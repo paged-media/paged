@@ -26,3 +26,4 @@ export {
   CLICK_DRAG_THRESHOLD_PX,
   type PageDrag,
 } from "./gestures";
+export { contributeTool } from "./tools";
