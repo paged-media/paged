@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites name="vitest tests" tests="25" failures="0" errors="0" time="0.221">
+    <testsuite name="test/anchor-machine.spec.ts" timestamp="2026-06-06T10:48:56.814Z" hostname="GVW25GW09J" tests="12" failures="0" errors="0" skipped="0" time="0.002913333">
+        <testcase classname="test/anchor-machine.spec.ts" name="segmentPairsOf &gt; open subpath: adjacent pairs only" time="0.000704541">
+        </testcase>
+        <testcase classname="test/anchor-machine.spec.ts" name="segmentPairsOf &gt; closed subpath: adds the wraparound edge carrying subEnd" time="0.000448791">
+        </testcase>
+        <testcase classname="test/anchor-machine.spec.ts" name="segmentPairsOf &gt; two subpaths enumerate independently" time="0.00015325">
+        </testcase>
+        <testcase classname="test/anchor-machine.spec.ts" name="planAnchorDelete &gt; plans removal of the nearest anchor within tolerance" time="0.000106208">
+        </testcase>
+        <testcase classname="test/anchor-machine.spec.ts" name="planAnchorDelete &gt; returns null when nothing is in range" time="0.000053084">
+        </testcase>
+        <testcase classname="test/anchor-machine.spec.ts" name="planAnchorDelete &gt; refuses to shrink a 2-anchor contour" time="0.000066583">
+        </testcase>
+        <testcase classname="test/anchor-machine.spec.ts" name="planAnchorConvert &gt; corner anchor converts to smooth" time="0.000091042">
+        </testcase>
+        <testcase classname="test/anchor-machine.spec.ts" name="planAnchorConvert &gt; smooth anchor converts to corner" time="0.000060959">
+        </testcase>
+        <testcase classname="test/anchor-machine.spec.ts" name="planAnchorAdd &gt; splits an interior straight segment at the click" time="0.000364">
+        </testcase>
+        <testcase classname="test/anchor-machine.spec.ts" name="planAnchorAdd &gt; returns null off-curve" time="0.000086959">
+        </testcase>
+        <testcase classname="test/anchor-machine.spec.ts" name="planAnchorAdd &gt; the last subpath&apos;s closing edge inserts at subEnd without an override" time="0.000132667">
+        </testcase>
+        <testcase classname="test/anchor-machine.spec.ts" name="planAnchorAdd &gt; a non-final subpath&apos;s closing edge supplies the starts override" time="0.000143167">
+        </testcase>
+    </testsuite>
+    <testsuite name="test/pen-machine.spec.ts" timestamp="2026-06-06T10:48:56.815Z" hostname="GVW25GW09J" tests="13" failures="0" errors="0" skipped="0" time="0.002796375">
+        <testcase classname="test/pen-machine.spec.ts" name="PenMachine — clicks &gt; click places a corner anchor" time="0.001138958">
+        </testcase>
+        <testcase classname="test/pen-machine.spec.ts" name="PenMachine — clicks &gt; Shift+click constrains placement to 45° from the previous anchor" time="0.000146334">
+        </testcase>
+        <testcase classname="test/pen-machine.spec.ts" name="PenMachine — clicks &gt; Enter commits an open path with &gt;= 2 anchors" time="0.000169458">
+        </testcase>
+        <testcase classname="test/pen-machine.spec.ts" name="PenMachine — clicks &gt; Enter with a single anchor cancels instead of committing" time="0.000069167">
+        </testcase>
+        <testcase classname="test/pen-machine.spec.ts" name="PenMachine — clicks &gt; Escape cancels without commit" time="0.000062542">
+        </testcase>
+        <testcase classname="test/pen-machine.spec.ts" name="PenMachine — drags (smooth anchors) &gt; drag creates a smooth anchor with mirrored handles" time="0.000159708">
+        </testcase>
+        <testcase classname="test/pen-machine.spec.ts" name="PenMachine — drags (smooth anchors) &gt; movement under the drag threshold stays a corner" time="0.000063208">
+        </testcase>
+        <testcase classname="test/pen-machine.spec.ts" name="PenMachine — drags (smooth anchors) &gt; Alt during drag freezes the mirrored left handle" time="0.000075834">
+        </testcase>
+        <testcase classname="test/pen-machine.spec.ts" name="PenMachine — drags (smooth anchors) &gt; Shift constrains the handle pull" time="0.00006225">
+        </testcase>
+        <testcase classname="test/pen-machine.spec.ts" name="PenMachine — closing + preview &gt; clicking the first anchor closes the path" time="0.000126792">
+        </testcase>
+        <testcase classname="test/pen-machine.spec.ts" name="PenMachine — closing + preview &gt; hover publishes the rubber band and the close preview" time="0.0000735">
+        </testcase>
+        <testcase classname="test/pen-machine.spec.ts" name="PenMachine — closing + preview &gt; a close-click on the first anchor of a 1-anchor path places a point instead" time="0.000065625">
+        </testcase>
+        <testcase classname="test/pen-machine.spec.ts" name="PenMachine — closing + preview &gt; events after commit are inert" time="0.000094084">
+        </testcase>
+    </testsuite>
+</testsuites>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites name="vitest tests" tests="3" failures="0" errors="0" time="0.283">
+    <testsuite name="test/activate.spec.ts" timestamp="2026-06-06T10:48:57.289Z" hostname="GVW25GW09J" tests="3" failures="0" errors="0" skipped="0" time="0.002193584">
+        <testcase classname="test/activate.spec.ts" name="drawBundle.activate &gt; registers 4 namespaced tools + activation commands + shortcuts" time="0.001160125">
+        </testcase>
+        <testcase classname="test/activate.spec.ts" name="drawBundle.activate &gt; registered ids match the manifest&apos;s contributes declaration" time="0.00018975">
+        </testcase>
+        <testcase classname="test/activate.spec.ts" name="drawBundle.activate &gt; dispose leaves the shell exactly as found (honesty smoke test)" time="0.000462417">
+        </testcase>
+    </testsuite>
+</testsuites>

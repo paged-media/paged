@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites name="vitest tests" tests="21" failures="0" errors="0" time="0.261">
+    <testsuite name="test/bezier.spec.ts" timestamp="2026-06-06T10:48:56.400Z" hostname="GVW25GW09J" tests="6" failures="0" errors="0" skipped="0" time="0.001857791">
+        <testcase classname="test/bezier.spec.ts" name="splitSegmentDeCasteljau &gt; splits at t=0.5 and both halves trace the original curve" time="0.000783666">
+        </testcase>
+        <testcase classname="test/bezier.spec.ts" name="closestTOnCubic &gt; finds the parameter of an on-curve click" time="0.000167917">
+        </testcase>
+        <testcase classname="test/bezier.spec.ts" name="closestTOnCubic &gt; projects an off-curve click onto the curve" time="0.000072">
+        </testcase>
+        <testcase classname="test/bezier.spec.ts" name="flattenAnchorRun &gt; emits straight segments without intermediate samples" time="0.000123667">
+        </testcase>
+        <testcase classname="test/bezier.spec.ts" name="flattenAnchorRun &gt; samples curved segments" time="0.000134208">
+        </testcase>
+        <testcase classname="test/bezier.spec.ts" name="flattenAnchorRun &gt; closes the run when asked" time="0.000082792">
+        </testcase>
+    </testsuite>
+    <testsuite name="test/handles.spec.ts" timestamp="2026-06-06T10:48:56.401Z" hostname="GVW25GW09J" tests="9" failures="0" errors="0" skipped="0" time="0.002059542">
+        <testcase classname="test/handles.spec.ts" name="handles &gt; cornerAnchor collapses both handles onto the point" time="0.000838083">
+        </testcase>
+        <testcase classname="test/handles.spec.ts" name="handles &gt; smoothAnchorFromDrag mirrors the incoming handle" time="0.000142375">
+        </testcase>
+        <testcase classname="test/handles.spec.ts" name="handles &gt; mirrorHandle reflects through the anchor" time="0.000076958">
+        </testcase>
+        <testcase classname="test/handles.spec.ts" name="constrainAngle &gt; snaps to 45 degrees preserving distance" time="0.000113833">
+        </testcase>
+        <testcase classname="test/handles.spec.ts" name="constrainAngle &gt; snaps a near-diagonal onto the diagonal" time="0.000050084">
+        </testcase>
+        <testcase classname="test/handles.spec.ts" name="constrainAngle &gt; returns the origin-coincident point unchanged" time="0.000066459">
+        </testcase>
+        <testcase classname="test/handles.spec.ts" name="affine &gt; round-trips apply → inverse-apply" time="0.000141667">
+        </testcase>
+        <testcase classname="test/handles.spec.ts" name="affine &gt; null matrix is identity" time="0.000063041">
+        </testcase>
+        <testcase classname="test/handles.spec.ts" name="affine &gt; singular matrix inverse returns null" time="0.000041375">
+        </testcase>
+    </testsuite>
+    <testsuite name="test/rdp.spec.ts" timestamp="2026-06-06T10:48:56.402Z" hostname="GVW25GW09J" tests="6" failures="0" errors="0" skipped="0" time="0.001727333">
+        <testcase classname="test/rdp.spec.ts" name="segmentDistance &gt; measures perpendicular distance to the segment body" time="0.000503333">
+        </testcase>
+        <testcase classname="test/rdp.spec.ts" name="segmentDistance &gt; clamps to the nearest endpoint beyond the segment" time="0.000072042">
+        </testcase>
+        <testcase classname="test/rdp.spec.ts" name="segmentDistance &gt; degenerates to point distance for zero-length segments" time="0.000070666">
+        </testcase>
+        <testcase classname="test/rdp.spec.ts" name="simplifyRdp &gt; keeps collinear runs as two endpoints" time="0.000330875">
+        </testcase>
+        <testcase classname="test/rdp.spec.ts" name="simplifyRdp &gt; keeps a deviation above tolerance" time="0.000088875">
+        </testcase>
+        <testcase classname="test/rdp.spec.ts" name="simplifyRdp &gt; returns short inputs unchanged (copies)" time="0.000205875">
+        </testcase>
+    </testsuite>
+</testsuites>
