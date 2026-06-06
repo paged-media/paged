@@ -43,8 +43,10 @@ node ../plugin-sdk/packages/plugin-cli/bin/paged-plugin.mjs validate packages/dr
   editor's pencil re-imports RDP from here.
 - **D2 — done** — pen + add/delete/convert-anchor live in the editor as
   shims over `draw-tools` (E2E: editor `tests/e2e/draw-plugin.spec.ts`).
-- **D3 — done** — `drawBundle.activate(host)` registers the four
-  `media.paged.draw.tool.*` tools (with activation commands + guarded
-  shortcuts via `contributeTool`) through `@paged-media/plugin-sdk` 0.2;
-  the editor loads the bundle with one `loadBundle()` call and removing
-  it removes draw cleanly (B-11 resolved).
+- **D3 — done** — `drawBundle.activate(host)` registers the three
+  `media.paged.draw.tool.*` anchor-editing tools (with activation
+  commands + guarded shortcuts via `contributeTool`) through
+  `@paged-media/plugin-sdk` 0.2; the editor loads the bundle with one
+  `loadBundle()` call and removing it removes draw cleanly (B-11
+  resolved). The Pen itself is a built-in core-document tool (editor
+  W2.5 division): built-ins author new paths, the bundle edits them.

@@ -67,25 +67,23 @@ const mapBacking = () => {
 };
 
 describe("drawBundle.activate", () => {
-  it("registers 4 namespaced tools + activation commands + shortcuts", () => {
+  it("registers the 3 anchor tools + activation commands + shortcuts (pen is built-in, W2.5 division)", () => {
     const fake = makeFakeEditor();
     loadBundle(() => fake.editor, drawBundle, {
       console: silent,
       storage: mapBacking(),
     });
     expect(fake.tools.ids()).toEqual([
-      "media.paged.draw.tool.pen",
       "media.paged.draw.tool.addAnchor",
       "media.paged.draw.tool.deleteAnchor",
       "media.paged.draw.tool.convertAnchor",
     ]);
     expect(fake.commands.ids()).toEqual([
-      "media.paged.draw.tool.pen.activate",
       "media.paged.draw.tool.addAnchor.activate",
       "media.paged.draw.tool.deleteAnchor.activate",
       "media.paged.draw.tool.convertAnchor.activate",
     ]);
-    expect(fake.keybindings.count()).toBe(4);
+    expect(fake.keybindings.count()).toBe(3);
   });
 
   it("registered ids match the manifest's contributes declaration", () => {

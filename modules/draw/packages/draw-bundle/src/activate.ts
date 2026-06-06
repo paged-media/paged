@@ -1,10 +1,12 @@
 // The paged.draw bundle entry — D-milestone status: D3.
 //
 // Registration happens HERE, through the public contribution surface:
-// four tools (pen + the three anchor tools), each with its activation
-// command and text-suppressed shortcut via `contributeTool`. The host
-// tracks every registration; removing the editor's `loadBundle` call
-// removes draw cleanly — the platform-honesty smoke test.
+// the three anchor-editing tools (Add/Delete/Convert — the Pen itself
+// is a built-in core-document tool per the W2.5 division), each with
+// its activation command and text-suppressed shortcut via
+// `contributeTool`. The host tracks every registration; removing the
+// editor's `loadBundle` call removes draw cleanly — the
+// platform-honesty smoke test.
 //
 // Panels stay design prototypes (`panels/*.panel.json`, BREAKAGE_LOG
 // B-01); the edit-context claim in the manifest stays declarative
