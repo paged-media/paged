@@ -1,0 +1,12 @@
+{
+  "name": "@paged-media/plugin-cli",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "paged-plugin": "./bin/paged-plugin.mjs"
+  },
+  "scripts": {
+    "validate": "node ./bin/paged-plugin.mjs validate"
+  }
+}
