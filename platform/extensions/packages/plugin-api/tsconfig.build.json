@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "emitDeclarationOnly": true,
+    "declaration": true,
+    "outDir": "dist",
+    "allowImportingTsExtensions": false
+  },
+  "include": ["src"],
+  "exclude": ["src/wire.d.ts"]
+}

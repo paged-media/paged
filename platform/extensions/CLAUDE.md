@@ -22,12 +22,15 @@ them in the same change.
 - **No speculative surface.** A type joins the façade when a real bundle
   (paged.draw first) needs it. Gaps are recorded in
   `plugin-draw/BREAKAGE_LOG.md`, not pre-emptively "fixed" here.
-- **Source-of-truth direction (incubation):** editor → this façade →
-  plugin repos. `plugin-api` re-exports from `@paged-media/shell` /
-  `@paged-media/client` via pnpm `link:` deps into the sibling
-  `~/paged/editor` checkout (which must be `pnpm install`ed first). Do not
-  hand-copy type declarations — re-export. The direction flips at v1
-  freeze (façade becomes the contract; Decision B publishing starts).
+- **This package OWNS its types (since the M1.1(a) vendoring pass,
+  2026-06-06):** hand-written editor-contract shapes in
+  `plugin-api/src/editor.ts` (handles NARROW, contributions 1:1) and
+  the engine wire types VENDORED in `src/wire.d.ts` — synced from the
+  editor's generated tsify output via `scripts/sync-wire.mjs`
+  (`--check` in CI). The EDITOR asserts compat through its dev link
+  (`apps/canvas/src/plugin-api-compat.ts`) — widen a handle type only
+  with API review. The workspace builds STANDALONE; sibling checkouts
+  are a dev-time luxury.
 - **Naming:** the plugin runtime is `@paged-media/plugin-sdk`;
   `@paged-media/sdk` is the core repo's WebGPU `ViewerSession` and must
   not be claimed here.

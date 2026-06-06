@@ -6,12 +6,14 @@
 // Bundles take values (facades, helpers) from `BundleHost` at
 // activation — types from here, values from the host.
 //
-// During incubation the editor is the source of truth and this
-// package is a curated façade over `@paged-media/shell` +
-// `@paged-media/client` (pnpm `link:` sibling deps). At API-v1
-// freeze the direction flips: the façade becomes the contract, the
-// host implements it, and publishing starts (Decision B). What's IN
-// the façade is decided by what paged.draw / paged.web needed — gaps
+// Since the M1.1(a) vendoring pass (2026-06-06) this package OWNS
+// its types: hand-written editor-contract shapes in ./editor, the
+// engine wire types VENDORED in ./wire.d.ts (synced from the
+// editor's generated tsify output via scripts/sync-wire.mjs). The
+// EDITOR asserts compatibility against this contract through its
+// dev link (apps/canvas/src/plugin-api-compat.ts) — drift fails the
+// editor's typecheck, never a consumer's build. What's IN the
+// façade is decided by what paged.draw / paged.web needed — gaps
 // live in the consumers' BREAKAGE_LOG.md files. Design rationale:
 // DESIGN.md at the repo root.
 

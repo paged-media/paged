@@ -1,8 +1,9 @@
-// Curated re-exports: the wire-type subset a bundle reads/emits.
-// Source of truth is the tsify-generated `paged_canvas_wasm.d.ts`
-// in `@paged-media/client` (PROTOCOL_VERSION-pinned, CI-enforced in
-// the editor repo). Same curation rule as contributions.ts: a type
-// joins this list when a bundle actually uses it.
+// Curated re-exports: the wire-type subset a bundle reads/emits —
+// since the M1.1(a) vendoring pass these come from ./wire.d.ts, the
+// VENDORED copy of the editor's tsify-generated types (source of
+// truth: core; sync + drift check: scripts/sync-wire.mjs). Same
+// curation rule as contributions.ts: a type joins this list when a
+// bundle actually uses it.
 
 export type {
   // Identity + addressing.
@@ -31,6 +32,11 @@ export type {
   ElementGeometryItem,
   SceneTreeNode,
   SelectionMode,
+  ContentSelection,
+  // Worker channel envelopes (PagedClient.send/subscribe).
+  MainToWorker,
+  MainToWorkerKind,
+  WorkerToMain,
   // Worker gesture channel.
   GestureType,
   GestureHandle,
@@ -42,4 +48,4 @@ export type {
   SwatchSummary,
   GradientSummary,
   LayerSummary,
-} from "@paged-media/client";
+} from "./wire";

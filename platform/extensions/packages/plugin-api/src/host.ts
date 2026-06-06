@@ -21,7 +21,7 @@ import type {
   PathAnchorsResult,
   SceneTreeNode,
   SelectionMode,
-} from "@paged-media/client";
+} from "./wire";
 import type {
   CommandContribution,
   KeybindingContribution,
@@ -30,7 +30,7 @@ import type {
   PanelContribution,
   ToolContribution,
   ToolPreviewShape,
-} from "@paged-media/shell";
+} from "./editor";
 
 import type { PluginManifest } from "./manifest";
 

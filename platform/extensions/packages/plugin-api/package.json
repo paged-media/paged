@@ -1,7 +1,8 @@
 {
   "name": "@paged-media/plugin-api",
-  "private": true,
-  "version": "0.2.0",
+  "version": "0.2.1-canary.0",
+  "description": "The Paged plugin contract: manifest, bundle lifecycle, the BundleHost surface, and the contribution + engine wire types. Type-only.",
+  "license": "UNLICENSED",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -9,12 +10,35 @@
     ".": "./src/index.ts",
     "./manifest.schema.json": "./src/manifest.schema.json"
   },
+  "files": [
+    "dist",
+    "src/manifest.schema.json"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/paged-media/plugin-sdk.git",
+    "directory": "packages/plugin-api"
+  },
+  "publishConfig": {
+    "access": "public",
+    "tag": "canary",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./manifest.schema.json": "./src/manifest.schema.json"
+    }
+  },
   "scripts": {
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && cp src/wire.d.ts dist/wire.d.ts && printf 'export {};\\n' > dist/index.js",
+    "prepublishOnly": "pnpm run build"
   },
   "dependencies": {
-    "@paged-media/client": "link:../../../editor/packages/client",
-    "@paged-media/shell": "link:../../../editor/packages/shell"
+    "@types/react": "^18.3.12"
   },
   "devDependencies": {
     "typescript": "^5.6.3"

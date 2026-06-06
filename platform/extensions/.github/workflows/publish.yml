@@ -1,0 +1,46 @@
+# Decision B CI lane (2026-06-06): canary publish on every merge to
+# main (concept §12.3 — "canary on every merge … loud is good").
+# Possible since the M1.1(a) vendoring pass: this workspace builds
+# STANDALONE (plugin-api owns its types; no private sibling checkouts
+# needed). A package publishes only when its version isn't on the
+# registry yet — bump a version to release, merge to ship.
+
+name: publish
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  verify-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r typecheck
+      - run: pnpm -r test
+      # Wire drift check is a warn-skip without the sibling editor
+      # checkout — the vendored copy in-repo is the source for CI.
+      - run: node scripts/sync-wire.mjs --check
+      - name: publish changed versions (canary)
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -e
+          for dir in packages/plugin-api packages/plugin-sdk packages/plugin-cli; do
+            name=$(node -p "require('./$dir/package.json').name")
+            version=$(node -p "require('./$dir/package.json').version")
+            if npm view "$name@$version" version >/dev/null 2>&1; then
+              echo "skip $name@$version (already published)"
+            else
+              echo "publish $name@$version"
+              (cd "$dir" && pnpm publish --no-git-checks)
+            fi
+          done
