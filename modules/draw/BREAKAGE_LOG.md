@@ -36,10 +36,20 @@ Format: `B-NN · date · area · status`.
   silently drops the whole fill; the legacy single-page
   `pipeline::build` is solid-only.
 
-- **B-04 · 2026-06-06 · engine ops · OPEN** — no group creation.
-  `NodeSpec` has no group variant; `NodeId::Group` exists read-side.
-  Blocks clipping masks, boolean-result grouping, layers panel
-  structure (§13.4/§13.8).
+- **B-04 · 2026-06-06 · engine ops · RESOLVED (2026-06-06)** —
+  `CreateGroup { memberIds }` / `DissolveGroup { groupId }` Mutations
+  landed (protocol v32; `paged-mutate` `Operation::CreateGroup` /
+  `DissolveGroup`). Flat groups v1, one spread, leaf members only;
+  fully validated before mutation (atomicity), minted group id echoed
+  as `createdId`. Z-order: members contiguous in paint order group
+  NEUTRALLY (group ref takes the earliest member's
+  `frames_in_order` slot — INV-tested as identical `build_document`
+  command streams); scattered members deterministically collect at
+  the earliest slot (InDesign semantic) and undo restores the exact
+  pre-group z-order via inverse-side `restore_slots`. INV suite:
+  `core/crates/paged-mutate/tests/group_ops.rs`. Wire re-vendored
+  (plugin-api 0.2.4-canary.0). Nested groups + group transforms
+  remain v2 (dissolving a parsed nested group rejects cleanly).
 
 - **B-05 · 2026-06-06 · geometry kernel · RESOLVED (2026-06-06)** —
   kernel (`paged-mutate/src/kurbo_kernel.rs`) AND wire ops landed:
