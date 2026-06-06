@@ -16,7 +16,7 @@
     "directory": "packages/plugin-cli"
   },
   "publishConfig": {
-    "access": "restricted",
+    "access": "public",
     "tag": "canary"
   },
   "scripts": {
