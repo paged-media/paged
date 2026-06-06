@@ -1,0 +1,40 @@
+{
+  "$comment": "DESIGN PROTOTYPE — not interpreted by any host. Gradient rows depend on the gradient-assignment engine gap (BREAKAGE_LOG.md B-03): swatch fills bind today via frameFillColor colorRef; whether a Gradient/* self-id is accepted there is unverified.",
+  "panel": "media.paged.draw.panel.fill",
+  "title": { "key": "panel.fill.title" },
+  "icon": "icons/fill.svg",
+  "sections": [
+    {
+      "rows": [
+        {
+          "type": "colorWell",
+          "bind": { "kind": "selectionProperty", "path": "frameFillColor" },
+          "label": { "key": "fill.color" }
+        },
+        {
+          "type": "numeric",
+          "bind": { "kind": "selectionProperty", "path": "frameFillTint", "coerce": "%" },
+          "min": 0,
+          "max": 100,
+          "label": { "key": "fill.tint" }
+        }
+      ]
+    },
+    {
+      "title": { "key": "fill.gradient" },
+      "$comment": "On-canvas annotator angle/length ride existing paths once assignment works.",
+      "rows": [
+        {
+          "type": "numeric",
+          "bind": { "kind": "selectionProperty", "path": "frameGradientFillAngle" },
+          "label": { "key": "gradient.angle" }
+        },
+        {
+          "type": "numeric",
+          "bind": { "kind": "selectionProperty", "path": "frameGradientFillLength", "coerce": "pt" },
+          "label": { "key": "gradient.length" }
+        }
+      ]
+    }
+  ]
+}

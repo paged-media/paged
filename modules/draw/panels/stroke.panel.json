@@ -1,0 +1,37 @@
+{
+  "$comment": "DESIGN PROTOTYPE — not interpreted by any host. The concept paper's §8 schema, rewritten against the editor catalog's real binding ceiling (literal | selectionProperty + coerce; NO visibleWhen — conditional visibility must come from a derived bound value in the plugin state model, see BREAKAGE_LOG.md B-01). Becomes the P4 test corpus when native panels move onto a schema.",
+  "panel": "media.paged.draw.panel.stroke",
+  "title": { "key": "panel.stroke.title" },
+  "icon": "icons/stroke.svg",
+  "sections": [
+    {
+      "rows": [
+        {
+          "type": "numeric",
+          "bind": { "kind": "selectionProperty", "path": "frameStrokeWeight", "coerce": "pt" },
+          "min": 0,
+          "label": { "key": "stroke.weight" }
+        },
+        {
+          "type": "colorWell",
+          "bind": { "kind": "selectionProperty", "path": "frameStrokeColor" },
+          "label": { "key": "stroke.color" }
+        },
+        {
+          "type": "segmented",
+          "bind": { "kind": "selectionProperty", "path": "frameStrokeEndCap" },
+          "options": ["butt", "round", "projecting"],
+          "label": { "key": "stroke.cap" }
+        }
+      ]
+    },
+    {
+      "title": { "key": "stroke.dashes" },
+      "$comment": "Paper had visibleWhen strokeType == dashed. The catalog forbids conditionals; the real panel exposes a derived 'dashControlsVisible' bound value from plugin state, or ships as an expert leaf. Engine gap: no dash-pattern PropertyPath yet (B-12).",
+      "rows": [
+        { "type": "numeric", "bind": { "kind": "derived", "key": "dashLength" }, "label": { "key": "stroke.dash" } },
+        { "type": "numeric", "bind": { "kind": "derived", "key": "gapLength" }, "label": { "key": "stroke.gap" } }
+      ]
+    }
+  ]
+}

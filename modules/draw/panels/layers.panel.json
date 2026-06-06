@@ -1,0 +1,18 @@
+{
+  "$comment": "DESIGN PROTOTYPE — not interpreted by any host. List widgets are expert-leaf territory in the catalog (data-bound collections render via documentCollection reads; row interactions commit layer ops through paged.mutate). This prototype records the intended binding surface only.",
+  "panel": "media.paged.draw.panel.layers",
+  "title": { "key": "panel.layers.title" },
+  "icon": "icons/layers.svg",
+  "sections": [
+    {
+      "rows": [
+        {
+          "type": "layerList",
+          "bind": { "kind": "documentCollection", "name": "layers" },
+          "$comment": "Expert leaf: visibility toggle → layerSetVisible, lock → layerSetLocked, rename → layerSetName, reorder → layerMove. Scoped to the edit context's subtree once edit contexts exist (B-02).",
+          "writes": ["collection"]
+        }
+      ]
+    }
+  ]
+}
