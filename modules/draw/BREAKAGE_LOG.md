@@ -91,18 +91,14 @@ Format: `B-NN · date · area · status`.
   a node loader). Until then: pure-machine unit tests + editor
   Playwright E2E.
 
-- **B-14 · 2026-06-06 · shell rail · OPEN (cosmetic)** — rail slot
-  order is first-seen group order, so a bundle registered after mount
-  lands its slot at the END of its section instead of the catalog
-  position (pen slot now trails pencil/shape). Needs a slot-order hint
-  on `ToolContribution` (per-section `order`) honored by
-  `ToolRail.deriveSections`.
+- **B-14 · 2026-06-06 · shell rail · RESOLVED (2026-06-06)** —
+  `ToolContribution.slotOrder` (contract + editor): the rail orders
+  slots by `min(slotOrder)` per section, first-seen for unhinted —
+  late bundles can place their slot among the built-ins.
 
-- **B-15 · 2026-06-06 · shell shortcuts · OPEN (worked around in SDK)**
-  — the host builds tool activation commands + shortcuts only for the
-  STARTUP tool set (`buildToolbarContributions` over the `tools` prop);
-  late-registered tools get a rail slot but no shortcut.
-  `@paged-media/plugin-sdk`'s `contributeTool` closes the gap
-  bundle-side (tool + activation command + text-suppressed
-  keybinding); the host-side fix is to derive shortcuts from the
-  registry instead of the prop.
+- **B-15 · 2026-06-06 · shell shortcuts · RESOLVED (2026-06-06)** —
+  host-side fix landed: `installRegistryDerivedContributions` derives
+  tool activation commands + guarded shortcuts and panel show/hide
+  pairs from the LIVE registries (onChange) for every registration
+  path; the SDK helpers dropped their bundle-side duplicates
+  (plugin-sdk 0.2.2).
