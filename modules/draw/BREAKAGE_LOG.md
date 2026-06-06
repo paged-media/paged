@@ -41,20 +41,23 @@ Format: `B-NN · date · area · status`.
   Blocks clipping masks, boolean-result grouping, layers panel
   structure (§13.4/§13.8).
 
-- **B-05 · 2026-06-06 · geometry kernel · PARTIAL (2026-06-06)** —
-  the KERNEL landed in core (`paged-mutate/src/kurbo_kernel.rs`,
-  kurbo 0.11 promoted): outline_stroke (raw expansion, correct under
-  the engine's nonzero fill), simplify_path, offset_closed_path
-  (exact per-segment flo offsets + nonzero resolve + area selection +
-  clearance guard; single closed contour v1), 6 tests. Remaining: the
-  `outlineStroke`/`offsetPath`/`simplifyPath` Mutation variants +
-  protocol bump + editor d.ts/wire sync.
+- **B-05 · 2026-06-06 · geometry kernel · RESOLVED (2026-06-06)** —
+  kernel (`paged-mutate/src/kurbo_kernel.rs`) AND wire ops landed:
+  `outlineStroke` / `offsetPath` / `simplifyPath` Mutations
+  (protocol v30, snapshot-inverse undo, kind-generic over the
+  Track-J path kinds; outlineStroke is geometry-only — paint
+  transfer composes as a caller Batch). Editor d.ts + plugin-api
+  wire re-vendored (0.2.3-canary.0). v1 scopes recorded in the
+  kernel docs: offset = single closed contour, bevel-ish gap joins;
+  outline keeps kurbo's raw expansion (correct under nonzero fill).
 
-- **B-06 · 2026-06-06 · hit-testing · PARTIAL (2026-06-06)** —
-  `nearest_point_on_path` landed engine-side (kurbo_kernel,
-  ParamCurveNearest over segment pairs). Remaining: the
-  `requestNearestPathPoint` worker query + reply so the TS copies of
-  `closestTOnCubic` (shell overlay, draw-tools) can collapse.
+- **B-06 · 2026-06-06 · hit-testing · RESOLVED (2026-06-06)** —
+  `requestNearestPathPoint { id, point } → nearestPathPoint` worker
+  query landed (protocol v30, element-local space like PathAnchors).
+  Follow-up (not a contract gap): migrate the TS `closestTOnCubic`
+  copies (shell overlay, draw-tools planner) onto the query where a
+  round-trip beats local math — the local copies stay legitimate for
+  sync interactive paths.
 
 - **B-07 · 2026-06-06 · overlays · OPEN** — `ToolPreviewShape` is
   rect-or-polyline only; in-progress pen cubics must be FLATTENED for
