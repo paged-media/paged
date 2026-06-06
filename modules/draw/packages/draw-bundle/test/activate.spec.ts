@@ -67,7 +67,7 @@ const mapBacking = () => {
 };
 
 describe("drawBundle.activate", () => {
-  it("registers the 3 anchor tools + activation commands + shortcuts (pen is built-in, W2.5 division)", () => {
+  it("registers the 3 anchor tools (pen built-in per W2.5; activation host-derived per B-15)", () => {
     const fake = makeFakeEditor();
     loadBundle(() => fake.editor, drawBundle, {
       console: silent,
@@ -78,12 +78,10 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.tool.deleteAnchor",
       "media.paged.draw.tool.convertAnchor",
     ]);
-    expect(fake.commands.ids()).toEqual([
-      "media.paged.draw.tool.addAnchor.activate",
-      "media.paged.draw.tool.deleteAnchor.activate",
-      "media.paged.draw.tool.convertAnchor.activate",
-    ]);
-    expect(fake.keybindings.count()).toBe(3);
+    // B-15: activation commands + shortcuts are HOST-derived from
+    // the registry — the bundle registers tools only.
+    expect(fake.commands.ids()).toEqual([]);
+    expect(fake.keybindings.count()).toBe(0);
   });
 
   it("registered ids match the manifest's contributes declaration", () => {
