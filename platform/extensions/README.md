@@ -1,4 +1,4 @@
-# paged-media/sdk
+# paged-media/plugin-sdk
 
 Plugin contract + tooling for the Paged editor. Three packages, three
 stability tiers (concept: `thoughts/docs/paged/plugin-draw/base-idea.md` §9,
@@ -26,9 +26,9 @@ sibling deps. A sibling checkout layout is required:
 
 ```
 ~/paged/
-├── editor/   ← link: targets resolve here (run `pnpm install` there first)
-├── sdk/      ← this repo
-└── plugin-draw/
+├── editor/      ← link: targets resolve here (run `pnpm install` there first)
+├── plugin-sdk/  ← this repo
+└── plugin-draw/ (+ plugin-web/)
 ```
 
 ```bash
