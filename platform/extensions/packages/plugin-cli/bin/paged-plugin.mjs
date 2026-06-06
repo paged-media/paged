@@ -22,6 +22,7 @@ const RENDERING = new Set(["sceneLayer", "overlay", "hitTest"]);
 const CLIPBOARD = new Set(["none", "vector", "full"]);
 const SCOPES = new Set(["broad", "scoped"]);
 const ENTRIES = new Set(["doubleClick", "command"]);
+const BAKED_FALLBACKS = new Set(["group", "rectangle", "raster"]);
 
 function fail(msg) {
   console.error(`error: ${msg}`);
@@ -114,7 +115,7 @@ function validateManifest(manifest, manifestDir) {
       err(`"contributes" must be an object`);
     } else {
       for (const key of Object.keys(contributes)) {
-        if (!["tools", "panels", "commands", "editContexts"].includes(key)) {
+        if (!["tools", "panels", "commands", "editContexts", "objectTypes"].includes(key)) {
           err(`unknown contribution kind "${key}"`);
         }
       }
@@ -159,6 +160,19 @@ function validateManifest(manifest, manifestDir) {
             if (typeof ec !== "object" || ec === null ||
                 typeof ec.type !== "string" || !ENTRIES.has(ec.entry)) {
               err(`each editContext needs { type: string, entry: doubleClick|command }`);
+            }
+          }
+        }
+      }
+      const ots = contributes.objectTypes;
+      if (ots !== undefined) {
+        if (!Array.isArray(ots)) {
+          err(`"contributes.objectTypes" must be an array`);
+        } else {
+          for (const ot of ots) {
+            if (typeof ot !== "object" || ot === null ||
+                typeof ot.type !== "string" || !BAKED_FALLBACKS.has(ot.bakedFallback)) {
+              err(`each objectType needs { type: string, bakedFallback: group|rectangle|raster }`);
             }
           }
         }
