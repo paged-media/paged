@@ -25,7 +25,7 @@ const PANEL: PanelContribution = {
 };
 
 describe("contributePanel", () => {
-  it("registers panel + show/hide commands routed through host.shell", () => {
+  it("registers the panel ONLY (B-15: host derives show/hide)", () => {
     const fake = makeFakeEditor();
     const openPanel = vi.fn();
     const closePanel = vi.fn();
@@ -35,10 +35,7 @@ describe("contributePanel", () => {
     });
     contributePanel(host, PANEL);
     expect(fake.panels.ids()).toEqual(["media.paged.test.panel.source"]);
-    expect(fake.commands.ids()).toEqual([
-      "media.paged.test.panel.source.show",
-      "media.paged.test.panel.source.hide",
-    ]);
+    expect(fake.commands.ids()).toEqual([]);
     expect(host.supports("shell.openPanel@1")).toBe(true);
   });
 
@@ -53,7 +50,7 @@ describe("contributePanel", () => {
     expect(warn).toHaveBeenCalledOnce();
   });
 
-  it("dispose tears the trio down", () => {
+  it("dispose tears the registration down", () => {
     const fake = makeFakeEditor();
     const { host } = createBundleHost(() => fake.editor, MANIFEST, {
       console: silent,
@@ -62,6 +59,5 @@ describe("contributePanel", () => {
     const d = contributePanel(host, PANEL);
     d.dispose();
     expect(fake.panels.ids()).toHaveLength(0);
-    expect(fake.commands.ids()).toHaveLength(0);
   });
 });

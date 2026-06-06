@@ -159,6 +159,10 @@ export interface ToolContribution {
   group: ToolGroupId;
   section: ToolSectionId;
   order?: number;
+  /** Slot position hint within the section (B-14): the rail orders
+   *  slots by the minimum slotOrder across a group's members; absent
+   *  = first-seen registration order (late bundles trail). */
+  slotOrder?: number;
   isGroupDefault?: boolean;
   cursor?: CursorSpec;
   /** Handler factory the host mounts when the tool activates. Absent

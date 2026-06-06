@@ -24,29 +24,25 @@ const TOOL: ToolContribution = {
   section: "drawType",
 } as ToolContribution;
 
-describe("contributeTool", () => {
-  it("registers tool + activation command + guarded keybinding", () => {
+describe("contributeTool (B-15: host derives activation + shortcut)", () => {
+  it("registers the tool ONLY — no bundle-side command/keybinding", () => {
     const fake = makeFakeEditor();
     const { host } = createBundleHost(() => fake.editor, MANIFEST, {
       console: silent,
     });
     contributeTool(host, TOOL);
     expect(fake.tools.ids()).toEqual(["media.paged.test.tool.pen"]);
-    expect(fake.commands.ids()).toEqual([
-      "media.paged.test.tool.pen.activate",
-    ]);
-    expect(fake.keybindings.count()).toBe(1);
+    expect(fake.commands.ids()).toEqual([]);
+    expect(fake.keybindings.count()).toBe(0);
   });
 
-  it("skips the keybinding for shortcut-less tools and disposes all", () => {
+  it("disposes the registration", () => {
     const fake = makeFakeEditor();
     const { host } = createBundleHost(() => fake.editor, MANIFEST, {
       console: silent,
     });
-    const d = contributeTool(host, { ...TOOL, shortcut: undefined });
-    expect(fake.keybindings.count()).toBe(0);
+    const d = contributeTool(host, TOOL);
     d.dispose();
     expect(fake.tools.ids()).toHaveLength(0);
-    expect(fake.commands.ids()).toHaveLength(0);
   });
 });
