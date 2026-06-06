@@ -41,17 +41,20 @@ Format: `B-NN · date · area · status`.
   Blocks clipping masks, boolean-result grouping, layers panel
   structure (§13.4/§13.8).
 
-- **B-05 · 2026-06-06 · geometry kernel · OPEN** — no outline-stroke,
-  offset-path, or simplify ops in core (`flo_curves =0.8` does
-  booleans + Schneider fitting only). §13.3 Tier-A rows blocked.
-  Direction: add kurbo (`kurbo::stroke()`), expose
-  `outlineStroke` / `offsetPath` / `simplifyPath` Mutations.
+- **B-05 · 2026-06-06 · geometry kernel · PARTIAL (2026-06-06)** —
+  the KERNEL landed in core (`paged-mutate/src/kurbo_kernel.rs`,
+  kurbo 0.11 promoted): outline_stroke (raw expansion, correct under
+  the engine's nonzero fill), simplify_path, offset_closed_path
+  (exact per-segment flo offsets + nonzero resolve + area selection +
+  clearance guard; single closed contour v1), 6 tests. Remaining: the
+  `outlineStroke`/`offsetPath`/`simplifyPath` Mutation variants +
+  protocol bump + editor d.ts/wire sync.
 
-- **B-06 · 2026-06-06 · hit-testing · OPEN** — no point-on-curve query
-  across the boundary (`hit_path_anchor` is nearest-anchor only).
-  draw-tools mirrors `closestTOnCubic` in TS (third copy of the math —
-  core, shell overlay, here). A `nearestPathPoint` worker query would
-  collapse them.
+- **B-06 · 2026-06-06 · hit-testing · PARTIAL (2026-06-06)** —
+  `nearest_point_on_path` landed engine-side (kurbo_kernel,
+  ParamCurveNearest over segment pairs). Remaining: the
+  `requestNearestPathPoint` worker query + reply so the TS copies of
+  `closestTOnCubic` (shell overlay, draw-tools) can collapse.
 
 - **B-07 · 2026-06-06 · overlays · OPEN** — `ToolPreviewShape` is
   rect-or-polyline only; in-progress pen cubics must be FLATTENED for
