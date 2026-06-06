@@ -158,7 +158,8 @@ function validateManifest(manifest, manifestDir) {
         } else {
           for (const ec of ecs) {
             if (typeof ec !== "object" || ec === null ||
-                typeof ec.type !== "string" || !ENTRIES.has(ec.entry)) {
+                typeof ec.type !== "string" || !ENTRIES.has(ec.entry) ||
+                (ec.priority !== undefined && !Number.isInteger(ec.priority))) {
               err(`each editContext needs { type: string, entry: doubleClick|command }`);
             }
           }

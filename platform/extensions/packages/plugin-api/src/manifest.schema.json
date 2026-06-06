@@ -3,7 +3,12 @@
   "$id": "https://paged.media/schemas/plugin-manifest.schema.json",
   "title": "Paged plugin manifest",
   "type": "object",
-  "required": ["id", "name", "version", "apiVersion"],
+  "required": [
+    "id",
+    "name",
+    "version",
+    "apiVersion"
+  ],
   "additionalProperties": false,
   "properties": {
     "id": {
@@ -11,13 +16,21 @@
       "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9-]*)+$",
       "description": "Reverse-DNS plugin identity; namespace prefix for all contribution ids."
     },
-    "name": { "type": "string", "minLength": 1 },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
     "version": {
       "type": "string",
       "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?$"
     },
-    "apiVersion": { "type": "string", "minLength": 1 },
-    "publisher": { "type": "string" },
+    "apiVersion": {
+      "type": "string",
+      "minLength": 1
+    },
+    "publisher": {
+      "type": "string"
+    },
     "capabilities": {
       "type": "object",
       "additionalProperties": false,
@@ -26,35 +39,92 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "read": { "enum": ["broad", "scoped"] },
-            "write": { "enum": ["broad", "scoped"] }
+            "read": {
+              "enum": [
+                "broad",
+                "scoped"
+              ]
+            },
+            "write": {
+              "enum": [
+                "broad",
+                "scoped"
+              ]
+            }
           }
         },
         "rendering": {
           "type": "array",
-          "items": { "enum": ["sceneLayer", "overlay", "hitTest"] }
+          "items": {
+            "enum": [
+              "sceneLayer",
+              "overlay",
+              "hitTest"
+            ]
+          }
         },
-        "editContext": { "type": "array", "items": { "type": "string" } },
-        "network": { "type": "boolean" },
-        "clipboard": { "enum": ["none", "vector", "full"] }
+        "editContext": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "network": {
+          "type": "boolean"
+        },
+        "clipboard": {
+          "enum": [
+            "none",
+            "vector",
+            "full"
+          ]
+        }
       }
     },
     "contributes": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "tools": { "type": "array", "items": { "type": "string" } },
-        "panels": { "type": "array", "items": { "type": "string" } },
-        "commands": { "type": "array", "items": { "type": "string" } },
+        "tools": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "panels": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "commands": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "editContexts": {
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["type", "entry"],
+            "required": [
+              "type",
+              "entry"
+            ],
             "additionalProperties": false,
             "properties": {
-              "type": { "type": "string" },
-              "entry": { "enum": ["doubleClick", "command"] }
+              "type": {
+                "type": "string"
+              },
+              "entry": {
+                "enum": [
+                  "doubleClick",
+                  "command"
+                ]
+              },
+              "priority": {
+                "type": "integer"
+              }
             }
           }
         },
@@ -62,11 +132,22 @@
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["type", "bakedFallback"],
+            "required": [
+              "type",
+              "bakedFallback"
+            ],
             "additionalProperties": false,
             "properties": {
-              "type": { "type": "string" },
-              "bakedFallback": { "enum": ["group", "rectangle", "raster"] }
+              "type": {
+                "type": "string"
+              },
+              "bakedFallback": {
+                "enum": [
+                  "group",
+                  "rectangle",
+                  "raster"
+                ]
+              }
             }
           }
         }

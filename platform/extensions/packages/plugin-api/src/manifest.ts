@@ -53,10 +53,17 @@ export interface PluginContributions {
   panels?: string[];
   /** Command ids the bundle registers. Must be namespaced by `id`. */
   commands?: string[];
-  /** Reserved for the P0 edit-context registry. */
+  /** Reserved for the P0 edit-context registry. `priority` (decision
+   *  Q12, 2026-06-06) reserves the multi-plugin contention shape NOW:
+   *  when two plugins claim one content type, runtime policy (ships
+   *  at P7) is user choice with a remembered per-content-type
+   *  default, first-party initially; higher priority orders the
+   *  choice list. First-installed-wins is rejected — install-order
+   *  nondeterminism is undebuggable. */
   editContexts?: Array<{
     type: string;
     entry: "doubleClick" | "command";
+    priority?: number;
   }>;
   /** Reserved (paged.web §9.1.2): plugin-defined object types under
    *  the metadata-plus-baked-fallback contract. */
