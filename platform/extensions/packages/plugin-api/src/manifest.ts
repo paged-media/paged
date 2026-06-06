@@ -58,4 +58,10 @@ export interface PluginContributions {
     type: string;
     entry: "doubleClick" | "command";
   }>;
+  /** Reserved (paged.web §9.1.2): plugin-defined object types under
+   *  the metadata-plus-baked-fallback contract. */
+  objectTypes?: Array<{
+    type: string;
+    bakedFallback: "group" | "rectangle" | "raster";
+  }>;
 }

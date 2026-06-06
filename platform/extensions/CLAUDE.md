@@ -8,7 +8,10 @@ become public at API-v1 freeze.
 
 pnpm workspace with three packages (see README for the tier table):
 `packages/plugin-api` (the contract, **type-only**), `packages/plugin-sdk`
-(runtime helpers), `packages/plugin-cli` (zero-dep ESM CLI, no build step).
+(the runtime: in-process `BundleHost` adapter, loader, gesture kit),
+`packages/plugin-cli` (zero-dep ESM CLI, no build step). **`DESIGN.md` is
+the deliberation record** — when code and DESIGN.md disagree, fix one of
+them in the same change.
 
 ## Hard rules
 
@@ -30,6 +33,16 @@ pnpm workspace with three packages (see README for the tier table):
   not be claimed here.
 - **CLI stays dependency-free.** `paged-plugin.mjs` hand-mirrors
   `manifest.schema.json`; change them together.
+- **The host adapter lives HERE, not in the editor.**
+  `plugin-sdk/src/host-impl.ts` implements `BundleHost` as a pure
+  function over `() => PagedEditor`; the editor's only job is one
+  `loadBundle()` call per bundle. The isolate migration is a second
+  implementation of the same interface (RPC proxy), never an editor
+  refactor. Keep `HOST_FEATURES` in sync with what's actually
+  implemented — `supports()` answers from it.
+- **Reserved members throw `PluginApiNotImplemented`** with a pointer —
+  visible seams, never fake-interactive (the brand honesty rule applied
+  to API design).
 
 ## Commands
 

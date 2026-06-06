@@ -1,9 +1,9 @@
-// @paged-media/plugin-api — the draft plugin contract (API v0).
+// @paged-media/plugin-api — the plugin contract (API v0.2).
 //
 // HARD RULE: this package is TYPE-ONLY. Every export is `export
 // type`; nothing here exists at runtime, so consuming a bundle never
 // drags host code (React, the wasm loader) into its module graph.
-// Bundles take values (registries, client) from `BundleHost` at
+// Bundles take values (facades, helpers) from `BundleHost` at
 // activation — types from here, values from the host.
 //
 // During incubation the editor is the source of truth and this
@@ -11,8 +11,9 @@
 // `@paged-media/client` (pnpm `link:` sibling deps). At API-v1
 // freeze the direction flips: the façade becomes the contract, the
 // host implements it, and publishing starts (Decision B). What's IN
-// the façade is decided by what paged.draw needed — gaps live in
-// plugin-draw/BREAKAGE_LOG.md.
+// the façade is decided by what paged.draw / paged.web needed — gaps
+// live in the consumers' BREAKAGE_LOG.md files. Design rationale:
+// DESIGN.md at the repo root.
 
 export type {
   PluginId,
@@ -21,7 +22,25 @@ export type {
   PluginContributions,
 } from "./manifest";
 
-export type { BundleHost, BundleHandle, PagedBundle } from "./bundle";
+export type { BundleHandle, PagedBundle } from "./bundle";
+
+export type {
+  BundleHost,
+  ContributionSurface,
+  DocumentSurface,
+  SelectionSurface,
+  ViewportSurface,
+  OverlaySurface,
+  StorageSurface,
+  DiagnosticsSurface,
+  Diagnostic,
+  DocumentChangeEvent,
+  MutationOutcome,
+  Disposable,
+  PluginLogger,
+  EditContextDescriptor,
+  ObjectTypeDescriptor,
+} from "./host";
 
 export type * from "./contributions";
 export type * from "./mutations";

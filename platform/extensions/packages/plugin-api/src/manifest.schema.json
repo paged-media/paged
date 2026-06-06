@@ -57,6 +57,18 @@
               "entry": { "enum": ["doubleClick", "command"] }
             }
           }
+        },
+        "objectTypes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["type", "bakedFallback"],
+            "additionalProperties": false,
+            "properties": {
+              "type": { "type": "string" },
+              "bakedFallback": { "enum": ["group", "rectangle", "raster"] }
+            }
+          }
         }
       }
     }

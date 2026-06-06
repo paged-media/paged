@@ -6,9 +6,12 @@ reality: `thoughts/docs/paged/plugin-draw/reality-check.md`):
 
 | Package | Contents | Tier |
 |---|---|---|
-| `@paged-media/plugin-api` | the contract: manifest types + schema, bundle lifecycle (`PagedBundle` / `BundleHost` / `BundleHandle`), curated type re-exports of the contribution + wire surface. **Type-only.** | frozen at v1 (draft today) |
-| `@paged-media/plugin-sdk` | ergonomic runtime helpers (`defineBundle`); headless test harness reserved | stable, faster-moving |
+| `@paged-media/plugin-api` | the contract: manifest types + schema, bundle lifecycle (`PagedBundle` / `BundleHandle`), the full `BundleHost` surface (contribute / document / selection / viewport / overlay / storage / diagnostics / supports), curated type re-exports of the contribution + wire surface. **Type-only.** | frozen at v1 (v0.2 today) |
+| `@paged-media/plugin-sdk` | the runtime: `createBundleHost` (in-process host adapter), `loadBundle` (apiVersion negotiation + teardown), the gesture kit (`beginPageDrag` / `endLocalFor` / `pxToPt` / `commitAndSelect`), `DisposableStore`, `API_VERSION`, `defineBundle`; headless harness reserved | stable, faster-moving |
 | `@paged-media/plugin-cli` | `paged-plugin validate <manifest.json>` — manifest schema + namespace checks | tooling cadence |
+
+The full API deliberation — tenets, area-by-area rationale, RPC-readiness
+audit, rejected alternatives, freeze policy — is in **`DESIGN.md`**.
 
 Note: the npm name `@paged-media/sdk` belongs to the **viewer session**
 (`core/crates/paged-sdk`, WebGPU read-only renderer) — the plugin runtime is

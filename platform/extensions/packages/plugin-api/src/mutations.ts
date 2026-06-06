@@ -25,6 +25,12 @@ export type {
   // Hit-testing.
   HitFilter,
   HitResult,
+  // Document reads (collections, meta, geometry, scene tree).
+  CollectionName,
+  DocumentMeta,
+  ElementGeometryItem,
+  SceneTreeNode,
+  SelectionMode,
   // Worker gesture channel.
   GestureType,
   GestureHandle,
