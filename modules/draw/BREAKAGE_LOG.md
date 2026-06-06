@@ -26,12 +26,15 @@ Format: `B-NN · date · area · status`.
   Esc pops). Tracked for the editor shell; draw's `manifest.json`
   already declares `editContexts: [{ type: "vectorGraphic" }]`.
 
-- **B-03 · 2026-06-06 · engine ops · OPEN (verify first)** — gradient
-  *assignment*. Gradients exist as swatches (`createGradient`) but the
-  toolbar gap note says no op applies one to a frame. Verify whether
-  `setElementProperty{ path: "frameFillColor", value: colorRef("Gradient/…") }`
-  is accepted by `paged-mutate/src/apply.rs`; if not, add a path. The
-  on-canvas annotator then rides `frameGradientFillAngle`/`Length`.
+- **B-03 · 2026-06-06 · engine ops · RESOLVED (2026-06-06)** — gradient
+  assignment needs NO new engine op: verified by core test
+  (`paged-mutate/tests/gradient_fill.rs`) — `setElementProperty{
+  frameFillColor, colorRef("Gradient/…") }` round-trips to a
+  `LinearGradient` paint through `build_document`, inverse restores.
+  Editor follow-up: the toolbar/panels just send the colorRef. Sharp
+  edges pinned in the test: a stop referencing a missing swatch
+  silently drops the whole fill; the legacy single-page
+  `pipeline::build` is solid-only.
 
 - **B-04 · 2026-06-06 · engine ops · OPEN** — no group creation.
   `NodeSpec` has no group variant; `NodeId::Group` exists read-side.
@@ -59,10 +62,13 @@ Format: `B-NN · date · area · status`.
   carries no pressure/tilt (Pointer Events expose them). Gates stylus
   input → variable-width strokes (§13.12, Tier B). Not a v1 blocker.
 
-- **B-09 · 2026-06-06 · scripting/runtime · OPEN (P7 gate)** — Boa is
-  synchronous, no time budget, no per-plugin isolate; §10/§11 safety
-  guarantees unbuildable. Deliberately NOT on the v1 critical path —
-  third-party-beta blocker only.
+- **B-09 · 2026-06-06 · scripting/runtime · PARTIAL (2026-06-06)** —
+  loop-iteration (10M) + recursion budgets now enforced via Boa 0.21
+  RuntimeLimits (`paged-script`, incl. a fixed latent worker-abort
+  when a limit tripped). Still open for the full §10 story:
+  instruction metering / wall-clock interrupts and per-context memory
+  caps (stock Boa has neither — upstream fuel or worker-level
+  isolation). The open half stays a P7 gate, not a v1 blocker.
 
 - **B-10 · 2026-06-06 · packaging · RESOLVED** — `@paged-media/sdk`
   npm name collision: it's core's WebGPU `ViewerSession`. Plugin
