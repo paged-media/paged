@@ -41,6 +41,17 @@ jobs:
               echo "skip $name@$version (already published)"
             else
               echo "publish $name@$version"
-              (cd "$dir" && pnpm publish --no-git-checks)
+              if ! (cd "$dir" && pnpm publish --no-git-checks); then
+                # Registry propagation race: the pre-check can 404 for a
+                # version that IS live. Re-check before failing.
+                if npm view "$name@$version" version >/dev/null 2>&1; then
+                  echo "skip $name@$version (published concurrently)"
+                else
+                  exit 1
+                fi
+              fi
+              # pnpm publish ignores publishConfig.tag — pin the canary
+              # dist-tag explicitly (latest also moves on publish).
+              npm dist-tag add "$name@$version" canary || true
             fi
           done
