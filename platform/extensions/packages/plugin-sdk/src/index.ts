@@ -27,3 +27,4 @@ export {
   type PageDrag,
 } from "./gestures";
 export { contributeTool } from "./tools";
+export { contributePanel } from "./panels";

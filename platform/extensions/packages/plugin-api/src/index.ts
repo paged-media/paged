@@ -31,6 +31,7 @@ export type {
   SelectionSurface,
   ViewportSurface,
   OverlaySurface,
+  ShellSurface,
   StorageSurface,
   DiagnosticsSurface,
   Diagnostic,

@@ -148,6 +148,22 @@ export interface OverlaySurface {
   setToolPreview(shape: ToolPreviewShape | null): void;
 }
 
+// ---------------------------------------------------------------- shell
+
+/**
+ * Shell actions the HOST APP injects at `loadBundle` time (the
+ * cockpit owns panel placement; the SDK's adapter stays a pure
+ * function over the editor handle). When the host app provides no
+ * implementation, calls warn and no-op — probe with
+ * `host.supports("shell.openPanel@1")`.
+ */
+export interface ShellSurface {
+  /** Open a REGISTERED panel as the active dock tab (the
+   *  Window-menu / panel-rail path). */
+  openPanel(panelId: string): void;
+  closePanel(panelId: string): void;
+}
+
 // -------------------------------------------------------------- storage
 
 /** Namespaced key-value persistence (`paged.plugin.<id>.*`), JSON
@@ -197,6 +213,7 @@ export interface BundleHost {
   readonly selection: SelectionSurface;
   readonly viewport: ViewportSurface;
   readonly overlay: OverlaySurface;
+  readonly shell: ShellSurface;
   readonly storage: StorageSurface;
   readonly diagnostics: DiagnosticsSurface;
   /** Capability detection over version sniffing: feature strings of

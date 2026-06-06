@@ -30,6 +30,7 @@ import type {
   SceneTreeNode,
   SelectionMode,
   SelectionSurface,
+  ShellSurface,
   StorageSurface,
   ViewportSurface,
 } from "@paged-media/plugin-api";
@@ -111,6 +112,10 @@ export interface CreateBundleHostOptions {
   storage?: StorageBacking;
   /** Console sink override (tests). */
   console?: Pick<Console, "debug" | "info" | "warn" | "error">;
+  /** Shell actions the HOST APP owns (the cockpit's panel placement).
+   *  When absent, `host.shell` warns and no-ops, and
+   *  `supports("shell.openPanel@1")` answers false. */
+  shell?: ShellSurface;
 }
 
 export interface BundleHostHandle {
@@ -359,7 +364,23 @@ export function createBundleHost(
     },
   };
 
+  // --------------------------------------------------------- shell
+  const shell: ShellSurface = options?.shell ?? {
+    openPanel(panelId) {
+      log.warn(
+        `shell.openPanel("${panelId}") ignored — the host app provided no ` +
+          `shell actions (probe with supports("shell.openPanel@1"))`,
+      );
+    },
+    closePanel() {
+      /* same contract as openPanel — warn once is enough */
+    },
+  };
+
   const featureSet = new Set(HOST_FEATURES);
+  if (options?.shell) {
+    featureSet.add("shell.openPanel@1");
+  }
 
   const host: BundleHost = {
     manifest,
@@ -369,6 +390,7 @@ export function createBundleHost(
     selection,
     viewport,
     overlay,
+    shell,
     storage,
     diagnostics,
     supports: (feature) => featureSet.has(feature),
