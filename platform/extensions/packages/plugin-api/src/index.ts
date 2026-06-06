@@ -43,6 +43,9 @@ export type {
   PluginLogger,
   EditContextDescriptor,
   ObjectTypeDescriptor,
+  PluginMetadataEnvelope,
+  ObjectTypeBaker,
+  BakeContext,
 } from "./host";
 
 export type * from "./contributions";

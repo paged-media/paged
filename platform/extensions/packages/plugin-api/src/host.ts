@@ -121,6 +121,62 @@ export interface DocumentSurface {
   elementGeometry(ids: ElementId[]): Promise<ElementGeometryItem[]>;
   tree(): Promise<SceneTreeNode[]>;
   onDidChange(listener: (e: DocumentChangeEvent) => void): Disposable;
+  /**
+   * Plugin-metadata carrier (protocol v33) — read this plugin's
+   * metadata envelope on a leaf page item, or `null` when absent.
+   * The key is implicit: `x-paged:<manifest shortname>` — a bundle
+   * can only see and write its OWN namespace (enforced by the host;
+   * the engine additionally gates prefix/size/envelope).
+   */
+  getMetadata(id: ElementId): Promise<PluginMetadataEnvelope | null>;
+  /**
+   * Write (or clear, with `null`) this plugin's metadata on a leaf
+   * page item. One ordinary mutation through the same door as
+   * `mutate` — full undo/redo, engine-gated (64 KiB cap, JSON
+   * envelope shape). IDML round-trips it as a `Properties/Label`
+   * `KeyValuePair`, which InDesign preserves verbatim.
+   */
+  setMetadata(
+    id: ElementId,
+    envelope: PluginMetadataEnvelope | null,
+  ): Promise<MutationOutcome>;
+}
+
+/**
+ * The schema'd value of one `x-paged:*` Label entry (facility design
+ * §2). `v` is the PLUGIN's metadata version (migrations are
+ * plugin-owned); `engine` carries determinism pins where relevant
+ * (e.g. paged.web's `{ blitz: "0.3.0-alpha.4" }`).
+ */
+export interface PluginMetadataEnvelope {
+  v: number;
+  data: Record<string, unknown>;
+  engine?: Record<string, string>;
+}
+
+/**
+ * The bake() contract (facility design §4) — registered via
+ * `contribute.objectType`. Produces the baked IDML form (mutations
+ * creating/refreshing the object's DERIVED children) from the live
+ * metadata. Pure: (metadata, geometry) in, mutation batch out. The
+ * host applies the batch atomically (one undo step) on metadata
+ * change (debounced) and before save/export; a throwing bake blocks
+ * the save with a diagnostic — never a silent degrade.
+ *
+ * NOTE: `contribute.objectType` is still reserved at runtime — this
+ * type ships ahead of the host loop so bakers can be written against
+ * it (consumer sequencing §6: paged.web W-02 first).
+ */
+export interface ObjectTypeBaker {
+  bake(ctx: BakeContext): Mutation[];
+}
+
+export interface BakeContext {
+  /** The host object the metadata lives on. */
+  id: ElementId;
+  envelope: PluginMetadataEnvelope;
+  /** Page-local frame bounds [top, left, bottom, right] in pt. */
+  bounds: [number, number, number, number];
 }
 
 // --------------------------------------------------- selection/viewport

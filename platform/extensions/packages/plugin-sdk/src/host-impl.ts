@@ -27,6 +27,7 @@ import type {
   PagedEditor,
   PluginLogger,
   PluginManifest,
+  PluginMetadataEnvelope,
   SceneTreeNode,
   SelectionMode,
   SelectionSurface,
@@ -54,6 +55,8 @@ export const HOST_FEATURES: readonly string[] = [
   "document.elementGeometry@1",
   "document.tree@1",
   "document.onDidChange@1",
+  "document.getMetadata@1",
+  "document.setMetadata@1",
   "selection@1",
   "viewport@1",
   "overlay.toolPreview@1",
@@ -133,6 +136,11 @@ export function createBundleHost(
   const sink = options?.console ?? console;
   const ns = `${manifest.id}.`;
   const tag = `[${manifest.id}]`;
+
+  // Plugin-metadata namespace — the FULL manifest id (not a
+  // shortname) so third-party ids can never collide:
+  // "x-paged:paged.web", "x-paged:acme.charts".
+  const metadataKey = (m: PluginManifest) => `x-paged:${m.id}`;
 
   const assertNamespaced = (id: string, kind: string): void => {
     if (!id.startsWith(ns)) {
@@ -249,6 +257,46 @@ export function createBundleHost(
         kind: "requestSceneTree",
       });
       return reply.kind === "sceneTree" ? reply.payload.roots : [];
+    },
+    async getMetadata(id) {
+      const key = metadataKey(manifest);
+      const reply = await getEditor().client.send({
+        kind: "requestElementProperties",
+        payload: { id },
+      });
+      if (reply.kind !== "elementProperties" || !reply.payload.result) {
+        return null;
+      }
+      for (const entry of reply.payload.result.entries) {
+        const v = entry.value;
+        if (
+          v &&
+          typeof v === "object" &&
+          v.type === "pluginMetadata" &&
+          v.value.key === key &&
+          typeof v.value.value === "string"
+        ) {
+          try {
+            return JSON.parse(v.value.value) as PluginMetadataEnvelope;
+          } catch {
+            return null; // engine-gated on write; treat corrupt as absent
+          }
+        }
+      }
+      return null;
+    },
+    async setMetadata(id, envelope) {
+      // The plugin's OWN namespace only — the key is derived, never
+      // caller-supplied (the engine additionally gates the prefix,
+      // the 64 KiB cap and the envelope shape).
+      return this.mutate({
+        op: "setPluginMetadata",
+        args: {
+          elementId: id,
+          key: metadataKey(manifest),
+          value: envelope === null ? null : JSON.stringify(envelope),
+        },
+      });
     },
     onDidChange(listener: (e: DocumentChangeEvent) => void): Disposable {
       const off = getEditor().client.subscribe((msg) => {

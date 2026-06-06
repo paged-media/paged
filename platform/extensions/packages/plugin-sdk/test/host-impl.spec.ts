@@ -236,3 +236,82 @@ describe("loadBundle", () => {
     expect(fake.tools.ids()).toHaveLength(0);
   });
 });
+
+describe("document.getMetadata / setMetadata (protocol v33)", () => {
+  const KEY = "x-paged:media.paged.test";
+
+  it("setMetadata writes the derived key + serialized envelope through mutate", async () => {
+    const h = host();
+    const out = await h.host.document.setMetadata(
+      { textFrame: "u10" } as never,
+      { v: 1, data: { source: "<b>hi</b>" } },
+    );
+    expect(out.applied).toBe(true);
+    expect(h.fake.mutations).toEqual([
+      {
+        op: "setPluginMetadata",
+        args: {
+          elementId: { textFrame: "u10" },
+          key: KEY,
+          value: '{"v":1,"data":{"source":"<b>hi</b>"}}',
+        },
+      },
+    ]);
+  });
+
+  it("setMetadata(null) clears the entry", async () => {
+    const h = host();
+    await h.host.document.setMetadata({ textFrame: "u10" } as never, null);
+    expect(
+      (h.fake.mutations[0] as { args: { value: unknown } }).args.value,
+    ).toBeNull();
+  });
+
+  it("getMetadata reads only this plugin's namespace and parses the envelope", async () => {
+    const h = host();
+    h.fake.setElementProperties({
+      kind: "elementProperties",
+      payload: {
+        result: {
+          id: { textFrame: "u10" },
+          kind: "TextFrame",
+          entries: [
+            {
+              path: "frameBounds",
+              value: { type: "bounds", value: [0, 0, 10, 10] },
+            },
+            {
+              path: "pluginMetadata",
+              value: {
+                type: "pluginMetadata",
+                value: {
+                  key: "x-paged:other.plugin",
+                  value: '{"v":9,"data":{"theirs":true}}',
+                },
+              },
+            },
+            {
+              path: "pluginMetadata",
+              value: {
+                type: "pluginMetadata",
+                value: { key: KEY, value: '{"v":1,"data":{"mine":true}}' },
+              },
+            },
+          ],
+        },
+      },
+    });
+    const envelope = await h.host.document.getMetadata({
+      textFrame: "u10",
+    } as never);
+    expect(envelope).toEqual({ v: 1, data: { mine: true } });
+  });
+
+  it("getMetadata returns null when absent", async () => {
+    const h = host();
+    const envelope = await h.host.document.getMetadata({
+      textFrame: "u10",
+    } as never);
+    expect(envelope).toBeNull();
+  });
+});

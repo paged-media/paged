@@ -58,6 +58,10 @@ export function makeFakeEditor() {
     kind: "mutationApplied",
     payload: { createdId: null, pageIds: ["p1"] },
   };
+  let elementPropertiesReply: unknown = {
+    kind: "elementProperties",
+    payload: { result: null },
+  };
 
   const client = {
     mutate: async (m: unknown) => {
@@ -77,6 +81,9 @@ export function makeFakeEditor() {
       }
       if (msg.kind === "requestSceneTree") {
         return { kind: "sceneTree", payload: { roots: [] } };
+      }
+      if (msg.kind === "requestElementProperties") {
+        return elementPropertiesReply;
       }
       return { kind: "noop" };
     },
@@ -106,6 +113,9 @@ export function makeFakeEditor() {
   };
 
   return {
+    setElementProperties(reply: unknown) {
+      elementPropertiesReply = reply;
+    },
     editor: editor as unknown as PagedEditor,
     tools,
     panels,
