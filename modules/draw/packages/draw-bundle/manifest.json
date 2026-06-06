@@ -1,8 +1,8 @@
 {
   "id": "media.paged.draw",
   "name": "paged.draw",
-  "version": "0.1.0",
-  "apiVersion": "^0.1",
+  "version": "0.2.0",
+  "apiVersion": "^0.2",
   "publisher": "paged.media",
   "capabilities": {
     "document": { "read": "broad", "write": "scoped" },
@@ -23,7 +23,12 @@
       "../../panels/fill.panel.json",
       "../../panels/layers.panel.json"
     ],
-    "commands": [],
+    "commands": [
+      "media.paged.draw.tool.pen.activate",
+      "media.paged.draw.tool.addAnchor.activate",
+      "media.paged.draw.tool.deleteAnchor.activate",
+      "media.paged.draw.tool.convertAnchor.activate"
+    ],
     "editContexts": [{ "type": "vectorGraphic", "entry": "doubleClick" }]
   }
 }

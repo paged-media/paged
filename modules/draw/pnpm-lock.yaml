@@ -14,6 +14,9 @@ importers:
 
   packages/draw-bundle:
     dependencies:
+      '@paged-media/draw-geometry':
+        specifier: workspace:*
+        version: link:../draw-geometry
       '@paged-media/draw-tools':
         specifier: workspace:*
         version: link:../draw-tools
@@ -27,6 +30,9 @@ importers:
       typescript:
         specifier: ^5.6.3
         version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9
 
   packages/draw-geometry:
     devDependencies:

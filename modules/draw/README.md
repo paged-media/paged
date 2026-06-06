@@ -39,10 +39,12 @@ node ../sdk/packages/plugin-cli/bin/paged-plugin.mjs validate packages/draw-bund
 
 ## Milestones
 
-- **D1** — geometry + machines extracted, tested standalone; the editor's
-  pencil re-imports RDP from here. *(this scaffold)*
-- **D2** — pen + add/delete/convert-anchor live in the editor as shims over
-  `draw-tools`.
-- **D3** — registration moves to `drawBundle.activate(host)` under the
-  `media.paged.draw.*` ids; removing the call removes draw cleanly. Gated on
-  BREAKAGE_LOG B-11.
+- **D1 — done** — geometry + machines extracted, tested standalone; the
+  editor's pencil re-imports RDP from here.
+- **D2 — done** — pen + add/delete/convert-anchor live in the editor as
+  shims over `draw-tools` (E2E: editor `tests/e2e/draw-plugin.spec.ts`).
+- **D3 — done** — `drawBundle.activate(host)` registers the four
+  `media.paged.draw.tool.*` tools (with activation commands + guarded
+  shortcuts via `contributeTool`) through `@paged-media/plugin-sdk` 0.2;
+  the editor loads the bundle with one `loadBundle()` call and removing
+  it removes draw cleanly (B-11 resolved).

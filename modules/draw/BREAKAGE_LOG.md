@@ -68,12 +68,11 @@ Format: `B-NN · date · area · status`.
   npm name collision: it's core's WebGPU `ViewerSession`. Plugin
   runtime renamed `@paged-media/plugin-sdk` (sdk repo, 2026-06-06).
 
-- **B-11 · 2026-06-06 · bundle surface · OPEN (gates D3)** — the
-  editor's gesture-shim helpers (`beginPageDrag`, `endLocalFor`,
-  `mutateAndSelect`, `pxToPt` in `editor/packages/tools/src/handlers/
-  shared.ts`) are not reachable through `plugin-api`, so `draw-bundle`
-  cannot register working tools itself yet. Either export them through
-  the plugin surface or absorb them into `@paged-media/plugin-sdk`.
+- **B-11 · 2026-06-06 · bundle surface · RESOLVED (2026-06-06)** — the
+  editor's gesture-shim helpers were absorbed into
+  `@paged-media/plugin-sdk` 0.2 as the gesture kit (`beginPageDrag`,
+  `endLocalFor`, `pxToPt`, `commitAndSelect`); `draw-bundle` now
+  registers its tools itself (D3, `src/activate.ts`).
 
 - **B-12 · 2026-06-06 · engine ops · OPEN** — no dash-pattern
   `PropertyPath` (stroke panel's dash section, §13.5 stroke model).
@@ -85,3 +84,19 @@ Format: `B-NN · date · area · status`.
   editor app; needs the engine wasm consumable headless (Decision B or
   a node loader). Until then: pure-machine unit tests + editor
   Playwright E2E.
+
+- **B-14 · 2026-06-06 · shell rail · OPEN (cosmetic)** — rail slot
+  order is first-seen group order, so a bundle registered after mount
+  lands its slot at the END of its section instead of the catalog
+  position (pen slot now trails pencil/shape). Needs a slot-order hint
+  on `ToolContribution` (per-section `order`) honored by
+  `ToolRail.deriveSections`.
+
+- **B-15 · 2026-06-06 · shell shortcuts · OPEN (worked around in SDK)**
+  — the host builds tool activation commands + shortcuts only for the
+  STARTUP tool set (`buildToolbarContributions` over the `tools` prop);
+  late-registered tools get a rail slot but no shortcut.
+  `@paged-media/plugin-sdk`'s `contributeTool` closes the gap
+  bundle-side (tool + activation command + text-suppressed
+  keybinding); the host-side fix is to derive shortcuts from the
+  registry instead of the prop.
