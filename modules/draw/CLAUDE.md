@@ -36,11 +36,11 @@ geometry/tools via pnpm `link:` and wraps the machines in thin
 - **`panels/*.panel.json` are design prototypes.** Not interpreted by any
   host; keep them honest against the catalog's binding ceiling (no
   invented conditionals).
-- **Install order:** editor → sdk → plugin-draw (`link:` chain).
+- **Install order:** editor → plugin-sdk → plugin-draw (`link:` chain).
 
 ## Commands
 
 ```bash
 pnpm install && pnpm -r test && pnpm -r typecheck
-node ../sdk/packages/plugin-cli/bin/paged-plugin.mjs validate packages/draw-bundle/manifest.json
+node ../plugin-sdk/packages/plugin-cli/bin/paged-plugin.mjs validate packages/draw-bundle/manifest.json
 ```

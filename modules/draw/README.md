@@ -25,16 +25,16 @@ ceiling; the P4 test corpus.
 
 ## Setup
 
-Sibling checkout layout required (pnpm `link:` deps into `../sdk`, which
-links into `../editor` — install order: editor → sdk → here):
+Sibling checkout layout required (pnpm `link:` deps into `../plugin-sdk`, which
+links into `../editor` — install order: editor → plugin-sdk → here):
 
 ```bash
 cd ~/paged/editor && pnpm install
-cd ~/paged/sdk && pnpm install
+cd ~/paged/plugin-sdk && pnpm install
 cd ~/paged/plugin-draw && pnpm install
 pnpm -r test        # vitest — pure machines, no host needed
 pnpm -r typecheck   # includes the wire-compat assertions against plugin-api
-node ../sdk/packages/plugin-cli/bin/paged-plugin.mjs validate packages/draw-bundle/manifest.json
+node ../plugin-sdk/packages/plugin-cli/bin/paged-plugin.mjs validate packages/draw-bundle/manifest.json
 ```
 
 ## Milestones
