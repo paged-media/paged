@@ -181,6 +181,76 @@ describe("viewport / overlay / storage / diagnostics", () => {
   });
 });
 
+describe("diagnostics — host problems-panel fan-out (W-05)", () => {
+  it("set/clear publish to an injected sink keyed by (bundleId, key)", () => {
+    const fake = makeFakeEditor();
+    const published: Array<[string, string, number]> = [];
+    const cleared: Array<[string, string | undefined]> = [];
+    const handle = createBundleHost(() => fake.editor, MANIFEST, {
+      console: silent,
+      storage: mapBacking(),
+      diagnosticsSink: {
+        publish: (bundleId, key, diags) =>
+          published.push([bundleId, key, diags.length]),
+        clear: (bundleId, key) => cleared.push([bundleId, key]),
+      },
+    });
+
+    handle.host.diagnostics.set("frame:u1", [
+      { severity: "error", message: "page JavaScript never executes", line: 2 },
+      { severity: "warning", message: "<p> is never closed", line: 1 },
+    ]);
+    // Fans out under THIS plugin's id — the panel attributes + de-dupes
+    // by it (and click-to-focus resolves the owning panel from it).
+    expect(published).toEqual([["media.paged.test", "frame:u1", 2]]);
+
+    handle.host.diagnostics.clear("frame:u1");
+    expect(cleared).toEqual([["media.paged.test", "frame:u1"]]);
+
+    // The per-bundle store + onDidChange round-trip is unchanged by the
+    // sink (it is a fan-out, not a replacement).
+    handle.host.diagnostics.set("frame:u1", [
+      { severity: "info", message: "empty web frame" },
+    ]);
+    expect(handle.host.diagnostics.get("frame:u1")).toHaveLength(1);
+    handle.dispose();
+  });
+
+  it("supports('diagnostics.publish@1') only with a sink", () => {
+    const h = host();
+    expect(h.host.supports("diagnostics.publish@1")).toBe(false);
+    const fake = makeFakeEditor();
+    const withSink = createBundleHost(() => fake.editor, MANIFEST, {
+      console: silent,
+      storage: mapBacking(),
+      diagnosticsSink: { publish: () => {}, clear: () => {} },
+    });
+    expect(withSink.host.supports("diagnostics.publish@1")).toBe(true);
+    withSink.dispose();
+  });
+});
+
+describe("widgets — host code-editor catalog (W-04)", () => {
+  it("defaults to a textarea fallback; supports() answers false", () => {
+    const h = host();
+    expect(typeof h.host.widgets.CodeEditor).toBe("function");
+    expect(h.host.supports("widgets.codeEditor@1")).toBe(false);
+  });
+
+  it("uses the injected catalog and flips the feature flag", () => {
+    const fake = makeFakeEditor();
+    const Injected = () => null;
+    const handle = createBundleHost(() => fake.editor, MANIFEST, {
+      console: silent,
+      storage: mapBacking(),
+      widgets: { CodeEditor: Injected },
+    });
+    expect(handle.host.widgets.CodeEditor).toBe(Injected);
+    expect(handle.host.supports("widgets.codeEditor@1")).toBe(true);
+    handle.dispose();
+  });
+});
+
 describe("loadBundle", () => {
   it("activates, then dispose() runs bundle + facade teardown", () => {
     const fake = makeFakeEditor();

@@ -31,8 +31,10 @@ export {
   PluginApiNotImplemented,
   type BundleHostHandle,
   type CreateBundleHostOptions,
+  type DiagnosticsSink,
   type StorageBacking,
 } from "./host-impl";
+export { FALLBACK_WIDGETS } from "./widgets-fallback";
 export { loadBundle, type LoadedBundle } from "./load";
 export {
   beginPageDrag,

@@ -34,9 +34,11 @@ import type {
   ShellSurface,
   StorageSurface,
   ViewportSurface,
+  WidgetSurface,
 } from "@paged-media/plugin-api";
 
 import { DisposableStore, toDisposable } from "./disposables";
+import { FALLBACK_WIDGETS } from "./widgets-fallback";
 
 /** The implemented feature set — `host.supports()` answers from this,
  *  so docs/tests can't drift from code. Form: `"area.member@major"`. */
@@ -111,6 +113,20 @@ function defaultStorageBacking(): StorageBacking {
   };
 }
 
+/**
+ * A host-side aggregator the editor injects to power a PROBLEMS PANEL
+ * (paged.web W-05): every `host.diagnostics.set/clear` is mirrored
+ * here keyed by `(bundleId, key)`, so one editor surface can list
+ * diagnostics across all loaded bundles. The per-bundle in-host store
+ * (`host.diagnostics.get`) is unchanged — this is a fan-out, not a
+ * replacement. `bundleId` lets the panel attribute + de-dupe and
+ * lets click-to-focus resolve the owning panel.
+ */
+export interface DiagnosticsSink {
+  publish(bundleId: string, key: string, diagnostics: Diagnostic[]): void;
+  clear(bundleId: string, key?: string): void;
+}
+
 export interface CreateBundleHostOptions {
   storage?: StorageBacking;
   /** Console sink override (tests). */
@@ -119,6 +135,15 @@ export interface CreateBundleHostOptions {
    *  When absent, `host.shell` warns and no-ops, and
    *  `supports("shell.openPanel@1")` answers false. */
   shell?: ShellSurface;
+  /** Host-provided panel widgets (W-04): the real code editor lives in
+   *  the editor's UI package and is injected here. When absent,
+   *  `host.widgets` is the plain-textarea fallback and
+   *  `supports("widgets.codeEditor@1")` answers false. */
+  widgets?: WidgetSurface;
+  /** Host-side problems-panel aggregator (W-05). When present,
+   *  `supports("diagnostics.publish@1")` answers true and every
+   *  `host.diagnostics.set/clear` fans out to it. */
+  diagnosticsSink?: DiagnosticsSink;
 }
 
 export interface BundleHostHandle {
@@ -410,7 +435,9 @@ export function createBundleHost(
   const diagnostics: DiagnosticsSurface = {
     set(key, items) {
       diagnosticStore.set(key, items);
-      // Console mirror — the v0 problems panel.
+      // Console mirror — the v0 floor (a problems panel consumes the
+      // SAME store via the injected sink; the mirror stays for
+      // headless hosts).
       for (const d of items) {
         const line = `${tag} ${key}: ${d.message}` +
           (d.line !== undefined ? ` (${d.source ?? ""}:${d.line})` : "");
@@ -418,11 +445,14 @@ export function createBundleHost(
         else if (d.severity === "warning") sink.warn(line);
         else sink.info(line);
       }
+      // Fan out to the host problems panel (W-05) keyed by bundle id.
+      options?.diagnosticsSink?.publish(manifest.id, key, items);
       emitDiagnostics(key);
     },
     clear(key) {
       if (key !== undefined) diagnosticStore.delete(key);
       else diagnosticStore.clear();
+      options?.diagnosticsSink?.clear(manifest.id, key);
       emitDiagnostics(key ?? "");
     },
     get(key) {
@@ -447,9 +477,21 @@ export function createBundleHost(
     },
   };
 
+  // --------------------------------------------------------- widgets
+  // The host app owns the widget catalog (W-04). When it injects one,
+  // bundles get the rich CodeEditor; otherwise the plain-textarea
+  // fallback stands in — same props contract, honest seam.
+  const widgets: WidgetSurface = options?.widgets ?? FALLBACK_WIDGETS;
+
   const featureSet = new Set(HOST_FEATURES);
   if (options?.shell) {
     featureSet.add("shell.openPanel@1");
+  }
+  if (options?.widgets) {
+    featureSet.add("widgets.codeEditor@1");
+  }
+  if (options?.diagnosticsSink) {
+    featureSet.add("diagnostics.publish@1");
   }
 
   const host: BundleHost = {
@@ -463,6 +505,7 @@ export function createBundleHost(
     shell,
     storage,
     diagnostics,
+    widgets,
     supports: (feature) => featureSet.has(feature),
     get editor() {
       return getEditor();

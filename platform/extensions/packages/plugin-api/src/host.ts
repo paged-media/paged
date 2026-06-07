@@ -33,6 +33,7 @@ import type {
 } from "./editor";
 
 import type { PluginManifest } from "./manifest";
+import type { WidgetSurface } from "./widgets";
 
 // ---------------------------------------------------------------- core
 
@@ -272,6 +273,11 @@ export interface BundleHost {
   readonly shell: ShellSurface;
   readonly storage: StorageSurface;
   readonly diagnostics: DiagnosticsSurface;
+  /** Host-provided panel widgets (W-04): the code editor and future
+   *  heavy controls the host owns. Always present — a plain-textarea
+   *  fallback stands in when the host app injects no widget catalog
+   *  (probe with `host.supports("widgets.codeEditor@1")`). */
+  readonly widgets: WidgetSurface;
   /** Capability detection over version sniffing: feature strings of
    *  the form `"area.member@major"` (see HOST_FEATURES in plugin-sdk). */
   supports(feature: string): boolean;

@@ -48,5 +48,12 @@ export type {
   BakeContext,
 } from "./host";
 
+export type {
+  WidgetSurface,
+  CodeEditorProps,
+  CodeEditorDiagnostic,
+  CodeEditorLanguage,
+} from "./widgets";
+
 export type * from "./contributions";
 export type * from "./mutations";
