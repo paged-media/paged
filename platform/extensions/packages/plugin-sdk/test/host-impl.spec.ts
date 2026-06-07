@@ -243,7 +243,7 @@ describe("document.getMetadata / setMetadata (protocol v33)", () => {
   it("setMetadata writes the derived key + serialized envelope through mutate", async () => {
     const h = host();
     const out = await h.host.document.setMetadata(
-      { textFrame: "u10" } as never,
+      { kind: "textFrame", id: "u10" } as never,
       { v: 1, data: { source: "<b>hi</b>" } },
     );
     expect(out.applied).toBe(true);
@@ -251,7 +251,7 @@ describe("document.getMetadata / setMetadata (protocol v33)", () => {
       {
         op: "setPluginMetadata",
         args: {
-          elementId: { textFrame: "u10" },
+          elementId: { kind: "textFrame", id: "u10" },
           key: KEY,
           value: '{"v":1,"data":{"source":"<b>hi</b>"}}',
         },
@@ -261,7 +261,7 @@ describe("document.getMetadata / setMetadata (protocol v33)", () => {
 
   it("setMetadata(null) clears the entry", async () => {
     const h = host();
-    await h.host.document.setMetadata({ textFrame: "u10" } as never, null);
+    await h.host.document.setMetadata({ kind: "textFrame", id: "u10" } as never, null);
     expect(
       (h.fake.mutations[0] as { args: { value: unknown } }).args.value,
     ).toBeNull();
@@ -273,7 +273,7 @@ describe("document.getMetadata / setMetadata (protocol v33)", () => {
       kind: "elementProperties",
       payload: {
         result: {
-          id: { textFrame: "u10" },
+          id: { kind: "textFrame", id: "u10" },
           kind: "TextFrame",
           entries: [
             {
@@ -313,5 +313,65 @@ describe("document.getMetadata / setMetadata (protocol v33)", () => {
       textFrame: "u10",
     } as never);
     expect(envelope).toBeNull();
+  });
+});
+
+describe("raw-mutate namespace gate (v34)", () => {
+  const KEY = "x-paged:media.paged.test";
+
+  it("rejects setPluginMetadata outside the plugin's namespace", async () => {
+    const h = host();
+    const out = await h.host.document.mutate({
+      op: "setPluginMetadata",
+      args: {
+        elementId: { kind: "rectangle", id: "u1" },
+        key: "x-paged:other.plugin",
+        value: '{"v":1,"data":{}}',
+      },
+    } as never);
+    expect(out.applied).toBe(false);
+    expect(h.fake.mutations).toHaveLength(0);
+  });
+
+  it("rejects foreign keys nested in batches; allows own key", async () => {
+    const h = host();
+    const bad = await h.host.document.mutate({
+      op: "batch",
+      args: {
+        ops: [
+          {
+            op: "setPluginMetadata",
+            args: {
+              elementId: { kind: "rectangle", id: "$created" },
+              key: "x-paged:other.plugin",
+              value: '{"v":1,"data":{}}',
+            },
+          },
+        ],
+      },
+    } as never);
+    expect(bad.applied).toBe(false);
+
+    const ok = await h.host.document.mutate({
+      op: "batch",
+      args: {
+        ops: [
+          {
+            op: "insertFrame",
+            args: { pageId: "p1", bounds: [0, 0, 10, 10] },
+          },
+          {
+            op: "setPluginMetadata",
+            args: {
+              elementId: { kind: "rectangle", id: "$created" },
+              key: KEY,
+              value: '{"v":1,"data":{}}',
+            },
+          },
+        ],
+      },
+    } as never);
+    expect(ok.applied).toBe(true);
+    expect(h.fake.mutations).toHaveLength(1);
   });
 });

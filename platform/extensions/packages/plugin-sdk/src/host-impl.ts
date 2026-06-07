@@ -195,8 +195,30 @@ export function createBundleHost(
   };
 
   // ------------------------------------------------------ document
+  /** The namespace rule at the WRITE chokepoint: a raw mutate may
+   *  carry setPluginMetadata (incl. nested in batches — e.g. the
+   *  v34 batch-created-sentinel insert flow), but only for THIS
+   *  plugin's derived key. Returns the offending key, or null. */
+  const foreignMetadataKey = (m: Mutation): string | null => {
+    if (m.op === "setPluginMetadata") {
+      return m.args.key === metadataKey(manifest) ? null : m.args.key;
+    }
+    if (m.op === "batch") {
+      for (const child of m.args.ops) {
+        const bad = foreignMetadataKey(child);
+        if (bad !== null) return bad;
+      }
+    }
+    return null;
+  };
   const document: DocumentSurface = {
     async mutate(mutation: Mutation): Promise<MutationOutcome> {
+      const foreign = foreignMetadataKey(mutation);
+      if (foreign !== null) {
+        const error = `setPluginMetadata key "${foreign}" is outside this plugin's namespace ("${metadataKey(manifest)}")`;
+        log.warn(error);
+        return { applied: false, error };
+      }
       try {
         const reply = await getEditor().client.mutate(mutation);
         if (reply.kind === "mutationApplied") {
