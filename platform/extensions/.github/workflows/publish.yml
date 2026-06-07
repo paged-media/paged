@@ -43,8 +43,10 @@ jobs:
           test -n "$VER" || { echo "wire.d.ts has no version stamp"; exit 1; }
           echo "vendored wire stamped @paged-media/canvas-wasm@$VER"
           mkdir -p .wire-src
-          ( cd .wire-src && npm init -y >/dev/null \
-              && npm install "@paged-media/canvas-wasm@$VER" \
+          # npm rejects a name derived from a dot-dir — write a valid
+          # manifest directly instead of npm init.
+          printf '{"name":"wire-src-scratch","private":true}' > .wire-src/package.json
+          ( cd .wire-src && npm install "@paged-media/canvas-wasm@$VER" \
                    --no-audit --no-fund --no-package-lock )
           PAGED_CANVAS_WASM_FROM="$PWD/.wire-src" \
             node scripts/sync-wire.mjs --check
