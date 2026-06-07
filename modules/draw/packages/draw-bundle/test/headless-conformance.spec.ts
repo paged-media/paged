@@ -92,6 +92,9 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "tool",
         "panel",
         "schemaPanel",
+        // W3.2 — the vectorGraphic edit context (B-02), recorded
+        // through the harness's editContext registration hook.
+        "editContext",
       ]);
       // The schema panel is recorded VERBATIM (the schema, not React):
       // its id, its sections, and the binding-driven gates.
@@ -108,6 +111,19 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
       const add = harness.toolsContributed()[0];
       expect(add.shortcut).toBe("=");
       expect(add.cursor).toEqual({ kind: "css", token: "crosshair" });
+      // W3.2 — the edit context is recorded with its matcher + sets, and
+      // the host stamped the own-namespace metadata key.
+      const ecs = harness.editContextsContributed();
+      expect(ecs.map((c) => c.type)).toEqual(["vectorGraphic"]);
+      expect(ecs[0].metadataKey).toBe("x-paged:media.paged.draw");
+      expect(
+        ecs[0].matches?.({
+          id: { kind: "polygon", id: "u1" } as never,
+          kind: "polygon",
+          groupChain: [],
+          metadata: null,
+        }),
+      ).toBe(true);
     } finally {
       handle.dispose();
     }

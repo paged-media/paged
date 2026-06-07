@@ -20,11 +20,16 @@
 // stays declarative until the shell grows the registry (B-02).
 
 import type { BundleHandle, BundleHost } from "@paged-media/plugin-api";
-import { contributeSchemaPanel, contributeTool } from "@paged-media/plugin-sdk";
+import {
+  contributeEditContext,
+  contributeSchemaPanel,
+  contributeTool,
+} from "@paged-media/plugin-sdk";
 
 import manifest from "../manifest.json";
 
 import { DRAW_TOOLS } from "./tools";
+import { vectorGraphicEditContext } from "./edit-context";
 import { installStrokePanelBindings, strokePanel } from "./panels/stroke-panel";
 
 export function activate(host: BundleHost): BundleHandle {
@@ -34,9 +39,13 @@ export function activate(host: BundleHost): BundleHandle {
   // The v1 schema panel + its binding driver (the dynamic gate source).
   contributeSchemaPanel(host, strokePanel);
   const bindingSub = installStrokePanelBindings(host);
+  // W3.2 — the vectorGraphic edit context (closes B-02): double-click a
+  // path enters anchor-editing (the anchor tools focused, the stroke
+  // panel raised, a breadcrumb, Esc exits).
+  contributeEditContext(host, vectorGraphicEditContext);
   host.log.info(
-    `activated — ${DRAW_TOOLS.length} tools + 1 schema panel ` +
-      `(apiVersion ${manifest.apiVersion})`,
+    `activated — ${DRAW_TOOLS.length} tools + 1 schema panel + ` +
+      `1 edit context (apiVersion ${manifest.apiVersion})`,
   );
   // The contributions tear down structurally via the host; the binding
   // subscription is the one thing allocated OUTSIDE a facade-tracked

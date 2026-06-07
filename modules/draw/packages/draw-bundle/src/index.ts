@@ -25,3 +25,9 @@ export {
   BIND_HAS_SELECTION,
   BIND_DASH_CONTROLS_VISIBLE,
 } from "./panels/stroke-panel";
+// W3.2 — the vectorGraphic edit context (closes B-02), exported for the
+// conformance spec.
+export {
+  vectorGraphicEditContext,
+  VECTOR_GRAPHIC_CONTEXT,
+} from "./edit-context";

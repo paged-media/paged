@@ -45,11 +45,30 @@ function fakeKeybindings() {
   };
 }
 
+// W3.2 — edit-context/object-type registries key off `type`, not `id`.
+function fakeTypeRegistry() {
+  const byType = new Map<string, { type: string }>();
+  return {
+    types: () => Array.from(byType.keys()),
+    get: (t: string) => byType.get(t),
+    register(c: { type: string }) {
+      byType.set(c.type, c);
+      return {
+        dispose() {
+          byType.delete(c.type);
+        },
+      };
+    },
+  };
+}
+
 function makeFakeEditor() {
   const tools = fakeRegistry();
   const commands = fakeRegistry();
   const panels = fakeRegistry();
   const keybindings = fakeKeybindings();
+  const editContexts = fakeTypeRegistry();
+  const objectTypes = fakeTypeRegistry();
   // Minimal client for the schema panel's binding driver: it subscribes
   // for selection changes and (on a non-empty selection) reads
   // pathAnchors. At install over the empty fake selection it only
@@ -62,7 +81,14 @@ function makeFakeEditor() {
   };
   const editor = {
     client,
-    registries: { tools, commands, panels, keybindings },
+    registries: {
+      tools,
+      commands,
+      panels,
+      keybindings,
+      editContexts,
+      objectTypes,
+    },
     selection: {
       elementSelection: selectionIds,
       setElementSelection: (ids: unknown[]) => {
@@ -78,6 +104,8 @@ function makeFakeEditor() {
     commands,
     panels,
     keybindings,
+    editContexts,
+    objectTypes,
   };
 }
 
@@ -135,6 +163,47 @@ describe("drawBundle.activate", () => {
     );
   });
 
+  it("registers the W3.2 vectorGraphic edit context (B-02 RESOLVED)", () => {
+    const fake = makeFakeEditor();
+    loadBundle(() => fake.editor, drawBundle, {
+      console: silent,
+      storage: mapBacking(),
+    });
+    expect(fake.editContexts.types()).toEqual(["vectorGraphic"]);
+    const ec = fake.editContexts.get("vectorGraphic") as unknown as {
+      entry: string;
+      toolIds: string[];
+      panelIds: string[];
+      matches?: (c: unknown) => boolean;
+      metadataKey?: string;
+    };
+    expect(ec.entry).toBe("doubleClick");
+    // The anchor-editing tool-set the context focuses.
+    expect(ec.toolIds).toEqual([
+      "media.paged.draw.tool.addAnchor",
+      "media.paged.draw.tool.deleteAnchor",
+      "media.paged.draw.tool.convertAnchor",
+    ]);
+    // The stroke panel the cockpit raises on enter.
+    expect(ec.panelIds).toEqual(["media.paged.draw.panel.stroke"]);
+    // The host stamped the own-namespace metadata key.
+    expect(ec.metadataKey).toBe("x-paged:media.paged.draw");
+    // Kind-claimed: a polygon matches, an oval (no path) does not.
+    expect(ec.matches?.({ kind: "polygon", groupChain: [], metadata: null })).toBe(
+      true,
+    );
+    expect(ec.matches?.({ kind: "oval", groupChain: [], metadata: null })).toBe(
+      false,
+    );
+    // paged.web declares NO objectType here; a webFrame is just a
+    // rectangle to draw — rectangles ARE a path kind, so this context
+    // claims them. (In the live editor paged.web's objectType claims a
+    // webFrame FIRST via metadata; see the resolveDoubleClick ordering.)
+    expect(
+      ec.matches?.({ kind: "rectangle", groupChain: [], metadata: null }),
+    ).toBe(true);
+  });
+
   it("dispose leaves the shell exactly as found (honesty smoke test)", () => {
     const fake = makeFakeEditor();
     const loaded = loadBundle(() => fake.editor, drawBundle, {
@@ -146,5 +215,6 @@ describe("drawBundle.activate", () => {
     expect(fake.panels.ids()).toHaveLength(0);
     expect(fake.commands.ids()).toHaveLength(0);
     expect(fake.keybindings.count()).toBe(0);
+    expect(fake.editContexts.types()).toHaveLength(0);
   });
 });

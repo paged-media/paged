@@ -75,12 +75,62 @@ Format: `B-NN · date · area · status`.
   verified (B-03); `layers.panel.json` is the recorded list-widget
   limit (ships as expert-leaf React when needed).
 
-- **B-02 · 2026-06-06 · shell · OPEN** — no edit contexts (paper §5 /
-  P0). Closest precursor: `useSelection().pathEditMode`. Needs an
-  `EditContextRegistry` (enter on double-click via hit-test
-  `groupChain`, panel/tool set swap, write-scope narrowing, breadcrumb,
-  Esc pops). Tracked for the editor shell; draw's `manifest.json`
-  already declares `editContexts: [{ type: "vectorGraphic" }]`.
+- **B-02 · 2026-06-06 · shell · RESOLVED (2026-06-07, W3.2)** — edit
+  contexts shipped (paper §5 / P0), un-reserving `contribute.editContext`
+  (the door no longer throws `PluginApiNotImplemented`). MECHANISM, the
+  three layers:
+  · **plugin-api / plugin-sdk:** `contribute.editContext` is now a real
+    door. A bundle registers an `EditContextContribution`
+    (`{ type, entry, matches?, toolIds?, panelIds?, onEnter?, onExit? }`).
+    Capability-gated like every other door, but keyed on the OBJECT array
+    `contributes.editContexts[]` (the `type` must be declared — NOT a
+    namespaced id, since a content-type name carries no manifest prefix;
+    the namespace rule does NOT apply, the capability gate is the only
+    gate). The SDK adapter STAMPS the bundle's own `x-paged:<id>`
+    `metadataKey` onto the contribution so the host resolves the
+    candidate's metadata from THIS plugin's envelope only. The headless
+    harness records every registration (`editContextsContributed()`) — so
+    conformance asserts the matcher/sets without a UI.
+  · **editor shell (the `EditContextRegistry` B-02 named):**
+    `registries/edit-context.ts` (registry + the pure `resolveDoubleClick`
+    router), `state/edit-context-stack.tsx` (the STACK — enter PUSHES a
+    frame {type, scopeRoot, toolIds, panelIds}; `pop()` removes the TOP
+    frame so Esc pops ONE level; `exitAll`; `isInScope`), the
+    `EditContextController` (Esc-pop, panel emphasis + first-tool focus on
+    enter, selection-driven auto-exit), and `EditContextBreadcrumb` (the
+    root→top trail; the active crumb is selection-magenta; renders ONLY
+    while a context is active). The canvas double-click ENTRY
+    (`ViewportCanvas.onDoubleClick`) consults `useEditContextEntry`
+    BEFORE group descent.
+  · **adoption (this repo):** `draw-bundle/src/edit-context.ts` —
+    `vectorGraphicEditContext` (kind-claimed: the Track-J path kinds —
+    polygon/graphicLine/rectangle/textFrame). Double-clicking a path now
+    ENTERS anchor-editing: the three anchor tools focused (Add first), the
+    stroke panel raised, the breadcrumb shows "Vector graphic", Esc pops.
+  WRITE-SCOPE LINE (documented honesty): the stack carries the entered
+  element as `scopeRoot`; `isInScope` is the SELECTION-SPACE guard at the
+  gesture/mutation entry — the SAME depth `SELECTION` enforces today, NOT
+  kernel-level isolation. A mutation addressed at an out-of-scope id is
+  NOT rejected by the engine; true subtree isolation is the isolate's job.
+  Proof: `draw-bundle` `test/activate.spec.ts` (the vectorGraphic context
+  registers with its tool/panel sets + stamped key + kind matcher) +
+  `test/headless-conformance.spec.ts` (recorded verbatim in the log);
+  plugin-sdk `test/edit-context.spec.ts` + `test/harness.spec.ts` (door,
+  gate, recording, no-more-throws); editor Playwright
+  `tests/e2e/edit-context.spec.ts` AC-EDITCTX-1 (double-click a path →
+  breadcrumb shows + Esc pops, on :5180).
+  RESIDUALS (not blockers): (1) the tool-set restriction is FOCUS-the-
+  first-tool depth — the rail does not yet GRAY OUT non-context tools
+  (a ToolRail derivation change, deferred); (2) write-scope is the
+  selection-space line above — engine subtree rejection is the isolate's;
+  (3) NESTED contexts: the stack supports depth N (Esc pops one), but no
+  first-party flow nests yet, and `isInScope` v1 matches only the
+  entered element itself (descendant membership needs a subtree query);
+  (4) when paged.draw AND a metadata-claiming objectType both could
+  claim one element, the objectType wins (resolveDoubleClick checks it
+  first) — a webFrame never falls through to the vectorGraphic kind
+  matcher; multi-plugin contention policy proper ships at P7 (manifest
+  `priority` reserves the shape).
 
 - **B-03 · 2026-06-06 · engine ops · RESOLVED (2026-06-06)** — gradient
   assignment needs NO new engine op: verified by core test
