@@ -117,26 +117,40 @@ jobs:
     needs: verify-and-publish
     runs-on: ubuntu-latest
     steps:
+      # plugin-template is private until the v1 freeze — the default
+      # GITHUB_TOKEN is scoped to THIS repo only, so the cross-repo
+      # checkout needs a PAT (org-read) in secrets.TEMPLATE_RO_TOKEN.
+      # When unset: SKIP with a visible warning instead of failing the
+      # whole publish red (the template's own ci.yml stays the standing
+      # floating-canary lane). secrets.* is not allowed in job-level
+      # `if`, hence the gate step.
+      - name: gate on TEMPLATE_RO_TOKEN
+        id: gate
+        env:
+          HAS_TOKEN: ${{ secrets.TEMPLATE_RO_TOKEN != '' }}
+        run: |
+          echo "has=$HAS_TOKEN" >> "$GITHUB_OUTPUT"
+          if [ "$HAS_TOKEN" != "true" ]; then
+            echo "::warning title=template-canary-smoke SKIPPED::TEMPLATE_RO_TOKEN is not set — wire an org-read PAT to smoke the fresh canary against plugin-template."
+          fi
       - uses: actions/checkout@v4
+        if: steps.gate.outputs.has == 'true'
         with:
           repository: paged-media/plugin-template
-          # plugin-template is private until the v1 freeze — the default
-          # GITHUB_TOKEN is scoped to THIS repo only, so a cross-repo
-          # checkout needs a PAT (org-read) in secrets.TEMPLATE_RO_TOKEN.
-          # When it's unset the checkout fails loud (intended: wire the
-          # secret, or drop this job and rely on the template's own
-          # ci.yml — the standing floating-canary lane).
           token: ${{ secrets.TEMPLATE_RO_TOKEN }}
       - uses: pnpm/action-setup@v4
+        if: steps.gate.outputs.has == 'true'
         with:
           version: 10
       - uses: actions/setup-node@v4
+        if: steps.gate.outputs.has == 'true'
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
       # Wait for the just-published canary to be resolvable (npm CDN
       # propagation lags the publish by seconds). Poll the dist-tag.
       - name: wait for @canary to resolve here
+        if: steps.gate.outputs.has == 'true'
         run: |
           for i in $(seq 1 30); do
             if npm view '@paged-media/plugin-sdk@canary' version >/dev/null 2>&1; then
@@ -147,8 +161,10 @@ jobs:
           done
           echo "canary did not propagate in time"; exit 1
       - name: install published @canary
+        if: steps.gate.outputs.has == 'true'
         run: pnpm install --no-frozen-lockfile
       - name: typecheck + test + validate against @canary
+        if: steps.gate.outputs.has == 'true'
         run: |
           pnpm ls @paged-media/plugin-api @paged-media/plugin-sdk @paged-media/plugin-cli
           pnpm typecheck
