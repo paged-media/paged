@@ -32,6 +32,7 @@ import type {
   ToolPreviewShape,
 } from "./editor";
 
+import type { AssetSurface } from "./assets";
 import type { PluginManifest } from "./manifest";
 import type { SchemaPanelContribution } from "./panel-schema";
 import type { WidgetSurface } from "./widgets";
@@ -449,6 +450,14 @@ export interface BundleHost {
    *  fallback stands in when the host app injects no widget catalog
    *  (probe with `host.supports("widgets.codeEditor@1")`). */
   readonly widgets: WidgetSurface;
+  /** The capability-gated ASSET STORE (W-06): a READ-ONLY door over the
+   *  bytes the DOCUMENT already embeds/loads. v1 serves font face bytes
+   *  (`getFontFace`) so a bundle can compose real `@font-face`. Always
+   *  present — when the host app injects no asset source, every read
+   *  answers `null` (the honest no-bytes door) and
+   *  `supports("assets.fonts@1")` is false. Capability-gated:
+   *  `getFontFace` requires `capabilities.assets` ∋ `"fonts"`. */
+  readonly assets: AssetSurface;
   /** Capability detection over version sniffing: feature strings of
    *  the form `"area.member@major"` (see HOST_FEATURES in plugin-sdk). */
   supports(feature: string): boolean;

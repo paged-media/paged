@@ -73,6 +73,15 @@
             "type": "string"
           }
         },
+        "assets": {
+          "type": "array",
+          "description": "Asset-store reads the bundle uses (W-06). v1 vocabulary: \"fonts\" only (gates host.assets.getFontFace). \"images\" is reserved for v2 and rejected today. See DESIGN.md §13.",
+          "items": {
+            "enum": [
+              "fonts"
+            ]
+          }
+        },
         "network": {
           "type": "boolean"
         },

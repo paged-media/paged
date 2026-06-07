@@ -74,5 +74,12 @@ export type {
   CodeEditorLanguage,
 } from "./widgets";
 
+export type {
+  AssetSurface,
+  AssetKind,
+  FontFaceAsset,
+  FontFaceFormat,
+} from "./assets";
+
 export type * from "./contributions";
 export type * from "./mutations";

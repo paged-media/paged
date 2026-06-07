@@ -15,6 +15,8 @@
 // (DESIGN.md §2.7/§11); the host option `capabilityMode: 'warn'` is the
 // migration escape hatch. See thoughts/docs/paged/plugin-trust-line.md.
 
+import type { AssetKind } from "./assets";
+
 /** Reverse-DNS plugin identity, e.g. `media.paged.draw`. Doubles as
  *  the namespace prefix for every contribution id the bundle
  *  registers (`media.paged.draw.tool.pen`). */
@@ -63,6 +65,16 @@ export interface PluginCapabilities {
   /** Edit-context content types the bundle claims (P0 shell work —
    *  reserved, not yet wired). */
   editContext?: string[];
+  /**
+   * Asset-store reads the bundle uses (paged.web W-06). A closed array
+   * vocabulary: v1 has exactly `"fonts"` (gates `host.assets.getFontFace`
+   * — serving DOCUMENT font face bytes for `@font-face`). `"images"` is
+   * RESERVED for v2 and REJECTED by validation today (the door has no
+   * image read yet; accepting the declaration would claim a capability
+   * the host cannot honor). Declaring `"fonts"` is the prerequisite for
+   * the door (the host gate throws on an undeclared use). See
+   * DESIGN.md §13. */
+  assets?: AssetKind[];
   network?: boolean;
   clipboard?: "none" | "vector" | "full";
   /**

@@ -28,14 +28,22 @@ export { API_VERSION, satisfiesApiVersion } from "./version";
 export {
   createBundleHost,
   HOST_FEATURES,
+  ASSET_BUDGETS,
   PluginApiNotImplemented,
   PluginCapabilityError,
   type BundleHostHandle,
   type CreateBundleHostOptions,
   type DiagnosticsSink,
+  type BundleAssetProvider,
   type StorageBacking,
 } from "./host-impl";
 export { FALLBACK_WIDGETS } from "./widgets-fallback";
+export {
+  createRecordableAssetSource,
+  type RecordableAssetSource,
+  type RecordedFontFaceRequest,
+  type SeededFace,
+} from "./asset-source-fake";
 export { makeSchemaPanelComponent, resolveGate } from "./schema-panel";
 export { loadBundle, type LoadedBundle } from "./load";
 export {

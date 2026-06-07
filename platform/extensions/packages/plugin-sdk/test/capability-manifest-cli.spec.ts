@@ -56,3 +56,45 @@ describe("plugin-cli validate — capabilities.keybindings (W3.10)", () => {
     expect(r.err).toMatch(/unknown capability "keystrokes"/);
   });
 });
+
+describe("plugin-cli validate — capabilities.assets (W-06)", () => {
+  it("accepts the fonts asset capability", () => {
+    const r = validate({ ...base, capabilities: { assets: ["fonts"] } });
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/valid/);
+  });
+
+  it("rejects a non-array assets capability", () => {
+    const r = validate({ ...base, capabilities: { assets: "fonts" } });
+    expect(r.code).toBe(1);
+    expect(r.err).toMatch(/"capabilities\.assets" must be an array/);
+  });
+
+  it("rejects the reserved-for-v2 'images' kind with a pointed message", () => {
+    const r = validate({ ...base, capabilities: { assets: ["images"] } });
+    expect(r.code).toBe(1);
+    expect(r.err).toMatch(/"images" is reserved for v2/);
+  });
+
+  it("rejects an unknown asset kind", () => {
+    const r = validate({ ...base, capabilities: { assets: ["audio"] } });
+    expect(r.code).toBe(1);
+    expect(r.err).toMatch(/"capabilities\.assets" entries must be "fonts"/);
+  });
+
+  it("accepts the real paged.web manifest shape (assets + others)", () => {
+    const r = validate({
+      ...base,
+      capabilities: {
+        document: { read: "broad", write: "scoped" },
+        rendering: ["hitTest"],
+        editContext: ["webFrame"],
+        assets: ["fonts"],
+        network: false,
+        clipboard: "none",
+      },
+    });
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/valid/);
+  });
+});

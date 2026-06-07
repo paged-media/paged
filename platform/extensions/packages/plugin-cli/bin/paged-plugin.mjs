@@ -24,6 +24,11 @@ const SCOPES = new Set(["broad", "scoped"]);
 const ENTRIES = new Set(["doubleClick", "command"]);
 const BAKED_FALLBACKS = new Set(["group", "rectangle", "raster"]);
 const WASM_PURPOSES = new Set(["layout", "codec", "compute"]);
+// Asset-store kinds (W-06). v1 vocabulary: "fonts" only. "images" is
+// RESERVED for v2 — rejected today (the door has no image read, so a
+// manifest must not claim it). Mirrors AssetKind in plugin-api.
+const ASSET_KINDS = new Set(["fonts"]);
+const ASSET_KINDS_RESERVED = new Set(["images"]);
 
 // WASM packaging budgets (W-07). Keep in sync with the host loader's
 // WASM_BUDGETS in plugin-sdk/src/wasm-bundle-loader.ts and the schema's
@@ -89,7 +94,7 @@ function validateManifest(manifest, manifestDir) {
       err(`"capabilities" must be an object`);
     } else {
       for (const key of Object.keys(caps)) {
-        if (!["document", "rendering", "keybindings", "editContext", "network", "clipboard", "wasm"].includes(key)) {
+        if (!["document", "rendering", "keybindings", "editContext", "assets", "network", "clipboard", "wasm"].includes(key)) {
           err(`unknown capability "${key}"`);
         }
       }
@@ -104,6 +109,26 @@ function validateManifest(manifest, manifestDir) {
       if (caps.rendering !== undefined) {
         if (!Array.isArray(caps.rendering) || !caps.rendering.every((r) => RENDERING.has(r))) {
           err(`"capabilities.rendering" entries must be sceneLayer|overlay|hitTest`);
+        }
+      }
+      // W-06: asset-store kinds. v1 accepts only "fonts"; "images" is
+      // reserved for v2 and rejected with a pointed message so a manifest
+      // can't claim a capability the host cannot honor yet.
+      if (caps.assets !== undefined) {
+        if (!Array.isArray(caps.assets)) {
+          err(`"capabilities.assets" must be an array of asset kinds`);
+        } else {
+          for (const a of caps.assets) {
+            if (ASSET_KINDS.has(a)) continue;
+            if (ASSET_KINDS_RESERVED.has(a)) {
+              err(
+                `"capabilities.assets" entry "${a}" is reserved for v2 — ` +
+                  `only "fonts" is supported today (W-06; DESIGN.md §13)`,
+              );
+            } else {
+              err(`"capabilities.assets" entries must be "fonts"`);
+            }
+          }
         }
       }
       // W3.10: the keybindings capability is the declaration for the

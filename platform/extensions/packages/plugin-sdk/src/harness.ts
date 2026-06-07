@@ -101,7 +101,10 @@ export interface RecordedContribution {
 
 export interface HarnessOptions
   extends LoadHeadlessEngineOptions,
-    Pick<CreateBundleHostOptions, "console" | "storage" | "capabilityMode"> {}
+    Pick<
+      CreateBundleHostOptions,
+      "console" | "storage" | "capabilityMode" | "assetSource"
+    > {}
 
 /** What `createHeadlessHost` resolves to: a real engine-backed host plus
  *  the conformance affordances (load an IDML, read the contribution log,
@@ -387,6 +390,11 @@ export async function createHeadlessHost(
       console: options.console,
       storage: options.storage,
       capabilityMode: mode,
+      // W-06 — a recordable fake asset source the conformance harness
+      // can pass so a bundle's `@font-face` byte path is exercisable
+      // headlessly (the editor's real adapter currently serves null;
+      // DESIGN.md §13.4). Absent → the no-bytes door.
+      assetSource: options.assetSource,
       // Record the SCHEMA verbatim at registration — the panel registry
       // only ever sees the synthesized React panel, so the conformance
       // log gets the schema through this adapter seam (no host renderer

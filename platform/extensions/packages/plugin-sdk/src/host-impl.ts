@@ -11,6 +11,7 @@
 // thunk idiom, avoids stale-closure drift).
 
 import type {
+  AssetSurface,
   BindingsSurface,
   BundleHost,
   ContributionSurface,
@@ -21,6 +22,7 @@ import type {
   DocumentSurface,
   EditContextContribution,
   ElementId,
+  FontFaceAsset,
   HitFilter,
   HitResult,
   Mutation,
@@ -169,6 +171,34 @@ export interface DiagnosticsSink {
   clear(bundleId: string, key?: string): void;
 }
 
+/** Asset-store budgets (W-06). The per-face cap mirrors the wasm lane's
+ *  per-artifact ceiling (DESIGN.md §10/§13.3) — a bundle can never be
+ *  handed an unbounded face buffer. The host facade refuses an
+ *  over-budget face (returns `null` + a `log.warn`). */
+export const ASSET_BUDGETS = {
+  /** Largest font face the door will serve, in bytes (8 MiB). */
+  maxFontFaceBytes: 8 * 1024 * 1024,
+} as const;
+
+/**
+ * The byte source the editor injects to back `host.assets` (W-06). The
+ * same injection shape as `widgets`/`diagnosticsSink`: a value the host
+ * app passes at `loadBundle` time. It serves the bytes the DOCUMENT
+ * already holds for a face — READ-ONLY, never a network fetch on the
+ * bundle's behalf (offline-forever, DESIGN.md §13.3). Returning `null`
+ * is the honest no-bytes answer (an unregistered family, or — in v1 of
+ * the editor adapter — every family, until the engine exposes a
+ * font-bytes read-back; DESIGN.md §13.4).
+ */
+export interface BundleAssetProvider {
+  /** The bytes of a document font face, or `null` when the host has
+   *  none. Style-agnostic when `style` is omitted. */
+  getFontFace(
+    family: string,
+    style?: string,
+  ): Promise<FontFaceAsset | null>;
+}
+
 export interface CreateBundleHostOptions {
   storage?: StorageBacking;
   /** Console sink override (tests). */
@@ -218,6 +248,13 @@ export interface CreateBundleHostOptions {
    *  `supports("diagnostics.publish@1")` answers true and every
    *  `host.diagnostics.set/clear` fans out to it. */
   diagnosticsSink?: DiagnosticsSink;
+  /** Host-provided ASSET byte source (W-06). When present,
+   *  `host.assets.getFontFace` serves DOCUMENT font face bytes through
+   *  it (capability-gated, budget-clamped) and
+   *  `supports("assets.fonts@1")` answers true. When absent, every
+   *  asset read answers `null` (the honest no-bytes door) and the
+   *  feature flag is false. */
+  assetSource?: BundleAssetProvider;
   /**
    * How the host treats a declaration↔use mismatch — a bundle that
    * USES a door (`contribute.tool`, `document.mutate`, …) it did not
@@ -287,6 +324,8 @@ export function createBundleHost(
     caps?.document?.[dir] !== undefined;
   const hasRendering = (s: "sceneLayer" | "overlay" | "hitTest"): boolean =>
     caps?.rendering?.includes(s) ?? false;
+  const hasAsset = (k: "fonts" | "images"): boolean =>
+    caps?.assets?.includes(k) ?? false;
   const lists = (
     arr: readonly string[] | undefined,
     id: string,
@@ -851,6 +890,47 @@ export function createBundleHost(
   // fallback stands in — same props contract, honest seam.
   const widgets: WidgetSurface = options?.widgets ?? FALLBACK_WIDGETS;
 
+  // --------------------------------------------------------- assets
+  // The capability-gated asset store (W-06). READ-ONLY: serves the
+  // bytes the DOCUMENT already holds for a face, through the injected
+  // `assetSource` — never a network fetch on the bundle's behalf
+  // (offline-forever, DESIGN.md §13.3). The gate (`getFontFace` needs
+  // `capabilities.assets` ∋ "fonts") is a READ door: it THROWS in
+  // 'enforce', warns+proceeds in 'warn', like every other read door.
+  // No source injected → every read answers `null` (the honest
+  // no-bytes door), and `supports("assets.fonts@1")` is false.
+  const assetSource = options?.assetSource;
+  const assets: AssetSurface = {
+    async getFontFace(family, style) {
+      requireDeclared(
+        hasAsset("fonts"),
+        "assets.getFontFace",
+        'capabilities.assets must include "fonts"',
+      );
+      if (!assetSource) return null;
+      let face: FontFaceAsset | null;
+      try {
+        face = await assetSource.getFontFace(family, style);
+      } catch {
+        // A throwing source must not break a bundle's preview — the
+        // door's failure mode is "no bytes", not an exception.
+        return null;
+      }
+      if (!face) return null;
+      // Budget clamp — refuse an over-budget face rather than hand a
+      // bundle an unbounded buffer (DESIGN.md §13.3).
+      if (face.bytes.byteLength > ASSET_BUDGETS.maxFontFaceBytes) {
+        log.warn(
+          `assets.getFontFace("${family}"${style ? `, "${style}"` : ""}) ` +
+            `served ${face.bytes.byteLength} bytes, over the ` +
+            `${ASSET_BUDGETS.maxFontFaceBytes}-byte per-face cap — refused`,
+        );
+        return null;
+      }
+      return face;
+    },
+  };
+
   const featureSet = new Set(HOST_FEATURES);
   if (options?.shell) {
     featureSet.add("shell.openPanel@1");
@@ -863,6 +943,12 @@ export function createBundleHost(
   }
   if (options?.diagnosticsSink) {
     featureSet.add("diagnostics.publish@1");
+  }
+  if (options?.assetSource) {
+    // The door always exists; the FEATURE flag means "a real byte
+    // source is wired" — a bundle probes it to decide whether to
+    // attempt `@font-face` composition at all.
+    featureSet.add("assets.fonts@1");
   }
 
   const host: BundleHost = {
@@ -878,6 +964,7 @@ export function createBundleHost(
     diagnostics,
     bindings,
     widgets,
+    assets,
     supports: (feature) => featureSet.has(feature),
     get editor() {
       return getEditor();

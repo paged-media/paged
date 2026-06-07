@@ -473,3 +473,129 @@ members, new `PanelSchema` / `SchemaPanelContribution` /
 `schemaPanelRenderer` host option. No existing member changed; no new
 manifest field (a schema panel is a panel — `contributes.panels[]`).
 The catalog binding ceiling is UNCHANGED — that is the point.
+
+## 13. The capability-gated asset store (W-06 — `host.assets`)
+
+paged.web's W1 font-parity pass (plugin-web BREAKAGE_LOG W-01·W1) proved
+that the `fonts` collection door crosses font family **NAMES** but the
+preview cannot inject real `@font-face` because **no door serves font
+face BYTES**. The preview substitutes-and-badges; closing the bytes gap
+is **W-06**. This section lands the door it needs.
+
+### 13.1 The shape — a READ-ONLY, capability-gated asset accessor
+
+`host.assets` is a new `BundleHost` member — a per-bundle facade over a
+host-injected `assetSource` (the same injection shape as `widgets` /
+`diagnosticsSink` / `schemaPanelRenderer`: a value the host app passes at
+`loadBundle` time; absent → the door answers `null` and
+`supports("assets.fonts@1")` is false). **v1 scope is exactly one
+read:**
+
+```ts
+interface AssetSurface {
+  getFontFace(family: string, style?: string): Promise<FontFaceAsset | null>;
+}
+interface FontFaceAsset {
+  bytes: Uint8Array;          // the face's raw OpenType/TrueType bytes
+  format: "truetype" | "opentype" | "woff" | "woff2";
+  postscriptName?: string;    // when the host knows it
+  family: string;             // the family the bytes resolve (host-canonical)
+  style?: string;             // the style the bytes resolve, when style-specific
+}
+```
+
+`getFontFace` serves **DOCUMENT-registered face bytes only** — the bytes
+the engine already holds for a face the *document* loads/embeds (the same
+faces the `fonts` collection NAMES). It is **not** an arbitrary
+filesystem or network reader: a bundle cannot ask for `/etc/passwd` or
+`https://evil/x.ttf`; it can only ask "give me the bytes for a family the
+document already uses," and the host answers from what the document
+already has (or `null`). `null` is the honest, frequent answer (a family
+the host has no bytes for — including every family in v1 of the editor
+adapter; see §13.4).
+
+### 13.2 Capability gate — `capabilities.assets: ["fonts"]`
+
+A new **additive** manifest field. `capabilities.assets` is a closed
+array vocabulary (like `rendering`): v1 has exactly one member,
+`"fonts"`. The capability gate (§11) refuses `host.assets.getFontFace`
+unless the bundle declares `capabilities.assets` ∋ `"fonts"` — a
+contribution/read door, so the verdict is **throw** in `'enforce'`, **log
++ proceed** in `'warn'` (the same enforce/warn split every other read
+door takes). plugin-cli `validate` enforces the vocabulary
+(unknown member rejected) and the array shape; the schema + types + CLI
+gain only this one optional field. Existing valid manifests stay valid.
+
+`"images"` is **declared-but-reserved for v2** — it appears in the
+vocabulary type/schema as a *reserved* member that validation REJECTS in
+v1 (the door has no `getImage`, so accepting the declaration would let a
+manifest claim a capability the host cannot honor — an honesty bug). The
+reservation records the v2 direction (placed-image / URL-import bytes:
+fetch-at-edit-time, render-offline-forever) without shipping a fake door.
+Why fonts first: W1 is blocked on font bytes NOW; images ride the same
+door shape once the engine exposes placed-image bytes by link.
+
+### 13.3 Budgets + trust line
+
+- **Per-face size cap** — `ASSET_BUDGETS.maxFontFaceBytes = 8 MiB`,
+  consistent with the wasm lane's per-artifact ceiling (§10). The host
+  facade refuses (returns `null` + a `log.warn`) a face whose bytes
+  exceed the cap, so a bundle can never be handed an unbounded buffer.
+  Per-face, not per-bundle: a bundle pulls faces lazily, one family at a
+  time, and never accumulates a host-held cache it could exhaust.
+- **READ-ONLY door** — there is NO `setFontFace`/`registerAsset`. Bundles
+  never WRITE assets. The engine's host→worker `registerFont` (document
+  font ingestion) is NOT exposed: a plugin cannot inject faces into the
+  document. The door only READS what the document already embeds/loads.
+- **Offline-forever = no network on the bundle's behalf.** The bytes come
+  from what the document ALREADY has (its embedded/loaded faces). The
+  host MUST NOT fetch a font from the network to satisfy a
+  `getFontFace` — that would make a "render offline forever" document
+  silently depend on a live URL. If the host has no bytes, it returns
+  `null`. (A future image lane obeys the same rule: bytes baked at edit
+  time, served from the package, never re-fetched at render.)
+- **No ambient authority** — like the wasm loader (§10), the asset door
+  grants ZERO new host reach: it is a pure read of document-owned bytes,
+  in-process today, a serializable `{family, style} → bytes|null` RPC
+  across the isolate tomorrow (`Uint8Array` clones 1:1).
+
+### 13.4 The editor adapter, honestly (the bytes-reachability verdict)
+
+Tracing the editor (`apps/canvas`): document fonts are referenced by
+**name** (IDML `Fonts/Font_*.xml` carries no bytes). The only font bytes
+the **main thread** ever holds is the single default-shaping font
+(`/fonts/Inter.ttf`, fetched in `shell/.../document-loader.ts` and passed
+as `loadDocument(bytes, fontBytes)` — the engine's *fallback* font, NOT a
+named per-family registration). The corpus family→file map
+(`fonts.sh` → `client.registerFont`) lives ONLY in the Playwright
+fidelity driver (`tests/fidelity/`), never the app. Once `registerFont`
+ingests bytes they live **worker-side / wasm-side** in the engine's
+`BytesResolver`; `fontRegistered` replies `{family}` only — there is **no
+read-back door** that returns a registered face's bytes.
+
+So **document face bytes by family are NOT reachable on the editor main
+thread** in v1. The editor therefore injects an `assetSource` whose
+`getFontFace` returns `null` for every family — the HONEST door, not a
+fake (serving Inter-as-Helvetica would be a lie; serving the default font
+under an arbitrary family name would mislead the preview into showing the
+wrong face as "the document's"). The door is real, gated, and budgeted;
+it simply has no bytes to serve until the engine exposes them.
+
+**The precise core/client follow-up that would make the door serve real
+bytes:** a worker→main read on the engine's font registry —
+`client.fontFaceBytes(family, style?) → Uint8Array | null`, backed by a
+new `requestFontFaceBytes` wire message the worker answers from the
+engine `BytesResolver` (the same store `registerFont` fills). That is a
+core change (a new `MainToWorker`/`WorkerToMain` pair + a `BytesResolver`
+accessor); when it lands, the editor adapter's `getFontFace` calls it
+instead of returning `null`, and nothing else in the door/gate/budget
+changes. Tracked as the W-06 residual in plugin-web's BREAKAGE_LOG.
+
+### 13.5 Additivity
+
+Wholly additive: a new `host.assets` member + `AssetSurface` /
+`FontFaceAsset` / `AssetKind` types, a new `assetSource`
+`CreateBundleHostOptions` field (+ `BundleAssetProvider` shape), the
+`ASSET_BUDGETS` export, and one optional manifest field
+`capabilities.assets`. No existing member changed. The capability gate,
+the namespace rule, and every other door are untouched.
