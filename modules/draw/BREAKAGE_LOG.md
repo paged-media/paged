@@ -78,13 +78,24 @@ Format: `B-NN · date · area · status`.
   carries no pressure/tilt (Pointer Events expose them). Gates stylus
   input → variable-width strokes (§13.12, Tier B). Not a v1 blocker.
 
-- **B-09 · 2026-06-06 · scripting/runtime · PARTIAL (2026-06-06)** —
-  loop-iteration (10M) + recursion budgets now enforced via Boa 0.21
-  RuntimeLimits (`paged-script`, incl. a fixed latent worker-abort
-  when a limit tripped). Still open for the full §10 story:
-  instruction metering / wall-clock interrupts and per-context memory
-  caps (stock Boa has neither — upstream fuel or worker-level
-  isolation). The open half stays a P7 gate, not a v1 blocker.
+- **B-09 · 2026-06-06 · scripting/runtime · RESOLVED (2026-06-07)** —
+  the open half closed in core (W3.9, rides protocol v35).
+  `paged-script` now combines Boa 0.21 `RuntimeLimits`
+  (loop/recursion/**stack**) with a host-injected **wall-clock
+  deadline** checked at every `paged.*`/`console.*` host-call
+  boundary, plus a per-execution `ScriptBudget` config
+  (`execute_script_with`) and a **typed** `ScriptBudgetKind
+  {Iterations|Recursion|StackSize|WallClock}` surfaced over the wire
+  (`ScriptResult.budgetKind`, additive on v35). Breaches raise Boa's
+  non-catchable `RuntimeLimit`, so user `try/catch` can't swallow
+  them and the worker survives (reusability tested). Honest wasm
+  limit: a host-call-free pure-JS busy loop is still bounded only by
+  the loop-iteration budget (single-threaded wasm can't preempt Boa's
+  synchronous run loop, which has no instruction interrupt hook) —
+  true preemption of such a loop needs main-thread Worker
+  termination, an editor concern. Per-context memory caps remain out
+  (stock Boa has none; the `max_buffer_size` host hook only caps
+  ArrayBuffers).
 
 - **B-10 · 2026-06-06 · packaging · RESOLVED** — `@paged-media/sdk`
   npm name collision: it's core's WebGPU `ViewerSession`. Plugin
