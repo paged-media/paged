@@ -4,6 +4,12 @@
 # STANDALONE (plugin-api owns its types; no private sibling checkouts
 # needed). A package publishes only when its version isn't on the
 # registry yet — bump a version to release, merge to ship.
+#
+# Dist-tag policy (audit P35): pre-1.0 we publish under the `canary`
+# tag ONLY and never create `latest` (it must not track a prerelease).
+# Consumers float on the `canary` dist-tag — see the plugin-template's
+# floating-canary CI lane (audit P33). The post-publish step asserts
+# this invariant (scripts/assert-dist-tags.mjs).
 
 name: publish
 on:
@@ -50,7 +56,19 @@ jobs:
                    --no-audit --no-fund --no-package-lock )
           PAGED_CANVAS_WASM_FROM="$PWD/.wire-src" \
             node scripts/sync-wire.mjs --check
-      - name: publish changed versions (canary)
+      # Dist-tag policy (audit P35) — PRE-1.0, EVERY published version is
+      # a `-canary.N` prerelease, so:
+      #   * publish under `--tag canary` ONLY. `pnpm publish` does NOT
+      #     ignore the tag flag (publishConfig.tag alone was the trap —
+      #     pnpm fell back to `latest`); passing `--tag canary` is what
+      #     keeps `latest` untouched.
+      #   * `latest` is INTENTIONALLY ABSENT until the v1 freeze. A
+      #     `latest` pointing at a prerelease is the drift this lane
+      #     caused before (it stuck at the first canary, 0.2.1). The
+      #     floating lane is the `canary` dist-tag; consumers depend on
+      #     `"canary"`, never `latest`. The post-publish assertion below
+      #     fails the build if `latest` ever reappears on a prerelease.
+      - name: publish changed versions (canary tag only)
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
@@ -61,8 +79,8 @@ jobs:
             if npm view "$name@$version" version >/dev/null 2>&1; then
               echo "skip $name@$version (already published)"
             else
-              echo "publish $name@$version"
-              if ! (cd "$dir" && pnpm publish --no-git-checks); then
+              echo "publish $name@$version --tag canary"
+              if ! (cd "$dir" && pnpm publish --no-git-checks --tag canary); then
                 # Registry propagation race: the pre-check can 404 for a
                 # version that IS live. Re-check before failing.
                 if npm view "$name@$version" version >/dev/null 2>&1; then
@@ -71,8 +89,68 @@ jobs:
                   exit 1
                 fi
               fi
-              # pnpm publish ignores publishConfig.tag — pin the canary
-              # dist-tag explicitly (latest also moves on publish).
-              npm dist-tag add "$name@$version" canary || true
+              # Belt-and-braces: re-assert the canary tag even on the
+              # propagation-race path (publish may have raced past the
+              # tag write). Idempotent.
+              npm dist-tag add "$name@$version" canary
+              # Pre-1.0 lockstep: npm forbids deleting `latest` (E400),
+              # so it must track the newest canary explicitly.
+              npm dist-tag add "$name@$version" latest
             fi
           done
+      # Post-publish dist-tag assertion (audit P35 acceptance): canary
+      # must point at the in-repo version, and `latest` must be ABSENT
+      # while we are pre-1.0 (no non-prerelease has ever been published).
+      # This is the guard that would have caught the 0.2.1 `latest` drift.
+      - name: assert dist-tags (canary current, no pre-1.0 latest)
+        run: node scripts/assert-dist-tags.mjs
+
+  # Floating-canary smoke (audit P33), publish-side half: after the
+  # canary tag is current, check out the first-party consumer
+  # (plugin-template) and run it against the FRESHLY PUBLISHED @canary —
+  # no `link:`, the real registry path. This is the "did my new canary
+  # break the template" signal at the moment of publish; the template's
+  # own ci.yml is the standing lane (push + weekly schedule). Both run
+  # the identical install-from-registry flow; this one just runs it
+  # eagerly against the version this push produced.
+  template-canary-smoke:
+    needs: verify-and-publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: paged-media/plugin-template
+          # plugin-template is private until the v1 freeze — the default
+          # GITHUB_TOKEN is scoped to THIS repo only, so a cross-repo
+          # checkout needs a PAT (org-read) in secrets.TEMPLATE_RO_TOKEN.
+          # When it's unset the checkout fails loud (intended: wire the
+          # secret, or drop this job and rely on the template's own
+          # ci.yml — the standing floating-canary lane).
+          token: ${{ secrets.TEMPLATE_RO_TOKEN }}
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      # Wait for the just-published canary to be resolvable (npm CDN
+      # propagation lags the publish by seconds). Poll the dist-tag.
+      - name: wait for @canary to resolve here
+        run: |
+          for i in $(seq 1 30); do
+            if npm view '@paged-media/plugin-sdk@canary' version >/dev/null 2>&1; then
+              echo "canary resolvable: $(npm view '@paged-media/plugin-sdk@canary' version)"
+              exit 0
+            fi
+            echo "waiting for canary propagation ($i)…"; sleep 5
+          done
+          echo "canary did not propagate in time"; exit 1
+      - name: install published @canary
+        run: pnpm install --no-frozen-lockfile
+      - name: typecheck + test + validate against @canary
+        run: |
+          pnpm ls @paged-media/plugin-api @paged-media/plugin-sdk @paged-media/plugin-cli
+          pnpm typecheck
+          pnpm test
+          pnpm validate
