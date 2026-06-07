@@ -118,3 +118,37 @@ Format: `B-NN · date · area · status`.
   pairs from the LIVE registries (onChange) for every registration
   path; the SDK helpers dropped their bundle-side duplicates
   (plugin-sdk 0.2.2).
+
+- **B-16 · 2026-06-07 · engine ops / trust · OPEN** — the engine
+  plugin-metadata gate has NO caller identity (audit P8). Per-plugin
+  namespace isolation (`x-paged:<id>`) is enforced only in the SDK
+  door (`host-impl.ts` `foreignMetadataKey`, recursive incl. batches);
+  the engine op (`paged-mutate/src/apply.rs` `setPluginMetadata`)
+  checks only the `x-paged:` prefix, the 64 KiB cap, and the JSON
+  envelope — never WHICH plugin writes. A bundle holding the raw
+  handle bypasses the door: `paged.client.mutate({ op:
+  "setPluginMetadata", args: { key: "x-paged:<other>", … } })` writes
+  another plugin's namespace directly. Benign for same-trust
+  first-party bundles; a hard blocker for the P7 multi-vendor story.
+  Real fix is caller identity at the engine boundary — only matters at
+  the isolate boundary where `host.editor` dies anyway. Trust-line
+  gate: `thoughts/docs/paged/plugin-trust-line.md`.
+
+- **B-17 · 2026-06-07 · bundle surface / §4.9 · OPEN** — gesture
+  handlers operate on the RAW spine handle, not the facades — the
+  §4.9 API-gap detector firing unrecorded (audit P12).
+  `draw-bundle/src/handlers/anchors.ts` reaches `paged.client.send`
+  (hitTest, L103), `paged.client.pathAnchors` (L115),
+  `paged.client.mutate` (L132), `paged.selection.elementSelection`
+  (L111), `paged.camera.camera.scale` (L123) — all of which have
+  facades (`host.document.hitTest/pathAnchors/mutate`,
+  `host.selection.get`, `host.viewport.camera`/`pxToPt`), reached via
+  the handle `onActivate(paged)` passes rather than through `host.*`.
+  DESIGN.md §4.9: "any use of `host.editor` not reachable through a
+  facade is a BREAKAGE_LOG entry." Benign in-process (same realm);
+  the tool would NOT survive the isolate as written (synchronous
+  `paged.*` reach, not the async facade). Resolution: migrate the
+  handler onto `host.*` facades (the actual dogfooding test that the
+  facade is sufficient for a real tool), or keep this entry until the
+  isolate re-routes it. Trust-line gate:
+  `thoughts/docs/paged/plugin-trust-line.md`.
