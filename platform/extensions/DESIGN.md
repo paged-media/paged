@@ -60,10 +60,13 @@ a proven consumer need, cited as `[draw B-NN]` or `[web §9.1.N]`.
    answers "can I?", `apiVersion` ranges answer "may I install?". Both
    exist because they fail differently: supports() degrades gracefully
    at runtime, the manifest range fails loudly at load.
-7. **One namespace rule.** Every contributed id is
-   `<manifest.id>.<anything>`. Enforced at the facade with a thrown
-   error (loud during dogfooding). This single check is where the
-   future capability gate attaches — same chokepoint, stricter policy.
+7. **One namespace rule, plus the capability gate (W3.10).** Every
+   contributed id is `<manifest.id>.<anything>`, enforced at the facade
+   with a thrown error (loud during dogfooding). That same chokepoint
+   now also runs the **capability gate**: a door a bundle USES must be
+   DECLARED in its manifest (§11). The namespace rule fires FIRST (the
+   outer guard); the capability gate is the stricter policy the
+   trust-line record (W0.11) promised — advisory → enforced.
 8. **Native UI by construction (v0 = convention, v1 = schema).** Panels
    are expert-leaf React composed from `@paged-media/ui` primitives and
    the `--pg-*`/`--chrome-*`/`--status-*` token layer; icons follow the
@@ -246,6 +249,13 @@ CLI validation, and a host-side loader door. The full deliberation
 line, non-goals) is in `docs/wasm-packaging.md`; §10 below is the
 summary.
 
+`capabilities.keybindings: boolean` [W3.10] — ADDED 2026-06-07. The one
+new field the capability gate (§11) needed: keybindings have no
+contribution id to list under `contributes`, so a boolean is their
+declaration. Schema + types + CLI validation gained only this. Every
+other gated door maps to an existing field — the contract addition is
+minimal and additive.
+
 ## 10. The plugin-shipped WASM lane (W-07)
 
 A bundle declares every wasm module it ships under `capabilities.wasm`
@@ -264,3 +274,67 @@ JS, so shipping a module grants ZERO new host reach. Non-goals: no native
 plugins, no wasm-side direct engine access, no threads/SAB in v1. The
 editor-side serving wiring (asset base, grant UX, `instantiateStreaming`)
 is the named residual.
+
+## 11. Capability-scope enforcement (W3.10)
+
+The trust-line record (W0.11) made manifest-capability **enforcement** a
+hard prerequisite for any third-party loading. W3.10 lands the engine of
+it: `createBundleHost` now gates every door against the bundle's manifest
+declarations — advisory → **enforced**. The verdict is one of:
+contribution + read doors **throw** `PluginCapabilityError`; the write
+doors **return a non-applied `MutationOutcome`** (mutate-never-throws,
+DESIGN.md §2.5). Same loud-honesty style as the namespace gate, which
+still fires FIRST (the outer guard).
+
+**v1 stance (unchanged by this):** in-process, no isolation. This is
+HONESTY + accident-prevention, *not* a security boundary — a bundle
+holding the raw `host.editor` handle (§4.9) still bypasses the facade.
+The gate makes declaration↔use drift loud so the manifest stays a
+truthful description of what the bundle touches; the real boundary is the
+isolate (the trust-line's other gates).
+
+### The chokepoint → declaration map
+
+| Door (chokepoint) | Manifest declaration required | On violation |
+|---|---|---|
+| `contribute.tool(id)` | `contributes.tools[]` lists `id` | throw |
+| `contribute.panel(id)` | `contributes.panels[]` lists `id` | throw |
+| `contribute.command(id)` | `contributes.commands[]` lists `id` | throw |
+| `contribute.keybinding` | `capabilities.keybindings: true` | throw |
+| `contribute.overlay(id)` | `capabilities.rendering` ∋ `"overlay"` | throw |
+| `document.mutate` / `setMetadata` | `capabilities.document.write` | non-applied outcome |
+| `document.undo` / `redo` | `capabilities.document.write` | throw |
+| `document.collection`/`meta`/`pathAnchors`/`elementGeometry`/`tree`/`getMetadata`/`onDidChange` | `capabilities.document.read` | throw |
+| `document.hitTest` | `document.read` **and** `rendering` ∋ `"hitTest"` | throw |
+| `selection.set` | `capabilities.document.write` | throw |
+| `selection.get` / `onDidChange` | none (ambient UI state) | — |
+| `overlay.setToolPreview` | `capabilities.rendering` ∋ `"overlay"` | throw |
+| `viewport.*` | none (read-only camera snapshot) | — |
+| `storage.*` | none (already per-bundle scoped: `paged.plugin.<id>.*`) | — |
+| `diagnostics.*` | none (per-bundle keyed store) | — |
+| `loadBundleWasm(name)` | `capabilities.wasm[]` lists `name` + host grant | throw (§10) |
+| metadata namespace (`x-paged:<id>`) | derived; foreign key refused | non-applied (always loud) |
+
+**New manifest vocabulary (additive):** `capabilities.keybindings:
+boolean` — keybindings carry no id to list under `contributes`, so a
+boolean is their declaration (first-party bundles let the host derive
+activation shortcuts from the tool registry, B-15, so it stays absent
+for them). Every other door maps to an EXISTING field; the schema +
+types + CLI gained only this one optional field. Existing valid
+manifests stay valid (additive contract).
+
+**`capabilityMode: 'enforce' | 'warn'`** (host option, default
+`'enforce'`). `'warn'` logs each violation through `host.log.warn` and
+proceeds — the migration escape hatch for a host loading not-yet-adopted
+manifests. The namespace gate and the metadata-namespace gate are
+UNAFFECTED by the mode — they are always loud.
+
+**Why these and not more.** `viewport`/`storage`/`diagnostics` need no
+capability: the camera is a read-only ambient snapshot; storage is
+already namespaced per-bundle (no cross-plugin reach); diagnostics is a
+per-bundle keyed store. Reading `selection` is ambient UI state every
+bundle may observe; *changing* it is a document-level action, so
+`selection.set` rides `document.write`. Over-declaring (a capability
+listed but unused — e.g. paged.web declares `rendering: ["hitTest"]` it
+does not exercise in the source lane) is allowed: the gate catches USE
+without declaration, never the reverse.

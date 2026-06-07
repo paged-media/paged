@@ -14,6 +14,9 @@ const MANIFEST: PluginManifest = {
   name: "test",
   version: "1.0.0",
   apiVersion: "^0.2",
+  // Declare the panel the bundle registers — capability enforcement is
+  // on by default (trust-line W0.11); the manifest must list it.
+  contributes: { panels: ["media.paged.test.panel.source"] },
 };
 
 const silent = { debug() {}, info() {}, warn() {}, error() {} };

@@ -3,11 +3,17 @@
 // `manifest.schema.json` (the CLI validates against the schema; these
 // types keep TS authors honest).
 //
-// API v0 status: the manifest is DECLARATIVE/ADVISORY. Capabilities
-// are recorded but not yet enforced — enforcement attaches at the
-// registries' `register()` / the client's `mutate()` chokepoints when
-// the capability gate lands (third-party-beta scope, see
-// thoughts/docs/paged/plugin-draw/reality-check.md §4).
+// API v0 status: the manifest is ENFORCED, not advisory (W3.10 /
+// trust-line W0.11). A door a bundle USES must be DECLARED here — the
+// host's capability gate (plugin-sdk `createBundleHost`) refuses an
+// undeclared use (a thrown `PluginCapabilityError` for the contribution
+// + read doors, a non-applied `MutationOutcome` for the write doors).
+// v1 stance: in-process, no isolation — this is HONESTY +
+// accident-prevention, NOT a security boundary against malicious code
+// (a bundle holding the raw `host.editor` handle still bypasses the
+// facade). The gate is at the same chokepoint as the namespace rule
+// (DESIGN.md §2.7/§11); the host option `capabilityMode: 'warn'` is the
+// migration escape hatch. See thoughts/docs/paged/plugin-trust-line.md.
 
 /** Reverse-DNS plugin identity, e.g. `media.paged.draw`. Doubles as
  *  the namespace prefix for every contribution id the bundle
@@ -28,15 +34,32 @@ export interface PluginManifest {
 }
 
 export interface PluginCapabilities {
-  /** read-broad / write-scoped is the intended default. */
+  /** read-broad / write-scoped is the intended default. Declaring
+   *  `document` is the PREREQUISITE for the document surface: a bundle
+   *  with no `document` capability cannot read OR write the document
+   *  (the host gate throws). `read` gates the read doors
+   *  (collection/meta/tree/pathAnchors/elementGeometry/getMetadata/
+   *  onDidChange); `write` gates the write doors (mutate/undo/redo/
+   *  setMetadata) AND `selection.set` (a document-level action). When
+   *  enforcement is on, an absent sub-field denies that direction. */
   document?: {
     read?: "broad" | "scoped";
     write?: "broad" | "scoped";
   };
   /** Render-pipeline surfaces the bundle uses. v0: `overlay` means
-   *  the shared TS overlay signals (tool previews); `sceneLayer` and
-   *  a host-side `hitTest` service are reserved for the P2 channel. */
+   *  the shared TS overlay signals (tool previews) AND
+   *  `contribute.overlay`; `hitTest` gates `document.hitTest`;
+   *  `sceneLayer` is reserved for the P2 channel. Declaring a surface
+   *  is the prerequisite for the matching door (the host gate throws
+   *  on an undeclared use). */
   rendering?: Array<"sceneLayer" | "overlay" | "hitTest">;
+  /** The bundle registers keybindings directly via
+   *  `contribute.keybinding`. Keybindings have no id to list under
+   *  `contributes`, so this boolean is their declaration. v0 first-
+   *  party bundles let the HOST derive activation shortcuts from the
+   *  tool registry (B-15), so this stays `false`/absent for them; a
+   *  bundle that wires its OWN keybindings must declare it. */
+  keybindings?: boolean;
   /** Edit-context content types the bundle claims (P0 shell work —
    *  reserved, not yet wired). */
   editContext?: string[];

@@ -6,6 +6,7 @@ import {
   createBundleHost,
   HOST_FEATURES,
   PluginApiNotImplemented,
+  PluginCapabilityError,
 } from "../src/host-impl";
 import { loadBundle } from "../src/load";
 import { defineBundle } from "../src/define-bundle";
@@ -18,6 +19,14 @@ const MANIFEST: PluginManifest = {
   apiVersion: "^0.2",
 };
 
+// A manifest that DECLARES the one tool the loadBundle wiring tests
+// register — so those tests run under the default 'enforce' mode and
+// still pass (the bundle's manifest is truthful).
+const DECLARED_MANIFEST: PluginManifest = {
+  ...MANIFEST,
+  contributes: { tools: ["media.paged.test.tool.pen"] },
+};
+
 const silent = {
   debug: () => {},
   info: () => {},
@@ -25,10 +34,15 @@ const silent = {
   error: () => {},
 };
 
+// These door-mechanics tests run in capabilityMode 'warn' (they cover
+// the doors themselves, not the declaration gate — which has its own
+// describe block below). 'warn' lets a capability-less manifest drive
+// every door while still logging the drift.
 function host(fake = makeFakeEditor()) {
   const handle = createBundleHost(() => fake.editor, MANIFEST, {
     console: silent,
     storage: mapBacking(),
+    capabilityMode: "warn",
   });
   return { ...handle, fake };
 }
@@ -256,7 +270,7 @@ describe("loadBundle", () => {
     const fake = makeFakeEditor();
     const bundleDispose = vi.fn();
     const bundle = defineBundle({
-      manifest: MANIFEST,
+      manifest: DECLARED_MANIFEST,
       activate(h) {
         h.contribute.tool(tool("media.paged.test.tool.pen"));
         return { dispose: bundleDispose };
@@ -288,7 +302,7 @@ describe("loadBundle", () => {
   it("facades tear down even when the bundle's dispose throws", () => {
     const fake = makeFakeEditor();
     const bundle = defineBundle({
-      manifest: MANIFEST,
+      manifest: DECLARED_MANIFEST,
       activate(h) {
         h.contribute.tool(tool("media.paged.test.tool.pen"));
         return {
@@ -443,5 +457,266 @@ describe("raw-mutate namespace gate (v34)", () => {
     } as never);
     expect(ok.applied).toBe(true);
     expect(h.fake.mutations).toHaveLength(1);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// Capability-scope ENFORCEMENT (W3.10 / trust-line W0.11): a door a
+// bundle USES must be DECLARED in its manifest. Per chokepoint:
+// declared → allowed, undeclared → typed error (or non-applied outcome
+// for the write doors), warn-mode → logs + proceeds.
+
+const baseManifest = (
+  overrides: Partial<PluginManifest>,
+): PluginManifest => ({
+  id: "media.paged.cap",
+  name: "cap",
+  version: "1.0.0",
+  apiVersion: "^0.2",
+  ...overrides,
+});
+
+const capHost = (
+  manifest: PluginManifest,
+  mode: "enforce" | "warn" = "enforce",
+  log?: Pick<Console, "debug" | "info" | "warn" | "error">,
+) => {
+  const fake = makeFakeEditor();
+  const handle = createBundleHost(() => fake.editor, manifest, {
+    console: log ?? silent,
+    storage: mapBacking(),
+    capabilityMode: mode,
+  });
+  return { ...handle, fake };
+};
+
+const cTool = (id: string): ToolContribution =>
+  ({ id, title: "T", icon: "i", group: "g", section: "drawType" }) as ToolContribution;
+
+describe("capability gate — contribution doors", () => {
+  it("contribute.tool: declared id allowed", () => {
+    const h = capHost(
+      baseManifest({ contributes: { tools: ["media.paged.cap.tool.pen"] } }),
+    );
+    expect(() => h.host.contribute.tool(cTool("media.paged.cap.tool.pen"))).not.toThrow();
+    expect(h.fake.tools.ids()).toEqual(["media.paged.cap.tool.pen"]);
+  });
+
+  it("contribute.tool: undeclared id throws PluginCapabilityError", () => {
+    const h = capHost(baseManifest({ contributes: { tools: [] } }));
+    let err: unknown;
+    try {
+      h.host.contribute.tool(cTool("media.paged.cap.tool.pen"));
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(PluginCapabilityError);
+    expect((err as PluginCapabilityError).door).toBe("contribute.tool");
+    expect((err as PluginCapabilityError).missingDeclaration).toMatch(
+      /contributes\.tools\[\] must include "media\.paged\.cap\.tool\.pen"/,
+    );
+    expect(h.fake.tools.ids()).toHaveLength(0);
+  });
+
+  it("contribute.tool: warn mode logs and proceeds", () => {
+    const warns: string[] = [];
+    const log = { ...silent, warn: (m: string) => void warns.push(m) };
+    const h = capHost(baseManifest({ contributes: { tools: [] } }), "warn", log);
+    expect(() => h.host.contribute.tool(cTool("media.paged.cap.tool.pen"))).not.toThrow();
+    expect(h.fake.tools.ids()).toEqual(["media.paged.cap.tool.pen"]);
+    expect(warns.some((w) => /contribute\.tool used without declaring/.test(w))).toBe(true);
+  });
+
+  it("contribute.panel: declared allowed / undeclared throws", () => {
+    const ok = capHost(
+      baseManifest({ contributes: { panels: ["media.paged.cap.panel.x"] } }),
+    );
+    expect(() =>
+      ok.host.contribute.panel({
+        id: "media.paged.cap.panel.x",
+      } as never),
+    ).not.toThrow();
+    const bad = capHost(baseManifest({}));
+    expect(() =>
+      bad.host.contribute.panel({ id: "media.paged.cap.panel.x" } as never),
+    ).toThrow(PluginCapabilityError);
+  });
+
+  it("contribute.command: declared allowed / undeclared throws", () => {
+    const ok = capHost(
+      baseManifest({ contributes: { commands: ["media.paged.cap.cmd.x"] } }),
+    );
+    expect(() =>
+      ok.host.contribute.command({ id: "media.paged.cap.cmd.x" } as never),
+    ).not.toThrow();
+    const bad = capHost(baseManifest({ contributes: { commands: [] } }));
+    expect(() =>
+      bad.host.contribute.command({ id: "media.paged.cap.cmd.x" } as never),
+    ).toThrow(/contributes\.commands\[\] must include/);
+  });
+
+  it("contribute.keybinding: gated on capabilities.keybindings", () => {
+    const ok = capHost(baseManifest({ capabilities: { keybindings: true } }));
+    expect(() =>
+      ok.host.contribute.keybinding({ key: "p", command: "media.paged.cap.cmd.x" }),
+    ).not.toThrow();
+    const bad = capHost(baseManifest({}));
+    expect(() =>
+      bad.host.contribute.keybinding({ key: "p", command: "media.paged.cap.cmd.x" }),
+    ).toThrow(/capabilities\.keybindings must be true/);
+  });
+
+  it("contribute.overlay: gated on rendering 'overlay'", () => {
+    const ok = capHost(baseManifest({ capabilities: { rendering: ["overlay"] } }));
+    expect(() =>
+      ok.host.contribute.overlay({ id: "media.paged.cap.overlay.x" } as never),
+    ).not.toThrow();
+    const bad = capHost(baseManifest({ capabilities: { rendering: [] } }));
+    expect(() =>
+      bad.host.contribute.overlay({ id: "media.paged.cap.overlay.x" } as never),
+    ).toThrow(/capabilities\.rendering must include "overlay"/);
+  });
+
+  it("namespace rule still fires FIRST (before the capability gate)", () => {
+    const h = capHost(baseManifest({ contributes: { tools: [] } }));
+    // A foreign id trips the namespace gate (plain Error), not the
+    // capability gate — the namespace rule is the outer guard.
+    expect(() => h.host.contribute.tool(cTool("other.tool.pen"))).toThrow(
+      /must be namespaced/,
+    );
+  });
+});
+
+describe("capability gate — document doors", () => {
+  it("write doors: declared write allowed", async () => {
+    const h = capHost(baseManifest({ capabilities: { document: { write: "broad" } } }));
+    const out = await h.host.document.mutate({
+      op: "insertFrame",
+      args: { pageId: "p1", bounds: [0, 0, 1, 1] },
+    } as never);
+    expect(out.applied).toBe(true);
+  });
+
+  it("mutate without document.write → non-applied outcome (never throws)", async () => {
+    const h = capHost(baseManifest({ capabilities: { document: { read: "broad" } } }));
+    const out = await h.host.document.mutate({
+      op: "insertFrame",
+      args: { pageId: "p1", bounds: [0, 0, 1, 1] },
+    } as never);
+    expect(out.applied).toBe(false);
+    if (!out.applied) {
+      expect(String(out.error)).toMatch(/document\.mutate requires capabilities\.document\.write/);
+    }
+    // The engine never saw the mutation.
+    expect(h.fake.mutations).toHaveLength(0);
+  });
+
+  it("mutate in warn mode proceeds despite no write capability", async () => {
+    const warns: string[] = [];
+    const log = { ...silent, warn: (m: string) => void warns.push(m) };
+    const h = capHost(baseManifest({}), "warn", log);
+    const out = await h.host.document.mutate({
+      op: "insertFrame",
+      args: { pageId: "p1", bounds: [0, 0, 1, 1] },
+    } as never);
+    expect(out.applied).toBe(true);
+    expect(warns.some((w) => /document\.mutate requires/.test(w))).toBe(true);
+  });
+
+  it("undo/redo gated on document.write (throw when undeclared)", async () => {
+    const h = capHost(baseManifest({ capabilities: { document: { read: "broad" } } }));
+    await expect(h.host.document.undo()).rejects.toThrow(PluginCapabilityError);
+    await expect(h.host.document.redo()).rejects.toThrow(PluginCapabilityError);
+  });
+
+  it("read doors: declared read allowed / undeclared throws", async () => {
+    const ok = capHost(baseManifest({ capabilities: { document: { read: "broad" } } }));
+    await expect(ok.host.document.meta()).resolves.toBeDefined();
+    await expect(ok.host.document.collection("pages")).resolves.toBeDefined();
+    await expect(ok.host.document.tree()).resolves.toBeDefined();
+
+    const bad = capHost(baseManifest({ capabilities: { document: { write: "broad" } } }));
+    // meta/collection/elementGeometry map 1:1 to the client and gate
+    // synchronously (a thrown error, the door-mechanics shape); tree is
+    // async and rejects. Both forms name the missing read declaration.
+    expect(() => bad.host.document.meta()).toThrow(PluginCapabilityError);
+    expect(() => bad.host.document.collection("pages")).toThrow(
+      /capabilities\.document\.read must be declared/,
+    );
+    expect(() => bad.host.document.elementGeometry([])).toThrow(
+      PluginCapabilityError,
+    );
+    await expect(bad.host.document.tree()).rejects.toThrow(
+      /capabilities\.document\.read must be declared/,
+    );
+    await expect(bad.host.document.getMetadata({} as never)).rejects.toThrow(
+      PluginCapabilityError,
+    );
+  });
+
+  it("hitTest needs BOTH document.read AND rendering 'hitTest'", async () => {
+    const full = capHost(
+      baseManifest({
+        capabilities: { document: { read: "broad" }, rendering: ["hitTest"] },
+      }),
+    );
+    await expect(full.host.document.hitTest("p1", [1, 2])).resolves.toEqual({
+      element: null,
+    });
+    // read but no rendering hitTest → throws.
+    const noRender = capHost(
+      baseManifest({ capabilities: { document: { read: "broad" } } }),
+    );
+    await expect(noRender.host.document.hitTest("p1", [1, 2])).rejects.toThrow(
+      /capabilities\.rendering must include "hitTest"/,
+    );
+    // rendering hitTest but no read → throws (read gate fires first).
+    const noRead = capHost(
+      baseManifest({ capabilities: { rendering: ["hitTest"] } }),
+    );
+    await expect(noRead.host.document.hitTest("p1", [1, 2])).rejects.toThrow(
+      /capabilities\.document\.read/,
+    );
+  });
+
+  it("setMetadata rides the write gate (non-applied when undeclared)", async () => {
+    const h = capHost(baseManifest({ capabilities: { document: { read: "broad" } } }));
+    const out = await h.host.document.setMetadata(
+      { kind: "rectangle", id: "u1" } as never,
+      { v: 1, data: {} },
+    );
+    expect(out.applied).toBe(false);
+    expect(h.fake.mutations).toHaveLength(0);
+  });
+});
+
+describe("capability gate — selection / overlay", () => {
+  it("selection.get + onDidChange always allowed (ambient UI state)", () => {
+    const h = capHost(baseManifest({}));
+    expect(() => h.host.selection.get()).not.toThrow();
+    expect(() => h.host.selection.onDidChange(() => {})).not.toThrow();
+  });
+
+  it("selection.set gated on document.write", async () => {
+    const ok = capHost(baseManifest({ capabilities: { document: { write: "broad" } } }));
+    await expect(ok.host.selection.set([])).resolves.toEqual([]);
+    const bad = capHost(baseManifest({}));
+    await expect(bad.host.selection.set([])).rejects.toThrow(PluginCapabilityError);
+  });
+
+  it("overlay.setToolPreview gated on rendering 'overlay'", () => {
+    const ok = capHost(baseManifest({ capabilities: { rendering: ["overlay"] } }));
+    expect(() => ok.host.overlay.setToolPreview(null)).not.toThrow();
+    const bad = capHost(baseManifest({}));
+    expect(() => bad.host.overlay.setToolPreview(null)).toThrow(
+      /capabilities\.rendering must include "overlay"/,
+    );
+  });
+
+  it("viewport / storage / diagnostics need no capability", () => {
+    const h = capHost(baseManifest({}));
+    expect(() => h.host.viewport.camera()).not.toThrow();
+    expect(() => h.host.storage.set("k", 1)).not.toThrow();
+    expect(() => h.host.diagnostics.set("k", [])).not.toThrow();
   });
 });

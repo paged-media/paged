@@ -250,7 +250,21 @@ async function loadedWith(h: HeadlessHost): Promise<HeadlessHost> {
 }
 
 function manifestFor(id: string): PluginManifest {
-  return { id, name: id, version: "1.0.0", apiVersion: "^0.2" };
+  // Declare the capabilities these conformance tests exercise (document
+  // read+write for the metadata round-trip; the inline contributions
+  // these bundles register). Capability enforcement is on by default
+  // now (trust-line W0.11); a manifest must declare what its bundle
+  // touches, so the conformance fixtures declare it too.
+  return {
+    id,
+    name: id,
+    version: "1.0.0",
+    apiVersion: "^0.2",
+    capabilities: { document: { read: "broad", write: "broad" } },
+    contributes: {
+      tools: [`${id}.tool.pen`, `${id}.tool.node`],
+    },
+  };
 }
 function bundleFor(id: string): PagedBundle {
   return defineBundle({

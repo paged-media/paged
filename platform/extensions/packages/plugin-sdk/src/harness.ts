@@ -87,7 +87,7 @@ export interface RecordedContribution {
 
 export interface HarnessOptions
   extends LoadHeadlessEngineOptions,
-    Pick<CreateBundleHostOptions, "console" | "storage"> {}
+    Pick<CreateBundleHostOptions, "console" | "storage" | "capabilityMode"> {}
 
 /** What `createHeadlessHost` resolves to: a real engine-backed host plus
  *  the conformance affordances (load an IDML, read the contribution log,
@@ -335,22 +335,41 @@ export async function createHeadlessHost(
   let currentHost: BundleHost | null = null;
   let disposed = false;
 
-  const buildHost = (manifest: PluginManifest) =>
+  // The NEUTRAL driver host runs PERMISSIVE ('warn'): it is the test
+  // driver that registers arbitrary contributions + drives every door
+  // directly, not a subject of the capability gate. A LOADED bundle is
+  // the subject — it gets the option's mode (default 'enforce'), so
+  // conformance proves the bundle's manifest declarations are complete.
+  const buildHost = (
+    manifest: PluginManifest,
+    mode: CreateBundleHostOptions["capabilityMode"],
+  ) =>
     createBundleHost(() => editor, manifest, {
       console: options.console,
       storage: options.storage,
+      capabilityMode: mode,
     });
 
   // Eager neutral host so `host` is available before a bundle is loaded
   // (tests that drive document/selection doors directly, without a
   // bundle, e.g. metadata-gate coverage). Uses a neutral harness id.
+  // The neutral manifest declares BROAD capabilities: the conformance
+  // host must be able to drive every document/render door directly
+  // (the capability gate is enforced from a loaded BUNDLE's manifest,
+  // which is what conformance asserts — the neutral host is the test
+  // driver, not the subject).
   const NEUTRAL: PluginManifest = {
     id: "media.paged.harness",
     name: "harness",
     version: "0.0.0",
     apiVersion: `^${API_VERSION.slice(0, 3)}`,
+    capabilities: {
+      document: { read: "broad", write: "broad" },
+      rendering: ["overlay", "hitTest"],
+      keybindings: true,
+    },
   };
-  let { host, dispose: disposeHostFacades } = buildHost(NEUTRAL);
+  let { host, dispose: disposeHostFacades } = buildHost(NEUTRAL, "warn");
   currentHost = host;
 
   const headless: HeadlessHost = {
@@ -403,8 +422,13 @@ export async function createHeadlessHost(
       }
       // Re-bind the host to the bundle's manifest so the namespace rule
       // and the `x-paged:<id>` metadata key derive from the real id.
+      // The bundle is the capability subject — enforce its declarations
+      // (default), so conformance catches an undeclared-use bundle.
       disposeHostFacades();
-      ({ host, dispose: disposeHostFacades } = buildHost(manifest));
+      ({ host, dispose: disposeHostFacades } = buildHost(
+        manifest,
+        options.capabilityMode ?? "enforce",
+      ));
       currentHost = host;
       const handle = bundle.activate(host);
       let bundleActive = true;
@@ -417,7 +441,10 @@ export async function createHeadlessHost(
           } finally {
             disposeHostFacades();
             // Re-arm a neutral host so the document doors stay usable.
-            ({ host, dispose: disposeHostFacades } = buildHost(NEUTRAL));
+            ({ host, dispose: disposeHostFacades } = buildHost(
+              NEUTRAL,
+              "warn",
+            ));
             currentHost = host;
             active = null;
           }

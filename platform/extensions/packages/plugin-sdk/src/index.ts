@@ -29,6 +29,7 @@ export {
   createBundleHost,
   HOST_FEATURES,
   PluginApiNotImplemented,
+  PluginCapabilityError,
   type BundleHostHandle,
   type CreateBundleHostOptions,
   type DiagnosticsSink,

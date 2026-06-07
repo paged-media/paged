@@ -63,6 +63,10 @@
             ]
           }
         },
+        "keybindings": {
+          "type": "boolean",
+          "description": "The bundle registers keybindings directly via contribute.keybinding. Keybindings have no id to list under contributes, so this boolean is their capability declaration."
+        },
         "editContext": {
           "type": "array",
           "items": {

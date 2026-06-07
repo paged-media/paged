@@ -11,6 +11,9 @@ const MANIFEST: PluginManifest = {
   name: "test",
   version: "1.0.0",
   apiVersion: "^0.2",
+  // Declare the tool the bundle registers — capability enforcement is
+  // on by default (trust-line W0.11); the manifest must list it.
+  contributes: { tools: ["media.paged.test.tool.pen"] },
 };
 
 const silent = { debug() {}, info() {}, warn() {}, error() {} };

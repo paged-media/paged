@@ -77,6 +77,37 @@ export class PluginApiNotImplemented extends Error {
   }
 }
 
+/**
+ * Thrown (in `capabilityMode: 'enforce'`) when a bundle USES a host
+ * door it did not DECLARE in its manifest — the trust-line record's
+ * (W0.11) "manifest capabilities ENFORCED, not advisory" gate, applied
+ * at the chokepoint. Same loud-honesty style as the namespace gate: the
+ * message names the door, the missing declaration, and where to add it.
+ *
+ * v1 stance (in-process, no isolation): this is HONESTY +
+ * accident-prevention, not a security boundary — a bundle holding the
+ * raw `host.editor` handle can still bypass the facade. The error makes
+ * declaration↔use drift loud during dogfooding so the manifest stays a
+ * truthful description of what the bundle actually touches.
+ */
+export class PluginCapabilityError extends Error {
+  /** The host door that was called (e.g. `"contribute.tool"`). */
+  readonly door: string;
+  /** The manifest declaration that would authorize it (e.g.
+   *  `'contributes.tools[] must include "media.paged.web.tool.pen"'`). */
+  readonly missingDeclaration: string;
+  constructor(door: string, missingDeclaration: string, pluginId: string) {
+    super(
+      `plugin-api: ${pluginId} called ${door} without declaring it — ` +
+        `${missingDeclaration}. Manifest capabilities are ENFORCED ` +
+        `(trust-line W0.11): declare the use or the host refuses it.`,
+    );
+    this.name = "PluginCapabilityError";
+    this.door = door;
+    this.missingDeclaration = missingDeclaration;
+  }
+}
+
 /** Minimal storage backing so tests / headless hosts can inject one;
  *  defaults to localStorage when present, else an in-memory Map. */
 export interface StorageBacking {
@@ -144,6 +175,19 @@ export interface CreateBundleHostOptions {
    *  `supports("diagnostics.publish@1")` answers true and every
    *  `host.diagnostics.set/clear` fans out to it. */
   diagnosticsSink?: DiagnosticsSink;
+  /**
+   * How the host treats a declaration↔use mismatch — a bundle that
+   * USES a door (`contribute.tool`, `document.mutate`, …) it did not
+   * DECLARE in its manifest (trust-line W0.11). Defaults to
+   * `'enforce'`: the violating call throws `PluginCapabilityError`
+   * (contribution registrations) or returns a non-applied
+   * `MutationOutcome` for the write doors (mutate-never-throws). In
+   * `'warn'` mode the violation is logged through `host.log.warn`
+   * and the call proceeds — the migration escape hatch for a host
+   * that loads not-yet-adopted manifests. The namespace gate and the
+   * metadata-namespace gate are UNAFFECTED — they are always loud.
+   */
+  capabilityMode?: "enforce" | "warn";
 }
 
 export interface BundleHostHandle {
@@ -184,25 +228,109 @@ export function createBundleHost(
     error: (m, ...a) => sink.error(`${tag} ${m}`, ...a),
   };
 
+  // ------------------------------------------ capability enforcement
+  // The trust-line W0.11 gate: a door a bundle USES must be DECLARED
+  // in its manifest. Same chokepoint as the namespace rule (DESIGN.md
+  // §2.7), stricter policy. 'warn' logs + proceeds (migration hatch);
+  // 'enforce' (default) refuses — throwing for the contribution doors,
+  // a non-applied outcome for the write doors (mutate-never-throws).
+  const capabilityMode = options?.capabilityMode ?? "enforce";
+  const caps = manifest.capabilities;
+  const declared = manifest.contributes;
+
+  /** Declaration predicates — one per door class. Read straight off
+   *  the manifest so the manifest stays the single source of truth. */
+  const hasDoc = (dir: "read" | "write"): boolean =>
+    caps?.document?.[dir] !== undefined;
+  const hasRendering = (s: "sceneLayer" | "overlay" | "hitTest"): boolean =>
+    caps?.rendering?.includes(s) ?? false;
+  const lists = (
+    arr: readonly string[] | undefined,
+    id: string,
+  ): boolean => arr?.includes(id) ?? false;
+
+  /** The verdict for the contribution/non-document doors: in 'enforce'
+   *  a violation throws PluginCapabilityError; in 'warn' it logs and
+   *  the caller proceeds. Returns void either way. */
+  const requireDeclared = (
+    ok: boolean,
+    door: string,
+    missing: string,
+  ): void => {
+    if (ok) return;
+    if (capabilityMode === "warn") {
+      log.warn(
+        `${door} used without declaring it — ${missing} (capabilityMode: ` +
+          `'warn'; would refuse in 'enforce')`,
+      );
+      return;
+    }
+    throw new PluginCapabilityError(door, missing, manifest.id);
+  };
+
+  /** The verdict for the WRITE doors, which never throw (mutate-never-
+   *  throws): in 'enforce' a violation returns a failure REASON string
+   *  (the caller maps it to `{ applied: false, error }`); in 'warn' it
+   *  logs and returns null (proceed). `null` = authorized/allowed. */
+  const denyWrite = (ok: boolean, door: string, missing: string): string | null => {
+    if (ok) return null;
+    const reason = `${door} requires ${missing} (trust-line W0.11)`;
+    if (capabilityMode === "warn") {
+      log.warn(`${reason} — proceeding (capabilityMode: 'warn')`);
+      return null;
+    }
+    return reason;
+  };
+
   // ---------------------------------------------------- contribute
+  // The namespace rule fires FIRST (always loud), then the capability
+  // gate: a contributed id must be listed in the matching
+  // `contributes.*` category (the manifest is the declaration).
   const contribute: ContributionSurface = {
     tool(c) {
       assertNamespaced(c.id, "tool");
+      requireDeclared(
+        lists(declared?.tools, c.id),
+        "contribute.tool",
+        `contributes.tools[] must include "${c.id}"`,
+      );
       return store.add(getEditor().registries.tools.register(c));
     },
     panel(c) {
       assertNamespaced(c.id, "panel");
+      requireDeclared(
+        lists(declared?.panels, c.id),
+        "contribute.panel",
+        `contributes.panels[] must include "${c.id}"`,
+      );
       return store.add(getEditor().registries.panels.register(c));
     },
     command(c) {
       assertNamespaced(c.id, "command");
+      requireDeclared(
+        lists(declared?.commands, c.id),
+        "contribute.command",
+        `contributes.commands[] must include "${c.id}"`,
+      );
       return store.add(getEditor().registries.commands.register(c));
     },
     keybinding(c) {
+      // Keybindings carry no id to list; the boolean capability is
+      // their declaration.
+      requireDeclared(
+        caps?.keybindings === true,
+        "contribute.keybinding",
+        "capabilities.keybindings must be true",
+      );
       return store.add(getEditor().registries.keybindings.register(c));
     },
     overlay(c) {
       assertNamespaced(c.id, "overlay");
+      requireDeclared(
+        hasRendering("overlay"),
+        "contribute.overlay",
+        'capabilities.rendering must include "overlay"',
+      );
       return store.add(getEditor().registries.overlays.register(c));
     },
     editContext() {
@@ -236,8 +364,25 @@ export function createBundleHost(
     }
     return null;
   };
+  /** Read doors require `capabilities.document.read`. Like the
+   *  contribution gate, an undeclared read throws in 'enforce' (it is a
+   *  manifest bug, surfaced loudly) and logs+proceeds in 'warn'. */
+  const requireDocRead = (door: string): void =>
+    requireDeclared(
+      hasDoc("read"),
+      door,
+      "capabilities.document.read must be declared",
+    );
   const document: DocumentSurface = {
     async mutate(mutation: Mutation): Promise<MutationOutcome> {
+      // Write-door capability gate (mutate-never-throws → non-applied
+      // outcome). The namespace gate below stays loud regardless.
+      const denied = denyWrite(
+        hasDoc("write"),
+        "document.mutate",
+        "capabilities.document.write",
+      );
+      if (denied !== null) return { applied: false, error: denied };
       const foreign = foreignMetadataKey(mutation);
       if (foreign !== null) {
         const error = `setPluginMetadata key "${foreign}" is outside this plugin's namespace ("${metadataKey(manifest)}")`;
@@ -265,18 +410,34 @@ export function createBundleHost(
       }
     },
     async undo() {
+      // undo/redo move shared history — write doors. They return void,
+      // so an undeclared call throws (enforce) / warns (warn) rather
+      // than silently no-opping.
+      requireDeclared(
+        hasDoc("write"),
+        "document.undo",
+        "capabilities.document.write",
+      );
       await getEditor().client.undo();
     },
     async redo() {
+      requireDeclared(
+        hasDoc("write"),
+        "document.redo",
+        "capabilities.document.write",
+      );
       await getEditor().client.redo();
     },
     collection(name) {
+      requireDocRead("document.collection");
       return getEditor().client.collection(name);
     },
     meta() {
+      requireDocRead("document.meta");
       return getEditor().client.documentMeta();
     },
     pathAnchors(id: ElementId) {
+      requireDocRead("document.pathAnchors");
       return getEditor()
         .client.pathAnchors(id)
         .catch(() => null);
@@ -286,6 +447,15 @@ export function createBundleHost(
       point,
       filter: HitFilter = "any",
     ): Promise<HitResult | null> {
+      // hitTest is a render-pipeline read: it needs BOTH a document
+      // read AND the `hitTest` rendering surface (the host-side picking
+      // service). Both must be declared.
+      requireDocRead("document.hitTest");
+      requireDeclared(
+        hasRendering("hitTest"),
+        "document.hitTest",
+        'capabilities.rendering must include "hitTest"',
+      );
       try {
         const reply = await getEditor().client.send({
           kind: "hitTest",
@@ -297,15 +467,18 @@ export function createBundleHost(
       }
     },
     elementGeometry(ids) {
+      requireDocRead("document.elementGeometry");
       return getEditor().client.elementGeometry(ids);
     },
     async tree(): Promise<SceneTreeNode[]> {
+      requireDocRead("document.tree");
       const reply = await getEditor().client.send({
         kind: "requestSceneTree",
       });
       return reply.kind === "sceneTree" ? reply.payload.roots : [];
     },
     async getMetadata(id) {
+      requireDocRead("document.getMetadata");
       const key = metadataKey(manifest);
       const reply = await getEditor().client.send({
         kind: "requestElementProperties",
@@ -346,6 +519,7 @@ export function createBundleHost(
       });
     },
     onDidChange(listener: (e: DocumentChangeEvent) => void): Disposable {
+      requireDocRead("document.onDidChange");
       const off = getEditor().client.subscribe((msg) => {
         if (
           msg.kind === "mutationApplied" ||
@@ -360,11 +534,21 @@ export function createBundleHost(
   };
 
   // ----------------------------------------------------- selection
+  // Reading selection (get/onDidChange) is ambient UI state — every
+  // bundle may observe it, no capability needed. CHANGING it
+  // (`selection.set`) is a document-level action, gated on
+  // `capabilities.document.write` (the post-insert select pattern is
+  // part of a write flow).
   const selection: SelectionSurface = {
     get() {
       return getEditor().selection.elementSelection;
     },
     async set(ids: ElementId[], mode: SelectionMode = "replace") {
+      requireDeclared(
+        hasDoc("write"),
+        "selection.set",
+        "capabilities.document.write",
+      );
       const editor = getEditor();
       const applied = await editor.client.setElementSelection(ids, mode);
       editor.selection.setElementSelection(applied);
@@ -393,8 +577,16 @@ export function createBundleHost(
   };
 
   // ------------------------------------------------------- overlay
+  // The tool-preview channel is a render-pipeline surface — gated on
+  // `capabilities.rendering` including "overlay" (same surface as
+  // `contribute.overlay`).
   const overlay: OverlaySurface = {
     setToolPreview(shape) {
+      requireDeclared(
+        hasRendering("overlay"),
+        "overlay.setToolPreview",
+        'capabilities.rendering must include "overlay"',
+      );
       getEditor().overlaySignals.setToolPreview(shape);
     },
   };

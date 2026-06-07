@@ -89,7 +89,7 @@ function validateManifest(manifest, manifestDir) {
       err(`"capabilities" must be an object`);
     } else {
       for (const key of Object.keys(caps)) {
-        if (!["document", "rendering", "editContext", "network", "clipboard", "wasm"].includes(key)) {
+        if (!["document", "rendering", "keybindings", "editContext", "network", "clipboard", "wasm"].includes(key)) {
           err(`unknown capability "${key}"`);
         }
       }
@@ -105,6 +105,11 @@ function validateManifest(manifest, manifestDir) {
         if (!Array.isArray(caps.rendering) || !caps.rendering.every((r) => RENDERING.has(r))) {
           err(`"capabilities.rendering" entries must be sceneLayer|overlay|hitTest`);
         }
+      }
+      // W3.10: the keybindings capability is the declaration for the
+      // `contribute.keybinding` door (keybindings carry no id to list).
+      if (caps.keybindings !== undefined && typeof caps.keybindings !== "boolean") {
+        err(`"capabilities.keybindings" must be a boolean`);
       }
       if (caps.editContext !== undefined && !isStringArray(caps.editContext)) {
         err(`"capabilities.editContext" must be a string array`);
