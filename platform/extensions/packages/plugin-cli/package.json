@@ -2,7 +2,7 @@
   "name": "@paged-media/plugin-cli",
   "version": "0.1.0-canary.0",
   "description": "Validate Paged plugin manifests (schema + namespace rule). Part of the Paged plugin SDK.",
-  "license": "UNLICENSED",
+  "license": "MPL-2.0 OR LicenseRef-PMEL",
   "type": "module",
   "bin": {
     "paged-plugin": "./bin/paged-plugin.mjs"
