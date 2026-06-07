@@ -6,7 +6,23 @@
 // them.
 
 export { defineBundle } from "./define-bundle";
-export { createHeadlessHost, type HarnessOptions } from "./harness";
+export {
+  createHeadlessHost,
+  type HarnessOptions,
+  type HeadlessHost,
+  type HeadlessHostHandle,
+  type RecordedContribution,
+} from "./harness";
+export {
+  loadHeadlessEngine,
+  resolveCanvasWasm,
+  readVendoredWireVersion,
+  protocolFromVersion,
+  CANVAS_WASM_PKG,
+  type HeadlessCanvasWorker,
+  type LoadedEngine,
+  type LoadHeadlessEngineOptions,
+} from "./wasm-loader";
 export { DisposableStore, toDisposable } from "./disposables";
 export { API_VERSION, satisfiesApiVersion } from "./version";
 export {

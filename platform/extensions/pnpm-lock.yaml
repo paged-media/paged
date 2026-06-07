@@ -36,6 +36,9 @@ importers:
         specifier: workspace:*
         version: link:../plugin-api
     devDependencies:
+      '@paged-media/canvas-wasm':
+        specifier: 0.34.0
+        version: 0.34.0
       '@types/node':
         specifier: 20.19.39
         version: 20.19.39
@@ -354,6 +357,9 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
+
+  '@paged-media/canvas-wasm@0.34.0':
+    resolution: {integrity: sha512-7WBLgv8tTi00rJJVWV/UIK0ReS8CwUZNDYlByWwSriTAoxXfx4icBHe7prwFmr9Um8vcZNe1V57yNt9EGgCx0A==}
 
   '@rollup/rollup-android-arm-eabi@4.61.1':
     resolution: {integrity: sha512-JnBB8MdXj45cajvTuO5FmPlvFVJRQgvrz1uSEl3NwqFnReAPGwb8EanbGi4z2nRaqLzjJSv5/JmycoTKlRZxHA==}
@@ -1100,6 +1106,8 @@ snapshots:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
+
+  '@paged-media/canvas-wasm@0.34.0': {}
 
   '@rollup/rollup-android-arm-eabi@4.61.1':
     optional: true

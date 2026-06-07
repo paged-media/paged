@@ -17,6 +17,7 @@
     "@paged-media/plugin-api": "workspace:*"
   },
   "devDependencies": {
+    "@paged-media/canvas-wasm": "0.34.0",
     "@types/node": "20.19.39",
     "typescript": "^5.6.3",
     "vitest": "^2.1.8"

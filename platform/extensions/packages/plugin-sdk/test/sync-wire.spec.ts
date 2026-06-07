@@ -13,10 +13,35 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { Module } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
+// Run `fn` with NODE_PATH neutralised. The unresolvable-source
+// assertions verify ANCHOR-RELATIVE resolution: the package must NOT be
+// found via the temp anchor's node_modules. But vitest seeds NODE_PATH
+// with pnpm's flat `.pnpm/node_modules`, and since the headless harness
+// devDepends on @paged-media/canvas-wasm it now lives there — Node's
+// resolver ALWAYS consults NODE_PATH (the `paths` option can't exclude
+// it), so a bare anchor would "resolve" the package by environment
+// accident. Stripping NODE_PATH for these probes restores the contract
+// the script actually enforces in CI (where the harness dep is present
+// but resolution is still anchored at the editor's packages/client).
+function withoutNodePath<T>(fn: () => T): T {
+  const saved = process.env.NODE_PATH;
+  delete process.env.NODE_PATH;
+  // Refresh Module's cached global paths so the change takes effect.
+  (Module as unknown as { _initPaths(): void })._initPaths();
+  try {
+    return fn();
+  } finally {
+    if (saved === undefined) delete process.env.NODE_PATH;
+    else process.env.NODE_PATH = saved;
+    (Module as unknown as { _initPaths(): void })._initPaths();
+  }
+}
 
 // The script is a plain .mjs (no .d.ts); the error fires on the module
 // specifier, so the directive sits on the line directly above it.
@@ -84,8 +109,10 @@ describe("sync-wire: source resolution", () => {
   it("MISSING source fails (no warn-skip)", () => {
     // No package installed under the anchor, no --source: must throw,
     // not silently pass like the pre-Decision-B warn-skip did.
-    expect(() => resolveSource({ resolveFrom: tmp })).toThrow(
-      /not resolvable|--source/,
+    withoutNodePath(() =>
+      expect(() => resolveSource({ resolveFrom: tmp })).toThrow(
+        /not resolvable|--source/,
+      ),
     );
     expect(() => resolveSource({ source: join(tmp, "nope.d.ts") })).toThrow(
       /not found/,
@@ -119,7 +146,7 @@ describe("sync-wire: --check", () => {
   it("UNRESOLVABLE source FAILS (not a pass)", () => {
     const target = join(tmp, "wire.d.ts");
     writeFileSync(target, "// whatever\n");
-    const res = checkVendored({ resolveFrom: tmp, target });
+    const res = withoutNodePath(() => checkVendored({ resolveFrom: tmp, target }));
     expect(res.ok).toBe(false);
     expect(res.reason).toMatch(/not resolvable|--source/);
   });

@@ -171,9 +171,26 @@ at the isolate boundary (the one v0 member that cannot survive RPC).
 - **`DisposableStore`** — the subscriptions idiom.
 - **`API_VERSION` + `satisfiesApiVersion`** — caret/exact/`*` ranges
   (deliberately minimal semver; full semver when publishing starts).
-- `defineBundle` (inference helper), `createHeadlessHost` (still
-  reserved — a mock host would let bundles pass against fiction
-  [draw B-13]).
+- `defineBundle` (inference helper).
+- **`createHeadlessHost`** (resolves [draw B-13]) — the conformance
+  harness the paper (§12.4) puts in the SDK tier. NOT a mock: it boots
+  the PUBLISHED `@paged-media/canvas-wasm` in Node (`initSync` over the
+  `_bg.wasm` bytes — the `--target web` loader's synchronous entry needs
+  no fetch; the only Node-hostile import the wasm reaches is
+  `globalThis.crypto`, present on Node ≥ 19) and drives the SAME
+  `handleMessage` JSON envelope the editor worker drives, so a bundle's
+  mutations round-trip through the true parse→apply→inverse engine path
+  with real undo/redo. The document/selection/diagnostics/storage doors
+  are REAL; the contribution surfaces (tool/panel/command/keybinding/
+  overlay) become RECORDING no-ops that capture every contribution in an
+  assertable log; `editContext`/`objectType` stay reserved (throw). That
+  pairing — replay against a real engine + an assertable contribution
+  log — IS the conformance semantics: a bundle can no longer pass
+  against fiction. The protocol is PINNED: the loader reads the vendored
+  wire's `Synced from …@<version>` stamp, derives the expected protocol
+  (the package minor), and asserts the booted wasm matches — a wasm/wire
+  skew fails loudly. Residuals (gesture REPLAY + overlay PREVIEW
+  assertions) stay recorded-only, carried in B-13.
 
 ## 6. RPC-readiness audit (the isolate migration debt, stated)
 
