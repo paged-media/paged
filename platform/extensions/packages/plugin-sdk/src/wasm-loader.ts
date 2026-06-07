@@ -179,9 +179,7 @@ export async function resolveCanvasWasm(resolveFrom?: string): Promise<{
   let lastErr: unknown;
   for (const anchor of anchors) {
     try {
-      const req = createRequire(
-        pathToFileURL(resolve(anchor, "package.json")),
-      );
+      const req = createRequire(pathToFileURL(resolve(anchor, "package.json")));
       const pkgJsonPath = req.resolve(`${CANVAS_WASM_PKG}/package.json`);
       const dir = dirname(pkgJsonPath);
       const pkg = JSON.parse(readFileSync(pkgJsonPath, "utf8")) as {
@@ -237,7 +235,10 @@ export async function loadHeadlessEngine(
     options.expectedProtocol ??
     (stampedVersion ? protocolFromVersion(stampedVersion) : null);
 
-  if (expectedProtocol !== null && worker.protocolVersion !== expectedProtocol) {
+  if (
+    expectedProtocol !== null &&
+    worker.protocolVersion !== expectedProtocol
+  ) {
     const booted = worker.protocolVersion;
     // Release the handle, then drop our reference so the
     // FinalizationRegistry can't double-free a manually-freed ptr.

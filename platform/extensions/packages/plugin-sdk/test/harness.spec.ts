@@ -19,10 +19,7 @@ import type {
   PluginManifest,
 } from "@paged-media/plugin-api";
 
-import {
-  createHeadlessHost,
-  type HeadlessHost,
-} from "../src/harness";
+import { createHeadlessHost, type HeadlessHost } from "../src/harness";
 import {
   protocolFromVersion,
   readVendoredWireVersion,
