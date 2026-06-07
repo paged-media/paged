@@ -1,7 +1,8 @@
 // Registration-wiring test: activate the real bundle against the
 // real in-process host adapter over a minimal fake editor. Covers
-// the D3 contract — four tools, four activation commands, four
-// guarded shortcuts, and the honesty smoke test (dispose leaves the
+// the D3 contract — three anchor tools (activation commands +
+// shortcuts host-derived per B-15) AND the W3.1 declarative stroke
+// SCHEMA panel — and the honesty smoke test (dispose leaves the
 // registries empty). Engine behavior is NOT faked here (that's the
 // reserved harness's job); this exercises wiring only.
 
@@ -47,12 +48,37 @@ function fakeKeybindings() {
 function makeFakeEditor() {
   const tools = fakeRegistry();
   const commands = fakeRegistry();
+  const panels = fakeRegistry();
   const keybindings = fakeKeybindings();
+  // Minimal client for the schema panel's binding driver: it subscribes
+  // for selection changes and (on a non-empty selection) reads
+  // pathAnchors. At install over the empty fake selection it only
+  // publishes hasSelection=false, so the stubs below suffice.
+  let selectionIds: unknown[] = [];
+  const client = {
+    subscribe: (_l: (msg: unknown) => void) => () => {},
+    pathAnchors: async () => null,
+    setElementSelection: async (ids: unknown[]) => ids,
+  };
   const editor = {
-    registries: { tools, commands, keybindings },
+    client,
+    registries: { tools, commands, panels, keybindings },
+    selection: {
+      elementSelection: selectionIds,
+      setElementSelection: (ids: unknown[]) => {
+        selectionIds = ids;
+      },
+      setElementGeometry: () => {},
+    },
     camera: { camera: { scale: 1, tx: 0, ty: 0 } },
   };
-  return { editor: editor as unknown as PagedEditor, tools, commands, keybindings };
+  return {
+    editor: editor as unknown as PagedEditor,
+    tools,
+    commands,
+    panels,
+    keybindings,
+  };
 }
 
 const silent = { debug() {}, info() {}, warn() {}, error() {} };
@@ -84,6 +110,17 @@ describe("drawBundle.activate", () => {
     expect(fake.keybindings.count()).toBe(0);
   });
 
+  it("registers the W3.1 stroke SCHEMA panel (B-01 RESOLVED)", () => {
+    const fake = makeFakeEditor();
+    loadBundle(() => fake.editor, drawBundle, {
+      console: silent,
+      storage: mapBacking(),
+    });
+    // The schema panel registers through the panels registry as a
+    // synthesized PanelContribution under its declared id.
+    expect(fake.panels.ids()).toEqual(["media.paged.draw.panel.stroke"]);
+  });
+
   it("registered ids match the manifest's contributes declaration", () => {
     const fake = makeFakeEditor();
     loadBundle(() => fake.editor, drawBundle, {
@@ -91,8 +128,10 @@ describe("drawBundle.activate", () => {
       storage: mapBacking(),
     });
     expect(fake.tools.ids()).toEqual(drawBundle.manifest.contributes?.tools);
+    // The schema panel's id matches the manifest's panel declaration.
+    expect(fake.panels.ids()).toEqual(drawBundle.manifest.contributes?.panels);
     expect(fake.commands.ids()).toEqual(
-      drawBundle.manifest.contributes?.commands,
+      drawBundle.manifest.contributes?.commands ?? [],
     );
   });
 
@@ -104,6 +143,7 @@ describe("drawBundle.activate", () => {
     });
     loaded.dispose();
     expect(fake.tools.ids()).toHaveLength(0);
+    expect(fake.panels.ids()).toHaveLength(0);
     expect(fake.commands.ids()).toHaveLength(0);
     expect(fake.keybindings.count()).toBe(0);
   });

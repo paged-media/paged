@@ -26,9 +26,7 @@
       "media.paged.draw.tool.convertAnchor"
     ],
     "panels": [
-      "../../panels/stroke.panel.json",
-      "../../panels/fill.panel.json",
-      "../../panels/layers.panel.json"
+      "media.paged.draw.panel.stroke"
     ],
     "commands": [],
     "editContexts": [

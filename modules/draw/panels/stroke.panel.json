@@ -1,5 +1,5 @@
 {
-  "$comment": "DESIGN PROTOTYPE — not interpreted by any host. The concept paper's §8 schema, rewritten against the editor catalog's real binding ceiling (literal | selectionProperty + coerce; NO visibleWhen — conditional visibility must come from a derived bound value in the plugin state model, see BREAKAGE_LOG.md B-01). Becomes the P4 test corpus when native panels move onto a schema.",
+  "$comment": "SUPERSEDED PROTOTYPE — the v1 declarative schema this anticipated now ships for real: see packages/draw-bundle/src/panels/stroke-panel.ts (a SchemaPanelContribution contributed through host.contribute.schemaPanel, B-01 RESOLVED). This JSON form is kept only as the historical design record. The real panel uses the catalog widget ids (paged.input.numeric-scrub / color-swatch / toggle-group) and drives the dash section's visibility from a PUBLISHED binding (dashControlsVisible) the bundle computes from selection — the derived-bound-value resolution B-01 recorded, NOT a visibleWhen conditional.",
   "panel": "media.paged.draw.panel.stroke",
   "title": { "key": "panel.stroke.title" },
   "icon": "icons/stroke.svg",

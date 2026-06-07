@@ -11,12 +11,14 @@
 // parse→apply→inverse engine path — no UI, no editor, no browser.
 //
 // CONTRIBUTION COUNT (honesty note): the bundle registers THREE anchor-
-// editing tools. The Pen itself is a built-in core-document tool (editor
-// W2.5 division), and panels stay design prototypes (`panels/*.panel.
-// json`, BREAKAGE_LOG B-01) — they are declared in the manifest but not
-// registered through `host.contribute.panel`. So the contribution log
-// holds three tools and zero panels; the proof asserts exactly that
-// reality rather than a planned-but-absent fourth tool / panel set.
+// editing tools AND ONE declarative SCHEMA panel (the stroke panel —
+// W3.1, BREAKAGE_LOG B-01 RESOLVED; registered through
+// `host.contribute.schemaPanel`, recorded by the harness as a
+// `schemaPanel` contribution carrying the verbatim schema). The Pen
+// itself is a built-in core-document tool (editor W2.5 division); the
+// fill/layers prototypes stay design JSON (B-01 closure: fill awaits
+// B-03, layers is expert-leaf list territory). So the contribution log
+// holds three tools + one schema panel.
 
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 
@@ -67,7 +69,7 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
     expect(harness.engineVersion).toMatch(/^\d+\.\d+\.\d+/);
   });
 
-  it("activating the bundle registers its tools in the contribution log", () => {
+  it("activating the bundle registers its tools + the schema panel in the log", () => {
     const handle = harness.loadBundle(drawBundle);
     try {
       // Every anchor tool is captured, namespaced + in registration order.
@@ -76,18 +78,65 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "media.paged.draw.tool.deleteAnchor",
         "media.paged.draw.tool.convertAnchor",
       ]);
-      // The contribution log holds exactly those three tools (pen is a
-      // core built-in, panels are design prototypes — see header note).
+      // The contribution log holds the three tools, then the schema
+      // panel as TWO entries: the synthesized React `panel` the panels
+      // registry sees (the host turns a schema into a registry panel via
+      // the injected renderer / seam) AND the `schemaPanel` recorded
+      // VERBATIM through the harness's registration hook. Both are
+      // honest — the registry really got a panel; the log keeps the
+      // schema so conformance can assert it. (Pen is a core built-in;
+      // fill/layers stay prototypes — header note.)
       expect(harness.contributions.map((c) => c.kind)).toEqual([
         "tool",
         "tool",
         "tool",
+        "panel",
+        "schemaPanel",
       ]);
-      expect(harness.panelsContributed()).toHaveLength(0);
-      // The captured contributions are the real objects (cursor, shortcut).
+      // The schema panel is recorded VERBATIM (the schema, not React):
+      // its id, its sections, and the binding-driven gates.
+      const panels = harness.schemaPanelsContributed();
+      expect(panels.map((p) => p.id)).toEqual(["media.paged.draw.panel.stroke"]);
+      const dashSection = panels[0].schema.sections[1];
+      expect(dashSection.title).toBe("Dashes");
+      // The dash section's visibility is a binding REF — a derived bound
+      // value the bundle publishes, NOT a visibleWhen conditional (B-01).
+      expect(dashSection.visible).toEqual({
+        bind: "media.paged.draw.dashControlsVisible",
+      });
+      // The captured tool contributions are the real objects too.
       const add = harness.toolsContributed()[0];
       expect(add.shortcut).toBe("=");
       expect(add.cursor).toEqual({ kind: "css", token: "crosshair" });
+    } finally {
+      handle.dispose();
+    }
+  });
+
+  it("the schema panel's bindings react to real selection (B-01 derived value)", async () => {
+    const handle = harness.loadBundle(drawBundle);
+    try {
+      // On activation the binding driver primes from the (empty)
+      // selection: nothing selected → hasSelection false.
+      // Selecting the rectangle flips hasSelection true; the rectangle
+      // is bounds-based (no anchor table — B-13 finding b), so
+      // dashControlsVisible stays false (it gates on path anchors).
+      await harness.host.selection.set([RECT as never]);
+      // Give the async recompute a tick to land.
+      await new Promise((r) => setTimeout(r, 0));
+      expect(harness.host.bindings.get("media.paged.draw.hasSelection")).toBe(
+        true,
+      );
+      expect(
+        harness.host.bindings.get("media.paged.draw.dashControlsVisible"),
+      ).toBe(false);
+
+      // Clearing the selection flips hasSelection back to false.
+      await harness.host.selection.set([]);
+      await new Promise((r) => setTimeout(r, 0));
+      expect(harness.host.bindings.get("media.paged.draw.hasSelection")).toBe(
+        false,
+      );
     } finally {
       handle.dispose();
     }

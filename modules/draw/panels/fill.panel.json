@@ -1,5 +1,5 @@
 {
-  "$comment": "DESIGN PROTOTYPE — not interpreted by any host. Gradient rows depend on the gradient-assignment engine gap (BREAKAGE_LOG.md B-03): swatch fills bind today via frameFillColor colorRef; whether a Gradient/* self-id is accepted there is unverified.",
+  "$comment": "DESIGN PROTOTYPE — stays a prototype. The v1 declarative schema mechanism now exists (host.contribute.schemaPanel — see packages/draw-bundle/src/panels/stroke-panel.ts and BREAKAGE_LOG.md B-01 RESOLVED); this panel can adopt it once gradient assignment is verified (B-03): swatch fills bind today via frameFillColor colorRef, but whether a Gradient/* self-id is accepted there is unverified, so the gradient rows would be honest seams. Convert to a SchemaPanelContribution when B-03 lands.",
   "panel": "media.paged.draw.panel.fill",
   "title": { "key": "panel.fill.title" },
   "icon": "icons/fill.svg",

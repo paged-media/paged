@@ -10,14 +10,70 @@ Format: `B-NN · date · area · status`.
 
 ---
 
-- **B-01 · 2026-06-06 · panel schema · OPEN** — the paper's
-  `visibleWhen`/`enabledWhen` conditionals don't exist and are
-  *rejected by design* (catalog binding ceiling: `literal |
-  selectionProperty`, `editor/packages/catalog/src/types.ts`).
-  Resolution direction: derived bound values from plugin state +
-  expert leaves, not a conditional binding language. Until settled,
-  `panels/*.panel.json` are design prototypes and real panels ship as
-  expert-leaf React.
+- **B-01 · 2026-06-06 · panel schema · RESOLVED (2026-06-07, W3.1)** —
+  the paper's `visibleWhen`/`enabledWhen` conditionals don't exist and
+  are *rejected by design* (catalog binding ceiling: `literal |
+  selectionProperty`, `editor/packages/catalog/src/types.ts`). The
+  recorded resolution direction — *derived bound values from plugin
+  state + expert leaves, not a conditional binding language* — is now a
+  CONTRACT. The v1 declarative panel-schema mechanism (plugin-sdk
+  DESIGN.md §12):
+  · a bundle registers a `SchemaPanelContribution` through the new
+    `host.contribute.schemaPanel` door (gated identically to
+    `contribute.panel`: namespace rule, then `contributes.panels[]`).
+    The `PanelSchema` is PURE DATA — sections → rows → widgets, each
+    widget a CATALOG id from the existing vocabulary
+    (`paged.input.numeric-scrub`/`color-swatch`/`toggle-group`/
+    `paged.readout`/…), each row's `value` a `WidgetValueBinding` on
+    the §11.5 ceiling UNCHANGED (`literal | selectionProperty` +
+    coerce). NO React crosses the boundary — this is the panel/overlay
+    isolate exit the trust line needs (DESIGN.md §6).
+  · DYNAMIC visibility/enablement comes from a `SchemaGate`
+    (`boolean | {bind, negate?}`). `{bind:"name"}` names a value the
+    plugin PUBLISHES through the new `host.bindings` door
+    (`publish/get/delete/onDidChange`, per-bundle, JSON); the host
+    LOOKS IT UP and re-renders (`resolveGate` — absent→true,
+    literal→itself, `{bind}`→`Boolean(lookup)`, missing→false,
+    `negate`→NOT). There is NO expression language: the plugin computes
+    the boolean in ITS OWN realm (tool/selection/document state) and
+    publishes the RESULT — the derived-bound-value resolution this
+    entry recorded. `negate` (a NOT) is the only transform.
+  · the host renders: `createBundleHost` synthesizes a registry
+    `PanelContribution` whose component delegates to a host-injected
+    `SchemaPanelRenderer` (`createBundleHost({ schemaPanelRenderer })`).
+    The editor's renderer (`@paged-media/shell`
+    `catalog/schema-panel-renderer.tsx`) walks the schema through the
+    catalog's `CompositionRenderer` and subscribes to the bundle's
+    bindings; no renderer injected → a visible "needs a host renderer"
+    SEAM (never a throw, never fake UI). The headless harness records
+    each schema panel VERBATIM (`schemaPanel` recorded contribution +
+    `schemaPanelsContributed()`).
+  ADOPTION (this repo): `draw-bundle/src/panels/stroke-panel.ts` is the
+  REAL stroke panel as a `SchemaPanelContribution`, contributed in
+  `activate.ts` via `contributeSchemaPanel`. Its dash SECTION's
+  visibility is gated on a published `media.paged.draw.dashControlsVisible`
+  binding the bundle derives from real selection state
+  (`installStrokePanelBindings`: a path element exposes a `pathAnchors`
+  table → true; a bounds-based rectangle → false), and the weight/color/
+  cap rows' enablement on `media.paged.draw.hasSelection`. This is
+  exactly the paper's `visibleWhen strokeType == "dashed"` case,
+  re-expressed as a derived bound value. Proof: `draw-bundle`
+  `test/activate.spec.ts` + `test/headless-conformance.spec.ts` (the
+  schema recorded verbatim, the bindings react to real selection);
+  editor `apps/canvas/tests/e2e/draw-schema-panel.spec.ts` (the panel
+  renders from the catalog on :5180; the dash section flips
+  visible/hidden as selection moves rect↔polygon).
+  HONEST LIMITS (DESIGN.md §12.4): the widget set is the curated catalog
+  leaves — NO list primitive (layer/style lists stay expert-leaf React;
+  `layers.panel.json` therefore can't adopt the schema yet) and NO
+  custom canvas; the gate evaluation is a host-side LOOKUP keyed by
+  name, NOT an expression language; a widget's `value` still binds only
+  to the selection (or a literal), never to a published binding, in v1.
+  The other prototypes stay prototypes with notes pointing here:
+  `stroke.panel.json` is SUPERSEDED by the live `stroke-panel.ts`;
+  `fill.panel.json` can adopt the schema once gradient assignment is
+  verified (B-03); `layers.panel.json` is the recorded list-widget
+  limit (ships as expert-leaf React when needed).
 
 - **B-02 · 2026-06-06 · shell · OPEN** — no edit contexts (paper §5 /
   P0). Closest precursor: `useSelection().pathEditMode`. Needs an
