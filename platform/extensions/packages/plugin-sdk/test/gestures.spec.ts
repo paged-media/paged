@@ -13,6 +13,10 @@ function evt(over: Partial<CanvasPointerEvent>): CanvasPointerEvent {
     maxDelta: 0,
     button: 0,
     target: null,
+    pressure: 0.5,
+    tiltX: 0,
+    tiltY: 0,
+    pointerType: "mouse",
     ...over,
   };
 }
@@ -52,5 +56,37 @@ describe("pxToPt", () => {
   });
   it("falls back to 1:1 before the camera initialises", () => {
     expect(pxToPt(0, 6)).toBe(6);
+  });
+});
+
+describe("B-08 pointer pressure/tilt", () => {
+  it("carries pen pressure + tilt + pointerType on the event", () => {
+    // The gesture kit forwards the whole CanvasPointerEvent object;
+    // pressure/tilt/pointerType ride it untouched (no SAB lane — that
+    // contract is wasm-coupled). A draw-tool shim reads these straight
+    // off the event the host built.
+    const pen = evt({
+      pressure: 0.82,
+      tiltX: -12,
+      tiltY: 30,
+      pointerType: "pen",
+    });
+    expect(pen.pressure).toBe(0.82);
+    expect(pen.tiltX).toBe(-12);
+    expect(pen.tiltY).toBe(30);
+    expect(pen.pointerType).toBe("pen");
+    // beginPageDrag is pressure-agnostic but must not drop the field —
+    // the drag still anchors and the source event still carries it.
+    const drag = beginPageDrag(pen);
+    expect(drag).not.toBeNull();
+    expect(pen.pressure).toBe(0.82);
+  });
+
+  it("defaults to mouse semantics (0.5 pressure, no tilt)", () => {
+    const mouse = evt({});
+    expect(mouse.pressure).toBe(0.5);
+    expect(mouse.tiltX).toBe(0);
+    expect(mouse.tiltY).toBe(0);
+    expect(mouse.pointerType).toBe("mouse");
   });
 });

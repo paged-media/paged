@@ -128,6 +128,13 @@ export interface HeadlessHost {
   /** Object types registered through `contribute.objectType` — the W3.2
    *  surface (W-03), recorded verbatim. */
   objectTypesContributed(): ObjectTypeContribution[];
+  /** The last tool preview a bundle pushed through
+   *  `host.overlay.setToolPreview` (B-07). There is no overlay SURFACE
+   *  headlessly, but the channel is RECORDED so conformance can assert a
+   *  pen/anchor handler emits the cubic `ToolPreviewPath` variant (true
+   *  Béziers) rather than a flattened polyline. `null` until set, and
+   *  reset to `null` when the bundle clears its preview. */
+  lastToolPreview(): ToolPreviewShape | null;
   /** Load an IDML package into the headless document. Resolves to the
    *  loaded page ids (or throws on a parse failure). */
   load(idml: Uint8Array): Promise<string[]>;
@@ -160,6 +167,7 @@ let seqCounter = 1;
 function makeEngineEditor(
   worker: HeadlessCanvasWorker,
   recorder: RecordedContribution[],
+  onToolPreview: (value: ToolPreviewShape | null) => void,
 ): PagedEditor {
   const protocol = worker.protocolVersion;
   const listeners = new Set<(msg: WorkerToMain) => void>();
@@ -317,7 +325,9 @@ function makeEngineEditor(
     overlaySignals: {
       setToolPreview(value: ToolPreviewShape | null) {
         toolPreview = value;
-        void toolPreview; // recorded but inert (no overlay surface)
+        // No overlay SURFACE headlessly, but the channel is RECORDED so
+        // conformance can assert the cubic ToolPreviewPath variant (B-07).
+        onToolPreview(toolPreview);
       },
     },
     // No tool spine + no content caret headlessly — both are inert
@@ -349,7 +359,13 @@ export async function createHeadlessHost(
   const engine = await loadHeadlessEngine(options);
   const worker = engine.worker;
   const contributions: RecordedContribution[] = [];
-  const editor = makeEngineEditor(worker, contributions);
+  // Last preview pushed through `overlay.setToolPreview` — recorded so
+  // a bundle's pen/anchor handler can be asserted to emit the cubic
+  // `ToolPreviewPath` variant rather than a flattened polyline (B-07).
+  let lastPreview: ToolPreviewShape | null = null;
+  const editor = makeEngineEditor(worker, contributions, (value) => {
+    lastPreview = value;
+  });
 
   // A placeholder manifest until a bundle is loaded; `loadBundle`
   // rebuilds the host bound to the bundle's own manifest so the
@@ -488,6 +504,9 @@ export async function createHeadlessHost(
         .filter((c) => c.kind === "objectType")
         .map((c) => c.value as ObjectTypeContribution);
     },
+    lastToolPreview() {
+      return lastPreview;
+    },
     async load(idml: Uint8Array): Promise<string[]> {
       const raw = worker.loadDocumentDirect(seqCounter++, idml);
       const reply = JSON.parse(raw) as WorkerToMain;
@@ -561,6 +580,7 @@ export async function createHeadlessHost(
         // Contribution log emptied structurally by facade teardown; free
         // the wasm so the handle is honestly released.
         contributions.length = 0;
+        lastPreview = null;
         worker.free();
       }
     },

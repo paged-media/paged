@@ -245,6 +245,72 @@ describe("contribution recording + dispose honesty", () => {
     ]);
   });
 
+  it("records the B-07 path/cubic tool preview headlessly (no overlay surface)", async () => {
+    live = await open();
+    // A loaded bundle that declares the overlay rendering capability —
+    // the same gate the live editor enforces. It pushes a TRUE cubic run
+    // (anchor/handle form), not a flattened polyline.
+    const preview = {
+      pageId: "p1",
+      anchors: [
+        { anchor: [10, 10] as [number, number], left: [10, 10] as [number, number], right: [30, 10] as [number, number] },
+        { anchor: [50, 10] as [number, number], left: [40, 30] as [number, number], right: [50, 10] as [number, number] },
+      ],
+      close: false,
+    };
+    const bundle = defineBundle({
+      manifest: {
+        id: "media.paged.draw",
+        name: "draw",
+        version: "1.0.0",
+        apiVersion: "^0.2",
+        capabilities: {
+          document: { read: "broad", write: "broad" },
+          rendering: ["overlay"],
+        },
+      },
+      activate(h) {
+        // Initially nothing.
+        expect(live!.lastToolPreview()).toBeNull();
+        h.overlay.setToolPreview(preview as never);
+        return { dispose() {} };
+      },
+    });
+    live.loadBundle(bundle);
+    // The channel is recorded verbatim — SEGMENT data (anchors + left/
+    // right handles), not sampled points. This is the headless proof of
+    // B-07's path variant (no overlay SURFACE, but an assertable record).
+    const rec = live.lastToolPreview() as typeof preview | null;
+    expect(rec).not.toBeNull();
+    expect(rec).toHaveProperty("anchors");
+    expect(rec).not.toHaveProperty("points");
+    expect(rec!.anchors).toHaveLength(2);
+    // The curved segment's handles survived untouched (the renderer would
+    // draw `C from.right to.left to.anchor`).
+    expect(rec!.anchors[1].left).toEqual([40, 30]);
+  });
+
+  it("a bundle without rendering 'overlay' cannot push a path preview", async () => {
+    live = await open();
+    const bundle = defineBundle({
+      manifest: manifestFor("media.paged.draw"), // no rendering capability
+      activate(h) {
+        expect(() =>
+          h.overlay.setToolPreview({
+            pageId: "p1",
+            anchors: [
+              { anchor: [0, 0], left: [0, 0], right: [0, 0] },
+              { anchor: [1, 1], left: [1, 1], right: [1, 1] },
+            ],
+          } as never),
+        ).toThrow(/rendering must include "overlay"/);
+        return { dispose() {} };
+      },
+    });
+    live.loadBundle(bundle);
+    expect(live.lastToolPreview()).toBeNull();
+  });
+
   it("namespace rule is enforced headlessly too", async () => {
     const host = (await loaded()).host;
     expect(() => host.contribute.tool(toolC("foreign.tool.pen"))).toThrow(

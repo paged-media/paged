@@ -98,6 +98,26 @@ export interface CanvasPointerEvent {
   button: number;
   /** Underlying DOM target — handlers may read `data-*` hooks. */
   target: unknown;
+  /**
+   * Pointer-Events normalized pressure, 0..1 (B-08). Browser
+   * semantics are preserved verbatim: a pen reports its physical
+   * pressure; a mouse reports `0` with no button and `0.5` while a
+   * button is held; touch reports `0`/`0.5` likewise. The host reads
+   * `PointerEvent.pressure` straight through, so a stylus drives
+   * variable-width strokes (§13.12, Tier B) once the renderer can
+   * consume a pressure profile. Defaults to `0.5` on synthetic
+   * events that omit it.
+   */
+  pressure: number;
+  /** Pen tilt around the X axis, −90..90 deg (Pointer Events). `0`
+   *  for mouse/touch and pens without tilt support. */
+  tiltX: number;
+  /** Pen tilt around the Y axis, −90..90 deg (Pointer Events). `0`
+   *  for mouse/touch and pens without tilt support. */
+  tiltY: number;
+  /** Originating device class (Pointer Events `pointerType`). Lets a
+   *  tool branch stylus-only behaviour. Defaults to `"mouse"`. */
+  pointerType: "mouse" | "pen" | "touch";
 }
 
 /** Ephemeral overlay primitive published during a gesture. Kept
@@ -304,7 +324,39 @@ export interface ToolPreviewPolyline {
   close?: boolean;
 }
 
-export type ToolPreviewShape = MarqueeRectPageLocal | ToolPreviewPolyline;
+/**
+ * A path/cubic tool preview (B-07). Where `ToolPreviewPolyline` forces
+ * an in-progress pen run to FLATTEN its cubics (sampling artefacts at
+ * high zoom, wasted work per pointermove), this variant carries the
+ * true anchor/handle form so the host renders real Béziers — one SVG
+ * `<path>` of `C` commands, exact at any zoom.
+ *
+ * `anchors` is the engine's `PathAnchorSpec` form (on-curve `anchor` +
+ * incoming `left` + outgoing `right` handles, IDML `PathPointType`
+ * semantics — structurally `draw-tools`' `AnchorTriple` and what
+ * `insertPath` consumes, so the same run feeds both preview and
+ * commit). `close` draws the closing cubic back to anchor 0. `dashed`
+ * selects the dashed-vs-solid stroke from the shared preview vocabulary
+ * (solid by default, matching the rubber-band family).
+ */
+export interface ToolPreviewPath {
+  pageId: PageId;
+  /** Cubic anchors in page-local pt (the `PathAnchorSpec` shape). */
+  anchors: ReadonlyArray<{
+    anchor: [number, number];
+    left: [number, number];
+    right: [number, number];
+  }>;
+  /** Close the contour (draw the cubic from the last anchor back to 0). */
+  close?: boolean;
+  /** Dashed stroke instead of the default solid (preview vocabulary). */
+  dashed?: boolean;
+}
+
+export type ToolPreviewShape =
+  | MarqueeRectPageLocal
+  | ToolPreviewPolyline
+  | ToolPreviewPath;
 
 // ------------------------------------------------------------- client
 // The NARROW engine-client contract — what the SDK and real bundles

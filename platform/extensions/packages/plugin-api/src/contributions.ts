@@ -51,5 +51,6 @@ export type {
   // Tool-preview signal shapes (the v0 overlay surface).
   ToolPreviewShape,
   ToolPreviewPolyline,
+  ToolPreviewPath,
   MarqueeRectPageLocal,
 } from "./editor";

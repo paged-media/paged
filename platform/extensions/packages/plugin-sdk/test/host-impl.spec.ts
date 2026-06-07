@@ -178,6 +178,31 @@ describe("viewport / overlay / storage / diagnostics", () => {
     expect(h.fake.getToolPreview()).toEqual({ pageId: "p1", points: [[0, 0]] });
   });
 
+  it("setToolPreview accepts the B-07 path/cubic variant verbatim", () => {
+    const h = host();
+    // True anchor/handle run (no flattening): a curved open segment.
+    const preview = {
+      pageId: "p1",
+      anchors: [
+        {
+          anchor: [10, 10] as [number, number],
+          left: [10, 10] as [number, number],
+          right: [30, 10] as [number, number],
+        },
+        {
+          anchor: [50, 10] as [number, number],
+          left: [40, 30] as [number, number],
+          right: [50, 10] as [number, number],
+        },
+      ],
+      close: false,
+    };
+    h.host.overlay.setToolPreview(preview);
+    // The door passes the cubic shape through UNTOUCHED — segment data,
+    // not sampled points (B-07: the renderer draws real Béziers).
+    expect(h.fake.getToolPreview()).toEqual(preview);
+  });
+
   it("storage namespaces keys and round-trips JSON", () => {
     const h = host();
     h.host.storage.set("opts", { dpi: 240 });
