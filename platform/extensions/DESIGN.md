@@ -235,6 +235,32 @@ the entire isolate debt.
 ## 9. Manifest additions in this change
 
 `contributes.objectTypes` [web §9.1.2] — declared + schema-validated
-(reserved at runtime). `capabilities.wasm` is *not* added: the WASM
-lane [web §9.1.3] is a packaging concern with zero contract surface
-yet; it earns a member when the W0 spike defines one.
+(reserved at runtime).
+
+`capabilities.wasm` [web §9.1.3, W-07] — ADDED 2026-06-07. The original
+v0.2 note deferred it ("a packaging concern with zero contract surface
+yet; it earns a member when the W0 spike defines one"). W-07 is that
+moment: the lane now has a concrete contract surface — a manifest field,
+CLI validation, and a host-side loader door. The full deliberation
+(manifest shape, budgets + rationale, the no-ambient-authority trust
+line, non-goals) is in `docs/wasm-packaging.md`; §10 below is the
+summary.
+
+## 10. The plugin-shipped WASM lane (W-07)
+
+A bundle declares every wasm module it ships under `capabilities.wasm`
+(`{ name, path, purpose, maxBytes? }`) — a *capability*, not a
+contribution (it registers nothing). `purpose` is a closed vocabulary
+(`layout | codec | compute`, like `rendering`) so the host can reason
+about a module's role before granting it. The loader
+(`plugin-sdk/loadBundleWasm`) enforces **declared-only** access (a name
+absent from the manifest never loads), a **host grant** (wasm is opt-in;
+no grant = refuse), the **budgets** (8 MiB/artifact, 16 MiB/bundle, 3 s
+load-time, 256 MiB memory ceiling — `docs/wasm-packaging.md` §3 carries
+the rationale), and instantiates with **no ambient authority**: the
+module gets only the imports the caller passes — no engine/DOM/network
+handle. The wasm is strictly downstream of the bundle's already-gated
+JS, so shipping a module grants ZERO new host reach. Non-goals: no native
+plugins, no wasm-side direct engine access, no threads/SAB in v1. The
+editor-side serving wiring (asset base, grant UX, `instantiateStreaming`)
+is the named residual.

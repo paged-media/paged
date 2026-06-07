@@ -1,0 +1,16 @@
+{
+  "id": "media.paged.web",
+  "name": "paged.web",
+  "version": "0.1.0",
+  "apiVersion": "^0.2",
+  "capabilities": {
+    "wasm": [
+      {
+        "name": "tiny",
+        "path": "tiny.wasm",
+        "purpose": "compute",
+        "maxBytes": 4
+      }
+    ]
+  }
+}

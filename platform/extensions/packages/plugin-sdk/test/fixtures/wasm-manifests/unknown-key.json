@@ -1,0 +1,16 @@
+{
+  "id": "media.paged.web",
+  "name": "paged.web",
+  "version": "0.1.0",
+  "apiVersion": "^0.2",
+  "capabilities": {
+    "wasm": [
+      {
+        "name": "engine",
+        "path": "engine.wasm",
+        "purpose": "compute",
+        "threads": true
+      }
+    ]
+  }
+}

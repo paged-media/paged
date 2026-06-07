@@ -1,0 +1,22 @@
+{
+  "id": "media.paged.web",
+  "name": "paged.web",
+  "version": "0.1.0",
+  "apiVersion": "^0.2",
+  "publisher": "paged.media",
+  "capabilities": {
+    "wasm": [
+      {
+        "name": "layout",
+        "path": "engine/layout.wasm",
+        "purpose": "layout",
+        "maxBytes": 4194304
+      },
+      {
+        "name": "png",
+        "path": "codecs/png.wasm",
+        "purpose": "codec"
+      }
+    ]
+  }
+}

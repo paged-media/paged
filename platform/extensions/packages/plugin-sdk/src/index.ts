@@ -37,6 +37,13 @@ export {
 export { FALLBACK_WIDGETS } from "./widgets-fallback";
 export { loadBundle, type LoadedBundle } from "./load";
 export {
+  loadBundleWasm,
+  WASM_BUDGETS,
+  type LoadedBundleWasm,
+  type LoadBundleWasmOptions,
+  type BundleAssetSource,
+} from "./wasm-bundle-loader";
+export {
   beginPageDrag,
   endLocalFor,
   pxToPt,

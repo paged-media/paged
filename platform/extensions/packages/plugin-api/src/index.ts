@@ -22,6 +22,8 @@ export type {
   PluginManifest,
   PluginCapabilities,
   PluginContributions,
+  WasmArtifact,
+  WasmPurpose,
 } from "./manifest";
 
 export type { BundleHandle, PagedBundle } from "./bundle";

@@ -12,7 +12,7 @@
 // contributed tool/command id starts with `<manifest.id>.`) and that
 // referenced `*.panel.json` files exist relative to the manifest.
 
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import process from "node:process";
 
@@ -23,6 +23,16 @@ const CLIPBOARD = new Set(["none", "vector", "full"]);
 const SCOPES = new Set(["broad", "scoped"]);
 const ENTRIES = new Set(["doubleClick", "command"]);
 const BAKED_FALLBACKS = new Set(["group", "rectangle", "raster"]);
+const WASM_PURPOSES = new Set(["layout", "codec", "compute"]);
+
+// WASM packaging budgets (W-07). Keep in sync with the host loader's
+// WASM_BUDGETS in plugin-sdk/src/wasm-bundle-loader.ts and the schema's
+// `maxBytes` maximum (8 MiB) — the CLI hand-mirrors the contract.
+const WASM_MAX_ARTIFACT_BYTES = 8 * 1024 * 1024; // 8 MiB per artifact
+const WASM_MAX_TOTAL_BYTES = 16 * 1024 * 1024; // 16 MiB declared total
+
+// Bundle-relative wasm path: no leading slash, no `..` segment, .wasm.
+const WASM_PATH_OK = /^(?!\/)(?!.*\.\.).+\.wasm$/;
 
 function fail(msg) {
   console.error(`error: ${msg}`);
@@ -79,7 +89,7 @@ function validateManifest(manifest, manifestDir) {
       err(`"capabilities" must be an object`);
     } else {
       for (const key of Object.keys(caps)) {
-        if (!["document", "rendering", "editContext", "network", "clipboard"].includes(key)) {
+        if (!["document", "rendering", "editContext", "network", "clipboard", "wasm"].includes(key)) {
           err(`unknown capability "${key}"`);
         }
       }
@@ -104,6 +114,84 @@ function validateManifest(manifest, manifestDir) {
       }
       if (caps.clipboard !== undefined && !CLIPBOARD.has(caps.clipboard)) {
         err(`"capabilities.clipboard" must be none|vector|full`);
+      }
+      // WASM packaging (W-07): declared-only artifacts, closed purpose
+      // vocabulary, path-traversal rejected, per-artifact + total budget.
+      const wasm = caps.wasm;
+      if (wasm !== undefined) {
+        if (!Array.isArray(wasm)) {
+          err(`"capabilities.wasm" must be an array of artifacts`);
+        } else {
+          const seenNames = new Set();
+          let declaredTotal = 0;
+          for (let i = 0; i < wasm.length; i++) {
+            const a = wasm[i];
+            const at = `capabilities.wasm[${i}]`;
+            if (typeof a !== "object" || a === null || Array.isArray(a)) {
+              err(`${at} must be an object`);
+              continue;
+            }
+            for (const k of Object.keys(a)) {
+              if (!["name", "path", "purpose", "maxBytes"].includes(k)) {
+                err(`${at} has unknown key "${k}"`);
+              }
+            }
+            if (typeof a.name !== "string" || a.name.length === 0) {
+              err(`${at}.name must be a non-empty string`);
+            } else if (seenNames.has(a.name)) {
+              err(`${at}.name "${a.name}" is declared more than once`);
+            } else {
+              seenNames.add(a.name);
+            }
+            if (typeof a.path !== "string" || !WASM_PATH_OK.test(a.path)) {
+              err(
+                `${at}.path "${a.path}" must be a bundle-relative *.wasm ` +
+                  `path (no leading "/", no ".." segment)`,
+              );
+            } else {
+              const resolved = resolve(manifestDir, a.path);
+              if (existsSync(resolved)) {
+                const size = statSync(resolved).size;
+                const ceiling =
+                  typeof a.maxBytes === "number" && a.maxBytes > 0
+                    ? Math.min(a.maxBytes, WASM_MAX_ARTIFACT_BYTES)
+                    : WASM_MAX_ARTIFACT_BYTES;
+                if (size > ceiling) {
+                  err(
+                    `${at} file "${a.path}" is ${size} bytes, over its ` +
+                      `${ceiling}-byte ceiling`,
+                  );
+                }
+                declaredTotal += size;
+              } else {
+                // File not present at validate time (the bundle may not
+                // be built yet); count the declared budget toward the
+                // total so an over-budget DECLARATION is still caught.
+                declaredTotal +=
+                  typeof a.maxBytes === "number" ? a.maxBytes : 0;
+              }
+            }
+            if (a.purpose === undefined || !WASM_PURPOSES.has(a.purpose)) {
+              err(`${at}.purpose must be layout|codec|compute`);
+            }
+            if (a.maxBytes !== undefined) {
+              if (!Number.isInteger(a.maxBytes) || a.maxBytes < 1) {
+                err(`${at}.maxBytes must be a positive integer`);
+              } else if (a.maxBytes > WASM_MAX_ARTIFACT_BYTES) {
+                err(
+                  `${at}.maxBytes (${a.maxBytes}) exceeds the host ` +
+                    `per-artifact ceiling (${WASM_MAX_ARTIFACT_BYTES})`,
+                );
+              }
+            }
+          }
+          if (declaredTotal > WASM_MAX_TOTAL_BYTES) {
+            err(
+              `"capabilities.wasm" total (${declaredTotal} bytes) exceeds ` +
+                `the bundle ceiling (${WASM_MAX_TOTAL_BYTES})`,
+            );
+          }
+        }
       }
     }
   }

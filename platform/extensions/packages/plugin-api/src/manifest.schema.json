@@ -78,6 +78,42 @@
             "vector",
             "full"
           ]
+        },
+        "wasm": {
+          "type": "array",
+          "description": "Declared WebAssembly artifacts the bundle ships and loads at runtime (capability-gated, declared-only, budgeted). See docs/wasm-packaging.md.",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "path",
+              "purpose"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "path": {
+                "type": "string",
+                "pattern": "^(?!/)(?!.*\\.\\.).+\\.wasm$",
+                "description": "Bundle-relative path to the .wasm file; no leading slash, no '..' segment."
+              },
+              "purpose": {
+                "enum": [
+                  "layout",
+                  "codec",
+                  "compute"
+                ]
+              },
+              "maxBytes": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 8388608
+              }
+            }
+          }
         }
       }
     },
