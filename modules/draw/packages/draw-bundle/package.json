@@ -20,6 +20,7 @@
     "@paged-media/plugin-sdk": "link:../../../plugin-sdk/packages/plugin-sdk"
   },
   "devDependencies": {
+    "@types/node": "20.19.39",
     "typescript": "^5.6.3",
     "vitest": "^2.1.8"
   }

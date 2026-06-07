@@ -100,12 +100,43 @@ Format: `B-NN · date · area · status`.
   `PropertyPath` (stroke panel's dash section, §13.5 stroke model).
   IDML carries it; the wire surface doesn't yet.
 
-- **B-13 · 2026-06-06 · testing · OPEN** — no headless host
-  (`@paged-media/plugin-sdk` `createHeadlessHost` throws by design).
-  Conformance fixtures can't replay against a real engine outside the
-  editor app; needs the engine wasm consumable headless (Decision B or
-  a node loader). Until then: pure-machine unit tests + editor
-  Playwright E2E.
+- **B-13 · 2026-06-06 · testing · RESOLVED (2026-06-07)** — the
+  headless conformance host LANDED (`@paged-media/plugin-sdk`
+  `createHeadlessHost`, W3.5). It is no longer a throw / a mock: it
+  boots the PUBLISHED `@paged-media/canvas-wasm` (0.34.0, Decision B) in
+  Node via a small loader util (`src/wasm-loader.ts` — `initSync` over
+  the `_bg.wasm` bytes; the wasm-bindgen `--target web` loader's
+  synchronous entry needs no fetch and the only Node-hostile import the
+  wasm reaches is `globalThis.crypto`, present on Node ≥ 19) and drives
+  the SAME `handleMessage` JSON envelope the editor worker drives. So a
+  bundle's document mutations round-trip through the true
+  parse→apply→inverse engine path with real undo/redo. Doors:
+  document.mutate/undo/redo/collection/meta/pathAnchors/hitTest/
+  elementGeometry/tree/getMetadata/setMetadata + selection reads +
+  diagnostics/storage are REAL (engine round-trip); the contribution
+  surfaces (tool/panel/command/keybinding/overlay) are RECORDING no-ops
+  capturing every contribution in an assertable log; editContext/
+  objectType stay RESERVED (throw `PluginApiNotImplemented`). Protocol
+  is PINNED — the loader reads the vendored wire's `Synced from …@<ver>`
+  stamp, derives the expected protocol (the package minor), and asserts
+  the booted wasm matches; a wasm/wire skew fails loudly. Consumer proof:
+  `plugin-draw/packages/draw-bundle/test/headless-conformance.spec.ts`
+  activates the real paged.draw bundle headlessly (3 anchor tools in the
+  contribution log — pen is a core built-in per W2.5, panels are design
+  prototypes per B-01, so the log holds 3 tools / 0 panels), runs a real
+  `setPluginMetadata` round-trip, and proves dispose leaves the doc
+  unchanged. SDK pins in `plugin-sdk/.../test/harness.spec.ts` (+
+  `sync-wire.spec.ts`).
+  RESIDUALS (not blockers; this is the replay FOUNDATION, not the whole
+  §12.4 fixture corpus): (1) gesture REPLAY — driving a tool's
+  `gesture()` machine event-by-event against the headless engine — is
+  not wired; the harness records the tool but does not yet replay its
+  pointer stream (couples to B-17's facade-vs-spine migration). (2)
+  overlay PREVIEW assertions are recorded no-ops (no overlay surface
+  headlessly; B-07). (3) one bundle per headless host in v1. (4) the
+  IDML replay fixture is a minimal hand-authored package (the fidelity
+  corpus stays private/LFS); a fixture CORPUS replay harness is the next
+  step on this foundation.
 
 - **B-14 · 2026-06-06 · shell rail · RESOLVED (2026-06-06)** —
   `ToolContribution.slotOrder` (contract + editor): the rail orders
