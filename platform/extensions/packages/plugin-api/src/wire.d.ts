@@ -1,8 +1,7 @@
-// GENERATED — do not edit. Vendored verbatim from the editor's
-// tracked tsify output (packages/client/src/wasm/paged_canvas_wasm.d.ts),
-// which is itself generated from paged-media/core (MPL-2.0 OR PMEL).
-// Sync: node scripts/sync-wire.mjs · Check: --check (CI-safe: warns
-// when the sibling editor checkout is absent).
+// GENERATED — do not edit. Vendored verbatim from the published
+// @paged-media/canvas-wasm .d.ts (tsify output from paged-media/core,
+// MPL-2.0 OR PMEL). Sync: node scripts/sync-wire.mjs · Check: --check.
+// Synced from @paged-media/canvas-wasm@0.34.0
 /* tslint:disable */
 /* eslint-disable */
 
@@ -1995,9 +1994,9 @@ export interface InitOutput {
     readonly qcms_white_point_sRGB: (a: number) => void;
     readonly lut_inverse_interp16: (a: number, b: number, c: number) => number;
     readonly lut_interp_linear16: (a: number, b: number, c: number) => number;
-    readonly wasm_bindgen__convert__closures_____invoke__he4c1c257c045c41d: (a: number, b: number, c: any) => [number, number];
-    readonly wasm_bindgen__convert__closures_____invoke__h98d8e723eec618c7: (a: number, b: number, c: any, d: any) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__h10d8665c2d310494: (a: number, b: number, c: any) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__hba9dab33e391dce8: (a: number, b: number, c: any) => [number, number];
+    readonly wasm_bindgen__convert__closures_____invoke__h2a9a86477ca3734e: (a: number, b: number, c: any, d: any) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__h84d34b615e684f5e: (a: number, b: number, c: any) => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_exn_store: (a: number) => void;

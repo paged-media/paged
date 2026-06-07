@@ -26,8 +26,14 @@ them in the same change.
   2026-06-06):** hand-written editor-contract shapes in
   `plugin-api/src/editor.ts` (handles NARROW, contributions 1:1) and
   the engine wire types VENDORED in `src/wire.d.ts` — synced from the
-  editor's generated tsify output via `scripts/sync-wire.mjs`
-  (`--check` in CI). The EDITOR asserts compat through its dev link
+  **published `@paged-media/canvas-wasm` `.d.ts`** (Decision B,
+  repointed 2026-06-07) via `scripts/sync-wire.mjs`. The script resolves
+  that package from the editor's `packages/client` node_modules (or
+  `--source <path>` / `PAGED_CANVAS_WASM_FROM`), and EXITS NONZERO if
+  neither resolves — no warn-skip. `wire.d.ts` carries a
+  `// Synced from @paged-media/canvas-wasm@<version>` stamp; `--check`
+  (a hard gate in CI, see `publish.yml`) fails on content drift OR a
+  stale stamp. The EDITOR asserts compat through its dev link
   (`apps/canvas/src/plugin-api-compat.ts`) — widen a handle type only
   with API review. The workspace builds STANDALONE; sibling checkouts
   are a dev-time luxury.

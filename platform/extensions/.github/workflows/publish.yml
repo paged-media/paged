@@ -26,9 +26,28 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r typecheck
       - run: pnpm -r test
-      # Wire drift check is a warn-skip without the sibling editor
-      # checkout — the vendored copy in-repo is the source for CI.
-      - run: node scripts/sync-wire.mjs --check
+      # Wire-vendoring lockstep (W0.10, audit P11): the vendored
+      # wire.d.ts is a PROTOCOL COUPLING to the published
+      # @paged-media/canvas-wasm. The check resolves that package's
+      # .d.ts and fails on drift OR a version-stamp mismatch — no
+      # warn-skip. Install the SAME version plugin-api was vendored
+      # from into a scratch dir, then point the resolver at it.
+      - name: wire vendoring lockstep (hard gate)
+        run: |
+          set -e
+          # The version the vendored copy was last synced from — read
+          # from the wire.d.ts stamp so this stays in lockstep with the
+          # commit under test.
+          WIRE=packages/plugin-api/src/wire.d.ts
+          VER=$(sed -n 's#^// Synced from @paged-media/canvas-wasm@##p' "$WIRE")
+          test -n "$VER" || { echo "wire.d.ts has no version stamp"; exit 1; }
+          echo "vendored wire stamped @paged-media/canvas-wasm@$VER"
+          mkdir -p .wire-src
+          ( cd .wire-src && npm init -y >/dev/null \
+              && npm install "@paged-media/canvas-wasm@$VER" \
+                   --no-audit --no-fund --no-package-lock )
+          PAGED_CANVAS_WASM_FROM="$PWD/.wire-src" \
+            node scripts/sync-wire.mjs --check
       - name: publish changed versions (canary)
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
