@@ -11,6 +11,7 @@ import type {
   BundleHost,
   Disposable,
   PanelContribution,
+  SchemaPanelContribution,
 } from "@paged-media/plugin-api";
 
 export function contributePanel(
@@ -18,4 +19,17 @@ export function contributePanel(
   panel: PanelContribution,
 ): Disposable {
   return host.contribute.panel(panel);
+}
+
+/** Register a DECLARATIVE panel (W3.1, B-01): the host renders the
+ *  schema from the catalog and subscribes to this bundle's published
+ *  bindings (`host.bindings`) for visibility/enablement. No React
+ *  crosses the boundary — the isolate-ready panel form. Same namespace
+ *  + capability gate as `contributePanel` (`contributes.panels[]` must
+ *  list the id). */
+export function contributeSchemaPanel(
+  host: BundleHost,
+  panel: SchemaPanelContribution,
+): Disposable {
+  return host.contribute.schemaPanel(panel);
 }

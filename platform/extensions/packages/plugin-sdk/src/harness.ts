@@ -54,6 +54,7 @@ import type {
   PanelContribution,
   PathAnchorsResult,
   PluginManifest,
+  SchemaPanelContribution,
   SelectionMode,
   ToolContribution,
   ToolPreviewShape,
@@ -75,11 +76,12 @@ import {
  *  `kind` is the surface; `value` is the contribution object verbatim
  *  (so a test can assert ids, titles, shortcuts, dock edges, …). */
 export interface RecordedContribution {
-  kind: "tool" | "panel" | "command" | "keybinding" | "overlay";
+  kind: "tool" | "panel" | "schemaPanel" | "command" | "keybinding" | "overlay";
   id: string;
   value:
     | ToolContribution
     | PanelContribution
+    | SchemaPanelContribution
     | CommandContribution
     | KeybindingContribution
     | OverlayContribution;
@@ -105,6 +107,9 @@ export interface HeadlessHost {
   /** Contributions of one surface (e.g. `tools()` for the rail). */
   toolsContributed(): ToolContribution[];
   panelsContributed(): PanelContribution[];
+  /** Declarative (schema) panels registered through
+   *  `contribute.schemaPanel` — the W3.1 surface, recorded verbatim. */
+  schemaPanelsContributed(): SchemaPanelContribution[];
   /** Load an IDML package into the headless document. Resolves to the
    *  loaded page ids (or throws on a parse failure). */
   load(idml: Uint8Array): Promise<string[]>;
@@ -348,6 +353,25 @@ export async function createHeadlessHost(
       console: options.console,
       storage: options.storage,
       capabilityMode: mode,
+      // Record the SCHEMA verbatim at registration — the panel registry
+      // only ever sees the synthesized React panel, so the conformance
+      // log gets the schema through this adapter seam (no host renderer
+      // headlessly; visibility/enabled gates are asserted off `bindings`
+      // directly, not through a mounted UI).
+      onSchemaPanelRegistered: (c) => {
+        const entry: RecordedContribution = {
+          kind: "schemaPanel",
+          id: c.id,
+          value: c,
+        };
+        contributions.push(entry);
+        return {
+          dispose() {
+            const i = contributions.indexOf(entry);
+            if (i >= 0) contributions.splice(i, 1);
+          },
+        };
+      },
     });
 
   // Eager neutral host so `host` is available before a bundle is loaded
@@ -388,6 +412,11 @@ export async function createHeadlessHost(
       return contributions
         .filter((c) => c.kind === "panel")
         .map((c) => c.value as PanelContribution);
+    },
+    schemaPanelsContributed() {
+      return contributions
+        .filter((c) => c.kind === "schemaPanel")
+        .map((c) => c.value as SchemaPanelContribution);
     },
     async load(idml: Uint8Array): Promise<string[]> {
       const raw = worker.loadDocumentDirect(seqCounter++, idml);

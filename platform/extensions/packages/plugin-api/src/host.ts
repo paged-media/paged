@@ -33,6 +33,7 @@ import type {
 } from "./editor";
 
 import type { PluginManifest } from "./manifest";
+import type { SchemaPanelContribution } from "./panel-schema";
 import type { WidgetSurface } from "./widgets";
 
 // ---------------------------------------------------------------- core
@@ -78,6 +79,17 @@ export interface ObjectTypeDescriptor {
 export interface ContributionSurface {
   tool(contribution: ToolContribution): Disposable;
   panel(contribution: PanelContribution): Disposable;
+  /**
+   * Register a DECLARATIVE panel (W3.1, closes B-01): sections/rows/
+   * widgets from the catalog vocabulary, with visibility/enablement
+   * driven by the bundle's PUBLISHED bindings (`host.bindings`) — no
+   * React crosses the boundary (the isolate-ready panel form; see
+   * panel-schema.ts). Same namespace + capability gate as `panel`
+   * (`contributes.panels[]` must list the id). The host renders the
+   * schema from the catalog and subscribes to the bundle's bindings;
+   * an expert-leaf React `panel` stays the escape hatch for custom UI.
+   */
+  schemaPanel(contribution: SchemaPanelContribution): Disposable;
   command(contribution: CommandContribution): Disposable;
   keybinding(contribution: KeybindingContribution): Disposable;
   overlay(contribution: OverlayContribution): Disposable;
@@ -254,6 +266,39 @@ export interface DiagnosticsSurface {
   onDidChange(listener: (key: string) => void): Disposable;
 }
 
+// ------------------------------------------------------------- bindings
+//
+// The PUBLISH-BINDINGS door (W3.1 — the dynamic half of the panel
+// schema). A bundle publishes NAMED reactive values that schema rows
+// reference via `{ bind: "name" }` for their `visible` / `enabled`
+// gates. The plugin computes the value in ITS OWN realm (from tool
+// state, selection, document reads — anything) and publishes the
+// RESULT; the host stores it and re-renders any schema row that reads
+// it. This is the deliberate non-conditional design (B-01): the binding
+// ceiling stays `literal | selectionProperty`; conditional VISIBILITY
+// comes from a derived bound value, NOT a host-evaluated expression.
+//
+// Values are plain JSON (`structuredClone`-able) so the door proxies
+// across the future isolate boundary unchanged: the bundle posts
+// `{ name, value }`, the host re-renders. Booleans drive gates; other
+// values are reserved for when a widget's display can read a published
+// value (a v2 widen — v1 widgets read only selection for `value`).
+export interface BindingsSurface {
+  /** Publish (or update) a named reactive value. Schema rows reading
+   *  `{ bind: name }` re-render on every change. JSON only. */
+  publish(name: string, value: unknown): void;
+  /** Read the current value of a published binding (or `undefined`).
+   *  The host uses this when first rendering a row; bundles rarely
+   *  need it. */
+  get(name: string): unknown;
+  /** Remove a published binding. Rows reading it fall back to the
+   *  gate's "absent" semantics (visible / enabled). */
+  delete(name: string): void;
+  /** Subscribe to changes of ANY published binding (the host's render
+   *  subscription; the argument is the changed name). */
+  onDidChange(listener: (name: string) => void): Disposable;
+}
+
 // ----------------------------------------------------------------- host
 
 /**
@@ -273,6 +318,12 @@ export interface BundleHost {
   readonly shell: ShellSurface;
   readonly storage: StorageSurface;
   readonly diagnostics: DiagnosticsSurface;
+  /** Published reactive values (W3.1) — the dynamic half of schema
+   *  panels: a bundle publishes named booleans (and JSON values) that
+   *  schema rows reference for `visible`/`enabled`. The plugin owns the
+   *  derivation; the host owns the lookup + re-render. Always present
+   *  (in-memory store; trivially proxyable across the isolate). */
+  readonly bindings: BindingsSurface;
   /** Host-provided panel widgets (W-04): the code editor and future
    *  heavy controls the host owns. Always present — a plain-textarea
    *  fallback stands in when the host app injects no widget catalog

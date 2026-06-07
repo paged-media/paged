@@ -36,6 +36,7 @@ export {
   type StorageBacking,
 } from "./host-impl";
 export { FALLBACK_WIDGETS } from "./widgets-fallback";
+export { makeSchemaPanelComponent, resolveGate } from "./schema-panel";
 export { loadBundle, type LoadedBundle } from "./load";
 export {
   loadBundleWasm,
@@ -53,4 +54,4 @@ export {
   type PageDrag,
 } from "./gestures";
 export { contributeTool } from "./tools";
-export { contributePanel } from "./panels";
+export { contributePanel, contributeSchemaPanel } from "./panels";

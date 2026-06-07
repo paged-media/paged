@@ -38,6 +38,7 @@ export type {
   ShellSurface,
   StorageSurface,
   DiagnosticsSurface,
+  BindingsSurface,
   Diagnostic,
   DocumentChangeEvent,
   MutationOutcome,
@@ -49,6 +50,18 @@ export type {
   ObjectTypeBaker,
   BakeContext,
 } from "./host";
+
+export type {
+  PanelSchema,
+  PanelSchemaSection,
+  PanelSchemaRow,
+  SchemaPanelContribution,
+  SchemaPanelRenderer,
+  SchemaPanelRendererProps,
+  WidgetValueBinding,
+  BindingRef,
+  SchemaGate,
+} from "./panel-schema";
 
 export type {
   WidgetSurface,

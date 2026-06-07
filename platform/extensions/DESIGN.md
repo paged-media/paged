@@ -67,12 +67,14 @@ a proven consumer need, cited as `[draw B-NN]` or `[web §9.1.N]`.
    DECLARED in its manifest (§11). The namespace rule fires FIRST (the
    outer guard); the capability gate is the stricter policy the
    trust-line record (W0.11) promised — advisory → enforced.
-8. **Native UI by construction (v0 = convention, v1 = schema).** Panels
-   are expert-leaf React composed from `@paged-media/ui` primitives and
-   the `--pg-*`/`--chrome-*`/`--status-*` token layer; icons follow the
-   24×24/currentColor/1.5–1.9-stroke rule. The declarative panel schema
-   stays a *catalog* concern [draw B-01] — the SDK will adopt it when
-   the catalog grows it, not invent a rival.
+8. **Native UI by construction (v0 = convention, v1 = schema —
+   LANDED).** Panels are expert-leaf React composed from
+   `@paged-media/ui` primitives and the `--pg-*`/`--chrome-*`/
+   `--status-*` token layer; icons follow the 24×24/currentColor/
+   1.5–1.9-stroke rule. The declarative panel schema stays a *catalog*
+   concern [draw B-01] — the SDK adopts it, never invents a rival. W3.1
+   landed that adoption: `host.contribute.schemaPanel` +
+   `host.bindings`, rendered host-side from the catalog (§12).
 
 ## 3. The package layering (unchanged from v0.1, sharpened)
 
@@ -204,7 +206,9 @@ at the isolate boundary (the one v0 member that cannot survive RPC).
 | overlay.setToolPreview | yes | plain data |
 | contribute.command/keybinding | yes | worker-kernel prototype already proved this (`shell/src/bundles/sample-bundle.worker.ts`) |
 | contribute.tool (`gesture()` factory) | **no** | the factory becomes an event subscription: host streams `CanvasPointerEvent`s (already plain data) to the isolate, which runs the same machine and replies with preview/mutation messages — the draw-tools machines were shaped event-in/intent-out for exactly this |
-| contribute.panel (React component) | **no** | v0 exception; resolves to the catalog schema (compositions are pure JSON) + `customCanvas`/`codeEditor` host widgets [web §9.1.1] |
+| contribute.panel (React component) | **no** | v0 exception (expert-leaf escape hatch, same-realm only) |
+| contribute.schemaPanel (`PanelSchema` data) | **yes** | W3.1 — pure data + named bindings; the isolate-ready panel form that RESOLVES the row above (§12) |
+| host.bindings (publish/get/onDidChange) | **yes** | plain JSON; the dynamic half of schema panels (§12.2) |
 | host.editor | **no** | dies at the boundary, by design (§4.9) |
 
 Three knowingly non-clonable members, each with a written exit. That is
@@ -338,3 +342,116 @@ bundle may observe; *changing* it is a document-level action, so
 listed but unused — e.g. paged.web declares `rendering: ["hitTest"]` it
 does not exercise in the source lane) is allowed: the gate catches USE
 without declaration, never the reverse.
+
+## 12. The declarative panel-schema mechanism (W3.1 — closes draw B-01)
+
+§2.8 deferred the declarative panel schema as a *catalog* concern, to be
+adopted "when the catalog grows it, not invent a rival." It has now
+grown (the editor's curated primitive leaves + `CompositionRenderer`
+ship live), so this section lands the SDK's adoption — the v1 mechanism
+that closes plugin-draw **B-01**.
+
+**The B-01 problem, restated.** The concept paper's panels used a
+`visibleWhen`/`enabledWhen` CONDITIONAL BINDING LANGUAGE
+(`strokeType == "dashed"`). That was *rejected by design*: the editor
+catalog's binding ceiling is `literal | selectionProperty` (+ coerce) —
+no expression language, and the SDK must not fork one (§8 rejected
+"inventing a richer panel-binding language"). B-01 recorded the
+resolution DIRECTION — "derived bound values from plugin state + expert
+leaves, not conditionals." W3.1 makes that direction a contract.
+
+### 12.1 The shape
+
+A bundle registers a `SchemaPanelContribution` through a new
+`host.contribute.schemaPanel` door (gated identically to
+`contribute.panel`: namespace rule first, then the capability gate —
+the id must be in `contributes.panels[]`). The contribution carries a
+`PanelSchema` — **pure data**, sections → rows → widgets:
+
+- a ROW names a catalog **widget id** from the EXISTING vocabulary
+  (`paged.input.numeric-scrub`, `paged.input.color-swatch`,
+  `paged.input.toggle-group`, `paged.readout`, …), supplies static
+  `props`, and optionally a `value` binding — a `WidgetValueBinding`
+  that is the §11.5 ceiling UNCHANGED (`literal | selectionProperty` +
+  `coerce`);
+- a ROW or SECTION's `visible` / `enabled` is a `SchemaGate`:
+  `boolean | { bind: string; negate?: boolean }`. The `{bind}` form
+  names a value the plugin PUBLISHES (next section); the host LOOKS IT
+  UP. `negate` is the only transform (a NOT) — publishing both `x` and
+  `!x` is wasteful; anything richer is computed by the plugin.
+
+No React crosses the boundary. A schema panel is `structuredClone`-able
+data — it is the **panel/overlay isolate exit** the trust line needs:
+DESIGN.md §6 lists the panel React `component` as the one knowingly
+non-clonable contribution member; a schema panel removes it. Expert-leaf
+React (`contribute.panel`) stays the escape hatch for genuinely custom
+UI — **same-realm only**, by definition.
+
+### 12.2 The bindings door (the dynamic half)
+
+`host.bindings` is a new `BundleHost` member — a per-bundle, in-memory,
+JSON-only `publish(name, value) / get / delete / onDidChange` store. The
+plugin computes a gate's boolean in ITS OWN realm (from tool state,
+selection, a document read — anything) and PUBLISHES the result under a
+name; schema rows reference it via `{ bind: name }`. The host stores it
+and re-renders any schema row that reads it. **There is no expression to
+evaluate** — the binding ceiling stays intact, and conditional
+visibility comes from a derived bound value, exactly as B-01 recorded.
+
+The door is plain data, so it proxies across the isolate unchanged: the
+bundle posts `{ name, value }`, the host re-renders.
+
+### 12.3 Who renders
+
+The host adapter (`createBundleHost`) synthesizes the registry
+`PanelContribution` from a `SchemaPanelContribution`; its `component`
+delegates to a host-injected `SchemaPanelRenderer`
+(`createBundleHost({ schemaPanelRenderer })` — the same injection shape
+as `widgets` / `shell`). The editor injects a renderer that walks the
+schema through the catalog's `CompositionRenderer` (mapping each row's
+`WidgetValueBinding` 1:1 onto a catalog `Binding`) and subscribes to the
+bundle's `bindings` so gates react live. When NO renderer is injected
+(headless hosts, an editor that hasn't wired the catalog),
+`contribute.schemaPanel` registers a visible SEAM panel ("schema panel
+needs a host renderer") — never a throw, never fake UI. The headless
+harness records every schema panel VERBATIM (a `schemaPanel` recorded
+contribution carrying the schema) so conformance asserts the schema, the
+gates, and the binding refs without a UI.
+
+`resolveGate(gate, lookup)` is the shared host-side evaluation (exported
+from the SDK; the editor mirrors it) — absent→true, literal→itself,
+`{bind}`→`Boolean(lookup(bind))` (a missing name reads `false`, a
+visible seam), `negate`→inverse. It is a LOOKUP, not a DSL.
+
+### 12.4 Honest limits (recorded, not hidden)
+
+- **No lists, no custom canvases.** The row widget set is the curated
+  catalog primitive leaves (numeric / length / color / toggle / select /
+  readout / section). There is NO list primitive — layer/style lists
+  stay expert-leaf React (the catalog calls them expert-leaf territory),
+  and a custom on-canvas widget is an expert leaf. paged.draw's
+  `layers.panel.json` prototype therefore CANNOT adopt the schema yet;
+  its note records why.
+- **The binding evaluation is a host-side LOOKUP keyed by name, NOT an
+  expression language.** `{bind:"x"}` reads value `x`; it cannot say
+  `x && !y` or `strokeType == "dashed"`. The plugin publishes the
+  already-combined boolean. This is the whole point — the catalog
+  binding ceiling stays.
+- **`value` bindings resolve only against the SELECTION (or a literal).**
+  A widget cannot bind its displayed VALUE to a published `bindings`
+  value in v1 — only `visible`/`enabled` can. That keeps every WRITE on
+  the typed property door (the apply-an-entity ceiling). A value-from-
+  bindings widen is a possible v2, not v1.
+- **The renderer is in-process React (the §6 non-clonable exit).** Across
+  the isolate the host renders schema-side from the cloned schema + a
+  bindings RPC channel — a SECOND `SchemaPanelRenderer` implementation,
+  not a contract change.
+
+### 12.5 Additivity
+
+Wholly additive: new `host.contribute.schemaPanel` + `host.bindings`
+members, new `PanelSchema` / `SchemaPanelContribution` /
+`WidgetValueBinding` / `BindingRef` / `SchemaGate` types, the
+`schemaPanelRenderer` host option. No existing member changed; no new
+manifest field (a schema panel is a panel — `contributes.panels[]`).
+The catalog binding ceiling is UNCHANGED — that is the point.

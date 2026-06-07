@@ -192,6 +192,26 @@ describe("contribution recording + dispose honesty", () => {
     ]);
   });
 
+  it("records SCHEMA panels verbatim (W3.1 — the schema, not React)", async () => {
+    live = await open();
+    const host = (await loaded()).host;
+    host.contribute.schemaPanel(schemaPanelC("media.paged.harness.panel.stroke"));
+    // The schema panel is recorded as its OWN kind, carrying the schema
+    // (not the synthesized React component the registry saw).
+    const recorded = live!.schemaPanelsContributed();
+    expect(recorded.map((p) => p.id)).toEqual([
+      "media.paged.harness.panel.stroke",
+    ]);
+    expect(recorded[0].schema.sections).toHaveLength(1);
+    expect(recorded[0].schema.sections[0].rows[0].widget).toBe(
+      "paged.readout",
+    );
+    // It also lands in the registry as a panel (the synthesized one).
+    expect(live!.panelsContributed().map((p) => p.id)).toContain(
+      "media.paged.harness.panel.stroke",
+    );
+  });
+
   it("namespace rule is enforced headlessly too", async () => {
     const host = (await loaded()).host;
     expect(() => host.contribute.tool(toolC("foreign.tool.pen"))).toThrow(
@@ -282,5 +302,17 @@ const toolC = (id: string) =>
   }) as never;
 const panelC = (id: string) =>
   ({ id, title: "P", component: (() => null) as never }) as never;
+const schemaPanelC = (id: string) =>
+  ({
+    id,
+    title: "S",
+    schema: {
+      id,
+      title: "S",
+      sections: [
+        { rows: [{ widget: "paged.readout", props: { text: "—" } }] },
+      ],
+    },
+  }) as never;
 const cmdC = (id: string) =>
   ({ id, title: "C", handler: () => undefined }) as never;

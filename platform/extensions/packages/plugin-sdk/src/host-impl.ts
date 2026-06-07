@@ -11,6 +11,7 @@
 // thunk idiom, avoids stale-closure drift).
 
 import type {
+  BindingsSurface,
   BundleHost,
   ContributionSurface,
   Diagnostic,
@@ -25,10 +26,13 @@ import type {
   MutationOutcome,
   OverlaySurface,
   PagedEditor,
+  PanelContribution,
   PluginLogger,
   PluginManifest,
   PluginMetadataEnvelope,
   SceneTreeNode,
+  SchemaPanelContribution,
+  SchemaPanelRenderer,
   SelectionMode,
   SelectionSurface,
   ShellSurface,
@@ -39,12 +43,15 @@ import type {
 
 import { DisposableStore, toDisposable } from "./disposables";
 import { FALLBACK_WIDGETS } from "./widgets-fallback";
+import { makeSchemaPanelComponent } from "./schema-panel";
 
 /** The implemented feature set — `host.supports()` answers from this,
  *  so docs/tests can't drift from code. Form: `"area.member@major"`. */
 export const HOST_FEATURES: readonly string[] = [
   "contribute.tool@1",
   "contribute.panel@1",
+  "contribute.schemaPanel@1",
+  "bindings@1",
   "contribute.command@1",
   "contribute.keybinding@1",
   "contribute.overlay@1",
@@ -171,6 +178,24 @@ export interface CreateBundleHostOptions {
    *  `host.widgets` is the plain-textarea fallback and
    *  `supports("widgets.codeEditor@1")` answers false. */
   widgets?: WidgetSurface;
+  /** Host-provided SCHEMA-PANEL renderer (W3.1): the editor's
+   *  `SchemaPanelRenderer` that walks a `PanelSchema` through the
+   *  catalog + subscribes to the bundle's bindings. When absent,
+   *  `contribute.schemaPanel` registers a visible "needs a host
+   *  renderer" seam panel (never a throw, never fake UI) and
+   *  `supports("contribute.schemaPanel@1")` still answers true (the
+   *  door exists; only the rich rendering is host-injected). */
+  schemaPanelRenderer?: SchemaPanelRenderer;
+  /** Internal registration hook (the headless harness): called at the
+   *  moment a schema panel registers, with the verbatim contribution,
+   *  so the conformance log can record the SCHEMA assertably (the
+   *  registry only sees the synthesized React `PanelContribution`). The
+   *  returned disposer (if any) is tracked alongside the panel
+   *  registration. Not part of the public contract — a host-adapter
+   *  seam. */
+  onSchemaPanelRegistered?: (
+    contribution: SchemaPanelContribution,
+  ) => Disposable | void;
   /** Host-side problems-panel aggregator (W-05). When present,
    *  `supports("diagnostics.publish@1")` answers true and every
    *  `host.diagnostics.set/clear` fans out to it. */
@@ -304,6 +329,46 @@ export function createBundleHost(
         `contributes.panels[] must include "${c.id}"`,
       );
       return store.add(getEditor().registries.panels.register(c));
+    },
+    schemaPanel(c) {
+      // SAME gates as `panel`: the namespace rule (always loud) then the
+      // capability gate — a schema panel is still a panel, so its id
+      // must be listed in `contributes.panels[]`. It carries NO React;
+      // the host's injected `SchemaPanelRenderer` (or the seam fallback)
+      // turns the schema + this bundle's `bindings` into the component
+      // the registry needs.
+      assertNamespaced(c.id, "schemaPanel");
+      requireDeclared(
+        lists(declared?.panels, c.id),
+        "contribute.schemaPanel",
+        `contributes.panels[] must include "${c.id}"`,
+      );
+      const panel: PanelContribution = {
+        id: c.id,
+        title: c.title,
+        icon: c.icon,
+        defaultDock: c.defaultDock,
+        defaultGroup: c.defaultGroup,
+        closable: c.closable,
+        movable: c.movable,
+        component: makeSchemaPanelComponent(
+          c,
+          bindings,
+          options?.schemaPanelRenderer,
+        ),
+      };
+      const reg = store.add(getEditor().registries.panels.register(panel));
+      // Let a host adapter (the headless harness) record the SCHEMA
+      // itself; the registry only ever saw the synthesized React panel.
+      const recorded = options?.onSchemaPanelRegistered?.(c);
+      if (recorded) {
+        const d = store.add(recorded);
+        return toDisposable(() => {
+          reg.dispose();
+          d.dispose();
+        });
+      }
+      return reg;
     },
     command(c) {
       assertNamespaced(c.id, "command");
@@ -656,6 +721,35 @@ export function createBundleHost(
     },
   };
 
+  // -------------------------------------------------------- bindings
+  // The publish-bindings store (W3.1) — named reactive values the
+  // bundle publishes; schema rows reference them via `{ bind: name }`
+  // for visible/enabled. The plugin owns the derivation; the store owns
+  // the lookup + change fan-out (the host's SchemaPanelRenderer
+  // subscribes). JSON-only, in-memory, per-bundle (cleared on dispose
+  // via the listener teardown through the DisposableStore).
+  const bindingStore = new Map<string, unknown>();
+  const bindingListeners = new Set<(name: string) => void>();
+  const emitBinding = (name: string) => {
+    for (const l of bindingListeners) l(name);
+  };
+  const bindings: BindingsSurface = {
+    publish(name, value) {
+      bindingStore.set(name, value);
+      emitBinding(name);
+    },
+    get(name) {
+      return bindingStore.get(name);
+    },
+    delete(name) {
+      if (bindingStore.delete(name)) emitBinding(name);
+    },
+    onDidChange(listener) {
+      bindingListeners.add(listener);
+      return store.add(toDisposable(() => bindingListeners.delete(listener)));
+    },
+  };
+
   // --------------------------------------------------------- shell
   const shell: ShellSurface = options?.shell ?? {
     openPanel(panelId) {
@@ -682,6 +776,9 @@ export function createBundleHost(
   if (options?.widgets) {
     featureSet.add("widgets.codeEditor@1");
   }
+  if (options?.schemaPanelRenderer) {
+    featureSet.add("schemaPanel.renderer@1");
+  }
   if (options?.diagnosticsSink) {
     featureSet.add("diagnostics.publish@1");
   }
@@ -697,6 +794,7 @@ export function createBundleHost(
     shell,
     storage,
     diagnostics,
+    bindings,
     widgets,
     supports: (feature) => featureSet.has(feature),
     get editor() {
