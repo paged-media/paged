@@ -175,14 +175,97 @@ Format: `B-NN · date · area · status`.
   round-trip beats local math — the local copies stay legitimate for
   sync interactive paths.
 
-- **B-07 · 2026-06-06 · overlays · OPEN** — `ToolPreviewShape` is
-  rect-or-polyline only; in-progress pen cubics must be FLATTENED for
-  preview (`flattenAnchorRun`). Fine at v0; a path/cubic preview
-  variant (or the P2 retained overlay channel) removes the sampling.
+- **B-07 · 2026-06-06 · overlays · RESOLVED (2026-06-07, W3.3)** —
+  `ToolPreviewShape` was rect-or-polyline only, so in-progress pen
+  cubics had to be FLATTENED for preview (`flattenAnchorRun` — sampling
+  artefacts at high zoom + wasted work per pointermove). The
+  path/cubic variant LANDED end-to-end:
+  · **contract** — `ToolPreviewPath` is now a third member of the
+    `ToolPreviewShape` union in `@paged-media/plugin-api`
+    (`editor.ts`, re-exported via `contributions.ts`): `{ pageId,
+    anchors: PathAnchorSpec-shape[], close?, dashed? }` — the SAME
+    anchor/handle run `insertPath` commits and `draw-tools`'
+    `AnchorTriple` produces, so one run feeds both preview and commit.
+  · **shell renderer** — `tool-preview.tsx` discriminates on
+    `"anchors" in p` and emits ONE real SVG `<path>` of `C` commands
+    (closing cubic + `Z` when `close`), exact at any zoom, no
+    sampling. Strokes the same `var(--overlay-snap)` token as the rest
+    of the preview family (no new token/class — the `overlay-tokens`
+    guard already covers it); `dashed` opts into the existing
+    dashed-vs-solid vocabulary.
+  · **host door** — `overlay.setToolPreview` passes the variant
+    through UNCHANGED, capability-gated as today
+    (`overlay.toolPreview@1` / `rendering: ["overlay"]`); the headless
+    host RECORDS it (`createHeadlessHost().lastToolPreview()`), closing
+    B-13 residual (2) for the path channel.
+  · **draw emitter** — `draw-tools` gained `penPreview(snapshot,
+    pageId, { dashed? })`, the host-agnostic builder that frames a
+    `PenSnapshot` as a `ToolPreviewPath` (live rubber-band → a trailing
+    corner anchor = straight cubic; `closePreview` → `close` + no
+    rubber-band). Replaces the flatten step; the editor shim / a future
+    isolated bundle pushes its output straight through the overlay door.
+  MECHANISM NOTE — there is NO separate feature flag: the variant is
+  STRUCTURAL (the renderer keys off the `"anchors"` discriminant), so a
+  host whose `ToolPreviewShape` predates the variant simply never
+  receives it and a shim targeting such a host keeps `flattenAnchorRun`
+  as the fallback. `flattenAnchorRun` is retained for that reason (and
+  for the polyline-family tools — pencil/line/gradient).
+  TESTS: plugin-sdk `host-impl.spec.ts` (door accepts the cubic shape
+  verbatim) + `harness.spec.ts` (loaded bundle records the variant
+  headlessly; the capability gate still bites); plugin-draw
+  `pen-machine.spec.ts` (`penPreview` emits SEGMENT data — handles, not
+  sampled points — `close`/rubber-band/dashed branches); editor
+  Playwright `e2e/overlay-path-preview.spec.ts` (a real `<path>` of `C`
+  commands renders in the overlay during an in-progress preview,
+  Z-terminated when closed, snap-teal).
+  RESIDUAL — the P2 RETAINED overlay channel (a plugin-owned persistent
+  scene layer, distinct from the transient single-preview signal) stays
+  reserved, not faked; it is a separate surface from this preview-lane
+  fix and remains future work.
 
-- **B-08 · 2026-06-06 · pointer events · OPEN** — `CanvasPointerEvent`
-  carries no pressure/tilt (Pointer Events expose them). Gates stylus
-  input → variable-width strokes (§13.12, Tier B). Not a v1 blocker.
+- **B-08 · 2026-06-06 · pointer events · PARTIAL (2026-06-07, W3.4)** —
+  `CanvasPointerEvent` now carries `pressure` (0..1), `tiltX`, `tiltY`,
+  and `pointerType` (`"mouse" | "pen" | "touch"`), all additive.
+  ViewportCanvas reads them straight off the DOM `PointerEvent` in
+  `buildToolPointer`, preserving browser semantics verbatim (a mouse
+  reports `0` with no button and `0.5` while held; a pen reports
+  physical pressure) — the host never synthesizes a value, only
+  defaults `0.5`/`0`/`"mouse"` when a synthetic event omits a field.
+  Plumbed through both contracts (`plugin-api/src/editor.ts` +
+  editor `shell/src/tools/gesture-handler.ts`, kept in lockstep so
+  `plugin-api-compat`'s `_PointerEventsFlowToContractHandlers` holds)
+  and forwarded untouched by the plugin-sdk gesture kit (it passes the
+  whole event object). On the draw side, `PenMachine` gained an
+  OPTIONAL `sample?: { pressure?, tiltX?, tiltY? }` on its down/move/up
+  events and records a per-anchor `pressures[]` profile parallel to
+  `anchors` — the machine stays PURE (pressure never feeds geometry;
+  unit-tested). `draw-tools` also exports the API seam
+  `strokeWidthFromPressure(p, {min,max})` that maps a sample to a
+  stroke width (mouse 0.5 → mid-range).
+
+  **SAB verdict — NOT carried on the gesture SAB lane (by design).**
+  The gesture SAB (`packages/client/src/sab/gesture.ts`, 32 bytes / 8
+  u32 words) is a **wasm-coupled fixed-layout contract**: core owns the
+  canonical layout (`crates/paged-canvas/src/gesture.rs` —
+  `GESTURE_SAB_BYTES` + `GESTURE_OFFSET_*` + `GestureSabLayout`), the
+  published `@paged-media/canvas-wasm` exposes `gestureSabLayout()`, and
+  the worker's `assertSabContract` fires `protocolMismatch` on any
+  drift. Adding pressure/tilt fields would grow `GESTURE_SAB_BYTES` and
+  add offsets the installed wasm doesn't know — a protocol break needing
+  a core change + republish, out of scope for an additive task. (Note:
+  the wasm does NOT read the SAB memory directly anyway — the worker
+  drains it in JS and passes scalar args to `updateGestureRaw(handleLo,
+  handleHi, dx, dy, modifierBits)`. The fix-the-right-place answer is
+  the event OBJECT, which the draw tools already receive.) So pressure
+  rides the `CanvasPointerEvent` object spine, not the SAB.
+
+  **RESIDUAL (still Tier B engine work):** variable-width stroke
+  RENDERING — turning a pressure profile into path geometry (offset-
+  curve outline from per-sample widths) — needs the engine. The
+  client/plugin surface now delivers the pressure profile + a width
+  hook; the renderer can't yet consume it. That is the remaining open
+  half of §13.12 and stays here until core lands a variable-width
+  stroke path.
 
 - **B-09 · 2026-06-06 · scripting/runtime · RESOLVED (2026-06-07)** —
   the open half closed in core (W3.9, rides protocol v35).

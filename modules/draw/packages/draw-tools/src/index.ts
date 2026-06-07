@@ -5,11 +5,15 @@
 
 export {
   PenMachine,
+  strokeWidthFromPressure,
+  penPreview,
   type PenEvent,
+  type PenSample,
   type PenModifiers,
   type PenSnapshot,
   type PenCommit,
   type PenOptions,
+  type StrokeWidthProfile,
 } from "./pen-machine";
 
 export {

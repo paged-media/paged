@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { PenMachine, type PenModifiers } from "../src/pen-machine";
+import {
+  PenMachine,
+  penPreview,
+  strokeWidthFromPressure,
+  type PenModifiers,
+} from "../src/pen-machine";
 
 const NONE: PenModifiers = { shift: false, alt: false };
 const SHIFT: PenModifiers = { shift: true, alt: false };
@@ -144,5 +149,204 @@ describe("PenMachine — closing + preview", () => {
     const snap = click(m, [50, 50]);
     expect(snap.active).toBe(false);
     expect(snap.anchors).toHaveLength(2);
+  });
+});
+
+describe("penPreview — B-07 cubic tool preview", () => {
+  // The variant the host pushes through `overlay.setToolPreview`: the
+  // SAME anchor/handle run the machine holds, NOT a flattened polyline.
+  // The shell renderer turns these into one <path> of `C` commands.
+
+  it("emits the cubic anchor run verbatim — segment data, not sampled points", () => {
+    const m = machine();
+    // Corner, then a smooth anchor via a drag (pulls handles).
+    click(m, [0, 0]);
+    m.handle({ type: "down", point: [40, 0], modifiers: NONE });
+    const snap = m.handle({ type: "move", point: [60, 20], modifiers: NONE });
+    const preview = penPreview(snap, "p1");
+    expect(preview).not.toBeNull();
+    // It carries `anchors` (the cubic form), NOT `points` (a polyline).
+    expect(preview).toHaveProperty("anchors");
+    expect(preview).not.toHaveProperty("points");
+    expect(preview!.pageId).toBe("p1");
+    expect(preview!.anchors).toHaveLength(2);
+    // The dragged anchor's outgoing handle is the pull — true curve data,
+    // proving NO flattening happened (a polyline would have lost it).
+    const dragged = preview!.anchors[1];
+    expect(dragged.right).toEqual([60, 20]);
+    expect(dragged.left).toEqual([20, -20]); // mirrored about [40,0]
+  });
+
+  it("appends the rubber-band to the hover cursor as a trailing corner anchor", () => {
+    const m = machine();
+    click(m, [0, 0]);
+    click(m, [30, 0]);
+    const snap = m.handle({ type: "move", point: [40, 10], modifiers: NONE });
+    const preview = penPreview(snap, "p1")!;
+    // Two placed anchors + the live rubber-band segment to the cursor.
+    expect(preview.anchors).toHaveLength(3);
+    const tail = preview.anchors[2];
+    expect(tail.anchor).toEqual([40, 10]);
+    // A corner anchor — collapsed handles → a straight cubic.
+    expect(tail.left).toEqual([40, 10]);
+    expect(tail.right).toEqual([40, 10]);
+    expect(preview.close).toBe(false);
+  });
+
+  it("marks `close` and omits the rubber-band when hovering the first anchor", () => {
+    const m = machine();
+    click(m, [0, 0]);
+    click(m, [30, 0]);
+    click(m, [30, 30]);
+    const snap = m.handle({ type: "move", point: [2, 1], modifiers: NONE });
+    expect(snap.closePreview).toBe(true);
+    const preview = penPreview(snap, "p1")!;
+    // Three placed anchors, no rubber-band tail (the closing cubic
+    // returns to anchor 0).
+    expect(preview.anchors).toHaveLength(3);
+    expect(preview.close).toBe(true);
+  });
+
+  it("returns null for a run too short to stroke (a single anchor)", () => {
+    const m = machine();
+    const snap = click(m, [0, 0]); // one anchor, no hover
+    expect(penPreview(snap, "p1")).toBeNull();
+  });
+
+  it("honours the dashed styling option", () => {
+    const m = machine();
+    click(m, [0, 0]);
+    click(m, [30, 0]);
+    const snap = m.handle({ type: "move", point: [40, 10], modifiers: NONE });
+    expect(penPreview(snap, "p1", { dashed: true })!.dashed).toBe(true);
+    // Solid by default — no `dashed` key.
+    expect(penPreview(snap, "p1")).not.toHaveProperty("dashed");
+  });
+});
+
+describe("PenMachine — B-08 pressure", () => {
+  it("records the pressure sample per anchor, parallel to anchors", () => {
+    const m = machine();
+    m.handle({
+      type: "down",
+      point: [0, 0],
+      modifiers: NONE,
+      sample: { pressure: 0.2 },
+    });
+    m.handle({ type: "up", point: [0, 0], modifiers: NONE });
+    const snap = m.handle({
+      type: "down",
+      point: [30, 0],
+      modifiers: NONE,
+      sample: { pressure: 0.9 },
+    });
+    expect(snap.anchors).toHaveLength(2);
+    expect(snap.pressures).toEqual([0.2, 0.9]);
+  });
+
+  it("a missing sample (mouse) records the 0.5 mouse default", () => {
+    const m = machine();
+    const snap = click(m, [5, 5]);
+    expect(snap.pressures).toEqual([0.5]);
+  });
+
+  it("pressure NEVER alters the geometry (machines stay pure)", () => {
+    const noSample = machine();
+    noSample.handle({ type: "down", point: [10, 10], modifiers: NONE });
+    noSample.handle({ type: "move", point: [18, 14], modifiers: NONE });
+    const a = noSample.handle({ type: "up", point: [18, 14], modifiers: NONE });
+
+    const withSample = machine();
+    withSample.handle({
+      type: "down",
+      point: [10, 10],
+      modifiers: NONE,
+      sample: { pressure: 0.05, tiltX: 40, tiltY: -10 },
+    });
+    withSample.handle({ type: "move", point: [18, 14], modifiers: NONE });
+    const b = withSample.handle({
+      type: "up",
+      point: [18, 14],
+      modifiers: NONE,
+    });
+
+    expect(b.anchors[0]).toEqual(a.anchors[0]);
+  });
+
+  it("clamps out-of-range / non-finite pressure into 0..1", () => {
+    const m = machine();
+    m.handle({
+      type: "down",
+      point: [0, 0],
+      modifiers: NONE,
+      sample: { pressure: 5 },
+    });
+    m.handle({ type: "up", point: [0, 0], modifiers: NONE });
+    m.handle({
+      type: "down",
+      point: [10, 0],
+      modifiers: NONE,
+      sample: { pressure: -3 },
+    });
+    const snap = m.handle({ type: "up", point: [10, 0], modifiers: NONE });
+    expect(snap.pressures).toEqual([1, 0]);
+  });
+
+  it("Escape clears the recorded pressure profile", () => {
+    const m = machine();
+    m.handle({
+      type: "down",
+      point: [0, 0],
+      modifiers: NONE,
+      sample: { pressure: 0.7 },
+    });
+    m.handle({ type: "up", point: [0, 0], modifiers: NONE });
+    const snap = m.handle({ type: "key", key: "Escape" });
+    expect(snap.pressures).toEqual([]);
+  });
+});
+
+describe("strokeWidthFromPressure (B-08 width hook)", () => {
+  const profile = { min: 1, max: 5 };
+
+  it("interpolates min..max across pressure 0..1", () => {
+    expect(strokeWidthFromPressure(0, profile)).toBe(1);
+    expect(strokeWidthFromPressure(1, profile)).toBe(5);
+    expect(strokeWidthFromPressure(0.5, profile)).toBe(3);
+  });
+
+  it("a mouse pressure (0.5) lands mid-range", () => {
+    expect(strokeWidthFromPressure(0.5, profile)).toBe(3);
+  });
+
+  it("clamps out-of-range pressure before mapping", () => {
+    expect(strokeWidthFromPressure(2, profile)).toBe(5);
+    expect(strokeWidthFromPressure(-1, profile)).toBe(1);
+    expect(strokeWidthFromPressure(Number.NaN, profile)).toBe(3);
+  });
+
+  it("penPreview geometry is unaffected by pressure (pure overlay)", () => {
+    // The preview path the host pushes to the overlay is geometry-only;
+    // pressure rides the snapshot's `pressures`, never the anchors —
+    // so a pressure-carrying run previews identically to a mouse run.
+    const m = machine();
+    m.handle({
+      type: "down",
+      point: [0, 0],
+      modifiers: NONE,
+      sample: { pressure: 0.1 },
+    });
+    m.handle({ type: "up", point: [0, 0], modifiers: NONE });
+    const snap = m.handle({
+      type: "down",
+      point: [30, 0],
+      modifiers: NONE,
+      sample: { pressure: 0.95 },
+    });
+    const preview = penPreview(snap, "page-1");
+    expect(preview).not.toBeNull();
+    expect(preview!.anchors).toHaveLength(2);
+    expect(preview!.anchors[0].anchor).toEqual([0, 0]);
+    expect(preview!.anchors[1].anchor).toEqual([30, 0]);
   });
 });

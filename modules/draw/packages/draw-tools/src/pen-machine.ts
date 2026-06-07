@@ -30,15 +30,31 @@ import {
   type Vec2,
 } from "@paged-media/draw-geometry";
 
+import type { ToolPreviewPath } from "@paged-media/plugin-api";
+
 export interface PenModifiers {
   shift: boolean;
   alt: boolean;
 }
 
+/**
+ * Optional Pointer-Events sample carried alongside a pen event (B-08).
+ * The machine stays geometry-pure — it records the pressure at each
+ * anchor but never branches on it; consumers turn the recorded profile
+ * into a variable-width stroke via a width hook (`strokeWidthFromPressure`)
+ * once the engine can render one (§13.12, Tier B residual). `pressure`
+ * is 0..1 with browser semantics (mouse 0/0.5; pen physical).
+ */
+export interface PenSample {
+  pressure?: number;
+  tiltX?: number;
+  tiltY?: number;
+}
+
 export type PenEvent =
-  | { type: "down"; point: Vec2; modifiers: PenModifiers }
-  | { type: "move"; point: Vec2; modifiers: PenModifiers }
-  | { type: "up"; point: Vec2; modifiers: PenModifiers }
+  | { type: "down"; point: Vec2; modifiers: PenModifiers; sample?: PenSample }
+  | { type: "move"; point: Vec2; modifiers: PenModifiers; sample?: PenSample }
+  | { type: "up"; point: Vec2; modifiers: PenModifiers; sample?: PenSample }
   | { type: "key"; key: "Enter" | "Escape" };
 
 export interface PenCommit {
@@ -50,6 +66,12 @@ export interface PenCommit {
 export interface PenSnapshot {
   /** Anchors placed so far (live — includes the one being dragged). */
   anchors: readonly AnchorTriple[];
+  /** Per-anchor pressure 0..1, parallel to `anchors` (B-08). The
+   *  pressure recorded when each anchor was placed; `0.5` when the
+   *  event carried no sample (mouse). The pen-stroke-width hook
+   *  (`strokeWidthFromPressure`) turns this profile into a
+   *  variable-width stroke — pending engine support (§13.12 Tier B). */
+  pressures: readonly number[];
   /** Hover point for the rubber band from the last anchor (null
    *  while the pointer is down or the path is empty/inactive). */
   rubberTo: Vec2 | null;
@@ -72,8 +94,15 @@ export interface PenOptions {
 
 const DEFAULT_DRAG_THRESHOLD = 2;
 
+/** Pressure recorded for a mouse anchor (no physical sample). Matches
+ *  the host's mouse-pressure default (Pointer Events: 0.5 while a
+ *  button is held). */
+const MOUSE_PRESSURE = 0.5;
+
 export class PenMachine {
   private anchors: AnchorTriple[] = [];
+  /** Per-anchor pressure, parallel to `anchors` (B-08). */
+  private pressures: number[] = [];
   private pointerDown = false;
   private downPoint: Vec2 | null = null;
   private dragging = false;
@@ -88,7 +117,7 @@ export class PenMachine {
     if (this.done) return this.snapshot(null);
     switch (event.type) {
       case "down":
-        return this.onDown(event.point, event.modifiers);
+        return this.onDown(event.point, event.modifiers, event.sample);
       case "move":
         return this.pointerDown
           ? this.onDragMove(event.point, event.modifiers)
@@ -100,7 +129,11 @@ export class PenMachine {
     }
   }
 
-  private onDown(point: Vec2, modifiers: PenModifiers): PenSnapshot {
+  private onDown(
+    point: Vec2,
+    modifiers: PenModifiers,
+    sample?: PenSample,
+  ): PenSnapshot {
     this.pointerDown = true;
     this.dragging = false;
     this.brokenLeft = false;
@@ -119,6 +152,10 @@ export class PenMachine {
         ? constrainAngle(this.anchors[this.anchors.length - 1].anchor, point)
         : clone(point);
     this.anchors.push(cornerAnchor(placed));
+    // B-08 — record the pressure at placement. Pure bookkeeping: it
+    // never feeds the geometry, only the optional variable-width hook.
+    // A missing sample (mouse / synthetic) records the mouse default.
+    this.pressures.push(clampPressure(sample?.pressure ?? MOUSE_PRESSURE));
     this.downPoint = placed;
     return this.snapshot(null);
   }
@@ -165,12 +202,14 @@ export class PenMachine {
     if (key === "Escape") {
       this.done = true;
       this.anchors = [];
+      this.pressures = [];
       return this.snapshot(null);
     }
     // Enter — commit the open path; a degenerate run cancels.
     this.done = true;
     if (this.anchors.length < 2) {
       this.anchors = [];
+      this.pressures = [];
       return this.snapshot(null);
     }
     return this.snapshot({ anchors: this.anchors, open: true });
@@ -185,6 +224,7 @@ export class PenMachine {
       dist(this.hover, this.anchors[0].anchor) <= this.options.closeTolerance;
     return {
       anchors: this.anchors,
+      pressures: this.pressures,
       rubberTo:
         this.done || this.pointerDown || this.anchors.length === 0
           ? null
@@ -194,4 +234,88 @@ export class PenMachine {
       active: !this.done,
     };
   }
+}
+
+/** Clamp a raw pressure sample into the Pointer-Events 0..1 range
+ *  (defensive against a misbehaving device / synthetic value). */
+function clampPressure(p: number): number {
+  if (!Number.isFinite(p)) return MOUSE_PRESSURE;
+  return p < 0 ? 0 : p > 1 ? 1 : p;
+}
+
+/**
+ * Pressure-aware stroke-width hook (B-08, §13.12 Tier B). Maps a
+ * normalized pressure 0..1 to a stroke width in pt by linear
+ * interpolation between `min` and `max`. This is the API SEAM only —
+ * it gives a draw tool a width per sample so a future variable-width
+ * renderer can build a tapered outline. The actual variable-width
+ * STROKE GEOMETRY (offset-curve outline from a width profile) is
+ * ENGINE work and remains a residual (see BREAKAGE_LOG B-08).
+ *
+ * Mouse input (pressure ~0.5) lands mid-range, so a mouse-drawn path
+ * gets a sensible constant width without special-casing.
+ */
+export interface StrokeWidthProfile {
+  /** Width at pressure 0, pt. */
+  min: number;
+  /** Width at pressure 1, pt. */
+  max: number;
+}
+
+export function strokeWidthFromPressure(
+  pressure: number,
+  profile: StrokeWidthProfile,
+): number {
+  const p = clampPressure(pressure);
+  return profile.min + (profile.max - profile.min) * p;
+}
+
+/**
+ * Build the in-progress PEN preview as a cubic `ToolPreviewPath`
+ * (B-07) — the host renders true Béziers instead of a flattened
+ * polyline. The snapshot's `anchors` ARE the cubic run (anchor + left/
+ * right handles); this only frames them for the overlay channel and
+ * appends the live rubber-band segment to the hover cursor as a corner
+ * anchor (collapsed handles → a straight cubic), exactly mirroring the
+ * polyline path's trailing rubber-band but WITHOUT sampling.
+ *
+ * Returns `null` for a run too short to draw (the host clears its
+ * preview). When `closePreview` is set (hovering anchor 0), the run is
+ * marked `close` and the rubber-band is omitted — the closing cubic
+ * already returns to anchor 0.
+ *
+ * This is the host-agnostic OUTPUT the editor shim / a future isolated
+ * bundle pushes straight through `host.overlay.setToolPreview`; the old
+ * `flattenAnchorRun` path stays as the fallback for a host whose
+ * `ToolPreviewShape` predates the path variant (capability is the same
+ * `overlay.toolPreview@1` door — the variant is structural, detected by
+ * the renderer's `"anchors" in shape` discriminant, so no separate
+ * feature flag exists; a pre-variant host simply ignores the unknown
+ * branch and the shim should keep flattening for it).
+ */
+export function penPreview(
+  snapshot: PenSnapshot,
+  pageId: string,
+  options?: { dashed?: boolean },
+): ToolPreviewPath | null {
+  const anchors: AnchorTriple[] = snapshot.anchors.map((a) => ({
+    anchor: [a.anchor[0], a.anchor[1]],
+    left: [a.left[0], a.left[1]],
+    right: [a.right[0], a.right[1]],
+  }));
+  const close = snapshot.closePreview;
+  // Rubber-band to the cursor: only while not snapping to close (the
+  // close edge already returns to anchor 0). A corner anchor at the
+  // hover point → a straight cubic from the last placed anchor.
+  if (snapshot.rubberTo && !close) {
+    anchors.push(cornerAnchor(clone(snapshot.rubberTo)));
+  }
+  // A single anchor (or none) has no segment to stroke.
+  if (anchors.length < 2) return null;
+  return {
+    pageId,
+    anchors,
+    close,
+    ...(options?.dashed ? { dashed: true } : {}),
+  };
 }
