@@ -144,10 +144,31 @@ Format: `B-NN · date · area · status`.
   not wired; the harness records the tool but does not yet replay its
   pointer stream (couples to B-17's facade-vs-spine migration). (2)
   overlay PREVIEW assertions are recorded no-ops (no overlay surface
-  headlessly; B-07). (3) one bundle per headless host in v1. (4) the
-  IDML replay fixture is a minimal hand-authored package (the fidelity
-  corpus stays private/LFS); a fixture CORPUS replay harness is the next
-  step on this foundation.
+  headlessly; B-07). (3) one bundle per headless host in v1.
+  RESIDUAL (4) — RESOLVED (2026-06-07, W4.15): the fixture CORPUS replay
+  harness now exists. `draw-bundle/test/fixtures/` carries a pure-TS IDML
+  builder (`build-idml.ts` — no `zip` CLI, deterministic bytes) + a named
+  corpus (`corpus.ts`: F1 multi-shape rect+open-polygon+line, F2 closed
+  quad, F3 curved-open). `test/replay.ts` records a `GesturePlan`
+  (`{tool, click, tolerance}` — the deterministic OUTPUT of the anchor
+  machines) and replays it through `host.document.mutate` via the
+  bundle's OWN exported `mutationFor` (no second copy to drift from),
+  asserting the resulting anchor table + that one undo restores baseline.
+  Spec family (`test/conformance/*.spec.ts`, vitest, one wasm boot per
+  file via the host's reload support): `corpus.spec.ts` (parse + geometry
+  round-trips per fixture), `replay.spec.ts` (add / delete / convert plan
+  shapes incl. closing-edge add + the delete min-anchors floor + the
+  curve-preserving split), `metadata.spec.ts` (plugin-metadata persistence
+  across mutate + undo + the namespace gate). Pointer-EVENT-level gesture
+  replay (residual 1) is still the deeper step gated on B-17 — this proves
+  the PLAN→engine contract, the load-bearing half.
+  FINDINGS surfaced by the corpus (pinned-gap tests, present through the
+  vendored protocol v35): (a) the plugin-metadata carrier round-trips on
+  `<Rectangle>` leaves but a `<Polygon>` write reports `applied:true` and
+  reads back `null` — so the corpus uses the rectangle as the metadata
+  carrier and the open polygon as the anchor-plan target; (b) rectangles
+  expose NO `pathAnchors` table (bounds-based), so anchor replay targets
+  polygons / graphic lines only.
 
 - **B-14 · 2026-06-06 · shell rail · RESOLVED (2026-06-06)** —
   `ToolContribution.slotOrder` (contract + editor): the rail orders

@@ -32,10 +32,34 @@ links into `../editor` — install order: editor → plugin-sdk → here):
 cd ~/paged/editor && pnpm install
 cd ~/paged/plugin-sdk && pnpm install
 cd ~/paged/plugin-draw && pnpm install
-pnpm -r test        # vitest — pure machines, no host needed
+pnpm -r test        # vitest — pure machines + the headless conformance corpus
 pnpm -r typecheck   # includes the wire-compat assertions against plugin-api
 node ../plugin-sdk/packages/plugin-cli/bin/paged-plugin.mjs validate packages/draw-bundle/manifest.json
 ```
+
+### Conformance corpus (W4.15)
+
+`draw-bundle/test/` carries a headless **conformance-fixture replay
+harness** on the B-13 foundation (`@paged-media/plugin-sdk`'s
+`createHeadlessHost` — the published engine wasm booted in Node):
+
+- `fixtures/build-idml.ts` — a pure-TS IDML package builder (no `zip`
+  CLI, deterministic bytes); `fixtures/corpus.ts` — named multi-shape
+  documents (F1 rect + open polygon + line, F2 closed quad, F3
+  curved-open).
+- `replay.ts` — records a `GesturePlan` (`{ tool, click, tolerance }`,
+  the anchor machines' deterministic output) and replays it through
+  `host.document.mutate` using the bundle's OWN `mutationFor`, asserting
+  the resulting anchor table **and** that one undo restores the baseline.
+- `conformance/*.spec.ts` — per-fixture assertions (geometry round-trips;
+  add / delete / convert plan shapes incl. closing-edge add + the delete
+  floor; plugin-metadata persistence across mutate + undo + the namespace
+  gate). One wasm boot per spec-file (the host supports reload).
+
+Residuals + the corpus findings (rectangle-vs-polygon metadata carrier;
+rectangles expose no `pathAnchors`) are tracked under **B-13** in
+`BREAKAGE_LOG.md`. Pointer-event-level gesture replay stays gated on
+**B-17**.
 
 ## Milestones
 

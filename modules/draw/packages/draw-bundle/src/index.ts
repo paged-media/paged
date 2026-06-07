@@ -12,3 +12,7 @@ export const drawBundle = defineBundle({
 });
 
 export { activate };
+// The plan→Mutation translation, exported for the conformance replay
+// harness (so it replays the EXACT mutation the live tool emits — no
+// second copy to drift from).
+export { mutationFor, type AnchorEditMode } from "./handlers/anchors";

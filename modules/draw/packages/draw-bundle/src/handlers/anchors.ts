@@ -41,7 +41,11 @@ function supportsPathEdit(id: ElementId): boolean {
   );
 }
 
-function mutationFor(plan: AnchorEditPlan, elementId: ElementId): Mutation {
+/** Translate a host-agnostic anchor-edit plan into the engine
+ *  Mutation the bundle sends through `host.document.mutate`. Exported
+ *  so the conformance replay harness drives the SAME translation the
+ *  live tool emits — there is no second copy to drift from. */
+export function mutationFor(plan: AnchorEditPlan, elementId: ElementId): Mutation {
   switch (plan.kind) {
     case "remove":
       return { op: "pathPointRemove", args: { elementId, index: plan.index } };
