@@ -19,11 +19,13 @@ import type {
   Disposable,
   DocumentChangeEvent,
   DocumentSurface,
+  EditContextContribution,
   ElementId,
   HitFilter,
   HitResult,
   Mutation,
   MutationOutcome,
+  ObjectTypeContribution,
   OverlaySurface,
   PagedEditor,
   PanelContribution,
@@ -55,6 +57,8 @@ export const HOST_FEATURES: readonly string[] = [
   "contribute.command@1",
   "contribute.keybinding@1",
   "contribute.overlay@1",
+  "contribute.editContext@1",
+  "contribute.objectType@1",
   "document.mutate@1",
   "document.undo@1",
   "document.collection@1",
@@ -196,6 +200,20 @@ export interface CreateBundleHostOptions {
   onSchemaPanelRegistered?: (
     contribution: SchemaPanelContribution,
   ) => Disposable | void;
+  /** Internal registration hook (the headless harness, W3.2): called
+   *  when an EDIT CONTEXT registers (after the namespace + capability
+   *  gates pass), with the verbatim contribution, so the conformance log
+   *  can record it. When the editor provides no `editContexts` registry,
+   *  this is ALSO the recording stub's only consumer — the door no
+   *  longer throws, it records. Not part of the public contract. */
+  onEditContextRegistered?: (
+    contribution: EditContextContribution,
+  ) => Disposable | void;
+  /** Internal registration hook (the headless harness, W3.2): the
+   *  object-type analogue of `onEditContextRegistered`. */
+  onObjectTypeRegistered?: (
+    contribution: ObjectTypeContribution,
+  ) => Disposable | void;
   /** Host-side problems-panel aggregator (W-05). When present,
    *  `supports("diagnostics.publish@1")` answers true and every
    *  `host.diagnostics.set/clear` fans out to it. */
@@ -273,6 +291,15 @@ export function createBundleHost(
     arr: readonly string[] | undefined,
     id: string,
   ): boolean => arr?.includes(id) ?? false;
+
+  /** W3.2 — an edit-context / object-type `type` is DECLARED when the
+   *  manifest's `contributes.editContexts[]` / `contributes.objectTypes[]`
+   *  lists an entry with that `type`. (These are object arrays keyed by
+   *  `type`, not flat id arrays, so they need their own predicate.) */
+  const declaresType = (
+    arr: ReadonlyArray<{ type: string }> | undefined,
+    type: string,
+  ): boolean => arr?.some((e) => e.type === type) ?? false;
 
   /** The verdict for the contribution/non-document doors: in 'enforce'
    *  a violation throws PluginCapabilityError; in 'warn' it logs and
@@ -398,17 +425,72 @@ export function createBundleHost(
       );
       return store.add(getEditor().registries.overlays.register(c));
     },
-    editContext() {
-      throw new PluginApiNotImplemented(
+    // W3.2 (un-reserved — B-02 / W-03): the last two reserved doors. The
+    // capability gate keys off the OBJECT arrays in `contributes`
+    // (`editContexts[]` / `objectTypes[]` carry `{type,…}`, not flat
+    // ids). The shell owns the stack / chrome / write-scope; the SDK
+    // adapter just hands the contribution to the editor's registry (or,
+    // when the host hasn't wired one — headless / not-yet-adopted —
+    // records it through the harness hook). The `type` is a content-type
+    // name, NOT a namespaced id, so the namespace rule does NOT apply
+    // (the capability gate is the only gate).
+    editContext(c) {
+      requireDeclared(
+        declaresType(declared?.editContexts, c.type),
         "contribute.editContext",
-        "P0 shell work — plugin-draw/BREAKAGE_LOG.md B-02",
+        `contributes.editContexts[] must declare { type: "${c.type}" }`,
       );
+      // Stamp the OWN-namespace metadata key so the host resolves the
+      // candidate's `metadata` from THIS plugin's envelope before calling
+      // `matches` (a bundle never sees a foreign plugin's metadata).
+      const stamped: EditContextContribution = {
+        ...c,
+        metadataKey: metadataKey(manifest),
+      };
+      const reg = getEditor().registries.editContexts;
+      const recorded = options?.onEditContextRegistered?.(stamped);
+      if (reg) {
+        const d = store.add(reg.register(stamped));
+        if (recorded) {
+          const r = store.add(recorded);
+          return toDisposable(() => {
+            d.dispose();
+            r.dispose();
+          });
+        }
+        return d;
+      }
+      // No shell registry wired — the recording stub IS the
+      // registration (the door no longer throws). The harness hook (if
+      // present) captures it; otherwise it is a tracked no-op.
+      if (recorded) return store.add(recorded);
+      return store.add(toDisposable(() => {}));
     },
-    objectType() {
-      throw new PluginApiNotImplemented(
+    objectType(c) {
+      requireDeclared(
+        declaresType(declared?.objectTypes, c.type),
         "contribute.objectType",
-        "paged.web W1 — base-idea §9.1.2",
+        `contributes.objectTypes[] must declare { type: "${c.type}" }`,
       );
+      const stamped: ObjectTypeContribution = {
+        ...c,
+        metadataKey: metadataKey(manifest),
+      };
+      const reg = getEditor().registries.objectTypes;
+      const recorded = options?.onObjectTypeRegistered?.(stamped);
+      if (reg) {
+        const d = store.add(reg.register(stamped));
+        if (recorded) {
+          const r = store.add(recorded);
+          return toDisposable(() => {
+            d.dispose();
+            r.dispose();
+          });
+        }
+        return d;
+      }
+      if (recorded) return store.add(recorded);
+      return store.add(toDisposable(() => {}));
     },
   };
 

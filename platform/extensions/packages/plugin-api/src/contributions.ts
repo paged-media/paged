@@ -14,6 +14,8 @@ export type {
   CommandRegistry,
   KeybindingRegistry,
   OverlayRegistry,
+  EditContextRegistry,
+  ObjectTypeRegistry,
   // Tools — the rail + gesture spine.
   ToolContribution,
   ToolId,

@@ -43,11 +43,13 @@ import type {
   CollectionName,
   Disposable,
   DocumentMeta,
+  EditContextContribution,
   ElementId,
   ElementGeometryItem,
   KeybindingContribution,
   MainToWorkerKind,
   Mutation,
+  ObjectTypeContribution,
   OverlayContribution,
   PagedBundle,
   PagedEditor,
@@ -76,7 +78,15 @@ import {
  *  `kind` is the surface; `value` is the contribution object verbatim
  *  (so a test can assert ids, titles, shortcuts, dock edges, …). */
 export interface RecordedContribution {
-  kind: "tool" | "panel" | "schemaPanel" | "command" | "keybinding" | "overlay";
+  kind:
+    | "tool"
+    | "panel"
+    | "schemaPanel"
+    | "command"
+    | "keybinding"
+    | "overlay"
+    | "editContext"
+    | "objectType";
   id: string;
   value:
     | ToolContribution
@@ -84,7 +94,9 @@ export interface RecordedContribution {
     | SchemaPanelContribution
     | CommandContribution
     | KeybindingContribution
-    | OverlayContribution;
+    | OverlayContribution
+    | EditContextContribution
+    | ObjectTypeContribution;
 }
 
 export interface HarnessOptions
@@ -110,6 +122,12 @@ export interface HeadlessHost {
   /** Declarative (schema) panels registered through
    *  `contribute.schemaPanel` — the W3.1 surface, recorded verbatim. */
   schemaPanelsContributed(): SchemaPanelContribution[];
+  /** Edit contexts registered through `contribute.editContext` — the
+   *  W3.2 surface (B-02), recorded verbatim (matcher fn included). */
+  editContextsContributed(): EditContextContribution[];
+  /** Object types registered through `contribute.objectType` — the W3.2
+   *  surface (W-03), recorded verbatim. */
+  objectTypesContributed(): ObjectTypeContribution[];
   /** Load an IDML package into the headless document. Resolves to the
    *  loaded page ids (or throws on a parse failure). */
   load(idml: Uint8Array): Promise<string[]>;
@@ -372,6 +390,37 @@ export async function createHeadlessHost(
           },
         };
       },
+      // W3.2 — the editContext/objectType registries are not wired
+      // headlessly (no shell stack / chrome), so the adapter takes the
+      // recording-stub path and these hooks ARE the registration log.
+      onEditContextRegistered: (c) => {
+        const entry: RecordedContribution = {
+          kind: "editContext",
+          id: c.type,
+          value: c,
+        };
+        contributions.push(entry);
+        return {
+          dispose() {
+            const i = contributions.indexOf(entry);
+            if (i >= 0) contributions.splice(i, 1);
+          },
+        };
+      },
+      onObjectTypeRegistered: (c) => {
+        const entry: RecordedContribution = {
+          kind: "objectType",
+          id: c.type,
+          value: c,
+        };
+        contributions.push(entry);
+        return {
+          dispose() {
+            const i = contributions.indexOf(entry);
+            if (i >= 0) contributions.splice(i, 1);
+          },
+        };
+      },
     });
 
   // Eager neutral host so `host` is available before a bundle is loaded
@@ -391,6 +440,17 @@ export async function createHeadlessHost(
       document: { read: "broad", write: "broad" },
       rendering: ["overlay", "hitTest"],
       keybindings: true,
+    },
+    // Broad contribution declarations so the neutral DRIVER host (which
+    // registers arbitrary contributions directly in 'warn' mode) never
+    // trips the capability gate. A loaded BUNDLE is the subject — its
+    // OWN manifest is enforced.
+    contributes: {
+      editContexts: [
+        { type: "vectorGraphic", entry: "doubleClick" },
+        { type: "webFrame", entry: "doubleClick" },
+      ],
+      objectTypes: [{ type: "webFrame", bakedFallback: "rectangle" }],
     },
   };
   let { host, dispose: disposeHostFacades } = buildHost(NEUTRAL, "warn");
@@ -417,6 +477,16 @@ export async function createHeadlessHost(
       return contributions
         .filter((c) => c.kind === "schemaPanel")
         .map((c) => c.value as SchemaPanelContribution);
+    },
+    editContextsContributed() {
+      return contributions
+        .filter((c) => c.kind === "editContext")
+        .map((c) => c.value as EditContextContribution);
+    },
+    objectTypesContributed() {
+      return contributions
+        .filter((c) => c.kind === "objectType")
+        .map((c) => c.value as ObjectTypeContribution);
     },
     async load(idml: Uint8Array): Promise<string[]> {
       const raw = worker.loadDocumentDirect(seqCounter++, idml);

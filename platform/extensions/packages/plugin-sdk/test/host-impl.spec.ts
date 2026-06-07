@@ -5,7 +5,6 @@ import type { PluginManifest, ToolContribution } from "@paged-media/plugin-api";
 import {
   createBundleHost,
   HOST_FEATURES,
-  PluginApiNotImplemented,
   PluginCapabilityError,
 } from "../src/host-impl";
 import { loadBundle } from "../src/load";
@@ -95,14 +94,27 @@ describe("contribute — namespace rule + teardown", () => {
     expect(h.fake.tools.ids()).toHaveLength(0);
   });
 
-  it("reserved members throw visible seams", () => {
+  it("editContext / objectType are no longer reserved (W3.2) — they register", () => {
+    // No shell registry on the fake editor → the adapter takes the
+    // recording-stub path; the door no longer throws. (The
+    // capability/namespace surface for these doors has its own block.)
     const h = host();
-    expect(() =>
-      h.host.contribute.editContext({ type: "x", entry: "doubleClick" }),
-    ).toThrow(PluginApiNotImplemented);
-    expect(() =>
-      h.host.contribute.objectType({ type: "x", bakedFallback: "group" }),
-    ).toThrow(PluginApiNotImplemented);
+    const d1 = h.host.contribute.editContext({
+      type: "vectorGraphic",
+      entry: "doubleClick",
+      matches: () => true,
+    });
+    const d2 = h.host.contribute.objectType({
+      type: "webFrame",
+      bakedFallback: "rectangle",
+      matches: () => true,
+    });
+    expect(typeof d1.dispose).toBe("function");
+    expect(typeof d2.dispose).toBe("function");
+    // Both are tracked by the host's DisposableStore (dispose is a no-op
+    // here but must not throw).
+    d1.dispose();
+    d2.dispose();
   });
 });
 
@@ -191,7 +203,11 @@ describe("viewport / overlay / storage / diagnostics", () => {
   it("supports() answers from HOST_FEATURES", () => {
     const h = host();
     for (const f of HOST_FEATURES) expect(h.host.supports(f)).toBe(true);
-    expect(h.host.supports("contribute.editContext@1")).toBe(false);
+    // W3.2 un-reserved both doors — they are now in HOST_FEATURES.
+    expect(h.host.supports("contribute.editContext@1")).toBe(true);
+    expect(h.host.supports("contribute.objectType@1")).toBe(true);
+    // An unimplemented feature still answers false.
+    expect(h.host.supports("contribute.nonexistent@9")).toBe(false);
   });
 });
 

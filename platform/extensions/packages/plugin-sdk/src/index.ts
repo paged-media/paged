@@ -55,3 +55,7 @@ export {
 } from "./gestures";
 export { contributeTool } from "./tools";
 export { contributePanel, contributeSchemaPanel } from "./panels";
+export {
+  contributeEditContext,
+  contributeObjectType,
+} from "./edit-context";

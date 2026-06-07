@@ -55,21 +55,127 @@ export interface PluginLogger {
 
 // ---------------------------------------------------------- contribute
 
-/** Reserved (P0 shell work, paged.draw B-02 / paged.web §8): an
- *  edit-context claim — double-click entry on a content type, scoped
- *  panel/tool sets. Throws PluginApiNotImplemented in v0. */
-export interface EditContextDescriptor {
-  type: string;
-  entry: "doubleClick" | "command";
+/**
+ * What a matcher sees about a candidate element — a plain snapshot, so
+ * the predicate is clonable + isolate-portable (DESIGN.md §6). The host
+ * resolves it once per double-click (or programmatic test) from the
+ * engine: the element's kind, its containing-group ancestry, and —
+ * crucially — this plugin's OWN metadata envelope on the element (the
+ * `x-paged:<id>` carrier, W-02). A bundle matches on the namespace it
+ * already owns; it never sees a foreign plugin's metadata.
+ */
+export interface EditContextCandidate {
+  /** The hit leaf element. */
+  id: ElementId;
+  /** The element's engine kind (`"polygon"`, `"rectangle"`, …) when the
+   *  host knows it; `undefined` when the hit carried none. */
+  kind?: string;
+  /** Containing-group ancestry, outer-most first (the hit's
+   *  `groupChain`). Empty when the element is not nested. */
+  groupChain: readonly string[];
+  /** THIS plugin's metadata envelope on the element, pre-resolved by the
+   *  host (the `x-paged:<manifest id>` carrier — never a foreign key).
+   *  `null` when the element carries none. The objectType matcher reads
+   *  this to claim a webFrame ("has my source metadata"). */
+  metadata: PluginMetadataEnvelope | null;
 }
 
-/** Reserved (paged.web §9.1.2): a plugin-defined object type under
- *  the metadata-plus-baked-fallback contract. Throws in v0. */
-export interface ObjectTypeDescriptor {
+/**
+ * An edit-context CLAIM (paged.draw B-02 / paged.web §8). Entering one
+ * (double-click on a matching element, or programmatically) pushes a
+ * context onto the shell's stack with: a restricted active tool-set, an
+ * emphasized panel-set, a breadcrumb, a narrowed write-scope (the
+ * context element's subtree), and Esc-pops-one-level. The plugin owns
+ * the matcher + the lifecycle hooks; the shell owns the stack, the
+ * chrome, and the scope enforcement.
+ */
+export interface EditContextContribution {
+  /** The context TYPE — must match a `contributes.editContexts[].type`
+   *  the manifest declares (the capability gate). Not namespace-prefixed
+   *  (a content-type name, e.g. `"vectorGraphic"`, `"webFrame"`), but
+   *  the bundle can only claim a type it declared. */
   type: string;
-  /** What the baked IDML form degrades to without the plugin. */
-  bakedFallback: "group" | "rectangle" | "raster";
+  /** How the user enters it. `"doubleClick"` wires the canvas
+   *  double-click entry; `"command"` is programmatic / menu-driven. */
+  entry: "doubleClick" | "command";
+  /** Does this element warrant entering THIS context? Pure predicate
+   *  over the candidate snapshot (kind / groupChain / this plugin's
+   *  metadata). When an `objectType` already routes a double-click to a
+   *  context (via `editContextType`), this matcher is not consulted —
+   *  it is the fallback path for elements claimed by KIND, not metadata
+   *  (the vectorGraphic case). Optional: a context entered only by
+   *  command needs no matcher. */
+  matches?(candidate: EditContextCandidate): boolean;
+  /** Tool ids the context restricts the rail to (the active tool-set
+   *  swap). Namespaced ids the bundle registered, plus host built-ins it
+   *  names. Empty = no restriction (all tools stay available). */
+  toolIds?: string[];
+  /** Panel ids the cockpit emphasizes / raises on enter (the panel-set
+   *  swap). The shell opens/raises these; it does not hide others. */
+  panelIds?: string[];
+  /** Called when the context becomes active (after the stack push + the
+   *  scope narrowing). The element entered on is passed so the hook can
+   *  prime panel state / publish bindings. */
+  onEnter?(ctx: EnteredEditContext): void;
+  /** Called when the context pops (Esc, or a programmatic exit), before
+   *  the stack unwinds. */
+  onExit?(ctx: EnteredEditContext): void;
+  /** HOST-STAMPED, not author-supplied: the `x-paged:<manifest id>`
+   *  metadata key the host resolves the candidate's `metadata` from
+   *  before calling `matches`. The SDK adapter fills this from the
+   *  bundle's manifest at registration; authors leave it undefined. */
+  metadataKey?: string;
 }
+
+/** The live handle a context's `onEnter` / `onExit` receives — the
+ *  element entered on + the context type, a clonable snapshot. */
+export interface EnteredEditContext {
+  type: string;
+  /** The element the context was entered on (the write-scope root). */
+  id: ElementId;
+}
+
+/**
+ * A plugin-defined OBJECT TYPE (paged.web §9.1.2). A webFrame is an
+ * ordinary rectangle with attached `x-paged:media.paged.web` source
+ * metadata; registering an object type lets the shell recognize it
+ * (`matches`) and route a double-click to a SOURCE edit context
+ * (`editContextType`) instead of descending into a group. The metadata
+ * namespace is the matcher's domain — `matches` reads the candidate's
+ * pre-resolved (own-namespace) envelope.
+ */
+export interface ObjectTypeContribution {
+  /** The object-type name — must match a `contributes.objectTypes[].type`
+   *  the manifest declares (the capability gate). */
+  type: string;
+  /** Is this element an instance of this object type? Reads the
+   *  candidate's metadata envelope (this plugin's `x-paged:<id>` carrier)
+   *  — e.g. "has a `source` field" for a webFrame. */
+  matches(candidate: EditContextCandidate): boolean;
+  /** The edit-context type a double-click on a matching element enters,
+   *  instead of group descent. Must be a context the SAME bundle
+   *  registered via `contribute.editContext`. Absent = the object type is
+   *  recognized for selection/chrome but double-click falls through to
+   *  the default (group descent) — the honest partial. */
+  editContextType?: string;
+  /** What the baked IDML form degrades to without the plugin (the
+   *  metadata-plus-baked-fallback contract; `ObjectTypeBaker` produces
+   *  the derived children). Carried for the bake loop (still reserved)
+   *  and for selection-chrome hints. */
+  bakedFallback: "group" | "rectangle" | "raster";
+  /** HOST-STAMPED (see `EditContextContribution.metadataKey`): the
+   *  `x-paged:<manifest id>` key the host resolves the candidate's
+   *  `metadata` from before calling `matches`. Authors leave it
+   *  undefined; the SDK adapter fills it. */
+  metadataKey?: string;
+}
+
+/** Back-compat aliases (the v0 reserved descriptors) — the rich
+ *  contributions above supersede them; kept so existing references
+ *  resolve. New code uses `EditContextContribution` /
+ *  `ObjectTypeContribution`. */
+export type EditContextDescriptor = EditContextContribution;
+export type ObjectTypeDescriptor = ObjectTypeContribution;
 
 /**
  * The contribution surface. Every method enforces the namespace rule
@@ -93,11 +199,25 @@ export interface ContributionSurface {
   command(contribution: CommandContribution): Disposable;
   keybinding(contribution: KeybindingContribution): Disposable;
   overlay(contribution: OverlayContribution): Disposable;
-  /** Reserved — throws PluginApiNotImplemented until edit contexts
-   *  land in the shell. Declared so manifests/docs can reference it. */
-  editContext(descriptor: EditContextDescriptor): Disposable;
-  /** Reserved — throws PluginApiNotImplemented (paged.web W1). */
-  objectType(descriptor: ObjectTypeDescriptor): Disposable;
+  /**
+   * Register an EDIT CONTEXT (W3.2, closes B-02): a double-click (or
+   * programmatic) entry on a content type that pushes a scoped context
+   * — restricted tool-set, emphasized panels, breadcrumb, narrowed
+   * write-scope, Esc-pops. Capability-gated: the `type` must be listed
+   * in `contributes.editContexts[]`. The shell owns the stack + chrome
+   * + scope; the plugin owns the matcher + the onEnter/onExit hooks.
+   */
+  editContext(contribution: EditContextContribution): Disposable;
+  /**
+   * Register an OBJECT TYPE (W3.2, closes W-03): a plugin-defined object
+   * (a webFrame is a rectangle with attached source metadata). A
+   * double-click on a matching element enters its `editContextType`
+   * instead of descending into a group. Capability-gated: the `type`
+   * must be listed in `contributes.objectTypes[]`. The matcher reads the
+   * element's OWN-namespace metadata envelope (the `x-paged:<id>`
+   * carrier).
+   */
+  objectType(contribution: ObjectTypeContribution): Disposable;
 }
 
 // ------------------------------------------------------------ document

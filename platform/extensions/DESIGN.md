@@ -108,9 +108,24 @@ plugin-id prefix; the problems-panel UI consumes it later.
 each namespace-checked. These wrap the five proven registries
 (`ToolContribution` with `gesture()` factories *is* the tool API — it
 carried the whole pen/anchor build [draw D2]).
-Reserved: `editContext` [draw B-02, web §8] and `objectType`
-[web §9.1.2] — declared now so manifests and docs can reference them;
-they throw until the shell work lands.
+`editContext` [draw B-02, web §8] and `objectType` [web §9.1.2] — the
+last two reserved doors — LANDED (W3.2, 2026-06-07). A bundle registers
+an `EditContextContribution` (`{ type, entry, matches?, toolIds?,
+panelIds?, onEnter?, onExit? }`) or an `ObjectTypeContribution`
+(`{ type, matches, editContextType?, bakedFallback }`). Capability-gated
+on the OBJECT arrays `contributes.editContexts[]` /
+`contributes.objectTypes[]` (the `type` — a content-type NAME, not a
+namespaced id — must be declared; the namespace rule does not apply, the
+capability gate is the only gate). The SDK adapter STAMPS the bundle's
+own `x-paged:<id>` `metadataKey` so the shell resolves the candidate's
+`metadata` from THIS plugin's envelope only. The SHELL owns the edit-
+context STACK (Esc pops one level), the breadcrumb, the tool/panel swap,
+and the SELECTION-SPACE write-scope (`EditContextRegistry` +
+`resolveDoubleClick` router: object types claim a double-click FIRST by
+metadata, edit contexts by KIND second, group descent last). True
+engine-level subtree isolation is the isolate's job (documented residual,
+draw B-02). The headless harness records both
+(`editContextsContributed()` / `objectTypesContributed()`).
 
 ### 4.3 `host.document` — read broadly, write through one door
 - `mutate(m: Mutation): Promise<MutationOutcome>` — *the* write door.
@@ -187,8 +202,11 @@ at the isolate boundary (the one v0 member that cannot survive RPC).
   mutations round-trip through the true parse→apply→inverse engine path
   with real undo/redo. The document/selection/diagnostics/storage doors
   are REAL; the contribution surfaces (tool/panel/command/keybinding/
-  overlay) become RECORDING no-ops that capture every contribution in an
-  assertable log; `editContext`/`objectType` stay reserved (throw). That
+  overlay, and — since W3.2 — `editContext`/`objectType`) become
+  RECORDING no-ops that capture every contribution in an assertable log
+  (the harness has no shell stack, so the un-reserved doors take the
+  recording-stub path; `editContextsContributed()` /
+  `objectTypesContributed()` read them back). That
   pairing — replay against a real engine + an assertable contribution
   log — IS the conformance semantics: a bundle can no longer pass
   against fiction. The protocol is PINNED: the loader reads the vendored

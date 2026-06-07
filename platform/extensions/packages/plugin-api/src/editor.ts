@@ -20,6 +20,10 @@
 import type { ComponentType } from "react";
 
 import type {
+  EditContextContribution,
+  ObjectTypeContribution,
+} from "./host";
+import type {
   CollectionName,
   ContentSelection,
   DocumentMeta,
@@ -259,12 +263,30 @@ export interface OverlayRegistry {
   register(contribution: OverlayContribution): Disposable;
 }
 
+/** W3.2 — the edit-context registry (the shell owns the stack + chrome
+ *  + write-scope; this narrow contract is just the registration door).
+ *  The contribution type lives in ./host (the bundle-facing surface). */
+export interface EditContextRegistry {
+  register(contribution: EditContextContribution): Disposable;
+}
+/** W3.2 — the object-type registry (the shell owns hit-routing; a
+ *  matching element's double-click enters its `editContextType`). */
+export interface ObjectTypeRegistry {
+  register(contribution: ObjectTypeContribution): Disposable;
+}
+
 export interface ShellRegistries {
   tools: ToolRegistry;
   panels: PanelRegistry;
   commands: CommandRegistry;
   keybindings: KeybindingRegistry;
   overlays: OverlayRegistry;
+  /** W3.2 — edit contexts (B-02). Narrow: `register` only. Optional on
+   *  the contract so a host that hasn't wired the registry yet stays
+   *  assignable; the SDK adapter falls back to a recording stub. */
+  editContexts?: EditContextRegistry;
+  /** W3.2 — object types (W-03). Optional for the same reason. */
+  objectTypes?: ObjectTypeRegistry;
 }
 
 // ---------------------------------------------------- overlay signals

@@ -212,6 +212,39 @@ describe("contribution recording + dispose honesty", () => {
     );
   });
 
+  it("records editContext + objectType contributions (W3.2 — un-reserved)", async () => {
+    live = await open();
+    const host = (await loaded()).host;
+    // The doors no longer throw PluginApiNotImplemented; headlessly there
+    // is no shell stack, so they take the recording-stub path.
+    host.contribute.editContext({
+      type: "vectorGraphic",
+      entry: "doubleClick",
+      matches: (c) => c.kind === "polygon",
+      toolIds: ["media.paged.harness.tool.addAnchor"],
+      panelIds: ["media.paged.harness.panel.stroke"],
+    });
+    host.contribute.objectType({
+      type: "webFrame",
+      bakedFallback: "rectangle",
+      matches: (c) => c.metadata?.data?.source !== undefined,
+      editContextType: "webFrame",
+    });
+    const ecs = live!.editContextsContributed();
+    const ots = live!.objectTypesContributed();
+    expect(ecs.map((c) => c.type)).toEqual(["vectorGraphic"]);
+    expect(ecs[0].toolIds).toEqual(["media.paged.harness.tool.addAnchor"]);
+    // The matcher survives verbatim — the shell calls it at hit time.
+    expect(ecs[0].matches?.({ id: {} as never, kind: "polygon", groupChain: [], metadata: null })).toBe(true);
+    expect(ots.map((c) => c.type)).toEqual(["webFrame"]);
+    expect(ots[0].editContextType).toBe("webFrame");
+    // Both also land in the unified contribution log under their kinds.
+    expect(live!.contributions.map((c) => c.kind)).toEqual([
+      "editContext",
+      "objectType",
+    ]);
+  });
+
   it("namespace rule is enforced headlessly too", async () => {
     const host = (await loaded()).host;
     expect(() => host.contribute.tool(toolC("foreign.tool.pen"))).toThrow(

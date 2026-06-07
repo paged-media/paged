@@ -27,6 +27,30 @@ function fakeRegistry(): FakeRegistry {
   };
 }
 
+/** W3.2 — edit-context / object-type registries key off `type`, not
+ *  `id`. Same Map-backed register/dispose contract. */
+export interface FakeTypeRegistry {
+  types(): string[];
+  get(type: string): unknown;
+  register(c: { type: string }): { dispose(): void };
+}
+
+function fakeTypeRegistry(): FakeTypeRegistry {
+  const byType = new Map<string, unknown>();
+  return {
+    types: () => Array.from(byType.keys()),
+    get: (t) => byType.get(t),
+    register(c: { type: string }) {
+      byType.set(c.type, c);
+      return {
+        dispose() {
+          byType.delete(c.type);
+        },
+      };
+    },
+  };
+}
+
 /** Keybindings register without ids in the real shell — accept any. */
 function fakeKeybindingRegistry() {
   const items: unknown[] = [];
@@ -44,13 +68,20 @@ function fakeKeybindingRegistry() {
   };
 }
 
-export function makeFakeEditor() {
+/** When `wireContextRegistries` is true the fake exposes shell-side
+ *  editContext/objectType registries (the WITH-registry path); when
+ *  false they are absent and the host adapter takes the recording-stub
+ *  path. Defaults to wired. */
+export function makeFakeEditor(opts?: { wireContextRegistries?: boolean }) {
+  const wireContextRegistries = opts?.wireContextRegistries ?? true;
   const listeners = new Set<Listener>();
   const tools = fakeRegistry();
   const panels = fakeRegistry();
   const commands = fakeRegistry();
   const overlays = fakeRegistry();
   const keybindings = fakeKeybindingRegistry();
+  const editContexts = fakeTypeRegistry();
+  const objectTypes = fakeTypeRegistry();
   const mutations: unknown[] = [];
   let selectionIds: unknown[] = [];
   let toolPreview: unknown = null;
@@ -95,7 +126,14 @@ export function makeFakeEditor() {
 
   const editor = {
     client,
-    registries: { tools, panels, commands, overlays, keybindings },
+    registries: {
+      tools,
+      panels,
+      commands,
+      overlays,
+      keybindings,
+      ...(wireContextRegistries ? { editContexts, objectTypes } : {}),
+    },
     selection: {
       elementSelection: selectionIds,
       setElementSelection: (ids: unknown[]) => {
@@ -122,6 +160,8 @@ export function makeFakeEditor() {
     commands,
     overlays,
     keybindings,
+    editContexts,
+    objectTypes,
     mutations,
     emit: (msg: unknown) => {
       for (const l of listeners) l(msg);
