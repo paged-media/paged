@@ -21,6 +21,7 @@
 //   Escape           → cancel
 
 import {
+  clampPressure,
   clone,
   constrainAngle,
   cornerAnchor,
@@ -31,6 +32,14 @@ import {
 } from "@paged-media/draw-geometry";
 
 import type { ToolPreviewPath } from "@paged-media/plugin-api";
+
+// The pressure → stroke-width seam moved to draw-geometry (zero-dep pure
+// math the editor's Pencil re-imports too); re-exported here so existing
+// draw-tools consumers keep their import site.
+export {
+  strokeWidthFromPressure,
+  type StrokeWidthProfile,
+} from "@paged-media/draw-geometry";
 
 export interface PenModifiers {
   shift: boolean;
@@ -236,39 +245,6 @@ export class PenMachine {
   }
 }
 
-/** Clamp a raw pressure sample into the Pointer-Events 0..1 range
- *  (defensive against a misbehaving device / synthetic value). */
-function clampPressure(p: number): number {
-  if (!Number.isFinite(p)) return MOUSE_PRESSURE;
-  return p < 0 ? 0 : p > 1 ? 1 : p;
-}
-
-/**
- * Pressure-aware stroke-width hook (B-08, §13.12 Tier B). Maps a
- * normalized pressure 0..1 to a stroke width in pt by linear
- * interpolation between `min` and `max`. This is the API SEAM only —
- * it gives a draw tool a width per sample so a future variable-width
- * renderer can build a tapered outline. The actual variable-width
- * STROKE GEOMETRY (offset-curve outline from a width profile) is
- * ENGINE work and remains a residual (see BREAKAGE_LOG B-08).
- *
- * Mouse input (pressure ~0.5) lands mid-range, so a mouse-drawn path
- * gets a sensible constant width without special-casing.
- */
-export interface StrokeWidthProfile {
-  /** Width at pressure 0, pt. */
-  min: number;
-  /** Width at pressure 1, pt. */
-  max: number;
-}
-
-export function strokeWidthFromPressure(
-  pressure: number,
-  profile: StrokeWidthProfile,
-): number {
-  const p = clampPressure(pressure);
-  return profile.min + (profile.max - profile.min) * p;
-}
 
 /**
  * Build the in-progress PEN preview as a cubic `ToolPreviewPath`

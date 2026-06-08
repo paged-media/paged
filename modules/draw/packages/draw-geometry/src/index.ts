@@ -29,3 +29,9 @@ export {
   affineScale,
   type Affine,
 } from "./affine";
+export {
+  NEUTRAL_PRESSURE,
+  clampPressure,
+  strokeWidthFromPressure,
+  type StrokeWidthProfile,
+} from "./pressure";
