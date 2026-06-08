@@ -132,9 +132,15 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.tool.deleteAnchor",
       "media.paged.draw.tool.convertAnchor",
     ]);
-    // B-15: activation commands + shortcuts are HOST-derived from
-    // the registry — the bundle registers tools only.
-    expect(fake.commands.ids()).toEqual([]);
+    // B-15: TOOL activation commands + shortcuts are HOST-derived from
+    // the registry — the bundle registers tools only. The four commands
+    // it DOES register are the B-12 dash presets (not tool activations).
+    expect(fake.commands.ids()).toEqual([
+      "media.paged.draw.command.strokeDashSolid",
+      "media.paged.draw.command.strokeDashDashed",
+      "media.paged.draw.command.strokeDashDotted",
+      "media.paged.draw.command.strokeDashDashDot",
+    ]);
     expect(fake.keybindings.count()).toBe(0);
   });
 

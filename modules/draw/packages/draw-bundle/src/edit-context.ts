@@ -16,7 +16,7 @@
 
 import type { EditContextContribution } from "@paged-media/plugin-api";
 
-import { DRAW_TOOLS } from "./tools";
+import { DRAW_TOOL_IDS } from "./tools";
 import { STROKE_PANEL_ID } from "./panels/stroke-panel";
 
 export const VECTOR_GRAPHIC_CONTEXT = "vectorGraphic";
@@ -36,7 +36,7 @@ export const vectorGraphicEditContext: EditContextContribution = {
     candidate.kind !== undefined && PATH_KINDS.has(candidate.kind),
   // The anchor-editing tool-set the context focuses (Add is first → the
   // host focuses it on enter).
-  toolIds: DRAW_TOOLS.map((t) => t.id),
+  toolIds: [...DRAW_TOOL_IDS],
   // The stroke panel the cockpit raises on enter.
   panelIds: [STROKE_PANEL_ID],
 };

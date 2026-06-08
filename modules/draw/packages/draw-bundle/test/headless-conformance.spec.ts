@@ -84,14 +84,21 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
       // the injected renderer / seam) AND the `schemaPanel` recorded
       // VERBATIM through the harness's registration hook. Both are
       // honest — the registry really got a panel; the log keeps the
-      // schema so conformance can assert it. (Pen is a core built-in;
-      // fill/layers stay prototypes — header note.)
+      // schema so conformance can assert it. Then the four B-12 dash-
+      // preset commands, then the W3.2 edit context. (Pen is a core
+      // built-in; fill/layers stay prototypes — header note.)
       expect(harness.contributions.map((c) => c.kind)).toEqual([
         "tool",
         "tool",
         "tool",
         "panel",
         "schemaPanel",
+        // B-12 — the stroke dash-preset commands (Solid / Dashed /
+        // Dotted / Dash-dot).
+        "command",
+        "command",
+        "command",
+        "command",
         // W3.2 — the vectorGraphic edit context (B-02), recorded
         // through the harness's editContext registration hook.
         "editContext",

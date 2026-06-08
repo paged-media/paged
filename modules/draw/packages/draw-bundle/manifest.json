@@ -28,7 +28,12 @@
     "panels": [
       "media.paged.draw.panel.stroke"
     ],
-    "commands": [],
+    "commands": [
+      "media.paged.draw.command.strokeDashSolid",
+      "media.paged.draw.command.strokeDashDashed",
+      "media.paged.draw.command.strokeDashDotted",
+      "media.paged.draw.command.strokeDashDashDot"
+    ],
     "editContexts": [
       {
         "type": "vectorGraphic",

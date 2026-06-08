@@ -259,13 +259,23 @@ Format: `B-NN · date · area · status`.
   the event OBJECT, which the draw tools already receive.) So pressure
   rides the `CanvasPointerEvent` object spine, not the SAB.
 
-  **RESIDUAL (still Tier B engine work):** variable-width stroke
-  RENDERING — turning a pressure profile into path geometry (offset-
-  curve outline from per-sample widths) — needs the engine. The
-  client/plugin surface now delivers the pressure profile + a width
-  hook; the renderer can't yet consume it. That is the remaining open
-  half of §13.12 and stays here until core lands a variable-width
-  stroke path.
+  **RESIDUAL — engine op LANDED (2026-06-08), consumer publish-gated:**
+  variable-width stroke RENDERING — turning a pressure profile into path
+  geometry — now exists in core. `paged-mutate` gained
+  `kurbo_kernel::variable_width_outline_stroke` (flatten centreline →
+  offset each vertex along its local normal by an arc-length-interpolated
+  half-width → one closed filled contour, rendered under nonzero winding,
+  no new GPU path) behind `PropertyPath::OutlineStrokeVariable` /
+  `Value::OutlineStrokeVariable { widths, cap, join, miter_limit, prev_* }`
+  with a snapshot inverse, kernel + apply round-trip tests, and the wire
+  `SetPluginMetadata`-adjacent op surfaced at **protocol v36** (core commit,
+  unpublished). The remaining open half is purely consumer-side and **gated
+  on publishing core v0.36 to npm**: the editor's built-in Pen mapping its
+  captured pressure profile through `strokeWidthFromPressure` → `widths[]` →
+  the new op (the editor pins `PROTOCOL_VERSION = 35` and
+  `check-protocol-version.sh` requires the installed package minor to match,
+  so it can't consume protocol 36 until the package ships). Stays PARTIAL
+  here until that publish + editor-pen wiring lands.
 
 - **B-09 · 2026-06-06 · scripting/runtime · RESOLVED (2026-06-07)** —
   the open half closed in core (W3.9, rides protocol v35).
@@ -296,9 +306,32 @@ Format: `B-NN · date · area · status`.
   `endLocalFor`, `pxToPt`, `commitAndSelect`); `draw-bundle` now
   registers its tools itself (D3, `src/activate.ts`).
 
-- **B-12 · 2026-06-06 · engine ops · OPEN** — no dash-pattern
-  `PropertyPath` (stroke panel's dash section, §13.5 stroke model).
-  IDML carries it; the wire surface doesn't yet.
+- **B-12 · 2026-06-06 · engine ops · RESOLVED (2026-06-08, W4.16)** — the
+  dash-pattern `PropertyPath` was ALREADY on the published wire
+  (`frameStrokeDashArray`, a `Value` `{type:"lengths"; value:number[]}`
+  member — canvas-wasm@0.35.1, protocol 35); the gap was purely a missing
+  draw-side consumer. It now ships as **command-driven presets** rather than
+  an inline widget, because `frameStrokeDashArray` is a vector and the panel
+  schema's binding ceiling is scalar (`literal | selectionProperty`, the
+  B-01 honest-limit — no list/array widget yet). Four commands under the
+  manifest id, category "Stroke" (`src/commands/dash.ts`):
+  `…command.strokeDash{Solid,Dashed,Dotted,DashDot}` → `lengths`
+  `[] / [6,3] / [1,3] / [6,3,1,3]` (Solid clears). Each handler reads
+  `host.selection.get()` and commits `setElementProperty{
+  frameStrokeDashArray, {type:"lengths", value:[…]} }` per selected element
+  through `host.document.mutate`; no selection → debug-log no-op. Registered
+  through `host.contribute.command` (no `contributeCommand` SDK helper
+  exists — the direct door, the plugin-web pattern) in `activate.ts` and
+  disposed on teardown; the 4 ids are declared in `manifest.json`
+  `contributes.commands[]`; the stroke panel's dash section readout now
+  points at them. The `DASH_PATH` literal-typed const keeps the mutation
+  satisfying `PropertyPath` with no cast (the §12.3 wire-compat alarm stays
+  live). Tests (`test/conformance/dash-commands.spec.ts`, 8): per-preset
+  exact wire-shape on `dashMutationFor`, the 4 commands in the contribution
+  log, each recorded handler landing `applied:true` on a selected stroked
+  rectangle at the real engine, and the no-selection no-op.
+  RESIDUAL (not a blocker): inline per-segment array EDITING (drag the dash
+  lengths) awaits a schema array/list binding — the same ceiling as B-01.
 
 - **B-13 · 2026-06-06 · testing · RESOLVED (2026-06-07)** — the
   headless conformance host LANDED (`@paged-media/plugin-sdk`
@@ -371,36 +404,53 @@ Format: `B-NN · date · area · status`.
   path; the SDK helpers dropped their bundle-side duplicates
   (plugin-sdk 0.2.2).
 
-- **B-16 · 2026-06-07 · engine ops / trust · OPEN** — the engine
-  plugin-metadata gate has NO caller identity (audit P8). Per-plugin
-  namespace isolation (`x-paged:<id>`) is enforced only in the SDK
-  door (`host-impl.ts` `foreignMetadataKey`, recursive incl. batches);
-  the engine op (`paged-mutate/src/apply.rs` `setPluginMetadata`)
-  checks only the `x-paged:` prefix, the 64 KiB cap, and the JSON
-  envelope — never WHICH plugin writes. A bundle holding the raw
-  handle bypasses the door: `paged.client.mutate({ op:
-  "setPluginMetadata", args: { key: "x-paged:<other>", … } })` writes
-  another plugin's namespace directly. Benign for same-trust
-  first-party bundles; a hard blocker for the P7 multi-vendor story.
-  Real fix is caller identity at the engine boundary — only matters at
-  the isolate boundary where `host.editor` dies anyway. Trust-line
-  gate: `thoughts/docs/paged/plugin-trust-line.md`.
+- **B-16 · 2026-06-07 · engine ops / trust · PARTIAL (2026-06-08) —
+  engine gate LANDED, consumer publish-gated** — the engine
+  plugin-metadata op now CAN enforce caller identity (audit P8). The
+  prior gap: per-plugin namespace isolation (`x-paged:<id>`) was enforced
+  only in the SDK door (`host-impl.ts` `foreignMetadataKey`, recursive
+  incl. batches); the engine op checked only the `x-paged:` prefix, the
+  64 KiB cap, and the JSON envelope — so a bundle holding the raw handle
+  bypassed the door (`paged.client.mutate({ op:"setPluginMetadata",
+  args:{ key:"x-paged:<other>", … } })` wrote another plugin's namespace).
+  Fix (core, protocol v36, committed/unpublished): an **additive**
+  `caller: Option<String>` (`#[serde(default)]`) rides the wire
+  `Mutation::SetPluginMetadata` → `Value::PluginMetadata`; when `caller`
+  is `Some`, `paged-mutate/src/apply.rs` `apply_plugin_metadata` enforces
+  the key namespace == `x-paged:<caller>` (mirrors the SDK door); when
+  `None` (the editor / `paged.script` / pre-B-16 callers), the prior
+  prefix-only behaviour holds, so nothing existing breaks. Enforcement
+  test: `evid_plugin_metadata_caller_gate_blocks_foreign_namespace`
+  (own-namespace ok, foreign-namespace rejected, `None` back-compat).
+  REMAINING (publish-gated): the SDK door passing `caller` as
+  defense-in-depth needs the plugin runtime to consume protocol 36, which
+  needs core v0.36 on npm. Full teeth still land at the isolate boundary
+  where `host.editor` dies anyway. Trust-line gate:
+  `thoughts/docs/paged/plugin-trust-line.md`.
 
-- **B-17 · 2026-06-07 · bundle surface / §4.9 · OPEN** — gesture
-  handlers operate on the RAW spine handle, not the facades — the
-  §4.9 API-gap detector firing unrecorded (audit P12).
-  `draw-bundle/src/handlers/anchors.ts` reaches `paged.client.send`
-  (hitTest, L103), `paged.client.pathAnchors` (L115),
-  `paged.client.mutate` (L132), `paged.selection.elementSelection`
-  (L111), `paged.camera.camera.scale` (L123) — all of which have
-  facades (`host.document.hitTest/pathAnchors/mutate`,
-  `host.selection.get`, `host.viewport.camera`/`pxToPt`), reached via
-  the handle `onActivate(paged)` passes rather than through `host.*`.
-  DESIGN.md §4.9: "any use of `host.editor` not reachable through a
-  facade is a BREAKAGE_LOG entry." Benign in-process (same realm);
-  the tool would NOT survive the isolate as written (synchronous
-  `paged.*` reach, not the async facade). Resolution: migrate the
-  handler onto `host.*` facades (the actual dogfooding test that the
-  facade is sufficient for a real tool), or keep this entry until the
-  isolate re-routes it. Trust-line gate:
+- **B-17 · 2026-06-07 · bundle surface / §4.9 · RESOLVED (2026-06-08,
+  W4.16)** — the anchor handlers now run entirely on `host.*` facades, the
+  dogfooding proof that the facade is sufficient for a real tool. The
+  handler factory took a host argument (`createAnchorEditHandler(mode,
+  host)`); `tools.ts` became a `drawTools(host)` factory (with a host-free
+  `DRAW_TOOL_IDS` for `edit-context.ts`), and `activate.ts` calls
+  `drawTools(host)`. Per-reach migration in
+  `draw-bundle/src/handlers/anchors.ts`:
+  `paged.client.send({kind:"hitTest"})` → `host.document.hitTest(pageId,
+  pagePoint, "any")`; `paged.client.pathAnchors` →
+  `host.document.pathAnchors`; `paged.client.mutate` →
+  `host.document.mutate` (failure check switched from `reply.kind ===
+  "mutationFailed"` to `!outcome.applied`, reading `outcome.error`);
+  `paged.selection.elementSelection` → `host.selection.get()`;
+  `pxToPt(paged.camera.camera.scale, …)` → `host.viewport.pxToPt(…)`
+  (verified semantically identical — both `px / (scale>0?scale:1)`).
+  `onActivate` is now a lifecycle no-op (no captured raw spine); `mutationFor`
+  is unchanged (tests import it). Tests
+  (`test/conformance/host-handler.spec.ts`, 3): a real pointer-up routed
+  through the host handler lands the inserted anchor at the real wasm; the
+  handler's effect equals the bundle's own `mutationFor(plan)` (no drift); a
+  structural source check asserts no `paged.client`/`paged.selection`/
+  `paged.camera`/`.elementSelection` reach remains and the five facades are
+  used. The §4.9 detector is now silent — the tool would survive the isolate
+  (async facades, no synchronous `paged.*` reach). Trust-line gate:
   `thoughts/docs/paged/plugin-trust-line.md`.

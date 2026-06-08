@@ -28,30 +28,42 @@ import {
 
 import manifest from "../manifest.json";
 
-import { DRAW_TOOLS } from "./tools";
+import { drawTools } from "./tools";
+import { contributeDashCommands, DASH_COMMAND_IDS } from "./commands/dash";
 import { vectorGraphicEditContext } from "./edit-context";
 import { installStrokePanelBindings, strokePanel } from "./panels/stroke-panel";
 
 export function activate(host: BundleHost): BundleHandle {
-  for (const tool of DRAW_TOOLS) {
+  // B-17 — the anchor-edit tools are built from a host-bound factory;
+  // each gesture handler reaches the engine through the `host.*`
+  // facades only (no raw spine — the dogfooding proof, DESIGN.md §4.9).
+  const tools = drawTools(host);
+  for (const tool of tools) {
     contributeTool(host, tool);
   }
   // The v1 schema panel + its binding driver (the dynamic gate source).
   contributeSchemaPanel(host, strokePanel);
   const bindingSub = installStrokePanelBindings(host);
+  // B-12 — the stroke DASH presets as commands (the schema binding
+  // ceiling is scalar, a dash array is a vector → command-driven). Each
+  // commits `setElementProperty{ frameStrokeDashArray, lengths }` to
+  // the selection through the document door.
+  const dashCommandsSub = contributeDashCommands(host);
   // W3.2 — the vectorGraphic edit context (closes B-02): double-click a
   // path enters anchor-editing (the anchor tools focused, the stroke
   // panel raised, a breadcrumb, Esc exits).
   contributeEditContext(host, vectorGraphicEditContext);
   host.log.info(
-    `activated — ${DRAW_TOOLS.length} tools + 1 schema panel + ` +
-      `1 edit context (apiVersion ${manifest.apiVersion})`,
+    `activated — ${tools.length} tools + 1 schema panel + ` +
+      `${DASH_COMMAND_IDS.length} dash commands + 1 edit context ` +
+      `(apiVersion ${manifest.apiVersion})`,
   );
   // The contributions tear down structurally via the host; the binding
   // subscription is the one thing allocated OUTSIDE a facade-tracked
-  // registration, so dispose it here.
+  // registration, so dispose it (and the dash command group) here.
   return {
     dispose() {
+      dashCommandsSub.dispose();
       bindingSub.dispose();
     },
   };

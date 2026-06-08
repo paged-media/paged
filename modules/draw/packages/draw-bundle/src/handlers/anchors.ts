@@ -10,13 +10,13 @@
 //   convert → pathPointCurveType
 
 import type {
+  BundleHost,
   CanvasPointerEvent,
   ElementId,
   GestureHandler,
   Mutation,
-  PagedEditor,
 } from "@paged-media/plugin-api";
-import { CLICK_DRAG_THRESHOLD_PX, pxToPt } from "@paged-media/plugin-sdk";
+import { CLICK_DRAG_THRESHOLD_PX } from "@paged-media/plugin-sdk";
 
 import { affineScale, inverseApplyAffine } from "@paged-media/draw-geometry";
 import {
@@ -94,29 +94,38 @@ export function mutationFor(plan: AnchorEditPlan, elementId: ElementId): Mutatio
   }
 }
 
-export function createAnchorEditHandler(mode: AnchorEditMode): GestureHandler {
-  let paged: PagedEditor | null = null;
-
+/**
+ * Build an anchor-edit click handler. `host` is threaded in from
+ * `activate(host)` (the proof, DESIGN.md §4.9, that the facade is
+ * sufficient for a real tool — B-17): the handler routes EVERY engine
+ * touch through `host.*`, never the raw spine:
+ *   · hit-test     → `host.document.hitTest`
+ *   · selection    → `host.selection.get()`
+ *   · path anchors → `host.document.pathAnchors`
+ *   · zoom→pt      → `host.viewport.pxToPt`
+ *   · write        → `host.document.mutate`
+ */
+export function createAnchorEditHandler(
+  mode: AnchorEditMode,
+  host: BundleHost,
+): GestureHandler {
   const act = async (e: CanvasPointerEvent) => {
-    if (!paged || !e.pageId || !e.pagePoint) return;
-    const client = paged.client;
+    if (!e.pageId || !e.pagePoint) return;
     // Resolve the target: hit-test first, single selection fallback
     // (a precise click on a hairline path isn't required).
     let target: ElementId | null = null;
     try {
-      const reply = await client.send({
-        kind: "hitTest",
-        payload: { pageId: e.pageId, docPoint: e.pagePoint, filter: "any" },
-      });
-      if (reply.kind === "hitResult") target = reply.payload.element ?? null;
+      const hit = await host.document.hitTest(e.pageId, e.pagePoint, "any");
+      target = hit?.element ?? null;
     } catch {
       /* fall through to the selection */
     }
-    if (!target && paged.selection.elementSelection.length === 1) {
-      target = paged.selection.elementSelection[0];
+    if (!target) {
+      const selection = host.selection.get();
+      if (selection.length === 1) target = selection[0];
     }
     if (!target || !supportsPathEdit(target)) return;
-    const result = await client.pathAnchors(target).catch(() => null);
+    const result = await host.document.pathAnchors(target).catch(() => null);
     if (!result || result.pageId !== e.pageId) return;
     // Page-local → path-local (inverse itemTransform); pick tolerance
     // scaled so it stays screen-constant in transformed local space.
@@ -124,8 +133,7 @@ export function createAnchorEditHandler(mode: AnchorEditMode): GestureHandler {
     const local = inverseApplyAffine(matrix, e.pagePoint[0], e.pagePoint[1]);
     if (!local) return;
     const tolerance =
-      pxToPt(paged.camera.camera.scale, PICK_TOLERANCE_PX) /
-      affineScale(matrix);
+      host.viewport.pxToPt(PICK_TOLERANCE_PX) / affineScale(matrix);
     const plan =
       mode === "add"
         ? planAnchorAdd(result, local, tolerance)
@@ -133,19 +141,19 @@ export function createAnchorEditHandler(mode: AnchorEditMode): GestureHandler {
           ? planAnchorDelete(result, local, tolerance)
           : planAnchorConvert(result, local, tolerance);
     if (!plan) return;
-    const reply = await client.mutate(mutationFor(plan, target));
-    if (reply.kind === "mutationFailed") {
+    const outcome = await host.document.mutate(mutationFor(plan, target));
+    if (!outcome.applied) {
       // eslint-disable-next-line no-console
       console.warn(
         `anchor ${mode} rejected by engine:`,
-        JSON.stringify((reply as { payload?: unknown }).payload),
+        JSON.stringify(outcome.error),
       );
     }
   };
 
   return {
-    onActivate(p) {
-      paged = p;
+    onActivate() {
+      /* host-routed handler — nothing to capture (B-17). */
     },
     onDeactivate() {
       /* click tool — nothing in flight */

@@ -92,10 +92,12 @@ export const strokePanel: SchemaPanelContribution = {
         // The dash section — its VISIBILITY is the binding-driven gate
         // (B-01's exact case: the prototype wanted `visibleWhen
         // strokeType == "dashed"`; here the bundle publishes the
-        // already-derived boolean). No dash-pattern PropertyPath exists
-        // yet (B-12), so the controls are an honest seam readout — but
-        // the SECTION appears / disappears live as the selection's
-        // stroke state changes.
+        // already-derived boolean). Dash editing is now LIVE (B-12), but
+        // a dash array is a VECTOR — the schema binding ceiling is scalar
+        // (`literal | selectionProperty`, B-01), so it can't bind an
+        // inline scrub. Dash is therefore COMMAND-driven: the readout
+        // points the author at the Stroke dash-preset commands (Solid /
+        // Dashed / Dotted / Dash-dot). No fake inline array scrubs.
         title: "Dashes",
         visible: { bind: BIND_DASH_CONTROLS_VISIBLE },
         rows: [
@@ -103,7 +105,7 @@ export const strokePanel: SchemaPanelContribution = {
             widget: "paged.readout",
             props: {
               label: "Pattern",
-              text: "Dash editing arrives with the stroke dash path (B-12).",
+              text: "Dash presets: see the Stroke commands (Solid / Dashed / Dotted / Dash-dot).",
             },
           },
         ],
