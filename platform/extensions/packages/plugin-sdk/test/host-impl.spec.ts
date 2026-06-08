@@ -379,6 +379,9 @@ describe("document.getMetadata / setMetadata (protocol v33)", () => {
           elementId: { kind: "textFrame", id: "u10" },
           key: KEY,
           value: '{"v":1,"data":{"source":"<b>hi</b>"}}',
+          // B-16: the door names the caller so the engine cross-checks
+          // the key is in this plugin's namespace (protocol v36).
+          caller: "media.paged.test",
         },
       },
     ]);

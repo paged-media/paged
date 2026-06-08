@@ -694,13 +694,18 @@ export function createBundleHost(
     async setMetadata(id, envelope) {
       // The plugin's OWN namespace only — the key is derived, never
       // caller-supplied (the engine additionally gates the prefix,
-      // the 64 KiB cap and the envelope shape).
+      // the 64 KiB cap and the envelope shape). B-16: name the calling
+      // plugin so the ENGINE cross-checks the key is in this plugin's
+      // `x-paged:<id>` namespace (protocol v36, additive) — defense in
+      // depth that holds even for a bundle reaching the raw handle, and
+      // the teeth the isolate boundary will rely on.
       return this.mutate({
         op: "setPluginMetadata",
         args: {
           elementId: id,
           key: metadataKey(manifest),
           value: envelope === null ? null : JSON.stringify(envelope),
+          caller: manifest.id,
         },
       });
     },
