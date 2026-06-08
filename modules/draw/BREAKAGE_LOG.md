@@ -223,7 +223,7 @@ Format: `B-NN · date · area · status`.
   reserved, not faked; it is a separate surface from this preview-lane
   fix and remains future work.
 
-- **B-08 · 2026-06-06 · pointer events · PARTIAL (2026-06-07, W3.4)** —
+- **B-08 · 2026-06-06 · pointer events · RESOLVED (2026-06-08, W4.16)** —
   `CanvasPointerEvent` now carries `pressure` (0..1), `tiltX`, `tiltY`,
   and `pointerType` (`"mouse" | "pen" | "touch"`), all additive.
   ViewportCanvas reads them straight off the DOM `PointerEvent` in
@@ -259,23 +259,28 @@ Format: `B-NN · date · area · status`.
   the event OBJECT, which the draw tools already receive.) So pressure
   rides the `CanvasPointerEvent` object spine, not the SAB.
 
-  **RESIDUAL — engine op LANDED (2026-06-08), consumer publish-gated:**
-  variable-width stroke RENDERING — turning a pressure profile into path
-  geometry — now exists in core. `paged-mutate` gained
+  **CLOSED (2026-06-08) — engine op + editor consumer both landed.**
+  Variable-width stroke RENDERING — turning a pressure profile into path
+  geometry — now exists end to end. Core (protocol **v36**, published
+  `@paged-media/canvas-wasm@0.36.0`) gained
   `kurbo_kernel::variable_width_outline_stroke` (flatten centreline →
   offset each vertex along its local normal by an arc-length-interpolated
   half-width → one closed filled contour, rendered under nonzero winding,
   no new GPU path) behind `PropertyPath::OutlineStrokeVariable` /
   `Value::OutlineStrokeVariable { widths, cap, join, miter_limit, prev_* }`
-  with a snapshot inverse, kernel + apply round-trip tests, and the wire
-  `SetPluginMetadata`-adjacent op surfaced at **protocol v36** (core commit,
-  unpublished). The remaining open half is purely consumer-side and **gated
-  on publishing core v0.36 to npm**: the editor's built-in Pen mapping its
-  captured pressure profile through `strokeWidthFromPressure` → `widths[]` →
-  the new op (the editor pins `PROTOCOL_VERSION = 35` and
-  `check-protocol-version.sh` requires the installed package minor to match,
-  so it can't consume protocol 36 until the package ships). Stays PARTIAL
-  here until that publish + editor-pen wiring lands.
+  with a snapshot inverse + kernel/apply round-trip tests, reachable over
+  the wire via the generic `SetElementProperty`. The pressure→width seam
+  `strokeWidthFromPressure` moved to `@paged-media/draw-geometry` (zero-dep,
+  the editor's D1 import seam beside `simplifyRdp`). The editor's built-in
+  **Pencil** (`editor packages/tools/src/handlers/pencil-tool.ts`) now
+  captures per-sample pressure; a PEN stroke commits `insertPath` + the
+  `OutlineStrokeVariable` bake in ONE undo step via a `batch` whose property
+  child targets the minted path through the `$created` sentinel; a mouse
+  keeps the plain smooth stroke. v1 residuals (non-blocking): caps/joins are
+  not yet rendered as round end-caps (the kernel ignores `cap`/`join` —
+  butt-like ends); the width profile is distributed uniformly across the
+  fitted centreline's arc length (not re-mapped to the pre-fit sample arc
+  positions). Editor: typecheck + build green at protocol 36.
 
 - **B-09 · 2026-06-06 · scripting/runtime · RESOLVED (2026-06-07)** —
   the open half closed in core (W3.9, rides protocol v35).
@@ -404,28 +409,28 @@ Format: `B-NN · date · area · status`.
   path; the SDK helpers dropped their bundle-side duplicates
   (plugin-sdk 0.2.2).
 
-- **B-16 · 2026-06-07 · engine ops / trust · PARTIAL (2026-06-08) —
-  engine gate LANDED, consumer publish-gated** — the engine
-  plugin-metadata op now CAN enforce caller identity (audit P8). The
-  prior gap: per-plugin namespace isolation (`x-paged:<id>`) was enforced
-  only in the SDK door (`host-impl.ts` `foreignMetadataKey`, recursive
-  incl. batches); the engine op checked only the `x-paged:` prefix, the
-  64 KiB cap, and the JSON envelope — so a bundle holding the raw handle
-  bypassed the door (`paged.client.mutate({ op:"setPluginMetadata",
-  args:{ key:"x-paged:<other>", … } })` wrote another plugin's namespace).
-  Fix (core, protocol v36, committed/unpublished): an **additive**
-  `caller: Option<String>` (`#[serde(default)]`) rides the wire
-  `Mutation::SetPluginMetadata` → `Value::PluginMetadata`; when `caller`
-  is `Some`, `paged-mutate/src/apply.rs` `apply_plugin_metadata` enforces
-  the key namespace == `x-paged:<caller>` (mirrors the SDK door); when
-  `None` (the editor / `paged.script` / pre-B-16 callers), the prior
-  prefix-only behaviour holds, so nothing existing breaks. Enforcement
-  test: `evid_plugin_metadata_caller_gate_blocks_foreign_namespace`
-  (own-namespace ok, foreign-namespace rejected, `None` back-compat).
-  REMAINING (publish-gated): the SDK door passing `caller` as
-  defense-in-depth needs the plugin runtime to consume protocol 36, which
-  needs core v0.36 on npm. Full teeth still land at the isolate boundary
-  where `host.editor` dies anyway. Trust-line gate:
+- **B-16 · 2026-06-07 · engine ops / trust · RESOLVED (2026-06-08,
+  W4.16)** — the engine plugin-metadata op now enforces caller identity
+  (audit P8). The prior gap: per-plugin namespace isolation
+  (`x-paged:<id>`) was enforced only in the SDK door (`host-impl.ts`
+  `foreignMetadataKey`, recursive incl. batches); the engine op checked
+  only the `x-paged:` prefix, the 64 KiB cap, and the JSON envelope — so a
+  bundle holding the raw handle bypassed the door
+  (`paged.client.mutate({ op:"setPluginMetadata", args:{
+  key:"x-paged:<other>", … } })` wrote another plugin's namespace). Fix
+  (core, protocol **v36**, published `@paged-media/canvas-wasm@0.36.0`):
+  an **additive** `caller: Option<String>` (`#[serde(default)]`) rides the
+  wire `Mutation::SetPluginMetadata` → `Value::PluginMetadata`; when
+  `caller` is `Some`, `paged-mutate/src/apply.rs` `apply_plugin_metadata`
+  enforces the key namespace == `x-paged:<caller>`; when `None` (the
+  editor / `paged.script` / pre-B-16 callers), the prior prefix-only
+  behaviour holds, so nothing existing breaks. Enforcement test:
+  `evid_plugin_metadata_caller_gate_blocks_foreign_namespace`
+  (own-namespace ok, foreign-namespace rejected, `None` back-compat). The
+  SDK door now names the caller (`plugin-sdk host-impl.ts` `setMetadata`
+  passes `caller: manifest.id`) so the engine cross-checks even a raw-handle
+  write — defense in depth, and the teeth the isolate boundary will rely on
+  (where `host.editor` dies anyway). Trust-line gate:
   `thoughts/docs/paged/plugin-trust-line.md`.
 
 - **B-17 · 2026-06-07 · bundle surface / §4.9 · RESOLVED (2026-06-08,

@@ -82,16 +82,18 @@ describe("draw conformance — metadata persistence", () => {
     expect(await h.host.document.getMetadata(RECT as never)).toBeNull();
   });
 
-  it("KNOWN WIRE LIMIT: polygon metadata write applies but does not read back", async () => {
-    // Documents the wire gap (present through v35) so a future engine
-    // fix to the polygon read accessor flips this assertion (then move
-    // the polygon onto the round-trip path above). The write is ACCEPTED…
-    const set = await h.host.document.setMetadata(POLY as never, {
-      v: 1,
-      data: { tool: "addAnchor" },
-    });
+  it("polygon metadata round-trips (read accessor fixed in the engine)", async () => {
+    // The earlier wire gap — a polygon metadata write applied but read
+    // back null — is GONE: the engine's element_properties gained the
+    // Polygon/GraphicLine arms (core af54c7c, ships in the 0.36.0 wire
+    // the bundle now targets), so the polygon read accessor returns the
+    // envelope and the polygon joins the rectangle on the full
+    // round-trip + undo path.
+    const env = { v: 1, data: { tool: "addAnchor" } };
+    const set = await h.host.document.setMetadata(POLY as never, env);
     expect(set.applied).toBe(true);
-    // …but the read accessor returns null for the polygon kind (v35).
+    expect(await h.host.document.getMetadata(POLY as never)).toEqual(env);
+    await h.host.document.undo();
     expect(await h.host.document.getMetadata(POLY as never)).toBeNull();
   });
 });
