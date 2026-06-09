@@ -329,6 +329,36 @@ export interface ViewportSurface {
   pxToPt(px: number): number;
 }
 
+// ----------------------------------------------------------------- text
+
+/** Font advance + vertical metrics, in document points (pt). */
+export interface TextMetrics {
+  /** Total advance width of the run at `sizePt`. */
+  advance: number;
+  /** Face ascender at `sizePt`. */
+  ascender: number;
+  /** Face descender at `sizePt` (negative below the baseline). */
+  descender: number;
+}
+
+/**
+ * Text measurement against the loaded document's fonts (S-13). A read
+ * door — no capability gate (like {@link ViewportSurface}); it wraps the
+ * engine's shaper (`paged-text::shape_run`) so a plugin can size grid
+ * columns / lower content to widths the page surface will agree with
+ * (the §8.3 cross-surface-consistency requirement). Resolves the face
+ * from the document's font registry; falls back to the default face when
+ * `family` is unknown.
+ */
+export interface TextSurface {
+  measureString(
+    family: string,
+    style: string | null,
+    text: string,
+    sizePt: number,
+  ): Promise<TextMetrics>;
+}
+
 // -------------------------------------------------------------- overlay
 
 /** The v0 overlay channel: the shared tool-preview signal (polyline /
@@ -471,6 +501,11 @@ export interface BundleHost {
   readonly document: DocumentSurface;
   readonly selection: SelectionSurface;
   readonly viewport: ViewportSurface;
+  /** Font measurement against the document's fonts (S-13). A read door,
+   *  no capability gate; `supports("text.measure@1")` reports whether the
+   *  host wired the engine shaper (it is false under a host that injects
+   *  no measurement backend — the headless harness returns an estimate). */
+  readonly text: TextSurface;
   readonly overlay: OverlaySurface;
   readonly shell: ShellSurface;
   readonly storage: StorageSurface;

@@ -35,6 +35,8 @@ export type {
   DocumentSurface,
   SelectionSurface,
   ViewportSurface,
+  TextSurface,
+  TextMetrics,
   OverlaySurface,
   ShellSurface,
   StorageSurface,

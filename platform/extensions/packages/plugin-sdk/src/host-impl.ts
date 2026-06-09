@@ -43,6 +43,7 @@ import type {
   SelectionSurface,
   ShellSurface,
   StorageSurface,
+  TextSurface,
   ViewportSurface,
   WidgetSurface,
 } from "@paged-media/plugin-api";
@@ -783,6 +784,27 @@ export function createBundleHost(
     },
   };
 
+  // --------------------------------------------------------- text
+  // Font measurement (S-13). A read door — no capability gate (like
+  // `viewport`). Routes to the editor's shaper when wired; otherwise an
+  // honest monospace-ish estimate so headless / older editors stay
+  // usable (the plugin checks `supports("text.measure@1")` to know which
+  // it got). `~0.5em` advance + `0.8em/0.2em` asc/desc are the standard
+  // fallback the bundle already used before this door existed.
+  const text: TextSurface = {
+    async measureString(family, style, str, sizePt) {
+      const editorText = getEditor().text;
+      if (editorText) {
+        return editorText.measure(family, style, str, sizePt);
+      }
+      return {
+        advance: str.length * sizePt * 0.5,
+        ascender: sizePt * 0.8,
+        descender: -sizePt * 0.2,
+      };
+    },
+  };
+
   // ------------------------------------------------------- overlay
   // The tool-preview channel is a render-pipeline surface — gated on
   // `capabilities.rendering` including "overlay" (same surface as
@@ -1016,6 +1038,12 @@ export function createBundleHost(
   };
 
   const featureSet = new Set(HOST_FEATURES);
+  if (getEditor().text) {
+    // The door always exists (it falls back to an estimate); the FEATURE
+    // flag means "a real engine shaper is wired" — a bundle probes it to
+    // decide whether to trust measured widths for cross-surface fidelity.
+    featureSet.add("text.measure@1");
+  }
   if (options?.shell) {
     featureSet.add("shell.openPanel@1");
   }
@@ -1047,6 +1075,7 @@ export function createBundleHost(
     document,
     selection,
     viewport,
+    text,
     overlay,
     shell,
     storage,

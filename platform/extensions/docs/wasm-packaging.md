@@ -197,3 +197,34 @@ size/compute concern, not a privilege-escalation one.
   the W0 Blitz/wasm spike re-tunes them.
 - **`wasm.load@1` supports() probe** — add when a host needs to advertise
   "I serve wasm" without inspecting the manifest.
+
+---
+
+## Two loaders, ratified (2026-06-09 — closes paged.sheet S-10 / paged.image I-07)
+
+There are **two** sanctioned ways a bundle runs its own wasm, and which
+one applies is decided by the module's *shape*, not by preference:
+
+1. **Raw module → `host.loadBundleWasm`.** A hand-built / Blitz-class
+   module with no JS glue (host-owned memory, only caller-passed imports,
+   no ambient authority). This is the door `wasm-bundle-loader.ts`
+   implements and everything above describes.
+
+2. **wasm-bindgen module → the bundle's own JS glue (the canvas-wasm
+   pattern).** A module produced by `wasm-bindgen --target web` (its
+   `__wbindgen_*` imports, its own exported memory, its generated
+   `.js`) **cannot** load through door (1) — the raw instantiation has
+   none of that glue. It is instead loaded by the bundle itself, in the
+   bundle's JS realm, by `import init, { … } from "./<name>.js"; await
+   init(url)` — exactly how `@paged-media/sdk` / `idml-viewer` boot, and
+   how `plugin-sheets`' `sheet-js` engine boots
+   (`packages/sheet-bundle/src/engine.ts` `bootEngine`).
+
+   The module is **still declared** under `capabilities.wasm[]` — the
+   declaration is governance + the plugin-cli 8 MiB size gate, NOT the
+   loader. `paged-sheet` (S-10) and `paged-image` (I-07) both ship this
+   way. **This is the v1 contract**: there is no host-side wasm-bindgen
+   loader and none is needed; the glue path is the answer. (If a future
+   host *wants* to own wasm-bindgen instantiation — e.g. to share a
+   `GPUDevice` import — that is the separate I-01/I-07 GPU-surface RFC,
+   not this door.)

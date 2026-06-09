@@ -394,6 +394,18 @@ export interface PagedEditor {
   camera: {
     camera: { scale: number; tx: number; ty: number };
   };
+  /** S-13 font measurement — the editor routes this to the canvas-wasm
+   *  `CanvasWorker.measureText` query (async across the worker boundary).
+   *  `undefined` when the host build wires no shaper (headless / older
+   *  editor); the host surface then falls back to an estimate. */
+  text?: {
+    measure(
+      family: string,
+      style: string | null,
+      text: string,
+      sizePt: number,
+    ): Promise<{ advance: number; ascender: number; descender: number }>;
+  };
   overlaySignals: {
     setToolPreview(value: ToolPreviewShape | null): void;
   };
