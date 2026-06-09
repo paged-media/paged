@@ -83,7 +83,30 @@
           }
         },
         "network": {
-          "type": "boolean"
+          "description": "Network reach the bundle declares (D-03). Boolean shorthand, or a per-origin allow-list + purpose. Reach is always consent-gated; documents do not fetch on open.",
+          "oneOf": [
+            { "type": "boolean" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["origins"],
+              "properties": {
+                "origins": {
+                  "oneOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^https?://[^/]+$"
+                      }
+                    },
+                    { "const": "consent" }
+                  ]
+                },
+                "purpose": { "type": "string" }
+              }
+            }
+          ]
         },
         "clipboard": {
           "enum": [

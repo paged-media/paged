@@ -57,6 +57,45 @@ describe("plugin-cli validate — capabilities.keybindings (W3.10)", () => {
   });
 });
 
+describe("plugin-cli validate — capabilities.network (D-03)", () => {
+  it("accepts the legacy boolean form", () => {
+    const r = validate({ ...base, capabilities: { network: false } });
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/valid/);
+  });
+
+  it("accepts a structured per-origin declaration", () => {
+    const r = validate({
+      ...base,
+      capabilities: {
+        network: { origins: ["https://api.test", "http://localhost:8080"], purpose: "bind" },
+      },
+    });
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/valid/);
+  });
+
+  it("accepts the \"consent\" wildcard (author-supplied sources)", () => {
+    const r = validate({ ...base, capabilities: { network: { origins: "consent" } } });
+    expect(r.code).toBe(0);
+  });
+
+  it("rejects a malformed origin (not scheme://host)", () => {
+    const r = validate({ ...base, capabilities: { network: { origins: ["api.test"] } } });
+    expect(r.code).toBe(1);
+    expect(r.err).toMatch(/capabilities\.network\.origins.*scheme:\/\/host/);
+  });
+
+  it("rejects an unknown key in the network object", () => {
+    const r = validate({
+      ...base,
+      capabilities: { network: { origins: "consent", evil: true } },
+    });
+    expect(r.code).toBe(1);
+    expect(r.err).toMatch(/capabilities\.network.*unknown key/);
+  });
+});
+
 describe("plugin-cli validate — capabilities.assets (W-06)", () => {
   it("accepts the fonts asset capability", () => {
     const r = validate({ ...base, capabilities: { assets: ["fonts"] } });

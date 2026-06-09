@@ -366,6 +366,42 @@ export interface StorageSurface {
   keys(): string[];
 }
 
+// -------------------------------------------------------------- network
+//
+// The capability-gated NETWORK CONSENT door (paged.data D-03; base-idea §11).
+// `capabilities.network` (a per-origin allow-list + purpose) is the OUTER bound;
+// this door makes reach EXPLICIT + CONSENTED. Documents carrying queries are
+// treated as carrying code: NOTHING fetches on open; external origins are inert
+// until the user reviews the data-source manifest (origins + purpose) and
+// consents — per-origin, rememberable. The host does NOT proxy bytes; it owns
+// the consent UI and enforces the boundary (a CSP `connect-src` derived from the
+// granted set). A bundle gates its OWN fetch / DuckDB `httpfs` on
+// `consentedOrigins()`. Always present; when the host injects no consent
+// backend the door DENIES every origin (the honest no-consent posture) and
+// `supports("network.consent@1")` answers false.
+
+/** The per-origin outcome of a consent request. */
+export interface ConsentResult {
+  /** Origins the user granted (a subset of the requested set). */
+  granted: readonly string[];
+  /** Origins denied (out-of-allow-list or user-declined). */
+  denied: readonly string[];
+  /** Whether the grant was remembered for this document (survives reopen). */
+  remembered: boolean;
+}
+
+export interface NetworkSurface {
+  /** Request consent to reach `origins` (`scheme://host[:port]`) for a stated
+   *  `purpose`; the host renders the data-source manifest for review and
+   *  resolves the per-origin decision. NOTHING fetches before this resolves.
+   *  Origins outside the declared `capabilities.network` allow-list are denied.
+   *  Requires `capabilities.network` to be declared (else a capability error). */
+  requestConsent(origins: readonly string[], purpose: string): Promise<ConsentResult>;
+  /** The currently-granted origins (session grants + remembered) — a bundle
+   *  gates its own reach on this. */
+  consentedOrigins(): readonly string[];
+}
+
 // ---------------------------------------------------------- diagnostics
 
 export interface Diagnostic {
@@ -438,6 +474,11 @@ export interface BundleHost {
   readonly overlay: OverlaySurface;
   readonly shell: ShellSurface;
   readonly storage: StorageSurface;
+  /** The capability-gated NETWORK CONSENT door (D-03; base-idea §11). Always
+   *  present; gated on `capabilities.network` and per-origin user consent.
+   *  When the host injects no consent backend, every request is DENIED (the
+   *  honest no-consent posture) and `supports("network.consent@1")` is false. */
+  readonly network: NetworkSurface;
   readonly diagnostics: DiagnosticsSurface;
   /** Published reactive values (W3.1) — the dynamic half of schema
    *  panels: a bundle publishes named booleans (and JSON values) that

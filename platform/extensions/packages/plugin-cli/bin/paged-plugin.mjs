@@ -139,8 +139,33 @@ function validateManifest(manifest, manifestDir) {
       if (caps.editContext !== undefined && !isStringArray(caps.editContext)) {
         err(`"capabilities.editContext" must be a string array`);
       }
-      if (caps.network !== undefined && typeof caps.network !== "boolean") {
-        err(`"capabilities.network" must be a boolean`);
+      // D-03: network is the legacy boolean OR a structured per-origin
+      // declaration { origins: string[] | "consent", purpose?: string }. Reach
+      // is always consent-gated at runtime; this is the OUTER allow-list bound.
+      if (caps.network !== undefined) {
+        const n = caps.network;
+        if (typeof n === "boolean") {
+          // ok — legacy shorthand
+        } else if (typeof n === "object" && n !== null && !Array.isArray(n)) {
+          const extra = Object.keys(n).filter((k) => !["origins", "purpose"].includes(k));
+          if (extra.length) err(`"capabilities.network" unknown key(s): ${extra.join(", ")}`);
+          if (n.origins === "consent") {
+            // ok — no fixed allow-list; every reach runtime-consented
+          } else if (Array.isArray(n.origins)) {
+            for (const o of n.origins) {
+              if (typeof o !== "string" || !/^https?:\/\/[^/]+$/.test(o)) {
+                err(`"capabilities.network.origins" entry "${o}" must be scheme://host[:port]`);
+              }
+            }
+          } else {
+            err(`"capabilities.network.origins" must be a string[] or "consent"`);
+          }
+          if (n.purpose !== undefined && typeof n.purpose !== "string") {
+            err(`"capabilities.network.purpose" must be a string`);
+          }
+        } else {
+          err(`"capabilities.network" must be a boolean or { origins, purpose }`);
+        }
       }
       if (caps.clipboard !== undefined && !CLIPBOARD.has(caps.clipboard)) {
         err(`"capabilities.clipboard" must be none|vector|full`);

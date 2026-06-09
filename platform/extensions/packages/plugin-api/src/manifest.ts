@@ -75,7 +75,18 @@ export interface PluginCapabilities {
    * the door (the host gate throws on an undeclared use). See
    * DESIGN.md §13. */
   assets?: AssetKind[];
-  network?: boolean;
+  /**
+   * Network reach the bundle declares (paged.data D-03; base-idea §11). The
+   * boolean form is the legacy shorthand (`true` = the bundle reaches the
+   * network, every origin still gated behind runtime consent; `false`/absent =
+   * no network). The object form declares a per-origin allow-list + a
+   * human-readable purpose the consent UI shows. Reach is NEVER silent: every
+   * origin is gated behind `host.network.requestConsent` (the visible
+   * data-source manifest), and a document does NOT fetch on open — external
+   * sources are inert until the user reviews + consents (base-idea §11). This
+   * is the OUTER bound; consent is the inner gate.
+   */
+  network?: boolean | NetworkCapability;
   clipboard?: "none" | "vector" | "full";
   /**
    * Declared WebAssembly artifacts the bundle ships and loads at
@@ -90,6 +101,17 @@ export interface PluginCapabilities {
    * JS. Threads/SharedArrayBuffer are OFF in v1.
    */
   wasm?: WasmArtifact[];
+}
+
+/** A structured network declaration (paged.data D-03; base-idea §11). The
+ *  `origins` allow-list is the OUTER bound — the set of `scheme://host[:port]`
+ *  the bundle may EVER request; runtime per-origin consent is the inner gate.
+ *  The string `"consent"` means the bundle has no fixed list (author-supplied
+ *  sources) — every reach requires runtime consent and none is pre-allowed. */
+export interface NetworkCapability {
+  origins: string[] | "consent";
+  /** Human-readable reason shown in the consent UI / data-source manifest. */
+  purpose?: string;
 }
 
 /** Purposes a bundle may declare for a shipped wasm module. A closed

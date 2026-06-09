@@ -32,6 +32,7 @@ export {
   PluginApiNotImplemented,
   PluginCapabilityError,
   type BundleHostHandle,
+  type ConsentBackend,
   type CreateBundleHostOptions,
   type DiagnosticsSink,
   type BundleAssetProvider,

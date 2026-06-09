@@ -25,8 +25,10 @@ import type {
   FontFaceAsset,
   HitFilter,
   HitResult,
+  ConsentResult,
   Mutation,
   MutationOutcome,
+  NetworkSurface,
   ObjectTypeContribution,
   OverlaySurface,
   PagedEditor,
@@ -131,6 +133,15 @@ export interface StorageBacking {
   keys(): string[];
 }
 
+/** The host-provided network consent primitive (paged.data D-03; base-idea §11).
+ *  The editor owns the consent UI (the visible data-source manifest) and the
+ *  CSP `connect-src` enforcement; this hook is how the host adapter asks the
+ *  user. When absent, `host.network.requestConsent` DENIES every origin (the
+ *  honest no-consent posture) and `supports("network.consent@1")` is false. */
+export interface ConsentBackend {
+  request(origins: readonly string[], purpose: string): Promise<ConsentResult>;
+}
+
 function defaultStorageBacking(): StorageBacking {
   const ls = (globalThis as { localStorage?: Storage }).localStorage;
   if (ls) {
@@ -201,6 +212,11 @@ export interface BundleAssetProvider {
 
 export interface CreateBundleHostOptions {
   storage?: StorageBacking;
+  /** Host-provided network consent (paged.data D-03; base-idea §11): the editor
+   *  injects the consent prompt + the data-source-manifest UI. When absent,
+   *  `host.network` denies every origin and `supports("network.consent@1")` is
+   *  false (the honest no-consent posture). */
+  consent?: ConsentBackend;
   /** Console sink override (tests). */
   console?: Pick<Console, "debug" | "info" | "warn" | "error">;
   /** Shell actions the HOST APP owns (the cockpit's panel placement).
@@ -809,6 +825,69 @@ export function createBundleHost(
     },
   };
 
+  // --------------------------------------------------- network (D-03)
+  //
+  // `capabilities.network` is the OUTER bound (the origins the bundle MAY ever
+  // request); per-origin user consent is the inner gate. Remembered grants
+  // persist in the bundle's own storage namespace. No consent backend wired →
+  // every request is denied (honest no-consent posture). The host never proxies
+  // bytes; a granted origin authorizes the BUNDLE's own reach (DuckDB httpfs),
+  // enforced at the realm boundary by the editor's CSP (the editor follow-up).
+  const declaredNetwork = manifest.capabilities?.network;
+  const networkDeclared =
+    declaredNetwork === true ||
+    (typeof declaredNetwork === "object" && declaredNetwork !== null);
+  const mayRequest = (origin: string): boolean => {
+    if (declaredNetwork === true) return true;
+    if (typeof declaredNetwork === "object" && declaredNetwork !== null) {
+      const o = declaredNetwork.origins;
+      return o === "consent" || (Array.isArray(o) && o.includes(origin));
+    }
+    return false;
+  };
+  const CONSENT_KEY = "network.consentedOrigins";
+  const granted = new Set<string>(storage.get<string[]>(CONSENT_KEY) ?? []);
+  const network: NetworkSurface = {
+    async requestConsent(origins, purpose): Promise<ConsentResult> {
+      requireDeclared(
+        networkDeclared,
+        "network.requestConsent",
+        "capabilities.network must declare the network capability (boolean or { origins })",
+      );
+      const inScope = origins.filter(mayRequest);
+      const outOfScope = origins.filter((o) => !mayRequest(o));
+      if (outOfScope.length > 0) {
+        log.warn(
+          `network.requestConsent: ${outOfScope.length} origin(s) outside the ` +
+            `declared capabilities.network allow-list — denied: ${outOfScope.join(", ")}`,
+        );
+      }
+      const need = inScope.filter((o) => !granted.has(o));
+      let prompted: ConsentResult = { granted: [], denied: [], remembered: false };
+      if (need.length > 0) {
+        if (options?.consent) {
+          prompted = await options.consent.request(need, purpose);
+        } else {
+          log.warn(
+            "network.requestConsent: no consent backend wired — denying " +
+              "(supports('network.consent@1') is false; the editor injects one)",
+          );
+          prompted = { granted: [], denied: need, remembered: false };
+        }
+      }
+      for (const o of prompted.granted) granted.add(o);
+      if (prompted.remembered) storage.set(CONSENT_KEY, [...granted]);
+      return {
+        granted: inScope.filter((o) => granted.has(o)),
+        denied: [...outOfScope, ...inScope.filter((o) => !granted.has(o))],
+        remembered: prompted.remembered,
+      };
+    },
+    consentedOrigins() {
+      return [...granted];
+    },
+  };
+
   // --------------------------------------------------- diagnostics
   const diagnosticStore = new Map<string, Diagnostic[]>();
   const diagnosticListeners = new Set<(key: string) => void>();
@@ -955,6 +1034,11 @@ export function createBundleHost(
     // attempt `@font-face` composition at all.
     featureSet.add("assets.fonts@1");
   }
+  if (options?.consent) {
+    // The network door always exists (default-deny); this flag means a real
+    // consent backend is wired, so a bundle can actually obtain a grant (D-03).
+    featureSet.add("network.consent@1");
+  }
 
   const host: BundleHost = {
     manifest,
@@ -966,6 +1050,7 @@ export function createBundleHost(
     overlay,
     shell,
     storage,
+    network,
     diagnostics,
     bindings,
     widgets,

@@ -22,6 +22,7 @@ export type {
   PluginManifest,
   PluginCapabilities,
   PluginContributions,
+  NetworkCapability,
   WasmArtifact,
   WasmPurpose,
 } from "./manifest";
@@ -37,6 +38,8 @@ export type {
   OverlaySurface,
   ShellSurface,
   StorageSurface,
+  NetworkSurface,
+  ConsentResult,
   DiagnosticsSurface,
   BindingsSurface,
   Diagnostic,

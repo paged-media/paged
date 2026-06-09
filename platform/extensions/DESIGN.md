@@ -159,6 +159,31 @@ paged.web's frame-options defaults and any tool's preferences; trivial
 in-process (localStorage), trivially proxyable. Injectable backing for
 tests/headless.
 
+### 4.6b `host.network` — the consent door [paged.data D-03]
+`requestConsent(origins, purpose) → ConsentResult` + `consentedOrigins()`.
+The first plugin needing network is paged.data (external datasets;
+base-idea §11 — "the largest attack surface in the suite"), so the door is
+designed against *its* threat model, not a generic fetch. Three deliberate
+choices: (1) **the manifest is the OUTER bound** — `capabilities.network`
+declares a per-origin allow-list (or `"consent"` for author-supplied
+sources); consent is the *inner* gate, so a bundle can never request an
+origin it did not declare. (2) **No fetch on open** — a document carrying
+queries is treated as carrying code: external origins are inert until the
+user reviews the data-source manifest (origins + purpose) and consents,
+per-origin and rememberable. (3) **The host does NOT proxy bytes** — a grant
+authorizes the *bundle's own* reach (so the vendored DuckDB-WASM `httpfs`
+connector works unchanged — connector breadth is the product); the editor
+enforces the boundary with a CSP `connect-src` derived from the granted set.
+The host adapter owns the consent *logic* (allow-list check, the remembered-
+grant store in `host.storage`, default-deny); the editor injects the consent
+*UI* via `CreateBundleHostOptions.consent` (a `ConsentBackend`). Absent a
+backend the door denies every origin and `supports("network.consent@1")` is
+false — the honest no-consent posture, mirroring `host.assets`. Editor
+follow-up: the consent-prompt UI + the CSP enforcement. The host-proxied
+`host.network.fetch` alternative was rejected (breaks DuckDB `httpfs`, adds a
+large chokepoint for no isolation gain over CSP-per-grant). Full RFC:
+`thoughts/docs/paged/plugin-data/rfc-network-consent.md`.
+
 ### 4.7 `host.diagnostics`
 `set(key, Diagnostic[]) / clear / onDidChange` — per-plugin diagnostic
 store with console mirroring [web §9.1.4: parse errors, unsupported-CSS
