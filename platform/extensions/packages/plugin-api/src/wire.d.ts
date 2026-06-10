@@ -1,7 +1,7 @@
 // GENERATED — do not edit. Vendored verbatim from the published
 // @paged-media/canvas-wasm .d.ts (tsify output from paged-media/core,
 // MPL-2.0 OR PMEL). Sync: node scripts/sync-wire.mjs · Check: --check.
-// Synced from @paged-media/canvas-wasm@0.39.0
+// Synced from @paged-media/canvas-wasm@0.40.0
 /* tslint:disable */
 /* eslint-disable */
 
@@ -45,6 +45,34 @@ export type Mutation = { op: "insertText"; args: { storyId: string; offset: numb
  */
 export interface SceneLayer {
     items: SceneItem[];
+}
+
+/**
+ * A single-line text run in frame-content coordinates (C-1.1).
+ */
+export interface SceneTextItem {
+    /**
+     * Baseline origin x in frame-content points.
+     */
+    x: number;
+    /**
+     * Baseline origin y in frame-content points (the text baseline).
+     */
+    y: number;
+    /**
+     * The run\'s text (single line — newlines are not laid out).
+     */
+    text: string;
+    /**
+     * Point size.
+     */
+    size: number;
+    paint: ScenePaint;
+    /**
+     * Reserved face hints (v1 renders in the document default font).
+     */
+    family?: string;
+    style?: string;
 }
 
 /**
@@ -561,7 +589,7 @@ export interface SnapLine {
 /**
  * One drawable in a [`SceneLayer`]. Coordinates are frame-content points.
  */
-export type SceneItem = { kind: "fillPath"; path: ScenePathSeg[]; paint: ScenePaint } | { kind: "strokePath"; path: ScenePathSeg[]; paint: ScenePaint; width: number };
+export type SceneItem = { kind: "fillPath"; path: ScenePathSeg[]; paint: ScenePaint } | { kind: "strokePath"; path: ScenePathSeg[]; paint: ScenePaint; width: number } | ({ kind: "text" } & SceneTextItem);
 
 /**
  * One entry in the field diff: a field whose resolved text
