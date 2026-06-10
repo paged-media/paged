@@ -37,6 +37,11 @@ export type {
   MainToWorker,
   MainToWorkerKind,
   WorkerToMain,
+  // C-1 — the in-frame scene-layer IR (host.contribute.sceneLayer().submit).
+  SceneLayer,
+  SceneItem,
+  ScenePathSeg,
+  ScenePaint,
   // Worker gesture channel.
   GestureType,
   GestureHandle,

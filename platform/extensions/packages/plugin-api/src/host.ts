@@ -30,10 +30,10 @@ import type {
   OverlayContribution,
   PagedEditor,
   PanelContribution,
-  SceneLayer,
   ToolContribution,
   ToolPreviewShape,
 } from "./editor";
+import type { SceneLayer } from "./wire";
 
 import type { AssetSurface } from "./assets";
 import type { PluginManifest } from "./manifest";

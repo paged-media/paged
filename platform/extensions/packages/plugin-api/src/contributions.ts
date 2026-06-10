@@ -49,11 +49,6 @@ export type {
   ImportRequest,
   ExporterContribution,
   ExportResult,
-  // Scene layers — in-frame plugin vector content (C-1).
-  SceneLayer,
-  SceneItem,
-  ScenePathSeg,
-  ScenePaint,
   // Shared base types.
   DockEdge,
   VisibilityPredicate,

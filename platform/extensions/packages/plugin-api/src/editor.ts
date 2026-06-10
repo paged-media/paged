@@ -33,6 +33,7 @@ import type {
   Mutation,
   PageId,
   PathAnchorsResult,
+  SceneLayer,
   SelectionMode,
   WorkerToMain,
 } from "./wire";
@@ -323,56 +324,6 @@ export interface ExporterContribution {
   /** Produce the bytes to save, or null to abort silently (nothing to
    *  export). Async so it can pull from a wasm engine. */
   export(): Promise<ExportResult | null> | ExportResult | null;
-}
-
-// ----------------------------------------------- scene layers (C-1)
-// The vector IR a plugin submits to render INSIDE a frame, in
-// FRAME-CONTENT coordinates (origin at the content-box top-left, x right,
-// y down, points). Core applies the frame's ItemTransform + clips to the
-// content box (§8.5) — the plugin never compensates for the transform.
-// Mirrors the engine wire `SceneLayer` 1:1 (so the SDK type is
-// structurally assignable to the wasm-generated one); the field tags
-// (`kind` / `op`) match the engine's serde shape exactly.
-
-/** A bezier path segment in frame-content points. */
-export type ScenePathSeg =
-  | { op: "moveTo"; x: number; y: number }
-  | { op: "lineTo"; x: number; y: number }
-  | {
-      op: "cubicTo";
-      cx1: number;
-      cy1: number;
-      cx2: number;
-      cy2: number;
-      x: number;
-      y: number;
-    }
-  | { op: "close" };
-
-/** Solid paint in sRGB (0..=1 per channel; alpha linear). Core converts
- *  to the engine's linear-light colour so plugin colours composite
- *  identically to document colours. */
-export interface ScenePaint {
-  r: number;
-  g: number;
-  b: number;
-  a: number;
-}
-
-/** One drawable in a [`SceneLayer`]. */
-export type SceneItem =
-  | { kind: "fillPath"; path: ScenePathSeg[]; paint: ScenePaint }
-  | {
-      kind: "strokePath";
-      path: ScenePathSeg[];
-      paint: ScenePaint;
-      /** Stroke width in points (content space). */
-      width: number;
-    };
-
-/** A plugin vector layer rendered inside a frame (C-1). */
-export interface SceneLayer {
-  items: SceneItem[];
 }
 
 // ----------------------------------------------------------- registries
