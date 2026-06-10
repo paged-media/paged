@@ -16,6 +16,8 @@ export type {
   OverlayRegistry,
   EditContextRegistry,
   ObjectTypeRegistry,
+  ImporterRegistry,
+  ExporterRegistry,
   // Tools — the rail + gesture spine.
   ToolContribution,
   ToolId,
@@ -42,6 +44,11 @@ export type {
   // Commands + keybindings.
   CommandContribution,
   KeybindingContribution,
+  // Document IO — importers + exporters (K-2 / S-06).
+  ImporterContribution,
+  ImportRequest,
+  ExporterContribution,
+  ExportResult,
   // Shared base types.
   DockEdge,
   VisibilityPredicate,

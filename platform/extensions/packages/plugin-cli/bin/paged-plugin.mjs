@@ -258,12 +258,12 @@ function validateManifest(manifest, manifestDir) {
       err(`"contributes" must be an object`);
     } else {
       for (const key of Object.keys(contributes)) {
-        if (!["tools", "panels", "commands", "editContexts", "objectTypes"].includes(key)) {
+        if (!["tools", "panels", "commands", "editContexts", "objectTypes", "importers", "exporters"].includes(key)) {
           err(`unknown contribution kind "${key}"`);
         }
       }
       const ns = typeof manifest.id === "string" ? `${manifest.id}.` : null;
-      for (const kind of ["tools", "commands"]) {
+      for (const kind of ["tools", "commands", "importers", "exporters"]) {
         const ids = contributes[kind];
         if (ids === undefined) continue;
         if (!isStringArray(ids)) {

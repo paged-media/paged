@@ -245,6 +245,52 @@ describe("contribution recording + dispose honesty", () => {
     ]);
   });
 
+  it("records importer + exporter contributions (K-2 / S-06)", async () => {
+    live = await open();
+    const host = (await loaded()).host;
+    // The doors route to the harness recording registry (no shell wired).
+    const seen: string[] = [];
+    host.contribute.importer({
+      id: "media.paged.harness.importer.xlsx",
+      title: "Spreadsheet",
+      extensions: [".xlsx"],
+      mimeTypes: [
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      ],
+      import: ({ name }) => void seen.push(name),
+    });
+    host.contribute.exporter({
+      id: "media.paged.harness.exporter.xlsx",
+      title: "Workbook (.xlsx)",
+      extension: ".xlsx",
+      export: () => ({ bytes: new Uint8Array([1, 2]), fileName: "out.xlsx" }),
+    });
+    const imps = live!.importersContributed();
+    const exps = live!.exportersContributed();
+    expect(imps.map((i) => i.id)).toEqual(["media.paged.harness.importer.xlsx"]);
+    expect(imps[0].extensions).toEqual([".xlsx"]);
+    // The import callback survives verbatim — the host calls it at open time.
+    imps[0].import({ name: "budget.xlsx", bytes: new Uint8Array(), mimeType: "" });
+    expect(seen).toEqual(["budget.xlsx"]);
+    expect(exps.map((e) => e.id)).toEqual(["media.paged.harness.exporter.xlsx"]);
+    expect(host.supports("contribute.importer@1")).toBe(true);
+    expect(host.supports("contribute.exporter@1")).toBe(true);
+    expect(live!.contributions.map((c) => c.kind)).toEqual([
+      "importer",
+      "exporter",
+    ]);
+  });
+
+  it("pickFile resolves empty + warns when no shell is wired (K-5 / S-11)", async () => {
+    live = await open();
+    const host = (await loaded()).host;
+    // The neutral headless host injects no shell — the honest no-picker door.
+    expect(host.supports("shell.pickFile@1")).toBe(false);
+    await expect(host.shell.pickFile({ accept: [".xlsx"] })).resolves.toEqual(
+      [],
+    );
+  });
+
   it("records the B-07 path/cubic tool preview headlessly (no overlay surface)", async () => {
     live = await open();
     // A loaded bundle that declares the overlay rendering capability —

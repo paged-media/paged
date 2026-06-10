@@ -263,6 +263,68 @@ export interface KeybindingContribution {
   when?: VisibilityPredicate;
 }
 
+// ----------------------------------------------- importers + exporters
+// Document IO contributions (K-2 / S-06 ↔ plugin-image I-05). An IMPORTER
+// claims file extensions / MIME types; when the host opens a matching file
+// (File menu, drag-drop, or `host.shell.pickFile`) it routes the bytes to
+// the importer's `import()` INSTEAD of the default IDML loader — so the
+// plugin owns what the file becomes (load into its own engine, lower a
+// range, …; it does NOT replace the document unless it chooses to). An
+// EXPORTER claims an extension and produces bytes on demand (the export UI
+// lists it). Both mirror the `command` contract: a namespaced id the
+// manifest must list, with the rich object handed in at register time.
+
+/** A file handed to an importer — bytes already read at the host boundary
+ *  (the contract never leaks a DOM `File`, so a bundle stays environment-
+ *  agnostic / isolate-ready). */
+export interface ImportRequest {
+  /** Original file name incl. extension (e.g. `"budget.xlsx"`). */
+  name: string;
+  /** The file's raw bytes. */
+  bytes: Uint8Array;
+  /** MIME type the host reported (may be `""` when the OS gave none). */
+  mimeType: string;
+}
+
+export interface ImporterContribution {
+  /** Stable id, `<namespace>.<importer>` — namespace-checked at register. */
+  id: string;
+  /** Human label for the Open/Import UI (e.g. `"Spreadsheet"`). */
+  title: string;
+  /** Extensions this importer handles, leading dot, lowercased
+   *  (`[".xlsx"]`). The host matches an opened file by extension first. */
+  extensions: readonly string[];
+  /** MIME types this importer also matches (optional; feeds the file
+   *  picker's `accept` and a secondary match when the extension is
+   *  ambiguous). */
+  mimeTypes?: readonly string[];
+  /** Handle an opened file. The importer drives the host through its own
+   *  surfaces (load into an engine, lower into the document, …); it does
+   *  not return a document. Async so it can boot wasm / await mutations. */
+  import(file: ImportRequest): void | Promise<void>;
+}
+
+/** What an exporter yields — bytes plus the suggested download name. */
+export interface ExportResult {
+  bytes: Uint8Array;
+  /** Suggested file name (the host may still let the user rename). */
+  fileName: string;
+}
+
+export interface ExporterContribution {
+  /** Stable id, `<namespace>.<exporter>` — namespace-checked at register. */
+  id: string;
+  /** Human label for the Export UI (e.g. `"Workbook (.xlsx)"`). */
+  title: string;
+  /** The extension the produced file carries, leading dot (`".xlsx"`). */
+  extension: string;
+  /** MIME type to stamp on the produced blob (optional). */
+  mimeType?: string;
+  /** Produce the bytes to save, or null to abort silently (nothing to
+   *  export). Async so it can pull from a wasm engine. */
+  export(): Promise<ExportResult | null> | ExportResult | null;
+}
+
 // ----------------------------------------------------------- registries
 // NARROW handle contracts: `register` is the only promised member —
 // the editor's richer registries stay assignable.
@@ -295,6 +357,17 @@ export interface ObjectTypeRegistry {
   register(contribution: ObjectTypeContribution): Disposable;
 }
 
+/** K-2 / S-06 — the document-importer registry (the shell owns file→plugin
+ *  routing in the open/drag-drop flow). Narrow: `register` only. */
+export interface ImporterRegistry {
+  register(contribution: ImporterContribution): Disposable;
+}
+/** K-2 / S-06 — the document-exporter registry (the export UI lists the
+ *  registered exporters and pulls bytes on demand). */
+export interface ExporterRegistry {
+  register(contribution: ExporterContribution): Disposable;
+}
+
 export interface ShellRegistries {
   tools: ToolRegistry;
   panels: PanelRegistry;
@@ -307,6 +380,13 @@ export interface ShellRegistries {
   editContexts?: EditContextRegistry;
   /** W3.2 — object types (W-03). Optional for the same reason. */
   objectTypes?: ObjectTypeRegistry;
+  /** K-2 / S-06 — document importers (file → plugin). Optional on the
+   *  contract so a host that hasn't wired the registry stays assignable;
+   *  the SDK adapter falls back to a tracked no-op (the headless harness
+   *  injects a recording registry). */
+  importers?: ImporterRegistry;
+  /** K-2 / S-06 — document exporters (plugin → file). Optional likewise. */
+  exporters?: ExporterRegistry;
 }
 
 // ---------------------------------------------------- overlay signals

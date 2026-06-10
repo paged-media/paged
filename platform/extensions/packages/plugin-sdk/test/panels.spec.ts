@@ -32,9 +32,10 @@ describe("contributePanel", () => {
     const fake = makeFakeEditor();
     const openPanel = vi.fn();
     const closePanel = vi.fn();
+    const pickFile = vi.fn(async () => []);
     const { host } = createBundleHost(() => fake.editor, MANIFEST, {
       console: silent,
-      shell: { openPanel, closePanel },
+      shell: { openPanel, closePanel, pickFile },
     });
     contributePanel(host, PANEL);
     expect(fake.panels.ids()).toEqual(["media.paged.test.panel.source"]);
@@ -57,7 +58,7 @@ describe("contributePanel", () => {
     const fake = makeFakeEditor();
     const { host } = createBundleHost(() => fake.editor, MANIFEST, {
       console: silent,
-      shell: { openPanel() {}, closePanel() {} },
+      shell: { openPanel() {}, closePanel() {}, async pickFile() { return []; } },
     });
     const d = contributePanel(host, PANEL);
     d.dispose();

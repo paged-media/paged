@@ -40,6 +40,8 @@ export type {
   FrameChainLink,
   OverlaySurface,
   ShellSurface,
+  FilePickerOptions,
+  PickedFile,
   StorageSurface,
   NetworkSurface,
   ConsentResult,

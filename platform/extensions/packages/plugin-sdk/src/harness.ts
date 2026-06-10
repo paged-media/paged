@@ -46,6 +46,8 @@ import type {
   EditContextContribution,
   ElementId,
   ElementGeometryItem,
+  ExporterContribution,
+  ImporterContribution,
   KeybindingContribution,
   MainToWorkerKind,
   Mutation,
@@ -86,7 +88,9 @@ export interface RecordedContribution {
     | "keybinding"
     | "overlay"
     | "editContext"
-    | "objectType";
+    | "objectType"
+    | "importer"
+    | "exporter";
   id: string;
   value:
     | ToolContribution
@@ -96,7 +100,9 @@ export interface RecordedContribution {
     | KeybindingContribution
     | OverlayContribution
     | EditContextContribution
-    | ObjectTypeContribution;
+    | ObjectTypeContribution
+    | ImporterContribution
+    | ExporterContribution;
 }
 
 export interface HarnessOptions
@@ -131,6 +137,12 @@ export interface HeadlessHost {
   /** Object types registered through `contribute.objectType` — the W3.2
    *  surface (W-03), recorded verbatim. */
   objectTypesContributed(): ObjectTypeContribution[];
+  /** Document importers registered through `contribute.importer` (K-2 /
+   *  S-06), recorded verbatim (extensions + the `import()` callback). */
+  importersContributed(): ImporterContribution[];
+  /** Document exporters registered through `contribute.exporter` (K-2 /
+   *  S-06), recorded verbatim. */
+  exportersContributed(): ExporterContribution[];
   /** The last tool preview a bundle pushed through
    *  `host.overlay.setToolPreview` (B-07). There is no overlay SURFACE
    *  headlessly, but the channel is RECORDED so conformance can assert a
@@ -312,6 +324,8 @@ function makeEngineEditor(
       commands: recordingRegistry<CommandContribution, "command">("command"),
       keybindings: keybindingRegistry,
       overlays: recordingRegistry<OverlayContribution, "overlay">("overlay"),
+      importers: recordingRegistry<ImporterContribution, "importer">("importer"),
+      exporters: recordingRegistry<ExporterContribution, "exporter">("exporter"),
     },
     selection: {
       get elementSelection() {
@@ -475,6 +489,8 @@ export async function createHeadlessHost(
         { type: "webFrame", entry: "doubleClick" },
       ],
       objectTypes: [{ type: "webFrame", bakedFallback: "rectangle" }],
+      importers: ["media.paged.harness.importer.xlsx"],
+      exporters: ["media.paged.harness.exporter.xlsx"],
     },
   };
   let { host, dispose: disposeHostFacades } = buildHost(NEUTRAL, "warn");
@@ -511,6 +527,16 @@ export async function createHeadlessHost(
       return contributions
         .filter((c) => c.kind === "objectType")
         .map((c) => c.value as ObjectTypeContribution);
+    },
+    importersContributed() {
+      return contributions
+        .filter((c) => c.kind === "importer")
+        .map((c) => c.value as ImporterContribution);
+    },
+    exportersContributed() {
+      return contributions
+        .filter((c) => c.kind === "exporter")
+        .map((c) => c.value as ExporterContribution);
     },
     lastToolPreview() {
       return lastPreview;

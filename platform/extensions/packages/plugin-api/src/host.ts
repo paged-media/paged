@@ -24,6 +24,8 @@ import type {
 } from "./wire";
 import type {
   CommandContribution,
+  ExporterContribution,
+  ImporterContribution,
   KeybindingContribution,
   OverlayContribution,
   PagedEditor,
@@ -219,6 +221,24 @@ export interface ContributionSurface {
    * carrier).
    */
   objectType(contribution: ObjectTypeContribution): Disposable;
+  /**
+   * Register a document IMPORTER (K-2 / S-06): claim file extensions /
+   * MIME types so an opened file (File menu, drag-drop, or
+   * `host.shell.pickFile`) routes its bytes to THIS plugin's `import()`
+   * instead of the default IDML loader — the plugin owns what the file
+   * becomes (load into its own engine, lower a range, …; it does not
+   * replace the document unless it chooses to). Capability-gated: the
+   * `id` must be listed in `contributes.importers[]`. Probe
+   * `supports("contribute.importer@1")`.
+   */
+  importer(contribution: ImporterContribution): Disposable;
+  /**
+   * Register a document EXPORTER (K-2 / S-06): produce bytes for a file
+   * type on demand (the export UI lists it and pulls on save).
+   * Capability-gated: the `id` must be listed in
+   * `contributes.exporters[]`.
+   */
+  exporter(contribution: ExporterContribution): Disposable;
 }
 
 // ------------------------------------------------------------ document
@@ -403,6 +423,31 @@ export interface ShellSurface {
    *  Window-menu / panel-rail path). */
   openPanel(panelId: string): void;
   closePanel(panelId: string): void;
+  /** Open the host's file picker and resolve to the chosen files' bytes
+   *  (read at the host boundary — the contract never leaks a DOM `File`,
+   *  so a bundle stays isolate-ready, K-5 / S-11). Resolves to `[]` when
+   *  the user cancels OR no picker is wired (the honest no-picker door);
+   *  probe `host.supports("shell.pickFile@1")` for the latter. */
+  pickFile(options?: FilePickerOptions): Promise<readonly PickedFile[]>;
+}
+
+/** Filter + multiplicity for `ShellSurface.pickFile` (K-5 / S-11). */
+export interface FilePickerOptions {
+  /** Accept filter — extensions (leading dot) and/or MIME types, passed
+   *  straight to the picker's `accept` (e.g. `[".xlsx"]`). Absent = any. */
+  accept?: readonly string[];
+  /** Allow choosing more than one file. Default `false`. */
+  multiple?: boolean;
+}
+
+/** A file the user chose through `pickFile`, bytes already read. */
+export interface PickedFile {
+  /** File name incl. extension. */
+  name: string;
+  /** The file's raw bytes. */
+  bytes: Uint8Array;
+  /** MIME type the browser reported (may be `""`). */
+  mimeType: string;
 }
 
 // -------------------------------------------------------------- storage

@@ -168,4 +168,12 @@ export interface PluginContributions {
     type: string;
     bakedFallback: "group" | "rectangle" | "raster";
   }>;
+  /** Importer ids the bundle registers (K-2 / S-06). Must be namespaced
+   *  by `id`. The rich `ImporterContribution` (extensions, MIME, the
+   *  `import()` callback) is handed in at `host.contribute.importer(...)`
+   *  — the manifest only DECLARES which ids may register. */
+  importers?: string[];
+  /** Exporter ids the bundle registers (K-2 / S-06). Must be namespaced
+   *  by `id`. */
+  exporters?: string[];
 }

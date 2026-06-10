@@ -65,6 +65,8 @@ export const HOST_FEATURES: readonly string[] = [
   "contribute.overlay@1",
   "contribute.editContext@1",
   "contribute.objectType@1",
+  "contribute.importer@1",
+  "contribute.exporter@1",
   "document.mutate@1",
   "document.undo@1",
   "document.collection@1",
@@ -550,6 +552,33 @@ export function createBundleHost(
       if (recorded) return store.add(recorded);
       return store.add(toDisposable(() => {}));
     },
+    // K-2 / S-06 — document IO. Mirrors `command`: namespaced id the
+    // manifest must list, routed to the shell registry. The registry is
+    // OPTIONAL on the handle (a host that hasn't wired it stays
+    // assignable) — when absent the door is a tracked no-op; the headless
+    // harness injects a recording registry so conformance can assert it.
+    importer(c) {
+      assertNamespaced(c.id, "importer");
+      requireDeclared(
+        lists(declared?.importers, c.id),
+        "contribute.importer",
+        `contributes.importers[] must include "${c.id}"`,
+      );
+      const reg = getEditor().registries.importers;
+      if (reg) return store.add(reg.register(c));
+      return store.add(toDisposable(() => {}));
+    },
+    exporter(c) {
+      assertNamespaced(c.id, "exporter");
+      requireDeclared(
+        lists(declared?.exporters, c.id),
+        "contribute.exporter",
+        `contributes.exporters[] must include "${c.id}"`,
+      );
+      const reg = getEditor().registries.exporters;
+      if (reg) return store.add(reg.register(c));
+      return store.add(toDisposable(() => {}));
+    },
   };
 
   // ------------------------------------------------------ document
@@ -1009,6 +1038,15 @@ export function createBundleHost(
     closePanel() {
       /* same contract as openPanel — warn once is enough */
     },
+    async pickFile() {
+      // No picker wired (headless / not-yet-adopted host): the honest
+      // no-picker door resolves empty (probe supports("shell.pickFile@1")).
+      log.warn(
+        `shell.pickFile() ignored — the host app provided no shell actions ` +
+          `(probe with supports("shell.pickFile@1"))`,
+      );
+      return [];
+    },
   };
 
   // --------------------------------------------------------- widgets
@@ -1067,6 +1105,10 @@ export function createBundleHost(
   }
   if (options?.shell) {
     featureSet.add("shell.openPanel@1");
+    // A wired shell implements the file picker too (the ShellSurface
+    // contract mandates pickFile); the flag tells a bundle a real picker
+    // is reachable rather than the empty no-picker door (K-5 / S-11).
+    featureSet.add("shell.pickFile@1");
   }
   if (options?.widgets) {
     featureSet.add("widgets.codeEditor@1");

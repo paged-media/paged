@@ -222,6 +222,18 @@
               }
             }
           }
+        },
+        "importers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "exporters": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       }
     }
