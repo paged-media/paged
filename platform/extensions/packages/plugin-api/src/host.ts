@@ -530,6 +530,91 @@ export interface NetworkSurface {
   consentedOrigins(): readonly string[];
 }
 
+// ------------------------------------------------------ data providers
+//
+// The cross-plugin DATA-PROVIDER registry (paged.data §7.1 / D-09). One plugin
+// PUBLISHES a resolved dataset; another DISCOVERS + reads it — e.g. a sheet
+// sourced from a governed query. They rendezvous ONLY here, never by direct
+// contact (§2.1): the consumer learns a provider's id/category/schema, never the
+// backing plugin's identity, and the consumer API has NO parameter by which it
+// could drive the provider's queries/sources (it reads published data; it cannot
+// induce a fetch). The interchange is the Arrow-aligned columnar shape the data
+// engine emits (`ty`, not `type`, on a field — the same shape it ingests).
+
+/** A field of a provider's schema (Arrow-seam shape). */
+export interface ProviderField {
+  name: string;
+  /** Arrow-aligned logical type: `text|int|float|bool|date|datetime|bytes|null`. */
+  ty: string;
+  nullable?: boolean;
+}
+
+/** A provider's schema descriptor (the half `discover` surfaces without rows). */
+export interface ProviderSchema {
+  fields: ProviderField[];
+}
+
+/** The columnar row payload a provider serves (Arrow-aligned): one array per
+ *  schema field. Opaque to the contract beyond its shape — the consumer maps it
+ *  to its own model. */
+export interface ProviderRecordSet {
+  schema: ProviderSchema;
+  columns: unknown[][];
+  rowCount: number;
+}
+
+/** What a provider hands `register`: a discovery descriptor + a LAZY snapshot
+ *  getter (invoked only when a consumer pulls, in the provider's own realm under
+ *  the provider's own capability/consent) + the current content revision. */
+export interface DataProviderRegistration {
+  id: string;
+  category: string;
+  schema: ProviderSchema;
+  /** An opaque content etag; bump it via the handle when the data changes. */
+  revision: string;
+  getSnapshot(): Promise<ProviderRecordSet> | ProviderRecordSet;
+}
+
+/** The handle a provider holds to signal refresh / tear its provider down. */
+export interface DataProviderHandle {
+  /** Announce a new revision — consumers subscribed via `onDidChange` re-pull. */
+  update(revision: string): void;
+  /** Remove the provider; `discover` stops listing it. */
+  dispose(): void;
+}
+
+/** A discovery record (schema + revision, NO rows). */
+export interface DataProviderInfo {
+  id: string;
+  category: string;
+  schema: ProviderSchema;
+  revision: string;
+}
+
+/** A pulled snapshot (the rows). */
+export interface DataProviderSnapshot {
+  id: string;
+  revision: string;
+  records: ProviderRecordSet;
+}
+
+export interface DataProvidersSurface {
+  /** PROVIDER side — register a named provider (gated on
+   *  `capabilities.dataProviders.publish` ∋ category). Returns a handle to
+   *  signal refresh / dispose. */
+  register(registration: DataProviderRegistration): DataProviderHandle;
+  /** CONSUMER side — enumerate providers by category (schema + revision, NO
+   *  rows). Gated on `capabilities.dataProviders.consume`. Empty when no shared
+   *  registry is wired (graceful absence). */
+  discover(category?: string): readonly DataProviderInfo[];
+  /** CONSUMER side — pull a provider's current snapshot, or `null` if it no
+   *  longer exists. Gated on `consume`. */
+  get(id: string): Promise<DataProviderSnapshot | null>;
+  /** CONSUMER side — fire when a provider's revision changes; re-pull on your
+   *  own schedule. Subscribing to an absent id is inert. */
+  onDidChange(id: string, listener: (revision: string) => void): Disposable;
+}
+
 // ---------------------------------------------------------- diagnostics
 
 export interface Diagnostic {
@@ -619,6 +704,13 @@ export interface BundleHost {
    *  When the host injects no consent backend, every request is DENIED (the
    *  honest no-consent posture) and `supports("network.consent@1")` is false. */
   readonly network: NetworkSurface;
+  /** The cross-plugin DATA-PROVIDER registry (paged.data §7.1 / D-09). A bundle
+   *  PUBLISHES a resolved dataset (gated on `capabilities.dataProviders.publish`)
+   *  and/or DISCOVERS + reads others' (gated on `consume`) — the neutral
+   *  rendezvous, never direct plugin contact. Always present; when the host wires
+   *  no shared registry, `discover()` is empty + `register()` is a no-op and
+   *  `supports("dataProviders@1")` is false (the honest no-registry posture). */
+  readonly dataProviders: DataProvidersSurface;
   readonly diagnostics: DiagnosticsSurface;
   /** Published reactive values (W3.1) — the dynamic half of schema
    *  panels: a bundle publishes named booleans (and JSON values) that

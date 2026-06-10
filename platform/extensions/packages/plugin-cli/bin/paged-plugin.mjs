@@ -94,8 +94,21 @@ function validateManifest(manifest, manifestDir) {
       err(`"capabilities" must be an object`);
     } else {
       for (const key of Object.keys(caps)) {
-        if (!["document", "rendering", "keybindings", "editContext", "assets", "storage", "network", "clipboard", "wasm"].includes(key)) {
+        if (!["document", "rendering", "keybindings", "editContext", "assets", "storage", "network", "dataProviders", "clipboard", "wasm"].includes(key)) {
           err(`unknown capability "${key}"`);
+        }
+      }
+      // D-09: data-provider roles — publish/consume are category string arrays.
+      if (caps.dataProviders !== undefined) {
+        const dp = caps.dataProviders;
+        if (typeof dp !== "object" || dp === null || Array.isArray(dp)) {
+          err(`"capabilities.dataProviders" must be an object`);
+        } else {
+          for (const role of ["publish", "consume"]) {
+            if (dp[role] !== undefined && (!Array.isArray(dp[role]) || !dp[role].every((c) => typeof c === "string"))) {
+              err(`"capabilities.dataProviders.${role}" must be an array of category strings`);
+            }
+          }
         }
       }
       const doc = caps.document;

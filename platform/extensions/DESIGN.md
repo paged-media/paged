@@ -184,6 +184,34 @@ follow-up: the consent-prompt UI + the CSP enforcement. The host-proxied
 large chokepoint for no isolation gain over CSP-per-grant). Full RFC:
 `thoughts/docs/paged/plugin-data/rfc-network-consent.md`.
 
+### 4.6c `host.dataProviders` — the cross-plugin data-provider registry [D-09]
+`register(registration) → handle` (provider side) + `discover(category) /
+get(id) / onDidChange(id, listener)` (consumer side). The §7.1 composition: one
+plugin PUBLISHES a resolved dataset (paged.data — a governed query result) and
+another DISCOVERS + reads it (paged.sheet — a sheet sourced from that query),
+**without any inter-plugin contact** (§2.1). They rendezvous only here. Four
+deliberate choices: (1) **a SHARED registry, not per-host** — unlike
+`host.bindings` (a plugin's own reactive values), this spans plugins, so the
+editor creates ONE `createDataProviderRegistry()` and injects the SAME instance
+into every plugin host via `CreateBundleHostOptions.dataProviders`; the per-plugin
+capability gate lives in the surface (`publish` ∋ category to register, `consume`
+to discover/get). (2) **lazy snapshots** — `register` takes a `getSnapshot()`
+invoked only on a consumer pull, in the PROVIDER's realm under the provider's own
+capability/consent, so a consumer pulling cannot induce a fetch the provider is
+not consented to (composes with D-03 without weakening it). (3) **revision
+etags** — the provider bumps an opaque `revision` via the handle; consumers
+re-pull through `onDidChange`. The data engine's revision is permutation-invariant
+(stabilized content hash), so a row reorder is no spurious refresh. (4) **no
+identity leak / no control** — discovery is by category; `DataProviderInfo`
+carries no backing-plugin identity, and the consumer API has no parameter to hand
+the provider a query/source. Absent a wired registry the door is the honest
+no-registry posture (discover empty, register a no-op, `supports("dataProviders@1")`
+false). The interchange is the Arrow-aligned columnar shape the engine emits
+(`ProviderRecordSet` — fields keyed `ty`, not `type`). Editor follow-up: create
+the registry once + inject it into every `loadBundle`. Full RFCs:
+`thoughts/docs/paged/plugin-data/rfc-data-provider.md` (contract owner),
+`thoughts/docs/paged/plugin-sheets/rfc-data-provider-consumer.md` (consumer).
+
 ### 4.7 `host.diagnostics`
 `set(key, Diagnostic[]) / clear / onDidChange` — per-plugin diagnostic
 store with console mirroring [web §9.1.4: parse errors, unsupported-CSS

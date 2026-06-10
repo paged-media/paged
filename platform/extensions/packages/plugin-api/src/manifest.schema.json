@@ -108,6 +108,15 @@
             }
           ]
         },
+        "dataProviders": {
+          "type": "object",
+          "description": "Data-provider roles (paged.data §7.1 / D-09). 'publish' = categories the bundle may register providers in; 'consume' = categories it may discover + read. The neutral cross-plugin composition; plugins rendezvous at host.dataProviders, never by direct contact.",
+          "additionalProperties": false,
+          "properties": {
+            "publish": { "type": "array", "items": { "type": "string" } },
+            "consume": { "type": "array", "items": { "type": "string" } }
+          }
+        },
         "storage": {
           "type": "object",
           "description": "Persistent binary storage (K-4 / S-08). 'blob' gates the OPFS-backed host.blob byte store; 'quotaBytes' requests a ceiling (host enforces the stricter of it and its hard per-plugin cap).",

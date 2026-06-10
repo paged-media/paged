@@ -28,6 +28,11 @@ import type {
   HitFilter,
   HitResult,
   ConsentResult,
+  DataProvidersSurface,
+  DataProviderRegistration,
+  DataProviderHandle,
+  DataProviderInfo,
+  DataProviderSnapshot,
   Mutation,
   MutationOutcome,
   NetworkSurface,
@@ -240,6 +245,73 @@ export interface BlobStore {
   used(pluginId: string): Promise<number>;
 }
 
+/** The SHARED cross-plugin data-provider registry (paged.data §7.1 / D-09). The
+ *  editor creates ONE (`createDataProviderRegistry`) and injects the SAME
+ *  instance into every plugin host, so a provider plugin and a consumer plugin
+ *  rendezvous through it. The per-plugin capability gate lives in the host
+ *  surface; this backend is the neutral store + fan-out. */
+export interface DataProviderBackend {
+  register(registration: DataProviderRegistration): DataProviderHandle;
+  discover(category?: string): readonly DataProviderInfo[];
+  get(id: string): Promise<DataProviderSnapshot | null>;
+  onDidChange(id: string, listener: (revision: string) => void): Disposable;
+}
+
+/** Build a shared in-memory data-provider registry (D-09). The editor holds ONE
+ *  and injects it into every `createBundleHost` call as `options.dataProviders`;
+ *  providers and consumers (different plugin hosts) meet through it. Reference
+ *  implementation — an RPC/isolate host swaps a proxy with the same contract. */
+export function createDataProviderRegistry(): DataProviderBackend {
+  const providers = new Map<
+    string,
+    { reg: DataProviderRegistration; revision: string }
+  >();
+  const listeners = new Map<string, Set<(revision: string) => void>>();
+  return {
+    register(registration) {
+      providers.set(registration.id, {
+        reg: registration,
+        revision: registration.revision,
+      });
+      return {
+        update(revision) {
+          const entry = providers.get(registration.id);
+          if (entry) entry.revision = revision;
+          for (const l of listeners.get(registration.id) ?? []) l(revision);
+        },
+        dispose() {
+          providers.delete(registration.id);
+        },
+      };
+    },
+    discover(category) {
+      return [...providers.values()]
+        .filter((e) => category === undefined || e.reg.category === category)
+        .map((e) => ({
+          id: e.reg.id,
+          category: e.reg.category,
+          schema: e.reg.schema,
+          revision: e.revision,
+        }));
+    },
+    async get(id) {
+      const entry = providers.get(id);
+      if (!entry) return null;
+      const records = await entry.reg.getSnapshot();
+      return { id, revision: entry.revision, records };
+    },
+    onDidChange(id, listener) {
+      let set = listeners.get(id);
+      if (!set) {
+        set = new Set();
+        listeners.set(id, set);
+      }
+      set.add(listener);
+      return toDisposable(() => set.delete(listener));
+    },
+  };
+}
+
 export interface CreateBundleHostOptions {
   storage?: StorageBacking;
   /** Host-provided network consent (paged.data D-03; base-idea §11): the editor
@@ -247,6 +319,12 @@ export interface CreateBundleHostOptions {
    *  `host.network` denies every origin and `supports("network.consent@1")` is
    *  false (the honest no-consent posture). */
   consent?: ConsentBackend;
+  /** Host-provided SHARED data-provider registry (paged.data §7.1 / D-09): the
+   *  editor creates ONE (`createDataProviderRegistry`) and injects the SAME
+   *  instance into every plugin host, so a provider and a consumer rendezvous
+   *  through it. When absent, `host.dataProviders` discover() is empty +
+   *  register() is a no-op and `supports("dataProviders@1")` is false. */
+  dataProviders?: DataProviderBackend;
   /** Console sink override (tests). */
   console?: Pick<Console, "debug" | "info" | "warn" | "error">;
   /** Shell actions the HOST APP owns (the cockpit's panel placement).
@@ -992,6 +1070,59 @@ export function createBundleHost(
     },
   };
 
+  // ----------------------------------------- data providers (D-09)
+  //
+  // The cross-plugin registry is a SHARED backend (options.dataProviders) the
+  // editor injects identically into every plugin host; this surface adds the
+  // per-plugin capability gate: register needs publish ∋ category, discover/get
+  // need consume. No backend wired → discover empty, register a no-op handle,
+  // get null (graceful absence + the honest no-registry posture).
+  const dpCap = manifest.capabilities?.dataProviders;
+  const mayPublish = (category: string): boolean =>
+    Array.isArray(dpCap?.publish) && dpCap.publish.includes(category);
+  const mayConsume = (category?: string): boolean =>
+    Array.isArray(dpCap?.consume) &&
+    (category === undefined || dpCap.consume.includes(category));
+  const consumeDeclared =
+    Array.isArray(dpCap?.consume) && dpCap.consume.length > 0;
+  const dataProviders: DataProvidersSurface = {
+    register(registration) {
+      requireDeclared(
+        mayPublish(registration.category),
+        "dataProviders.register",
+        `capabilities.dataProviders.publish must include "${registration.category}"`,
+      );
+      if (!options?.dataProviders) {
+        log.warn(
+          `dataProviders.register("${registration.id}") — no shared registry ` +
+            "wired (supports('dataProviders@1') is false; the editor injects one)",
+        );
+        return { update() {}, dispose() {} };
+      }
+      return options.dataProviders.register(registration);
+    },
+    discover(category) {
+      requireDeclared(
+        mayConsume(category),
+        "dataProviders.discover",
+        "capabilities.dataProviders.consume must include the category",
+      );
+      return options?.dataProviders?.discover(category) ?? [];
+    },
+    async get(id) {
+      requireDeclared(
+        consumeDeclared,
+        "dataProviders.get",
+        "capabilities.dataProviders.consume must be declared",
+      );
+      return (await options?.dataProviders?.get(id)) ?? null;
+    },
+    onDidChange(id, listener) {
+      if (!options?.dataProviders) return toDisposable(() => undefined);
+      return store.add(options.dataProviders.onDidChange(id, listener));
+    },
+  };
+
   // --------------------------------------------------- diagnostics
   const diagnosticStore = new Map<string, Diagnostic[]>();
   const diagnosticListeners = new Set<(key: string) => void>();
@@ -1222,6 +1353,12 @@ export function createBundleHost(
     // consent backend is wired, so a bundle can actually obtain a grant (D-03).
     featureSet.add("network.consent@1");
   }
+  if (options?.dataProviders) {
+    // The door always exists (no-registry fallback); this flag means a real
+    // SHARED registry is wired, so providers + consumers can actually
+    // rendezvous (D-09).
+    featureSet.add("dataProviders@1");
+  }
   if (options?.blobStore) {
     // The blob door always exists (no-store fallback); this flag means a
     // real OPFS/backing store is wired, so a bundle can actually persist
@@ -1242,6 +1379,7 @@ export function createBundleHost(
     storage,
     blob,
     network,
+    dataProviders,
     diagnostics,
     bindings,
     widgets,

@@ -27,6 +27,7 @@ export { DisposableStore, toDisposable } from "./disposables";
 export { API_VERSION, satisfiesApiVersion } from "./version";
 export {
   createBundleHost,
+  createDataProviderRegistry,
   HOST_FEATURES,
   ASSET_BUDGETS,
   BLOB_BUDGETS,
@@ -34,6 +35,7 @@ export {
   PluginCapabilityError,
   type BundleHostHandle,
   type ConsentBackend,
+  type DataProviderBackend,
   type CreateBundleHostOptions,
   type DiagnosticsSink,
   type BundleAssetProvider,

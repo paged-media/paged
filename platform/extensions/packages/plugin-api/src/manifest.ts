@@ -98,6 +98,16 @@ export interface PluginCapabilities {
    * is the OUTER bound; consent is the inner gate.
    */
   network?: boolean | NetworkCapability;
+  /**
+   * Data-provider roles (paged.data §7.1 / D-09): the neutral cross-plugin
+   * composition where one plugin PUBLISHES a resolved dataset and another
+   * CONSUMES it (e.g. a sheet sourced from a governed query) — they rendezvous
+   * ONLY at the core `host.dataProviders` registry, never by direct contact.
+   * `publish` = the categories this bundle may register providers in; `consume`
+   * = the categories it may discover + read. A bundle declaring neither role
+   * gets no surface.
+   */
+  dataProviders?: DataProvidersCapability;
   clipboard?: "none" | "vector" | "full";
   /**
    * Declared WebAssembly artifacts the bundle ships and loads at
@@ -131,6 +141,17 @@ export interface NetworkCapability {
   origins: string[] | "consent";
   /** Human-readable reason shown in the consent UI / data-source manifest. */
   purpose?: string;
+}
+
+/** Data-provider roles (paged.data §7.1 / D-09). Categories are a neutral, open
+ *  string vocabulary (`"dataset"`, …) — discovery is BY CATEGORY, never by
+ *  plugin identity. The PROVIDER and CONSUMER plugins each declare only their
+ *  own role; they never name or import each other (§2.1). */
+export interface DataProvidersCapability {
+  /** Categories this bundle MAY register providers in (the publish role). */
+  publish?: string[];
+  /** Categories this bundle MAY discover + read (the consume role). */
+  consume?: string[];
 }
 
 /** Purposes a bundle may declare for a shipped wasm module. A closed
