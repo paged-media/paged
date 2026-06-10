@@ -291,6 +291,52 @@ describe("contribution recording + dispose honesty", () => {
     );
   });
 
+  it("contribute.sceneLayer() is obtainable + no-ops without a channel (C-1)", async () => {
+    live = await open();
+    const host = (await loaded()).host;
+    // No scene channel is wired headlessly — the honest no-op door.
+    expect(host.supports("rendering.sceneLayer@1")).toBe(false);
+    const surface = host.contribute.sceneLayer();
+    // submit/clear resolve (no-op) without throwing; the surface disposes.
+    await expect(
+      surface.submit("media.paged.sheet.grid.f1", {
+        items: [
+          {
+            kind: "strokePath",
+            path: [
+              { op: "moveTo", x: 0, y: 0 },
+              { op: "lineTo", x: 10, y: 0 },
+            ],
+            paint: { r: 0, g: 0, b: 0, a: 1 },
+            width: 1,
+          },
+        ],
+      }),
+    ).resolves.toBeUndefined();
+    await expect(surface.clear("media.paged.sheet.grid.f1")).resolves.toBeUndefined();
+    expect(() => surface.dispose()).not.toThrow();
+  });
+
+  it("contribute.sceneLayer() is gated on rendering ∋ sceneLayer (C-1)", async () => {
+    live = await open();
+    // A bundle whose manifest does NOT declare rendering sceneLayer is
+    // refused (enforce mode — the same gate overlay/hitTest use).
+    const bundle = defineBundle({
+      manifest: {
+        id: "media.paged.proof",
+        name: "proof",
+        version: "1.0.0",
+        apiVersion: "^0.2",
+        capabilities: { document: { read: "broad" } }, // no rendering
+      },
+      activate: (h) => {
+        expect(() => h.contribute.sceneLayer()).toThrow(/rendering/);
+        return { dispose() {} };
+      },
+    });
+    live.loadBundle(bundle);
+  });
+
   it("blob store round-trips bytes + reports usage (K-4 / S-08)", async () => {
     live = await open();
     const host = (await loaded()).host;

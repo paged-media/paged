@@ -30,6 +30,7 @@ import type {
   OverlayContribution,
   PagedEditor,
   PanelContribution,
+  SceneLayer,
   ToolContribution,
   ToolPreviewShape,
 } from "./editor";
@@ -239,6 +240,29 @@ export interface ContributionSurface {
    * `contributes.exporters[]`.
    */
   exporter(contribution: ExporterContribution): Disposable;
+  /**
+   * Open a SCENE-LAYER surface (C-1): submit vector content that renders
+   * INSIDE a frame, in frame-content coordinates — core applies the
+   * frame's `ItemTransform` and clips to the content box (§8.5), so the
+   * plugin never compensates for the transform. The layer lowers through
+   * the same display-list → GPU/CPU path as native content (colour-
+   * managed, print-correct). Capability-gated: `capabilities.rendering`
+   * must include `"sceneLayer"`. Probe `supports("rendering.sceneLayer@1")`
+   * — false when the host wires no scene channel (the surface then warns +
+   * no-ops). The returned surface is disposable: disposing it clears every
+   * layer it submitted.
+   */
+  sceneLayer(): SceneLayerSurface;
+}
+
+/** The scene-layer surface (C-1) returned by `contribute.sceneLayer()`.
+ *  `elementId` is the host `Self` id of the frame to render into. */
+export interface SceneLayerSurface extends Disposable {
+  /** Submit (replacing any previous) the vector layer for `elementId`. */
+  submit(elementId: string, layer: SceneLayer): Promise<void>;
+  /** Clear the layer for `elementId` (returns the frame to native
+   *  content). */
+  clear(elementId: string): Promise<void>;
 }
 
 // ------------------------------------------------------------ document

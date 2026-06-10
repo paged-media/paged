@@ -34,6 +34,7 @@ export type { BundleHandle, PagedBundle } from "./bundle";
 export type {
   BundleHost,
   ContributionSurface,
+  SceneLayerSurface,
   DocumentSurface,
   SelectionSurface,
   ViewportSurface,

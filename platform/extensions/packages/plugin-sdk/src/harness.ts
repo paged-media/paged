@@ -515,7 +515,7 @@ export async function createHeadlessHost(
     apiVersion: `^${API_VERSION.slice(0, 3)}`,
     capabilities: {
       document: { read: "broad", write: "broad" },
-      rendering: ["overlay", "hitTest"],
+      rendering: ["overlay", "hitTest", "sceneLayer"],
       keybindings: true,
       storage: { blob: true },
     },

@@ -44,6 +44,7 @@ import type {
   PluginManifest,
   PluginMetadataEnvelope,
   SceneTreeNode,
+  SceneLayerSurface,
   SchemaPanelContribution,
   SchemaPanelRenderer,
   SelectionMode,
@@ -689,6 +690,49 @@ export function createBundleHost(
       if (reg) return store.add(reg.register(c));
       return store.add(toDisposable(() => {}));
     },
+    // C-1 — the in-frame scene-layer surface. Capability-gated on
+    // `rendering ∋ sceneLayer`; routes submit/clear to the editor's scene
+    // channel (`getEditor().sceneLayers` → canvas-wasm submit/clear). When
+    // no channel is wired (headless / older editor) the surface warns +
+    // no-ops (probe `supports("rendering.sceneLayer@1")`). Disposing the
+    // surface clears every layer it submitted (tracked so host.dispose()
+    // tears them down).
+    sceneLayer() {
+      requireDeclared(
+        hasRendering("sceneLayer"),
+        "contribute.sceneLayer",
+        'capabilities.rendering must include "sceneLayer"',
+      );
+      const submitted = new Set<string>();
+      const channel = () => getEditor().sceneLayers;
+      const surface: SceneLayerSurface = {
+        async submit(elementId, layer) {
+          const ch = channel();
+          if (!ch) {
+            log.warn(
+              `contribute.sceneLayer().submit("${elementId}") ignored — the ` +
+                `host wired no scene channel (probe ` +
+                `supports("rendering.sceneLayer@1"))`,
+            );
+            return;
+          }
+          submitted.add(elementId);
+          await ch.submit(elementId, layer);
+        },
+        async clear(elementId) {
+          submitted.delete(elementId);
+          await channel()?.clear(elementId);
+        },
+        dispose() {
+          const ch = channel();
+          if (ch) {
+            for (const id of submitted) void ch.clear(id);
+          }
+          submitted.clear();
+        },
+      };
+      return store.add(surface);
+    },
   };
 
   // ------------------------------------------------------ document
@@ -1325,6 +1369,13 @@ export function createBundleHost(
     // flag means "a real engine shaper is wired" — a bundle probes it to
     // decide whether to trust measured widths for cross-surface fidelity.
     featureSet.add("text.measure@1");
+  }
+  if (getEditor().sceneLayers) {
+    // C-1 — a real scene channel is wired (the editor routes to the
+    // canvas-wasm submit/clear). The contribute.sceneLayer() door always
+    // exists (warns + no-ops without this); the flag tells a bundle the
+    // in-frame layer will actually render.
+    featureSet.add("rendering.sceneLayer@1");
   }
   if (options?.shell) {
     featureSet.add("shell.openPanel@1");
