@@ -19,6 +19,7 @@ import type {
   DiagnosticsSurface,
   Disposable,
   DocumentChangeEvent,
+  FrameChainLink,
   DocumentSurface,
   EditContextContribution,
   ElementId,
@@ -67,6 +68,7 @@ export const HOST_FEATURES: readonly string[] = [
   "document.mutate@1",
   "document.undo@1",
   "document.collection@1",
+  "document.frameChain@1",
   "document.meta@1",
   "document.pathAnchors@1",
   "document.hitTest@1",
@@ -726,6 +728,14 @@ export function createBundleHost(
         },
       });
     },
+    async frameChain(storyId: string): Promise<FrameChainLink[]> {
+      requireDocRead("document.frameChain");
+      const reply = await getEditor().client.send({
+        kind: "requestFrameChain",
+        payload: { storyId },
+      });
+      return reply.kind === "frameChainResult" ? reply.payload.links : [];
+    },
     onDidChange(listener: (e: DocumentChangeEvent) => void): Disposable {
       requireDocRead("document.onDidChange");
       const off = getEditor().client.subscribe((msg) => {
@@ -734,7 +744,18 @@ export function createBundleHost(
           msg.kind === "undoApplied" ||
           msg.kind === "redoApplied"
         ) {
-          listener({ kind: msg.kind, pageIds: msg.payload.pageIds });
+          // Reflow (v38, C-2): only `mutationApplied` carries it, and only
+          // when a resizeFrame changed a content box (§8.5). Pass it through
+          // so a pagination consumer re-splits on resize, not on transform.
+          const reflow =
+            msg.kind === "mutationApplied" ? msg.payload.reflow : undefined;
+          listener({
+            kind: msg.kind,
+            pageIds: msg.payload.pageIds,
+            ...(reflow
+              ? { reflow: { frameId: reflow.frameId, contentBox: reflow.contentBox } }
+              : {}),
+          });
         }
       });
       return store.add(toDisposable(off));

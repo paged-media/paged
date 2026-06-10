@@ -37,6 +37,7 @@ export type {
   ViewportSurface,
   TextSurface,
   TextMetrics,
+  FrameChainLink,
   OverlaySurface,
   ShellSurface,
   StorageSurface,

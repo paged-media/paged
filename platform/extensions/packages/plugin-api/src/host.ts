@@ -232,6 +232,21 @@ export type MutationOutcome =
 export interface DocumentChangeEvent {
   kind: "mutationApplied" | "undoApplied" | "redoApplied";
   pageIds: PageId[];
+  /** Content-box reflow (protocol v38, C-2/S-05): present ONLY when the
+   *  change RESIZED a frame's content box (a `resizeFrame`) — never on a
+   *  pure transform (move/scale/rotate is display-only, §8.5). A
+   *  pagination consumer re-splits on this and ignores transform-only
+   *  changes (where it is absent). */
+  reflow?: { frameId: string; contentBox: [number, number, number, number] };
+}
+
+/** One link in a text-frame thread (protocol v38, C-2/S-05). `next` is
+ *  the following frame's id (null at the tail); `overflow` marks the tail
+ *  frame as overset (story content past the chain end). */
+export interface FrameChainLink {
+  frameId: string;
+  next: string | null;
+  overflow: boolean;
 }
 
 /**
@@ -254,6 +269,12 @@ export interface DocumentSurface {
   ): Promise<HitResult | null>;
   elementGeometry(ids: ElementId[]): Promise<ElementGeometryItem[]>;
   tree(): Promise<SceneTreeNode[]>;
+  /** Read a text frame's thread topology (protocol v38, C-2/S-05) — the
+   *  ordered chain of frames a story flows through, tail-overflow flagged.
+   *  Empty when the story has no frame or no document is loaded. A
+   *  pagination consumer reads this to know the real host chain (rather
+   *  than a caller-supplied one). */
+  frameChain(storyId: string): Promise<FrameChainLink[]>;
   onDidChange(listener: (e: DocumentChangeEvent) => void): Disposable;
   /**
    * Plugin-metadata carrier (protocol v33) — read this plugin's
