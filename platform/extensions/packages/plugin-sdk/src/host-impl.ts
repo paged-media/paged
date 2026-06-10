@@ -13,6 +13,7 @@
 import type {
   AssetSurface,
   BindingsSurface,
+  BlobSurface,
   BundleHost,
   ContributionSurface,
   Diagnostic,
@@ -215,6 +216,30 @@ export interface BundleAssetProvider {
   ): Promise<FontFaceAsset | null>;
 }
 
+/** Blob-store budgets (K-4 / S-08). The default per-plugin quota when a
+ *  manifest requests none; a manifest's `storage.quotaBytes` may only
+ *  TIGHTEN it (the adapter enforces the stricter). */
+export const BLOB_BUDGETS = {
+  /** Default per-plugin blob ceiling, in bytes (64 MiB). */
+  defaultQuotaBytes: 64 * 1024 * 1024,
+} as const;
+
+/**
+ * The backend the editor injects to back `host.blob` (K-4 / S-08): a
+ * RAW per-plugin byte store (OPFS in-browser; an in-memory map in the
+ * headless harness). The SDK adapter owns namespacing (passes the
+ * plugin id), the capability gate, and the quota — the backend only does
+ * scoped IO. Keys are opaque strings the adapter forwards verbatim.
+ */
+export interface BlobStore {
+  write(pluginId: string, key: string, bytes: Uint8Array): Promise<void>;
+  read(pluginId: string, key: string): Promise<Uint8Array | null>;
+  delete(pluginId: string, key: string): Promise<void>;
+  keys(pluginId: string): Promise<string[]>;
+  /** Total bytes this plugin currently stores. */
+  used(pluginId: string): Promise<number>;
+}
+
 export interface CreateBundleHostOptions {
   storage?: StorageBacking;
   /** Host-provided network consent (paged.data D-03; base-idea §11): the editor
@@ -276,6 +301,12 @@ export interface CreateBundleHostOptions {
    *  asset read answers `null` (the honest no-bytes door) and the
    *  feature flag is false. */
   assetSource?: BundleAssetProvider;
+  /** Host-provided BLOB backend (K-4 / S-08). When present,
+   *  `host.blob.*` persists per-plugin bytes through it (capability-
+   *  gated, quota-clamped) and `supports("storage.blob@1")` answers true.
+   *  When absent, reads answer empty and writes reject (the honest
+   *  no-store door). */
+  blobStore?: BlobStore;
   /**
    * How the host treats a declaration↔use mismatch — a bundle that
    * USES a door (`contribute.tool`, `document.mutate`, …) it did not
@@ -347,6 +378,7 @@ export function createBundleHost(
     caps?.rendering?.includes(s) ?? false;
   const hasAsset = (k: "fonts" | "images"): boolean =>
     caps?.assets?.includes(k) ?? false;
+  const hasBlobStore = (): boolean => caps?.storage?.blob === true;
   const lists = (
     arr: readonly string[] | undefined,
     id: string,
@@ -1096,6 +1128,66 @@ export function createBundleHost(
     },
   };
 
+  // --------------------------------------------------------- blob
+  // The capability-gated binary store (K-4 / S-08). Per-plugin namespaced
+  // (the adapter passes manifest.id; the backend scopes by it), quota-
+  // clamped (the stricter of the host default and the manifest's
+  // requested storage.quotaBytes). No backend injected → reads answer
+  // empty, writes reject (the honest no-store door); supports() is false.
+  const blobBackend = options?.blobStore;
+  const blobQuota = Math.min(
+    BLOB_BUDGETS.defaultQuotaBytes,
+    caps?.storage?.quotaBytes ?? BLOB_BUDGETS.defaultQuotaBytes,
+  );
+  const blobGate = (door: string): void =>
+    requireDeclared(
+      hasBlobStore(),
+      door,
+      'capabilities.storage must include { blob: true }',
+    );
+  const blob: BlobSurface = {
+    async write(key, bytes) {
+      blobGate("blob.write");
+      if (!blobBackend) {
+        throw new Error(
+          `host.blob.write("${key}") — no blob store wired ` +
+            `(supports("storage.blob@1") is false; the editor injects one)`,
+        );
+      }
+      // Overwrite = delete-then-write so `used` already excludes the old
+      // value; then the quota check is a simple projected-total compare.
+      await blobBackend.delete(manifest.id, key);
+      const used = await blobBackend.used(manifest.id);
+      if (used + bytes.byteLength > blobQuota) {
+        throw new Error(
+          `host.blob.write("${key}") — ${bytes.byteLength} bytes would ` +
+            `exceed the ${blobQuota}-byte quota (used ${used}) — refused`,
+        );
+      }
+      await blobBackend.write(manifest.id, key, bytes);
+    },
+    async read(key) {
+      blobGate("blob.read");
+      if (!blobBackend) return null;
+      return blobBackend.read(manifest.id, key);
+    },
+    async delete(key) {
+      blobGate("blob.delete");
+      if (!blobBackend) return;
+      await blobBackend.delete(manifest.id, key);
+    },
+    async keys() {
+      blobGate("blob.keys");
+      if (!blobBackend) return [];
+      return blobBackend.keys(manifest.id);
+    },
+    async usage() {
+      blobGate("blob.usage");
+      if (!blobBackend) return { used: 0, quota: 0 };
+      return { used: await blobBackend.used(manifest.id), quota: blobQuota };
+    },
+  };
+
   const featureSet = new Set(HOST_FEATURES);
   if (getEditor().text) {
     // The door always exists (it falls back to an estimate); the FEATURE
@@ -1130,6 +1222,12 @@ export function createBundleHost(
     // consent backend is wired, so a bundle can actually obtain a grant (D-03).
     featureSet.add("network.consent@1");
   }
+  if (options?.blobStore) {
+    // The blob door always exists (no-store fallback); this flag means a
+    // real OPFS/backing store is wired, so a bundle can actually persist
+    // bytes (K-4 / S-08).
+    featureSet.add("storage.blob@1");
+  }
 
   const host: BundleHost = {
     manifest,
@@ -1142,6 +1240,7 @@ export function createBundleHost(
     overlay,
     shell,
     storage,
+    blob,
     network,
     diagnostics,
     bindings,

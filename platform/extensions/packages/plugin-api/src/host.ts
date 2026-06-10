@@ -462,6 +462,38 @@ export interface StorageSurface {
   keys(): string[];
 }
 
+// ----------------------------------------------------------------- blob
+
+/** Per-plugin usage + the granted ceiling, in bytes (`BlobSurface.usage`). */
+export interface BlobUsage {
+  /** Bytes this plugin currently stores. */
+  used: number;
+  /** The granted ceiling in bytes — the stricter of the host's hard
+   *  per-plugin cap and the manifest's requested `storage.quotaBytes`.
+   *  `0` when no store is wired. */
+  quota: number;
+}
+
+/**
+ * Persistent BINARY blob storage (K-4 / S-08): an OPFS-backed,
+ * per-plugin, quota-bounded store for bytes too large for the KV
+ * `host.storage` (multi-MB workbook bytes, decode spill). Keys are
+ * namespaced to THIS plugin (a bundle never sees another's bytes).
+ * Capability-gated: every door requires `capabilities.storage` ∋
+ * `blob: true`. Always present — when the host injects no backend a
+ * `read` answers `null`, `keys` is `[]`, `usage` is `{used:0,quota:0}`,
+ * and a `write` REJECTS (the honest no-store door; probe
+ * `supports("storage.blob@1")` first). A `write` that would exceed the
+ * granted quota rejects.
+ */
+export interface BlobSurface {
+  write(key: string, bytes: Uint8Array): Promise<void>;
+  read(key: string): Promise<Uint8Array | null>;
+  delete(key: string): Promise<void>;
+  keys(): Promise<string[]>;
+  usage(): Promise<BlobUsage>;
+}
+
 // -------------------------------------------------------------- network
 //
 // The capability-gated NETWORK CONSENT door (paged.data D-03; base-idea §11).
@@ -575,6 +607,13 @@ export interface BundleHost {
   readonly overlay: OverlaySurface;
   readonly shell: ShellSurface;
   readonly storage: StorageSurface;
+  /** The capability-gated BINARY blob store (K-4 / S-08): OPFS-backed,
+   *  per-plugin, quota-bounded bytes for payloads too large for the KV
+   *  `storage`. Always present; gated on `capabilities.storage` ∋ blob.
+   *  When the host injects no backend, reads answer null / `[]` /
+   *  `{used:0,quota:0}`, writes reject, and `supports("storage.blob@1")`
+   *  is false (the honest no-store door). */
+  readonly blob: BlobSurface;
   /** The capability-gated NETWORK CONSENT door (D-03; base-idea §11). Always
    *  present; gated on `capabilities.network` and per-origin user consent.
    *  When the host injects no consent backend, every request is DENIED (the

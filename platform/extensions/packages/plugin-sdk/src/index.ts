@@ -29,6 +29,7 @@ export {
   createBundleHost,
   HOST_FEATURES,
   ASSET_BUDGETS,
+  BLOB_BUDGETS,
   PluginApiNotImplemented,
   PluginCapabilityError,
   type BundleHostHandle,
@@ -36,6 +37,7 @@ export {
   type CreateBundleHostOptions,
   type DiagnosticsSink,
   type BundleAssetProvider,
+  type BlobStore,
   type StorageBacking,
 } from "./host-impl";
 export { FALLBACK_WIDGETS } from "./widgets-fallback";

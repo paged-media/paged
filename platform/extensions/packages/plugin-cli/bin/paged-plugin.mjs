@@ -94,7 +94,7 @@ function validateManifest(manifest, manifestDir) {
       err(`"capabilities" must be an object`);
     } else {
       for (const key of Object.keys(caps)) {
-        if (!["document", "rendering", "keybindings", "editContext", "assets", "network", "clipboard", "wasm"].includes(key)) {
+        if (!["document", "rendering", "keybindings", "editContext", "assets", "storage", "network", "clipboard", "wasm"].includes(key)) {
           err(`unknown capability "${key}"`);
         }
       }
@@ -138,6 +138,22 @@ function validateManifest(manifest, manifestDir) {
       }
       if (caps.editContext !== undefined && !isStringArray(caps.editContext)) {
         err(`"capabilities.editContext" must be a string array`);
+      }
+      // K-4 / S-08: persistent binary storage — { blob?: boolean, quotaBytes?: integer }.
+      if (caps.storage !== undefined) {
+        const s = caps.storage;
+        if (typeof s !== "object" || s === null || Array.isArray(s)) {
+          err(`"capabilities.storage" must be an object`);
+        } else {
+          const extra = Object.keys(s).filter((k) => !["blob", "quotaBytes"].includes(k));
+          if (extra.length) err(`"capabilities.storage" unknown key(s): ${extra.join(", ")}`);
+          if (s.blob !== undefined && typeof s.blob !== "boolean") {
+            err(`"capabilities.storage.blob" must be a boolean`);
+          }
+          if (s.quotaBytes !== undefined && !Number.isInteger(s.quotaBytes)) {
+            err(`"capabilities.storage.quotaBytes" must be an integer`);
+          }
+        }
       }
       // D-03: network is the legacy boolean OR a structured per-origin
       // declaration { origins: string[] | "consent", purpose?: string }. Reach

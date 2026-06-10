@@ -291,6 +291,31 @@ describe("contribution recording + dispose honesty", () => {
     );
   });
 
+  it("blob store round-trips bytes + reports usage (K-4 / S-08)", async () => {
+    live = await open();
+    const host = (await loaded()).host;
+    // The harness injects an in-memory blob store, so the door is live.
+    expect(host.supports("storage.blob@1")).toBe(true);
+    expect(await host.blob.read("workbook")).toBeNull();
+
+    const bytes = new Uint8Array([5, 6, 7, 8]);
+    await host.blob.write("workbook", bytes);
+    expect(Array.from((await host.blob.read("workbook"))!)).toEqual([
+      5, 6, 7, 8,
+    ]);
+    expect(await host.blob.keys()).toEqual(["workbook"]);
+    const usage = await host.blob.usage();
+    expect(usage.used).toBe(4);
+    expect(usage.quota).toBeGreaterThan(0);
+
+    // Overwrite replaces (usage does not double-count), then delete clears.
+    await host.blob.write("workbook", new Uint8Array([9]));
+    expect((await host.blob.usage()).used).toBe(1);
+    await host.blob.delete("workbook");
+    expect(await host.blob.read("workbook")).toBeNull();
+    expect(await host.blob.keys()).toEqual([]);
+  });
+
   it("records the B-07 path/cubic tool preview headlessly (no overlay surface)", async () => {
     live = await open();
     // A loaded bundle that declares the overlay rendering capability —

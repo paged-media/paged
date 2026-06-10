@@ -76,6 +76,17 @@ export interface PluginCapabilities {
    * DESIGN.md §13. */
   assets?: AssetKind[];
   /**
+   * Persistent BINARY storage the bundle uses (K-4 / S-08). The KV
+   * `host.storage` (localStorage JSON) is always available ungated; this
+   * capability gates the OPFS-backed `host.blob` byte store for payloads
+   * too large for KV (multi-MB workbook bytes, decode spill). Declaring
+   * `blob: true` is the prerequisite for every `host.blob` door (the host
+   * gate throws on an undeclared use). `quotaBytes`, when present,
+   * REQUESTS a ceiling — the host enforces the stricter of it and its
+   * hard per-plugin cap; `host.blob.usage()` reports the granted value.
+   */
+  storage?: StorageCapability;
+  /**
    * Network reach the bundle declares (paged.data D-03; base-idea §11). The
    * boolean form is the legacy shorthand (`true` = the bundle reaches the
    * network, every origin still gated behind runtime consent; `false`/absent =
@@ -101,6 +112,14 @@ export interface PluginCapabilities {
    * JS. Threads/SharedArrayBuffer are OFF in v1.
    */
   wasm?: WasmArtifact[];
+}
+
+/** Persistent binary-storage declaration (K-4 / S-08). `blob` gates the
+ *  OPFS-backed `host.blob` byte store; `quotaBytes` requests a ceiling
+ *  (the host enforces the stricter of it and its hard per-plugin cap). */
+export interface StorageCapability {
+  blob?: boolean;
+  quotaBytes?: number;
 }
 
 /** A structured network declaration (paged.data D-03; base-idea §11). The

@@ -108,6 +108,15 @@
             }
           ]
         },
+        "storage": {
+          "type": "object",
+          "description": "Persistent binary storage (K-4 / S-08). 'blob' gates the OPFS-backed host.blob byte store; 'quotaBytes' requests a ceiling (host enforces the stricter of it and its hard per-plugin cap).",
+          "additionalProperties": false,
+          "properties": {
+            "blob": { "type": "boolean" },
+            "quotaBytes": { "type": "integer" }
+          }
+        },
         "clipboard": {
           "enum": [
             "none",

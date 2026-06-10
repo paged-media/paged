@@ -23,6 +23,7 @@ export type {
   PluginCapabilities,
   PluginContributions,
   NetworkCapability,
+  StorageCapability,
   WasmArtifact,
   WasmPurpose,
 } from "./manifest";
@@ -43,6 +44,8 @@ export type {
   FilePickerOptions,
   PickedFile,
   StorageSurface,
+  BlobSurface,
+  BlobUsage,
   NetworkSurface,
   ConsentResult,
   DiagnosticsSurface,

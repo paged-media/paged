@@ -67,6 +67,7 @@ import type {
 
 import {
   createBundleHost,
+  type BlobStore,
   type CreateBundleHostOptions,
 } from "./host-impl";
 import { satisfiesApiVersion, API_VERSION } from "./version";
@@ -109,8 +110,40 @@ export interface HarnessOptions
   extends LoadHeadlessEngineOptions,
     Pick<
       CreateBundleHostOptions,
-      "console" | "storage" | "capabilityMode" | "assetSource"
+      "console" | "storage" | "capabilityMode" | "assetSource" | "blobStore"
     > {}
+
+/** A headless in-memory `BlobStore` — per-plugin byte maps, so the
+ *  conformance harness exercises `host.blob` (K-4 / S-08) without OPFS.
+ *  Default-injected so `supports("storage.blob@1")` is true headlessly. */
+export function inMemoryBlobStore(): BlobStore {
+  const byPlugin = new Map<string, Map<string, Uint8Array>>();
+  const dir = (id: string) => {
+    let d = byPlugin.get(id);
+    if (!d) byPlugin.set(id, (d = new Map()));
+    return d;
+  };
+  return {
+    async write(id, key, bytes) {
+      dir(id).set(key, bytes.slice());
+    },
+    async read(id, key) {
+      const v = dir(id).get(key);
+      return v ? v.slice() : null;
+    },
+    async delete(id, key) {
+      dir(id).delete(key);
+    },
+    async keys(id) {
+      return Array.from(dir(id).keys());
+    },
+    async used(id) {
+      let n = 0;
+      for (const v of dir(id).values()) n += v.byteLength;
+      return n;
+    },
+  };
+}
 
 /** What `createHeadlessHost` resolves to: a real engine-backed host plus
  *  the conformance affordances (load an IDML, read the contribution log,
@@ -396,6 +429,11 @@ export async function createHeadlessHost(
   // directly, not a subject of the capability gate. A LOADED bundle is
   // the subject — it gets the option's mode (default 'enforce'), so
   // conformance proves the bundle's manifest declarations are complete.
+  // One in-memory blob store shared across the harness's hosts (so a
+  // reloaded bundle sees its own persisted bytes — K-4 / S-08), unless a
+  // test injects its own.
+  const blobStore = options.blobStore ?? inMemoryBlobStore();
+
   const buildHost = (
     manifest: PluginManifest,
     mode: CreateBundleHostOptions["capabilityMode"],
@@ -403,6 +441,7 @@ export async function createHeadlessHost(
     createBundleHost(() => editor, manifest, {
       console: options.console,
       storage: options.storage,
+      blobStore,
       capabilityMode: mode,
       // W-06 — a recordable fake asset source the conformance harness
       // can pass so a bundle's `@font-face` byte path is exercisable
@@ -478,6 +517,7 @@ export async function createHeadlessHost(
       document: { read: "broad", write: "broad" },
       rendering: ["overlay", "hitTest"],
       keybindings: true,
+      storage: { blob: true },
     },
     // Broad contribution declarations so the neutral DRIVER host (which
     // registers arbitrary contributions directly in 'warn' mode) never
