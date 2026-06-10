@@ -69,6 +69,7 @@ export type {
   ObjectTypeContribution,
   EditContextCandidate,
   EnteredEditContext,
+  ContentPointerEvent,
   EditContextDescriptor,
   ObjectTypeDescriptor,
   PluginMetadataEnvelope,

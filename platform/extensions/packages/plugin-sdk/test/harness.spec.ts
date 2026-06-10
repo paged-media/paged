@@ -245,6 +245,38 @@ describe("contribution recording + dispose honesty", () => {
     ]);
   });
 
+  it("an editContext carries the K-1 modal + content-pointer handlers", async () => {
+    live = await open();
+    const host = (await loaded()).host;
+    const seen: string[] = [];
+    let dirty = true;
+    host.contribute.editContext({
+      type: "vectorGraphic",
+      entry: "doubleClick",
+      onContentPointerDown: (e) => seen.push(`down@${e.contentPoint.join(",")}`),
+      onContentPointerMove: () => seen.push("move"),
+      onContentPointerUp: () => seen.push("up"),
+      onContentKey: (e) => seen.push(`key:${e.key}`),
+      isDirty: () => dirty,
+      onCommit: () => seen.push("commit"),
+      onCancel: () => seen.push("cancel"),
+    });
+    const ec = live!.editContextsContributed()[0];
+    // The handlers survive registration verbatim — the editor calls them
+    // at pointer/commit time with frame-content coords (K-1 wiring).
+    expect(typeof ec.onContentPointerDown).toBe("function");
+    expect(typeof ec.onCommit).toBe("function");
+    expect(ec.isDirty?.()).toBe(true);
+    ec.onContentPointerDown?.({
+      contentPoint: [12, 34],
+      elementId: "media.paged.sheet.frame1",
+      modifiers: { shift: false, alt: false, cmd: false, ctrl: false },
+      button: 0,
+    });
+    ec.onCommit?.();
+    expect(seen).toEqual(["down@12,34", "commit"]);
+  });
+
   it("records importer + exporter contributions (K-2 / S-06)", async () => {
     live = await open();
     const host = (await loaded()).host;

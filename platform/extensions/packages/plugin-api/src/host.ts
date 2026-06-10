@@ -124,6 +124,28 @@ export interface EditContextContribution {
   /** Called when the context pops (Esc, or a programmatic exit), before
    *  the stack unwinds. */
   onExit?(ctx: EnteredEditContext): void;
+  /** K-1 — pointer inside the context's frame, delivered in FRAME-CONTENT
+   *  coordinates: the editor resolved the frame's content transform
+   *  (`frame_outer ∘ content-box offset`), inverted it, and mapped the
+   *  page-space pointer into the plugin's own space — so the plugin (a
+   *  sheet grid) hit-tests in content coords regardless of how the frame
+   *  is moved / scaled / rotated (§8.5 — the plugin never compensates).
+   *  Optional: a context that doesn't edit by pointer omits them. */
+  onContentPointerDown?(e: ContentPointerEvent): void;
+  onContentPointerMove?(e: ContentPointerEvent): void;
+  onContentPointerUp?(e: ContentPointerEvent): void;
+  /** K-1 — a key while the context is active. The shell owns Esc (→
+   *  `onCancel`) and Enter (→ `onCommit`); every other key forwards here. */
+  onContentKey?(e: KeyboardEvent): void;
+  /** K-1 — unsaved-edit probe: gates the discard prompt + the §8.0
+   *  seamless-undo boundary. Absent ⇒ treated as never dirty. */
+  isDirty?(): boolean;
+  /** K-1 — modal COMMIT (Enter / a click outside the frame): keep the
+   *  in-flight edits. Fires before `onExit`. */
+  onCommit?(): void;
+  /** K-1 — modal CANCEL (Esc): revert the in-flight edits. Fires before
+   *  `onExit`. */
+  onCancel?(): void;
   /** HOST-STAMPED, not author-supplied: the `x-paged:<manifest id>`
    *  metadata key the host resolves the candidate's `metadata` from
    *  before calling `matches`. The SDK adapter fills this from the
@@ -137,6 +159,19 @@ export interface EnteredEditContext {
   type: string;
   /** The element the context was entered on (the write-scope root). */
   id: ElementId;
+}
+
+/** K-1 — a pointer delivered to the ACTIVE edit context, in FRAME-CONTENT
+ *  coordinates (the editor inverted the frame's content transform). */
+export interface ContentPointerEvent {
+  /** Pointer in frame-content points (origin = the content-box top-left,
+   *  x right, y down). */
+  contentPoint: [number, number];
+  /** The frame the active context edits (the stack's scope root). */
+  elementId: string;
+  modifiers: { shift: boolean; alt: boolean; cmd: boolean; ctrl: boolean };
+  /** Mouse button (0 = primary). */
+  button: number;
 }
 
 /**
