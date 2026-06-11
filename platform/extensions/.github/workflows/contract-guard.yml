@@ -1,0 +1,33 @@
+# Bump-on-contract-change guard (audit 2026-06-11, 03 P2).
+#
+# Catches the exact regression that left the npm canary two protocols
+# behind contract HEAD: a change to a package's published src/ that ships
+# WITHOUT a version bump, which publish.yml then silently no-ops. Runs on
+# every push to main and on PRs (so it catches the miss before merge if
+# PRs are used, and immediately after if not).
+name: contract-guard
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  bump-on-contract-change:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Need the base commit present locally for the diff. Full
+          # history is the simplest reliable way to reach an arbitrary
+          # PR base or a force-push `before`.
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: assert contract changes carry a version bump
+        env:
+          # PR: diff against the PR base. Push: diff against the prior
+          # trunk tip. The script falls back to HEAD~1 if both are empty.
+          CONTRACT_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: node scripts/assert-contract-bumped.mjs
