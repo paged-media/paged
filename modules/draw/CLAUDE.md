@@ -21,9 +21,9 @@ geometry/tools via pnpm `link:` and wraps the machines in thin
   `@paged-media/plugin-api`. Never import `@paged-media/shell` /
   `@paged-media/client` / React here — that's the editor shim's job. If a
   machine seems to need host state, the missing piece is an event/option
-  on the machine API or a `BREAKAGE_LOG.md` entry.
+  on the machine API or an RFI gap (the BREAKAGE_LOG was retired 2026-06-12, fully drained).
 - **`@paged-media/plugin-api` is the only sanctioned contract import.**
-  A need it can't meet goes to `BREAKAGE_LOG.md` (numbered `B-NN`); the
+  A need it can't meet goes to the cross-repo RFI (`thoughts/docs/paged/plugin-platform/rfi-core-sdk-gaps.md`); the
   log is the API-v1 punch list — keep it current, mark entries RESOLVED
   with a pointer when host/core work lands.
 - **Machines stay pure + unit-tested.** Page-local pt in, snapshots/plans
