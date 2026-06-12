@@ -146,6 +146,24 @@ export interface EditContextContribution {
   /** K-1 — modal CANCEL (Esc): revert the in-flight edits. Fires before
    *  `onExit`. */
   onCancel?(): void;
+  /** ADR-012 Tier 1 — in-session undo OWNERSHIP. While this context is
+   *  active and declares these hooks, the shell routes Cmd-Z /
+   *  Cmd-Shift-Z HERE (the plugin's own op-log — for sheets, workbook
+   *  Operations) instead of the document undo stack; the document stack
+   *  is suspended until exit (Tier 2: commit-exit re-lowers the net
+   *  change as ONE atomic batch = one document undo step). Return
+   *  `true` when a step was un/re-done, `false` when this context's log
+   *  is exhausted (the shell does NOT fall through to the document
+   *  stack mid-session — the boundary is the modal entry/exit,
+   *  ADR-012). Absent ⇒ the context doesn't own undo and the document
+   *  stack behaves as ever. */
+  onUndo?(): boolean;
+  onRedo?(): boolean;
+  /** ADR-012 — enablement probes for the un/redo affordances while the
+   *  context owns the stack. Absent (with `onUndo` present) ⇒ assumed
+   *  always enabled. */
+  onCanUndo?(): boolean;
+  onCanRedo?(): boolean;
   /** HOST-STAMPED, not author-supplied: the `x-paged:<manifest id>`
    *  metadata key the host resolves the candidate's `metadata` from
    *  before calling `matches`. The SDK adapter fills this from the
