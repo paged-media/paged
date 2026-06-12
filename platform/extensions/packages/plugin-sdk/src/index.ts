@@ -33,6 +33,7 @@ export {
   BLOB_BUDGETS,
   PluginApiNotImplemented,
   PluginCapabilityError,
+  type BundleTrust,
   type BundleHostHandle,
   type ConsentBackend,
   type DataProviderBackend,

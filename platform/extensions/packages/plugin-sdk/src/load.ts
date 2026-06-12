@@ -25,6 +25,28 @@ export function loadBundle(
   options?: CreateBundleHostOptions,
 ): LoadedBundle {
   const { manifest } = bundle;
+  // Trust-line load-path assertion (plugin-trust-line.md): same-realm
+  // execution is FIRST-PARTY-ONLY during incubation, and that constraint
+  // is asserted HERE — not left to the convention of "we only static-
+  // import our own bundles in main.tsx." The host vouches via
+  // `options.trust` (default 'first-party'); there is no trustworthy
+  // signal ON the bundle yet (the `media.paged.*` id is self-asserted;
+  // signing is the last unchecked gate box), so the assertion is that the
+  // HOST declared first-party. Anything else is refused loudly: loading
+  // foreign code on the same-realm path stays gated on the isolate/RPC
+  // host + capability enforcement + signing. A future dynamic-import lane
+  // can't slip untrusted code through silently — it would have to pass a
+  // non-first-party trust, which throws here with a pointer.
+  const trust = options?.trust ?? "first-party";
+  if (trust !== "first-party") {
+    throw new Error(
+      `loadBundle: ${manifest.id} requested trust="${String(trust)}", but ` +
+        `same-realm bundle execution is first-party-only during ` +
+        `incubation. Loading non-first-party bundles is gated on the ` +
+        `isolate/RPC host, enforced capabilities, and package signing ` +
+        `(see plugin-trust-line.md "Gate checklist").`,
+    );
+  }
   if (!ID_PATTERN.test(manifest.id)) {
     throw new Error(
       `loadBundle: manifest id "${manifest.id}" is not reverse-DNS ` +

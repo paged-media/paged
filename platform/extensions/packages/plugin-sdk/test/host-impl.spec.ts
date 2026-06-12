@@ -340,6 +340,39 @@ describe("loadBundle", () => {
     );
   });
 
+  it("default trust is first-party — loads without an explicit trust", () => {
+    const fake = makeFakeEditor();
+    const bundle = defineBundle({
+      manifest: DECLARED_MANIFEST,
+      activate: () => ({ dispose() {} }),
+    });
+    const loaded = loadBundle(() => fake.editor, bundle, {
+      console: silent,
+      storage: mapBacking(),
+    });
+    expect(loaded.active).toBe(true);
+    loaded.dispose();
+  });
+
+  it("refuses a non-first-party trust loudly (trust-line load-path assertion)", () => {
+    const fake = makeFakeEditor();
+    const bundle = defineBundle({
+      manifest: DECLARED_MANIFEST,
+      activate: () => ({ dispose() {} }),
+    });
+    expect(() =>
+      loadBundle(() => fake.editor, bundle, {
+        console: silent,
+        storage: mapBacking(),
+        // A future dynamic-import lane would have to opt out explicitly —
+        // and the loader refuses, gating same-realm execution on the
+        // isolate. (Cast: the type only admits "first-party"; the runtime
+        // check is what the trust line claims exists.)
+        trust: "third-party" as never,
+      }),
+    ).toThrow(/first-party-only/);
+  });
+
   it("facades tear down even when the bundle's dispose throws", () => {
     const fake = makeFakeEditor();
     const bundle = defineBundle({

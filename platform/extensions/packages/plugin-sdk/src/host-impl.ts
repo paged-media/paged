@@ -313,7 +313,32 @@ export function createDataProviderRegistry(): DataProviderBackend {
   };
 }
 
+/**
+ * Trust posture the HOST asserts for a bundle at the load path
+ * (`plugin-trust-line.md`). Same-realm execution — full `BundleHost`
+ * + the raw `PagedEditor` via `host.editor` — is FIRST-PARTY-ONLY
+ * during incubation. There is no sound *cryptographic* identity signal
+ * yet (package signing is the last unchecked gate box), and the
+ * manifest `id` namespace (`media.paged.*`) is SELF-ASSERTED — a
+ * foreign bundle could claim it — so the trust signal cannot come from
+ * the bundle. It comes from the HOST vouching, here: a value the
+ * caller supplies, defaulting to `'first-party'`. The loader refuses
+ * anything else (`load.ts`), turning the drift-by-default the trust
+ * line warns about (a quiet dynamic-import of foreign code on the
+ * same-realm path) into a deliberate, greppable, reviewable act that
+ * still does not load until the isolate/RPC host gate is built.
+ */
+export type BundleTrust = "first-party";
+
 export interface CreateBundleHostOptions {
+  /**
+   * The host's trust assertion for this bundle (`plugin-trust-line.md`).
+   * Defaults to `'first-party'` — the only value the loader accepts
+   * today. Passing any other value (e.g. via a future dynamic-import
+   * experiment) is refused loudly at the load path, gated on the
+   * isolate/RPC host + capability enforcement + signing.
+   */
+  trust?: BundleTrust;
   storage?: StorageBacking;
   /** Host-provided network consent (paged.data D-03; base-idea §11): the editor
    *  injects the consent prompt + the data-source-manifest UI. When absent,

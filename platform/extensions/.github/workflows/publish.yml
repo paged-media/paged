@@ -5,11 +5,13 @@
 # needed). A package publishes only when its version isn't on the
 # registry yet — bump a version to release, merge to ship.
 #
-# Dist-tag policy (audit P35): pre-1.0 we publish under the `canary`
-# tag ONLY and never create `latest` (it must not track a prerelease).
-# Consumers float on the `canary` dist-tag — see the plugin-template's
-# floating-canary CI lane (audit P33). The post-publish step asserts
-# this invariant (scripts/assert-dist-tags.mjs).
+# Dist-tag policy (audit P35/P13): pre-1.0 we publish under the `canary`
+# tag ONLY and never create or advance `latest` — it MUST NOT track a
+# prerelease (a bare `npm install` would otherwise resolve a `-canary.N`
+# build). Consumers float on the `canary` dist-tag — see the
+# plugin-template's floating-canary CI lane (audit P33). The post-publish
+# step asserts this invariant (scripts/assert-dist-tags.mjs): canary ==
+# the in-repo version, and latest never points at a prerelease.
 
 name: publish
 on:
@@ -56,18 +58,20 @@ jobs:
                    --no-audit --no-fund --no-package-lock )
           PAGED_CANVAS_WASM_FROM="$PWD/.wire-src" \
             node scripts/sync-wire.mjs --check
-      # Dist-tag policy (audit P35) — PRE-1.0, EVERY published version is
-      # a `-canary.N` prerelease, so:
+      # Dist-tag policy (audit P35/P13) — PRE-1.0, EVERY published version
+      # is a `-canary.N` prerelease, so:
       #   * publish under `--tag canary` ONLY. `pnpm publish` does NOT
       #     ignore the tag flag (publishConfig.tag alone was the trap —
       #     pnpm fell back to `latest`); passing `--tag canary` is what
       #     keeps `latest` untouched.
-      #   * `latest` is INTENTIONALLY ABSENT until the v1 freeze. A
-      #     `latest` pointing at a prerelease is the drift this lane
-      #     caused before (it stuck at the first canary, 0.2.1). The
-      #     floating lane is the `canary` dist-tag; consumers depend on
-      #     `"canary"`, never `latest`. The post-publish assertion below
-      #     fails the build if `latest` ever reappears on a prerelease.
+      #   * `latest` is INTENTIONALLY ABSENT until the v1 freeze and this
+      #     lane NEVER creates or advances it. A `latest` pointing at a
+      #     prerelease is the drift this lane caused before (it stuck at
+      #     the first canary, 0.2.1) — a bare `npm install` then resolves a
+      #     prerelease. The floating lane is the `canary` dist-tag;
+      #     consumers depend on `"canary"`, never `latest`. The
+      #     post-publish assertion below fails the build if `latest` ever
+      #     points at a prerelease.
       - name: publish changed versions (canary tag only)
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -93,16 +97,21 @@ jobs:
               # propagation-race path (publish may have raced past the
               # tag write). Idempotent.
               npm dist-tag add "$name@$version" canary
-              # Pre-1.0 lockstep: npm forbids deleting `latest` (E400),
-              # so it must track the newest canary explicitly.
-              npm dist-tag add "$name@$version" latest
+              # NOTE: we deliberately do NOT advance `latest`. Pre-1.0,
+              # `latest` must not track a prerelease (P13); a bare
+              # `npm install` must never resolve a `-canary.N` build.
+              # Consumers float on `canary`. (npm forbids deleting an
+              # existing `latest` — E400 — so any historical
+              # prerelease-`latest` is remediated out-of-band at the v1
+              # freeze, not advanced here.)
             fi
           done
-      # Post-publish dist-tag assertion (audit P35 acceptance): canary
-      # must point at the in-repo version, and `latest` must be ABSENT
-      # while we are pre-1.0 (no non-prerelease has ever been published).
-      # This is the guard that would have caught the 0.2.1 `latest` drift.
-      - name: assert dist-tags (canary current, no pre-1.0 latest)
+      # Post-publish dist-tag assertion (audit P35/P13 acceptance): canary
+      # must point at the in-repo version, and `latest` must NOT track a
+      # prerelease while we are pre-1.0 (no non-prerelease has ever been
+      # published). This is the guard that would have caught the 0.2.1
+      # `latest` drift.
+      - name: assert dist-tags (canary current, latest not a prerelease)
         run: node scripts/assert-dist-tags.mjs
 
   # Floating-canary smoke (audit P33), publish-side half: after the
