@@ -11,14 +11,14 @@
 // parse→apply→inverse engine path — no UI, no editor, no browser.
 //
 // CONTRIBUTION COUNT (honesty note): the bundle registers THREE anchor-
-// editing tools AND ONE declarative SCHEMA panel (the stroke panel —
-// W3.1, BREAKAGE_LOG B-01 RESOLVED; registered through
-// `host.contribute.schemaPanel`, recorded by the harness as a
+// editing tools AND TWO declarative SCHEMA panels (stroke — W3.1,
+// B-01 RESOLVED; fill — Phase 2d, B-03 consumer; each registered
+// through `host.contribute.schemaPanel`, recorded by the harness as a
 // `schemaPanel` contribution carrying the verbatim schema). The Pen
 // itself is a built-in core-document tool (editor W2.5 division); the
-// fill/layers prototypes stay design JSON (B-01 closure: fill awaits
-// B-03, layers is expert-leaf list territory). So the contribution log
-// holds three tools + one schema panel.
+// layers prototype stays design JSON (expert-leaf list territory). So
+// the contribution log holds three tools + two schema panels + eight
+// commands (4 dash + 2 group + 2 gradient-fill) + the edit context.
 
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 
@@ -78,19 +78,25 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "media.paged.draw.tool.deleteAnchor",
         "media.paged.draw.tool.convertAnchor",
       ]);
-      // The contribution log holds the three tools, then the schema
+      // The contribution log holds the three tools, then EACH schema
       // panel as TWO entries: the synthesized React `panel` the panels
       // registry sees (the host turns a schema into a registry panel via
       // the injected renderer / seam) AND the `schemaPanel` recorded
       // VERBATIM through the harness's registration hook. Both are
       // honest — the registry really got a panel; the log keeps the
-      // schema so conformance can assert it. Then the four B-12 dash-
-      // preset commands, then the W3.2 edit context. (Pen is a core
-      // built-in; fill/layers stay prototypes — header note.)
+      // schema so conformance can assert it. Stroke first, then fill
+      // (Phase 2d). Then the four B-12 dash-preset commands, the two
+      // Phase 2d group commands, the two gradient-fill commands, then
+      // the W3.2 edit context. (Pen is a core built-in; layers stays a
+      // prototype — header note.)
       expect(harness.contributions.map((c) => c.kind)).toEqual([
         "tool",
         "tool",
         "tool",
+        // W3.1 — the stroke schema panel.
+        "panel",
+        "schemaPanel",
+        // Phase 2d — the fill schema panel (B-03).
         "panel",
         "schemaPanel",
         // B-12 — the stroke dash-preset commands (Solid / Dashed /
@@ -99,20 +105,36 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "command",
         "command",
         "command",
+        // Phase 2d — Group selection / Ungroup (B-04).
+        "command",
+        "command",
+        // Phase 2d — Fill: Linear / Radial gradient (B-03).
+        "command",
+        "command",
         // W3.2 — the vectorGraphic edit context (B-02), recorded
         // through the harness's editContext registration hook.
         "editContext",
       ]);
-      // The schema panel is recorded VERBATIM (the schema, not React):
-      // its id, its sections, and the binding-driven gates.
+      // The schema panels are recorded VERBATIM (the schema, not React):
+      // ids, sections, and the binding-driven gates.
       const panels = harness.schemaPanelsContributed();
-      expect(panels.map((p) => p.id)).toEqual(["media.paged.draw.panel.stroke"]);
+      expect(panels.map((p) => p.id)).toEqual([
+        "media.paged.draw.panel.stroke",
+        "media.paged.draw.panel.fill",
+      ]);
       const dashSection = panels[0].schema.sections[1];
       expect(dashSection.title).toBe("Dashes");
       // The dash section's visibility is a binding REF — a derived bound
       // value the bundle publishes, NOT a visibleWhen conditional (B-01).
       expect(dashSection.visible).toEqual({
         bind: "media.paged.draw.dashControlsVisible",
+      });
+      // The fill panel's gradient section is likewise a binding REF
+      // (Phase 2d — gated on the selection's fill being a gradient).
+      const gradientSection = panels[1].schema.sections[1];
+      expect(gradientSection.title).toBe("Gradient");
+      expect(gradientSection.visible).toEqual({
+        bind: "media.paged.draw.gradientControlsVisible",
       });
       // The captured tool contributions are the real objects too.
       const add = harness.toolsContributed()[0];

@@ -12,12 +12,16 @@
 // `loadBundle` call removes draw cleanly — the platform-honesty smoke
 // test.
 //
-// The OTHER prototypes (`panels/fill.panel.json`, `panels/layers.panel.
-// json`) stay design prototypes pending the v1 mechanism: fill awaits
-// gradient-assignment verification (B-03) and layers is expert-leaf
-// list territory the schema can't express yet (see B-01 closure +
-// DESIGN.md §12 honest limits). The edit-context claim in the manifest
-// stays declarative until the shell grows the registry (B-02).
+// Phase 2d adds: the FILL schema panel (B-03 consumer — the
+// `panels/fill.panel.json` prototype made real, gradient section gated
+// by a published binding), the gradient-fill preset commands (gradient
+// assignment is a multi-mutation flow above the binding ceiling — the
+// dash precedent), and the GROUP/UNGROUP commands (B-04 consumers;
+// clipping masks are NOT wire-representable — see commands/group.ts).
+//
+// The layers prototype (`panels/layers.panel.json`) stays a design
+// prototype: expert-leaf list territory the schema can't express yet
+// (see B-01 closure + DESIGN.md §12 honest limits).
 
 import type { BundleHandle, BundleHost } from "@paged-media/plugin-api";
 import {
@@ -30,7 +34,13 @@ import manifest from "../manifest.json";
 
 import { drawTools } from "./tools";
 import { contributeDashCommands, DASH_COMMAND_IDS } from "./commands/dash";
+import {
+  contributeFillGradientCommands,
+  FILL_GRADIENT_COMMAND_IDS,
+} from "./commands/fill-gradient";
+import { contributeGroupCommands, GROUP_COMMAND_IDS } from "./commands/group";
 import { vectorGraphicEditContext } from "./edit-context";
+import { fillPanel, installFillPanelBindings } from "./panels/fill-panel";
 import { installStrokePanelBindings, strokePanel } from "./panels/stroke-panel";
 
 export function activate(host: BundleHost): BundleHandle {
@@ -41,30 +51,49 @@ export function activate(host: BundleHost): BundleHandle {
   for (const tool of tools) {
     contributeTool(host, tool);
   }
-  // The v1 schema panel + its binding driver (the dynamic gate source).
+  // The v1 schema panels + their binding drivers (the dynamic gate
+  // sources): STROKE (W3.1, B-01) then FILL (Phase 2d, B-03 — gradient
+  // section gated by the published gradientControlsVisible binding).
   contributeSchemaPanel(host, strokePanel);
-  const bindingSub = installStrokePanelBindings(host);
+  const strokeBindingSub = installStrokePanelBindings(host);
+  contributeSchemaPanel(host, fillPanel);
+  const fillBindingSub = installFillPanelBindings(host);
   // B-12 — the stroke DASH presets as commands (the schema binding
   // ceiling is scalar, a dash array is a vector → command-driven). Each
   // commits `setElementProperty{ frameStrokeDashArray, lengths }` to
   // the selection through the document door.
   const dashCommandsSub = contributeDashCommands(host);
+  // Phase 2d — Group selection / Ungroup (the B-04 wire consumers;
+  // clipping masks are NOT representable on the wire — honest subset,
+  // see commands/group.ts).
+  const groupCommandsSub = contributeGroupCommands(host);
+  // Phase 2d — gradient-fill presets (B-03 consumer; a gradient
+  // assignment is a multi-mutation, vector-valued flow above the
+  // binding ceiling → command-driven, the dash precedent).
+  const fillGradientCommandsSub = contributeFillGradientCommands(host);
   // W3.2 — the vectorGraphic edit context (closes B-02): double-click a
   // path enters anchor-editing (the anchor tools focused, the stroke
   // panel raised, a breadcrumb, Esc exits).
   contributeEditContext(host, vectorGraphicEditContext);
   host.log.info(
-    `activated — ${tools.length} tools + 1 schema panel + ` +
-      `${DASH_COMMAND_IDS.length} dash commands + 1 edit context ` +
+    `activated — ${tools.length} tools + 2 schema panels + ` +
+      `${
+        DASH_COMMAND_IDS.length +
+        GROUP_COMMAND_IDS.length +
+        FILL_GRADIENT_COMMAND_IDS.length
+      } commands + 1 edit context ` +
       `(apiVersion ${manifest.apiVersion})`,
   );
   // The contributions tear down structurally via the host; the binding
-  // subscription is the one thing allocated OUTSIDE a facade-tracked
-  // registration, so dispose it (and the dash command group) here.
+  // subscriptions are allocated OUTSIDE a facade-tracked registration,
+  // so dispose them (and the command groups) here.
   return {
     dispose() {
+      fillGradientCommandsSub.dispose();
+      groupCommandsSub.dispose();
       dashCommandsSub.dispose();
-      bindingSub.dispose();
+      fillBindingSub.dispose();
+      strokeBindingSub.dispose();
     },
   };
 }

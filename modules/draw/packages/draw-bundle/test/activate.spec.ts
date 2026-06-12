@@ -133,26 +133,34 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.tool.convertAnchor",
     ]);
     // B-15: TOOL activation commands + shortcuts are HOST-derived from
-    // the registry — the bundle registers tools only. The four commands
-    // it DOES register are the B-12 dash presets (not tool activations).
+    // the registry — the bundle registers tools only. The commands it
+    // DOES register are the B-12 dash presets, the Phase 2d group pair
+    // (B-04) and the gradient-fill pair (B-03) — not tool activations.
     expect(fake.commands.ids()).toEqual([
       "media.paged.draw.command.strokeDashSolid",
       "media.paged.draw.command.strokeDashDashed",
       "media.paged.draw.command.strokeDashDotted",
       "media.paged.draw.command.strokeDashDashDot",
+      "media.paged.draw.command.groupSelection",
+      "media.paged.draw.command.ungroup",
+      "media.paged.draw.command.fillGradientLinear",
+      "media.paged.draw.command.fillGradientRadial",
     ]);
     expect(fake.keybindings.count()).toBe(0);
   });
 
-  it("registers the W3.1 stroke SCHEMA panel (B-01 RESOLVED)", () => {
+  it("registers the stroke + fill SCHEMA panels (B-01 RESOLVED; fill = Phase 2d/B-03)", () => {
     const fake = makeFakeEditor();
     loadBundle(() => fake.editor, drawBundle, {
       console: silent,
       storage: mapBacking(),
     });
-    // The schema panel registers through the panels registry as a
+    // Each schema panel registers through the panels registry as a
     // synthesized PanelContribution under its declared id.
-    expect(fake.panels.ids()).toEqual(["media.paged.draw.panel.stroke"]);
+    expect(fake.panels.ids()).toEqual([
+      "media.paged.draw.panel.stroke",
+      "media.paged.draw.panel.fill",
+    ]);
   });
 
   it("registered ids match the manifest's contributes declaration", () => {

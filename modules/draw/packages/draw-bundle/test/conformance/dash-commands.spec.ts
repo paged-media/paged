@@ -79,9 +79,14 @@ describe("draw conformance — dash-preset commands (B-12)", () => {
     afterAll(() => h?.dispose());
 
     it("the bundle records all four dash commands in the contribution log", () => {
+      // The log also carries the Phase 2d group + gradient-fill
+      // commands; this spec pins the DASH family (the full ordered
+      // command list is asserted by activate.spec / headless-
+      // conformance.spec).
       const ids = h.contributions
         .filter((c) => c.kind === "command")
-        .map((c) => c.id);
+        .map((c) => c.id)
+        .filter((id) => id.includes("strokeDash"));
       expect(ids).toEqual([
         "media.paged.draw.command.strokeDashSolid",
         "media.paged.draw.command.strokeDashDashed",

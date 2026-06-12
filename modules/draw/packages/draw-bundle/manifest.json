@@ -1,7 +1,7 @@
 {
   "id": "media.paged.draw",
   "name": "paged.draw",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "apiVersion": "^0.2",
   "publisher": "paged.media",
   "capabilities": {
@@ -26,13 +26,18 @@
       "media.paged.draw.tool.convertAnchor"
     ],
     "panels": [
-      "media.paged.draw.panel.stroke"
+      "media.paged.draw.panel.stroke",
+      "media.paged.draw.panel.fill"
     ],
     "commands": [
       "media.paged.draw.command.strokeDashSolid",
       "media.paged.draw.command.strokeDashDashed",
       "media.paged.draw.command.strokeDashDotted",
-      "media.paged.draw.command.strokeDashDashDot"
+      "media.paged.draw.command.strokeDashDashDot",
+      "media.paged.draw.command.groupSelection",
+      "media.paged.draw.command.ungroup",
+      "media.paged.draw.command.fillGradientLinear",
+      "media.paged.draw.command.fillGradientRadial"
     ],
     "editContexts": [
       {

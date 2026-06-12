@@ -43,3 +43,38 @@ export {
   contributeDashCommands,
   type DashPreset,
 } from "./commands/dash";
+// Phase 2d — Group selection / Ungroup (B-04 consumers; clipping masks
+// honestly omitted — not wire-representable, see commands/group.ts),
+// exported for the conformance spec.
+export {
+  GROUP_COMMAND_ID,
+  UNGROUP_COMMAND_ID,
+  GROUP_COMMAND_IDS,
+  GROUP_COMMAND_CATEGORY,
+  groupMutationFor,
+  ungroupMutationFor,
+  applyGroupSelection,
+  applyUngroup,
+  contributeGroupCommands,
+} from "./commands/group";
+// Phase 2d — the v1 declarative FILL panel (B-03 consumer) + its
+// binding driver, exported for the conformance spec.
+export {
+  fillPanel,
+  installFillPanelBindings,
+  FILL_PANEL_ID,
+  BIND_GRADIENT_CONTROLS_VISIBLE,
+} from "./panels/fill-panel";
+// Phase 2d — the gradient-fill preset commands + their mutation
+// builder, exported for the conformance spec (so it asserts the EXACT
+// mutations a command emits — no second copy to drift from).
+export {
+  FILL_GRADIENT_PRESETS,
+  FILL_GRADIENT_COMMAND_IDS,
+  FILL_COMMAND_CATEGORY,
+  mintFillGradientIds,
+  fillGradientMutationsFor,
+  applyFillGradientPreset,
+  contributeFillGradientCommands,
+  type FillGradientPreset,
+} from "./commands/fill-gradient";
