@@ -18,6 +18,7 @@ import type {
   HitResult,
   Mutation,
   PageId,
+  ElementProperties,
   PathAnchorsResult,
   SceneTreeNode,
   SelectionMode,
@@ -359,6 +360,11 @@ export interface DocumentSurface {
   collection<T>(name: CollectionName): Promise<readonly T[]>;
   meta(): Promise<DocumentMeta>;
   pathAnchors(id: ElementId): Promise<PathAnchorsResult | null>;
+  /** B-19 — the typed element-properties read (every PropertyPath/Value
+   *  entry the engine exposes for `id`, the same snapshot panels bind
+   *  against). Retires the v0 `host.editor.client.send` escape hatch
+   *  the draw fill panel used. `null` for an unknown element. */
+  elementProperties(id: ElementId): Promise<ElementProperties | null>;
   hitTest(
     pageId: PageId,
     point: [number, number],

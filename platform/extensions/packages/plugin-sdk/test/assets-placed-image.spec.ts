@@ -70,3 +70,24 @@ describe("host.assets.getPlacedImage (C-5, engine-served)", () => {
     ).rejects.toThrow(/assets/);
   });
 });
+
+describe("host.document.elementProperties (B-19, typed read)", () => {
+  it("returns the engine's property snapshot for a frame; null on miss", async () => {
+    live = await createHeadlessHost({ console: silent, storage: mapBacking() });
+    await live.load(minimalIdml());
+    live.loadBundle(bundle("media.paged.b19", true));
+    const props = await live.host.document.elementProperties({
+      kind: "rectangle",
+      id: "urect",
+    } as never);
+    expect(props).not.toBeNull();
+    expect(Array.isArray(props!.entries)).toBe(true);
+    expect(props!.entries.length).toBeGreaterThan(0);
+    expect(
+      await live.host.document.elementProperties({
+        kind: "rectangle",
+        id: "nope",
+      } as never),
+    ).toBeNull();
+  });
+});

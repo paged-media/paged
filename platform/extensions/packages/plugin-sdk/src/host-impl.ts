@@ -82,6 +82,7 @@ export const HOST_FEATURES: readonly string[] = [
   "document.pathAnchors@1",
   "document.hitTest@1",
   "document.elementGeometry@1",
+  "document.elementProperties@1",
   "document.tree@1",
   "document.onDidChange@1",
   "document.getMetadata@1",
@@ -887,6 +888,22 @@ export function createBundleHost(
     elementGeometry(ids) {
       requireDocRead("document.elementGeometry");
       return getEditor().client.elementGeometry(ids);
+    },
+    async elementProperties(id) {
+      // B-19 — the typed read over `requestElementProperties` (the same
+      // wire query getMetadata filters); null on miss or channel failure.
+      requireDocRead("document.elementProperties");
+      try {
+        const reply = await getEditor().client.send({
+          kind: "requestElementProperties",
+          payload: { id },
+        });
+        return reply.kind === "elementProperties"
+          ? reply.payload.result
+          : null;
+      } catch {
+        return null;
+      }
     },
     async tree(): Promise<SceneTreeNode[]> {
       requireDocRead("document.tree");
