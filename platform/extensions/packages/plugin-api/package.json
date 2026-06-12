@@ -1,6 +1,6 @@
 {
   "name": "@paged-media/plugin-api",
-  "version": "0.2.12-canary.0",
+  "version": "0.2.13-canary.0",
   "description": "The Paged plugin contract: manifest, bundle lifecycle, the BundleHost surface, and the contribution + engine wire types. Type-only.",
   "license": "MPL-2.0 OR LicenseRef-PMEL",
   "type": "module",

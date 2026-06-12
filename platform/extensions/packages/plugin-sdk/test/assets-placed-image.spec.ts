@@ -39,7 +39,7 @@ function bundle(id: string, withImages: boolean): PagedBundle {
     version: "1.0.0",
     apiVersion: "^0.2",
     capabilities: {
-      document: { read: "broad" },
+      document: { read: "broad", write: "broad" },
       ...(withImages ? { assets: ["images"] } : {}),
     },
     contributes: {},
@@ -89,5 +89,67 @@ describe("host.document.elementProperties (B-19, typed read)", () => {
         id: "nope",
       } as never),
     ).toBeNull();
+  });
+});
+
+describe("host.document.placeholders (D-01, protocol v43)", () => {
+  it("insert → enumerate → setFieldValue → re-enumerate, live engine", async () => {
+    live = await createHeadlessHost({ console: silent, storage: mapBacking() });
+    await live.load(minimalIdml());
+    live.loadBundle(bundle("media.paged.d01", true));
+    expect(live.host.supports("document.placeholders@1")).toBe(true);
+    expect(await live.host.document.placeholders()).toEqual([]);
+
+    // The fixture has a text frame? minimal-idml carries a rectangle
+    // only — pour a placeholder into a FRESH frame's minted story
+    // (the v0.42.1 story-mint makes this addressable).
+    const frame = await live.host.document.mutate({
+      op: "insertTextFrame",
+      args: { pageId: "usp", bounds: [300, 300, 360, 460] },
+    } as never);
+    expect(frame.applied).toBe(true);
+    const items0 = await live.host.document.placeholders();
+    expect(items0).toEqual([]); // a frame alone carries no fields
+
+    // Find the minted story via the stories collection (single story).
+    const stories = await live.host.document.collection<{ selfId: string }>(
+      "stories",
+    );
+    expect(stories.length).toBe(1);
+    const storyId = stories[0].selfId;
+
+    const ins = await live.host.document.mutate({
+      op: "insertField",
+      args: {
+        storyId,
+        offset: 0,
+        field: {
+          placeholder: { plugin: "media.paged.d01", key: "price", value: null },
+        },
+      },
+    } as never);
+    expect(ins.applied).toBe(true);
+
+    const items1 = await live.host.document.placeholders();
+    expect(items1.length).toBe(1);
+    expect(items1[0]).toMatchObject({
+      storyId,
+      plugin: "media.paged.d01",
+      key: "price",
+      value: null,
+    });
+
+    const set = await live.host.document.mutate({
+      op: "setFieldValue",
+      args: { storyId, offset: items1[0].offset, value: "€ 9,99" },
+    } as never);
+    expect(set.applied).toBe(true);
+    const items2 = await live.host.document.placeholders();
+    expect(items2[0].value).toBe("€ 9,99");
+
+    // Undo unwinds the resolution (one undoable step).
+    await live.host.document.undo();
+    const items3 = await live.host.document.placeholders();
+    expect(items3[0].value).toBeNull();
   });
 });

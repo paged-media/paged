@@ -83,6 +83,7 @@ export const HOST_FEATURES: readonly string[] = [
   "document.hitTest@1",
   "document.elementGeometry@1",
   "document.elementProperties@1",
+  "document.placeholders@1",
   "document.tree@1",
   "document.onDidChange@1",
   "document.getMetadata@1",
@@ -888,6 +889,21 @@ export function createBundleHost(
     elementGeometry(ids) {
       requireDocRead("document.elementGeometry");
       return getEditor().client.elementGeometry(ids);
+    },
+    async placeholders() {
+      // D-01 — the read half of the tagged-placeholder loop (protocol
+      // v43). Channel failure answers an empty list, never a throw.
+      requireDocRead("document.placeholders");
+      try {
+        const reply = await getEditor().client.send({
+          kind: "requestDocumentPlaceholders",
+        });
+        return reply.kind === "documentPlaceholders"
+          ? reply.payload.items
+          : [];
+      } catch {
+        return [];
+      }
     },
     async elementProperties(id) {
       // B-19 — the typed read over `requestElementProperties` (the same

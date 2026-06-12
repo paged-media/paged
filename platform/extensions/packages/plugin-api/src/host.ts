@@ -341,6 +341,18 @@ export interface DocumentChangeEvent {
 /** One link in a text-frame thread (protocol v38, C-2/S-05). `next` is
  *  the following frame's id (null at the tail); `overflow` marks the tail
  *  frame as overset (story content past the chain end). */
+/** D-01 — one tagged placeholder field (`requestDocumentPlaceholders`
+ *  item): its address (story + run-start offset), the owning plugin id,
+ *  the placeholder key, and the resolved value (`null` = unresolved —
+ *  the field displays its `<key>` token). */
+export interface DocumentPlaceholder {
+  storyId: string;
+  offset: number;
+  plugin: string;
+  key: string;
+  value: string | null;
+}
+
 export interface FrameChainLink {
   frameId: string;
   next: string | null;
@@ -365,6 +377,13 @@ export interface DocumentSurface {
    *  against). Retires the v0 `host.editor.client.send` escape hatch
    *  the draw fill panel used. `null` for an unknown element. */
   elementProperties(id: ElementId): Promise<ElementProperties | null>;
+  /** D-01 (protocol v43) — enumerate every plugin-tagged placeholder
+   *  field in the document, in story order. Offsets are FRESH-READ
+   *  addresses (a placeholder is its own tagged run; re-enumerate
+   *  before each write pass — the refresh loop's contract). Writes ride
+   *  `mutate`: `insertField` with the `placeholder` FieldKind places
+   *  one; `setFieldValue` re-resolves it (one undoable step). */
+  placeholders(): Promise<readonly DocumentPlaceholder[]>;
   hitTest(
     pageId: PageId,
     point: [number, number],
