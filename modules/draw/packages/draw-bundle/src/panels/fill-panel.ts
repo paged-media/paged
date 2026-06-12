@@ -106,28 +106,19 @@ export const fillPanel: SchemaPanelContribution = {
 
 /** Read the first selected element's `frameFillColor` ref (or null).
  *
- *  GAP (named, not faked): the `host.document` facade has NO
- *  element-properties read door — `requestElementProperties` is wire-
- *  only (the facade exposes pathAnchors / geometry / tree / collections,
- *  not the typed property snapshot). This read therefore goes through
- *  the MARKED v0 escape hatch `host.editor.client.send` (DESIGN.md
- *  §4.9); the missing facade door belongs to the cross-repo RFI
- *  (`thoughts/docs/paged/plugin-platform/rfi-core-sdk-gaps.md`) and
- *  this call site is the consumer evidence. Failure ⇒ `null` (the
- *  binding then reads false — a hidden section, never a throw). */
+ *  B-19 RESOLVED: the typed `host.document.elementProperties` facade
+ *  read (plugin-api 0.2.12) replaced the marked v0
+ *  `host.editor.client.send` escape hatch this call site carried as
+ *  consumer evidence. Failure ⇒ `null` (the binding then reads false —
+ *  a hidden section, never a throw). */
 async function fillRefOf(
   host: BundleHost,
   id: ElementId,
 ): Promise<string | null> {
   try {
-    const reply = await host.editor.client.send({
-      kind: "requestElementProperties",
-      payload: { id },
-    });
-    if (reply.kind !== "elementProperties" || !reply.payload.result) {
-      return null;
-    }
-    for (const entry of reply.payload.result.entries) {
+    const props = await host.document.elementProperties(id);
+    if (!props) return null;
+    for (const entry of props.entries) {
       const v = entry.value;
       if (entry.path === "frameFillColor" && v && v.type === "colorRef") {
         return v.value;
