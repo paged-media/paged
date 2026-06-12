@@ -15,11 +15,10 @@
 // document already has). When the host has no bytes for a face it
 // returns `null`; that is the honest, frequent answer.
 
-/** What `host.assets` can serve. v1: `"fonts"` only. `"images"` is
- *  DECLARED-but-RESERVED for v2 (placed-image / URL-import bytes) — it
- *  appears so the v2 direction is recorded, but `validate` REJECTS it
- *  in a manifest today (the door has no `getImage`, so honoring the
- *  declaration would be an honesty bug). */
+/** What `host.assets` can serve. `"fonts"` gates `getFontFace` (W-06);
+ *  `"images"` gates `getPlacedImage` (C-5 / I-04 — OPEN since core v42:
+ *  the engine serves a placed image's original bytes, so `validate`
+ *  accepts the declaration the v1 vocabulary used to reject). */
 export type AssetKind = "fonts" | "images";
 
 /** Container/wrapper format of served font bytes — lets the consumer
@@ -49,14 +48,33 @@ export interface FontFaceAsset {
 }
 
 /**
- * The asset accessor a bundle reaches through `host.assets`. v1 has
- * exactly ONE read: DOCUMENT-registered font face bytes by family
- * (+ optional style). It is NOT an arbitrary filesystem/network
- * reader — a bundle can only ask for a family the document already
- * uses, and the host answers from what the document already has, or
- * `null`. Capability-gated: `getFontFace` requires
- * `capabilities.assets` ∋ `"fonts"` (the host gate throws in
- * `'enforce'`, warns in `'warn'`).
+ * One placed DOCUMENT image's original bytes (C-5 / I-04, core v42).
+ * `bytes` is the placed file exactly as the document links it (PSD /
+ * JPEG / PNG — undecoded), with its natural pixel `width`/`height` and
+ * the resolved link `uri`. The input side of image M4: read placed →
+ * process in the bundle's wasm → composite back via the v41 image
+ * scene layer. Serializable, isolate-proxy-safe like `FontFaceAsset`.
+ */
+export interface PlacedImageAsset {
+  /** The ORIGINAL encoded file bytes (not decoded pixels). */
+  bytes: Uint8Array;
+  /** The resolved `image_link` URI the document carries. */
+  uri: string;
+  /** Natural pixel width of the placed image. */
+  width: number;
+  /** Natural pixel height of the placed image. */
+  height: number;
+}
+
+/**
+ * The asset accessor a bundle reaches through `host.assets`. Two reads:
+ * DOCUMENT-registered font face bytes by family (+ optional style), and
+ * a placed DOCUMENT image's original bytes by element id. It is NOT an
+ * arbitrary filesystem/network reader — a bundle can only ask for what
+ * the document already holds, and the host answers from that or
+ * `null`. Capability-gated per kind: `getFontFace` requires
+ * `capabilities.assets` ∋ `"fonts"`, `getPlacedImage` ∋ `"images"`
+ * (the host gate throws in `'enforce'`, warns in `'warn'`).
  */
 export interface AssetSurface {
   /**
@@ -66,4 +84,13 @@ export interface AssetSurface {
    * `null` over a live fetch keeps "render offline forever" honest.
    */
   getFontFace(family: string, style?: string): Promise<FontFaceAsset | null>;
+  /**
+   * Serve a placed DOCUMENT image's ORIGINAL bytes by element id, or
+   * `null` when the element isn't an image frame, the link doesn't
+   * resolve, or the image hasn't rendered yet (the engine serves what
+   * its build already decoded + cached — C-5's pure-read contract).
+   * No size clamp: document-scale originals are the use case; the
+   * engine door already bounds it to what the document holds.
+   */
+  getPlacedImage(elementId: string): Promise<PlacedImageAsset | null>;
 }

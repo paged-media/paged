@@ -24,11 +24,11 @@ const SCOPES = new Set(["broad", "scoped"]);
 const ENTRIES = new Set(["doubleClick", "command"]);
 const BAKED_FALLBACKS = new Set(["group", "rectangle", "raster"]);
 const WASM_PURPOSES = new Set(["layout", "codec", "compute"]);
-// Asset-store kinds (W-06). v1 vocabulary: "fonts" only. "images" is
-// RESERVED for v2 — rejected today (the door has no image read, so a
-// manifest must not claim it). Mirrors AssetKind in plugin-api.
-const ASSET_KINDS = new Set(["fonts"]);
-const ASSET_KINDS_RESERVED = new Set(["images"]);
+// Asset-store kinds. "fonts" gates getFontFace (W-06); "images" gates
+// getPlacedImage (C-5 / I-04 — OPEN since core v42; the former v2
+// reservation is honored). Mirrors AssetKind in plugin-api.
+const ASSET_KINDS = new Set(["fonts", "images"]);
+const ASSET_KINDS_RESERVED = new Set([]);
 
 // WASM packaging budgets (W-07). Keep in sync with the host loader's
 // WASM_BUDGETS in plugin-sdk/src/wasm-bundle-loader.ts and the schema's
@@ -124,9 +124,7 @@ function validateManifest(manifest, manifestDir) {
           err(`"capabilities.rendering" entries must be sceneLayer|overlay|hitTest`);
         }
       }
-      // W-06: asset-store kinds. v1 accepts only "fonts"; "images" is
-      // reserved for v2 and rejected with a pointed message so a manifest
-      // can't claim a capability the host cannot honor yet.
+      // Asset-store kinds: "fonts" (W-06) | "images" (C-5, core v42).
       if (caps.assets !== undefined) {
         if (!Array.isArray(caps.assets)) {
           err(`"capabilities.assets" must be an array of asset kinds`);
@@ -135,11 +133,11 @@ function validateManifest(manifest, manifestDir) {
             if (ASSET_KINDS.has(a)) continue;
             if (ASSET_KINDS_RESERVED.has(a)) {
               err(
-                `"capabilities.assets" entry "${a}" is reserved for v2 — ` +
-                  `only "fonts" is supported today (W-06; DESIGN.md §13)`,
+                `"capabilities.assets" entry "${a}" is reserved — ` +
+                  `supported today: "fonts", "images" (W-06 / C-5)`,
               );
             } else {
-              err(`"capabilities.assets" entries must be "fonts"`);
+              err(`"capabilities.assets" entries must be "fonts" or "images"`);
             }
           }
         }

@@ -579,14 +579,18 @@ door takes). plugin-cli `validate` enforces the vocabulary
 (unknown member rejected) and the array shape; the schema + types + CLI
 gain only this one optional field. Existing valid manifests stay valid.
 
-`"images"` is **declared-but-reserved for v2** — it appears in the
-vocabulary type/schema as a *reserved* member that validation REJECTS in
-v1 (the door has no `getImage`, so accepting the declaration would let a
-manifest claim a capability the host cannot honor — an honesty bug). The
-reservation records the v2 direction (placed-image / URL-import bytes:
-fetch-at-edit-time, render-offline-forever) without shipping a fake door.
-Why fonts first: W1 is blocked on font bytes NOW; images ride the same
-door shape once the engine exposes placed-image bytes by link.
+`"images"` is **OPEN since core v42 (2026-06-12, C-5 / I-04)** — the
+former v2 reservation is honored: the engine serves a placed image's
+ORIGINAL bytes through the `requestPlacedAssetBytes` wire query, so the
+door gained `getPlacedImage(elementId)` and validation now accepts the
+declaration. Unlike `getFontFace` (which routes through the editor's
+injected byte source and stays conditional — §13.4), the image read is
+engine-served: no injection, `supports("assets.images@1")` is
+unconditional at the pinned canvas-wasm, and `found:false`/channel
+failure answer `null` (the honest no-bytes mode). No size clamp —
+document-scale originals (PSDs) are the use case, and the engine only
+serves what the document already holds. URL-import bytes remain future
+work on the same door shape.
 
 ### 13.3 Budgets + trust line
 

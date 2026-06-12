@@ -109,16 +109,18 @@ describe("plugin-cli validate — capabilities.assets (W-06)", () => {
     expect(r.err).toMatch(/"capabilities\.assets" must be an array/);
   });
 
-  it("rejects the reserved-for-v2 'images' kind with a pointed message", () => {
+  it("accepts the 'images' kind (C-5 — the v2 reservation opened at core v42)", () => {
     const r = validate({ ...base, capabilities: { assets: ["images"] } });
-    expect(r.code).toBe(1);
-    expect(r.err).toMatch(/"images" is reserved for v2/);
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/valid/);
   });
 
   it("rejects an unknown asset kind", () => {
     const r = validate({ ...base, capabilities: { assets: ["audio"] } });
     expect(r.code).toBe(1);
-    expect(r.err).toMatch(/"capabilities\.assets" entries must be "fonts"/);
+    expect(r.err).toMatch(
+      /"capabilities\.assets" entries must be "fonts" or "images"/,
+    );
   });
 
   it("accepts the real paged.web manifest shape (assets + others)", () => {

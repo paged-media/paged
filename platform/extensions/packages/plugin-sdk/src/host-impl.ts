@@ -91,6 +91,11 @@ export const HOST_FEATURES: readonly string[] = [
   "overlay.toolPreview@1",
   "storage@1",
   "diagnostics@1",
+  // C-5 / I-04 (core v42): the placed-image bytes read is engine-served
+  // through the wire (no injected source), so it is unconditionally
+  // implemented at the pinned canvas-wasm — unlike assets.fonts@1, which
+  // stays conditional on the editor's injected byte source.
+  "assets.images@1",
 ];
 
 /** Thrown by reserved surface members — a visible seam, never
@@ -1325,6 +1330,38 @@ export function createBundleHost(
         return null;
       }
       return face;
+    },
+    // C-5 / I-04 (core v42): a placed DOCUMENT image's ORIGINAL bytes,
+    // straight from the engine's resolver/parse cache through the
+    // `requestPlacedAssetBytes` wire query — no injected source needed
+    // (the engine IS the byte holder). `found:false` and any channel
+    // failure both answer `null`, the door's honest no-bytes mode. No
+    // size clamp: document-scale originals (PSDs) are the use case and
+    // the engine only serves what the document already holds.
+    async getPlacedImage(elementId) {
+      requireDeclared(
+        hasAsset("images"),
+        "assets.getPlacedImage",
+        'capabilities.assets must include "images"',
+      );
+      try {
+        const reply = await getEditor().client.send({
+          kind: "requestPlacedAssetBytes",
+          payload: { elementId },
+        });
+        if (reply.kind !== "placedAssetBytes" || !reply.payload.found) {
+          return null;
+        }
+        const p = reply.payload;
+        return {
+          bytes: Uint8Array.from(p.encoded),
+          uri: p.uri,
+          width: p.width,
+          height: p.height,
+        };
+      } catch {
+        return null;
+      }
     },
   };
 
