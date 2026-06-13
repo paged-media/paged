@@ -1,7 +1,7 @@
 // GENERATED — do not edit. Vendored verbatim from the published
 // @paged-media/canvas-wasm .d.ts (tsify output from paged-media/core,
 // MPL-2.0 OR PMEL). Sync: node scripts/sync-wire.mjs · Check: --check.
-// Synced from @paged-media/canvas-wasm@0.45.0
+// Synced from @paged-media/canvas-wasm@0.46.0
 /* tslint:disable */
 /* eslint-disable */
 
@@ -33,6 +33,16 @@ export type ScenePathSeg = { op: "moveTo"; x: number; y: number } | { op: "lineT
 export type ByteBuf = number[];
 
 /**
+ * A compositing blend mode for [`SceneItem::FillPathBlend`] (C-1.4).
+ * Mirrors the CSS-relevant subset of the display list\'s
+ * [`BlendMode`] — `Normal` is intentionally absent (a normal fill is
+ * just [`SceneItem::FillPath`]). Maps 1:1 to [`BlendMode`] at
+ * lowering, so a plugin\'s `mix-blend-mode` composites identically to
+ * a native IDML transparency blend.
+ */
+export type SceneBlendMode = "multiply" | "screen" | "overlay" | "darken" | "lighten" | "colorDodge" | "colorBurn" | "hardLight" | "softLight" | "difference" | "exclusion" | "hue" | "saturation" | "color" | "luminosity";
+
+/**
  * A content-space mutation. Phase 1 carries the *envelope* only —
  * the worker rejects each variant with `WorkerError::NotImplemented`.
  * Phase 3 lights these up incrementally.
@@ -45,7 +55,7 @@ export type Mutation = { op: "insertText"; args: { storyId: string; offset: numb
  * like the filled path). Colours are sRGB, linearised at lowering to
  * composite identically to document colours.
  */
-export type SceneGradient = { type: "linear"; x0: number; y0: number; x1: number; y1: number; stops: SceneGradientStop[] } | { type: "radial"; cx: number; cy: number; radius: number; stops: SceneGradientStop[] };
+export type SceneGradient = { type: "linear"; x0: number; y0: number; x1: number; y1: number; stops: SceneGradientStop[] } | { type: "radial"; cx: number; cy: number; radius: number; stops: SceneGradientStop[] } | { type: "sweep"; cx: number; cy: number; start_angle: number; stops: SceneGradientStop[] };
 
 /**
  * A plugin-submitted vector layer in frame-content coordinates. Keyed
@@ -609,7 +619,7 @@ export interface SceneGradientStop {
 /**
  * One drawable in a [`SceneLayer`]. Coordinates are frame-content points.
  */
-export type SceneItem = { kind: "fillPath"; path: ScenePathSeg[]; paint: ScenePaint } | { kind: "strokePath"; path: ScenePathSeg[]; paint: ScenePaint; width: number } | ({ kind: "text" } & SceneTextItem) | { kind: "image"; rgba: number[]; width: number; height: number; x: number; y: number; w: number; h: number } | { kind: "fillPathGradient"; path: ScenePathSeg[]; gradient: SceneGradient };
+export type SceneItem = { kind: "fillPath"; path: ScenePathSeg[]; paint: ScenePaint } | { kind: "strokePath"; path: ScenePathSeg[]; paint: ScenePaint; width: number } | ({ kind: "text" } & SceneTextItem) | { kind: "image"; rgba: number[]; width: number; height: number; x: number; y: number; w: number; h: number } | { kind: "fillPathGradient"; path: ScenePathSeg[]; gradient: SceneGradient } | { kind: "fillPathBlend"; path: ScenePathSeg[]; paint: ScenePaint; blend: SceneBlendMode } | { kind: "dropShadow"; path: ScenePathSeg[]; offset_x: number; offset_y: number; blur_radius: number; r: number; g: number; b: number; a: number };
 
 /**
  * One entry in the field diff: a field whose resolved text
