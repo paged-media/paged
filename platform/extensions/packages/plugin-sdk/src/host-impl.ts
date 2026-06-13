@@ -623,6 +623,12 @@ export function createBundleHost(
   /** D-11 — the credential-store door is DECLARED when
    *  `capabilities.secrets.sources` is true (the v1 grant). */
   const hasSecrets = (): boolean => caps?.secrets?.sources === true;
+  /** I-07 / C-1 Stage B (realm-local; ADR-018) — the GPU usage is DECLARED
+   *  when `capabilities.gpu.realm` is `"bundle"` (the only value v1 grants).
+   *  DECLARE-ONLY: there is NO `host.gpu` device door — the bundle drives
+   *  WebGPU in its own realm via `navigator.gpu`; this flag only reflects
+   *  that the usage is blessed (`supports("gpu@1")`). */
+  const hasGpu = (): boolean => caps?.gpu?.realm === "bundle";
   const lists = (
     arr: readonly string[] | undefined,
     id: string,
@@ -2058,6 +2064,15 @@ export function createBundleHost(
     // exists false); this flag means a real SecretStoreBackend is wired, so
     // a bundle can actually have the host hold a credential by ref (D-11).
     featureSet.add("secrets@1");
+  }
+  if (hasGpu()) {
+    // I-07 / C-1 Stage B (realm-local; ADR-018). UNLIKE every flag above,
+    // this reflects the DECLARATION, not a host-wired backend: there is no
+    // device door to wire (the bundle drives WebGPU itself via navigator.gpu
+    // in its own realm). The flag simply blesses that the realm-local GPU
+    // usage is declared in the contract — the host surfaces "this plugin uses
+    // the GPU" from it. NO zero-copy host composite, NO shared device.
+    featureSet.add("gpu@1");
   }
 
   const host: BundleHost = {

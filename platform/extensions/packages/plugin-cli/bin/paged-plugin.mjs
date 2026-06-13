@@ -29,6 +29,13 @@ const SCOPES = new Set(["broad", "scoped"]);
 const ENTRIES = new Set(["doubleClick", "command"]);
 const BAKED_FALLBACKS = new Set(["group", "rectangle", "raster"]);
 const WASM_PURPOSES = new Set(["layout", "codec", "compute", "engine"]);
+// GPU (WebGPU) realm vocabulary (I-07 / C-1 Stage B realm-local; ADR-018).
+// "bundle" = the plugin uses WebGPU in its own JS realm (DECLARE-ONLY; no
+// device handed). "shared" is RESERVED for the future host-device-sharing
+// path and rejected today (the zero-copy walls — Vello external-texture +
+// cross-realm device transfer — are unlifted; ADR-018).
+const GPU_REALMS = new Set(["bundle"]);
+const GPU_REALMS_RESERVED = new Set(["shared"]);
 // Asset-store kinds. "fonts" gates getFontFace (W-06); "images" gates
 // getPlacedImage (C-5 / I-04 — OPEN since core v42; the former v2
 // reservation is honored). Mirrors AssetKind in plugin-api.
@@ -105,7 +112,7 @@ function validateManifest(manifest, manifestDir) {
       err(`"capabilities" must be an object`);
     } else {
       for (const key of Object.keys(caps)) {
-        if (!["document", "rendering", "keybindings", "editContext", "assets", "storage", "network", "dataProviders", "clipboard", "wasm", "workers", "secrets"].includes(key)) {
+        if (!["document", "rendering", "keybindings", "editContext", "assets", "storage", "network", "dataProviders", "clipboard", "wasm", "workers", "secrets", "gpu"].includes(key)) {
           err(`unknown capability "${key}"`);
         }
       }
@@ -250,6 +257,33 @@ function validateManifest(manifest, manifestDir) {
           if (extra.length) err(`"capabilities.secrets" unknown key(s): ${extra.join(", ")}`);
           if (typeof s.sources !== "boolean") {
             err(`"capabilities.secrets.sources" must be a boolean`);
+          }
+        }
+      }
+      // I-07 / C-1 Stage B (realm-local; ADR-018): the WebGPU usage
+      // declaration — { realm: "bundle" }. DECLARE-ONLY (no device handed;
+      // the bundle already has navigator.gpu in its own realm). Closed
+      // vocabulary, hand-mirrors the schema. "shared" is RESERVED for the
+      // future host-device-sharing path and rejected today.
+      if (caps.gpu !== undefined) {
+        const g = caps.gpu;
+        if (typeof g !== "object" || g === null || Array.isArray(g)) {
+          err(`"capabilities.gpu" must be an object`);
+        } else {
+          const extra = Object.keys(g).filter((k) => !["realm"].includes(k));
+          if (extra.length) err(`"capabilities.gpu" unknown key(s): ${extra.join(", ")}`);
+          if (g.realm === undefined) {
+            err(`"capabilities.gpu.realm" is required (must be "bundle")`);
+          } else if (!GPU_REALMS.has(g.realm)) {
+            if (GPU_REALMS_RESERVED.has(g.realm)) {
+              err(
+                `"capabilities.gpu.realm" value "${g.realm}" is reserved — ` +
+                  `host-device-sharing is deferred (ADR-018); only "bundle" ` +
+                  `(realm-local WebGPU) validates today`,
+              );
+            } else {
+              err(`"capabilities.gpu.realm" must be "bundle"`);
+            }
           }
         }
       }

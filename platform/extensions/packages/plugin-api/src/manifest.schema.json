@@ -171,6 +171,19 @@
             }
           }
         },
+        "gpu": {
+          "type": "object",
+          "description": "WebGPU usage declaration (I-07 / C-1 Stage B realm-local; ADR-018). DECLARE-ONLY: no GPUDevice is handed to the bundle — it legitimizes the realm-local WebGPU usage the bundle already does in its own JS realm (paged.image Engine-B). realm:\"bundle\" is the only value accepted today; realm:\"shared\" (future host-device-sharing) is reserved and REJECTED until the zero-copy walls lift. No requestGpuDevice surface exists.",
+          "additionalProperties": false,
+          "required": [
+            "realm"
+          ],
+          "properties": {
+            "realm": {
+              "const": "bundle"
+            }
+          }
+        },
         "wasm": {
           "type": "array",
           "description": "Declared WebAssembly artifacts the bundle ships and loads at runtime (capability-gated, declared-only, budgeted). See docs/wasm-packaging.md.",

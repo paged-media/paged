@@ -225,3 +225,44 @@ describe("plugin-cli validate — capabilities.secrets (D-11)", () => {
     expect(r.err).toMatch(/"capabilities\.secrets" unknown key/);
   });
 });
+
+describe("plugin-cli validate — capabilities.gpu (I-07 / C-1 Stage B realm-local)", () => {
+  it("accepts realm: \"bundle\" (the realm-local bless-it)", () => {
+    const r = validate({ ...base, capabilities: { gpu: { realm: "bundle" } } });
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/valid/);
+  });
+
+  it("rejects realm: \"shared\" as reserved (host-device-sharing deferred, ADR-018)", () => {
+    const r = validate({ ...base, capabilities: { gpu: { realm: "shared" } } });
+    expect(r.code).toBe(1);
+    expect(r.err).toMatch(/"capabilities\.gpu\.realm" value "shared" is reserved/);
+  });
+
+  it("rejects an unknown realm value", () => {
+    const r = validate({ ...base, capabilities: { gpu: { realm: "host" } } });
+    expect(r.code).toBe(1);
+    expect(r.err).toMatch(/"capabilities\.gpu\.realm" must be "bundle"/);
+  });
+
+  it("rejects a missing realm", () => {
+    const r = validate({ ...base, capabilities: { gpu: {} } });
+    expect(r.code).toBe(1);
+    expect(r.err).toMatch(/"capabilities\.gpu\.realm" is required/);
+  });
+
+  it("rejects a non-object gpu capability", () => {
+    const r = validate({ ...base, capabilities: { gpu: true } });
+    expect(r.code).toBe(1);
+    expect(r.err).toMatch(/"capabilities\.gpu" must be an object/);
+  });
+
+  it("rejects an unknown key in the gpu object (no device-sharing surface leak)", () => {
+    const r = validate({
+      ...base,
+      capabilities: { gpu: { realm: "bundle", device: true } },
+    });
+    expect(r.code).toBe(1);
+    expect(r.err).toMatch(/"capabilities\.gpu" unknown key/);
+  });
+});

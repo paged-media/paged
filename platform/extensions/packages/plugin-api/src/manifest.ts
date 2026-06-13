@@ -170,6 +170,39 @@ export interface PluginCapabilities {
    * and DESIGN.md §16.
    */
   secrets?: SecretsCapability;
+  /**
+   * GPU (WebGPU) usage the bundle declares (I-07 / C-1 Stage B — the
+   * buildable, realm-local half; ADR-018). DECLARE-ONLY: this does NOT hand
+   * the bundle a `GPUDevice` (the bundle already has `navigator.gpu` in its
+   * own JS realm — paged.image's Engine-B drives WebGPU there today). It
+   * LEGITIMIZES that usage within the capability contract so the host can
+   * surface "this plugin uses the GPU" to the user, exactly as the wasm
+   * artifacts are declare-only.
+   *
+   * `realm: "bundle"` is the ONLY value that validates today: the plugin uses
+   * WebGPU in its OWN realm (no host involvement, no zero-copy composite into
+   * the page scene). `realm: "shared"` is RESERVED in the vocabulary for the
+   * future host-device-sharing path (a host-blessed `GPUDevice` + a
+   * `SceneItem::Texture` zero-copy composite) and is REJECTED by validation —
+   * that path is blocked on TWO walls (Vello has no external-texture import;
+   * WebGPU can't transfer a device across the render-worker/main-thread realm
+   * boundary) and stays deferred record-only (ADR-018). There is NO
+   * `requestGpuDevice` / device surface; adding one would be a fake.
+   */
+  gpu?: GpuCapability;
+}
+
+/** WebGPU usage declaration (I-07 / C-1 Stage B realm-local; ADR-018).
+ *  DECLARE-ONLY — no device is handed to the bundle. `realm: "bundle"` is the
+ *  only value validation accepts today (the plugin uses WebGPU in its own JS
+ *  realm); `realm: "shared"` is reserved for the future host-device-sharing
+ *  path and rejected until the zero-copy walls lift. A closed vocabulary so
+ *  the host can reason about the grant. */
+export interface GpuCapability {
+  /** `"bundle"` — the plugin uses WebGPU in its own JS realm (the only value
+   *  accepted today). `"shared"` is reserved for future host-device-sharing
+   *  (currently rejected by validation). */
+  realm: "bundle" | "shared";
 }
 
 /** Credential-store declaration (D-11; rfc-credential-store). `sources`

@@ -1,6 +1,6 @@
 {
   "name": "@paged-media/plugin-sdk",
-  "version": "0.2.19",
+  "version": "0.2.20-canary.0",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",

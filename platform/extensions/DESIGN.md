@@ -835,3 +835,56 @@ Wholly additive: a new `host.secrets` member + `SecretsSurface` /
 the `SecretStoreBackend` shape), the `secrets@1` feature flag, and a new
 `capabilities.secrets` manifest field (schema + CLI). No existing member
 changed; the gate / namespace rule / every other door are untouched.
+
+## 17. The realm-local GPU declaration (I-07 / C-1 Stage B — `capabilities.gpu`)
+
+ADR-018 (`thoughts/docs/paged/adr/018-stage-b-gpu-texture-defer-record-only.md`)
+is the deliberation record; this section is the contract summary. This is the
+BUILDABLE, HONEST half of C-1 Stage B — and ONLY that half. It blesses, within
+the capability contract, the WebGPU usage paged.image's Engine-B already does
+in the bundle's OWN JS realm (I-07). It does NOT build the zero-copy
+host-composited texture, which stays deferred record-only.
+
+### 17.1 The shape — declare-only, no device handed
+
+`capabilities.gpu: { realm: "bundle" }` (closed vocabulary, CLI + schema
+validated). It is DECLARE-ONLY, exactly like the wasm artifacts: it hands the
+bundle NOTHING. There is **no `host.gpu` surface, no `requestGpuDevice`, no
+device/adapter/texture member** anywhere on `BundleHost`. The bundle already
+has `navigator.gpu` in its own realm and drives WebGPU there itself; the
+capability simply LEGITIMIZES that usage so the host can surface "this plugin
+uses the GPU" to the user, and `supports("gpu@1")` reflects the declaration.
+
+### 17.2 Why declaration-driven, not backend-driven
+
+UNLIKE every other feature flag (`workers@1`, `secrets@1`, … which mean "a real
+host backend is wired"), `supports("gpu@1")` reflects the MANIFEST DECLARATION
+— because there is no device door to wire. The flag is true iff the bundle
+declared `gpu: { realm: "bundle" }`. This mirrors how the wasm lane is
+declare-only: presence of the artifact in the manifest is the whole contract.
+
+### 17.3 The reserved `realm: "shared"` (and why it is rejected today)
+
+The TS type's `realm` union is `"bundle" | "shared"` to RESERVE the shape, but
+validation accepts ONLY `"bundle"`; `"shared"` is REJECTED (mirroring how
+`assets ∋ "images"` was rejected until C-5's real read existed). `realm:
+"shared"` would declare the future host-device-sharing path — a host-blessed
+`GPUDevice` + a `SceneItem::Texture` zero-copy composite. That path is blocked
+on TWO confirmed walls (ADR-018): (1) Vello has no external-texture import
+(`peniko::ImageData` is bytes-only and Vello uploads into its own CPU-fed
+atlas); (2) WebGPU can't transfer a `GPUDevice` across the
+render-worker/main-thread realm boundary. Until BOTH lift, a `requestGpuDevice`
+surface would be a fake — so the reserved value validates to an error with that
+pointer, and the honest absence of any device member is the trust line (a test
+asserts no `gpu`/`requestGpuDevice`/device-shaped member exists, mirroring
+D-11's no-`get` keystone).
+
+### 17.4 Additivity
+
+Wholly additive: a new `capabilities.gpu` manifest field (`GpuCapability` type
++ schema + CLI) and the declaration-driven `gpu@1` feature flag. No new
+`BundleHost` member, no `CreateBundleHostOptions` field, no SDK surface — the
+deliberate absence IS the design. The gate / namespace rule / every other door
+are untouched. The zero-copy composite + shared device remain deferred
+record-only (ADR-018); this section adds NONE of `SceneItem::Texture`,
+`requestGpuDevice`, or a host GPU backend.

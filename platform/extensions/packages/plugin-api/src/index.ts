@@ -29,6 +29,7 @@ export type {
   WasmPurpose,
   WorkersCapability,
   SecretsCapability,
+  GpuCapability,
 } from "./manifest";
 
 export type { BundleHandle, PagedBundle } from "./bundle";
