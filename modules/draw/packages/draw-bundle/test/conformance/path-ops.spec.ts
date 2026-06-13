@@ -155,9 +155,9 @@ describe("draw conformance — kernel path ops (Phase 4c)", () => {
     });
 
     it("offsetPath applies on a closed path (anchors change) and undo restores", async () => {
-      // offsetPath REQUIRES a closed path — the engine rejects an offset
-      // of an open stroke. The plugin's command surfaces that honestly;
-      // this pins the working (closed) lane.
+      // A closed contour offsets the contour directly (the single-sided
+      // lane); open paths now produce a band instead of erroring — see
+      // the next test (B-21).
       const target = await newClosedPath(h);
       const ref = { kind: target.kind, id: target.id as string };
       const before = await liveTable(h.host, ref);
@@ -176,15 +176,41 @@ describe("draw conformance — kernel path ops (Phase 4c)", () => {
       await h.host.document.undo();
     });
 
-    it("simplifyPath is accepted + undoable (the engine owns the decimation magnitude)", async () => {
-      // FINDING (v0.43, pinned for the RFI): the engine accepts
-      // `simplifyPath` (applied:true, undoable) but does NOT reduce the
-      // anchor count of a corner polyline at any tolerance probed — the
-      // decimation kernel is a no-op on these inputs. The PLUGIN's
-      // contract is to emit the op + round-trip undo; the geometry
-      // reduction is core's contract (a core gap to file). This test
-      // pins the contract the plugin owns, not the (currently absent)
-      // reduction.
+    it("offsetPath on an OPEN path now produces a closed band (B-21, v0.44.1)", async () => {
+      // B-21 FIXED (core v0.44.1): an open/multi-subpath input no longer
+      // errors "open path where closed is required" — it routes to a
+      // kurbo outline_stroke band (the two-sided offset outline at
+      // 2·|delta|). applied:true, the anchor table changes, undo
+      // restores. Closes the B-21 RFI loop (was: rejected by design).
+      const target = await newPath(h); // OPEN 3-anchor stroke
+      const ref = { kind: target.kind, id: target.id as string };
+      const before = await liveTable(h.host, ref);
+      const outcome = await h.host.document.mutate(
+        offsetPathMutationFor(target, {
+          delta: DEFAULT_OFFSET_DELTA_PT,
+          join: "miter",
+          miterLimit: DEFAULT_MITER_LIMIT,
+        }),
+      );
+      expect(outcome.applied).toBe(true);
+      expect((await liveTable(h.host, ref)).anchors).not.toEqual(
+        before.anchors,
+      );
+      await h.host.document.undo();
+      expect((await liveTable(h.host, ref)).anchors).toEqual(before.anchors);
+      await h.host.document.undo();
+    });
+
+    it("simplifyPath decimates within tolerance + undo restores (B-20, v0.44.1)", async () => {
+      // B-20 FIXED (core v0.44.1): `simplifyPath` now runs an RDP
+      // point-decimation pass over each subpath BEFORE the curve-fit, so
+      // a near-collinear interior anchor within tolerance drops. The
+      // 3-anchor corner polyline ([100,100],[200,120],[300,100]) has a
+      // ~20pt-deviation middle anchor; at tolerance 30 (> 20) it is
+      // removed → fewer anchors. Undo restores the original table
+      // bytewise. (Pre-0.44.1 this was a no-op — the test then pinned the
+      // plugin contract only; it now asserts the reduction the published
+      // engine delivers, closing the B-20 RFI loop.)
       const target = await newPath(h);
       const ref = { kind: target.kind, id: target.id as string };
       const before = await liveTable(h.host, ref);
@@ -192,6 +218,8 @@ describe("draw conformance — kernel path ops (Phase 4c)", () => {
         simplifyPathMutationFor(target, 30),
       );
       expect(outcome.applied).toBe(true);
+      const after = await liveTable(h.host, ref);
+      expect(after.anchors.length).toBeLessThan(before.anchors.length);
       await h.host.document.undo();
       expect((await liveTable(h.host, ref)).anchors).toEqual(before.anchors);
       await h.host.document.undo();
