@@ -137,6 +137,62 @@ export {
   contributePathfinderCommands,
   type PathfinderPreset,
 } from "./commands/pathfinder";
+// Phase 9 (Tier B) — Shape Builder gesture tool: the gesture→pathfinder
+// plan builder + the host handler factory, exported for the conformance
+// specs (the no-second-copy rule).
+export {
+  createShapeBuilderHandler,
+  shapeBuilderMutationFor,
+  pathfinderKindFor,
+} from "./handlers/shape-builder";
+// Phase 9 (Tier B) — Live Corners: the per-corner wire-shape builders +
+// the metadata "live" marker, exported for the conformance spec.
+export {
+  LIVE_CORNER_PRESETS,
+  LIVE_CORNER_COMMAND_IDS,
+  LIVE_CORNERS_COMMAND_CATEGORY,
+  DEFAULT_CORNER_RADIUS_PT,
+  supportsLiveCorners,
+  cornerStyleMutationFor,
+  cornerRadiiMutationFor,
+  withLiveCornerMarker,
+  applyLiveCornerPreset,
+  contributeLiveCornerCommands,
+  type LiveCornerPreset,
+  type CornerStyleToken,
+} from "./commands/live-corners";
+// Phase 9 (Tier B) — Appearance model: the stack model + bake builders +
+// envelope round-trip helpers, exported for the conformance spec.
+export {
+  APPEARANCE_COMMAND_IDS,
+  APPEARANCE_COMMAND_CATEGORY,
+  APPEARANCE_ADD_FILL_COMMAND_ID,
+  APPEARANCE_ADD_STROKE_COMMAND_ID,
+  APPEARANCE_CLEAR_COMMAND_ID,
+  appearanceOf,
+  withAppearance,
+  bakeAppearanceMutations,
+  commitAppearance,
+  contributeAppearanceCommands,
+  type AppearanceStack,
+  type FillLayer,
+  type StrokeLayer,
+} from "./commands/appearance";
+// Phase 9 (Tier B) — Select-same: the pure matcher + tree flattener,
+// exported for the conformance spec.
+export {
+  SELECT_SAME_COMMAND_IDS,
+  SELECT_SAME_COMMAND_CATEGORY,
+  SELECT_SAME_FILL_COMMAND_ID,
+  SELECT_SAME_STROKE_COMMAND_ID,
+  SELECT_SAME_STROKE_WEIGHT_COMMAND_ID,
+  pathForCriterion,
+  valueForCriterion,
+  leafIdsOf,
+  selectSameMatches,
+  contributeSelectSameCommands,
+  type SelectSameCriterion,
+} from "./commands/select-same";
 // Phase 4c — the Line ends (arrowheads) panel section's binding +
 // curated vocabulary, exported for the conformance spec.
 export {

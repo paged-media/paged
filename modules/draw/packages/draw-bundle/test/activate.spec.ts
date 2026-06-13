@@ -135,6 +135,7 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.tool.pencil",
       "media.paged.draw.tool.gradientAnnotator",
       "media.paged.draw.tool.measure",
+      "media.paged.draw.tool.shapeBuilder",
     ]);
     // B-15: TOOL activation commands + shortcuts are HOST-derived from
     // the registry — the bundle registers tools only. The commands it
@@ -159,6 +160,17 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.pathfinderSubtract",
       "media.paged.draw.command.pathfinderIntersect",
       "media.paged.draw.command.pathfinderExclude",
+      "media.paged.draw.command.cornersRounded",
+      "media.paged.draw.command.cornersInverseRounded",
+      "media.paged.draw.command.cornersBevel",
+      "media.paged.draw.command.cornersFancy",
+      "media.paged.draw.command.cornersNone",
+      "media.paged.draw.command.appearanceAddFill",
+      "media.paged.draw.command.appearanceAddStroke",
+      "media.paged.draw.command.appearanceClear",
+      "media.paged.draw.command.selectSameFill",
+      "media.paged.draw.command.selectSameStroke",
+      "media.paged.draw.command.selectSameStrokeWeight",
     ]);
     expect(fake.keybindings.count()).toBe(0);
   });

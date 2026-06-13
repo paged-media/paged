@@ -1,7 +1,7 @@
 {
   "id": "media.paged.draw",
   "name": "paged.draw",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "apiVersion": "^0.2",
   "publisher": "paged.media",
   "capabilities": {
@@ -27,7 +27,8 @@
       "media.paged.draw.tool.curvature",
       "media.paged.draw.tool.pencil",
       "media.paged.draw.tool.gradientAnnotator",
-      "media.paged.draw.tool.measure"
+      "media.paged.draw.tool.measure",
+      "media.paged.draw.tool.shapeBuilder"
     ],
     "panels": [
       "media.paged.draw.panel.stroke",
@@ -50,7 +51,18 @@
       "media.paged.draw.command.pathfinderUnite",
       "media.paged.draw.command.pathfinderSubtract",
       "media.paged.draw.command.pathfinderIntersect",
-      "media.paged.draw.command.pathfinderExclude"
+      "media.paged.draw.command.pathfinderExclude",
+      "media.paged.draw.command.cornersRounded",
+      "media.paged.draw.command.cornersInverseRounded",
+      "media.paged.draw.command.cornersBevel",
+      "media.paged.draw.command.cornersFancy",
+      "media.paged.draw.command.cornersNone",
+      "media.paged.draw.command.appearanceAddFill",
+      "media.paged.draw.command.appearanceAddStroke",
+      "media.paged.draw.command.appearanceClear",
+      "media.paged.draw.command.selectSameFill",
+      "media.paged.draw.command.selectSameStroke",
+      "media.paged.draw.command.selectSameStrokeWeight"
     ],
     "editContexts": [
       {

@@ -43,7 +43,19 @@ import {
 import manifest from "../manifest.json";
 
 import { drawTools } from "./tools";
+import {
+  contributeAppearanceCommands,
+  APPEARANCE_COMMAND_IDS,
+} from "./commands/appearance";
 import { contributeDashCommands, DASH_COMMAND_IDS } from "./commands/dash";
+import {
+  contributeLiveCornerCommands,
+  LIVE_CORNER_COMMAND_IDS,
+} from "./commands/live-corners";
+import {
+  contributeSelectSameCommands,
+  SELECT_SAME_COMMAND_IDS,
+} from "./commands/select-same";
 import {
   contributeFillGradientCommands,
   FILL_GRADIENT_COMMAND_IDS,
@@ -104,6 +116,17 @@ export function activate(host: BundleHost): BundleHandle {
   // Phase 4c — Pathfinder Unite/Subtract/Intersect/Exclude (the
   // pathfinderBoolean wire consumers; first selected = kept).
   const pathfinderCommandsSub = contributePathfinderCommands(host);
+  // Phase 9 (Tier B) — Live Corners (the frameCornerOption*/Radius* wire
+  // consumers, Rectangle-only — gap B-23; each preset is an eight-write
+  // batch + a metadata "live" marker).
+  const liveCornerCommandsSub = contributeLiveCornerCommands(host);
+  // Phase 9 (Tier B) — Appearance (multiple fills/strokes): a metadata
+  // stack baked to the frame's top layer (one-fill/one-stroke engine —
+  // gap B-24).
+  const appearanceCommandsSub = contributeAppearanceCommands(host);
+  // Phase 9 (Tier B) — Select-same (pure selection over fill / stroke /
+  // stroke-weight; no mutation).
+  const selectSameCommandsSub = contributeSelectSameCommands(host);
   // W3.2 — the vectorGraphic edit context (closes B-02): double-click a
   // path enters anchor-editing (the anchor tools focused, the stroke
   // panel raised, a breadcrumb, Esc exits).
@@ -116,7 +139,10 @@ export function activate(host: BundleHost): BundleHandle {
         FILL_GRADIENT_COMMAND_IDS.length +
         PATH_OPS_COMMAND_IDS.length +
         JOIN_AVERAGE_COMMAND_IDS.length +
-        PATHFINDER_COMMAND_IDS.length
+        PATHFINDER_COMMAND_IDS.length +
+        LIVE_CORNER_COMMAND_IDS.length +
+        APPEARANCE_COMMAND_IDS.length +
+        SELECT_SAME_COMMAND_IDS.length
       } commands + 1 edit context ` +
       `(apiVersion ${manifest.apiVersion})`,
   );
@@ -125,6 +151,9 @@ export function activate(host: BundleHost): BundleHandle {
   // so dispose them (and the command groups) here.
   return {
     dispose() {
+      selectSameCommandsSub.dispose();
+      appearanceCommandsSub.dispose();
+      liveCornerCommandsSub.dispose();
       pathfinderCommandsSub.dispose();
       joinAverageCommandsSub.dispose();
       pathOpsCommandsSub.dispose();

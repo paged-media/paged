@@ -41,6 +41,17 @@ export const BIND_DASH_CONTROLS_VISIBLE = "media.paged.draw.dashControlsVisible"
  *  section honestly hides elsewhere). */
 export const BIND_ARROWHEAD_CONTROLS_VISIBLE =
   "media.paged.draw.arrowheadControlsVisible";
+/** Phase 9 (Tier B) — gates the Corners section: true when the FIRST
+ *  selected element is a RECTANGLE (the engine's corner-option apply arm
+ *  is Rectangle-only — see commands/live-corners.ts gap B-23; the section
+ *  honestly hides elsewhere). */
+export const BIND_CORNER_CONTROLS_VISIBLE =
+  "media.paged.draw.cornerControlsVisible";
+/** Phase 9 (Tier B) — gates the Appearance section: true when ANYTHING is
+ *  selected (the appearance stack is plugin metadata applicable to any
+ *  frame; the layer count itself is managed by the Appearance commands). */
+export const BIND_APPEARANCE_CONTROLS_VISIBLE =
+  "media.paged.draw.appearanceControlsVisible";
 
 /** The curated arrowhead picker options (v43): wire `Value{type:"text"}`
  *  tokens from the IDML `ArrowHead` enumeration; `""` clears (the same
@@ -159,6 +170,87 @@ export const strokePanel: SchemaPanelContribution = {
           },
         ],
       },
+      {
+        // Phase 9 (Tier B) — Live Corners. The four per-corner RADIUS
+        // scrubs ride the §11.5 scalar ceiling unchanged (each
+        // `frameCornerRadius*` is a scalar `selectionProperty`, in pt);
+        // the corner STYLE (Rounded / Inverse / Bevel / Fancy / None) is
+        // a vector across four `frameCornerOption*` writes + a metadata
+        // marker, so it is COMMAND-driven (the readout points the author
+        // at the Corners commands). The whole section's VISIBILITY gates
+        // on the selection being a RECTANGLE (the engine's corner apply
+        // arm is Rectangle-only — gap B-23).
+        title: "Corners",
+        visible: { bind: BIND_CORNER_CONTROLS_VISIBLE },
+        rows: [
+          {
+            widget: "paged.readout",
+            props: {
+              label: "Style",
+              text: "Corner styles: see the Corners commands (Rounded / Inverse rounded / Bevel / Fancy / None).",
+            },
+          },
+          {
+            widget: "paged.input.numeric-scrub",
+            props: { label: "Radius ◰", suffix: "pt", min: 0 },
+            value: {
+              kind: "selectionProperty",
+              path: "frameCornerRadiusTopLeft",
+              coerce: "pt",
+            },
+            enabled: { bind: BIND_HAS_SELECTION },
+          },
+          {
+            widget: "paged.input.numeric-scrub",
+            props: { label: "Radius ◳", suffix: "pt", min: 0 },
+            value: {
+              kind: "selectionProperty",
+              path: "frameCornerRadiusTopRight",
+              coerce: "pt",
+            },
+            enabled: { bind: BIND_HAS_SELECTION },
+          },
+          {
+            widget: "paged.input.numeric-scrub",
+            props: { label: "Radius ◲", suffix: "pt", min: 0 },
+            value: {
+              kind: "selectionProperty",
+              path: "frameCornerRadiusBottomRight",
+              coerce: "pt",
+            },
+            enabled: { bind: BIND_HAS_SELECTION },
+          },
+          {
+            widget: "paged.input.numeric-scrub",
+            props: { label: "Radius ◱", suffix: "pt", min: 0 },
+            value: {
+              kind: "selectionProperty",
+              path: "frameCornerRadiusBottomLeft",
+              coerce: "pt",
+            },
+            enabled: { bind: BIND_HAS_SELECTION },
+          },
+        ],
+      },
+      {
+        // Phase 9 (Tier B) — Appearance (multiple fills/strokes). The
+        // stack is plugin METADATA baked to the frame's top layer
+        // (commands/appearance.ts) — a layer list is a vector above the
+        // scalar binding ceiling, so layer management is COMMAND-driven.
+        // The readout points the author at the Appearance commands; the
+        // section's VISIBILITY gates on a non-empty selection.
+        title: "Appearance",
+        visible: { bind: BIND_APPEARANCE_CONTROLS_VISIBLE },
+        rows: [
+          {
+            widget: "paged.readout",
+            props: {
+              label: "Layers",
+              text: "Stacked fills/strokes: see the Appearance commands (Add fill / Add stroke / Clear). The top layer bakes to the frame.",
+            },
+          },
+        ],
+      },
     ],
   },
 };
@@ -195,6 +287,16 @@ export function installStrokePanelBindings(host: BundleHost): Disposable {
       BIND_ARROWHEAD_CONTROLS_VISIBLE,
       has && selection[0].kind === "graphicLine",
     );
+    // Phase 9 (Tier B) — the Corners section gates on the selection being
+    // a RECTANGLE (the engine's corner-option apply arm is Rectangle-only,
+    // gap B-23); the Appearance section gates on any non-empty selection
+    // (the stack is plugin metadata applicable to any frame). Plain
+    // selection reads, no document round-trip.
+    host.bindings.publish(
+      BIND_CORNER_CONTROLS_VISIBLE,
+      has && selection[0].kind === "rectangle",
+    );
+    host.bindings.publish(BIND_APPEARANCE_CONTROLS_VISIBLE, has);
     if (!has) {
       host.bindings.publish(BIND_DASH_CONTROLS_VISIBLE, false);
       return;

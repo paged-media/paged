@@ -10,18 +10,18 @@
 // fake editor), this drives the bundle's document door through the true
 // parse→apply→inverse engine path — no UI, no editor, no browser.
 //
-// CONTRIBUTION COUNT (honesty note): the bundle registers SEVEN tools
+// CONTRIBUTION COUNT (honesty note): the bundle registers EIGHT tools
 // (three anchor-editing + the Phase 4c pro four: Curvature, Pencil,
-// Gradient Annotator, Measure) AND TWO declarative SCHEMA panels
-// (stroke — W3.1, B-01 RESOLVED; fill — Phase 2d, B-03 consumer; each
-// registered through `host.contribute.schemaPanel`, recorded by the
-// harness as a `schemaPanel` contribution carrying the verbatim
-// schema). The Pen itself is a built-in core-document tool (editor
-// W2.5 division); the layers prototype stays design JSON (expert-leaf
-// list territory). So the contribution log holds seven tools + two
-// schema panels + seventeen commands (4 dash + 2 group + 2 gradient-
-// fill + 3 path-ops + 2 join/average + 4 pathfinder) + the edit
-// context.
+// Gradient Annotator, Measure + the Phase 9 Shape Builder) AND TWO
+// declarative SCHEMA panels (stroke — W3.1, B-01 RESOLVED; fill — Phase
+// 2d, B-03 consumer; each registered through `host.contribute.schemaPanel`,
+// recorded by the harness as a `schemaPanel` contribution carrying the
+// verbatim schema). The Pen itself is a built-in core-document tool
+// (editor W2.5 division); the layers prototype stays design JSON
+// (expert-leaf list territory). So the contribution log holds eight tools
+// + two schema panels + twenty-eight commands (4 dash + 2 group + 2
+// gradient-fill + 3 path-ops + 2 join/average + 4 pathfinder + the Phase 9
+// Tier B 5 live-corner + 3 appearance + 3 select-same) + the edit context.
 
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 
@@ -85,6 +85,7 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "media.paged.draw.tool.pencil",
         "media.paged.draw.tool.gradientAnnotator",
         "media.paged.draw.tool.measure",
+        "media.paged.draw.tool.shapeBuilder",
       ]);
       // The contribution log holds the seven tools, then EACH schema
       // panel as TWO entries: the synthesized React `panel` the panels
@@ -97,7 +98,9 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
       // then the W3.2 edit context. (Pen is a core built-in; layers
       // stays a prototype — header note.)
       expect(harness.contributions.map((c) => c.kind)).toEqual([
-        // Three anchor editors + the Phase 4c pro four.
+        // Three anchor editors + the Phase 4c pro four + the Phase 9
+        // Shape Builder (eight tools).
+        "tool",
         "tool",
         "tool",
         "tool",
@@ -133,6 +136,21 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "command",
         // Phase 4c — Pathfinder Unite / Subtract / Intersect / Exclude.
         "command",
+        "command",
+        "command",
+        "command",
+        // Phase 9 (Tier B) — Live Corners (Rounded / Inverse / Bevel /
+        // Fancy / None).
+        "command",
+        "command",
+        "command",
+        "command",
+        "command",
+        // Phase 9 (Tier B) — Appearance (Add fill / Add stroke / Clear).
+        "command",
+        "command",
+        "command",
+        // Phase 9 (Tier B) — Select-same (Fill / Stroke / Stroke weight).
         "command",
         "command",
         "command",
@@ -263,7 +281,7 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
     const before = await treeSize();
 
     const handle = harness.loadBundle(drawBundle);
-    expect(harness.toolsContributed()).toHaveLength(7);
+    expect(harness.toolsContributed()).toHaveLength(8);
     handle.dispose();
 
     // After dispose: the contribution log is empty (registrations torn
