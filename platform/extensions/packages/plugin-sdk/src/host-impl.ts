@@ -34,6 +34,7 @@ import type {
   WorkersSurface,
   BundleWorker,
   SpawnWorkerOptions,
+  SecretsSurface,
   ProviderTileWire,
   ConsentResult,
   DataProvidersSurface,
@@ -304,6 +305,33 @@ export interface WorkerBackend {
 }
 
 /**
+ * The backend the editor injects to back `host.secrets` (D-11;
+ * rfc-credential-store): a REFERENCE-ONLY, host-owned credential store. The
+ * SDK adapter owns the capability gate + the namespacing (passes the plugin
+ * id); this backend owns the storage tier (WebCrypto-wrapped IndexedDB in
+ * the editor, an in-memory map in the headless harness) AND the user PROMPT
+ * — the RFC's "via host UI only": `set` resolves only after the host has
+ * the material (the editor backing prompts the user; the plugin's supplied
+ * `secret` is the value to STORE, never persisted silently by the adapter).
+ *
+ * The trust line is the ABSENCE of a read: there is `set`/`exists`/`forget`
+ * and NO `get` — secret bytes never leave the host realm. A headless host
+ * injects no backend → `set`/`forget` reject, `exists` is false,
+ * `supports("secrets@1")` is false. The plugin id + the (caller-supplied)
+ * `ref` together namespace the stored secret (`paged:<plugin-id>:<ref>`).
+ */
+export interface SecretStoreBackend {
+  /** Store `secret` for `pluginId` under `ref` (the editor backing PROMPTS
+   *  the user — "via host UI only"). Rejects when the user declines or the
+   *  store is unavailable. */
+  set(pluginId: string, ref: string, secret: string): Promise<void>;
+  /** Whether a secret is stored for `pluginId`/`ref`. */
+  exists(pluginId: string, ref: string): Promise<boolean>;
+  /** Forget the secret for `pluginId`/`ref` (idempotent). */
+  forget(pluginId: string, ref: string): Promise<void>;
+}
+
+/**
  * The backend the editor injects to back `host.clipboard` (K-6 / S-14): a
  * thin read/write pair over the REAL system clipboard (`navigator.clipboard`
  * in-browser; a fake in the headless harness). The SDK adapter owns the
@@ -497,6 +525,14 @@ export interface CreateBundleHostOptions {
    *  honestly, `concurrency()` is 0, and the feature flag is false (the
    *  honest no-worker door). */
   workers?: WorkerBackend;
+  /** Host-provided CREDENTIAL-STORE backend (D-11; rfc-credential-store).
+   *  When present, `host.secrets.set/exists/forget` go through it
+   *  (capability-gated on `capabilities.secrets`; `set` prompts the user —
+   *  "via host UI only") and `supports("secrets@1")` answers true. When
+   *  absent, `set`/`forget` reject and `exists` is false (the honest
+   *  no-store door). REFERENCE-ONLY: there is no `get` anywhere — secret
+   *  bytes never enter the plugin realm. */
+  secrets?: SecretStoreBackend;
   /**
    * How the host treats a declaration↔use mismatch — a bundle that
    * USES a door (`contribute.tool`, `document.mutate`, …) it did not
@@ -584,6 +620,9 @@ export function createBundleHost(
    *  present (an object with a numeric `max`). */
   const hasWorkers = (): boolean =>
     typeof caps?.workers?.max === "number";
+  /** D-11 — the credential-store door is DECLARED when
+   *  `capabilities.secrets.sources` is true (the v1 grant). */
+  const hasSecrets = (): boolean => caps?.secrets?.sources === true;
   const lists = (
     arr: readonly string[] | undefined,
     id: string,
@@ -1888,6 +1927,60 @@ export function createBundleHost(
     concurrency: () => workerCap,
   };
 
+  // ----------------------------------------------------- secrets
+  // The capability-gated, REFERENCE-ONLY credential store (D-11;
+  // rfc-credential-store). set/exists/forget take a credentialRef + (for
+  // set) the secret to STORE; there is NO get — the trust line is that
+  // secret bytes never come BACK to the plugin. The host injects the
+  // material at the attach/fetch door on its own side. The capability gate
+  // (an undeclared capabilities.secrets) THROWS in 'enforce'; a missing
+  // BACKEND is the graceful honest answer — set/forget reject, exists is
+  // false, supports("secrets@1") false. The backend owns the storage tier
+  // AND the user prompt ("via host UI only").
+  const secretStore = options?.secrets;
+  const secrets: SecretsSurface = {
+    async set(ref: string, secret: string): Promise<void> {
+      requireDeclared(
+        hasSecrets(),
+        "secrets.set",
+        "capabilities.secrets must declare { sources: true }",
+      );
+      if (!secretStore) {
+        throw new Error(
+          `host.secrets.set("${ref}") — no secret-store backend wired ` +
+            `(supports("secrets@1") is false; the editor injects one)`,
+        );
+      }
+      await secretStore.set(manifest.id, ref, secret);
+    },
+    async exists(ref: string): Promise<boolean> {
+      requireDeclared(
+        hasSecrets(),
+        "secrets.exists",
+        "capabilities.secrets must declare { sources: true }",
+      );
+      if (!secretStore) return false;
+      return secretStore.exists(manifest.id, ref);
+    },
+    async forget(ref: string): Promise<void> {
+      requireDeclared(
+        hasSecrets(),
+        "secrets.forget",
+        "capabilities.secrets must declare { sources: true }",
+      );
+      // No backend → nothing to forget (the honest no-store no-op; the
+      // capability gate already fired above for the undeclared case).
+      if (!secretStore) {
+        log.warn(
+          `host.secrets.forget("${ref}") — no secret-store backend wired ` +
+            `(supports("secrets@1") is false); nothing to forget`,
+        );
+        return;
+      }
+      await secretStore.forget(manifest.id, ref);
+    },
+  };
+
   const featureSet = new Set(HOST_FEATURES);
   if (getEditor().text) {
     // The door always exists (it falls back to an estimate); the FEATURE
@@ -1960,6 +2053,12 @@ export function createBundleHost(
     // actually spawn off-main-thread workers (K-3 / S-07 / I-02).
     featureSet.add("workers@1");
   }
+  if (options?.secrets) {
+    // The secrets door always exists (no-store fallback: set/forget reject,
+    // exists false); this flag means a real SecretStoreBackend is wired, so
+    // a bundle can actually have the host hold a credential by ref (D-11).
+    featureSet.add("secrets@1");
+  }
 
   const host: BundleHost = {
     manifest,
@@ -1981,6 +2080,7 @@ export function createBundleHost(
     assets,
     images,
     workers,
+    secrets,
     clipboard,
     supports: (feature) => featureSet.has(feature),
     get editor() {

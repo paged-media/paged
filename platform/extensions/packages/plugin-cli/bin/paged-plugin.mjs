@@ -105,7 +105,7 @@ function validateManifest(manifest, manifestDir) {
       err(`"capabilities" must be an object`);
     } else {
       for (const key of Object.keys(caps)) {
-        if (!["document", "rendering", "keybindings", "editContext", "assets", "storage", "network", "dataProviders", "clipboard", "wasm", "workers"].includes(key)) {
+        if (!["document", "rendering", "keybindings", "editContext", "assets", "storage", "network", "dataProviders", "clipboard", "wasm", "workers", "secrets"].includes(key)) {
           err(`unknown capability "${key}"`);
         }
       }
@@ -235,6 +235,21 @@ function validateManifest(manifest, manifestDir) {
               `"capabilities.workers.maxSharedBytes" must be an integer ` +
                 `1..${WORKERS_MAX_SHARED_BYTES}`,
             );
+          }
+        }
+      }
+      // D-11 (rfc-credential-store): the host credential-store door —
+      // { sources: boolean }. REFERENCE-ONLY; gates host.secrets (set/exists/
+      // forget, NO get). Closed object vocabulary, hand-mirrors the schema.
+      if (caps.secrets !== undefined) {
+        const s = caps.secrets;
+        if (typeof s !== "object" || s === null || Array.isArray(s)) {
+          err(`"capabilities.secrets" must be an object`);
+        } else {
+          const extra = Object.keys(s).filter((k) => !["sources"].includes(k));
+          if (extra.length) err(`"capabilities.secrets" unknown key(s): ${extra.join(", ")}`);
+          if (typeof s.sources !== "boolean") {
+            err(`"capabilities.secrets.sources" must be a boolean`);
           }
         }
       }

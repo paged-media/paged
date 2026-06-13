@@ -154,6 +154,31 @@ export interface PluginCapabilities {
    * is the real boundary). See the K-3 design note.
    */
   workers?: WorkersCapability;
+  /**
+   * The host CREDENTIAL-STORE door's grant (D-11; rfc-credential-store).
+   * Gates `host.secrets`: a bundle that does not declare `secrets` cannot
+   * reach the store (the host gate throws). `sources: true` is the v1
+   * grant — credentials for authenticated DB-attach / remote sources.
+   *
+   * The store is REFERENCE-ONLY and host-owned: a bundle holds
+   * `credentialRef` strings (e.g. `keychain:source-4`), NEVER secret
+   * material. The surface has `set` (host-UI-prompted) / `exists` /
+   * `forget` and DELIBERATELY NO `get` — secret bytes never enter the
+   * plugin realm. The plugin passes the ref to the host attach/fetch door
+   * and the HOST injects the connection string / Authorization header on
+   * its side of the wire (pairs with the D-03 consent door). See the RFC
+   * and DESIGN.md §16.
+   */
+  secrets?: SecretsCapability;
+}
+
+/** Credential-store declaration (D-11; rfc-credential-store). `sources`
+ *  gates the `host.secrets` door for authenticated DB-attach / remote
+ *  sources — the v1 (and only) grant. A closed vocabulary so the host can
+ *  reason about it; an absent/false `sources` denies the door. */
+export interface SecretsCapability {
+  /** Grant the credential store for data sources (DB-attach / remote). */
+  sources: boolean;
 }
 
 /** Worker spawn + SAB declaration (K-3 / S-07). `max` is the requested

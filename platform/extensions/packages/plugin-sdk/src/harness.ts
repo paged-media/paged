@@ -70,6 +70,7 @@ import {
   createBundleHost,
   type BlobStore,
   type ClipboardBackend,
+  type SecretStoreBackend,
   type CreateBundleHostOptions,
 } from "./host-impl";
 import { satisfiesApiVersion, API_VERSION } from "./version";
@@ -118,6 +119,7 @@ export interface HarnessOptions
       | "assetSource"
       | "blobStore"
       | "clipboard"
+      | "secrets"
     > {}
 
 /** A headless in-memory `BlobStore` — per-plugin byte maps, so the
@@ -178,6 +180,38 @@ export function inMemoryClipboard(): ClipboardBackend {
           ? { tabular: { rows: payload.tabular.rows.map((r) => [...r]) } }
           : {}),
       };
+    },
+  };
+}
+
+/** A headless in-memory `SecretStoreBackend` (D-11; rfc-credential-store) —
+ *  per-plugin `ref→secret` maps, so the conformance harness exercises
+ *  `host.secrets` set/exists/forget without a real keychain. Default-
+ *  injected so `supports("secrets@1")` is true headlessly. It STORES the
+ *  secret silently (no prompt) — the prompt is the EDITOR backing's job
+ *  ("via host UI only"); a headless driver has no UI. Critically there is
+ *  NO read-back path here either: the map is write-only from the door's
+ *  perspective (`exists` is the only observation), upholding the no-`get`
+ *  trust line even in the reference backing. */
+export function inMemorySecretStore(): SecretStoreBackend {
+  const byPlugin = new Map<string, Set<string>>();
+  const dir = (id: string) => {
+    let d = byPlugin.get(id);
+    if (!d) byPlugin.set(id, (d = new Set()));
+    return d;
+  };
+  return {
+    async set(id, ref, _secret) {
+      // The secret value is intentionally NOT retained by the harness —
+      // only the fact that the ref is "held" — so a test can never recover
+      // it (the no-get invariant, end to end).
+      dir(id).add(ref);
+    },
+    async exists(id, ref) {
+      return dir(id).has(ref);
+    },
+    async forget(id, ref) {
+      dir(id).delete(ref);
     },
   };
 }
@@ -474,6 +508,11 @@ export async function createHeadlessHost(
   // unless a test injects its own — so a consumer's copy→paste round-trips
   // headlessly and `supports("clipboard@1")` is true.
   const clipboard = options.clipboard ?? inMemoryClipboard();
+  // One in-memory credential store shared across the harness's hosts (D-11),
+  // unless a test injects its own — so a bundle's set→exists→forget door is
+  // exercisable headlessly and `supports("secrets@1")` is true. Reference-
+  // only: the value is never retained (the no-get trust line, end to end).
+  const secrets = options.secrets ?? inMemorySecretStore();
 
   const buildHost = (
     manifest: PluginManifest,
@@ -484,6 +523,7 @@ export async function createHeadlessHost(
       storage: options.storage,
       blobStore,
       clipboard,
+      secrets,
       capabilityMode: mode,
       // W-06 — a recordable fake asset source the conformance harness
       // can pass so a bundle's `@font-face` byte path is exercisable
@@ -560,6 +600,7 @@ export async function createHeadlessHost(
       rendering: ["overlay", "hitTest", "sceneLayer"],
       keybindings: true,
       storage: { blob: true },
+      secrets: { sources: true },
     },
     // Broad contribution declarations so the neutral DRIVER host (which
     // registers arbitrary contributions directly in 'warn' mode) never

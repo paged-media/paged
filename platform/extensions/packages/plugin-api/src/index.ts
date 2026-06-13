@@ -28,6 +28,7 @@ export type {
   WasmArtifact,
   WasmPurpose,
   WorkersCapability,
+  SecretsCapability,
 } from "./manifest";
 
 export type { BundleHandle, PagedBundle } from "./bundle";
@@ -42,6 +43,8 @@ export type {
   WorkersSurface,
   BundleWorker,
   SpawnWorkerOptions,
+  SecretsSurface,
+  SecretMaterial,
   DocumentSurface,
   SelectionSurface,
   ViewportSurface,

@@ -158,6 +158,19 @@
             }
           }
         },
+        "secrets": {
+          "type": "object",
+          "description": "Host credential-store door (D-11; rfc-credential-store). 'sources' grants host.secrets for authenticated DB-attach / remote sources. REFERENCE-ONLY + host-owned: plugins hold credentialRef strings, never secret material; the surface has set/exists/forget and NO get. Gates host.secrets.",
+          "additionalProperties": false,
+          "required": [
+            "sources"
+          ],
+          "properties": {
+            "sources": {
+              "type": "boolean"
+            }
+          }
+        },
         "wasm": {
           "type": "array",
           "description": "Declared WebAssembly artifacts the bundle ships and loads at runtime (capability-gated, declared-only, budgeted). See docs/wasm-packaging.md.",

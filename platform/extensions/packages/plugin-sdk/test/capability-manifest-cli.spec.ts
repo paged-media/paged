@@ -191,3 +191,37 @@ describe("plugin-cli validate — capabilities.workers (K-3 / S-07)", () => {
     expect(r.err).toMatch(/"capabilities\.workers\.maxSharedBytes"/);
   });
 });
+
+describe("plugin-cli validate — capabilities.secrets (D-11)", () => {
+  it("accepts a secrets capability with sources: true", () => {
+    const r = validate({ ...base, capabilities: { secrets: { sources: true } } });
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/valid/);
+  });
+
+  it("accepts sources: false (declared-but-off)", () => {
+    const r = validate({ ...base, capabilities: { secrets: { sources: false } } });
+    expect(r.code).toBe(0);
+  });
+
+  it("rejects a non-boolean sources", () => {
+    const r = validate({ ...base, capabilities: { secrets: { sources: "yes" } } });
+    expect(r.code).toBe(1);
+    expect(r.err).toMatch(/"capabilities\.secrets\.sources" must be a boolean/);
+  });
+
+  it("rejects a non-object secrets capability", () => {
+    const r = validate({ ...base, capabilities: { secrets: true } });
+    expect(r.code).toBe(1);
+    expect(r.err).toMatch(/"capabilities\.secrets" must be an object/);
+  });
+
+  it("rejects an unknown key in the secrets object (no get/material leak)", () => {
+    const r = validate({
+      ...base,
+      capabilities: { secrets: { sources: true, get: true } },
+    });
+    expect(r.code).toBe(1);
+    expect(r.err).toMatch(/"capabilities\.secrets" unknown key/);
+  });
+});

@@ -779,3 +779,59 @@ Wholly additive: a new `host.workers` member + `WorkersSurface` /
 shapes + `WORKER_BUDGETS`), the `workers@1` feature flag, and a new
 `capabilities.workers` manifest field (schema + CLI). No existing member
 changed; the gate / namespace rule / every other door are untouched.
+
+## 16. The host credential store (D-11 — `host.secrets`)
+
+The frozen RFC
+(`thoughts/docs/paged/plugin-data/rfc-credential-store.md`) is the
+deliberation record; this section is the contract summary. The deferral
+lifts because a real consumer exists: paged.data's authenticated
+DB-attach / remote sources need a credential the document MUST NOT carry.
+A bundle never touches a secret store directly — the host owns it; the
+plugin holds only references.
+
+### 16.1 The shape — reference-only, no `get`
+
+`host.secrets` has exactly three doors:
+`set(ref, secret): Promise<void>` (the RFC's "via host UI only" — the
+editor backing PROMPTS), `exists(ref): Promise<boolean>`, and
+`forget(ref): Promise<void>`. There is **deliberately NO `get`**. A plugin
+maps a source to a `credentialRef` STRING (e.g. `keychain:source-4`) and
+holds only that string; secret bytes never enter the plugin realm. When a
+source resolves, the plugin passes the ref to the host attach/fetch door
+and the **HOST** injects the connection string / Authorization header on
+its side of the wire — the injection point pairs with the D-03 consent
+door (a consented origin + a `credentialRef` resolve host-side). The
+no-`get` absence IS the contract; a trust-line test asserts the surface
+has no `get` member (`secrets.spec.ts`).
+
+### 16.2 Capability gate + the no-backend door
+
+`capabilities.secrets: { sources: true }` (closed vocabulary, CLI + schema
+validated) is the prerequisite. The CAPABILITY gate (an undeclared
+`secrets`) makes every door REJECT in 'enforce' (a manifest bug, surfaced
+loudly); a missing BACKEND is the graceful honest answer — `set`/`forget`
+reject (`exists` answers `false`), and `supports("secrets@1")` is false.
+The editor injects a `SecretStoreBackend` that owns the storage tier and
+the user prompt; a headless host injects an in-memory ref store
+(`inMemorySecretStore`) that holds refs but never retains the value
+(upholding no-`get` end to end).
+
+### 16.3 Editor backing tiers (honestly tiered)
+
+The editor's reference `SecretStoreBackend` is WebCrypto-wrapped IndexedDB
+when a user passphrase is set (a passphrase-wrapped AES-GCM key, namespaced
+`paged:<plugin-id>:<ref>`), with a SESSION-ONLY in-memory fallback when no
+passphrase/backing is configured (refs die with the tab — the RFC's honest
+degradation; documents stay inert until re-entered). The WebCrypto tier is
+the WEAKER tier (no OS keychain on the pure-web path — the RFC names the OS
+keychain as the strong tier behind a future shell); the consent affordance
+says so.
+
+### 16.4 Additivity
+
+Wholly additive: a new `host.secrets` member + `SecretsSurface` /
+`SecretMaterial` types, a new `secrets` `CreateBundleHostOptions` field (+
+the `SecretStoreBackend` shape), the `secrets@1` feature flag, and a new
+`capabilities.secrets` manifest field (schema + CLI). No existing member
+changed; the gate / namespace rule / every other door are untouched.

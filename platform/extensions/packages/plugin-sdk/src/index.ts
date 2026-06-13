@@ -45,6 +45,7 @@ export {
   type ClipboardBackend,
   type WorkerBackend,
   type SpawnedWorker,
+  type SecretStoreBackend,
   type StorageBacking,
 } from "./host-impl";
 export { FALLBACK_WIDGETS } from "./widgets-fallback";

@@ -484,6 +484,63 @@ export interface WorkersSurface {
   concurrency(): number;
 }
 
+// ------------------------------------------------------------- secrets
+//
+// The host CREDENTIAL-STORE door (D-11; rfc-credential-store). A
+// REFERENCE-ONLY, host-owned secret store for authenticated DB-attach /
+// remote data sources. The trust line: a plugin holds `credentialRef`
+// STRINGS (e.g. `keychain:source-4`), never secret material — so there is
+// DELIBERATELY NO `get()`. Secret bytes never enter the plugin realm; the
+// plugin passes the ref to the host attach/fetch door and the HOST injects
+// the connection string / Authorization header on its side of the wire
+// (the injection point pairs with the D-03 consent door). `set` is the
+// only door that takes a secret, and the RFC says "via host UI only" — the
+// SDK surface accepts it, but the editor backing PROMPTS the user (the
+// reference adapter never persists a plugin-supplied secret silently).
+// Capability-gated on `capabilities.secrets`. Probe `supports("secrets@1")`
+// — false when the host wires no `SecretStoreBackend` (the door then
+// rejects honestly).
+
+/** The secret a `host.secrets.set` carries (D-11). v1 is a connection
+ *  string / token / password as a UTF-8 string — opaque to the contract;
+ *  the host stores it under the `ref` and injects it at attach/fetch time.
+ *  This is the ONLY place a secret value crosses the door, inbound; there
+ *  is no outbound read (no `get`). */
+export type SecretMaterial = string;
+
+/**
+ * The capability-gated, REFERENCE-ONLY credential store (D-11;
+ * rfc-credential-store). The plugin maps a source to a `credentialRef`
+ * string and asks the host to `set` (prompting the user), `exists`, or
+ * `forget` it — but it can NEVER read the secret back. `set` resolves once
+ * the host has stored the material (its backing decides whether to prompt;
+ * the editor reference backing PROMPTS — "via host UI only"). Always
+ * present — when the host injects no `SecretStoreBackend`, `set`/`forget`
+ * reject and `exists` answers `false` (the honest no-store door), and
+ * `supports("secrets@1")` is false. Capability-gated:
+ * `capabilities.secrets` must be declared (the host gate throws on an
+ * undeclared use).
+ *
+ * NOTE: this surface has NO `get`. That absence IS the contract (the
+ * trust line — secret bytes never enter the plugin realm); a `get` here
+ * would defeat the entire D-11 design.
+ */
+export interface SecretsSurface {
+  /** Store `secret` under `ref` (the editor backing PROMPTS the user — the
+   *  RFC's "via host UI only"). Rejects when undeclared (capability gate),
+   *  no backend is wired, or the user declines the prompt. The plugin
+   *  keeps only the `ref`. */
+  set(ref: string, secret: SecretMaterial): Promise<void>;
+  /** Does the host hold a secret under `ref`? `false` when none is stored
+   *  OR no backend is wired (the honest no-store answer). A bundle uses
+   *  this to decide whether a source still needs its credential entered. */
+  exists(ref: string): Promise<boolean>;
+  /** Forget the secret under `ref` (the source goes inert until re-entered
+   *  — the RFC's honest degradation). Idempotent; rejects only when the
+   *  door is undeclared (capability gate). A no-op when no backend wired. */
+  forget(ref: string): Promise<void>;
+}
+
 // ------------------------------------------------------------ document
 
 /** Expected mutation failures are results, not throws — mirroring the
@@ -1015,6 +1072,15 @@ export interface BundleHost {
    *  Capability-gated on `capabilities.workers`. The host facade tracks
    *  every spawned worker for automatic teardown on bundle dispose. */
   readonly workers: WorkersSurface;
+  /** The capability-gated, REFERENCE-ONLY CREDENTIAL STORE (D-11;
+   *  rfc-credential-store): `set` (host-UI-prompted) / `exists` / `forget`
+   *  a `credentialRef` — and DELIBERATELY NO `get` (secret bytes never
+   *  enter the plugin realm; the HOST injects them at the attach/fetch
+   *  door). Always present — when the host injects no `SecretStoreBackend`,
+   *  `set`/`forget` reject, `exists` is false, and `supports("secrets@1")`
+   *  is false (the honest no-store door). Capability-gated on
+   *  `capabilities.secrets`. */
+  readonly secrets: SecretsSurface;
   /** The capability-gated CLIPBOARD door (K-6 / S-14): read/write the
    *  SYSTEM clipboard with a rich `{ text?, tabular? }` payload (the
    *  sheets grid's range copy/paste interchange). Always present — when
