@@ -320,6 +320,89 @@ export interface SceneLayerSurface extends Disposable {
   clear(elementId: string): Promise<void>;
 }
 
+// ------------------------------------------------------- images (C-6)
+//
+// The renderer RESOURCE-PROVIDER door (C-6 / I-06; the v44 wire). A
+// bundle CLAIMS a placed image's pyramid: it tells the renderer how the
+// image is tiled (levels / tile size / base extent) and hands a `source`
+// callback. The renderer PULLS tiles it needs at composite time (it
+// knows the visible rect + scale; the bundle knows the pixels) — a pull
+// seam keyed by element id, NOT a plugin push (push would re-invent
+// damage tracking on the wrong side of the wire). The SDK adapter owns
+// the needed → source → submit plumbing: on a `resourceTilesNeeded`
+// event it calls `source(level, x, y)` for each missing tile, batches the
+// results, and submits them (echoing the generation); the bundle supplies
+// only `source` + `revision`. Capability-gated on `capabilities.rendering`
+// ∋ `"resourceProvider"`. Probe `supports("rendering.resourceProvider@1")`
+// — false when the host wires no resource channel (the door then warns +
+// no-ops). Disposing a claim releases it (the renderer drops to the
+// whole-image fallback lane).
+
+/** One pyramid tile the bundle's `source` callback returns (C-6). `rgba`
+ *  is tightly packed RGBA8 (`width*height*4` bytes, row-major); `[x, y]`
+ *  is the tile's origin in LEVEL-space px (the provider's grid origin at
+ *  that mip level). Returning `null` is the honest "no pixels for this
+ *  tile yet" answer — the renderer keeps the best cached/fallback level. */
+export interface TileBytes {
+  /** Tile origin x in level-space px. */
+  x: number;
+  /** Tile origin y in level-space px. */
+  y: number;
+  /** Pixel width of the buffer. */
+  width: number;
+  /** Pixel height of the buffer. */
+  height: number;
+  /** Tightly packed RGBA8, row-major (`width*height*4` bytes). */
+  rgba: Uint8Array;
+}
+
+/** What `host.images.claimImageResource` is handed (C-6). The first four
+ *  fields describe the provider-owned pyramid; `source` serves a tile,
+ *  `revision` is a monotonic damage signal (bump it and the renderer
+ *  re-pulls — same etag discipline as the data provider). */
+export interface ImageResourceClaimOptions {
+  /** Number of mip levels the provider serves (0 = full res; each level
+   *  halves). */
+  levels: number;
+  /** Tile edge in level-space px (the grid step). */
+  tileSize: number;
+  /** Natural pixel width of the level-0 image. */
+  baseWidth: number;
+  /** Natural pixel height of the level-0 image. */
+  baseHeight: number;
+  /** Serve one tile at pyramid `level` whose origin is `(x, y)` in
+   *  level-space px, or `null` when the provider has no pixels for it
+   *  yet (the renderer holds the fallback level). Invoked by the SDK
+   *  adapter for each tile the renderer reports needing. */
+  source(level: number, x: number, y: number): Promise<TileBytes | null>;
+  /** The current content revision — a monotonic counter the SDK sends
+   *  on claim; bump the value your closure returns and re-claim (or rely
+   *  on the renderer's damage) to invalidate. */
+  revision(): number;
+}
+
+/**
+ * The renderer resource-provider door (C-6 / I-06). A bundle claims a
+ * placed image's tiled mip pyramid; the renderer pulls tiles at the
+ * level its current scale needs. The SDK adapter owns the
+ * needed → source → submit plumbing (the bundle supplies only the
+ * `source` + `revision` callbacks). Always present — when the host wires
+ * no resource channel, `claimImageResource` warns + returns an inert
+ * Disposable and `supports("rendering.resourceProvider@1")` is false (the
+ * honest no-provider door). Capability-gated: `capabilities.rendering`
+ * must include `"resourceProvider"`.
+ */
+export interface ImagesSurface {
+  /** Claim `elementId`'s image resource (the v44 wire's `image_id`). The
+   *  renderer registers the claim and pulls tiles as it composites;
+   *  disposing the returned handle releases the claim (the renderer drops
+   *  to the whole-image fallback lane). */
+  claimImageResource(
+    elementId: string,
+    opts: ImageResourceClaimOptions,
+  ): Disposable;
+}
+
 // ------------------------------------------------------------ document
 
 /** Expected mutation failures are results, not throws — mirroring the
@@ -834,6 +917,15 @@ export interface BundleHost {
    *  `supports("assets.fonts@1")` is false. Capability-gated:
    *  `getFontFace` requires `capabilities.assets` ∋ `"fonts"`. */
   readonly assets: AssetSurface;
+  /** The capability-gated RENDERER RESOURCE-PROVIDER door (C-6 / I-06):
+   *  claim a placed image's tiled mip pyramid so the renderer pulls tiles
+   *  at the level its current scale needs (the v44 wire). The SDK adapter
+   *  owns the needed → source → submit plumbing; the bundle supplies the
+   *  `source` + `revision` callbacks. Always present — when the host wires
+   *  no resource channel, `claimImageResource` warns + returns an inert
+   *  Disposable and `supports("rendering.resourceProvider@1")` is false.
+   *  Capability-gated on `capabilities.rendering` ∋ `"resourceProvider"`. */
+  readonly images: ImagesSurface;
   /** The capability-gated CLIPBOARD door (K-6 / S-14): read/write the
    *  SYSTEM clipboard with a rich `{ text?, tabular? }` payload (the
    *  sheets grid's range copy/paste interchange). Always present — when

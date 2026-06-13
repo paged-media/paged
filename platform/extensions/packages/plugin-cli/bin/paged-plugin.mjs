@@ -18,7 +18,12 @@ import process from "node:process";
 
 const ID_PATTERN = /^[a-z][a-z0-9]*(\.[a-z][a-z0-9-]*)+$/;
 const SEMVER_PATTERN = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
-const RENDERING = new Set(["sceneLayer", "overlay", "hitTest"]);
+const RENDERING = new Set([
+  "sceneLayer",
+  "overlay",
+  "hitTest",
+  "resourceProvider",
+]);
 const CLIPBOARD = new Set(["none", "vector", "full"]);
 const SCOPES = new Set(["broad", "scoped"]);
 const ENTRIES = new Set(["doubleClick", "command"]);
@@ -122,7 +127,7 @@ function validateManifest(manifest, manifestDir) {
       }
       if (caps.rendering !== undefined) {
         if (!Array.isArray(caps.rendering) || !caps.rendering.every((r) => RENDERING.has(r))) {
-          err(`"capabilities.rendering" entries must be sceneLayer|overlay|hitTest`);
+          err(`"capabilities.rendering" entries must be sceneLayer|overlay|hitTest|resourceProvider`);
         }
       }
       // Asset-store kinds: "fonts" (W-06) | "images" (C-5, core v42).

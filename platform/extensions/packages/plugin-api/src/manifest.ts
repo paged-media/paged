@@ -48,13 +48,16 @@ export interface PluginCapabilities {
     read?: "broad" | "scoped";
     write?: "broad" | "scoped";
   };
-  /** Render-pipeline surfaces the bundle uses. v0: `overlay` means
-   *  the shared TS overlay signals (tool previews) AND
-   *  `contribute.overlay`; `hitTest` gates `document.hitTest`;
-   *  `sceneLayer` is reserved for the P2 channel. Declaring a surface
-   *  is the prerequisite for the matching door (the host gate throws
-   *  on an undeclared use). */
-  rendering?: Array<"sceneLayer" | "overlay" | "hitTest">;
+  /** Render-pipeline surfaces the bundle uses. `overlay` means the
+   *  shared TS overlay signals (tool previews) AND `contribute.overlay`;
+   *  `hitTest` gates `document.hitTest`; `sceneLayer` gates the in-frame
+   *  `contribute.sceneLayer()` channel (C-1); `resourceProvider` gates
+   *  the renderer pyramid-tile door `host.images.claimImageResource`
+   *  (C-6 / I-06). Declaring a surface is the prerequisite for the
+   *  matching door (the host gate throws on an undeclared use). */
+  rendering?: Array<
+    "sceneLayer" | "overlay" | "hitTest" | "resourceProvider"
+  >;
   /** The bundle registers keybindings directly via
    *  `contribute.keybinding`. Keybindings have no id to list under
    *  `contributes`, so this boolean is their declaration. v0 first-

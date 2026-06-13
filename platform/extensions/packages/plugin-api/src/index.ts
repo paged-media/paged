@@ -35,6 +35,9 @@ export type {
   BundleHost,
   ContributionSurface,
   SceneLayerSurface,
+  ImagesSurface,
+  ImageResourceClaimOptions,
+  TileBytes,
   DocumentSurface,
   SelectionSurface,
   ViewportSurface,
@@ -102,6 +105,10 @@ export type {
   FontFaceAsset,
   FontFaceFormat,
 } from "./assets";
+
+// C-6 (I-06) — the renderer resource-provider wire shape, re-exported
+// so the editor channel + the SDK adapter share one tile type.
+export type { ProviderTileWire } from "./wire";
 
 export type {
   ClipboardSurface,

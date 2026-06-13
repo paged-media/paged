@@ -33,10 +33,29 @@ import type {
   Mutation,
   PageId,
   PathAnchorsResult,
+  ProviderTileWire,
+  ResourceTilesNeededWire,
   SceneLayer,
   SelectionMode,
   WorkerToMain,
 } from "./wire";
+
+/** C-6 (I-06) — the editor-channel claim shape (the v44
+ *  `claimImageResource` payload, named for the `PagedEditor.images`
+ *  member). The SDK adapter derives it from
+ *  `ImageResourceClaimOptions` + the bundle-supplied revision. */
+export interface ImageResourceClaim {
+  imageId: string;
+  levels: number;
+  tileSize: number;
+  baseWidth: number;
+  baseHeight: number;
+  revision: number;
+}
+
+/** C-6 — the worker's tile-miss notification, as the editor channel
+ *  surfaces it (the v44 `resourceTilesNeeded` payload). */
+export type ResourceTilesNeeded = ResourceTilesNeededWire;
 
 // ---------------------------------------------------------------- base
 
@@ -495,6 +514,30 @@ export interface PagedEditor {
   sceneLayers?: {
     submit(elementId: string, layer: SceneLayer): Promise<void>;
     clear(elementId: string): Promise<void>;
+  };
+  /** C-6 (I-06) — the renderer RESOURCE-PROVIDER channel. The editor
+   *  routes these to the canvas-wasm `claimImageResource` /
+   *  `submitResourceTiles` / `releaseImageResource` messages (the v44
+   *  wire) AND surfaces the worker's `resourceTilesNeeded` events
+   *  (`onResourceTilesNeeded`) so the SDK adapter can pull + submit the
+   *  tiles. `undefined` when the host build wires no resource channel
+   *  (headless / older editor); `host.images.claimImageResource()` then
+   *  warns + no-ops and `supports("rendering.resourceProvider@1")` is
+   *  false. All four members mirror the editor's CanvasClient surface. */
+  images?: {
+    claim(claim: ImageResourceClaim): Promise<void>;
+    release(imageId: string): Promise<void>;
+    submitTiles(
+      imageId: string,
+      level: number,
+      tiles: ProviderTileWire[],
+      generation: number,
+    ): Promise<void>;
+    /** Subscribe to the worker's `resourceTilesNeeded` notifications
+     *  (worker → main). The returned function unsubscribes. */
+    onResourceTilesNeeded(
+      listener: (need: ResourceTilesNeeded) => void,
+    ): () => void;
   };
   overlaySignals: {
     setToolPreview(value: ToolPreviewShape | null): void;

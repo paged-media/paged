@@ -29,6 +29,9 @@ import type {
   FontFaceAsset,
   HitFilter,
   HitResult,
+  ImagesSurface,
+  ImageResourceClaimOptions,
+  ProviderTileWire,
   ConsentResult,
   DataProvidersSurface,
   DataProviderRegistration,
@@ -508,8 +511,9 @@ export function createBundleHost(
    *  the manifest so the manifest stays the single source of truth. */
   const hasDoc = (dir: "read" | "write"): boolean =>
     caps?.document?.[dir] !== undefined;
-  const hasRendering = (s: "sceneLayer" | "overlay" | "hitTest"): boolean =>
-    caps?.rendering?.includes(s) ?? false;
+  const hasRendering = (
+    s: "sceneLayer" | "overlay" | "hitTest" | "resourceProvider",
+  ): boolean => caps?.rendering?.includes(s) ?? false;
   const hasAsset = (k: "fonts" | "images"): boolean =>
     caps?.assets?.includes(k) ?? false;
   const hasBlobStore = (): boolean => caps?.storage?.blob === true;
@@ -1431,6 +1435,114 @@ export function createBundleHost(
     },
   };
 
+  // --------------------------------------------------------- images
+  // The capability-gated RENDERER RESOURCE-PROVIDER door (C-6 / I-06; the
+  // v44 wire). A claim registers a placed image's pyramid with the
+  // renderer (`channel.claim` → `claimImageResource`); the renderer pulls
+  // tiles it needs by emitting `resourceTilesNeeded`, which the editor
+  // surfaces through `channel.onResourceTilesNeeded`. THE SDK ADAPTER
+  // OWNS THE PLUMBING: per needed event for THIS image, it calls the
+  // bundle's `source(level, x, y)` for each grid origin, batches the
+  // non-null results, and submits them (`channel.submitTiles` →
+  // `submitResourceTiles`) echoing the generation so a stale reply is
+  // dropped worker-side. Disposing the claim releases it (`channel.release`
+  // → `releaseImageResource`) and stops routing its needed events. The
+  // gate is a render-pipeline door: `claimImageResource` requires
+  // `capabilities.rendering` ∋ "resourceProvider" (throws in 'enforce',
+  // warns in 'warn'). No channel wired → claim warns + returns an inert
+  // Disposable and `supports("rendering.resourceProvider@1")` is false.
+  const imageChannel = () => getEditor().images;
+  const images: ImagesSurface = {
+    claimImageResource(elementId: string, opts: ImageResourceClaimOptions) {
+      requireDeclared(
+        hasRendering("resourceProvider"),
+        "images.claimImageResource",
+        'capabilities.rendering must include "resourceProvider"',
+      );
+      const channel = imageChannel();
+      if (!channel) {
+        log.warn(
+          `images.claimImageResource("${elementId}") ignored — the host ` +
+            `wired no resource channel (probe ` +
+            `supports("rendering.resourceProvider@1"))`,
+        );
+        return store.add(toDisposable(() => {}));
+      }
+      let released = false;
+      // Route only THIS image's needed events; pull → submit per miss.
+      const off = channel.onResourceTilesNeeded((need) => {
+        if (released || need.imageId !== elementId) return;
+        void (async () => {
+          const tiles: ProviderTileWire[] = [];
+          for (const [x, y] of need.tiles) {
+            let tile: Awaited<ReturnType<typeof opts.source>>;
+            try {
+              tile = await opts.source(need.level, x, y);
+            } catch (err) {
+              // A throwing source must not strand the fill — skip the
+              // tile (the renderer keeps the fallback level for it).
+              log.warn(
+                `images.source(level ${need.level}, ${x}, ${y}) threw — ` +
+                  `tile skipped`,
+                err,
+              );
+              continue;
+            }
+            if (!tile) continue;
+            tiles.push({
+              x: tile.x,
+              y: tile.y,
+              width: tile.width,
+              height: tile.height,
+              // The wire carries a plain number[]; Array.from copies the
+              // RGBA8 view (isolate-proxy-safe, like the scene-layer path).
+              rgba: Array.from(tile.rgba),
+            });
+          }
+          if (released || tiles.length === 0) return;
+          try {
+            await channel.submitTiles(
+              elementId,
+              need.level,
+              tiles,
+              need.generation,
+            );
+          } catch (err) {
+            log.warn(
+              `images.submitTiles("${elementId}", level ${need.level}) failed`,
+              err,
+            );
+          }
+        })();
+      });
+      // The claim itself — fire-and-forget; the renderer registers it and
+      // begins pulling. A claim that races a release is harmless (release
+      // wins via `released`).
+      void channel
+        .claim({
+          imageId: elementId,
+          levels: opts.levels,
+          tileSize: opts.tileSize,
+          baseWidth: opts.baseWidth,
+          baseHeight: opts.baseHeight,
+          revision: opts.revision(),
+        })
+        .catch((err) => {
+          log.warn(`images.claim("${elementId}") failed`, err);
+        });
+      return store.add(
+        toDisposable(() => {
+          if (released) return;
+          released = true;
+          off();
+          void channel.release(elementId).catch((err) => {
+            log.warn(`images.release("${elementId}") failed`, err);
+          });
+        }),
+      );
+    },
+  };
+
   // --------------------------------------------------------- blob
   // The capability-gated binary store (K-4 / S-08). Per-plugin namespaced
   // (the adapter passes manifest.id; the backend scopes by it), quota-
@@ -1572,6 +1684,13 @@ export function createBundleHost(
     // in-frame layer will actually render.
     featureSet.add("rendering.sceneLayer@1");
   }
+  if (getEditor().images) {
+    // C-6 (I-06) — a real resource channel is wired (the editor routes the
+    // v44 claim/submit/release + surfaces resourceTilesNeeded). The
+    // host.images door always exists (warns + no-ops without this); the
+    // flag tells a bundle the renderer will actually pull its tiles.
+    featureSet.add("rendering.resourceProvider@1");
+  }
   if (options?.shell) {
     featureSet.add("shell.openPanel@1");
     // A wired shell implements the file picker too (the ShellSurface
@@ -1636,6 +1755,7 @@ export function createBundleHost(
     bindings,
     widgets,
     assets,
+    images,
     clipboard,
     supports: (feature) => featureSet.has(feature),
     get editor() {

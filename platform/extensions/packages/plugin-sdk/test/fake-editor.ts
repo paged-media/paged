@@ -68,11 +68,74 @@ function fakeKeybindingRegistry() {
   };
 }
 
+/** C-6 — a fake renderer resource channel (the editor's `PagedEditor.images`
+ *  member). Records claims/submits/releases and lets a test EMIT a
+ *  `resourceTilesNeeded` notification (the worker→main event the editor
+ *  surfaces), driving the SDK adapter's pull→submit plumbing. */
+export function makeFakeImageChannel() {
+  type Claim = {
+    imageId: string;
+    levels: number;
+    tileSize: number;
+    baseWidth: number;
+    baseHeight: number;
+    revision: number;
+  };
+  type Tile = { x: number; y: number; width: number; height: number; rgba: number[] };
+  type Submit = { imageId: string; level: number; tiles: Tile[]; generation: number };
+  type Need = { imageId: string; level: number; tiles: [number, number][]; generation: number };
+
+  const claims: Claim[] = [];
+  const releases: string[] = [];
+  const submits: Submit[] = [];
+  const listeners = new Set<(need: Need) => void>();
+
+  const channel = {
+    async claim(claim: Claim) {
+      claims.push(claim);
+    },
+    async release(imageId: string) {
+      releases.push(imageId);
+    },
+    async submitTiles(
+      imageId: string,
+      level: number,
+      tiles: Tile[],
+      generation: number,
+    ) {
+      submits.push({ imageId, level, tiles, generation });
+    },
+    onResourceTilesNeeded(listener: (need: Need) => void) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+
+  return {
+    channel,
+    claims,
+    releases,
+    submits,
+    listenerCount: () => listeners.size,
+    /** Drive the worker→main needed event; resolves after the queued
+     *  microtasks (the adapter's async source→submit) settle. */
+    async emitNeeded(need: Need) {
+      for (const l of [...listeners]) l(need);
+      // Let the adapter's per-tile awaits + the submit microtask flush.
+      await new Promise((r) => setTimeout(r, 0));
+    },
+  };
+}
+
 /** When `wireContextRegistries` is true the fake exposes shell-side
  *  editContext/objectType registries (the WITH-registry path); when
  *  false they are absent and the host adapter takes the recording-stub
- *  path. Defaults to wired. */
-export function makeFakeEditor(opts?: { wireContextRegistries?: boolean }) {
+ *  path. Defaults to wired. `images` injects a fake resource channel
+ *  (C-6) onto the editor handle. */
+export function makeFakeEditor(opts?: {
+  wireContextRegistries?: boolean;
+  images?: ReturnType<typeof makeFakeImageChannel>["channel"];
+}) {
   const wireContextRegistries = opts?.wireContextRegistries ?? true;
   const listeners = new Set<Listener>();
   const tools = fakeRegistry();
@@ -148,6 +211,7 @@ export function makeFakeEditor(opts?: { wireContextRegistries?: boolean }) {
         toolPreview = v;
       },
     },
+    ...(opts?.images ? { images: opts.images } : {}),
   };
 
   return {

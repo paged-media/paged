@@ -59,7 +59,8 @@
             "enum": [
               "sceneLayer",
               "overlay",
-              "hitTest"
+              "hitTest",
+              "resourceProvider"
             ]
           }
         },

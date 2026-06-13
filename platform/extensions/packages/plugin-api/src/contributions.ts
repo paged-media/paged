@@ -55,6 +55,9 @@ export type {
   // The editor handle a bundle works against.
   PagedEditor,
   PagedClient,
+  // C-6 (I-06) — the renderer resource-provider channel shapes.
+  ImageResourceClaim,
+  ResourceTilesNeeded,
   // Tool-preview signal shapes (the v0 overlay surface).
   ToolPreviewShape,
   ToolPreviewPolyline,
