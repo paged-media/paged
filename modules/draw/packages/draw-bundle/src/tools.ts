@@ -24,6 +24,7 @@ import { createCurvatureHandler } from "./handlers/curvature";
 import { createGradientAnnotatorHandler } from "./handlers/gradient-annotator";
 import { createMeasureHandler } from "./handlers/measure";
 import { createPencilHandler } from "./handlers/pencil";
+import { createShapeBuilderHandler } from "./handlers/shape-builder";
 
 const CROSS: CursorSpec = { kind: "css", token: "crosshair" };
 
@@ -37,12 +38,14 @@ export const DRAW_TOOL_IDS = [
 
 /** Phase 4c — the pro toolset ids, in rail order (host-free, like
  *  DRAW_TOOL_IDS; the edit context keeps its anchor-editing set —
- *  these are document-level authoring/inspection tools). */
+ *  these are document-level authoring/inspection tools). Phase 9 (Tier
+ *  B) appends the Shape Builder gesture tool. */
 export const PRO_TOOL_IDS = [
   "media.paged.draw.tool.curvature",
   "media.paged.draw.tool.pencil",
   "media.paged.draw.tool.gradientAnnotator",
   "media.paged.draw.tool.measure",
+  "media.paged.draw.tool.shapeBuilder",
 ] as const;
 
 /** Build the three anchor-editing tools bound to `host` — each
@@ -130,6 +133,20 @@ export function drawTools(host: BundleHost): ToolContribution[] {
       order: 1,
       cursor: CROSS,
       gesture: () => createMeasureHandler(host),
+    },
+    // Phase 9 (Tier B) — Shape Builder: a drag across overlapping shapes
+    // unites them; Alt-drag subtracts. Composes over pathfinderBoolean;
+    // the gesture decides the operand set + mode (handlers/shape-builder.ts).
+    {
+      id: "media.paged.draw.tool.shapeBuilder",
+      title: "Shape Builder",
+      icon: "tool-shapeBuilder",
+      shortcut: "shift+b",
+      group: "shapeBuilder",
+      section: "drawType",
+      order: 6,
+      cursor: CROSS,
+      gesture: () => createShapeBuilderHandler(host),
     },
   ];
 }

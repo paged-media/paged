@@ -44,6 +44,14 @@ export {
 } from "./measure-machine";
 
 export {
+  ShapeBuilderMachine,
+  type ShapeBuilderEvent,
+  type ShapeBuilderModifiers,
+  type ShapeBuilderMode,
+  type ShapeBuilderSnapshot,
+} from "./shape-builder-machine";
+
+export {
   planAnchorAdd,
   planAnchorDelete,
   planAnchorConvert,
