@@ -135,6 +135,29 @@
             "full"
           ]
         },
+        "workers": {
+          "type": "object",
+          "description": "Worker spawn + SharedArrayBuffer (K-3 / S-07 / I-02). 'max' is the worker-count ceiling requested (host clamps to min(declared, hardwareConcurrency, 8)); 'sharedMemory' declares SAB use (gates allocateShared); 'maxSharedBytes' requests a per-bundle shared-memory ceiling (host enforces the stricter of it and its 256 MiB default cap). Gates host.workers.",
+          "additionalProperties": false,
+          "required": [
+            "max"
+          ],
+          "properties": {
+            "max": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8
+            },
+            "sharedMemory": {
+              "type": "boolean"
+            },
+            "maxSharedBytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 268435456
+            }
+          }
+        },
         "wasm": {
           "type": "array",
           "description": "Declared WebAssembly artifacts the bundle ships and loads at runtime (capability-gated, declared-only, budgeted). See docs/wasm-packaging.md.",

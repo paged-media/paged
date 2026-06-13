@@ -45,6 +45,11 @@ const WASM_MAX_TOTAL_BYTES = 80 * 1024 * 1024; // declared total
 // Bundle-relative wasm path: no leading slash, no `..` segment, .wasm.
 const WASM_PATH_OK = /^(?!\/)(?!.*\.\.).+\.wasm$/;
 
+// Worker budgets (K-3 / S-07). Keep in sync with WORKER_BUDGETS in
+// plugin-sdk/src/host-impl.ts and the schema — the CLI hand-mirrors them.
+const WORKERS_MAX = 8; // hard worker-count cap (min(declared, hwConcurrency, 8))
+const WORKERS_MAX_SHARED_BYTES = 268435456; // 256 MiB per-bundle SAB ceiling
+
 function fail(msg) {
   console.error(`error: ${msg}`);
   process.exit(1);
@@ -100,7 +105,7 @@ function validateManifest(manifest, manifestDir) {
       err(`"capabilities" must be an object`);
     } else {
       for (const key of Object.keys(caps)) {
-        if (!["document", "rendering", "keybindings", "editContext", "assets", "storage", "network", "dataProviders", "clipboard", "wasm"].includes(key)) {
+        if (!["document", "rendering", "keybindings", "editContext", "assets", "storage", "network", "dataProviders", "clipboard", "wasm", "workers"].includes(key)) {
           err(`unknown capability "${key}"`);
         }
       }
@@ -202,6 +207,36 @@ function validateManifest(manifest, manifestDir) {
       }
       if (caps.clipboard !== undefined && !CLIPBOARD.has(caps.clipboard)) {
         err(`"capabilities.clipboard" must be none|vector|full`);
+      }
+      // K-3 / S-07: worker spawn + SAB — { max: integer 1..8, sharedMemory?:
+      // boolean, maxSharedBytes?: integer 1..256 MiB }.
+      if (caps.workers !== undefined) {
+        const w = caps.workers;
+        if (typeof w !== "object" || w === null || Array.isArray(w)) {
+          err(`"capabilities.workers" must be an object`);
+        } else {
+          const extra = Object.keys(w).filter(
+            (k) => !["max", "sharedMemory", "maxSharedBytes"].includes(k),
+          );
+          if (extra.length) err(`"capabilities.workers" unknown key(s): ${extra.join(", ")}`);
+          if (!Number.isInteger(w.max) || w.max < 1 || w.max > WORKERS_MAX) {
+            err(`"capabilities.workers.max" must be an integer 1..${WORKERS_MAX}`);
+          }
+          if (w.sharedMemory !== undefined && typeof w.sharedMemory !== "boolean") {
+            err(`"capabilities.workers.sharedMemory" must be a boolean`);
+          }
+          if (
+            w.maxSharedBytes !== undefined &&
+            (!Number.isInteger(w.maxSharedBytes) ||
+              w.maxSharedBytes < 1 ||
+              w.maxSharedBytes > WORKERS_MAX_SHARED_BYTES)
+          ) {
+            err(
+              `"capabilities.workers.maxSharedBytes" must be an integer ` +
+                `1..${WORKERS_MAX_SHARED_BYTES}`,
+            );
+          }
+        }
       }
       // WASM packaging (W-07): declared-only artifacts, closed purpose
       // vocabulary, path-traversal rejected, per-artifact + total budget.

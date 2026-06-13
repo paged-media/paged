@@ -134,6 +134,43 @@ export interface PluginCapabilities {
    * JS. Threads/SharedArrayBuffer are OFF in v1.
    */
   wasm?: WasmArtifact[];
+  /**
+   * Worker spawn + SharedArrayBuffer reach the bundle declares (K-3 /
+   * S-07 / I-02). Gates `host.workers`: a bundle CANNOT spawn a worker
+   * without declaring it, and only modules listed under a declared path
+   * (bundle-relative, like the wasm artifacts) may be spawned — never an
+   * arbitrary URL. `max` is the worker-count ceiling the host grants
+   * (clamped to `min(declared, hardwareConcurrency, 8)`); `sharedMemory`
+   * declares `SharedArrayBuffer` use (gates `allocateShared`; absent ⇒
+   * message-copy only). Declaring `workers` is the prerequisite for the
+   * door (the host gate throws on an undeclared spawn).
+   *
+   * The worker gets NO ambient authority — no engine/DOM/network handle,
+   * only the bundle's already-gated JS talks to it; the SAB is a separate
+   * bundle-owned allocation, host-budgeted (a per-bundle shared-memory
+   * ceiling the host enforces, default 256 MiB, which a manifest
+   * `maxSharedBytes` may only TIGHTEN). v1 stance: honesty +
+   * accident-prevention, not a security boundary (the isolate migration
+   * is the real boundary). See the K-3 design note.
+   */
+  workers?: WorkersCapability;
+}
+
+/** Worker spawn + SAB declaration (K-3 / S-07). `max` is the requested
+ *  worker-count ceiling (the host clamps to a hard cap); `sharedMemory`
+ *  declares `SharedArrayBuffer` use; `maxSharedBytes`, when present,
+ *  REQUESTS a per-bundle shared-memory ceiling — the host enforces the
+ *  stricter of it and its hard cap. */
+export interface WorkersCapability {
+  /** Worker-count ceiling the bundle requests; the host grants
+   *  `min(max, hardwareConcurrency, 8)`. */
+  max: number;
+  /** Declares `SharedArrayBuffer` use — gates `BundleWorker.allocateShared`.
+   *  Absent/false ⇒ message-copy only (`allocateShared` returns `null`). */
+  sharedMemory?: boolean;
+  /** Optional per-bundle shared-memory ceiling, in bytes. Tightens —
+   *  never widens — the host's hard cap (default 256 MiB). */
+  maxSharedBytes?: number;
 }
 
 /** Persistent binary-storage declaration (K-4 / S-08). `blob` gates the

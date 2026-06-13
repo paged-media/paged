@@ -31,6 +31,7 @@ export {
   HOST_FEATURES,
   ASSET_BUDGETS,
   BLOB_BUDGETS,
+  WORKER_BUDGETS,
   PluginApiNotImplemented,
   PluginCapabilityError,
   type BundleTrust,
@@ -42,6 +43,8 @@ export {
   type BundleAssetProvider,
   type BlobStore,
   type ClipboardBackend,
+  type WorkerBackend,
+  type SpawnedWorker,
   type StorageBacking,
 } from "./host-impl";
 export { FALLBACK_WIDGETS } from "./widgets-fallback";

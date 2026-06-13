@@ -27,6 +27,7 @@ export type {
   StorageCapability,
   WasmArtifact,
   WasmPurpose,
+  WorkersCapability,
 } from "./manifest";
 
 export type { BundleHandle, PagedBundle } from "./bundle";
@@ -38,6 +39,9 @@ export type {
   ImagesSurface,
   ImageResourceClaimOptions,
   TileBytes,
+  WorkersSurface,
+  BundleWorker,
+  SpawnWorkerOptions,
   DocumentSurface,
   SelectionSurface,
   ViewportSurface,

@@ -31,6 +31,9 @@ import type {
   HitResult,
   ImagesSurface,
   ImageResourceClaimOptions,
+  WorkersSurface,
+  BundleWorker,
+  SpawnWorkerOptions,
   ProviderTileWire,
   ConsentResult,
   DataProvidersSurface,
@@ -242,6 +245,18 @@ export const BLOB_BUDGETS = {
   defaultQuotaBytes: 64 * 1024 * 1024,
 } as const;
 
+/** Worker spawn + SAB budgets (K-3 / S-07). The host enforces the
+ *  stricter of these and any manifest tightening. */
+export const WORKER_BUDGETS = {
+  /** Hard worker-count cap per bundle. The grant is `min(declared.max,
+   *  hardwareConcurrency, maxWorkers)` — a runaway `max` can't exhaust
+   *  the machine. */
+  maxWorkers: 8,
+  /** Default per-bundle shared-memory ceiling, in bytes (256 MiB). A
+   *  manifest's `maxSharedBytes` may only TIGHTEN this. */
+  defaultSharedBytes: 256 * 1024 * 1024,
+} as const;
+
 /**
  * The backend the editor injects to back `host.blob` (K-4 / S-08): a
  * RAW per-plugin byte store (OPFS in-browser; an in-memory map in the
@@ -256,6 +271,36 @@ export interface BlobStore {
   keys(pluginId: string): Promise<string[]>;
   /** Total bytes this plugin currently stores. */
   used(pluginId: string): Promise<number>;
+}
+
+/**
+ * A raw spawned worker the `WorkerBackend` hands back (K-3 / S-07). The
+ * SDK adapter owns the capability gate, the count cap, the SAB budget,
+ * and teardown tracking; this backend only constructs the realm + does
+ * the raw message IO. `post` forwards to the underlying worker (optional
+ * transfer); `onMessage` subscribes (the backend fans out); `terminate`
+ * destroys the realm.
+ */
+export interface SpawnedWorker {
+  post(message: unknown, transfer?: Transferable[]): void;
+  onMessage(handler: (message: unknown) => void): Disposable;
+  terminate(): void;
+}
+
+/**
+ * The backend the editor injects to back `host.workers` (K-3 / S-07 /
+ * I-02): it resolves a bundle's DECLARED, bundle-relative `module` path
+ * through the bundle's own asset base (the `/@fs/`-allowed sibling-plugin
+ * path the wasm artifacts use) and constructs an ES-module `Worker`. The
+ * SDK adapter passes the plugin id + the declared module path; the
+ * backend never invents a URL. Returns a `SpawnedWorker` (or rejects when
+ * the module fails to resolve/construct). The SAB itself is allocated by
+ * the SDK adapter (a plain `new SharedArrayBuffer` under the host budget)
+ * — the backend's job is purely the worker realm. A headless host injects
+ * no backend → `spawn` rejects + `supports("workers@1")` is false.
+ */
+export interface WorkerBackend {
+  spawn(pluginId: string, module: string, name?: string): Promise<SpawnedWorker>;
 }
 
 /**
@@ -444,6 +489,14 @@ export interface CreateBundleHostOptions {
    *  When absent, `read` answers `null` and `write` is a no-op (the honest
    *  no-clipboard door). */
   clipboard?: ClipboardBackend;
+  /** Host-provided WORKER backend (K-3 / S-07 / I-02). When present,
+   *  `host.workers.spawn` resolves a declared bundle-relative module +
+   *  constructs a host-owned `Worker` through it (capability-gated,
+   *  count-capped, SAB-budgeted, teardown-tracked) and
+   *  `supports("workers@1")` answers true. When absent, `spawn` rejects
+   *  honestly, `concurrency()` is 0, and the feature flag is false (the
+   *  honest no-worker door). */
+  workers?: WorkerBackend;
   /**
    * How the host treats a declaration↔use mismatch — a bundle that
    * USES a door (`contribute.tool`, `document.mutate`, …) it did not
@@ -527,6 +580,10 @@ export function createBundleHost(
       : caps?.clipboard === "vector"
         ? "vector"
         : "none";
+  /** K-3 — the worker door is DECLARED when `capabilities.workers` is
+   *  present (an object with a numeric `max`). */
+  const hasWorkers = (): boolean =>
+    typeof caps?.workers?.max === "number";
   const lists = (
     arr: readonly string[] | undefined,
     id: string,
@@ -1670,6 +1727,167 @@ export function createBundleHost(
     },
   };
 
+  // ----------------------------------------------------- workers
+  // The capability-gated WORKER door (K-3 / S-07 / I-02). spawn() resolves
+  // a DECLARED, bundle-relative module through the injected WorkerBackend
+  // (which owns the /@fs/ resolution + Worker construction), wraps it in a
+  // BundleWorker, and TRACKS it so bundle dispose terminates every spawned
+  // worker — the platform-honesty smoke test by construction. The
+  // worker-count cap is min(declared.max, hardwareConcurrency, 8); SAB
+  // allocation is a plain new SharedArrayBuffer gated by sharedMemory +
+  // a per-bundle byte budget (the stricter of the host default and the
+  // manifest's maxSharedBytes). No backend wired → spawn rejects honestly,
+  // concurrency() is 0, supports("workers@1") is false.
+  const workerBackend = options?.workers;
+  const declaredWorkers = caps?.workers;
+  const hardwareConcurrency =
+    (globalThis.navigator as { hardwareConcurrency?: number } | undefined)
+      ?.hardwareConcurrency ?? 1;
+  // Grant: min(declared.max, hardwareConcurrency, hard cap). 0 when
+  // undeclared / no backend (the door is dormant either way).
+  const workerCap =
+    hasWorkers() && workerBackend
+      ? Math.max(
+          0,
+          Math.min(
+            declaredWorkers?.max ?? 0,
+            hardwareConcurrency,
+            WORKER_BUDGETS.maxWorkers,
+          ),
+        )
+      : 0;
+  // Per-bundle shared-memory ceiling — the stricter of the host default
+  // and the manifest's requested maxSharedBytes.
+  const sharedByteBudget = Math.min(
+    WORKER_BUDGETS.defaultSharedBytes,
+    declaredWorkers?.maxSharedBytes ?? WORKER_BUDGETS.defaultSharedBytes,
+  );
+  const sharedMemoryDeclared = declaredWorkers?.sharedMemory === true;
+  // Cross-origin isolation is the hard browser gate for SharedArrayBuffer
+  // (the editor's COOP/COEP). Read it honestly — false under a host that
+  // isn't isolated (and in most test environments).
+  const crossOriginIsolated = (
+    globalThis as { crossOriginIsolated?: boolean }
+  ).crossOriginIsolated === true;
+  // Live accounting across every worker this bundle spawns.
+  let liveWorkerCount = 0;
+  let sharedBytesUsed = 0;
+
+  const makeBundleWorker = (raw: SpawnedWorker): BundleWorker => {
+    let terminated = false;
+    let mySharedBytes = 0;
+    const subs = new DisposableStore();
+    const worker: BundleWorker = {
+      post(message, transfer) {
+        if (terminated) return;
+        raw.post(message, transfer);
+      },
+      onMessage(handler) {
+        if (terminated) return toDisposable(() => {});
+        return subs.add(raw.onMessage(handler));
+      },
+      allocateShared(bytes) {
+        if (terminated) return null;
+        if (!sharedMemoryDeclared) {
+          log.warn(
+            "workers.allocateShared: capabilities.workers.sharedMemory is " +
+              "not declared — no SharedArrayBuffer (declare it to allocate)",
+          );
+          return null;
+        }
+        if (!crossOriginIsolated) {
+          log.warn(
+            "workers.allocateShared: the environment is not cross-origin " +
+              "isolated — SharedArrayBuffer is unavailable (the host needs " +
+              "COOP/COEP)",
+          );
+          return null;
+        }
+        if (!Number.isInteger(bytes) || bytes <= 0) return null;
+        if (sharedBytesUsed + bytes > sharedByteBudget) {
+          log.warn(
+            `workers.allocateShared(${bytes}) would exceed the ` +
+              `${sharedByteBudget}-byte per-bundle shared-memory budget ` +
+              `(used ${sharedBytesUsed}) — refused`,
+          );
+          return null;
+        }
+        let sab: SharedArrayBuffer;
+        try {
+          sab = new SharedArrayBuffer(bytes);
+        } catch (err) {
+          log.warn(`workers.allocateShared(${bytes}) failed`, err);
+          return null;
+        }
+        sharedBytesUsed += bytes;
+        mySharedBytes += bytes;
+        return sab;
+      },
+      terminate() {
+        if (terminated) return;
+        terminated = true;
+        subs.dispose();
+        // Return this worker's shared-memory budget to the bundle pool.
+        sharedBytesUsed -= mySharedBytes;
+        mySharedBytes = 0;
+        liveWorkerCount = Math.max(0, liveWorkerCount - 1);
+        try {
+          raw.terminate();
+        } catch (err) {
+          log.warn("workers.terminate: backend terminate threw", err);
+        }
+      },
+    };
+    return worker;
+  };
+
+  const workers: WorkersSurface = {
+    async spawn(opts: SpawnWorkerOptions): Promise<BundleWorker> {
+      // The gate is a read-and-spawn door — THROW (reject) in 'enforce',
+      // warn+proceed in 'warn', like every other gated door. Surface it as
+      // a rejected promise (spawn returns a Promise).
+      requireDeclared(
+        hasWorkers(),
+        "workers.spawn",
+        "capabilities.workers must be declared",
+      );
+      if (!workerBackend) {
+        throw new Error(
+          `host.workers.spawn("${opts.module}") — no worker backend wired ` +
+            `(supports("workers@1") is false; the editor injects one)`,
+        );
+      }
+      if (liveWorkerCount >= workerCap) {
+        throw new Error(
+          `host.workers.spawn("${opts.module}") — the ${workerCap}-worker ` +
+            `count cap is reached (declared max ${declaredWorkers?.max}, ` +
+            `clamped to min(declared, hardwareConcurrency ${hardwareConcurrency}, ` +
+            `${WORKER_BUDGETS.maxWorkers})) — terminate a worker first`,
+        );
+      }
+      // Reserve the slot BEFORE the async construct so a burst of spawns
+      // can't all pass the cap check; release it on a construct failure.
+      liveWorkerCount++;
+      let raw: SpawnedWorker;
+      try {
+        raw = await workerBackend.spawn(manifest.id, opts.module, opts.name);
+      } catch (err) {
+        liveWorkerCount = Math.max(0, liveWorkerCount - 1);
+        throw err instanceof Error
+          ? err
+          : new Error(
+              `host.workers.spawn("${opts.module}") failed: ${String(err)}`,
+            );
+      }
+      const worker = makeBundleWorker(raw);
+      // Track for automatic teardown on bundle dispose (idempotent
+      // terminate, so a bundle that ALSO terminates explicitly is fine).
+      store.add(toDisposable(() => worker.terminate()));
+      return worker;
+    },
+    concurrency: () => workerCap,
+  };
+
   const featureSet = new Set(HOST_FEATURES);
   if (getEditor().text) {
     // The door always exists (it falls back to an estimate); the FEATURE
@@ -1736,6 +1954,12 @@ export function createBundleHost(
     // actually read/write the clipboard (K-6 / S-14).
     featureSet.add("clipboard@1");
   }
+  if (options?.workers) {
+    // The workers door always exists (no-worker fallback: spawn rejects);
+    // this flag means a real WorkerBackend is wired, so a bundle can
+    // actually spawn off-main-thread workers (K-3 / S-07 / I-02).
+    featureSet.add("workers@1");
+  }
 
   const host: BundleHost = {
     manifest,
@@ -1756,6 +1980,7 @@ export function createBundleHost(
     widgets,
     assets,
     images,
+    workers,
     clipboard,
     supports: (feature) => featureSet.has(feature),
     get editor() {

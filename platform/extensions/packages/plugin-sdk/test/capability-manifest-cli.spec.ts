@@ -139,3 +139,55 @@ describe("plugin-cli validate — capabilities.assets (W-06)", () => {
     expect(r.out).toMatch(/valid/);
   });
 });
+
+describe("plugin-cli validate — capabilities.workers (K-3 / S-07)", () => {
+  it("accepts a worker capability with max + sharedMemory", () => {
+    const r = validate({
+      ...base,
+      capabilities: { workers: { max: 4, sharedMemory: true } },
+    });
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/valid/);
+  });
+
+  it("accepts a maxSharedBytes ceiling", () => {
+    const r = validate({
+      ...base,
+      capabilities: { workers: { max: 2, sharedMemory: true, maxSharedBytes: 1048576 } },
+    });
+    expect(r.code).toBe(0);
+  });
+
+  it("rejects a missing max", () => {
+    const r = validate({ ...base, capabilities: { workers: { sharedMemory: true } } });
+    expect(r.code).toBe(1);
+    expect(r.err).toMatch(/"capabilities\.workers\.max" must be an integer/);
+  });
+
+  it("rejects a max over the hard cap (8)", () => {
+    const r = validate({ ...base, capabilities: { workers: { max: 16 } } });
+    expect(r.code).toBe(1);
+    expect(r.err).toMatch(/"capabilities\.workers\.max" must be an integer 1\.\.8/);
+  });
+
+  it("rejects a non-object workers capability", () => {
+    const r = validate({ ...base, capabilities: { workers: true } });
+    expect(r.code).toBe(1);
+    expect(r.err).toMatch(/"capabilities\.workers" must be an object/);
+  });
+
+  it("rejects an unknown key in the workers object", () => {
+    const r = validate({ ...base, capabilities: { workers: { max: 2, threads: 4 } } });
+    expect(r.code).toBe(1);
+    expect(r.err).toMatch(/"capabilities\.workers" unknown key/);
+  });
+
+  it("rejects a maxSharedBytes over the 256 MiB cap", () => {
+    const r = validate({
+      ...base,
+      capabilities: { workers: { max: 1, maxSharedBytes: 536870912 } },
+    });
+    expect(r.code).toBe(1);
+    expect(r.err).toMatch(/"capabilities\.workers\.maxSharedBytes"/);
+  });
+});

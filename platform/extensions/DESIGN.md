@@ -722,3 +722,60 @@ Wholly additive: a new `host.clipboard` member + `ClipboardSurface` /
 `capabilities.clipboard` manifest field (the enum itself is unchanged). No
 existing member changed; the gate / namespace rule / every other door are
 untouched.
+
+## 15. The capability-gated worker door (K-3 / S-07 / I-02 — `host.workers`)
+
+The K-3 design note
+(`thoughts/docs/paged/plugin-platform/k3-worker-capability-design.md`) is
+the deliberation record; this section is the contract summary. The
+deferral (Wave 3b, no-speculative-surface) lifts because two real
+consumers exist: paged.image's decode pool and paged.data's DuckDB
+worker. A bundle never touches `new Worker()` directly — the SDK owns the
+primitive, the manifest gates it, the host budgets + tears it down (the
+same posture as every other door).
+
+### 15.1 The shape — host-spawned, bundle-owned workers
+
+`host.workers.spawn({ module, name? })` resolves a DECLARED, bundle-
+relative `module` path (like the wasm artifacts — never an arbitrary URL)
+and hands back a `BundleWorker`: `post(msg, transfer?)` /
+`onMessage(handler): Disposable` for structured-clone messaging,
+`allocateShared(bytes): SharedArrayBuffer | null` for zero-copy hand-off,
+and `terminate()`. `concurrency()` reports the granted count cap so a
+bundle sizes its pool rather than guessing.
+
+### 15.2 Capability gate + budgets
+
+`capabilities.workers: { max, sharedMemory?, maxSharedBytes? }` (closed
+vocabulary, CLI + schema validated). The grant is `min(declared.max,
+hardwareConcurrency, 8)`; `sharedMemory` gates `allocateShared`, which
+also requires `crossOriginIsolated` (the editor's COOP/COEP) and stays
+under the per-bundle shared-memory ceiling (256 MiB default, a manifest
+`maxSharedBytes` may only tighten). The SAB accountant is live across
+every worker a bundle spawns and reclaims a worker's budget on terminate.
+
+### 15.3 The gate vs. the no-backend door
+
+The CAPABILITY gate (an undeclared `capabilities.workers`) makes `spawn`
+REJECT in 'enforce' (a manifest bug, surfaced loudly); a missing BACKEND
+is the graceful honest answer — `spawn` rejects with "no worker backend
+wired", `concurrency()` is 0, `supports("workers@1")` false. The editor
+injects a `WorkerBackend` that resolves the module through the bundle's
+own asset base and constructs an ES-module `Worker`.
+
+### 15.4 Trust line (v1, in-process)
+
+Same posture as the wasm lane: the worker gets NO ambient authority — no
+engine/DOM/network handle, only the bundle's already-gated JS talks to
+it; the SAB is a separate bundle-owned allocation. Honesty +
+accident-prevention, not a security boundary (the isolate migration is
+the real boundary — K-3's worker becomes the isolate's worker then).
+
+### 15.5 Additivity
+
+Wholly additive: a new `host.workers` member + `WorkersSurface` /
+`BundleWorker` / `SpawnWorkerOptions` types, a new `workers`
+`CreateBundleHostOptions` field (+ `WorkerBackend` / `SpawnedWorker`
+shapes + `WORKER_BUDGETS`), the `workers@1` feature flag, and a new
+`capabilities.workers` manifest field (schema + CLI). No existing member
+changed; the gate / namespace rule / every other door are untouched.

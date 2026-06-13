@@ -403,6 +403,87 @@ export interface ImagesSurface {
   ): Disposable;
 }
 
+// ------------------------------------------------------------- workers
+
+// The WORKER door (K-3 / S-07 / I-02). A bundle spawns a host-owned
+// worker — it never touches `new Worker()` directly (mirrors every other
+// host door: the SDK owns the primitive, the manifest gates it, the host
+// can budget + tear down). The worker module is DECLARED-ONLY (a
+// bundle-relative path, like the wasm artifacts) — a bundle can't spawn
+// an arbitrary URL. The worker gets NO ambient authority (no engine/DOM/
+// network handle); a `SharedArrayBuffer` is a separate bundle-owned
+// allocation the host budgets (a per-bundle ceiling). The host facade
+// tracks every spawned worker for automatic teardown on bundle dispose.
+// Capability-gated on `capabilities.workers`. Probe
+// `supports("workers@1")` — false when the host wires no `WorkerBackend`
+// (the door then rejects spawns honestly).
+
+/** Options for `host.workers.spawn` (K-3). `module` is a bundle-relative
+ *  path the host resolves through the bundle's own asset base (the same
+ *  `/@fs/`-allowed sibling path the wasm artifacts use) — never an
+ *  arbitrary URL. `name` is an optional debug label. */
+export interface SpawnWorkerOptions {
+  /** Bundle-relative path to the worker module (an ES-module worker — JS
+   *  or wasm-bindgen worker glue). Resolved through the bundle's asset
+   *  base; a bundle can only spawn a module it ships. */
+  module: string;
+  /** Optional debug label (surfaced in the host log / devtools). */
+  name?: string;
+}
+
+/**
+ * A host-spawned, bundle-owned worker (K-3). Talk over `post`/`onMessage`
+ * (structured-clone, optional transfer); `allocateShared` hands back a
+ * host-budgeted `SharedArrayBuffer` (or `null` when SAB is unavailable or
+ * the bundle didn't declare `sharedMemory` / would exceed its budget).
+ * `terminate` stops the worker — and the host runs it automatically on
+ * bundle dispose, so a bundle that forgets to terminate still leaks
+ * nothing (the platform-honesty smoke test by construction).
+ */
+export interface BundleWorker {
+  /** Post a message to the worker (structured-clone; `transfer` moves
+   *  ownership of the listed transferables, e.g. an `ArrayBuffer`). */
+  post(message: unknown, transfer?: Transferable[]): void;
+  /** Subscribe to messages FROM the worker. Dispose to stop listening
+   *  (and free the listener); all subscriptions drop on `terminate`. */
+  onMessage(handler: (message: unknown) => void): Disposable;
+  /**
+   * Allocate a `SharedArrayBuffer` of `bytes` for zero-copy hand-off,
+   * host-budgeted against the per-bundle shared-memory ceiling. Returns
+   * `null` when the bundle did not declare `capabilities.workers.
+   * sharedMemory`, the environment is not cross-origin-isolated (SAB is
+   * unconstructible), or the request would exceed the budget — the
+   * honest, frequent answer. Pass the returned buffer through `post` to
+   * share it with the worker.
+   */
+  allocateShared(bytes: number): SharedArrayBuffer | null;
+  /** Stop the worker + drop its listeners. Idempotent; also run by the
+   *  host on bundle dispose. */
+  terminate(): void;
+}
+
+/**
+ * The capability-gated WORKER door (K-3 / S-07 / I-02). `spawn` resolves
+ * a bundle-relative `module`, constructs a host-owned `Worker`, and tracks
+ * it for automatic teardown. Always present — when the host injects no
+ * `WorkerBackend`, `spawn` REJECTS honestly (no worker realm to give) and
+ * `supports("workers@1")` is false. Capability-gated:
+ * `capabilities.workers` must be declared (the host gate throws on an
+ * undeclared spawn); the granted worker-count cap is
+ * `min(declared.max, hardwareConcurrency, 8)` (read it via `concurrency`).
+ */
+export interface WorkersSurface {
+  /** Spawn `opts.module` (a declared, bundle-relative path) as a
+   *  host-owned `BundleWorker`. Rejects when the use is undeclared
+   *  (capability gate), the host wired no backend, the count cap is
+   *  reached, or the module fails to resolve/construct. */
+  spawn(opts: SpawnWorkerOptions): Promise<BundleWorker>;
+  /** The granted worker-count cap (`min(declared.max, hardwareConcurrency,
+   *  8)`, or 0 when undeclared / no backend) — a bundle sizes its pool to
+   *  this rather than guessing. */
+  concurrency(): number;
+}
+
 // ------------------------------------------------------------ document
 
 /** Expected mutation failures are results, not throws — mirroring the
@@ -926,6 +1007,14 @@ export interface BundleHost {
    *  Disposable and `supports("rendering.resourceProvider@1")` is false.
    *  Capability-gated on `capabilities.rendering` ∋ `"resourceProvider"`. */
   readonly images: ImagesSurface;
+  /** The capability-gated WORKER door (K-3 / S-07 / I-02): spawn a
+   *  host-owned, bundle-owned worker (declared-only module, no ambient
+   *  authority) + allocate a host-budgeted `SharedArrayBuffer`. Always
+   *  present — when the host injects no `WorkerBackend`, `spawn` rejects
+   *  honestly, `concurrency()` is 0, and `supports("workers@1")` is false.
+   *  Capability-gated on `capabilities.workers`. The host facade tracks
+   *  every spawned worker for automatic teardown on bundle dispose. */
+  readonly workers: WorkersSurface;
   /** The capability-gated CLIPBOARD door (K-6 / S-14): read/write the
    *  SYSTEM clipboard with a rich `{ text?, tabular? }` payload (the
    *  sheets grid's range copy/paste interchange). Always present — when
