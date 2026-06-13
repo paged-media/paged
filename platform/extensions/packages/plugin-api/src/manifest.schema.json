@@ -159,13 +159,15 @@
                 "enum": [
                   "layout",
                   "codec",
-                  "compute"
+                  "compute",
+                  "engine"
                 ]
               },
               "maxBytes": {
                 "type": "integer",
                 "minimum": 1,
-                "maximum": 8388608
+                "maximum": 67108864,
+                "description": "Per-artifact byte ceiling (tightens, never widens, the host cap). Host cap: 8 MiB for layout/codec/compute, 64 MiB for purpose:\"engine\" (D-07b — vendored DB engines like DuckDB-WASM)."
               }
             }
           }

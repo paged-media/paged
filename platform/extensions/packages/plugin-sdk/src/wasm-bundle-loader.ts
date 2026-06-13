@@ -28,14 +28,20 @@ import type { PagedBundle, WasmArtifact } from "@paged-media/plugin-api";
  *  KEEP IN SYNC with plugin-cli's WASM_MAX_* and the schema's `maxBytes`
  *  maximum — the CLI hand-mirrors the contract. */
 export const WASM_BUDGETS = {
-  /** Hard per-artifact byte ceiling. A release-optimised wasm layout
-   *  engine (Blitz-class) lands in the low-single-digit MiB; 8 MiB
-   *  rejects an accidentally-bundled debug build while leaving headroom
-   *  for one real engine. A manifest `maxBytes` may only TIGHTEN this. */
+  /** Hard per-artifact byte ceiling for layout/codec/compute. A
+   *  release-optimised wasm layout engine (Blitz-class) lands in the
+   *  low-single-digit MiB; 8 MiB rejects an accidentally-bundled debug
+   *  build while leaving headroom for one real engine. A manifest
+   *  `maxBytes` may only TIGHTEN this. */
   maxArtifactBytes: 8 * 1024 * 1024,
-  /** Total declared wasm across one bundle. Bounds a bundle that ships
-   *  several modules (engine + a codec, say). */
-  maxTotalBytes: 16 * 1024 * 1024,
+  /** D-07b — the governed HIGHER ceiling for `purpose: "engine"` (a
+   *  vendored DB/query engine like DuckDB-WASM ≈ 36 MiB). 64 MiB fits the
+   *  real artifacts with headroom; still a hard cap a manifest may only
+   *  tighten. Only the `engine` purpose earns it. */
+  maxEngineArtifactBytes: 64 * 1024 * 1024,
+  /** Total declared wasm across one bundle. Sized so one `engine`
+   *  artifact + a codec fit. */
+  maxTotalBytes: 80 * 1024 * 1024,
   /** Wall-clock budget for fetch + compile + instantiate. Protects the
    *  editor's main flow from a pathological module; advisory, the loader
    *  aborts with a clear error when exceeded. */
@@ -163,11 +169,17 @@ export async function loadBundleWasm(
   view.set(src);
 
   // 2. byte-budget gate — host hard ceiling, tightened by the manifest's
-  //    own maxBytes (the stricter wins).
+  //    own maxBytes (the stricter wins). D-07b: a `purpose: "engine"`
+  //    artifact earns the higher governed ceiling; everything else stays
+  //    at the default 8 MiB.
+  const hostCeiling =
+    artifact.purpose === "engine"
+      ? WASM_BUDGETS.maxEngineArtifactBytes
+      : WASM_BUDGETS.maxArtifactBytes;
   const ceiling =
     typeof artifact.maxBytes === "number" && artifact.maxBytes > 0
-      ? Math.min(artifact.maxBytes, WASM_BUDGETS.maxArtifactBytes)
-      : WASM_BUDGETS.maxArtifactBytes;
+      ? Math.min(artifact.maxBytes, hostCeiling)
+      : hostCeiling;
   if (view.byteLength > ceiling) {
     throw new Error(
       `loadBundleWasm: "${name}" of ${id} is ${view.byteLength} bytes, over ` +

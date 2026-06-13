@@ -56,11 +56,15 @@ changing the manifest shape.
 
 ### `purpose` — a closed vocabulary
 
-`layout | codec | compute`. Closed (like `rendering`) so the host can
-reason about what role a module plays before granting it — a `layout`
-engine and a `compute` blob warrant different scrutiny and, later,
-different host services. Unknown purposes are **rejected at validation**:
-a bundle cannot smuggle an unmodelled role past the gate.
+`layout | codec | compute | engine`. Closed (like `rendering`) so the
+host can reason about what role a module plays before granting it — a
+`layout` engine and a `compute` blob warrant different scrutiny and,
+later, different host services. `engine` (D-07b) marks a vendored
+data/query/DB engine whose release artifact legitimately exceeds the
+default 8 MiB ceiling (DuckDB-WASM ≈ 36 MiB; paged.data) — it earns the
+**higher 64 MiB per-artifact ceiling** and is otherwise an ordinary
+declared+budgeted module. Unknown purposes are **rejected at
+validation**: a bundle cannot smuggle an unmodelled role past the gate.
 
 - `layout` — a foreign-document layout/measure engine (paged.web's lane).
 - `codec` — encode/decode (image, font transforms).
@@ -113,8 +117,8 @@ isolation + a threads story is a later milestone.)
 
 | Budget | v1 value | Why |
 |---|---|---|
-| **Per-artifact byte ceiling** | **8 MiB** | A release-optimised wasm layout engine (Blitz-class, `-O`/`wasm-opt`) lands in the low single-digit MiB. 8 MiB fits one real engine with headroom while **rejecting an accidentally-bundled debug build** (tens of MiB) — the most common foot-gun. A manifest `maxBytes` may only **tighten** this; the loader enforces the stricter of the two. |
-| **Total bundle wasm ceiling** | **16 MiB** | Sum across all declared artifacts. Bounds a bundle that ships several modules (engine + a codec). |
+| **Per-artifact byte ceiling** | **8 MiB** (layout/codec/compute), **64 MiB** (`purpose: "engine"`, D-07b) | A release-optimised wasm layout engine (Blitz-class, `-O`/`wasm-opt`) lands in the low single-digit MiB. 8 MiB fits one real engine with headroom while **rejecting an accidentally-bundled debug build** (tens of MiB) — the most common foot-gun. A vendored DB engine (DuckDB-WASM ≈ 36 MiB) legitimately needs more, so `engine` earns the 64 MiB cap. A manifest `maxBytes` may only **tighten** this; the loader enforces the stricter of the two. |
+| **Total bundle wasm ceiling** | **80 MiB** | Sum across all declared artifacts. Sized so one `engine` artifact + a codec fit. |
 | **Load-time budget** | **3000 ms** | Wall-clock for fetch + compile + instantiate. Protects the editor's main flow from a pathological module; the loader aborts with a clear stage-tagged error rather than hanging the host. |
 | **Memory-growth ceiling** | **256 MiB** (4096 × 64 KiB pages) | Passed as `WebAssembly.Memory({ maximum })` when the host owns memory. A per-page layout pass should sit far under this; the cap turns "runaway `memory.grow`" into a trapped failure, not an OOM of the tab. |
 

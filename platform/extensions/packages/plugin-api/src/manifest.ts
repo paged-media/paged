@@ -159,8 +159,15 @@ export interface DataProvidersCapability {
  *  unknown purposes are rejected at validation. v1:
  *  - `layout`  — a foreign-document layout/measure engine (paged.web).
  *  - `codec`   — encode/decode (image/font transforms).
- *  - `compute` — generic pure computation with no special host role. */
-export type WasmPurpose = "layout" | "codec" | "compute";
+ *  - `compute` — generic pure computation with no special host role.
+ *  - `engine`  — a vendored data/query/DB engine whose release artifact
+ *               legitimately exceeds the default per-artifact ceiling
+ *               (DuckDB-WASM ≈ 36 MiB; paged.data). Governed: it earns
+ *               the HIGHER artifact ceiling (D-07b) but is otherwise an
+ *               ordinary declared+budgeted module — the higher cap is
+ *               the only difference, and a manifest `maxBytes` may still
+ *               tighten it. */
+export type WasmPurpose = "layout" | "codec" | "compute" | "engine";
 
 /** One declared wasm artifact. `path` is bundle-relative (no leading
  *  slash, no `..`); `maxBytes`, when present, tightens — never widens —

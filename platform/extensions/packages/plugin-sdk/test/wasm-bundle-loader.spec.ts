@@ -128,6 +128,39 @@ describe("loadBundleWasm — budgets", () => {
     ).rejects.toThrow(/over its \d+-byte ceiling/);
   });
 
+  it("D-07b: purpose:'engine' earns the higher 64 MiB ceiling (DuckDB-class)", async () => {
+    // A 36 MiB artifact (DuckDB-WASM-scale) is OVER the 8 MiB default
+    // but UNDER the engine ceiling — a `compute` artifact rejects it,
+    // an `engine` artifact accepts it.
+    const big = new Uint8Array(WASM_BUDGETS.maxArtifactBytes + 1); // > 8 MiB
+    const asCompute = bundleWith({
+      wasm: [{ name: "duck", path: "duck.wasm", purpose: "compute" }],
+    });
+    await expect(
+      loadBundleWasm(asCompute, "duck", { assetSource: () => big, grant: "*" }),
+    ).rejects.toThrow(/over its \d+-byte ceiling/);
+
+    const asEngine = bundleWith({
+      wasm: [{ name: "duck", path: "duck.wasm", purpose: "engine" }],
+    });
+    // Same buffer is now UNDER the engine ceiling, so it passes the
+    // budget gate and reaches compile (which throws on the non-wasm
+    // bytes — proof the SIZE gate let it through).
+    await expect(
+      loadBundleWasm(asEngine, "duck", { assetSource: () => big, grant: "*" }),
+    ).rejects.toThrow(/compile|magic|wasm|WebAssembly/i);
+  });
+
+  it("D-07b: an over-64-MiB engine artifact still rejects", async () => {
+    const tooBig = new Uint8Array(WASM_BUDGETS.maxEngineArtifactBytes + 1);
+    const bundle = bundleWith({
+      wasm: [{ name: "duck", path: "duck.wasm", purpose: "engine" }],
+    });
+    await expect(
+      loadBundleWasm(bundle, "duck", { assetSource: () => tooBig, grant: "*" }),
+    ).rejects.toThrow(/over its \d+-byte ceiling/);
+  });
+
   it("aborts when fetch blows the load-time budget", async () => {
     let t = 0;
     const clock = () => t;

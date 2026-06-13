@@ -23,7 +23,7 @@ const CLIPBOARD = new Set(["none", "vector", "full"]);
 const SCOPES = new Set(["broad", "scoped"]);
 const ENTRIES = new Set(["doubleClick", "command"]);
 const BAKED_FALLBACKS = new Set(["group", "rectangle", "raster"]);
-const WASM_PURPOSES = new Set(["layout", "codec", "compute"]);
+const WASM_PURPOSES = new Set(["layout", "codec", "compute", "engine"]);
 // Asset-store kinds. "fonts" gates getFontFace (W-06); "images" gates
 // getPlacedImage (C-5 / I-04 — OPEN since core v42; the former v2
 // reservation is honored). Mirrors AssetKind in plugin-api.
@@ -33,8 +33,9 @@ const ASSET_KINDS_RESERVED = new Set([]);
 // WASM packaging budgets (W-07). Keep in sync with the host loader's
 // WASM_BUDGETS in plugin-sdk/src/wasm-bundle-loader.ts and the schema's
 // `maxBytes` maximum (8 MiB) — the CLI hand-mirrors the contract.
-const WASM_MAX_ARTIFACT_BYTES = 8 * 1024 * 1024; // 8 MiB per artifact
-const WASM_MAX_TOTAL_BYTES = 16 * 1024 * 1024; // 16 MiB declared total
+const WASM_MAX_ARTIFACT_BYTES = 8 * 1024 * 1024; // 8 MiB layout/codec/compute
+const WASM_MAX_ENGINE_ARTIFACT_BYTES = 64 * 1024 * 1024; // D-07b: purpose:"engine" (DuckDB-WASM)
+const WASM_MAX_TOTAL_BYTES = 80 * 1024 * 1024; // declared total
 
 // Bundle-relative wasm path: no leading slash, no `..` segment, .wasm.
 const WASM_PATH_OK = /^(?!\/)(?!.*\.\.).+\.wasm$/;
@@ -234,10 +235,14 @@ function validateManifest(manifest, manifestDir) {
               const resolved = resolve(manifestDir, a.path);
               if (existsSync(resolved)) {
                 const size = statSync(resolved).size;
+                const hostCeiling =
+                  a.purpose === "engine"
+                    ? WASM_MAX_ENGINE_ARTIFACT_BYTES
+                    : WASM_MAX_ARTIFACT_BYTES;
                 const ceiling =
                   typeof a.maxBytes === "number" && a.maxBytes > 0
-                    ? Math.min(a.maxBytes, WASM_MAX_ARTIFACT_BYTES)
-                    : WASM_MAX_ARTIFACT_BYTES;
+                    ? Math.min(a.maxBytes, hostCeiling)
+                    : hostCeiling;
                 if (size > ceiling) {
                   err(
                     `${at} file "${a.path}" is ${size} bytes, over its ` +
@@ -254,16 +259,22 @@ function validateManifest(manifest, manifestDir) {
               }
             }
             if (a.purpose === undefined || !WASM_PURPOSES.has(a.purpose)) {
-              err(`${at}.purpose must be layout|codec|compute`);
+              err(`${at}.purpose must be layout|codec|compute|engine`);
             }
             if (a.maxBytes !== undefined) {
               if (!Number.isInteger(a.maxBytes) || a.maxBytes < 1) {
                 err(`${at}.maxBytes must be a positive integer`);
-              } else if (a.maxBytes > WASM_MAX_ARTIFACT_BYTES) {
-                err(
-                  `${at}.maxBytes (${a.maxBytes}) exceeds the host ` +
-                    `per-artifact ceiling (${WASM_MAX_ARTIFACT_BYTES})`,
-                );
+              } else {
+                const cap =
+                  a.purpose === "engine"
+                    ? WASM_MAX_ENGINE_ARTIFACT_BYTES
+                    : WASM_MAX_ARTIFACT_BYTES;
+                if (a.maxBytes > cap) {
+                  err(
+                    `${at}.maxBytes (${a.maxBytes}) exceeds the host ` +
+                      `per-artifact ceiling (${cap})`,
+                  );
+                }
               }
             }
           }
