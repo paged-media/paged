@@ -37,8 +37,8 @@ importers:
         version: link:../plugin-api
     devDependencies:
       '@paged-media/canvas-wasm':
-        specifier: 0.46.0
-        version: 0.46.0
+        specifier: 0.47.0
+        version: 0.47.0
       '@types/node':
         specifier: 20.19.39
         version: 20.19.39
@@ -364,8 +364,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@paged-media/canvas-wasm@0.46.0':
-    resolution: {integrity: sha512-mYEb4+LWvhWQOJ26hIL2cL2fDEmQUsSiaNXyOo+RzRWizBIrBqk67SluEk5kIvksc2474ZU9UdtG5peDkB++UA==}
+  '@paged-media/canvas-wasm@0.47.0':
+    resolution: {integrity: sha512-5Q2TOubFwSNwNEXkWz7B2zfo6HpTm2mG7BCY6QdleGxA0lH/yBB2kJsRczbmO4xcoqQGsHHVfu4dvbY1GRKPdA==}
 
   '@rollup/rollup-android-arm-eabi@4.61.1':
     resolution: {integrity: sha512-JnBB8MdXj45cajvTuO5FmPlvFVJRQgvrz1uSEl3NwqFnReAPGwb8EanbGi4z2nRaqLzjJSv5/JmycoTKlRZxHA==}
@@ -1124,7 +1124,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@paged-media/canvas-wasm@0.46.0': {}
+  '@paged-media/canvas-wasm@0.47.0': {}
 
   '@rollup/rollup-android-arm-eabi@4.61.1':
     optional: true
