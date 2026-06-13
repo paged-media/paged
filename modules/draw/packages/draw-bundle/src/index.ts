@@ -199,3 +199,18 @@ export {
   BIND_ARROWHEAD_CONTROLS_VISIBLE,
   ARROWHEAD_OPTIONS,
 } from "./panels/stroke-panel";
+// Phase 8 — SVG interchange (K-2): the importer/exporter registration +
+// the pure planning helpers (insert/style mutation builders), exported
+// for the conformance specs (the no-second-copy rule).
+export {
+  contributeSvgIo,
+  importSvg,
+  exportSvg,
+  shapesFromSvgBytes,
+  insertPathMutationsForShape,
+  styleDefaultsForShape,
+  SVG_IMPORTER_ID,
+  SVG_EXPORTER_ID,
+  SVG_MIME,
+  type ShapeDefaults,
+} from "./io/svg";

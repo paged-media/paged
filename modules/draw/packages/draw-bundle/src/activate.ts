@@ -76,6 +76,7 @@ import {
 import { vectorGraphicEditContext } from "./edit-context";
 import { fillPanel, installFillPanelBindings } from "./panels/fill-panel";
 import { installStrokePanelBindings, strokePanel } from "./panels/stroke-panel";
+import { contributeSvgIo } from "./io/svg";
 
 export function activate(host: BundleHost): BundleHandle {
   // B-17 — the anchor-edit tools are built from a host-bound factory;
@@ -131,6 +132,11 @@ export function activate(host: BundleHost): BundleHandle {
   // path enters anchor-editing (the anchor tools focused, the stroke
   // panel raised, a breadcrumb, Esc exits).
   contributeEditContext(host, vectorGraphicEditContext);
+  // Phase 8 — SVG interchange (K-2): an `.svg` importer (parse → insert
+  // the shapes through the existing insertPath lane) + an `.svg` exporter
+  // (selection → SVG bytes). Capability-gated; degrades honestly when the
+  // host predates the importer/exporter doors.
+  const svgIoSub = contributeSvgIo(host);
   host.log.info(
     `activated — ${tools.length} tools + 2 schema panels + ` +
       `${
@@ -151,6 +157,7 @@ export function activate(host: BundleHost): BundleHandle {
   // so dispose them (and the command groups) here.
   return {
     dispose() {
+      svgIoSub.dispose();
       selectSameCommandsSub.dispose();
       appearanceCommandsSub.dispose();
       liveCornerCommandsSub.dispose();

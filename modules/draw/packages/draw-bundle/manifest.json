@@ -1,7 +1,7 @@
 {
   "id": "media.paged.draw",
   "name": "paged.draw",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "apiVersion": "^0.2",
   "publisher": "paged.media",
   "capabilities": {
@@ -63,6 +63,12 @@
       "media.paged.draw.command.selectSameFill",
       "media.paged.draw.command.selectSameStroke",
       "media.paged.draw.command.selectSameStrokeWeight"
+    ],
+    "importers": [
+      "media.paged.draw.importer.svg"
+    ],
+    "exporters": [
+      "media.paged.draw.exporter.svg"
     ],
     "editContexts": [
       {

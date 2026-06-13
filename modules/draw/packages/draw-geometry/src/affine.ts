@@ -26,6 +26,24 @@ export function inverseApplyAffine(
   return [(m[3] * px - m[2] * py) / det, (-m[1] * px + m[0] * py) / det];
 }
 
+/** Compose two affines (`outer ∘ inner` — apply `inner` first, then
+ *  `outer`). Both in the `[a, b, c, d, tx, ty]` column-pair convention. */
+export function composeAffine(outer: Affine, inner: Affine): Affine {
+  const [a1, b1, c1, d1, e1, f1] = outer;
+  const [a2, b2, c2, d2, e2, f2] = inner;
+  return [
+    a1 * a2 + c1 * b2,
+    b1 * a2 + d1 * b2,
+    a1 * c2 + c1 * d2,
+    b1 * c2 + d1 * d2,
+    a1 * e2 + c1 * f2 + e1,
+    b1 * e2 + d1 * f2 + f1,
+  ];
+}
+
+/** The identity affine. */
+export const IDENTITY_AFFINE: Affine = [1, 0, 0, 1, 0, 0];
+
 /** Scale factor the transform applies to lengths (uniform-ish
  *  approximation: average of the basis-vector norms). Used to keep
  *  pick tolerances meaningful in transformed local space. */

@@ -157,6 +157,10 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         // W3.2 — the vectorGraphic edit context (B-02), recorded
         // through the harness's editContext registration hook.
         "editContext",
+        // Phase 8 — the SVG importer + exporter (K-2), recorded through
+        // the harness's recording importer/exporter registries.
+        "importer",
+        "exporter",
       ]);
       // The schema panels are recorded VERBATIM (the schema, not React):
       // ids, sections, and the binding-driven gates.
@@ -204,6 +208,25 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
           metadata: null,
         }),
       ).toBe(true);
+      // Phase 8 — the SVG importer/exporter are recorded with their
+      // claimed extensions, and the registered ids match the manifest's
+      // contributes declaration.
+      const importers = harness.importersContributed();
+      expect(importers.map((i) => i.id)).toEqual([
+        "media.paged.draw.importer.svg",
+      ]);
+      expect(importers[0].extensions).toEqual([".svg"]);
+      expect(importers.map((i) => i.id)).toEqual(
+        drawBundle.manifest.contributes?.importers,
+      );
+      const exporters = harness.exportersContributed();
+      expect(exporters.map((e) => e.id)).toEqual([
+        "media.paged.draw.exporter.svg",
+      ]);
+      expect(exporters[0].extension).toBe(".svg");
+      expect(exporters.map((e) => e.id)).toEqual(
+        drawBundle.manifest.contributes?.exporters,
+      );
     } finally {
       handle.dispose();
     }
