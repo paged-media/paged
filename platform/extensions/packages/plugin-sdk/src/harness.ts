@@ -39,6 +39,7 @@
 
 import type {
   BundleHost,
+  ClipboardPayload,
   CommandContribution,
   CollectionName,
   Disposable,
@@ -68,6 +69,7 @@ import type {
 import {
   createBundleHost,
   type BlobStore,
+  type ClipboardBackend,
   type CreateBundleHostOptions,
 } from "./host-impl";
 import { satisfiesApiVersion, API_VERSION } from "./version";
@@ -110,7 +112,12 @@ export interface HarnessOptions
   extends LoadHeadlessEngineOptions,
     Pick<
       CreateBundleHostOptions,
-      "console" | "storage" | "capabilityMode" | "assetSource" | "blobStore"
+      | "console"
+      | "storage"
+      | "capabilityMode"
+      | "assetSource"
+      | "blobStore"
+      | "clipboard"
     > {}
 
 /** A headless in-memory `BlobStore` — per-plugin byte maps, so the
@@ -141,6 +148,36 @@ export function inMemoryBlobStore(): BlobStore {
       let n = 0;
       for (const v of dir(id).values()) n += v.byteLength;
       return n;
+    },
+  };
+}
+
+/** A headless in-memory `ClipboardBackend` — a single shared payload slot,
+ *  so the conformance harness exercises `host.clipboard` (K-6 / S-14)
+ *  without a real system clipboard. Default-injected so
+ *  `supports("clipboard@1")` is true headlessly. Round-trips the payload
+ *  by value (a fresh object on read) so a consumer test can't mutate the
+ *  stored copy. */
+export function inMemoryClipboard(): ClipboardBackend {
+  let slot: ClipboardPayload | null = null;
+  return {
+    async read() {
+      if (!slot) return null;
+      // Clone so the reader can't mutate the stored grid.
+      return {
+        ...(slot.text !== undefined ? { text: slot.text } : {}),
+        ...(slot.tabular
+          ? { tabular: { rows: slot.tabular.rows.map((r) => [...r]) } }
+          : {}),
+      };
+    },
+    async write(payload) {
+      slot = {
+        ...(payload.text !== undefined ? { text: payload.text } : {}),
+        ...(payload.tabular
+          ? { tabular: { rows: payload.tabular.rows.map((r) => [...r]) } }
+          : {}),
+      };
     },
   };
 }
@@ -433,6 +470,10 @@ export async function createHeadlessHost(
   // reloaded bundle sees its own persisted bytes — K-4 / S-08), unless a
   // test injects its own.
   const blobStore = options.blobStore ?? inMemoryBlobStore();
+  // One in-memory clipboard shared across the harness's hosts (K-6 / S-14),
+  // unless a test injects its own — so a consumer's copy→paste round-trips
+  // headlessly and `supports("clipboard@1")` is true.
+  const clipboard = options.clipboard ?? inMemoryClipboard();
 
   const buildHost = (
     manifest: PluginManifest,
@@ -442,6 +483,7 @@ export async function createHeadlessHost(
       console: options.console,
       storage: options.storage,
       blobStore,
+      clipboard,
       capabilityMode: mode,
       // W-06 — a recordable fake asset source the conformance harness
       // can pass so a bundle's `@font-face` byte path is exercisable

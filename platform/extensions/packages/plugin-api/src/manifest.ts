@@ -108,6 +108,15 @@ export interface PluginCapabilities {
    * gets no surface.
    */
   dataProviders?: DataProvidersCapability;
+  /**
+   * The clipboard door's grant (K-6 / S-14). Gates `host.clipboard`:
+   * `"full"` grants BOTH the text and the rich `tabular` (cell-grid)
+   * payload — the sheets range copy/paste interchange; `"vector"` grants
+   * the `text` half only (a vector plugin copies a textual representation,
+   * not a cell grid — a `tabular` write is dropped); `"none"` (the
+   * default) / absent DENIES the door (read → `null`, write refused). See
+   * `clipboard.ts` for the surface + DESIGN.md for the trust line.
+   */
   clipboard?: "none" | "vector" | "full";
   /**
    * Declared WebAssembly artifacts the bundle ships and loads at

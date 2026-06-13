@@ -656,3 +656,69 @@ Wholly additive: a new `host.assets` member + `AssetSurface` /
 `ASSET_BUDGETS` export, and one optional manifest field
 `capabilities.assets`. No existing member changed. The capability gate,
 the namespace rule, and every other door are untouched.
+
+## 14. The capability-gated clipboard (K-6 / S-14 — `host.clipboard`)
+
+The sheets-mode grid's range copy/paste (cells + values) had nowhere to
+land (RFI §6 K-6). `host.clipboard` is the door: a read/write surface over
+the SYSTEM clipboard with a rich `{ text?, tabular? }` payload. The
+manifest already declared a `clipboard` enum (`none | vector | full`) ahead
+of any surface; this change gives it teeth.
+
+### 14.1 The payload — TSV is the floor, a cell grid is the ceiling
+
+`TabularClipboard = { rows: string[][] }` is the canonical interchange — a
+RECTANGULAR grid of cell DISPLAY strings (already number-formatted; the
+consumer owns re-parsing on paste). `ClipboardPayload` carries a `text`
+half and/or a `tabular` half: a grid copy carries BOTH (the grid AND a TSV
+`text` fallback so a paste into a plain editor still lands something), a
+text-only copy carries just `text`. On read the host fills whichever halves
+it can recover (`tabular` is reconstructed from TSV `text` when the
+platform offers no richer form). Plain strings ⇒ the door proxies across
+the future isolate boundary unchanged.
+
+### 14.2 The capability mapping (the honest reading of the existing enum)
+
+- `"full"` — BOTH `text` and `tabular`. The rich grid interchange; what
+  paged.sheet declares.
+- `"vector"` — `text` ONLY. A vector plugin copies a textual/SVG
+  representation, not a cell grid; a `tabular` half it WRITES is dropped
+  (the surface strips it + logs once), a `tabular` half it READS is never
+  surfaced (read returns the `text` half).
+- `"none"` / absent — the door is DENIED: `read` throws (enforce) /
+  warns+proceeds-text-only (warn), `write` likewise. This is the manifest
+  default, so a bundle that never declares clipboard cannot touch the
+  system clipboard by accident.
+
+The warn-mode proceed treats an undeclared/`"none"` grant as the narrower
+`"vector"` tier — a warn-migration host never silently leaks a cell grid.
+
+### 14.3 The gate vs. the no-backend door (two different failures)
+
+Two distinct failure modes, kept apart on purpose (matching `host.assets`):
+the CAPABILITY gate (an undeclared manifest) THROWS in 'enforce' (a
+manifest bug, surfaced loudly), while a missing BACKEND is the graceful
+honest answer — `read` → `null`, `write` → no-op, `supports("clipboard@1")`
+false. A platform refusal (no user gesture, permission denied) is also
+graceful: a denied read answers `null`, a refused write is swallowed
+(logged, not thrown) — the honest browser posture.
+
+### 14.4 The editor backend (lossless paste OUT of the editor)
+
+The editor injects a `ClipboardBackend` over `navigator.clipboard`. On
+`write` it lays down BOTH `text/plain` (TSV) AND `text/html` (a real
+`<table>`) via `navigator.clipboard.write([new ClipboardItem({...})])`, so a
+paste into Excel/Sheets/Word lands a real grid, not a tab-soup line. On
+`read` it pulls `text/plain` and parses the TSV back into `{ rows }`. It is
+behind a feature check (`ClipboardItem` availability) with an honest
+fallback to `writeText`/`readText`.
+
+### 14.5 Additivity
+
+Wholly additive: a new `host.clipboard` member + `ClipboardSurface` /
+`ClipboardPayload` / `TabularClipboard` types, a new `clipboard`
+`CreateBundleHostOptions` field (+ `ClipboardBackend` shape), the
+`clipboard@1` feature flag, and a doc comment on the EXISTING
+`capabilities.clipboard` manifest field (the enum itself is unchanged). No
+existing member changed; the gate / namespace rule / every other door are
+untouched.

@@ -37,6 +37,7 @@ import type {
 import type { SceneLayer } from "./wire";
 
 import type { AssetSurface } from "./assets";
+import type { ClipboardSurface } from "./clipboard";
 import type { PluginManifest } from "./manifest";
 import type { SchemaPanelContribution } from "./panel-schema";
 import type { WidgetSurface } from "./widgets";
@@ -833,6 +834,15 @@ export interface BundleHost {
    *  `supports("assets.fonts@1")` is false. Capability-gated:
    *  `getFontFace` requires `capabilities.assets` ∋ `"fonts"`. */
   readonly assets: AssetSurface;
+  /** The capability-gated CLIPBOARD door (K-6 / S-14): read/write the
+   *  SYSTEM clipboard with a rich `{ text?, tabular? }` payload (the
+   *  sheets grid's range copy/paste interchange). Always present — when
+   *  the host app injects no clipboard backend, `read` answers `null`,
+   *  `write` is a no-op, and `supports("clipboard@1")` is false (the
+   *  honest no-clipboard door). Capability-gated on
+   *  `capabilities.clipboard`: `"full"` grants text + tabular, `"vector"`
+   *  grants text only, `"none"`/absent denies. */
+  readonly clipboard: ClipboardSurface;
   /** Capability detection over version sniffing: feature strings of
    *  the form `"area.member@major"` (see HOST_FEATURES in plugin-sdk). */
   supports(feature: string): boolean;

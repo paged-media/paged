@@ -103,5 +103,11 @@ export type {
   FontFaceFormat,
 } from "./assets";
 
+export type {
+  ClipboardSurface,
+  ClipboardPayload,
+  TabularClipboard,
+} from "./clipboard";
+
 export type * from "./contributions";
 export type * from "./mutations";

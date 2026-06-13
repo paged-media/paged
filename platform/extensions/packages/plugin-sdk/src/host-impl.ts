@@ -15,6 +15,8 @@ import type {
   BindingsSurface,
   BlobSurface,
   BundleHost,
+  ClipboardSurface,
+  ClipboardPayload,
   ContributionSurface,
   Diagnostic,
   DiagnosticsSurface,
@@ -253,6 +255,21 @@ export interface BlobStore {
   used(pluginId: string): Promise<number>;
 }
 
+/**
+ * The backend the editor injects to back `host.clipboard` (K-6 / S-14): a
+ * thin read/write pair over the REAL system clipboard (`navigator.clipboard`
+ * in-browser; a fake in the headless harness). The SDK adapter owns the
+ * capability gate + the `"vector"` tabular-stripping; this backend only does
+ * the raw IO. `read` recovers a `{ text?, tabular? }` payload (or `null` when
+ * the platform offers nothing / refuses); `write` puts a payload on the
+ * clipboard (the editor backend lays down BOTH `text/plain` TSV and a
+ * `text/html` `<table>` so a paste into Excel/Sheets/Word lands a real grid).
+ */
+export interface ClipboardBackend {
+  read(): Promise<ClipboardPayload | null>;
+  write(payload: ClipboardPayload): Promise<void>;
+}
+
 /** The SHARED cross-plugin data-provider registry (paged.data §7.1 / D-09). The
  *  editor creates ONE (`createDataProviderRegistry`) and injects the SAME
  *  instance into every plugin host, so a provider plugin and a consumer plugin
@@ -418,6 +435,12 @@ export interface CreateBundleHostOptions {
    *  When absent, reads answer empty and writes reject (the honest
    *  no-store door). */
   blobStore?: BlobStore;
+  /** Host-provided CLIPBOARD backend (K-6 / S-14). When present,
+   *  `host.clipboard.read/write` go through it (capability-gated on
+   *  `capabilities.clipboard`) and `supports("clipboard@1")` answers true.
+   *  When absent, `read` answers `null` and `write` is a no-op (the honest
+   *  no-clipboard door). */
+  clipboard?: ClipboardBackend;
   /**
    * How the host treats a declaration↔use mismatch — a bundle that
    * USES a door (`contribute.tool`, `document.mutate`, …) it did not
@@ -490,6 +513,16 @@ export function createBundleHost(
   const hasAsset = (k: "fonts" | "images"): boolean =>
     caps?.assets?.includes(k) ?? false;
   const hasBlobStore = (): boolean => caps?.storage?.blob === true;
+  /** K-6 — the clipboard grant. `"full"` authorizes the whole door
+   *  (text + tabular); `"vector"` authorizes the door but text-ONLY (the
+   *  surface strips a tabular write + never surfaces a tabular read);
+   *  `"none"`/absent denies entirely. Returns the granted tier. */
+  const clipboardGrant = (): "full" | "vector" | "none" =>
+    caps?.clipboard === "full"
+      ? "full"
+      : caps?.clipboard === "vector"
+        ? "vector"
+        : "none";
   const lists = (
     arr: readonly string[] | undefined,
     id: string,
@@ -1458,6 +1491,73 @@ export function createBundleHost(
     },
   };
 
+  // ----------------------------------------------------- clipboard
+  // The capability-gated SYSTEM-clipboard door (K-6 / S-14). Read/write a
+  // `{ text?, tabular? }` payload through the injected backend. The gate
+  // is a READ-AND-WRITE door: it THROWS in 'enforce' (a manifest bug —
+  // the bundle used a door it didn't declare), warns+proceeds in 'warn',
+  // like every other gated door. The TIER decides tabular: `"full"` ⇒
+  // both halves; `"vector"` ⇒ text only (a tabular WRITE is stripped + a
+  // tabular READ is never surfaced); `"none"`/absent ⇒ denied. No backend
+  // wired → read answers `null`, write no-ops (the honest no-clipboard
+  // door); supports("clipboard@1") is false.
+  const clipboardBackend = options?.clipboard;
+  const clipboardGate = (door: string): "full" | "vector" => {
+    const grant = clipboardGrant();
+    requireDeclared(
+      grant !== "none",
+      door,
+      'capabilities.clipboard must be "full" or "vector"',
+    );
+    // In 'warn' mode an undeclared bundle reaches here with grant "none";
+    // treat the proceed as the narrower "vector" tier (text only) so a
+    // warn-migration host never silently leaks a cell grid.
+    return grant === "full" ? "full" : "vector";
+  };
+  const clipboard: ClipboardSurface = {
+    async read() {
+      const tier = clipboardGate("clipboard.read");
+      if (!clipboardBackend) return null;
+      let payload: ClipboardPayload | null;
+      try {
+        payload = await clipboardBackend.read();
+      } catch {
+        // A throwing/denied platform read is "nothing readable", not an
+        // exception the bundle must handle.
+        return null;
+      }
+      if (!payload) return null;
+      // A "vector" grant never receives the tabular half.
+      if (tier === "vector" && payload.tabular !== undefined) {
+        const { tabular: _dropped, ...rest } = payload;
+        return rest;
+      }
+      return payload;
+    },
+    async write(payload: ClipboardPayload) {
+      const tier = clipboardGate("clipboard.write");
+      if (!clipboardBackend) return;
+      let toWrite = payload;
+      // A "vector" grant may only write text — strip a supplied tabular
+      // half (log once so the author sees the honest narrowing).
+      if (tier === "vector" && payload.tabular !== undefined) {
+        log.warn(
+          'clipboard.write: dropping the tabular payload — capabilities.clipboard ' +
+            'is "vector" (text only); declare "full" to copy a cell grid',
+        );
+        const { tabular: _dropped, ...rest } = payload;
+        toWrite = rest;
+      }
+      try {
+        await clipboardBackend.write(toWrite);
+      } catch (err) {
+        // A platform refusal (no user gesture, permission denied) is not a
+        // bundle error — the door's failure mode is "nothing copied".
+        log.warn("clipboard.write: the platform refused the write", err);
+      }
+    },
+  };
+
   const featureSet = new Set(HOST_FEATURES);
   if (getEditor().text) {
     // The door always exists (it falls back to an estimate); the FEATURE
@@ -1511,6 +1611,12 @@ export function createBundleHost(
     // bytes (K-4 / S-08).
     featureSet.add("storage.blob@1");
   }
+  if (options?.clipboard) {
+    // The clipboard door always exists (no-clipboard fallback); this flag
+    // means a real system-clipboard backend is wired, so a bundle can
+    // actually read/write the clipboard (K-6 / S-14).
+    featureSet.add("clipboard@1");
+  }
 
   const host: BundleHost = {
     manifest,
@@ -1530,6 +1636,7 @@ export function createBundleHost(
     bindings,
     widgets,
     assets,
+    clipboard,
     supports: (feature) => featureSet.has(feature),
     get editor() {
       return getEditor();

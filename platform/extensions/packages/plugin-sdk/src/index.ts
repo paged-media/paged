@@ -41,6 +41,7 @@ export {
   type DiagnosticsSink,
   type BundleAssetProvider,
   type BlobStore,
+  type ClipboardBackend,
   type StorageBacking,
 } from "./host-impl";
 export { FALLBACK_WIDGETS } from "./widgets-fallback";
