@@ -121,7 +121,7 @@ const mapBacking = () => {
 };
 
 describe("drawBundle.activate", () => {
-  it("registers the 3 anchor tools (pen built-in per W2.5; activation host-derived per B-15)", () => {
+  it("registers the 3 anchor tools + the Phase 4c pro four (pen built-in per W2.5; activation host-derived per B-15)", () => {
     const fake = makeFakeEditor();
     loadBundle(() => fake.editor, drawBundle, {
       console: silent,
@@ -131,11 +131,16 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.tool.addAnchor",
       "media.paged.draw.tool.deleteAnchor",
       "media.paged.draw.tool.convertAnchor",
+      "media.paged.draw.tool.curvature",
+      "media.paged.draw.tool.pencil",
+      "media.paged.draw.tool.gradientAnnotator",
+      "media.paged.draw.tool.measure",
     ]);
     // B-15: TOOL activation commands + shortcuts are HOST-derived from
     // the registry — the bundle registers tools only. The commands it
     // DOES register are the B-12 dash presets, the Phase 2d group pair
-    // (B-04) and the gradient-fill pair (B-03) — not tool activations.
+    // (B-04), the gradient-fill pair (B-03), and the Phase 4c families
+    // (path ops, join/average, pathfinder) — not tool activations.
     expect(fake.commands.ids()).toEqual([
       "media.paged.draw.command.strokeDashSolid",
       "media.paged.draw.command.strokeDashDashed",
@@ -145,6 +150,15 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.ungroup",
       "media.paged.draw.command.fillGradientLinear",
       "media.paged.draw.command.fillGradientRadial",
+      "media.paged.draw.command.outlineStroke",
+      "media.paged.draw.command.offsetPath",
+      "media.paged.draw.command.simplifyPath",
+      "media.paged.draw.command.joinEndpoints",
+      "media.paged.draw.command.averageEndpoints",
+      "media.paged.draw.command.pathfinderUnite",
+      "media.paged.draw.command.pathfinderSubtract",
+      "media.paged.draw.command.pathfinderIntersect",
+      "media.paged.draw.command.pathfinderExclude",
     ]);
     expect(fake.keybindings.count()).toBe(0);
   });

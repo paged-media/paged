@@ -35,6 +35,25 @@ export const STROKE_PANEL_ID = "media.paged.draw.panel.stroke";
  *  them up (no expression language). */
 export const BIND_HAS_SELECTION = "media.paged.draw.hasSelection";
 export const BIND_DASH_CONTROLS_VISIBLE = "media.paged.draw.dashControlsVisible";
+/** Phase 4c — gates the Line ends (arrowheads) section: true when the
+ *  FIRST selected element is a GraphicLine (the v43 properties are
+ *  GraphicLine-only — the engine rejects them on any other kind, so the
+ *  section honestly hides elsewhere). */
+export const BIND_ARROWHEAD_CONTROLS_VISIBLE =
+  "media.paged.draw.arrowheadControlsVisible";
+
+/** The curated arrowhead picker options (v43): wire `Value{type:"text"}`
+ *  tokens from the IDML `ArrowHead` enumeration; `""` clears (the same
+ *  spelling the engine reads back for a bare line). The full 11-token
+ *  vocabulary stays scriptable through the same property — the picker
+ *  carries the five workhorse ends. */
+export const ARROWHEAD_OPTIONS = [
+  { value: "", label: "None" },
+  { value: "SimpleArrowHead", label: "Simple" },
+  { value: "TriangleArrowHead", label: "Triangle" },
+  { value: "CircleSolidArrowHead", label: "Circle" },
+  { value: "BarArrowHead", label: "Bar" },
+] as const;
 
 export const strokePanel: SchemaPanelContribution = {
   id: STROKE_PANEL_ID,
@@ -110,6 +129,36 @@ export const strokePanel: SchemaPanelContribution = {
           },
         ],
       },
+      {
+        // Phase 4c — Line ends (the v43 arrowhead properties). The
+        // section's VISIBILITY is a published binding gating on the
+        // selection being a GraphicLine (the engine's own kind gate);
+        // the start/end pickers ride the §11.5 ceiling unchanged —
+        // scalar `selectionProperty` text values from the curated
+        // ArrowHead vocabulary, "" clears.
+        title: "Line ends",
+        visible: { bind: BIND_ARROWHEAD_CONTROLS_VISIBLE },
+        rows: [
+          {
+            widget: "paged.input.toggle-group",
+            props: { label: "Start", options: [...ARROWHEAD_OPTIONS] },
+            value: {
+              kind: "selectionProperty",
+              path: "frameStrokeStartArrowhead",
+            },
+            enabled: { bind: BIND_HAS_SELECTION },
+          },
+          {
+            widget: "paged.input.toggle-group",
+            props: { label: "End", options: [...ARROWHEAD_OPTIONS] },
+            value: {
+              kind: "selectionProperty",
+              path: "frameStrokeEndArrowhead",
+            },
+            enabled: { bind: BIND_HAS_SELECTION },
+          },
+        ],
+      },
     ],
   },
 };
@@ -139,6 +188,13 @@ export function installStrokePanelBindings(host: BundleHost): Disposable {
     const selection = ids ?? host.selection.get();
     const has = selection.length > 0;
     host.bindings.publish(BIND_HAS_SELECTION, has);
+    // Phase 4c — the Line ends section gates on the selection's KIND
+    // (GraphicLine-only, the engine's own arrowhead gate). A plain
+    // selection read, no document round-trip.
+    host.bindings.publish(
+      BIND_ARROWHEAD_CONTROLS_VISIBLE,
+      has && selection[0].kind === "graphicLine",
+    );
     if (!has) {
       host.bindings.publish(BIND_DASH_CONTROLS_VISIBLE, false);
       return;

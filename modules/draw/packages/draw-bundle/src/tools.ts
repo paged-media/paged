@@ -20,6 +20,10 @@ import type {
 } from "@paged-media/plugin-api";
 
 import { createAnchorEditHandler } from "./handlers/anchors";
+import { createCurvatureHandler } from "./handlers/curvature";
+import { createGradientAnnotatorHandler } from "./handlers/gradient-annotator";
+import { createMeasureHandler } from "./handlers/measure";
+import { createPencilHandler } from "./handlers/pencil";
 
 const CROSS: CursorSpec = { kind: "css", token: "crosshair" };
 
@@ -29,6 +33,16 @@ export const DRAW_TOOL_IDS = [
   "media.paged.draw.tool.addAnchor",
   "media.paged.draw.tool.deleteAnchor",
   "media.paged.draw.tool.convertAnchor",
+] as const;
+
+/** Phase 4c — the pro toolset ids, in rail order (host-free, like
+ *  DRAW_TOOL_IDS; the edit context keeps its anchor-editing set —
+ *  these are document-level authoring/inspection tools). */
+export const PRO_TOOL_IDS = [
+  "media.paged.draw.tool.curvature",
+  "media.paged.draw.tool.pencil",
+  "media.paged.draw.tool.gradientAnnotator",
+  "media.paged.draw.tool.measure",
 ] as const;
 
 /** Build the three anchor-editing tools bound to `host` — each
@@ -68,6 +82,54 @@ export function drawTools(host: BundleHost): ToolContribution[] {
       order: 3,
       cursor: CROSS,
       gesture: () => createAnchorEditHandler("convert", host),
+    },
+    // Phase 4c — the pro toolset. Curvature + Pencil AUTHOR new paths
+    // (machine → one insertPath), so they join the pen flyout slot;
+    // the gradient annotator + measure are inspection/steering tools
+    // in their own slots.
+    {
+      id: "media.paged.draw.tool.curvature",
+      title: "Curvature",
+      icon: "tool-curvature",
+      shortcut: "shift+p",
+      group: "pen",
+      section: "drawType",
+      order: 4,
+      cursor: CROSS,
+      gesture: () => createCurvatureHandler(host),
+    },
+    {
+      id: "media.paged.draw.tool.pencil",
+      title: "Pencil",
+      icon: "tool-pencil",
+      shortcut: "shift+n",
+      group: "pen",
+      section: "drawType",
+      order: 5,
+      cursor: CROSS,
+      gesture: () => createPencilHandler(host),
+    },
+    {
+      id: "media.paged.draw.tool.gradientAnnotator",
+      title: "Gradient Annotator",
+      icon: "tool-gradient",
+      shortcut: "shift+g",
+      group: "gradientAnnotator",
+      section: "transform",
+      order: 1,
+      cursor: CROSS,
+      gesture: () => createGradientAnnotatorHandler(host),
+    },
+    {
+      id: "media.paged.draw.tool.measure",
+      title: "Measure",
+      icon: "tool-measure",
+      shortcut: "shift+m",
+      group: "measure",
+      section: "modNav",
+      order: 1,
+      cursor: CROSS,
+      gesture: () => createMeasureHandler(host),
     },
   ];
 }

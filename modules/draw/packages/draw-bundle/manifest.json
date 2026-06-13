@@ -1,7 +1,7 @@
 {
   "id": "media.paged.draw",
   "name": "paged.draw",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "apiVersion": "^0.2",
   "publisher": "paged.media",
   "capabilities": {
@@ -23,7 +23,11 @@
     "tools": [
       "media.paged.draw.tool.addAnchor",
       "media.paged.draw.tool.deleteAnchor",
-      "media.paged.draw.tool.convertAnchor"
+      "media.paged.draw.tool.convertAnchor",
+      "media.paged.draw.tool.curvature",
+      "media.paged.draw.tool.pencil",
+      "media.paged.draw.tool.gradientAnnotator",
+      "media.paged.draw.tool.measure"
     ],
     "panels": [
       "media.paged.draw.panel.stroke",
@@ -37,7 +41,16 @@
       "media.paged.draw.command.groupSelection",
       "media.paged.draw.command.ungroup",
       "media.paged.draw.command.fillGradientLinear",
-      "media.paged.draw.command.fillGradientRadial"
+      "media.paged.draw.command.fillGradientRadial",
+      "media.paged.draw.command.outlineStroke",
+      "media.paged.draw.command.offsetPath",
+      "media.paged.draw.command.simplifyPath",
+      "media.paged.draw.command.joinEndpoints",
+      "media.paged.draw.command.averageEndpoints",
+      "media.paged.draw.command.pathfinderUnite",
+      "media.paged.draw.command.pathfinderSubtract",
+      "media.paged.draw.command.pathfinderIntersect",
+      "media.paged.draw.command.pathfinderExclude"
     ],
     "editContexts": [
       {

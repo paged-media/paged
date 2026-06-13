@@ -17,6 +17,33 @@ export {
 } from "./pen-machine";
 
 export {
+  CurvatureMachine,
+  curvaturePreview,
+  type CurvatureEvent,
+  type CurvatureModifiers,
+  type CurvatureSnapshot,
+  type CurvatureCommit,
+  type CurvatureOptions,
+} from "./curvature-machine";
+
+export {
+  PencilMachine,
+  type PencilEvent,
+  type PencilSnapshot,
+  type PencilCommit,
+  type PencilOptions,
+} from "./pencil-machine";
+
+export {
+  MeasureMachine,
+  measureReadout,
+  type MeasureEvent,
+  type MeasureModifiers,
+  type MeasureReadout,
+  type MeasureSnapshot,
+} from "./measure-machine";
+
+export {
   planAnchorAdd,
   planAnchorDelete,
   planAnchorConvert,

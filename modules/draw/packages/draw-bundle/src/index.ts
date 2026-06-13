@@ -78,3 +78,68 @@ export {
   contributeFillGradientCommands,
   type FillGradientPreset,
 } from "./commands/fill-gradient";
+// Phase 4c — the pro toolset, exported for the conformance specs (the
+// same no-second-copy rule for every builder).
+export { PRO_TOOL_IDS, DRAW_TOOL_IDS } from "./tools";
+export { insertPathMutationFor } from "./handlers/insert-path";
+export { createCurvatureHandler } from "./handlers/curvature";
+export { createPencilHandler } from "./handlers/pencil";
+export {
+  createMeasureHandler,
+  nearestPathPointOnPage,
+  BIND_MEASURE_READOUT,
+} from "./handlers/measure";
+export {
+  createGradientAnnotatorHandler,
+  gradientAxisMutationFor,
+} from "./handlers/gradient-annotator";
+export {
+  PATH_OPS_COMMAND_IDS,
+  PATH_OPS_COMMAND_CATEGORY,
+  OUTLINE_STROKE_COMMAND_ID,
+  OFFSET_PATH_COMMAND_ID,
+  SIMPLIFY_PATH_COMMAND_ID,
+  DEFAULT_OUTLINE_WIDTH_PT,
+  DEFAULT_OFFSET_DELTA_PT,
+  DEFAULT_SIMPLIFY_TOLERANCE_PT,
+  DEFAULT_MITER_LIMIT,
+  outlineStrokeMutationFor,
+  offsetPathMutationFor,
+  simplifyPathMutationFor,
+  outlineParamsOf,
+  applyOutlineStroke,
+  applyOffsetPath,
+  applySimplifyPath,
+  contributePathOpsCommands,
+  type OutlineStrokeParams,
+  type OffsetPathParams,
+  type StrokeCapToken,
+  type StrokeJoinToken,
+} from "./commands/path-ops";
+export {
+  JOIN_AVERAGE_COMMAND_IDS,
+  JOIN_AVERAGE_COMMAND_CATEGORY,
+  JOIN_COMMAND_ID,
+  AVERAGE_COMMAND_ID,
+  planJoinEndpoints,
+  planAverageEndpoints,
+  pathPointSetMutationFor,
+  endpointMovesMutationFor,
+  contributeJoinAverageCommands,
+  type EndpointMove,
+} from "./commands/join-average";
+export {
+  PATHFINDER_PRESETS,
+  PATHFINDER_COMMAND_IDS,
+  PATHFINDER_COMMAND_CATEGORY,
+  pathfinderMutationFor,
+  applyPathfinder,
+  contributePathfinderCommands,
+  type PathfinderPreset,
+} from "./commands/pathfinder";
+// Phase 4c — the Line ends (arrowheads) panel section's binding +
+// curated vocabulary, exported for the conformance spec.
+export {
+  BIND_ARROWHEAD_CONTROLS_VISIBLE,
+  ARROWHEAD_OPTIONS,
+} from "./panels/stroke-panel";

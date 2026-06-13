@@ -105,6 +105,32 @@ export const F3_CURVED_OPEN: CorpusFixture = {
   },
 };
 
+/** F4 — TWO OVERLAPPING closed quads (Phase 4c): the pathfinder
+ *  conformance targets. `ua` (100..300)² overlaps `ub` (200..400)²;
+ *  `ids.polygon` carries the KEPT element, `secondId` the consumed one. */
+export const F4_OVERLAP: CorpusFixture & { secondId: string } = {
+  id: "overlap-pair",
+  about: "two overlapping closed polygons — pathfinder boolean targets",
+  pageId: "usp",
+  ids: { polygon: "ua" },
+  secondId: "ub",
+  bytes() {
+    const a = pathItem("Polygon", "ua", "100 100 300 300", false, [
+      { a: [100, 100] },
+      { a: [300, 100] },
+      { a: [300, 300] },
+      { a: [100, 300] },
+    ]);
+    const b = pathItem("Polygon", "ub", "200 200 400 400", false, [
+      { a: [200, 200] },
+      { a: [400, 200] },
+      { a: [400, 400] },
+      { a: [200, 400] },
+    ]);
+    return packageWithSpread(a + b);
+  },
+};
+
 export const CORPUS: readonly CorpusFixture[] = [
   F1_MULTI_SHAPE,
   F2_CLOSED_QUAD,
