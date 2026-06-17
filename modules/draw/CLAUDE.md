@@ -14,6 +14,20 @@ incubate-then-extract window (strategy:
 geometry/tools via pnpm `link:` and wraps the machines in thin
 `GestureHandler` shims.
 
+`draw-bundle` is past "skeleton" — `activate(host)` contributes a full
+toolset via `contributeTool` (the Add/Delete/Convert anchor editors in
+the pen flyout, plus the Curvature/Pencil/Gradient-Annotator/Measure/
+Shape-Builder pro tools), the Stroke + Fill schema panels, the
+Appearance/Dash/Path-Ops/Select-Same/Live-Corners commands, SVG import/
+export, and the `vectorGraphic` EDIT CONTEXT (double-click a path-bearing
+kind → anchor-editing tool-set focused, stroke panel raised, Esc pops
+out). The bundle drives end-to-end through the real editor host: the
+draw-plugin e2e (`editor` `apps/canvas/tests/e2e/draw-plugin.spec.ts`)
+and a DTP journey (`tests/journey/plugins/draw.journey.spec.ts`) author a
+path with the built-in Pen, then refine its anchors (add/delete/convert)
+and stroke through the bundle. The three packages carry 302 passing
+vitest (geometry 96, tools 67, bundle 139) and typecheck clean.
+
 ## Hard rules
 
 - **Host-agnostic means host-agnostic.** `draw-geometry` has zero deps;
