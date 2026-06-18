@@ -330,4 +330,28 @@ export interface PluginContributions {
   /** Exporter ids the bundle registers (K-2 / S-06). Must be namespaced
    *  by `id`. */
   exporters?: string[];
+  /** `.paged` CONTAINER part-types this plugin persists (file-format.md
+   *  §4 / §8.1). Each extended object is stored in three ROLES: `spec` (the
+   *  canonical JSON definition — small, diffable, must round-trip), `source`
+   *  (the bytes the spec operates on — binary, embeddable or linked, §6), and
+   *  `derived` (the regenerable, producer-stamped flatten kept for viewers
+   *  without a compute engine). A bundle DECLARES the part-types it owns here;
+   *  the container's `manifest.json` binds to this declaration directly (one
+   *  registry, not two), so third-party plugins persist namespaced parts
+   *  WITHOUT central blessing of each data type. The bytes are read/written
+   *  through the `host.parts` door into the plugin's own `paged/<plugin-id>/`
+   *  namespace. Purely DECLARATIVE — no runtime behaviour rides on this. */
+  partTypes?: Array<{
+    /** A plugin-local type name (e.g. "sheet", "imageStack", "barcode"). */
+    type: string;
+    /** Which of the three storage roles this part fills. */
+    role: "spec" | "source" | "derived";
+    /** The part's serialization — advisory metadata for tooling + the
+     *  container manifest (e.g. "json", "parquet", "png", "svg", "pdf"). */
+    format: string;
+    /** `source` parts only: whether this part MAY be linked to an external
+     *  URI (with a cached snapshot in the container) rather than embedded
+     *  (file-format.md §6 embedded-vs-linked). */
+    linkable?: boolean;
+  }>;
 }

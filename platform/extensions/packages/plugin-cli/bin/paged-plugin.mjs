@@ -385,7 +385,7 @@ function validateManifest(manifest, manifestDir) {
       err(`"contributes" must be an object`);
     } else {
       for (const key of Object.keys(contributes)) {
-        if (!["tools", "panels", "commands", "editContexts", "objectTypes", "importers", "exporters"].includes(key)) {
+        if (!["tools", "panels", "commands", "editContexts", "objectTypes", "importers", "exporters", "partTypes"].includes(key)) {
           err(`unknown contribution kind "${key}"`);
         }
       }
@@ -444,6 +444,23 @@ function validateManifest(manifest, manifestDir) {
             if (typeof ot !== "object" || ot === null ||
                 typeof ot.type !== "string" || !BAKED_FALLBACKS.has(ot.bakedFallback)) {
               err(`each objectType needs { type: string, bakedFallback: group|rectangle|raster }`);
+            }
+          }
+        }
+      }
+      // `.paged` container part-types (file-format.md §8.1) — declarative.
+      const pts = contributes.partTypes;
+      if (pts !== undefined) {
+        if (!Array.isArray(pts)) {
+          err(`"contributes.partTypes" must be an array`);
+        } else {
+          for (const pt of pts) {
+            if (typeof pt !== "object" || pt === null ||
+                typeof pt.type !== "string" ||
+                !["spec", "source", "derived"].includes(pt.role) ||
+                typeof pt.format !== "string" ||
+                (pt.linkable !== undefined && typeof pt.linkable !== "boolean")) {
+              err(`each partType needs { type: string, role: spec|source|derived, format: string, linkable?: boolean }`);
             }
           }
         }

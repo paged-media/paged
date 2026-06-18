@@ -305,6 +305,36 @@
           "items": {
             "type": "string"
           }
+        },
+        "partTypes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "type",
+              "role",
+              "format"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "type": {
+                "type": "string"
+              },
+              "role": {
+                "enum": [
+                  "spec",
+                  "source",
+                  "derived"
+                ]
+              },
+              "format": {
+                "type": "string"
+              },
+              "linkable": {
+                "type": "boolean"
+              }
+            }
+          }
         }
       }
     }
