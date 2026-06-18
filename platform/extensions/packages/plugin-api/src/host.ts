@@ -818,6 +818,37 @@ export interface BlobSurface {
   usage(): Promise<BlobUsage>;
 }
 
+// ------------------------------------------------------------- parts
+
+/**
+ * The `.paged` CONTAINER parts door (file-format.md). Per-plugin, NAMESPACED
+ * bytes persisted INTO the document container (the `.paged`/IDML package) that
+ * TRAVEL WITH THE FILE — unlike `host.blob` (per-browser OPFS, local-only).
+ *
+ * Paths are RELATIVE to this plugin's own `paged/<plugin-id>/` subtree (the
+ * host prepends it; a bundle can neither read nor write another plugin's
+ * parts, and `..`/absolute paths are rejected), so a path is typically
+ * `<object-id>/<role>.<ext>` — e.g. `o1/spec.json` (spec, canonical JSON),
+ * `o1/values.parquet` (source, binary), `o1/chart.svg` (derived). The
+ * part-types a plugin persists are declared in `contributes.partTypes`; the
+ * container's `manifest.json` binds to that declaration.
+ *
+ * Always present — when the host wires no container writer (older editor /
+ * headless), `read` answers `null`, `list` is `[]`, `write` rejects, and
+ * `supports("storage.parts@1")` is false (the honest no-container door).
+ */
+export interface PartsSurface {
+  /** Write/overwrite the part at `path` (relative to this plugin's namespace).
+   *  Persisted into the container on the next document save. */
+  write(path: string, bytes: Uint8Array): Promise<void>;
+  /** Read a part's bytes (the live edit overlay first, else the loaded
+   *  container), or `null` if absent. */
+  read(path: string): Promise<Uint8Array | null>;
+  /** List part paths under `prefix` (relative) — this plugin's namespace only,
+   *  returned as relative paths. */
+  list(prefix?: string): Promise<string[]>;
+}
+
 // -------------------------------------------------------------- network
 //
 // The capability-gated NETWORK CONSENT door (paged.data D-03; base-idea §11).
@@ -1023,6 +1054,14 @@ export interface BundleHost {
    *  `{used:0,quota:0}`, writes reject, and `supports("storage.blob@1")`
    *  is false (the honest no-store door). */
   readonly blob: BlobSurface;
+  /** The `.paged` CONTAINER parts door (file-format.md): per-plugin,
+   *  namespaced bytes persisted INTO the document so they TRAVEL WITH THE
+   *  FILE (unlike `host.blob`'s per-browser OPFS). Paths are relative to the
+   *  plugin's own `paged/<plugin-id>/` subtree. Always present; when the host
+   *  wires no container writer (older editor / headless), reads answer
+   *  null/`[]`, writes reject, and `supports("storage.parts@1")` is false. The
+   *  part-types are declared in `contributes.partTypes`. */
+  readonly parts: PartsSurface;
   /** The capability-gated NETWORK CONSENT door (D-03; base-idea §11). Always
    *  present; gated on `capabilities.network` and per-origin user consent.
    *  When the host injects no consent backend, every request is DENIED (the

@@ -14,6 +14,7 @@ import type {
   AssetSurface,
   BindingsSurface,
   BlobSurface,
+  PartsSurface,
   BundleHost,
   ClipboardSurface,
   ClipboardPayload,
@@ -107,6 +108,10 @@ export const HOST_FEATURES: readonly string[] = [
   // implemented at the pinned canvas-wasm — unlike assets.fonts@1, which
   // stays conditional on the editor's injected byte source.
   "assets.images@1",
+  // .paged container parts door (file-format.md) — the engine (canvas-wasm
+  // v51) is the writer, so it is live whenever a bundle runs (the worker
+  // handshake guarantees a v51-protocol worker).
+  "storage.parts@1",
 ];
 
 /** Thrown by reserved surface members — a visible seam, never
@@ -1705,6 +1710,58 @@ export function createBundleHost(
     },
   };
 
+  // ----------------------------------------------------- parts
+  // The `.paged` CONTAINER parts door (file-format.md, v51): per-plugin
+  // namespaced bytes persisted INTO the document container (they travel WITH
+  // the .paged file, unlike host.blob's per-browser OPFS), via the
+  // writePagedPart / readPagedPart / listPagedParts wire ops. Paths are
+  // RELATIVE to this plugin's own paged/<id>/ subtree — the door prepends it
+  // and rejects `..` / absolute escapes, so a bundle can only touch its own
+  // parts. No injected backend: the engine (canvas-wasm) is the writer, so the
+  // door is always live against a v51 worker (the handshake guarantees that).
+  const partsBase = `paged/${manifest.id}/`;
+  const partsFull = (rel: string): string => {
+    const clean = rel.replace(/^\/+/, "");
+    if (clean.split("/").includes("..")) {
+      throw new Error(`host.parts: path "${rel}" must not contain ".."`);
+    }
+    return partsBase + clean;
+  };
+  const parts: PartsSurface = {
+    async write(path, bytes) {
+      const reply = await getEditor().client.send({
+        kind: "writePagedPart",
+        payload: { path: partsFull(path), bytes: Array.from(bytes) },
+      });
+      if (reply.kind !== "pagedPartWritten") {
+        const err =
+          reply.kind === "pagedPartFailed" ? reply.payload.error : `unexpected ${reply.kind}`;
+        throw new Error(`host.parts.write("${path}"): ${err}`);
+      }
+    },
+    async read(path) {
+      const reply = await getEditor().client.send({
+        kind: "readPagedPart",
+        payload: { path: partsFull(path) },
+      });
+      if (reply.kind === "pagedPartRead") {
+        return reply.payload.found ? Uint8Array.from(reply.payload.bytes) : null;
+      }
+      return null; // pagedPartFailed (e.g. no document) → the honest null
+    },
+    async list(prefix = "") {
+      const reply = await getEditor().client.send({
+        kind: "listPagedParts",
+        payload: { prefix: partsFull(prefix) },
+      });
+      if (reply.kind !== "pagedPartList") return [];
+      // Strip the namespace back off — bundles speak in relative paths.
+      return reply.payload.paths.map((p) =>
+        p.startsWith(partsBase) ? p.slice(partsBase.length) : p,
+      );
+    },
+  };
+
   // ----------------------------------------------------- clipboard
   // The capability-gated SYSTEM-clipboard door (K-6 / S-14). Read/write a
   // `{ text?, tabular? }` payload through the injected backend. The gate
@@ -2087,6 +2144,7 @@ export function createBundleHost(
     shell,
     storage,
     blob,
+    parts,
     network,
     dataProviders,
     diagnostics,
