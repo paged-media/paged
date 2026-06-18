@@ -148,6 +148,8 @@ export function makeFakeEditor(opts?: {
   const mutations: unknown[] = [];
   let selectionIds: unknown[] = [];
   let toolPreview: unknown = null;
+  // v51 .paged container parts — an in-memory store so host.parts round-trips.
+  const pagedParts = new Map<string, number[]>();
   let nextMutateReply: unknown = {
     kind: "mutationApplied",
     payload: { createdId: null, pageIds: ["p1"] },
@@ -178,6 +180,21 @@ export function makeFakeEditor(opts?: {
       }
       if (msg.kind === "requestElementProperties") {
         return elementPropertiesReply;
+      }
+      if (msg.kind === "writePagedPart") {
+        const m = msg as { payload: { path: string; bytes: number[] } };
+        pagedParts.set(m.payload.path, m.payload.bytes);
+        return { kind: "pagedPartWritten", payload: {} };
+      }
+      if (msg.kind === "readPagedPart") {
+        const m = msg as { payload: { path: string } };
+        const b = pagedParts.get(m.payload.path);
+        return { kind: "pagedPartRead", payload: { found: b !== undefined, bytes: b ?? [] } };
+      }
+      if (msg.kind === "listPagedParts") {
+        const m = msg as { payload: { prefix: string } };
+        const paths = [...pagedParts.keys()].filter((p) => p.startsWith(m.payload.prefix));
+        return { kind: "pagedPartList", payload: { paths } };
       }
       return { kind: "noop" };
     },
