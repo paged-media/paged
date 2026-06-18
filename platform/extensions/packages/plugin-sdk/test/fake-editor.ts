@@ -182,17 +182,17 @@ export function makeFakeEditor(opts?: {
         return elementPropertiesReply;
       }
       if (msg.kind === "writePagedPart") {
-        const m = msg as { payload: { path: string; bytes: number[] } };
+        const m = msg as unknown as { payload: { path: string; bytes: number[] } };
         pagedParts.set(m.payload.path, m.payload.bytes);
         return { kind: "pagedPartWritten", payload: {} };
       }
       if (msg.kind === "readPagedPart") {
-        const m = msg as { payload: { path: string } };
+        const m = msg as unknown as { payload: { path: string } };
         const b = pagedParts.get(m.payload.path);
         return { kind: "pagedPartRead", payload: { found: b !== undefined, bytes: b ?? [] } };
       }
       if (msg.kind === "listPagedParts") {
-        const m = msg as { payload: { prefix: string } };
+        const m = msg as unknown as { payload: { prefix: string } };
         const paths = [...pagedParts.keys()].filter((p) => p.startsWith(m.payload.prefix));
         return { kind: "pagedPartList", payload: { paths } };
       }
