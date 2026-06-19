@@ -41,7 +41,7 @@ export const BIND_GRADIENT_CONTROLS_VISIBLE =
 export const fillPanel: SchemaPanelContribution = {
   id: FILL_PANEL_ID,
   title: "Fill",
-  icon: "swatch-fill",
+  icon: "ui-swatch-fill",
   defaultDock: "right",
   defaultGroup: "draw",
   schema: {

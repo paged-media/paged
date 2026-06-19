@@ -94,7 +94,9 @@ export function drawTools(host: BundleHost): ToolContribution[] {
       id: "media.paged.draw.tool.curvature",
       title: "Curvature",
       icon: "tool-curvature",
-      shortcut: "shift+p",
+      // shift+u — yields shift+p to the built-in Page tool (InDesign-canonical);
+      // INV-REG-1 keeps every single-key tool shortcut unique across bundles.
+      shortcut: "shift+u",
       group: "pen",
       section: "drawType",
       order: 4,
@@ -116,7 +118,9 @@ export function drawTools(host: BundleHost): ToolContribution[] {
       id: "media.paged.draw.tool.gradientAnnotator",
       title: "Gradient Annotator",
       icon: "tool-gradient",
-      shortcut: "shift+g",
+      // shift+a — yields shift+g to the built-in Gradient Feather tool
+      // (InDesign-canonical); INV-REG-1 keeps tool shortcuts unique.
+      shortcut: "shift+a",
       group: "gradientAnnotator",
       section: "transform",
       order: 1,
