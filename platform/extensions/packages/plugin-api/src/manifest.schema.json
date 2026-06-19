@@ -1,6 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://paged.media/schemas/plugin-manifest.schema.json",
+  "$comment": "SINGLE SOURCE OF TRUTH for the closed capability vocabularies (rendering surfaces, asset kinds, clipboard grants, wasm purposes, edit-context scopes/entries, baked fallbacks). The plugin-api TS unions (manifest.ts/assets.ts) and the plugin-cli runtime Sets are PROJECTIONS of these enums; plugin-sdk/test/capability-vocabulary.spec.ts gates them against this file (ADR 019). Change a vocabulary HERE first.",
   "title": "Paged plugin manifest",
   "type": "object",
   "required": [

@@ -18,6 +18,11 @@ import process from "node:process";
 
 const ID_PATTERN = /^[a-z][a-z0-9]*(\.[a-z][a-z0-9-]*)+$/;
 const SEMVER_PATTERN = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
+// The closed capability vocabularies below are PROJECTIONS of the enums in
+// plugin-api `manifest.schema.json` (the single source of truth, ADR 019). They
+// stay hand-mirrored here because this CLI is zero-dep and runs standalone — but
+// plugin-sdk/test/capability-vocabulary.spec.ts now GATES them against the schema,
+// so drift fails CI. Change a vocabulary in the schema first, then mirror here.
 const RENDERING = new Set([
   "sceneLayer",
   "overlay",
