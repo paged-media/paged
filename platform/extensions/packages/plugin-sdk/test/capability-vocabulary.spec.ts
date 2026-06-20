@@ -33,16 +33,32 @@ const tsSrc = readdirSync(API)
 
 const canon = (values: readonly string[]) => [...values].sort().join(",");
 
-// All enum value-sets in the schema (recursive) — the source of truth.
-function collectSchemaEnums(node: unknown, acc: string[] = []): string[] {
+// All schema value-sets (recursive): `enum` arrays AND `const` scalars — a const
+// is a single-value closed vocabulary (e.g. gpu.realm = const "bundle"). The
+// scalar set is every accepted value, flattened. This is the source of truth.
+function collectSchemaValues(
+  node: unknown,
+  enums: string[] = [],
+  scalars: string[] = [],
+): { enums: string[]; scalars: string[] } {
   if (node && typeof node === "object") {
-    const enumVals = (node as { enum?: unknown }).enum;
-    if (Array.isArray(enumVals)) acc.push(canon(enumVals as string[]));
-    for (const v of Object.values(node)) collectSchemaEnums(v, acc);
+    const e = (node as { enum?: unknown }).enum;
+    if (Array.isArray(e)) {
+      enums.push(canon(e as string[]));
+      for (const v of e as string[]) scalars.push(v);
+    }
+    const c = (node as { const?: unknown }).const;
+    if (typeof c === "string") {
+      enums.push(canon([c]));
+      scalars.push(c);
+    }
+    for (const v of Object.values(node)) collectSchemaValues(v, enums, scalars);
   }
-  return acc;
+  return { enums, scalars };
 }
-const SCHEMA_ENUMS = new Set(collectSchemaEnums(schema));
+const collected = collectSchemaValues(schema);
+const SCHEMA_ENUMS = new Set(collected.enums);
+const SCHEMA_SCALARS = new Set(collected.scalars);
 
 // The CLI's `const NAME = new Set([...])` literal.
 function cliSet(name: string): string[] | null {
@@ -51,37 +67,58 @@ function cliSet(name: string): string[] | null {
   return [...m[1].matchAll(/"([^"]+)"/g)].map((x) => x[1]);
 }
 
-// Every >=2-member literal-string union in manifest.ts, as canonical value-sets.
+// Every >=2-member literal-string union in the plugin-api types, canonicalized.
 const TS_UNIONS = new Set(
   [...tsSrc.matchAll(/"[a-zA-Z]+"(?:\s*\|\s*"[a-zA-Z]+")+/g)].map((m) =>
     canon([...m[0].matchAll(/"([^"]+)"/g)].map((x) => x[1])),
   ),
 );
 
-// vocab key → (expected values, CLI Set name). Values are documented here only
-// for readability; the assertion is schema-driven (the test fails if the schema
-// stops defining the vocabulary).
-const VOCAB: Record<string, { values: string[]; cliSet: string }> = {
+// vocab → schema-ACCEPTED values + the CLI Set that mirrors them. `reserved` is
+// a vocabulary forward-declared in the TS type (and a CLI *reserved* Set) but
+// deliberately NOT accepted by the schema — e.g. gpu realm "shared" (ADR-018:
+// rejected until the zero-copy walls lift). The TS type union = accepted ∪
+// reserved; the schema accepts only the accepted half.
+type Vocab = {
+  values: string[];
+  cliSet: string;
+  reservedCliSet?: string;
+  reserved?: string[];
+};
+const VOCAB: Record<string, Vocab> = {
   rendering: { values: ["sceneLayer", "overlay", "hitTest", "resourceProvider"], cliSet: "RENDERING" },
-  assets: { values: ["fonts", "images"], cliSet: "ASSET_KINDS" },
+  assets: { values: ["fonts", "images"], cliSet: "ASSET_KINDS", reservedCliSet: "ASSET_KINDS_RESERVED", reserved: [] },
   clipboard: { values: ["none", "vector", "full"], cliSet: "CLIPBOARD" },
   scopes: { values: ["broad", "scoped"], cliSet: "SCOPES" },
   wasmPurposes: { values: ["layout", "codec", "compute", "engine"], cliSet: "WASM_PURPOSES" },
   entries: { values: ["doubleClick", "command"], cliSet: "ENTRIES" },
   bakedFallbacks: { values: ["group", "rectangle", "raster"], cliSet: "BAKED_FALLBACKS" },
+  gpuRealm: { values: ["bundle"], cliSet: "GPU_REALMS", reservedCliSet: "GPU_REALMS_RESERVED", reserved: ["shared"] },
 };
 
 describe("capability vocabulary — single source: manifest.schema.json", () => {
-  for (const [vocab, { values, cliSet: setName }] of Object.entries(VOCAB)) {
-    it(`${vocab}: schema, CLI Set, and manifest.ts union all agree`, () => {
-      // 1. the schema (the source) defines this vocabulary
+  for (const [vocab, spec] of Object.entries(VOCAB)) {
+    const { values, cliSet: setName, reservedCliSet, reserved = [] } = spec;
+    it(`${vocab}: schema is the source; CLI Set + TS type agree`, () => {
+      // 1. the schema (the source) accepts exactly these values
       expect(SCHEMA_ENUMS.has(canon(values))).toBe(true);
-      // 2. the CLI Set matches the schema enum (no hand-mirror drift)
+      // 2. the CLI accepted Set mirrors the schema (no hand-mirror drift)
       const cli = cliSet(setName);
       expect(cli, `CLI Set ${setName} not found`).not.toBeNull();
       expect(canon(cli!)).toBe(canon(values));
-      // 3. a manifest.ts literal union matches the schema enum
-      expect(TS_UNIONS.has(canon(values))).toBe(true);
+      // 3. reserved values: mirrored by the CLI reserved Set, disjoint from the
+      //    accepted half, and NOT accepted anywhere in the schema (forward-only)
+      if (reservedCliSet) {
+        const cliR = cliSet(reservedCliSet);
+        expect(cliR, `CLI Set ${reservedCliSet} not found`).not.toBeNull();
+        expect(canon(cliR!)).toBe(canon(reserved));
+        for (const r of reserved) {
+          expect(values).not.toContain(r);
+          expect(SCHEMA_SCALARS.has(r)).toBe(false);
+        }
+      }
+      // 4. the TS type union == accepted ∪ reserved
+      expect(TS_UNIONS.has(canon([...values, ...reserved]))).toBe(true);
     });
   }
 
