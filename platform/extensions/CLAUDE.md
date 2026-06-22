@@ -1,8 +1,9 @@
 # CLAUDE.md
 
 Orientation for Claude sessions in **paged-media/sdk** — the plugin
-contract + tooling workspace. Private for now; `plugin-api` is destined to
-become public at API-v1 freeze.
+contract + tooling workspace. Public; dual-licensed MPL-2.0 OR PMEL —
+deliberately permissive (unlike the AGPL editor) so plugins built on it can
+carry any license.
 
 ## What this is
 

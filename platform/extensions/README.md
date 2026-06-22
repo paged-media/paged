@@ -39,3 +39,12 @@ node packages/plugin-cli/bin/paged-plugin.mjs validate <path/to/manifest.json>
 
 First consumer: `paged-media/plugin-draw` (the paged.draw bundle). API gaps
 found there land in its `BREAKAGE_LOG.md` — that log is the v1 punch list.
+
+## License
+
+Dual-licensed **MPL-2.0 OR the Paged Media Enterprise License (PMEL)** —
+deliberately permissive (unlike the AGPL editor) so plugins built on this SDK
+can carry any license. See [`LICENSE.md`](./LICENSE.md), [`LICENSE`](./LICENSE),
+and [`CONTRIBUTING.md`](./CONTRIBUTING.md) (contributions under a CLA).
+
+`SPDX-License-Identifier: MPL-2.0 OR LicenseRef-PMEL`
