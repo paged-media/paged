@@ -1,0 +1,40 @@
+name: publish
+
+# Canary publish on push to main (mirrors plugin-sdk). Pre-1.0 every published
+# version is a -canary.N prerelease under the `canary` dist-tag; `latest` is left
+# untouched. Bump a package's version to release it; unchanged versions skip.
+# pnpm publish runs prepublishOnly (tsup build) and ships dist/ per publishConfig.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r typecheck
+      - name: publish changed versions (canary tag only)
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -e
+          for dir in packages/draw-geometry packages/draw-tools packages/draw-bundle; do
+            name=$(node -p "require('./$dir/package.json').name")
+            version=$(node -p "require('./$dir/package.json').version")
+            if npm view "$name@$version" version >/dev/null 2>&1; then
+              echo "skip $name@$version (already published)"
+            else
+              echo "publish $name@$version --tag canary"
+              (cd "$dir" && pnpm publish --no-git-checks --tag canary)
+            fi
+          done
