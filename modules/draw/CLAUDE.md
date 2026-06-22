@@ -1,8 +1,8 @@
 # CLAUDE.md
 
 Orientation for Claude sessions in **paged-media/plugin-draw** — the
-paged.draw vector plugin (private, proprietary, And The Next GmbH; no
-license headers).
+paged.draw vector plugin (public; dual-licensed AGPL-3.0 OR PMEL, And The
+Next GmbH; license headers on every source file).
 
 ## What this is
 
