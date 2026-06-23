@@ -1,1 +1,1 @@
-export * from "@paged-media/draw-geometry";
+export * from "../../draw-geometry/src";
