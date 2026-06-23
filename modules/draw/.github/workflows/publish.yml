@@ -1,14 +1,15 @@
 name: publish
 
-# Token-bootstrap publish for the consolidated @paged-media/draw package.
-# NEW package name → OIDC can't first-publish. After the first publish, add a
-# Trusted Publisher on npm and switch back to OIDC (drop NODE_AUTH_TOKEN).
+# Publish @paged-media/draw to npm via OIDC TRUSTED PUBLISHING (tokenless).
+# Requires a Trusted Publisher on npm: org paged-media, repo plugin-draw,
+# workflow publish.yml. Pre-1.0 -canary.N; unchanged versions skip.
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
 permissions:
+  id-token: write
   contents: read
 
 jobs:
@@ -22,13 +23,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          registry-url: https://registry.npmjs.org
+      - name: upgrade npm (OIDC needs >= 11.5.1)
+        run: npm install -g npm@latest
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r typecheck
       - run: pnpm -r build
-      - name: publish (canary)
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: publish via OIDC (canary)
         run: |
           set -e
           for dir in packages/draw-bundle; do
@@ -39,6 +39,6 @@ jobs:
             fi
             tgz="$RUNNER_TEMP/$(echo "$name" | sed 's#@##; s#/#-#')-${version}.tgz"
             ( cd "$dir" && pnpm pack --pack-destination "$RUNNER_TEMP" )
-            echo "publish $name@$version"
+            echo "publish $name@$version via OIDC"
             npm publish "$tgz" --tag canary --access public
           done
