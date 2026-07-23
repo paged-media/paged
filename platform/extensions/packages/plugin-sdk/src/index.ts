@@ -55,6 +55,7 @@ export {
   type CreateBundleHostOptions,
   type DiagnosticsSink,
   type BundleAssetProvider,
+  type NativeDocumentBackend,
   type BlobStore,
   type ClipboardBackend,
   type WorkerBackend,
