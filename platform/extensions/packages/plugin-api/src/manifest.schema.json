@@ -51,6 +51,14 @@
                 "broad",
                 "scoped"
               ]
+            },
+            "readNative": {
+              "type": "boolean",
+              "description": "Privileged read of the document's core-owned native parts (host.nativeDocument reads; the paged/core/ subtree — ADR-021)."
+            },
+            "openNative": {
+              "type": "boolean",
+              "description": "Authorizes replacing the active document by loading a plugin-produced native/importable package (host.nativeDocument.open)."
             }
           }
         },

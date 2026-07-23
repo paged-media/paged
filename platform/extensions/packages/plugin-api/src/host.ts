@@ -863,6 +863,38 @@ export interface PartsSurface {
   list(prefix?: string): Promise<string[]>;
 }
 
+// ------------------------------------------------------- nativeDocument
+//
+// The isolate-safe NATIVE-DOCUMENT door (ADR-021 / document-model direction):
+// capability-gated read access to the host document's CORE-OWNED native parts
+// (the `paged/core/` subtree — the native MODEL + COMPOSITION parts, which a
+// plugin can neither write nor namespace under `host.parts`) PLUS the ability
+// to LOAD a plugin-produced native/importable package as the active document.
+// It forwards to an EDITOR-INJECTED backend (exactly like `host.assets` /
+// `assetSource`), replacing the non-isolate `host.editor.client` escape hatch
+// for importers/exporters.
+//
+// Always present — when the host injects no backend, `readModel`/`readComposition`
+// answer `null`, `listParts` is `[]`, `open` REJECTS (the honest no-backend
+// door), and `supports("document.readNative@1")` /
+// `supports("document.openNative@1")` are false. Capability-gated: the reads
+// require `capabilities.document.readNative`; `open` requires
+// `capabilities.document.openNative`.
+export interface NativeDocumentSurface {
+  /** Read the core-owned native MODEL part (`paged/core/model/document.pgm`)
+   *  bytes, or null if the document carries no native model part. */
+  readModel(): Promise<Uint8Array | null>;
+  /** Read the core-owned COMPOSITION part (`paged/core/composition/document.pgd`)
+   *  bytes, or null if absent. */
+  readComposition(): Promise<Uint8Array | null>;
+  /** List the container's `paged/core/` native part paths (optionally under a
+   *  relative prefix). Empty when the host wires no backend. */
+  listParts(prefix?: string): Promise<string[]>;
+  /** Replace the active document by loading a native/importable package
+   *  (an importer plugin produces these bytes, e.g. from IDML). */
+  open(bytes: Uint8Array): Promise<void>;
+}
+
 // -------------------------------------------------------------- network
 //
 // The capability-gated NETWORK CONSENT door (paged.data D-03; base-idea §11).
@@ -1076,6 +1108,17 @@ export interface BundleHost {
    *  null/`[]`, writes reject, and `supports("storage.parts@1")` is false. The
    *  part-types are declared in `contributes.partTypes`. */
   readonly parts: PartsSurface;
+  /** The isolate-safe NATIVE-DOCUMENT door (ADR-021): capability-gated read of
+   *  the host document's CORE-OWNED native parts (`paged/core/` MODEL +
+   *  COMPOSITION) + loading a plugin-produced native/importable package as the
+   *  active document — the isolate-safe replacement for the `host.editor.client`
+   *  escape hatch used by importers/exporters. Gated on
+   *  `capabilities.document.readNative` (the reads) and
+   *  `capabilities.document.openNative` (`open`). Always present; when the host
+   *  wires no backend, reads answer null/`[]`, `open` rejects, and
+   *  `supports("document.readNative@1")` / `supports("document.openNative@1")`
+   *  are false. */
+  readonly nativeDocument: NativeDocumentSurface;
   /** The capability-gated NETWORK CONSENT door (D-03; base-idea §11). Always
    *  present; gated on `capabilities.network` and per-origin user consent.
    *  When the host injects no consent backend, every request is DENIED (the

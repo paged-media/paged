@@ -74,6 +74,7 @@ export type {
   BlobSurface,
   BlobUsage,
   PartsSurface,
+  NativeDocumentSurface,
   NetworkSurface,
   ConsentResult,
   DataProvidersSurface,

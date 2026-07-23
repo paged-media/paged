@@ -61,6 +61,16 @@ export interface PluginCapabilities {
   document?: {
     read?: "broad" | "scoped";
     write?: "broad" | "scoped";
+    /** Privileged READ of the document's core-owned NATIVE parts
+     *  (`host.nativeDocument.readModel/readComposition/listParts`, the
+     *  `paged/core/` subtree — ADR-021). Gates the native read doors; an
+     *  absent field denies them. */
+    readNative?: boolean;
+    /** Authorizes REPLACING the active document by loading a
+     *  plugin-produced native/importable package
+     *  (`host.nativeDocument.open` — an importer's door). Gates that write;
+     *  an absent field denies it. */
+    openNative?: boolean;
   };
   /** Render-pipeline surfaces the bundle uses. `overlay` means the
    *  shared TS overlay signals (tool previews) AND `contribute.overlay`;

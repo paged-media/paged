@@ -29,6 +29,7 @@ import type {
   BindingsSurface,
   BlobSurface,
   PartsSurface,
+  NativeDocumentSurface,
   BundleHost,
   ClipboardSurface,
   ClipboardPayload,
@@ -365,6 +366,24 @@ export interface ClipboardBackend {
   write(payload: ClipboardPayload): Promise<void>;
 }
 
+/**
+ * The backend the editor injects to back `host.nativeDocument` (ADR-021 /
+ * document-model direction): the isolate-safe replacement for an importer/
+ * exporter reaching through `host.editor.client`. It exposes read access to
+ * the document's CORE-OWNED native parts (the `paged/core/` MODEL + COMPOSITION
+ * parts) plus a `open` that loads a plugin-produced native/importable package
+ * as the active document. The SDK adapter owns the capability gate; this
+ * backend only does the raw IO. A headless host injects no backend → the reads
+ * answer `null`/`[]`, `open` rejects, and `supports("document.readNative@1")` /
+ * `supports("document.openNative@1")` are false (the honest no-backend door).
+ */
+export interface NativeDocumentBackend {
+  readModel(): Promise<Uint8Array | null>;
+  readComposition(): Promise<Uint8Array | null>;
+  listParts(prefix?: string): Promise<string[]>;
+  open(bytes: Uint8Array): Promise<void>;
+}
+
 /** The SHARED cross-plugin data-provider registry (paged.data §7.1 / D-09). The
  *  editor creates ONE (`createDataProviderRegistry`) and injects the SAME
  *  instance into every plugin host, so a provider plugin and a consumer plugin
@@ -536,6 +555,15 @@ export interface CreateBundleHostOptions {
    *  When absent, `read` answers `null` and `write` is a no-op (the honest
    *  no-clipboard door). */
   clipboard?: ClipboardBackend;
+  /** Host-provided NATIVE-DOCUMENT backend (ADR-021). When present,
+   *  `host.nativeDocument.readModel/readComposition/listParts` read the
+   *  document's core-owned `paged/core/` native parts through it (gated on
+   *  `capabilities.document.readNative`) and `host.nativeDocument.open` loads a
+   *  plugin-produced package as the active document (gated on
+   *  `capabilities.document.openNative`); `supports("document.readNative@1")` /
+   *  `supports("document.openNative@1")` answer true. When absent, the reads
+   *  answer `null`/`[]` and `open` rejects (the honest no-backend door). */
+  nativeDocument?: NativeDocumentBackend;
   /** Host-provided WORKER backend (K-3 / S-07 / I-02). When present,
    *  `host.workers.spawn` resolves a declared bundle-relative module +
    *  constructs a host-owned `Worker` through it (capability-gated,
@@ -619,6 +647,11 @@ export function createBundleHost(
    *  the manifest so the manifest stays the single source of truth. */
   const hasDoc = (dir: "read" | "write"): boolean =>
     caps?.document?.[dir] !== undefined;
+  /** ADR-021 — the native-document READ doors are DECLARED when
+   *  `capabilities.document.readNative` is true; the LOAD door (`open`) when
+   *  `capabilities.document.openNative` is true. */
+  const hasNativeRead = (): boolean => caps?.document?.readNative === true;
+  const hasNativeOpen = (): boolean => caps?.document?.openNative === true;
   const hasRendering = (
     s: "sceneLayer" | "overlay" | "hitTest" | "resourceProvider",
   ): boolean => caps?.rendering?.includes(s) ?? false;
@@ -950,6 +983,22 @@ export function createBundleHost(
       hasDoc("read"),
       door,
       "capabilities.document.read must be declared",
+    );
+  /** ADR-021 — the native-document read doors require
+   *  `capabilities.document.readNative`; `open` requires
+   *  `capabilities.document.openNative`. Both throw in 'enforce' (a manifest
+   *  bug) and log+proceed in 'warn', like every other read door. */
+  const requireNativeRead = (door: string): void =>
+    requireDeclared(
+      hasNativeRead(),
+      door,
+      "capabilities.document.readNative must be declared",
+    );
+  const requireNativeOpen = (door: string): void =>
+    requireDeclared(
+      hasNativeOpen(),
+      door,
+      "capabilities.document.openNative must be declared",
     );
   const document: DocumentSurface = {
     async mutate(mutation: Mutation): Promise<MutationOutcome> {
@@ -1776,6 +1825,41 @@ export function createBundleHost(
     },
   };
 
+  // ----------------------------------------------- nativeDocument
+  // The isolate-safe NATIVE-DOCUMENT door (ADR-021 / document-model direction):
+  // the isolate-safe replacement for an importer/exporter reaching through
+  // `host.editor.client`. It forwards to an EDITOR-INJECTED backend (like
+  // `assetSource`): the reads (readModel/readComposition/listParts) are gated on
+  // `capabilities.document.readNative`, `open` on `capabilities.document.openNative`
+  // — both READ-style gates that THROW in 'enforce' and warn+proceed in 'warn'.
+  // No backend injected → the reads answer the honest null/`[]`, `open` throws,
+  // and supports("document.readNative@1")/("document.openNative@1") are false.
+  const nativeDocBackend = options?.nativeDocument;
+  const nativeDocument: NativeDocumentSurface = {
+    async readModel() {
+      requireNativeRead("nativeDocument.readModel");
+      return nativeDocBackend ? nativeDocBackend.readModel() : null;
+    },
+    async readComposition() {
+      requireNativeRead("nativeDocument.readComposition");
+      return nativeDocBackend ? nativeDocBackend.readComposition() : null;
+    },
+    async listParts(prefix) {
+      requireNativeRead("nativeDocument.listParts");
+      return nativeDocBackend ? nativeDocBackend.listParts(prefix) : [];
+    },
+    async open(bytes) {
+      requireNativeOpen("nativeDocument.open");
+      if (!nativeDocBackend) {
+        throw new Error(
+          "host.nativeDocument.open: the host wired no nativeDocument backend " +
+            '(supports("document.openNative@1") is false; the editor injects one)',
+        );
+      }
+      return nativeDocBackend.open(bytes);
+    },
+  };
+
   // ----------------------------------------------------- clipboard
   // The capability-gated SYSTEM-clipboard door (K-6 / S-14). Read/write a
   // `{ text?, tabular? }` payload through the injected backend. The gate
@@ -2124,6 +2208,14 @@ export function createBundleHost(
     // actually read/write the clipboard (K-6 / S-14).
     featureSet.add("clipboard@1");
   }
+  if (options?.nativeDocument) {
+    // The nativeDocument door always exists (no-backend fallback: reads answer
+    // null/[], open rejects); these flags mean a real NativeDocumentBackend is
+    // wired, so a bundle can actually read the core-owned native parts and load
+    // a package as the active document (ADR-021).
+    featureSet.add("document.readNative@1");
+    featureSet.add("document.openNative@1");
+  }
   if (options?.workers) {
     // The workers door always exists (no-worker fallback: spawn rejects);
     // this flag means a real WorkerBackend is wired, so a bundle can
@@ -2159,6 +2251,7 @@ export function createBundleHost(
     storage,
     blob,
     parts,
+    nativeDocument,
     network,
     dataProviders,
     diagnostics,

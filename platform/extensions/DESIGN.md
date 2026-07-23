@@ -142,6 +142,29 @@ Capability note: this is the "read-broad / write-scoped" default. v0
 enforces namespace only; write-*scoping* (subtree restriction) attaches
 at this same `mutate` chokepoint when edit contexts land.
 
+### 4.3b `host.nativeDocument` — the whole-native-document door [ADR-022]
+The privileged, isolate-safe surface an import/export plugin needs to
+speak in terms of the WHOLE Paged-native document, replacing the
+`host.editor.client` escape hatch (§4.9) for that job.
+- `readModel()` / `readComposition()` — raw bytes of the core-owned
+  native parts (`paged/core/model/document.pgm`,
+  `…/composition/document.pgd`), or `null` when the document carries no
+  such part. Cross-namespace reads — NOT a plugin's own `host.parts`
+  subtree (§4.6), which is why they are separately gated.
+- `listParts(prefix?)` — the `paged/core/` native part paths present.
+- `open(bytes)` — replace the active document by loading a
+  native/importable package (the IDML importer produces these bytes from
+  a `.idml`, then hands them here). Forwards to `client.loadDocument`.
+
+Capability note: two grants under `capabilities.document` —
+`readNative` (the reads) and `openNative` (the whole-document replace),
+kept SEPARATE because `open` is far more powerful than reading. Restrict
+to first-party / trusted-publisher bundles. Always present: honest `null`
+/ `[]` / reject with `supports("document.readNative@1"|"…openNative@1")`
+false when the host injects no `nativeDocument` backend. This is the
+core-side door ADR-022 pairs with the IDML adapter leaving the engine —
+the plugin imports/exports, the host owns loading.
+
 ### 4.4 `host.selection`, `host.viewport`
 `selection.get()/set()/onDidChange` (the post-insert select pattern
 every drawing tool needs) and `viewport.camera()/pxToPt(px)` (the

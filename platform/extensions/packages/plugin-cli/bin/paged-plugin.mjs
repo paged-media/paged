@@ -140,6 +140,9 @@ function validateManifest(manifest, manifestDir) {
         else {
           if (doc.read !== undefined && !SCOPES.has(doc.read)) err(`"capabilities.document.read" must be broad|scoped`);
           if (doc.write !== undefined && !SCOPES.has(doc.write)) err(`"capabilities.document.write" must be broad|scoped`);
+          // ADR-021: host.nativeDocument gates — readNative (privileged native reads) / openNative (load a package).
+          if (doc.readNative !== undefined && typeof doc.readNative !== "boolean") err(`"capabilities.document.readNative" must be a boolean`);
+          if (doc.openNative !== undefined && typeof doc.openNative !== "boolean") err(`"capabilities.document.openNative" must be a boolean`);
         }
       }
       if (caps.rendering !== undefined) {
