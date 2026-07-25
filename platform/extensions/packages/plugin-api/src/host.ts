@@ -601,6 +601,42 @@ export interface FrameChainLink {
  * The future write-scope (edit-context subtree) attaches at this same
  * chokepoint.
  */
+/**
+ * DOC-03 (protocol v54) — a story's full CONTENT: its paragraphs → runs → text +
+ * applied styles + direct character overrides. Where `collection<StorySummary>
+ * ("stories")` gives only counts, this gives the decoded text + formatting a
+ * content plugin needs to read an EDITED document back (e.g. paged.doc diffs it
+ * against its import baseline to drive edited save-back). Field names mirror the
+ * engine's `CharacterRun`/`Paragraph`; each `null`/absent override = inherit.
+ */
+export interface StoryContent {
+  selfId: string;
+  paragraphs: ParagraphContent[];
+}
+
+/** DOC-03 — one paragraph's applied style + its runs. */
+export interface ParagraphContent {
+  paragraphStyle?: string | null;
+  runs: RunContent[];
+}
+
+/** DOC-03 — one run's text + applied character style + direct overrides. A run
+ *  styled only through an applied style carries just `characterStyle`. */
+export interface RunContent {
+  text: string;
+  characterStyle?: string | null;
+  font?: string | null;
+  fontStyle?: string | null;
+  pointSize?: number | null;
+  fillColor?: string | null;
+  underline?: boolean | null;
+  strikethru?: boolean | null;
+  capitalization?: string | null;
+  baselineShift?: number | null;
+  position?: string | null;
+  tracking?: number | null;
+}
+
 export interface DocumentSurface {
   mutate(mutation: Mutation): Promise<MutationOutcome>;
   undo(): Promise<void>;
@@ -633,6 +669,14 @@ export interface DocumentSurface {
    *  pagination consumer reads this to know the real host chain (rather
    *  than a caller-supplied one). */
   frameChain(storyId: string): Promise<FrameChainLink[]>;
+  /** DOC-03 (protocol v54) — read a story's full content (paragraphs → runs →
+   *  text + applied styles + direct overrides), or `null` when the story id
+   *  doesn't resolve. Where `collection<StorySummary>("stories")` gives counts,
+   *  this gives the decoded text + formatting needed to read an EDITED document
+   *  back and diff it (paged.doc edited save-back). Gated:
+   *  `supports("document.readStory@1")`; a host without the v54 read backend
+   *  throws `PluginApiNotImplemented` (a visible seam, never a fake value). */
+  storyContent(storyId: string): Promise<StoryContent | null>;
   onDidChange(listener: (e: DocumentChangeEvent) => void): Disposable;
   /**
    * Plugin-metadata carrier (protocol v33) — read this plugin's

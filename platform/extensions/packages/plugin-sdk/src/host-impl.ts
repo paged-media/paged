@@ -39,6 +39,7 @@ import type {
   Disposable,
   DocumentChangeEvent,
   FrameChainLink,
+  StoryContent,
   DocumentSurface,
   EditContextContribution,
   ElementId,
@@ -1188,6 +1189,19 @@ export function createBundleHost(
         payload: { storyId },
       });
       return reply.kind === "frameChainResult" ? reply.payload.links : [];
+    },
+    async storyContent(_storyId: string): Promise<StoryContent | null> {
+      // DOC-03 (protocol v54). The core read op (`RequestStoryContent` →
+      // `StoryContentResult`) exists on the engine, but the vendored `wire.d.ts`
+      // is synced from the PUBLISHED @paged-media/canvas-wasm — which does not
+      // carry v54 yet. Reserved (a visible seam, never a fake value) until core
+      // publishes canvas-wasm v54 and `sync-wire.mjs` pulls the kinds; then this
+      // forwards `requestStoryContent` like `frameChain` and gains a
+      // `document.readStory@1` HOST_FEATURES entry so `supports(...)` answers true.
+      throw new PluginApiNotImplemented(
+        "document.storyContent",
+        "awaiting @paged-media/canvas-wasm v54 publish + sync-wire; core op RequestStoryContent already exists",
+      );
     },
     onDidChange(listener: (e: DocumentChangeEvent) => void): Disposable {
       requireDocRead("document.onDidChange");
