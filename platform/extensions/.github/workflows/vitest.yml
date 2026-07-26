@@ -1,0 +1,72 @@
+# Test evidence for the state matrix (plugin.api lane).
+#
+# This workspace has 271 tests across 27 files — including the headless
+# conformance harness that boots the REAL published engine wasm — and until
+# now NOTHING ran them in CI. The repo's workflows are cla / contract-guard /
+# notify-docs / publish; a green merge told you the version was bumped and the
+# package published, never that the contract still worked. The matrix
+# consequently reported plugin-sdk/vitest "silent for 876h" while the suite was
+# green on every developer's machine.
+#
+# Evidence hand-off is INVERTED (2026-07-26): this repo is PUBLIC and the state
+# repo is PRIVATE, so it cannot call state's publish-results action — GitHub
+# refuses to resolve a private repo's action from a public workflow, which
+# killed every wire that tried. We upload the JUnit; state PULLS it
+# (siblings-pull.yml, driven by state's ingest/artifacts.yaml).
+name: vitest
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vitest-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  vitest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # The harness specs boot the published canvas-wasm from node_modules, so
+      # this is a real engine run, not a mock.
+      #
+      # Red results must still publish (the matrix wants the ✗), so the run
+      # does not abort the job here — the gate at the end fails the build after
+      # the artifact is safely uploaded. Only plugin-sdk emits JUnit; plugin-api
+      # is type-only and plugin-cli has no suite, so `-r` would produce nothing
+      # for them.
+      - name: vitest → JUnit
+        run: |
+          set -uo pipefail
+          pnpm --filter @paged-media/plugin-sdk exec vitest run \
+            --reporter=default --reporter=junit \
+            --outputFile=junit.xml || echo "VITEST_FAILED=1" >> "$GITHUB_ENV"
+          test -s packages/plugin-sdk/junit.xml
+
+      - name: upload vitest results artifact
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: vitest-junit
+          path: packages/plugin-sdk/junit.xml
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: tests failed
+        if: ${{ env.VITEST_FAILED == '1' }}
+        run: exit 1

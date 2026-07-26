@@ -1,3 +1,7 @@
 node_modules/
 dist/
 *.tsbuildinfo
+
+# test evidence (emitted by CI for the state matrix, never committed)
+junit.xml
+**/junit.xml
