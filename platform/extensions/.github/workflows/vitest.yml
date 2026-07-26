@@ -35,6 +35,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
+        with:
+          # REQUIRED here: this repo's package.json has no `packageManager`
+          # field, and action-setup@v4 errors "No pnpm version is specified"
+          # without one of the two.
+          version: 10
       - uses: actions/setup-node@v4
         with:
           node-version: 22
