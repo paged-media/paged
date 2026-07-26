@@ -21,15 +21,43 @@
 // once and transparently gains the rich editor where the host
 // provides it.
 //
-// React is an OPTIONAL peer of plugin-sdk: only this module imports it,
-// and only the host path that renders a widget reaches it. The
-// diagnostics/loader code paths stay React-free.
-
-import { createElement } from "react";
+// React is an OPTIONAL peer of plugin-sdk (`peerDependenciesMeta`), and it
+// has to be optional at RUNTIME too, not just in the manifest. A STATIC
+// `import { createElement } from "react"` here made the whole package
+// unloadable without React: host-impl imports this module for the fallback
+// widget, index re-exports host-impl, so `import { loadBundle }` — the
+// React-free loader path — pulled React in transitively and died with
+// ERR_MODULE_NOT_FOUND. That is what broke every one of plugin-draw's 22
+// test files against the published canary (a host-agnostic repo that has no
+// business installing React), invisibly, for as long as its CI had been
+// failing at set-up.
+//
+// So resolve React dynamically and tolerate its absence. A host that renders
+// the fallback has React by construction; a headless consumer never reaches
+// the render path, and if one somehow does it gets a named seam rather than a
+// module-resolution crash.
 
 import type { CodeEditorProps, WidgetSurface } from "@paged-media/plugin-api";
 
-function TextareaCodeEditor(props: CodeEditorProps): ReturnType<typeof createElement> {
+type CreateElement = typeof import("react").createElement;
+
+let createElement: CreateElement | null = null;
+try {
+  ({ createElement } = await import("react"));
+} catch {
+  /* React-free consumer (headless tests, Node-side conformance) — see above. */
+}
+
+function TextareaCodeEditor(
+  props: CodeEditorProps,
+): ReturnType<CreateElement> {
+  if (!createElement) {
+    throw new Error(
+      "plugin-sdk: host.widgets.CodeEditor fell back to the built-in textarea, " +
+        "but React is not installed. Install react, or inject a widget catalog " +
+        "via createBundleHost({ widgets }).",
+    );
+  }
   return createElement("textarea", {
     value: props.value,
     readOnly: props.readOnly,

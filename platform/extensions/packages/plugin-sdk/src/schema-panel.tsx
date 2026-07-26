@@ -29,8 +29,11 @@
 // React is an OPTIONAL peer of plugin-sdk: only this module + the
 // widgets fallback import it, and only the host render path reaches it.
 // The document/loader/bindings-store code paths stay React-free.
-
-import { createElement } from "react";
+//
+// It has to be optional at RUNTIME, not just in package.json — a STATIC
+// react import here is reachable from the barrel (index → host-impl →
+// this), so it made `import { loadBundle }` fail with ERR_MODULE_NOT_FOUND
+// in any React-free consumer. See widgets-fallback.tsx for the full note.
 
 import type {
   BindingsSurface,
@@ -40,6 +43,25 @@ import type {
   SchemaPanelRenderer,
 } from "@paged-media/plugin-api";
 import type { ComponentType } from "react";
+
+type CreateElement = typeof import("react").createElement;
+
+let createElement: CreateElement | null = null;
+try {
+  ({ createElement } = await import("react"));
+} catch {
+  /* React-free consumer — the render paths below are never reached there. */
+}
+
+/** The render paths need React; a headless consumer never calls them. */
+function h(): CreateElement {
+  if (!createElement) {
+    throw new Error(
+      "plugin-sdk: rendering a schema panel needs React, which is not installed.",
+    );
+  }
+  return createElement;
+}
 
 /**
  * Resolve a schema visibility / enablement gate against a published-
@@ -77,14 +99,14 @@ export function makeSchemaPanelComponent(
     // neither — it resolves bindings via the catalog through the host's
     // own React context, and reactive gates via the bundle's bindings.
     function SchemaPanel(_props: PanelProps) {
-      return createElement(Renderer, { schema, bindings });
+      return h()(Renderer, { schema, bindings });
     }
     SchemaPanel.displayName = `SchemaPanel(${schema.id})`;
     return SchemaPanel;
   }
   // Honest seam — the host injected no schema renderer.
   function SchemaPanelSeam(_props: PanelProps) {
-    return createElement(
+    return h()(
       "div",
       {
         "data-schema-panel-seam": schema.id,
