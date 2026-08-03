@@ -30,12 +30,27 @@ import type {
   GestureHandler,
 } from "@paged-media/plugin-api";
 
+import { strokeWidthFromPressure } from "@paged-media/draw-geometry";
 import { PencilMachine, type PencilSnapshot } from "@paged-media/draw-tools";
 
 import { insertPathMutationFor } from "./insert-path";
 
 /** Screen-space RDP fidelity: pointer wobble below this collapses. */
 const SIMPLIFY_TOLERANCE_PX = 2;
+/** B-08 pressure→width ramp (pt at pressure 0 → pt at 1). */
+const PRESSURE_WIDTH_PROFILE = { min: 0.35, max: 4 };
+/** Did a pressure device actually drive the stroke? A mouse reports a
+ *  CONSTANT pressure, so any meaningful spread means real input. */
+const pressuresVary = (pressures: number[]): boolean => {
+  if (pressures.length < 2) return false;
+  let min = 1;
+  let max = 0;
+  for (const p of pressures) {
+    if (p < min) min = p;
+    if (p > max) max = p;
+  }
+  return max - min > 0.05;
+};
 /** Screen-space lift-near-the-start radius that closes the contour. */
 const CLOSE_TOLERANCE_PX = 8;
 
@@ -64,6 +79,39 @@ export function createPencilHandler(host: BundleHost): GestureHandler {
             return;
           }
           if (outcome.createdId) await host.selection.set([outcome.createdId]);
+          // B-08 — pressure → variable-width stroke. When a pressure
+          // device drove the stroke (the sample pressures actually VARY —
+          // a mouse's constant NEUTRAL never triggers this) and the
+          // contour is OPEN (the engine's v1 variable-outline scope), the
+          // drawn path converts to a variable-width outline via the
+          // `outlineStrokeVariable` wire op: per-anchor width stops from
+          // the linear pressure ramp. Its own undo step — undo restores
+          // the plain centerline path.
+          if (
+            outcome.createdId &&
+            c.open &&
+            pressuresVary(c.pressures)
+          ) {
+            const widths = c.pressures.map((pr) =>
+              strokeWidthFromPressure(pr, PRESSURE_WIDTH_PROFILE),
+            );
+            const outlined = await host.document.mutate({
+              op: "setElementProperty",
+              args: {
+                elementId: outcome.createdId,
+                path: "outlineStrokeVariable",
+                value: {
+                  type: "outlineStrokeVariable",
+                  value: { widths, cap: "round", join: "round", miterLimit: 4 },
+                },
+              },
+            });
+            if (!outlined.applied) {
+              host.log.warn(
+                `pencil variable-width outline rejected (path kept as centerline): ${JSON.stringify(outlined.error)}`,
+              );
+            }
+          }
         })
         .catch((err) => host.log.warn(`pencil commit failed: ${err}`));
       return;
@@ -99,11 +147,15 @@ export function createPencilHandler(host: BundleHost): GestureHandler {
         closeTolerance: host.viewport.pxToPt(CLOSE_TOLERANCE_PX),
       });
       pageId = e.pageId;
-      sync(machine.handle({ type: "down", point: e.pagePoint }));
+      sync(
+        machine.handle({ type: "down", point: e.pagePoint, pressure: e.pressure }),
+      );
     },
     onPointerMove(e: CanvasPointerEvent) {
       if (!machine || !e.pagePoint || e.pageId !== pageId) return;
-      sync(machine.handle({ type: "move", point: e.pagePoint }));
+      sync(
+        machine.handle({ type: "move", point: e.pagePoint, pressure: e.pressure }),
+      );
     },
     onPointerUp(e: CanvasPointerEvent) {
       if (!machine) return;
@@ -111,7 +163,7 @@ export function createPencilHandler(host: BundleHost): GestureHandler {
       const point =
         e.pageId === pageId && e.pagePoint ? e.pagePoint : undefined;
       const snap = point
-        ? machine.handle({ type: "up", point })
+        ? machine.handle({ type: "up", point, pressure: e.pressure })
         : machine.handle({ type: "key", key: "Escape" });
       sync(snap);
     },

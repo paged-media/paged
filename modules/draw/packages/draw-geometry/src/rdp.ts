@@ -43,7 +43,23 @@ export function simplifyRdp(
   points: ReadonlyArray<Vec2>,
   tolerance: number,
 ): Vec2Mut[] {
-  if (points.length <= 2) return points.map((p) => [p[0], p[1]]);
+  return simplifyRdpIndices(points, tolerance).map((i) => [
+    points[i][0],
+    points[i][1],
+  ]);
+}
+
+/**
+ * RDP simplification returning the KEPT INDICES into `points` (ascending).
+ * The index form lets a caller carry per-sample side data (the pencil's
+ * pressure lane, B-08) through the simplification losslessly — the kept
+ * points map 1:1 onto the fitted anchors downstream.
+ */
+export function simplifyRdpIndices(
+  points: ReadonlyArray<Vec2>,
+  tolerance: number,
+): number[] {
+  if (points.length <= 2) return points.map((_, i) => i);
   const keep = new Array<boolean>(points.length).fill(false);
   keep[0] = keep[points.length - 1] = true;
   const stack: [number, number][] = [[0, points.length - 1]];
@@ -63,9 +79,9 @@ export function simplifyRdp(
       stack.push([first, index], [index, last]);
     }
   }
-  const out: Vec2Mut[] = [];
+  const out: number[] = [];
   for (let i = 0; i < points.length; i++) {
-    if (keep[i]) out.push([points[i][0], points[i][1]]);
+    if (keep[i]) out.push(i);
   }
   return out;
 }

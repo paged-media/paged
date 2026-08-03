@@ -115,3 +115,30 @@ describe("PencilMachine", () => {
     expect(snap.points).toHaveLength(0);
   });
 });
+
+describe("PencilMachine pressure lane (B-08)", () => {
+  it("carries per-sample pressures through RDP onto the commit, 1:1 with anchors", () => {
+    const m = new PencilMachine({ tolerance: 0.1 });
+    m.handle({ type: "down", point: [0, 0], pressure: 0.1 });
+    // A real corner at (10,0) so RDP keeps it; distinct pressure there.
+    m.handle({ type: "move", point: [10, 0], pressure: 0.9 });
+    const snap = m.handle({ type: "up", point: [10, 10], pressure: 0.4 });
+    expect(snap.commit).not.toBeNull();
+    const c = snap.commit!;
+    expect(c.pressures).toHaveLength(c.anchors.length);
+    expect(c.pressures[0]).toBeCloseTo(0.1);
+    expect(c.pressures[1]).toBeCloseTo(0.9);
+    expect(c.pressures[c.pressures.length - 1]).toBeCloseTo(0.4);
+  });
+
+  it("defaults absent pressure to NEUTRAL and clamps out-of-range values", () => {
+    const m = new PencilMachine({ tolerance: 0.1 });
+    m.handle({ type: "down", point: [0, 0] });
+    m.handle({ type: "move", point: [10, 0], pressure: 7 });
+    const snap = m.handle({ type: "up", point: [10, 10], pressure: -3 });
+    const c = snap.commit!;
+    expect(c.pressures[0]).toBeCloseTo(0.5);
+    expect(c.pressures[1]).toBe(1);
+    expect(c.pressures[c.pressures.length - 1]).toBe(0);
+  });
+});

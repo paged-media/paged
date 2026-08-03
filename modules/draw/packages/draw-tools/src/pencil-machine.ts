@@ -34,23 +34,30 @@
 // than committing an unstrokeable path.
 
 import {
+  clampPressure,
   clone,
   dist,
-  simplifyRdp,
+  NEUTRAL_PRESSURE,
+  simplifyRdpIndices,
   smoothAnchorsThrough,
   type AnchorTriple,
   type Vec2,
 } from "@paged-media/draw-geometry";
 
 export type PencilEvent =
-  | { type: "down"; point: Vec2 }
-  | { type: "move"; point: Vec2 }
-  | { type: "up"; point: Vec2 }
+  | { type: "down"; point: Vec2; pressure?: number }
+  | { type: "move"; point: Vec2; pressure?: number }
+  | { type: "up"; point: Vec2; pressure?: number }
   | { type: "key"; key: "Escape" };
 
 export interface PencilCommit {
   anchors: AnchorTriple[];
   open: boolean;
+  /** Per-anchor normalized pressures (B-08): the kept samples' clamped
+   *  Pointer-Events pressures, 1:1 with `anchors`. A mouse's constant
+   *  NEUTRAL_PRESSURE lands mid-range — a caller can detect "no real
+   *  pressure input" by the range being ~zero. */
+  pressures: number[];
 }
 
 export interface PencilSnapshot {
@@ -82,6 +89,8 @@ const DEFAULT_MIN_SAMPLE_DISTANCE = 0.5;
 
 export class PencilMachine {
   private samples: Vec2[] = [];
+  /** Parallel to `samples`: the clamped pressure of each kept sample. */
+  private pressures: number[] = [];
   private drawing = false;
   private done = false;
 
@@ -93,6 +102,7 @@ export class PencilMachine {
       case "down":
         this.drawing = true;
         this.samples = [clone(event.point)];
+        this.pressures = [clampPressure(event.pressure ?? NEUTRAL_PRESSURE)];
         return this.snapshot(null);
       case "move": {
         if (!this.drawing) return this.snapshot(null);
@@ -101,30 +111,36 @@ export class PencilMachine {
           this.options.minSampleDistance ?? DEFAULT_MIN_SAMPLE_DISTANCE;
         if (dist(event.point, last) >= floor) {
           this.samples.push(clone(event.point));
+          this.pressures.push(clampPressure(event.pressure ?? NEUTRAL_PRESSURE));
         }
         return this.snapshot(null);
       }
       case "up":
-        return this.onUp(event.point);
+        return this.onUp(event.point, event.pressure);
       case "key":
         // Escape — cancel the in-flight stroke.
         this.done = true;
         this.samples = [];
+        this.pressures = [];
         return this.snapshot(null);
     }
   }
 
-  private onUp(point: Vec2): PencilSnapshot {
+  private onUp(point: Vec2, pressure?: number): PencilSnapshot {
     if (!this.drawing) return this.snapshot(null);
     this.drawing = false;
     this.done = true;
     const last = this.samples[this.samples.length - 1];
-    if (dist(point, last) > 0) this.samples.push(clone(point));
+    if (dist(point, last) > 0) {
+      this.samples.push(clone(point));
+      this.pressures.push(clampPressure(pressure ?? NEUTRAL_PRESSURE));
+    }
     // Close when the pen lifted near the start (and the stroke is long
     // enough that dropping the coincident tail still leaves a contour).
     const closeTol = this.options.closeTolerance ?? 0;
     let closed = false;
     let run = this.samples;
+    let runPressures = this.pressures;
     if (
       closeTol > 0 &&
       run.length >= 4 &&
@@ -132,14 +148,22 @@ export class PencilMachine {
     ) {
       closed = true;
       run = run.slice(0, -1); // the wraparound edge supplies the return
+      runPressures = runPressures.slice(0, -1);
     }
-    const simplified = simplifyRdp(run, this.options.tolerance);
-    if (simplified.length < 2 || (closed && simplified.length < 3)) {
+    // Index-form RDP so the pressure lane rides through the simplification
+    // losslessly (kept samples map 1:1 onto the fitted anchors, B-08).
+    const keptIdx = simplifyRdpIndices(run, this.options.tolerance);
+    if (keptIdx.length < 2 || (closed && keptIdx.length < 3)) {
       // A click / negligible stroke — cancel, never commit a degenerate
       // path the engine would reject.
       this.samples = [];
+      this.pressures = [];
       return this.snapshot(null);
     }
+    const simplified = keptIdx.map(
+      (i) => [run[i][0], run[i][1]] as [number, number],
+    );
+    const pressures = keptIdx.map((i) => runPressures[i] ?? NEUTRAL_PRESSURE);
     const anchors: AnchorTriple[] =
       this.options.smooth === false
         ? simplified.map((p) => ({
@@ -148,7 +172,7 @@ export class PencilMachine {
             right: [p[0], p[1]] as [number, number],
           }))
         : smoothAnchorsThrough(simplified, undefined, closed);
-    return this.snapshot({ anchors, open: !closed });
+    return this.snapshot({ anchors, open: !closed, pressures });
   }
 
   private snapshot(commit: PencilCommit | null): PencilSnapshot {

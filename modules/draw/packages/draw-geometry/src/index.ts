@@ -30,7 +30,7 @@ export {
   type AnchorTriple,
   type AnchorTable,
 } from "./types";
-export { segmentDistance, simplifyRdp } from "./rdp";
+export { segmentDistance, simplifyRdp, simplifyRdpIndices } from "./rdp";
 export { smoothAnchorsThrough } from "./spline";
 export {
   splitSegmentDeCasteljau,
