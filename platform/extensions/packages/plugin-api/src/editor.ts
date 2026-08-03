@@ -477,10 +477,48 @@ export interface ToolPreviewPath {
   dashed?: boolean;
 }
 
+/**
+ * A text tool-preview (the overlay TEXT primitive). Closes the RFI
+ * gap "the overlay channel carries shapes only, no text primitive" —
+ * consumer: paged.draw's Measure tool readout (an on-canvas
+ * length/angle HUD was impossible with shapes alone); future
+ * consumers: the Dimension tool, crop HUDs, Ruler markers.
+ *
+ * `x`/`y` are the text anchor position in page-local pt — the SAME
+ * space every other preview variant uses. The host renders the label
+ * at a constant SCREEN size (like its page captions), so `size` is a
+ * screen-px font size (default host-chosen, ~11), not a document pt
+ * size that would scale with zoom. `anchor` is SVG `text-anchor`
+ * semantics relative to `x`. `background` opts into a small backing
+ * plate behind the label for legibility over page content.
+ *
+ * PLAIN TEXT ONLY — the host sanitizes (control characters stripped,
+ * no markup interpreted). Probe `supports("overlay.text@1")`.
+ */
+export interface ToolPreviewText {
+  /** Explicit discriminant — the first in this vocabulary (the older
+   *  variants discriminate structurally; new primitives get a `kind`). */
+  kind: "text";
+  pageId: PageId;
+  /** Text anchor x, page-local pt. */
+  x: number;
+  /** Text BASELINE y, page-local pt. */
+  y: number;
+  /** The label. Plain text; the host sanitizes + may truncate. */
+  text: string;
+  /** Font size in screen px (constant under zoom). Host default ~11. */
+  size?: number;
+  /** Horizontal anchoring relative to `x` (SVG text-anchor). Default "start". */
+  anchor?: "start" | "middle" | "end";
+  /** Render a small backing plate behind the label for legibility. */
+  background?: boolean;
+}
+
 export type ToolPreviewShape =
   | MarqueeRectPageLocal
   | ToolPreviewPolyline
-  | ToolPreviewPath;
+  | ToolPreviewPath
+  | ToolPreviewText;
 
 // ------------------------------------------------------------- client
 // The NARROW engine-client contract — what the SDK and real bundles

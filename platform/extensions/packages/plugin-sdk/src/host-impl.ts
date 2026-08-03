@@ -60,6 +60,7 @@ import type {
   DataProviderInfo,
   DataProviderSnapshot,
   Mutation,
+  MutationInput,
   MutationOutcome,
   NetworkSurface,
   ObjectTypeContribution,
@@ -77,6 +78,7 @@ import type {
   SelectionSurface,
   ShellSurface,
   StorageSurface,
+  TextCaret,
   TextSurface,
   ViewportSurface,
   WidgetSurface,
@@ -119,6 +121,13 @@ export const HOST_FEATURES: readonly string[] = [
   "overlay.toolPreview@1",
   "storage@1",
   "diagnostics@1",
+  // The overlay TEXT primitive (RFI "overlay carries shapes only" —
+  // consumer: paged.draw's Measure readout). A pure pass-through on the
+  // same tool-preview channel; the renderer that knows the variant ships
+  // in the same host release that bumps this SDK, so the flag is static
+  // like the channel's own `overlay.toolPreview@1`. The headless harness
+  // records the shape verbatim.
+  "overlay.text@1",
   // C-5 / I-04 (core v42): the placed-image bytes read is engine-served
   // through the wire (no injected source), so it is unconditionally
   // implemented at the pinned canvas-wasm — unlike assets.fonts@1, which
@@ -368,6 +377,24 @@ export interface ClipboardBackend {
 }
 
 /**
+ * The reader the editor injects to back `host.text.caret()` (C-9): a
+ * synchronous read of the user's ACTIVE text caret from the editor's
+ * text-editing/content-selection state (the caret lives in EDITOR
+ * state, not the engine). The SDK adapter owns nothing here but the
+ * pass-through + the honest no-backend default — `read()` answers the
+ * caret in the engine text-op offset convention (`ContentSelection`
+ * story-local offsets; see `TextCaret`), `null` when no caret is
+ * active. The editor's backend also answers `null` for a
+ * cell-qualified caret (cell-local offsets must not leak as
+ * story-local — the documented v1 gap). When absent,
+ * `host.text.caret()` is always `null` and `supports("text.caret@1")`
+ * is false.
+ */
+export interface TextCaretBackend {
+  read(): TextCaret | null;
+}
+
+/**
  * The backend the editor injects to back `host.nativeDocument` (ADR-021 /
  * document-model direction): the isolate-safe replacement for an importer/
  * exporter reaching through `host.editor.client`. It exposes read access to
@@ -550,6 +577,12 @@ export interface CreateBundleHostOptions {
    *  When absent, reads answer empty and writes reject (the honest
    *  no-store door). */
   blobStore?: BlobStore;
+  /** Host-provided TEXT-CARET reader (C-9). When present,
+   *  `host.text.caret()` reads the user's active text caret through it
+   *  and `supports("text.caret@1")` answers true. When absent, `caret()`
+   *  always answers `null` (the honest no-reader door — a read door like
+   *  `text.measureString`, no capability gate). */
+  textCaret?: TextCaretBackend;
   /** Host-provided CLIPBOARD backend (K-6 / S-14). When present,
    *  `host.clipboard.read/write` go through it (capability-gated on
    *  `capabilities.clipboard`) and `supports("clipboard@1")` answers true.
@@ -964,7 +997,7 @@ export function createBundleHost(
    *  carry setPluginMetadata (incl. nested in batches — e.g. the
    *  v34 batch-created-sentinel insert flow), but only for THIS
    *  plugin's derived key. Returns the offending key, or null. */
-  const foreignMetadataKey = (m: Mutation): string | null => {
+  const foreignMetadataKey = (m: MutationInput): string | null => {
     if (m.op === "setPluginMetadata") {
       return m.args.key === metadataKey(manifest) ? null : m.args.key;
     }
@@ -1002,7 +1035,7 @@ export function createBundleHost(
       "capabilities.document.openNative must be declared",
     );
   const document: DocumentSurface = {
-    async mutate(mutation: Mutation): Promise<MutationOutcome> {
+    async mutate(mutation: MutationInput): Promise<MutationOutcome> {
       // Write-door capability gate (mutate-never-throws → non-applied
       // outcome). The namespace gate below stays loud regardless.
       const denied = denyWrite(
@@ -1018,7 +1051,14 @@ export function createBundleHost(
         return { applied: false, error };
       }
       try {
-        const reply = await getEditor().client.mutate(mutation);
+        // The narrow `PagedClient.mutate` handle is typed against the
+        // VENDORED `Mutation` (protocol 51). A protocol-ahead op (v56;
+        // mutations.ts `PendingMutation`) is a real payload the live
+        // worker accepts — the cast is the ONE seam that carries it
+        // until `sync-wire.mjs` re-vendors canvas-wasm 0.56 and the
+        // union absorbs it. Widening the handle instead would demand
+        // more of every host than the published wire promises.
+        const reply = await getEditor().client.mutate(mutation as Mutation);
         if (reply.kind === "mutationApplied") {
           return {
             applied: true,
@@ -1290,6 +1330,15 @@ export function createBundleHost(
         ascender: sizePt * 0.8,
         descender: -sizePt * 0.2,
       };
+    },
+    // C-9 — the caret read door. A read of EDITOR state (the
+    // text-editing caret), injected by the host app like clipboard /
+    // consent; no capability gate (a read door, like measureString /
+    // viewport). No backend → the honest null (probe
+    // supports("text.caret@1") to distinguish "no caret" from
+    // "no reader").
+    caret(): TextCaret | null {
+      return options?.textCaret?.read() ?? null;
     },
   };
 
@@ -2221,6 +2270,13 @@ export function createBundleHost(
     // means a real system-clipboard backend is wired, so a bundle can
     // actually read/write the clipboard (K-6 / S-14).
     featureSet.add("clipboard@1");
+  }
+  if (options?.textCaret) {
+    // The caret door always exists (no-reader fallback: always null); this
+    // flag means a real caret reader is wired, so a bundle can distinguish
+    // "no active caret" from "host can't tell me" (C-9 — paged.data
+    // first-insert placement).
+    featureSet.add("text.caret@1");
   }
   if (options?.nativeDocument) {
     // The nativeDocument door always exists (no-backend fallback: reads answer

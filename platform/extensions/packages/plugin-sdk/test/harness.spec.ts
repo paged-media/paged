@@ -226,6 +226,40 @@ describe("contribution recording + dispose honesty", () => {
     );
   });
 
+  it("records a v1.1 LIST row verbatim (items + actions survive)", async () => {
+    // Schema v1.1 (DESIGN.md §12.6) — the list/collection tier is pure
+    // data like the rest of the schema, so the adapter must carry it
+    // through UNTOUCHED: a conformance consumer asserts the collection
+    // binding, the label/id fields, the selection binding and the
+    // applyEntity action without any UI.
+    live = await open();
+    const host = (await loaded()).host;
+    host.contribute.schemaPanel(listPanelC("media.paged.harness.panel.styles"));
+    const [recorded] = live!.schemaPanelsContributed();
+    const row = recorded.schema.sections[0].rows[0];
+    expect(row.widget).toBe("paged.list");
+    expect(row.list).toEqual({
+      items: { kind: "documentCollection", collection: "paragraphStyles" },
+      labelField: "name",
+      secondaryField: "kind",
+      idField: "selfId",
+      selectionBinding: "media.paged.harness.selectedStyle",
+      actions: [
+        {
+          label: "Apply",
+          action: {
+            kind: "applyEntity",
+            scope: "content",
+            path: "appliedParagraphStyle",
+            valueType: "text",
+          },
+          enabled: { bind: "media.paged.harness.hasSelection" },
+        },
+        { label: "Rename", action: { kind: "command", command: "x.rename" } },
+      ],
+    });
+  });
+
   it("records editContext + objectType contributions (W3.2 — un-reserved)", async () => {
     live = await open();
     const host = (await loaded()).host;
@@ -573,6 +607,53 @@ const schemaPanelC = (id: string) =>
       title: "S",
       sections: [
         { rows: [{ widget: "paged.readout", props: { text: "—" } }] },
+      ],
+    },
+  }) as never;
+/** Schema v1.1 (§12.6) — a schema panel whose single row is a LIST:
+ *  a document-collection source, a published selection binding, and
+ *  both `SchemaRowAction` kinds (applyEntity + command). */
+const listPanelC = (id: string) =>
+  ({
+    id,
+    title: "L",
+    schema: {
+      id,
+      title: "L",
+      sections: [
+        {
+          rows: [
+            {
+              widget: "paged.list",
+              list: {
+                items: {
+                  kind: "documentCollection",
+                  collection: "paragraphStyles",
+                },
+                labelField: "name",
+                secondaryField: "kind",
+                idField: "selfId",
+                selectionBinding: "media.paged.harness.selectedStyle",
+                actions: [
+                  {
+                    label: "Apply",
+                    action: {
+                      kind: "applyEntity",
+                      scope: "content",
+                      path: "appliedParagraphStyle",
+                      valueType: "text",
+                    },
+                    enabled: { bind: "media.paged.harness.hasSelection" },
+                  },
+                  {
+                    label: "Rename",
+                    action: { kind: "command", command: "x.rename" },
+                  },
+                ],
+              },
+            },
+          ],
+        },
       ],
     },
   }) as never;

@@ -58,6 +58,7 @@ export {
   type NativeDocumentBackend,
   type BlobStore,
   type ClipboardBackend,
+  type TextCaretBackend,
   type WorkerBackend,
   type SpawnedWorker,
   type SecretStoreBackend,

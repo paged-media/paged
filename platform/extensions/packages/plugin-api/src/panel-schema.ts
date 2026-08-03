@@ -48,9 +48,11 @@
 // for genuinely custom UI — SAME-REALM ONLY, by definition.
 //
 // HONEST LIMITS (recorded in DESIGN.md §12 + B-01 closure):
-//   · the row widget set is the curated catalog leaves — no LISTS
-//     (layer/style lists stay expert leaves; the catalog calls them
-//     expert-leaf territory) and no custom CANVASES;
+//   · the row widget set is the curated catalog leaves — no custom
+//     CANVASES (a bespoke on-canvas widget stays an expert leaf).
+//     SCHEMA v1.1 lifted the "no LISTS" half of this limit: the
+//     catalog grew a `paged.list` leaf, so `PanelSchemaRow.list`
+//     below carries a `SchemaListSpec` (see DESIGN.md §12.6);
 //   · binding evaluation is a host-side LOOKUP keyed by name, never an
 //     expression language (`{bind:"x"}` reads value `x`; it cannot say
 //     `x && !y`, `strokeType == "dashed"`, etc. — the plugin publishes
@@ -112,6 +114,94 @@ export interface BindingRef {
  *  throw). */
 export type SchemaGate = boolean | BindingRef;
 
+// ---------------------------------------------------------------- lists
+//
+// SCHEMA v1.1 — the COLLECTION tier (B-01 list widget + the G3
+// apply-entity write). §12.4 recorded "no lists" as a v1 honest limit:
+// layer/style lists stayed expert-leaf React because the curated
+// primitive leaves had no list. The editor has since GROWN one (the
+// `paged.list` leaf + the schema-list demo panel), so the contract
+// adopts it — the same "when the catalog grows it, not invent a rival"
+// rule §12 was built on. See DESIGN.md §12.6.
+//
+// Every member below is ADDITIVE and OPTIONAL: a v1 schema (scalar rows
+// only) is unchanged and still renders, and the widened row stays
+// structurally identical to the editor's mirror
+// (`shell/src/catalog/schema-panel-types.ts`), so the editor's
+// injection-seam assert (apps/canvas `main.tsx`
+// `_AssertSchemaRenderer`) keeps its teeth — the contract's
+// `SchemaPanelRendererProps` must stay assignable to the shell's.
+//
+// The binding CEILING is untouched. A list does not evaluate anything:
+// its rows come from a named collection or a published array, and its
+// actions either dispatch a registered command or write ONE typed
+// PropertyPath through the same mutation door the scalar widgets
+// commit on. No expression language enters here either.
+
+/** Where a `list` row's items come from. Two sources, mirroring the
+ *  two live-collection lanes the host already has:
+ *    · `documentCollection` — a named engine collection (the same
+ *      `host.document.collection(name)` lane the editor's own panels
+ *      read);
+ *    · `binding` — an ARRAY the plugin publishes through
+ *      `host.bindings.publish(name, rows)` (the §12.2 published-
+ *      bindings door, now carrying rows instead of a boolean). */
+export type WidgetCollectionBinding =
+  | { kind: "documentCollection"; collection: string }
+  | { kind: "binding"; bind: string };
+
+/** G3 — a schema row ACTION. Either dispatches a registered command
+ *  with the row id as payload, or the `applyEntity` write kind: apply
+ *  the row's entity id (style / swatch self-id) to the current
+ *  selection through the SAME `setElementProperty` mutation channel the
+ *  scalar widgets commit on. `valueType` picks the wire payload
+ *  (`text` for applied-style paths, `colorRef` for swatch/gradient
+ *  paths) — the collection-select leaf's convention. Note the ceiling
+ *  holds: an action writes ONE typed PropertyPath, it does not compute. */
+export type SchemaRowAction =
+  | { kind: "command"; command: string }
+  | {
+      kind: "applyEntity";
+      /** Selection surface to write to (defaults to `"element"`). */
+      scope?: "element" | "content";
+      /** The applied-entity PropertyPath (e.g. `frameFillColor`,
+       *  `appliedParagraphStyle`). */
+      path: PropertyPath;
+      /** Wire payload variant; defaults to `"text"`. */
+      valueType?: "text" | "colorRef";
+    };
+
+/** One per-row action button on a `list` widget. */
+export interface SchemaListAction {
+  /** Button label (sentence case, no emoji — brand content rules). */
+  label: string;
+  action: SchemaRowAction;
+  /** Gate the button on a published binding (absent = enabled;
+   *  `applyEntity` actions additionally disable while the target
+   *  selection is empty — the honest no-write-path rule). */
+  enabled?: SchemaGate;
+}
+
+/** The `list` widget spec (widget id `paged.list`). Renders rows from a
+ *  collection binding; publishes the clicked row's id back through
+ *  `selectionBinding` so other rows/sections can gate on it — which is
+ *  how a list participates in §12.2 without a DSL. */
+export interface SchemaListSpec {
+  items: WidgetCollectionBinding;
+  /** Dot-path into a row object for the primary label ("name"). */
+  labelField: string;
+  /** Optional secondary line (mono), e.g. "kind". */
+  secondaryField?: string;
+  /** Dot-path carrying the row's stable id; defaults to "selfId" (the
+   *  summary-shape convention every document collection uses). */
+  idField?: string;
+  /** Published binding name that receives the selected row id on click
+   *  (string). Absent = the list keeps private selection. */
+  selectionBinding?: string;
+  /** Per-row action buttons. */
+  actions?: SchemaListAction[];
+}
+
 // ---------------------------------------------------------------- rows
 //
 // A row names a catalog WIDGET id (one of the curated primitive leaves
@@ -134,6 +224,9 @@ export interface PanelSchemaRow {
    *  (`literal | selectionProperty`). Absent = a layout-only / display
    *  leaf (label, section). */
   value?: WidgetValueBinding;
+  /** ADDITIVE (schema v1.1) — present iff `widget` is the list widget
+   *  (`paged.list`). Scalar rows ignore it; a v1 schema never sets it. */
+  list?: SchemaListSpec;
   /** Show the row only when this gate is truthy. Absent = always. */
   visible?: SchemaGate;
   /** Enable the row's control only when this gate is truthy. Absent =

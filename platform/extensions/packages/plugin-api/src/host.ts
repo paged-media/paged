@@ -52,6 +52,7 @@ import type { SceneLayer } from "./wire";
 
 import type { AssetSurface } from "./assets";
 import type { ClipboardSurface } from "./clipboard";
+import type { MutationInput } from "./mutations";
 import type { PluginManifest } from "./manifest";
 import type { SchemaPanelContribution } from "./panel-schema";
 import type { WidgetSurface } from "./widgets";
@@ -638,7 +639,11 @@ export interface RunContent {
 }
 
 export interface DocumentSurface {
-  mutate(mutation: Mutation): Promise<MutationOutcome>;
+  /** The single write door. Accepts `MutationInput` — the vendored
+   *  `Mutation` union PLUS the protocol-ahead ops the vendored wire
+   *  hasn't absorbed yet (see mutations.ts). Widening an accepted
+   *  input is additive: every `Mutation` still passes. */
+  mutate(mutation: MutationInput): Promise<MutationOutcome>;
   undo(): Promise<void>;
   redo(): Promise<void>;
   collection<T>(name: CollectionName): Promise<readonly T[]>;
@@ -765,6 +770,24 @@ export interface TextMetrics {
 }
 
 /**
+ * C-9 — the user's text caret: the story + insertion offset a
+ * text-inserting plugin should target (paged.data first-insert
+ * placement — without this door a freshly-placed variable field lands
+ * at story start, offset 0).
+ *
+ * `offset` is a story-local content offset in the SAME convention the
+ * engine's text mutations consume (`insertText.offset`,
+ * `deleteRange.start/end` — the `ContentSelection` addressing: run
+ * bytes plus one synthetic `\n` per inter-paragraph boundary), so the
+ * value can be passed straight to `host.document.mutate`.
+ */
+export interface TextCaret {
+  storyId: string;
+  /** Insertion offset (see the offset-convention note above). */
+  offset: number;
+}
+
+/**
  * Text measurement against the loaded document's fonts (S-13). A read
  * door — no capability gate (like {@link ViewportSurface}); it wraps the
  * engine's shaper (`paged-text::shape_run`) so a plugin can size grid
@@ -780,13 +803,25 @@ export interface TextSurface {
     text: string,
     sizePt: number,
   ): Promise<TextMetrics>;
+  /**
+   * C-9 — read the user's text caret (the active `ContentSelection`),
+   * or `null` when no text caret is active OR the host injects no
+   * caret reader (probe `supports("text.caret@1")` to tell the two
+   * apart). For a collapsed selection this is the caret offset; for a
+   * RANGE selection it answers the range START (where a replace
+   * inserts). Honest v1 gap: a caret inside a TABLE CELL
+   * (cell-qualified selection) answers `null` — cell-local offsets
+   * would be misread as story-local body offsets.
+   */
+  caret(): TextCaret | null;
 }
 
 // -------------------------------------------------------------- overlay
 
 /** The v0 overlay channel: the shared tool-preview signal (polyline /
- *  rect). Retained plugin scene layers are the P2 channel — reserved,
- *  not faked. */
+ *  rect / path — and, with `supports("overlay.text@1")`, the TEXT
+ *  primitive `ToolPreviewText` for on-canvas readouts). Retained
+ *  plugin scene layers are the P2 channel — reserved, not faked. */
 export interface OverlaySurface {
   setToolPreview(shape: ToolPreviewShape | null): void;
 }

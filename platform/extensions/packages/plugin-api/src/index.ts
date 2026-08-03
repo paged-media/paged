@@ -65,6 +65,7 @@ export type {
   ViewportSurface,
   TextSurface,
   TextMetrics,
+  TextCaret,
   FrameChainLink,
   StoryContent,
   ParagraphContent,
@@ -117,6 +118,12 @@ export type {
   WidgetValueBinding,
   BindingRef,
   SchemaGate,
+  // Schema v1.1 — the list/collection tier (B-01 list widget + G3
+  // applyEntity write). Additive; see DESIGN.md §12.6.
+  WidgetCollectionBinding,
+  SchemaRowAction,
+  SchemaListAction,
+  SchemaListSpec,
 } from "./panel-schema";
 
 export type {

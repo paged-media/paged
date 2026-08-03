@@ -76,5 +76,6 @@ export type {
   ToolPreviewShape,
   ToolPreviewPolyline,
   ToolPreviewPath,
+  ToolPreviewText,
   MarqueeRectPageLocal,
 } from "./editor";

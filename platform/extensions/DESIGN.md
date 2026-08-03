@@ -128,8 +128,10 @@ draw B-02). The headless harness records both
 (`editContextsContributed()` / `objectTypesContributed()`).
 
 ### 4.3 `host.document` — read broadly, write through one door
-- `mutate(m: Mutation): Promise<MutationOutcome>` — *the* write door.
-  Undo/validation/collab semantics stay engine-owned.
+- `mutate(m: MutationInput): Promise<MutationOutcome>` — *the* write
+  door. Undo/validation/collab semantics stay engine-owned.
+  `MutationInput = Mutation | PendingMutation` (§4.3a) — a WIDENED
+  accepted input, which is additive: every `Mutation` still passes.
 - reads: `collection(name)`, `meta()`, `pathAnchors(id)`,
   `hitTest(pageId, pt, filter)` [draw: scissors/anchor tools],
   `elementGeometry(ids)`, `tree()`.
@@ -141,6 +143,47 @@ draw B-02). The headless harness records both
 Capability note: this is the "read-broad / write-scoped" default. v0
 enforces namespace only; write-*scoping* (subtree restriction) attaches
 at this same `mutate` chokepoint when edit contexts land.
+
+### 4.3a Protocol-ahead mutation ops (`PendingMutation`)
+
+**Finding, stated plainly:** `mutate` payloads are NOT structurally open
+— `Mutation` is a typed, CLOSED, `op`-discriminated union. It is also
+GENERATED: `plugin-api/src/wire.d.ts` is vendored verbatim from the
+PUBLISHED `@paged-media/canvas-wasm` (stamp: `0.51.0` = protocol 51) and
+guarded by `scripts/sync-wire.mjs --check`, a hard CI gate on content
+drift OR a stale stamp. So a new engine op cannot simply be typed in:
+hand-editing the vendored copy would BREAK the gate, and a vendored file
+that no longer matches its source is not a passing check.
+
+Core is at **protocol 56**, unpublished. Four ops landed there that
+bundles need now, mirrored HAND-WRITTEN in `plugin-api/src/mutations.ts`
+— byte-equal to the tsify output the v56 build emits:
+
+| op | args | consumer |
+| --- | --- | --- |
+| `closePath` | `{ elementId, subpath? }` | paged.draw Wave B — close an open subpath (the inverse of `pathOpenAt`'s scissors cut) |
+| `joinPaths` | `{ elementId, otherId }` | paged.draw Wave B — weld two open single-contour paths (InDesign's Join) |
+| `pasteInto` | `{ containerId, childId }` | B-18 nested content — nest a top-level page item in a container frame |
+| `releaseFrom` | `{ childId }` | B-18 — pop a nested child back to top level |
+
+This is the same shape as DOC-03's `StoryContent` (protocol v54), which
+ships hand-written in `host.ts` ahead of its vendoring. The union stays
+sound throughout: when canvas-wasm 0.56 publishes and `sync-wire.mjs`
+runs, `Mutation` ABSORBS these and `PendingMutation` collapses into a
+subset of it — it never contradicts the vendored union.
+
+**Honest limits, recorded:**
+- A protocol-ahead op is NOT gated by `host.supports()`. The gate is the
+  worker's protocol version, which the client handshake already checks
+  (`protocolMismatch`); an op a pre-v56 worker can't deserialise comes
+  back as a non-applied `MutationOutcome`, never a silent no-op.
+- They cannot ride the vendored `batch` op (`args.ops: Mutation[]`)
+  until the re-sync — issue separate `mutate` calls.
+- The narrow `PagedClient.mutate` handle (editor.ts) is DELIBERATELY not
+  widened. Widening a handle demands more of every host than the
+  published wire promises; instead the adapter carries one commented
+  cast at the single call site (`host-impl.ts`), which disappears on
+  re-sync.
 
 ### 4.3b `host.nativeDocument` — the whole-native-document door [ADR-022]
 The privileged, isolate-safe surface an import/export plugin needs to
@@ -172,9 +215,45 @@ zoom-constant-tolerance idiom from `pencil/scissors/pen` — [draw B-11]
 showed every tool re-derives it).
 
 ### 4.5 `host.overlay`
-`setToolPreview(shape | null)` — the polyline/rect preview signal (the
-one overlay channel that exists [draw B-07]). Scene layers and retained
-plugin overlays are the P2 channel; reserved, not faked.
+`setToolPreview(shape | null)` — the polyline/rect/path preview signal
+(the one overlay channel that exists [draw B-07]). Scene layers and
+retained plugin overlays are the P2 channel; reserved, not faked.
+
+**The TEXT primitive (`ToolPreviewText`)** — closes the RFI gap "the
+overlay channel carries shapes only, no text primitive". Consumer:
+**paged.draw's Measure tool readout** (an on-canvas length/angle HUD was
+a binding — impossible with shapes alone); future consumers: the
+Dimension tool, crop HUDs, Ruler markers. `{ kind: "text", pageId, x,
+y, text, size?, anchor?, background? }` — `kind` is the vocabulary's
+first explicit discriminant (older variants discriminate structurally;
+new primitives get one). `x`/`y` are in the SAME page-local-pt space as
+every other preview variant; the host renders the label at constant
+SCREEN size (its page-caption idiom), sanitizes to plain text (control
+chars stripped, no markup), and `background: true` adds a small backing
+plate for legibility. A pure pass-through in the adapter on the
+existing channel — probe `supports("overlay.text@1")` (static, like
+`overlay.toolPreview@1`: the renderer ships in the same host release
+that bumps this SDK).
+
+### 4.5b `host.text` — measurement + the caret read door [S-13 · C-9]
+`measureString(family, style, text, sizePt)` (S-13 — real engine-shaper
+metrics when the editor wires `PagedEditor.text`, an honest estimate
+otherwise; `supports("text.measure@1")` tells a bundle which it got) and
+`caret(): TextCaret | null` (C-9). The caret door exists because a
+text-inserting plugin had no way to read the user's insertion point —
+**paged.data's first-insert placement** landed every freshly-placed
+variable field at story start, offset 0 (RFI §6 D-01 residual). The
+caret lives in EDITOR state (the text-editing layer), not the engine,
+so the editor injects a reader via
+`CreateBundleHostOptions.textCaret` (the clipboard/consent injection
+shape); no backend → `caret()` is always `null` and
+`supports("text.caret@1")` is false. The answered `offset` is in the
+engine text-op convention (`ContentSelection` story-local offsets — the
+same value `insertText.offset` consumes). Honest v1 gaps, by contract:
+a RANGE selection answers its START (where a replace inserts); a
+cell-qualified caret (table cell) answers `null` — cell-local offsets
+must not leak as story-local. Both are a read door — no capability
+gate (like `viewport`).
 
 ### 4.6 `host.storage`
 Namespaced KV (`paged.plugin.<id>.*`), JSON values. Needed by
@@ -526,6 +605,9 @@ visible seam), `negate`→inverse. It is a LOOKUP, not a DSL.
   and a custom on-canvas widget is an expert leaf. paged.draw's
   `layers.panel.json` prototype therefore CANNOT adopt the schema yet;
   its note records why.
+  **→ SUPERSEDED IN PART by §12.6 (schema v1.1):** the catalog grew a
+  `paged.list` leaf, so lists are now IN the schema. The custom-canvas
+  half of this limit stands unchanged.
 - **The binding evaluation is a host-side LOOKUP keyed by name, NOT an
   expression language.** `{bind:"x"}` reads value `x`; it cannot say
   `x && !y` or `strokeType == "dashed"`. The plugin publishes the
@@ -549,6 +631,91 @@ members, new `PanelSchema` / `SchemaPanelContribution` /
 `schemaPanelRenderer` host option. No existing member changed; no new
 manifest field (a schema panel is a panel — `contributes.panels[]`).
 The catalog binding ceiling is UNCHANGED — that is the point.
+
+### 12.6 Schema v1.1 — the list / collection tier (B-01 lists + G3 applyEntity)
+
+§12.4 recorded "no lists" as a v1 honest limit, with a REASON, not a
+refusal: the curated primitive leaves had no list, and §2.8's rule is
+"adopt the schema when the catalog grows it, not invent a rival." The
+catalog has now grown one — the editor implemented the `paged.list` leaf
+plus the collection/apply-entity plumbing in
+`packages/shell/src/catalog/schema-panel-types.ts` (+ `leaves.tsx`,
+`use-collection.ts`). This section is the contract's adoption of it.
+
+**Consumers.** (1) The editor's own **schema-list demo panel**, which is
+what proved the leaf renders a live collection and commits an
+apply-entity write. (2) The **B-01 RFI row**
+(`thoughts/docs/paged/plugin-platform/rfi-core-sdk-gaps.md`), whose
+closure note explicitly parked layer/style lists as expert-leaf React —
+this is the half that un-parks. (3) FIRST BUNDLE CONSUMER, upcoming:
+**paged.draw's appearance + layers panels** — `layers.panel.json` is the
+prototype §12.4 named as unable to adopt the schema; with `list` it can,
+which retires an expert-leaf React panel from the draw bundle and moves
+it onto the clonable, isolate-ready path.
+
+**The shape** (mirrored EXACTLY from the editor — the members are
+structurally identical, which is what keeps the injection-seam assert
+honest):
+
+- `PanelSchemaRow.list?: SchemaListSpec` — additive, optional, present
+  iff the row's `widget` is the list leaf. A v1 schema never sets it and
+  renders unchanged.
+- `SchemaListSpec { items, labelField, secondaryField?, idField?,
+  selectionBinding?, actions? }` — `labelField`/`secondaryField`/
+  `idField` are dot-paths into a row object (`idField` defaults to
+  `selfId`, the summary-shape convention every document collection
+  uses); `selectionBinding` names a published binding that receives the
+  clicked row's id.
+- `WidgetCollectionBinding = { kind: "documentCollection"; collection }
+  | { kind: "binding"; bind }` — the two live-collection lanes: a named
+  ENGINE collection (the `host.document.collection(name)` lane), or an
+  ARRAY the plugin publishes through `host.bindings.publish(name, rows)`
+  (§12.2's door, now carrying rows instead of a boolean).
+- `SchemaListAction { label, action, enabled? }` and
+  `SchemaRowAction = { kind: "command"; command } | { kind:
+  "applyEntity"; scope?, path, valueType? }` — a row action either
+  dispatches a registered command with the row id as payload, or applies
+  the row's entity id (style / swatch self-id) to the selection through
+  the SAME `setElementProperty` channel the scalar widgets commit on.
+  `valueType` picks the wire payload (`text` for applied-style paths,
+  `colorRef` for swatch/gradient paths).
+
+**The binding ceiling is untouched — that is still the point.** A list
+does not EVALUATE anything: rows come from a named collection or a
+published array (a lookup, not a query), and an action writes exactly
+ONE typed `PropertyPath` (a write, not an expression). `selectionBinding`
+feeds §12.2 rather than forking it — the clicked id becomes a published
+value other rows/sections gate on, which is the same
+derived-bound-value discipline B-01's closure prescribed. No
+`visibleWhen`/`enabledWhen` DSL enters here either.
+
+**Additivity + the seam.** Every member above is new and optional; no
+existing member changed, no manifest field, no new host door, no
+capability. The editor holds the assert: `apps/canvas/src/main.tsx`
+(`_AssertSchemaRenderer`) requires the injected `HostSchemaPanelRenderer`
+to satisfy plugin-api's `SchemaPanelRenderer`, which (props being
+contravariant) requires the CONTRACT's `SchemaPanelRendererProps` to be
+assignable to the shell's — i.e. **contract `PanelSchema` ⊆ editor
+`PanelSchema`**. Mirroring the shapes verbatim keeps that true; a drift
+on either side fails the EDITOR's typecheck at the injection seam, never
+a plugin author's build.
+
+One asymmetry is EXPECTED and worth naming, because it looks like drift
+and isn't: the shell's shapes are NOT assignable back to the contract's,
+by exactly one member. `SchemaRowAction.applyEntity.path` is a
+`PropertyPath`, and the shell reads that union from the editor's
+protocol-56 client while the contract reads it from the vendored
+protocol-51 wire — so the shell's union has one extra literal
+(`"closePath"`, §4.3a's path-topology op). The editor mirror's own header
+states the rule this satisfies: it must be a structural SUPERSET. The
+required direction holds; the reverse closes on the next
+`sync-wire.mjs`.
+
+**Still honest about what is NOT here.** Custom on-canvas widgets remain
+expert-leaf React (§12.4's other half). A list is a flat row list — no
+tree, no drag-reorder, no inline rename; a layers panel that needs
+reordering still reaches for `mutate` (`layerMove`) behind a row action,
+not for a schema affordance that does not exist.
 
 ## 13. The capability-gated asset store (W-06 — `host.assets`)
 
