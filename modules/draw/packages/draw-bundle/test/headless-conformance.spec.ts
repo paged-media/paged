@@ -28,44 +28,31 @@
 // fake editor), this drives the bundle's document door through the true
 // parse→apply→inverse engine path — no UI, no editor, no browser.
 //
-// CONTRIBUTION COUNT (honesty note): the bundle registers EIGHT tools
-// (three anchor-editing + the Phase 4c pro four: Curvature, Pencil,
-// Gradient Annotator, Measure + the Phase 9 Shape Builder) AND TWO
-// declarative SCHEMA panels (stroke — W3.1, B-01 RESOLVED; fill — Phase
-// 2d, B-03 consumer; each registered through `host.contribute.schemaPanel`,
-// recorded by the harness as a `schemaPanel` contribution carrying the
-// verbatim schema). The Pen itself is a built-in core-document tool
-// (editor W2.5 division); the layers prototype stays design JSON
-// (expert-leaf list territory). So the contribution log holds eight tools
-// + two schema panels + twenty-eight commands (4 dash + 2 group + 2
+// CONTRIBUTION COUNT (honesty note): the bundle registers FIFTEEN
+// tools (three anchor-editing + the pro set: Curvature, Pencil,
+// Gradient Annotator, Measure, Shape Builder, Corner Radius + the v0
+// brushes: Paintbrush, Blob Brush, Eraser + the wave-2 trio:
+// Eyedropper, Width, Lasso Select) AND TWO declarative SCHEMA panels
+// (stroke — W3.1, B-01 RESOLVED; fill — Phase 2d, B-03 consumer; each
+// registered through `host.contribute.schemaPanel`, recorded by the
+// harness as a `schemaPanel` contribution carrying the verbatim
+// schema). The Pen itself is a built-in core-document tool (editor
+// W2.5 division); the layers prototype stays design JSON (expert-leaf
+// list territory). So the contribution log holds fifteen tools + two
+// schema panels + thirty-four commands (4 dash + 2 group + 2
 // gradient-fill + 3 path-ops + 2 join/average + 4 pathfinder + the Phase 9
-// Tier B 5 live-corner + 3 appearance + 3 select-same) + the edit context.
+// Tier B 5 live-corner + 3 appearance + 3 select-same + the wave-2
+// 4 insert-shape + blend + select-parent-group) + the edit context.
 
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 
-import {
-  createHeadlessHost,
-  type HeadlessHost,
-} from "@paged-media/plugin-sdk";
+import { type HeadlessHost } from "@paged-media/plugin-sdk";
 
 import { drawBundle } from "../src";
 import { minimalIdml } from "./fixtures/minimal-idml";
-
-const silent = {
-  debug: () => {},
-  info: () => {},
-  warn: () => {},
-  error: () => {},
-};
-const mapBacking = () => {
-  const m = new Map<string, string>();
-  return {
-    getItem: (k: string) => m.get(k) ?? null,
-    setItem: (k: string, v: string) => void m.set(k, v),
-    removeItem: (k: string) => void m.delete(k),
-    keys: () => Array.from(m.keys()),
-  };
-};
+// The shared engine boot (it probes the editor-checkout layouts for the
+// wasm — see conformance/host.ts).
+import { openHost } from "./conformance/host";
 
 // The fixture's single rectangle leaf (Self="urect").
 const RECT = { kind: "rectangle", id: "urect" } as const;
@@ -74,10 +61,7 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
   let harness: HeadlessHost;
 
   beforeAll(async () => {
-    harness = await createHeadlessHost({
-      console: silent,
-      storage: mapBacking(),
-    });
+    harness = await openHost();
     await harness.load(minimalIdml());
   });
 
@@ -94,7 +78,8 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
     const handle = harness.loadBundle(drawBundle);
     try {
       // Every tool is captured, namespaced + in registration order —
-      // the three anchor editors, then the Phase 4c pro four.
+      // the three anchor editors, the pro set (incl. the §13.2 corner
+      // widget), the v0 brushes, then the wave-2 trio.
       expect(harness.toolsContributed().map((t) => t.id)).toEqual([
         "media.paged.draw.tool.addAnchor",
         "media.paged.draw.tool.deleteAnchor",
@@ -104,20 +89,37 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "media.paged.draw.tool.gradientAnnotator",
         "media.paged.draw.tool.measure",
         "media.paged.draw.tool.shapeBuilder",
+        "media.paged.draw.tool.cornerRadius",
+        "media.paged.draw.tool.paintbrush",
+        "media.paged.draw.tool.blobBrush",
+        "media.paged.draw.tool.eraserBrush",
+        "media.paged.draw.tool.eyedropper",
+        "media.paged.draw.tool.width",
+        "media.paged.draw.tool.lassoSelect",
       ]);
-      // The contribution log holds the seven tools, then EACH schema
+      // The contribution log holds the fifteen tools, then EACH schema
       // panel as TWO entries: the synthesized React `panel` the panels
       // registry sees (the host turns a schema into a registry panel via
       // the injected renderer / seam) AND the `schemaPanel` recorded
       // VERBATIM through the harness's registration hook. Both are
       // honest — the registry really got a panel; the log keeps the
       // schema so conformance can assert it. Stroke first, then fill
-      // (Phase 2d). Then the seventeen commands in registration order,
-      // then the W3.2 edit context. (Pen is a core built-in; layers
-      // stays a prototype — header note.)
+      // (Phase 2d), then the two React panels (layers, appearance).
+      // Then the thirty-seven commands in registration order, then the
+      // W3.2 edit context. (Pen is a core built-in.)
       expect(harness.contributions.map((c) => c.kind)).toEqual([
-        // Three anchor editors + the Phase 4c pro four + the Phase 9
-        // Shape Builder (eight tools).
+        // Three anchor editors + the pro set (Curvature, Pencil,
+        // Gradient Annotator, Measure, Shape Builder, Corner Radius) +
+        // the v0 brushes (Paintbrush, Blob Brush, Eraser) + the
+        // wave-2 trio (Eyedropper, Width, Lasso Select) — fifteen
+        // tools.
+        "tool",
+        "tool",
+        "tool",
+        "tool",
+        "tool",
+        "tool",
+        "tool",
         "tool",
         "tool",
         "tool",
@@ -132,6 +134,12 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         // Phase 2d — the fill schema panel (B-03).
         "panel",
         "schemaPanel",
+        // The LAYERS panel (the layers.panel.json prototype made real —
+        // an expert-leaf React panel, registered directly).
+        "panel",
+        // The APPEARANCE panel (the metadata stack + its one-fill/
+        // one-stroke honesty note) — likewise expert-leaf React.
+        "panel",
         // B-12 — the stroke dash-preset commands (Solid / Dashed /
         // Dotted / Dash-dot).
         "command",
@@ -149,7 +157,10 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "command",
         "command",
         "command",
-        // Phase 4c — Join / Average endpoints (pathPointSet subset).
+        // Phase 4c + v56 — Join (the real joinPaths/closePath weld,
+        // coincide fallback on older engines) / Close path / Average
+        // endpoints.
+        "command",
         "command",
         "command",
         // Phase 4c — Pathfinder Unite / Subtract / Intersect / Exclude.
@@ -164,13 +175,26 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "command",
         "command",
         "command",
-        // Phase 9 (Tier B) — Appearance (Add fill / Add stroke / Clear).
+        // Phase 9 (Tier B) — Appearance (Add fill / Add stroke / Clear)
+        // + the panel's edit surface (Remove layer / Reorder layer).
+        "command",
+        "command",
         "command",
         "command",
         "command",
         // Phase 9 (Tier B) — Select-same (Fill / Stroke / Stroke weight).
         "command",
         "command",
+        "command",
+        // Wave 2 — Insert shapes (Arc / Spiral / Rect grid / Polar
+        // grid).
+        "command",
+        "command",
+        "command",
+        "command",
+        // Wave 2 — Blend selected.
+        "command",
+        // Wave 2 — Select parent group.
         "command",
         // W3.2 — the vectorGraphic edit context (B-02), recorded
         // through the harness's editContext registration hook.
@@ -322,7 +346,7 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
     const before = await treeSize();
 
     const handle = harness.loadBundle(drawBundle);
-    expect(harness.toolsContributed()).toHaveLength(8);
+    expect(harness.toolsContributed()).toHaveLength(15);
     handle.dispose();
 
     // After dispose: the contribution log is empty (registrations torn

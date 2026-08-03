@@ -16,13 +16,16 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Phase 4c conformance — Join / Average over open-path endpoints (the
-// pathPointSet consumers; the TRUE join/close is a NAMED engine-op gap
-// — see src/commands/join-average.ts). Asserts (1) the pure planners'
-// shapes, (2) the exact batch wire sequence the commands emit, and
-// (3) the moves applied at the REAL engine (handles ride along —
-// the apply layer drags both handles with the anchor) with undo
-// round-trips, driven through the recorded command handlers.
+// Phase 4c conformance — Average over open-path endpoints, and the
+// endpoint PLANNERS that are now the pre-v56 FALLBACK lane for Join
+// (the real `joinPaths`/`closePath` weld has its own spec —
+// conformance/path-weld.spec.ts). Asserts (1) the pure planners'
+// shapes, (2) the exact batch wire sequence the pathPointSet commands
+// emit, and (3) the moves applied at the REAL engine (handles ride
+// along — the apply layer drags both handles with the anchor) with undo
+// round-trips, driven through the recorded command handlers. The Join
+// command's engine behaviour here is the REAL weld, because the booted
+// engine has the ops.
 
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 
@@ -208,35 +211,32 @@ describe("draw conformance — join/average endpoints (Phase 4c)", () => {
       expect(restored.anchors).toEqual(before.anchors);
     });
 
-    it("Join across polygon + line welds the closest endpoint pair (second onto first); undo restores", async () => {
+    it("Join across polygon + line WELDS them into one element (v56); undo restores both", async () => {
       const beforePoly = await liveTable(h.host, polyRef);
       const beforeLine = await liveTable(h.host, lineRef);
       await h.host.selection.set([POLY, LINE]);
       await commandFor(h, JOIN_COMMAND_ID).handler(undefined);
+
+      // The engine carries `joinPaths` (protocol v56), so this is the
+      // REAL weld: the line element is gone and its anchors now live on
+      // the polygon (the first-selected survivor).
+      expect(await h.host.document.pathAnchors(LINE)).toBeNull();
       const afterPoly = await liveTable(h.host, polyRef);
-      const afterLine = await liveTable(h.host, lineRef);
-      // The polygon (first selected) is untouched; ONE line endpoint
-      // now coincides with a polygon endpoint.
-      expect(afterPoly.anchors).toEqual(beforePoly.anchors);
-      const polyEnds = [
-        afterPoly.anchors[0].anchor,
-        afterPoly.anchors[afterPoly.anchors.length - 1].anchor,
-      ];
-      const lineEnds = [
-        afterLine.anchors[0].anchor,
-        afterLine.anchors[afterLine.anchors.length - 1].anchor,
-      ];
-      const welded = lineEnds.some((le) =>
-        polyEnds.some((pe) => pe[0] === le[0] && pe[1] === le[1]),
+      expect(afterPoly.anchors.length).toBe(
+        beforePoly.anchors.length + beforeLine.anchors.length,
       );
-      expect(welded).toBe(true);
+
+      // ONE undo is the faithful inverse — both elements, both tables.
       await h.host.document.undo();
       expect((await liveTable(h.host, lineRef)).anchors).toEqual(
         beforeLine.anchors,
       );
+      expect((await liveTable(h.host, polyRef)).anchors).toEqual(
+        beforePoly.anchors,
+      );
     });
 
-    it("a selection without an anchor table no-ops (rectangle is bounds-based — B-13 finding b)", async () => {
+    it("a selection the engine cannot weld no-ops (rectangle is bounds-based — B-13 finding b)", async () => {
       const before = await liveTable(h.host, polyRef);
       await h.host.selection.set([RECT, POLY]);
       await expect(

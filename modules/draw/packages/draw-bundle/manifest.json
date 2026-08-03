@@ -28,12 +28,19 @@
       "media.paged.draw.tool.gradientAnnotator",
       "media.paged.draw.tool.measure",
       "media.paged.draw.tool.shapeBuilder",
-      "media.paged.draw.tool.cornerRadius"
+      "media.paged.draw.tool.cornerRadius",
+      "media.paged.draw.tool.paintbrush",
+      "media.paged.draw.tool.blobBrush",
+      "media.paged.draw.tool.eraserBrush",
+      "media.paged.draw.tool.eyedropper",
+      "media.paged.draw.tool.width",
+      "media.paged.draw.tool.lassoSelect"
     ],
     "panels": [
       "media.paged.draw.panel.stroke",
       "media.paged.draw.panel.fill",
-      "media.paged.draw.panel.layers"
+      "media.paged.draw.panel.layers",
+      "media.paged.draw.panel.appearance"
     ],
     "commands": [
       "media.paged.draw.command.strokeDashSolid",
@@ -48,6 +55,7 @@
       "media.paged.draw.command.offsetPath",
       "media.paged.draw.command.simplifyPath",
       "media.paged.draw.command.joinEndpoints",
+      "media.paged.draw.command.closePath",
       "media.paged.draw.command.averageEndpoints",
       "media.paged.draw.command.pathfinderUnite",
       "media.paged.draw.command.pathfinderSubtract",
@@ -61,9 +69,17 @@
       "media.paged.draw.command.appearanceAddFill",
       "media.paged.draw.command.appearanceAddStroke",
       "media.paged.draw.command.appearanceClear",
+      "media.paged.draw.command.appearanceRemoveLayer",
+      "media.paged.draw.command.appearanceMoveLayer",
       "media.paged.draw.command.selectSameFill",
       "media.paged.draw.command.selectSameStroke",
-      "media.paged.draw.command.selectSameStrokeWeight"
+      "media.paged.draw.command.selectSameStrokeWeight",
+      "media.paged.draw.command.insertArc",
+      "media.paged.draw.command.insertSpiral",
+      "media.paged.draw.command.insertRectGrid",
+      "media.paged.draw.command.insertPolarGrid",
+      "media.paged.draw.command.blendSelected",
+      "media.paged.draw.command.selectParentGroup"
     ],
     "importers": [
       "media.paged.draw.importer.svg"

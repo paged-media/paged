@@ -86,3 +86,25 @@ export {
   strokeWidthFromPressure,
   type StrokeWidthProfile,
 } from "./pressure";
+// Brush tools v0 — the calligraphic nib width model (tangent angle ×
+// nib × pressure → per-anchor width stops for outlineStrokeVariable).
+export {
+  calligraphicWidth,
+  anchorTangentAngle,
+  MIN_BRUSH_WIDTH_RATIO,
+  type NibProfile,
+} from "./brush";
+// Wave 2 — parametric shape generators (insert-shape commands).
+export {
+  arcPath,
+  spiralPath,
+  rectGridPaths,
+  polarGridPaths,
+} from "./parametric";
+// Wave 2 — the width tool's peaked per-anchor profile
+// (outlineStrokeVariable stops).
+export { peakedWidthProfile } from "./width";
+// Wave 2 — blend interpolation (anchor-run lerp + sRGB colour mix).
+export { interpolateAnchors, mixRgb } from "./blend";
+// Wave 2 — the lasso-select region test.
+export { pointInPolygon } from "./polygon";

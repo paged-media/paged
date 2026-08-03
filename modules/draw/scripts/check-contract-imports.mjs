@@ -22,6 +22,15 @@ const ALLOWED_PREFIXES = [
   "@paged-media/plugin-api",
   "@paged-media/plugin-sdk",
   "@paged-media/draw-", // this repo's own packages
+  // React is PART of the sanctioned panel contract, not a backdoor:
+  // plugin-api itself types `PanelContribution.component` as a React
+  // `ComponentType` (editor.ts / widgets.ts / panel-schema.ts), and the
+  // bundle declares react as a peerDependency. Allowed for the
+  // draw-bundle's expert-leaf React panels (layers); draw-geometry /
+  // draw-tools remain react-free by the CLAUDE.md host-agnostic rule
+  // (their tsconfigs have no react types — an import there still fails
+  // typecheck).
+  "react",
 ];
 
 function walk(dir, out = []) {

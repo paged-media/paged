@@ -20,13 +20,29 @@
 // the measured segment displays through the shared tool-preview overlay
 // channel, and the numbers publish as a named binding (+ an info log).
 //
+// THE ON-CANVAS READOUT (the RFI gap "the overlay channel carries
+// shapes only" — CLOSED by the `ToolPreviewText` primitive, guarded by
+// `host.supports("overlay.text@1")`):
+//   · while the drag is IN FLIGHT the preview slot carries the measured
+//     LINE (the geometry feedback that matters mid-drag);
+//   · the moment the drag ENDS the slot carries the readout as TEXT —
+//     `"124.60 pt · 53.1°"`, anchored at the segment midpoint, offset
+//     perpendicular to the line so it reads beside where it was
+//     measured, with the backing plate on for legibility over content.
+//   · WHY the swap and not both at once: `overlay.setToolPreview` is a
+//     SINGLE-SLOT channel (one `ToolPreviewShape`, last write wins) —
+//     the host has no preview LIST. So the frozen line is traded for
+//     the frozen numbers; that trade is named here rather than hidden.
+//     A multi-primitive preview channel is the follow-up RFI item.
+//   · FALLBACK: on a host whose plugin-sdk predates `overlay.text@1`
+//     (the shipped 0.2.25-canary.0 does — the contract lags the local
+//     build) `supports` answers false and the tool keeps publishing the
+//     LINE after pointer-up, exactly as before.
+//   · The `media.paged.draw.measureReadout` BINDING publishes in BOTH
+//     branches (panels and host surfaces read it), and pointer-up still
+//     mirrors to `host.log.info`.
+//
 // HONEST SUBSET, named:
-//   · the overlay channel (`host.overlay.setToolPreview`) carries
-//     SHAPES only — there is no text primitive, so the numeric readout
-//     cannot render on-canvas. It publishes through `host.bindings`
-//     (`media.paged.draw.measureReadout`, a JSON object) for any panel/
-//     host surface to display, and mirrors to `host.log.info` on
-//     pointer-up. An overlay TEXT primitive is an RFI candidate.
 //   · nearest-path-point SNAP: the wire carries
 //     `requestNearestPathPoint` (B-06) but `host.document` has no
 //     facade door for it yet — the snap goes through the MARKED v0
@@ -42,6 +58,7 @@ import type {
   CanvasPointerEvent,
   ElementId,
   GestureHandler,
+  ToolPreviewShape,
 } from "@paged-media/plugin-api";
 
 import {
@@ -51,12 +68,70 @@ import {
 } from "@paged-media/draw-geometry";
 import {
   MeasureMachine,
+  type MeasureReadout,
   type MeasureSnapshot,
 } from "@paged-media/draw-tools";
 
 /** The published readout binding (a `MeasureReadout` JSON object,
  *  deleted when nothing is measured). */
 export const BIND_MEASURE_READOUT = "media.paged.draw.measureReadout";
+
+/** The host feature flag that gates the on-canvas readout. */
+export const OVERLAY_TEXT_FEATURE = "overlay.text@1";
+
+/** How far (page pt) the readout sits off the measured line, along its
+ *  normal — "beside the line", not on top of it. */
+const READOUT_OFFSET_PT = 10;
+
+/** The overlay TEXT primitive (contract `ToolPreviewText`).
+ *
+ *  SKEW, named: the INSTALLED `@paged-media/plugin-api`
+ *  (0.2.25-canary.0) predates the variant, so its `ToolPreviewShape`
+ *  union does not carry it and this is a local MIRROR of the contract
+ *  shape — the same fields, verbatim. The single cast lives in
+ *  `measureTextPreview` below; when the published contract catches up,
+ *  delete this interface and import the type. */
+export interface ToolPreviewTextMirror {
+  kind: "text";
+  pageId: string;
+  x: number;
+  y: number;
+  text: string;
+  size?: number;
+  anchor?: "start" | "middle" | "end";
+  background?: boolean;
+}
+
+/** The label the on-canvas readout shows: distance in pt + the angle. */
+export function measureReadoutLabel(readout: MeasureReadout): string {
+  return `${readout.distance.toFixed(2)} pt · ${readout.angleDeg.toFixed(1)}°`;
+}
+
+/** The TEXT preview for a frozen measurement: the label at the segment
+ *  MIDPOINT, pushed `READOUT_OFFSET_PT` along the segment normal, with
+ *  the backing plate on. Exported so the conformance spec asserts the
+ *  exact primitive the live tool publishes (no second copy). */
+export function measureTextPreview(
+  pageId: string,
+  readout: MeasureReadout,
+): ToolPreviewTextMirror {
+  const [fx, fy] = readout.from;
+  const [tx, ty] = readout.to;
+  const len = Math.hypot(tx - fx, ty - fy);
+  // Unit normal of the segment (−dy, dx)/len; a degenerate segment just
+  // pushes straight up.
+  const nx = len > 0 ? -(ty - fy) / len : 0;
+  const ny = len > 0 ? (tx - fx) / len : -1;
+  return {
+    kind: "text",
+    pageId,
+    x: (fx + tx) / 2 + nx * READOUT_OFFSET_PT,
+    y: (fy + ty) / 2 + ny * READOUT_OFFSET_PT,
+    text: measureReadoutLabel(readout),
+    anchor: "middle",
+    background: true,
+  };
+}
 
 /** Screen-space radius within which the measure origin snaps to the
  *  nearest point ON a hit path. */
@@ -120,23 +195,39 @@ export function createMeasureHandler(host: BundleHost): GestureHandler {
   let machine: MeasureMachine | null = null;
   let pageId: string | null = null;
 
+  // Probed ONCE per handler: the host either has the overlay TEXT
+  // primitive or it doesn't — the answer cannot change mid-gesture.
+  const canDrawText = host.supports(OVERLAY_TEXT_FEATURE);
+
   const render = (snapshot: MeasureSnapshot) => {
     if (!snapshot.line || !pageId) {
       host.overlay.setToolPreview(null);
       host.bindings.delete(BIND_MEASURE_READOUT);
       return;
     }
-    host.overlay.setToolPreview({
-      pageId,
-      points: [
-        [snapshot.line[0][0], snapshot.line[0][1]],
-        [snapshot.line[1][0], snapshot.line[1][1]],
-      ],
-    });
+    // Single-slot channel: the LINE while the drag is in flight, the
+    // TEXT readout once it freezes (module-header honesty note). Without
+    // `overlay.text@1` the line stays in both states — the old behavior.
+    if (canDrawText && !snapshot.measuring && snapshot.readout) {
+      host.overlay.setToolPreview(
+        measureTextPreview(
+          pageId,
+          snapshot.readout,
+        ) as unknown as ToolPreviewShape,
+      );
+    } else {
+      host.overlay.setToolPreview({
+        pageId,
+        points: [
+          [snapshot.line[0][0], snapshot.line[0][1]],
+          [snapshot.line[1][0], snapshot.line[1][1]],
+        ],
+      });
+    }
     if (snapshot.readout) {
-      // The on-canvas numeric readout is NOT drawable through the
-      // shape-only preview channel — publish for host surfaces instead
-      // (module-header honesty note).
+      // The binding publishes in BOTH branches — panels and host
+      // surfaces read it, and it is the ONLY readout on a host without
+      // the text primitive.
       host.bindings.publish(BIND_MEASURE_READOUT, snapshot.readout);
     }
   };

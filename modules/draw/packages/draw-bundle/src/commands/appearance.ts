@@ -61,13 +61,22 @@ export const APPEARANCE_ADD_STROKE_COMMAND_ID =
   "media.paged.draw.command.appearanceAddStroke";
 export const APPEARANCE_CLEAR_COMMAND_ID =
   "media.paged.draw.command.appearanceClear";
+export const APPEARANCE_REMOVE_LAYER_COMMAND_ID =
+  "media.paged.draw.command.appearanceRemoveLayer";
+export const APPEARANCE_MOVE_LAYER_COMMAND_ID =
+  "media.paged.draw.command.appearanceMoveLayer";
 
 /** The contributed command ids, in registration order. */
 export const APPEARANCE_COMMAND_IDS = [
   APPEARANCE_ADD_FILL_COMMAND_ID,
   APPEARANCE_ADD_STROKE_COMMAND_ID,
   APPEARANCE_CLEAR_COMMAND_ID,
+  APPEARANCE_REMOVE_LAYER_COMMAND_ID,
+  APPEARANCE_MOVE_LAYER_COMMAND_ID,
 ];
+
+/** Which half of the stack an edit addresses. */
+export type AppearanceLayerKind = "fill" | "stroke";
 
 /** One extra fill layer (a swatch ref + optional tint %). */
 export interface FillLayer {
@@ -122,6 +131,49 @@ export function withAppearance(
     data.appearance = stack;
   }
   return { v: prev?.v ?? 1, data, ...(prev?.engine ? { engine: prev.engine } : {}) };
+}
+
+// ------------------------------------------------ pure stack transforms
+// (the panel's edit vocabulary — index arithmetic with no host in sight,
+// so the round-trip is unit-testable and the panel stays a view)
+
+const cloneStack = (stack: AppearanceStack): AppearanceStack => ({
+  fills: stack.fills.slice(),
+  strokes: stack.strokes.slice(),
+});
+
+/** Drop one layer. An out-of-range index leaves the stack untouched
+ *  (the honest no-op — a stale panel row never corrupts the model). */
+export function removeAppearanceLayer(
+  stack: AppearanceStack,
+  kind: AppearanceLayerKind,
+  index: number,
+): AppearanceStack {
+  const next = cloneStack(stack);
+  const list: unknown[] = kind === "fill" ? next.fills : next.strokes;
+  if (index < 0 || index >= list.length) return next;
+  list.splice(index, 1);
+  return next;
+}
+
+/** Reorder one layer by `delta` WITHIN its half of the stack. The stack
+ *  is BOTTOM-to-TOP, so `+1` moves a layer toward the FRONT (toward the
+ *  one layer that bakes) and `-1` toward the back. A move off either end
+ *  is a no-op. */
+export function moveAppearanceLayer(
+  stack: AppearanceStack,
+  kind: AppearanceLayerKind,
+  index: number,
+  delta: number,
+): AppearanceStack {
+  const next = cloneStack(stack);
+  const list: unknown[] = kind === "fill" ? next.fills : next.strokes;
+  const target = index + delta;
+  if (index < 0 || index >= list.length) return next;
+  if (target < 0 || target >= list.length) return next;
+  const [moved] = list.splice(index, 1);
+  list.splice(target, 0, moved);
+  return next;
 }
 
 /** The BAKE: the `setElementProperty` writes that lower the FRONT-MOST
@@ -231,9 +283,11 @@ async function frameFillStroke(
   return out;
 }
 
-type AppearanceKind = "fill" | "stroke" | "clear";
+/** The three seeded/whole-stack operations (the panel's buttons drive
+ *  the SAME appliers the commands do). */
+export type AppearanceKind = "fill" | "stroke" | "clear";
 
-async function applyAppearanceCommand(
+export async function applyAppearanceCommand(
   host: BundleHost,
   commandId: string,
   kind: AppearanceKind,
@@ -265,8 +319,44 @@ async function applyAppearanceCommand(
   }
 }
 
-/** Register the three appearance commands (add fill layer / add stroke
- *  layer / clear the stack). */
+/** Apply a pure stack transform to every selected element: read the
+ *  envelope, transform, re-commit (metadata + the top-layer bake). The
+ *  Appearance panel drives THIS — same door as the commands, so the
+ *  panel adds no second write path to drift from. */
+export async function applyAppearanceEdit(
+  host: BundleHost,
+  commandId: string,
+  edit: (stack: AppearanceStack) => AppearanceStack,
+): Promise<void> {
+  const selection = host.selection.get();
+  if (selection.length === 0) {
+    host.log.debug(`${commandId}: no selection — no-op`);
+    return;
+  }
+  for (const id of selection) {
+    const prev = await host.document.getMetadata(id).catch(() => null);
+    await commitAppearance(host, id, edit(appearanceOf(prev)), prev);
+  }
+}
+
+const layerKind = (v: unknown): AppearanceLayerKind =>
+  v === "stroke" ? "stroke" : "fill";
+
+const layerIndex = (v: unknown): number =>
+  typeof v === "number" && Number.isInteger(v) && v >= 0 ? v : -1;
+
+/** `{ direction: "up" }` (toward the front-most / baked layer) or
+ *  `"down"`; an explicit numeric `delta` wins. */
+function layerDelta(payload: Record<string, unknown> | undefined): number {
+  const delta = payload?.delta;
+  if (typeof delta === "number" && Number.isInteger(delta)) return delta;
+  return payload?.direction === "down" ? -1 : 1;
+}
+
+/** Register the appearance commands: add fill / add stroke / clear, plus
+ *  the panel's edit surface (remove layer / reorder layer). Payload:
+ *  `{ kind: "fill" | "stroke", index: number, direction?: "up" | "down",
+ *  delta?: number }` — `index` addresses the BOTTOM-to-TOP stack. */
 export function contributeAppearanceCommands(host: BundleHost): Disposable {
   const disposers = [
     host.contribute.command({
@@ -287,6 +377,33 @@ export function contributeAppearanceCommands(host: BundleHost): Disposable {
       title: "Appearance: Clear extra layers",
       category: APPEARANCE_COMMAND_CATEGORY,
       handler: () => applyAppearanceCommand(host, APPEARANCE_CLEAR_COMMAND_ID, "clear"),
+    }),
+    host.contribute.command({
+      id: APPEARANCE_REMOVE_LAYER_COMMAND_ID,
+      title: "Appearance: Remove layer",
+      category: APPEARANCE_COMMAND_CATEGORY,
+      handler: (_paged, payload) => {
+        const p = payload as Record<string, unknown> | undefined;
+        return applyAppearanceEdit(host, APPEARANCE_REMOVE_LAYER_COMMAND_ID, (s) =>
+          removeAppearanceLayer(s, layerKind(p?.kind), layerIndex(p?.index)),
+        );
+      },
+    }),
+    host.contribute.command({
+      id: APPEARANCE_MOVE_LAYER_COMMAND_ID,
+      title: "Appearance: Reorder layer",
+      category: APPEARANCE_COMMAND_CATEGORY,
+      handler: (_paged, payload) => {
+        const p = payload as Record<string, unknown> | undefined;
+        return applyAppearanceEdit(host, APPEARANCE_MOVE_LAYER_COMMAND_ID, (s) =>
+          moveAppearanceLayer(
+            s,
+            layerKind(p?.kind),
+            layerIndex(p?.index),
+            layerDelta(p),
+          ),
+        );
+      },
     }),
   ];
   return {

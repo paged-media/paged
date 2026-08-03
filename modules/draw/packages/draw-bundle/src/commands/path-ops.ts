@@ -83,8 +83,10 @@ export interface OffsetPathParams {
 }
 
 /** The four path-bearing kinds the topology ops accept (the same set
- *  the anchor tools edit). */
-function supportsPathOps(id: ElementId): boolean {
+ *  the anchor tools edit). Exported for the brush handlers (the blob
+ *  brush's unite targets + the eraser's subtract targets filter the
+ *  selection through the same gate). */
+export function supportsPathOps(id: ElementId): boolean {
   return (
     id.kind === "polygon" ||
     id.kind === "rectangle" ||

@@ -21,6 +21,10 @@
 // tests — the harness.spec.ts pattern (booting the wasm per test would
 // dominate the runtime; per-file keeps the suite fast + deterministic).
 
+import { existsSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { createHeadlessHost, type HeadlessHost } from "@paged-media/plugin-sdk";
 
 export const silent = {
@@ -40,6 +44,36 @@ export const mapBacking = () => {
   };
 };
 
+const HERE = dirname(fileURLToPath(import.meta.url));
+
+/** Where the engine wasm actually lives: the editor's `packages/client`
+ *  (the repo install order: editor → plugin-sdk → plugin-draw). The
+ *  published harness's built-in editor anchor predates the 2026-08-03
+ *  move of the plugin repos under `~/paged/plugins/`, so probe the two
+ *  known checkout layouts and hand the harness an explicit
+ *  `resolveFrom`; its own anchors stay the fallback when the probe
+ *  finds nothing. */
+const editorClientAnchor = (): string | undefined => {
+  const repoRoot = resolve(HERE, "../../../.."); // …/plugin-draw
+  for (const candidate of [
+    resolve(repoRoot, "../../editor/packages/client"), // ~/paged/plugins/<repo> layout
+    resolve(repoRoot, "../editor/packages/client"), // sibling (CI) layout
+  ]) {
+    if (
+      existsSync(
+        join(candidate, "node_modules/@paged-media/canvas-wasm/package.json"),
+      )
+    ) {
+      return candidate;
+    }
+  }
+  return undefined;
+};
+
 /** Boot a headless host with the silent console + in-memory storage. */
 export const openHost = (): Promise<HeadlessHost> =>
-  createHeadlessHost({ console: silent, storage: mapBacking() });
+  createHeadlessHost({
+    console: silent,
+    storage: mapBacking(),
+    resolveFrom: editorClientAnchor(),
+  });

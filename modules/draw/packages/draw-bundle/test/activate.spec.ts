@@ -139,7 +139,7 @@ const mapBacking = () => {
 };
 
 describe("drawBundle.activate", () => {
-  it("registers the 3 anchor tools + the Phase 4c pro four (pen built-in per W2.5; activation host-derived per B-15)", () => {
+  it("registers the 3 anchor tools + the pro set + the v0 brushes + the wave-2 trio (pen built-in per W2.5; activation host-derived per B-15)", () => {
     const fake = makeFakeEditor();
     loadBundle(() => fake.editor, drawBundle, {
       console: silent,
@@ -155,6 +155,12 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.tool.measure",
       "media.paged.draw.tool.shapeBuilder",
       "media.paged.draw.tool.cornerRadius",
+      "media.paged.draw.tool.paintbrush",
+      "media.paged.draw.tool.blobBrush",
+      "media.paged.draw.tool.eraserBrush",
+      "media.paged.draw.tool.eyedropper",
+      "media.paged.draw.tool.width",
+      "media.paged.draw.tool.lassoSelect",
     ]);
     // B-15: TOOL activation commands + shortcuts are HOST-derived from
     // the registry — the bundle registers tools only. The commands it
@@ -174,6 +180,7 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.offsetPath",
       "media.paged.draw.command.simplifyPath",
       "media.paged.draw.command.joinEndpoints",
+      "media.paged.draw.command.closePath",
       "media.paged.draw.command.averageEndpoints",
       "media.paged.draw.command.pathfinderUnite",
       "media.paged.draw.command.pathfinderSubtract",
@@ -187,27 +194,37 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.appearanceAddFill",
       "media.paged.draw.command.appearanceAddStroke",
       "media.paged.draw.command.appearanceClear",
+      "media.paged.draw.command.appearanceRemoveLayer",
+      "media.paged.draw.command.appearanceMoveLayer",
       "media.paged.draw.command.selectSameFill",
       "media.paged.draw.command.selectSameStroke",
       "media.paged.draw.command.selectSameStrokeWeight",
+      "media.paged.draw.command.insertArc",
+      "media.paged.draw.command.insertSpiral",
+      "media.paged.draw.command.insertRectGrid",
+      "media.paged.draw.command.insertPolarGrid",
+      "media.paged.draw.command.blendSelected",
+      "media.paged.draw.command.selectParentGroup",
     ]);
     expect(fake.keybindings.count()).toBe(0);
   });
 
-  it("registers the stroke + fill SCHEMA panels and the layers React panel", () => {
+  it("registers the stroke + fill SCHEMA panels and the layers + appearance React panels", () => {
     const fake = makeFakeEditor();
     loadBundle(() => fake.editor, drawBundle, {
       console: silent,
       storage: mapBacking(),
     });
     // The schema panels register through the panels registry as
-    // synthesized PanelContributions; the layers panel (the
-    // layers.panel.json prototype made real, expert-leaf React per
-    // B-01's list-widget limit) registers directly.
+    // synthesized PanelContributions; the two React panels — layers
+    // (the layers.panel.json prototype made real) and appearance (the
+    // metadata stack + its one-fill/one-stroke honesty note) — register
+    // directly, both expert-leaf per B-01's list-widget limit.
     expect(fake.panels.ids()).toEqual([
       "media.paged.draw.panel.stroke",
       "media.paged.draw.panel.fill",
       "media.paged.draw.panel.layers",
+      "media.paged.draw.panel.appearance",
     ]);
   });
 

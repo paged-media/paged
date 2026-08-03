@@ -38,12 +38,20 @@ import type {
 } from "@paged-media/plugin-api";
 
 import { createAnchorEditHandler } from "./handlers/anchors";
+import {
+  createBlobBrushHandler,
+  createEraserBrushHandler,
+  createPaintbrushHandler,
+} from "./handlers/brush";
 import { createCornerRadiusHandler } from "./handlers/corner-radius";
 import { createCurvatureHandler } from "./handlers/curvature";
+import { createEyedropperHandler } from "./handlers/eyedropper";
 import { createGradientAnnotatorHandler } from "./handlers/gradient-annotator";
+import { createLassoSelectHandler } from "./handlers/lasso";
 import { createMeasureHandler } from "./handlers/measure";
 import { createPencilHandler } from "./handlers/pencil";
 import { createShapeBuilderHandler } from "./handlers/shape-builder";
+import { createWidthHandler } from "./handlers/width";
 
 const CROSS: CursorSpec = { kind: "css", token: "crosshair" };
 
@@ -66,6 +74,22 @@ export const PRO_TOOL_IDS = [
   "media.paged.draw.tool.measure",
   "media.paged.draw.tool.shapeBuilder",
   "media.paged.draw.tool.cornerRadius",
+] as const;
+
+/** Brush tools v0 — sweep-authoring ids, in rail order (host-free, the
+ *  PRO_TOOL_IDS pattern). */
+export const BRUSH_TOOL_IDS = [
+  "media.paged.draw.tool.paintbrush",
+  "media.paged.draw.tool.blobBrush",
+  "media.paged.draw.tool.eraserBrush",
+] as const;
+
+/** Wave 2 — the eyedropper / width / lasso ids, in rail order
+ *  (host-free, the PRO_TOOL_IDS pattern). */
+export const WAVE2_TOOL_IDS = [
+  "media.paged.draw.tool.eyedropper",
+  "media.paged.draw.tool.width",
+  "media.paged.draw.tool.lassoSelect",
 ] as const;
 
 /** Build the three anchor-editing tools bound to `host` — each
@@ -186,6 +210,106 @@ export function drawTools(host: BundleHost): ToolContribution[] {
       order: 2,
       cursor: CROSS,
       gesture: () => createCornerRadiusHandler(host),
+    },
+    // Brush tools v0 — sweep authoring composed over the engine's
+    // outline ops (handlers/brush.ts): BrushMachine centerline +
+    // per-anchor calligraphic widths → insertPath →
+    // outlineStrokeVariable = a filled swept shape. They AUTHOR new
+    // paths, so they join the pen flyout slot with Pencil/Curvature.
+    // v0 fixed nib defaults (no options UI yet): size 6pt, nib angle
+    // 45°, roundness 0.3; eraser = uniform 6pt round nib.
+    // SHORTCUTS (INV-REG-1, globally unique tool shortcuts): shift+j /
+    // shift+k / shift+i — verified free against the editor built-ins
+    // (v a u b t f m l c e r s o g i k h z p n w x d j q \ = - and the
+    // shift+p/t/g trio), this bundle (= - shift+c/u/n/a/m/b/r) and the
+    // other plugin bundles (paged.image holds shift+x).
+    {
+      id: "media.paged.draw.tool.paintbrush",
+      title: "Paintbrush",
+      icon: "tool-paintbrush",
+      shortcut: "shift+j",
+      group: "pen",
+      section: "drawType",
+      order: 7,
+      cursor: CROSS,
+      gesture: () => createPaintbrushHandler(host),
+    },
+    {
+      id: "media.paged.draw.tool.blobBrush",
+      title: "Blob Brush",
+      icon: "tool-blobBrush",
+      shortcut: "shift+k",
+      group: "pen",
+      section: "drawType",
+      order: 8,
+      cursor: CROSS,
+      gesture: () => createBlobBrushHandler(host),
+    },
+    {
+      id: "media.paged.draw.tool.eraserBrush",
+      title: "Eraser",
+      icon: "tool-eraserBrush",
+      shortcut: "shift+i",
+      group: "pen",
+      section: "drawType",
+      order: 9,
+      cursor: CROSS,
+      gesture: () => createEraserBrushHandler(host),
+    },
+    // Wave 2 — Eyedropper / Width / Lasso. SHORTCUTS (INV-REG-1,
+    // globally unique tool shortcuts): shift+d / shift+s / shift+q —
+    // verified free against the editor built-ins (the single keys
+    // v a u b t f m l c e r s o g i k h z p n w x d j q \ = - plus the
+    // shift+p/t/g trio — `d` is taken as a single key, shift+d is
+    // not), this bundle (= - shift+c/u/n/a/m/b/r/j/k/i) and the other
+    // plugin bundles: paged.image holds shift+x AND (since its
+    // selection-tools wave) y / shift+y / shift+l / shift+w — which
+    // rules out the Illustrator-canonical shift+w (Width) and shift+l
+    // (Lasso) here. shift+s reads as "Stroke width"; shift+q shifts
+    // Illustrator's own lasso key (q, whose single-key register is
+    // editor-claimed).
+    //
+    // Eyedropper — sample a clicked element's PROPERTIES (not
+    // composited pixels — handlers/eyedropper.ts documents the honest
+    // scope) and apply them to the selection; Alt+click samples only.
+    {
+      id: "media.paged.draw.tool.eyedropper",
+      title: "Eyedropper",
+      icon: "tool-eyedropper",
+      shortcut: "shift+d",
+      group: "eyedropper",
+      section: "modNav",
+      order: 2,
+      cursor: CROSS,
+      gesture: () => createEyedropperHandler(host),
+    },
+    // Width v0 — drag near an anchor of the selected OPEN path to
+    // peak a per-anchor width profile there, baked DESTRUCTIVELY via
+    // outlineStrokeVariable on release (handlers/width.ts).
+    {
+      id: "media.paged.draw.tool.width",
+      title: "Width",
+      icon: "tool-width",
+      shortcut: "shift+s",
+      group: "width",
+      section: "transform",
+      order: 3,
+      cursor: CROSS,
+      gesture: () => createWidthHandler(host),
+    },
+    // Lasso select — freehand region; elements whose bounds CENTERS
+    // fall inside are selected (handlers/lasso.ts documents the
+    // centers-inside v0 semantics).
+    {
+      id: "media.paged.draw.tool.lassoSelect",
+      title: "Lasso Select",
+      icon: "tool-lassoSelect",
+      shortcut: "shift+q",
+      group: "lassoSelect",
+      section: "selection",
+      order: 1,
+      cursor: CROSS,
+      gesture: () => createLassoSelectHandler(host),
     },
   ];
 }

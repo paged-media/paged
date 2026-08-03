@@ -16,30 +16,41 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Join / Average over path ENDPOINTS — pathPoint-op consumers (the
-// dash.ts command pattern over the anchor-machine's pure-planner
-// pattern).
+// Join / Close / Average over path ENDPOINTS.
 //
-// HONEST SUBSET, named (the task's "if true join needs an engine op"):
-//   · a TRUE Illustrator join — CLOSING one open contour with a real
-//     segment, or WELDING two elements into one path — is NOT
-//     wire-representable: there is no `closePath`/`joinPaths`/
-//     element-merge mutation (`pathOpenAt` only OPENS; `framePath`
-//     carries anchors + subpathStarts but no open flags). Both are
-//     named engine-op gaps for the cross-repo RFI
-//     (`thoughts/docs/paged/plugin-platform/rfi-core-sdk-gaps.md`).
-//   · what SHIPS is the pathPoint-op subset: **Join endpoints** moves
-//     the nearest endpoint pair to COINCIDE (one open path: last anchor
-//     onto the first; two open paths: the second element's nearest
-//     endpoint onto the first's). **Average endpoints** moves the pair
-//     to their MIDPOINT (Illustrator's Average, both axes). Topology is
-//     untouched — the paths stay open, which the command names in its
-//     title ("(coincide)").
-//   · endpoint ADDRESSING: the facade has no anchor-level selection
-//     door (selection is element-level), so the planners operate on
-//     the canonical endpoints of SINGLE-SUBPATH OPEN paths in a 1- or
-//     2-element selection. Compound/multi-subpath paths no-op with a
-//     debug log.
+// TRUE JOIN — LIVE since engine protocol v56. The engine now carries the
+// two topology ops this command wanted all along:
+//   · `closePath { elementId, subpath? }` — closes an open subpath (the
+//     faithful inverse of `pathOpenAt`; coincident endpoints MERGE, apart
+//     endpoints close with an implicit straight edge);
+//   · `joinPaths { elementId, otherId }` — WELDS two open path elements
+//     at their nearest endpoints (reversing orientation as needed,
+//     merging coincident weld anchors, closing into a ring when both
+//     endpoint pairs coincide) and DELETES the other element. One undo
+//     is the faithful inverse: the other element comes back.
+// Both reject honestly (closed / multi-contour / primitive / degenerate /
+// self-join) — a rejection is an engine NO-OP, not a reason to fall back.
+//
+// THE FALLBACK, still shipped + still honest: on an engine that predates
+// v56 neither op exists, so **Join** degrades to the original
+// pathPoint-op subset — it moves the nearest endpoint pair to COINCIDE
+// (one open path: last anchor onto the first; two open paths: the second
+// element's nearest endpoint onto the first's). Topology is untouched
+// there — the paths stay open and the log says so. Which lane runs is
+// decided by `engineOpVocabulary()` below (a probe, not a version
+// guess), so the command title carries no "(coincide)" caveat that would
+// be wrong on a current engine.
+//
+// **Average endpoints** is unchanged: it moves the operating pair to
+// their MIDPOINT (Illustrator's Average, both axes) — a pure pathPointSet
+// op with no topology story.
+//
+// endpoint ADDRESSING (the fallback lane + Average): the facade has no
+// anchor-level selection door (selection is element-level), so the
+// planners operate on the canonical endpoints of SINGLE-SUBPATH OPEN
+// paths in a 1- or 2-element selection. Compound/multi-subpath paths
+// no-op with a debug log. The v56 ops do their OWN addressing engine-side
+// (nearest endpoints), so the weld lane does not need the planners.
 //
 // `pathPointSet { role: "anchor" }` drags both handles by the same
 // delta engine-side (verified in paged-mutate's apply layer), so a
@@ -59,9 +70,14 @@ export const JOIN_AVERAGE_COMMAND_CATEGORY = "Path";
 
 export const JOIN_COMMAND_ID = "media.paged.draw.command.joinEndpoints";
 export const AVERAGE_COMMAND_ID = "media.paged.draw.command.averageEndpoints";
+export const CLOSE_PATH_COMMAND_ID = "media.paged.draw.command.closePath";
 
 /** The contributed command ids, in registration order. */
-export const JOIN_AVERAGE_COMMAND_IDS = [JOIN_COMMAND_ID, AVERAGE_COMMAND_ID];
+export const JOIN_AVERAGE_COMMAND_IDS = [
+  JOIN_COMMAND_ID,
+  CLOSE_PATH_COMMAND_ID,
+  AVERAGE_COMMAND_ID,
+];
 
 /** One planned endpoint move: `table` indexes the input table list. */
 export interface EndpointMove {
@@ -185,6 +201,130 @@ export function endpointMovesMutationFor(
   };
 }
 
+// ------------------------------------------------- the v56 weld lane
+//
+// WIRE-TYPE NOTE (skew, named): `closePath` / `joinPaths` are protocol
+// v56 ops the INSTALLED `@paged-media/plugin-api` (0.2.25-canary.0) does
+// not yet carry in its curated `Mutation` union — the published contract
+// lags the local engine. The builders below emit the EXACT v56 wire shape
+// and cast once, here, at the boundary; when the contract catches up the
+// cast is the only thing to delete.
+
+/** `closePath { elementId, subpath? }` — close one open subpath. */
+export function closePathMutationFor(
+  elementId: ElementId,
+  subpath?: number,
+): Mutation {
+  return {
+    op: "closePath",
+    args: subpath === undefined ? { elementId } : { elementId, subpath },
+  } as unknown as Mutation;
+}
+
+/** `joinPaths { elementId, otherId }` — weld `other` INTO `elementId`
+ *  at the nearest endpoint pair (the other element is deleted). */
+export function joinPathsMutationFor(
+  elementId: ElementId,
+  otherId: ElementId,
+): Mutation {
+  return {
+    op: "joinPaths",
+    args: { elementId, otherId },
+  } as unknown as Mutation;
+}
+
+/** A deliberately unknown op name. The engine answers an unknown variant
+ *  with its FULL op vocabulary in the deserialize error, so ONE rejected
+ *  probe — never applied, nothing on the undo stack — tells us exactly
+ *  which ops this build carries. Capability detection over version
+ *  sniffing, at the only door a bundle has. */
+const OP_PROBE_SENTINEL = "mediaPagedDrawOpProbe";
+
+const vocabularyCache = new WeakMap<
+  object,
+  Promise<ReadonlySet<string> | null>
+>();
+
+/** Pull `unknown variant \`x\`, expected one of \`a\`, \`b\`, …` out of a
+ *  rejected mutation's error payload. Null when the shape is foreign
+ *  (an older/other engine wording) — callers then stay optimistic and
+ *  let the ATTEMPT decide (see `applyJoin`). */
+export function parseOpVocabulary(error: unknown): ReadonlySet<string> | null {
+  let text: string;
+  try {
+    text = JSON.stringify(error) ?? "";
+  } catch {
+    return null;
+  }
+  const at = text.indexOf("expected one of");
+  if (at < 0) return null;
+  const quoted = text.slice(at).match(/`[A-Za-z][A-Za-z0-9]*`/g);
+  if (!quoted || quoted.length === 0) return null;
+  return new Set(quoted.map((q) => q.slice(1, -1)));
+}
+
+/** The engine's mutation-op vocabulary, probed ONCE per host (cached).
+ *  Null when it could not be read. */
+export function engineOpVocabulary(
+  host: BundleHost,
+): Promise<ReadonlySet<string> | null> {
+  const cached = vocabularyCache.get(host);
+  if (cached) return cached;
+  const probe = (async () => {
+    try {
+      const outcome = await host.document.mutate({
+        op: OP_PROBE_SENTINEL,
+        args: {},
+      } as unknown as Mutation);
+      // An unknown variant can only be REJECTED — an `applied` answer
+      // means the probe told us nothing about the vocabulary.
+      return outcome.applied ? null : parseOpVocabulary(outcome.error);
+    } catch {
+      return null;
+    }
+  })();
+  vocabularyCache.set(host, probe);
+  return probe;
+}
+
+/** Does this engine carry the true-join topology ops (protocol ≥ v56)?
+ *  An unreadable vocabulary answers TRUE — optimistic, because the
+ *  attempt below detects an unknown op honestly and falls back then. */
+export async function supportsPathWeld(host: BundleHost): Promise<boolean> {
+  const vocab = await engineOpVocabulary(host);
+  if (!vocab) return true;
+  return vocab.has("closePath") && vocab.has("joinPaths");
+}
+
+type WeldResult = "applied" | "rejected" | "unsupported";
+
+/** Commit one weld op. `"unsupported"` = this engine does not know the
+ *  op (fall back); `"rejected"` = the engine KNOWS it and refused (an
+ *  honest no-op — never fall back, that would fake a join). */
+async function commitWeld(
+  host: BundleHost,
+  commandId: string,
+  mutation: Mutation,
+): Promise<WeldResult> {
+  let outcome;
+  try {
+    outcome = await host.document.mutate(mutation);
+  } catch {
+    return "unsupported";
+  }
+  if (outcome.applied) return "applied";
+  const text = (() => {
+    try {
+      return JSON.stringify(outcome.error) ?? "";
+    } catch {
+      return "";
+    }
+  })();
+  if (text.includes("unknown variant")) return "unsupported";
+  host.log.debug(`${commandId}: engine refused the weld — no-op (${text})`);
+  return "rejected";
+}
+
 async function applyEndpointPlan(
   host: BundleHost,
   commandId: string,
@@ -227,15 +367,84 @@ async function applyEndpointPlan(
   }
 }
 
-/** Register Join/Average (titles carry the honest "(coincide)" /
- *  endpoint scoping). */
+/** **Join** — the real thing where the engine has it (protocol ≥ v56):
+ *  a 2-element selection WELDS (`joinPaths`, one element survives), a
+ *  1-element selection CLOSES (`closePath`). On an older engine — and
+ *  only there — it degrades to the documented coincide fallback
+ *  (`planJoinEndpoints`), which leaves both paths open. */
+export async function applyJoin(host: BundleHost): Promise<void> {
+  const selection = host.selection.get();
+  if (selection.length < 1 || selection.length > 2) {
+    host.log.debug(
+      `${JOIN_COMMAND_ID}: needs 1 or 2 selected paths (have ${selection.length}) — no-op`,
+    );
+    return;
+  }
+  if (await supportsPathWeld(host)) {
+    const mutation =
+      selection.length === 2
+        ? joinPathsMutationFor(selection[0], selection[1])
+        : closePathMutationFor(selection[0]);
+    const result = await commitWeld(host, JOIN_COMMAND_ID, mutation);
+    if (result !== "unsupported") return;
+    host.log.debug(
+      `${JOIN_COMMAND_ID}: engine predates closePath/joinPaths — ` +
+        `falling back to the coincide subset (the paths stay OPEN)`,
+    );
+  }
+  await applyEndpointPlan(host, JOIN_COMMAND_ID, planJoinEndpoints);
+}
+
+/** **Close path** — the explicit 1-op door onto `closePath`, over EVERY
+ *  path-bearing element in the selection (one mutation each = one undo
+ *  step each; a batch would make one element's honest refusal abort the
+ *  others). On an engine without the op the selection degrades to the
+ *  coincide fallback, which only MOVES the endpoints together. */
+export async function applyClosePath(host: BundleHost): Promise<void> {
+  const selection = host.selection.get();
+  if (selection.length === 0) {
+    host.log.debug(`${CLOSE_PATH_COMMAND_ID}: no selection — no-op`);
+    return;
+  }
+  if (await supportsPathWeld(host)) {
+    let unsupported = false;
+    for (const id of selection) {
+      const result = await commitWeld(
+        host,
+        CLOSE_PATH_COMMAND_ID,
+        closePathMutationFor(id),
+      );
+      if (result === "unsupported") {
+        unsupported = true;
+        break;
+      }
+    }
+    if (!unsupported) return;
+    host.log.debug(
+      `${CLOSE_PATH_COMMAND_ID}: engine predates closePath — ` +
+        `falling back to the coincide subset (the path stays OPEN)`,
+    );
+  }
+  await applyEndpointPlan(host, CLOSE_PATH_COMMAND_ID, planJoinEndpoints);
+}
+
+/** Register Join / Close path / Average. The Join title carries NO
+ *  "(coincide)" caveat any more: on a v56+ engine it performs the real
+ *  weld/close, and the coincide lane is the probe-selected fallback for
+ *  older engines (named in this module's header + a debug log). */
 export function contributeJoinAverageCommands(host: BundleHost): Disposable {
   const disposers = [
     host.contribute.command({
       id: JOIN_COMMAND_ID,
-      title: "Path: Join endpoints (coincide)",
+      title: "Path: Join",
       category: JOIN_AVERAGE_COMMAND_CATEGORY,
-      handler: () => applyEndpointPlan(host, JOIN_COMMAND_ID, planJoinEndpoints),
+      handler: () => applyJoin(host),
+    }),
+    host.contribute.command({
+      id: CLOSE_PATH_COMMAND_ID,
+      title: "Path: Close path",
+      category: JOIN_AVERAGE_COMMAND_CATEGORY,
+      handler: () => applyClosePath(host),
     }),
     host.contribute.command({
       id: AVERAGE_COMMAND_ID,

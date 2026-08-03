@@ -218,8 +218,9 @@ function setDocumentDefaultsMutation(d: ShapeDefaults): Mutation {
 /** Resolve the page to insert onto: the document's active page when the
  *  host reports one, else the first page in the `pages` collection (the
  *  headless / no-focus fallback). Returns null when the document has no
- *  pages. */
-async function resolveTargetPage(host: BundleHost): Promise<string | null> {
+ *  pages. Exported for the wave-2 insert-shape commands (the same
+ *  no-second-copy rule as the mutation builders). */
+export async function resolveTargetPage(host: BundleHost): Promise<string | null> {
   const meta = await host.document.meta();
   if (meta.activePage) return meta.activePage;
   try {

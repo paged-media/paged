@@ -98,14 +98,35 @@ export {
 } from "./commands/fill-gradient";
 // Phase 4c — the pro toolset, exported for the conformance specs (the
 // same no-second-copy rule for every builder).
-export { PRO_TOOL_IDS, DRAW_TOOL_IDS } from "./tools";
+export {
+  PRO_TOOL_IDS,
+  DRAW_TOOL_IDS,
+  BRUSH_TOOL_IDS,
+  WAVE2_TOOL_IDS,
+} from "./tools";
 export { insertPathMutationFor } from "./handlers/insert-path";
+// Brush tools v0 — the sweep handler factories, the exact
+// outlineStrokeVariable wire builder and the fixed nib profiles,
+// exported for the conformance specs (the no-second-copy rule).
+export {
+  createPaintbrushHandler,
+  createBlobBrushHandler,
+  createEraserBrushHandler,
+  outlineStrokeVariableMutationFor,
+  PAINTBRUSH_NIB,
+  ERASER_NIB,
+  FALLBACK_FILL_REF,
+} from "./handlers/brush";
 export { createCurvatureHandler } from "./handlers/curvature";
 export { createPencilHandler } from "./handlers/pencil";
 export {
   createMeasureHandler,
   nearestPathPointOnPage,
+  measureReadoutLabel,
+  measureTextPreview,
   BIND_MEASURE_READOUT,
+  OVERLAY_TEXT_FEATURE,
+  type ToolPreviewTextMirror,
 } from "./handlers/measure";
 export {
   createGradientAnnotatorHandler,
@@ -134,15 +155,27 @@ export {
   type StrokeCapToken,
   type StrokeJoinToken,
 } from "./commands/path-ops";
+// Phase 4c + the v56 TRUE JOIN — the endpoint planners (the coincide
+// fallback), the real `closePath`/`joinPaths` wire builders and the
+// engine-op probe that chooses between them, exported for the
+// conformance spec (the no-second-copy rule).
 export {
   JOIN_AVERAGE_COMMAND_IDS,
   JOIN_AVERAGE_COMMAND_CATEGORY,
   JOIN_COMMAND_ID,
+  CLOSE_PATH_COMMAND_ID,
   AVERAGE_COMMAND_ID,
   planJoinEndpoints,
   planAverageEndpoints,
   pathPointSetMutationFor,
   endpointMovesMutationFor,
+  closePathMutationFor,
+  joinPathsMutationFor,
+  parseOpVocabulary,
+  engineOpVocabulary,
+  supportsPathWeld,
+  applyJoin,
+  applyClosePath,
   contributeJoinAverageCommands,
   type EndpointMove,
 } from "./commands/join-average";
@@ -187,15 +220,31 @@ export {
   APPEARANCE_ADD_FILL_COMMAND_ID,
   APPEARANCE_ADD_STROKE_COMMAND_ID,
   APPEARANCE_CLEAR_COMMAND_ID,
+  APPEARANCE_REMOVE_LAYER_COMMAND_ID,
+  APPEARANCE_MOVE_LAYER_COMMAND_ID,
   appearanceOf,
   withAppearance,
   bakeAppearanceMutations,
   commitAppearance,
+  removeAppearanceLayer,
+  moveAppearanceLayer,
+  applyAppearanceEdit,
+  applyAppearanceCommand,
   contributeAppearanceCommands,
   type AppearanceStack,
+  type AppearanceKind,
+  type AppearanceLayerKind,
   type FillLayer,
   type StrokeLayer,
 } from "./commands/appearance";
+// The APPEARANCE panel (React, the Layers-panel idiom) — the view over
+// that stack, with the one-fill/one-stroke engine limit stated inline.
+export {
+  makeAppearancePanel,
+  appearanceRowLabel,
+  APPEARANCE_PANEL_ID,
+  APPEARANCE_BAKE_NOTE,
+} from "./panels/appearance-panel";
 // Phase 9 (Tier B) — Select-same: the pure matcher + tree flattener,
 // exported for the conformance spec.
 export {
@@ -227,8 +276,78 @@ export {
   shapesFromSvgBytes,
   insertPathMutationsForShape,
   styleDefaultsForShape,
+  resolveTargetPage,
   SVG_IMPORTER_ID,
   SVG_EXPORTER_ID,
   SVG_MIME,
   type ShapeDefaults,
 } from "./io/svg";
+// Wave 2 — Eyedropper: the sample/apply pure halves + the module
+// sample state, exported for the conformance spec (the no-second-copy
+// rule).
+export {
+  createEyedropperHandler,
+  sampledStyleFrom,
+  applyStyleMutationFor,
+  getEyedropperSample,
+  clearEyedropperSample,
+  type SampledStyle,
+  type StyleApplyTarget,
+} from "./handlers/eyedropper";
+// Wave 2 — Width tool v0: the handler factory + the v0 profile
+// constants (the widths bake through the brush module's exact
+// outlineStrokeVariable builder above).
+export {
+  createWidthHandler,
+  WIDTH_FALLOFF_ANCHORS,
+  WIDTH_GAIN,
+  WIDTH_MAX_PT,
+} from "./handlers/width";
+// Wave 2 — Lasso select: the handler factory + the pure centers-inside
+// matcher, exported for the conformance spec.
+export {
+  createLassoSelectHandler,
+  lassoMatches,
+  itemCenterOnPage,
+} from "./handlers/lasso";
+// Wave 2 — the parametric insert-shape commands (v0 fixed defaults) +
+// their exact-wire builders, exported for the conformance spec.
+export {
+  INSERT_SHAPE_COMMAND_IDS,
+  INSERT_SHAPE_COMMAND_CATEGORY,
+  INSERT_ARC_COMMAND_ID,
+  INSERT_SPIRAL_COMMAND_ID,
+  INSERT_RECT_GRID_COMMAND_ID,
+  INSERT_POLAR_GRID_COMMAND_ID,
+  INSERT_SHAPE_DEFAULTS,
+  arcDefaultTable,
+  spiralDefaultTable,
+  rectGridDefaultTables,
+  polarGridDefaultTables,
+  insertTablesMutationFor,
+  contributeInsertShapeCommands,
+} from "./commands/insert-shapes";
+// Wave 2 — Blend v0: the structure gate + the exact batch builder,
+// exported for the conformance spec.
+export {
+  BLEND_COMMAND_ID,
+  BLEND_COMMAND_CATEGORY,
+  BLEND_STEPS,
+  blendSourceFrom,
+  blendStructureMatches,
+  blendGeometryBatchFor,
+  blendFillBatchFor,
+  applyBlendSelected,
+  contributeBlendCommand,
+  type BlendSource,
+  type BlendFillPlan,
+} from "./commands/blend";
+// Wave 2 — group-selection cycling: the pure tree-parentage resolver,
+// exported for the conformance spec.
+export {
+  SELECT_PARENT_GROUP_COMMAND_ID,
+  SELECT_PARENT_GROUP_COMMAND_CATEGORY,
+  parentGroupOf,
+  applySelectParentGroup,
+  contributeSelectParentGroupCommand,
+} from "./commands/select-parent-group";

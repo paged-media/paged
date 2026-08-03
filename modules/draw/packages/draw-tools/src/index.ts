@@ -51,6 +51,26 @@ export {
   type PencilCommit,
   type PencilOptions,
 } from "./pencil-machine";
+
+// Brush tools v0 — the pencil sampling pipeline with a calligraphic
+// per-anchor width lane on the commit (centerline + widths →
+// outlineStrokeVariable in the bundle).
+export {
+  BrushMachine,
+  type BrushEvent,
+  type BrushOptions,
+  type BrushCommit,
+  type BrushSnapshot,
+} from "./brush-machine";
+// Wave 2 — the Width tool's drag machine (nearest-anchor peak +
+// falloff profile → outlineStrokeVariable widths in the bundle).
+export {
+  WidthMachine,
+  type WidthEvent,
+  type WidthOptions,
+  type WidthCommit,
+  type WidthSnapshot,
+} from "./width-machine";
 // §13.2 on-canvas corner widgets — pure math for the corner-radius
 // gesture tool (the bundle owns the host wiring).
 export {

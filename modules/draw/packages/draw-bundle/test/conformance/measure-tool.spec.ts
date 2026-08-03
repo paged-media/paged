@@ -24,15 +24,22 @@
 //     the tolerance gate;
 //   · the LIVE gesture handler publishes the measured line on the
 //     overlay channel and the numeric readout as the
-//     `media.paged.draw.measureReadout` binding (the shape-only overlay
-//     channel cannot carry text — the named subset), and tears both
-//     down on deactivate;
+//     `media.paged.draw.measureReadout` binding, and tears both down on
+//     deactivate;
+//   · the ON-CANVAS READOUT, BOTH branches of the `overlay.text@1`
+//     guard: with the flag the frozen measurement publishes the
+//     `ToolPreviewText` primitive (single-slot channel — the line while
+//     dragging, the label once frozen); WITHOUT it (the installed
+//     plugin-sdk 0.2.25-canary.0 predates the flag — real skew, not a
+//     hypothetical) the line stays published and the binding remains the
+//     only readout;
 //   · the tool drives NO mutations (read-only proof: the document is
 //     untouched).
 
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 
 import type {
+  BundleHost,
   CanvasPointerEvent,
   ElementId,
   ToolPreviewPolyline,
@@ -43,8 +50,12 @@ import type { MeasureReadout } from "@paged-media/draw-tools";
 import {
   drawBundle,
   createMeasureHandler,
+  measureReadoutLabel,
+  measureTextPreview,
   nearestPathPointOnPage,
   BIND_MEASURE_READOUT,
+  OVERLAY_TEXT_FEATURE,
+  type ToolPreviewTextMirror,
 } from "../../src";
 import { F1_MULTI_SHAPE } from "../fixtures/corpus";
 import { liveTable } from "../replay";
@@ -135,5 +146,108 @@ describe("draw conformance — measure tool (Phase 4c)", () => {
     handler.onDeactivate("switch");
     expect(h.lastToolPreview()).toBeNull();
     expect(h.host.bindings.get(BIND_MEASURE_READOUT)).toBeUndefined();
+  });
+
+  describe("the on-canvas readout (overlay.text@1)", () => {
+    it("measureTextPreview places the label beside the segment midpoint", () => {
+      const preview = measureTextPreview("pg1", {
+        from: [0, 0],
+        to: [100, 0],
+        dx: 100,
+        dy: 0,
+        distance: 100,
+        angleDeg: 0,
+      });
+      expect(preview.kind).toBe("text");
+      expect(preview.pageId).toBe("pg1");
+      // Midpoint (50, 0) pushed 10 pt along the segment normal.
+      expect(preview.x).toBeCloseTo(50);
+      expect(preview.y).toBeCloseTo(10);
+      expect(preview.text).toBe("100.00 pt · 0.0°");
+      expect(preview.anchor).toBe("middle");
+      expect(preview.background).toBe(true);
+      // A degenerate (zero-length) measurement still places a label.
+      const degenerate = measureTextPreview("pg1", {
+        from: [10, 10],
+        to: [10, 10],
+        dx: 0,
+        dy: 0,
+        distance: 0,
+        angleDeg: 0,
+      });
+      expect(degenerate.x).toBeCloseTo(10);
+      expect(degenerate.y).toBeCloseTo(0);
+    });
+
+    it("the label is distance + angle", () => {
+      expect(
+        measureReadoutLabel({
+          from: [0, 0],
+          to: [30, 40],
+          dx: 30,
+          dy: 40,
+          distance: 50,
+          angleDeg: 53.13010235,
+        }),
+      ).toBe("50.00 pt · 53.1°");
+    });
+
+    it("WITHOUT the flag the frozen measurement keeps the LINE (this host — real skew)", () => {
+      // The installed @paged-media/plugin-sdk (0.2.25-canary.0) has no
+      // `overlay.text@1` in HOST_FEATURES, so this is the branch the
+      // harness actually exercises today.
+      expect(h.host.supports(OVERLAY_TEXT_FEATURE)).toBe(false);
+      const handler = createMeasureHandler(h.host);
+      handler.onActivate(undefined as never);
+      handler.onPointerDown(pointer([10, 10]));
+      handler.onPointerUp(pointer([110, 10]));
+      const frozen = h.lastToolPreview() as ToolPreviewPolyline;
+      expect(frozen.points).toEqual([
+        [10, 10],
+        [110, 10],
+      ]);
+      // The binding is the ONLY readout on such a host.
+      expect(
+        (h.host.bindings.get(BIND_MEASURE_READOUT) as MeasureReadout).distance,
+      ).toBeCloseTo(100);
+      handler.onDeactivate("switch");
+    });
+
+    it("WITH the flag the frozen measurement publishes the TEXT primitive; the drag still shows the line", () => {
+      // A host that DOES carry the flag (the contract's own shape — the
+      // local plugin-api already defines `ToolPreviewText`). Everything
+      // else delegates to the real headless host, so the preview lands
+      // on the real overlay channel.
+      const textHost = {
+        ...h.host,
+        supports: (feature: string) =>
+          feature === OVERLAY_TEXT_FEATURE || h.host.supports(feature),
+      } as unknown as BundleHost;
+
+      const handler = createMeasureHandler(textHost);
+      handler.onActivate(undefined as never);
+      handler.onPointerDown(pointer([10, 10]));
+      handler.onPointerMove(pointer([110, 10]));
+      // Mid-drag: still the LINE (single-slot channel).
+      const live = h.lastToolPreview() as ToolPreviewPolyline;
+      expect(live.points).toEqual([
+        [10, 10],
+        [110, 10],
+      ]);
+
+      handler.onPointerUp(pointer([110, 10]));
+      const frozen = h.lastToolPreview() as unknown as ToolPreviewTextMirror;
+      expect(frozen.kind).toBe("text");
+      expect(frozen.text).toBe("100.00 pt · 0.0°");
+      expect(frozen.background).toBe(true);
+      expect(frozen.x).toBeCloseTo(60);
+      // The binding publishes in BOTH branches (panels read it).
+      expect(
+        (h.host.bindings.get(BIND_MEASURE_READOUT) as MeasureReadout).distance,
+      ).toBeCloseTo(100);
+
+      handler.onDeactivate("switch");
+      expect(h.lastToolPreview()).toBeNull();
+    });
   });
 });

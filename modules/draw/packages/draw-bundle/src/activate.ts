@@ -75,6 +75,12 @@ import {
   SELECT_SAME_COMMAND_IDS,
 } from "./commands/select-same";
 import {
+  contributeInsertShapeCommands,
+  INSERT_SHAPE_COMMAND_IDS,
+} from "./commands/insert-shapes";
+import { contributeBlendCommand } from "./commands/blend";
+import { contributeSelectParentGroupCommand } from "./commands/select-parent-group";
+import {
   contributeFillGradientCommands,
   FILL_GRADIENT_COMMAND_IDS,
 } from "./commands/fill-gradient";
@@ -94,6 +100,10 @@ import {
 import { vectorGraphicEditContext } from "./edit-context";
 import { fillPanel, installFillPanelBindings } from "./panels/fill-panel";
 import { makeLayersPanel } from "./panels/layers-panel";
+import {
+  makeAppearancePanel,
+  APPEARANCE_PANEL_ID,
+} from "./panels/appearance-panel";
 import { installStrokePanelBindings, strokePanel } from "./panels/stroke-panel";
 import { contributeSvgIo } from "./io/svg";
 
@@ -120,6 +130,20 @@ export function activate(host: BundleHost): BundleHandle {
     id: "media.paged.draw.panel.layers",
     icon: "panel-layers",
     ...makeLayersPanel(host),
+  });
+  // The APPEARANCE panel — the view over the metadata stack the
+  // appearance commands already model (add/remove/reorder fills +
+  // strokes), with the one-fill/one-stroke engine limit (gap B-24)
+  // stated inline instead of hidden behind a convincing stack. React
+  // for the same reason Layers is (a reorderable list is above the v1
+  // schema panel's scalar ceiling).
+  // (`panel-effects` is a REAL glyph in the host's kebab-case map — the
+  // dock tab renders iconless on an invented token, the stroke panel's
+  // recorded lesson.)
+  host.contribute.panel({
+    id: APPEARANCE_PANEL_ID,
+    icon: "panel-effects",
+    ...makeAppearancePanel(host),
   });
   // B-12 — the stroke DASH presets as commands (the schema binding
   // ceiling is scalar, a dash array is a vector → command-driven). Each
@@ -156,6 +180,18 @@ export function activate(host: BundleHost): BundleHandle {
   // Phase 9 (Tier B) — Select-same (pure selection over fill / stroke /
   // stroke-weight; no mutation).
   const selectSameCommandsSub = contributeSelectSameCommands(host);
+  // Wave 2 — the parametric insert-shape commands (Arc / Spiral /
+  // Rect grid / Polar grid; v0 fixed default geometry — see
+  // commands/insert-shapes.ts).
+  const insertShapeCommandsSub = contributeInsertShapeCommands(host);
+  // Wave 2 — Blend v0 (two matching-structure paths → 3 interpolated
+  // intermediates, one batch; commands/blend.ts documents the honest
+  // colour scope).
+  const blendCommandSub = contributeBlendCommand(host);
+  // Wave 2 — group-selection cycling (parentage via the scene-tree
+  // door; commands/select-parent-group.ts records the parentOf door
+  // gap).
+  const selectParentGroupCommandSub = contributeSelectParentGroupCommand(host);
   // W3.2 — the vectorGraphic edit context (closes B-02): double-click a
   // path enters anchor-editing (the anchor tools focused, the stroke
   // panel raised, a breadcrumb, Esc exits).
@@ -166,7 +202,7 @@ export function activate(host: BundleHost): BundleHandle {
   // host predates the importer/exporter doors.
   const svgIoSub = contributeSvgIo(host);
   host.log.info(
-    `activated — ${tools.length} tools + 2 schema panels + ` +
+    `activated — ${tools.length} tools + 2 schema panels + 2 React panels + ` +
       `${
         DASH_COMMAND_IDS.length +
         GROUP_COMMAND_IDS.length +
@@ -176,7 +212,9 @@ export function activate(host: BundleHost): BundleHandle {
         PATHFINDER_COMMAND_IDS.length +
         LIVE_CORNER_COMMAND_IDS.length +
         APPEARANCE_COMMAND_IDS.length +
-        SELECT_SAME_COMMAND_IDS.length
+        SELECT_SAME_COMMAND_IDS.length +
+        INSERT_SHAPE_COMMAND_IDS.length +
+        2 // blendSelected + selectParentGroup
       } commands + 1 edit context ` +
       `(apiVersion ${manifest.apiVersion})`,
   );
@@ -186,6 +224,9 @@ export function activate(host: BundleHost): BundleHandle {
   return {
     dispose() {
       svgIoSub.dispose();
+      selectParentGroupCommandSub.dispose();
+      blendCommandSub.dispose();
+      insertShapeCommandsSub.dispose();
       selectSameCommandsSub.dispose();
       appearanceCommandsSub.dispose();
       liveCornerCommandsSub.dispose();
