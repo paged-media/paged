@@ -31,7 +31,8 @@
     ],
     "panels": [
       "media.paged.draw.panel.stroke",
-      "media.paged.draw.panel.fill"
+      "media.paged.draw.panel.fill",
+      "media.paged.draw.panel.layers"
     ],
     "commands": [
       "media.paged.draw.command.strokeDashSolid",

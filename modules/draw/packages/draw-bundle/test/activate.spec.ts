@@ -193,17 +193,20 @@ describe("drawBundle.activate", () => {
     expect(fake.keybindings.count()).toBe(0);
   });
 
-  it("registers the stroke + fill SCHEMA panels (B-01 RESOLVED; fill = Phase 2d/B-03)", () => {
+  it("registers the stroke + fill SCHEMA panels and the layers React panel", () => {
     const fake = makeFakeEditor();
     loadBundle(() => fake.editor, drawBundle, {
       console: silent,
       storage: mapBacking(),
     });
-    // Each schema panel registers through the panels registry as a
-    // synthesized PanelContribution under its declared id.
+    // The schema panels register through the panels registry as
+    // synthesized PanelContributions; the layers panel (the
+    // layers.panel.json prototype made real, expert-leaf React per
+    // B-01's list-widget limit) registers directly.
     expect(fake.panels.ids()).toEqual([
       "media.paged.draw.panel.stroke",
       "media.paged.draw.panel.fill",
+      "media.paged.draw.panel.layers",
     ]);
   });
 

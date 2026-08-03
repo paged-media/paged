@@ -93,6 +93,7 @@ import {
 } from "./commands/pathfinder";
 import { vectorGraphicEditContext } from "./edit-context";
 import { fillPanel, installFillPanelBindings } from "./panels/fill-panel";
+import { makeLayersPanel } from "./panels/layers-panel";
 import { installStrokePanelBindings, strokePanel } from "./panels/stroke-panel";
 import { contributeSvgIo } from "./io/svg";
 
@@ -111,6 +112,15 @@ export function activate(host: BundleHost): BundleHandle {
   const strokeBindingSub = installStrokePanelBindings(host);
   contributeSchemaPanel(host, fillPanel);
   const fillBindingSub = installFillPanelBindings(host);
+  // The LAYERS panel — the panels/layers.panel.json prototype made real
+  // as the expert-leaf React panel its own comment prescribes (the v1
+  // schema has no list widget, B-01's honest limit). Live layer list +
+  // the layer wire ops (visible/lock/printable/rename/move/add/remove).
+  host.contribute.panel({
+    id: "media.paged.draw.panel.layers",
+    icon: "panel-layers",
+    ...makeLayersPanel(host),
+  });
   // B-12 — the stroke DASH presets as commands (the schema binding
   // ceiling is scalar, a dash array is a vector → command-driven). Each
   // commits `setElementProperty{ frameStrokeDashArray, lengths }` to
