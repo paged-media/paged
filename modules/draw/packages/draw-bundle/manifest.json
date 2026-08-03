@@ -16,8 +16,7 @@
     "editContext": [
       "vectorGraphic"
     ],
-    "network": false,
-    "clipboard": "vector"
+    "network": false
   },
   "contributes": {
     "tools": [

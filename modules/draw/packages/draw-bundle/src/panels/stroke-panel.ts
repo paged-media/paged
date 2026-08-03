@@ -87,7 +87,9 @@ export const ARROWHEAD_OPTIONS = [
 export const strokePanel: SchemaPanelContribution = {
   id: STROKE_PANEL_ID,
   title: "Stroke",
-  icon: "tool-convertAnchor",
+  // A real host glyph name — the earlier "tool-convertAnchor" wasn't in the
+  // editor's (kebab-case) glyph map, so the dock tab rendered iconless.
+  icon: "panel-stroke",
   defaultDock: "right",
   defaultGroup: "draw",
   schema: {
