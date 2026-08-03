@@ -51,6 +51,17 @@ export {
   type PencilCommit,
   type PencilOptions,
 } from "./pencil-machine";
+// §13.2 on-canvas corner widgets — pure math for the corner-radius
+// gesture tool (the bundle owns the host wiring).
+export {
+  cornerAt,
+  cornerPoints,
+  cornerPreview,
+  maxRadius,
+  radiusFromDrag,
+  type Bounds,
+  type CornerIndex,
+} from "./corner-radius-machine";
 
 export {
   MeasureMachine,

@@ -154,6 +154,7 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.tool.gradientAnnotator",
       "media.paged.draw.tool.measure",
       "media.paged.draw.tool.shapeBuilder",
+      "media.paged.draw.tool.cornerRadius",
     ]);
     // B-15: TOOL activation commands + shortcuts are HOST-derived from
     // the registry — the bundle registers tools only. The commands it

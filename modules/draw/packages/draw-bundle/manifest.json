@@ -27,7 +27,8 @@
       "media.paged.draw.tool.pencil",
       "media.paged.draw.tool.gradientAnnotator",
       "media.paged.draw.tool.measure",
-      "media.paged.draw.tool.shapeBuilder"
+      "media.paged.draw.tool.shapeBuilder",
+      "media.paged.draw.tool.cornerRadius"
     ],
     "panels": [
       "media.paged.draw.panel.stroke",

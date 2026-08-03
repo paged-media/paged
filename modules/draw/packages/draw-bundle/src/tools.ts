@@ -38,6 +38,7 @@ import type {
 } from "@paged-media/plugin-api";
 
 import { createAnchorEditHandler } from "./handlers/anchors";
+import { createCornerRadiusHandler } from "./handlers/corner-radius";
 import { createCurvatureHandler } from "./handlers/curvature";
 import { createGradientAnnotatorHandler } from "./handlers/gradient-annotator";
 import { createMeasureHandler } from "./handlers/measure";
@@ -64,6 +65,7 @@ export const PRO_TOOL_IDS = [
   "media.paged.draw.tool.gradientAnnotator",
   "media.paged.draw.tool.measure",
   "media.paged.draw.tool.shapeBuilder",
+  "media.paged.draw.tool.cornerRadius",
 ] as const;
 
 /** Build the three anchor-editing tools bound to `host` — each
@@ -169,6 +171,21 @@ export function drawTools(host: BundleHost): ToolContribution[] {
       order: 6,
       cursor: CROSS,
       gesture: () => createShapeBuilderHandler(host),
+    },
+    // §13.2 — the on-canvas corner widget: press near a corner of the
+    // selected rectangle, drag inward, release → ONE per-corner
+    // RoundedCorner mutation (the handle the live-corners commands
+    // reserved; rectangles only, B-23).
+    {
+      id: "media.paged.draw.tool.cornerRadius",
+      title: "Corner Radius",
+      icon: "tool-cornerRadius",
+      shortcut: "shift+r",
+      group: "cornerRadius",
+      section: "transform",
+      order: 2,
+      cursor: CROSS,
+      gesture: () => createCornerRadiusHandler(host),
     },
   ];
 }
