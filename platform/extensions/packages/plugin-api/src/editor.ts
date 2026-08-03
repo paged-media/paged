@@ -249,6 +249,16 @@ export interface PanelContribution {
   defaultDock?: DockEdge;
   defaultGroup?: string;
   icon?: string;
+  /** K-8 — opt into the editor's PANEL RAIL: hosts that support the
+   *  rail door render a launcher item for this panel after the
+   *  built-ins. Off by default (the Window menu + palette remain the
+   *  baseline discovery surfaces). */
+  rail?: boolean;
+  /** K-8 — a self-contained SVG glyph (the inner markup of a 24×24
+   *  viewBox, currentColor strokes/fills, no script/foreignObject/event
+   *  handlers — the host SANITIZES before rendering). Used when `icon`
+   *  names no host glyph; the honest fallback stays the iconless tab. */
+  iconSvg?: string;
   when?: VisibilityPredicate;
   closable?: boolean;
   movable?: boolean;
