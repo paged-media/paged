@@ -80,27 +80,30 @@ export type {
 // `scripts/sync-wire.mjs --check` (content drift OR a stale stamp
 // fails CI). The current stamp is 0.51.0 = protocol 51.
 //
-// Core is at **protocol 57** and has not published yet. Eleven new ops
+// Core is at **protocol 59** and has not published yet. Sixteen new ops
 // landed there that bundles need NOW: four in v56 (paged.draw's Wave-B
-// path topology + B-18 nested content) and seven in v57 (B-22 — the
-// REGION Pathfinder row + Shape Builder's face commit). Hand-editing
-// wire.d.ts to add them would break the drift gate — a vendored copy
-// that no longer matches its source is not a passing check. So they
-// live HERE, in the hand-owned curation module, exactly the way DOC-03's
-// `StoryContent` (protocol v54) ships hand-written in host.ts ahead of
-// its vendoring: the shapes below are byte-equal to the tsify output the
-// v57 build emits, so when canvas-wasm 0.57 publishes and
-// `sync-wire.mjs` runs, `Mutation` absorbs them and these aliases become
-// redundant (the union stays sound throughout — `PendingMutation`
-// collapses into a subset of `Mutation`, it never contradicts it).
+// path topology + B-18 nested content), seven in v57 (B-22 — the
+// REGION Pathfinder row + Shape Builder's face commit), four in v58
+// (C-28 opacity masks + C-29 type-on-a-path) and one in v59 (Arrange —
+// the z-order door). Hand-editing wire.d.ts to add them would break the
+// drift gate — a vendored copy that no longer matches its source is not
+// a passing check. So they live HERE, in the hand-owned curation module,
+// exactly the way DOC-03's `StoryContent` (protocol v54) ships
+// hand-written in host.ts ahead of its vendoring: the shapes below are
+// byte-equal to the tsify output the v59 build emits, so when
+// canvas-wasm 0.59 publishes and `sync-wire.mjs` runs, `Mutation`
+// absorbs them and these aliases become redundant (the union stays sound
+// throughout — `PendingMutation` collapses into a subset of `Mutation`,
+// it never contradicts it).
 //
 // HONEST LIMIT: a protocol-ahead op is not gated by `host.supports()`
 // — the gate is the WORKER's protocol version, which the client
 // handshake already checks (`protocolMismatch`). A bundle sending one
-// of these to a pre-v56 (resp. pre-v57) worker gets an honest
-// non-applied `MutationOutcome` from the engine, never a silent no-op.
-// Nor can they ride the vendored `batch` op (`args.ops: Mutation[]`)
-// until the re-sync — batch them by issuing separate `mutate` calls.
+// of these to a pre-v56 (resp. pre-v57 / v58 / v59) worker gets an
+// honest non-applied `MutationOutcome` from the engine, never a silent
+// no-op. Nor can they ride the vendored `batch` op
+// (`args.ops: Mutation[]`) until the re-sync — batch them by issuing
+// separate `mutate` calls.
 
 /** v56 (Wave B) — close an OPEN subpath of a path element: the inverse
  *  gesture of `pathOpenAt`'s scissors cut. `subpath` picks the contour
@@ -281,8 +284,61 @@ export type DetachTextFromPathMutation = {
   args: { elementId: ElementId };
 };
 
+/** v59 (Arrange) — where `reorderElement` puts its target inside the
+ *  sibling list it already belongs to. `0` is the BACKMOST slot (painted
+ *  first). Prefer the four verbs: they are evaluated against the order
+ *  the engine holds at apply time, so a concurrent insert or delete
+ *  cannot make them restack the wrong item. `{ index }` is absolute and
+ *  therefore CAN go stale — an out-of-range index is refused with an
+ *  honest error, never clamped. */
+export type ZOrderTarget =
+  | "front"
+  | "back"
+  | "forward"
+  | "backward"
+  | { index: number };
+
+/** v59 (Arrange) — **the z-order door**: restack an element within the
+ *  sibling list it already belongs to. Nothing on the wire could change
+ *  stacking before v59, which is why so many bundles carry "inserted
+ *  items land on top of the z-order" as an accepted limit — that
+ *  sentence is retired by this op.
+ *
+ *  The sibling list is DERIVED from where the element already is: a
+ *  top-level item restacks in the spread's z table, a group member
+ *  inside its group, a pasted-in child inside its container. There is no
+ *  parent argument, so a reorder can never move an element between those
+ *  scopes — for that use `createGroup` / `dissolveGroup` /
+ *  `pasteInto` / `releaseFrom`. An opacity-mask artwork is painted from
+ *  no list at all and is refused. One undo restores the previous order
+ *  exactly (the engine's inverse carries the slot the item came from).
+ *
+ *  CREATE-THEN-ARRANGE in one undo step — the Live Paint shape (fill a
+ *  face, then put the fill UNDER the strokes bounding it) — is a batch
+ *  of `[insert…, bindCreated { handle }, reorderElement
+ *  { elementId: "$h:<handle>", to: "back" }]`. The `bindCreated` is
+ *  required: the bare `$created` sentinel is understood by
+ *  `setPluginMetadata` / `setElementProperty` only, while the generic
+ *  handle resolver — the one that rewrites any id position of any op —
+ *  is armed by a `bindCreated` child being present.
+ *
+ *  HONEST LIMIT 1 — Arrange is WITHIN a layer. The renderer sorts by
+ *  `ItemLayer` before it paints, so bring-to-front cannot lift an
+ *  element above one on a higher layer. That is InDesign's model:
+ *  crossing layers is a property write, not an Arrange.
+ *
+ *  HONEST LIMIT 2 — the new order shows on canvas and survives a
+ *  `.paged` save, but NOT an `.idml` export: the IDML writer re-emits
+ *  existing source elements byte-for-byte and only places new ones, so a
+ *  reorder reverts on an export/reopen round trip. Do not present
+ *  Arrange as durable across IDML interchange yet. */
+export type ReorderElementMutation = {
+  op: "reorderElement";
+  args: { elementId: ElementId; to: ZOrderTarget };
+};
+
 /** The protocol-ahead ops, as one union — the delta between the
- *  vendored `Mutation` (protocol 51) and core's protocol 58. Empties
+ *  vendored `Mutation` (protocol 51) and core's protocol 59. Empties
  *  itself on the next `sync-wire.mjs` run. */
 export type PendingMutation =
   | ClosePathMutation
@@ -299,7 +355,8 @@ export type PendingMutation =
   | ApplyOpacityMaskMutation
   | ReleaseOpacityMaskMutation
   | AttachTextToPathMutation
-  | DetachTextFromPathMutation;
+  | DetachTextFromPathMutation
+  | ReorderElementMutation;
 
 /** What `host.document.mutate` ACCEPTS: the vendored op union plus the
  *  protocol-ahead ops. Widening an accepted-input type is additive —
