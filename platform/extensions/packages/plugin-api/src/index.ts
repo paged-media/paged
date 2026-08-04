@@ -138,6 +138,30 @@ export type {
   CodeEditorLanguage,
 } from "./widgets";
 
+// ADR-023 phase A — BINDING PROVIDERS: one host-owned panel, and while
+// an edit context is active the owning plugin resolves what that panel
+// binds to (paths / collections / structural ops; reads + writes).
+export type {
+  BindingTarget,
+  BindingPropertyRequest,
+  BindingPropertyWrite,
+  BindingCollectionRequest,
+  BindingRead,
+  BindingResolved,
+  BindingDecline,
+  BindingWrite,
+  BindingCollection,
+  BindingOp,
+  BindingProvider,
+  BindingProviderScope,
+  BindingProviderHandle,
+  // What the HOST reads back (the editor's shared panel, phase C).
+  BindingReadResult,
+  BindingWriteResult,
+  BindingCollectionResult,
+  ActiveBindingProvider,
+} from "./binding-provider";
+
 export type {
   AssetSurface,
   AssetKind,

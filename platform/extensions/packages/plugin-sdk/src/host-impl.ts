@@ -25,9 +25,20 @@
 // thunk idiom, avoids stale-closure drift).
 
 import type {
+  ActiveBindingProvider,
   AssetSurface,
+  BindingCollectionRequest,
+  BindingCollectionResult,
+  BindingProvider,
+  BindingProviderHandle,
+  BindingPropertyRequest,
+  BindingPropertyWrite,
+  BindingReadResult,
+  BindingWriteResult,
   BindingsSurface,
   BlobSurface,
+  CollectionName,
+  PropertyPath,
   PartsSurface,
   NativeDocumentSurface,
   BundleHost,
@@ -102,6 +113,14 @@ export const HOST_FEATURES: readonly string[] = [
   "contribute.overlay@1",
   "contribute.editContext@1",
   "contribute.objectType@1",
+  // ADR-023 phase A — the binding-provider DOOR exists in this SDK (a
+  // bundle may call `host.contribute.bindingProvider` without a
+  // TypeError). STATIC, and it deliberately does NOT claim that anything
+  // will consult the provider — that is the separate, DYNAMIC
+  // `bindings.provider@1`, which is true only when the host wired a
+  // shared registry. Same static-door / dynamic-backing split as
+  // `contribute.schemaPanel@1` + `schemaPanel.renderer@1`.
+  "contribute.bindingProvider@1",
   "contribute.importer@1",
   "contribute.exporter@1",
   "document.mutate@1",
@@ -497,6 +516,260 @@ export function createDataProviderRegistry(): DataProviderBackend {
   };
 }
 
+// ------------------------------------------- binding providers (ADR-023)
+//
+// The SHARED registry every plugin host writes into and the HOST's own
+// panels read from — the same injection shape as `dataProviders` (the
+// editor builds ONE with `createBindingProviderRegistry()` and passes
+// the SAME instance to every `createBundleHost` call), because the whole
+// point is cross-bundle: one host Layers panel must be able to ask "who
+// resolves `layers` right now?" without knowing which bundles exist.
+//
+// It keeps TWO things:
+//   · the ACTIVE CONTEXT STACK — pushed/popped by the SDK adapter from
+//     the shell's own `onEnter`/`onExit` calls, so activation is DERIVED
+//     from the shell's context stack rather than reported alongside it
+//     (there is exactly one notion of "who is active", ADR-023's rule);
+//   · the registered PROVIDERS, keyed by (plugin, contextType).
+//
+// Resolution walks the active stack INNERMOST-FIRST. That is the whole
+// precedence model: contexts nest (the shell pushes and Esc pops one
+// level), so the innermost active context is by construction the one
+// that owns the current selection.
+
+/** One provider as the registry holds it (the adapter's registration
+ *  payload — the bundle identity the contract's answers carry as
+ *  `provider`, plus the borrowed context type). */
+export interface RegisteredBindingProvider {
+  plugin: string;
+  contextType: string;
+  provider: BindingProvider;
+}
+
+/**
+ * The shared binding-provider registry (ADR-023 phase A). TWO audiences,
+ * deliberately on one object (like {@link DataProviderBackend}):
+ *
+ *   · the SDK ADAPTER calls `register` / `setContextActive` — a bundle
+ *     never touches these; it reaches the registry only through
+ *     `host.contribute.bindingProvider`;
+ *   · the HOST APP (the editor's shared panels, phase C) calls
+ *     `activeProviders` / `readProperty` / `writeProperty` /
+ *     `readCollection` / `applyMutation` / `onDidChange`.
+ *
+ * FALL-THROUGH IS THE HOST'S JOB, not the registry's: every resolution
+ * answers either a claim or a typed `resolved: false` / `handled: false`
+ * refusal, and the host reads/writes CORE on the refusal. The registry
+ * holds no editor handle and therefore cannot — and must not — fall
+ * through on the host's behalf; keeping the two separable is what lets
+ * the isolate implementation be an RPC proxy of exactly this shape.
+ */
+export interface BindingProviderBackend {
+  // ---- adapter side (bundles never call these) ----
+  /** Register a provider. Disposing removes it without touching the
+   *  edit context whose activation it borrows. */
+  register(entry: RegisteredBindingProvider): Disposable;
+  /** Report an edit context entering (`active: true`) or leaving. Called
+   *  by the adapter from the shell's own `onEnter`/`onExit`. */
+  setContextActive(
+    plugin: string,
+    contextType: string,
+    elementId: string | null,
+    active: boolean,
+  ): void;
+  /** A provider announced `invalidate()` — fan out to host subscribers. */
+  notifyChanged(plugin: string, contextType: string): void;
+  // ---- host side ----
+  /** The active provider stack, INNERMOST FIRST (= precedence order). */
+  activeProviders(): readonly ActiveBindingProvider[];
+  readProperty(request: BindingPropertyRequest): Promise<BindingReadResult>;
+  writeProperty(request: BindingPropertyWrite): Promise<BindingWriteResult>;
+  readCollection(
+    request: BindingCollectionRequest,
+  ): Promise<BindingCollectionResult>;
+  /** Offer a structural mutation to the active providers before sending
+   *  it to core (`layerMove`, `createSwatch`, …). */
+  applyMutation(mutation: MutationInput): Promise<BindingWriteResult>;
+  /** Fires when the active stack changes OR a provider invalidates —
+   *  the host panel's re-read signal. */
+  onDidChange(listener: () => void): Disposable;
+}
+
+/** Build a shared binding-provider registry (ADR-023 phase A). The editor
+ *  holds ONE and injects it into every `createBundleHost` call as
+ *  `options.bindingProviders`. Reference implementation — an
+ *  RPC/isolate host swaps a proxy with the same contract. */
+export function createBindingProviderRegistry(): BindingProviderBackend {
+  /** (plugin, contextType) → the registered providers, in registration
+   *  order. A key holds at most one provider in practice; the array
+   *  keeps a second registration honest rather than silently replacing
+   *  the first. */
+  const providers = new Map<string, RegisteredBindingProvider[]>();
+  /** The active context stack, OUTERMOST first (push order = the shell's
+   *  enter order). Resolution reads it reversed. */
+  const stack: { plugin: string; contextType: string; elementId: string | null }[] =
+    [];
+  const listeners = new Set<() => void>();
+  const key = (plugin: string, contextType: string) =>
+    `${plugin} ${contextType}`;
+  const emit = () => {
+    for (const l of [...listeners]) l();
+  };
+
+  /** The active (frame, provider) pairs, innermost first. */
+  const active = (): {
+    frame: { plugin: string; contextType: string; elementId: string | null };
+    entry: RegisteredBindingProvider;
+  }[] => {
+    const out: {
+      frame: { plugin: string; contextType: string; elementId: string | null };
+      entry: RegisteredBindingProvider;
+    }[] = [];
+    for (let i = stack.length - 1; i >= 0; i--) {
+      const frame = stack[i];
+      for (const entry of providers.get(key(frame.plugin, frame.contextType)) ??
+        []) {
+        out.push({ frame, entry });
+      }
+    }
+    return out;
+  };
+
+  const declaresPath = (e: RegisteredBindingProvider, path: PropertyPath) =>
+    e.provider.provides.paths?.includes(path) ?? false;
+  const declaresCollection = (
+    e: RegisteredBindingProvider,
+    collection: CollectionName,
+  ) => e.provider.provides.collections?.includes(collection) ?? false;
+
+  return {
+    register(entry) {
+      const k = key(entry.plugin, entry.contextType);
+      const list = providers.get(k) ?? [];
+      list.push(entry);
+      providers.set(k, list);
+      emit();
+      return toDisposable(() => {
+        const cur = providers.get(k);
+        if (!cur) return;
+        const i = cur.indexOf(entry);
+        if (i >= 0) cur.splice(i, 1);
+        if (cur.length === 0) providers.delete(k);
+        emit();
+      });
+    },
+    setContextActive(plugin, contextType, elementId, isActive) {
+      if (isActive) {
+        stack.push({ plugin, contextType, elementId });
+      } else {
+        // Pop the INNERMOST matching frame: the same context type can be
+        // entered twice (a frame inside a frame), and exiting must
+        // unwind the one the shell is unwinding, not the outer one.
+        for (let i = stack.length - 1; i >= 0; i--) {
+          if (stack[i].plugin === plugin && stack[i].contextType === contextType) {
+            stack.splice(i, 1);
+            break;
+          }
+        }
+      }
+      emit();
+    },
+    notifyChanged() {
+      emit();
+    },
+    activeProviders() {
+      return active().map(({ frame, entry }) => ({
+        plugin: frame.plugin,
+        contextType: frame.contextType,
+        elementId: frame.elementId,
+        provides: entry.provider.provides,
+      }));
+    },
+    async readProperty(request) {
+      // A ROW target is special, and the special case is the whole
+      // reason the model is honest: a row this provider handed out does
+      // NOT exist in core, so an undeclared path over it must NOT fall
+      // through — the panel would then show the CORE selection's value
+      // for a row core has never heard of. Only providers owning that
+      // collection are consulted, and an owned-but-undeclared path is
+      // `absent` (blank the control), never `decline`.
+      const rowScoped =
+        request.target.kind === "row" ? request.target.collection : null;
+      for (const { entry } of active()) {
+        if (rowScoped !== null && !declaresCollection(entry, rowScoped)) continue;
+        if (!declaresPath(entry, request.path)) {
+          if (rowScoped === null) continue;
+          return {
+            resolved: true,
+            provider: entry.plugin,
+            read: {
+              kind: "absent",
+              reason:
+                `${entry.plugin} owns collection "${rowScoped}" but does not ` +
+                `serve "${request.path}" for its rows`,
+            },
+          };
+        }
+        if (!entry.provider.readProperty) continue;
+        const read = await entry.provider.readProperty(request);
+        if (read.kind === "decline") continue;
+        return { resolved: true, provider: entry.plugin, read };
+      }
+      return {
+        resolved: false,
+        reason: `no active binding provider claimed "${request.path}"`,
+      };
+    },
+    async writeProperty(request) {
+      const rowScoped =
+        request.target.kind === "row" ? request.target.collection : null;
+      for (const { entry } of active()) {
+        if (rowScoped !== null && !declaresCollection(entry, rowScoped)) continue;
+        if (!declaresPath(entry, request.path)) continue;
+        if (!entry.provider.writeProperty) continue;
+        const write = await entry.provider.writeProperty(request);
+        if (write.kind === "decline") continue;
+        return { handled: true, provider: entry.plugin, outcome: write.outcome };
+      }
+      return {
+        handled: false,
+        reason: `no active binding provider claimed a write to "${request.path}"`,
+      };
+    },
+    async readCollection(request) {
+      for (const { entry } of active()) {
+        if (!declaresCollection(entry, request.collection)) continue;
+        if (!entry.provider.readCollection) continue;
+        const read = await entry.provider.readCollection(request);
+        if (read.kind === "decline") continue;
+        return { resolved: true, provider: entry.plugin, rows: read.rows };
+      }
+      return {
+        resolved: false,
+        reason: `no active binding provider claimed collection "${request.collection}"`,
+      };
+    },
+    async applyMutation(mutation) {
+      for (const { entry } of active()) {
+        if (!(entry.provider.provides.ops?.includes(mutation.op) ?? false))
+          continue;
+        if (!entry.provider.applyMutation) continue;
+        const write = await entry.provider.applyMutation(mutation);
+        if (write.kind === "decline") continue;
+        return { handled: true, provider: entry.plugin, outcome: write.outcome };
+      }
+      return {
+        handled: false,
+        reason: `no active binding provider claimed the "${mutation.op}" op`,
+      };
+    },
+    onDidChange(listener) {
+      listeners.add(listener);
+      return toDisposable(() => listeners.delete(listener));
+    },
+  };
+}
+
 /**
  * Trust posture the HOST asserts for a bundle at the load path
  * (`plugin-trust-line.md`). Same-realm execution — full `BundleHost`
@@ -547,6 +820,14 @@ export interface CreateBundleHostOptions {
    *  through it. When absent, `host.dataProviders` discover() is empty +
    *  register() is a no-op and `supports("dataProviders@1")` is false. */
   dataProviders?: DataProviderBackend;
+  /** Host-provided SHARED BINDING-PROVIDER registry (ADR-023 phase A): the
+   *  editor creates ONE (`createBindingProviderRegistry`) and injects the SAME
+   *  instance into every plugin host, so its own panels can ask "who resolves
+   *  this path / collection / op right now?" across all loaded bundles. When
+   *  absent, `host.contribute.bindingProvider` warns + returns an inert handle
+   *  (nothing would ever consult the provider) and
+   *  `supports("bindings.provider@1")` is false. */
+  bindingProviders?: BindingProviderBackend;
   /** Console sink override (tests). */
   console?: Pick<Console, "debug" | "info" | "warn" | "error">;
   /** Shell actions the HOST APP owns (the cockpit's panel placement).
@@ -795,6 +1076,50 @@ export function createBundleHost(
     return reason;
   };
 
+  // ------------------------------------ binding providers (ADR-023 A)
+  // Edit-context types THIS bundle actually registered. A binding
+  // provider borrows one of them for its activation, so registering a
+  // provider for a type that was never contributed would produce a
+  // resolver that can never be consulted — refused loudly below rather
+  // than accepted and silently inert.
+  const registeredContexts = new Set<string>();
+  const bindingRegistry = options?.bindingProviders;
+
+  // -------------------------------------------------------------------
+  // Which lanes must be implemented for which declaration. Declaring a
+  // lane in `provides` without its callback is an authoring bug (the
+  // registry would skip the provider forever), so it is a loud
+  // registration error — the same posture as the namespace rule.
+  const providerLaneGaps = (p: BindingProvider): string[] => {
+    const gaps: string[] = [];
+    if ((p.provides.paths?.length ?? 0) > 0 && !p.readProperty)
+      gaps.push("provides.paths declared without readProperty()");
+    if ((p.provides.collections?.length ?? 0) > 0 && !p.readCollection)
+      gaps.push("provides.collections declared without readCollection()");
+    if ((p.provides.ops?.length ?? 0) > 0 && !p.applyMutation)
+      gaps.push("provides.ops declared without applyMutation()");
+    // A declaration list is a SET: a repeated entry means two intents
+    // fought over one key and one lost silently. Say so instead.
+    const dupes = (label: string, xs: readonly string[] | undefined) => {
+      const seen = new Set<string>();
+      for (const x of xs ?? []) {
+        if (seen.has(x)) gaps.push(`provides.${label} lists "${x}" twice`);
+        seen.add(x);
+      }
+    };
+    dupes("paths", p.provides.paths);
+    dupes("collections", p.provides.collections);
+    dupes("ops", p.provides.ops);
+    if (
+      (p.provides.paths?.length ?? 0) === 0 &&
+      (p.provides.collections?.length ?? 0) === 0 &&
+      (p.provides.ops?.length ?? 0) === 0
+    ) {
+      gaps.push("provides declares nothing — the provider could never answer");
+    }
+    return gaps;
+  };
+
   // ---------------------------------------------------- contribute
   // The namespace rule fires FIRST (always loud), then the capability
   // gate: a contributed id must be listed in the matching
@@ -904,9 +1229,43 @@ export function createBundleHost(
       // Stamp the OWN-namespace metadata key so the host resolves the
       // candidate's `metadata` from THIS plugin's envelope before calling
       // `matches` (a bundle never sees a foreign plugin's metadata).
+      //
+      // ADR-023 — and WRAP the lifecycle hooks when a binding-provider
+      // registry is wired. This is how a provider's lifetime is DERIVED
+      // from the shell's context stack instead of reported alongside it:
+      // the shell already calls `onEnter`/`onExit` at exactly the moments
+      // a context gains and loses ownership of the selection, so the
+      // adapter listens in rather than asking the editor for a second
+      // "who is active" signal that could disagree. The bundle's own
+      // hooks still run, unchanged and first-class.
+      registeredContexts.add(c.type);
       const stamped: EditContextContribution = {
         ...c,
         metadataKey: metadataKey(manifest),
+        ...(bindingRegistry
+          ? {
+              onEnter: (ctx) => {
+                bindingRegistry.setContextActive(
+                  manifest.id,
+                  c.type,
+                  typeof ctx.id?.id === "string" ? ctx.id.id : null,
+                  true,
+                );
+                c.onEnter?.(ctx);
+              },
+              onExit: (ctx) => {
+                // The bundle's hook runs BEFORE deactivation so its
+                // teardown can still resolve through its own provider.
+                c.onExit?.(ctx);
+                bindingRegistry.setContextActive(
+                  manifest.id,
+                  c.type,
+                  typeof ctx.id?.id === "string" ? ctx.id.id : null,
+                  false,
+                );
+              },
+            }
+          : {}),
       };
       const reg = getEditor().registries.editContexts;
       const recorded = options?.onEditContextRegistered?.(stamped);
@@ -952,6 +1311,76 @@ export function createBundleHost(
       }
       if (recorded) return store.add(recorded);
       return store.add(toDisposable(() => {}));
+    },
+    // ADR-023 phase A — the BINDING-PROVIDER door. Three gates, in
+    // order, all loud:
+    //   1. the CAPABILITY gate, borrowed whole from the edit context the
+    //      provider attaches to (`contributes.editContexts[]` must
+    //      declare the type). No new manifest field and no new
+    //      capability: the authority a provider exercises IS the
+    //      authority the active context already holds over the selection
+    //      it owns, so a second declaration would be ceremony, not a
+    //      gate. (Precedent: `EditContextContribution.toolIds` swaps the
+    //      whole tool rail and is not separately declared either.)
+    //   2. the ORDERING rule — the context must already be registered by
+    //      THIS bundle. A provider on an unregistered type can never
+    //      activate; accepting it would be the fake-interactive failure
+    //      the platform refuses.
+    //   3. the DECLARATION shape — a lane declared without its callback,
+    //      a repeated entry, or an empty `provides` is an authoring bug
+    //      that would make the provider silently unreachable.
+    // Then the honest no-backend door: no registry wired → warn + an
+    // inert handle (probe `supports("bindings.provider@1")`).
+    bindingProvider(contextType, provider): BindingProviderHandle {
+      requireDeclared(
+        declaresType(declared?.editContexts, contextType),
+        "contribute.bindingProvider",
+        `contributes.editContexts[] must declare { type: "${contextType}" } ` +
+          `(a binding provider borrows its edit context's declaration)`,
+      );
+      if (!registeredContexts.has(contextType)) {
+        throw new Error(
+          `plugin-api: contribute.bindingProvider("${contextType}") — no such ` +
+            `edit context is registered by ${manifest.id}. A provider BORROWS ` +
+            `its context's activation (ADR-023): call ` +
+            `contribute.editContext({ type: "${contextType}", … }) first, or ` +
+            `the provider could never be consulted.`,
+        );
+      }
+      const gaps = providerLaneGaps(provider);
+      if (gaps.length > 0) {
+        throw new Error(
+          `plugin-api: contribute.bindingProvider("${contextType}") — ` +
+            `${gaps.join("; ")}. A declared lane the registry can never call ` +
+            `is a silently dead provider, so the declaration is refused.`,
+        );
+      }
+      if (!bindingRegistry) {
+        log.warn(
+          `contribute.bindingProvider("${contextType}") registered nothing — ` +
+            `the host wired no binding-provider registry, so no panel will ` +
+            `ever consult it (probe supports("bindings.provider@1"))`,
+        );
+        return store.add({
+          invalidate() {},
+          dispose() {},
+        }) as BindingProviderHandle;
+      }
+      const entry: RegisteredBindingProvider = {
+        plugin: manifest.id,
+        contextType,
+        provider,
+      };
+      const reg = store.add(bindingRegistry.register(entry));
+      const handle: BindingProviderHandle = {
+        invalidate() {
+          bindingRegistry.notifyChanged(manifest.id, contextType);
+        },
+        dispose() {
+          reg.dispose();
+        },
+      };
+      return handle;
     },
     // K-2 / S-06 — document IO. Mirrors `command`: namespaced id the
     // manifest must list, routed to the shell registry. The registry is
@@ -2489,6 +2918,13 @@ export function createBundleHost(
     // SHARED registry is wired, so providers + consumers can actually
     // rendezvous (D-09).
     featureSet.add("dataProviders@1");
+  }
+  if (options?.bindingProviders) {
+    // ADR-023 — the door always exists (see the static flag above); this
+    // one means a real SHARED registry is wired, so a registered
+    // provider will actually be consulted by the host's panels and the
+    // adapter reports context activation into it.
+    featureSet.add("bindings.provider@1");
   }
   if (options?.blobStore) {
     // The blob door always exists (no-store fallback); this flag means a

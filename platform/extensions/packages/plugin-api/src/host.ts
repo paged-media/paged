@@ -52,6 +52,10 @@ import type {
 import type { SceneLayer } from "./wire";
 
 import type { AssetSurface } from "./assets";
+import type {
+  BindingProvider,
+  BindingProviderHandle,
+} from "./binding-provider";
 import type { ClipboardSurface } from "./clipboard";
 import type { MutationInput } from "./mutations";
 import type { PluginManifest } from "./manifest";
@@ -311,6 +315,38 @@ export interface ContributionSurface {
    * `contributes.exporters[]`.
    */
   exporter(contribution: ExporterContribution): Disposable;
+  /**
+   * Register a BINDING PROVIDER (ADR-023 phase A): while the edit
+   * context named by `contextType` is ACTIVE, this bundle resolves what
+   * the HOST's own panels bind to — typed property paths, named
+   * collections, and first refusal on structural mutation ops. Reads and
+   * writes both.
+   *
+   * This is the inversion the panel-duplication problem needs: instead
+   * of minting a fourth Layers panel, a bundle serves the ONE host
+   * Layers panel's values for its own content type. See
+   * binding-provider.ts for the three-lane shape, the core-vocabulary-
+   * only rule, and the precedence model.
+   *
+   * LIFETIME is borrowed, not declared: `contextType` must be a type
+   * this SAME bundle already registered through `contribute.editContext`
+   * (an unregistered type is refused loudly — a provider that can never
+   * activate is a bug, not a stance). The capability gate is that
+   * context's: `contributes.editContexts[]` must declare the type. There
+   * is deliberately NO separate manifest field and NO separate
+   * capability — the authority a provider exercises is the authority the
+   * active context already holds over the selection it owns.
+   *
+   * Always present. When the host wires no shared registry, the door
+   * warns + returns an inert handle (nothing will ever consult the
+   * provider) and `supports("bindings.provider@1")` is false; probe
+   * `supports("contribute.bindingProvider@1")` for whether this SDK has
+   * the door at all.
+   */
+  bindingProvider(
+    contextType: string,
+    provider: BindingProvider,
+  ): BindingProviderHandle;
   /**
    * Open a SCENE-LAYER surface (C-1): submit vector content that renders
    * INSIDE a frame, in frame-content coordinates — core applies the

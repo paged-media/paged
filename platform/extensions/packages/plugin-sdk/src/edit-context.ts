@@ -25,6 +25,8 @@
 // write-scope narrowing.
 
 import type {
+  BindingProvider,
+  BindingProviderHandle,
   BundleHost,
   Disposable,
   EditContextContribution,
@@ -52,4 +54,26 @@ export function contributeObjectType(
   contribution: ObjectTypeContribution,
 ): Disposable {
   return host.contribute.objectType(contribution);
+}
+
+/**
+ * ADR-023 phase A — register a BINDING PROVIDER: while `contextType` is
+ * the ACTIVE edit context, this bundle resolves what the HOST's own
+ * panels bind to (typed paths, named collections, structural ops; reads
+ * and writes both), so one host-owned panel serves many content types
+ * instead of each plugin minting its own copy.
+ *
+ * Lives here rather than in its own module deliberately: a provider
+ * borrows its edit context's ACTIVATION, so the two doors belong to one
+ * lifecycle and reading them side by side is the point. `contextType`
+ * must be a type this bundle already passed to
+ * {@link contributeEditContext} — the ordering is enforced, not
+ * conventional.
+ */
+export function contributeBindingProvider(
+  host: BundleHost,
+  contextType: string,
+  provider: BindingProvider,
+): BindingProviderHandle {
+  return host.contribute.bindingProvider(contextType, provider);
 }

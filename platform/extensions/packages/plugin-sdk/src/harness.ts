@@ -82,6 +82,8 @@ import type {
 
 import {
   createBundleHost,
+  createBindingProviderRegistry,
+  type BindingProviderBackend,
   type BlobStore,
   type ClipboardBackend,
   type SecretStoreBackend,
@@ -134,6 +136,7 @@ export interface HarnessOptions
       | "blobStore"
       | "clipboard"
       | "secrets"
+      | "bindingProviders"
     > {}
 
 /** A headless in-memory `BlobStore` — per-plugin byte maps, so the
@@ -275,6 +278,14 @@ export interface HeadlessHost {
    *  bundle's "geometry AND label at once" claim is assertable without a
    *  browser. `lastToolPreview()` tracks the list's FIRST shape. */
   lastToolPreviews(): readonly ToolPreviewShape[] | null;
+  /** ADR-023 phase A — the SHARED binding-provider registry this host
+   *  injected. It is the HOST side of the seam, so a conformance test
+   *  plays the part the editor's shared panel plays in phase C: enter
+   *  the bundle's edit context, then `readProperty` / `readCollection` /
+   *  `applyMutation` through here and assert the bundle answered (and
+   *  that a path it does not declare comes back as a typed refusal to
+   *  fall through to core). */
+  readonly bindingProviders: BindingProviderBackend;
   /** Load an IDML package into the headless document. Resolves to the
    *  loaded page ids (or throws on a parse failure). */
   load(idml: Uint8Array): Promise<string[]>;
@@ -557,6 +568,14 @@ export async function createHeadlessHost(
   // exercisable headlessly and `supports("secrets@1")` is true. Reference-
   // only: the value is never retained (the no-get trust line, end to end).
   const secrets = options.secrets ?? inMemorySecretStore();
+  // ONE shared binding-provider registry across the harness's hosts
+  // (ADR-023 phase A), unless a test injects its own — so a bundle's
+  // provider registration, its context-driven activation, and the host-
+  // side resolution are all exercisable headlessly and
+  // `supports("bindings.provider@1")` is true. It has to be shared for
+  // the same reason the editor shares one: resolution is CROSS-bundle.
+  const bindingProviders =
+    options.bindingProviders ?? createBindingProviderRegistry();
 
   const buildHost = (
     manifest: PluginManifest,
@@ -568,6 +587,7 @@ export async function createHeadlessHost(
       blobStore,
       clipboard,
       secrets,
+      bindingProviders,
       capabilityMode: mode,
       // W-06 — a recordable fake asset source the conformance harness
       // can pass so a bundle's `@font-face` byte path is exercisable
@@ -711,6 +731,7 @@ export async function createHeadlessHost(
     lastToolPreviews() {
       return lastPreviews;
     },
+    bindingProviders,
     async load(idml: Uint8Array): Promise<string[]> {
       const raw = worker.loadDocumentDirect(seqCounter++, idml);
       const reply = JSON.parse(raw) as WorkerToMain;

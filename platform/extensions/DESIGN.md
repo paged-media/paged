@@ -1343,3 +1343,277 @@ deliberate absence IS the design. The gate / namespace rule / every other door
 are untouched. The zero-copy composite + shared device remain deferred
 record-only (ADR-018); this section adds NONE of `SceneItem::Texture`,
 `requestGpuDevice`, or a host GPU backend.
+
+## 18. Binding providers (ADR-023 phase A — `contribute.bindingProvider`)
+
+ADR-023 (`thoughts/docs/paged/adr/023-shared-panels-binding-providers.md`,
+ACCEPTED 2026-08-04) is the deliberation record; this section is the contract
+it lands. It is **phase A only** — the provider CONTRACT + the host adapter.
+Phase B (the editor's tree/drag/rename widget tier), phase C (the one
+host-owned Layers panel) and phase D (the plugin migration) are elsewhere.
+
+**The problem, measured.** The platform's only two ways to put a panel on
+screen — `contributeSchemaPanel` and `contributePanel` — both MINT A NEW
+PANEL. There is no way for a plugin to serve the values a HOST panel binds
+to, so "write another Layers panel" is the correct local decision every time:
+Layers exists three times (editor `paged.layers`, plugin-draw
+`layers-panel.tsx`, plugin-image `LayersSection`), Stroke / Fill / Effects /
+Outline twice each. The fix is the inversion: **the host owns the panel; while
+an edit context is active, the owning plugin resolves the values that panel
+binds to** — reads and writes both.
+
+### 18.1 Designed against THREE consumers, not one
+
+One consumer only proves you built something shaped like its only caller.
+ADR-023 named Layers; two more were added deliberately because they are
+different SHAPES:
+
+| Consumer | Shape | Addressing | Core backing |
+|---|---|---|---|
+| **Layers** | element COLLECTION — ordering, visibility, lock | row identity | `LayerSummary`, the `layers` collection, `layerSet*` / `layerMove` |
+| **Character / Paragraph** | SCALAR paths over a RANGE; value may be MIXED | story id + character range | the 37 `character*` / `paragraph*` PropertyPaths |
+| **Swatches / colour** | DOCUMENT-SCOPED resource collection the panel EDITS, plus apply-to-selection | document-level | `swatches` / `gradients` / `colorGroups` / `inks`; `create|edit|delete Swatch|Gradient|ColorGroup`; the colour-bearing paths |
+
+Colour is the most universal (every plugin touches it) and the only one with a
+LIVE consumer already working around the seam's absence: **plugin-sheets mints
+real document swatches through the raw ops today**, because no shared panel
+exists to drive them from. Its write path is therefore first-class here, not a
+footnote.
+
+### 18.2 The shape — ONE provider kind, THREE lanes
+
+`host.contribute.bindingProvider(contextType, provider)` →
+`BindingProviderHandle` (`invalidate()` + `dispose()`).
+
+- `readProperty` / `writeProperty` — one typed `PropertyPath` at a
+  `BindingTarget`. Serves a Layers row's visible/locked, a Character path over
+  a range, and applying a colour to the selection.
+- `readCollection` — the rows of a named `CollectionName`. Serves the Layers
+  list and the swatch/gradient list. **Takes no target**: document-scoped by
+  construction.
+- `applyMutation` — first refusal on a `MutationInput` the host panel would
+  otherwise send straight to core. Serves the STRUCTURAL edits that are not
+  property writes: `layerMove` / `layerInsert` / `layerRemove`,
+  `createSwatch` / `editSwatch` / `deleteSwatch`. **It introduces no new verb
+  vocabulary** — the host panel speaks core's ops and the provider intercepts
+  the ones it can honour, which is "no branching on plugin identity" applied
+  to writes.
+
+ONE provider kind with three OPTIONAL lanes, not a "property provider" and a
+"collection provider". The reason is lifetime, not taste: the same content-type
+owner answers all three questions about the SAME active selection, so two
+registrations would give them two independent lifetimes and two precedence
+stacks to be reconciled by convention. Separation of SHAPE without separation
+of LIFETIME.
+
+`BindingTarget` has exactly three variants, one per addressing need:
+`{selection, scope}` (the panel's ambient case; the provider resolves it in its
+OWN realm, so the host never has to name a thing it cannot address),
+`{element, id}` (core's `ElementId`, which ALREADY models both element kinds
+and the RANGE kinds — `storyRange` carries `{story_id, start, end}` — so
+range-scoped addressing is admitted by core's own type rather than a parallel
+one), and `{row, collection, id}` (a row the provider itself handed out, in the
+provider's own vocabulary).
+
+### 18.3 Four read answers, and why none of them collapse
+
+`BindingRead` is `value | mixed | absent | decline`.
+
+- `mixed` mirrors core's OWN convention: `PropertyEntry.value` is
+  `Value | null`, and the wire's comment says `None` = "mixed / indeterminate —
+  a `StoryRange` whose `CharacterRun`s carry conflicting values". A Character
+  panel over a multi-format selection must show "mixed", never a winner.
+- `absent` vs `decline` is the pair most easily conflated and the most
+  expensive to conflate. `absent` = "I own this target, the path does not apply
+  to it" → the panel blanks the row and does NOT consult core. `decline` = "not
+  mine" → resolution continues down the stack, then to core. Collapse them and
+  a raster text layer with no leading concept shows the CORE text frame's
+  leading.
+
+Writes answer `applied` (carrying a `MutationOutcome` — the SAME type
+`host.document.mutate` answers, so the host panel has ONE code path for the
+provider write and the core fall-through) or `decline`. A refused write (a
+locked layer) is `{applied:false, error}`, not a decline: the provider owned it
+and said no.
+
+**The undo rule the type states and cannot enforce:** a provider's write MUST
+land through a door that participates in undo — `host.document.mutate` (the
+document stack) or its active context's OWN op-log when that context owns undo
+(ADR-012 Tier 1). Either way Cmd-Z works. A provider mutating outside both IS
+the side channel this contract exists to prevent; the contract cannot police a
+callback in the plugin's realm, so it is stated as a requirement on the
+implementer, honestly.
+
+### 18.4 Lifetime is BORROWED from the edit context
+
+A provider is consulted only while the edit context named at registration is
+ACTIVE. It borrows `contributeEditContext`'s activation rather than inventing a
+parallel notion of "who is active", because the shell's context stack ALREADY
+is that notion. Concretely the SDK adapter **wraps the context's own
+`onEnter`/`onExit`**, so activation is DERIVED from the shell's stack and
+cannot drift from it — no second signal, no new editor API, and the bundle's
+own hooks still run first-class (the wrap is additive; `onExit` runs the
+bundle's hook BEFORE deactivating so its teardown can still resolve through its
+own provider).
+
+Consequence, stated rather than discovered: **a provider is never consulted
+while its context is inactive — including for the document-scoped lanes.** A
+plugin's colour vocabulary shows in the host Swatches panel while you are
+inside that plugin's frame and not after you leave it. That is exactly the
+retargeting ADR-023 set out to copy (there is ONE Character panel, and it
+retargets), applied consistently. A plugin needing its resources visible
+document-wide keeps its own panel. Worked through for the live consumer:
+plugin-sheets mints its swatches from inside its K-1 modal cell session, and
+the swatches it minted are real document swatches that core's own `swatches`
+collection carries afterwards — so the context-scoped lifetime costs it
+nothing.
+
+### 18.5 Precedence, and fall-through as a typed refusal
+
+Resolution walks the active stack **innermost-first**. That is the whole
+precedence model: contexts nest (the shell pushes, Esc pops one level), so the
+innermost active context is by construction the one that owns the selection. A
+`decline` continues down the stack. A path the provider did NOT declare is
+never offered to it at all — the declaration IS the gate.
+
+The registry answers a claim or a typed `resolved:false` / `handled:false`
+refusal, and **the HOST does the fall-through to core**. The registry holds no
+editor handle and must not: keeping the two separable is what lets the isolate
+implementation be an RPC proxy of exactly this shape. The split is the lesson
+`document.planarRegions` records — a refusal that looks like an empty result is
+a bug generator; here `resolved:false` is structurally unmistakable for
+"claimed, and the value is empty".
+
+**One row-scoped exception, and it is load-bearing.** For a
+`{kind:"row", collection}` target, only providers owning that collection are
+consulted, and an owned-but-undeclared path answers `absent`, NOT `decline` —
+because a row a provider handed out does not exist in core, so falling through
+would show the core selection's value for a row core has never heard of.
+
+### 18.6 The vocabulary rule: core-modelled values ONLY
+
+ADR-023 left open "whether a provider may serve paths core does not model … and
+inventing synthetic paths is its own decision". **DECIDED: no.** A provider
+addresses core's vocabulary and nothing else — `PropertyPath`,
+`CollectionName`, `Value`, `MutationInput["op"]`. In order of weight:
+
+1. A synthetic path is IDENTITY-SHAPED by construction: only its minter knows
+   it exists, so a host panel binding to one must know which plugin is active —
+   the exact anti-pattern ADR-023's Consequences section names.
+2. The shared vocabulary IS the interoperability contract. It is what makes a
+   DOCX run, a sheet cell and a raster text layer interchangeable behind one
+   Character panel. Widen it per plugin and you have three panels again,
+   wearing one panel's clothes.
+3. It is enforceable at the TYPE level today at zero runtime cost — those are
+   closed unions in the vendored wire — and doubly so: a declared path must
+   exist AND its value must be expressible as a core `Value`.
+4. The escape is the one every other gap here takes: add the path to core (an
+   RFI row + a protocol bump), or keep the surface on a plugin-owned
+   `contributePanel`, which ADR-023 explicitly PRESERVES for surfaces with no
+   host counterpart.
+
+Applied to the case that forced the question: paged.image works in raster
+RGB/CMYK pixel values and paged.web in CSS colours, neither of which has a
+`SwatchSpec` behind it. **Those do not become swatch providers** — they keep
+their own colour panels, and may serve only the core-modelled half they can
+honestly express as a `Value`, declining the rest. The ruling deliberately does
+not touch the case that already works: plugin-sheets mints real `SwatchSpec`
+swatches, so core-modelled colour is first-class through `readCollection` +
+`applyMutation`.
+
+A collection provider's rows MUST likewise carry CORE's row shape for that
+collection (`LayerSummary` for `"layers"`, …) — that is the same rule applied
+to collections, and it is what lets one host list render provider rows and core
+rows with one renderer. Where a provider's model has no counterpart for a
+field, the honest way to suppress the control is to leave that PATH out of
+`provides.paths`, which the row-scoped `absent` rule turns into a blanked
+control rather than a lie.
+
+### 18.7 Gates — three, all loud, and no new manifest field
+
+1. **Capability**, borrowed whole from the edit context:
+   `contributes.editContexts[]` must declare the type →
+   `PluginCapabilityError`. There is deliberately **no separate manifest field
+   and no separate capability**: the authority a provider exercises IS the
+   authority the active context already holds over the selection it owns, so a
+   second declaration would be ceremony, not a gate. (Precedent:
+   `EditContextContribution.toolIds` swaps the whole tool rail and is not
+   separately declared either.) It also leaves `manifest.schema.json` and the
+   hand-mirroring CLI untouched.
+2. **Ordering**: the context must already be registered by THIS bundle. A
+   provider on an unregistered type could never activate; accepting it would be
+   the fake-interactive failure the platform refuses.
+3. **Declaration shape**: a lane declared without its callback, a repeated
+   entry, or an empty `provides` is refused — each would make the provider
+   silently unreachable.
+
+Feature flags follow the `contribute.schemaPanel@1` + `schemaPanel.renderer@1`
+precedent exactly: **`contribute.bindingProvider@1`** is STATIC (this SDK has
+the door), **`bindings.provider@1`** is DYNAMIC (a shared registry is wired, so
+something will actually consult the provider). With no registry the door warns
+and returns an inert handle — never a throw, never a silent success.
+
+### 18.8 The registry — shared, host-injected, isolate-shaped
+
+`createBindingProviderRegistry()` (plugin-sdk) is the same injection shape as
+`createDataProviderRegistry` and for the same reason: resolution is
+CROSS-BUNDLE, so the editor builds ONE and passes the SAME instance to every
+`createBundleHost` call. It keeps the active context stack (written by the
+adapter from the shell's hooks) and the registered providers, and exposes the
+host-side `activeProviders / readProperty / writeProperty / readCollection /
+applyMutation / onDidChange`. The headless harness default-injects one, so the
+seam is exercisable in conformance suites without an editor.
+
+`invalidate()` exists because the host's usual refresh signal
+(`document.onDidChange`) fires on ENGINE mutations, and a provider's state
+frequently changes without one — a raster layer toggled inside plugin-image's
+own wasm layer graph moves no engine page. Without it the host panel goes
+quietly stale. Coarse by design ("re-read", not a per-path diff): panels are
+small, and a diff protocol here would be a second damage-tracking system on the
+wrong side of the wire.
+
+Every request and every answer is plain, `structuredClone`-able data,
+deliberately, so the seam proxies across the isolate unchanged. The provider's
+four callbacks are the non-clonable part; across the isolate they become RPC
+stubs the host calls by (plugin, contextType) — a SECOND registry
+implementation, not a contract change (§6).
+
+### 18.9 Additivity
+
+Wholly additive: a new `host.contribute.bindingProvider` member, the
+`binding-provider.ts` types, a `bindingProviders` host option, the
+`createBindingProviderRegistry` export, and the two feature flags. No existing
+member changed; **no manifest field, no capability, no wire change, no
+`PropertyPath`/`CollectionName` addition**. The one behavioural change to an
+existing door is internal and additive: `contribute.editContext` wraps
+`onEnter`/`onExit` when a registry is injected, and the bundle's own hooks run
+unchanged.
+
+### 18.10 Named gaps — what phases B/C will hit
+
+Recorded here rather than left for phase C to discover:
+
+- **`LayerSummary` is FLAT.** It carries `selfId / name / visible / locked /
+  printable / z` and has no `children`, `parentId` or `depth`; the only nested
+  wire shape is `SceneTreeNode`, which is not layer-scoped. ADR-023 phase B
+  asks the editor for **tree rows**, and phase C for a Layers panel with
+  nesting — but there is no core row shape for a tree to render. That is CORE
+  work (a parentage field on `LayerSummary`, or a different read), not contract
+  work, and this seam neither creates nor blocks it: a provider serving nested
+  rows today would have to invent a row shape, which the vocabulary rule
+  forbids.
+- **Row identity is a string here; plugin-image keys its layers by numeric
+  index.** `BindingTarget.row.id` is deliberately opaque to the host, so the
+  provider maps it back — but a provider whose rows are index-keyed must mint
+  STABLE ids (plugin-image already carries a stable numeric `id` alongside
+  `index`), because an index-derived row id goes stale on every reorder.
+- **The three shipped Layers surfaces implement three different subsets** —
+  the editor has no opacity/blend, plugin-draw no drag-drop, plugin-image no
+  `printable` and no engine ids. `provides.paths` + the row-scoped `absent`
+  rule is how a host panel learns what it may offer; phase C must actually READ
+  `activeProviders()` and disable rather than assume.
+- **Structural ops are core's op vocabulary, which means a provider must be
+  able to express its verb as one.** `layerMove`'s absolute `newIndex` and
+  plugin-image's `(from, to)` reorder are reconcilable; a verb with no core op
+  at all (plugin-image's "duplicate layer") has no lane and stays a plugin
+  command. That is the vocabulary rule biting where it should.

@@ -42,6 +42,12 @@ export { API_VERSION, satisfiesApiVersion } from "./version";
 export {
   createBundleHost,
   createDataProviderRegistry,
+  // ADR-023 phase A — the shared binding-provider registry the editor
+  // builds ONCE and injects into every bundle host; its own panels
+  // resolve through it (and fall through to core on a typed refusal).
+  createBindingProviderRegistry,
+  type BindingProviderBackend,
+  type RegisteredBindingProvider,
   HOST_FEATURES,
   ASSET_BUDGETS,
   BLOB_BUDGETS,
@@ -95,4 +101,5 @@ export { contributePanel, contributeSchemaPanel } from "./panels";
 export {
   contributeEditContext,
   contributeObjectType,
+  contributeBindingProvider,
 } from "./edit-context";
