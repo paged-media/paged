@@ -29,7 +29,7 @@
 // document is the wrong tradeoff — the builder is the source of truth
 // and the shapes are readable XML below.
 
-import { deflateRawSync } from "node:zlib";
+import { deflateRawSync, deflateSync } from "node:zlib";
 
 interface IdmlEntry {
   name: string;
@@ -208,6 +208,108 @@ export function packageWithSpread(
     { name: "Spreads/Spread_us.xml", data: spread },
     { name: "XML/BackingStory.xml", data: BACKING },
   ]);
+}
+
+/** A real, minimal, VALID PNG from RGBA8 pixels — signature + IHDR +
+ *  IDAT (zlib, filter 0 per scanline) + IEND. Pure Node (`node:zlib`),
+ *  deterministic, no vendored base64: the image-trace fixture needs a
+ *  placed image the ENGINE can actually parse, and hand-waving one would
+ *  make the conformance assertion about the fixture instead of the
+ *  feature. */
+export function pngBytes(
+  width: number,
+  height: number,
+  rgba: Uint8Array,
+): Uint8Array {
+  const chunk = (type: string, data: Uint8Array): Uint8Array => {
+    const name = new TextEncoder().encode(type);
+    const out = new Uint8Array(12 + data.length);
+    const dv = new DataView(out.buffer);
+    dv.setUint32(0, data.length, false);
+    out.set(name, 4);
+    out.set(data, 8);
+    const crcInput = new Uint8Array(4 + data.length);
+    crcInput.set(name, 0);
+    crcInput.set(data, 4);
+    dv.setUint32(8 + data.length, crc32(crcInput), false);
+    return out;
+  };
+  const ihdrData = new Uint8Array(13);
+  const ihdr = new DataView(ihdrData.buffer);
+  ihdr.setUint32(0, width, false);
+  ihdr.setUint32(4, height, false);
+  ihdrData[8] = 8; // bit depth
+  ihdrData[9] = 6; // colour type: RGBA
+  // 10..12 = compression / filter / interlace, all 0.
+  const raw = new Uint8Array(height * (1 + width * 4));
+  for (let y = 0; y < height; y++) {
+    const at = y * (1 + width * 4);
+    raw[at] = 0; // filter: None
+    raw.set(rgba.subarray(y * width * 4, (y + 1) * width * 4), at + 1);
+  }
+  const parts = [
+    new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk("IHDR", ihdrData),
+    chunk("IDAT", new Uint8Array(deflateSync(raw))),
+    chunk("IEND", new Uint8Array(0)),
+  ];
+  let total = 0;
+  for (const p of parts) total += p.length;
+  const out = new Uint8Array(total);
+  let at = 0;
+  for (const p of parts) {
+    out.set(p, at);
+    at += p.length;
+  }
+  return out;
+}
+
+/** One `<Rectangle>` hosting a PLACED IMAGE: the frame geometry plus an
+ *  `<Image>` child carrying BOTH a `LinkResourceURI` and INLINE base64
+ *  `<Contents>` bytes (core's Q-03 path: inline bytes take precedence
+ *  over the link, so the frame resolves with no asset resolver wired —
+ *  which is the only way a headless harness gets a real placed image).
+ *  `elementGeometry` reports `hasImage: true` for it. */
+export function imageItem(
+  self: string,
+  bounds: string,
+  uri: string,
+  png: Uint8Array,
+  pixels: { width: number; height: number },
+): string {
+  const [top, left, bottom, right] = bounds.split(" ").map(Number);
+  const base64 = Buffer.from(png).toString("base64");
+  const rectPath =
+    `<Properties><PathGeometry><GeometryPathType PathOpen="false"><PathPointArray>` +
+    `<PathPointType Anchor="${left} ${top}" LeftDirection="${left} ${top}" RightDirection="${left} ${top}"/>` +
+    `<PathPointType Anchor="${left} ${bottom}" LeftDirection="${left} ${bottom}" RightDirection="${left} ${bottom}"/>` +
+    `<PathPointType Anchor="${right} ${bottom}" LeftDirection="${right} ${bottom}" RightDirection="${right} ${bottom}"/>` +
+    `<PathPointType Anchor="${right} ${top}" LeftDirection="${right} ${top}" RightDirection="${right} ${top}"/>` +
+    `</PathPointArray></GeometryPathType></PathGeometry></Properties>`;
+  const imagePath =
+    `<Properties><PathGeometry><GeometryPathType PathOpen="false"><PathPointArray>` +
+    `<PathPointType Anchor="0 0" LeftDirection="0 0" RightDirection="0 0"/>` +
+    `<PathPointType Anchor="0 ${pixels.height}" LeftDirection="0 ${pixels.height}" RightDirection="0 ${pixels.height}"/>` +
+    `<PathPointType Anchor="${pixels.width} ${pixels.height}" LeftDirection="${pixels.width} ${pixels.height}" RightDirection="${pixels.width} ${pixels.height}"/>` +
+    `<PathPointType Anchor="${pixels.width} 0" LeftDirection="${pixels.width} 0" RightDirection="${pixels.width} 0"/>` +
+    `</PathPointArray></GeometryPathType></PathGeometry>` +
+    `<Contents><![CDATA[${base64}]]></Contents></Properties>`;
+  const sx = (right - left) / pixels.width;
+  const sy = (bottom - top) / pixels.height;
+  return (
+    // FillColor must reference a swatch the scaffold's Graphic.xml
+    // actually declares — `Swatch/None` is present but the parser refuses
+    // it here (probed: the load fails `loadFailed: parse`), so the image
+    // frame carries the ordinary Black the rest of the corpus uses. The
+    // fill is invisible under a resolved image anyway.
+    `<Rectangle Self="${self}" GeometricBounds="${bounds}" ItemTransform="1 0 0 1 0 0" FillColor="Color/Black">` +
+    rectPath +
+    `<Image Self="${self}img" ItemTransform="${sx} 0 0 ${sy} ${left} ${top}" ` +
+    `LinkResourceURI="${uri}">` +
+    imagePath +
+    `<Link LinkResourceURI="${uri}"/>` +
+    `</Image></Rectangle>`
+  );
 }
 
 /** One page-item path: a `<Polygon>` / `<GraphicLine>` with an explicit

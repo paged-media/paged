@@ -1,0 +1,16 @@
+[package]
+name = "draw-trace"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "paged.draw IMAGE TRACE kernel — RGBA pixels in, cubic contour regions out, over visioncortex's colour clustering + path walking + spline fitting. Host-free and wasm-free: the wasm-bindgen surface is trace-js."
+
+[lints]
+workspace = true
+
+[dependencies]
+visioncortex = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }

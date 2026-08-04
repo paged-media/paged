@@ -220,6 +220,8 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.insertPolarGrid",
       "media.paged.draw.command.blendSelected",
       "media.paged.draw.command.selectParentGroup",
+      // Illustrator Phase 2 (last row) — Image Trace v0 (the wasm lane).
+      "media.paged.draw.command.imageTrace",
     ]);
     expect(fake.keybindings.count()).toBe(0);
   });

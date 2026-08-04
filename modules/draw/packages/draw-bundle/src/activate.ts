@@ -91,6 +91,10 @@ import {
   INSERT_SHAPE_COMMAND_IDS,
 } from "./commands/insert-shapes";
 import { contributeBlendCommand } from "./commands/blend";
+import {
+  contributeImageTraceCommand,
+  IMAGE_TRACE_COMMAND_IDS,
+} from "./commands/image-trace";
 import { contributeSelectParentGroupCommand } from "./commands/select-parent-group";
 import {
   contributeFillGradientCommands,
@@ -232,6 +236,16 @@ export function activate(host: BundleHost): BundleHandle {
   // door; commands/select-parent-group.ts records the parentOf door
   // gap).
   const selectParentGroupCommandSub = contributeSelectParentGroupCommand(host);
+  // Illustrator Phase 2 (last row) — IMAGE TRACE v0. The one capability
+  // in this repo whose kernel is computer vision rather than path
+  // algebra, so it is the one that ships a Rust/wasm artifact
+  // (crates/draw-trace + crates/trace-js over `visioncortex`, declared in
+  // the manifest under capabilities.wasm[]). Pixels arrive through the
+  // C-5 placed-asset door; holes come out as COMPOUND paths through
+  // draw-geometry's `makeCompoundTable`, because the engine fills
+  // non-zero. One-shot, fills only, main-thread — commands/image-trace.ts
+  // states the whole honest scope, and the command TITLE carries it.
+  const imageTraceCommandSub = contributeImageTraceCommand(host);
   // W3.2 — the vectorGraphic edit context (closes B-02): double-click a
   // path enters anchor-editing (the anchor tools focused, the stroke
   // panel raised, a breadcrumb, Esc exits).
@@ -258,6 +272,7 @@ export function activate(host: BundleHost): BundleHandle {
         APPEARANCE_BAKE_COMMAND_IDS.length +
         SELECT_SAME_COMMAND_IDS.length +
         INSERT_SHAPE_COMMAND_IDS.length +
+        IMAGE_TRACE_COMMAND_IDS.length +
         2 // blendSelected + selectParentGroup
       } commands + 1 edit context ` +
       `(apiVersion ${manifest.apiVersion})`,
@@ -268,6 +283,7 @@ export function activate(host: BundleHost): BundleHandle {
   return {
     dispose() {
       svgIoSub.dispose();
+      imageTraceCommandSub.dispose();
       selectParentGroupCommandSub.dispose();
       blendCommandSub.dispose();
       insertShapeCommandsSub.dispose();

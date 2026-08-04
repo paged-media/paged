@@ -451,6 +451,58 @@ export {
   type BlendSource,
   type BlendFillPlan,
 } from "./commands/blend";
+// Illustrator Phase 2 (last row) — IMAGE TRACE v0: the wasm engine
+// facade, the platform decoder, the pure plan + the exact wire builders.
+// Exported for the conformance spec (the no-second-copy rule) — which
+// boots the REAL artifact in Node and drives the REAL engine with a plan
+// built from a REAL trace.
+export {
+  bootTraceEngine,
+  wrapTraceEngine,
+  traceBudget,
+  DEFAULT_TRACE_PIXELS,
+  TRACE_DEFAULTS,
+  TRACE_ENGINE_NOT_BUILT,
+  type TraceEngine,
+  type TraceLimits,
+  type TraceOptions,
+  type TraceAnchor,
+  type TraceContour,
+  type TraceRegion,
+  type TraceResult,
+} from "./trace-engine";
+export {
+  decodeRasterBytes,
+  decodeScaleFor,
+  decodeSizeFor,
+  rasterDecoderAvailable,
+  RASTER_DECODER_UNAVAILABLE,
+  type DecodedRaster,
+} from "./io/raster-decode";
+export {
+  IMAGE_TRACE_COMMAND_ID,
+  IMAGE_TRACE_COMMAND_IDS,
+  IMAGE_TRACE_COMMAND_CATEGORY,
+  IMAGE_TRACE_COMMAND_TITLE,
+  TRACE_SLOW_PIXELS,
+  imageTraceOf,
+  withImageTrace,
+  pixelToPageAffine,
+  regionTableFor,
+  tracePlanFor,
+  traceOptionsFrom,
+  traceSwatchMutationFor,
+  traceInsertBatchFor,
+  bindTraceRegions,
+  traceFinishBatchFor,
+  applyImageTrace,
+  applyImageTracePlan,
+  contributeImageTraceCommand,
+  type ImageTraceRecord,
+  type TracePlan,
+  type TracePlanRegion,
+  type TraceRegionBinding,
+} from "./commands/image-trace";
 // Wave 2 — group-selection cycling: the pure tree-parentage resolver,
 // exported for the conformance spec.
 export {

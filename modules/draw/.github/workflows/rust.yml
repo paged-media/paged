@@ -1,0 +1,79 @@
+# The IMAGE TRACE wasm lane (crates/draw-trace + crates/trace-js over
+# visioncortex). Everything else in this repo is TS; this job is what
+# keeps the one Rust corner honest.
+#
+# WHAT IT DOES NOT DO, on purpose: it does not assert that the COMMITTED
+# artifact is byte-identical to a fresh build. wasm-bindgen and wasm-opt
+# do not promise reproducible bytes across their own patch versions, so
+# such a check would go red on a toolchain bump rather than on a real
+# drift. What it does instead is REBUILD and re-validate the manifest
+# against the fresh artifact, so an over-budget or unbuildable artifact
+# fails here even though the repo ships a prebuilt one.
+name: rust
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: plugin-draw
+      # plugin-cli lives in the SDK repo; the manifest validate below
+      # needs it (same sibling layout the vitest job uses).
+      - uses: actions/checkout@v4
+        with:
+          repository: paged-media/sdk
+          path: sdk
+          token: ${{ secrets.STATE_DISPATCH_TOKEN || github.token }}
+      - name: toolchain (rust-toolchain.toml pins the channel + target)
+        run: rustup show
+        working-directory: plugin-draw
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: plugin-draw
+      - name: fmt
+        run: cargo fmt --all -- --check
+        working-directory: plugin-draw
+      - name: clippy (native + wasm32)
+        run: |
+          cargo clippy --workspace --all-targets -- -D warnings
+          cargo clippy --workspace --all-targets \
+            --target wasm32-unknown-unknown -- -D warnings
+        working-directory: plugin-draw
+      - name: test
+        run: cargo test --workspace
+        working-directory: plugin-draw
+      # binaryen is PINNED: an old apt binaryen breaks wasm-bindgen
+      # externref table grow (the "Table.grow failed" gotcha), and it also
+      # validates bulk-memory off by default, which rustc emits.
+      - name: binaryen
+        uses: Aandreba/setup-binaryen@v1.0.0
+        with:
+          token: ${{ github.token }}
+      - name: wasm-bindgen-cli (version must match Cargo.lock)
+        run: |
+          V=$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock \
+              | grep version | head -1 | cut -d'"' -f2)
+          cargo install wasm-bindgen-cli --version "$V" --locked
+        working-directory: plugin-draw
+      - name: build the wasm artifact (enforces the size budget)
+        run: ./scripts/build-wasm.sh
+        working-directory: plugin-draw
+      - name: manifest validate (measures the freshly built artifact)
+        run: |
+          node ../sdk/packages/plugin-cli/bin/paged-plugin.mjs validate \
+            packages/draw-bundle/manifest.json
+        working-directory: plugin-draw

@@ -16,7 +16,18 @@
     "editContext": [
       "vectorGraphic"
     ],
-    "network": false
+    "assets": [
+      "images"
+    ],
+    "network": false,
+    "wasm": [
+      {
+        "name": "trace",
+        "path": "wasm/trace_js_bg.wasm",
+        "purpose": "compute",
+        "maxBytes": 2097152
+      }
+    ]
   },
   "contributes": {
     "tools": [
@@ -90,7 +101,8 @@
       "media.paged.draw.command.insertRectGrid",
       "media.paged.draw.command.insertPolarGrid",
       "media.paged.draw.command.blendSelected",
-      "media.paged.draw.command.selectParentGroup"
+      "media.paged.draw.command.selectParentGroup",
+      "media.paged.draw.command.imageTrace"
     ],
     "importers": [
       "media.paged.draw.importer.svg"

@@ -1,3 +1,9 @@
 node_modules/
 dist/
 *.tsbuildinfo
+
+# Rust build output. The wasm ARTIFACT itself is COMMITTED (see
+# scripts/build-wasm.sh): `pnpm test` / `pnpm -r typecheck` and the
+# plugin-cli size gate all have to work on a fresh checkout with no Rust
+# toolchain installed.
+/target

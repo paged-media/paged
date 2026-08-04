@@ -26,7 +26,7 @@
 // The B-13 RESOLVED entry named this as the foundation's next step:
 // "a fixture CORPUS replay harness". These fixtures are that corpus.
 
-import { packageWithSpread, pathItem } from "./build-idml";
+import { imageItem, packageWithSpread, pathItem, pngBytes } from "./build-idml";
 
 export interface CorpusFixture {
   /** Stable id used in spec titles + the per-fixture assertions. */
@@ -221,6 +221,63 @@ export const F6_RING_PAIR: CorpusFixture & {
       { a: [500, 300] },
     ]);
     return packageWithSpread(outer + inner + open);
+  },
+};
+
+/** The RGBA8 pixels the F7 fixture embeds AND the image-trace spec
+ *  traces: a black RING on white — a filled square with a square hole.
+ *  The canonical hole shape, because a hole is the whole reason a traced
+ *  region is a COMPOUND path. Exported so the spec traces exactly the
+ *  pixels the document carries. */
+export function ringPixels(size = 48): Uint8Array {
+  const out = new Uint8Array(size * size * 4);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const inside = x >= 8 && x < size - 8 && y >= 8 && y < size - 8;
+      const hole = x >= 18 && x < size - 18 && y >= 18 && y < size - 18;
+      const ink = inside && !hole;
+      const at = (y * size + x) * 4;
+      out[at] = out[at + 1] = out[at + 2] = ink ? 0 : 255;
+      out[at + 3] = 255;
+    }
+  }
+  return out;
+}
+
+/** F7 — a PLACED IMAGE frame (a real, inline-embedded PNG of
+ *  `ringPixels`) plus a plain polygon to keep it company. The image-trace
+ *  target: `elementGeometry` reports `hasImage` on it, and the C-5
+ *  placed-asset door is asked for its bytes. */
+export const F7_PLACED_IMAGE: CorpusFixture & {
+  imageId: string;
+  uri: string;
+  pixels: number;
+  bounds: [number, number, number, number];
+} = {
+  id: "placed-image",
+  about: "a placed-image rectangle (inline PNG ring) + a polygon — image-trace target",
+  pageId: "usp",
+  ids: { rectangle: "uimg", polygon: "uspare" },
+  imageId: "uimg",
+  uri: "file:ring-48.png",
+  pixels: 48,
+  // GeometricBounds is "top left bottom right".
+  bounds: [100, 100, 340, 340],
+  bytes() {
+    const image = imageItem(
+      "uimg",
+      "100 100 340 340",
+      "file:ring-48.png",
+      pngBytes(48, 48, ringPixels(48)),
+      { width: 48, height: 48 },
+    );
+    const spare = pathItem("Polygon", "uspare", "400 400 500 500", false, [
+      { a: [400, 400] },
+      { a: [500, 400] },
+      { a: [500, 500] },
+      { a: [400, 500] },
+    ]);
+    return packageWithSpread(image + spare);
   },
 };
 

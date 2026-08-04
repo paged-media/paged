@@ -1,0 +1,73 @@
+# paged.draw — the Rust half of the plugin: the IMAGE TRACE engine.
+#
+# WHY RUST IS HERE AT ALL. Everything else in this repo is pure TS on
+# purpose (draw-geometry / draw-tools / draw-bundle). Image Trace is the
+# one capability whose kernel is not path algebra but computer vision:
+# hierarchical colour clustering over a raster, boundary walking, and
+# curve fitting. `visioncortex` (MIT/Apache-2.0, the library under
+# vtracer) is that kernel, and re-implementing it in TS would be a worse
+# tracer maintained by us. The plugin contract already carries a
+# `capabilities.wasm[]` slot, and paged.image / paged.sheet / paged.data
+# all ship wasm — so this is the established shape, not a new one.
+#
+# Layout: crates/ (Rust) sits beside packages/ (TS). The wasm artifact
+# lands in packages/draw-bundle/wasm/, which is BOTH the path the
+# manifest declares (relative to manifest.json) and the path the bundle
+# imports — ONE copy, so the manifest/package drift that bit paged.image
+# cannot happen here.
+[workspace]
+resolver = "2"
+members = ["crates/draw-trace", "crates/trace-js"]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.93"
+license = "AGPL-3.0-only OR LicenseRef-PMEL"
+publish = false
+
+[workspace.dependencies]
+# The tracer kernel. 0.9 is the current line; it pulls exactly three
+# crates (bit-vec, num-traits, flo_curves 0.3).
+#
+# flo_curves 0.3 — READ THIS BEFORE BUMPING. The engine repo patches
+# flo_curves 0.8 for a real abort (core Cargo.toml: the point sort in
+# `GraphPath::exterior_paths` compares x with a 0.01 epsilon band, which
+# is NOT a strict weak ordering; rustc's driftsort detects the violation
+# and panics, and `panic = abort` in a wasm worker makes it
+# uncatchable). That defect is NOT reachable from here, on two
+# independent counts:
+#   1. visioncortex touches flo_curves in exactly two places —
+#      `src/point.rs` (Coordinate/Coordinate2D trait impls on its own
+#      Point2) and `src/path/smooth.rs` (`bezier::Curve::fit_from_points`,
+#      the Schneider curve fitter). It never constructs a `GraphPath`,
+#      never calls `exterior_paths` / `path_add` / `path_sub` /
+#      `path_intersect` / `ray_collisions`. Grep the crate for
+#      `GraphPath` and you get nothing.
+#   2. The defective comparator does not exist in 0.3.1 (the version
+#      `"0.3"` resolves to — there is no 0.3.0 on crates.io).
+#      0.3.1's `exterior_paths` is a Dijkstra search with no point sort
+#      at all; the epsilon `sort_by` was introduced later.
+# So this dependency is a curve fitter, not a boolean path engine.
+visioncortex = "0.9.1"
+# EXACT pin: the wasm-bindgen CRATE and the wasm-bindgen CLI that
+# post-processes the artifact must be the same version or the generated
+# glue does not match the module. scripts/build-wasm.sh re-checks this
+# against Cargo.lock and refuses to build on a mismatch (paged.image's
+# guard, kept).
+wasm-bindgen = "=0.2.122"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+console_error_panic_hook = "0.1"
+
+[workspace.lints.clippy]
+too_many_arguments = "allow"
+
+# Release profile for the wasm artifact: size first (the plugin budget is
+# measured, not aspirational — see scripts/build-wasm.sh).
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

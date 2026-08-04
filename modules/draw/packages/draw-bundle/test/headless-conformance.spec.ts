@@ -105,7 +105,7 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
       // honest — the registry really got a panel; the log keeps the
       // schema so conformance can assert it. Stroke first, then fill
       // (Phase 2d), then the two React panels (layers, appearance).
-      // Then the forty-eight commands in registration order, then the
+      // Then the forty-nine commands in registration order, then the
       // W3.2 edit context. (Pen is a core built-in.)
       expect(harness.contributions.map((c) => c.kind)).toEqual([
         // Three anchor editors + the pro set (Curvature, Pencil,
@@ -211,6 +211,9 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         // Wave 2 — Blend selected.
         "command",
         // Wave 2 — Select parent group.
+        "command",
+        // Illustrator Phase 2 (last row) — Image Trace v0 (the wasm
+        // lane: crates/trace-js over visioncortex).
         "command",
         // W3.2 — the vectorGraphic edit context (B-02), recorded
         // through the harness's editContext registration hook.
