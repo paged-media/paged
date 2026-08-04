@@ -204,8 +204,14 @@ describe("drawBundle.activate", () => {
       // Illustrator Phase 2 — compound paths (Make / Release).
       "media.paged.draw.command.makeCompoundPath",
       "media.paged.draw.command.releaseCompoundPath",
-      // Illustrator Phase 2 — patterns v0 (a destructive step-and-repeat BAKE).
+      // Illustrator Phase 2 — PATTERN EDITING v1 (a re-editable tile
+      // FIELD; the swatch half of the catalog row is not buildable on
+      // this engine — RFI C-31).
       "media.paged.draw.command.makePatternFromSelection",
+      "media.paged.draw.command.editPatternField",
+      "media.paged.draw.command.selectPatternTiles",
+      "media.paged.draw.command.deletePatternTiles",
+      "media.paged.draw.command.releasePatternField",
       "media.paged.draw.command.cornersRounded",
       "media.paged.draw.command.cornersInverseRounded",
       "media.paged.draw.command.cornersBevel",
@@ -270,21 +276,22 @@ describe("drawBundle.activate", () => {
     expect(fake.keybindings.count()).toBe(0);
   });
 
-  it("registers the stroke + fill SCHEMA panels and the layers + appearance + graphic-styles + symbols + live-paint React panels", () => {
+  it("registers the stroke + fill SCHEMA panels and the layers + appearance + graphic-styles + symbols + live-paint + pattern React panels", () => {
     const fake = makeFakeEditor();
     loadBundle(() => fake.editor, drawBundle, {
       console: silent,
       storage: mapBacking(),
     });
     // The schema panels register through the panels registry as
-    // synthesized PanelContributions; the five React panels — layers
+    // synthesized PanelContributions; the six React panels — layers
     // (the layers.panel.json prototype made real), appearance (the
     // metadata stack + its one-fill/one-stroke honesty note), graphic
     // styles (the document-resident style library + the selection's link
     // into it), symbols (the document-resident artwork library + the
-    // instances that follow it) and live paint (the document-resident
-    // face RECIPES + the artwork each painted face materialised as) —
-    // register directly, all expert-leaf per B-01's list-widget limit.
+    // instances that follow it), live paint (the document-resident
+    // face RECIPES + the artwork each painted face materialised as) and
+    // pattern (the tile-field OPTIONS form + the not-a-swatch boundary)
+    // — register directly, all expert-leaf per B-01's list-widget limit.
     expect(fake.panels.ids()).toEqual([
       "media.paged.draw.panel.stroke",
       "media.paged.draw.panel.fill",
@@ -293,6 +300,7 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.panel.graphicStyles",
       "media.paged.draw.panel.symbols",
       "media.paged.draw.panel.livePaint",
+      "media.paged.draw.panel.pattern",
     ]);
   });
 

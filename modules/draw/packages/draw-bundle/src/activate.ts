@@ -153,6 +153,7 @@ import {
   makeLivePaintPanel,
   LIVE_PAINT_PANEL_ID,
 } from "./panels/live-paint-panel";
+import { makePatternPanel, PATTERN_PANEL_ID } from "./panels/pattern-panel";
 import { installStrokePanelBindings, strokePanel } from "./panels/stroke-panel";
 import { contributeSvgIo } from "./io/svg";
 
@@ -241,6 +242,24 @@ export function activate(host: BundleHost): BundleHandle {
     icon: "panel-swatches",
     ...makeLivePaintPanel(host),
   });
+  // Illustrator Phase 2 — PATTERN EDITING v1: the Pattern Options form.
+  // The panel exists because the catalog row is an EDITING MODE (layout,
+  // size, spacing, overlap, copies, dimming) and the SWATCH half of that
+  // row is not buildable at all — there is no pattern paint type in
+  // IDML, in `paged_model::Graphic` or on the wire (RFI C-31). So the
+  // panel carries the boundary verbatim (`PATTERN_PANEL_NOTE`, pinned by
+  // a conformance test) next to the knobs that ARE real.
+  // (There is no `panel-pattern` glyph in the host's kebab-case map, and
+  // an invented token renders the dock tab ICONLESS — the stroke panel's
+  // recorded lesson. So this REUSES `panel-object-styles`, which the
+  // graphic-styles panel also carries; a shared glyph is honest, an
+  // invented one is not. Deliberately NOT `panel-swatches`: a swatch
+  // icon is exactly the promise this feature cannot keep.)
+  host.contribute.panel({
+    id: PATTERN_PANEL_ID,
+    icon: "panel-object-styles",
+    ...makePatternPanel(host),
+  });
   // B-12 — the stroke DASH presets as commands (the schema binding
   // ceiling is scalar, a dash array is a vector → command-driven). Each
   // commits `setElementProperty{ frameStrokeDashArray, lengths }` to
@@ -277,10 +296,18 @@ export function activate(host: BundleHost): BundleHandle {
   // under the engine's NON-ZERO fill lives in draw-geometry — see
   // commands/compound-path.ts for the undo shape + the honest scope.
   const compoundPathCommandsSub = contributeCompoundPathCommands(host);
-  // Illustrator Phase 2 — PATTERNS v0, and honestly only v0: there is
-  // no pattern paint type in IDML / the engine / the wire, so this is a
-  // destructive step-and-repeat BAKE (copies, not a live fill). The
-  // command title says BAKE; commands/pattern.ts says why.
+  // Illustrator Phase 2 — PATTERN EDITING v1 (bake / re-plan / select /
+  // delete tiles / release). The catalog row's "save as a pattern
+  // swatch" half is NOT BUILDABLE and is not faked: there is no pattern
+  // paint type in IDML, none in `paged_model::Graphic` and none on the
+  // wire (RFI C-31), so what a field produces is ARTWORK. What v1 does
+  // deliver is the editing MODE v0 lacked — grid/brick/hex layouts,
+  // tile size, spacing (negative = overlap), overlap ORDER, copy counts
+  // and dimming, all persisted in a `.paged` container part — plus an
+  // ARTBOARD-AWARE tile count that closes v0's off-page residual
+  // (RFI C-23) and a release/re-plan/un-bake path so undo is no longer
+  // the only way back. commands/pattern.ts states the measured undo
+  // counts and the two batch-ordering rules the engine enforces.
   const patternCommandsSub = contributePatternCommands(host);
   // Phase 9 (Tier B) — Live Corners (the frameCornerOption*/Radius* wire
   // consumers, Rectangle-only — gap B-23; each preset is an eight-write
@@ -376,7 +403,7 @@ export function activate(host: BundleHost): BundleHandle {
   // host predates the importer/exporter doors.
   const svgIoSub = contributeSvgIo(host);
   host.log.info(
-    `activated — ${tools.length} tools + 2 schema panels + 5 React panels + ` +
+    `activated — ${tools.length} tools + 2 schema panels + 6 React panels + ` +
       `${
         DASH_COMMAND_IDS.length +
         GROUP_COMMAND_IDS.length +

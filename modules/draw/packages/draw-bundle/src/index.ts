@@ -232,37 +232,94 @@ export {
   type CompoundSource,
   type CompoundPaint,
 } from "./commands/compound-path";
-// Illustrator Phase 2 — PATTERNS v0: a DESTRUCTIVE step-and-repeat BAKE
-// (the engine has no pattern paint type — see commands/pattern.ts). The
-// pure plan + wire builders, exported for the conformance spec.
+// Illustrator Phase 2 — PATTERN EDITING v1: a RE-EDITABLE tile FIELD,
+// and deliberately NOT a pattern swatch (there is no pattern paint type
+// in IDML, in the engine's Graphic model or on the wire — RFI C-31; see
+// commands/pattern.ts). Real parameters (grid / brick / hex, size,
+// spacing incl. negative overlap, overlap ORDER, copies, dimming), an
+// artboard-aware tile count that closes v0's off-page residual, and a
+// recipe in a `.paged` container part so a field can be re-planned,
+// released or un-baked. Pure model + the exact wire builders exported
+// for the conformance spec (the no-second-copy rule).
 export {
   PATTERN_COMMAND_IDS,
   PATTERN_COMMAND_CATEGORY,
   MAKE_PATTERN_COMMAND_ID,
+  EDIT_PATTERN_COMMAND_ID,
+  SELECT_PATTERN_TILES_COMMAND_ID,
+  DELETE_PATTERN_TILES_COMMAND_ID,
+  RELEASE_PATTERN_COMMAND_ID,
+  PATTERN_PART,
+  PATTERN_LIBRARY_VERSION,
+  PATTERN_FEATURE,
+  PATTERN_LEGACY_FIELD,
+  PATTERN_MAX_TILES,
+  PATTERN_DEFAULTS,
   PATTERN_COLUMNS,
   PATTERN_ROWS,
   PATTERN_SPACING_PT,
-  patternBakeOf,
-  patternTileOf,
-  withPatternBake,
+  HEX_ROW_FACTOR,
+  PATTERN_SWATCH_NOTE,
+  patternParamsFrom,
+  patternStepFor,
+  orderPatternTiles,
   patternTilesFor,
+  fitTilesToPage,
   patternCopiesFor,
   offsetTable,
+  parsePatternLibrary,
+  serializePatternLibrary,
+  mintPatternId,
+  findPatternField,
+  upsertPatternField,
+  removePatternFieldFrom,
+  patternSourceOf,
+  patternTileOf,
+  withPatternKey,
   patternInsertBatchFor,
   bindPatternCopies,
   patternFinishBatchFor,
+  patternReleaseBatchFor,
+  patternDeleteBatchFor,
+  readPatternLibrary,
+  writePatternLibrary,
+  patternPageRect,
+  selectionBoundsOf,
   selectionTileSize,
+  patternLinks,
+  patternGroupOf,
+  resolvePatternField,
   patternPlanFor,
   applyMakePattern,
+  applyEditPattern,
+  applySelectPatternTiles,
+  applyDeletePatternTiles,
+  applyReleasePattern,
   contributePatternCommands,
-  type PatternBakeRecord,
-  type PatternTileMarker,
+  type PatternLayout,
+  type PatternOverlapOrder,
+  type PatternParams,
+  type PatternField,
+  type PatternLibrary,
+  type PatternSourceRef,
+  type PatternTileRef,
+  type PatternBounds,
+  type PatternPageRect,
   type PatternTile,
   type PatternSource,
   type PatternPlan,
   type PatternCopy,
   type PatternCopyBinding,
 } from "./commands/pattern";
+// …and its PANEL — the editing MODE the catalog row asks for (the only
+// half of that row this engine can carry). The note it renders is the
+// hard boundary, pinned by conformance.
+export {
+  makePatternPanel,
+  patternRowLabel,
+  PATTERN_PANEL_ID,
+  PATTERN_PANEL_NOTE,
+} from "./panels/pattern-panel";
 // Phase 9 (Tier B) → B-22 — Shape Builder gesture tool, now REGION
 // level: the gesture→pathfinderFaces builder, the element-lane fallback
 // builder, the raw→page face mapping and the host handler factory,

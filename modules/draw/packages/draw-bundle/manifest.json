@@ -57,7 +57,8 @@
       "media.paged.draw.panel.appearance",
       "media.paged.draw.panel.graphicStyles",
       "media.paged.draw.panel.symbols",
-      "media.paged.draw.panel.livePaint"
+      "media.paged.draw.panel.livePaint",
+      "media.paged.draw.panel.pattern"
     ],
     "commands": [
       "media.paged.draw.command.strokeDashSolid",
@@ -87,6 +88,10 @@
       "media.paged.draw.command.makeCompoundPath",
       "media.paged.draw.command.releaseCompoundPath",
       "media.paged.draw.command.makePatternFromSelection",
+      "media.paged.draw.command.editPatternField",
+      "media.paged.draw.command.selectPatternTiles",
+      "media.paged.draw.command.deletePatternTiles",
+      "media.paged.draw.command.releasePatternField",
       "media.paged.draw.command.cornersRounded",
       "media.paged.draw.command.cornersInverseRounded",
       "media.paged.draw.command.cornersBevel",
@@ -154,6 +159,12 @@
       },
       {
         "type": "livePaintRecipe",
+        "role": "spec",
+        "format": "json",
+        "linkable": false
+      },
+      {
+        "type": "patternRecipe",
         "role": "spec",
         "format": "json",
         "linkable": false

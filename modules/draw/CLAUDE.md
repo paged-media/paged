@@ -30,7 +30,36 @@ toolset via `contributeTool` (the Add/Delete/Convert anchor editors in
 the pen flyout, plus the Curvature/Pencil/Gradient-Annotator/Measure/
 Shape-Builder pro tools), the Stroke + Fill schema panels, the
 Appearance/Dash/Path-Ops/Select-Same/Live-Corners commands, the
-Compound-Path pair (Make / Release), the Pattern bake, IMAGE TRACE v0,
+Compound-Path pair (Make / Release), PATTERN EDITING v1 (a re-editable
+tile FIELD — and read this before the feature name: "save as a pattern
+SWATCH" IS NOT BUILDABLE and is not faked. There is no pattern paint type
+in IDML, none in `paged_model::Graphic` and none on the wire —
+`SwatchSpec`/`GradientSpec` are the only two shapes
+`createSwatch`/`createGradient` accept — so a field produces ARTWORK, not
+a fill. Filed as RFI C-31: a new paint kind + renderer support in BOTH
+backends + an IDML representation decision, i.e. core work. What v1 DOES
+deliver is everything else the catalog row asks for, and each item was
+one of v0's measured ceilings: real parameters — grid/brick/hex
+lattices, tile size, spacing where NEGATIVE is a geometric overlap, copy
+counts, dimming as a real `frameOpacity` on the copies, and `overlap` =
+which copy paints in FRONT, expressible only because insertion order IS
+paint order (so the vertical choice wins, being the outer sort, and the
+SOURCE can never be lifted above its copies); an ARTBOARD-AWARE tile
+count read from the `pages` collection's `sizePt`, so v0's off-page tiles
+— created, grouped and unreadable, because `pathAnchors`/`elementGeometry`
+are page-keyed (RFI C-23) — now happen only behind an explicit
+`fitToArtboard: false` the spec still pins; and RE-EDITABILITY: re-plan
+with new parameters AND fresh source geometry, release, un-bake, select
+tiles. The recipe is a `.paged` container part — the fourth in this
+repo, after graphic styles / symbols / live paint — with per-leaf links,
+so Release and un-bake work even on a host with no container writer
+(only the PARAMETERS are lost there). The Pattern Options React panel is
+where the not-a-swatch boundary is put in front of the user, and its
+wording is pinned by a test. A v0 `patternTile` stamp
+reads as the legacy field `""`: releasable and un-bakeable, not
+re-plannable. Two batch-ORDERING rules are measured and load-bearing —
+a batch that deletes then inserts is refused, and a group must be
+DISSOLVED before its members are deleted), IMAGE TRACE v0,
 GRAPHIC STYLES (a named, LINKED complete appearance — the library is a
 document-resident `.paged` container part written through `host.parts`
 and declared in `contributes.partTypes`; the link is a reference on the
@@ -67,8 +96,8 @@ stroke panel raised, Esc pops out). The bundle drives end-to-end through the rea
 the draw-plugin e2e (`editor` `apps/canvas/tests/e2e/draw-plugin.spec.ts`)
 and a DTP journey (`tests/journey/plugins/draw.journey.spec.ts`) author a
 path with the built-in Pen, then refine its anchors (add/delete/convert)
-and stroke through the bundle. The three TS packages carry 746 passing
-vitest (geometry 162, tools 113, bundle 471) and typecheck clean; the two
+and stroke through the bundle. The three TS packages carry 767 passing
+vitest (geometry 162, tools 113, bundle 492) and typecheck clean; the two
 crates carry 26 `cargo test` (draw-trace 22, trace-js 4).
 
 **The planar arrangement has ONE seam.** `draw-bundle/src/handlers/planar-regions.ts`
@@ -116,19 +145,38 @@ Two honesty facts these rows carry, and neither may be softened:
   editor-side call. `shift+z` is now the ONLY free shift key.
 
 **RFI C-15 has LANDED in core (b8e2b6b) but is NOT reachable from here
-yet.** A batch can now address an id an earlier child minted
-(`bindCreated { handle }` + `$h:` references), and the locally-synced
-engine wasm speaks it (`bindCreated` IS in the booted v58 build's op
-vocabulary — re-probed 2026-08-04) — but `@paged-media/plugin-api`'s
-`Mutation` union carries no `bindCreated` arm, and neither does the
-protocol-ahead `PendingMutation` delta plugin-sdk HEAD now maintains
-(re-checked at `f00d6dd`, and in the published `0.2.25-canary.0`). Until the
-contract package regenerates its wire types, every insert-then-style flow
-in this repo stays at its two-batch floor, and the "TWO batches ⇒ 2 undo
-steps" notes in `pattern.ts` / `appearance-bake.ts` / `compound-path.ts`
-(release) / `blend.ts` are still TRUE, not stale — even though core's own
-commit message lists exactly those four as collapsible. Re-check this
-when the contract bumps.
+yet — and the two-batch floor is now provably a CONTRACT floor, not an
+engine one.** Re-measured 2026-08-04 while building Pattern Editing v1,
+and pinned by a conformance test in `pattern.spec.ts` so the claim stays
+falsifiable: the booted v58 engine speaks C-15 END TO END. `{ op:
+"bindCreated", args: { handle } }` placed AFTER a creating child makes
+`$h:<handle>` address that child's minted id and the batch applies;
+placed BEFORE it, the engine refuses with its own sentence ("has nothing
+to name — no creating child ran before it in this batch"). It is a
+SEPARATE op, not a field on `insertPath` — passing `bindCreated` inside
+the insert's args is silently ignored and the later `$h:` reference then
+fails with "node not found". What blocks the collapse is purely the
+contract: `@paged-media/plugin-api`'s `Mutation` union carries no
+`bindCreated` arm, and neither does the protocol-ahead `PendingMutation`
+delta plugin-sdk HEAD maintains (re-checked at `f00d6dd`, and in the
+published `0.2.25-canary.0`). So every insert-then-style flow here stays
+at two batches by DISCIPLINE, and the "TWO batches ⇒ 2 undo steps" notes
+in `pattern.ts` / `appearance-bake.ts` / `compound-path.ts` (release) /
+`blend.ts` are still TRUE as shipped — but the reason has changed, and
+core's own commit message listing exactly those four as collapsible is
+now correct about the engine. Re-check when the contract bumps; the fix
+is a regeneration, not a redesign.
+
+**Two batch-ORDERING rules the engine enforces**, both measured and both
+load-bearing for any bake-then-rebuild flow (Pattern v1's re-plan is the
+first consumer of the second):
+- A batch that DELETES and then INSERTS is refused — "position N out of
+  range for parent Spread" — because the insert's z-position resolves
+  against the spread length the batch STARTED with. Inserts ride batch 1,
+  deletes ride batch 2. (Insert-then-delete in one batch is fine.)
+- A group must be DISSOLVED BEFORE its members are deleted. Deleting
+  first leaves the group holding a hole and the dissolve is refused with
+  "group has an id-less member that cannot round-trip".
 
 ## Hard rules
 

@@ -109,10 +109,10 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
       // VERBATIM through the harness's registration hook. Both are
       // honest — the registry really got a panel; the log keeps the
       // schema so conformance can assert it. Stroke first, then fill
-      // (Phase 2d), then the five React panels (layers, appearance,
-      // graphic styles, symbols, live paint). Then the seventy-two
-      // commands in registration order, then the W3.2 edit context.
-      // (Pen is a core built-in.)
+      // (Phase 2d), then the six React panels (layers, appearance,
+      // graphic styles, symbols, live paint, pattern). Then the
+      // seventy-six commands in registration order, then the W3.2 edit
+      // context. (Pen is a core built-in.)
       expect(harness.contributions.map((c) => c.kind)).toEqual([
         // Three anchor editors + the pro set (Curvature, Pencil,
         // Gradient Annotator, Measure, Shape Builder, Corner Radius) +
@@ -160,6 +160,9 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         // artwork each painted face materialised as) — likewise
         // expert-leaf React.
         "panel",
+        // The PATTERN OPTIONS panel (the tile-field parameters + the
+        // not-a-swatch boundary, RFI C-31) — likewise expert-leaf React.
+        "panel",
         // B-12 — the stroke dash-preset commands (Solid / Dashed /
         // Dotted / Dash-dot).
         "command",
@@ -197,7 +200,13 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "command",
         "command",
         // Illustrator Phase 2 — Make / Release compound path, then
-        // patterns v0 (the destructive step-and-repeat bake).
+        // PATTERN EDITING v1 (Bake / Re-plan / Select tiles / Delete
+        // tiles / Release — a re-editable tile FIELD; the catalog row's
+        // swatch half is not buildable, RFI C-31).
+        "command",
+        "command",
+        "command",
+        "command",
         "command",
         "command",
         "command",
