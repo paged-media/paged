@@ -232,12 +232,20 @@ export type OpacityMaskType = "luminosity" | "alpha";
  *  mask over `targetId`. The mask item leaves the page's z-order (its
  *  slot is captured) and one undo pops it back exactly.
  *
- *  RENDERER GAP, stated because it is user-visible: the mask is honoured
- *  by the CPU rasterizer and by PDF export, but NOT by the Vello/WebGPU
- *  backend the editor canvas uses — Vello's `push_layer` takes a shape,
- *  not a coverage buffer. On canvas the content currently draws
- *  UNMASKED; the exported PDF is correct. Do not present this as
- *  on-canvas WYSIWYG. */
+ *  RENDERS EVERYWHERE. An earlier revision of this comment warned that
+ *  the mask was honoured by the CPU rasterizer and PDF export but NOT by
+ *  the Vello/WebGPU backend the editor canvas uses, so a plugin must not
+ *  imply WYSIWYG. **That is no longer true, and it was never as
+ *  fundamental as it read**: the claim rested on the belief that Vello
+ *  lacked a coverage-buffer API, when the pinned version has
+ *  `Scene::push_luminance_mask_layer` (an unrelated 0.3.0 entry in
+ *  `Cargo.lock`, belonging to a spike crate, was misread as the resolved
+ *  version). Alpha masks need no mask layer at all — `Compose::DestIn`
+ *  IS `dst · src.a`.
+ *
+ *  Vello output is now byte-identical to the CPU rasterizer across
+ *  luminosity, alpha and both inverted forms. Safe to build WYSIWYG UI
+ *  over. */
 export type ApplyOpacityMaskMutation = {
   op: "applyOpacityMask";
   args: {
