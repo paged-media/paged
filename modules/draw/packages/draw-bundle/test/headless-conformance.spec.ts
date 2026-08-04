@@ -38,8 +38,10 @@
 // registered through `host.contribute.schemaPanel`, recorded by the
 // harness as a `schemaPanel` contribution carrying the verbatim
 // schema). The Pen itself is a built-in core-document tool (editor
-// W2.5 division); the layers prototype stays design JSON (expert-leaf
-// list territory). So the contribution log holds eighteen tools + two
+// W2.5 division); the layers prototype stays design JSON, and its
+// subject left this bundle with ADR 023 phase D — the Layers PANEL is
+// retired and paged.draw now resolves the HOST panel's values through
+// a binding provider instead. So the contribution log holds eighteen tools + two
 // schema panels + thirty-four commands (4 dash + 2 group + 2
 // gradient-fill + 3 path-ops + 2 join/average + 4 pathfinder + the Phase 9
 // Tier B 5 live-corner + 3 appearance + 3 select-same + the wave-2
@@ -109,8 +111,8 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
       // VERBATIM through the harness's registration hook. Both are
       // honest — the registry really got a panel; the log keeps the
       // schema so conformance can assert it. Stroke first, then fill
-      // (Phase 2d), then the six React panels (layers, appearance,
-      // graphic styles, symbols, live paint, pattern). Then the
+      // (Phase 2d), then the five React panels (appearance, graphic
+      // styles, symbols, live paint, pattern — Layers is retired). Then the
       // seventy-six commands in registration order, then the W3.2 edit
       // context. (Pen is a core built-in.)
       expect(harness.contributions.map((c) => c.kind)).toEqual([
@@ -144,9 +146,10 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         // Phase 2d — the fill schema panel (B-03).
         "panel",
         "schemaPanel",
-        // The LAYERS panel (the layers.panel.json prototype made real —
-        // an expert-leaf React panel, registered directly).
-        "panel",
+        // NO Layers panel — ADR 023 phase D retired it behind the
+        // binding-provider seam. Its absence from this log IS the
+        // assertion; the replacement's behaviour is pinned in
+        // `conformance/layers-provider.spec.ts`.
         // The APPEARANCE panel (the metadata stack + its one-fill/
         // one-stroke honesty note) — likewise expert-leaf React.
         "panel",

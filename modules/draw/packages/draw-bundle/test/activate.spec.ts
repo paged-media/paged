@@ -276,26 +276,31 @@ describe("drawBundle.activate", () => {
     expect(fake.keybindings.count()).toBe(0);
   });
 
-  it("registers the stroke + fill SCHEMA panels and the layers + appearance + graphic-styles + symbols + live-paint + pattern React panels", () => {
+  it("registers the stroke + fill SCHEMA panels and the appearance + graphic-styles + symbols + live-paint + pattern React panels — and NO Layers panel", () => {
     const fake = makeFakeEditor();
     loadBundle(() => fake.editor, drawBundle, {
       console: silent,
       storage: mapBacking(),
     });
     // The schema panels register through the panels registry as
-    // synthesized PanelContributions; the six React panels — layers
-    // (the layers.panel.json prototype made real), appearance (the
-    // metadata stack + its one-fill/one-stroke honesty note), graphic
-    // styles (the document-resident style library + the selection's link
-    // into it), symbols (the document-resident artwork library + the
-    // instances that follow it), live paint (the document-resident
-    // face RECIPES + the artwork each painted face materialised as) and
-    // pattern (the tile-field OPTIONS form + the not-a-swatch boundary)
-    // — register directly, all expert-leaf per B-01's list-widget limit.
+    // synthesized PanelContributions; the five React panels —
+    // appearance (the metadata stack + its one-fill/one-stroke honesty
+    // note), graphic styles (the document-resident style library + the
+    // selection's link into it), symbols (the document-resident artwork
+    // library + the instances that follow it), live paint (the
+    // document-resident face RECIPES + the artwork each painted face
+    // materialised as) and pattern (the tile-field OPTIONS form + the
+    // not-a-swatch boundary) — register directly, all expert-leaf per
+    // B-01's list-widget limit.
+    //
+    // THERE IS NO LAYERS PANEL, and its absence is the assertion: ADR
+    // 023 phase D retired it behind the binding-provider seam
+    // (`binding-provider/layers-provider.ts`, whose behaviour is pinned
+    // in `conformance/layers-provider.spec.ts`). A Layers panel
+    // reappearing here would be the duplication coming back.
     expect(fake.panels.ids()).toEqual([
       "media.paged.draw.panel.stroke",
       "media.paged.draw.panel.fill",
-      "media.paged.draw.panel.layers",
       "media.paged.draw.panel.appearance",
       "media.paged.draw.panel.graphicStyles",
       "media.paged.draw.panel.symbols",

@@ -38,8 +38,10 @@
 // clipping masks are NOT wire-representable — see commands/group.ts).
 //
 // The layers prototype (`panels/layers.panel.json`) stays a design
-// prototype: expert-leaf list territory the schema can't express yet
-// (see B-01 closure + DESIGN.md §12 honest limits).
+// prototype, and its subject has moved out of this bundle entirely:
+// ADR 023 phase D retired the Layers PANEL and replaced it with a
+// BINDING PROVIDER, so paged.draw now resolves what the HOST's one
+// Layers panel binds to instead of shipping a second one.
 //
 // Phase 4c adds the PRO TOOLSET: four tools (Curvature + Pencil — pure
 // machines over draw-geometry committing one insertPath; Gradient
@@ -139,7 +141,6 @@ import {
 } from "./commands/pathfinder-region";
 import { vectorGraphicEditContext } from "./edit-context";
 import { fillPanel, installFillPanelBindings } from "./panels/fill-panel";
-import { makeLayersPanel } from "./panels/layers-panel";
 import { makeLayersBindingProvider } from "./binding-provider/layers-provider";
 import { registerBindingProvider } from "./binding-provider/adr023-seam";
 import {
@@ -174,20 +175,15 @@ export function activate(host: BundleHost): BundleHandle {
   const strokeBindingSub = installStrokePanelBindings(host);
   contributeSchemaPanel(host, fillPanel);
   const fillBindingSub = installFillPanelBindings(host);
-  // The LAYERS panel — the panels/layers.panel.json prototype made real
-  // as the expert-leaf React panel its own comment prescribes (the v1
-  // schema has no list widget, B-01's honest limit). Live layer list +
-  // the layer wire ops (visible/lock/printable/rename/move/add/remove).
+  // The LAYERS panel is GONE — ADR 023 phase D, the first retirement
+  // behind the binding-provider seam.
   //
-  // ADR 023 phase D: this panel is BEING RETIRED behind the
-  // binding-provider seam below. It is still registered in THIS commit
-  // on purpose — the coverage moves first, so there is a point to roll
-  // back to if the seam turns out to be wrong.
-  host.contribute.panel({
-    id: "media.paged.draw.panel.layers",
-    icon: "panel-layers",
-    ...makeLayersPanel(host),
-  });
+  // It was `host.contribute.panel({id: "…panel.layers", …})`: a React
+  // list over `document.collection("layers")` carrying its own copy of
+  // the seven `layer*` ops. That was the correct LOCAL decision — the
+  // platform's only two doors both MINT A NEW PANEL — and the result was
+  // "Layers" existing three times across two repos.
+  //
   // ADR 023 phase D — the replacement, and it is NOT another panel.
   // While the `vectorGraphic` context is active, this bundle RESOLVES
   // what the HOST's own Layers panel binds to
@@ -450,7 +446,7 @@ export function activate(host: BundleHost): BundleHandle {
   // host predates the importer/exporter doors.
   const svgIoSub = contributeSvgIo(host);
   host.log.info(
-    `activated — ${tools.length} tools + 2 schema panels + 6 React panels + ` +
+    `activated — ${tools.length} tools + 2 schema panels + 5 React panels + ` +
       `${
         DASH_COMMAND_IDS.length +
         GROUP_COMMAND_IDS.length +
