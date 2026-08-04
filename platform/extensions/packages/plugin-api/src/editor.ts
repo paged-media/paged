@@ -603,6 +603,15 @@ export interface PagedEditor {
   };
   overlaySignals: {
     setToolPreview(value: ToolPreviewShape | null): void;
+    /** K-9 — the MULTI-shape tool-preview sink. `undefined` when the host
+     *  build's overlay renderer predates the multi-shape channel (older
+     *  editor / a headless host that wires only the single slot); the
+     *  `host.overlay.setToolPreviews` door then degrades to the first
+     *  shape on `setToolPreview` and
+     *  `supports("overlay.multiPreview@1")` is false. Same slot as
+     *  `setToolPreview` — this REPLACES the slot's content with the
+     *  list; `null` clears it. */
+    setToolPreviews?(value: readonly ToolPreviewShape[] | null): void;
   };
   tool: {
     setBaseTool(id: ToolId): void;

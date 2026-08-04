@@ -115,6 +115,12 @@ export const HOST_FEATURES: readonly string[] = [
   "document.elementProperties@1",
   "document.placeholders@1",
   "document.tree@1",
+  // C-16 — the per-element parentage read. STATIC like `document.tree@1`
+  // and for the same reason: it is served ENTIRELY by this SDK from the
+  // scene tree the existing `requestSceneTree` wire query already
+  // returns, so there is no engine version to gate on (no core door was
+  // needed — DESIGN.md §4.3d).
+  "document.parentOf@1",
   "document.onDidChange@1",
   "document.getMetadata@1",
   "document.setMetadata@1",
@@ -508,6 +514,18 @@ export function createDataProviderRegistry(): DataProviderBackend {
  */
 export type BundleTrust = "first-party";
 
+/**
+ * What the HOST APP injects as `shell` (K-10). Structurally the
+ * bundle-facing {@link ShellSurface}, except that doors added AFTER a
+ * host app adopted the option are optional here — today `saveFile`,
+ * which the editor gained one release after `pickFile`. A host that
+ * implements the full surface is assignable unchanged; a host that
+ * omits `saveFile` still injects a valid backend and
+ * `supports("shell.saveFile@1")` reports the truth.
+ */
+export type ShellBackend = Omit<ShellSurface, "saveFile"> &
+  Partial<Pick<ShellSurface, "saveFile">>;
+
 export interface CreateBundleHostOptions {
   /**
    * The host's trust assertion for this bundle (`plugin-trust-line.md`).
@@ -533,8 +551,11 @@ export interface CreateBundleHostOptions {
   console?: Pick<Console, "debug" | "info" | "warn" | "error">;
   /** Shell actions the HOST APP owns (the cockpit's panel placement).
    *  When absent, `host.shell` warns and no-ops, and
-   *  `supports("shell.openPanel@1")` answers false. */
-  shell?: ShellSurface;
+   *  `supports("shell.openPanel@1")` answers false. Typed as
+   *  {@link ShellBackend}, not `ShellSurface`: doors the host app has
+   *  not adopted yet are OPTIONAL here and each answers its own honest
+   *  no-backend value through the wrapper. */
+  shell?: ShellBackend;
   /** Host-provided panel widgets (W-04): the real code editor lives in
    *  the editor's UI package and is injected here. When absent,
    *  `host.widgets` is the plain-textarea fallback and
@@ -1046,6 +1067,45 @@ export function createBundleHost(
       door,
       "capabilities.document.openNative must be declared",
     );
+
+  // ------------------------------------------- C-16 the parent index
+  // `document.parentOf` needs NO engine door: the `requestSceneTree`
+  // reply already carries full parentage (nodes nest; the ones that are
+  // addressable carry their `ElementId`). What was missing was a
+  // per-element READ — paged.draw's selectParentGroup walked the entire
+  // tree on every press. So the adapter derives the index ONCE and
+  // rebuilds it when the document changes: the O(document) walk moves
+  // from once-per-press to once-per-edit, and the answer stays exactly
+  // as fresh as `tree()` (never fresher — that is the honest ceiling of
+  // a derived read).
+  //
+  // Keyed by the string element id; only string-id kinds nest (a
+  // storyRange/table address is structural, never a group child).
+  let parentIndex: Map<string, ElementId> | null = null;
+  let parentIndexWired = false;
+  const buildParentIndex = (roots: readonly SceneTreeNode[]) => {
+    const index = new Map<string, ElementId>();
+    const walk = (
+      nodes: readonly SceneTreeNode[],
+      parent: ElementId | null,
+    ): void => {
+      for (const node of nodes) {
+        const id = node.id ?? null;
+        // A node WITHOUT an ElementId (Spread / Page rows) is not an
+        // element, so it does not become anyone's parent — its children
+        // inherit the nearest addressable ancestor instead.
+        if (id && typeof id.id === "string") {
+          if (parent) index.set(id.id, parent);
+          walk(node.children ?? [], id);
+        } else {
+          walk(node.children ?? [], parent);
+        }
+      }
+    };
+    walk(roots, null);
+    return index;
+  };
+
   const document: DocumentSurface = {
     async mutate(mutation: MutationInput): Promise<MutationOutcome> {
       // Write-door capability gate (mutate-never-throws → non-applied
@@ -1234,6 +1294,52 @@ export function createBundleHost(
       });
       return reply.kind === "sceneTree" ? reply.payload.roots : [];
     },
+    async parentOf(id: ElementId): Promise<ElementId | null> {
+      // C-16 — served from the SAME scene tree as `tree()`, memoized.
+      // No new wire op (see the parent-index note above).
+      requireDocRead("document.parentOf");
+      // Only string-id kinds can be a group child; a storyRange/table
+      // address is structural, so the honest answer is null without a
+      // read at all.
+      if (typeof id.id !== "string") return null;
+      if (!parentIndexWired) {
+        // Wired LAZILY on first use so a bundle that never asks for
+        // parentage pays for no subscription. The index is dropped on
+        // every applied change (mutation / undo / redo) — the next read
+        // rebuilds it from one fresh tree.
+        parentIndexWired = true;
+        const off = getEditor().client.subscribe((msg) => {
+          if (
+            msg.kind === "mutationApplied" ||
+            msg.kind === "undoApplied" ||
+            msg.kind === "redoApplied" ||
+            // A newly opened document invalidates everything; the kind
+            // is matched defensively (not every host posts it).
+            msg.kind === "documentLoaded"
+          ) {
+            parentIndex = null;
+          }
+        });
+        store.add(toDisposable(off));
+      }
+      if (!parentIndex) {
+        // No in-flight de-duplication by design: a burst of CONCURRENT
+        // first calls may each issue a read (they cannot each get a
+        // WRONG answer, which a shared in-flight promise could once an
+        // invalidation lands mid-read). Sequential presses — the actual
+        // consumer shape — cost exactly one.
+        const reply = await getEditor().client.send({
+          kind: "requestSceneTree",
+        });
+        // A host that cannot answer leaves the index EMPTY rather than
+        // unset — a failed read must not turn into a rebuild storm on
+        // every press (the cost this door exists to remove).
+        parentIndex = buildParentIndex(
+          reply.kind === "sceneTree" ? reply.payload.roots : [],
+        );
+      }
+      return parentIndex.get(id.id) ?? null;
+    },
     async getMetadata(id) {
       requireDocRead("document.getMetadata");
       const key = metadataKey(manifest);
@@ -1412,6 +1518,27 @@ export function createBundleHost(
         'capabilities.rendering must include "overlay"',
       );
       getEditor().overlaySignals.setToolPreview(shape);
+    },
+    // K-9 — the MULTI-shape write on the SAME slot + the SAME gate. When
+    // the host wired a multi-shape sink we hand the list over verbatim
+    // (the adapter never re-shapes a preview — the renderer owns layout).
+    // When it did not, the honest degradation is the pre-K-9 behaviour a
+    // bundle used to hand-code: the FIRST shape through the single slot,
+    // never a throw. `null`/empty clears, so a bundle's teardown path is
+    // the same either way.
+    setToolPreviews(shapes) {
+      requireDeclared(
+        hasRendering("overlay"),
+        "overlay.setToolPreviews",
+        'capabilities.rendering must include "overlay"',
+      );
+      const signals = getEditor().overlaySignals;
+      const list = shapes && shapes.length > 0 ? shapes : null;
+      if (signals.setToolPreviews) {
+        signals.setToolPreviews(list);
+        return;
+      }
+      signals.setToolPreview(list ? list[0] : null);
     },
   };
 
@@ -1626,24 +1753,52 @@ export function createBundleHost(
   };
 
   // --------------------------------------------------------- shell
-  const shell: ShellSurface = options?.shell ?? {
+  // The bundle-facing surface WRAPS the injected backend rather than
+  // being it (K-10). Two reasons, both structural: the backend's doors
+  // arrive one release at a time (a host app that predates `saveFile`
+  // still injects a valid `shell`), and each door's no-backend answer
+  // has to be the honest one — a missing member must never surface to a
+  // bundle as `host.shell.saveFile is not a function`.
+  const shellBackend = options?.shell;
+  const shell: ShellSurface = {
     openPanel(panelId) {
+      if (shellBackend) {
+        shellBackend.openPanel(panelId);
+        return;
+      }
       log.warn(
         `shell.openPanel("${panelId}") ignored — the host app provided no ` +
           `shell actions (probe with supports("shell.openPanel@1"))`,
       );
     },
-    closePanel() {
+    closePanel(panelId) {
       /* same contract as openPanel — warn once is enough */
+      shellBackend?.closePanel(panelId);
     },
-    async pickFile() {
+    async pickFile(pickOptions) {
       // No picker wired (headless / not-yet-adopted host): the honest
       // no-picker door resolves empty (probe supports("shell.pickFile@1")).
+      if (shellBackend) return shellBackend.pickFile(pickOptions);
       log.warn(
         `shell.pickFile() ignored — the host app provided no shell actions ` +
           `(probe with supports("shell.pickFile@1"))`,
       );
       return [];
+    },
+    // K-10 — the write half. No saver wired (headless, or a host app
+    // older than the door) answers FALSE, never a throw: "the bytes were
+    // not delivered" is a result a bundle can act on (keep the Export
+    // Center path, disable the menu item), which a rejection would turn
+    // into an unhandled promise in a click handler.
+    async saveFile(saveOptions) {
+      if (shellBackend?.saveFile) {
+        return shellBackend.saveFile(saveOptions);
+      }
+      log.warn(
+        `shell.saveFile("${saveOptions.suggestedName}") ignored — the host ` +
+          `app wired no file saver (probe with supports("shell.saveFile@1"))`,
+      );
+      return false;
     },
   };
 
@@ -2277,6 +2432,17 @@ export function createBundleHost(
     // in-frame layer will actually render.
     featureSet.add("rendering.sceneLayer@1");
   }
+  // `?.` although the member is non-optional in the contract: a host
+  // handle is a plain object a test/adapter may build partially, and a
+  // feature PROBE must never be the thing that throws.
+  if (typeof getEditor().overlaySignals?.setToolPreviews === "function") {
+    // K-9 — a real MULTI-shape preview sink is wired (the editor's
+    // overlay renders a list, not one node). The door always exists
+    // (it degrades to the first shape on the single slot without this);
+    // the flag tells a bundle it may publish geometry AND a label
+    // together instead of trading one for the other.
+    featureSet.add("overlay.multiPreview@1");
+  }
   if (getEditor().images) {
     // C-6 (I-06) — a real resource channel is wired (the editor routes the
     // v44 claim/submit/release + surfaces resourceTilesNeeded). The
@@ -2290,6 +2456,13 @@ export function createBundleHost(
     // contract mandates pickFile); the flag tells a bundle a real picker
     // is reachable rather than the empty no-picker door (K-5 / S-11).
     featureSet.add("shell.pickFile@1");
+    if (typeof options.shell.saveFile === "function") {
+      // K-10 — PER-MEMBER, unlike pickFile above: `saveFile` joined the
+      // backend after hosts had already adopted the option, so its
+      // presence is the only truthful signal that bytes handed to
+      // `host.shell.saveFile` reach the user's filesystem.
+      featureSet.add("shell.saveFile@1");
+    }
   }
   if (options?.widgets) {
     featureSet.add("widgets.codeEditor@1");

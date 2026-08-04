@@ -77,6 +77,8 @@ export type {
   ShellSurface,
   FilePickerOptions,
   PickedFile,
+  // K-10 — the save-file door's payload (the inverse of PickedFile).
+  SaveFileOptions,
   StorageSurface,
   BlobSurface,
   BlobUsage,

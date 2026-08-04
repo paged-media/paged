@@ -487,6 +487,57 @@ describe("contribution recording + dispose honesty", () => {
     expect(rec!.anchors[1].left).toEqual([40, 30]);
   });
 
+  it("records a MULTI-shape tool preview headlessly (K-9 — geometry AND a label)", async () => {
+    live = await open();
+    const shapes = [
+      {
+        pageId: "p1",
+        points: [
+          [10, 10] as [number, number],
+          [80, 45] as [number, number],
+        ],
+      },
+      {
+        kind: "text" as const,
+        pageId: "p1",
+        x: 45,
+        y: 28,
+        text: "78.3 pt · 26.6°",
+        background: true,
+      },
+    ];
+    const bundle = defineBundle({
+      manifest: {
+        id: "media.paged.draw",
+        name: "draw",
+        version: "1.0.0",
+        apiVersion: "^0.2",
+        capabilities: {
+          document: { read: "broad", write: "broad" },
+          rendering: ["overlay"],
+        },
+      },
+      activate(h) {
+        // The harness wires a real multi-shape sink, so the door does NOT
+        // take its first-shape degradation path here.
+        expect(h.supports("overlay.multiPreview@1")).toBe(true);
+        expect(live!.lastToolPreviews()).toBeNull();
+        h.overlay.setToolPreviews(shapes as never);
+        return { dispose() {} };
+      },
+    });
+    live.loadBundle(bundle);
+    // The gap this closes, headlessly assertable: the measured LINE and
+    // the frozen READOUT are published together instead of traded.
+    const rec = live.lastToolPreviews() as typeof shapes | null;
+    expect(rec).not.toBeNull();
+    expect(rec).toHaveLength(2);
+    expect(rec![0]).toHaveProperty("points");
+    expect(rec![1]).toHaveProperty("kind", "text");
+    // One SLOT: `lastToolPreview()` tracks the list's first shape.
+    expect(live.lastToolPreview()).toHaveProperty("points");
+  });
+
   it("a bundle without rendering 'overlay' cannot push a path preview", async () => {
     live = await open();
     const bundle = defineBundle({

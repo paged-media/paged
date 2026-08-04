@@ -62,6 +62,8 @@ export {
   type WorkerBackend,
   type SpawnedWorker,
   type SecretStoreBackend,
+  // K-10 — what a host app injects as `shell` (saveFile optional).
+  type ShellBackend,
   type StorageBacking,
 } from "./host-impl";
 export { FALLBACK_WIDGETS } from "./widgets-fallback";

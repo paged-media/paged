@@ -268,6 +268,13 @@ export interface HeadlessHost {
    *  Béziers) rather than a flattened polyline. `null` until set, and
    *  reset to `null` when the bundle clears its preview. */
   lastToolPreview(): ToolPreviewShape | null;
+  /** K-9 — the last LIST a bundle pushed through
+   *  `host.overlay.setToolPreviews`, or `null` when it cleared / never
+   *  used the multi-shape door. The harness wires the multi-shape sink,
+   *  so `supports("overlay.multiPreview@1")` is true headlessly and a
+   *  bundle's "geometry AND label at once" claim is assertable without a
+   *  browser. `lastToolPreview()` tracks the list's FIRST shape. */
+  lastToolPreviews(): readonly ToolPreviewShape[] | null;
   /** Load an IDML package into the headless document. Resolves to the
    *  loaded page ids (or throws on a parse failure). */
   load(idml: Uint8Array): Promise<string[]>;
@@ -301,6 +308,7 @@ function makeEngineEditor(
   worker: HeadlessCanvasWorker,
   recorder: RecordedContribution[],
   onToolPreview: (value: ToolPreviewShape | null) => void,
+  onToolPreviews: (value: readonly ToolPreviewShape[] | null) => void,
 ): PagedEditor {
   const protocol = worker.protocolVersion;
   const listeners = new Set<(msg: WorkerToMain) => void>();
@@ -364,6 +372,7 @@ function makeEngineEditor(
 
   let elementSelection: ElementId[] = [];
   let toolPreview: ToolPreviewShape | null = null;
+  let toolPreviews: readonly ToolPreviewShape[] | null = null;
 
   const client: PagedEditor["client"] = {
     async mutate(mutation: Mutation): Promise<WorkerToMain> {
@@ -464,6 +473,18 @@ function makeEngineEditor(
         // conformance can assert the cubic ToolPreviewPath variant (B-07).
         onToolPreview(toolPreview);
       },
+      // K-9 — the MULTI-shape sink. Wiring it headlessly is what makes
+      // `supports("overlay.multiPreview@1")` true in the harness, so a
+      // bundle's "geometry AND label at once" claim is conformance-
+      // assertable without a browser. One slot: the list also updates
+      // `lastToolPreview()` (to its first shape) so an older assertion
+      // still reads something true rather than a stale value.
+      setToolPreviews(value: readonly ToolPreviewShape[] | null) {
+        toolPreviews = value && value.length > 0 ? value : null;
+        toolPreview = toolPreviews ? toolPreviews[0] : null;
+        onToolPreviews(toolPreviews);
+        onToolPreview(toolPreview);
+      },
     },
     // No tool spine + no content caret headlessly — both are inert
     // members of the narrow handle, present so the cast is total.
@@ -498,9 +519,18 @@ export async function createHeadlessHost(
   // a bundle's pen/anchor handler can be asserted to emit the cubic
   // `ToolPreviewPath` variant rather than a flattened polyline (B-07).
   let lastPreview: ToolPreviewShape | null = null;
-  const editor = makeEngineEditor(worker, contributions, (value) => {
-    lastPreview = value;
-  });
+  // K-9 — the LIST a bundle pushed through `overlay.setToolPreviews`.
+  let lastPreviews: readonly ToolPreviewShape[] | null = null;
+  const editor = makeEngineEditor(
+    worker,
+    contributions,
+    (value) => {
+      lastPreview = value;
+    },
+    (value) => {
+      lastPreviews = value;
+    },
+  );
 
   // A placeholder manifest until a bundle is loaded; `loadBundle`
   // rebuilds the host bound to the bundle's own manifest so the
@@ -677,6 +707,9 @@ export async function createHeadlessHost(
     },
     lastToolPreview() {
       return lastPreview;
+    },
+    lastToolPreviews() {
+      return lastPreviews;
     },
     async load(idml: Uint8Array): Promise<string[]> {
       const raw = worker.loadDocumentDirect(seqCounter++, idml);

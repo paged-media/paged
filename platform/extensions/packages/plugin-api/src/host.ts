@@ -764,6 +764,31 @@ export interface DocumentSurface {
   ): Promise<HitResult | null>;
   elementGeometry(ids: ElementId[]): Promise<ElementGeometryItem[]>;
   tree(): Promise<SceneTreeNode[]>;
+  /**
+   * C-16 — the per-element PARENTAGE read: the nearest ANCESTOR that is
+   * itself an addressable element (a group today — the only element kind
+   * that nests page items), or `null` when there is none.
+   *
+   * Consumer: paged.draw's `selectParentGroup` command
+   * (`draw-bundle/src/commands/select-parent-group.ts`), which climbs to
+   * the containing group on every press. Without this door it re-read
+   * `tree()` and walked the WHOLE scene tree per invocation — O(document)
+   * per keystroke, a cost its own module header records as a named gap.
+   *
+   * `null` is the honest answer for three distinct cases a caller need
+   * not distinguish: the element is top-level (its container is a Page /
+   * Spread, which is NOT an element and never a selection target), the
+   * id does not resolve, or the address is a story/table range (those
+   * never nest in groups).
+   *
+   * A pure READ gated on `capabilities.document.read`, resolved from the
+   * SAME scene-tree the `tree()` door reads — no extra engine query and
+   * no wire op of its own (DESIGN.md §4.3d). The host keeps a parent
+   * index and rebuilds it when the document changes, so the O(document)
+   * walk happens once per EDIT rather than once per press. It is
+   * therefore exactly as fresh as `tree()` and no fresher.
+   */
+  parentOf(id: ElementId): Promise<ElementId | null>;
   /** Read a text frame's thread topology (protocol v38, C-2/S-05) — the
    *  ordered chain of frames a story flows through, tail-overflow flagged.
    *  Empty when the story has no frame or no document is loaded. A
@@ -920,6 +945,33 @@ export interface TextSurface {
  *  plugin scene layers are the P2 channel — reserved, not faked. */
 export interface OverlaySurface {
   setToolPreview(shape: ToolPreviewShape | null): void;
+  /**
+   * K-9 — publish MANY preview shapes at once (DESIGN.md §4.5a). The
+   * single-slot `setToolPreview` is last-write-wins, so a tool could
+   * show geometry OR a label, never both: paged.draw's **Measure** trades
+   * the frozen line for the frozen readout at pointer-up, and its region
+   * **Shape Builder** can highlight one hovered face but not shade the
+   * whole collected set. Both trades are named in that bundle's code;
+   * this door retires them.
+   *
+   * ONE SLOT, two writers: this REPLACES whatever the tool-preview slot
+   * holds with `shapes` (rendered in array order, first = bottom-most);
+   * `null` — or an empty array — clears it, exactly like
+   * `setToolPreview(null)`. It is not a second overlay layer (that would
+   * resurrect z-ordering and double the teardown paths).
+   *
+   * Shapes may address DIFFERENT pages: each carries its own `pageId`
+   * and the host resolves the page rect per shape.
+   *
+   * Same `capabilities.rendering` ∋ `"overlay"` gate as
+   * `setToolPreview` — one channel, one gate. Probe
+   * `supports("overlay.multiPreview@1")`: it is DYNAMIC (unlike the
+   * static `overlay.text@1`), true only when the host wired a real
+   * multi-shape sink. When it is false the door still works and never
+   * throws — it forwards the FIRST shape through the single slot, which
+   * is precisely the pre-K-9 behaviour a bundle used to hand-code.
+   */
+  setToolPreviews(shapes: readonly ToolPreviewShape[] | null): void;
 }
 
 // ---------------------------------------------------------------- shell
@@ -930,6 +982,11 @@ export interface OverlaySurface {
  * function over the editor handle). When the host app provides no
  * implementation, calls warn and no-op — probe with
  * `host.supports("shell.openPanel@1")`.
+ *
+ * The two FILE doors are a pair: `pickFile` reads bytes IN (K-5 / S-11),
+ * `saveFile` hands bytes OUT (K-10). Both are byte-level by design —
+ * no DOM `File`/`Blob` ever crosses the contract — and both answer an
+ * honest "nothing happened" value rather than throwing.
  */
 export interface ShellSurface {
   /** Open a REGISTERED panel as the active dock tab (the
@@ -942,6 +999,43 @@ export interface ShellSurface {
    *  the user cancels OR no picker is wired (the honest no-picker door);
    *  probe `host.supports("shell.pickFile@1")` for the latter. */
   pickFile(options?: FilePickerOptions): Promise<readonly PickedFile[]>;
+  /**
+   * K-10 — the WRITE half of the picker door: hand the host bytes to
+   * deliver to the user's filesystem under `suggestedName` (DESIGN.md
+   * §4.5c). The mirror of `pickFile`: bytes cross, never a DOM `File`
+   * or a `Blob`, so a bundle stays isolate-ready.
+   *
+   * Consumer: **paged.image**, which can compute an adjusted
+   * PSD/PNG/JPEG but — with `pickFile` READ-only — could only deliver it
+   * through the Export Center's exporter registry, so "Save adjusted
+   * copy…" was unofferable from the bundle's own panel.
+   *
+   * Answers `true` when the host ACCEPTED the bytes and handed them to
+   * its save path, `false` when it did not — no saver wired (probe
+   * `supports("shell.saveFile@1")` to know that up front), the user
+   * declined, or the host refused. Never throws: a refused save is a
+   * result, like a refused mutation. Honest ceiling: a host backed by
+   * the browser's anchor-download cannot observe a user cancel, so
+   * `true` means "delivered to the browser's download path", not "a file
+   * exists on disk"; a File System Access backing can answer a real
+   * `false`.
+   */
+  saveFile(options: SaveFileOptions): Promise<boolean>;
+}
+
+/** What `ShellSurface.saveFile` delivers (K-10) — the inverse of
+ *  {@link PickedFile}, field-for-field, so bytes picked from disk can be
+ *  handed straight back after an edit. */
+export interface SaveFileOptions {
+  /** File name incl. extension the host proposes to the user (it may
+   *  sanitize or de-duplicate it — the name is a suggestion, not a
+   *  path; a bundle can never target a location). */
+  suggestedName: string;
+  /** The bytes to write. */
+  bytes: Uint8Array;
+  /** MIME type for the saved file (same field name as `PickedFile`).
+   *  Absent ⇒ the host uses `application/octet-stream`. */
+  mimeType?: string;
 }
 
 /** Filter + multiplicity for `ShellSurface.pickFile` (K-5 / S-11). */

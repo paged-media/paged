@@ -145,10 +145,14 @@ export function makeFakeImageChannel() {
  *  editContext/objectType registries (the WITH-registry path); when
  *  false they are absent and the host adapter takes the recording-stub
  *  path. Defaults to wired. `images` injects a fake resource channel
- *  (C-6) onto the editor handle. */
+ *  (C-6) onto the editor handle. `multiPreview` wires the K-9
+ *  MULTI-shape tool-preview sink (`overlaySignals.setToolPreviews`);
+ *  OFF by default, which is the older-host path the door must degrade
+ *  onto. */
 export function makeFakeEditor(opts?: {
   wireContextRegistries?: boolean;
   images?: ReturnType<typeof makeFakeImageChannel>["channel"];
+  multiPreview?: boolean;
 }) {
   const wireContextRegistries = opts?.wireContextRegistries ?? true;
   const listeners = new Set<Listener>();
@@ -162,6 +166,10 @@ export function makeFakeEditor(opts?: {
   const mutations: unknown[] = [];
   let selectionIds: unknown[] = [];
   let toolPreview: unknown = null;
+  let toolPreviews: unknown = null;
+  // C-16 — the scriptable `requestSceneTree` reply (the parentage
+  // source). Empty roots by default, as before.
+  let sceneTreeRoots: unknown[] = [];
   // v51 .paged container parts — an in-memory store so host.parts round-trips.
   const pagedParts = new Map<string, number[]>();
   let nextMutateReply: unknown = {
@@ -200,7 +208,7 @@ export function makeFakeEditor(opts?: {
         return { kind: "hitResult", payload: { element: null } };
       }
       if (msg.kind === "requestSceneTree") {
-        return { kind: "sceneTree", payload: { roots: [] } };
+        return { kind: "sceneTree", payload: { roots: sceneTreeRoots } };
       }
       if (msg.kind === "requestElementProperties") {
         return elementPropertiesReply;
@@ -250,7 +258,19 @@ export function makeFakeEditor(opts?: {
     overlaySignals: {
       setToolPreview: (v: unknown) => {
         toolPreview = v;
+        toolPreviews = null;
       },
+      // K-9 — present ONLY when the test asks for it, so the same fake
+      // covers both hosts the door must serve (multi-shape sink wired /
+      // not wired).
+      ...(opts?.multiPreview
+        ? {
+            setToolPreviews: (v: unknown) => {
+              toolPreviews = v;
+              toolPreview = null;
+            },
+          }
+        : {}),
     },
     ...(opts?.images ? { images: opts.images } : {}),
   };
@@ -280,6 +300,15 @@ export function makeFakeEditor(opts?: {
     },
     listenerCount: () => listeners.size,
     getToolPreview: () => toolPreview,
+    /** K-9 — the last LIST written through `setToolPreviews` (only ever
+     *  non-null when the fake was built with `multiPreview: true`). */
+    getToolPreviews: () => toolPreviews,
+    /** C-16 — script the scene tree the parentage read derives from.
+     *  Counts the `requestSceneTree` sends via `sent`, which is how the
+     *  memoization is asserted. */
+    setSceneTree: (roots: unknown[]) => {
+      sceneTreeRoots = roots;
+    },
     setNextMutateReply: (r: unknown) => {
       nextMutateReply = r;
     },

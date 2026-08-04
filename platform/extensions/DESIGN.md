@@ -291,6 +291,60 @@ change publishes as a canary and the bundle repins; the door is built
 and tested here first (`test/planar-regions.spec.ts`), which is the
 sequencing every promoted member follows.
 
+### 4.3d `host.document.parentOf` — the parentage read door [C-16]
+
+`parentOf(id): Promise<ElementId | null>` — the nearest ANCESTOR that is
+itself an addressable element (a group today: the only element kind that
+nests page items), `null` when there is none.
+
+**Consumer (the promotion rule):** paged.draw's `selectParentGroup`
+command (`draw-bundle/src/commands/select-parent-group.ts`), which climbs
+to the containing group on every press. Its module header already records
+the gap in its own words — *"there is no per-element
+`document.parentOf(id)` read — this command re-reads the WHOLE tree per
+invocation, which is O(document) on every press … a targeted parent read
+door is the RFI candidate"*. This is that door. The bundle's pure
+`parentGroupOf(roots, target)` walk stays exported for its conformance
+spec; what changes is that the command stops paying for a full tree walk
+per keystroke.
+
+**No core door was needed, and that is the finding.** The
+`requestSceneTree` → `sceneTree` reply the `tree()` door already reads
+carries the FULL parentage: nodes nest, and every addressable node
+carries its `ElementId`. The gap was never "the engine can't tell us" —
+it was "the facade offers no per-element question, so every consumer
+re-derives the whole answer". So `parentOf` is served ENTIRELY host-side,
+by this SDK, over the existing wire query. **No engine change, no
+protocol bump, no new wire op** — which also means the flag
+`document.parentOf@1` is STATIC in `HOST_FEATURES` (like
+`document.tree@1`) rather than per-call like `planarRegions` (§4.3c).
+
+**How it avoids being the same O(document) with extra steps.** The
+adapter derives a child→parent index ONCE from a scene-tree read and
+holds it, dropping it when the document changes (`mutationApplied` /
+`undoApplied` / `redoApplied` / `documentLoaded`, subscribed lazily on
+first use so a bundle that never asks pays nothing). The walk therefore
+happens once per EDIT rather than once per PRESS, and a burst of presses
+costs one query — asserted directly (`test/parent-of.spec.ts`, "costs ONE
+scene-tree read across repeated presses").
+
+**Honest ceiling, stated:** a derived read is exactly as fresh as the
+thing it derives from. `parentOf` is as fresh as `tree()` and no fresher;
+a host that never announces a change would serve a stale index, the same
+staleness a consumer's own cached `tree()` would have. A failed scene-tree
+read caches an EMPTY index rather than leaving it unset — a broken channel
+must not turn into a rebuild storm on every press, which is the cost this
+door exists to remove.
+
+**What `null` means (three cases, deliberately merged):** the element is
+top-level (its container is a Page/Spread row, which carries no
+`ElementId` and is not a selection target — so those rows are
+*transparent*: a frame inside a group inside a page answers the GROUP);
+the id does not resolve; or the address is structural (`storyRange`,
+`table`, `tableCell` — those never nest in groups, and answer without a
+read at all). A caller that needs to tell them apart still has `tree()`.
+A pure read, gated on `capabilities.document.read` like every other.
+
 ### 4.4 `host.selection`, `host.viewport`
 `selection.get()/set()/onDidChange` (the post-insert select pattern
 every drawing tool needs) and `viewport.camera()/pxToPt(px)` (the
@@ -300,7 +354,9 @@ showed every tool re-derives it).
 ### 4.5 `host.overlay`
 `setToolPreview(shape | null)` — the polyline/rect/path preview signal
 (the one overlay channel that exists [draw B-07]). Scene layers and
-retained plugin overlays are the P2 channel; reserved, not faked.
+retained plugin overlays are the P2 channel; reserved, not faked. The
+same channel takes a LIST through `setToolPreviews` (§4.5a) — that member
+is what retires the single-slot trade this one imposes.
 
 **The TEXT primitive (`ToolPreviewText`)** — closes the RFI gap "the
 overlay channel carries shapes only, no text primitive". Consumer:
@@ -317,6 +373,69 @@ plate for legibility. A pure pass-through in the adapter on the
 existing channel — probe `supports("overlay.text@1")` (static, like
 `overlay.toolPreview@1`: the renderer ships in the same host release
 that bumps this SDK).
+
+### 4.5a `host.overlay.setToolPreviews` — the multi-shape preview [K-9]
+
+`setToolPreviews(shapes | null)` — publish MANY preview shapes at once,
+rendered in array order (first = bottom-most). The channel `setToolPreview`
+opened is SINGLE-SLOT (one `ToolPreviewShape`, last write wins, one node
+rendered), which meant a tool could show geometry **or** a label, never
+both.
+
+**Consumers (the promotion rule), both naming the gap in their own code:**
+- paged.draw's **Measure** (`draw-bundle/src/handlers/measure.ts`) — its
+  header says it outright: *"`overlay.setToolPreview` is a SINGLE-SLOT
+  channel … the frozen line is traded for the frozen numbers; that trade
+  is named here rather than hidden. A multi-primitive preview channel is
+  the follow-up RFI item."* With this door the measured segment and the
+  `"124.60 pt · 53.1°"` readout ride together; the pointer-up SWAP goes
+  away.
+- paged.draw's region **Shape Builder**
+  (`draw-bundle/src/handlers/shape-builder.ts`) — *"Single-slot channel:
+  the hovered FACE outline wins … the gesture polyline stands in when the
+  pointer is over no face."* It can highlight ONE face; it cannot shade
+  the whole COLLECTED set, which is the interaction's actual feedback.
+
+**Why an array and not a second annotation slot.** A dedicated
+annotation/label slot fixes Measure (one geometry + one label) and does
+nothing for Shape Builder, which needs N outlines of the SAME kind shaded
+simultaneously. The array is the only shape that serves both named
+consumers, and it stays in the existing vocabulary — no new primitive,
+no second render path, no z-ordering vocabulary to invent.
+
+**Why a new member and not a widened `setToolPreview` parameter.**
+Widening the parameter to `shape | shape[] | null` would be smaller on
+paper and worse in practice for two reasons. (1) *Silent mis-render*: the
+existing renderer discriminates the variants structurally (`"cells" in
+p`, `"anchors" in p`, …); an array satisfies none of them and falls
+through to the rect branch, so a bundle built against a new SDK on a host
+with an older renderer would draw garbage rather than degrade. (2) *A
+static flag is then forced*: one member cannot report which arity the
+host actually renders. A separate member lets
+`supports("overlay.multiPreview@1")` be **DYNAMIC** — present-when-wired,
+exactly like `rendering.sceneLayer@1` / `text.measure@1` / `images` —
+because the sink is an OPTIONAL member on the editor handle
+(`PagedEditor.overlaySignals.setToolPreviews?`). That is the honest
+difference from `overlay.text@1`, whose flag is static.
+
+**Additive, in all three directions.** `setToolPreview` is untouched and
+every existing caller keeps working, including every one of the editor's
+own built-in tool handlers. The handle member is optional, so an older editor
+still satisfies `PagedEditor`. And when the sink is absent the door does
+NOT throw or no-op: it forwards the FIRST shape through the single slot —
+the pre-K-9 behaviour each consumer used to hand-code, now done once in
+the adapter.
+
+**One slot, two writers.** `setToolPreviews` REPLACES the slot's content;
+`null` *and* `[]` clear it, so a bundle's teardown path is the same on
+either host. It is deliberately not a second overlay layer: that would
+resurrect z-ordering between the layers and double the teardown paths for
+no consumer's benefit. Shapes may address different pages — each carries
+its own `pageId` and the host resolves the page rect per shape. Same
+`capabilities.rendering ∋ "overlay"` gate as the single-shape write: one
+channel, one gate. The headless harness wires the sink (so the flag is
+true and `lastToolPreviews()` records the list), which is what makes
+"geometry AND label at once" conformance-assertable without a browser.
 
 ### 4.5b `host.text` — measurement + the caret read door [S-13 · C-9]
 `measureString(family, style, text, sizePt)` (S-13 — real engine-shaper
@@ -337,6 +456,68 @@ a RANGE selection answers its START (where a replace inserts); a
 cell-qualified caret (table cell) answers `null` — cell-local offsets
 must not leak as story-local. Both are a read door — no capability
 gate (like `viewport`).
+
+### 4.5c `host.shell` — panel actions + the two FILE doors [K-5 · K-10]
+
+`openPanel`/`closePanel` (the cockpit owns placement; the SDK adapter
+stays a pure function over the editor handle) plus the file pair:
+`pickFile(options?) → PickedFile[]` reads bytes IN (K-5 / S-11), and
+`saveFile({ suggestedName, bytes, mimeType? }) → boolean` hands bytes
+OUT (K-10). Both are BYTE-level by design — no DOM `File` or `Blob` ever
+crosses the contract, so a bundle stays isolate-ready — and both answer
+an honest "nothing happened" value instead of throwing.
+
+**Consumer (the promotion rule):** **paged.image**. It can compute an
+adjusted PSD/PNG/JPEG, but with `pickFile` READ-only the only way out was
+the Export Center's exporter registry — a document-level surface — so a
+bundle could not offer "Save adjusted copy…" from its own panel. `pickFile`
+without `saveFile` is a half-door: a plugin that ingests a file has no way
+to give the edited bytes back.
+
+**Shape: the mirror of `PickedFile`, field for field.** `PickedFile` is
+`{ name, bytes, mimeType }`; `SaveFileOptions` is `{ suggestedName, bytes,
+mimeType? }`. The one rename is deliberate — `suggestedName` says what
+the contract can honestly promise: the host may sanitize or de-duplicate
+it, and a bundle can never name a *path* or a location. `mimeType` keeps
+the picker's spelling so bytes picked from disk can be handed straight
+back after an edit without re-keying the field.
+
+**Why `boolean` and not `void` or a path.** A path would be a lie in a
+browser host (there isn't one) and a liability in any host (a plugin that
+learns filesystem locations is a new trust surface). `void` would hide the
+frequent honest failure. `true` means the host ACCEPTED the bytes and
+handed them to its save path; `false` means it did not — no saver wired,
+the user declined, or the host refused. **Honest ceiling, stated in the
+contract:** a host backed by the browser's anchor-download cannot observe
+a user cancel, so `true` there means "delivered to the browser's download
+path", not "a file exists on disk"; a File System Access backing can
+answer a real `false`. Never a rejection: a refused save is a result, like
+a refused mutation — a rejection would land as an unhandled promise in a
+click handler.
+
+**The flag is PER-MEMBER, unlike `shell.pickFile@1`.** A wired shell was
+previously taken to imply the whole surface, so `shell.openPanel@1` and
+`shell.pickFile@1` both flip on the option's presence. `saveFile` joined
+the backend after host apps had already adopted the option, so
+`supports("shell.saveFile@1")` is keyed on the MEMBER's presence
+(`typeof shell.saveFile === "function"`). That forced a small structural
+change: the option is now typed `ShellBackend` (the bundle-facing
+`ShellSurface` with `saveFile` optional) and the bundle-facing surface
+WRAPS it rather than BEING it — so a host app that predates the door
+still injects a valid shell, and a missing member surfaces to a bundle as
+`false`, never as *"host.shell.saveFile is not a function"*.
+
+**No capability gate, for the same reason `pickFile` has none.** Neither
+door reaches document state or another plugin's data; the host's own
+dialog — the user choosing a file, or the browser's download — is the
+consent step, and the host owns it entirely (name sanitization included).
+A `capabilities.shell` tier is the follow-up if the isolate boundary ever
+needs to budget these, not something to invent ahead of a consumer.
+
+**Editor backing:** the app's existing anchor-download idiom, extracted
+(not re-invented) — `apps/canvas/src/shell-file-saver.ts` now owns
+blob→download and the Export Center's plugin-exporter delivery calls
+straight into it, so plugin bytes leave the app through ONE mechanism.
 
 ### 4.6 `host.storage`
 Namespaced KV (`paged.plugin.<id>.*`), JSON values. Needed by
@@ -564,11 +745,12 @@ isolate (the trust-line's other gates).
 | `contribute.overlay(id)` | `capabilities.rendering` ∋ `"overlay"` | throw |
 | `document.mutate` / `setMetadata` | `capabilities.document.write` | non-applied outcome |
 | `document.undo` / `redo` | `capabilities.document.write` | throw |
-| `document.collection`/`meta`/`pathAnchors`/`elementGeometry`/`tree`/`getMetadata`/`onDidChange` | `capabilities.document.read` | throw |
+| `document.collection`/`meta`/`pathAnchors`/`elementGeometry`/`tree`/`parentOf`/`getMetadata`/`onDidChange` | `capabilities.document.read` | throw |
 | `document.hitTest` | `document.read` **and** `rendering` ∋ `"hitTest"` | throw |
 | `selection.set` | `capabilities.document.write` | throw |
 | `selection.get` / `onDidChange` | none (ambient UI state) | — |
-| `overlay.setToolPreview` | `capabilities.rendering` ∋ `"overlay"` | throw |
+| `overlay.setToolPreview` / `setToolPreviews` | `capabilities.rendering` ∋ `"overlay"` | throw |
+| `shell.pickFile` / `saveFile` | none (host-owned dialog; §4.5c) | — |
 | `viewport.*` | none (read-only camera snapshot) | — |
 | `storage.*` | none (already per-bundle scoped: `paged.plugin.<id>.*`) | — |
 | `diagnostics.*` | none (per-bundle keyed store) | — |
