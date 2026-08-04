@@ -28,17 +28,18 @@
 // fake editor), this drives the bundle's document door through the true
 // parse→apply→inverse engine path — no UI, no editor, no browser.
 //
-// CONTRIBUTION COUNT (honesty note): the bundle registers FIFTEEN
+// CONTRIBUTION COUNT (honesty note): the bundle registers SEVENTEEN
 // tools (three anchor-editing + the pro set: Curvature, Pencil,
 // Gradient Annotator, Measure, Shape Builder, Corner Radius + the v0
 // brushes: Paintbrush, Blob Brush, Eraser + the wave-2 trio:
-// Eyedropper, Width, Lasso Select) AND TWO declarative SCHEMA panels
+// Eyedropper, Width, Lasso Select + the Live Paint pair: Bucket, Face
+// Selection) AND TWO declarative SCHEMA panels
 // (stroke — W3.1, B-01 RESOLVED; fill — Phase 2d, B-03 consumer; each
 // registered through `host.contribute.schemaPanel`, recorded by the
 // harness as a `schemaPanel` contribution carrying the verbatim
 // schema). The Pen itself is a built-in core-document tool (editor
 // W2.5 division); the layers prototype stays design JSON (expert-leaf
-// list territory). So the contribution log holds fifteen tools + two
+// list territory). So the contribution log holds seventeen tools + two
 // schema panels + thirty-four commands (4 dash + 2 group + 2
 // gradient-fill + 3 path-ops + 2 join/average + 4 pathfinder + the Phase 9
 // Tier B 5 live-corner + 3 appearance + 3 select-same + the wave-2
@@ -79,7 +80,8 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
     try {
       // Every tool is captured, namespaced + in registration order —
       // the three anchor editors, the pro set (incl. the §13.2 corner
-      // widget), the v0 brushes, then the wave-2 trio.
+      // widget), the v0 brushes, the wave-2 trio, then the Live Paint
+      // pair.
       expect(harness.toolsContributed().map((t) => t.id)).toEqual([
         "media.paged.draw.tool.addAnchor",
         "media.paged.draw.tool.deleteAnchor",
@@ -96,24 +98,28 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "media.paged.draw.tool.eyedropper",
         "media.paged.draw.tool.width",
         "media.paged.draw.tool.lassoSelect",
+        "media.paged.draw.tool.livePaintBucket",
+        "media.paged.draw.tool.livePaintSelect",
       ]);
-      // The contribution log holds the fifteen tools, then EACH schema
+      // The contribution log holds the seventeen tools, then EACH schema
       // panel as TWO entries: the synthesized React `panel` the panels
       // registry sees (the host turns a schema into a registry panel via
       // the injected renderer / seam) AND the `schemaPanel` recorded
       // VERBATIM through the harness's registration hook. Both are
       // honest — the registry really got a panel; the log keeps the
       // schema so conformance can assert it. Stroke first, then fill
-      // (Phase 2d), then the four React panels (layers, appearance,
-      // graphic styles, symbols). Then the sixty-two commands in
-      // registration order, then the W3.2 edit context. (Pen is a core
-      // built-in.)
+      // (Phase 2d), then the five React panels (layers, appearance,
+      // graphic styles, symbols, live paint). Then the sixty-eight
+      // commands in registration order, then the W3.2 edit context.
+      // (Pen is a core built-in.)
       expect(harness.contributions.map((c) => c.kind)).toEqual([
         // Three anchor editors + the pro set (Curvature, Pencil,
         // Gradient Annotator, Measure, Shape Builder, Corner Radius) +
         // the v0 brushes (Paintbrush, Blob Brush, Eraser) + the
-        // wave-2 trio (Eyedropper, Width, Lasso Select) — fifteen
-        // tools.
+        // wave-2 trio (Eyedropper, Width, Lasso Select) + the Live
+        // Paint pair (Bucket, Face Selection) — seventeen tools.
+        "tool",
+        "tool",
         "tool",
         "tool",
         "tool",
@@ -146,6 +152,10 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "panel",
         // The SYMBOLS panel (the document-resident artwork library + the
         // instances that follow it) — likewise expert-leaf React.
+        "panel",
+        // The LIVE PAINT panel (the document-resident face RECIPES + the
+        // artwork each painted face materialised as) — likewise
+        // expert-leaf React.
         "panel",
         // B-12 — the stroke dash-preset commands (Solid / Dashed /
         // Dotted / Dash-dot).
@@ -216,6 +226,15 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         // Illustrator Phase 2 (§16.1) — Symbols v0 (Define / Place /
         // Redefine / Break link / Reset transform / Rename / Delete).
         "command",
+        "command",
+        "command",
+        "command",
+        "command",
+        "command",
+        "command",
+        // Illustrator Phase 2 (the last unbuilt row) — Live Paint v0
+        // (Make group / Fill face / Regenerate / Select faces / Delete
+        // face / Release).
         "command",
         "command",
         "command",
@@ -389,7 +408,7 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
     const before = await treeSize();
 
     const handle = harness.loadBundle(drawBundle);
-    expect(harness.toolsContributed()).toHaveLength(15);
+    expect(harness.toolsContributed()).toHaveLength(17);
     handle.dispose();
 
     // After dispose: the contribution log is empty (registrations torn

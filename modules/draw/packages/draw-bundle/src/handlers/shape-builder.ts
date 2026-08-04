@@ -29,35 +29,14 @@
 //            mode }` — `keep` for a plain drag, `remove` for an
 //            Alt-drag (Illustrator's erase). One undo step.
 //
-// CACHING — the decision, stated: the arrangement is read ONCE PER
-// GESTURE SCOPE, not once per pointermove. `requestPlanarRegions`
-// WITHOUT a point returns every face; the handler caches that set
-// (keyed by the ordered input ids) and every later hover is a LOCAL
-// point-in-path test against the cached outlines. A drag across three
-// faces therefore costs ONE engine round trip, not one per sample. The
-// cache is dropped when the selection changes or the document mutates —
-// either invalidates the geometry it was built from.
-//
-// The `point` form of the same door is still used, for exactly two
-// situations and only those:
-//   · COLD START — the first sample after the cache was dropped. The
-//     point query answers immediately (N point-in-path tests plus one
-//     materialisation, the engine's own note) so the highlight appears
-//     on the first move rather than one round trip late; the full
-//     enumeration is kicked off in the same tick and takes over.
-//   · FACE-CAP REFUSAL — the full enumeration refuses past 256 faces,
-//     but `face_at_point` carries no face cap, so hover stays live
-//     there. Every move then costs a round trip, and the log says so
-//     once.
-//
-// SPACE: the engine's arrangement runs in RAW path space — per-element
-// `ItemTransform`s are NOT composed in (the limitation
-// `pathfinderBoolean` already ships with, named in core). So the
-// handler maps the page-space pointer through the inverse of the
-// FRONTMOST input's itemTransform on the way in, and the face outlines
-// back through it on the way out. Exact when the inputs share a
-// transform (the ordinary case, and identity for anything the editor
-// authors); approximate — and named here — when they do not.
+// CACHING, THE DOOR AND THE COORDINATE SPACE all live in
+// `handlers/planar-regions.ts` now — the shared arrangement seam, which
+// Live Paint became the second consumer of. Read that module's header
+// for the escape hatch (`requestPlanarRegions` wire-level, because the
+// vendored contract has no `document.planarRegions` facade yet), the
+// once-per-gesture-scope cache with its cold-start / face-cap point
+// queries, and the raw↔page mapping through the frontmost input's
+// itemTransform.
 //
 // HONEST SURFACES:
 //   · The overlay channel is SINGLE-SLOT, so the preview shows the
@@ -89,19 +68,12 @@ import type {
   ElementId,
   GestureHandler,
   Mutation,
-  PathAnchorTriple,
   PathfinderKind,
 } from "@paged-media/plugin-api";
 
 import {
-  applyAffine,
-  inverseApplyAffine,
-  type Affine,
-} from "@paged-media/draw-geometry";
-import {
   ShapeBuilderMachine,
   type FaceMode,
-  type RegionFace,
   type ShapeBuilderMode,
   type ShapeBuilderSnapshot,
 } from "@paged-media/draw-tools";
@@ -113,6 +85,21 @@ import {
   regionRefusalReason,
   selectionTopToBottom,
 } from "../commands/pathfinder-region";
+import {
+  createRegionCache,
+  planarInputKey,
+  type RegionCache,
+} from "./planar-regions";
+
+// The arrangement types + the raw↔page mapping moved to the shared seam
+// when Live Paint became the second consumer; re-exported here so the
+// bundle's public surface (and the conformance spec that imports from
+// it) is unchanged.
+export {
+  faceToPageSpace,
+  type PlanarFaceWire,
+  type PlanarRegionsWire,
+} from "./planar-regions";
 
 /** The path-bearing kinds the Shape Builder operates on (the engine's
  *  pathfinder operands — the same closed-path family the Pathfinder
@@ -154,57 +141,6 @@ export function shapeBuilderFacesMutationFor(
   return pathfinderFacesMutationFor(inputs, [...faces], mode);
 }
 
-/** One face as `requestPlanarRegions` reports it. Typed locally: the
- *  protocol-v57 `PlanarFaceWire` is not in the vendored contract yet
- *  (the join-average.ts skew note applies verbatim). */
-export interface PlanarFaceWire {
-  id: string;
-  signature: number[];
-  anchors: PathAnchorTriple[];
-  subpathStarts: number[];
-  area: number;
-  inside: [number, number];
-}
-
-/** The `requestPlanarRegions` reply, typed locally (same skew note). */
-export interface PlanarRegionsWire {
-  found: boolean;
-  faces: PlanarFaceWire[];
-  inputCount: number;
-  complete: boolean;
-  reason?: string | null;
-}
-
-/** Map a face's outline from the engine's RAW path space into PAGE
- *  space with `matrix` (the frontmost input's itemTransform) — the form
- *  the machine hit-tests in and the overlay draws in. Exported so the
- *  conformance spec pins the mapping the live tool uses. */
-export function faceToPageSpace(
-  face: PlanarFaceWire,
-  matrix: Affine | null,
-): RegionFace {
-  const at = (p: readonly [number, number]): [number, number] => {
-    const q = applyAffine(matrix, p[0], p[1]);
-    return [q[0], q[1]];
-  };
-  return {
-    id: face.id,
-    anchors: face.anchors.map((a) => ({
-      anchor: at(a.anchor),
-      left: at(a.left),
-      right: at(a.right),
-    })),
-    subpathStarts: face.subpathStarts,
-  };
-}
-
-/** Stable cache key for an ordered input set. */
-function inputKey(ids: readonly ElementId[]): string {
-  return ids
-    .map((i) => `${i.kind}:${String((i as { id: unknown }).id)}`)
-    .join("|");
-}
-
 /** Build the Shape Builder gesture handler bound to `host` (the B-17
  *  factory shape — every engine touch is a `host.*` facade). */
 export function createShapeBuilderHandler(host: BundleHost): GestureHandler {
@@ -214,35 +150,29 @@ export function createShapeBuilderHandler(host: BundleHost): GestureHandler {
   // the typed ElementId operands the ELEMENT lane tracks by string key.
   const byKey = new Map<string, ElementId>();
 
-  // ---- the per-gesture region cache (see the module header) --------
   /** The ordered input set this gesture operates on (top-to-bottom). */
   let inputs: ElementId[] = [];
-  /** The page-space face outlines the overlay draws from — the same set
-   *  installed in the machine (kept here because the machine hands back
-   *  ids, not geometry). */
-  let cachedFaces: RegionFace[] = [];
-  /** `inputKey(inputs)` the cache was built for; null = cold. */
-  let cacheKey: string | null = null;
-  /** The frontmost input's itemTransform — the raw↔page mapping. */
-  let matrix: Affine | null = null;
-  /** In flight, so a burst of pointermoves issues ONE enumeration. */
-  let enumerating = false;
-  /** The full enumeration refused (face cap): stay on point queries. */
-  let pointQueryOnly = false;
-  /** Log the round-trip-per-move degradation once per gesture scope. */
-  let warnedPointOnly = false;
   /** Resolved once per handler: does this engine carry the region ops? */
   let regionLane: boolean | null = null;
   /** Live subscriptions — allocated on activate, released on the
    *  non-suspend deactivate (GestureHandler has no dispose hook). */
   let subs: Disposable[] = [];
 
+  // The shared arrangement seam (handlers/planar-regions.ts) — one
+  // enumeration per gesture scope, cold-start + face-cap point queries,
+  // refusals surfaced with the engine's own words.
+  const cache: RegionCache = createRegionCache(host, {
+    label: "shapeBuilder",
+    onFaces: (faces) => {
+      if (machine) render(machine.setRegions(faces));
+    },
+    onPointFace: (id) => {
+      if (machine) render(machine.handle({ type: "region", id }));
+    },
+  });
+
   const dropCache = () => {
-    cacheKey = null;
-    matrix = null;
-    cachedFaces = [];
-    pointQueryOnly = false;
-    warnedPointOnly = false;
+    cache.drop();
     machine?.setRegions(null);
   };
 
@@ -255,7 +185,7 @@ export function createShapeBuilderHandler(host: BundleHost): GestureHandler {
     // that makes the tool legible); the gesture polyline stands in when
     // the pointer is over no face.
     const face = snapshot.hovered
-      ? cachedFaces.find((f) => f.id === snapshot.hovered)
+      ? cache.faces().find((f) => f.id === snapshot.hovered)
       : undefined;
     if (face && face.anchors.length >= 2) {
       host.overlay.setToolPreview({
@@ -279,121 +209,12 @@ export function createShapeBuilderHandler(host: BundleHost): GestureHandler {
     });
   };
 
-  const readRegions = async (
-    ids: ElementId[],
-    point?: [number, number],
-  ): Promise<PlanarRegionsWire | null> => {
-    try {
-      // ESCAPE HATCH (named): `host.document` has no planarRegions
-      // facade door yet — wire-level `requestPlanarRegions` through
-      // host.editor (DESIGN.md §4.9, the measure.ts precedent). A
-      // `document.planarRegions` door is the RFI follow-up.
-      //
-      // The REPLY is cast once here for the same reason: `planarRegions`
-      // is a v57 `WorkerToMainKind` the vendored union does not carry.
-      const reply = (await host.editor.client.send({
-        kind: "requestPlanarRegions",
-        payload: point ? { elementIds: ids, point } : { elementIds: ids },
-      } as never)) as unknown as {
-        kind: string;
-        payload?: { result?: PlanarRegionsWire };
-      };
-      if (reply.kind !== "planarRegions") return null;
-      return reply.payload?.result ?? null;
-    } catch {
-      return null;
-    }
-  };
-
-  /** Report a refusal the same way everywhere: the engine's own words,
-   *  at WARN and on the status binding. Never an empty face list
-   *  presented as "these paths divide into nothing". */
-  const reportRefusal = (result: PlanarRegionsWire): void => {
-    const reason =
-      result.reason ?? "the engine refused the region query (no reason given)";
-    host.log.warn(`shapeBuilder: ${reason}`);
-    host.bindings.publish(BIND_PATHFINDER_STATUS, reason);
-  };
-
-  /** Fill the per-gesture cache for `ids` (ONE full enumeration). */
-  const ensureCache = (ids: ElementId[]): void => {
-    const key = inputKey(ids);
-    if (cacheKey === key || enumerating || pointQueryOnly) return;
-    enumerating = true;
-    void (async () => {
-      try {
-        // The frontmost input's transform maps raw path space ↔ page
-        // space (module header). Read it with the arrangement so both
-        // land together.
-        const table = await host.document.pathAnchors(ids[0]).catch(() => null);
-        const result = await readRegions(ids);
-        if (!result) return;
-        if (!result.found) {
-          reportRefusal(result);
-          // A face-cap refusal still leaves the POINT query answerable
-          // (it has no face cap) — degrade to that rather than to
-          // nothing, and say what it costs.
-          pointQueryOnly = true;
-          return;
-        }
-        if (!result.complete) {
-          host.log.warn(
-            `shapeBuilder: the arrangement is INCOMPLETE — the ${result.faces.length} ` +
-              `face(s) listed are real, but they do not tile the union (a sliver was missed)`,
-          );
-        }
-        matrix = table?.itemTransform ?? null;
-        cachedFaces = result.faces.map((f) => faceToPageSpace(f, matrix));
-        cacheKey = key;
-        if (machine) render(machine.setRegions(cachedFaces));
-      } finally {
-        enumerating = false;
-      }
-    })();
-  };
-
-  /** COLD-START / face-cap path: ask the engine for the single face
-   *  under `point` and inject it into the machine. */
-  const pointQuery = (ids: ElementId[], point: [number, number]): void => {
-    void (async () => {
-      const table = await host.document.pathAnchors(ids[0]).catch(() => null);
-      const m = table?.itemTransform ?? matrix;
-      const local = inverseApplyAffine(m ?? null, point[0], point[1]);
-      if (!local) return;
-      const result = await readRegions(ids, [local[0], local[1]]);
-      if (!result || !machine) return;
-      if (!result.found) {
-        reportRefusal(result);
-        return;
-      }
-      if (pointQueryOnly && !warnedPointOnly) {
-        warnedPointOnly = true;
-        host.log.warn(
-          "shapeBuilder: the full arrangement exceeded the engine's face cap — " +
-            "hover stays live through the point query, at one round trip per move",
-        );
-      }
-      const face = result.faces[0] ?? null;
-      if (face) {
-        // Keep the outline available to the overlay even without a full
-        // enumeration (one face is still a legible highlight).
-        const mapped = faceToPageSpace(face, m ?? null);
-        if (!cachedFaces.some((f) => f.id === mapped.id)) {
-          cachedFaces = [...cachedFaces, mapped];
-        }
-      }
-      render(machine.handle({ type: "region", id: face ? face.id : null }));
-    })();
-  };
-
   /** One pointer sample in the REGION lane: purely local while the
-   *  cache is warm (the machine already resolved it on the point
-   *  event), an engine point query only while it is not. */
+   *  cache is warm (the machine already resolved it), an engine point
+   *  query only while it is not. The seam owns both. */
   const sampleRegion = (point: [number, number]): void => {
     if (inputs.length < 2 || !machine) return;
-    if (cacheKey === inputKey(inputs) && !pointQueryOnly) return;
-    ensureCache(inputs);
-    pointQuery(inputs, point);
+    cache.sample(inputs, point);
   };
 
   /** Hit-test the engine at `point` and, when it resolves a boolean-
@@ -439,7 +260,7 @@ export function createShapeBuilderHandler(host: BundleHost): GestureHandler {
   const refreshInputs = async (): Promise<void> => {
     const ordered = await selectionTopToBottom(host);
     const next = ordered.filter((id) => BOOLEAN_KINDS.has(id.kind));
-    if (inputKey(next) === inputKey(inputs)) return;
+    if (planarInputKey(next) === planarInputKey(inputs)) return;
     inputs = next;
     dropCache();
   };

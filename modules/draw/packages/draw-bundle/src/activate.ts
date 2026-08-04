@@ -78,6 +78,10 @@ import {
   SYMBOLS_COMMAND_IDS,
 } from "./commands/symbols";
 import {
+  contributeLivePaintCommands,
+  LIVE_PAINT_COMMAND_IDS,
+} from "./commands/live-paint";
+import {
   contributeCompoundPathCommands,
   COMPOUND_PATH_COMMAND_IDS,
 } from "./commands/compound-path";
@@ -137,6 +141,10 @@ import {
   GRAPHIC_STYLES_PANEL_ID,
 } from "./panels/graphic-styles-panel";
 import { makeSymbolsPanel, SYMBOLS_PANEL_ID } from "./panels/symbols-panel";
+import {
+  makeLivePaintPanel,
+  LIVE_PAINT_PANEL_ID,
+} from "./panels/live-paint-panel";
 import { installStrokePanelBindings, strokePanel } from "./panels/stroke-panel";
 import { contributeSvgIo } from "./io/svg";
 
@@ -205,6 +213,25 @@ export function activate(host: BundleHost): BundleHandle {
     id: SYMBOLS_PANEL_ID,
     icon: "panel-links",
     ...makeSymbolsPanel(host),
+  });
+  // Illustrator Phase 2 (the last unbuilt row) — LIVE PAINT v0. The
+  // panel is where the honest framing lives, because the feature NAME
+  // promises a document-resident face/edge object this engine does not
+  // have: what is built is a REGENERABLE RECIPE (the ordered members +
+  // a paint per face id, in a third `.paged` container part) plus real
+  // artwork inserted over each painted face. commands/live-paint.ts
+  // states the measured undo counts, the 12-input / 256-face refusals,
+  // and the two catalog halves that are NOT built — gap tolerance (the
+  // arrangement door takes no tolerance and the kernel names gap
+  // detection as out of scope) and edge stroking (there are no edge ids
+  // on the wire at all).
+  // (`panel-swatches` is a REAL glyph in the host's kebab-case map;
+  // there is no `panel-live-paint`, and an invented token renders the
+  // dock tab ICONLESS — the stroke panel's recorded lesson.)
+  host.contribute.panel({
+    id: LIVE_PAINT_PANEL_ID,
+    icon: "panel-swatches",
+    ...makeLivePaintPanel(host),
   });
   // B-12 — the stroke DASH presets as commands (the schema binding
   // ceiling is scalar, a dash array is a vector → command-driven). Each
@@ -280,6 +307,15 @@ export function activate(host: BundleHost): BundleHandle {
   // the text refusal and everything v0 deliberately does not build (the
   // eight symbol-SET tools, nine-slice scaling, 3D mapping).
   const symbolCommandsSub = contributeSymbolCommands(host);
+  // Illustrator Phase 2 (the last unbuilt row) — LIVE PAINT v0 (make
+  // group / fill face / regenerate / select faces / delete face /
+  // release). Faces come from the B-22 planar arrangement, which is a
+  // per-call QUERY: its ids are indices into the ordered member list, so
+  // nothing here survives a member edit by itself. The recipe is a
+  // document container part and a painted face is inserted artwork —
+  // see commands/live-paint.ts for why that is the honest shape, and
+  // RFI C-30 for the persistent object it is standing in for.
+  const livePaintCommandsSub = contributeLivePaintCommands(host);
   // Phase 9 (Tier B) — Select-same (pure selection over fill / stroke /
   // stroke-weight; no mutation).
   const selectSameCommandsSub = contributeSelectSameCommands(host);
@@ -315,7 +351,7 @@ export function activate(host: BundleHost): BundleHandle {
   // host predates the importer/exporter doors.
   const svgIoSub = contributeSvgIo(host);
   host.log.info(
-    `activated — ${tools.length} tools + 2 schema panels + 4 React panels + ` +
+    `activated — ${tools.length} tools + 2 schema panels + 5 React panels + ` +
       `${
         DASH_COMMAND_IDS.length +
         GROUP_COMMAND_IDS.length +
@@ -331,6 +367,7 @@ export function activate(host: BundleHost): BundleHandle {
         APPEARANCE_BAKE_COMMAND_IDS.length +
         GRAPHIC_STYLES_COMMAND_IDS.length +
         SYMBOLS_COMMAND_IDS.length +
+        LIVE_PAINT_COMMAND_IDS.length +
         SELECT_SAME_COMMAND_IDS.length +
         INSERT_SHAPE_COMMAND_IDS.length +
         IMAGE_TRACE_COMMAND_IDS.length +
@@ -349,6 +386,7 @@ export function activate(host: BundleHost): BundleHandle {
       blendCommandSub.dispose();
       insertShapeCommandsSub.dispose();
       selectSameCommandsSub.dispose();
+      livePaintCommandsSub.dispose();
       symbolCommandsSub.dispose();
       graphicStyleCommandsSub.dispose();
       appearanceBakeCommandsSub.dispose();

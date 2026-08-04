@@ -103,6 +103,7 @@ export {
   DRAW_TOOL_IDS,
   BRUSH_TOOL_IDS,
   WAVE2_TOOL_IDS,
+  LIVE_PAINT_TOOL_IDS,
 } from "./tools";
 export { insertPathMutationFor } from "./handlers/insert-path";
 // Brush tools v0 — the sweep handler factories, the exact
@@ -274,6 +275,108 @@ export {
   type PlanarFaceWire,
   type PlanarRegionsWire,
 } from "./handlers/shape-builder";
+// B-22 — the shared PLANAR ARRANGEMENT seam (the escape-hatch read, the
+// once-per-gesture cache, the refusal reporter, the engine's own caps),
+// which Shape Builder and Live Paint both ride. Exported for the
+// conformance specs so they drive the SAME door the tools do.
+export {
+  readPlanarRegions,
+  reportPlanarRefusal,
+  planarInputKey,
+  createRegionCache,
+  MAX_PLANAR_INPUTS,
+  MAX_PLANAR_FACES,
+  type RegionCache,
+  type RegionCacheHooks,
+} from "./handlers/planar-regions";
+// Illustrator Phase 2 (the last unbuilt row) — LIVE PAINT v0:
+// REGENERABLE, NOT LIVE. The engine has no LivePaintGroup node and no
+// persistent face/edge ids — only a per-call planar query whose ids
+// index into the ORDERED member list — so a group here is a recipe in a
+// document container part and a painted face is real inserted artwork.
+// Gap tolerance and edge stroking are NOT built and commands/live-paint.ts
+// says exactly why. Pure model + the exact wire builders exported for the
+// conformance spec (the no-second-copy rule).
+export {
+  LIVE_PAINT_COMMAND_IDS,
+  LIVE_PAINT_COMMAND_CATEGORY,
+  LIVE_PAINT_PART,
+  LIVE_PAINT_LIBRARY_VERSION,
+  LIVE_PAINT_FEATURE,
+  LIVE_PAINT_KINDS,
+  LIVE_PAINT_DEFAULT_FILL,
+  BIND_LIVE_PAINT_FACE,
+  MAKE_LIVE_PAINT_GROUP_COMMAND_ID,
+  FILL_LIVE_PAINT_FACE_COMMAND_ID,
+  REGENERATE_LIVE_PAINT_COMMAND_ID,
+  SELECT_LIVE_PAINT_FACES_COMMAND_ID,
+  DELETE_LIVE_PAINT_FACE_COMMAND_ID,
+  RELEASE_LIVE_PAINT_COMMAND_ID,
+  parseLivePaintLibrary,
+  serializeLivePaintLibrary,
+  mintLivePaintId,
+  findLivePaintGroup,
+  upsertLivePaintGroup,
+  removeLivePaintGroupFrom,
+  withLivePaintFace,
+  withoutLivePaintFace,
+  livePaintMemberOf,
+  livePaintFillOf,
+  withLivePaintKey,
+  faceTableOf,
+  livePaintContourCounts,
+  bindLivePaintFaces,
+  livePaintInsertBatchFor,
+  livePaintFinishBatchFor,
+  livePaintMemberBatchFor,
+  livePaintReleaseBatchFor,
+  livePaintDeleteBatchFor,
+  readLivePaintLibrary,
+  writeLivePaintLibrary,
+  livePaintInputs,
+  livePaintLinks,
+  selectedLivePaintGroup,
+  resolveLivePaintGroup,
+  livePaintArrangement,
+  livePaintFaceAt,
+  emitLivePaintFills,
+  fillLivePaintFaces,
+  applyMakeLivePaintGroup,
+  applyFillLivePaintFace,
+  applyRegenerateLivePaint,
+  applySelectLivePaintFaces,
+  applyDeleteLivePaintFace,
+  applyReleaseLivePaint,
+  contributeLivePaintCommands,
+  type LivePaintFaceRecord,
+  type LivePaintRecipe,
+  type LivePaintLibrary,
+  type LivePaintMemberRef,
+  type LivePaintFillRef,
+  type LivePaintFacePlan,
+  type LivePaintFillPlan,
+  type LivePaintFaceBinding,
+} from "./commands/live-paint";
+// LIVE PAINT v0 — the two gesture tools (one handler factory, two
+// commits) and the module-level bucket swatch the panel drives.
+export {
+  createLivePaintHandler,
+  createLivePaintBucketHandler,
+  createLivePaintSelectHandler,
+  getLivePaintFill,
+  setLivePaintFill,
+  type LivePaintToolMode,
+} from "./handlers/live-paint";
+// The LIVE PAINT panel (React, the Layers / Appearance / Graphic Styles
+// / Symbols idiom) — the recipe list, the per-face rows that make
+// "select individual faces" reachable without a pointer, and the honest
+// note stating regenerable-not-live, no gaps, no edges, the caps.
+export {
+  makeLivePaintPanel,
+  livePaintRowLabel,
+  LIVE_PAINT_PANEL_ID,
+  LIVE_PAINT_NOTE,
+} from "./panels/live-paint-panel";
 // Phase 9 (Tier B) — Live Corners: the per-corner wire-shape builders +
 // the metadata "live" marker, exported for the conformance spec.
 export {

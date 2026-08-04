@@ -44,16 +44,39 @@ Core has no symbol/instance model, IDML has no such primitive, and the
 group cannot hold metadata. Registration points are the §16.1 nine-point
 grid; redefine and reset REBUILD an instance rather than re-point it.
 TEXT is refused (no op copies a story), and the eight symbol-SET tools /
-nine-slice / 3D mapping are named as unbuilt rather than implied), SVG
-import/export, and the `vectorGraphic` EDIT CONTEXT (double-click a
-path-bearing kind → anchor-editing tool-set focused, stroke panel raised,
-Esc pops out). The bundle drives end-to-end through the real editor host:
+nine-slice / 3D mapping are named as unbuilt rather than implied), LIVE
+PAINT v0 (the last unbuilt Illustrator Phase-2 row — and the third
+library-in-a-container-part feature. Read the word REGENERABLE before
+the word LIVE: the engine has NO `LivePaintGroup` node and no persistent
+face/edge ids, only B-22's per-call planar QUERY whose ids
+(`<signature>#<component>`) index into the REQUEST's own ordered
+`elementIds`. So a group is a RECIPE — the ordered members plus a paint
+per face id — and a painted face is REAL ARTWORK inserted over the
+region; editing a member repaints nothing until Regenerate re-derives,
+and a face id an edit retires loses its paint with a report. GAP options
+and EDGE stroking are NOT built and the code says exactly why: the
+arrangement door takes no tolerance, the kernel names gap detection as
+out of scope, every input subpath is implicitly CLOSED, and the wire
+carries no edge id at all. The 12-input / 256-face caps REFUSE with the
+engine's own sentence on the pathfinder status binding. Filed as RFI
+C-30), SVG import/export, and the `vectorGraphic` EDIT CONTEXT
+(double-click a path-bearing kind → anchor-editing tool-set focused,
+stroke panel raised, Esc pops out). The bundle drives end-to-end through the real editor host:
 the draw-plugin e2e (`editor` `apps/canvas/tests/e2e/draw-plugin.spec.ts`)
 and a DTP journey (`tests/journey/plugins/draw.journey.spec.ts`) author a
 path with the built-in Pen, then refine its anchors (add/delete/convert)
-and stroke through the bundle. The three TS packages carry 643 passing
-vitest (geometry 162, tools 102, bundle 379) and typecheck clean; the two
+and stroke through the bundle. The three TS packages carry 698 passing
+vitest (geometry 162, tools 113, bundle 423) and typecheck clean; the two
 crates carry 26 `cargo test` (draw-trace 22, trace-js 4).
+
+**The planar arrangement has ONE seam.** `draw-bundle/src/handlers/planar-regions.ts`
+owns the `requestPlanarRegions` escape hatch (the vendored contract still
+has no `document.planarRegions` facade — RFI K-11 built it, unpublished),
+the once-per-gesture-scope cache with its cold-start / face-cap point
+queries, the raw↔page face mapping and the refusal reporter. Shape
+Builder and Live Paint both ride it; a third region tool must too, and a
+K-11 repin is a rewrite of ONE function plus deleting two local wire
+types.
 
 **RFI C-15 has LANDED in core (b8e2b6b) but is NOT reachable from here
 yet.** A batch can now address an id an earlier child minted

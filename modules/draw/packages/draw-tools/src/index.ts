@@ -102,6 +102,16 @@ export {
   type RegionFace,
 } from "./shape-builder-machine";
 
+// LIVE PAINT v0 — the Shape Builder machine's sibling over the SAME
+// `RegionFace` arrangement: hover resolves a face, a click paints it, a
+// drag paints every face it crosses. Drives both the bucket and the
+// face-selection tool (the host decides what the collected ids mean).
+export {
+  LivePaintMachine,
+  type LivePaintEvent,
+  type LivePaintSnapshot,
+} from "./live-paint-machine";
+
 export {
   planAnchorAdd,
   planAnchorDelete,

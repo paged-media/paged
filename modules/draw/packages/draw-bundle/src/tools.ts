@@ -48,6 +48,10 @@ import { createCurvatureHandler } from "./handlers/curvature";
 import { createEyedropperHandler } from "./handlers/eyedropper";
 import { createGradientAnnotatorHandler } from "./handlers/gradient-annotator";
 import { createLassoSelectHandler } from "./handlers/lasso";
+import {
+  createLivePaintBucketHandler,
+  createLivePaintSelectHandler,
+} from "./handlers/live-paint";
 import { createMeasureHandler } from "./handlers/measure";
 import { createPencilHandler } from "./handlers/pencil";
 import { createShapeBuilderHandler } from "./handlers/shape-builder";
@@ -90,6 +94,13 @@ export const WAVE2_TOOL_IDS = [
   "media.paged.draw.tool.eyedropper",
   "media.paged.draw.tool.width",
   "media.paged.draw.tool.lassoSelect",
+] as const;
+
+/** LIVE PAINT v0 — the bucket + the face-selection tool, in rail order
+ *  (host-free, the PRO_TOOL_IDS pattern). */
+export const LIVE_PAINT_TOOL_IDS = [
+  "media.paged.draw.tool.livePaintBucket",
+  "media.paged.draw.tool.livePaintSelect",
 ] as const;
 
 /** Build the three anchor-editing tools bound to `host` — each
@@ -310,6 +321,55 @@ export function drawTools(host: BundleHost): ToolContribution[] {
       order: 1,
       cursor: CROSS,
       gesture: () => createLassoSelectHandler(host),
+    },
+    // LIVE PAINT v0 — the bucket hovers/paints the FACES of a recorded
+    // group's planar arrangement (commands/live-paint.ts says exactly
+    // what "Live Paint" does and does not mean here: a regenerable
+    // recipe, no gap handling, no edges); its sibling selects the
+    // materialised face artwork for restyling or deletion.
+    //
+    // SHORTCUTS (INV-REG-1, globally unique tool shortcuts): the
+    // catalog's own two keys are BOTH unavailable — Illustrator's Live
+    // Paint Bucket is `k`, which is an editor built-in single key, and
+    // its Live Paint Selection is `shift+l`, which paged.image took in
+    // its selection-tools wave. Re-verified at pick time against the
+    // editor built-ins (v a u b t f m l c e r s o g i k h z p n w x d j
+    // q \ = - plus the shift+p/t/g trio), this bundle (= -
+    // shift+c/u/n/a/m/b/r/j/k/i/d/s/q) and paged.image, which has GROWN
+    // since the wave-2 note above: it now holds shift+x, y, shift+y,
+    // shift+l, shift+w AND q / shift+f / shift+e (its raster brush /
+    // pencil / eraser). That leaves exactly four free shift keys —
+    // shift+h, shift+o, shift+v, shift+z — and these take two of them.
+    // `shift+v` reads as a Selection-tool variant (`v` is the editor's
+    // Selection tool), which is what the face picker is.
+    //
+    // ICONS: the host's kebab-case glyph map has no `tool-livePaint*`
+    // entry, and an INVENTED token renders the rail button GLYPHLESS
+    // (the stroke panel's recorded lesson) — so both borrow a REAL
+    // token whose metaphor holds: a filled swatch for "drop this paint
+    // into a region", and the direct-selection arrow for "pick one part
+    // of a compound thing".
+    {
+      id: "media.paged.draw.tool.livePaintBucket",
+      title: "Live Paint Bucket",
+      icon: "tool-gradientSwatch",
+      shortcut: "shift+o",
+      group: "livePaintBucket",
+      section: "drawType",
+      order: 10,
+      cursor: CROSS,
+      gesture: () => createLivePaintBucketHandler(host),
+    },
+    {
+      id: "media.paged.draw.tool.livePaintSelect",
+      title: "Live Paint Selection",
+      icon: "tool-directSelect",
+      shortcut: "shift+v",
+      group: "livePaintSelect",
+      section: "selection",
+      order: 2,
+      cursor: CROSS,
+      gesture: () => createLivePaintSelectHandler(host),
     },
   ];
 }

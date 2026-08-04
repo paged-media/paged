@@ -161,6 +161,9 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.tool.eyedropper",
       "media.paged.draw.tool.width",
       "media.paged.draw.tool.lassoSelect",
+      // LIVE PAINT v0 — the bucket + the face-selection tool.
+      "media.paged.draw.tool.livePaintBucket",
+      "media.paged.draw.tool.livePaintSelect",
     ]);
     // B-15: TOOL activation commands + shortcuts are HOST-derived from
     // the registry — the bundle registers tools only. The commands it
@@ -228,6 +231,16 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.resetSymbolTransform",
       "media.paged.draw.command.renameSymbol",
       "media.paged.draw.command.deleteSymbol",
+      // Illustrator Phase 2 (the last unbuilt row) — LIVE PAINT v0 (a
+      // REGENERABLE recipe in a container part + real artwork per
+      // painted face; no gap handling and no edges — see
+      // commands/live-paint.ts).
+      "media.paged.draw.command.makeLivePaintGroup",
+      "media.paged.draw.command.fillLivePaintFace",
+      "media.paged.draw.command.regenerateLivePaint",
+      "media.paged.draw.command.selectLivePaintFaces",
+      "media.paged.draw.command.deleteLivePaintFace",
+      "media.paged.draw.command.releaseLivePaint",
       "media.paged.draw.command.selectSameFill",
       "media.paged.draw.command.selectSameStroke",
       "media.paged.draw.command.selectSameStrokeWeight",
@@ -243,20 +256,21 @@ describe("drawBundle.activate", () => {
     expect(fake.keybindings.count()).toBe(0);
   });
 
-  it("registers the stroke + fill SCHEMA panels and the layers + appearance + graphic-styles + symbols React panels", () => {
+  it("registers the stroke + fill SCHEMA panels and the layers + appearance + graphic-styles + symbols + live-paint React panels", () => {
     const fake = makeFakeEditor();
     loadBundle(() => fake.editor, drawBundle, {
       console: silent,
       storage: mapBacking(),
     });
     // The schema panels register through the panels registry as
-    // synthesized PanelContributions; the four React panels — layers
+    // synthesized PanelContributions; the five React panels — layers
     // (the layers.panel.json prototype made real), appearance (the
     // metadata stack + its one-fill/one-stroke honesty note), graphic
     // styles (the document-resident style library + the selection's link
-    // into it) and symbols (the document-resident artwork library + the
-    // instances that follow it) — register directly, all expert-leaf per
-    // B-01's list-widget limit.
+    // into it), symbols (the document-resident artwork library + the
+    // instances that follow it) and live paint (the document-resident
+    // face RECIPES + the artwork each painted face materialised as) —
+    // register directly, all expert-leaf per B-01's list-widget limit.
     expect(fake.panels.ids()).toEqual([
       "media.paged.draw.panel.stroke",
       "media.paged.draw.panel.fill",
@@ -264,6 +278,7 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.panel.appearance",
       "media.paged.draw.panel.graphicStyles",
       "media.paged.draw.panel.symbols",
+      "media.paged.draw.panel.livePaint",
     ]);
   });
 

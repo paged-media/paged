@@ -45,7 +45,9 @@
       "media.paged.draw.tool.eraserBrush",
       "media.paged.draw.tool.eyedropper",
       "media.paged.draw.tool.width",
-      "media.paged.draw.tool.lassoSelect"
+      "media.paged.draw.tool.lassoSelect",
+      "media.paged.draw.tool.livePaintBucket",
+      "media.paged.draw.tool.livePaintSelect"
     ],
     "panels": [
       "media.paged.draw.panel.stroke",
@@ -53,7 +55,8 @@
       "media.paged.draw.panel.layers",
       "media.paged.draw.panel.appearance",
       "media.paged.draw.panel.graphicStyles",
-      "media.paged.draw.panel.symbols"
+      "media.paged.draw.panel.symbols",
+      "media.paged.draw.panel.livePaint"
     ],
     "commands": [
       "media.paged.draw.command.strokeDashSolid",
@@ -108,6 +111,12 @@
       "media.paged.draw.command.resetSymbolTransform",
       "media.paged.draw.command.renameSymbol",
       "media.paged.draw.command.deleteSymbol",
+      "media.paged.draw.command.makeLivePaintGroup",
+      "media.paged.draw.command.fillLivePaintFace",
+      "media.paged.draw.command.regenerateLivePaint",
+      "media.paged.draw.command.selectLivePaintFaces",
+      "media.paged.draw.command.deleteLivePaintFace",
+      "media.paged.draw.command.releaseLivePaint",
       "media.paged.draw.command.selectSameFill",
       "media.paged.draw.command.selectSameStroke",
       "media.paged.draw.command.selectSameStrokeWeight",
@@ -134,6 +143,12 @@
       },
       {
         "type": "symbolLibrary",
+        "role": "spec",
+        "format": "json",
+        "linkable": false
+      },
+      {
+        "type": "livePaintRecipe",
         "role": "spec",
         "format": "json",
         "linkable": false
