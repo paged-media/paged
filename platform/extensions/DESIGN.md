@@ -134,7 +134,8 @@ draw B-02). The headless harness records both
   accepted input, which is additive: every `Mutation` still passes.
 - reads: `collection(name)`, `meta()`, `pathAnchors(id)`,
   `hitTest(pageId, pt, filter)` [draw: scissors/anchor tools],
-  `elementGeometry(ids)`, `tree()`.
+  `elementGeometry(ids)`, `tree()`,
+  `planarRegions(elementIds, point?)` (§4.3c).
 - `undo()` / `redo()` — shared history, no plugin-local stacks.
 - `onDidChange(l)` — typed `mutationApplied | undoApplied | redoApplied`
   events (every panel audit showed this exact subscribe pattern,
@@ -155,9 +156,9 @@ drift OR a stale stamp. So a new engine op cannot simply be typed in:
 hand-editing the vendored copy would BREAK the gate, and a vendored file
 that no longer matches its source is not a passing check.
 
-Core is at **protocol 56**, unpublished. Four ops landed there that
+Core is at **protocol 57**, unpublished. Eleven ops landed there that
 bundles need now, mirrored HAND-WRITTEN in `plugin-api/src/mutations.ts`
-— byte-equal to the tsify output the v56 build emits:
+— byte-equal to the tsify output the v57 build emits:
 
 | op | args | consumer |
 | --- | --- | --- |
@@ -165,18 +166,35 @@ bundles need now, mirrored HAND-WRITTEN in `plugin-api/src/mutations.ts`
 | `joinPaths` | `{ elementId, otherId }` | paged.draw Wave B — weld two open single-contour paths (InDesign's Join) |
 | `pasteInto` | `{ containerId, childId }` | B-18 nested content — nest a top-level page item in a container frame |
 | `releaseFrom` | `{ childId }` | B-18 — pop a nested child back to top level |
+| `pathfinderDivide` | `{ elementIds }` | B-22 (v57) — paged.draw's `Pathfinder: Divide` command (`commands/pathfinder-region.ts`) |
+| `pathfinderTrim` | `{ elementIds }` | B-22 — paged.draw's `Pathfinder: Trim` |
+| `pathfinderMerge` | `{ elementIds }` | B-22 — paged.draw's `Pathfinder: Merge` |
+| `pathfinderCrop` | `{ elementIds }` | B-22 — paged.draw's `Pathfinder: Crop` |
+| `pathfinderOutline` | `{ elementIds }` | B-22 — paged.draw's `Pathfinder: Outline` |
+| `pathfinderMinusBack` | `{ elementIds }` | B-22 — paged.draw's `Pathfinder: Minus back` |
+| `pathfinderFaces` | `{ elementIds, faces, mode }` | B-22 — paged.draw's Shape Builder commit (`handlers/shape-builder.ts`), fed by §4.3c's face ids |
+
+The seven v57 ops are the REGION row: where the vendored
+`pathfinderBoolean` (Shape Modes) combines paths into one, these resolve
+the planar ARRANGEMENT of the inputs — the same arrangement §4.3c reads
+— and operate per face. `elementIds` is **top-to-bottom** (index 0
+frontmost), the convention `pathfinderBoolean`'s `kept`-is-top already
+sets; the order is load-bearing, so a consumer derives it from paint
+order rather than guessing. The editor's **Pathfinder panel** is the
+downstream surface these light up.
 
 This is the same shape as DOC-03's `StoryContent` (protocol v54), which
 ships hand-written in `host.ts` ahead of its vendoring. The union stays
-sound throughout: when canvas-wasm 0.56 publishes and `sync-wire.mjs`
+sound throughout: when canvas-wasm 0.57 publishes and `sync-wire.mjs`
 runs, `Mutation` ABSORBS these and `PendingMutation` collapses into a
 subset of it — it never contradicts the vendored union.
 
 **Honest limits, recorded:**
 - A protocol-ahead op is NOT gated by `host.supports()`. The gate is the
   worker's protocol version, which the client handshake already checks
-  (`protocolMismatch`); an op a pre-v56 worker can't deserialise comes
-  back as a non-applied `MutationOutcome`, never a silent no-op.
+  (`protocolMismatch`); an op a pre-v56 (resp. pre-v57) worker can't
+  deserialise comes back as a non-applied `MutationOutcome`, never a
+  silent no-op.
 - They cannot ride the vendored `batch` op (`args.ops: Mutation[]`)
   until the re-sync — issue separate `mutate` calls.
 - The narrow `PagedClient.mutate` handle (editor.ts) is DELIBERATELY not
@@ -207,6 +225,71 @@ to first-party / trusted-publisher bundles. Always present: honest `null`
 false when the host injects no `nativeDocument` backend. This is the
 core-side door ADR-022 pairs with the IDML adapter leaving the engine —
 the plugin imports/exports, the host owns loading.
+
+### 4.3c `host.document.planarRegions` — the region read door [B-22 · K-11]
+
+`planarRegions(elementIds, point?): Promise<PlanarRegionsResult>` — the
+level BELOW element hit-testing: the FACES of the planar arrangement the
+inputs form (the areas their overlapping outlines divide the plane
+into). Core shipped it in protocol v57 as
+`RequestPlanarRegions → PlanarRegions`; K-11 is the facade for it.
+
+**Consumer (the promotion rule):** paged.draw's region **Shape Builder**
+(`draw-bundle/src/handlers/shape-builder.ts`) — hover query per
+pointermove (`point` form), one full enumeration per gesture scope
+(`point`-less form), then a single `pathfinderFaces` commit built from
+the face ids — and the six **`Pathfinder: <verb>` commands**
+(`commands/pathfinder-region.ts`), whose `elementIds` come from the same
+arrangement. Both reach the engine today through the marked v0 escape
+hatch `host.editor.client.send({ kind: "requestPlanarRegions" })` (§4.9)
+— the same precedent `measure.ts` set for `requestNearestPathPoint`,
+and the gap this member closes. The editor's **Pathfinder panel** is the
+downstream surface. With `point` the engine answers the single face
+under it (N point-in-path tests + one region materialisation) instead of
+enumerating everything — the reason the argument is on the contract and
+not simulated by the consumer.
+
+**Why the door answers a RESULT, not a face array.** The result carries
+a REFUSAL channel, and flattening it would be the one dishonesty this
+door cannot afford:
+- `found: false` + `reason` — the query could not be answered at all:
+  no document, an id that doesn't resolve, or more than the kernel's
+  `MAX_PLANAR_INPUTS` (12) inputs / more than 256 faces. The engine
+  REFUSES rather than truncating, and a caller that rendered that as an
+  empty face list would tell the user "these paths divide into nothing".
+  paged.draw already surfaces `reason` verbatim on a status binding;
+  the contract must keep that possible.
+- `complete: false` — the listed faces are all REAL but do not tile the
+  union (the enumeration missed a sliver). Always `true` for a point
+  query: one face is not a tiling claim.
+- `inputCount` — what the arrangement was actually built from.
+
+**Coordinates, stated:** faces come back in the RAW path space
+`pathAnchors` reports — per-element `itemTransform`s are NOT composed in
+(the arrangement runs on the anchors as stored, exactly like
+`pathfinderBoolean`). A consumer drawing faces on canvas maps them with
+the frontmost input's `itemTransform`. Face **ids are stable for the
+same input set**, which is what lets a hovered id ride straight into
+`pathfinderFaces` — and only for that set, so a stale face list is
+refused by the engine, not silently ignored.
+
+**Capability + flag.** A pure read, gated on `capabilities.document.read`
+like every other read door. `supports("document.planarRegions@1")` is
+STATIC and means exactly one thing: this SDK's document surface
+implements and forwards the door. It does NOT claim the host's engine
+carries v57 — the vendored wire is still 0.51, so that answer is
+per-call: a host whose engine predates the door (or any channel failure)
+comes back as `{ found: false, reason: … }`, never a throw and never a
+fake empty face list. Same honesty split as §4.3a's mutations: the
+engine-level gate is the worker handshake, not `supports()`. Two casts
+in the adapter (request kind out, reply kind in) carry the v57 wire
+until `sync-wire.mjs` re-vendors canvas-wasm 0.57 — the same
+single-seam discipline as the `mutate` cast.
+
+**Not yet consumed.** paged.draw keeps its escape hatch until this SDK
+change publishes as a canary and the bundle repins; the door is built
+and tested here first (`test/planar-regions.spec.ts`), which is the
+sequencing every promoted member follows.
 
 ### 4.4 `host.selection`, `host.viewport`
 `selection.get()/set()/onDidChange` (the post-insert select pattern

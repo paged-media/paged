@@ -67,6 +67,9 @@ export type {
   TextMetrics,
   TextCaret,
   FrameChainLink,
+  // B-22 (protocol v57) — the planar-region read door's result shapes.
+  PlanarFace,
+  PlanarRegionsResult,
   StoryContent,
   ParagraphContent,
   RunContent,

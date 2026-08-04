@@ -172,6 +172,12 @@ export function makeFakeEditor(opts?: {
     kind: "elementProperties",
     payload: { result: null },
   };
+  // B-22 (v57) — scripted `planarRegions` reply. `null` = this fake
+  // engine predates the door, so `send` falls through to the generic
+  // `noop` (the honest unsupported path the adapter must survive).
+  let planarRegionsReply: unknown = null;
+  /** Every message that crossed `client.send`, in order. */
+  const sent: { kind: string; payload?: unknown }[] = [];
 
   const client = {
     mutate: async (m: unknown) => {
@@ -185,7 +191,11 @@ export function makeFakeEditor(opts?: {
     pathAnchors: async () => null,
     elementGeometry: async () => [],
     setElementSelection: async (ids: unknown[]) => ids,
-    send: async (msg: { kind: string }) => {
+    send: async (msg: { kind: string; payload?: unknown }) => {
+      sent.push({ kind: msg.kind, payload: msg.payload });
+      if (msg.kind === "requestPlanarRegions" && planarRegionsReply !== null) {
+        return planarRegionsReply;
+      }
       if (msg.kind === "hitTest") {
         return { kind: "hitResult", payload: { element: null } };
       }
@@ -249,6 +259,13 @@ export function makeFakeEditor(opts?: {
     setElementProperties(reply: unknown) {
       elementPropertiesReply = reply;
     },
+    /** B-22 — script the `requestPlanarRegions` reply (pass `null` to go
+     *  back to a pre-v57 engine that never answers the kind). */
+    setPlanarRegionsReply(reply: unknown) {
+      planarRegionsReply = reply;
+    },
+    /** Every `client.send` message, in order (kind + payload). */
+    sent,
     editor: editor as unknown as PagedEditor,
     tools,
     panels,

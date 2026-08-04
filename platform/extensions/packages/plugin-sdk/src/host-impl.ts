@@ -48,6 +48,8 @@ import type {
   HitResult,
   ImagesSurface,
   ImageResourceClaimOptions,
+  MainToWorkerKind,
+  PlanarRegionsResult,
   WorkersSurface,
   BundleWorker,
   SpawnWorkerOptions,
@@ -137,6 +139,16 @@ export const HOST_FEATURES: readonly string[] = [
   // v51) is the writer, so it is live whenever a bundle runs (the worker
   // handshake guarantees a v51-protocol worker).
   "storage.parts@1",
+  // B-22 (protocol v57) — the planar-region read door. STATIC, and the
+  // flag means exactly one thing: this SDK's document surface IMPLEMENTS
+  // `planarRegions` and forwards it (retiring the `host.editor.client`
+  // escape hatch). It does NOT claim the host's engine carries v57 — the
+  // vendored wire is still 0.51, so that answer is per-call: a pre-v57
+  // engine (or any host that doesn't answer the query) comes back as
+  // `{ found: false, reason }`, never a fake empty face list. Same
+  // honesty split as the protocol-ahead mutations (mutations.ts): the
+  // engine-level gate is the worker handshake, not `supports()`.
+  "document.planarRegions@1",
 ];
 
 /** Thrown by reserved surface members — a visible seam, never
@@ -1167,6 +1179,52 @@ export function createBundleHost(
           : null;
       } catch {
         return null;
+      }
+    },
+    async planarRegions(
+      elementIds: ElementId[],
+      point?: [number, number],
+    ): Promise<PlanarRegionsResult> {
+      // B-22 (protocol v57) — the region read door, routed over the same
+      // request/reply channel as `elementProperties` / `placeholders` /
+      // `tree`. It differs from them in what it answers when the reply
+      // doesn't come: those collapse to `null` / `[]`, which is exactly
+      // what this door must NOT do — an empty face list reads as "these
+      // paths divide into nothing". So an unanswered query becomes a
+      // typed REFUSAL (`found: false` + a reason), the same channel the
+      // engine itself uses for its input cap. Never throws.
+      requireDocRead("document.planarRegions");
+      const refusal = (reason: string): PlanarRegionsResult => ({
+        found: false,
+        faces: [],
+        inputCount: elementIds.length,
+        complete: false,
+        reason,
+      });
+      try {
+        // TWO casts, one per direction, for the same reason the `mutate`
+        // seam carries one: `requestPlanarRegions` / `planarRegions` are
+        // v57 wire kinds and the vendored union is protocol 51. Both
+        // disappear when `sync-wire.mjs` re-vendors canvas-wasm 0.57.
+        const reply = (await getEditor().client.send({
+          kind: "requestPlanarRegions",
+          payload: point ? { elementIds, point } : { elementIds },
+        } as unknown as MainToWorkerKind)) as unknown as {
+          kind: string;
+          payload?: { result?: PlanarRegionsResult };
+        };
+        if (reply.kind !== "planarRegions") {
+          return refusal(
+            "this host did not answer requestPlanarRegions — its engine " +
+              "predates the planar-region read door (protocol v57)",
+          );
+        }
+        return (
+          reply.payload?.result ??
+          refusal("the engine answered planarRegions with no result")
+        );
+      } catch (error) {
+        return refusal(`the region read door failed: ${String(error)}`);
       }
     },
     async tree(): Promise<SceneTreeNode[]> {

@@ -34,6 +34,7 @@ import type {
   PageId,
   ElementProperties,
   PathAnchorsResult,
+  PathAnchorTriple,
   SceneTreeNode,
   SelectionMode,
 } from "./wire";
@@ -638,6 +639,71 @@ export interface RunContent {
   tracking?: number | null;
 }
 
+/**
+ * B-22 (protocol v57) — one FACE of a planar arrangement: a connected
+ * region of the plane whose containment signature is constant. This is
+ * the level BELOW element hit-testing (the areas overlapping paths
+ * divide the plane into), which is what a Shape Builder needs.
+ *
+ * Coordinates are in the RAW path space `pathAnchors` reports —
+ * per-element `itemTransform`s are NOT composed in (the arrangement runs
+ * on the anchors as stored, exactly like `pathfinderBoolean`). A consumer
+ * that draws faces on canvas maps them with the frontmost input's
+ * `itemTransform`, the same chain the anchor overlays use.
+ */
+export interface PlanarFace {
+  /** Stable id (`"<signature>#<component>"`, e.g. `"0-1#0"`) — stable
+   *  across calls with the same inputs, which is what lets a hovered
+   *  face's id ride straight into the `pathfinderFaces` mutation
+   *  (mutations.ts) without a second query. */
+  id: string;
+  /** Indices into the REQUEST's `elementIds` whose interior contains
+   *  this face. */
+  signature: number[];
+  /** The face outline (closed). A face with holes carries them as extra
+   *  contours. */
+  anchors: PathAnchorTriple[];
+  /** Per-contour boundaries into `anchors`. */
+  subpathStarts: number[];
+  /** Unsigned area, outer contour minus holes. */
+  area: number;
+  /** A point strictly inside the face — what a hover highlight or a fill
+   *  drop keys off without re-deriving containment. */
+  inside: [number, number];
+}
+
+/**
+ * B-22 (protocol v57) — the full result of `document.planarRegions`.
+ *
+ * Deliberately NOT a bare face array: the door has THREE distinct
+ * answers a caller must be able to tell apart, and flattening them
+ * would make a refusal indistinguishable from "these paths divide into
+ * nothing":
+ *   · `found: true` — `faces` is the answer (possibly empty: a point
+ *     query outside every input);
+ *   · `found: false` + `reason` — a REFUSAL (no document, an id that
+ *     doesn't resolve, more inputs than the kernel's cap, or a host
+ *     whose engine predates the door). Never a truncated answer;
+ *     surface the engine's own words, never an empty face list.
+ *   · `complete: false` — the listed faces are all REAL but do not tile
+ *     the union of the inputs (the enumeration missed a sliver). Always
+ *     `true` for a point query — one face is not a tiling claim.
+ */
+export interface PlanarRegionsResult {
+  /** `false` ⇒ the query could not be answered at all; read `reason`. */
+  found: boolean;
+  /** Populated when `found`. With a `point` in the request this holds at
+   *  most one face (empty ⇒ the point is outside every input). */
+  faces: PlanarFace[];
+  /** How many inputs the arrangement was built from. */
+  inputCount: number;
+  /** `true` when the resolved faces tile the union of the inputs. */
+  complete: boolean;
+  /** Why `found` is false — the engine's own words (or the host
+   *  adapter's, when no v57 engine answered). Absent on success. */
+  reason?: string | null;
+}
+
 export interface DocumentSurface {
   /** The single write door. Accepts `MutationInput` — the vendored
    *  `Mutation` union PLUS the protocol-ahead ops the vendored wire
@@ -654,6 +720,36 @@ export interface DocumentSurface {
    *  against). Retires the v0 `host.editor.client.send` escape hatch
    *  the draw fill panel used. `null` for an unknown element. */
   elementProperties(id: ElementId): Promise<ElementProperties | null>;
+  /**
+   * B-22 (protocol v57) — the planar-REGION read door: resolve the faces
+   * of the arrangement `elementIds` forms (the areas the overlapping
+   * paths divide the plane into, one level below element hit-testing).
+   * Retires the v0 `host.editor.client.send({ kind:
+   * "requestPlanarRegions" })` escape hatch paged.draw's Shape Builder
+   * used.
+   *
+   * With `point` (in the RAW path space `pathAnchors` reports) it answers
+   * ONLY the face under it — the hover query, which costs N
+   * point-in-path tests plus one region materialisation instead of a
+   * full enumeration. Without it, every face comes back.
+   *
+   * Pure READ, gated on `capabilities.document.read`. Face ids are stable
+   * for the same inputs, so a hovered id is handed straight to the
+   * `pathfinderFaces` mutation.
+   *
+   * Answers the FULL {@link PlanarRegionsResult} — never a bare face
+   * array — because a refusal (`found: false` + `reason`: input cap,
+   * unresolvable id, or a host whose engine predates the door) must not
+   * be readable as "no regions". A host that cannot answer comes back as
+   * a refusal with a reason — never a throw (the undeclared-capability
+   * gate is the one exception, as on every read door). Probe
+   * `supports("document.planarRegions@1")` for whether the facade
+   * forwards at all.
+   */
+  planarRegions(
+    elementIds: ElementId[],
+    point?: [number, number],
+  ): Promise<PlanarRegionsResult>;
   /** D-01 (protocol v43) — enumerate every plugin-tagged placeholder
    *  field in the document, in story order. Offsets are FRESH-READ
    *  addresses (a placeholder is its own tagged run; re-enumerate
