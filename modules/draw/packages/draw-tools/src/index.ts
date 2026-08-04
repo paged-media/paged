@@ -98,6 +98,8 @@ export {
   type ShapeBuilderModifiers,
   type ShapeBuilderMode,
   type ShapeBuilderSnapshot,
+  type FaceMode,
+  type RegionFace,
 } from "./shape-builder-machine";
 
 export {

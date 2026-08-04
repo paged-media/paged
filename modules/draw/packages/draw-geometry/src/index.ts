@@ -107,4 +107,4 @@ export { peakedWidthProfile } from "./width";
 // Wave 2 — blend interpolation (anchor-run lerp + sRGB colour mix).
 export { interpolateAnchors, mixRgb } from "./blend";
 // Wave 2 — the lasso-select region test.
-export { pointInPolygon } from "./polygon";
+export { pointInPolygon, pointInAnchorPath } from "./polygon";

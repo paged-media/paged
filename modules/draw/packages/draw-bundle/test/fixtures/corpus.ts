@@ -149,6 +149,40 @@ export const F4_OVERLAP: CorpusFixture & { secondId: string } = {
   },
 };
 
+/** F5 — THIRTEEN mutually overlapping quads: one more than the planar
+ *  kernel's `MAX_PLANAR_INPUTS` (12). The fixture exists to prove the
+ *  engine REFUSES rather than truncating, and that the refusal's reason
+ *  reaches the UI (B-22). Ids are `u0` … `u12`. */
+export const F5_THIRTEEN: CorpusFixture & {
+  count: number;
+  idAt(i: number): string;
+} = {
+  id: "thirteen-overlap",
+  about: "13 mutually overlapping quads — one past the planar input cap",
+  pageId: "usp",
+  ids: { polygon: "u0" },
+  count: 13,
+  idAt: (i: number) => `u${i}`,
+  bytes() {
+    const items = Array.from({ length: 13 }, (_, i) => {
+      const o = i * 5;
+      return pathItem(
+        "Polygon",
+        `u${i}`,
+        `${100 + o} ${100 + o} ${300 + o} ${300 + o}`,
+        false,
+        [
+          { a: [100 + o, 100 + o] },
+          { a: [300 + o, 100 + o] },
+          { a: [300 + o, 300 + o] },
+          { a: [100 + o, 300 + o] },
+        ],
+      );
+    }).join("");
+    return packageWithSpread(items);
+  },
+};
+
 export const CORPUS: readonly CorpusFixture[] = [
   F1_MULTI_SHAPE,
   F2_CLOSED_QUAD,

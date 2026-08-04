@@ -23,8 +23,9 @@
 // plugin repo, hours after the change — the §12.3 "loud during
 // dogfooding" property.
 
-import type { PathAnchorSpec } from "@paged-media/plugin-api";
+import type { PathAnchorSpec, PathAnchorTriple } from "@paged-media/plugin-api";
 import type { AnchorTriple } from "@paged-media/draw-geometry";
+import type { RegionFace } from "./shape-builder-machine";
 
 type Extends<A, B> = A extends B ? true : false;
 type Assert<T extends true> = T;
@@ -32,3 +33,12 @@ type Assert<T extends true> = T;
 /** `AnchorTriple` assigns directly to `PathAnchorSpec` (insertPath,
  *  pathPointInsert anchors). */
 export type AnchorTripleFeedsWire = Assert<Extends<AnchorTriple, PathAnchorSpec>>;
+
+/** B-22 — a planar FACE's anchors, as the `requestPlanarRegions` read
+ *  door reports them (`PathAnchorTriple`), install into the Shape
+ *  Builder machine's `RegionFace` verbatim. The face's OWN wire type
+ *  (`PlanarFaceWire`, protocol v57) is not in the vendored contract
+ *  yet, so this asserts the part that IS: the anchor triple. */
+export type PlanarFaceAnchorsFeedMachine = Assert<
+  Extends<{ id: string; anchors: PathAnchorTriple[] }, RegionFace>
+>;

@@ -101,6 +101,10 @@ import {
   contributePathfinderCommands,
   PATHFINDER_COMMAND_IDS,
 } from "./commands/pathfinder";
+import {
+  contributePathfinderRegionCommands,
+  PATHFINDER_REGION_COMMAND_IDS,
+} from "./commands/pathfinder-region";
 import { vectorGraphicEditContext } from "./edit-context";
 import { fillPanel, installFillPanelBindings } from "./panels/fill-panel";
 import { makeLayersPanel } from "./panels/layers-panel";
@@ -173,6 +177,11 @@ export function activate(host: BundleHost): BundleHandle {
   // Phase 4c — Pathfinder Unite/Subtract/Intersect/Exclude (the
   // pathfinderBoolean wire consumers; first selected = kept).
   const pathfinderCommandsSub = contributePathfinderCommands(host);
+  // B-22 (engine v57) — the REGION Pathfinder row: Divide / Trim /
+  // Merge / Crop / Outline / Minus back over the planar arrangement.
+  // `elementIds` is TOP-TO-BOTTOM, read from the scene tree's paint
+  // order rather than click order — see commands/pathfinder-region.ts.
+  const pathfinderRegionCommandsSub = contributePathfinderRegionCommands(host);
   // Phase 9 (Tier B) — Live Corners (the frameCornerOption*/Radius* wire
   // consumers, Rectangle-only — gap B-23; each preset is an eight-write
   // batch + a metadata "live" marker).
@@ -221,6 +230,7 @@ export function activate(host: BundleHost): BundleHandle {
         PATH_OPS_COMMAND_IDS.length +
         JOIN_AVERAGE_COMMAND_IDS.length +
         PATHFINDER_COMMAND_IDS.length +
+        PATHFINDER_REGION_COMMAND_IDS.length +
         LIVE_CORNER_COMMAND_IDS.length +
         APPEARANCE_COMMAND_IDS.length +
         APPEARANCE_BAKE_COMMAND_IDS.length +
@@ -243,6 +253,7 @@ export function activate(host: BundleHost): BundleHandle {
       appearanceBakeCommandsSub.dispose();
       appearanceCommandsSub.dispose();
       liveCornerCommandsSub.dispose();
+      pathfinderRegionCommandsSub.dispose();
       pathfinderCommandsSub.dispose();
       joinAverageCommandsSub.dispose();
       pathOpsCommandsSub.dispose();

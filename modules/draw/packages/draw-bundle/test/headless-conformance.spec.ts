@@ -105,7 +105,7 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
       // honest — the registry really got a panel; the log keeps the
       // schema so conformance can assert it. Stroke first, then fill
       // (Phase 2d), then the two React panels (layers, appearance).
-      // Then the thirty-nine commands in registration order, then the
+      // Then the forty-five commands in registration order, then the
       // W3.2 edit context. (Pen is a core built-in.)
       expect(harness.contributions.map((c) => c.kind)).toEqual([
         // Three anchor editors + the pro set (Curvature, Pencil,
@@ -164,6 +164,14 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "command",
         "command",
         // Phase 4c — Pathfinder Unite / Subtract / Intersect / Exclude.
+        "command",
+        "command",
+        "command",
+        "command",
+        // B-22 (engine v57) — the REGION Pathfinder row: Divide / Trim
+        // / Merge / Crop / Outline / Minus back.
+        "command",
+        "command",
         "command",
         "command",
         "command",

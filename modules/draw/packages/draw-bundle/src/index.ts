@@ -188,13 +188,38 @@ export {
   contributePathfinderCommands,
   type PathfinderPreset,
 } from "./commands/pathfinder";
-// Phase 9 (Tier B) — Shape Builder gesture tool: the gesture→pathfinder
-// plan builder + the host handler factory, exported for the conformance
-// specs (the no-second-copy rule).
+// B-22 (engine v57) — the REGION Pathfinder row (Divide / Trim / Merge
+// / Crop / Outline / Minus back) + the shared v57 wire builders and the
+// refusal reader, exported for the conformance spec (no second copy to
+// drift from).
+export {
+  PATHFINDER_REGION_PRESETS,
+  PATHFINDER_REGION_COMMAND_IDS,
+  PATHFINDER_REGION_COMMAND_CATEGORY,
+  BIND_PATHFINDER_STATUS,
+  pathfinderRegionMutationFor,
+  pathfinderFacesMutationFor,
+  paintOrderLeaves,
+  orderTopToBottom,
+  selectionTopToBottom,
+  regionRefusalReason,
+  applyPathfinderRegion,
+  contributePathfinderRegionCommands,
+  type PathfinderRegionPreset,
+  type PathfinderRegionVerb,
+} from "./commands/pathfinder-region";
+// Phase 9 (Tier B) → B-22 — Shape Builder gesture tool, now REGION
+// level: the gesture→pathfinderFaces builder, the element-lane fallback
+// builder, the raw→page face mapping and the host handler factory,
+// exported for the conformance specs (the no-second-copy rule).
 export {
   createShapeBuilderHandler,
   shapeBuilderMutationFor,
+  shapeBuilderFacesMutationFor,
+  faceToPageSpace,
   pathfinderKindFor,
+  type PlanarFaceWire,
+  type PlanarRegionsWire,
 } from "./handlers/shape-builder";
 // Phase 9 (Tier B) — Live Corners: the per-corner wire-shape builders +
 // the metadata "live" marker, exported for the conformance spec.

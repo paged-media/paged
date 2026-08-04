@@ -186,6 +186,13 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.pathfinderSubtract",
       "media.paged.draw.command.pathfinderIntersect",
       "media.paged.draw.command.pathfinderExclude",
+      // B-22 (engine v57) — the REGION Pathfinder row.
+      "media.paged.draw.command.pathfinderDivide",
+      "media.paged.draw.command.pathfinderTrim",
+      "media.paged.draw.command.pathfinderMerge",
+      "media.paged.draw.command.pathfinderCrop",
+      "media.paged.draw.command.pathfinderOutline",
+      "media.paged.draw.command.pathfinderMinusBack",
       "media.paged.draw.command.cornersRounded",
       "media.paged.draw.command.cornersInverseRounded",
       "media.paged.draw.command.cornersBevel",
