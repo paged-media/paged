@@ -140,6 +140,8 @@ import {
 import { vectorGraphicEditContext } from "./edit-context";
 import { fillPanel, installFillPanelBindings } from "./panels/fill-panel";
 import { makeLayersPanel } from "./panels/layers-panel";
+import { makeLayersBindingProvider } from "./binding-provider/layers-provider";
+import { registerBindingProvider } from "./binding-provider/adr023-seam";
 import {
   makeAppearancePanel,
   APPEARANCE_PANEL_ID,
@@ -176,11 +178,27 @@ export function activate(host: BundleHost): BundleHandle {
   // as the expert-leaf React panel its own comment prescribes (the v1
   // schema has no list widget, B-01's honest limit). Live layer list +
   // the layer wire ops (visible/lock/printable/rename/move/add/remove).
+  //
+  // ADR 023 phase D: this panel is BEING RETIRED behind the
+  // binding-provider seam below. It is still registered in THIS commit
+  // on purpose — the coverage moves first, so there is a point to roll
+  // back to if the seam turns out to be wrong.
   host.contribute.panel({
     id: "media.paged.draw.panel.layers",
     icon: "panel-layers",
     ...makeLayersPanel(host),
   });
+  // ADR 023 phase D — the replacement, and it is NOT another panel.
+  // While the `vectorGraphic` context is active, this bundle RESOLVES
+  // what the HOST's own Layers panel binds to
+  // (`binding-provider/layers-provider.ts`): one panel in the rail,
+  // retargeting on selection, instead of a second copy of the same
+  // seven ops in a second dock tab.
+  //
+  // Registration happens WITH the edit context further down (phase A
+  // enforces the ordering: a provider on an unregistered context type
+  // could never activate, so the door refuses it).
+  const layersProvider = makeLayersBindingProvider(host);
   // The APPEARANCE panel — the view over the metadata stack the
   // appearance commands already model (add/remove/reorder fills +
   // strokes), with the one-fill/one-stroke engine limit (gap B-24)
@@ -396,7 +414,36 @@ export function activate(host: BundleHost): BundleHandle {
   // W3.2 — the vectorGraphic edit context (closes B-02): double-click a
   // path enters anchor-editing (the anchor tools focused, the stroke
   // panel raised, a breadcrumb, Esc exits).
-  contributeEditContext(host, vectorGraphicEditContext);
+  //
+  // ADR 023: the context's own hooks now also tell the Layers provider
+  // WHICH element was entered — its scope root, whose siblings are the
+  // object stack the host Layers panel shows. Note this is NOT the
+  // provider's lifetime: that is BORROWED, wrapped by the SDK adapter
+  // around these same hooks, so the shell's context stack stays the
+  // single source of "who is active". The declaration itself is spread
+  // from the shared const, so `edit-context.ts` (and the specs pinning
+  // its matcher / tool set / panel set) are untouched.
+  contributeEditContext(host, {
+    ...vectorGraphicEditContext,
+    onEnter: (ctx) => {
+      vectorGraphicEditContext.onEnter?.(ctx);
+      layersProvider.enter(ctx.id);
+    },
+    onExit: (ctx) => {
+      vectorGraphicEditContext.onExit?.(ctx);
+      layersProvider.exit();
+    },
+  });
+  // …and only NOW the provider: phase A refuses a provider whose edit
+  // context this bundle has not registered yet, because it could never
+  // activate. `null` back means the host predates phase A — draw then
+  // contributes no provider and the host Layers panel keeps reading
+  // core, which is exactly the pre-ADR behaviour.
+  const layersProviderHandle = registerBindingProvider(
+    host,
+    vectorGraphicEditContext.type,
+    layersProvider.provider,
+  );
   // Phase 8 — SVG interchange (K-2): an `.svg` importer (parse → insert
   // the shapes through the existing insertPath lane) + an `.svg` exporter
   // (selection → SVG bytes). Capability-gated; degrades honestly when the
@@ -426,7 +473,8 @@ export function activate(host: BundleHost): BundleHandle {
         INSERT_SHAPE_COMMAND_IDS.length +
         IMAGE_TRACE_COMMAND_IDS.length +
         2 // blendSelected + selectParentGroup
-      } commands + 1 edit context ` +
+      } commands + 1 edit context + ` +
+      `${layersProviderHandle ? 1 : 0} binding providers ` +
       `(apiVersion ${manifest.apiVersion})`,
   );
   // The contributions tear down structurally via the host; the binding
@@ -434,6 +482,11 @@ export function activate(host: BundleHost): BundleHandle {
   // so dispose them (and the command groups) here.
   return {
     dispose() {
+      // ADR 023 — disposing the provider handle removes the provider
+      // WITHOUT touching the edit context it borrowed activation from.
+      // That separation is what makes phase D a migration with a
+      // rollback point rather than a deletion.
+      layersProviderHandle?.dispose();
       svgIoSub.dispose();
       imageTraceCommandSub.dispose();
       selectParentGroupCommandSub.dispose();
