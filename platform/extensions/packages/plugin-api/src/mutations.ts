@@ -219,8 +219,70 @@ export type PathfinderFacesMutation = {
   args: { elementIds: ElementId[]; faces: string[]; mode: FaceSelectMode };
 };
 
+/** v58 (C-28) — how the mask artwork's coverage is read. `luminosity`
+ *  is Illustrator's default and PDF's `/S /Luminosity`; `alpha` reads
+ *  the artwork's alpha channel instead. Unpainted area means HIDDEN for
+ *  both (PDF's black backdrop). Omitted = `luminosity`. */
+export type OpacityMaskType = "luminosity" | "alpha";
+
+/** v58 (C-28) — **Make Opacity Mask**: `maskId`'s artwork becomes a soft
+ *  mask over `targetId`. The mask item leaves the page's z-order (its
+ *  slot is captured) and one undo pops it back exactly.
+ *
+ *  RENDERER GAP, stated because it is user-visible: the mask is honoured
+ *  by the CPU rasterizer and by PDF export, but NOT by the Vello/WebGPU
+ *  backend the editor canvas uses — Vello's `push_layer` takes a shape,
+ *  not a coverage buffer. On canvas the content currently draws
+ *  UNMASKED; the exported PDF is correct. Do not present this as
+ *  on-canvas WYSIWYG. */
+export type ApplyOpacityMaskMutation = {
+  op: "applyOpacityMask";
+  args: {
+    targetId: ElementId;
+    maskId: ElementId;
+    maskType?: OpacityMaskType | null;
+    invert?: boolean | null;
+  };
+};
+
+/** v58 (C-28) — drop the mask relation; the artwork returns to top level
+ *  with its geometry untouched. One undo re-applies the mask with its
+ *  original mode/invert at the same z slot. */
+export type ReleaseOpacityMaskMutation = {
+  op: "releaseOpacityMask";
+  args: { targetId: ElementId };
+};
+
+/** v58 (C-29) — **Type on a Path**: flow an existing story along an
+ *  existing path element. The engine could already RENDER type on a path
+ *  loaded from an IDML; until v58 nothing could create one.
+ *
+ *  Hosts are Rectangle / GraphicLine / Polygon. A TextFrame is refused
+ *  WITH a reason: its glyphs are emitted by the story pass, so accepting
+ *  it would produce a visible lie. `pathTypeAlignment` (Baseline /
+ *  Center honoured), `flipPathEffect` and the `startBracket`/`endBracket`
+ *  range are all live. `PathEffect` is deliberately NOT exposed — only
+ *  `RainbowPathEffect` actually renders. */
+export type AttachTextToPathMutation = {
+  op: "attachTextToPath";
+  args: {
+    elementId: ElementId;
+    storyId: string;
+    pathTypeAlignment?: string | null;
+    flipPathEffect?: string | null;
+    startBracket?: number | null;
+    endBracket?: number | null;
+  };
+};
+
+/** v58 (C-29) — unlink the text from the path; the exact inverse. */
+export type DetachTextFromPathMutation = {
+  op: "detachTextFromPath";
+  args: { elementId: ElementId };
+};
+
 /** The protocol-ahead ops, as one union — the delta between the
- *  vendored `Mutation` (protocol 51) and core's protocol 57. Empties
+ *  vendored `Mutation` (protocol 51) and core's protocol 58. Empties
  *  itself on the next `sync-wire.mjs` run. */
 export type PendingMutation =
   | ClosePathMutation
@@ -233,7 +295,11 @@ export type PendingMutation =
   | PathfinderCropMutation
   | PathfinderOutlineMutation
   | PathfinderMinusBackMutation
-  | PathfinderFacesMutation;
+  | PathfinderFacesMutation
+  | ApplyOpacityMaskMutation
+  | ReleaseOpacityMaskMutation
+  | AttachTextToPathMutation
+  | DetachTextFromPathMutation;
 
 /** What `host.document.mutate` ACCEPTS: the vendored op union plus the
  *  protocol-ahead ops. Widening an accepted-input type is additive —
