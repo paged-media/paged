@@ -340,7 +340,39 @@ export type ReorderElementMutation = {
 /** The protocol-ahead ops, as one union — the delta between the
  *  vendored `Mutation` (protocol 51) and core's protocol 59. Empties
  *  itself on the next `sync-wire.mjs` run. */
+/** v57 (C-15) — name the id a creating sibling is about to mint, so a
+ *  LATER child of the same batch can address it as `"$h:<handle>"`.
+ *
+ *  This is what collapses a two-batch flow into ONE undo step. Before it,
+ *  a bundle that inserted geometry and then painted or grouped it had to
+ *  issue two batches, because a batch op could not reference an id minted
+ *  in the same batch — paged.draw's appearance bake, pattern bake and
+ *  re-plan, compound-path release, symbol place, image trace and
+ *  live-paint fill all pay two undo steps for exactly that reason.
+ *
+ *  Three rules, each of which was measured against the engine rather than
+ *  assumed, because getting any of them wrong fails in a confusing way:
+ *
+ *  1. **Order matters.** The bind must come AFTER the creating child.
+ *     Placed before, the batch is refused BY NAME (an honest error, not a
+ *     silent no-op).
+ *  2. **It is its own op, not a field.** Passing a handle inside a
+ *     creating op's own `args` is SILENTLY IGNORED — which is what made
+ *     an early probe read as "the engine doesn't support this".
+ *  3. **Scope is the declaring batch**, visible to its own later children
+ *     including nested batches, never outward. A `$h:` appearing in TEXT
+ *     content is content and is never rewritten.
+ *
+ *  Generalises the v34 `$created` sentinel — which only two mutation
+ *  kinds understood — to any number of live names addressable from any
+ *  mutation kind. */
+export type BindCreatedMutation = {
+  op: "bindCreated";
+  args: { handle: string };
+};
+
 export type PendingMutation =
+  | BindCreatedMutation
   | ClosePathMutation
   | JoinPathsMutation
   | PasteIntoMutation
