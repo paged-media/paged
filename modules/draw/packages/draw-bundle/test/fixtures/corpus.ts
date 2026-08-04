@@ -183,6 +183,47 @@ export const F5_THIRTEEN: CorpusFixture & {
   },
 };
 
+/** F6 — a RING PAIR: a big closed quad `uouter` (100..400)² with a
+ *  small closed quad `uinner` (200..300)² fully inside it, PLUS an open
+ *  3-anchor polygon `uopen` well clear of both. Authored with the SAME
+ *  winding on both quads, which is exactly the trap: concatenating them
+ *  as-is paints a solid coin under the engine's non-zero fill, so the
+ *  fixture proves the compound-path command RE-WINDS the inner contour.
+ *  `uopen` is the open-contour scope case (survivor + consumed). */
+export const F6_RING_PAIR: CorpusFixture & {
+  innerId: string;
+  openId: string;
+} = {
+  id: "ring-pair",
+  about: "outer quad + inner quad (same winding) + an open path — compound-path targets",
+  pageId: "usp",
+  ids: { polygon: "uouter" },
+  innerId: "uinner",
+  openId: "uopen",
+  bytes() {
+    const outer = pathItem("Polygon", "uouter", "100 100 400 400", false, [
+      { a: [100, 100] },
+      { a: [400, 100] },
+      { a: [400, 400] },
+      { a: [100, 400] },
+    ]);
+    const inner = pathItem("Polygon", "uinner", "200 200 300 300", false, [
+      { a: [200, 200] },
+      { a: [300, 200] },
+      { a: [300, 300] },
+      { a: [200, 300] },
+    ]);
+    // GeometricBounds is "top left bottom right"; the anchors below
+    // span x 500..600, y 100..300.
+    const open = pathItem("Polygon", "uopen", "100 500 300 600", true, [
+      { a: [500, 100] },
+      { a: [600, 200] },
+      { a: [500, 300] },
+    ]);
+    return packageWithSpread(outer + inner + open);
+  },
+};
+
 export const CORPUS: readonly CorpusFixture[] = [
   F1_MULTI_SHAPE,
   F2_CLOSED_QUAD,

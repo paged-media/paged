@@ -193,6 +193,11 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.pathfinderCrop",
       "media.paged.draw.command.pathfinderOutline",
       "media.paged.draw.command.pathfinderMinusBack",
+      // Illustrator Phase 2 — compound paths (Make / Release).
+      "media.paged.draw.command.makeCompoundPath",
+      "media.paged.draw.command.releaseCompoundPath",
+      // Illustrator Phase 2 — patterns v0 (a destructive step-and-repeat BAKE).
+      "media.paged.draw.command.makePatternFromSelection",
       "media.paged.draw.command.cornersRounded",
       "media.paged.draw.command.cornersInverseRounded",
       "media.paged.draw.command.cornersBevel",

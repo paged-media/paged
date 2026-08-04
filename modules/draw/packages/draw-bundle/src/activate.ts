@@ -69,7 +69,15 @@ import {
   contributeAppearanceBakeCommands,
   APPEARANCE_BAKE_COMMAND_IDS,
 } from "./commands/appearance-bake";
+import {
+  contributeCompoundPathCommands,
+  COMPOUND_PATH_COMMAND_IDS,
+} from "./commands/compound-path";
 import { contributeDashCommands, DASH_COMMAND_IDS } from "./commands/dash";
+import {
+  contributePatternCommands,
+  PATTERN_COMMAND_IDS,
+} from "./commands/pattern";
 import {
   contributeLiveCornerCommands,
   LIVE_CORNER_COMMAND_IDS,
@@ -182,6 +190,18 @@ export function activate(host: BundleHost): BundleHandle {
   // `elementIds` is TOP-TO-BOTTOM, read from the scene tree's paint
   // order rather than click order — see commands/pathfinder-region.ts.
   const pathfinderRegionCommandsSub = contributePathfinderRegionCommands(host);
+  // Illustrator Phase 2 — Make / Release COMPOUND PATH. No new wire op:
+  // `framePath` replaces a whole anchor table (contour boundaries
+  // included) and is the same door core's own `apply_pathfinder` uses.
+  // The winding re-orientation that turns a nested contour into a HOLE
+  // under the engine's NON-ZERO fill lives in draw-geometry — see
+  // commands/compound-path.ts for the undo shape + the honest scope.
+  const compoundPathCommandsSub = contributeCompoundPathCommands(host);
+  // Illustrator Phase 2 — PATTERNS v0, and honestly only v0: there is
+  // no pattern paint type in IDML / the engine / the wire, so this is a
+  // destructive step-and-repeat BAKE (copies, not a live fill). The
+  // command title says BAKE; commands/pattern.ts says why.
+  const patternCommandsSub = contributePatternCommands(host);
   // Phase 9 (Tier B) — Live Corners (the frameCornerOption*/Radius* wire
   // consumers, Rectangle-only — gap B-23; each preset is an eight-write
   // batch + a metadata "live" marker).
@@ -231,6 +251,8 @@ export function activate(host: BundleHost): BundleHandle {
         JOIN_AVERAGE_COMMAND_IDS.length +
         PATHFINDER_COMMAND_IDS.length +
         PATHFINDER_REGION_COMMAND_IDS.length +
+        COMPOUND_PATH_COMMAND_IDS.length +
+        PATTERN_COMMAND_IDS.length +
         LIVE_CORNER_COMMAND_IDS.length +
         APPEARANCE_COMMAND_IDS.length +
         APPEARANCE_BAKE_COMMAND_IDS.length +
@@ -253,6 +275,8 @@ export function activate(host: BundleHost): BundleHandle {
       appearanceBakeCommandsSub.dispose();
       appearanceCommandsSub.dispose();
       liveCornerCommandsSub.dispose();
+      patternCommandsSub.dispose();
+      compoundPathCommandsSub.dispose();
       pathfinderRegionCommandsSub.dispose();
       pathfinderCommandsSub.dispose();
       joinAverageCommandsSub.dispose();

@@ -208,6 +208,59 @@ export {
   type PathfinderRegionPreset,
   type PathfinderRegionVerb,
 } from "./commands/pathfinder-region";
+// Illustrator Phase 2 — COMPOUND PATHS (Make / Release). The wire
+// builders, the page-space contour reader and the appliers, exported
+// for the conformance spec (the no-second-copy rule).
+export {
+  COMPOUND_PATH_COMMAND_IDS,
+  COMPOUND_PATH_COMMAND_CATEGORY,
+  MAKE_COMPOUND_PATH_COMMAND_ID,
+  RELEASE_COMPOUND_PATH_COMMAND_ID,
+  framePathMutationFor,
+  makeCompoundBatchFor,
+  releaseInsertBatchFor,
+  releasePaintBatchFor,
+  compoundSourceOf,
+  compoundPaintOf,
+  contourCountOf,
+  tableInInnerSpace,
+  applyMakeCompoundPath,
+  applyReleaseCompoundPath,
+  contributeCompoundPathCommands,
+  type CompoundSource,
+  type CompoundPaint,
+} from "./commands/compound-path";
+// Illustrator Phase 2 — PATTERNS v0: a DESTRUCTIVE step-and-repeat BAKE
+// (the engine has no pattern paint type — see commands/pattern.ts). The
+// pure plan + wire builders, exported for the conformance spec.
+export {
+  PATTERN_COMMAND_IDS,
+  PATTERN_COMMAND_CATEGORY,
+  MAKE_PATTERN_COMMAND_ID,
+  PATTERN_COLUMNS,
+  PATTERN_ROWS,
+  PATTERN_SPACING_PT,
+  patternBakeOf,
+  patternTileOf,
+  withPatternBake,
+  patternTilesFor,
+  patternCopiesFor,
+  offsetTable,
+  patternInsertBatchFor,
+  bindPatternCopies,
+  patternFinishBatchFor,
+  selectionTileSize,
+  patternPlanFor,
+  applyMakePattern,
+  contributePatternCommands,
+  type PatternBakeRecord,
+  type PatternTileMarker,
+  type PatternTile,
+  type PatternSource,
+  type PatternPlan,
+  type PatternCopy,
+  type PatternCopyBinding,
+} from "./commands/pattern";
 // Phase 9 (Tier B) → B-22 — Shape Builder gesture tool, now REGION
 // level: the gesture→pathfinderFaces builder, the element-lane fallback
 // builder, the raw→page face mapping and the host handler factory,
