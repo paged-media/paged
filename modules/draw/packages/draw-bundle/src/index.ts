@@ -423,6 +423,87 @@ export {
   GRAPHIC_STYLES_PANEL_ID,
   GRAPHIC_STYLES_NOTE,
 } from "./panels/graphic-styles-panel";
+// Illustrator Phase 2 (§16.1) — SYMBOLS v0: a named DEFINITION in a
+// document-resident container part + INSTANCES re-emitted from it and
+// stamped with a link. The engine has no symbol primitive and no
+// element-duplicate op, so an instance is re-emitted geometry + flat
+// paint — see commands/symbols.ts for the persistence shape, the
+// measured undo counts and everything v0 deliberately does NOT build
+// (the eight symbol-SET tools, nine-slice, 3D mapping). Pure model +
+// the exact wire builders exported for the conformance spec (the
+// no-second-copy rule).
+export {
+  SYMBOLS_COMMAND_IDS,
+  SYMBOLS_COMMAND_CATEGORY,
+  SYMBOLS_PART,
+  SYMBOLS_LIBRARY_VERSION,
+  SYMBOLS_FEATURE,
+  SYMBOL_REGISTRATIONS,
+  DEFAULT_SYMBOL_REGISTRATION,
+  DEFINE_SYMBOL_COMMAND_ID,
+  PLACE_SYMBOL_COMMAND_ID,
+  REDEFINE_SYMBOL_COMMAND_ID,
+  BREAK_SYMBOL_LINK_COMMAND_ID,
+  RESET_SYMBOL_TRANSFORM_COMMAND_ID,
+  RENAME_SYMBOL_COMMAND_ID,
+  DELETE_SYMBOL_COMMAND_ID,
+  parseAnchorTable,
+  parseSymbolPaint,
+  parseSymbolLibrary,
+  serializeSymbolLibrary,
+  mintSymbolId,
+  mintSymbolInstanceId,
+  findSymbol,
+  upsertSymbol,
+  renameSymbolIn,
+  removeSymbolFrom,
+  symbolBoundsOf,
+  registrationPointOf,
+  symbolDefinitionFrom,
+  symbolInstanceOf,
+  withSymbolInstance,
+  symbolPlacePlanFor,
+  symbolContourCounts,
+  bindSymbolPieces,
+  symbolInsertBatchFor,
+  symbolFinishBatchFor,
+  symbolUnlinkBatchFor,
+  readSymbolLibrary,
+  writeSymbolLibrary,
+  symbolInstances,
+  expandToLeaves,
+  selectedSymbolInstances,
+  liveInstanceOrigin,
+  captureSymbolSources,
+  emitSymbolInstance,
+  applyDefineSymbol,
+  applyPlaceSymbolInstance,
+  applyRedefineSymbol,
+  applyResetSymbolTransform,
+  applyBreakSymbolLink,
+  applyRenameSymbol,
+  applyDeleteSymbol,
+  contributeSymbolCommands,
+  type SymbolRegistration,
+  type SymbolPiece,
+  type SymbolDefinition,
+  type SymbolLibrary,
+  type SymbolInstanceRef,
+  type SymbolInstance,
+  type SymbolPlacePlan,
+  type SymbolPieceBinding,
+  type SymbolReplacement,
+} from "./commands/symbols";
+// The SYMBOLS panel (React, the Layers / Appearance / Graphic Styles
+// idiom) — the view over the library + whether the selection is an
+// instance, with the not-undoable library and the unbuilt P2 symbol-set
+// tools stated inline.
+export {
+  makeSymbolsPanel,
+  symbolRowLabel,
+  SYMBOLS_PANEL_ID,
+  SYMBOLS_NOTE,
+} from "./panels/symbols-panel";
 // Phase 9 (Tier B) — Select-same: the pure matcher + tree flattener,
 // exported for the conformance spec.
 export {

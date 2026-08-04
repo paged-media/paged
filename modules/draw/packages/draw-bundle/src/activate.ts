@@ -74,6 +74,10 @@ import {
   GRAPHIC_STYLES_COMMAND_IDS,
 } from "./commands/graphic-styles";
 import {
+  contributeSymbolCommands,
+  SYMBOLS_COMMAND_IDS,
+} from "./commands/symbols";
+import {
   contributeCompoundPathCommands,
   COMPOUND_PATH_COMMAND_IDS,
 } from "./commands/compound-path";
@@ -132,6 +136,7 @@ import {
   makeGraphicStylesPanel,
   GRAPHIC_STYLES_PANEL_ID,
 } from "./panels/graphic-styles-panel";
+import { makeSymbolsPanel, SYMBOLS_PANEL_ID } from "./panels/symbols-panel";
 import { installStrokePanelBindings, strokePanel } from "./panels/stroke-panel";
 import { contributeSvgIo } from "./io/svg";
 
@@ -187,6 +192,19 @@ export function activate(host: BundleHost): BundleHandle {
     id: GRAPHIC_STYLES_PANEL_ID,
     icon: "panel-object-styles",
     ...makeGraphicStylesPanel(host),
+  });
+  // Illustrator Phase 2 (§16.1) — SYMBOLS v0: a named artwork DEFINITION
+  // in a second `.paged` container part, plus INSTANCES re-emitted from
+  // it. Same React reason as the rows above (a list of named records with
+  // per-row actions is above the v1 schema panel's scalar ceiling).
+  // (`panel-links` is a REAL glyph in the host's kebab-case map — there is
+  // no `panel-symbols`, and an invented token renders the dock tab
+  // ICONLESS, the stroke panel's recorded lesson. It is also the honest
+  // metaphor: an instance is a LINK to a definition.)
+  host.contribute.panel({
+    id: SYMBOLS_PANEL_ID,
+    icon: "panel-links",
+    ...makeSymbolsPanel(host),
   });
   // B-12 — the stroke DASH presets as commands (the schema binding
   // ceiling is scalar, a dash array is a vector → command-driven). Each
@@ -252,6 +270,16 @@ export function activate(host: BundleHost): BundleHandle {
   // the link, and a redefine overwrites it. See commands/graphic-styles.ts
   // for the persistence shape, the kind projection and the honest limits.
   const graphicStyleCommandsSub = contributeGraphicStyleCommands(host);
+  // Illustrator Phase 2 (§16.1) — SYMBOLS v0 (define / place / redefine /
+  // break link / reset transform / rename / delete). Core has NO symbol
+  // or instance model and IDML has no such primitive, and there is no
+  // element-duplicate op on the wire — so a definition is a document
+  // container part and an INSTANCE is real artwork re-emitted through
+  // `insertPath` and stamped with a link on every leaf (a group cannot
+  // carry metadata). commands/symbols.ts states the measured undo counts,
+  // the text refusal and everything v0 deliberately does not build (the
+  // eight symbol-SET tools, nine-slice scaling, 3D mapping).
+  const symbolCommandsSub = contributeSymbolCommands(host);
   // Phase 9 (Tier B) — Select-same (pure selection over fill / stroke /
   // stroke-weight; no mutation).
   const selectSameCommandsSub = contributeSelectSameCommands(host);
@@ -287,7 +315,7 @@ export function activate(host: BundleHost): BundleHandle {
   // host predates the importer/exporter doors.
   const svgIoSub = contributeSvgIo(host);
   host.log.info(
-    `activated — ${tools.length} tools + 2 schema panels + 3 React panels + ` +
+    `activated — ${tools.length} tools + 2 schema panels + 4 React panels + ` +
       `${
         DASH_COMMAND_IDS.length +
         GROUP_COMMAND_IDS.length +
@@ -302,6 +330,7 @@ export function activate(host: BundleHost): BundleHandle {
         APPEARANCE_COMMAND_IDS.length +
         APPEARANCE_BAKE_COMMAND_IDS.length +
         GRAPHIC_STYLES_COMMAND_IDS.length +
+        SYMBOLS_COMMAND_IDS.length +
         SELECT_SAME_COMMAND_IDS.length +
         INSERT_SHAPE_COMMAND_IDS.length +
         IMAGE_TRACE_COMMAND_IDS.length +
@@ -320,6 +349,7 @@ export function activate(host: BundleHost): BundleHandle {
       blendCommandSub.dispose();
       insertShapeCommandsSub.dispose();
       selectSameCommandsSub.dispose();
+      symbolCommandsSub.dispose();
       graphicStyleCommandsSub.dispose();
       appearanceBakeCommandsSub.dispose();
       appearanceCommandsSub.dispose();

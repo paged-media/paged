@@ -36,15 +36,37 @@ document-resident `.paged` container part written through `host.parts`
 and declared in `contributes.partTypes`; the link is a reference on the
 element's own metadata envelope, a direct appearance edit marks the
 element OVERRIDDEN without breaking the link, and a redefine overwrites
-that override), SVG import/export, and the `vectorGraphic` EDIT CONTEXT (double-click a
+that override), SYMBOLS v0 (its sibling, same shape: a named artwork
+DEFINITION in a SECOND container part + INSTANCES re-emitted from it.
+Core has no symbol/instance model, IDML has no such primitive, and the
+`Mutation` union has no element-duplicate op — so an instance is
+`insertPath` geometry + flat paint carrying a per-LEAF link, because a
+group cannot hold metadata. Registration points are the §16.1 nine-point
+grid; redefine and reset REBUILD an instance rather than re-point it.
+TEXT is refused (no op copies a story), and the eight symbol-SET tools /
+nine-slice / 3D mapping are named as unbuilt rather than implied), SVG
+import/export, and the `vectorGraphic` EDIT CONTEXT (double-click a
 path-bearing kind → anchor-editing tool-set focused, stroke panel raised,
 Esc pops out). The bundle drives end-to-end through the real editor host:
 the draw-plugin e2e (`editor` `apps/canvas/tests/e2e/draw-plugin.spec.ts`)
 and a DTP journey (`tests/journey/plugins/draw.journey.spec.ts`) author a
 path with the built-in Pen, then refine its anchors (add/delete/convert)
-and stroke through the bundle. The three TS packages carry 606 passing
-vitest (geometry 162, tools 102, bundle 342) and typecheck clean; the two
+and stroke through the bundle. The three TS packages carry 643 passing
+vitest (geometry 162, tools 102, bundle 379) and typecheck clean; the two
 crates carry 26 `cargo test` (draw-trace 22, trace-js 4).
+
+**RFI C-15 has LANDED in core (b8e2b6b) but is NOT reachable from here
+yet.** A batch can now address an id an earlier child minted
+(`bindCreated { handle }` + `$h:` references), and the locally-synced
+engine wasm speaks it — but `@paged-media/plugin-api`'s `Mutation` union
+carries no `bindCreated` arm (checked in the published
+`0.2.25-canary.0` AND in plugin-sdk's unpublished HEAD source). Until the
+contract package regenerates its wire types, every insert-then-style flow
+in this repo stays at its two-batch floor, and the "TWO batches ⇒ 2 undo
+steps" notes in `pattern.ts` / `appearance-bake.ts` / `compound-path.ts`
+(release) / `blend.ts` are still TRUE, not stale — even though core's own
+commit message lists exactly those four as collapsible. Re-check this
+when the contract bumps.
 
 ## Hard rules
 

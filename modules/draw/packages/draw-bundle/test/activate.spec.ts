@@ -219,6 +219,15 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.breakGraphicStyleLink",
       "media.paged.draw.command.renameGraphicStyle",
       "media.paged.draw.command.deleteGraphicStyle",
+      // Illustrator Phase 2 (§16.1) — symbols v0 (a definition in a
+      // container part; an instance is re-emitted artwork carrying a link).
+      "media.paged.draw.command.defineSymbol",
+      "media.paged.draw.command.placeSymbolInstance",
+      "media.paged.draw.command.redefineSymbol",
+      "media.paged.draw.command.breakSymbolLink",
+      "media.paged.draw.command.resetSymbolTransform",
+      "media.paged.draw.command.renameSymbol",
+      "media.paged.draw.command.deleteSymbol",
       "media.paged.draw.command.selectSameFill",
       "media.paged.draw.command.selectSameStroke",
       "media.paged.draw.command.selectSameStrokeWeight",
@@ -234,25 +243,27 @@ describe("drawBundle.activate", () => {
     expect(fake.keybindings.count()).toBe(0);
   });
 
-  it("registers the stroke + fill SCHEMA panels and the layers + appearance + graphic-styles React panels", () => {
+  it("registers the stroke + fill SCHEMA panels and the layers + appearance + graphic-styles + symbols React panels", () => {
     const fake = makeFakeEditor();
     loadBundle(() => fake.editor, drawBundle, {
       console: silent,
       storage: mapBacking(),
     });
     // The schema panels register through the panels registry as
-    // synthesized PanelContributions; the three React panels — layers
+    // synthesized PanelContributions; the four React panels — layers
     // (the layers.panel.json prototype made real), appearance (the
-    // metadata stack + its one-fill/one-stroke honesty note) and graphic
+    // metadata stack + its one-fill/one-stroke honesty note), graphic
     // styles (the document-resident style library + the selection's link
-    // into it) — register directly, all expert-leaf per B-01's
-    // list-widget limit.
+    // into it) and symbols (the document-resident artwork library + the
+    // instances that follow it) — register directly, all expert-leaf per
+    // B-01's list-widget limit.
     expect(fake.panels.ids()).toEqual([
       "media.paged.draw.panel.stroke",
       "media.paged.draw.panel.fill",
       "media.paged.draw.panel.layers",
       "media.paged.draw.panel.appearance",
       "media.paged.draw.panel.graphicStyles",
+      "media.paged.draw.panel.symbols",
     ]);
   });
 
