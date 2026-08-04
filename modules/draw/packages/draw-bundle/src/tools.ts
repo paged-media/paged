@@ -55,6 +55,7 @@ import {
 import { createMeasureHandler } from "./handlers/measure";
 import { createPencilHandler } from "./handlers/pencil";
 import { createShapeBuilderHandler } from "./handlers/shape-builder";
+import { createTypeOnPathHandler } from "./handlers/text-on-path";
 import { createWidthHandler } from "./handlers/width";
 
 const CROSS: CursorSpec = { kind: "css", token: "crosshair" };
@@ -101,6 +102,12 @@ export const WAVE2_TOOL_IDS = [
 export const LIVE_PAINT_TOOL_IDS = [
   "media.paged.draw.tool.livePaintBucket",
   "media.paged.draw.tool.livePaintSelect",
+] as const;
+
+/** TYPE ON A PATH (C-29, engine protocol v58) — one tool (host-free,
+ *  the PRO_TOOL_IDS pattern). */
+export const TEXT_ON_PATH_TOOL_IDS = [
+  "media.paged.draw.tool.typeOnPath",
 ] as const;
 
 /** Build the three anchor-editing tools bound to `host` — each
@@ -338,10 +345,11 @@ export function drawTools(host: BundleHost): ToolContribution[] {
     // shift+c/u/n/a/m/b/r/j/k/i/d/s/q) and paged.image, which has GROWN
     // since the wave-2 note above: it now holds shift+x, y, shift+y,
     // shift+l, shift+w AND q / shift+f / shift+e (its raster brush /
-    // pencil / eraser). That leaves exactly four free shift keys —
+    // pencil / eraser). That left exactly four free shift keys —
     // shift+h, shift+o, shift+v, shift+z — and these take two of them.
     // `shift+v` reads as a Selection-tool variant (`v` is the editor's
-    // Selection tool), which is what the face picker is.
+    // Selection tool), which is what the face picker is. (Type on a Path
+    // has since taken shift+h; shift+z is the only one still free.)
     //
     // ICONS: the host's kebab-case glyph map has no `tool-livePaint*`
     // entry, and an INVENTED token renders the rail button GLYPHLESS
@@ -370,6 +378,43 @@ export function drawTools(host: BundleHost): ToolContribution[] {
       order: 2,
       cursor: CROSS,
       gesture: () => createLivePaintSelectHandler(host),
+    },
+    // TYPE ON A PATH (C-29, engine protocol v58) — click a Rectangle /
+    // GraphicLine / Polygon and an EXISTING free story flows along it;
+    // alt+click detaches (handlers/text-on-path.ts). The engine has
+    // rendered `<TextPath>` all along; v58 is the first way to CREATE
+    // one, so nothing here is an approximation.
+    //
+    // THE EDITOR ALREADY SHIPS AN INERT `paged.tool.typePath` — a
+    // built-in rail entry titled "Type on a Path" (icon `tool-typePath`,
+    // shortcut `shift+t`, TEXT cursor) that carries NO `gesture` and
+    // therefore does nothing when picked. A bundle cannot attach
+    // behaviour to a built-in id (`contributeTool` registers a NEW
+    // tool), so this joins the SAME `type` group one slot further along
+    // and takes a DISTINCT title, rather than shadowing the built-in or
+    // pretending to replace it. Retiring the placeholder is an editor-
+    // side call.
+    //
+    // SHORTCUT (INV-REG-1, globally unique tool shortcuts): the
+    // canonical `shift+t` is exactly the inert built-in's key, so it is
+    // NOT free. Re-verified at pick time against the editor built-ins
+    // (v a u b t f m l c e r s o g i k h z p n w x d j q \ = - plus the
+    // shift+p/t/g trio), this bundle (= - shift+c/u/n/a/m/b/r/j/k/i/d/
+    // s/q and, since Live Paint, shift+o/shift+v) and paged.image
+    // (shift+x, y, shift+y, shift+l, shift+w, q, shift+f, shift+e).
+    // That leaves exactly TWO free shift keys — shift+h and shift+z —
+    // and this takes shift+h: `shift+z` reads as an undo variant on
+    // every platform and binding it to a tool would be a trap.
+    {
+      id: "media.paged.draw.tool.typeOnPath",
+      title: "Type on a Path (attach story)",
+      icon: "tool-typePath",
+      shortcut: "shift+h",
+      group: "type",
+      section: "drawType",
+      order: 2,
+      cursor: CROSS,
+      gesture: () => createTypeOnPathHandler(host),
     },
   ];
 }

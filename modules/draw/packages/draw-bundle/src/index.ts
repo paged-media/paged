@@ -104,6 +104,7 @@ export {
   BRUSH_TOOL_IDS,
   WAVE2_TOOL_IDS,
   LIVE_PAINT_TOOL_IDS,
+  TEXT_ON_PATH_TOOL_IDS,
 } from "./tools";
 export { insertPathMutationFor } from "./handlers/insert-path";
 // Brush tools v0 — the sweep handler factories, the exact
@@ -377,6 +378,90 @@ export {
   LIVE_PAINT_PANEL_ID,
   LIVE_PAINT_NOTE,
 } from "./panels/live-paint-panel";
+// PROTOCOL 58 — the ONE place the v58 wire skew lives (the four C-28 /
+// C-29 ops, their capability probes and their refusal reader). The
+// typed contract for all four is committed in plugin-sdk `f00d6dd`;
+// this repo installs the published 0.2.25-canary.0, so the cast stays
+// until the canary bumps — and then deleting it is the whole change.
+export {
+  PATH_TYPE_ALIGNMENTS,
+  FLIP_PATH_EFFECTS,
+  applyOpacityMaskMutationFor,
+  releaseOpacityMaskMutationFor,
+  attachTextToPathMutationFor,
+  detachTextFromPathMutationFor,
+  v58RefusalReason,
+  supportsOpacityMask,
+  supportsTextOnPath,
+  type OpacityMaskMode,
+  type PathTypeAlignment,
+  type FlipPathEffect,
+  type TextPathSpec,
+} from "./commands/v58-wire";
+// Illustrator Phase 2 (the Transparency panel row) — OPACITY MASKS
+// (C-28). EXPORT-ONLY today: honoured by the CPU rasterizer and by PDF
+// export, NOT by the Vello/WebGPU backend the canvas draws through.
+// `OPACITY_MASK_CANVAS_NOTE` is the pinned wording; the command title
+// carries it too.
+export {
+  OPACITY_MASK_COMMAND_IDS,
+  OPACITY_MASK_COMMAND_CATEGORY,
+  MAKE_OPACITY_MASK_COMMAND_ID,
+  RELEASE_OPACITY_MASK_COMMAND_ID,
+  BIND_OPACITY_MASK_STATUS,
+  OPACITY_MASK_CANVAS_NOTE,
+  OPACITY_MASK_KINDS,
+  DEFAULT_OPACITY_MASK_MODE,
+  opacityMaskOf,
+  withOpacityMaskKey,
+  opacityMaskApplyBatchFor,
+  opacityMaskReleaseBatchFor,
+  resolveMaskTarget,
+  opacityMaskLinks,
+  applyMakeOpacityMask,
+  applyReleaseOpacityMask,
+  contributeOpacityMaskCommands,
+  type OpacityMaskRef,
+} from "./commands/opacity-mask";
+// Illustrator/InDesign Phase 2 — TYPE ON A PATH (C-29): flow an
+// EXISTING story along an EXISTING path. Every knob offered is one the
+// renderer honours; `PathEffect` is deliberately absent.
+export {
+  TEXT_ON_PATH_COMMAND_IDS,
+  TEXT_ON_PATH_COMMAND_CATEGORY,
+  ATTACH_TEXT_TO_PATH_COMMAND_ID,
+  DETACH_TEXT_FROM_PATH_COMMAND_ID,
+  BIND_TEXT_ON_PATH_STATUS,
+  BIND_TEXT_ON_PATH_STORY,
+  TEXT_ON_PATH_KINDS,
+  NO_FREE_STORY_NOTE,
+  pathTypeAlignmentOf,
+  flipPathEffectOf,
+  textPathSpecOf,
+  textOnPathOf,
+  withTextOnPathKey,
+  textOnPathAttachBatchFor,
+  textOnPathDetachBatchFor,
+  documentStories,
+  textOnPathLinks,
+  freeStories,
+  resolvePathHost,
+  resolveAttachStory,
+  getTextOnPathStory,
+  setTextOnPathStory,
+  applyAttachTextToPath,
+  applyDetachTextFromPath,
+  contributeTextOnPathCommands,
+  type TextOnPathRef,
+  type StorySummaryLike,
+} from "./commands/text-on-path";
+// TYPE ON A PATH — the click tool (plain click attaches, alt+click
+// detaches) and the pure host-kind refusal reader it pre-explains with.
+export {
+  createTypeOnPathHandler,
+  pathHostRefusal,
+  TYPE_ON_PATH_LABEL,
+} from "./handlers/text-on-path";
 // Phase 9 (Tier B) — Live Corners: the per-corner wire-shape builders +
 // the metadata "live" marker, exported for the conformance spec.
 export {

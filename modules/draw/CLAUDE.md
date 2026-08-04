@@ -59,14 +59,16 @@ arrangement door takes no tolerance, the kernel names gap detection as
 out of scope, every input subpath is implicitly CLOSED, and the wire
 carries no edge id at all. The 12-input / 256-face caps REFUSE with the
 engine's own sentence on the pathfinder status binding. Filed as RFI
-C-30), SVG import/export, and the `vectorGraphic` EDIT CONTEXT
+C-30), OPACITY MASKS and TYPE ON A PATH (the two protocol-58 rows — see
+the v58 seam note below), SVG import/export, and the `vectorGraphic` EDIT
+CONTEXT
 (double-click a path-bearing kind → anchor-editing tool-set focused,
 stroke panel raised, Esc pops out). The bundle drives end-to-end through the real editor host:
 the draw-plugin e2e (`editor` `apps/canvas/tests/e2e/draw-plugin.spec.ts`)
 and a DTP journey (`tests/journey/plugins/draw.journey.spec.ts`) author a
 path with the built-in Pen, then refine its anchors (add/delete/convert)
-and stroke through the bundle. The three TS packages carry 698 passing
-vitest (geometry 162, tools 113, bundle 423) and typecheck clean; the two
+and stroke through the bundle. The three TS packages carry 746 passing
+vitest (geometry 162, tools 113, bundle 471) and typecheck clean; the two
 crates carry 26 `cargo test` (draw-trace 22, trace-js 4).
 
 **The planar arrangement has ONE seam.** `draw-bundle/src/handlers/planar-regions.ts`
@@ -78,12 +80,49 @@ Builder and Live Paint both ride it; a third region tool must too, and a
 K-11 repin is a rewrite of ONE function plus deleting two local wire
 types.
 
+**PROTOCOL 58 has ONE seam too.** `draw-bundle/src/commands/v58-wire.ts`
+owns the four C-28/C-29 ops (`applyOpacityMask` / `releaseOpacityMask` /
+`attachTextToPath` / `detachTextFromPath`), their capability probes and
+their refusal reader — so the skew lives in one file and the repin is a
+pure deletion of four casts. The skew is NARROWER than the v56/v57 ones
+were: plugin-sdk `f00d6dd` already added typed definitions for all four
+to `@paged-media/plugin-api`'s hand-maintained protocol-ahead delta
+(`packages/plugin-api/src/mutations.ts` → `PendingMutation`, plus a
+`MutationInput = Mutation | PendingMutation`), so the cast points at a
+contract that EXISTS and is COMMITTED and the arg shapes match it
+field-for-field. It is still needed only because this repo installs the
+PUBLISHED `0.2.25-canary.0`.
+
+Two honesty facts these rows carry, and neither may be softened:
+- **An opacity mask does NOT render on canvas.** Core honours it in the
+  CPU rasterizer and in PDF export, but NOT in the Vello/WebGPU backend
+  the editor draws through (`push_layer` takes a shape, not a coverage
+  buffer). So there is deliberately no panel, no overlay and no preview:
+  the command TITLE carries the gap (the `pattern.ts` precedent), the
+  success log repeats it, and `OPACITY_MASK_CANVAS_NOTE`'s wording is
+  pinned by a conformance test.
+- **Type on a Path FLOWS AN EXISTING STORY.** No wire op mints a bare
+  story (`insertTextFrame` mints one BOUND to its frame, and a flowed
+  story is refused), so the attach resolves a FREE story — empty frame
+  chain AND unclaimed by a path stamp, because a path-attached story
+  reports an empty frame chain exactly like an unflowed one — and its
+  refusal names the workflow that produces one (type into a frame,
+  delete the FRAME). A "seed a story" command is deliberately NOT built.
+  `PathEffect` is likewise not offered: only `RainbowPathEffect` renders.
+  NOTE the editor already ships an INERT built-in `paged.tool.typePath`
+  (a rail entry with no `gesture`, holding `shift+t`); a bundle cannot
+  attach behaviour to a built-in id, so this tool joins the same `type`
+  group beside it under `shift+h` — retiring the placeholder is an
+  editor-side call. `shift+z` is now the ONLY free shift key.
+
 **RFI C-15 has LANDED in core (b8e2b6b) but is NOT reachable from here
 yet.** A batch can now address an id an earlier child minted
 (`bindCreated { handle }` + `$h:` references), and the locally-synced
-engine wasm speaks it — but `@paged-media/plugin-api`'s `Mutation` union
-carries no `bindCreated` arm (checked in the published
-`0.2.25-canary.0` AND in plugin-sdk's unpublished HEAD source). Until the
+engine wasm speaks it (`bindCreated` IS in the booted v58 build's op
+vocabulary — re-probed 2026-08-04) — but `@paged-media/plugin-api`'s
+`Mutation` union carries no `bindCreated` arm, and neither does the
+protocol-ahead `PendingMutation` delta plugin-sdk HEAD now maintains
+(re-checked at `f00d6dd`, and in the published `0.2.25-canary.0`). Until the
 contract package regenerates its wire types, every insert-then-style flow
 in this repo stays at its two-batch floor, and the "TWO batches ⇒ 2 undo
 steps" notes in `pattern.ts` / `appearance-bake.ts` / `compound-path.ts`

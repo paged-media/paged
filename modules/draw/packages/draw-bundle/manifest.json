@@ -47,7 +47,8 @@
       "media.paged.draw.tool.width",
       "media.paged.draw.tool.lassoSelect",
       "media.paged.draw.tool.livePaintBucket",
-      "media.paged.draw.tool.livePaintSelect"
+      "media.paged.draw.tool.livePaintSelect",
+      "media.paged.draw.tool.typeOnPath"
     ],
     "panels": [
       "media.paged.draw.panel.stroke",
@@ -117,6 +118,10 @@
       "media.paged.draw.command.selectLivePaintFaces",
       "media.paged.draw.command.deleteLivePaintFace",
       "media.paged.draw.command.releaseLivePaint",
+      "media.paged.draw.command.makeOpacityMask",
+      "media.paged.draw.command.releaseOpacityMask",
+      "media.paged.draw.command.attachTextToPath",
+      "media.paged.draw.command.detachTextFromPath",
       "media.paged.draw.command.selectSameFill",
       "media.paged.draw.command.selectSameStroke",
       "media.paged.draw.command.selectSameStrokeWeight",

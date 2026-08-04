@@ -164,6 +164,11 @@ describe("drawBundle.activate", () => {
       // LIVE PAINT v0 — the bucket + the face-selection tool.
       "media.paged.draw.tool.livePaintBucket",
       "media.paged.draw.tool.livePaintSelect",
+      // C-29 (engine v58) — Type on a Path. Joins the built-in `type`
+      // group beside the editor's INERT `paged.tool.typePath`
+      // placeholder (a rail entry with no gesture, which a bundle
+      // cannot attach behaviour to).
+      "media.paged.draw.tool.typeOnPath",
     ]);
     // B-15: TOOL activation commands + shortcuts are HOST-derived from
     // the registry — the bundle registers tools only. The commands it
@@ -241,6 +246,15 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.selectLivePaintFaces",
       "media.paged.draw.command.deleteLivePaintFace",
       "media.paged.draw.command.releaseLivePaint",
+      // Illustrator Phase 2 (the Transparency row) — opacity masks
+      // (C-28, engine v58). EXPORT-ONLY: the canvas backend does not
+      // honour the mask, and the command title says so.
+      "media.paged.draw.command.makeOpacityMask",
+      "media.paged.draw.command.releaseOpacityMask",
+      // C-29 (engine v58) — type on a path: flow an EXISTING story
+      // along an EXISTING path, and its exact inverse.
+      "media.paged.draw.command.attachTextToPath",
+      "media.paged.draw.command.detachTextFromPath",
       "media.paged.draw.command.selectSameFill",
       "media.paged.draw.command.selectSameStroke",
       "media.paged.draw.command.selectSameStrokeWeight",

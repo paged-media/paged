@@ -28,18 +28,18 @@
 // fake editor), this drives the bundle's document door through the true
 // parse→apply→inverse engine path — no UI, no editor, no browser.
 //
-// CONTRIBUTION COUNT (honesty note): the bundle registers SEVENTEEN
+// CONTRIBUTION COUNT (honesty note): the bundle registers EIGHTEEN
 // tools (three anchor-editing + the pro set: Curvature, Pencil,
 // Gradient Annotator, Measure, Shape Builder, Corner Radius + the v0
 // brushes: Paintbrush, Blob Brush, Eraser + the wave-2 trio:
 // Eyedropper, Width, Lasso Select + the Live Paint pair: Bucket, Face
-// Selection) AND TWO declarative SCHEMA panels
+// Selection + Type on a Path) AND TWO declarative SCHEMA panels
 // (stroke — W3.1, B-01 RESOLVED; fill — Phase 2d, B-03 consumer; each
 // registered through `host.contribute.schemaPanel`, recorded by the
 // harness as a `schemaPanel` contribution carrying the verbatim
 // schema). The Pen itself is a built-in core-document tool (editor
 // W2.5 division); the layers prototype stays design JSON (expert-leaf
-// list territory). So the contribution log holds seventeen tools + two
+// list territory). So the contribution log holds eighteen tools + two
 // schema panels + thirty-four commands (4 dash + 2 group + 2
 // gradient-fill + 3 path-ops + 2 join/average + 4 pathfinder + the Phase 9
 // Tier B 5 live-corner + 3 appearance + 3 select-same + the wave-2
@@ -80,8 +80,8 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
     try {
       // Every tool is captured, namespaced + in registration order —
       // the three anchor editors, the pro set (incl. the §13.2 corner
-      // widget), the v0 brushes, the wave-2 trio, then the Live Paint
-      // pair.
+      // widget), the v0 brushes, the wave-2 trio, the Live Paint pair,
+      // then Type on a Path.
       expect(harness.toolsContributed().map((t) => t.id)).toEqual([
         "media.paged.draw.tool.addAnchor",
         "media.paged.draw.tool.deleteAnchor",
@@ -100,8 +100,9 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "media.paged.draw.tool.lassoSelect",
         "media.paged.draw.tool.livePaintBucket",
         "media.paged.draw.tool.livePaintSelect",
+        "media.paged.draw.tool.typeOnPath",
       ]);
-      // The contribution log holds the seventeen tools, then EACH schema
+      // The contribution log holds the eighteen tools, then EACH schema
       // panel as TWO entries: the synthesized React `panel` the panels
       // registry sees (the host turns a schema into a registry panel via
       // the injected renderer / seam) AND the `schemaPanel` recorded
@@ -109,7 +110,7 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
       // honest — the registry really got a panel; the log keeps the
       // schema so conformance can assert it. Stroke first, then fill
       // (Phase 2d), then the five React panels (layers, appearance,
-      // graphic styles, symbols, live paint). Then the sixty-eight
+      // graphic styles, symbols, live paint). Then the seventy-two
       // commands in registration order, then the W3.2 edit context.
       // (Pen is a core built-in.)
       expect(harness.contributions.map((c) => c.kind)).toEqual([
@@ -117,7 +118,9 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         // Gradient Annotator, Measure, Shape Builder, Corner Radius) +
         // the v0 brushes (Paintbrush, Blob Brush, Eraser) + the
         // wave-2 trio (Eyedropper, Width, Lasso Select) + the Live
-        // Paint pair (Bucket, Face Selection) — seventeen tools.
+        // Paint pair (Bucket, Face Selection) + Type on a Path
+        // (C-29) — eighteen tools.
+        "tool",
         "tool",
         "tool",
         "tool",
@@ -239,6 +242,13 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "command",
         "command",
         "command",
+        "command",
+        "command",
+        // Illustrator Phase 2 (the Transparency row) — Opacity masks
+        // (Make / Release) over the C-28 v58 pair. EXPORT-ONLY.
+        "command",
+        "command",
+        // C-29 (engine v58) — Type on a path (Attach / Detach).
         "command",
         "command",
         // Phase 9 (Tier B) — Select-same (Fill / Stroke / Stroke weight).
@@ -408,7 +418,7 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
     const before = await treeSize();
 
     const handle = harness.loadBundle(drawBundle);
-    expect(harness.toolsContributed()).toHaveLength(17);
+    expect(harness.toolsContributed()).toHaveLength(18);
     handle.dispose();
 
     // After dispose: the contribution log is empty (registrations torn
