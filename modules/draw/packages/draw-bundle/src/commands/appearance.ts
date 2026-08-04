@@ -95,15 +95,23 @@ export type AppearanceLayerKind = "fill" | "stroke";
 export interface FillLayer {
   /** A swatch / gradient self-id (the `frameFillColor` colorRef vocab). */
   color: string;
-  /** Tint 0..100, default 100. NOTE: a tint survives the metadata and
-   *  the front-most-layer bake (a Rectangle takes `FrameFillTint`) but
-   *  NOT the GROUP bake — the derived paths are Polygons and core's
-   *  `set_property` has no Polygon arm for `FrameFillTint`. */
+  /** Tint 0..100, default 100. Survives the metadata, the front-most-layer
+   *  bake AND the GROUP bake: core's `set_property` grew Polygon + Oval
+   *  arms for `FrameFillTint` (C-20) and the IDML writer emits the
+   *  attribute for an inserted item (C-19), so a tinted layer round-trips
+   *  through a save. */
   tint?: number;
-  /** Layer opacity 0..100. Renders on canvas and in a PDF export; the
-   *  IDML writer does not emit it for a derived path (see
-   *  `appearance-bake.ts`). */
+  /** Layer opacity 0..100. Renders on canvas, prints into a PDF export,
+   *  and since C-19 the IDML write-new lane emits the
+   *  `<TransparencySetting>` that carries it — so it survives a save-back
+   *  of a baked layer too (see `appearance-bake.ts`). */
   opacity?: number;
+  /** IDML blend mode for this layer (`"Multiply"`, `"Screen"`, …). A
+   *  GROUP-BAKE property: a blend mode needs the layers BELOW it to blend
+   *  with, which only the baked stack provides, so it lowers onto the
+   *  derived path (`FrameBlendMode` grew a Polygon arm in C-20) and is
+   *  deliberately not part of the front-most-layer bake. */
+  blendMode?: string;
 }
 
 /** One extra stroke layer (a swatch ref + weight in pt). */
@@ -111,8 +119,10 @@ export interface StrokeLayer {
   color: string;
   /** Stroke weight in pt. */
   weight: number;
-  /** Layer opacity 0..100 — same caveat as {@link FillLayer.opacity}. */
+  /** Layer opacity 0..100 — same lane as {@link FillLayer.opacity}. */
   opacity?: number;
+  /** IDML blend mode — same lane as {@link FillLayer.blendMode}. */
+  blendMode?: string;
 }
 
 /** The appearance stack — fills + strokes BOTTOM-to-TOP (the LAST entry

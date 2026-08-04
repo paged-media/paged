@@ -134,13 +134,21 @@ export interface ShapeDefaults {
 }
 
 /** The swatch-create mutations + the resolved document defaults for one
- *  shape's style. An inserted `insertPath` polygon does NOT accept a
- *  direct `setElementProperty{ frameFillColor }` write (the engine rejects
- *  frame-property writes on a Polygon — FINDING, Phase 8); instead a new
- *  path inherits the document defaults at creation. So the importer
- *  creates the colour swatches (NAMED with their hex so the exporter
- *  resolves them back) and sets the document defaults to point at them
- *  BEFORE the insert. Pure — exported for the conformance spec. */
+ *  shape's style. The importer styles through the document CREATION
+ *  DEFAULTS: it creates the colour swatches (NAMED with their hex so the
+ *  exporter resolves them back), points the defaults at them, and lets
+ *  each inserted path inherit them — one pair of writes per shape however
+ *  many contours it has.
+ *
+ *  (This lane was originally forced: the Phase 8 finding was that an
+ *  `insertPath` Polygon REJECTED a direct `setElementProperty` write. That
+ *  is no longer true — re-probed against the booted engine 2026-08-04, a
+ *  freshly inserted Polygon accepts frame-property writes, which is what
+ *  the appearance GROUP BAKE relies on. The defaults lane is kept because
+ *  it still works and is fewer mutations, not because the engine refuses
+ *  the alternative.)
+ *
+ *  Pure — exported for the conformance spec. */
 export function styleDefaultsForShape(style: SvgStyle): {
   swatches: Mutation[];
   defaults: ShapeDefaults;
@@ -257,9 +265,9 @@ export async function importSvg(
   }
 
   // Save the document's current creation defaults so the import doesn't
-  // leave them clobbered (a new path inherits the defaults at creation —
-  // the engine rejects a direct frame-property write on the inserted
-  // Polygon, so style flows through the defaults). Restored at the end.
+  // leave them clobbered (a new path inherits the defaults at creation,
+  // which is how style flows here — see `styleDefaultsForShape` for why
+  // this lane, and not a per-item write). Restored at the end.
   const meta0 = await host.document.meta();
   const original: ShapeDefaults = {
     fillColor: meta0.defaultFillColor ?? null,

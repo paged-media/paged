@@ -25,8 +25,8 @@ out). The bundle drives end-to-end through the real editor host: the
 draw-plugin e2e (`editor` `apps/canvas/tests/e2e/draw-plugin.spec.ts`)
 and a DTP journey (`tests/journey/plugins/draw.journey.spec.ts`) author a
 path with the built-in Pen, then refine its anchors (add/delete/convert)
-and stroke through the bundle. The three packages carry 438 passing
-vitest (geometry 136, tools 89, bundle 213) and typecheck clean.
+and stroke through the bundle. The three packages carry 498 passing
+vitest (geometry 142, tools 102, bundle 254) and typecheck clean.
 
 ## Hard rules
 

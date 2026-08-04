@@ -129,8 +129,9 @@ describe("draw conformance — eyedropper (wave 2)", () => {
             },
           },
           // The line target gets NO fill op (unsupported path) and no
-          // tint/opacity (null = no information — the skip that also
-          // sidesteps the Polygon tint read≠write asymmetry).
+          // tint/opacity (null = no information; the Polygon tint
+          // read≠write asymmetry this skip used to also sidestep was
+          // closed by C-20).
           {
             op: "setElementProperty",
             args: {

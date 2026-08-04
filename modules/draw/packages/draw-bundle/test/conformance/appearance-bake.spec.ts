@@ -17,11 +17,12 @@
  */
 
 // GAP B-24 — the GROUP BAKE, through the REAL engine wasm the harness
-// boots (protocol 56). Pins:
+// boots (protocol 57). Pins:
 //   (1) the pure plan: paint order (fills bottom-to-top, then strokes),
-//       the exact insert / paint / release wire shapes, and the fact
-//       that TINT is deliberately NOT emitted (the engine refuses
-//       `FrameFillTint` on a derived Polygon);
+//       the exact insert / paint / release wire shapes, and the ONE-paint
+//       rule for a derived layer — one colour per layer, plus the
+//       modifiers that paint carries (tint, opacity, blend mode), which
+//       C-20 made writable on a derived Polygon;
 //   (2) the document SHAPE a bake produces — a group whose members are
 //       the CARRIER (the source frame, paint cleared, metadata intact)
 //       followed by one derived path per paint layer, back-to-front,
@@ -36,12 +37,17 @@
 //   (6) EXPORT, through the real engine:
 //         · PDF — the baked stack paints into the page content stream in
 //           order (the bake's whole point: every layer renders);
-//         · IDML — a PINNED ENGINE GAP: core's IDML writer skips inserted
-//           page items that live inside a group
-//           (`idml-export::write_inserted_items`), so a baked group does
-//           NOT save back to IDML. Release first — asserted too. When
-//           core closes that lane this test fails LOUDLY, which is the
-//           point of pinning it.
+//         · IDML — the bake SURVIVES a save (C-19: the writer emits a
+//           scene-created group as a real `<Group>`, members nested and
+//           re-based, in z-table order). Asserted end to end: the group
+//           wrapper, the carrier moved inside it with its metadata
+//           envelope, every derived layer, and each layer's paint +
+//           tint + opacity + blend mode. The one z-fact that is STILL
+//           true is pinned as such: an inserted item emits at the
+//           spread's close, so the group reopens ABOVE the source items
+//           rather than in the carrier's canvas z-slot;
+//         · IDML after RELEASE — the front-most layer on a single frame,
+//           unchanged by the C-19 work.
 
 import { inflateSync } from "node:zlib";
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
@@ -89,6 +95,17 @@ const RECT = {
 const STACK: AppearanceStack = {
   fills: [{ color: "Color/Black" }, { color: "Color/Paper" }],
   strokes: [{ color: "Color/Black", weight: 2 }],
+};
+
+/** The same stack wearing every per-layer MODIFIER the lowering now
+ *  carries: a tinted + multiplied bottom fill and a half-transparent
+ *  stroke (C-19 / C-20). */
+const MODIFIED_STACK: AppearanceStack = {
+  fills: [
+    { color: "Color/Black", tint: 40, blendMode: "Multiply" },
+    { color: "Color/Paper" },
+  ],
+  strokes: [{ color: "Color/Black", weight: 2, opacity: 55 }],
 };
 
 /** The F1 rectangle is BOUNDS-ONLY (an IDML `<Rectangle>` exposes no
@@ -263,14 +280,19 @@ describe("draw conformance — the appearance GROUP BAKE (gap B-24)", () => {
       expect(batch.args.ops[0]).toEqual(batch.args.ops[1]);
     });
 
-    it("a derived layer carries exactly ONE paint (and never a tint)", () => {
+    it("a derived layer carries exactly ONE paint, with its modifiers", () => {
+      // ONE paint per layer is the whole lowering: a fill layer clears
+      // its stroke and vice versa. The MODIFIERS that paint carries —
+      // tint, opacity, blend mode — ride along; C-20 gave `FrameFillTint`
+      // and `FrameBlendMode` Polygon arms, so withholding them would be
+      // the fiction now.
       const fill: BakeLayer = {
         kind: "fill",
         index: 0,
         color: "Color/Paper",
-        // A tint the model carries but the engine refuses on a Polygon.
         tint: 40,
         opacity: 60,
+        blendMode: "Multiply",
       };
       expect(bakeLayerPaintFor(poly("u1"), fill)).toEqual([
         {
@@ -293,11 +315,30 @@ describe("draw conformance — the appearance GROUP BAKE (gap B-24)", () => {
           op: "setElementProperty",
           args: {
             elementId: poly("u1"),
+            path: "frameFillTint",
+            value: { type: "length", value: 40 },
+          },
+        },
+        {
+          op: "setElementProperty",
+          args: {
+            elementId: poly("u1"),
             path: "frameOpacity",
             value: { type: "length", value: 60 },
           },
         },
+        {
+          op: "setElementProperty",
+          args: {
+            elementId: poly("u1"),
+            path: "frameBlendMode",
+            value: { type: "text", value: "Multiply" },
+          },
+        },
       ]);
+      // A layer with no modifiers emits none of them — the plan stays
+      // minimal, and a stroke layer never gets a fill tint (there is no
+      // stroke-side tint on the wire).
       const stroke: BakeLayer = {
         kind: "stroke",
         index: 0,
@@ -309,6 +350,27 @@ describe("draw conformance — the appearance GROUP BAKE (gap B-24)", () => {
           (m) => (m as { args: { path: string } }).args.path,
         ),
       ).toEqual(["frameFillColor", "frameStrokeColor", "frameStrokeWeight"]);
+      expect(
+        bakeLayerPaintFor(poly("u3"), {
+          kind: "stroke",
+          index: 0,
+          color: "Color/Black",
+          weight: 3,
+          blendMode: "Screen",
+        }).map((m) => (m as { args: { path: string } }).args.path),
+      ).toEqual([
+        "frameFillColor",
+        "frameStrokeColor",
+        "frameStrokeWeight",
+        "frameBlendMode",
+      ]);
+      expect(
+        bakeLayerPaintFor(poly("u4"), {
+          kind: "fill",
+          index: 0,
+          color: "Color/Black",
+        }).map((m) => (m as { args: { path: string } }).args.path),
+      ).toEqual(["frameFillColor", "frameStrokeColor"]);
     });
 
     it("bakePaintBatchFor closes with the carrier clear + envelope + createGroup", () => {
@@ -699,32 +761,84 @@ describe("draw conformance — the appearance GROUP BAKE (gap B-24)", () => {
       await releaseAppearance(h.host, RECT);
     });
 
-    it("EXPORT (IDML) — PINNED GAP: a baked group does not save back", async () => {
+    it("EXPORT (IDML) — the whole baked group saves back (C-19)", async () => {
       const created = await bakeAppearance(h.host, RECT);
       expect(created).toHaveLength(3);
+      const liveGroup = await groupShape(h);
 
       const reopened = await reopenViaIdml(h);
       try {
-        // core's `idml-export::write_inserted_items` skips an INSERTED
-        // page item that lives inside a group ("a group's own insertion
-        // is a separate, deferred lane"), so the whole bake — group and
-        // derived layers — is absent from the saved file. The carrier
-        // survives, with the cleared paint the bake gave it.
+        // core's IDML writer emits a scene-created group as a real
+        // `<Group>` with its members nested and re-based (C-19), so every
+        // DERIVED layer reaches the file — where the writer used to drop
+        // the whole bake on the floor.
         const ids = await leafIds(reopened);
         for (const id of created) {
-          expect(ids).not.toContain(id.id as string);
+          expect(ids).toContain(id.id as string);
         }
+        // `leafIds` walks to LEAVES, so the wrapper itself is not in that
+        // list — the group is the non-leaf node with children.
+        const group = await groupShape(reopened);
+        expect(group).not.toBeNull();
+        expect(group!.id).toBe(liveGroup!.id);
+        // Members in PAINT order: the carrier first, then the derived
+        // layers back-to-front. C-19 also made the insert lane follow the
+        // spread's z-table, so the stack no longer re-imports inverted.
+        expect(group!.members).toEqual([
+          RECT.id,
+          ...created.map((c) => c.id as string),
+        ]);
+        // The CARRIER survives — moved INSIDE the wrapper by the writer …
         expect(ids).toContain(RECT.id as string);
-        // …and it carries the paint the bake gave it: none.
+        // …and it carries the paint the bake gave it: none. Spelled
+        // `Swatch/None` rather than the absent attribute the pre-C-19
+        // round-trip produced: a MOVED carrier is re-emitted by the
+        // write-new lane, which NAMES the empty paint instead of leaving
+        // the attribute out. Same picture, explicit spelling.
         expect(await readProp(reopened, RECT, "frameFillColor")).toEqual({
           type: "colorRef",
-          value: null,
+          value: "Swatch/None",
         });
-        // The editable stack DOES survive (plugin metadata round-trips on
-        // a source page item), so re-opening in Paged still shows it.
+        // …and its `<Label>` (this plugin's envelope) rode the move, so
+        // the editable stack AND the bake record reopen intact.
+        const env = await reopened.host.document.getMetadata(RECT);
+        expect(appearanceOf(env)).toEqual(STACK);
+        expect(appearanceBakeOf(env)!.layers).toEqual(
+          created.map((c) => c.id as string),
+        );
+        // Each derived layer keeps its ONE paint, and its own envelope
+        // still resolves back to the carrier.
+        expect(await readProp(reopened, created[0], "frameFillColor")).toEqual({
+          type: "colorRef",
+          value: "Color/Black",
+        });
+        expect(await readProp(reopened, created[1], "frameFillColor")).toEqual({
+          type: "colorRef",
+          value: "Color/Paper",
+        });
+        expect(await readProp(reopened, created[2], "frameStrokeColor")).toEqual(
+          { type: "colorRef", value: "Color/Black" },
+        );
+        expect(await readProp(reopened, created[2], "frameStrokeWeight")).toEqual(
+          { type: "length", value: 2 },
+        );
         expect(
-          appearanceOf(await reopened.host.document.getMetadata(RECT)),
-        ).toEqual(STACK);
+          appearanceLayerOf(
+            await reopened.host.document.getMetadata(created[0]),
+          )!.of,
+        ).toEqual(RECT);
+
+        // STILL TRUE, and pinned so a future core fix fails loudly: an
+        // INSERTED item emits at the SPREAD'S CLOSE, so the group reopens
+        // ABOVE the page items the source file already carried — its
+        // canvas z-slot (the carrier's, asserted in the BAKE test) is not
+        // what the file records.
+        const page = (await reopened.host.document.tree())[0].children![0];
+        expect(page.children!.map((c) => c.id!.id)).toEqual([
+          F1_MULTI_SHAPE.ids.polygon,
+          F1_MULTI_SHAPE.ids.graphicLine,
+          group!.id,
+        ]);
       } finally {
         reopened.dispose();
       }
@@ -747,6 +861,96 @@ describe("draw conformance — the appearance GROUP BAKE (gap B-24)", () => {
         ).toEqual(STACK);
       } finally {
         reopened.dispose();
+      }
+    });
+
+    it("per-layer TINT + BLEND MODE + OPACITY land on the derived paths and survive an IDML save (C-19/C-20)", async () => {
+      // The stack the old note said could not be lowered: a tinted,
+      // multiplied bottom fill and a half-transparent stroke.
+      const prev = await h.host.document.getMetadata(RECT);
+      await commitAppearance(h.host, RECT, MODIFIED_STACK, prev);
+      const created = await bakeAppearance(h.host, RECT);
+      expect(created).toHaveLength(3);
+
+      // …ON THE ENGINE: `FrameFillTint` / `FrameBlendMode` on a derived
+      // Polygon are C-20 arms; `FrameOpacity` always had one.
+      expect(await readProp(h, created[0], "frameFillTint")).toEqual({
+        type: "length",
+        value: 40,
+      });
+      expect(await readProp(h, created[0], "frameBlendMode")).toEqual({
+        type: "text",
+        value: "Multiply",
+      });
+      expect(await readProp(h, created[2], "frameOpacity")).toEqual({
+        type: "length",
+        value: 55,
+      });
+      // An untinted layer stays untinted — the bake emits nothing it was
+      // not given.
+      expect(await readProp(h, created[1], "frameFillTint")).toEqual({
+        type: "length",
+        value: null,
+      });
+
+      // …AND THROUGH A SAVE: C-19 emits the tint attribute and the
+      // `<TransparencySetting>` (opacity + blend mode) for an inserted
+      // item, which the write-new lane used to drop entirely.
+      const reopened = await reopenViaIdml(h);
+      try {
+        expect(await readProp(reopened, created[0], "frameFillTint")).toEqual({
+          type: "length",
+          value: 40,
+        });
+        expect(await readProp(reopened, created[0], "frameBlendMode")).toEqual({
+          type: "text",
+          value: "Multiply",
+        });
+        expect(await readProp(reopened, created[2], "frameOpacity")).toEqual({
+          type: "length",
+          value: 55,
+        });
+        // The editable model rides along unchanged.
+        expect(
+          appearanceOf(await reopened.host.document.getMetadata(RECT)),
+        ).toEqual(MODIFIED_STACK);
+      } finally {
+        reopened.dispose();
+      }
+      await releaseAppearance(h.host, RECT);
+    });
+
+    it("a GraphicLine still REFUSES tint + blend — named, not papered over", async () => {
+      // C-20 gave Polygon and Oval the `FrameFillTint` / `FrameBlendMode`
+      // arms; `paged_model::GraphicLine` has no `fill_tint` /
+      // `blend_mode` / `opacity` field at all (its paint is entirely
+      // stroke-side), so the refusal is a MODEL fact, not a missing arm.
+      // The bake never mints a GraphicLine, so this bites nothing — it is
+      // pinned so the boundary stays honest.
+      const line = {
+        kind: "graphicLine",
+        id: F1_MULTI_SHAPE.ids.graphicLine!,
+      } as ElementId;
+      for (const op of [
+        {
+          op: "setElementProperty",
+          args: {
+            elementId: line,
+            path: "frameFillTint",
+            value: { type: "length", value: 40 },
+          },
+        },
+        {
+          op: "setElementProperty",
+          args: {
+            elementId: line,
+            path: "frameBlendMode",
+            value: { type: "text", value: "Multiply" },
+          },
+        },
+      ] as Mutation[]) {
+        const outcome = await h.host.document.mutate(op);
+        expect(outcome.applied).toBe(false);
       }
     });
   });

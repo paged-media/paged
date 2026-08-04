@@ -38,18 +38,19 @@
 //     intersects the sample with the paths each TARGET's OWN
 //     property snapshot exposes (one read per target), so a mixed
 //     selection doesn't poison the batch.
-//   · One READ≠WRITE asymmetry remains: a Polygon EXPOSES
-//     frameFillTint in its snapshot yet REJECTS the write. Null
-//     tint/opacity members are skipped (they carry no information),
-//     which sidesteps the common case; a residual rejection fails the
-//     WHOLE batch (engine batches are atomic) and is warned, never
-//     thrown.
-//   · Freshly `insertPath`-created Polygons REJECT direct
-//     frame-property writes altogether (the Phase 8 finding,
-//     io/svg.ts) — such targets are warned-and-skipped by the same
-//     atomic-rejection lane. Styling those flows through the document
-//     creation defaults instead (the brush idiom); a defaults-based
-//     re-style of existing elements is out of eyedropper scope.
+//     A rejection fails the WHOLE batch (engine batches are atomic)
+//     and is warned, never thrown.
+//   · The Polygon READ≠WRITE asymmetry this note used to name — a
+//     Polygon exposing frameFillTint in its snapshot yet rejecting the
+//     write — is GONE: core's set_property grew Polygon + Oval arms for
+//     FrameFillTint / FrameBlendMode (gap C-20), re-probed against the
+//     booted engine 2026-08-04. Null tint/opacity members are still
+//     skipped, but because they carry no information, not to dodge a
+//     rejection. Freshly `insertPath`-created Polygons likewise accept
+//     direct frame-property writes now (the same probe), so the old
+//     Phase 8 finding no longer applies here either; the
+//     `supports`-intersection stays because KIND-dependence itself has
+//     not gone away (a GraphicLine still refuses fill, tint and blend).
 
 import type {
   BundleHost,

@@ -134,14 +134,27 @@ describe("draw conformance — Appearance panel", () => {
     expect(APPEARANCE_BAKE_NOTE).toContain("front-most");
     expect(APPEARANCE_BAKE_NOTE).toContain("one fill slot and one stroke slot");
     expect(APPEARANCE_BAKE_NOTE).toContain("metadata");
-    // BAKED — real stacked page items that render and reach a PDF.
+    // BAKED — real stacked page items that render, reach a PDF and now
+    // (C-19 + C-20) survive an IDML save-back with their modifiers.
     expect(APPEARANCE_BAKE_NOTE).toContain("one derived path per layer");
     expect(APPEARANCE_BAKE_NOTE).toContain("PDF export");
-    // …and the THREE costs, none of them hidden.
+    expect(APPEARANCE_BAKE_NOTE).toContain("IDML save-back");
+    expect(APPEARANCE_BAKE_NOTE).toContain(
+      "tint, opacity and blend mode included",
+    );
+    // …and the costs that are STILL real, none of them hidden.
     expect(APPEARANCE_BAKE_NOTE).toContain("GROUP of derived paths");
-    expect(APPEARANCE_BAKE_NOTE).toContain("tint and blend mode do not");
-    expect(APPEARANCE_BAKE_NOTE).toContain("does not save back to IDML");
-    expect(APPEARANCE_BAKE_NOTE).toContain("Release");
+    expect(APPEARANCE_BAKE_NOTE).toContain("replaced, not patched");
+    expect(APPEARANCE_BAKE_NOTE).toContain(
+      "writes the group at the end of the spread",
+    );
+    // …and the claim the engine fix RETIRED: Release is no longer a
+    // prerequisite for saving. Pinned as a NEGATIVE so the old wording
+    // cannot creep back in.
+    expect(APPEARANCE_BAKE_NOTE).not.toContain("does not save back to IDML");
+    expect(APPEARANCE_BAKE_NOTE).toContain(
+      "Release is a choice, not a prerequisite for saving",
+    );
     expect(APPEARANCE_BAKE_NOTE).toContain("B-24");
   });
 

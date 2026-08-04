@@ -39,15 +39,18 @@
 //
 //   BAKED — `bakeAppearance` lowered the stack onto REAL stacked page
 //   items (one derived path per layer, sharing this shape's geometry,
-//   inside a group). Every layer renders, on canvas and in a PDF export.
-//   The panel keeps editing the METADATA stack — it stays the source of
-//   truth — and an edit RE-BAKES rather than letting the model and the
-//   page diverge.
+//   inside a group). Every layer renders, on canvas, in a PDF export and
+//   through an IDML save-back (C-19 taught the writer to emit
+//   scene-created groups; C-20 gave a derived Polygon its tint and blend
+//   mode). The panel keeps editing the METADATA stack — it stays the
+//   source of truth — and an edit RE-BAKES rather than letting the model
+//   and the page diverge.
 //
-// The note block spells out what the bake costs (a group of derived
-// paths, tint/blend not expressible on a derived path, no IDML save-back
-// yet). Hiding any of that behind a convincing stack would be the exact
-// fiction this repo refuses.
+// The note block spells out what the bake still costs (a group of derived
+// paths, every edit replacing them, and an IDML save placing the group at
+// the spread's close rather than in the carrier's z-slot). Hiding any of
+// that behind a convincing stack would be the exact fiction this repo
+// refuses.
 
 import type { BundleHost, ElementId, PanelProps } from "@paged-media/plugin-api";
 import * as React from "react";
@@ -86,15 +89,15 @@ export const APPEARANCE_BAKE_NOTE =
   "file and reopen here, but they are not what renders. Bake makes the " +
   "stack real: one derived path per layer, sharing this shape's geometry, " +
   "stacked back-to-front in a group, which is ordinary IDML — so every " +
-  "layer renders on the canvas and in a PDF export. What the bake costs: " +
-  "the object becomes a GROUP of derived paths (direct-selecting inside it " +
-  "edits one derived layer, and every edit re-bakes — the derived paths " +
-  "are replaced, not patched); per-layer tint and blend mode do not " +
-  "survive the lowering (the engine supports neither on a derived path); " +
-  "and a baked group does not save back to IDML yet — the engine's IDML " +
-  "writer drops scene-created groups, so Release before saving to IDML. " +
-  "Release restores the single frame with the front-most layer on its own " +
-  "attributes (gap B-24).";
+  "layer renders on the canvas, in a PDF export and through an IDML " +
+  "save-back, per-layer tint, opacity and blend mode included. What the " +
+  "bake costs: the object becomes a GROUP of derived paths (direct-" +
+  "selecting inside it edits one derived layer, and every edit re-bakes — " +
+  "the derived paths are replaced, not patched), and an IDML save writes " +
+  "the group at the end of the spread, so it reopens above the page items " +
+  "the file already carried. Release is a choice, not a prerequisite for " +
+  "saving: it restores the single frame with the front-most layer on its " +
+  "own attributes (gap B-24).";
 
 const EMPTY: AppearanceStack = { fills: [], strokes: [] };
 

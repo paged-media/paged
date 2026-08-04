@@ -47,7 +47,7 @@
 // survive a bake→release round-trip because the ORIGINAL element is
 // still there.
 //
-// MUTATION / UNDO SHAPE (probed against the booted engine, protocol 56 —
+// MUTATION / UNDO SHAPE (probed against the booted engine, protocol 57 —
 // the RFI C-15 rule: assert the real count, never claim "one undo"):
 //   · bake    = TWO batches ⇒ 2 undo steps. Batch 1 inserts the N
 //     derived paths; batch 2 paints them, clears the carrier, stamps
@@ -66,35 +66,45 @@
 //     flag exactly (`insertPath`), and they export.
 //   ✔ per-layer FILL colour, STROKE colour and STROKE WEIGHT: settable
 //     on the derived Polygon and written by the IDML writer.
-//   ✔ per-layer OPACITY: settable on a Polygon (`FrameOpacity` has a
-//     Polygon arm in core's set_property) and it RENDERS — but the IDML
-//     writer does not emit it for an inserted item, so it is a canvas +
-//     PDF truth only.
-//   ✘ per-layer TINT and BLEND MODE: `FrameFillTint` / `FrameBlendMode`
-//     have TextFrame + Rectangle arms only in core's set_property — a
-//     derived Polygon REFUSES both. A tinted layer therefore bakes as
-//     its untinted swatch. Named, not silently dropped.
+//   ✔ per-layer TINT and BLEND MODE (C-20): `FrameFillTint` and
+//     `FrameBlendMode` grew Polygon + Oval arms in core's
+//     `set_property`, and the IDML write-new lane emits both — the tint
+//     as an attribute, the blend mode inside the `<TransparencySetting>`
+//     C-19 taught that lane to write. So a tinted / multiplied layer
+//     bakes, renders AND survives a save-back. The KIND boundary that
+//     remains is deliberate, not a gap: `paged_model::GraphicLine` has
+//     no `fill_tint` / `blend_mode` / `opacity` field at all (a line's
+//     paint is entirely stroke-side), so a GraphicLine still refuses
+//     both. The bake never mints one — its layers are Polygons — so
+//     that boundary does not bite here.
+//   ✔ per-layer OPACITY: `FrameOpacity` always had a Polygon arm, and
+//     since C-19 the write-new lane emits the `<TransparencySetting>`
+//     that carries it, so opacity is canvas + PDF + IDML truth now.
 //   ✘ COMPOUND (multi-subpath) sources: `insertPath` takes one contour
 //     and one open flag, so a source with more than one subpath is
 //     REFUSED with a diagnostic rather than silently flattened.
-//   ✘ IDML SAVE-BACK of a baked group: core's IDML writer
-//     (`idml-export::write_inserted_items`) skips any INSERTED page item
-//     that lives inside a group — "a group's own insertion is a separate,
-//     deferred lane" — so a baked group and its derived layers do not
-//     reach an IDML export. Release before saving back to IDML; the
-//     conformance spec pins this so a core fix fails the test loudly.
+//   ✔ IDML SAVE-BACK of a baked group (C-19): core's IDML writer emits a
+//     scene-created group as a real `<Group>` with its members nested and
+//     re-based, and moves a source item that joined the group inside it.
+//     The whole bake — wrapper, carrier and every derived layer — reaches
+//     an IDML export and re-imports as the same group; the carrier's
+//     `<Label>` (this plugin's envelope) rides the move, so a reopened
+//     file still knows the stack and the bake record. Release is a
+//     CHOICE now, not a prerequisite for saving.
 //   ✔ PDF export: `paged-export-pdf` renders the composed scene, so
 //     every baked layer paints into the PDF (asserted through the real
 //     engine by counting the painted paths in the page content stream).
 //
-// RESIDUAL, found while probing the export lane and NOT worked around
-// here (it does not bite a GROUPED bake, which the writer drops whole,
-// but it would bite any flat variant): items inserted in one session are
-// emitted at the spread's close in the model's per-kind vec order, which
-// came back REVERSED relative to their live z-order — three paths
-// inserted u1,u2,u3 export as u3,u2,u1, i.e. a stacked appearance would
-// reimport inverted. Belongs with the group-insert lane in the same
-// core writer, not in this plugin.
+// RESIDUAL, still true after C-19 and NOT worked around here: an item the
+// session INSERTED is emitted at the SPREAD'S CLOSE, so a baked group
+// re-imports ABOVE every page item the source file already carried — its
+// z-slot among unmodified siblings is not preserved by an IDML save (on
+// the canvas the group does take the carrier's slot; the conformance spec
+// pins both halves). Their ORDER within the insert lane is now correct:
+// C-19 made the write-new lane follow the spread's z-table instead of the
+// model's per-kind vecs, so three paths inserted u1,u2,u3 no longer
+// export as u3,u2,u1 — which is what lets a stacked appearance re-import
+// right side up.
 
 import type {
   BundleHost,
@@ -325,11 +335,20 @@ const colorRef = (
 
 const length = (
   elementId: ElementId,
-  path: "frameStrokeWeight" | "frameOpacity",
+  path: "frameStrokeWeight" | "frameOpacity" | "frameFillTint",
   value: number,
 ): Mutation => ({
   op: "setElementProperty",
   args: { elementId, path, value: { type: "length", value } },
+});
+
+const text = (
+  elementId: ElementId,
+  path: "frameBlendMode",
+  value: string,
+): Mutation => ({
+  op: "setElementProperty",
+  args: { elementId, path, value: { type: "text", value } },
 });
 
 const stamp = (
@@ -370,10 +389,14 @@ export function bakeInsertBatchFor(
   return { op: "batch", args: { ops } };
 }
 
-/** The per-layer paint ops for ONE derived element: exactly one paint
- *  (a fill layer clears its stroke and vice versa) plus the layer's
- *  optional opacity. `tint` is deliberately NOT emitted — the engine
- *  refuses `FrameFillTint` on a Polygon (see the header). */
+/** The per-layer paint ops for ONE derived element: exactly ONE paint (a
+ *  fill layer clears its stroke and vice versa), plus the modifiers that
+ *  paint carries — a fill's `tint`, and either kind's `opacity` and
+ *  `blendMode`. Tint and blend used to be withheld because core's
+ *  `set_property` had no Polygon arm for `FrameFillTint` /
+ *  `FrameBlendMode`; C-20 added both (and C-19 taught the IDML
+ *  write-new lane to emit them), so withholding them now would be the
+ *  fiction. A layer that carries neither emits neither. */
 export function bakeLayerPaintFor(
   elementId: ElementId,
   layer: BakeLayer,
@@ -382,6 +405,9 @@ export function bakeLayerPaintFor(
   if (layer.kind === "fill") {
     ops.push(colorRef(elementId, "frameFillColor", layer.color));
     ops.push(colorRef(elementId, "frameStrokeColor", null));
+    if (typeof layer.tint === "number") {
+      ops.push(length(elementId, "frameFillTint", layer.tint));
+    }
   } else {
     ops.push(colorRef(elementId, "frameFillColor", null));
     ops.push(colorRef(elementId, "frameStrokeColor", layer.color));
@@ -389,6 +415,9 @@ export function bakeLayerPaintFor(
   }
   if (typeof layer.opacity === "number") {
     ops.push(length(elementId, "frameOpacity", layer.opacity));
+  }
+  if (typeof layer.blendMode === "string" && layer.blendMode.length > 0) {
+    ops.push(text(elementId, "frameBlendMode", layer.blendMode));
   }
   return ops;
 }
