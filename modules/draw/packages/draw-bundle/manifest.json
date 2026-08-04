@@ -64,8 +64,6 @@
       "media.paged.draw.command.strokeDashDashed",
       "media.paged.draw.command.strokeDashDotted",
       "media.paged.draw.command.strokeDashDashDot",
-      "media.paged.draw.command.groupSelection",
-      "media.paged.draw.command.ungroup",
       "media.paged.draw.command.fillGradientLinear",
       "media.paged.draw.command.fillGradientRadial",
       "media.paged.draw.command.outlineStroke",
@@ -134,7 +132,6 @@
       "media.paged.draw.command.insertRectGrid",
       "media.paged.draw.command.insertPolarGrid",
       "media.paged.draw.command.blendSelected",
-      "media.paged.draw.command.selectParentGroup",
       "media.paged.draw.command.imageTrace"
     ],
     "importers": [

@@ -113,7 +113,7 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
       // schema so conformance can assert it. Stroke first, then fill
       // (Phase 2d), then the five React panels (appearance, graphic
       // styles, symbols, live paint, pattern — Layers is retired). Then the
-      // seventy-six commands in registration order, then the W3.2 edit
+      // seventy-three commands in registration order, then the W3.2 edit
       // context. (Pen is a core built-in.)
       expect(harness.contributions.map((c) => c.kind)).toEqual([
         // Three anchor editors + the pro set (Curvature, Pencil,
@@ -172,9 +172,13 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "command",
         "command",
         "command",
-        // Phase 2d — Group selection / Ungroup (B-04).
-        "command",
-        "command",
+        // NO Group / Ungroup here, and no Select parent group further
+        // down: those three are the HOST's commands now
+        // (`paged.object.*`). Their absence from this log IS the
+        // assertion — basic object operations are what plugins build
+        // on, and shipping them from a plugin meant a user without
+        // paged.draw loaded could not group. The B-04 wire shapes stay
+        // in `commands/group.ts` for Pattern / Symbols / Image Trace.
         // Phase 2d — Fill: Linear / Radial gradient (B-03).
         "command",
         "command",
@@ -274,8 +278,6 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "command",
         "command",
         // Wave 2 — Blend selected.
-        "command",
-        // Wave 2 — Select parent group.
         "command",
         // Illustrator Phase 2 (last row) — Image Trace v0 (the wasm
         // lane: crates/trace-js over visioncortex).

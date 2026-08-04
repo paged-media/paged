@@ -61,20 +61,11 @@ export {
   contributeDashCommands,
   type DashPreset,
 } from "./commands/dash";
-// Phase 2d — Group selection / Ungroup (B-04 consumers; clipping masks
-// honestly omitted — not wire-representable, see commands/group.ts),
-// exported for the conformance spec.
-export {
-  GROUP_COMMAND_ID,
-  UNGROUP_COMMAND_ID,
-  GROUP_COMMAND_IDS,
-  GROUP_COMMAND_CATEGORY,
-  groupMutationFor,
-  ungroupMutationFor,
-  applyGroupSelection,
-  applyUngroup,
-  contributeGroupCommands,
-} from "./commands/group";
+// The B-04 GROUP wire shapes, composed by Pattern / Symbols / Image
+// Trace and exported for the conformance spec. The user-facing Group /
+// Ungroup COMMANDS are the host's now (`paged.object.*`) — see
+// commands/group.ts.
+export { groupMutationFor, ungroupMutationFor } from "./commands/group";
 // Phase 2d — the v1 declarative FILL panel (B-03 consumer) + its
 // binding driver, exported for the conformance spec.
 export {
@@ -898,12 +889,8 @@ export {
   type TracePlanRegion,
   type TraceRegionBinding,
 } from "./commands/image-trace";
-// Wave 2 — group-selection cycling: the pure tree-parentage resolver,
-// exported for the conformance spec.
-export {
-  SELECT_PARENT_GROUP_COMMAND_ID,
-  SELECT_PARENT_GROUP_COMMAND_CATEGORY,
-  parentGroupOf,
-  applySelectParentGroup,
-  contributeSelectParentGroupCommand,
-} from "./commands/select-parent-group";
+// The pure tree-parentage resolver Appearance bake + Symbols read,
+// exported for the conformance spec. "Select: Parent group" itself is
+// the host's now (`paged.object.selectParentGroup`) — see
+// commands/parentage.ts.
+export { parentGroupOf } from "./commands/parentage";

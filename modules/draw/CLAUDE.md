@@ -96,9 +96,25 @@ stroke panel raised, Esc pops out). The bundle drives end-to-end through the rea
 the draw-plugin e2e (`editor` `apps/canvas/tests/e2e/draw-plugin.spec.ts`)
 and a DTP journey (`tests/journey/plugins/draw.journey.spec.ts`) author a
 path with the built-in Pen, then refine its anchors (add/delete/convert)
-and stroke through the bundle. The three TS packages carry 767 passing
-vitest (geometry 162, tools 113, bundle 492) and typecheck clean; the two
+and stroke through the bundle. The three TS packages carry 775 passing
+vitest (geometry 162, tools 113, bundle 500) and typecheck clean; the two
 crates carry 26 `cargo test` (draw-trace 22, trace-js 4).
+
+**THE STRUCTURAL VERBS ARE NOT THIS BUNDLE'S.** Group / Ungroup /
+Select parent group used to be `media.paged.draw.command.*`, which meant
+a user without paged.draw loaded could not group — although `createGroup`
+/ `dissolveGroup` have been wire ops the whole time. They are HOST
+commands now (`paged.object.group` / `.ungroup` / `.selectParentGroup`
+in `editor` `apps/canvas/src/object-commands.ts`, alongside the four
+Arrange verbs the editor never had), and their conformance moved with
+them to `apps/canvas/tests/e2e/object-commands.spec.ts`. Basic object
+operations are what plugins BUILD ON, so exactly one implementation
+ships and it is the host's. What stayed here is what draw's own features
+compose: the wire shapes in `commands/group.ts` (Pattern's re-plan,
+Symbols' instance grouping, Image Trace's contour grouping) and the pure
+`parentGroupOf` walk in `commands/parentage.ts` (Appearance bake,
+Symbols). Do not re-add a plugin-side Group command — `activate.spec.ts`
+and `headless-conformance.spec.ts` both assert its absence.
 
 **The planar arrangement has ONE seam.** `draw-bundle/src/handlers/planar-regions.ts`
 owns the `requestPlanarRegions` escape hatch (the vendored contract still

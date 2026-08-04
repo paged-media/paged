@@ -208,7 +208,7 @@ import {
 import { groupMutationFor } from "./group";
 import { offsetTable } from "./pattern";
 import { leafIdsOf } from "./select-same";
-import { parentGroupOf } from "./select-parent-group";
+import { parentGroupOf } from "./parentage";
 import { insertPathMutationFor } from "../handlers/insert-path";
 import { resolveTargetPage } from "../io/svg";
 

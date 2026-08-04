@@ -16,10 +16,17 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Group-selection CYCLING (wave 2) — `selectParentGroup`: when the
-// selection sits inside a group, select the CONTAINING group; invoke
-// again to climb another level (nested groups cycle upward). Pure
-// selection — no mutation.
+// PARENTAGE — the nearest group ancestor of an element, read off the
+// scene tree.
+//
+// THIS MODULE NO LONGER CONTRIBUTES A COMMAND. "Select: Parent group"
+// was paged.draw's; it is now the host's
+// (`paged.object.selectParentGroup`, `apps/canvas/src/object-commands.ts`),
+// beside Group / Ungroup and the four Arrange verbs, because basic
+// object operations are what plugins BUILD ON. What stays is the pure
+// resolver two of draw's OWN features need: Appearance bake reads the
+// group it must dissolve before rebuilding, and Symbols resolves the
+// group an instance's leaves live in.
 //
 // PARENTAGE DOOR (the honest answer to "is parentage readable?"):
 // YES, through `host.document.tree()` — the scene tree nests
@@ -29,21 +36,10 @@
 // carries ancestry but needs a pointer event, and `elementProperties`
 // exposes NO parent member — the tree is the only click-free door.
 // NAMED DOOR GAP (recorded, not blocking): there is no per-element
-// `document.parentOf(id)` read — this command re-reads the WHOLE tree
-// per invocation, which is O(document) on every press. Fine at v0
-// scale; if it bites on huge documents, a targeted parent read door is
-// the RFI candidate.
+// `document.parentOf(id)` read, so each caller re-reads the WHOLE tree.
+// A targeted parent read door is the RFI candidate if it ever bites.
 
-import type {
-  BundleHost,
-  Disposable,
-  ElementId,
-  SceneTreeNode,
-} from "@paged-media/plugin-api";
-
-export const SELECT_PARENT_GROUP_COMMAND_CATEGORY = "Select";
-export const SELECT_PARENT_GROUP_COMMAND_ID =
-  "media.paged.draw.command.selectParentGroup";
+import type { ElementId, SceneTreeNode } from "@paged-media/plugin-api";
 
 /** The nearest GROUP ancestor of `target` in the scene tree, or null
  *  when the element is not inside a group (or not found). Pure —
@@ -75,36 +71,4 @@ export function parentGroupOf(
   };
   walk(roots, []);
   return found;
-}
-
-export async function applySelectParentGroup(host: BundleHost): Promise<void> {
-  const selection = host.selection.get();
-  if (selection.length === 0) {
-    host.log.debug(`${SELECT_PARENT_GROUP_COMMAND_ID}: nothing selected — no-op`);
-    return;
-  }
-  const roots = await host.document.tree();
-  // The FIRST selected element anchors the climb (the select-same
-  // reference convention).
-  const parent = parentGroupOf(roots, selection[0]);
-  if (!parent) {
-    host.log.debug(
-      `${SELECT_PARENT_GROUP_COMMAND_ID}: selection has no parent group ` +
-        `in the scene tree — selection unchanged`,
-    );
-    return;
-  }
-  await host.selection.set([parent]);
-}
-
-/** Register the group-selection cycling command. Pure selection. */
-export function contributeSelectParentGroupCommand(
-  host: BundleHost,
-): Disposable {
-  return host.contribute.command({
-    id: SELECT_PARENT_GROUP_COMMAND_ID,
-    title: "Select: Parent group",
-    category: SELECT_PARENT_GROUP_COMMAND_CATEGORY,
-    handler: () => applySelectParentGroup(host),
-  });
 }

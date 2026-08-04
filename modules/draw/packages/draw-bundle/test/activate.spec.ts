@@ -172,16 +172,20 @@ describe("drawBundle.activate", () => {
     ]);
     // B-15: TOOL activation commands + shortcuts are HOST-derived from
     // the registry — the bundle registers tools only. The commands it
-    // DOES register are the B-12 dash presets, the Phase 2d group pair
-    // (B-04), the gradient-fill pair (B-03), and the Phase 4c families
-    // (path ops, join/average, pathfinder) — not tool activations.
+    // DOES register are the B-12 dash presets, the gradient-fill pair
+    // (B-03), and the Phase 4c families (path ops, join/average,
+    // pathfinder) — not tool activations.
+    //
+    // NO Group / Ungroup / Select parent group, and their absence is the
+    // assertion: those three are the HOST's commands now
+    // (`paged.object.*`), because basic object operations are what
+    // plugins build on. A `media.paged.draw.command.groupSelection`
+    // reappearing here would be the duplication coming back.
     expect(fake.commands.ids()).toEqual([
       "media.paged.draw.command.strokeDashSolid",
       "media.paged.draw.command.strokeDashDashed",
       "media.paged.draw.command.strokeDashDotted",
       "media.paged.draw.command.strokeDashDashDot",
-      "media.paged.draw.command.groupSelection",
-      "media.paged.draw.command.ungroup",
       "media.paged.draw.command.fillGradientLinear",
       "media.paged.draw.command.fillGradientRadial",
       "media.paged.draw.command.outlineStroke",
@@ -269,7 +273,6 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.insertRectGrid",
       "media.paged.draw.command.insertPolarGrid",
       "media.paged.draw.command.blendSelected",
-      "media.paged.draw.command.selectParentGroup",
       // Illustrator Phase 2 (last row) — Image Trace v0 (the wasm lane).
       "media.paged.draw.command.imageTrace",
     ]);

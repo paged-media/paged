@@ -128,7 +128,7 @@ import {
   type StrokeLayer,
 } from "./appearance";
 import { leafIdsOf } from "./select-same";
-import { parentGroupOf } from "./select-parent-group";
+import { parentGroupOf } from "./parentage";
 
 export const APPEARANCE_BAKE_COMMAND_ID =
   "media.paged.draw.command.bakeAppearance";

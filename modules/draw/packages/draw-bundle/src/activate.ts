@@ -32,10 +32,13 @@
 //
 // Phase 2d adds: the FILL schema panel (B-03 consumer — the
 // `panels/fill.panel.json` prototype made real, gradient section gated
-// by a published binding), the gradient-fill preset commands (gradient
-// assignment is a multi-mutation flow above the binding ceiling — the
-// dash precedent), and the GROUP/UNGROUP commands (B-04 consumers;
-// clipping masks are NOT wire-representable — see commands/group.ts).
+// by a published binding) and the gradient-fill preset commands
+// (gradient assignment is a multi-mutation flow above the binding
+// ceiling — the dash precedent). It ALSO added Group / Ungroup, and
+// wave 2 added Select: Parent group; all three have since been retired
+// in favour of the editor's own `paged.object.*` layer — the wire
+// shapes they used stay in commands/group.ts + commands/parentage.ts
+// for Pattern / Symbols / Image Trace / Appearance bake to compose.
 //
 // The layers prototype (`panels/layers.panel.json`) stays a design
 // prototype, and its subject has moved out of this bundle entirely:
@@ -117,12 +120,10 @@ import {
   contributeImageTraceCommand,
   IMAGE_TRACE_COMMAND_IDS,
 } from "./commands/image-trace";
-import { contributeSelectParentGroupCommand } from "./commands/select-parent-group";
 import {
   contributeFillGradientCommands,
   FILL_GRADIENT_COMMAND_IDS,
 } from "./commands/fill-gradient";
-import { contributeGroupCommands, GROUP_COMMAND_IDS } from "./commands/group";
 import {
   contributeJoinAverageCommands,
   JOIN_AVERAGE_COMMAND_IDS,
@@ -279,10 +280,12 @@ export function activate(host: BundleHost): BundleHandle {
   // commits `setElementProperty{ frameStrokeDashArray, lengths }` to
   // the selection through the document door.
   const dashCommandsSub = contributeDashCommands(host);
-  // Phase 2d — Group selection / Ungroup (the B-04 wire consumers;
-  // clipping masks are NOT representable on the wire — honest subset,
-  // see commands/group.ts).
-  const groupCommandsSub = contributeGroupCommands(host);
+  // NOTE — no Group / Ungroup / Select parent group here. Those three
+  // are the HOST's commands now (`paged.object.*`): basic object
+  // operations are what plugins build on, and shipping them from a
+  // plugin meant a user without paged.draw loaded could not group. The
+  // B-04 wire shapes stay in commands/group.ts because Pattern,
+  // Symbols and Image Trace compose them inside larger batches.
   // Phase 2d — gradient-fill presets (B-03 consumer; a gradient
   // assignment is a multi-mutation, vector-valued flow above the
   // binding ceiling → command-driven, the dash precedent).
@@ -393,10 +396,6 @@ export function activate(host: BundleHost): BundleHandle {
   // intermediates, one batch; commands/blend.ts documents the honest
   // colour scope).
   const blendCommandSub = contributeBlendCommand(host);
-  // Wave 2 — group-selection cycling (parentage via the scene-tree
-  // door; commands/select-parent-group.ts records the parentOf door
-  // gap).
-  const selectParentGroupCommandSub = contributeSelectParentGroupCommand(host);
   // Illustrator Phase 2 (last row) — IMAGE TRACE v0. The one capability
   // in this repo whose kernel is computer vision rather than path
   // algebra, so it is the one that ships a Rust/wasm artifact
@@ -449,7 +448,6 @@ export function activate(host: BundleHost): BundleHandle {
     `activated — ${tools.length} tools + 2 schema panels + 5 React panels + ` +
       `${
         DASH_COMMAND_IDS.length +
-        GROUP_COMMAND_IDS.length +
         FILL_GRADIENT_COMMAND_IDS.length +
         PATH_OPS_COMMAND_IDS.length +
         JOIN_AVERAGE_COMMAND_IDS.length +
@@ -468,7 +466,7 @@ export function activate(host: BundleHost): BundleHandle {
         SELECT_SAME_COMMAND_IDS.length +
         INSERT_SHAPE_COMMAND_IDS.length +
         IMAGE_TRACE_COMMAND_IDS.length +
-        2 // blendSelected + selectParentGroup
+        1 // blendSelected
       } commands + 1 edit context + ` +
       `${layersProviderHandle ? 1 : 0} binding providers ` +
       `(apiVersion ${manifest.apiVersion})`,
@@ -485,7 +483,6 @@ export function activate(host: BundleHost): BundleHandle {
       layersProviderHandle?.dispose();
       svgIoSub.dispose();
       imageTraceCommandSub.dispose();
-      selectParentGroupCommandSub.dispose();
       blendCommandSub.dispose();
       insertShapeCommandsSub.dispose();
       selectSameCommandsSub.dispose();
@@ -504,7 +501,6 @@ export function activate(host: BundleHost): BundleHandle {
       joinAverageCommandsSub.dispose();
       pathOpsCommandsSub.dispose();
       fillGradientCommandsSub.dispose();
-      groupCommandsSub.dispose();
       dashCommandsSub.dispose();
       fillBindingSub.dispose();
       strokeBindingSub.dispose();
