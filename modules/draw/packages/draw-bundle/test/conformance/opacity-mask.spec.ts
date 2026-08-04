@@ -31,7 +31,8 @@
 //       text frame — on the log and on the status binding;
 //   (5) the HONESTY WORDING: the canvas/export asymmetry is in the
 //       command title AND in OPACITY_MASK_CANVAS_NOTE, and neither may
-//       be softened into a WYSIWYG claim.
+//       be softened — the note now states that canvas and export
+//       AGREE, which is what the Vello mask work made true.
 
 import { describe, expect, it, beforeAll, beforeEach, afterAll } from "vitest";
 
@@ -219,16 +220,18 @@ describe("draw conformance — opacity masks (C-28, engine protocol v58)", () =>
 
   describe("the canvas/export asymmetry is stated where a user reads it", () => {
     it("the note names the backend, the two lanes and the visible consequence", () => {
-      // Every clause here is load-bearing. If this test starts failing
-      // because the note was "tidied up", the fix is to restore the
-      // claim — not to relax the assertion.
-      expect(OPACITY_MASK_CANVAS_NOTE).toContain("CPU rasterizer");
-      expect(OPACITY_MASK_CANVAS_NOTE).toContain("PDF export");
-      expect(OPACITY_MASK_CANVAS_NOTE).toContain("NOT");
-      expect(OPACITY_MASK_CANVAS_NOTE).toContain("Vello/WebGPU");
-      expect(OPACITY_MASK_CANVAS_NOTE).toContain("UNMASKED");
-      // …and it must never claim the canvas shows it.
-      expect(OPACITY_MASK_CANVAS_NOTE).not.toMatch(/WYSIWYG|live preview/i);
+      // This block used to pin the OPPOSITE claim — that the note must
+      // contain "NOT", "Vello/WebGPU" and "UNMASKED", and must never
+      // read as WYSIWYG. The premise was false (vello v0.9.0 has
+      // `push_luminance_mask_layer`; the gap traced to a misread
+      // Cargo.lock), so the pin was holding a wrong sentence in place.
+      // It now pins the true one, with the same discipline: if this
+      // fails because the note was softened, restore the claim.
+      expect(OPACITY_MASK_CANVAS_NOTE).toContain("canvas");
+      expect(OPACITY_MASK_CANVAS_NOTE).toContain("PDF");
+      expect(OPACITY_MASK_CANVAS_NOTE).toContain("byte-for-byte");
+      // …and it must not resurrect the retracted warning.
+      expect(OPACITY_MASK_CANVAS_NOTE).not.toMatch(/UNMASKED|EXPORT ONLY/);
     });
   });
 
@@ -265,11 +268,11 @@ describe("draw conformance — opacity masks (C-28, engine protocol v58)", () =>
         expect(commandFor(h, id).category).toBe("Transparency");
       }
       const make = commandFor(h, MAKE_OPACITY_MASK_COMMAND_ID).title;
-      // The `pattern.ts` precedent: a command palette entry is the one
-      // surface read BEFORE invoking, so the gap lives there.
-      expect(make).toContain("EXPORT ONLY");
-      expect(make).toContain("UNMASKED");
+      // The `pattern.ts` precedent still applies — a command palette
+      // entry is the one surface read BEFORE invoking — but what it must
+      // carry changed when the renderer gap turned out not to exist.
       expect(make).toContain("canvas");
+      expect(make).not.toMatch(/EXPORT ONLY|UNMASKED/);
       expect(commandFor(h, RELEASE_OPACITY_MASK_COMMAND_ID).title).toContain(
         "comes back on top",
       );

@@ -27,20 +27,22 @@
 // draws through, because Vello's `push_layer` takes a SHAPE, not a
 // coverage buffer — there is nowhere to hand it a continuous alpha
 // field. So today, applying a mask makes the mask ARTWORK disappear
-// (it leaves the page's z-order — that part IS visible) while the
-// masked artwork keeps drawing at full strength on screen; the exported
-// PDF is correct.
+// (it leaves the page's z-order — that part IS visible) and the masked
+// artwork is modulated on screen exactly as it is in the exported PDF.
 //
-// That asymmetry is the single most important thing about this feature,
-// so it is stated in THREE places that a user can actually reach: the
-// command TITLE (the `pattern.ts` precedent — its title says BAKE
-// because the bake is destructive), the success log line, and
-// `OPACITY_MASK_CANVAS_NOTE` below, whose wording a conformance test
-// pins. There is deliberately NO panel, NO overlay preview and NO
-// on-canvas affordance: every one of those would imply a WYSIWYG this
-// backend cannot deliver, and a designer who applies a mask, sees
-// nothing change, and concludes the feature is broken is a worse
-// outcome than a long command title.
+// HISTORY, kept because it is the more useful part: this module shipped
+// with the opposite claim in three user-reachable places — the command
+// title, the success log and `OPACITY_MASK_CANVAS_NOTE` — stating the
+// canvas drew UNMASKED, and with no panel or overlay, on the reasoning
+// that any on-canvas affordance would imply a WYSIWYG the backend could
+// not deliver. The premise was false: vello v0.9.0 already had
+// `Scene::push_luminance_mask_layer`, and the "no coverage buffer"
+// belief traced to a misread `Cargo.lock` carrying a second, unrelated
+// vello 0.3.0 for a spike crate. One unverified reading produced five
+// wrong artifacts across four repos, including a conformance test that
+// PINNED the wrong sentence. An honesty note is load-bearing precisely
+// because people build on it — so it is worth being as sure of a stated
+// limitation as of a stated feature.
 //
 // --------------------------------------------------------- the shape
 // `applyOpacityMask { targetId, maskId, maskType?, invert? }` moves the
@@ -146,14 +148,22 @@ export const OPACITY_MASK_COMMAND_IDS = [
  *  on, so a schema panel could show the engine's own words. */
 export const BIND_OPACITY_MASK_STATUS = "media.paged.draw.opacityMaskStatus";
 
-/** THE sentence about the renderer gap. Pinned by a conformance test so
- *  nobody softens it into a WYSIWYG claim, and reused verbatim in the
- *  success log line. */
+/** What the mask does, now that it renders everywhere. Pinned by a
+ *  conformance test.
+ *
+ *  This constant previously carried a renderer-gap warning: that the mask
+ *  was honoured by the CPU rasterizer and PDF but NOT by the Vello/WebGPU
+ *  backend, because "Vello's push_layer takes a shape, not a coverage
+ *  buffer". That was RETRACTED — the pinned vello (v0.9.0) has
+ *  `Scene::push_luminance_mask_layer`, and alpha masks never needed a
+ *  mask layer at all (`Compose::DestIn` IS `dst · src.a`). The belief
+ *  came from misreading a second, unrelated vello 0.3.0 entry in core's
+ *  Cargo.lock. Vello output is now byte-identical to the CPU rasterizer
+ *  across luminosity, alpha and both inverted forms. */
 export const OPACITY_MASK_CANVAS_NOTE =
-  "the mask is honoured by the CPU rasterizer and by PDF export, but NOT by " +
-  "the Vello/WebGPU backend the editor canvas draws through (Vello's " +
-  "push_layer takes a shape, not a coverage buffer) — on canvas the masked " +
-  "artwork still draws UNMASKED while the exported PDF is correct";
+  "the mask renders on canvas and in the exported PDF alike — the Vello " +
+  "backend matches the CPU rasterizer byte-for-byte across luminosity, " +
+  "alpha and both inverted forms";
 
 /** The kinds core accepts on EITHER side of a mask. Mirrored here only
  *  so a caller can explain a likely refusal BEFORE spending a round
@@ -465,7 +475,7 @@ export function contributeOpacityMaskCommands(host: BundleHost): Disposable {
     host.contribute.command({
       id: MAKE_OPACITY_MASK_COMMAND_ID,
       title:
-        "Transparency: Make opacity mask from top object (EXPORT ONLY — the canvas still draws the artwork UNMASKED)",
+        "Transparency: Make opacity mask from top object (renders on canvas and in export)",
       category: OPACITY_MASK_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyMakeOpacityMask(host, payloadOf(payload)).then(() => undefined),
