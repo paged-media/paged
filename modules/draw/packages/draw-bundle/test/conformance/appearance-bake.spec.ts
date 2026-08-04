@@ -828,16 +828,18 @@ describe("draw conformance — the appearance GROUP BAKE (gap B-24)", () => {
           )!.of,
         ).toEqual(RECT);
 
-        // STILL TRUE, and pinned so a future core fix fails loudly: an
-        // INSERTED item emits at the SPREAD'S CLOSE, so the group reopens
-        // ABOVE the page items the source file already carried — its
-        // canvas z-slot (the carrier's, asserted in the BAKE test) is not
-        // what the file records.
+        // CLOSED (RFI C-22): an inserted item used to emit at the SPREAD'S
+        // CLOSE, so the group reopened ABOVE everything the source file
+        // already carried and the file's z-order disagreed with the
+        // canvas. The writer now anchors an inserted item to the first
+        // following source item, so this matches the LIVE-tree assertion
+        // in the BAKE test exactly — which is the whole point: what the
+        // file records is what the canvas shows.
         const page = (await reopened.host.document.tree())[0].children![0];
         expect(page.children!.map((c) => c.id!.id)).toEqual([
+          group!.id,
           F1_MULTI_SHAPE.ids.polygon,
           F1_MULTI_SHAPE.ids.graphicLine,
-          group!.id,
         ]);
       } finally {
         reopened.dispose();
