@@ -351,7 +351,16 @@ const text = (
   args: { elementId, path, value: { type: "text", value } },
 });
 
-const stamp = (
+/** A RAW `setPluginMetadata` op carrying this plugin's envelope.
+ *
+ *  Exported because it is the ONE builder every module that needs its
+ *  envelope write to ride INSIDE its own batch uses (the bake here, the
+ *  graphic-style apply in `graphic-styles.ts`): the facade's
+ *  `setMetadata` is its own mutation, i.e. its own undo step, so an
+ *  in-batch stamp is the difference between one undo step and two. The
+ *  SDK's namespace gate still checks the key on the way through — a
+ *  foreign key is refused before the engine sees it. */
+export const stampDrawMetadata = (
   elementId: ElementId,
   envelope: PluginMetadataEnvelope | null,
 ): Mutation => ({
@@ -363,6 +372,8 @@ const stamp = (
     caller: manifest.id,
   },
 });
+
+const stamp = stampDrawMetadata;
 
 /** BATCH 1 of the bake — `count` copies of the source contour, inserted
  *  bottom-to-top. One batch ⇒ one undo step for the whole geometry.

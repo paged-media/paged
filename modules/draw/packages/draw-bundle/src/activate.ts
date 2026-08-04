@@ -70,6 +70,10 @@ import {
   APPEARANCE_BAKE_COMMAND_IDS,
 } from "./commands/appearance-bake";
 import {
+  contributeGraphicStyleCommands,
+  GRAPHIC_STYLES_COMMAND_IDS,
+} from "./commands/graphic-styles";
+import {
   contributeCompoundPathCommands,
   COMPOUND_PATH_COMMAND_IDS,
 } from "./commands/compound-path";
@@ -124,6 +128,10 @@ import {
   makeAppearancePanel,
   APPEARANCE_PANEL_ID,
 } from "./panels/appearance-panel";
+import {
+  makeGraphicStylesPanel,
+  GRAPHIC_STYLES_PANEL_ID,
+} from "./panels/graphic-styles-panel";
 import { installStrokePanelBindings, strokePanel } from "./panels/stroke-panel";
 import { contributeSvgIo } from "./io/svg";
 
@@ -164,6 +172,21 @@ export function activate(host: BundleHost): BundleHandle {
     id: APPEARANCE_PANEL_ID,
     icon: "panel-effects",
     ...makeAppearancePanel(host),
+  });
+  // Illustrator Phase 2 — GRAPHIC STYLES: the named, LINKED complete
+  // appearance. The library is a `.paged` CONTAINER part (it travels
+  // with the file — `host.storage` is per-browser and plugin metadata is
+  // per-element, so neither could hold it); the link is a reference on
+  // the element's own envelope. A React panel for the Layers/Appearance
+  // reason: a list of named records with per-row actions is above the v1
+  // schema panel's scalar ceiling.
+  // (`panel-object-styles` is a REAL glyph in the host's kebab-case map;
+  // there is no `panel-graphic-styles`, and an invented token renders the
+  // dock tab ICONLESS — the stroke panel's recorded lesson.)
+  host.contribute.panel({
+    id: GRAPHIC_STYLES_PANEL_ID,
+    icon: "panel-object-styles",
+    ...makeGraphicStylesPanel(host),
   });
   // B-12 — the stroke DASH presets as commands (the schema binding
   // ceiling is scalar, a dash array is a vector → command-driven). Each
@@ -221,6 +244,14 @@ export function activate(host: BundleHost): BundleHandle {
   // See commands/appearance-bake.ts for the mutation/undo shape and the
   // named list of what does and does not survive the lowering.
   const appearanceBakeCommandsSub = contributeAppearanceBakeCommands(host);
+  // Illustrator Phase 2 — GRAPHIC STYLES (save / apply / redefine /
+  // break link / rename / delete). The library is a document-resident
+  // container part (`host.parts`, declared in contributes.partTypes) and
+  // the LINK is a reference on the element's own metadata envelope; a
+  // direct appearance edit marks the object OVERRIDDEN without breaking
+  // the link, and a redefine overwrites it. See commands/graphic-styles.ts
+  // for the persistence shape, the kind projection and the honest limits.
+  const graphicStyleCommandsSub = contributeGraphicStyleCommands(host);
   // Phase 9 (Tier B) — Select-same (pure selection over fill / stroke /
   // stroke-weight; no mutation).
   const selectSameCommandsSub = contributeSelectSameCommands(host);
@@ -256,7 +287,7 @@ export function activate(host: BundleHost): BundleHandle {
   // host predates the importer/exporter doors.
   const svgIoSub = contributeSvgIo(host);
   host.log.info(
-    `activated — ${tools.length} tools + 2 schema panels + 2 React panels + ` +
+    `activated — ${tools.length} tools + 2 schema panels + 3 React panels + ` +
       `${
         DASH_COMMAND_IDS.length +
         GROUP_COMMAND_IDS.length +
@@ -270,6 +301,7 @@ export function activate(host: BundleHost): BundleHandle {
         LIVE_CORNER_COMMAND_IDS.length +
         APPEARANCE_COMMAND_IDS.length +
         APPEARANCE_BAKE_COMMAND_IDS.length +
+        GRAPHIC_STYLES_COMMAND_IDS.length +
         SELECT_SAME_COMMAND_IDS.length +
         INSERT_SHAPE_COMMAND_IDS.length +
         IMAGE_TRACE_COMMAND_IDS.length +
@@ -288,6 +320,7 @@ export function activate(host: BundleHost): BundleHandle {
       blendCommandSub.dispose();
       insertShapeCommandsSub.dispose();
       selectSameCommandsSub.dispose();
+      graphicStyleCommandsSub.dispose();
       appearanceBakeCommandsSub.dispose();
       appearanceCommandsSub.dispose();
       liveCornerCommandsSub.dispose();

@@ -325,6 +325,7 @@ export {
   APPEARANCE_RELEASE_COMMAND_ID,
   APPEARANCE_BAKE_COMMAND_IDS,
   DRAW_METADATA_KEY,
+  stampDrawMetadata,
   appearanceBakeOf,
   appearanceLayerOf,
   withAppearanceBake,
@@ -354,6 +355,74 @@ export {
   APPEARANCE_PANEL_ID,
   APPEARANCE_BAKE_NOTE,
 } from "./panels/appearance-panel";
+// Illustrator Phase 2 — GRAPHIC STYLES: a named, LINKED complete
+// appearance. The library is a `.paged` CONTAINER part (document-
+// resident, so it travels with the file); the link is a reference on the
+// element's own metadata envelope, and a direct appearance edit marks
+// the element OVERRIDDEN without breaking it. Pure model + the exact
+// wire builder exported for the conformance spec (the no-second-copy
+// rule).
+export {
+  GRAPHIC_STYLES_COMMAND_IDS,
+  GRAPHIC_STYLES_COMMAND_CATEGORY,
+  GRAPHIC_STYLES_PART,
+  GRAPHIC_STYLES_LIBRARY_VERSION,
+  GRAPHIC_STYLES_FEATURE,
+  GRAPHIC_STYLE_BASE_PATHS,
+  EMPTY_GRAPHIC_STYLE_BASE,
+  SAVE_GRAPHIC_STYLE_COMMAND_ID,
+  APPLY_GRAPHIC_STYLE_COMMAND_ID,
+  REDEFINE_GRAPHIC_STYLE_COMMAND_ID,
+  BREAK_GRAPHIC_STYLE_LINK_COMMAND_ID,
+  RENAME_GRAPHIC_STYLE_COMMAND_ID,
+  DELETE_GRAPHIC_STYLE_COMMAND_ID,
+  graphicStyleBaseOf,
+  graphicStyleAppearanceOf,
+  parseGraphicStyleLibrary,
+  serializeGraphicStyleLibrary,
+  mintGraphicStyleId,
+  findGraphicStyle,
+  upsertGraphicStyle,
+  renameGraphicStyleIn,
+  removeGraphicStyleFrom,
+  projectGraphicAppearance,
+  canonicalGraphicAppearance,
+  graphicAppearanceDigest,
+  graphicStyleRefOf,
+  withGraphicStyleRef,
+  graphicStyleOverridden,
+  graphicStyleRefusalOf,
+  graphicStyleBaseMutations,
+  applyGraphicStyleBatchFor,
+  readGraphicStyleLibrary,
+  writeGraphicStyleLibrary,
+  readGraphicAppearance,
+  graphicStyleLinks,
+  linkGraphicStyle,
+  applySaveGraphicStyle,
+  applyGraphicStyleToSelection,
+  applyRedefineGraphicStyle,
+  applyBreakGraphicStyleLink,
+  applyRenameGraphicStyle,
+  applyDeleteGraphicStyle,
+  contributeGraphicStyleCommands,
+  type GraphicStyle,
+  type GraphicStyleAppearance,
+  type GraphicStyleBase,
+  type GraphicStyleLibrary,
+  type GraphicStyleRef,
+  type GraphicStyleRefusal,
+  type GraphicAppearanceRead,
+} from "./commands/graphic-styles";
+// The GRAPHIC STYLES panel (React, the Layers/Appearance idiom) — the
+// view over the library + the selection's link, with the not-undoable
+// library and the unbuilt catalog verbs stated inline.
+export {
+  makeGraphicStylesPanel,
+  graphicStyleRowLabel,
+  GRAPHIC_STYLES_PANEL_ID,
+  GRAPHIC_STYLES_NOTE,
+} from "./panels/graphic-styles-panel";
 // Phase 9 (Tier B) — Select-same: the pure matcher + tree flattener,
 // exported for the conformance spec.
 export {

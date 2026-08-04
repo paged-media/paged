@@ -104,9 +104,9 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
       // VERBATIM through the harness's registration hook. Both are
       // honest — the registry really got a panel; the log keeps the
       // schema so conformance can assert it. Stroke first, then fill
-      // (Phase 2d), then the two React panels (layers, appearance).
-      // Then the forty-nine commands in registration order, then the
-      // W3.2 edit context. (Pen is a core built-in.)
+      // (Phase 2d), then the three React panels (layers, appearance,
+      // graphic styles). Then the fifty-five commands in registration
+      // order, then the W3.2 edit context. (Pen is a core built-in.)
       expect(harness.contributions.map((c) => c.kind)).toEqual([
         // Three anchor editors + the pro set (Curvature, Pencil,
         // Gradient Annotator, Measure, Shape Builder, Corner Radius) +
@@ -139,6 +139,9 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "panel",
         // The APPEARANCE panel (the metadata stack + its one-fill/
         // one-stroke honesty note) — likewise expert-leaf React.
+        "panel",
+        // The GRAPHIC STYLES panel (the document-resident style library
+        // + the selection's link into it) — likewise expert-leaf React.
         "panel",
         // B-12 — the stroke dash-preset commands (Solid / Dashed /
         // Dotted / Dash-dot).
@@ -196,6 +199,14 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "command",
         "command",
         // B-24 — Bake stack to a group / Release baked stack.
+        "command",
+        "command",
+        // Illustrator Phase 2 — Graphic styles (Save from selection /
+        // Apply / Redefine / Break link / Rename / Delete).
+        "command",
+        "command",
+        "command",
+        "command",
         "command",
         "command",
         // Phase 9 (Tier B) — Select-same (Fill / Stroke / Stroke weight).

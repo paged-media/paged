@@ -211,6 +211,14 @@ describe("drawBundle.activate", () => {
       // B-24 — the group bake + its inverse.
       "media.paged.draw.command.bakeAppearance",
       "media.paged.draw.command.releaseAppearance",
+      // Illustrator Phase 2 — graphic styles (the named, LINKED complete
+      // appearance; library = a `.paged` container part).
+      "media.paged.draw.command.saveGraphicStyle",
+      "media.paged.draw.command.applyGraphicStyle",
+      "media.paged.draw.command.redefineGraphicStyle",
+      "media.paged.draw.command.breakGraphicStyleLink",
+      "media.paged.draw.command.renameGraphicStyle",
+      "media.paged.draw.command.deleteGraphicStyle",
       "media.paged.draw.command.selectSameFill",
       "media.paged.draw.command.selectSameStroke",
       "media.paged.draw.command.selectSameStrokeWeight",
@@ -226,22 +234,25 @@ describe("drawBundle.activate", () => {
     expect(fake.keybindings.count()).toBe(0);
   });
 
-  it("registers the stroke + fill SCHEMA panels and the layers + appearance React panels", () => {
+  it("registers the stroke + fill SCHEMA panels and the layers + appearance + graphic-styles React panels", () => {
     const fake = makeFakeEditor();
     loadBundle(() => fake.editor, drawBundle, {
       console: silent,
       storage: mapBacking(),
     });
     // The schema panels register through the panels registry as
-    // synthesized PanelContributions; the two React panels — layers
-    // (the layers.panel.json prototype made real) and appearance (the
-    // metadata stack + its one-fill/one-stroke honesty note) — register
-    // directly, both expert-leaf per B-01's list-widget limit.
+    // synthesized PanelContributions; the three React panels — layers
+    // (the layers.panel.json prototype made real), appearance (the
+    // metadata stack + its one-fill/one-stroke honesty note) and graphic
+    // styles (the document-resident style library + the selection's link
+    // into it) — register directly, all expert-leaf per B-01's
+    // list-widget limit.
     expect(fake.panels.ids()).toEqual([
       "media.paged.draw.panel.stroke",
       "media.paged.draw.panel.fill",
       "media.paged.draw.panel.layers",
       "media.paged.draw.panel.appearance",
+      "media.paged.draw.panel.graphicStyles",
     ]);
   });
 

@@ -31,14 +31,19 @@ the pen flyout, plus the Curvature/Pencil/Gradient-Annotator/Measure/
 Shape-Builder pro tools), the Stroke + Fill schema panels, the
 Appearance/Dash/Path-Ops/Select-Same/Live-Corners commands, the
 Compound-Path pair (Make / Release), the Pattern bake, IMAGE TRACE v0,
-SVG import/export, and the `vectorGraphic` EDIT CONTEXT (double-click a
+GRAPHIC STYLES (a named, LINKED complete appearance — the library is a
+document-resident `.paged` container part written through `host.parts`
+and declared in `contributes.partTypes`; the link is a reference on the
+element's own metadata envelope, a direct appearance edit marks the
+element OVERRIDDEN without breaking the link, and a redefine overwrites
+that override), SVG import/export, and the `vectorGraphic` EDIT CONTEXT (double-click a
 path-bearing kind → anchor-editing tool-set focused, stroke panel raised,
 Esc pops out). The bundle drives end-to-end through the real editor host:
 the draw-plugin e2e (`editor` `apps/canvas/tests/e2e/draw-plugin.spec.ts`)
 and a DTP journey (`tests/journey/plugins/draw.journey.spec.ts`) author a
 path with the built-in Pen, then refine its anchors (add/delete/convert)
-and stroke through the bundle. The three TS packages carry 575 passing
-vitest (geometry 162, tools 102, bundle 311) and typecheck clean; the two
+and stroke through the bundle. The three TS packages carry 606 passing
+vitest (geometry 162, tools 102, bundle 342) and typecheck clean; the two
 crates carry 26 `cargo test` (draw-trace 22, trace-js 4).
 
 ## Hard rules
