@@ -196,6 +196,9 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.appearanceClear",
       "media.paged.draw.command.appearanceRemoveLayer",
       "media.paged.draw.command.appearanceMoveLayer",
+      // B-24 — the group bake + its inverse.
+      "media.paged.draw.command.bakeAppearance",
+      "media.paged.draw.command.releaseAppearance",
       "media.paged.draw.command.selectSameFill",
       "media.paged.draw.command.selectSameStroke",
       "media.paged.draw.command.selectSameStrokeWeight",

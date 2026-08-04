@@ -30,13 +30,24 @@
 // to drift from.
 //
 // THE HONESTY THE UI MUST CARRY (gap B-24, and the reason this panel
-// exists at all): the engine gives a frame ONE fill slot and ONE stroke
-// slot. Layers below the top are plugin metadata — they travel in the
-// `.paged` file and reopen here, but they are NOT in the document's own
-// paint and do NOT reach an IDML/PDF export. The panel says that in
-// plain words (the `noteStyle` block), marks the row that actually bakes
-// ("bakes"), and dims the ones that do not. Hiding it behind a
-// convincing stack would be the exact fiction this repo refuses.
+// exists at all). There are now TWO states, and the panel names both:
+//
+//   UNBAKED — the stack is plugin metadata. The engine gives a frame ONE
+//   fill slot and ONE stroke slot, so only the FRONT-MOST fill + stroke
+//   sit in the document's own paint; the layers below travel in the
+//   `.paged` file and reopen here but are not what renders.
+//
+//   BAKED — `bakeAppearance` lowered the stack onto REAL stacked page
+//   items (one derived path per layer, sharing this shape's geometry,
+//   inside a group). Every layer renders, on canvas and in a PDF export.
+//   The panel keeps editing the METADATA stack — it stays the source of
+//   truth — and an edit RE-BAKES rather than letting the model and the
+//   page diverge.
+//
+// The note block spells out what the bake costs (a group of derived
+// paths, tint/blend not expressible on a derived path, no IDML save-back
+// yet). Hiding any of that behind a convincing stack would be the exact
+// fiction this repo refuses.
 
 import type { BundleHost, ElementId, PanelProps } from "@paged-media/plugin-api";
 import * as React from "react";
@@ -56,19 +67,34 @@ import {
   type FillLayer,
   type StrokeLayer,
 } from "../commands/appearance";
+import {
+  appearanceBakeOf,
+  bakeAppearance,
+  releaseAppearance,
+  resolveAppearanceCarrier,
+} from "../commands/appearance-bake";
 
 export const APPEARANCE_PANEL_ID = "media.paged.draw.panel.appearance";
 
-/** The one-sentence limitation the panel renders inline. Exported so the
- *  conformance spec pins the WORDING (an honesty note that can be edited
- *  away silently is not a guarantee). */
+/** The limitation the panel renders inline. Exported so the conformance
+ *  spec pins the WORDING (an honesty note that can be edited away
+ *  silently is not a guarantee). */
 export const APPEARANCE_BAKE_NOTE =
-  "Only the front-most fill and stroke bake into the document. The engine " +
-  "gives each frame one fill slot and one stroke slot, so the layers below " +
-  "live in this plugin's metadata: they travel in the .paged file and " +
-  "reopen here, but they are not in the frame's own paint and do not reach " +
-  "an IDML or PDF export. True multi-layer compositing needs a multi-paint " +
-  "frame model in the engine (gap B-24).";
+  "Unbaked, this stack is metadata only: the engine gives each frame one " +
+  "fill slot and one stroke slot, so only the front-most fill and stroke " +
+  "are in the document's own paint — the layers below travel in the .paged " +
+  "file and reopen here, but they are not what renders. Bake makes the " +
+  "stack real: one derived path per layer, sharing this shape's geometry, " +
+  "stacked back-to-front in a group, which is ordinary IDML — so every " +
+  "layer renders on the canvas and in a PDF export. What the bake costs: " +
+  "the object becomes a GROUP of derived paths (direct-selecting inside it " +
+  "edits one derived layer, and every edit re-bakes — the derived paths " +
+  "are replaced, not patched); per-layer tint and blend mode do not " +
+  "survive the lowering (the engine supports neither on a derived path); " +
+  "and a baked group does not save back to IDML yet — the engine's IDML " +
+  "writer drops scene-created groups, so Release before saving to IDML. " +
+  "Release restores the single frame with the front-most layer on its own " +
+  "attributes (gap B-24).";
 
 const EMPTY: AppearanceStack = { fills: [], strokes: [] };
 
@@ -147,20 +173,31 @@ export function makeAppearancePanel(host: BundleHost): {
     const [target, setTarget] = React.useState<ElementId | null>(null);
     const [extra, setExtra] = React.useState(0);
     const [stack, setStack] = React.useState<AppearanceStack>(EMPTY);
+    const [baked, setBaked] = React.useState(false);
 
     const reload = React.useCallback(async () => {
       const selection = host.selection.get();
       const first = selection[0] ?? null;
-      setTarget(first);
       setExtra(Math.max(0, selection.length - 1));
       if (!first) {
+        setTarget(null);
         setStack(EMPTY);
+        setBaked(false);
         return;
       }
       try {
-        setStack(appearanceOf(await host.document.getMetadata(first)));
+        // A baked stack can be selected as its group or as one of its
+        // derived layers — both resolve to the CARRIER that owns the
+        // (still editable) metadata stack.
+        const carrier = await resolveAppearanceCarrier(host, first);
+        const env = await host.document.getMetadata(carrier);
+        setTarget(carrier);
+        setStack(appearanceOf(env));
+        setBaked(appearanceBakeOf(env) !== null);
       } catch {
+        setTarget(first);
         setStack(EMPTY);
+        setBaked(false);
       }
     }, []);
 
@@ -200,12 +237,16 @@ export function makeAppearancePanel(host: BundleHost): {
         .reverse()
         .map(({ layer, index }, position) => {
           const top = index === list.length - 1;
+          // BAKED: every layer is a real page item, so no row is dimmed
+          // and every row is tagged. UNBAKED: only the front-most one
+          // reaches the frame's own paint.
+          const real = baked || top;
           return (
             <div
               key={`${kind}-${index}`}
-              style={{ ...rowStyle, opacity: top ? 1 : 0.6 }}
+              style={{ ...rowStyle, opacity: real ? 1 : 0.6 }}
               data-draw-appearance-row={`${kind}:${index}`}
-              data-draw-appearance-bakes={top ? "true" : "false"}
+              data-draw-appearance-bakes={real ? "true" : "false"}
             >
               <span style={swatchChip(layer.color)} aria-hidden="true" />
               <span
@@ -217,14 +258,18 @@ export function makeAppearancePanel(host: BundleHost): {
                   whiteSpace: "nowrap",
                 }}
                 title={
-                  top
-                    ? "Front-most layer — this one bakes into the document"
-                    : "Metadata only — this layer does not reach the document paint"
+                  baked
+                    ? "Baked — this layer is a real derived path in the group"
+                    : top
+                      ? "Front-most layer — this one bakes into the document"
+                      : "Metadata only — this layer does not reach the document paint"
                 }
               >
                 {appearanceRowLabel(kind, layer)}
               </span>
-              {top && <span style={bakeTagStyle}>bakes</span>}
+              {real && (
+                <span style={bakeTagStyle}>{baked ? "baked" : "bakes"}</span>
+              )}
               <button
                 type="button"
                 style={iconBtn}
@@ -274,7 +319,11 @@ export function makeAppearancePanel(host: BundleHost): {
     const total = stack.fills.length + stack.strokes.length;
 
     return (
-      <div style={{ padding: 12 }} data-draw-appearance-panel={total}>
+      <div
+        style={{ padding: 12 }}
+        data-draw-appearance-panel={total}
+        data-draw-appearance-baked={baked ? "true" : "false"}
+      >
         <div style={{ ...rowStyle, justifyContent: "space-between" }}>
           <span style={{ ...sectionStyle, paddingTop: 0 }}>
             Appearance ({total})
@@ -335,6 +384,37 @@ export function makeAppearancePanel(host: BundleHost): {
               Clear
             </button>
           </span>
+        </div>
+
+        <div style={{ ...rowStyle, justifyContent: "flex-end", gap: 4 }}>
+          <button
+            type="button"
+            style={iconBtn}
+            title="Bake the stack into real stacked page items (a group of derived paths)"
+            data-draw-appearance-bake
+            disabled={!target || baked || total === 0}
+            onClick={() =>
+              void run(
+                bakeAppearance(host, target!).then(() => undefined),
+              )
+            }
+          >
+            Bake
+          </button>
+          <button
+            type="button"
+            style={iconBtn}
+            title="Release the baked group back to a single frame carrying the stack"
+            data-draw-appearance-release
+            disabled={!target || !baked}
+            onClick={() =>
+              void run(
+                releaseAppearance(host, target!).then(() => undefined),
+              )
+            }
+          >
+            Release
+          </button>
         </div>
 
         {!target && (

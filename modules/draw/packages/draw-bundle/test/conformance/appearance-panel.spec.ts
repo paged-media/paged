@@ -129,11 +129,19 @@ describe("draw conformance — Appearance panel", () => {
     ).toBe("Color/Paper · 1.5 pt");
   });
 
-  it("the inline note NAMES the one-fill/one-stroke limit (gap B-24)", () => {
+  it("the inline note NAMES both states and what the bake costs (gap B-24)", () => {
+    // UNBAKED — the one-slot reality that makes the stack metadata.
     expect(APPEARANCE_BAKE_NOTE).toContain("front-most");
     expect(APPEARANCE_BAKE_NOTE).toContain("one fill slot and one stroke slot");
     expect(APPEARANCE_BAKE_NOTE).toContain("metadata");
-    expect(APPEARANCE_BAKE_NOTE).toContain("IDML or PDF export");
+    // BAKED — real stacked page items that render and reach a PDF.
+    expect(APPEARANCE_BAKE_NOTE).toContain("one derived path per layer");
+    expect(APPEARANCE_BAKE_NOTE).toContain("PDF export");
+    // …and the THREE costs, none of them hidden.
+    expect(APPEARANCE_BAKE_NOTE).toContain("GROUP of derived paths");
+    expect(APPEARANCE_BAKE_NOTE).toContain("tint and blend mode do not");
+    expect(APPEARANCE_BAKE_NOTE).toContain("does not save back to IDML");
+    expect(APPEARANCE_BAKE_NOTE).toContain("Release");
     expect(APPEARANCE_BAKE_NOTE).toContain("B-24");
   });
 

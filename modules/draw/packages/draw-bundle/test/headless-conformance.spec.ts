@@ -105,7 +105,7 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
       // honest — the registry really got a panel; the log keeps the
       // schema so conformance can assert it. Stroke first, then fill
       // (Phase 2d), then the two React panels (layers, appearance).
-      // Then the thirty-seven commands in registration order, then the
+      // Then the thirty-nine commands in registration order, then the
       // W3.2 edit context. (Pen is a core built-in.)
       expect(harness.contributions.map((c) => c.kind)).toEqual([
         // Three anchor editors + the pro set (Curvature, Pencil,
@@ -180,6 +180,9 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "command",
         "command",
         "command",
+        "command",
+        "command",
+        // B-24 — Bake stack to a group / Release baked stack.
         "command",
         "command",
         // Phase 9 (Tier B) — Select-same (Fill / Stroke / Stroke weight).

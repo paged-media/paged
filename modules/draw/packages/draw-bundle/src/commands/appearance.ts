@@ -31,13 +31,20 @@
 // LIMITATION, named (the task's "name the limitation honestly"): the
 // engine has ONE fill + ONE stroke slot per frame and NO per-layer
 // blend/opacity compositing of multiple fills into a single frame paint.
-// So the bake is NOT a true composite of N fills — it lowers the FRONT-MOST
-// (top) opaque fill layer and the front-most stroke layer to the frame's
-// real attributes (the visible result when layers don't blend). A faithful
-// N-layer composite (multiply/screen stacks, per-layer opacity) would need
-// either a multi-paint frame model in the engine OR baking the stack into
-// an overlapping GROUP of derived frames — RFI gap B-24. v0 ships the
-// stack-in-metadata + top-layer bake; the panel manages the layers.
+// So the top-layer bake is NOT a true composite of N fills — it lowers
+// the FRONT-MOST (top) opaque fill layer and the front-most stroke layer
+// to the frame's real attributes (the visible result when layers don't
+// blend).
+//
+// B-24 CLOSED (the GROUP BAKE, `commands/appearance-bake.ts`): the
+// faithful N-layer lowering is NOT a multi-paint frame model — that
+// would be a paged-only extension IDML cannot round-trip. It is a GROUP
+// of stacked page items, each with one paint, all sharing the source
+// geometry, which IS ordinary IDML. This module keeps the stack model,
+// the metadata carrier and the front-most-layer bake (what an UNBAKED
+// object shows and what a RELEASED object goes back to); the bake module
+// owns the group lowering, its inverse, and the honest list of what does
+// and does not survive it.
 //
 // The layer EDITORS (add/remove/reorder) are COMMANDS (a layer list is a
 // vector above the scalar schema binding ceiling — the dash/gradient
@@ -52,6 +59,12 @@ import type {
   MutationOutcome,
   PluginMetadataEnvelope,
 } from "@paged-media/plugin-api";
+
+import {
+  appearanceBakeOf,
+  rebakeAppearance,
+  resolveAppearanceCarrier,
+} from "./appearance-bake";
 
 export const APPEARANCE_COMMAND_CATEGORY = "Appearance";
 
@@ -82,8 +95,15 @@ export type AppearanceLayerKind = "fill" | "stroke";
 export interface FillLayer {
   /** A swatch / gradient self-id (the `frameFillColor` colorRef vocab). */
   color: string;
-  /** Tint 0..100, default 100. */
+  /** Tint 0..100, default 100. NOTE: a tint survives the metadata and
+   *  the front-most-layer bake (a Rectangle takes `FrameFillTint`) but
+   *  NOT the GROUP bake — the derived paths are Polygons and core's
+   *  `set_property` has no Polygon arm for `FrameFillTint`. */
   tint?: number;
+  /** Layer opacity 0..100. Renders on canvas and in a PDF export; the
+   *  IDML writer does not emit it for a derived path (see
+   *  `appearance-bake.ts`). */
+  opacity?: number;
 }
 
 /** One extra stroke layer (a swatch ref + weight in pt). */
@@ -91,6 +111,8 @@ export interface StrokeLayer {
   color: string;
   /** Stroke weight in pt. */
   weight: number;
+  /** Layer opacity 0..100 — same caveat as {@link FillLayer.opacity}. */
+  opacity?: number;
 }
 
 /** The appearance stack — fills + strokes BOTTOM-to-TOP (the LAST entry
@@ -229,17 +251,30 @@ export function bakeAppearanceMutations(
   return ops;
 }
 
-/** Persist a stack onto an element: write the metadata envelope AND bake
- *  the top layer to the frame (one batch when there's anything to bake;
- *  the metadata write is its own undoable step). Exported for the
- *  conformance spec. Returns the metadata outcome (the source of truth);
- *  a bake failure is logged, not thrown (the stack still round-trips). */
+/** Persist a stack onto an element.
+ *
+ *  UNBAKED target: write the metadata envelope AND bake the top layer to
+ *  the frame (one batch when there's anything to bake; the metadata
+ *  write is its own undoable step).
+ *
+ *  BAKED target (a `data.appearanceBake` record on the envelope): the
+ *  derived layers ARE what renders, so a metadata-only write would let
+ *  the model and the page diverge. The edit therefore RE-BAKES — release
+ *  the old layers with the new stack, then bake it again (three undo
+ *  steps; see `appearance-bake.ts`).
+ *
+ *  Exported for the conformance spec. Returns the metadata outcome (the
+ *  source of truth); a bake failure is logged, not thrown (the stack
+ *  still round-trips). */
 export async function commitAppearance(
   host: BundleHost,
   id: ElementId,
   stack: AppearanceStack,
   prev: PluginMetadataEnvelope | null,
 ): Promise<MutationOutcome> {
+  if (appearanceBakeOf(prev)) {
+    return rebakeAppearance(host, id, stack, prev);
+  }
   const metaOutcome = await host.document.setMetadata(
     id,
     withAppearance(prev, stack),
@@ -297,22 +332,34 @@ export async function applyAppearanceCommand(
     host.log.debug(`${commandId}: no selection — no-op`);
     return;
   }
-  for (const id of selection) {
+  for (const selected of selection) {
+    // A baked stack can be selected as its GROUP or as one of its
+    // derived layers — both resolve to the carrier that owns the stack.
+    const id = await resolveAppearanceCarrier(host, selected);
     const prev = await host.document.getMetadata(id).catch(() => null);
     if (kind === "clear") {
-      await host.document.setMetadata(id, withAppearance(prev, EMPTY));
+      // Through `commitAppearance` so a BAKED object releases its
+      // derived layers instead of stranding them under an empty stack.
+      await commitAppearance(host, id, EMPTY, prev);
       continue;
     }
     const current = appearanceOf(prev);
     const seed = await frameFillStroke(host, id);
     if (kind === "fill") {
-      // Stack a new fill layer seeded from the frame's current fill (or
-      // black when it has none) — the author then edits it in the panel.
-      current.fills.push({ color: seed.fill ?? "Color/Black", tint: 100 });
+      // Stack a new fill layer seeded from the STACK's front-most fill,
+      // falling back to the frame's own fill (or black). The stack comes
+      // first because a BAKED carrier paints nothing — its own fill is
+      // null by construction, so seeding from the frame would silently
+      // hand every added layer the fallback black.
+      current.fills.push({
+        color: current.fills.at(-1)?.color ?? seed.fill ?? "Color/Black",
+        tint: 100,
+      });
     } else {
+      const top = current.strokes.at(-1);
       current.strokes.push({
-        color: seed.stroke ?? "Color/Black",
-        weight: seed.weight,
+        color: top?.color ?? seed.stroke ?? "Color/Black",
+        weight: top?.weight ?? seed.weight,
       });
     }
     await commitAppearance(host, id, current, prev);
@@ -333,7 +380,8 @@ export async function applyAppearanceEdit(
     host.log.debug(`${commandId}: no selection — no-op`);
     return;
   }
-  for (const id of selection) {
+  for (const selected of selection) {
+    const id = await resolveAppearanceCarrier(host, selected);
     const prev = await host.document.getMetadata(id).catch(() => null);
     await commitAppearance(host, id, edit(appearanceOf(prev)), prev);
   }

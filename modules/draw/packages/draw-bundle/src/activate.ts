@@ -65,6 +65,10 @@ import {
   contributeAppearanceCommands,
   APPEARANCE_COMMAND_IDS,
 } from "./commands/appearance";
+import {
+  contributeAppearanceBakeCommands,
+  APPEARANCE_BAKE_COMMAND_IDS,
+} from "./commands/appearance-bake";
 import { contributeDashCommands, DASH_COMMAND_IDS } from "./commands/dash";
 import {
   contributeLiveCornerCommands,
@@ -177,6 +181,13 @@ export function activate(host: BundleHost): BundleHandle {
   // stack baked to the frame's top layer (one-fill/one-stroke engine —
   // gap B-24).
   const appearanceCommandsSub = contributeAppearanceCommands(host);
+  // B-24 CLOSED — the GROUP BAKE: `bakeAppearance` lowers the metadata
+  // stack onto real stacked page items (one derived path per paint,
+  // sharing the source geometry, wrapped in a group with the source
+  // frame as the carrier); `releaseAppearance` is its exact inverse.
+  // See commands/appearance-bake.ts for the mutation/undo shape and the
+  // named list of what does and does not survive the lowering.
+  const appearanceBakeCommandsSub = contributeAppearanceBakeCommands(host);
   // Phase 9 (Tier B) — Select-same (pure selection over fill / stroke /
   // stroke-weight; no mutation).
   const selectSameCommandsSub = contributeSelectSameCommands(host);
@@ -212,6 +223,7 @@ export function activate(host: BundleHost): BundleHandle {
         PATHFINDER_COMMAND_IDS.length +
         LIVE_CORNER_COMMAND_IDS.length +
         APPEARANCE_COMMAND_IDS.length +
+        APPEARANCE_BAKE_COMMAND_IDS.length +
         SELECT_SAME_COMMAND_IDS.length +
         INSERT_SHAPE_COMMAND_IDS.length +
         2 // blendSelected + selectParentGroup
@@ -228,6 +240,7 @@ export function activate(host: BundleHost): BundleHandle {
       blendCommandSub.dispose();
       insertShapeCommandsSub.dispose();
       selectSameCommandsSub.dispose();
+      appearanceBakeCommandsSub.dispose();
       appearanceCommandsSub.dispose();
       liveCornerCommandsSub.dispose();
       pathfinderCommandsSub.dispose();

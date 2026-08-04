@@ -237,6 +237,37 @@ export {
   type FillLayer,
   type StrokeLayer,
 } from "./commands/appearance";
+// B-24 CLOSED — the GROUP BAKE: the metadata stack lowered onto real
+// stacked page items (one derived path per paint, sharing the source
+// geometry, wrapped in a group with the source frame as the carrier) and
+// its exact inverse. Builders exported so the conformance spec asserts
+// the EXACT wire shapes (the no-second-copy rule).
+export {
+  APPEARANCE_BAKE_COMMAND_ID,
+  APPEARANCE_RELEASE_COMMAND_ID,
+  APPEARANCE_BAKE_COMMAND_IDS,
+  DRAW_METADATA_KEY,
+  appearanceBakeOf,
+  appearanceLayerOf,
+  withAppearanceBake,
+  appearanceBakeLayers,
+  bakeGeometryOf,
+  bakeInsertBatchFor,
+  bakeLayerPaintFor,
+  bakePaintBatchFor,
+  releaseBatchFor,
+  groupChildren,
+  resolveAppearanceCarrier,
+  bakeAppearance,
+  releaseAppearance,
+  rebakeAppearance,
+  contributeAppearanceBakeCommands,
+  type AppearanceBakeRecord,
+  type AppearanceLayerMarker,
+  type BakeGeometry,
+  type BakeLayer,
+  type BakeRefusal,
+} from "./commands/appearance-bake";
 // The APPEARANCE panel (React, the Layers-panel idiom) — the view over
 // that stack, with the one-fill/one-stroke engine limit stated inline.
 export {
