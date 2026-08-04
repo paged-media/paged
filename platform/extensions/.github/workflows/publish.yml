@@ -36,6 +36,11 @@ jobs:
         run: npm install -g npm@latest
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r typecheck
+      # Build BEFORE the suite: react-free-import.spec.ts asserts on the
+      # SHIPPED artifact and skips itself when `dist` is absent, so building
+      # afterwards left that guard inert on every publish. `pnpm pack` does
+      # NOT run prepublishOnly, so this step produces the published dist too.
+      - run: pnpm -r build
       - run: pnpm -r test
       - name: wire vendoring lockstep (hard gate)
         run: |
@@ -48,7 +53,6 @@ jobs:
           printf '{"name":"wire-src-scratch","private":true}' > .wire-src/package.json
           ( cd .wire-src && npm install "@paged-media/canvas-wasm@$VER" --no-audit --no-fund --no-package-lock )
           PAGED_CANVAS_WASM_FROM="$PWD/.wire-src" node scripts/sync-wire.mjs --check
-      - run: pnpm -r build   # produce dist (pnpm pack does NOT run prepublishOnly)
       - name: publish changed versions via OIDC (canary)
         run: |
           set -e

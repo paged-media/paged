@@ -22,42 +22,27 @@
 // provides it.
 //
 // React is an OPTIONAL peer of plugin-sdk (`peerDependenciesMeta`), and it
-// has to be optional at RUNTIME too, not just in the manifest. A STATIC
-// `import { createElement } from "react"` here made the whole package
-// unloadable without React: host-impl imports this module for the fallback
-// widget, index re-exports host-impl, so `import { loadBundle }` — the
-// React-free loader path — pulled React in transitively and died with
-// ERR_MODULE_NOT_FOUND. That is what broke every one of plugin-draw's 22
-// test files against the published canary (a host-agnostic repo that has no
-// business installing React), invisibly, for as long as its CI had been
-// failing at set-up.
-//
-// So resolve React dynamically and tolerate its absence. A host that renders
-// the fallback has React by construction; a headless consumer never reaches
-// the render path, and if one somehow does it gets a named seam rather than a
-// module-resolution crash.
+// has to be optional at RUNTIME too, not just in the manifest: host-impl
+// imports this module for the fallback widget and index re-exports
+// host-impl, so anything React-shaped here is on the React-free loader
+// path. `react-optional.ts` owns that resolution — and owns the record of
+// the TWO breakages (a static import; then a top-level await) it has to
+// keep fixed at once. A host that renders this fallback has React by
+// construction; a headless consumer never reaches the render path, and if
+// one somehow does it gets a named seam rather than a crash.
 
 import type { CodeEditorProps, WidgetSurface } from "@paged-media/plugin-api";
 
-type CreateElement = typeof import("react").createElement;
-
-let createElement: CreateElement | null = null;
-try {
-  ({ createElement } = await import("react"));
-} catch {
-  /* React-free consumer (headless tests, Node-side conformance) — see above. */
-}
+import { type CreateElement, requireCreateElement } from "./react-optional";
 
 function TextareaCodeEditor(
   props: CodeEditorProps,
 ): ReturnType<CreateElement> {
-  if (!createElement) {
-    throw new Error(
-      "plugin-sdk: host.widgets.CodeEditor fell back to the built-in textarea, " +
-        "but React is not installed. Install react, or inject a widget catalog " +
-        "via createBundleHost({ widgets }).",
-    );
-  }
+  const createElement = requireCreateElement(
+    "plugin-sdk: host.widgets.CodeEditor fell back to the built-in textarea, " +
+      "but React is not installed. Install react, or inject a widget catalog " +
+      "via createBundleHost({ widgets }).",
+  );
   return createElement("textarea", {
     value: props.value,
     readOnly: props.readOnly,

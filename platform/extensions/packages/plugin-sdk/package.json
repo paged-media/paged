@@ -10,7 +10,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
-    "build": "tsup src/index.ts --format esm --dts --out-dir dist --clean",
+    "build": "tsup src/index.ts --format esm --target es2020 --dts --out-dir dist --clean",
     "prepublishOnly": "pnpm run build"
   },
   "dependencies": {

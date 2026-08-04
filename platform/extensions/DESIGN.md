@@ -634,6 +634,49 @@ at the isolate boundary (the one v0 member that cannot survive RPC).
   skew fails loudly. Residuals (gesture REPLAY + overlay PREVIEW
   assertions) stay recorded-only, carried in B-13.
 
+### 5.1 React is optional at RUNTIME, not just in the manifest
+
+Two members render: `FALLBACK_WIDGETS.CodeEditor` (§4's `host.widgets`
+fallback) and `makeSchemaPanelComponent` (§12.3). Both need
+`createElement`; both sit on the barrel's static graph
+(`index → host-impl → widgets-fallback / schema-panel`). So the package
+has to satisfy two properties AT ONCE, and each has already been broken
+once by a fix for the other:
+
+- **No hard React dependency.** A static `import … from "react"` made
+  `import { loadBundle }` — the React-free loader path — fail with
+  ERR_MODULE_NOT_FOUND wherever React is not installed. That silently
+  broke all 22 of plugin-draw's test files against the published canary.
+  `peerDependenciesMeta.react.optional` is a manifest claim; this is the
+  runtime one.
+- **No top-level await in the emitted bundle.** The fix for the above
+  was a top-level `await import("react")`. tsup emits it verbatim, and
+  Vite's dep-optimizer compiles pre-bundled dependencies down to its
+  ES2020 floor, where top-level await does not exist — so pre-bundling
+  the published package fails a consuming dev server outright. The
+  editor had to carry an `optimizeDeps.exclude` entry to boot (found in
+  ADR-023 phase C).
+
+`src/react-optional.ts` is the ONE place that touches React and holds
+the full record. It kicks the dynamic import off at module scope and
+does **not** await it: module evaluation stays synchronous, and the
+render paths read the resolved value SYNCHRONOUSLY from its cache.
+`import()` of an already-instantiated module settles on a microtask
+queued at call time — during this module's evaluation, before any
+continuation of the code that imported the barrel, and many turns before
+React renders a plugin panel; the only code that reads the cache is a
+component body, reachable only inside a React host. A render that
+somehow beat it gets a NAMED seam saying exactly that (brand-honesty
+rule: a visible seam, never fake UI). The module is internal — it is not
+re-exported from `index.ts`, because how the two members obtain
+`createElement` is not contract surface.
+
+The build pins `--target es2020`, Vite's own dep-optimizer floor.
+esbuild cannot LOWER top-level await, so that target makes it
+unemittable: a future one fails `pnpm build` here instead of a
+consumer's dev server. That is the gate, not the fix — the fix is the
+source shape above. Do not raise the target without reading this.
+
 ## 6. RPC-readiness audit (the isolate migration debt, stated)
 
 | Member | Clonable? | Migration note |
@@ -675,6 +718,26 @@ the entire isolate debt.
 - **Host adapter inside the editor repo** — would make the contract's
   implementation invisible to this repo's review and version it apart
   from its types.
+- **Injecting `createElement` through `BundleHost` (§5.1's other
+  candidate)** — architecturally the tenet-1 answer ("values from the
+  host"), and it would delete the React import outright. Rejected on
+  cost, not on principle: `FALLBACK_WIDGETS` (a const) and
+  `makeSchemaPanelComponent` (a 3-arg function) are both PUBLIC exports,
+  so it is a breaking signature change to a factory plus a new
+  `createBundleHost` option, and the seam and the fallback widget would
+  then be dead in every host that hadn't been updated — a silent
+  regression that only fires at render, in another repo, for a bug whose
+  whole cause is local to this one's build. Revisit if a THIRD renderer
+  appears, or at the next major.
+- **A build-level answer alone (target, format, or a conditional
+  export)** — cannot work. esbuild cannot LOWER top-level await, so
+  lowering the target just moves the same error into our own build (that
+  is why it makes a good GATE and a bad fix); CJS cannot represent it at
+  all; and splitting the React-touching modules behind a
+  `@paged-media/plugin-sdk/react` conditional export would relocate the
+  top-level await rather than remove it — the first consumer to import
+  that subpath hits the identical dep-optimizer failure — while breaking
+  the barrel, whose single `.` export is the contract.
 
 ## 9. Manifest additions in this change
 

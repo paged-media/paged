@@ -47,6 +47,14 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # Build BEFORE the suite: react-free-import.spec.ts asserts on the
+      # SHIPPED artifact (no static react import, no AWAITED react import),
+      # and skips itself when `dist` is absent — so without this the guard
+      # was inert in CI. The build is also the top-level-await gate: tsup
+      # pins `--target es2020` (Vite's dep-optimizer floor), which esbuild
+      # cannot emit a top-level await into. See DESIGN.md §5.1.
+      - run: pnpm --filter @paged-media/plugin-sdk build
+
       # The harness specs boot the published canvas-wasm from node_modules, so
       # this is a real engine run, not a mock.
       #

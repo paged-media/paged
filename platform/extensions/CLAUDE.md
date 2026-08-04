@@ -53,6 +53,14 @@ them in the same change.
 - **Reserved members throw `PluginApiNotImplemented`** with a pointer —
   visible seams, never fake-interactive (the brand honesty rule applied
   to API design).
+- **React is optional at RUNTIME, and so is the top-level await that
+  would resolve it.** `plugin-sdk/src/react-optional.ts` is the ONE
+  place that touches React: a NON-awaited module-scope `import("react")`
+  feeding a sync cache the render paths read. A static react import
+  makes the barrel unloadable without React; a top-level `await` makes
+  the published bundle un-pre-bundleable by Vite (its dep-optimizer
+  floor is ES2020). Both have shipped and broken consumers. The build
+  pins `--target es2020` as the gate — do not raise it. DESIGN.md §5.1.
 
 ## Commands
 
