@@ -154,8 +154,8 @@ stroke panel raised, Esc pops out). The bundle drives end-to-end through the rea
 the draw-plugin e2e (`editor` `apps/canvas/tests/e2e/draw-plugin.spec.ts`)
 and a DTP journey (`tests/journey/plugins/draw.journey.spec.ts`) author a
 path with the built-in Pen, then refine its anchors (add/delete/convert)
-and stroke through the bundle. The three TS packages carry 938 passing
-vitest (geometry 210, tools 126, bundle 602) and typecheck clean; the two
+and stroke through the bundle. The three TS packages carry 940 passing
+vitest (geometry 210, tools 126, bundle 604) and typecheck clean; the two
 crates carry 26 `cargo test` (draw-trace 22, trace-js 4).
 
 **ONE SHARED KERNEL, AND ONLY ONE.** §16.2 (blend spines) and §16.3
@@ -195,36 +195,59 @@ Symbols' instance grouping, Image Trace's contour grouping) and the pure
 Symbols). Do not re-add a plugin-side Group command — `activate.spec.ts`
 and `headless-conformance.spec.ts` both assert its absence.
 
-**The planar arrangement has ONE seam.** `draw-bundle/src/handlers/planar-regions.ts`
-owns the `requestPlanarRegions` escape hatch (the vendored contract still
-has no `document.planarRegions` facade — RFI K-11 built it, unpublished),
-the once-per-gesture-scope cache with its cold-start / face-cap point
-queries, the raw↔page face mapping and the refusal reporter. Shape
-Builder and Live Paint both ride it; a third region tool must too, and a
-K-11 repin is a rewrite of ONE function plus deleting two local wire
-types.
+**The planar arrangement has ONE seam, and it is no longer an escape
+hatch.** `draw-bundle/src/handlers/planar-regions.ts` owns the
+once-per-gesture-scope cache with its cold-start / face-cap point
+queries, the raw↔page face mapping and the refusal reporter. The QUERY
+itself now goes through the published `host.document.planarRegions`
+facade — K-11 shipped in `0.2.28-canary.0`, so the raw `client.send`
+and the two local wire types are gone (they are aliases of the
+contract's `PlanarFace` / `PlanarRegionsResult`). Shape Builder and Live
+Paint both ride it; a third region tool must too. ONE behaviour changed
+with the repin and it is an improvement: `null` used to mean "the host
+did not answer", which conflated an old engine with a dead send; the
+facade answers an unservable door as a REFUSAL carrying the engine's
+reason, so `null` now means only that the capability gate threw.
 
-**THERE ARE FOUR WIRE SEAMS, and they do not overlap.**
-`handlers/planar-regions.ts` (K-11's arrangement query),
-`commands/v58-wire.ts` (the C-28/C-29 quartet, below),
-`binding-provider/adr023-seam.ts` (the ADR-023 binding-provider door AND
-the one protocol-59 `reorderElement` its Layers lane needs) and
-`commands/v59-wire.ts` (C-15's `bindCreated` + B-18's `pasteInto` /
-`releaseFrom`, added with Repeats). Each op has exactly ONE builder and
-it lives with its consumer; every repin is a deletion of casts.
+**THE FOUR WIRE SEAMS ARE NOW FOUR MODULES, NOT FOUR CASTS.** The
+`0.2.28-canary.0` repin (2026-08-05) deleted all thirteen of them:
+`handlers/planar-regions.ts` calls the published facade,
+`commands/v58-wire.ts` and `commands/v59-wire.ts` return
+`PendingMutation` directly, and `binding-provider/adr023-seam.ts`
+re-exports the contract's seven ADR-023 types instead of mirroring them.
+The modules stay, because each still owns real logic (caching, refusal
+reading, capability probes, optional-field omission) and because one
+builder per op is still the rule.
 
-**PROTOCOL 58 has ONE seam too.** `draw-bundle/src/commands/v58-wire.ts`
-owns the four C-28/C-29 ops (`applyOpacityMask` / `releaseOpacityMask` /
-`attachTextToPath` / `detachTextFromPath`), their capability probes and
-their refusal reader — so the skew lives in one file and the repin is a
-pure deletion of four casts. The skew is NARROWER than the v56/v57 ones
-were: plugin-sdk `f00d6dd` already added typed definitions for all four
-to `@paged-media/plugin-api`'s hand-maintained protocol-ahead delta
-(`packages/plugin-api/src/mutations.ts` → `PendingMutation`, plus a
-`MutationInput = Mutation | PendingMutation`), so the cast points at a
-contract that EXISTS and is COMMITTED and the arg shapes match it
-field-for-field. It is still needed only because this repo installs the
-PUBLISHED `0.2.25-canary.0`.
+**ONE cast survives, and it is a CONTRACT GAP, not laziness.**
+`batchMutationFor` in `commands/v59-wire.ts`. The generated `Mutation`
+types batch as `{ ops: Mutation[] }` — settled ops only — and
+`PendingMutation` carries no batch variant, so the union cannot express
+"a batch containing a protocol-ahead op". That is exactly what every
+one-undo-step flow here builds, and what `bindCreated` was DESIGNED for
+(it is meaningless outside a batch). The gap is in the hand-maintained
+delta, not in core, which accepts these batches. Filed for the SDK: add
+a `BatchMutation` to `PendingMutation` whose `ops` are `MutationInput[]`.
+Until then there is ONE cast, in ONE function, and every flow routes
+through it.
+
+**A LOCAL MIRROR CAN HIDE A REAL INCOMPATIBILITY — measured, not
+theoretical.** The retired `adr023-seam.ts` mirror declared
+`applyMutation(mutation: Mutation)` where the contract takes a
+`MutationInput`. Under `strictFunctionTypes` a handler accepting only the
+NARROWER union cannot satisfy the wider parameter, so that provider could
+never actually have registered once the cast came off. The mirror was not
+a cosmetically-drifted copy; it was a type this bundle could not have
+used. That is the argument against writing the next one.
+
+**PROTOCOL 58 has ONE seam too**, and its skew is CLOSED.
+`draw-bundle/src/commands/v58-wire.ts` owns the four C-28/C-29 ops
+(`applyOpacityMask` / `releaseOpacityMask` / `attachTextToPath` /
+`detachTextFromPath`), their capability probes and their refusal reader.
+All four are typed in the published delta (plugin-sdk `f00d6dd`), the
+builders return `PendingMutation`, and `OpacityMaskMode` is an alias of
+the contract's `OpacityMaskType` rather than a second declaration of the
+same two strings.
 
 Two honesty facts these rows carry, and neither may be softened:
 - **An opacity mask does NOT render on canvas.** Core honours it in the
@@ -286,10 +309,12 @@ This section used to say C-15 had landed in core but was unreachable
 here, blocked purely by `@paged-media/plugin-api`. That changed:
 plugin-sdk `bc52766` ("plugin-api: carry `bindCreated` — the op that
 collapses two-batch flows") added `BindCreatedMutation` to the
-protocol-ahead `PendingMutation` delta. This repo still installs the
-PUBLISHED `0.2.25-canary.0`, which predates it, so the op rides ONE cast
-seam — `commands/v59-wire.ts`, the `v58-wire.ts` precedent — and the
-repin is a pure deletion.
+protocol-ahead `PendingMutation` delta, and the `0.2.28-canary.0` repin
+INSTALLS it. `bindCreatedMutationFor` returns a real `PendingMutation`;
+the cast it used to ride is gone. What remains is the batch-shaped gap
+described above — `PendingMutation` has no batch variant, so the one
+`batchMutationFor` cast is the only thing between this op and a fully
+typed path.
 
 REPEATS v1 is the first consumer and builds in ONE UNDO STEP. Everything
 measured against the booted engine (protocol **60** — the local wasm

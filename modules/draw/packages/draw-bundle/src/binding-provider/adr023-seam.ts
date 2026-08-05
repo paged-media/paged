@@ -51,87 +51,43 @@
 
 import type {
   BundleHost,
-  CollectionName,
-  Disposable,
+  BindingProvider,
+  BindingProviderHandle,
   ElementId,
   Mutation,
-  MutationOutcome,
+  PendingMutation,
   PropertyPath,
-  Value,
 } from "@paged-media/plugin-api";
 
-// ------------------------------------------------------ local mirrors
-
-/** Mirror of the contract's `BindingTarget`. */
-export type BindingTarget =
-  | { kind: "selection"; scope: "element" | "content" }
-  | { kind: "element"; id: ElementId }
-  | { kind: "row"; collection: CollectionName; id: string };
-
-/** Mirror of `BindingResolved` + `BindingDecline` = `BindingRead`.
- *
- *  The four states do not collapse, and the pair that matters here is
- *  `absent` vs `decline`: `absent` means THIS provider owns the target
- *  and the path does not apply to it, so the host BLANKS the control
- *  and does not read core. Falling through instead would show a core
- *  layer's flag for a row core has never heard of. */
-export type BindingRead =
-  | { kind: "value"; value: Value }
-  | { kind: "mixed" }
-  | { kind: "absent"; reason?: string }
-  | { kind: "decline"; reason?: string };
-
-/** Mirror of `BindingWrite`. A REFUSED write is
- *  `{applied:false, error}` inside `applied`, NOT a decline — the
- *  provider owned it and said no. */
-export type BindingWrite =
-  | { kind: "applied"; outcome: MutationOutcome }
-  | { kind: "decline"; reason?: string };
-
-/** Mirror of `BindingCollection`. */
-export type BindingCollection =
-  | { kind: "rows"; rows: readonly unknown[] }
-  | { kind: "decline"; reason?: string };
-
-/** Mirror of `BindingProviderScope`. Every member is a CLOSED core
- *  union — the vocabulary rule (§18.6): a provider addresses core's
- *  vocabulary and nothing else. */
-export interface BindingProviderScope {
-  paths?: readonly PropertyPath[];
-  collections?: readonly CollectionName[];
-  ops?: readonly string[];
-}
-
-/** Mirror of `BindingProvider`, narrowed to the three lanes a Layers
- *  provider needs (`writeProperty` is deliberately absent — this
- *  provider's writes are STRUCTURAL and arrive through `applyMutation`,
- *  and an unimplemented lane must not be declared). */
-export interface BindingProvider {
-  provides: BindingProviderScope;
-  readProperty?(request: {
-    path: PropertyPath;
-    target: BindingTarget;
-  }): BindingRead | Promise<BindingRead>;
-  readCollection?(request: {
-    collection: CollectionName;
-  }): BindingCollection | Promise<BindingCollection>;
-  applyMutation?(mutation: Mutation): BindingWrite | Promise<BindingWrite>;
-}
-
-/** Mirror of `BindingProviderHandle`. */
-export interface BindingProviderHandle extends Disposable {
-  invalidate(): void;
-}
+// ------------------------------------------- local mirrors: RETIRED
+//
+// This block used to hold seven hand-written mirrors of the ADR-023
+// contract types, because the door was built in plugin-sdk but not yet
+// published. `0.2.28-canary.0` publishes all seven, so they are
+// RE-EXPORTS now — the bundle's public surface keeps the same names
+// (`index.ts` and the Layers provider import them from here) while the
+// definitions come from one place.
+//
+// The mirror was not merely redundant, and this is worth recording
+// because it is the argument against writing the next one: the local
+// `BindingProvider.applyMutation` took a `Mutation`, while the contract
+// takes a `MutationInput`. Under `strictFunctionTypes` a handler that
+// accepts only the narrower union CANNOT satisfy the wider parameter —
+// so the mirror was not a copy that had drifted cosmetically, it was a
+// type this bundle could not actually have registered once the cast
+// came off. The cast was hiding a genuine incompatibility, which is
+// exactly what a cast toward an unpublished contract risks.
+export type {
+  BindingTarget,
+  BindingRead,
+  BindingWrite,
+  BindingCollection,
+  BindingProviderScope,
+  BindingProvider,
+  BindingProviderHandle,
+} from "@paged-media/plugin-api";
 
 // ------------------------------------------------------------- probes
-
-/** The host-side shape the cast targets. */
-type ContributeWithBindingProvider = {
-  bindingProvider?: (
-    contextType: string,
-    provider: BindingProvider,
-  ) => BindingProviderHandle;
-};
 
 /**
  * Does this host know the ADR 023 phase-A door AND has it wired a
@@ -146,8 +102,11 @@ type ContributeWithBindingProvider = {
  * probe requires both and the caller logs which one failed.
  */
 export function supportsBindingProviders(host: BundleHost): boolean {
-  const contribute = host.contribute as unknown as ContributeWithBindingProvider;
-  if (typeof contribute.bindingProvider !== "function") return false;
+  // The TYPE now declares `bindingProvider` (it is published, not cast
+  // toward), but the runtime check STAYS: a host app can be older than
+  // the contract this bundle compiled against, and that is precisely
+  // the case the first branch below reports.
+  if (typeof host.contribute.bindingProvider !== "function") return false;
   try {
     return host.supports("bindings.provider@1");
   } catch {
@@ -174,8 +133,7 @@ export function registerBindingProvider(
     );
     return null;
   }
-  const contribute = host.contribute as unknown as ContributeWithBindingProvider;
-  return contribute.bindingProvider!(contextType, provider);
+  return host.contribute.bindingProvider(contextType, provider);
 }
 
 // --------------------------------------------------------- the v59 op
@@ -183,8 +141,8 @@ export function registerBindingProvider(
 /**
  * `reorderElement` (protocol 59) in its ABSOLUTE `{ index }` form —
  * `to` is the element's FINAL slot among its siblings, which is exactly
- * what a drop position means. Cast because 0.2.25 vendors protocol 51;
- * the arg names match core's `Mutation::ReorderElement` field-for-field.
+ * what a drop position means. No longer cast: `0.2.28-canary.0` carries
+ * `ReorderElementMutation` in the protocol-ahead delta.
  *
  * Index 0 is the BACKMOST sibling (the first-painted). An index the
  * engine finds out of range is REJECTED, not clamped — deliberately not
@@ -194,11 +152,8 @@ export function registerBindingProvider(
 export function reorderElementMutationFor(
   elementId: ElementId,
   index: number,
-): Mutation {
-  return {
-    op: "reorderElement",
-    args: { elementId, to: { index } },
-  } as unknown as Mutation;
+): PendingMutation {
+  return { op: "reorderElement", args: { elementId, to: { index } } };
 }
 
 /** `setElementProperty` for a boolean path — the lane that carries a

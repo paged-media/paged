@@ -138,6 +138,7 @@ import type {
   Mutation,
   PathAnchorsResult,
   PluginMetadataEnvelope,
+  MutationInput,
 } from "@paged-media/plugin-api";
 import {
   applyAffine,
@@ -168,7 +169,11 @@ import { supportsPathOps } from "./path-ops";
 import { repeatPageRect } from "./repeat";
 import { leafIdsOf, valueForCriterion } from "./select-same";
 import { insertPathMutationFor } from "../handlers/insert-path";
-import { bindCreatedMutationFor, handleElementId } from "./v59-wire";
+import {
+  batchMutationFor,
+  bindCreatedMutationFor,
+  handleElementId,
+} from "./v59-wire";
 
 export const BLEND_COMMAND_CATEGORY = "Blend";
 
@@ -655,7 +660,9 @@ export function resetBlendSwatchSeq(): void {
 /** The straight-line spine between two keys — the DEFAULT, expressed
  *  through the shared kernel so nothing downstream has a "no spine"
  *  branch. Pure. */
-export function defaultSpineFor(keys: readonly [BlendKey, BlendKey]): PathMetric {
+export function defaultSpineFor(
+  keys: readonly [BlendKey, BlendKey],
+): PathMetric {
   return measureSegment(keys[0].center, keys[1].center);
 }
 
@@ -709,7 +716,11 @@ export function blendStepsFor(args: {
     }
     const subpaths: AnchorTriple[][] = [];
     for (let s = 0; s < a.source.subpaths.length; s++) {
-      const run = interpolateAnchors(a.source.subpaths[s], b.source.subpaths[s], t);
+      const run = interpolateAnchors(
+        a.source.subpaths[s],
+        b.source.subpaths[s],
+        t,
+      );
       subpaths.push(run.map((p) => mapTriple(p, matrix)));
     }
     const colorT = ease(
@@ -760,7 +771,10 @@ function mixOrKeep(
     const rgb = mixRgb(from, to, t);
     // Name = the hex (the io/svg convention, so the SVG exporter
     // resolves the ref back).
-    return { mint: { selfId: mintBlendSwatchId(), name: rgbToHex(rgb) }, ref: null };
+    return {
+      mint: { selfId: mintBlendSwatchId(), name: rgbToHex(rgb) },
+      ref: null,
+    };
   }
   return { mint: null, ref: keepRef };
 }
@@ -970,9 +984,9 @@ export function blendBatchFor(args: {
   keyEnvelopes: readonly (PluginMetadataEnvelope | null)[];
   spineEnvelope?: PluginMetadataEnvelope | null;
   previous?: BlendGeneration | null;
-}): Mutation {
+}): MutationInput {
   const { plan } = args;
-  const ops: Mutation[] = [];
+  const ops: MutationInput[] = [];
 
   plan.steps.forEach((step, i) => {
     for (const mint of [step.mintFill, step.mintStroke]) {
@@ -994,9 +1008,15 @@ export function blendBatchFor(args: {
       ops.push(insertPathMutationFor(plan.pageId, run, step.open[s] ?? false));
       ops.push(bindCreatedMutationFor(blendHandle(i, s)));
       const id = handleElementId(blendHandle(i, s));
-      ops.push(colorRef(id, "frameFillColor", step.mintFill?.selfId ?? step.fillRef));
       ops.push(
-        colorRef(id, "frameStrokeColor", step.mintStroke?.selfId ?? step.strokeRef),
+        colorRef(id, "frameFillColor", step.mintFill?.selfId ?? step.fillRef),
+      );
+      ops.push(
+        colorRef(
+          id,
+          "frameStrokeColor",
+          step.mintStroke?.selfId ?? step.strokeRef,
+        ),
       );
       if (typeof step.strokeWeight === "number") {
         ops.push({
@@ -1063,7 +1083,7 @@ export function blendBatchFor(args: {
     });
   });
   if (members.length > 2) ops.push(groupMutationFor(members));
-  return { op: "batch", args: { ops } };
+  return batchMutationFor(ops);
 }
 
 /** The EXPAND batch — stop tracking, keep every piece of artwork. Drops
@@ -1099,8 +1119,8 @@ export function blendReleaseBatchFor(args: {
     envelope: PluginMetadataEnvelope | null;
     key: BlendKeyName;
   }[];
-}): Mutation {
-  const ops: Mutation[] = [];
+}): MutationInput {
+  const ops: MutationInput[] = [];
   if (args.group && typeof args.group.id === "string") {
     ops.push(ungroupMutationFor(args.group.id));
   }
@@ -1113,7 +1133,7 @@ export function blendReleaseBatchFor(args: {
       stampDrawMetadata(link.id, withBlendKey(link.envelope, link.key, null)),
     );
   }
-  return { op: "batch", args: { ops } };
+  return batchMutationFor(ops);
 }
 
 // -------------------------------------------------------- host: the part
@@ -1195,8 +1215,7 @@ export async function blendKeyOfElement(
   const fillRef =
     paint.fill ??
     ((await valueForCriterion(host, id, "fill").catch(() => null)) as
-      | string
-      | null);
+      string | null);
   return {
     pageId: table.pageId,
     key: {
@@ -1451,7 +1470,9 @@ export async function blendPlanFor(
     } else {
       placed = steps.filter((step) => {
         const [minX, minY, maxX, maxY] = blendStepBounds(step);
-        return minX >= 0 && minY >= 0 && maxX <= page.width && maxY <= page.height;
+        return (
+          minX >= 0 && minY >= 0 && maxX <= page.width && maxY <= page.height
+        );
       });
       dropped = steps.length - placed.length;
       if (dropped > 0) {
@@ -1507,9 +1528,7 @@ async function emitBlend(
   },
 ): Promise<BlendBuild> {
   const { plan, label } = args;
-  const before = new Set(
-    (await leafElements(host)).map((e) => String(e.id)),
-  );
+  const before = new Set((await leafElements(host)).map((e) => String(e.id)));
   const keyEnvelopes = await Promise.all(
     plan.keys.map((k) => host.document.getMetadata(k.id).catch(() => null)),
   );
@@ -1582,7 +1601,10 @@ async function saveBlend(
       id: args.plan.blend,
       name: args.name,
       params: args.plan.params,
-      keys: args.plan.keys.map((k) => ({ kind: k.id.kind, id: String(k.id.id) })),
+      keys: args.plan.keys.map((k) => ({
+        kind: k.id.kind,
+        id: String(k.id.id),
+      })),
       spine: args.plan.spineId
         ? { kind: args.plan.spineId.kind, id: String(args.plan.spineId.id) }
         : null,
@@ -1675,7 +1697,8 @@ export async function applyUpdateBlend(
   const keyIds =
     links.keys.length === 2
       ? links.keys.map((k) => k.id)
-      : (saved?.keys.map((k) => ({ kind: k.kind, id: k.id }) as ElementId) ?? []);
+      : (saved?.keys.map((k) => ({ kind: k.kind, id: k.id }) as ElementId) ??
+        []);
   if (keyIds.length !== 2) {
     host.log.warn(
       `${label}: "${blend}" no longer names two key objects — nothing to update`,
@@ -1978,7 +2001,9 @@ export async function applyReleaseBlend(
     host,
     removeBlendRecordFrom(await readBlendLibrary(host), blend),
   );
-  await host.selection.set(leaves.filter((l) => l.key === "blendKey").map((l) => l.id));
+  await host.selection.set(
+    leaves.filter((l) => l.key === "blendKey").map((l) => l.id),
+  );
   host.log.info(
     `${label}: "${blend}" released — ${generation.steps.length} ` +
       "intermediate(s) removed; the key objects and the spine are kept " +
@@ -2034,8 +2059,7 @@ export function contributeBlendCommands(host: BundleHost): Disposable {
     }),
     host.contribute.command({
       id: REVERSE_BLEND_ORDER_COMMAND_ID,
-      title:
-        "Blend: Reverse front to back (paint order only — nothing moves)",
+      title: "Blend: Reverse front to back (paint order only — nothing moves)",
       category: BLEND_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyReverseBlendOrder(host, payload).then(() => undefined),

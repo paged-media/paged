@@ -23,17 +23,12 @@
 // of the same cast is exactly the drift the no-second-copy rule exists
 // to prevent.
 //
-// ------------------------------------------------------ contract skew
-// NAMED, not hidden, and NARROWER than the earlier v56/v57 skews:
-// plugin-sdk commit `f00d6dd` ("plugin-api: carry the v58 opacity-mask
-// and type-on-path ops") added typed definitions for ALL FOUR to
-// `@paged-media/plugin-api`'s hand-maintained protocol-ahead delta
-// (`packages/plugin-api/src/mutations.ts`, appended to
-// `PendingMutation`). This repo installs the PUBLISHED
-// `0.2.25-canary.0`, which predates that commit, so the cast below is
-// still required — but it casts toward a contract that EXISTS AND IS
-// COMMITTED, and every argument name/type below matches it
-// field-for-field:
+// ------------------------------------------- contract skew: CLOSED
+// This block used to explain four `as unknown as Mutation` casts and
+// promise a pure deletion at the next canary bump. The bump happened
+// (`0.2.25-canary.0` → `0.2.28-canary.0`, which carries plugin-sdk
+// `f00d6dd`), and the deletion is done. All four ops are typed in
+// `@paged-media/plugin-api`'s protocol-ahead delta:
 //
 //   applyOpacityMask   { targetId, maskId, maskType?, invert? }
 //   releaseOpacityMask { targetId }
@@ -41,10 +36,10 @@
 //                        flipPathEffect?, startBracket?, endBracket? }
 //   detachTextFromPath { elementId }
 //
-// So when the canary bumps, the change here is a PURE DELETION: drop the
-// four `as unknown as Mutation` casts and the local `OpacityMaskMode`
-// alias (the contract calls it `OpacityMaskType`). Nothing else in this
-// repo touches the v58 wire.
+// The builders return `PendingMutation`; `OpacityMaskMode` is now an
+// alias of the contract's `OpacityMaskType` rather than a second
+// declaration of the same two strings. Nothing else in this repo
+// touches the v58 wire.
 //
 // ---------------------------------------------------- optional fields
 // Every optional argument is OMITTED when the caller does not set it
@@ -60,15 +55,25 @@
 // the op list out of the deserialize error. An unreadable vocabulary
 // answers TRUE — optimistic, because the ATTEMPT then reports honestly.
 
-import type { BundleHost, ElementId, Mutation } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  ElementId,
+  OpacityMaskType,
+  PendingMutation,
+} from "@paged-media/plugin-api";
 
 import { engineOpVocabulary } from "./join-average";
 
 /** C-28 — how the mask artwork's coverage is read. `luminosity` is
  *  Illustrator's default and PDF's `/S /Luminosity`; `alpha` reads the
- *  artwork's alpha channel instead. The contract delta names this type
- *  `OpacityMaskType`; the alias is local only until the canary bump. */
-export type OpacityMaskMode = "luminosity" | "alpha";
+ *  artwork's alpha channel instead.
+ *
+ *  This is now an ALIAS of the contract's `OpacityMaskType`, kept only
+ *  because it is part of this bundle's exported surface (`index.ts`)
+ *  and six call sites in `opacity-mask.ts` name it. Renaming those is a
+ *  separate, purely cosmetic change; what mattered — that the local
+ *  declaration could drift from the contract's — is fixed. */
+export type OpacityMaskMode = OpacityMaskType;
 
 /** The `pathTypeAlignment` values core accepts — the glyph's vertical
  *  seat on the path. Baseline (the IDML default) and Center are the
@@ -114,9 +119,9 @@ export interface TextPathSpec {
 export function applyOpacityMaskMutationFor(args: {
   targetId: ElementId;
   maskId: ElementId;
-  maskType?: OpacityMaskMode;
+  maskType?: OpacityMaskType;
   invert?: boolean;
-}): Mutation {
+}): PendingMutation {
   return {
     op: "applyOpacityMask",
     args: {
@@ -125,16 +130,18 @@ export function applyOpacityMaskMutationFor(args: {
       ...(args.maskType === undefined ? {} : { maskType: args.maskType }),
       ...(args.invert === undefined ? {} : { invert: args.invert }),
     },
-  } as unknown as Mutation;
+  };
 }
 
 /** `releaseOpacityMask { targetId }` — drop the relation; the artwork
  *  returns to top level with its geometry untouched. */
-export function releaseOpacityMaskMutationFor(targetId: ElementId): Mutation {
+export function releaseOpacityMaskMutationFor(
+  targetId: ElementId,
+): PendingMutation {
   return {
     op: "releaseOpacityMask",
     args: { targetId },
-  } as unknown as Mutation;
+  };
 }
 
 /** `attachTextToPath { elementId, storyId, … }` — flow an EXISTING
@@ -143,13 +150,14 @@ export function attachTextToPathMutationFor(
   elementId: ElementId,
   storyId: string,
   spec: TextPathSpec = {},
-): Mutation {
+): PendingMutation {
   return {
     op: "attachTextToPath",
     args: {
       elementId,
       storyId,
-      ...(spec.pathTypeAlignment === undefined || spec.pathTypeAlignment === null
+      ...(spec.pathTypeAlignment === undefined ||
+      spec.pathTypeAlignment === null
         ? {}
         : { pathTypeAlignment: spec.pathTypeAlignment }),
       ...(spec.flipPathEffect === undefined || spec.flipPathEffect === null
@@ -162,17 +170,19 @@ export function attachTextToPathMutationFor(
         ? {}
         : { endBracket: spec.endBracket }),
     },
-  } as unknown as Mutation;
+  };
 }
 
 /** `detachTextFromPath { elementId }` — unlink the text from the path.
  *  THE STORY SURVIVES (core's deliberate choice: attach only ever
  *  linked an existing story, so unlinking is its exact inverse). */
-export function detachTextFromPathMutationFor(elementId: ElementId): Mutation {
+export function detachTextFromPathMutationFor(
+  elementId: ElementId,
+): PendingMutation {
   return {
     op: "detachTextFromPath",
     args: { elementId },
-  } as unknown as Mutation;
+  };
 }
 
 // ---------------------------------------------------- refusal reading

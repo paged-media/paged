@@ -44,6 +44,7 @@ import type {
   CommandContribution,
   ElementId,
   Mutation,
+  MutationInput,
 } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
@@ -162,7 +163,10 @@ async function undoTo(h: HeadlessHost, steps: number): Promise<void> {
   for (let i = 0; i < steps; i++) await h.host.document.undo();
 }
 
-async function fillHexOf(h: HeadlessHost, id: ElementId): Promise<string | null> {
+async function fillHexOf(
+  h: HeadlessHost,
+  id: ElementId,
+): Promise<string | null> {
   const props = await h.host.document.elementProperties(id);
   let ref: string | null = null;
   for (const entry of props?.entries ?? []) {
@@ -184,11 +188,16 @@ const corner = (x: number, y: number) => ({
   right: [x, y] as [number, number],
 });
 
-const opsOf = (m: Mutation): Mutation[] =>
-  (m as { args: { ops: Mutation[] } }).args.ops;
+const opsOf = (m: MutationInput): MutationInput[] =>
+  (m as { args: { ops: MutationInput[] } }).args.ops;
 
 /** A hand-built key: a 100 × 100 square whose top-left is at (x, y). */
-const squareKey = (id: string, x: number, y: number, fill: string | null): BlendKey => {
+const squareKey = (
+  id: string,
+  x: number,
+  y: number,
+  fill: string | null,
+): BlendKey => {
   const source: BlendSource = {
     subpaths: [
       [
@@ -239,7 +248,9 @@ describe("draw conformance — BLENDS v1 (§16.2)", () => {
       // An explicit null CLEARS independence; omitting it keeps the base.
       const independent = blendParamsFrom({ colorEasing: "easeIn" });
       expect(independent.colorEasing).toBe("easeIn");
-      expect(blendParamsFrom({ colorEasing: null }, independent).colorEasing).toBeNull();
+      expect(
+        blendParamsFrom({ colorEasing: null }, independent).colorEasing,
+      ).toBeNull();
       expect(blendParamsFrom({}, independent).colorEasing).toBe("easeIn");
     });
   });
@@ -336,7 +347,9 @@ describe("draw conformance — BLENDS v1 (§16.2)", () => {
       })!;
       expect(steps).toHaveLength(3);
       // t = 1/4, 1/2, 3/4 over a 300 pt gap → x offsets 75, 150, 225.
-      expect(steps.map((s) => s.subpaths[0][0].anchor[0])).toEqual([75, 150, 225]);
+      expect(steps.map((s) => s.subpaths[0][0].anchor[0])).toEqual([
+        75, 150, 225,
+      ]);
       expect(steps.map((s) => s.subpaths[0][0].anchor[1])).toEqual([0, 0, 0]);
       expect(steps.map((s) => s.t)).toEqual([0.25, 0.5, 0.75]);
       expect(steps.map((s) => s.index)).toEqual([1, 2, 3]);
@@ -427,11 +440,16 @@ describe("draw conformance — BLENDS v1 (§16.2)", () => {
         225, 150, 75,
       ]);
       // Every step is the SAME step, just emitted in the other order.
-      expect(flipped.map((s) => s.t).reverse()).toEqual(forward.map((s) => s.t));
+      expect(flipped.map((s) => s.t).reverse()).toEqual(
+        forward.map((s) => s.t),
+      );
     });
 
     it("EASING re-parameterizes the shapes, and INDEPENDENT COLOUR does not follow it", () => {
-      const red = { ...squareKey("ua", 0, 0, null), rgb: [255, 0, 0] as [number, number, number] };
+      const red = {
+        ...squareKey("ua", 0, 0, null),
+        rgb: [255, 0, 0] as [number, number, number],
+      };
       const blue = {
         ...squareKey("ub", 300, 0, null),
         rgb: [0, 0, 255] as [number, number, number],
@@ -482,7 +500,9 @@ describe("draw conformance — BLENDS v1 (§16.2)", () => {
     it("CONCENTRIC keys — a ZERO-length spine — still make every intermediate", () => {
       const outer = squareKey("ua", 0, 0, null);
       const innerSource: BlendSource = {
-        subpaths: [[corner(25, 25), corner(75, 25), corner(75, 75), corner(25, 75)]],
+        subpaths: [
+          [corner(25, 25), corner(75, 25), corner(75, 75), corner(25, 75)],
+        ],
         open: [false],
       };
       const inner: BlendKey = {
@@ -519,7 +539,10 @@ describe("draw conformance — BLENDS v1 (§16.2)", () => {
   describe("the wire", () => {
     it("blendBatchFor emits ONE batch: swatch, insert, bind, paint, link — then the group", () => {
       resetBlendSwatchSeq();
-      const red = { ...squareKey("ua", 0, 0, null), rgb: [255, 0, 0] as [number, number, number] };
+      const red = {
+        ...squareKey("ua", 0, 0, null),
+        rgb: [255, 0, 0] as [number, number, number],
+      };
       const blue = {
         ...squareKey("ub", 300, 0, null),
         rgb: [0, 0, 255] as [number, number, number],
@@ -567,17 +590,17 @@ describe("draw conformance — BLENDS v1 (§16.2)", () => {
         op: "bindCreated",
         args: { handle: blendHandle(0, 0) },
       });
-      expect((ops[3] as { args: { elementId: ElementId } }).args.elementId).toEqual(
-        { kind: "polygon", id: `$h:${blendHandle(0, 0)}` },
-      );
+      expect(
+        (ops[3] as { args: { elementId: ElementId } }).args.elementId,
+      ).toEqual({ kind: "polygon", id: `$h:${blendHandle(0, 0)}` });
       // …and the group holds BOTH keys plus the intermediate by handle.
-      expect((ops[8] as { args: { memberIds: ElementId[] } }).args.memberIds).toEqual(
-        [
-          red.id,
-          blue.id,
-          { kind: "polygon", id: `$h:${blendHandle(0, 0)}` },
-        ],
-      );
+      expect(
+        (ops[8] as { args: { memberIds: ElementId[] } }).args.memberIds,
+      ).toEqual([
+        red.id,
+        blue.id,
+        { kind: "polygon", id: `$h:${blendHandle(0, 0)}` },
+      ]);
     });
 
     it("a KEEP-FIRST blend (no readable colour) mints no swatch at all", () => {
@@ -591,7 +614,10 @@ describe("draw conformance — BLENDS v1 (§16.2)", () => {
       })!;
       expect(steps.every((s) => s.mintFill === null)).toBe(true);
       // …and every step keeps the FIRST key's ref (v0's rule).
-      expect(steps.map((s) => s.fillRef)).toEqual(["Color/Black", "Color/Black"]);
+      expect(steps.map((s) => s.fillRef)).toEqual([
+        "Color/Black",
+        "Color/Black",
+      ]);
     });
   });
 
@@ -616,10 +642,13 @@ describe("draw conformance — BLENDS v1 (§16.2)", () => {
       expect(mintBlendId(back)).toBe("bl-2");
       expect(findBlendRecord(back, "bl-1")?.name).toBe("One");
       expect(parseBlendLibrary(null).blends).toEqual([]);
-      expect(parseBlendLibrary(new TextEncoder().encode("{{{")).blends).toEqual([]);
+      expect(parseBlendLibrary(new TextEncoder().encode("{{{")).blends).toEqual(
+        [],
+      );
       expect(
-        parseBlendLibrary(new TextEncoder().encode('{"v":99,"blends":[{"id":"x"}]}'))
-          .blends,
+        parseBlendLibrary(
+          new TextEncoder().encode('{"v":99,"blends":[{"id":"x"}]}'),
+        ).blends,
       ).toEqual([]);
     });
 
@@ -628,7 +657,10 @@ describe("draw conformance — BLENDS v1 (§16.2)", () => {
         v: 1,
         data: { graphicStyle: { style: "gs-1" }, blendKey: { blend: "old" } },
       };
-      const merged = withBlendKey(prev, "blendKey", { blend: "bl-2", index: 1 });
+      const merged = withBlendKey(prev, "blendKey", {
+        blend: "bl-2",
+        index: 1,
+      });
       expect(merged?.data).toEqual({
         graphicStyle: { style: "gs-1" },
         blendKey: { blend: "bl-2", index: 1 },
@@ -636,7 +668,9 @@ describe("draw conformance — BLENDS v1 (§16.2)", () => {
       const dropped = withBlendKey(merged, "blendKey", null);
       expect(dropped?.data).toEqual({ graphicStyle: { style: "gs-1" } });
       // …and an envelope with nothing left goes to null, not to `{}`.
-      expect(withBlendKey({ v: 1, data: { blendKey: {} } }, "blendKey", null)).toBeNull();
+      expect(
+        withBlendKey({ v: 1, data: { blendKey: {} } }, "blendKey", null),
+      ).toBeNull();
     });
   });
 
@@ -655,7 +689,9 @@ describe("draw conformance — BLENDS v1 (§16.2)", () => {
       ] as const) {
         const sw = await h.host.document.mutate({
           op: "createSwatch",
-          args: { spec: { selfId: ref, name: hex, space: "RGB", value: [...rgb] } },
+          args: {
+            spec: { selfId: ref, name: hex, space: "RGB", value: [...rgb] },
+          },
         });
         if (!sw.applied) throw new Error("createSwatch failed");
         const set = await h.host.document.mutate({
@@ -701,7 +737,9 @@ describe("draw conformance — BLENDS v1 (§16.2)", () => {
       expect(blendKeyOf(await h.host.document.getMetadata(UB))?.index).toBe(1);
       expect((await groupShape(h))?.members).toHaveLength(2 + BLEND_STEPS);
       // The commit never touches the creation defaults.
-      expect((await h.host.document.meta()).defaultFillColor ?? null).toBeNull();
+      expect(
+        (await h.host.document.meta()).defaultFillColor ?? null,
+      ).toBeNull();
 
       // …AND ONE undo puts the document back exactly as it was.
       await h.host.document.undo();
@@ -726,7 +764,10 @@ describe("draw conformance — BLENDS v1 (§16.2)", () => {
 
     it("SPECIFIED STEPS and SPECIFIED DISTANCE reach the engine, each in 1 undo step", async () => {
       await h.host.selection.set([UA, UB]);
-      const eight = await applyMakeBlend(h.host, { spacing: "steps", steps: 8 });
+      const eight = await applyMakeBlend(h.host, {
+        spacing: "steps",
+        steps: 8,
+      });
       expect(eight).toHaveLength(8);
       await undoTo(h, 1);
       expect(await sortedLeafIds(h)).toEqual(PRISTINE);
@@ -792,7 +833,9 @@ describe("draw conformance — BLENDS v1 (§16.2)", () => {
       // The ORDINALS are reversed in emission (= paint) order…
       expect(after.map((a) => a.t)).toEqual([3, 2, 1]);
       // …and the SET of positions is unchanged: nothing moved.
-      expect(after.map((a) => a.x).sort()).toEqual(before.map((b) => b.x).sort());
+      expect(after.map((a) => a.x).sort()).toEqual(
+        before.map((b) => b.x).sort(),
+      );
       // ONE undo step for the flip, one for the build.
       await undoTo(h, 2);
       expect(await sortedLeafIds(h)).toEqual(PRISTINE);
@@ -833,7 +876,9 @@ describe("draw conformance — BLENDS v1 (§16.2)", () => {
       expect(await applyExpandBlend(h.host, {})).toBe(true);
       expect(await leafIds(h)).toHaveLength(PRISTINE.length + made.length);
       expect(blendKeyOf(await h.host.document.getMetadata(UA))).toBeNull();
-      expect(blendStepOf(await h.host.document.getMetadata(made[0]))).toBeNull();
+      expect(
+        blendStepOf(await h.host.document.getMetadata(made[0])),
+      ).toBeNull();
       await undoTo(h, 2); // the expand, then the make
       expect(await sortedLeafIds(h)).toEqual(PRISTINE);
 
@@ -874,10 +919,12 @@ describe("draw conformance — BLENDS v1 (§16.2)", () => {
         .anchor;
       expect(at[1]).toBeGreaterThan(300);
       // The spine carries its own link and is NOT in the blend's group.
-      expect(blendSpineOf(await h.host.document.getMetadata(spine))?.blend).toBe(
-        "bl-1",
+      expect(
+        blendSpineOf(await h.host.document.getMetadata(spine))?.blend,
+      ).toBe("bl-1");
+      expect((await groupShape(h))?.members ?? []).not.toContain(
+        String(spine.id),
       );
-      expect((await groupShape(h))?.members ?? []).not.toContain(String(spine.id));
       expect((await readBlendLibrary(h.host)).blends[0].spine?.id).toBe(
         String(spine.id),
       );
@@ -910,7 +957,8 @@ describe("draw conformance — BLENDS v1 (§16.2)", () => {
         op: "insertTextFrame",
         args: { pageId: F4_OVERLAP.pageId, bounds: [500, 100, 560, 200] },
       } as unknown as Mutation);
-      if (!ins.applied || !ins.createdId) throw new Error("insertTextFrame failed");
+      if (!ins.applied || !ins.createdId)
+        throw new Error("insertTextFrame failed");
       await h.host.selection.set([UA, ins.createdId as unknown as ElementId]);
       expect(await applyMakeBlend(h.host, {})).toEqual([]);
       await h.host.document.undo();

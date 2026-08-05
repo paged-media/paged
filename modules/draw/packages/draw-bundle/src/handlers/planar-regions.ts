@@ -67,7 +67,12 @@
 // inputs share a transform (the ordinary case, and identity for anything
 // the editor authors); approximate — and named here — when they do not.
 
-import type { BundleHost, ElementId, PathAnchorTriple } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  ElementId,
+  PlanarFace,
+  PlanarRegionsResult,
+} from "@paged-media/plugin-api";
 import {
   applyAffine,
   inverseApplyAffine,
@@ -87,31 +92,13 @@ export const MAX_PLANAR_INPUTS = 12;
  *  sentence is what a user sees, never this number. */
 export const MAX_PLANAR_FACES = 256;
 
-/** One face as `requestPlanarRegions` reports it. Typed locally: the
- *  protocol-v57 `PlanarFaceWire` is not in the vendored contract yet
- *  (module header). */
-export interface PlanarFaceWire {
-  id: string;
-  /** Indices into the REQUEST's `elementIds` whose interiors cover this
-   *  face — so a face id only means anything against the same ordered
-   *  input list that produced it. */
-  signature: number[];
-  anchors: PathAnchorTriple[];
-  subpathStarts: number[];
-  /** Unsigned area, outer contour minus holes. */
-  area: number;
-  /** A point strictly inside the face, in RAW path space. */
-  inside: [number, number];
-}
-
-/** The `requestPlanarRegions` reply, typed locally (same skew note). */
-export interface PlanarRegionsWire {
-  found: boolean;
-  faces: PlanarFaceWire[];
-  inputCount: number;
-  complete: boolean;
-  reason?: string | null;
-}
+/** K-11 IS PUBLISHED — these are now ALIASES of the contract's own
+ *  types, not local re-declarations. They are kept as names because the
+ *  whole bundle refers to them (Shape Builder, Live Paint and the cache
+ *  below), and because the "Wire" suffix records where the shape comes
+ *  from: this is the engine's answer, not something this repo decides. */
+export type PlanarFaceWire = PlanarFace;
+export type PlanarRegionsWire = PlanarRegionsResult;
 
 /** Stable cache/identity key for an ORDERED input set. Order matters: a
  *  face's signature indexes into the request list, so the same elements
@@ -122,27 +109,27 @@ export function planarInputKey(ids: readonly ElementId[]): string {
     .join("|");
 }
 
-/** The ONE `requestPlanarRegions` round trip in this bundle. `null` =
- *  the host did not answer the door at all (an engine predating v57, or
- *  a send that threw) — distinct from a REFUSAL, which comes back as a
- *  well-formed `found: false` with a reason. */
+/** The ONE planar-arrangement round trip in this bundle, now over the
+ *  PUBLISHED `host.document.planarRegions` facade rather than a raw
+ *  `client.send` (K-11 landed in `0.2.28-canary.0`).
+ *
+ *  `null` is NARROWER than it used to be, and that is an improvement:
+ *  the facade answers a host that cannot serve the door as a REFUSAL
+ *  carrying the engine's reason, so the only `null` left is the
+ *  undeclared-capability gate throwing — the one case with nothing to
+ *  report. A refusal still arrives as a well-formed `found: false`, and
+ *  `reportPlanarRefusal` below is still what puts it in front of the
+ *  user. */
 export async function readPlanarRegions(
   host: BundleHost,
   ids: readonly ElementId[],
   point?: readonly [number, number],
 ): Promise<PlanarRegionsWire | null> {
   try {
-    const reply = (await host.editor.client.send({
-      kind: "requestPlanarRegions",
-      payload: point
-        ? { elementIds: ids, point: [point[0], point[1]] }
-        : { elementIds: ids },
-    } as never)) as unknown as {
-      kind: string;
-      payload?: { result?: PlanarRegionsWire };
-    };
-    if (reply.kind !== "planarRegions") return null;
-    return reply.payload?.result ?? null;
+    return await host.document.planarRegions(
+      ids as ElementId[],
+      point ? [point[0], point[1]] : undefined,
+    );
   } catch {
     return null;
   }
@@ -301,7 +288,8 @@ export function createRegionCache(
         // Keep the outline available to the overlay even without a full
         // enumeration (one face is still a legible highlight).
         const mapped = faceToPageSpace(face, m ?? null);
-        if (!cached.some((f) => f.id === mapped.id)) cached = [...cached, mapped];
+        if (!cached.some((f) => f.id === mapped.id))
+          cached = [...cached, mapped];
       }
       hooks.onPointFace(face ? face.id : null);
     })();

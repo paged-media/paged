@@ -44,6 +44,7 @@ import type {
   CommandContribution,
   ElementId,
   Mutation,
+  MutationInput,
 } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
@@ -136,8 +137,8 @@ async function transformOf(
   return g[0] ? ((g[0].itemTransform as number[] | null) ?? null) : null;
 }
 
-const opsOf = (m: Mutation): Mutation[] =>
-  (m as { args: { ops: Mutation[] } }).args.ops;
+const opsOf = (m: MutationInput): MutationInput[] =>
+  (m as { args: { ops: MutationInput[] } }).args.ops;
 
 /** A 100 × 100 object at the origin of its own space, home = identity. */
 const boxObject = (id: string): OnPathObject => ({
@@ -184,9 +185,13 @@ describe("draw conformance — OBJECTS ON A PATH (§16.3)", () => {
       ]);
       // A PARTIAL permutation: named entries first, the rest follow in
       // their original order — so a half-typed order is still usable.
-      expect(orderedIndices(4, { ...base, order: [3, 1] })).toEqual([3, 1, 0, 2]);
+      expect(orderedIndices(4, { ...base, order: [3, 1] })).toEqual([
+        3, 1, 0, 2,
+      ]);
       // Out-of-range and duplicate entries are ignored, not fatal.
-      expect(orderedIndices(3, { ...base, order: [9, 1, 1] })).toEqual([1, 0, 2]);
+      expect(orderedIndices(3, { ...base, order: [9, 1, 1] })).toEqual([
+        1, 0, 2,
+      ]);
     });
   });
 
@@ -338,14 +343,16 @@ describe("draw conformance — OBJECTS ON A PATH (§16.3)", () => {
 
   describe("the wire", () => {
     it("frameTransformMutationFor is the ONE door — and the batch is transforms then links", () => {
-      expect(frameTransformMutationFor(poly("ua"), [1, 0, 0, 1, 5, 6])).toEqual({
-        op: "setElementProperty",
-        args: {
-          elementId: poly("ua"),
-          path: "frameTransform",
-          value: { type: "transform", value: [1, 0, 0, 1, 5, 6] },
+      expect(frameTransformMutationFor(poly("ua"), [1, 0, 0, 1, 5, 6])).toEqual(
+        {
+          op: "setElementProperty",
+          args: {
+            elementId: poly("ua"),
+            path: "frameTransform",
+            value: { type: "transform", value: [1, 0, 0, 1, 5, 6] },
+          },
         },
-      });
+      );
       const objects = [boxObject("a"), boxObject("b")];
       const placements = placeObjectsOnPath({
         objects,
@@ -439,7 +446,10 @@ describe("draw conformance — OBJECTS ON A PATH (§16.3)", () => {
     it("withOnPathKey preserves every OTHER draw metadata key, and affineFrom is strict", () => {
       const prev = {
         v: 1,
-        data: { symbolInstance: { symbol: "sy-1" }, onPathObject: { onPath: "x" } },
+        data: {
+          symbolInstance: { symbol: "sy-1" },
+          onPathObject: { onPath: "x" },
+        },
       };
       const merged = withOnPathKey(prev, "onPathObject", {
         onPath: "op-2",
@@ -469,14 +479,15 @@ describe("draw conformance — OBJECTS ON A PATH (§16.3)", () => {
           objects: [{ kind: "polygon", id: "ua", home: [1, 0, 0, 1, 3, 4] }],
         },
       );
-      expect(parseObjectsOnPathLibrary(serializeObjectsOnPathLibrary(lib))).toEqual(
-        lib,
-      );
+      expect(
+        parseObjectsOnPathLibrary(serializeObjectsOnPathLibrary(lib)),
+      ).toEqual(lib);
       expect(mintObjectsOnPathId(lib)).toBe("op-2");
       expect(findObjectsOnPathRecord(lib, "op-1")?.name).toBe("Beads");
       expect(parseObjectsOnPathLibrary(null).associations).toEqual([]);
       expect(
-        parseObjectsOnPathLibrary(new TextEncoder().encode("nope")).associations,
+        parseObjectsOnPathLibrary(new TextEncoder().encode("nope"))
+          .associations,
       ).toEqual([]);
       // A missing home degrades to the identity rather than throwing.
       const noHome = parseObjectsOnPathLibrary(
@@ -507,7 +518,11 @@ describe("draw conformance — OBJECTS ON A PATH (§16.3)", () => {
     const square = (x: number, y: number) => [
       { anchor: [x, y], left: [x, y], right: [x, y] },
       { anchor: [x + 60, y], left: [x + 60, y], right: [x + 60, y] },
-      { anchor: [x + 60, y + 60], left: [x + 60, y + 60], right: [x + 60, y + 60] },
+      {
+        anchor: [x + 60, y + 60],
+        left: [x + 60, y + 60],
+        right: [x + 60, y + 60],
+      },
       { anchor: [x, y + 60], left: [x, y + 60], right: [x, y + 60] },
     ];
 
@@ -518,9 +533,14 @@ describe("draw conformance — OBJECTS ON A PATH (§16.3)", () => {
       const mint = async (x: number, y: number) => {
         const out = await h.host.document.mutate({
           op: "insertPath",
-          args: { pageId: F6_RING_PAIR.pageId, anchors: square(x, y), open: false },
+          args: {
+            pageId: F6_RING_PAIR.pageId,
+            anchors: square(x, y),
+            open: false,
+          },
         } as unknown as Mutation);
-        if (!out.applied || !out.createdId) throw new Error("insertPath failed");
+        if (!out.applied || !out.createdId)
+          throw new Error("insertPath failed");
         return out.createdId as unknown as ElementId;
       };
       SMALL_A = await mint(20, 20);
@@ -580,7 +600,7 @@ describe("draw conformance — OBJECTS ON A PATH (§16.3)", () => {
 
       // …and writing again REPLACES rather than composing.
       expect((await write([1, 0, 0, 1, 40, 60])).applied).toBe(true);
-      expect((await transformOf(h, INNER))).toEqual([1, 0, 0, 1, 40, 60]);
+      expect(await transformOf(h, INNER)).toEqual([1, 0, 0, 1, 40, 60]);
       await undoTo(h, 2);
       expect(await transformOf(h, INNER)).toEqual([1, 0, 0, 1, 0, 0]);
     });
@@ -593,7 +613,10 @@ describe("draw conformance — OBJECTS ON A PATH (§16.3)", () => {
         args: {
           elementId: INNER,
           key: "x-paged:media.paged.draw",
-          value: JSON.stringify({ v: 1, data: { graphicStyle: { style: "gs-1" } } }),
+          value: JSON.stringify({
+            v: 1,
+            data: { graphicStyle: { style: "gs-1" } },
+          }),
           caller: "media.paged.draw",
         },
       } as unknown as Mutation);
@@ -611,9 +634,11 @@ describe("draw conformance — OBJECTS ON A PATH (§16.3)", () => {
       expect(await leafIds(h)).toContain("uinner");
       // A write BY ID still reaches it and brings it back.
       expect(
-        (await h.host.document.mutate(
-          frameTransformMutationFor(INNER, IDENTITY_AFFINE),
-        )).applied,
+        (
+          await h.host.document.mutate(
+            frameTransformMutationFor(INNER, IDENTITY_AFFINE),
+          )
+        ).applied,
       ).toBe(true);
       expect(await h.host.document.elementGeometry([INNER])).toHaveLength(1);
     });
@@ -645,7 +670,9 @@ describe("draw conformance — OBJECTS ON A PATH (§16.3)", () => {
       const before = await sortedLeafIds(h);
       // The PATH is the LAST selected item.
       await h.host.selection.set([SMALL_A, SMALL_B, OPEN]);
-      const moved = await applyMakeObjectsOnPath(h.host, { alignToPath: false });
+      const moved = await applyMakeObjectsOnPath(h.host, {
+        alignToPath: false,
+      });
 
       // (1) NOTHING WAS CREATED — the leaf set is byte-for-byte the same.
       expect(await sortedLeafIds(h)).toEqual(before);
@@ -665,9 +692,9 @@ describe("draw conformance — OBJECTS ON A PATH (§16.3)", () => {
       expect(
         onPathObjectOf(await h.host.document.getMetadata(SMALL_A))?.onPath,
       ).toBe("op-1");
-      expect(onPathSpineOf(await h.host.document.getMetadata(OPEN))?.onPath).toBe(
-        "op-1",
-      );
+      expect(
+        onPathSpineOf(await h.host.document.getMetadata(OPEN))?.onPath,
+      ).toBe("op-1");
       // …and each object's link REMEMBERS its way home.
       expect(
         onPathObjectOf(await h.host.document.getMetadata(SMALL_A))?.home,
@@ -686,7 +713,10 @@ describe("draw conformance — OBJECTS ON A PATH (§16.3)", () => {
         args: {
           elementId: SMALL_A,
           key: "x-paged:media.paged.draw",
-          value: JSON.stringify({ v: 1, data: { graphicStyle: { style: "gs-7" } } }),
+          value: JSON.stringify({
+            v: 1,
+            data: { graphicStyle: { style: "gs-7" } },
+          }),
           caller: "media.paged.draw",
         },
       } as unknown as Mutation);
@@ -778,9 +808,9 @@ describe("draw conformance — OBJECTS ON A PATH (§16.3)", () => {
       expect(await transformOf(h, OUTER)).toEqual([1, 0, 0, 1, 0, 0]);
       // …but it IS in the association, with its way home, and it is
       // still perfectly readable — which is the whole point of the guard.
-      expect(onPathObjectOf(await h.host.document.getMetadata(OUTER))?.onPath).toBe(
-        "op-1",
-      );
+      expect(
+        onPathObjectOf(await h.host.document.getMetadata(OUTER))?.onPath,
+      ).toBe("op-1");
       expect(await h.host.document.elementGeometry([OUTER])).toHaveLength(1);
     });
 
@@ -798,7 +828,9 @@ describe("draw conformance — OBJECTS ON A PATH (§16.3)", () => {
       expect(forced).toHaveLength(1);
       expect(await transformOf(h, OUTER)).toEqual([1, 0, 0, 1, 250, -150]);
       expect(await h.host.document.elementGeometry([OUTER])).toHaveLength(1);
-      expect(onPathObjectOf(await h.host.document.getMetadata(OUTER))).not.toBeNull();
+      expect(
+        onPathObjectOf(await h.host.document.getMetadata(OUTER)),
+      ).not.toBeNull();
     });
 
     it("a STRANDED object is still LINKED — Release finds it and brings it home", async () => {
@@ -812,7 +844,9 @@ describe("draw conformance — OBJECTS ON A PATH (§16.3)", () => {
       expect(await h.host.document.elementGeometry([SMALL_A])).toHaveLength(0);
       // The LINK WALK still sees it — this is the assertion that keeps
       // the module header honest about which doors C-23 actually takes.
-      expect((await objectsOnPathLinks(h.host, "op-1")).objects).toHaveLength(1);
+      expect((await objectsOnPathLinks(h.host, "op-1")).objects).toHaveLength(
+        1,
+      );
       // Update cannot PLACE it (nothing can measure it) but does not
       // forget it either: it keeps its seat and its way home.
       await applyUpdateObjectsOnPath(h.host, {});
@@ -833,7 +867,9 @@ describe("draw conformance — OBJECTS ON A PATH (§16.3)", () => {
       await h.host.selection.set([SMALL_A, SMALL_B, OPEN]);
       await applyMakeObjectsOnPath(h.host, { alignToPath: false });
       expect(
-        (await applySelectObjectsOnPath(h.host, {})).map((i) => String(i.id)).sort(),
+        (await applySelectObjectsOnPath(h.host, {}))
+          .map((i) => String(i.id))
+          .sort(),
       ).toEqual([String(SMALL_A.id), String(SMALL_B.id)].sort());
       expect(
         (await applySelectObjectsOnPath(h.host, { which: "path" })).map((i) =>
@@ -891,7 +927,10 @@ describe("draw conformance — OBJECTS ON A PATH (§16.3)", () => {
 
     it("the recipe records the association and resolves without a payload", async () => {
       await h.host.selection.set([SMALL_A, SMALL_B, OPEN]);
-      await applyMakeObjectsOnPath(h.host, { name: "Beads", alignToPath: false });
+      await applyMakeObjectsOnPath(h.host, {
+        name: "Beads",
+        alignToPath: false,
+      });
       const record = findObjectsOnPathRecord(
         await readObjectsOnPathLibrary(h.host),
         "op-1",
@@ -960,7 +999,8 @@ describe("draw conformance — OBJECTS ON A PATH (§16.3)", () => {
         RELEASE_OBJECTS_ON_PATH_COMMAND_ID,
       ]);
       const declared = drawBundle.manifest.contributes?.commands ?? [];
-      for (const id of OBJECTS_ON_PATH_COMMAND_IDS) expect(declared).toContain(id);
+      for (const id of OBJECTS_ON_PATH_COMMAND_IDS)
+        expect(declared).toContain(id);
       expect(drawBundle.manifest.contributes?.panels).toContain(
         OBJECTS_ON_PATH_PANEL_ID,
       );

@@ -51,6 +51,7 @@ import type {
   CommandContribution,
   ElementId,
   Mutation,
+  MutationInput,
 } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
@@ -213,15 +214,13 @@ const SQUARE_PLAN: RepeatPlan = {
       paint: { fill: "Color/Black", stroke: null, weight: null },
     },
   ],
-  placements: [
-    { index: 1, col: 1, row: 0, matrix: [1, 0, 0, 1, 200, 0] },
-  ],
+  placements: [{ index: 1, col: 1, row: 0, matrix: [1, 0, 0, 1, 200, 0] }],
   dropped: [],
   clipRect: null,
 };
 
-const opsOf = (m: Mutation): Mutation[] =>
-  (m as { args: { ops: Mutation[] } }).args.ops;
+const opsOf = (m: MutationInput): MutationInput[] =>
+  (m as { args: { ops: MutationInput[] } }).args.ops;
 
 function pointer(
   pageId: string,
@@ -339,9 +338,9 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
       expect(removeRepeatRecordFrom(back, "rep-1").repeats).toEqual([]);
       // Unreadable → empty, never a crash.
       expect(parseRepeatLibrary(null).repeats).toEqual([]);
-      expect(parseRepeatLibrary(new TextEncoder().encode("{{")).repeats).toEqual(
-        [],
-      );
+      expect(
+        parseRepeatLibrary(new TextEncoder().encode("{{")).repeats,
+      ).toEqual([]);
       expect(
         parseRepeatLibrary(new TextEncoder().encode('{"v":99,"repeats":[{}]}'))
           .repeats,
@@ -368,10 +367,12 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
       ).toBeNull();
       // Readers are tolerant of partial/foreign shapes.
       expect(repeatSourceOf(null)).toBeNull();
-      expect(repeatInstanceOf({ v: 1, data: { repeatInstance: {} } })).toBeNull();
-      expect(repeatClipOf({ v: 1, data: { repeatClip: { repeat: "r" } } })).toEqual(
-        { repeat: "r" },
-      );
+      expect(
+        repeatInstanceOf({ v: 1, data: { repeatInstance: {} } }),
+      ).toBeNull();
+      expect(
+        repeatClipOf({ v: 1, data: { repeatClip: { repeat: "r" } } }),
+      ).toEqual({ repeat: "r" });
     });
   });
 
@@ -568,7 +569,11 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
               op: "insertPath",
               args: {
                 pageId: F6_RING_PAIR.pageId,
-                anchors: [anchorAt([10, 10]), anchorAt([20, 10]), anchorAt([20, 20])],
+                anchors: [
+                  anchorAt([10, 10]),
+                  anchorAt([20, 10]),
+                  anchorAt([20, 20]),
+                ],
                 open: false,
               },
             },
@@ -589,7 +594,11 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
               op: "insertPath",
               args: {
                 pageId: F6_RING_PAIR.pageId,
-                anchors: [anchorAt([10, 10]), anchorAt([20, 10]), anchorAt([20, 20])],
+                anchors: [
+                  anchorAt([10, 10]),
+                  anchorAt([20, 10]),
+                  anchorAt([20, 20]),
+                ],
                 open: false,
                 bindCreated: "h1",
               },
@@ -646,7 +655,9 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
       await h.host.document.undo();
       expect(await sortedLeafIds(h)).toEqual(PRISTINE);
       expect(await groupShape(h)).toBeNull();
-      expect(repeatSourceOf(await h.host.document.getMetadata(INNER))).toBeNull();
+      expect(
+        repeatSourceOf(await h.host.document.getMetadata(INNER)),
+      ).toBeNull();
     });
 
     it("MAKE GRID and MAKE MIRROR are one undo step too, and place what they say", async () => {
@@ -691,9 +702,7 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
       expect(after.map((i) => i.id)).not.toContain(first[0].id);
       // The old ones are GONE, not orphaned.
       expect(await leafIds(h)).not.toContain(first[0].id);
-      expect(
-        await h.host.document.elementGeometry([first[0]]),
-      ).toHaveLength(0);
+      expect(await h.host.document.elementGeometry([first[0]])).toHaveLength(0);
       // One undo unwinds the whole re-plan back to the FIRST generation.
       await h.host.document.undo();
       const back = await leafIds(h);
@@ -715,7 +724,9 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
       // Every piece of artwork is still there…
       expect(await leafIds(h)).toHaveLength(PRISTINE.length + made.length);
       // …and nothing tracks it.
-      expect(repeatSourceOf(await h.host.document.getMetadata(INNER))).toBeNull();
+      expect(
+        repeatSourceOf(await h.host.document.getMetadata(INNER)),
+      ).toBeNull();
       expect(
         repeatInstanceOf(await h.host.document.getMetadata(made[0])),
       ).toBeNull();
@@ -737,7 +748,9 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
       expect(await applyReleaseRepeat(h.host, {})).toBe(again.length);
       // The instances are gone; the SOURCE is untouched and unlinked.
       expect(await sortedLeafIds(h)).toEqual(PRISTINE);
-      expect(repeatSourceOf(await h.host.document.getMetadata(INNER))).toBeNull();
+      expect(
+        repeatSourceOf(await h.host.document.getMetadata(INNER)),
+      ).toBeNull();
       expect((await readRepeatLibrary(h.host)).repeats).toEqual([]);
       await undoTo(h, 2); // the release, then the make
       expect(await sortedLeafIds(h)).toEqual(PRISTINE);
@@ -790,14 +803,15 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
       }
       // The clip FRAME is in the tree (only its children are not) and
       // carries its own link.
-      const record = findRepeatRecord(await readRepeatLibrary(h.host), "rep-1")!;
+      const record = findRepeatRecord(
+        await readRepeatLibrary(h.host),
+        "rep-1",
+      )!;
       expect(record.clipFrame).not.toBeNull();
       expect(visible).toContain(record.clipFrame!.id);
       expect(
         repeatClipOf(
-          await h.host.document.getMetadata(
-            poly(record.clipFrame!.id),
-          ),
+          await h.host.document.getMetadata(poly(record.clipFrame!.id)),
         )?.repeat,
       ).toBe("rep-1");
       // …and the recipe is the ONLY index of the hidden instances,
@@ -877,7 +891,10 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
         startDeg: -90,
         clip: true,
       });
-      const record = findRepeatRecord(await readRepeatLibrary(h.host), "rep-1")!;
+      const record = findRepeatRecord(
+        await readRepeatLibrary(h.host),
+        "rep-1",
+      )!;
       const child = poly(record.instances[0].id);
       // The hazard, demonstrated: drop the container on its own…
       const dropped = await h.host.document.mutate({
@@ -1046,7 +1063,9 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
     });
 
     it("resolveRepeat / repeatBoundsOf / repeatGroupOf read what the commands need", async () => {
-      expect(await repeatBoundsOf(h.host, [INNER])).toEqual([200, 200, 300, 300]);
+      expect(await repeatBoundsOf(h.host, [INNER])).toEqual([
+        200, 200, 300, 300,
+      ]);
       expect(await resolveRepeat(h.host, "rep-9")).toBe("rep-9");
       expect(await resolveRepeat(h.host, undefined)).toBeNull();
       await h.host.selection.set([INNER]);
@@ -1162,8 +1181,9 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
       h.loadBundle(drawBundle);
       // Take the door away, the graphic-styles precedent.
       const supports = h.host.supports.bind(h.host);
-      (h.host as { supports: (f: string) => boolean }).supports = (f: string) =>
-        f === REPEAT_FEATURE ? false : supports(f);
+      (h.host as { supports: (f: string) => boolean }).supports = (
+        f: string,
+      ) => (f === REPEAT_FEATURE ? false : supports(f));
       (h.host.log as { warn: (m: string) => void }).warn = (m: string) => {
         warnings.push(m);
       };

@@ -73,9 +73,10 @@
 import type {
   BundleHost,
   ElementId,
-  Mutation,
   PropertyPath,
   SceneTreeNode,
+  MutationInput,
+  BindingProviderScope,
 } from "@paged-media/plugin-api";
 
 import {
@@ -158,7 +159,7 @@ export function siblingsOf(
 const SERVED_PATHS: readonly PropertyPath[] = ["layerVisible", "layerLocked"];
 
 /** Core ops this provider takes first refusal on. */
-const SERVED_OPS: readonly string[] = [
+const SERVED_OPS: BindingProviderScope["ops"] = [
   "layerMove",
   "layerSetVisible",
   "layerSetLocked",
@@ -340,7 +341,7 @@ export function makeLayersBindingProvider(
           reason: `"${layerId}" is not in the current object stack`,
         };
       }
-      let translated: Mutation;
+      let translated: MutationInput;
       switch (m.op) {
         case "layerMove": {
           const newIndex = m.args?.newIndex;
@@ -358,7 +359,10 @@ export function makeLayersBindingProvider(
         case "layerSetVisible": {
           const visible = m.args?.visible;
           if (typeof visible !== "boolean") {
-            return { kind: "decline", reason: "layerSetVisible without a flag" };
+            return {
+              kind: "decline",
+              reason: "layerSetVisible without a flag",
+            };
           }
           translated = setBoolPropertyMutationFor(
             element,

@@ -31,21 +31,26 @@
 // here reorders anything, so `reorderElement` is not re-declared —
 // there is exactly one builder for it and it lives with its consumer.
 //
-// ------------------------------------------------------ contract skew
-// NAMED, not hidden, and NARROW — all three ops have TYPED definitions
-// in `@paged-media/plugin-api`'s hand-maintained protocol-ahead delta
-// (`packages/plugin-api/src/mutations.ts` → `PendingMutation`):
+// ------------------------------------------- contract skew: CLOSED
+// This block used to explain three `as unknown as Mutation` casts and
+// promise they would become a pure deletion at the next canary bump.
+// The bump happened (`0.2.25-canary.0` → `0.2.28-canary.0`) and the
+// deletion is done: all three ops carry TYPED definitions in
+// `@paged-media/plugin-api`'s protocol-ahead delta —
 //
 //   bindCreated  { handle }                     — plugin-sdk `bc52766`
 //   pasteInto    { containerId, childId }       — v56 (B-18)
 //   releaseFrom  { childId }                    — v56 (B-18)
 //
-// This repo installs the PUBLISHED `0.2.25-canary.0`, which predates
-// `bc52766` and carries none of the three in its vendored `Mutation`
-// union, so the casts below are still required — but they cast toward a
-// contract that EXISTS and is COMMITTED, and every argument name/type
-// matches it field-for-field. When the canary bumps, the change here is
-// a PURE DELETION: drop three `as unknown as Mutation` casts.
+// — and the builders below return `PendingMutation` directly.
+//
+// The delta is still a DELTA: these ops live in `PendingMutation`, not
+// in `Mutation`, and the door that accepts both is
+// `MutationInput = Mutation | PendingMutation` (what
+// `host.document.mutate` takes). So a batch that mixes settled and
+// protocol-ahead ops is typed `MutationInput[]`, never `Mutation[]` —
+// that is a real distinction the contract is making, not a leftover,
+// and it is why this file still exists after the casts are gone.
 //
 // ---------------------------------------------------- what C-15 buys
 // `bindCreated` is what collapses a two-batch flow into ONE undo step.
@@ -81,7 +86,13 @@
 // not found: Group(<the earlier insert's id>)". With no earlier bind in
 // the batch, the dissolve resolves correctly.
 
-import type { BundleHost, ElementId, Mutation } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  ElementId,
+  Mutation,
+  MutationInput,
+  PendingMutation,
+} from "@paged-media/plugin-api";
 
 import { engineOpVocabulary } from "./join-average";
 
@@ -90,14 +101,27 @@ export const HANDLE_PREFIX = "$h:";
 
 /** C-15 — name the id the PRECEDING creating child minted, so a LATER
  *  child of the same batch can address it as `"$h:<handle>"`. */
-export function bindCreatedMutationFor(handle: string): Mutation {
-  return { op: "bindCreated", args: { handle } } as unknown as Mutation;
+export function bindCreatedMutationFor(handle: string): PendingMutation {
+  return { op: "bindCreated", args: { handle } };
 }
 
 /** A `"$h:<handle>"` reference as an `ElementId` of `kind`. `insertPath`
- *  mints Polygons, so that is the default. */
-export function handleElementId(handle: string, kind = "polygon"): ElementId {
-  return { kind, id: `${HANDLE_PREFIX}${handle}` } as ElementId;
+ *  mints Polygons, so that is the default.
+ *
+ *  `kind` is narrowed to the kinds whose `id` is a STRING, which the
+ *  contract's union makes explicit and the old cast hid: `storyRange`,
+ *  `table` and `tableCell` key on a STRUCTURED id (story + offsets,
+ *  story + table, story + table + row/col), and there is no way to
+ *  express "the thing the previous op minted" in those shapes. A handle
+ *  addresses a page ITEM; the three structured kinds are addresses
+ *  INSIDE a story, which no creating op mints. */
+type HandleableElementId = Extract<ElementId, { id: string }>;
+
+export function handleElementId(
+  handle: string,
+  kind: HandleableElementId["kind"] = "polygon",
+): HandleableElementId {
+  return { kind, id: `${HANDLE_PREFIX}${handle}` } as HandleableElementId;
 }
 
 /** B-18 — nest an existing TOP-LEVEL page item inside a container
@@ -107,17 +131,43 @@ export function handleElementId(handle: string, kind = "polygon"): ElementId {
 export function pasteIntoMutationFor(
   containerId: ElementId,
   childId: ElementId,
-): Mutation {
-  return {
-    op: "pasteInto",
-    args: { containerId, childId },
-  } as unknown as Mutation;
+): PendingMutation {
+  return { op: "pasteInto", args: { containerId, childId } };
 }
 
 /** B-18 — the inverse: pop a pasted-in child back to top level (it
  *  stacks on top), world transform preserved. */
-export function releaseFromMutationFor(childId: ElementId): Mutation {
-  return { op: "releaseFrom", args: { childId } } as unknown as Mutation;
+export function releaseFromMutationFor(childId: ElementId): PendingMutation {
+  return { op: "releaseFrom", args: { childId } };
+}
+
+// ------------------------------------------- THE ONE REMAINING CAST
+//
+// A CONTRACT GAP, and the only one the `0.2.28-canary.0` repin did not
+// close. The generated `Mutation` types batch as
+// `{ op: "batch"; args: { ops: Mutation[] } }` — SETTLED ops only — and
+// `PendingMutation` carries no batch variant at all. So the union has
+// no way to say "a batch that contains a protocol-ahead op", which is
+// precisely what every one-undo-step flow in this bundle builds:
+// Repeats, Blends, opacity masks and text-on-path all mix settled
+// inserts with `bindCreated` / `pasteInto` / `applyOpacityMask`.
+//
+// The engine accepts it — `bindCreated` is meaningless OUTSIDE a batch,
+// so a batch containing one is the only shape it was ever designed for.
+// The gap is in the hand-maintained delta, not in core.
+//
+// Rather than leave a `Mutation` cast at each of the twelve call sites
+// the repin exposed, there is ONE builder and this is it. Filed for the
+// SDK as: add a `BatchMutation` to `PendingMutation` whose `ops` are
+// `MutationInput[]`. When that lands, this function loses its cast and
+// keeps its signature.
+
+/** A batch whose children may include protocol-ahead ops. */
+export function batchMutationFor(ops: readonly MutationInput[]): MutationInput {
+  return {
+    op: "batch",
+    args: { ops: ops as Mutation[] },
+  };
 }
 
 // ---------------------------------------------------- refusal reading

@@ -37,7 +37,11 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
-import type { ElementId, Mutation, SceneTreeNode } from "@paged-media/plugin-api";
+import type {
+  ElementId,
+  Mutation,
+  SceneTreeNode,
+} from "@paged-media/plugin-api";
 
 import { drawBundle } from "../../src";
 import {
@@ -119,13 +123,38 @@ describe("draw conformance — the Layers binding provider (ADR 023)", () => {
     );
   });
 
-  it("degrades honestly on a host with no binding-provider registry", () => {
-    // This repo's installed plugin-sdk predates ADR 023 phase A, so the
-    // door is absent. The seam must answer `null` — not throw, and not
-    // register something nothing will consult.
-    expect(supportsBindingProviders(h.host)).toBe(false);
+  it("the INSTALLED host serves the ADR-023 door — the provider REGISTERS", () => {
+    // THIS ASSERTION USED TO BE `.toBe(false)`: `0.2.25-canary.0`
+    // predated ADR 023 phase A, so the door was absent and the only
+    // honest thing this seam could do was answer `null`.
+    //
+    // The `0.2.28-canary.0` repin closed that. `contribute.bindingProvider`
+    // is on the published `BundleHost` AND the SDK harness injects a
+    // registry, so paged.draw's Layers provider now actually registers —
+    // which is the whole point of ADR 023, and was untestable here until
+    // the bump.
+    expect(supportsBindingProviders(h.host)).toBe(true);
     const { provider } = makeLayersBindingProvider(h.host);
-    expect(registerBindingProvider(h.host, "vectorGraphic", provider)).toBe(
+    const handle = registerBindingProvider(h.host, "vectorGraphic", provider);
+    expect(handle).not.toBeNull();
+    // The handle is the rollback lever ADR-023 phase D depends on.
+    expect(typeof handle!.invalidate).toBe("function");
+    handle!.dispose();
+  });
+
+  it("degrades honestly on a host with no binding-provider registry", () => {
+    // Still a REAL case — an editor older than this SDK — and still the
+    // required behaviour: answer `null`, do not throw, and do not
+    // register something nothing will consult. It just needs a synthetic
+    // host to reach now that the installed one has the door.
+    const oldHost = {
+      ...h.host,
+      supports: (feature: string) =>
+        feature === "bindings.provider@1" ? false : h.host.supports(feature),
+    } as unknown as typeof h.host;
+    expect(supportsBindingProviders(oldHost)).toBe(false);
+    const { provider } = makeLayersBindingProvider(oldHost);
+    expect(registerBindingProvider(oldHost, "vectorGraphic", provider)).toBe(
       null,
     );
   });
@@ -145,7 +174,15 @@ describe("draw conformance — the Layers binding provider (ADR 023)", () => {
     // the vocabulary rule, and what lets one host renderer draw both.
     for (const row of rows) {
       expect(Object.keys(row).sort()).toEqual(
-        ["locked", "name", "parentId", "printable", "selfId", "visible", "z"].sort(),
+        [
+          "locked",
+          "name",
+          "parentId",
+          "printable",
+          "selfId",
+          "visible",
+          "z",
+        ].sort(),
       );
       expect(typeof row.visible).toBe("boolean");
       expect(typeof row.locked).toBe("boolean");
@@ -177,13 +214,13 @@ describe("draw conformance — the Layers binding provider (ADR 023)", () => {
   it("exit() clears the stack, so the panel retargets back to core", async () => {
     const p = makeLayersBindingProvider(h.host);
     p.enter(RECT as unknown as ElementId);
-    expect((await p.provider.readCollection!({ collection: "layers" })).kind).toBe(
-      "rows",
-    );
+    expect(
+      (await p.provider.readCollection!({ collection: "layers" })).kind,
+    ).toBe("rows");
     p.exit();
-    expect((await p.provider.readCollection!({ collection: "layers" })).kind).toBe(
-      "decline",
-    );
+    expect(
+      (await p.provider.readCollection!({ collection: "layers" })).kind,
+    ).toBe("decline");
   });
 
   // --------------------------------------------------------- property
@@ -322,7 +359,11 @@ describe("draw conformance — the Layers binding provider (ADR 023)", () => {
             label: "p",
             id: undefined,
             children: [
-              { kind: "rectangle", label: "r", id: { kind: "rectangle", id: "a" } },
+              {
+                kind: "rectangle",
+                label: "r",
+                id: { kind: "rectangle", id: "a" },
+              },
               { kind: "polygon", label: "p", id: { kind: "polygon", id: "b" } },
             ],
           },

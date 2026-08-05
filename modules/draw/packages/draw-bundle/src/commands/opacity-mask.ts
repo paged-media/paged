@@ -116,8 +116,8 @@ import type {
   BundleHost,
   Disposable,
   ElementId,
-  Mutation,
   PluginMetadataEnvelope,
+  MutationInput,
 } from "@paged-media/plugin-api";
 
 import { stampDrawMetadata } from "./appearance-bake";
@@ -130,6 +130,7 @@ import {
   v58RefusalReason,
   type OpacityMaskMode,
 } from "./v58-wire";
+import { batchMutationFor } from "./v59-wire";
 
 export const OPACITY_MASK_COMMAND_CATEGORY = "Transparency";
 
@@ -243,26 +244,24 @@ export function opacityMaskApplyBatchFor(args: {
   invert: boolean;
   /** The target's CURRENT envelope, so every other draw key survives. */
   envelope: PluginMetadataEnvelope | null;
-}): Mutation {
+}): MutationInput {
   const ref: OpacityMaskRef = {
-    mask: { kind: args.mask.kind, id: String((args.mask as { id: unknown }).id) },
+    mask: {
+      kind: args.mask.kind,
+      id: String((args.mask as { id: unknown }).id),
+    },
     maskType: args.maskType,
     invert: args.invert,
   };
-  return {
-    op: "batch",
-    args: {
-      ops: [
-        applyOpacityMaskMutationFor({
-          targetId: args.target,
-          maskId: args.mask,
-          maskType: args.maskType,
-          invert: args.invert,
-        }),
-        stampDrawMetadata(args.target, withOpacityMaskKey(args.envelope, ref)),
-      ],
-    },
-  };
+  return batchMutationFor([
+    applyOpacityMaskMutationFor({
+      targetId: args.target,
+      maskId: args.mask,
+      maskType: args.maskType,
+      invert: args.invert,
+    }),
+    stampDrawMetadata(args.target, withOpacityMaskKey(args.envelope, ref)),
+  ]);
 }
 
 /** THE release batch — the op plus the unstamp. ONE batch ⇒ 1 undo
@@ -270,16 +269,11 @@ export function opacityMaskApplyBatchFor(args: {
 export function opacityMaskReleaseBatchFor(args: {
   target: ElementId;
   envelope: PluginMetadataEnvelope | null;
-}): Mutation {
-  return {
-    op: "batch",
-    args: {
-      ops: [
-        releaseOpacityMaskMutationFor(args.target),
-        stampDrawMetadata(args.target, withOpacityMaskKey(args.envelope, null)),
-      ],
-    },
-  };
+}): MutationInput {
+  return batchMutationFor([
+    releaseOpacityMaskMutationFor(args.target),
+    stampDrawMetadata(args.target, withOpacityMaskKey(args.envelope, null)),
+  ]);
 }
 
 // --------------------------------------------------------- host reads
@@ -482,7 +476,8 @@ export function contributeOpacityMaskCommands(host: BundleHost): Disposable {
     }),
     host.contribute.command({
       id: RELEASE_OPACITY_MASK_COMMAND_ID,
-      title: "Transparency: Release opacity mask (the artwork comes back on top)",
+      title:
+        "Transparency: Release opacity mask (the artwork comes back on top)",
       category: OPACITY_MASK_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyReleaseOpacityMask(host, payloadOf(payload)).then(() => undefined),

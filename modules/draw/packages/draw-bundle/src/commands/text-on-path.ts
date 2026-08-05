@@ -117,8 +117,8 @@ import type {
   BundleHost,
   Disposable,
   ElementId,
-  Mutation,
   PluginMetadataEnvelope,
+  MutationInput,
 } from "@paged-media/plugin-api";
 
 import { stampDrawMetadata } from "./appearance-bake";
@@ -134,6 +134,7 @@ import {
   type PathTypeAlignment,
   type TextPathSpec,
 } from "./v58-wire";
+import { batchMutationFor } from "./v59-wire";
 
 export const TEXT_ON_PATH_COMMAND_CATEGORY = "Type";
 
@@ -278,7 +279,7 @@ export function textOnPathAttachBatchFor(args: {
   spec: TextPathSpec;
   /** The host's CURRENT envelope, so every other draw key survives. */
   envelope: PluginMetadataEnvelope | null;
-}): Mutation {
+}): MutationInput {
   const ref: TextOnPathRef = {
     story: args.storyId,
     pathTypeAlignment: args.spec.pathTypeAlignment ?? null,
@@ -286,15 +287,10 @@ export function textOnPathAttachBatchFor(args: {
     startBracket: args.spec.startBracket ?? null,
     endBracket: args.spec.endBracket ?? null,
   };
-  return {
-    op: "batch",
-    args: {
-      ops: [
-        attachTextToPathMutationFor(args.element, args.storyId, args.spec),
-        stampDrawMetadata(args.element, withTextOnPathKey(args.envelope, ref)),
-      ],
-    },
-  };
+  return batchMutationFor([
+    attachTextToPathMutationFor(args.element, args.storyId, args.spec),
+    stampDrawMetadata(args.element, withTextOnPathKey(args.envelope, ref)),
+  ]);
 }
 
 /** THE detach batch — the op plus the unstamp. ONE batch ⇒ 1 undo
@@ -302,19 +298,11 @@ export function textOnPathAttachBatchFor(args: {
 export function textOnPathDetachBatchFor(args: {
   element: ElementId;
   envelope: PluginMetadataEnvelope | null;
-}): Mutation {
-  return {
-    op: "batch",
-    args: {
-      ops: [
-        detachTextFromPathMutationFor(args.element),
-        stampDrawMetadata(
-          args.element,
-          withTextOnPathKey(args.envelope, null),
-        ),
-      ],
-    },
-  };
+}): MutationInput {
+  return batchMutationFor([
+    detachTextFromPathMutationFor(args.element),
+    stampDrawMetadata(args.element, withTextOnPathKey(args.envelope, null)),
+  ]);
 }
 
 // --------------------------------------------------------- host reads
@@ -336,7 +324,9 @@ export async function documentStories(
 ): Promise<StorySummaryLike[]> {
   try {
     const raw = await host.document.collection<StorySummaryLike>("stories");
-    return raw.filter((s) => typeof s?.selfId === "string" && s.selfId.length > 0);
+    return raw.filter(
+      (s) => typeof s?.selfId === "string" && s.selfId.length > 0,
+    );
   } catch {
     host.log.debug("text on path: the stories collection is unreadable");
     return [];
@@ -454,7 +444,8 @@ function reportRefusal(
   error: unknown,
 ): string {
   const reason =
-    v58RefusalReason(error) ?? "the engine refused the text-on-a-path operation";
+    v58RefusalReason(error) ??
+    "the engine refused the text-on-a-path operation";
   host.log.warn(`${label}: ${reason}`);
   host.bindings.publish(BIND_TEXT_ON_PATH_STATUS, reason);
   return reason;
@@ -593,7 +584,8 @@ export function contributeTextOnPathCommands(host: BundleHost): Disposable {
   const disposers = [
     host.contribute.command({
       id: ATTACH_TEXT_TO_PATH_COMMAND_ID,
-      title: "Type: Attach story to path (flows an EXISTING story — no story is created)",
+      title:
+        "Type: Attach story to path (flows an EXISTING story — no story is created)",
       category: TEXT_ON_PATH_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyAttachTextToPath(host, payloadOf(payload)).then(() => undefined),

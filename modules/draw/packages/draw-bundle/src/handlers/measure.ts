@@ -58,7 +58,7 @@ import type {
   CanvasPointerEvent,
   ElementId,
   GestureHandler,
-  ToolPreviewShape,
+  ToolPreviewText,
 } from "@paged-media/plugin-api";
 
 import {
@@ -83,24 +83,15 @@ export const OVERLAY_TEXT_FEATURE = "overlay.text@1";
  *  normal — "beside the line", not on top of it. */
 const READOUT_OFFSET_PT = 10;
 
-/** The overlay TEXT primitive (contract `ToolPreviewText`).
+/** The overlay TEXT primitive.
  *
- *  SKEW, named: the INSTALLED `@paged-media/plugin-api`
- *  (0.2.25-canary.0) predates the variant, so its `ToolPreviewShape`
- *  union does not carry it and this is a local MIRROR of the contract
- *  shape — the same fields, verbatim. The single cast lives in
- *  `measureTextPreview` below; when the published contract catches up,
- *  delete this interface and import the type. */
-export interface ToolPreviewTextMirror {
-  kind: "text";
-  pageId: string;
-  x: number;
-  y: number;
-  text: string;
-  size?: number;
-  anchor?: "start" | "middle" | "end";
-  background?: boolean;
-}
+ *  SKEW CLOSED (`0.2.28-canary.0`): this used to be a local MIRROR of
+ *  the contract shape with a cast, because the installed
+ *  `0.2.25-canary.0` predated the variant. The published
+ *  `ToolPreviewShape` union now carries `ToolPreviewText`, so the mirror
+ *  is an ALIAS and the cast is gone. The name is kept because it is part
+ *  of this bundle's exported surface. */
+export type ToolPreviewTextMirror = ToolPreviewText;
 
 /** The label the on-canvas readout shows: distance in pt + the angle. */
 export function measureReadoutLabel(readout: MeasureReadout): string {
@@ -138,7 +129,12 @@ export function measureTextPreview(
 const SNAP_TOLERANCE_PX = 8;
 
 /** The path-bearing kinds worth snapping to. */
-const PATH_KINDS = new Set(["polygon", "rectangle", "textFrame", "graphicLine"]);
+const PATH_KINDS = new Set([
+  "polygon",
+  "rectangle",
+  "textFrame",
+  "graphicLine",
+]);
 
 /** The `nearestPathPoint` reply payload (wire B-06) — typed LOCALLY
  *  because plugin-api's curated wire subset doesn't carry it yet (no
@@ -176,9 +172,8 @@ export async function nearestPathPointOnPage(
       payload: { id: target, point: [local[0], local[1]] },
     });
     if (reply.kind !== "nearestPathPoint") return null;
-    const result = (
-      reply.payload as { result: NearestPathPointWire | null }
-    ).result;
+    const result = (reply.payload as { result: NearestPathPointWire | null })
+      .result;
     // The reply's distance is LOCAL-space — scale the page-space
     // tolerance into local (the anchors.ts pick-tolerance idiom).
     if (!result || result.distance > tolerancePt / affineScale(matrix)) {
@@ -209,12 +204,7 @@ export function createMeasureHandler(host: BundleHost): GestureHandler {
     // TEXT readout once it freezes (module-header honesty note). Without
     // `overlay.text@1` the line stays in both states — the old behavior.
     if (canDrawText && !snapshot.measuring && snapshot.readout) {
-      host.overlay.setToolPreview(
-        measureTextPreview(
-          pageId,
-          snapshot.readout,
-        ) as unknown as ToolPreviewShape,
-      );
+      host.overlay.setToolPreview(measureTextPreview(pageId, snapshot.readout));
     } else {
       host.overlay.setToolPreview({
         pageId,

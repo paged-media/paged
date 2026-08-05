@@ -64,10 +64,7 @@ import { openHost } from "./host";
 const POLY = { kind: "polygon", id: F1_MULTI_SHAPE.ids.polygon! } as ElementId;
 const polyRef = { kind: "polygon", id: F1_MULTI_SHAPE.ids.polygon! };
 
-function pointer(
-  point: [number, number],
-  shift = false,
-): CanvasPointerEvent {
+function pointer(point: [number, number], shift = false): CanvasPointerEvent {
   return {
     pageId: F1_MULTI_SHAPE.pageId,
     pagePoint: point,
@@ -192,12 +189,44 @@ describe("draw conformance — measure tool (Phase 4c)", () => {
       ).toBe("50.00 pt · 53.1°");
     });
 
-    it("WITHOUT the flag the frozen measurement keeps the LINE (this host — real skew)", () => {
-      // The installed @paged-media/plugin-sdk (0.2.25-canary.0) has no
-      // `overlay.text@1` in HOST_FEATURES, so this is the branch the
-      // harness actually exercises today.
-      expect(h.host.supports(OVERLAY_TEXT_FEATURE)).toBe(false);
+    it("the INSTALLED host now serves overlay.text@1 — the wall is closed", () => {
+      // THIS ASSERTION USED TO BE `.toBe(false)`, and the test was named
+      // "real skew": `0.2.25-canary.0` had no `overlay.text@1` in
+      // HOST_FEATURES, so the Measure tool's on-canvas readout could
+      // never fire on a real host and only the binding carried it.
+      //
+      // The `0.2.28-canary.0` repin closed that. The flag ships, the
+      // contract's `ToolPreviewShape` union carries `ToolPreviewText`,
+      // and the frozen measurement now draws its label on canvas with
+      // NO synthetic host — which is what the next test needed one for.
+      expect(h.host.supports(OVERLAY_TEXT_FEATURE)).toBe(true);
+
       const handler = createMeasureHandler(h.host);
+      handler.onActivate(undefined as never);
+      handler.onPointerDown(pointer([10, 10]));
+      handler.onPointerUp(pointer([110, 10]));
+      const frozen = h.lastToolPreview() as unknown as ToolPreviewTextMirror;
+      expect(frozen.kind).toBe("text");
+      expect(frozen.text).toBe("100.00 pt · 0.0°");
+      // The binding still publishes in BOTH branches — panels read it.
+      expect(
+        (h.host.bindings.get(BIND_MEASURE_READOUT) as MeasureReadout).distance,
+      ).toBeCloseTo(100);
+      handler.onDeactivate("switch");
+    });
+
+    it("WITHOUT the flag the frozen measurement keeps the LINE", () => {
+      // The degraded branch is still REACHABLE and still supported: an
+      // editor older than this SDK serves no `overlay.text@1`. It just
+      // needs a synthetic host to reach now — the mirror image of what
+      // the with-flag test needed before the repin.
+      const plainHost = {
+        ...h.host,
+        supports: (feature: string) =>
+          feature === OVERLAY_TEXT_FEATURE ? false : h.host.supports(feature),
+      } as unknown as BundleHost;
+
+      const handler = createMeasureHandler(plainHost);
       handler.onActivate(undefined as never);
       handler.onPointerDown(pointer([10, 10]));
       handler.onPointerUp(pointer([110, 10]));

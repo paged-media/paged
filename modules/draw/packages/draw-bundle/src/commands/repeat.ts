@@ -172,6 +172,7 @@ import type {
   ElementId,
   Mutation,
   PluginMetadataEnvelope,
+  MutationInput,
 } from "@paged-media/plugin-api";
 import {
   boundsCenter,
@@ -202,6 +203,7 @@ import {
 import { leafIdsOf } from "./select-same";
 import { insertPathMutationFor } from "../handlers/insert-path";
 import {
+  batchMutationFor,
   bindCreatedMutationFor,
   handleElementId,
   pasteIntoMutationFor,
@@ -411,7 +413,9 @@ const pair = (
 
 const boundsOrNull = (v: unknown): RepeatBounds | null => {
   if (!Array.isArray(v) || v.length !== 4) return null;
-  const out = v.map((n) => (typeof n === "number" && Number.isFinite(n) ? n : NaN));
+  const out = v.map((n) =>
+    typeof n === "number" && Number.isFinite(n) ? n : NaN,
+  );
   return out.some(Number.isNaN) ? null : (out as unknown as RepeatBounds);
 };
 
@@ -560,7 +564,9 @@ export function radialCenterOfDraft(
 export function mirrorDefaultOffset(angleDeg: number, size: Vec2): number {
   const r = (angleDeg * Math.PI) / 180;
   // |n| projected onto the box: |sin θ|·w/2 + |cos θ|·h/2.
-  return (Math.abs(Math.sin(r)) * size[0] + Math.abs(Math.cos(r)) * size[1]) / 2;
+  return (
+    (Math.abs(Math.sin(r)) * size[0] + Math.abs(Math.cos(r)) * size[1]) / 2
+  );
 }
 
 /** The copies a plan produces, in INSERTION order (placement-major, then
@@ -628,7 +634,10 @@ export function parseRepeatLibrary(bytes: Uint8Array | null): RepeatLibrary {
   for (const entry of Array.isArray(lib.repeats) ? lib.repeats : []) {
     const r = (entry ?? {}) as Partial<RepeatRecord>;
     if (typeof r.id !== "string" || r.id.length === 0) continue;
-    const clip = (r.clipFrame ?? null) as { kind?: unknown; id?: unknown } | null;
+    const clip = (r.clipFrame ?? null) as {
+      kind?: unknown;
+      id?: unknown;
+    } | null;
     const clipKind = clip ? strOrNull(clip.kind) : null;
     const clipId = clip ? strOrNull(clip.id) : null;
     repeats.push({
@@ -702,13 +711,15 @@ export function removeRepeatRecordFrom(
 export function repeatSourceOf(
   env: PluginMetadataEnvelope | null,
 ): RepeatSourceRef | null {
-  const raw = (env?.data as { repeatSource?: unknown } | undefined)?.repeatSource;
+  const raw = (env?.data as { repeatSource?: unknown } | undefined)
+    ?.repeatSource;
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Partial<RepeatSourceRef>;
   if (typeof r.repeat !== "string") return null;
   return {
     repeat: r.repeat,
-    index: typeof r.index === "number" && Number.isFinite(r.index) ? r.index : 0,
+    index:
+      typeof r.index === "number" && Number.isFinite(r.index) ? r.index : 0,
   };
 }
 
@@ -831,9 +842,9 @@ export function repeatBatchFor(args: {
   plan: RepeatPlan;
   sourceEnvelopes: readonly (PluginMetadataEnvelope | null)[];
   previous?: RepeatGeneration | null;
-}): Mutation {
+}): MutationInput {
   const { plan } = args;
-  const ops: Mutation[] = [];
+  const ops: MutationInput[] = [];
   const clipping = plan.clipRect !== null;
 
   if (plan.clipRect) {
@@ -942,7 +953,7 @@ export function repeatBatchFor(args: {
       ]),
     );
   }
-  return { op: "batch", args: { ops } };
+  return batchMutationFor(ops);
 }
 
 /**
@@ -967,13 +978,10 @@ export function repeatBatchFor(args: {
 export function repeatClipBatchFor(
   clipFrame: ElementId,
   instances: readonly ElementId[],
-): Mutation {
-  return {
-    op: "batch",
-    args: {
-      ops: instances.map((id) => pasteIntoMutationFor(clipFrame, id)),
-    },
-  };
+): MutationInput {
+  return batchMutationFor(
+    instances.map((id) => pasteIntoMutationFor(clipFrame, id)),
+  );
 }
 
 /** The EXPAND batch — stop tracking, keep every piece of artwork. Drops
@@ -992,7 +1000,10 @@ export function repeatExpandBatchFor(
     op: "batch",
     args: {
       ops: leaves.map((leaf) =>
-        stampDrawMetadata(leaf.id, withRepeatKey(leaf.envelope, leaf.key, null)),
+        stampDrawMetadata(
+          leaf.id,
+          withRepeatKey(leaf.envelope, leaf.key, null),
+        ),
       ),
     },
   };
@@ -1019,8 +1030,8 @@ export function repeatReleaseBatchFor(args: {
     id: ElementId;
     envelope: PluginMetadataEnvelope | null;
   }[];
-}): Mutation {
-  const ops: Mutation[] = [];
+}): MutationInput {
+  const ops: MutationInput[] = [];
   if (args.group && typeof args.group.id === "string") {
     ops.push(ungroupMutationFor(args.group.id));
   }
@@ -1040,7 +1051,7 @@ export function repeatReleaseBatchFor(args: {
       ),
     );
   }
-  return { op: "batch", args: { ops } };
+  return batchMutationFor(ops);
 }
 
 // -------------------------------------------------------- host: the part
@@ -1246,7 +1257,9 @@ export async function resolveRepeat(
   const links = await repeatLinks(host);
   const distinct = new Set([
     ...links.sources.map((s) => s.ref.repeat),
-    ...links.instances.map((i) => i.ref?.repeat).filter((r): r is string => !!r),
+    ...links.instances
+      .map((i) => i.ref?.repeat)
+      .filter((r): r is string => !!r),
   ]);
   return distinct.size === 1 ? [...distinct][0]! : null;
 }
@@ -1551,7 +1564,8 @@ export async function applyMakeRepeat(
   const built = await emitRepeat(host, { plan, label });
   if (built.instances.length === 0) return [];
   const name =
-    nameFor(p, "") ?? `${kind[0].toUpperCase()}${kind.slice(1)} repeat ${library.repeats.length + 1}`;
+    nameFor(p, "") ??
+    `${kind[0].toUpperCase()}${kind.slice(1)} repeat ${library.repeats.length + 1}`;
   const saved = await writeRepeatLibrary(
     host,
     upsertRepeatRecord(library, {
@@ -1689,7 +1703,9 @@ export async function applySelectRepeatInstances(
     ...links.instances.map((i) => i.id),
   ];
   if (ids.length === 0) {
-    host.log.debug(`${label}: "${repeat}" has no instances on the page — no-op`);
+    host.log.debug(
+      `${label}: "${repeat}" has no instances on the page — no-op`,
+    );
   }
   await host.selection.set(ids);
   return ids;
