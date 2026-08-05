@@ -311,8 +311,42 @@ export type BindingOp = MutationInput["op"];
  * see the vocabulary rule in this file's header.
  */
 export interface BindingProviderScope {
-  /** Typed property paths this provider reads / writes. */
+  /** Typed property paths this provider READS. (Also the write set unless
+   *  {@link BindingProviderScope.writablePaths} narrows it.) */
   paths?: readonly PropertyPath[];
+  /**
+   * The subset of {@link BindingProviderScope.paths} this provider accepts
+   * WRITES for. OMITTED means "all of them" — the behaviour before this
+   * member existed, so no existing provider changes.
+   *
+   * WHY IT EXISTS, and why the first two proof consumers did not need it.
+   * The property-WRITE lane was the one lane no consumer had exercised:
+   * Layers writes STRUCTURALLY (`layerMove` / `layerSetVisible` through
+   * `applyMutation`) and Swatches likewise (`editSwatch`), and both of
+   * those are DECLARED in `ops` — so a host panel can ask
+   * "may this control work?" synchronously and DISABLE it, which is
+   * exactly what ADR-023's Swatches slice does. The property lane had no
+   * such declaration: `writeProperty` is an optional CALLBACK, and a
+   * callback's absence is not visible through `activeProviders()`.
+   *
+   * The consequence was a contradiction inside this very file. The op
+   * lane's rule is "an undeclared op must not reach core — the panel is
+   * showing somebody else's rows"; the path lane's rule (below, now
+   * corrected) said the opposite: that an absent `writeProperty` lets
+   * writes fall through to core. Fall-through there is the WRITE-side
+   * form of the `absent` lie — the panel is showing a sheet cell's font
+   * size and the commit lands on whatever core text the caret last
+   * touched.
+   *
+   * So a provider that can READ a path but not WRITE it says so HERE, the
+   * host reads the declaration, and the control renders read-only instead
+   * of being fake-interactive. Forced by paged.sheet as the
+   * Character/Paragraph provider: the sheet engine has no cell-style
+   * write API at all (all spreadsheet semantics live in Rust, and adding
+   * one is a Rust change), so it reads the whole surface and writes none
+   * of it — `writablePaths: []`.
+   */
+  writablePaths?: readonly PropertyPath[];
   /** Named core collections whose ROWS this provider serves. */
   collections?: readonly CollectionName[];
   /** Mutation ops this provider takes first refusal on — the STRUCTURAL
@@ -359,10 +393,19 @@ export interface BindingProvider {
     request: BindingPropertyRequest,
   ): BindingRead | Promise<BindingRead>;
   /** Write one typed path at one target. OPTIONAL even with declared
-   *  paths — a read-only provider (a computed readout) is legitimate;
-   *  its absence means writes fall through to core, which is the honest
-   *  behaviour for a provider that only wants to CHANGE what a panel
-   *  displays. */
+   *  paths — a read-only provider (a computed readout) is legitimate.
+   *
+   *  CORRECTED 2026-08-05 (the Character/Paragraph consumer). This used
+   *  to say its absence means "writes fall through to core, which is the
+   *  honest behaviour". It is not honest: a provider that CLAIMED the
+   *  read owns the target, and sending the commit to core writes
+   *  whatever core's selection happens to be — the write-side form of
+   *  the `absent` lie the whole seam exists to prevent. A read-only
+   *  provider now DECLARES itself with
+   *  {@link BindingProviderScope.writablePaths}, and the host renders
+   *  those controls read-only rather than routing their writes anywhere.
+   *  A claimed path whose write the registry refuses is DROPPED, never
+   *  re-aimed at core. */
   writeProperty?(
     request: BindingPropertyWrite,
   ): BindingWrite | Promise<BindingWrite>;

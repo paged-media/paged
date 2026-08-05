@@ -1680,3 +1680,42 @@ Recorded here rather than left for phase C to discover:
   plugin-image's `(from, to)` reorder are reconcilable; a verb with no core op
   at all (plugin-image's "duplicate layer") has no lane and stays a plugin
   command. That is the vocabulary rule biting where it should.
+
+### 18.11 `provides.writablePaths` — the read/write split (added by the phase-C/D Character/Paragraph consumer, 2026-08-05)
+
+The property-WRITE lane was the one lane the first two proof consumers never
+exercised, and that is not a coincidence — it is what §18.1's "three shapes"
+was for. **Layers** and **Swatches** both write STRUCTURALLY, through
+`applyMutation`, whose availability is DECLARED in `provides.ops`. So a host
+panel can ask "may this control work?" synchronously and disable it, which is
+exactly what the Swatches slice's `useCollectionOpOffered` does. The property
+lane had no such declaration: `writeProperty` is an optional *callback*, and a
+callback's absence does not reach `activeProviders()`.
+
+That left a contradiction inside §18.3/§18.5. The op lane's rule is *an
+undeclared op must not reach core — the panel is showing somebody else's rows*.
+The path lane's rule said the opposite: that an absent `writeProperty` lets
+writes **fall through to core**. Fall-through there is the WRITE-side form of
+the `absent` lie: the panel is showing a sheet cell's font size and the commit
+lands on whatever core text the caret last touched.
+
+Both halves are now fixed, and both are additive:
+
+- **`BindingProviderScope.writablePaths`** optionally NARROWS `paths` to the
+  subset that accepts writes. **Omitted means all of them**, so no existing
+  provider changes behaviour. `[]` is the honest read-only declaration.
+- **A claimed read is never re-aimed at core on write.** `writeProperty`'s
+  doc comment is corrected; the host drops a refused write for a path a
+  provider claimed, rather than sending it to the engine.
+- Gate 3 grew two checks: a `writablePaths` member outside `paths` is a loud
+  registration error (it would never be asked about — the silent-loss shape
+  the dupe check exists for), and a NON-empty narrowing without
+  `writeProperty()` is too. An EMPTY one needs no callback, because "I read
+  these and write none" is precisely what it declares.
+
+Forced by a real bundle, per the no-speculative-surface rule: **paged.sheet**
+as the Character/Paragraph provider reads a cell's font face/size out of the
+workbook and can write NONE of it — all spreadsheet semantics live in Rust and
+the engine has no cell-style write API — so it declares
+`writablePaths: []` and the host renders those controls read-only instead of
+fake-interactive.

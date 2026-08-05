@@ -187,6 +187,28 @@ describe("contribute.bindingProvider — registration + the three gates", () => 
         readProperty: () => ({ kind: "decline" }),
       }),
     ).toThrow(/lists "layerVisible" twice/);
+    // `writablePaths` NARROWS `paths` — a member outside it would never
+    // be asked about, the same silent loss the dupe check catches.
+    expect(() =>
+      contributeBindingProvider(host, "rasterImage", {
+        provides: { paths: ["layerVisible"], writablePaths: ["layerLocked"] },
+        readProperty: () => ({ kind: "decline" }),
+      }),
+    ).toThrow(/writablePaths lists "layerLocked", which is not in provides.paths/);
+    // A NON-empty narrowing needs the callback; an EMPTY one is exactly
+    // how a read-only provider declares itself and needs none.
+    expect(() =>
+      contributeBindingProvider(host, "rasterImage", {
+        provides: { paths: ["layerVisible"], writablePaths: ["layerVisible"] },
+        readProperty: () => ({ kind: "decline" }),
+      }),
+    ).toThrow(/writablePaths declared without writeProperty/);
+    expect(() =>
+      contributeBindingProvider(host, "rasterImage", {
+        provides: { paths: ["layerVisible"], writablePaths: [] },
+        readProperty: () => ({ kind: "decline" }),
+      }).dispose(),
+    ).not.toThrow();
   });
 
   it("no registry wired: the door warns, hands back an inert handle, never throws", async () => {
@@ -470,7 +492,15 @@ describe("fall-through to core — a typed refusal, never an empty answer", () =
     expect(fake.mutations).toHaveLength(1);
   });
 
-  it("a provider that declares a path but omits writeProperty falls through on WRITES only", async () => {
+  it("a provider that declares a path but omits writeProperty CLAIMS the read and refuses the write", async () => {
+    // The registry's own answer, stated precisely: the read is claimed,
+    // the write is `handled:false`. What the HOST may do with that
+    // refusal is a policy the host owns — and since ADR-023's
+    // Character/Paragraph consumer it is NOT "write core instead": a
+    // claimed read means the provider owns the target, so a refused
+    // write is dropped. `writablePaths` (below) is how a provider says
+    // so up front, so the control never renders editable in the first
+    // place.
     const { host, registry, enter } = setup();
     contributeBindingProvider(host, "rasterImage", {
       provides: { paths: ["layerVisible"] },
@@ -491,6 +521,115 @@ describe("fall-through to core — a typed refusal, never an empty answer", () =
           path: "layerVisible",
           target: { kind: "selection", scope: "element" },
           value: { type: "bool", value: false },
+        })
+      ).handled,
+    ).toBe(false);
+  });
+});
+
+// ═══════════════════════════════════ writablePaths — the read/write split
+
+describe("provides.writablePaths — a provider that READS more than it WRITES", () => {
+  /** paged.sheet's shape as the Character/Paragraph provider: it reads a
+   *  cell's font size/face out of the workbook, and can write NONE of it
+   *  (the sheet engine has no cell-style write API). Before this member
+   *  the difference was invisible to the host — `writeProperty` is a
+   *  callback, and a callback's absence does not reach
+   *  `activeProviders()`. */
+  const readOnly = {
+    provides: {
+      paths: ["characterFontSize", "characterLeading"] as const,
+      writablePaths: [] as const,
+    },
+    readProperty: () => ({
+      kind: "value" as const,
+      value: { type: "length" as const, value: 18 },
+    }),
+    // Present ON PURPOSE: the gate must be the DECLARATION, not the
+    // absence of the callback. A provider whose declaration says
+    // "read-only" is never asked to write even when it could.
+    writeProperty: () => ({ kind: "applied" as const, outcome: applied }),
+  };
+
+  it("omitted ⇒ every declared path is writable (the pre-existing behaviour)", async () => {
+    const { host, registry, enter } = setup();
+    contributeBindingProvider(host, "rasterImage", {
+      provides: { paths: ["layerVisible"] },
+      readProperty: () => ({ kind: "value", value: { type: "bool", value: true } }),
+      writeProperty: () => ({ kind: "applied", outcome: applied }),
+    });
+    enter();
+    const wrote = await registry.writeProperty({
+      path: "layerVisible",
+      target: { kind: "selection", scope: "element" },
+      value: { type: "bool", value: false },
+    });
+    expect(wrote.handled).toBe(true);
+  });
+
+  it("declared-but-not-writable: the READ is claimed, the WRITE never reaches the provider", async () => {
+    const { host, registry, enter } = setup();
+    contributeBindingProvider(host, "rasterImage", readOnly);
+    enter();
+    const read = await registry.readProperty({
+      path: "characterFontSize",
+      target: { kind: "selection", scope: "content" },
+    });
+    expect(read).toEqual({
+      resolved: true,
+      provider: "media.paged.test",
+      read: { kind: "value", value: { type: "length", value: 18 } },
+    });
+    const wrote = await registry.writeProperty({
+      path: "characterFontSize",
+      target: { kind: "selection", scope: "content" },
+      value: { type: "length", value: 24 },
+    });
+    expect(wrote.handled).toBe(false);
+  });
+
+  it("the declaration is visible to the HOST, which is the whole point", () => {
+    const { host, registry, enter } = setup();
+    contributeBindingProvider(host, "rasterImage", readOnly);
+    enter();
+    // `activeProviders()` is the host's synchronous capability question.
+    // A panel reads THIS to render a control read-only — it never probes
+    // by attempting a write and never asks which plugin answered.
+    const [active] = registry.activeProviders();
+    expect(active.provides.paths).toContain("characterFontSize");
+    expect(active.provides.writablePaths).toEqual([]);
+  });
+
+  it("a PARTIAL narrowing writes the declared half and refuses the other", async () => {
+    const { host, registry, enter } = setup();
+    contributeBindingProvider(host, "rasterImage", {
+      provides: {
+        paths: ["characterFontSize", "characterLeading"],
+        writablePaths: ["characterFontSize"],
+      },
+      readProperty: () => ({
+        kind: "value",
+        value: { type: "length", value: 18 },
+      }),
+      writeProperty: () => ({ kind: "applied", outcome: applied }),
+    });
+    enter();
+    const target = { kind: "selection", scope: "content" } as const;
+    expect(
+      (
+        await registry.writeProperty({
+          path: "characterFontSize",
+          target,
+          value: { type: "length", value: 24 },
+        })
+      ).handled,
+    ).toBe(true);
+    expect(
+      (
+        await registry.writeProperty({
+          path: "characterLeading",
+          target,
+          value: { type: "length", value: 24 },
         })
       ).handled,
     ).toBe(false);

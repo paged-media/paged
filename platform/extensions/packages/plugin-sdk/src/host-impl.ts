@@ -637,6 +637,20 @@ export function createBindingProviderRegistry(): BindingProviderBackend {
 
   const declaresPath = (e: RegisteredBindingProvider, path: PropertyPath) =>
     e.provider.provides.paths?.includes(path) ?? false;
+  /** Does this provider accept WRITES for `path`? `writablePaths` is the
+   *  optional NARROWING of `paths`; omitted keeps the pre-existing
+   *  "everything declared is writable". A declared-but-not-writable path
+   *  is skipped here so the provider's `writeProperty` is never called
+   *  for it — the declaration is the gate on this lane exactly as it is
+   *  on the others. */
+  const declaresWritablePath = (
+    e: RegisteredBindingProvider,
+    path: PropertyPath,
+  ) => {
+    const w = e.provider.provides.writablePaths;
+    if (w === undefined) return declaresPath(e, path);
+    return declaresPath(e, path) && w.includes(path);
+  };
   const declaresCollection = (
     e: RegisteredBindingProvider,
     collection: CollectionName,
@@ -725,7 +739,7 @@ export function createBindingProviderRegistry(): BindingProviderBackend {
         request.target.kind === "row" ? request.target.collection : null;
       for (const { entry } of active()) {
         if (rowScoped !== null && !declaresCollection(entry, rowScoped)) continue;
-        if (!declaresPath(entry, request.path)) continue;
+        if (!declaresWritablePath(entry, request.path)) continue;
         if (!entry.provider.writeProperty) continue;
         const write = await entry.provider.writeProperty(request);
         if (write.kind === "decline") continue;
@@ -1110,6 +1124,24 @@ export function createBundleHost(
     dupes("paths", p.provides.paths);
     dupes("collections", p.provides.collections);
     dupes("ops", p.provides.ops);
+    dupes("writablePaths", p.provides.writablePaths);
+    // `writablePaths` NARROWS `paths`; a member outside it is a path the
+    // provider believes it writes and will never be asked about, which is
+    // the silent-loss shape the dupe check exists for.
+    for (const w of p.provides.writablePaths ?? []) {
+      if (!(p.provides.paths ?? []).includes(w)) {
+        gaps.push(
+          `provides.writablePaths lists "${w}", which is not in provides.paths`,
+        );
+      }
+    }
+    if (p.provides.writablePaths !== undefined && !p.writeProperty) {
+      // Not a gap when the list is EMPTY — "I read these and write none"
+      // is precisely what an empty narrowing declares, and a read-only
+      // provider has no write callback to offer.
+      if (p.provides.writablePaths.length > 0)
+        gaps.push("provides.writablePaths declared without writeProperty()");
+    }
     if (
       (p.provides.paths?.length ?? 0) === 0 &&
       (p.provides.collections?.length ?? 0) === 0 &&
