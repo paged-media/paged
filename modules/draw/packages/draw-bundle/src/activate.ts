@@ -119,7 +119,14 @@ import {
   contributeInsertShapeCommands,
   INSERT_SHAPE_COMMAND_IDS,
 } from "./commands/insert-shapes";
-import { contributeBlendCommand } from "./commands/blend";
+import {
+  contributeBlendCommands,
+  BLEND_COMMAND_IDS,
+} from "./commands/blend";
+import {
+  contributeObjectsOnPathCommands,
+  OBJECTS_ON_PATH_COMMAND_IDS,
+} from "./commands/objects-on-path";
 import {
   contributeImageTraceCommand,
   IMAGE_TRACE_COMMAND_IDS,
@@ -163,6 +170,11 @@ import {
 } from "./panels/live-paint-panel";
 import { makePatternPanel, PATTERN_PANEL_ID } from "./panels/pattern-panel";
 import { makeRepeatPanel, REPEAT_PANEL_ID } from "./panels/repeat-panel";
+import { makeBlendPanel, BLEND_PANEL_ID } from "./panels/blend-panel";
+import {
+  makeObjectsOnPathPanel,
+  OBJECTS_ON_PATH_PANEL_ID,
+} from "./panels/objects-on-path-panel";
 import { installStrokePanelBindings, strokePanel } from "./panels/stroke-panel";
 import { contributeSvgIo } from "./io/svg";
 
@@ -296,6 +308,37 @@ export function activate(host: BundleHost): BundleHandle {
     icon: "panel-object-transform",
     ...makeRepeatPanel(host),
   });
+  // Illustrator Phase 3 (§16.2) — BLENDS v1: the Blend Options form. The
+  // three SPACING MODES are the substance of the row (Smooth Color
+  // derives its count from the colour distance, Specified Steps is a
+  // count, Specified Distance divides the SPINE's arc length), and the
+  // panel is where the catalog's "live Blend panel preview" is put in
+  // front of the user for exactly what it is: a preview of the PLAN —
+  // the resolved count and where it came from — not of the artwork,
+  // because re-rendering per keystroke would be an undo step per
+  // keystroke. `BLEND_PANEL_NOTE` carries that verbatim.
+  // (`panel-object-transform` is a REAL glyph in the host's kebab-case
+  // map and is shared with the repeat panel — a shared glyph is honest,
+  // an invented one renders the dock tab ICONLESS, the stroke panel's
+  // recorded lesson.)
+  host.contribute.panel({
+    id: BLEND_PANEL_ID,
+    icon: "panel-object-transform",
+    ...makeBlendPanel(host),
+  });
+  // Illustrator Phase 3 (§16.3) — OBJECTS ON A PATH: the distribution
+  // form. The panel carries the one thing the form cannot say — that
+  // this row MOVES your objects and creates nothing, which is the
+  // opposite of every other arranging feature in this bundle, and that
+  // an object moved off the page rect answers NOTHING at all, not even
+  // its own metadata (RFI C-23, measured on transforms).
+  // (`panel-align` is a REAL glyph in the host's kebab-case map and is
+  // the honest metaphor — this is a distribution.)
+  host.contribute.panel({
+    id: OBJECTS_ON_PATH_PANEL_ID,
+    icon: "panel-align",
+    ...makeObjectsOnPathPanel(host),
+  });
   // B-12 — the stroke DASH presets as commands (the schema binding
   // ceiling is scalar, a dash array is a vector → command-driven). Each
   // commits `setElementProperty{ frameStrokeDashArray, lengths }` to
@@ -426,10 +469,26 @@ export function activate(host: BundleHost): BundleHandle {
   // Rect grid / Polar grid; v0 fixed default geometry — see
   // commands/insert-shapes.ts).
   const insertShapeCommandsSub = contributeInsertShapeCommands(host);
-  // Wave 2 — Blend v0 (two matching-structure paths → 3 interpolated
-  // intermediates, one batch; commands/blend.ts documents the honest
-  // colour scope).
-  const blendCommandSub = contributeBlendCommand(host);
+  // Illustrator Phase 3 (§16.2) — BLENDS v1 (make / update / replace
+  // spine / reverse spine / reverse front-to-back / select keys / expand
+  // / release). Wave 2's v0 shipped ONE command and two undo steps; the
+  // row the catalog names is the three SPACING MODES, a SPINE, easing
+  // with independent colour acceleration, and the two verbs that take a
+  // blend apart. It is the SECOND consumer of C-15's `bindCreated` (after
+  // repeats), so it builds in ONE undo step and rides the same
+  // `v59-wire.ts` seam rather than a second copy of the cast.
+  // commands/blend.ts states every measured count and the two places
+  // this deliberately differs from Illustrator's spine.
+  const blendCommandsSub = contributeBlendCommands(host);
+  // Illustrator Phase 3 (§16.3) — OBJECTS ON A PATH (make / update /
+  // select / expand / release). The one arranging row in this bundle that
+  // creates NOTHING: it writes one `frameTransform` per object, so the
+  // objects on the path ARE the selected objects — element ids survive,
+  // text frames are not refused, and Release writes each object's
+  // remembered home transform straight back. It shares §16.2's
+  // arc-length placement kernel (`draw-geometry/src/along-path.ts`) and
+  // nothing above it.
+  const objectsOnPathCommandsSub = contributeObjectsOnPathCommands(host);
   // Illustrator Phase 2 (last row) — IMAGE TRACE v0. The one capability
   // in this repo whose kernel is computer vision rather than path
   // algebra, so it is the one that ships a Rust/wasm artifact
@@ -479,7 +538,7 @@ export function activate(host: BundleHost): BundleHandle {
   // host predates the importer/exporter doors.
   const svgIoSub = contributeSvgIo(host);
   host.log.info(
-    `activated — ${tools.length} tools + 2 schema panels + 6 React panels + ` +
+    `activated — ${tools.length} tools + 2 schema panels + 8 React panels + ` +
       `${
         DASH_COMMAND_IDS.length +
         FILL_GRADIENT_COMMAND_IDS.length +
@@ -501,7 +560,8 @@ export function activate(host: BundleHost): BundleHandle {
         SELECT_SAME_COMMAND_IDS.length +
         INSERT_SHAPE_COMMAND_IDS.length +
         IMAGE_TRACE_COMMAND_IDS.length +
-        1 // blendSelected
+        BLEND_COMMAND_IDS.length +
+        OBJECTS_ON_PATH_COMMAND_IDS.length
       } commands + 1 edit context + ` +
       `${layersProviderHandle ? 1 : 0} binding providers ` +
       `(apiVersion ${manifest.apiVersion})`,
@@ -518,7 +578,8 @@ export function activate(host: BundleHost): BundleHandle {
       layersProviderHandle?.dispose();
       svgIoSub.dispose();
       imageTraceCommandSub.dispose();
-      blendCommandSub.dispose();
+      objectsOnPathCommandsSub.dispose();
+      blendCommandsSub.dispose();
       insertShapeCommandsSub.dispose();
       selectSameCommandsSub.dispose();
       textOnPathCommandsSub.dispose();

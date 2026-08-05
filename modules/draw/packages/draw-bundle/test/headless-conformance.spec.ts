@@ -112,10 +112,11 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
       // VERBATIM through the harness's registration hook. Both are
       // honest — the registry really got a panel; the log keeps the
       // schema so conformance can assert it. Stroke first, then fill
-      // (Phase 2d), then the five React panels (appearance, graphic
-      // styles, symbols, live paint, pattern, repeat — Layers is
-      // retired). Then the eighty commands in registration order, then
-      // the W3.2 edit context. (Pen is a core built-in.)
+      // (Phase 2d), then the EIGHT React panels (appearance, graphic
+      // styles, symbols, live paint, pattern, repeat, blend,
+      // objects-on-path — Layers is retired). Then the ninety-two
+      // commands in registration order, then the W3.2 edit context.
+      // (Pen is a core built-in.)
       expect(harness.contributions.map((c) => c.kind)).toEqual([
         // Three anchor editors + the pro set (Curvature, Pencil,
         // Gradient Annotator, Measure, Shape Builder, Corner Radius) +
@@ -172,6 +173,14 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         // The REPEAT OPTIONS panel (§12.4's radial/grid/mirror
         // parameters + the two honesty notes: what "live" means here,
         // and what clipping costs) — likewise expert-leaf React.
+        "panel",
+        // The BLEND OPTIONS panel (§16.2's three spacing modes, the
+        // spine verbs, easing + independent colour acceleration — and
+        // the catalog's "live preview" as exactly what it is here: a
+        // preview of the PLAN, not of the artwork).
+        "panel",
+        // The OBJECTS ON PATH panel (§16.3's distribution form + the
+        // note that this row MOVES your objects and creates none).
         "panel",
         // B-12 — the stroke dash-preset commands (Solid / Dashed /
         // Dotted / Dash-dot).
@@ -294,7 +303,26 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "command",
         "command",
         "command",
-        // Wave 2 — Blend selected.
+        // Illustrator Phase 3 (§16.2) — Blends v1 (Make / Update /
+        // Replace spine / Reverse spine / Reverse front-to-back / Select
+        // keys / Expand / Release). Wave 2's v0 was the first of these
+        // eight and paid two undo steps; C-15's bindCreated made every
+        // verb one.
+        "command",
+        "command",
+        "command",
+        "command",
+        "command",
+        "command",
+        "command",
+        "command",
+        // Illustrator Phase 3 (§16.3) — Objects on a path (Make /
+        // Update / Select / Expand / Release). The one arranging row
+        // here that creates nothing: one frameTransform per object.
+        "command",
+        "command",
+        "command",
+        "command",
         "command",
         // Illustrator Phase 2 (last row) — Image Trace v0 (the wasm
         // lane: crates/trace-js over visioncortex).

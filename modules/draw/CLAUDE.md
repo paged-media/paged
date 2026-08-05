@@ -111,7 +111,42 @@ recipe is the FIFTH `.paged` container part here. The on-canvas control
 is REAL but bounded and the code says where: a drag steers ONE parameter
 and the overlay draws a GUIDE, because `setToolPreview` takes ONE
 polyline; the artwork is rebuilt once on RELEASE, because a re-plan per
-pointer-move would be an undo step per sample), OPACITY MASKS and TYPE ON
+pointer-move would be an undo step per sample),
+BLENDS v1 (§16.2 — wave 2's v0 was ONE command and two undo steps; the
+CATALOG ROW is the three SPACING MODES, and all three reduce to a step
+count: Specified Steps IS the count, Specified Distance divides the
+SPINE's arc length, Smooth Color divides the COLOUR distance — the
+largest per-channel difference between the two key fills. A TYPED count
+over the 200 ceiling REFUSES and a DERIVED one CLAMPS, because a typo is
+not data. THE SPINE is the path the intermediates follow and its default
+— the straight line between the two keys — is PROVABLY INERT: a
+default-options v1 blend places exactly the lerp v0 placed, so the spine
+offset and the orientation turn both vanish and every deviation is
+opt-in. TWO DELIBERATE DIFFERENCES FROM ILLUSTRATOR, both named in the
+code: a replaced spine KEEPS ITS OWN PAINT (clearing a stroke the user
+drew, unasked, is a worse surprise than a visible spine) and is NOT put
+in the blend's group (so it stays selectable — the whole reason to
+replace one). The two REVERSES are different verbs and both are built:
+reverse SPINE moves geometry, reverse FRONT-TO-BACK moves nothing and
+costs no `reorderElement`, because insertion order IS paint order. Easing
+has a STRENGTH that is a blend, not an exponent, so strength 0 is the
+identity for every curve; colour gets its own curve only when
+`colorEasing` is non-null — that IS "independent colour acceleration".
+The catalog's "live Blend panel preview" is honest about its scope: the
+panel previews the PLAN — the resolved count and where it came from —
+not the artwork, because re-rendering per keystroke is an undo step per
+keystroke. SECOND consumer of C-15, so make/update/replace-spine/both
+reverses/expand/release are ONE undo step EACH),
+OBJECTS ON A PATH (§16.3 — and read this before the code: IT MOVES YOUR
+OBJECTS AND CREATES NOTHING, which is the opposite of every other
+arranging row here. One `setElementProperty { frameTransform }` per
+object, so the objects on the path ARE the selected ones: element ids
+survive, a foreign plugin's metadata on them survives, TEXT IS NOT
+REFUSED (nothing copies a story because nothing is copied), and RELEASE
+is an exact restore rather than an inverse. Nothing is grouped, nothing
+is scaled to fit, and the count mode's count IS the object count —
+there is deliberately no way to ask for more slots than objects, because
+that is what a Repeat is), OPACITY MASKS and TYPE ON
 A PATH (the two protocol-58 rows — see the v58 seam note below), SVG
 import/export, and the `vectorGraphic` EDIT CONTEXT
 (double-click a path-bearing kind → anchor-editing tool-set focused,
@@ -119,9 +154,30 @@ stroke panel raised, Esc pops out). The bundle drives end-to-end through the rea
 the draw-plugin e2e (`editor` `apps/canvas/tests/e2e/draw-plugin.spec.ts`)
 and a DTP journey (`tests/journey/plugins/draw.journey.spec.ts`) author a
 path with the built-in Pen, then refine its anchors (add/delete/convert)
-and stroke through the bundle. The three TS packages carry 848 passing
-vitest (geometry 185, tools 126, bundle 537) and typecheck clean; the two
+and stroke through the bundle. The three TS packages carry 938 passing
+vitest (geometry 210, tools 126, bundle 602) and typecheck clean; the two
 crates carry 26 `cargo test` (draw-trace 22, trace-js 4).
+
+**ONE SHARED KERNEL, AND ONLY ONE.** §16.2 (blend spines) and §16.3
+(objects on a path) landed together, so the "is there a common placement
+kernel?" question had to be answered with facts. There is, and it is
+`draw-geometry/src/along-path.ts`: BOTH rows need *point + tangent at a
+fraction of a path's ARC LENGTH*, which means flattening, cumulative
+lengths, a lookup and a tangent — ~150 lines that go wrong twice if
+written twice — plus the same count/spacing distribution rule on top
+(`endpoints: "interior"` keeps a blend's intermediates off its keys;
+`"inclusive"` puts the first and last object on an open path's ends).
+What is deliberately NOT shared is everything ABOVE the slot list,
+because there the two rows need DIFFERENT facts: a blend interpolates NEW
+geometry between two shapes and offsets it onto the spine; objects-on-a-
+path moves EXISTING elements — their own geometry, their own ids — about
+a pivot. Those are three lines each and share nothing but the word
+"affine". One measured detail the kernel carries because it would
+otherwise be silently wrong: a COUNT distribution survives a
+ZERO-LENGTH path (two CONCENTRIC key objects give a blend exactly that,
+and collapsing it to one intermediate would drop every step of an
+ordinary concentric blend); only SPACING collapses, because a zero-length
+path has no gaps to walk.
 
 **THE STRUCTURAL VERBS ARE NOT THIS BUNDLE'S.** Group / Ungroup /
 Select parent group used to be `media.paged.draw.command.*`, which meant
@@ -212,7 +268,18 @@ a trap. That is why the §12.4 REPEAT tool ships with NO shortcut: a
 keyless working tool is honest (`paged.tool.smooth` is one), a stolen
 canonical key is not. Moving the three tools onto their canonical keys
 is a separate, deliberate change — do it as one pass, not by taking one
-key here.
+key here. **The §16.2 and §16.3 rows changed nothing above**: they ship
+as COMMANDS AND PANELS ONLY, with no new tool and therefore no shortcut
+question at all. `shift+t`, `i`, `k` and `shift+z` are still the four
+free registers, and the first three are still owed to the tools whose
+canonical keys they are.
+
+**`.paged` CONTAINER PARTS: there are now SEVEN** — graphic styles,
+symbols, live paint, pattern, repeat, blend (`blend.json`) and objects-on-
+path (`objects-on-path.json`). The last one is the only feature whose
+recipe is NOT load-bearing: each object's HOME transform rides its own
+metadata link, so release and update work on a host with no container
+writer and only the distribution PARAMETERS are lost there.
 
 **RFI C-15 IS NOW IN THE CONTRACT AND THE TWO-BATCH FLOOR IS BROKEN.**
 This section used to say C-15 had landed in core but was unreachable
@@ -251,12 +318,52 @@ inconsistently — `deleteFrame { frameId: "$h:g" }` reaches the GROUP
 insert's id>)". With no earlier bind, the dissolve resolves correctly.
 Repeats reads the previous group out of the TREE before it builds.
 
-THE OTHER SEVEN FLOWS ARE STILL TWO BATCHES — `pattern.ts`,
+BLENDS v1 is the SECOND consumer and is likewise ONE undo step for every
+verb (`blend.spec.ts` measures make / update / both reverses / expand /
+release). OBJECTS ON A PATH is one too, and for a different reason worth
+keeping separate: it creates NOTHING, so it needs no `bindCreated`, no
+batch-ordering rule and no group — just N `frameTransform` writes in one
+batch.
+
+THE OTHER SIX FLOWS ARE STILL TWO BATCHES — `pattern.ts`,
 `appearance-bake.ts`, `compound-path.ts` (release), `symbols.ts`,
-`image-trace.ts`, `live-paint.ts`, `blend.ts` — and each is now one
-mechanical edit away from one, not a redesign. Their "TWO batches ⇒ 2
-undo steps" notes are still TRUE as shipped; the reason is no longer
-"the contract cannot", it is "not yet converted".
+`image-trace.ts`, `live-paint.ts` — and each is now one mechanical edit
+away from one, not a redesign. Their "TWO batches ⇒ 2 undo steps" notes
+are still TRUE as shipped; the reason is no longer "the contract cannot",
+it is "not yet converted".
+
+**THE `frameTransform` DOOR, and three things measured about it** (the
+§16.3 lane rides it; protocol 60):
+- it REPLACES an element's item transform, it does NOT compose with it.
+  Writing the same rotation twice leaves the object at 30°, not 60° —
+  which is what makes an idempotent Update and an EXACT (not inverse)
+  Release possible at all;
+- `elementGeometry.bounds` is the frame box in the element's OWN space
+  and is NOT recomputed by a transform, nor — separately measured — by a
+  `framePath` write. The transform comes back beside it, so page space is
+  `transformBounds(bounds, itemTransform)`. Anything reading `bounds` as
+  if it were page space is wrong on any transformed element;
+- N writes in ONE batch is ONE undo step.
+
+**RFI C-23 IS NARROWER THAN "PAGE-KEYED" SUGGESTS, and two plausible
+readings of it are FALSE.** Both were written into `objects-on-path.ts`
+as fact and then deleted when they were measured:
+- `getMetadata` is NOT page-keyed, and neither is `document.tree()`. An
+  element moved off the page still answers its own link and is still
+  listed in the tree. What goes silent is `elementGeometry` /
+  `pathAnchors` — the GEOMETRY, which is exactly what a re-distribution
+  needs. So an off-page element is never LOST, only unmeasurable, and a
+  write BY ID still reaches it. (An earlier claim here that an off-page
+  element "answers nothing, not even its metadata" came from a probe
+  whose stamp had been refused for a NAMESPACE reason — the bundle was
+  not loaded. Load the bundle before concluding anything about
+  `setPluginMetadata`.)
+- there is no simple "outside the rect" threshold. A 300 pt box hanging
+  38 pt past the right edge AND 50 pt above the top still answers
+  everything; the same box starting 500 pt across a 612 pt page does not.
+  Where the engine draws that line is NOT modelled here and no guess
+  about it is recorded — §16.3's artboard fit simply applies the stricter
+  "fully inside" rule, so it never needs to know.
 
 **Two batch-ORDERING rules the engine enforces**, both measured and both
 load-bearing for any bake-then-rebuild flow (Pattern v1's re-plan is the

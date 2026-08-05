@@ -151,3 +151,28 @@ export {
   type GridSpec,
   type MirrorSpec,
 } from "./repeat";
+// Illustrator Phase 3 (§16.2 + §16.3) — ALONG-PATH PLACEMENT: the ONE
+// arc-length kernel both the blend SPINE and objects-on-a-path need
+// (flatten → cumulative length → point + tangent at a fraction), plus
+// the count/spacing distribution rule on top of it and the easing curves
+// §16.2 asks for. Everything ABOVE the slot list stays in the two
+// commands, because there they need different facts — see the module
+// header for the decision.
+export {
+  measureAnchorRun,
+  measureSegment,
+  pointAtLength,
+  pointAtFraction,
+  distributeAlongPath,
+  wrapOrClamp,
+  ease,
+  EASE_KINDS,
+  type PathStation,
+  type PathMetric,
+  type PathPoint,
+  type PathSlot,
+  type SlotMode,
+  type SlotEndpoints,
+  type DistributeArgs,
+  type EaseKind,
+} from "./along-path";

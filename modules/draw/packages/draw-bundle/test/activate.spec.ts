@@ -287,7 +287,29 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.insertSpiral",
       "media.paged.draw.command.insertRectGrid",
       "media.paged.draw.command.insertPolarGrid",
+      // Illustrator Phase 3 (§16.2) — BLENDS v1. Wave 2's v0 was ONE
+      // command and two undo steps; the catalog row is the three SPACING
+      // MODES, a spine with its two reverses, easing with independent
+      // colour acceleration, and expand/release. `blendSelected` is kept
+      // as the MAKE verb: it is a published id, and renaming it to match
+      // a newer convention would break callers for cosmetics.
       "media.paged.draw.command.blendSelected",
+      "media.paged.draw.command.updateBlend",
+      "media.paged.draw.command.replaceBlendSpine",
+      "media.paged.draw.command.reverseBlendSpine",
+      "media.paged.draw.command.reverseBlendFrontToBack",
+      "media.paged.draw.command.selectBlendObjects",
+      "media.paged.draw.command.expandBlend",
+      "media.paged.draw.command.releaseBlend",
+      // Illustrator Phase 3 (§16.3) — OBJECTS ON A PATH. The one
+      // arranging row here that CREATES NOTHING: it writes one
+      // frameTransform per object, so the objects on the path ARE the
+      // selected objects, ids and all.
+      "media.paged.draw.command.makeObjectsOnPath",
+      "media.paged.draw.command.updateObjectsOnPath",
+      "media.paged.draw.command.selectObjectsOnPath",
+      "media.paged.draw.command.expandObjectsOnPath",
+      "media.paged.draw.command.releaseObjectsOnPath",
       // Illustrator Phase 2 (last row) — Image Trace v0 (the wasm lane).
       "media.paged.draw.command.imageTrace",
     ]);
@@ -308,9 +330,12 @@ describe("drawBundle.activate", () => {
     // library + the instances that follow it), live paint (the
     // document-resident face RECIPES + the artwork each painted face
     // materialised as), pattern (the tile-field OPTIONS form + the
-    // not-a-swatch boundary) and repeat (§12.4's radial/grid/mirror
-    // parameters + the two honesty notes) — register directly, all
-    // expert-leaf per B-01's list-widget limit.
+    // not-a-swatch boundary), repeat (§12.4's radial/grid/mirror
+    // parameters + the two honesty notes), blend (§16.2's three spacing
+    // modes + the "live preview" that previews the PLAN, not the
+    // artwork) and objects-on-path (§16.3's distribution + the note that
+    // this row MOVES your objects rather than copying them) — register
+    // directly, all expert-leaf per B-01's list-widget limit.
     //
     // THERE IS NO LAYERS PANEL, and its absence is the assertion: ADR
     // 023 phase D retired it behind the binding-provider seam
@@ -326,6 +351,8 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.panel.livePaint",
       "media.paged.draw.panel.pattern",
       "media.paged.draw.panel.repeat",
+      "media.paged.draw.panel.blend",
+      "media.paged.draw.panel.objectsOnPath",
     ]);
   });
 

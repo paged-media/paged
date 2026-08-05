@@ -59,7 +59,9 @@
       "media.paged.draw.panel.symbols",
       "media.paged.draw.panel.livePaint",
       "media.paged.draw.panel.pattern",
-      "media.paged.draw.panel.repeat"
+      "media.paged.draw.panel.repeat",
+      "media.paged.draw.panel.blend",
+      "media.paged.draw.panel.objectsOnPath"
     ],
     "commands": [
       "media.paged.draw.command.strokeDashSolid",
@@ -141,6 +143,18 @@
       "media.paged.draw.command.insertRectGrid",
       "media.paged.draw.command.insertPolarGrid",
       "media.paged.draw.command.blendSelected",
+      "media.paged.draw.command.updateBlend",
+      "media.paged.draw.command.replaceBlendSpine",
+      "media.paged.draw.command.reverseBlendSpine",
+      "media.paged.draw.command.reverseBlendFrontToBack",
+      "media.paged.draw.command.selectBlendObjects",
+      "media.paged.draw.command.expandBlend",
+      "media.paged.draw.command.releaseBlend",
+      "media.paged.draw.command.makeObjectsOnPath",
+      "media.paged.draw.command.updateObjectsOnPath",
+      "media.paged.draw.command.selectObjectsOnPath",
+      "media.paged.draw.command.expandObjectsOnPath",
+      "media.paged.draw.command.releaseObjectsOnPath",
       "media.paged.draw.command.imageTrace"
     ],
     "importers": [
@@ -176,6 +190,18 @@
       },
       {
         "type": "repeatRecipe",
+        "role": "spec",
+        "format": "json",
+        "linkable": false
+      },
+      {
+        "type": "blendRecipe",
+        "role": "spec",
+        "format": "json",
+        "linkable": false
+      },
+      {
+        "type": "objectsOnPathRecipe",
         "role": "spec",
         "format": "json",
         "linkable": false
