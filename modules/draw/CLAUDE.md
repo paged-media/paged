@@ -225,7 +225,9 @@ seam — `commands/v59-wire.ts`, the `v58-wire.ts` precedent — and the
 repin is a pure deletion.
 
 REPEATS v1 is the first consumer and builds in ONE UNDO STEP. Everything
-measured against the booted engine (protocol 59) and pinned in
+measured against the booted engine (protocol **60** — the local wasm
+carries `LayerSummary.parentId`; the harness booted 60, not the 59 an
+earlier note claimed while correcting a staler 58) and pinned in
 `repeat.spec.ts`:
 - the bind must come AFTER its creating child; before it the batch is
   refused BY NAME ("has nothing to name — no creating child ran before
