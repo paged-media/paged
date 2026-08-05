@@ -54,6 +54,7 @@ import {
 } from "./handlers/live-paint";
 import { createMeasureHandler } from "./handlers/measure";
 import { createPencilHandler } from "./handlers/pencil";
+import { createRepeatHandler } from "./handlers/repeat";
 import { createShapeBuilderHandler } from "./handlers/shape-builder";
 import { createTypeOnPathHandler } from "./handlers/text-on-path";
 import { createWidthHandler } from "./handlers/width";
@@ -109,6 +110,10 @@ export const LIVE_PAINT_TOOL_IDS = [
 export const TEXT_ON_PATH_TOOL_IDS = [
   "media.paged.draw.tool.typeOnPath",
 ] as const;
+
+/** REPEATS (§12.4) — the on-canvas steering widget (host-free, the
+ *  PRO_TOOL_IDS pattern). */
+export const REPEAT_TOOL_IDS = ["media.paged.draw.tool.repeat"] as const;
 
 /** Build the three anchor-editing tools bound to `host` — each
  *  gesture handler reaches the engine through the facades only (B-17).
@@ -415,6 +420,46 @@ export function drawTools(host: BundleHost): ToolContribution[] {
       order: 2,
       cursor: CROSS,
       gesture: () => createTypeOnPathHandler(host),
+    },
+    // REPEATS (§12.4) — the on-canvas steering widget. Press and drag to
+    // steer the SELECTED repeat's primary parameter (the ring centre,
+    // the next grid cell, a point on the mirror axis); Shift snaps the
+    // angular ones to 45°; the commit is ONE update on release.
+    // handlers/repeat.ts states exactly how live that is and is not.
+    //
+    // NO SHORTCUT — and that is a decision, not an omission. The three
+    // keys the editor freed on 2026-08-03 by retiring its dead rail
+    // entries (`2e6f835`) are `shift+t`, `i` and `k`, and EVERY one of
+    // them is the canonical Illustrator/InDesign key of a paged.draw
+    // tool that is currently sitting on a substitute because that key
+    // was taken: `shift+t` → Type on a Path (on `shift+h`; the editor's
+    // own retirement note asks paged.draw to claim it), `i` →
+    // Eyedropper (on `shift+d`), `k` → Live Paint Bucket (on
+    // `shift+o`). Taking one for a NEW tool would spend the correction
+    // those retirements were FOR. The only other free register is
+    // `shift+z`, which reads as an undo variant on every platform and
+    // would be a trap. So this tool ships keyless — the editor's own
+    // catalog has working tools with no shortcut (`paged.tool.smooth`),
+    // and a keyless working tool is honest where a stolen key is not.
+    //
+    // (This also CORRECTS the note further up: `shift+z` is no longer
+    // "the only free shift key" — `shift+t` is free too, and so are the
+    // single keys `i` and `k`.)
+    //
+    // ICON: `tool-rotate` is a REAL token in the host's kebab-case glyph
+    // map and the honest metaphor — a radial repeat turns copies about a
+    // centre, which is what the drag steers. An INVENTED token renders
+    // the rail button glyphless (the stroke panel's recorded lesson), so
+    // a shared real glyph beats a made-up specific one.
+    {
+      id: "media.paged.draw.tool.repeat",
+      title: "Repeat (steer the selected repeat)",
+      icon: "tool-rotate",
+      group: "repeat",
+      section: "transform",
+      order: 4,
+      cursor: CROSS,
+      gesture: () => createRepeatHandler(host),
     },
   ];
 }

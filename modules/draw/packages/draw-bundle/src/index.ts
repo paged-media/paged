@@ -96,6 +96,7 @@ export {
   WAVE2_TOOL_IDS,
   LIVE_PAINT_TOOL_IDS,
   TEXT_ON_PATH_TOOL_IDS,
+  REPEAT_TOOL_IDS,
 } from "./tools";
 export { insertPathMutationFor } from "./handlers/insert-path";
 // Brush tools v0 — the sweep handler factories, the exact
@@ -311,6 +312,109 @@ export {
   PATTERN_PANEL_ID,
   PATTERN_PANEL_NOTE,
 } from "./panels/pattern-panel";
+// Illustrator Phase 3 (§12.4) — REPEATS: radial / grid / mirror repeat
+// objects with instance counts, spacing, clipping and EXPAND/RELEASE.
+// The catalog's sibling of pattern, not the same thing: a pattern is a
+// swatch-shaped FILL, a repeat is an object TRANSFORM. The first feature
+// in this repo that builds in ONE undo step (C-15 `bindCreated` is in
+// the contract as of plugin-sdk `bc52766`); clipping rides B-18's
+// pasteInto and costs the second, because that op is also what hides an
+// instance from the scene tree. Pure model + the exact wire builders
+// exported for the conformance spec (the no-second-copy rule).
+export {
+  REPEAT_COMMAND_IDS,
+  REPEAT_COMMAND_CATEGORY,
+  MAKE_RADIAL_REPEAT_COMMAND_ID,
+  MAKE_GRID_REPEAT_COMMAND_ID,
+  MAKE_MIRROR_REPEAT_COMMAND_ID,
+  UPDATE_REPEAT_COMMAND_ID,
+  SELECT_REPEAT_INSTANCES_COMMAND_ID,
+  EXPAND_REPEAT_COMMAND_ID,
+  RELEASE_REPEAT_COMMAND_ID,
+  REPEAT_PART,
+  REPEAT_LIBRARY_VERSION,
+  REPEAT_FEATURE,
+  REPEAT_MAX_INSTANCES,
+  REPEAT_DEFAULTS,
+  REPEAT_KINDS,
+  REPEAT_CLIP_HANDLE,
+  REPEAT_LIVE_NOTE,
+  REPEAT_CLIP_NOTE,
+  repeatParamsFrom,
+  repeatPlacementsFor,
+  radialCenterOfDraft,
+  mirrorDefaultOffset,
+  repeatCopiesFor,
+  repeatHandle,
+  handleRef,
+  parseRepeatLibrary,
+  serializeRepeatLibrary,
+  mintRepeatId,
+  findRepeatRecord,
+  upsertRepeatRecord,
+  removeRepeatRecordFrom,
+  repeatSourceOf,
+  repeatInstanceOf,
+  repeatClipOf,
+  withRepeatKey,
+  repeatBatchFor,
+  repeatClipBatchFor,
+  repeatExpandBatchFor,
+  repeatReleaseBatchFor,
+  readRepeatLibrary,
+  writeRepeatLibrary,
+  repeatPageRect,
+  repeatBoundsOf,
+  repeatLinks,
+  repeatGroupOf,
+  resolveRepeat,
+  repeatGenerationOf,
+  repeatPlanFor,
+  applyMakeRepeat,
+  applyUpdateRepeat,
+  applySelectRepeatInstances,
+  applyExpandRepeat,
+  applyReleaseRepeat,
+  contributeRepeatCommands,
+  type RepeatParams,
+  type RepeatRecord,
+  type RepeatLibrary,
+  type RepeatSourceRef,
+  type RepeatInstanceRef,
+  type RepeatClipRef,
+  type RepeatKey,
+  type RepeatPageRect,
+  type RepeatSource,
+  type RepeatPlan,
+  type RepeatCopy,
+  type RepeatGeneration,
+  type RepeatBuild,
+} from "./commands/repeat";
+// …and its PANEL + its on-canvas widget. The panel's note is where the
+// two honesty facts reach the user (what "live" means; what clipping
+// costs); the handler is where they hold.
+export {
+  makeRepeatPanel,
+  repeatRowLabel,
+  REPEAT_PANEL_ID,
+  REPEAT_PANEL_NOTE,
+} from "./panels/repeat-panel";
+export { createRepeatHandler } from "./handlers/repeat";
+// The C-15 + B-18 protocol-ahead wire seam — `bindCreated` (what
+// collapses a two-batch flow into one undo step) and the `pasteInto` /
+// `releaseFrom` nesting pair, with their capability probes and the
+// engine's own refusal sentences. One place, so the canary repin is a
+// pure deletion (the v58-wire.ts precedent).
+export {
+  bindCreatedMutationFor,
+  handleElementId,
+  pasteIntoMutationFor,
+  releaseFromMutationFor,
+  b18RefusalReason,
+  supportsBindCreated,
+  supportsPasteInto,
+  HANDLE_PREFIX,
+} from "./commands/v59-wire";
 // Phase 9 (Tier B) → B-22 — Shape Builder gesture tool, now REGION
 // level: the gesture→pathfinderFaces builder, the element-lane fallback
 // builder, the raw→page face mapping and the host handler factory,

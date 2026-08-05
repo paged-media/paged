@@ -48,7 +48,8 @@
       "media.paged.draw.tool.lassoSelect",
       "media.paged.draw.tool.livePaintBucket",
       "media.paged.draw.tool.livePaintSelect",
-      "media.paged.draw.tool.typeOnPath"
+      "media.paged.draw.tool.typeOnPath",
+      "media.paged.draw.tool.repeat"
     ],
     "panels": [
       "media.paged.draw.panel.stroke",
@@ -57,7 +58,8 @@
       "media.paged.draw.panel.graphicStyles",
       "media.paged.draw.panel.symbols",
       "media.paged.draw.panel.livePaint",
-      "media.paged.draw.panel.pattern"
+      "media.paged.draw.panel.pattern",
+      "media.paged.draw.panel.repeat"
     ],
     "commands": [
       "media.paged.draw.command.strokeDashSolid",
@@ -89,6 +91,13 @@
       "media.paged.draw.command.selectPatternTiles",
       "media.paged.draw.command.deletePatternTiles",
       "media.paged.draw.command.releasePatternField",
+      "media.paged.draw.command.makeRadialRepeat",
+      "media.paged.draw.command.makeGridRepeat",
+      "media.paged.draw.command.makeMirrorRepeat",
+      "media.paged.draw.command.updateRepeat",
+      "media.paged.draw.command.selectRepeatInstances",
+      "media.paged.draw.command.expandRepeat",
+      "media.paged.draw.command.releaseRepeat",
       "media.paged.draw.command.cornersRounded",
       "media.paged.draw.command.cornersInverseRounded",
       "media.paged.draw.command.cornersBevel",
@@ -161,6 +170,12 @@
       },
       {
         "type": "patternRecipe",
+        "role": "spec",
+        "format": "json",
+        "linkable": false
+      },
+      {
+        "type": "repeatRecipe",
         "role": "spec",
         "format": "json",
         "linkable": false

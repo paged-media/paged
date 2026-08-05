@@ -121,3 +121,33 @@ export {
   makeCompoundTable,
   splitCompound,
 } from "./compound";
+// Illustrator Phase 3 (§12.4) — REPEATS: the placement algebra for
+// radial / grid / mirror repeat objects. One AFFINE per instance (a
+// repeat rotates and reflects, so a pattern-style translation offset is
+// not enough), plus the artboard fit that keeps an instance from
+// landing where the page-keyed reads answer nothing (RFI C-23).
+export {
+  affineTranslate,
+  affineRotate,
+  affineReflect,
+  transformAnchorTable,
+  transformBounds,
+  boundsCenter,
+  radialStepDeg,
+  radialPointAt,
+  radialCenterFor,
+  radialPlacements,
+  gridPlacements,
+  mirrorAxisNormal,
+  mirrorOriginFor,
+  mirrorPlacements,
+  fitPlacementsToPage,
+  repeatExtent,
+  rectAnchorTable,
+  type RepeatKind,
+  type RepeatBounds,
+  type RepeatPlacement,
+  type RadialSpec,
+  type GridSpec,
+  type MirrorSpec,
+} from "./repeat";

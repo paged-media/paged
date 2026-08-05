@@ -36,18 +36,31 @@
 // batch, not a user-facing verb, so they keep their one shared shape
 // rather than open-coding the op three times.
 //
-// CLIPPING MASKS — VERIFIED NOT REPRESENTABLE, honestly omitted: the
-// wire `GroupSpec` carries only `selfId` / `members` + the W1.20
-// inverse-only fields (`parent`, `itemTransform`), and core's parsed
-// `Group` (paged-parse `spread.rs`) carries members + transparency +
-// item_transform — NO clip flag, NO mask member, NO clip path. Core's
-// only clipping today is `ClippingPathSettings` on PLACED IMAGES (and
-// paragraph-shading `clip_to_frame`), neither of which a group can
-// claim. So a clip-group / "paste into" cannot be expressed end-to-end;
-// faking one (e.g. metadata-tagging a plain group as a "mask") would
-// render nothing and lie on save. The gap belongs to the cross-repo RFI
-// (`thoughts/docs/paged/plugin-platform/rfi-core-sdk-gaps.md`) as a
-// core GroupSpec/scene extension.
+// A CLIP GROUP is still not representable — but "paste into" IS, and
+// this note used to say otherwise. Both halves, kept apart:
+//
+//  · STILL TRUE: the wire `GroupSpec` carries only `selfId` / `members`
+//    + the W1.20 inverse-only fields (`parent`, `itemTransform`), and
+//    core's parsed `Group` (paged-parse `spread.rs`) carries members +
+//    transparency + item_transform — NO clip flag, NO mask member, NO
+//    clip path. Metadata-tagging a plain group as a "mask" would render
+//    nothing and lie on save, so no Group-based clipping is offered.
+//  · NO LONGER TRUE (corrected 2026-08-05): "a 'paste into' cannot be
+//    expressed end-to-end". B-18 landed — `pasteInto { containerId,
+//    childId }` nests a top-level item inside a container Rectangle /
+//    Oval / Polygon, where it renders CLIPPED by that container's
+//    outline, and `releaseFrom { childId }` pops it back. Both are in
+//    the booted engine's op vocabulary (measured), and
+//    `commands/repeat.ts` ships on them for §12.4's clipping. The wire
+//    seam is `commands/v59-wire.ts`; the four measured consequences of
+//    nesting (no group, invisible to `document.tree()`, `deleteFrame`
+//    refused, a deleted container ORPHANS its children) are documented
+//    there and in `commands/repeat.ts`.
+//
+// So what remains for the cross-repo RFI
+// (`thoughts/docs/paged/plugin-platform/rfi-core-sdk-gaps.md`) is a
+// GroupSpec/scene clip extension — an ARBITRARY clip path over a set of
+// items — not the container-nesting case, which is built.
 //
 // Host-agnostic: imports only plugin-api types.
 

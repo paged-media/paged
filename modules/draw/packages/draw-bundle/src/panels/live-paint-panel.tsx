@@ -83,8 +83,9 @@ export const LIVE_PAINT_NOTE =
   "\"or stroke edges\" half has nothing to address. And the engine REFUSES " +
   "past 12 member paths or 256 faces — it never truncates, and the refusal " +
   "is shown with the engine's own words instead of an empty result. Two " +
-  "smaller facts: a filled face lands at the TOP of the z-order (there is no " +
-  "insert-at-z or reorder op on the wire), so it paints over the inner half " +
+  "smaller facts: a filled face lands at the TOP of the z-order (`insertPath` " +
+  "carries no position argument, and Live Paint v0 does not restack), so it " +
+  "paints over the inner half " +
   "of the strokes that bound it; and the recipe is a container write, not a " +
   "mutation, so Make, Regenerate's bookkeeping, Delete face and Release " +
   "change it OUTSIDE the undo stack.";

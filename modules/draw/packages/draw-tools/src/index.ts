@@ -122,4 +122,21 @@ export {
   type SegmentPair,
 } from "./anchor-machine";
 
+// Illustrator Phase 3 (§12.4) — the on-canvas REPEAT widget's math: a
+// drag steers ONE parameter per kind and the overlay draws ONE guide
+// polyline (the door's ceiling — see the module header for what "live"
+// does and does not mean here).
+export {
+  repeatSteer,
+  repeatGuide,
+  snapAngleDeg,
+  CONSTRAIN_STEP_DEG,
+  MIN_RADIUS_PT,
+  RING_SEGMENTS,
+  type RepeatSteerKind,
+  type RepeatSteer,
+  type RepeatSteerModifiers,
+  type RepeatGuideSpec,
+} from "./repeat-machine";
+
 export type { AnchorTripleFeedsWire } from "./wire-compat";

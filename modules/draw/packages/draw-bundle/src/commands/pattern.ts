@@ -78,10 +78,17 @@
 // that word: not "how much" (that is negative spacing) but WHICH COPY
 // PAINTS IN FRONT. It is expressible here for exactly one reason —
 // insertion order IS paint order, because `insertPath` lands an item at
-// the TOP of the page's z-order and the `Mutation` union carries no
-// reorder op at all (the same insert-lane wall RFI C-30 records). So
-// `overlap` is implemented as the EMISSION ORDER of the tiles, and two
-// facts follow that cannot be softened:
+// the TOP of the page's z-order and carries no position argument (the
+// insert-lane wall RFI C-30 records). So `overlap` is implemented as the
+// EMISSION ORDER of the tiles, and two facts follow that cannot be
+// softened:
+//   (CORRECTION, 2026-08-05: an earlier version of this note said the
+//   wire "carries no reorder op at all". That is no longer true —
+//   protocol 59 has `reorderElement`, and this repo already casts it in
+//   `binding-provider/adr023-seam.ts`. The VENDORED contract still does
+//   not carry it, and pattern v1 does not use it, so the shipped
+//   behaviour below stands exactly as described — but the reason is
+//   "not used" now, not "does not exist".)
 //   · the VERTICAL choice is the OUTER sort and therefore WINS wherever
 //     the two disagree (rows are the outer loop);
 //   · the SOURCE always sits BELOW every copy. It was there first and

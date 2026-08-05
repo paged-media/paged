@@ -103,8 +103,9 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "media.paged.draw.tool.livePaintBucket",
         "media.paged.draw.tool.livePaintSelect",
         "media.paged.draw.tool.typeOnPath",
+        "media.paged.draw.tool.repeat",
       ]);
-      // The contribution log holds the eighteen tools, then EACH schema
+      // The contribution log holds the nineteen tools, then EACH schema
       // panel as TWO entries: the synthesized React `panel` the panels
       // registry sees (the host turns a schema into a registry panel via
       // the injected renderer / seam) AND the `schemaPanel` recorded
@@ -112,16 +113,18 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
       // honest — the registry really got a panel; the log keeps the
       // schema so conformance can assert it. Stroke first, then fill
       // (Phase 2d), then the five React panels (appearance, graphic
-      // styles, symbols, live paint, pattern — Layers is retired). Then the
-      // seventy-three commands in registration order, then the W3.2 edit
-      // context. (Pen is a core built-in.)
+      // styles, symbols, live paint, pattern, repeat — Layers is
+      // retired). Then the eighty commands in registration order, then
+      // the W3.2 edit context. (Pen is a core built-in.)
       expect(harness.contributions.map((c) => c.kind)).toEqual([
         // Three anchor editors + the pro set (Curvature, Pencil,
         // Gradient Annotator, Measure, Shape Builder, Corner Radius) +
         // the v0 brushes (Paintbrush, Blob Brush, Eraser) + the
         // wave-2 trio (Eyedropper, Width, Lasso Select) + the Live
         // Paint pair (Bucket, Face Selection) + Type on a Path
-        // (C-29) — eighteen tools.
+        // (C-29) + the Repeat steering widget (§12.4, the one tool
+        // with no shortcut — see tools.ts) — nineteen tools.
+        "tool",
         "tool",
         "tool",
         "tool",
@@ -165,6 +168,10 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "panel",
         // The PATTERN OPTIONS panel (the tile-field parameters + the
         // not-a-swatch boundary, RFI C-31) — likewise expert-leaf React.
+        "panel",
+        // The REPEAT OPTIONS panel (§12.4's radial/grid/mirror
+        // parameters + the two honesty notes: what "live" means here,
+        // and what clipping costs) — likewise expert-leaf React.
         "panel",
         // B-12 — the stroke dash-preset commands (Solid / Dashed /
         // Dotted / Dash-dot).
@@ -210,6 +217,16 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         // PATTERN EDITING v1 (Bake / Re-plan / Select tiles / Delete
         // tiles / Release — a re-editable tile FIELD; the catalog row's
         // swatch half is not buildable, RFI C-31).
+        "command",
+        "command",
+        "command",
+        "command",
+        "command",
+        "command",
+        "command",
+        // Illustrator Phase 3 (§12.4) — REPEATS (Radial / Grid / Mirror
+        // / Update / Select instances / Expand / Release). The catalog's
+        // SIBLING of pattern, not the same row.
         "command",
         "command",
         "command",
@@ -432,7 +449,7 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
     const before = await treeSize();
 
     const handle = harness.loadBundle(drawBundle);
-    expect(harness.toolsContributed()).toHaveLength(18);
+    expect(harness.toolsContributed()).toHaveLength(19);
     handle.dispose();
 
     // After dispose: the contribution log is empty (registrations torn

@@ -104,6 +104,10 @@ import {
   PATTERN_COMMAND_IDS,
 } from "./commands/pattern";
 import {
+  contributeRepeatCommands,
+  REPEAT_COMMAND_IDS,
+} from "./commands/repeat";
+import {
   contributeLiveCornerCommands,
   LIVE_CORNER_COMMAND_IDS,
 } from "./commands/live-corners";
@@ -158,6 +162,7 @@ import {
   LIVE_PAINT_PANEL_ID,
 } from "./panels/live-paint-panel";
 import { makePatternPanel, PATTERN_PANEL_ID } from "./panels/pattern-panel";
+import { makeRepeatPanel, REPEAT_PANEL_ID } from "./panels/repeat-panel";
 import { installStrokePanelBindings, strokePanel } from "./panels/stroke-panel";
 import { contributeSvgIo } from "./io/svg";
 
@@ -275,6 +280,22 @@ export function activate(host: BundleHost): BundleHandle {
     icon: "panel-object-styles",
     ...makePatternPanel(host),
   });
+  // Illustrator Phase 3 (§12.4) — REPEATS: the Repeat Options form. A
+  // repeat is the catalog's SIBLING of a pattern, not the same thing —
+  // a pattern is a swatch-shaped fill (whose swatch half is not
+  // buildable at all, RFI C-31), a repeat is an object TRANSFORM with
+  // expand/release. The panel carries both honesty notes verbatim
+  // (`REPEAT_PANEL_NOTE`, pinned by a conformance test): what "live"
+  // does and does not mean here, and what clipping costs.
+  // (`panel-object-transform` is a REAL glyph in the host's kebab-case
+  // map and is the honest metaphor — a repeat IS an object transform.
+  // An invented token renders the dock tab ICONLESS, the stroke panel's
+  // recorded lesson.)
+  host.contribute.panel({
+    id: REPEAT_PANEL_ID,
+    icon: "panel-object-transform",
+    ...makeRepeatPanel(host),
+  });
   // B-12 — the stroke DASH presets as commands (the schema binding
   // ceiling is scalar, a dash array is a vector → command-driven). Each
   // commits `setElementProperty{ frameStrokeDashArray, lengths }` to
@@ -326,6 +347,19 @@ export function activate(host: BundleHost): BundleHandle {
   // the only way back. commands/pattern.ts states the measured undo
   // counts and the two batch-ordering rules the engine enforces.
   const patternCommandsSub = contributePatternCommands(host);
+  // Illustrator Phase 3 (§12.4) — REPEATS (radial / grid / mirror, then
+  // update / select / expand / release). The row §12.4 lists BESIDE
+  // pattern, and this bundle keeps them apart: a pattern is a
+  // swatch-shaped FILL, a repeat is an object TRANSFORM whose two verbs
+  // take it apart again. It is also the FIRST feature in this repo to
+  // build in ONE undo step: plugin-sdk `bc52766` put C-15's
+  // `bindCreated` in the contract, so a batch can address the ids it
+  // mints and the inserts, the paint, the links and the group all ride
+  // one batch. CLIPPING rides B-18's pasteInto — and costs the second
+  // undo step, because that same op is what hides an instance from the
+  // scene tree. commands/repeat.ts states every measured count and
+  // consequence.
+  const repeatCommandsSub = contributeRepeatCommands(host);
   // Phase 9 (Tier B) — Live Corners (the frameCornerOption*/Radius* wire
   // consumers, Rectangle-only — gap B-23; each preset is an eight-write
   // batch + a metadata "live" marker).
@@ -445,7 +479,7 @@ export function activate(host: BundleHost): BundleHandle {
   // host predates the importer/exporter doors.
   const svgIoSub = contributeSvgIo(host);
   host.log.info(
-    `activated — ${tools.length} tools + 2 schema panels + 5 React panels + ` +
+    `activated — ${tools.length} tools + 2 schema panels + 6 React panels + ` +
       `${
         DASH_COMMAND_IDS.length +
         FILL_GRADIENT_COMMAND_IDS.length +
@@ -455,6 +489,7 @@ export function activate(host: BundleHost): BundleHandle {
         PATHFINDER_REGION_COMMAND_IDS.length +
         COMPOUND_PATH_COMMAND_IDS.length +
         PATTERN_COMMAND_IDS.length +
+        REPEAT_COMMAND_IDS.length +
         LIVE_CORNER_COMMAND_IDS.length +
         APPEARANCE_COMMAND_IDS.length +
         APPEARANCE_BAKE_COMMAND_IDS.length +
@@ -494,6 +529,7 @@ export function activate(host: BundleHost): BundleHandle {
       appearanceBakeCommandsSub.dispose();
       appearanceCommandsSub.dispose();
       liveCornerCommandsSub.dispose();
+      repeatCommandsSub.dispose();
       patternCommandsSub.dispose();
       compoundPathCommandsSub.dispose();
       pathfinderRegionCommandsSub.dispose();

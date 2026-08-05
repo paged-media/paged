@@ -88,16 +88,39 @@ arrangement door takes no tolerance, the kernel names gap detection as
 out of scope, every input subpath is implicitly CLOSED, and the wire
 carries no edge id at all. The 12-input / 256-face caps REFUSE with the
 engine's own sentence on the pathfinder status binding. Filed as RFI
-C-30), OPACITY MASKS and TYPE ON A PATH (the two protocol-58 rows — see
-the v58 seam note below), SVG import/export, and the `vectorGraphic` EDIT
-CONTEXT
+C-30), REPEATS v1 (the Illustrator §12.4 row, and the catalog's SIBLING
+of pattern — read the difference before the code: a PATTERN is a
+swatch-shaped FILL, a REPEAT is an object TRANSFORM with expand/release.
+Radial / grid / mirror, one AFFINE per instance in
+`draw-geometry/src/repeat.ts` because a repeat rotates and REFLECTS where
+a tile field only translates. It is the FIRST feature in this repo that
+builds in ONE UNDO STEP: plugin-sdk `bc52766` put C-15's `bindCreated`
+in the contract, so one batch inserts, binds, paints, links and groups —
+measured, 200 instances in ~12 ms, one undo removes all of them.
+EXPAND and RELEASE are Illustrator's two verbs and mean different things
+(expand keeps every instance as artwork; release removes them and keeps
+the source) — note this is pattern v1's pair spelled the OTHER way
+round. CLIPPING is real, over B-18's `pasteInto`, and costs the second
+undo step plus four measured consequences that are all asserted: a
+clipped repeat has NO GROUP (`pasteInto` refuses a grouped child), a
+clipped instance is INVISIBLE to `document.tree()` while still answering
+geometry and metadata by id (so the recipe is its only index, and
+clipping DEGRADES OFF without a container writer), `deleteFrame` REFUSES
+a pasted-in child, and deleting the container ORPHANS its children. The
+recipe is the FIFTH `.paged` container part here. The on-canvas control
+is REAL but bounded and the code says where: a drag steers ONE parameter
+and the overlay draws a GUIDE, because `setToolPreview` takes ONE
+polyline; the artwork is rebuilt once on RELEASE, because a re-plan per
+pointer-move would be an undo step per sample), OPACITY MASKS and TYPE ON
+A PATH (the two protocol-58 rows — see the v58 seam note below), SVG
+import/export, and the `vectorGraphic` EDIT CONTEXT
 (double-click a path-bearing kind → anchor-editing tool-set focused,
 stroke panel raised, Esc pops out). The bundle drives end-to-end through the real editor host:
 the draw-plugin e2e (`editor` `apps/canvas/tests/e2e/draw-plugin.spec.ts`)
 and a DTP journey (`tests/journey/plugins/draw.journey.spec.ts`) author a
 path with the built-in Pen, then refine its anchors (add/delete/convert)
-and stroke through the bundle. The three TS packages carry 775 passing
-vitest (geometry 162, tools 113, bundle 500) and typecheck clean; the two
+and stroke through the bundle. The three TS packages carry 848 passing
+vitest (geometry 185, tools 126, bundle 537) and typecheck clean; the two
 crates carry 26 `cargo test` (draw-trace 22, trace-js 4).
 
 **THE STRUCTURAL VERBS ARE NOT THIS BUNDLE'S.** Group / Ungroup /
@@ -124,6 +147,15 @@ queries, the raw↔page face mapping and the refusal reporter. Shape
 Builder and Live Paint both ride it; a third region tool must too, and a
 K-11 repin is a rewrite of ONE function plus deleting two local wire
 types.
+
+**THERE ARE FOUR WIRE SEAMS, and they do not overlap.**
+`handlers/planar-regions.ts` (K-11's arrangement query),
+`commands/v58-wire.ts` (the C-28/C-29 quartet, below),
+`binding-provider/adr023-seam.ts` (the ADR-023 binding-provider door AND
+the one protocol-59 `reorderElement` its Layers lane needs) and
+`commands/v59-wire.ts` (C-15's `bindCreated` + B-18's `pasteInto` /
+`releaseFrom`, added with Repeats). Each op has exactly ONE builder and
+it lives with its consumer; every repin is a deletion of casts.
 
 **PROTOCOL 58 has ONE seam too.** `draw-bundle/src/commands/v58-wire.ts`
 owns the four C-28/C-29 ops (`applyOpacityMask` / `releaseOpacityMask` /
@@ -154,34 +186,75 @@ Two honesty facts these rows carry, and neither may be softened:
   refusal names the workflow that produces one (type into a frame,
   delete the FRAME). A "seed a story" command is deliberately NOT built.
   `PathEffect` is likewise not offered: only `RainbowPathEffect` renders.
-  NOTE the editor already ships an INERT built-in `paged.tool.typePath`
+  NOTE the editor USED to ship an INERT built-in `paged.tool.typePath`
   (a rail entry with no `gesture`, holding `shift+t`); a bundle cannot
   attach behaviour to a built-in id, so this tool joins the same `type`
-  group beside it under `shift+h` — retiring the placeholder is an
-  editor-side call. `shift+z` is now the ONLY free shift key.
+  group beside it under `shift+h`.
 
-**RFI C-15 has LANDED in core (b8e2b6b) but is NOT reachable from here
-yet — and the two-batch floor is now provably a CONTRACT floor, not an
-engine one.** Re-measured 2026-08-04 while building Pattern Editing v1,
-and pinned by a conformance test in `pattern.spec.ts` so the claim stays
-falsifiable: the booted v58 engine speaks C-15 END TO END. `{ op:
-"bindCreated", args: { handle } }` placed AFTER a creating child makes
-`$h:<handle>` address that child's minted id and the batch applies;
-placed BEFORE it, the engine refuses with its own sentence ("has nothing
-to name — no creating child ran before it in this batch"). It is a
-SEPARATE op, not a field on `insertPath` — passing `bindCreated` inside
-the insert's args is silently ignored and the later `$h:` reference then
-fails with "node not found". What blocks the collapse is purely the
-contract: `@paged-media/plugin-api`'s `Mutation` union carries no
-`bindCreated` arm, and neither does the protocol-ahead `PendingMutation`
-delta plugin-sdk HEAD maintains (re-checked at `f00d6dd`, and in the
-published `0.2.25-canary.0`). So every insert-then-style flow here stays
-at two batches by DISCIPLINE, and the "TWO batches ⇒ 2 undo steps" notes
-in `pattern.ts` / `appearance-bake.ts` / `compound-path.ts` (release) /
-`blend.ts` are still TRUE as shipped — but the reason has changed, and
-core's own commit message listing exactly those four as collapsible is
-now correct about the engine. Re-check when the contract bumps; the fix
-is a regeneration, not a redesign.
+**SHORTCUT REGISTERS — the note above is out of date and this is the
+correction.** "`shift+z` is now the ONLY free shift key" was true until
+the editor's `2e6f835` ("no more dead rail entries — wire six, stub
+five, retire four", 2026-08-03) RETIRED three inert built-ins and freed
+their keys: `shift+t` (the placeholder Type on a Path), `i` (a dead
+Eyedropper) and `k` (a dead Measure). The current global picture:
+- editor built-ins hold `v a u b t \ p n f m l c e r s o g h z` plus
+  `shift+p` / `shift+g`, and `w` as the preview toggle;
+- paged.image holds `shift+x y shift+y shift+l shift+w q shift+f shift+e`;
+- paged.draw holds `= -` plus
+  `shift+c/u/n/a/m/b/r/j/k/i/d/s/q/o/v/h`.
+So the free registers are exactly `shift+t`, `i`, `k` and `shift+z`. THE
+FIRST THREE ARE EACH THE CANONICAL KEY OF A paged.draw TOOL CURRENTLY ON
+A SUBSTITUTE — `shift+t` → Type on a Path (on `shift+h`), `i` →
+Eyedropper (on `shift+d`), `k` → Live Paint Bucket (on `shift+o`) — and
+the editor's own retirement note asks paged.draw to claim them for those
+tools. `shift+z` reads as an undo variant on every platform and would be
+a trap. That is why the §12.4 REPEAT tool ships with NO shortcut: a
+keyless working tool is honest (`paged.tool.smooth` is one), a stolen
+canonical key is not. Moving the three tools onto their canonical keys
+is a separate, deliberate change — do it as one pass, not by taking one
+key here.
+
+**RFI C-15 IS NOW IN THE CONTRACT AND THE TWO-BATCH FLOOR IS BROKEN.**
+This section used to say C-15 had landed in core but was unreachable
+here, blocked purely by `@paged-media/plugin-api`. That changed:
+plugin-sdk `bc52766` ("plugin-api: carry `bindCreated` — the op that
+collapses two-batch flows") added `BindCreatedMutation` to the
+protocol-ahead `PendingMutation` delta. This repo still installs the
+PUBLISHED `0.2.25-canary.0`, which predates it, so the op rides ONE cast
+seam — `commands/v59-wire.ts`, the `v58-wire.ts` precedent — and the
+repin is a pure deletion.
+
+REPEATS v1 is the first consumer and builds in ONE UNDO STEP. Everything
+measured against the booted engine (protocol 59) and pinned in
+`repeat.spec.ts`:
+- the bind must come AFTER its creating child; before it the batch is
+  refused BY NAME ("has nothing to name — no creating child ran before
+  it in this batch");
+- it is its OWN op — a handle inside a creating op's `args` is SILENTLY
+  ignored and the later `$h:` then fails with "node not found";
+- `"$h:<handle>"` resolves in every id position this repo uses: an
+  `ElementId.id`, a bare-string `deleteFrame.frameId`, a
+  `setElementProperty.elementId` (INCLUDING the `framePath` compound
+  re-merge door), a `createGroup.memberIds` entry, and BOTH ends of
+  `pasteInto`;
+- 200 inserts + binds + property writes apply in one batch in ~12 ms and
+  ONE undo removes all of them.
+
+ONE MEASURED EDGE, recorded in `v59-wire.ts` because it is why repeats
+never addresses a group it minted: with an EARLIER `bindCreated` present
+in the same batch, a `bindCreated` placed after a `createGroup` resolves
+inconsistently — `deleteFrame { frameId: "$h:g" }` reaches the GROUP
+(and is refused, since deleteFrame refuses groups) while `dissolveGroup
+{ groupId: "$h:g" }` refuses with "node not found: Group(<the earlier
+insert's id>)". With no earlier bind, the dissolve resolves correctly.
+Repeats reads the previous group out of the TREE before it builds.
+
+THE OTHER SEVEN FLOWS ARE STILL TWO BATCHES — `pattern.ts`,
+`appearance-bake.ts`, `compound-path.ts` (release), `symbols.ts`,
+`image-trace.ts`, `live-paint.ts`, `blend.ts` — and each is now one
+mechanical edit away from one, not a redesign. Their "TWO batches ⇒ 2
+undo steps" notes are still TRUE as shipped; the reason is no longer
+"the contract cannot", it is "not yet converted".
 
 **Two batch-ORDERING rules the engine enforces**, both measured and both
 load-bearing for any bake-then-rebuild flow (Pattern v1's re-plan is the
@@ -193,6 +266,31 @@ first consumer of the second):
 - A group must be DISSOLVED BEFORE its members are deleted. Deleting
   first leaves the group holding a hole and the dissolve is refused with
   "group has an id-less member that cannot round-trip".
+
+**B-18 NESTING IS REAL, and `commands/group.ts`'s old "a 'paste into'
+cannot be expressed end-to-end" note was wrong — it is corrected in
+place.** `pasteInto { containerId, childId }` nests a top-level item
+inside a container Rectangle / Oval / Polygon, where it renders CLIPPED
+by that container's outline; `releaseFrom { childId }` pops it back.
+Repeats' clipping ships on the pair. FOUR consequences, all measured and
+all asserted in `repeat.spec.ts` — read them before building anything
+else on nesting:
+1. a nested child CANNOT be grouped ("B-18: a grouped item cannot be
+   pasted into a frame (ungroup first)"), so clip and group are
+   mutually exclusive;
+2. a nested child is INVISIBLE to `document.tree()` — the container
+   reports NO children — while `getMetadata` / `elementGeometry` /
+   `pathAnchors` all still answer for it BY ID. So nothing that walks
+   the tree can enumerate nested artwork, and anything that nests must
+   keep its own index;
+3. `deleteFrame` REFUSES a nested child ("B-18: the item is pasted into
+   a container — release it before removing") — release first;
+4. deleting the CONTAINER does not delete its children, it ORPHANS them:
+   they leave the tree and still answer `elementGeometry`. Delete the
+   children first, the container last.
+What is still NOT representable is a clip GROUP — an arbitrary clip path
+over a set of items. The `GroupSpec` has no clip flag and core's parsed
+`Group` has no mask member; that half stays in the RFI.
 
 ## Hard rules
 

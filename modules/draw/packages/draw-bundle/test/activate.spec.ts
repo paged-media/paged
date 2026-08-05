@@ -169,6 +169,11 @@ describe("drawBundle.activate", () => {
       // placeholder (a rail entry with no gesture, which a bundle
       // cannot attach behaviour to).
       "media.paged.draw.tool.typeOnPath",
+      // §12.4 — the Repeat steering widget. The one tool in this list
+      // with NO shortcut, and deliberately (see tools.ts): every free
+      // register is the canonical key of a paged.draw tool currently on
+      // a substitute.
+      "media.paged.draw.tool.repeat",
     ]);
     // B-15: TOOL activation commands + shortcuts are HOST-derived from
     // the registry — the bundle registers tools only. The commands it
@@ -216,6 +221,16 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.selectPatternTiles",
       "media.paged.draw.command.deletePatternTiles",
       "media.paged.draw.command.releasePatternField",
+      // Illustrator Phase 3 (§12.4) — REPEATS. The catalog's SIBLING of
+      // pattern, not the same row: a pattern is a swatch-shaped fill, a
+      // repeat is an object transform with expand/release.
+      "media.paged.draw.command.makeRadialRepeat",
+      "media.paged.draw.command.makeGridRepeat",
+      "media.paged.draw.command.makeMirrorRepeat",
+      "media.paged.draw.command.updateRepeat",
+      "media.paged.draw.command.selectRepeatInstances",
+      "media.paged.draw.command.expandRepeat",
+      "media.paged.draw.command.releaseRepeat",
       "media.paged.draw.command.cornersRounded",
       "media.paged.draw.command.cornersInverseRounded",
       "media.paged.draw.command.cornersBevel",
@@ -279,22 +294,23 @@ describe("drawBundle.activate", () => {
     expect(fake.keybindings.count()).toBe(0);
   });
 
-  it("registers the stroke + fill SCHEMA panels and the appearance + graphic-styles + symbols + live-paint + pattern React panels — and NO Layers panel", () => {
+  it("registers the stroke + fill SCHEMA panels and the appearance + graphic-styles + symbols + live-paint + pattern + repeat React panels — and NO Layers panel", () => {
     const fake = makeFakeEditor();
     loadBundle(() => fake.editor, drawBundle, {
       console: silent,
       storage: mapBacking(),
     });
     // The schema panels register through the panels registry as
-    // synthesized PanelContributions; the five React panels —
+    // synthesized PanelContributions; the six React panels —
     // appearance (the metadata stack + its one-fill/one-stroke honesty
     // note), graphic styles (the document-resident style library + the
     // selection's link into it), symbols (the document-resident artwork
     // library + the instances that follow it), live paint (the
     // document-resident face RECIPES + the artwork each painted face
-    // materialised as) and pattern (the tile-field OPTIONS form + the
-    // not-a-swatch boundary) — register directly, all expert-leaf per
-    // B-01's list-widget limit.
+    // materialised as), pattern (the tile-field OPTIONS form + the
+    // not-a-swatch boundary) and repeat (§12.4's radial/grid/mirror
+    // parameters + the two honesty notes) — register directly, all
+    // expert-leaf per B-01's list-widget limit.
     //
     // THERE IS NO LAYERS PANEL, and its absence is the assertion: ADR
     // 023 phase D retired it behind the binding-provider seam
@@ -309,6 +325,7 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.panel.symbols",
       "media.paged.draw.panel.livePaint",
       "media.paged.draw.panel.pattern",
+      "media.paged.draw.panel.repeat",
     ]);
   });
 

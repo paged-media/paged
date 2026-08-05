@@ -61,7 +61,7 @@ export const PATTERN_PANEL_ID = "media.paged.draw.panel.pattern";
 export const PATTERN_PANEL_NOTE =
   `${PATTERN_SWATCH_NOTE} Two more things this form cannot hide. The COPIES ` +
   "always paint ABOVE the source: an inserted item lands at the top of the " +
-  "page's z-order and the wire carries no reorder op, so \"in front\" can " +
+  "page's z-order and pattern v1 does not restack it, so \"in front\" can " +
   "only order the copies among themselves (and the vertical choice wins, " +
   "because rows are the outer loop). And DIMMING is a real frameOpacity " +
   "written on every copy — Illustrator dims copies only while its pattern " +
