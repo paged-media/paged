@@ -77,14 +77,26 @@
 // and at BOTH ends of `pasteInto`. 200 inserts + binds + property writes
 // apply in one batch in ~12 ms and ONE undo removes all of them.
 //
-// A MEASURED EDGE, recorded because it is why `commands/repeat.ts` never
+// A MEASURED EDGE — DIAGNOSED AND FIXED IN CORE, still worked around
+// here until the engine ships it. This is why `commands/repeat.ts` never
 // addresses a group it minted in its own batch: with an EARLIER
 // `bindCreated` present in the same batch, a `bindCreated` placed after
-// a `createGroup` resolves inconsistently — `deleteFrame { frameId:
-// "$h:g" }` reaches the GROUP (and is refused, since deleteFrame refuses
-// groups) while `dissolveGroup { groupId: "$h:g" }` refuses with "node
-// not found: Group(<the earlier insert's id>)". With no earlier bind in
-// the batch, the dissolve resolves correctly.
+// a `createGroup` resolved to the PREVIOUS creation, so
+// `dissolveGroup { groupId: "$h:g" }` refused with "node not found:
+// Group(<the earlier insert's id>)".
+//
+// The cause was never the resolver. A wire `createGroup` translated with
+// `spec.self_id: None` — the engine minted the group's id during APPLY —
+// while a handle-using batch translates every child BEFORE applying any
+// of them, so it could only learn a created id from the translated op.
+// `None` there meant nothing was bound and the stale previous creation
+// stayed live. Core now mints the group id at translation time (the same
+// `u<hex>` space and the same value the applier would have chosen), so
+// the group is nameable by the bind that follows it.
+//
+// KEEP THE WORKAROUND until the engine carrying that fix is published:
+// this bundle runs against whatever wasm the host booted, and reading the
+// previous group out of the TREE is correct on both old and new engines.
 
 import type {
   BundleHost,

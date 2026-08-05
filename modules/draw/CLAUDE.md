@@ -334,14 +334,18 @@ earlier note claimed while correcting a staler 58) and pinned in
 - 200 inserts + binds + property writes apply in one batch in ~12 ms and
   ONE undo removes all of them.
 
-ONE MEASURED EDGE, recorded in `v59-wire.ts` because it is why repeats
-never addresses a group it minted: with an EARLIER `bindCreated` present
-in the same batch, a `bindCreated` placed after a `createGroup` resolves
-inconsistently — `deleteFrame { frameId: "$h:g" }` reaches the GROUP
-(and is refused, since deleteFrame refuses groups) while `dissolveGroup
-{ groupId: "$h:g" }` refuses with "node not found: Group(<the earlier
-insert's id>)". With no earlier bind, the dissolve resolves correctly.
-Repeats reads the previous group out of the TREE before it builds.
+ONE MEASURED EDGE, recorded in `v59-wire.ts` — now DIAGNOSED AND FIXED
+IN CORE, and still worked around here until that engine ships. With an
+EARLIER `bindCreated` in the same batch, a `bindCreated` placed after a
+`createGroup` bound the PREVIOUS creation, so `dissolveGroup { groupId:
+"$h:g" }` refused with "node not found: Group(<the earlier insert's
+id>)". The cause was not the resolver: a wire `createGroup` translated
+with `spec.self_id: None` and let the APPLIER mint the id, while a
+handle-using batch translates every child BEFORE applying any of them —
+so it could only learn a created id from the translated op, and `None`
+there bound nothing. Core now mints the group id at translation time.
+Repeats still reads the previous group out of the TREE before it builds,
+because this bundle runs against whatever wasm the host booted.
 
 BLENDS v1 is the SECOND consumer and is likewise ONE undo step for every
 verb (`blend.spec.ts` measures make / update / both reverses / expand /
