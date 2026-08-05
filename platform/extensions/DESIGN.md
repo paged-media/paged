@@ -1719,3 +1719,77 @@ workbook and can write NONE of it — all spreadsheet semantics live in Rust and
 the engine has no cell-style write API — so it declares
 `writablePaths: []` and the host renders those controls read-only instead of
 fake-interactive.
+
+### 18.12 `panelIds` vs. a retargeting panel — the docking rule, and why NO contract member was added (2026-08-05)
+
+The defect ADR-023's *Still open* names first: **`EditContextContribution.panelIds`
+fights a shared panel.** `panelIds` lets a context raise its OWN panels on
+enter. It was written when every panel belonged to exactly one owner, so
+"raise mine" and "keep the shared one visible" could not conflict. §18 makes
+them conflict: entering `paged.draw`'s `vectorGraphic` raises draw's Stroke
+panel into the editor's right dock, that dock renders ONE panel at a time, and
+the shared Layers panel is therefore **off screen at the precise instant it
+retargets** — the one instant this whole seam exists to produce. Not
+theoretical: it is what the Layers slice's first run failed on.
+
+**The obvious fix is a sibling field, and it is refused.** `servesPanelIds:
+["paged.layers"]` beside `panelIds`, three reasons in order of weight:
+
+1. **It is a HOST LAYOUT fact, not a plugin fact.** Whether raising one panel
+   displaces another depends on the host's dock topology. In a multi-pane
+   shell both are visible and the question never arises. A plugin cannot know
+   that and must not have to.
+2. **It puts HOST PANEL IDS in plugin code.** `provides` is the declaration
+   §18.6 spent four arguments making identity-free; a plugin naming
+   `paged.layers` re-introduces exactly that coupling one layer up, in the
+   same contract, for the same panel.
+3. **It can DRIFT from `provides`, and both directions lie.** Declare a panel
+   you do not serve and it stays on screen showing CORE rows while the user is
+   inside your frame — the §18.3 `absent` lie in docking form. Omit one you do
+   serve and the defect is simply unfixed.
+
+**So the contract gains nothing.** The answer is a set intersection over
+vocabulary that already exists on both sides, computed by the host:
+
+- the PROVIDER half is `BindingProviderScope` — `provides.collections` /
+  `provides.paths`, which a provider must already declare correctly or nothing
+  about it works;
+- the PANEL half is what a MOUNTED host panel actually asks the seam about,
+  reported by the seam hooks themselves rather than declared per panel (the
+  editor's `catalog/panel-binding-surface.tsx`). A `PanelContribution.serves`
+  field would have been a second copy of what `useProvidedCollection("layers")`
+  already says, and the copy rots the first time a panel grows a binding. This
+  is the precedent ADR-023's own outcome praises — *"put in the PLATFORM, not
+  the panel, so every schema list inherits it"* — applied to the docking rule.
+
+The rule: **on enter, OPEN each declared panel; withhold the RAISE when the
+panel on screen is one the entering context's providers serve.** Everything
+else is unchanged, and that matters — the withholding is targeted, not a
+blanket "never steal focus", or the panel-set swap would be dead. Proven both
+ways in the editor's `layers-retarget` spec: with Layers on screen the raise is
+withheld and the panel retargets in place; with Character on screen (which draw
+answers nothing for) the same entry raises Stroke exactly as before.
+
+**The authority is purely NEGATIVE.** "This context serves that panel" can only
+ever withhold a displacement. It never opens, raises or closes a host panel, so
+a wrong declaration cannot be used to take over the user's dock — the worst it
+can do is fail to raise the plugin's own panel, which is visible and harmless.
+A context that wants a shared panel SUMMONED must still ask the user's shell
+door; borrowing the provider declaration for that would be a positive authority
+nobody granted.
+
+**An unmounted shared panel is not a failure mode.** The three doors that could
+have been asked to do something here — closed, behind another tab, in a dock
+group that is collapsed — all resolve to *nothing happens, safely*, because
+resolution through this seam is PULL-BASED at mount and not a push to a
+subscriber. There is no listener to leak, no stale render to correct, and no
+error to swallow: the panel resolves through `activeProviders()` the instant it
+mounts, so it shows the provider's rows on the next activation. `invalidate()`
+and `onDidChange` wake only MOUNTED panels, which is exactly right. The editor
+asserts this directly (`AC-NO-DISPLACE-2`) rather than leaving it as a claim.
+
+**What this does NOT close.** The tab STRIP is chrome that outlives the panel
+it names, so a tab reading "Layers" while a provider is active carries no hint
+that its content has retargeted; the "provided by" affordance lives INSIDE the
+panel and is therefore invisible until you open it. That is a legitimate
+residual (a provenance mark on the tab), not part of this rule.

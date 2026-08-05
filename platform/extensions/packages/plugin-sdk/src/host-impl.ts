@@ -610,8 +610,13 @@ export function createBindingProviderRegistry(): BindingProviderBackend {
   const stack: { plugin: string; contextType: string; elementId: string | null }[] =
     [];
   const listeners = new Set<() => void>();
+  // The separator is the ESCAPE `\u0000`, not a literal NUL byte. A raw
+  // control character in the source makes every tool that sniffs content
+  // treat this 3k-line file as BINARY — `grep` silently matches nothing
+  // in it, `file(1)` reports "data", and diffs go opaque. Same value,
+  // same collision-proof key, readable file.
   const key = (plugin: string, contextType: string) =>
-    `${plugin} ${contextType}`;
+    `${plugin}\u0000${contextType}`;
   const emit = () => {
     for (const l of [...listeners]) l();
   };

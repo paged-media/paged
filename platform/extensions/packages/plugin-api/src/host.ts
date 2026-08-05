@@ -137,7 +137,25 @@ export interface EditContextContribution {
    *  names. Empty = no restriction (all tools stay available). */
   toolIds?: string[];
   /** Panel ids the cockpit emphasizes / raises on enter (the panel-set
-   *  swap). The shell opens/raises these; it does not hide others. */
+   *  swap).
+   *
+   *  These are the context's OWN panels. There is deliberately no sibling
+   *  field naming the SHARED host panels a context serves (ADR-023), and
+   *  the reason is worth stating because the gap looks like an omission:
+   *  a plugin naming `paged.layers` here would be host-panel IDENTITY in
+   *  plugin code — the exact coupling binding providers removed from the
+   *  value lane — and it could drift from `provides`, which is the only
+   *  declaration that decides who actually answers. The host infers
+   *  "serves" from `BindingProviderScope` instead (DESIGN.md §18.12).
+   *
+   *  WHAT THE HOST GUARANTEES, corrected 2026-08-05: it OPENS these. It
+   *  raises them too, EXCEPT when raising would displace a panel the
+   *  entering context's own binding providers serve — because in a dock
+   *  that shows one panel at a time, "raise mine" IS "hide the shared
+   *  one", and hiding it at the instant it retargets defeats the whole
+   *  point. (This comment used to promise "it does not hide others"
+   *  unconditionally; that was never true in such a dock.) A withheld
+   *  raise still opens the tab, so the surface is reachable either way. */
   panelIds?: string[];
   /** Called when the context becomes active (after the stack push + the
    *  scope narrowing). The element entered on is passed so the hook can
