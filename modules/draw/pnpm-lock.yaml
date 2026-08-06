@@ -18,11 +18,11 @@ importers:
   packages/draw-bundle:
     dependencies:
       '@paged-media/plugin-api':
-        specifier: 0.2.28-canary.0
-        version: 0.2.28-canary.0
+        specifier: 0.2.29-canary.0
+        version: 0.2.29-canary.0
       '@paged-media/plugin-sdk':
-        specifier: 0.2.28-canary.0
-        version: 0.2.28-canary.0(react@18.3.1)
+        specifier: 0.2.29-canary.0
+        version: 0.2.29-canary.0(react@18.3.1)
     devDependencies:
       '@paged-media/draw-geometry':
         specifier: workspace:*
@@ -383,11 +383,11 @@ packages:
   '@paged-media/plugin-api@0.2.24-canary.0':
     resolution: {integrity: sha512-4TXZeTEivmHbfExYT6LW8HpvkDhLw8TFjtiq+4kmf6MCLfmd2362Vvhbi4+TJrTcUAhu19u/Gbr8TFITcPFCgw==}
 
-  '@paged-media/plugin-api@0.2.28-canary.0':
-    resolution: {integrity: sha512-bNzPXLZ08RHYIKqEoeysT4Vj9l1GocsizgMHUdIZb/YZ18xjdGu33VxG4wkzZTD335UpIov6XM+t0dUwbKE99g==}
+  '@paged-media/plugin-api@0.2.29-canary.0':
+    resolution: {integrity: sha512-dSRpd2OyTrDNmiFVbbG/USJPoOq0zIcNb0c2xRyxJAbzk7AsX630gr1zg9oAJBop6zp33u4L7MJ1OGHhjY768g==}
 
-  '@paged-media/plugin-sdk@0.2.28-canary.0':
-    resolution: {integrity: sha512-oCpcCtmx+k9wwQw/V6uaLSfuGK9yAO/wCfRsB8Euf/EQKK16afsPo/CENMlEE/fEFSvyaxICrCmbXfoUmaaZ4w==}
+  '@paged-media/plugin-sdk@0.2.29-canary.0':
+    resolution: {integrity: sha512-AMplmxOnl9PVTBqlcjpvuoHmUeh6tdEs6bmbKVUuOyZUk0h+476HNwpsQFUvcCEPCEiTLGPUfp80zo+J89du8g==}
     peerDependencies:
       react: ^18.3.0
     peerDependenciesMeta:
@@ -1088,13 +1088,13 @@ snapshots:
     dependencies:
       '@types/react': 18.3.31
 
-  '@paged-media/plugin-api@0.2.28-canary.0':
+  '@paged-media/plugin-api@0.2.29-canary.0':
     dependencies:
       '@types/react': 18.3.31
 
-  '@paged-media/plugin-sdk@0.2.28-canary.0(react@18.3.1)':
+  '@paged-media/plugin-sdk@0.2.29-canary.0(react@18.3.1)':
     dependencies:
-      '@paged-media/plugin-api': 0.2.28-canary.0
+      '@paged-media/plugin-api': 0.2.29-canary.0
     optionalDependencies:
       react: 18.3.1
 
