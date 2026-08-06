@@ -78,32 +78,41 @@ export type {
 // wire.d.ts is vendored verbatim from the PUBLISHED
 // `@paged-media/canvas-wasm` and guarded by
 // `scripts/sync-wire.mjs --check` (content drift OR a stale stamp
-// fails CI). The current stamp is 0.51.0 = protocol 51.
+// fails CI). The current stamp is 0.61.0 = protocol 61.
 //
-// Core is at **protocol 59** and has not published yet. Sixteen new ops
-// landed there that bundles need NOW: four in v56 (paged.draw's Wave-B
-// path topology + B-18 nested content), seven in v57 (B-22 — the
-// REGION Pathfinder row + Shape Builder's face commit), four in v58
-// (C-28 opacity masks + C-29 type-on-a-path) and one in v59 (Arrange —
-// the z-order door). Hand-editing wire.d.ts to add them would break the
-// drift gate — a vendored copy that no longer matches its source is not
-// a passing check. So they live HERE, in the hand-owned curation module,
-// exactly the way DOC-03's `StoryContent` (protocol v54) ships
-// hand-written in host.ts ahead of its vendoring: the shapes below are
-// byte-equal to the tsify output the v59 build emits, so when
-// canvas-wasm 0.59 publishes and `sync-wire.mjs` runs, `Mutation`
-// absorbs them and these aliases become redundant (the union stays sound
-// throughout — `PendingMutation` collapses into a subset of `Mutation`,
-// it never contradicts it).
+// THE WAIT IS OVER (2026-08-06). This block was written while core sat
+// at protocol 59 with nothing published: sixteen ops that bundles needed
+// NOW lived here, in the hand-owned curation module, because
+// hand-editing wire.d.ts to add them would have broken the drift gate —
+// a vendored copy that no longer matches its source is not a passing
+// check. canvas-wasm 0.61.0 published, `sync-wire.mjs` ran, and the
+// vendored `Mutation` union now carries every one of them (four in v56 —
+// Wave-B path topology + B-18 nested content; seven in v57 — the B-22
+// REGION Pathfinder row + Shape Builder's face commit; four in v58 —
+// C-28 opacity masks + C-29 type-on-a-path; one in v59 — Arrange, the
+// z-order door). The prediction held exactly: `PendingMutation`
+// collapsed into a SUBSET of `Mutation` rather than contradicting it, so
+// the union stayed sound throughout.
+//
+// The aliases below are therefore REDUNDANT — and they stay anyway,
+// because removing exported contract types is a breaking change and
+// paged.draw imports them by name (`RegionMutation`,
+// `OpacityMaskMutation`, in draw-bundle's index.ts and v58-wire.ts).
+// Retiring them is a deliberate two-repo change: move paged.draw onto
+// the vendored `Mutation` members first, then delete these.
 //
 // HONEST LIMIT: a protocol-ahead op is not gated by `host.supports()`
 // — the gate is the WORKER's protocol version, which the client
 // handshake already checks (`protocolMismatch`). A bundle sending one
 // of these to a pre-v56 (resp. pre-v57 / v58 / v59) worker gets an
 // honest non-applied `MutationOutcome` from the engine, never a silent
-// no-op. Nor can they ride the vendored `batch` op
-// (`args.ops: Mutation[]`) until the re-sync — batch them by issuing
-// separate `mutate` calls.
+// no-op.
+//
+// They CAN now ride the vendored `batch` op. Until the 0.61.0 re-sync
+// `args.ops: Mutation[]` could not describe them, so callers issued
+// separate `mutate` calls and got one undo step PER op; the vendored
+// union now contains them, so a sequence that belongs together can be
+// batched back into a single undo step.
 
 /** v56 (Wave B) — close an OPEN subpath of a path element: the inverse
  *  gesture of `pathOpenAt`'s scissors cut. `subpath` picks the contour
