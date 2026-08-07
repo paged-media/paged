@@ -19,7 +19,7 @@
 // curation rule as contributions.ts: a type joins this list when a
 // bundle actually uses it.
 
-import type { ElementId, Mutation } from "./wire";
+import type { Mutation } from "./wire";
 
 export type {
   // Identity + addressing.
@@ -101,6 +101,14 @@ export type {
 // Retiring them is a deliberate two-repo change: move paged.draw onto
 // the vendored `Mutation` members first, then delete these.
 //
+// K-12 (2026-08-07) — they are now aliases IN FACT, not just in this
+// comment: each is `Extract<Mutation, { op: "…" }>` rather than a
+// re-declared object literal. Saying "redundant" while shipping a
+// second hand-written copy of a generated type is how the two come
+// apart — structural typing hides it until the generated side changes
+// a field, and then the error lands in a bundle, not here. See the
+// subset gate at the foot of this file.
+//
 // HONEST LIMIT: a protocol-ahead op is not gated by `host.supports()`
 // — the gate is the WORKER's protocol version, which the client
 // handshake already checks (`protocolMismatch`). A bundle sending one
@@ -119,10 +127,7 @@ export type {
  *  by index; omit for the default (the single/last open subpath).
  *  Coincident endpoints — the duplicated pair a cut leaves — merge back
  *  into one anchor; endpoints apart gain the implicit closing edge. */
-export type ClosePathMutation = {
-  op: "closePath";
-  args: { elementId: ElementId; subpath?: number | null };
-};
+export type ClosePathMutation = Extract<Mutation, { op: "closePath" }>;
 
 /** v56 (Wave B) — weld two OPEN single-contour path elements into one
  *  (InDesign's Join): connect the NEAREST endpoints of `elementId` and
@@ -130,10 +135,7 @@ export type ClosePathMutation = {
  *  closes the result into a ring. Non-path / closed / multi-contour
  *  inputs are rejected with an honest error (no-op). One undo step
  *  restores BOTH elements. */
-export type JoinPathsMutation = {
-  op: "joinPaths";
-  args: { elementId: ElementId; otherId: ElementId };
-};
+export type JoinPathsMutation = Extract<Mutation, { op: "joinPaths" }>;
 
 /** v56 (B-18) — InDesign paste-into: nest an existing TOP-LEVEL page
  *  item inside a container Rectangle / Oval / Polygon. The child keeps
@@ -141,18 +143,12 @@ export type JoinPathsMutation = {
  *  clipped by the container's outline. Grouped / already-nested
  *  children and non-container hosts are rejected with an honest error.
  *  One undo pops the child back to its exact stacking slot. */
-export type PasteIntoMutation = {
-  op: "pasteInto";
-  args: { containerId: ElementId; childId: ElementId };
-};
+export type PasteIntoMutation = Extract<Mutation, { op: "pasteInto" }>;
 
 /** v56 (B-18) — the inverse gesture: pop a pasted-in child back to top
  *  level (stacks on top), world transform preserved. One undo re-nests
  *  it at the same child index. */
-export type ReleaseFromMutation = {
-  op: "releaseFrom";
-  args: { childId: ElementId };
-};
+export type ReleaseFromMutation = Extract<Mutation, { op: "releaseFrom" }>;
 
 // ------------------------------------------ v57 (B-22) region ops
 //
@@ -175,46 +171,28 @@ export type ReleaseFromMutation = {
 
 /** v57 (B-22) — every face of the arrangement becomes its own object,
  *  keeping the attributes of the topmost input covering it. */
-export type PathfinderDivideMutation = {
-  op: "pathfinderDivide";
-  args: { elementIds: ElementId[] };
-};
+export type PathfinderDivideMutation = Extract<Mutation, { op: "pathfinderDivide" }>;
 
 /** v57 (B-22) — each input is clipped to the part nothing above it
  *  covers, and loses its stroke. Inputs entirely hidden are deleted. */
-export type PathfinderTrimMutation = {
-  op: "pathfinderTrim";
-  args: { elementIds: ElementId[] };
-};
+export type PathfinderTrimMutation = Extract<Mutation, { op: "pathfinderTrim" }>;
 
 /** v57 (B-22) — Trim, then coalesce: inputs that share a fill colour
  *  merge into one object. */
-export type PathfinderMergeMutation = {
-  op: "pathfinderMerge";
-  args: { elementIds: ElementId[] };
-};
+export type PathfinderMergeMutation = Extract<Mutation, { op: "pathfinderMerge" }>;
 
 /** v57 (B-22) — keep only what falls inside the TOPMOST input, coloured
  *  by the objects beneath it; the topmost input is consumed as the
  *  cookie cutter and disappears. */
-export type PathfinderCropMutation = {
-  op: "pathfinderCrop";
-  args: { elementIds: ElementId[] };
-};
+export type PathfinderCropMutation = Extract<Mutation, { op: "pathfinderCrop" }>;
 
 /** v57 (B-22) — fills become strokes: every arrangement edge (split at
  *  each crossing) becomes an open `GraphicLine` stroked with the fill of
  *  the input that contributed it. All inputs are consumed. */
-export type PathfinderOutlineMutation = {
-  op: "pathfinderOutline";
-  args: { elementIds: ElementId[] };
-};
+export type PathfinderOutlineMutation = Extract<Mutation, { op: "pathfinderOutline" }>;
 
 /** v57 (B-22) — the BACKMOST object minus every object in front of it. */
-export type PathfinderMinusBackMutation = {
-  op: "pathfinderMinusBack";
-  args: { elementIds: ElementId[] };
-};
+export type PathfinderMinusBackMutation = Extract<Mutation, { op: "pathfinderMinusBack" }>;
 
 /** v57 (B-22) — whether `pathfinderFaces` KEEPS the named faces or
  *  REMOVES them (Shape Builder's drag vs alt-drag). */
@@ -226,10 +204,7 @@ export type FaceSelectMode = "keep" | "remove";
  *  `elementIds` (ids are only stable per input set); `mode` picks
  *  whether they are the faces kept or the faces removed. An unknown id
  *  is REFUSED, not ignored — a stale face set fails loudly. */
-export type PathfinderFacesMutation = {
-  op: "pathfinderFaces";
-  args: { elementIds: ElementId[]; faces: string[]; mode: FaceSelectMode };
-};
+export type PathfinderFacesMutation = Extract<Mutation, { op: "pathfinderFaces" }>;
 
 /** v58 (C-28) — how the mask artwork's coverage is read. `luminosity`
  *  is Illustrator's default and PDF's `/S /Luminosity`; `alpha` reads
@@ -255,23 +230,12 @@ export type OpacityMaskType = "luminosity" | "alpha";
  *  Vello output is now byte-identical to the CPU rasterizer across
  *  luminosity, alpha and both inverted forms. Safe to build WYSIWYG UI
  *  over. */
-export type ApplyOpacityMaskMutation = {
-  op: "applyOpacityMask";
-  args: {
-    targetId: ElementId;
-    maskId: ElementId;
-    maskType?: OpacityMaskType | null;
-    invert?: boolean | null;
-  };
-};
+export type ApplyOpacityMaskMutation = Extract<Mutation, { op: "applyOpacityMask" }>;
 
 /** v58 (C-28) — drop the mask relation; the artwork returns to top level
  *  with its geometry untouched. One undo re-applies the mask with its
  *  original mode/invert at the same z slot. */
-export type ReleaseOpacityMaskMutation = {
-  op: "releaseOpacityMask";
-  args: { targetId: ElementId };
-};
+export type ReleaseOpacityMaskMutation = Extract<Mutation, { op: "releaseOpacityMask" }>;
 
 /** v58 (C-29) — **Type on a Path**: flow an existing story along an
  *  existing path element. The engine could already RENDER type on a path
@@ -283,23 +247,10 @@ export type ReleaseOpacityMaskMutation = {
  *  Center honoured), `flipPathEffect` and the `startBracket`/`endBracket`
  *  range are all live. `PathEffect` is deliberately NOT exposed — only
  *  `RainbowPathEffect` actually renders. */
-export type AttachTextToPathMutation = {
-  op: "attachTextToPath";
-  args: {
-    elementId: ElementId;
-    storyId: string;
-    pathTypeAlignment?: string | null;
-    flipPathEffect?: string | null;
-    startBracket?: number | null;
-    endBracket?: number | null;
-  };
-};
+export type AttachTextToPathMutation = Extract<Mutation, { op: "attachTextToPath" }>;
 
 /** v58 (C-29) — unlink the text from the path; the exact inverse. */
-export type DetachTextFromPathMutation = {
-  op: "detachTextFromPath";
-  args: { elementId: ElementId };
-};
+export type DetachTextFromPathMutation = Extract<Mutation, { op: "detachTextFromPath" }>;
 
 /** v59 (Arrange) — where `reorderElement` puts its target inside the
  *  sibling list it already belongs to. `0` is the BACKMOST slot (painted
@@ -349,14 +300,18 @@ export type ZOrderTarget =
  *  existing source elements byte-for-byte and only places new ones, so a
  *  reorder reverts on an export/reopen round trip. Do not present
  *  Arrange as durable across IDML interchange yet. */
-export type ReorderElementMutation = {
-  op: "reorderElement";
-  args: { elementId: ElementId; to: ZOrderTarget };
-};
+export type ReorderElementMutation = Extract<Mutation, { op: "reorderElement" }>;
 
-/** The protocol-ahead ops, as one union — the delta between the
- *  vendored `Mutation` (protocol 51) and core's protocol 59. Empties
- *  itself on the next `sync-wire.mjs` run. */
+/** The protocol-ahead ops, as one union.
+ *
+ *  This said "the delta between the vendored `Mutation` (protocol 51)
+ *  and core's protocol 59 — empties itself on the next `sync-wire.mjs`
+ *  run". The run happened (the vendored stamp is 0.61.0) and the delta
+ *  did NOT empty itself: `sync-wire.mjs` rewrites `wire.d.ts` and has
+ *  no idea this file exists. So it is currently EMPTY in substance —
+ *  every member is a member of `Mutation` — while still being a real
+ *  union, and the gate at the foot of this file is what keeps that
+ *  claim honest instead of asserting it in prose. */
 /** v57 (C-15) — name the id a creating sibling is about to mint, so a
  *  LATER child of the same batch can address it as `"$h:<handle>"`.
  *
@@ -383,10 +338,7 @@ export type ReorderElementMutation = {
  *  Generalises the v34 `$created` sentinel — which only two mutation
  *  kinds understood — to any number of live names addressable from any
  *  mutation kind. */
-export type BindCreatedMutation = {
-  op: "bindCreated";
-  args: { handle: string };
-};
+export type BindCreatedMutation = Extract<Mutation, { op: "bindCreated" }>;
 
 export type PendingMutation =
   | BindCreatedMutation
@@ -411,3 +363,35 @@ export type PendingMutation =
  *  protocol-ahead ops. Widening an accepted-input type is additive —
  *  every existing `Mutation` call site still compiles. */
 export type MutationInput = Mutation | PendingMutation;
+
+/** K-12 — THE DELTA IS A SUBSET OF `Mutation`, and this is the gate.
+ *
+ *  `sync-wire.mjs` empties the delta in one direction only: it refreshes
+ *  `wire.d.ts`, and nothing here notices that the ops it used to be
+ *  ahead of have arrived. So the delta drained itself and no one told
+ *  it — every member above is now IN the vendored union, and the block's
+ *  own header has said so since 2026-08-06 while the members went on
+ *  being independently-declared object literals.
+ *
+ *  That is not cosmetic. A hand-written literal that HAPPENS to match a
+ *  generated one is a second type that structural typing lets you get
+ *  away with until the generated side changes a field — and then the
+ *  error surfaces at the call site, not here. Declaring each member as
+ *  `Extract<Mutation, …>` makes them one type by construction, so they
+ *  cannot drift at all.
+ *
+ *  This line is the check: if any member ever stops being part of
+ *  `Mutation`, its `Extract` collapses to `never`, `PendingMutation`
+ *  narrows, and the assignment below fails to compile — naming the
+ *  regression here rather than in whichever bundle hit it first. When a
+ *  genuinely protocol-ahead op is added, it will not be an `Extract`,
+ *  and this line is what will (correctly) fail until it lands in a
+ *  published wire and the member is folded back.
+ *
+ *  Type-level, never a value: this module is the type-only façade, and
+ *  a `const` here — even an unexported one — would put a runtime symbol
+ *  in a package whose whole contract is that it has none. */
+type Assert<T extends true> = T;
+export type DeltaIsASubsetOfTheSettledUnion = Assert<
+  PendingMutation extends Mutation ? true : false
+>;
