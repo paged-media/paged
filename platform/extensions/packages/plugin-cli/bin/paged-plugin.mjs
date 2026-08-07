@@ -31,7 +31,11 @@ const RENDERING = new Set([
 ]);
 const CLIPBOARD = new Set(["none", "vector", "full"]);
 const SCOPES = new Set(["broad", "scoped"]);
-const ENTRIES = new Set(["doubleClick", "command"]);
+// K-13 — `doubleClick` is the ONE entry gesture for canvas content.
+// See EditContextContribution.entry: a user learns "double-click to go
+// inside" once and it must hold for every plugin. "command" was removed
+// (declared, never implemented, zero users).
+const ENTRIES = new Set(["doubleClick"]);
 const BAKED_FALLBACKS = new Set(["group", "rectangle", "raster"]);
 const WASM_PURPOSES = new Set(["layout", "codec", "compute", "engine"]);
 // GPU (WebGPU) realm vocabulary (I-07 / C-1 Stage B realm-local; ADR-018).
@@ -438,7 +442,7 @@ function validateManifest(manifest, manifestDir) {
             if (typeof ec !== "object" || ec === null ||
                 typeof ec.type !== "string" || !ENTRIES.has(ec.entry) ||
                 (ec.priority !== undefined && !Number.isInteger(ec.priority))) {
-              err(`each editContext needs { type: string, entry: doubleClick|command }`);
+              err(`each editContext needs { type: string, entry: "doubleClick" }`);
             }
           }
         }

@@ -1793,3 +1793,61 @@ it names, so a tab reading "Layers" while a provider is active carries no hint
 that its content has retargeted; the "provided by" affordance lives INSIDE the
 panel and is therefore invisible until you open it. That is a legitimate
 residual (a provenance mark on the tab), not part of this rule.
+
+## 19. One entry gesture for canvas content (K-13 — `entry: "doubleClick"`)
+
+**Rule: any plugin that exposes content to the canvas is entered by
+double-clicking its frame.** `EditContextContribution.entry` is a
+one-member union so the compiler enforces it.
+
+This is a PRODUCT rule, and it outranks the convenience of matching a
+plugin's internal state exactly. A user learns "double-click to go
+inside" once, and it has to hold for a vector group, a spreadsheet, a
+web frame, a Word document and a raster image alike. The moment one
+bundle enters some other way, "how do I get into this thing" becomes
+plugin-specific trivia — a cost paid by every user of every plugin, to
+save one plugin author some wiring.
+
+### Why `"command"` was removed rather than implemented
+
+`entry` used to accept `"doubleClick" | "command"`, with the second
+documented as "programmatic / menu-driven". Nothing implemented it, on
+either side:
+
+- `EditContextRegistry` is `register`-only;
+- `BundleHost` has no context-enter member anywhere in `host-impl.ts`;
+- the shell's `enter` is a React hook inside `useEditContextStack`,
+  which no bundle can reach;
+- the editor's only wired entry path is
+  `tryEnterEditContext(hit: DoubleClickHit)`.
+
+So a plugin could declare a command-entry context, pass manifest
+validation, register it successfully — and it was dead on arrival. That
+is the same shape as the `absent` lie ADR-023 exists to prevent, one
+layer up: a declaration the platform accepts and then silently never
+honours.
+
+An audit at removal found **5 of 5 content plugins already on
+`"doubleClick"`** (draw `vectorGraphic`, web `webFrame`, sheets `sheet`,
+doc `wordDocument`, image `rasterImage`) and **zero users of
+`"command"`**. `plugin-publish` and `plugin-data` declare no edit
+contexts at all, correctly — foreign-format I/O and a data provider have
+no canvas editing mode to enter. Removing the member therefore broke
+nothing and moved the rule from review-time to compile-time.
+
+Kept as a one-member union rather than deleted outright: the field is
+where a second gesture would be declared if one is ever genuinely
+warranted, and an author reading it should see that the choice was
+MADE, not that it was never considered. `plugin-cli`'s hand-mirrored
+`ENTRIES` set was narrowed in the same change — the CLI and the schema
+change together, per this repo's rules.
+
+### What this costs, stated rather than hidden
+
+A plugin whose natural activation window is not "the user is inside this
+frame" has to live with the frame boundary anyway. paged.image is the
+worked example: its binding providers would ideally activate on "I hold
+this raster frame", which the plugin knows from its own ingest and not
+from a gesture. It takes double-click entry regardless, and scopes
+provider answers by DECLINING when its own state says there is nothing
+to serve — which the binding contract already models properly.

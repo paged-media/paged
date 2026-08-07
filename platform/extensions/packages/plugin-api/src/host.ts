@@ -121,9 +121,37 @@ export interface EditContextContribution {
    *  (a content-type name, e.g. `"vectorGraphic"`, `"webFrame"`), but
    *  the bundle can only claim a type it declared. */
   type: string;
-  /** How the user enters it. `"doubleClick"` wires the canvas
-   *  double-click entry; `"command"` is programmatic / menu-driven. */
-  entry: "doubleClick" | "command";
+  /**
+   * How the user enters it. `"doubleClick"` wires the canvas
+   * double-click entry.
+   *
+   * THIS IS THE ONLY VALUE, and that is a product rule rather than a
+   * missing feature (K-13, 2026-08-07). **Any plugin that exposes
+   * content to the canvas is entered by double-clicking its frame.**
+   * The gesture must mean ONE thing across the product: a user learns
+   * "double-click to go inside" once, and it has to hold for a vector
+   * group, a spreadsheet, a web frame, a Word document and a raster
+   * image alike. A bundle with a bespoke entry would turn "how do I get
+   * into this thing" into plugin-specific trivia, which is a worse cost
+   * than any convenience a custom entry buys.
+   *
+   * `"command"` USED TO BE HERE, documented as "programmatic /
+   * menu-driven", and nothing ever implemented it: the registry is
+   * `register`-only, `BundleHost` has no enter member, and the shell's
+   * `enter` is a React hook no bundle can reach. So it was a value the
+   * platform accepted, validated and registered — and then silently
+   * never honoured, which is the `absent` lie one layer up. An audit at
+   * removal found 5 of 5 content plugins on `"doubleClick"` (draw, web,
+   * sheets, doc, image) and ZERO users of `"command"`, so removing it
+   * broke nothing and made the rule checkable by the compiler instead
+   * of by review.
+   *
+   * Kept as a one-member union rather than deleted outright: the field
+   * is where a SECOND entry gesture would be declared if one is ever
+   * genuinely warranted, and a plugin author reading it should see that
+   * the choice was made, not that it was never considered.
+   */
+  entry: "doubleClick";
   /** Does this element warrant entering THIS context? Pure predicate
    *  over the candidate snapshot (kind / groupChain / this plugin's
    *  metadata). When an `objectType` already routes a double-click to a
