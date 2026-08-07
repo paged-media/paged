@@ -2536,8 +2536,32 @@ export function createBundleHost(
     async write(path, bytes) {
       const reply = await getEditor().client.send({
         kind: "writePagedPart",
-        payload: { path: partsFull(path), bytes: Array.from(bytes) },
-      });
+        payload: {
+          path: partsFull(path),
+          bytes: Array.from(bytes),
+          // C-34 — DECLARE WHO IS WRITING, so the engine
+          // confines this to `paged/<id>/` instead of trusting that we
+          // built the path correctly. `partsFull` already scopes it;
+          // that is a convention held in THIS file, and a convention is
+          // not a boundary — a bundle reaching the raw handle bypasses
+          // it entirely. Saying the caller moves the check to the one
+          // place that cannot be routed around.
+          //
+          // Safe against an older worker: the wire has no
+          // `deny_unknown_fields`, so an engine without the gate
+          // ignores this and behaves exactly as before. No `supports()`
+          // probe needed — there is no degraded path to choose between.
+          caller: manifest.id,
+        },
+        // THE CAST, named rather than left to be discovered. `wire.d.ts`
+        // is vendored from the PUBLISHED `@paged-media/canvas-wasm`
+        // (0.61.0), whose `writePagedPart` has no `caller` — the field
+        // exists in core today and reaches these types only when the
+        // next canvas-wasm publishes and `sync-wire` runs. Same escape-hatch
+        // shape the repo already uses elsewhere: a cast pointing at a
+        // contract that EXISTS AND IS COMMITTED, not at a hope. It
+        // deletes itself at the repin.
+      } as never);
       if (reply.kind !== "pagedPartWritten") {
         const err =
           reply.kind === "pagedPartFailed" ? reply.payload.error : `unexpected ${reply.kind}`;
