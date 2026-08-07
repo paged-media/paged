@@ -574,7 +574,22 @@ export interface PagedEditor {
    *  scene channel (headless / older editor); `host.contribute.sceneLayer()`
    *  then warns + no-ops and `supports("rendering.sceneLayer@1")` is false. */
   sceneLayers?: {
-    submit(elementId: string, layer: SceneLayer): Promise<void>;
+    /**
+     * `caller` (C-34) — the plugin submitting. OPTIONAL, and omitting it
+     * keeps the prior behaviour exactly: the engine records no owner and
+     * enforces nothing.
+     *
+     * When present the engine records which plugin claimed the frame's
+     * render and refuses a foreign replace, because a frame's in-frame
+     * render belongs to ONE content type and the door used to be an
+     * unconditional insert. The SDK adapter fills it from the manifest
+     * id, so a bundle never passes it itself.
+     */
+    submit(
+      elementId: string,
+      layer: SceneLayer,
+      caller?: string,
+    ): Promise<void>;
     clear(elementId: string): Promise<void>;
   };
   /** C-6 (I-06) — the renderer RESOURCE-PROVIDER channel. The editor

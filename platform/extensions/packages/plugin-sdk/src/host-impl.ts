@@ -1473,7 +1473,11 @@ export function createBundleHost(
             return;
           }
           submitted.add(elementId);
-          await ch.submit(elementId, layer);
+          // C-34 — DECLARE WHO IS RENDERING. The bundle never passes
+          // this; the adapter fills it from the manifest, which is the
+          // only place the identity is trustworthy. An engine without
+          // the gate ignores it, so this is additive.
+          await ch.submit(elementId, layer, manifest.id);
         },
         async clear(elementId) {
           submitted.delete(elementId);
