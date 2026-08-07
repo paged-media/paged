@@ -88,6 +88,23 @@ const TS_UNIONS = new Set(
   ),
 );
 
+// SINGLE-LITERAL type positions — `entry: "doubleClick";`.
+//
+// A one-member vocabulary is NOT a union and can never appear in
+// TS_UNIONS, whose regex requires at least one `|`. That assumption held
+// until K-13 narrowed `entry` from two members to one, at which point
+// this gate started failing a correctly-narrowed type — the gate was
+// asserting "a vocabulary has alternatives", which was never the rule.
+//
+// Anchored on a PROPERTY POSITION (`name: "value";`) rather than a bare
+// quoted word, so the prose in doc comments — which quotes vocabulary
+// values freely, including removed ones — cannot satisfy it.
+const TS_LITERALS = new Set(
+  [...tsSrc.matchAll(/\b[a-zA-Z]+\??:\s*"([a-zA-Z]+)"\s*[;,]/g)].map((m) =>
+    canon([m[1]]),
+  ),
+);
+
 // vocab → schema-ACCEPTED values + the CLI Set that mirrors them. `reserved` is
 // a vocabulary forward-declared in the TS type (and a CLI *reserved* Set) but
 // deliberately NOT accepted by the schema — e.g. gpu realm "shared" (ADR-018:
@@ -105,7 +122,7 @@ const VOCAB: Record<string, Vocab> = {
   clipboard: { values: ["none", "vector", "full"], cliSet: "CLIPBOARD" },
   scopes: { values: ["broad", "scoped"], cliSet: "SCOPES" },
   wasmPurposes: { values: ["layout", "codec", "compute", "engine"], cliSet: "WASM_PURPOSES" },
-  entries: { values: ["doubleClick", "command"], cliSet: "ENTRIES" },
+  entries: { values: ["doubleClick"], cliSet: "ENTRIES" },
   bakedFallbacks: { values: ["group", "rectangle", "raster"], cliSet: "BAKED_FALLBACKS" },
   gpuRealm: { values: ["bundle"], cliSet: "GPU_REALMS", reservedCliSet: "GPU_REALMS_RESERVED", reserved: ["shared"] },
 };
@@ -131,8 +148,15 @@ describe("capability vocabulary — single source: manifest.schema.json", () => 
           expect(SCHEMA_SCALARS.has(r)).toBe(false);
         }
       }
-      // 4. the TS type union == accepted ∪ reserved
-      expect(TS_UNIONS.has(canon([...values, ...reserved]))).toBe(true);
+      // 4. the TS type == accepted ∪ reserved. A vocabulary of two or
+      //    more is a UNION; a vocabulary of one is a bare literal, which
+      //    is a different shape in the AST and not a lesser one.
+      const want = canon([...values, ...reserved]);
+      const inTs =
+        values.length + reserved.length >= 2
+          ? TS_UNIONS.has(want)
+          : TS_LITERALS.has(want);
+      expect(inTs, `no TS type carries exactly ${want}`).toBe(true);
     });
   }
 

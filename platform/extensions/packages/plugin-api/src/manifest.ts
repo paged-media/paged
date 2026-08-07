@@ -337,7 +337,9 @@ export interface PluginContributions {
    *  nondeterminism is undebuggable. */
   editContexts?: Array<{
     type: string;
-    entry: "doubleClick" | "command";
+    /** K-13 — the ONE entry gesture for canvas content. See
+     *  `EditContextContribution.entry` and DESIGN.md §19. */
+    entry: "doubleClick";
     priority?: number;
   }>;
   /** Reserved (paged.web §9.1.2): plugin-defined object types under

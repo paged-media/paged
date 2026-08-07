@@ -270,8 +270,7 @@
               },
               "entry": {
                 "enum": [
-                  "doubleClick",
-                  "command"
+                  "doubleClick"
                 ]
               },
               "priority": {
