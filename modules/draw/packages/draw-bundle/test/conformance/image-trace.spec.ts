@@ -687,6 +687,15 @@ describe("draw conformance — IMAGE TRACE v0", () => {
       // `<Image><Contents>` base64, which core caches under an
       // `inline:<ptr>:<len>` key, not the URI — so the C-5 door answers
       // null here. Measured, not assumed.
+      //
+      // FIXED IN CORE 2026-08-07 (C-26): the inline cache is now keyed
+      // by the owning element's id, so this door serves embedded bytes.
+      // The pin below therefore FLIPS THE MOMENT the editor picks up a
+      // canvas-wasm built after that change — which is the pin working,
+      // not a regression. When it goes red, replace the `toBeNull()`
+      // with the positive assertion (bytes + natural size) and delete
+      // the "no placed bytes" half of this test's name; the decoder half
+      // below is a separate, still-true gap (Node has no ImageBitmap).
       expect(await h.host.assets.getPlacedImage(F7_PLACED_IMAGE.imageId)).toBeNull();
       // And this realm is Node: no createImageBitmap, no OffscreenCanvas.
       expect(rasterDecoderAvailable()).toBe(false);
