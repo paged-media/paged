@@ -1,7 +1,7 @@
 // GENERATED — do not edit. Vendored verbatim from the published
 // @paged-media/canvas-wasm .d.ts (tsify output from paged-media/core,
 // MPL-2.0 OR PMEL). Sync: node scripts/sync-wire.mjs · Check: --check.
-// Synced from @paged-media/canvas-wasm@0.61.0
+// Synced from @paged-media/canvas-wasm@0.61.1
 /* tslint:disable */
 /* eslint-disable */
 
@@ -922,7 +922,31 @@ export type GestureHandle = number;
  */
 export interface ElementGeometryItem {
     id: ElementId;
-    pageId: PageId;
+    /**
+     * C-23 — the page this element sits on, or `None` when it sits on
+     * the PASTEBOARD and belongs to no page.
+     *
+     * This used to be a plain `PageId`, and the door did not report a
+     * pageless element as pageless — it dropped it from the reply
+     * entirely, so a plugin that generated art off-page (paged.draw\'s
+     * pattern bake, stepping a tile past the page edge) created and
+     * grouped something it then could not read back.
+     *
+     * **The convention `None` carries:** `bounds` + `item_transform`
+     * compose against the SPREAD origin rather than a page origin.
+     * `spread_id` names which spread, because without it the answer is
+     * unusable the moment a document has two.
+     *
+     * Runtime-safe to widen: every element of every existing document
+     * is on a page, so no existing reply changes shape. The `None`
+     * only appears for items this door used to omit.
+     */
+    pageId?: PageId | null;
+    /**
+     * C-23 — the owning spread. Always populated; the page-owned case
+     * carries it too, so a consumer never has to ask a second door.
+     */
+    spreadId?: string | null;
     /**
      * `[top, left, bottom, right]`.
      */
@@ -1586,6 +1610,25 @@ export interface LinkSummary {
      * 300-ppi floor. `None` when the IDML omits it.
      */
     effectivePpi?: number | null;
+    /**
+     * C-27 — the placed image\'s OWN `<Image ItemTransform>`: how the
+     * pixels sit inside the frame. `elementGeometry` reports the frame
+     * and nothing reported this, so a plugin deriving geometry from the
+     * pixels (Image Trace today; any measure or annotate tool later)
+     * had to assume the image fills the frame — and quietly mis-placed
+     * its output on every cropped or fitted placement.
+     *
+     * Row-major `[a, b, c, d, tx, ty]`, mapping the image\'s natural
+     * pixel rect `(0, 0, width, height)` into the frame\'s INNER
+     * coordinate space — the same matrix the renderer composes with
+     * the frame\'s own transform. Compose it the same way and generated
+     * geometry lands where the pixels do.
+     *
+     * `None` for synthetic IDMLs that omit the inner transform, which
+     * is the case the renderer handles by stretching the image to the
+     * frame bounds; a consumer seeing `None` may assume that fill.
+     */
+    imageTransform?: [number, number, number, number, number, number] | null;
 }
 
 /**
@@ -1700,7 +1743,15 @@ export type PageId = string;
  */
 export interface PathAnchorsResult {
     id: ElementId;
-    pageId: PageId;
+    /**
+     * C-23 — see [`ElementGeometryItem::page_id`]; same convention,
+     * same reason. Anchors are in the element\'s own space either way.
+     */
+    pageId?: PageId | null;
+    /**
+     * C-23 — the owning spread; see [`ElementGeometryItem::spread_id`].
+     */
+    spreadId?: string | null;
     anchors: PathAnchorTriple[];
     /**
      * Per-contour boundaries. Empty for the common single-contour
@@ -1774,7 +1825,7 @@ export type Operation = { kind: "SetProperty"; node: NodeId; path: PropertyPath;
  * variants so e.g. `cmyk_icc_profile` becomes `cmykIccProfile` on
  * the wire — the TS protocol mirror locks the camelCase contract.
  */
-export type MainToWorkerKind = { kind: "hello" } | { kind: "loadDocument"; payload: { bytes: number[]; font?: number[] | null; cmykIccProfile?: number[] | null } } | { kind: "newBlankDocument"; payload: { widthPt: number; heightPt: number; font?: number[] | null } } | { kind: "registerFont"; payload: { family: string; style?: string | null; bytes: number[] } } | { kind: "clearFontRegistry" } | { kind: "registerColorProfile"; payload: { name: string; bytes: number[] } } | { kind: "mutate"; payload: Mutation } | { kind: "requestPage"; payload: { pageId: PageId; lod: LodTier } } | { kind: "hitTest"; payload: { pageId: PageId; docPoint: [number, number]; filter: HitFilter } } | { kind: "requestSnapshot"; payload: { pageId: PageId; targetWidthPx: number; dpi?: number | null } } | { kind: "setSelection"; payload: { selection: ContentSelection | null } } | { kind: "requestSelectionGeometry"; payload: { selection: ContentSelection } } | { kind: "requestCaretGeometry"; payload: { selection: ContentSelection } } | { kind: "requestCaretNav"; payload: { storyId: string; offset: number; direction: CaretDirection; cell?: TextCellAddr | null } } | { kind: "requestLineBounds"; payload: { storyId: string; offset: number; cell?: TextCellAddr | null } } | { kind: "requestWordBounds"; payload: { storyId: string; offset: number; cell?: TextCellAddr | null } } | { kind: "requestParagraphBounds"; payload: { storyId: string; offset: number; cell?: TextCellAddr | null } } | { kind: "undo" } | { kind: "redo" } | { kind: "setElementSelection"; payload: { ids: ElementId[]; mode: SelectionMode } } | { kind: "requestMarqueeHits"; payload: { pageId: PageId; rect: [number, number, number, number] } } | { kind: "requestElementGeometry"; payload: { ids: ElementId[] } } | { kind: "requestGroupLeaves"; payload: { groupId: string } } | { kind: "requestPathAnchors"; payload: { id: ElementId } } | { kind: "requestNearestPathPoint"; payload: { id: ElementId; point: [number, number] } } | { kind: "requestPlanarRegions"; payload: { elementIds: ElementId[]; point?: [number, number] | null } } | { kind: "requestLayers" } | { kind: "requestCollection"; payload: { name: CollectionName } } | { kind: "requestFrameChain"; payload: { storyId: string } } | { kind: "requestStoryContent"; payload: { storyId: string } } | { kind: "requestPlacedAssetBytes"; payload: { elementId: string } } | { kind: "requestFontFaceBytes"; payload: { family: string; style?: string | null } } | { kind: "requestMeasureText"; payload: { family: string; style?: string | null; text: string; sizePt: number } } | { kind: "submitSceneLayer"; payload: { elementId: string; layer: SceneLayer } } | { kind: "clearSceneLayer"; payload: { elementId: string } } | { kind: "submitPixelLayer"; payload: { elementId: string; layer: PixelLayer } } | { kind: "clearPixelLayer"; payload: { elementId: string } } | { kind: "claimImageResource"; payload: { imageId: string; levels: number; tileSize: number; baseWidth: number; baseHeight: number; revision: number } } | { kind: "releaseImageResource"; payload: { imageId: string } } | { kind: "submitResourceTiles"; payload: { imageId: string; level: number; tiles: ProviderTileWire[]; generation: number } } | { kind: "requestDocumentMeta" } | { kind: "requestDocumentPlaceholders" } | { kind: "requestColorPreview"; payload: { swatchId: string } } | { kind: "requestColorCompute"; payload: { space: string; value: number[]; tint?: number | null; model?: string | null; alternateSpace?: string | null; alternateValue?: number[] | null } } | { kind: "requestGradientDetail"; payload: { gradientId: string } } | { kind: "exportSwatchLibrary"; payload: { groupId?: string | null } } | { kind: "executeScript"; payload: { source: string } } | { kind: "exportPdfBegin"; payload: { options: ExportPdfWireOptions } } | { kind: "exportPdfPage"; payload: { session: number } } | { kind: "exportPdfFinish"; payload: { session: number } } | { kind: "exportPdfCancel"; payload: { session: number } } | { kind: "exportIdml"; payload: {} } | { kind: "writePagedPart"; payload: { path: string; bytes: number[] } } | { kind: "readPagedPart"; payload: { path: string } } | { kind: "listPagedParts"; payload: { prefix: string } } | { kind: "exportPaged"; payload: {} } | { kind: "requestElementProperties"; payload: { id: ElementId } } | { kind: "requestSceneTree" } | { kind: "beginGesture"; payload: { nodes: ElementId[]; gesture: GestureType; anchor?: GestureAnchor | null; cameraScale?: number | null } } | { kind: "updateGesture"; payload: { handle: GestureHandle; delta: [number, number]; modifiers: GestureModifiers } } | { kind: "commitGesture"; payload: { handle: GestureHandle } } | { kind: "cancelGesture"; payload: { handle: GestureHandle } };
+export type MainToWorkerKind = { kind: "hello" } | { kind: "loadDocument"; payload: { bytes: number[]; font?: number[] | null; cmykIccProfile?: number[] | null } } | { kind: "newBlankDocument"; payload: { widthPt: number; heightPt: number; font?: number[] | null } } | { kind: "registerFont"; payload: { family: string; style?: string | null; bytes: number[] } } | { kind: "clearFontRegistry" } | { kind: "registerColorProfile"; payload: { name: string; bytes: number[] } } | { kind: "mutate"; payload: Mutation } | { kind: "requestPage"; payload: { pageId: PageId; lod: LodTier } } | { kind: "hitTest"; payload: { pageId: PageId; docPoint: [number, number]; filter: HitFilter } } | { kind: "requestSnapshot"; payload: { pageId: PageId; targetWidthPx: number; dpi?: number | null } } | { kind: "setSelection"; payload: { selection: ContentSelection | null } } | { kind: "requestSelectionGeometry"; payload: { selection: ContentSelection } } | { kind: "requestCaretGeometry"; payload: { selection: ContentSelection } } | { kind: "requestCaretNav"; payload: { storyId: string; offset: number; direction: CaretDirection; cell?: TextCellAddr | null } } | { kind: "requestLineBounds"; payload: { storyId: string; offset: number; cell?: TextCellAddr | null } } | { kind: "requestWordBounds"; payload: { storyId: string; offset: number; cell?: TextCellAddr | null } } | { kind: "requestParagraphBounds"; payload: { storyId: string; offset: number; cell?: TextCellAddr | null } } | { kind: "undo" } | { kind: "redo" } | { kind: "setElementSelection"; payload: { ids: ElementId[]; mode: SelectionMode } } | { kind: "requestMarqueeHits"; payload: { pageId: PageId; rect: [number, number, number, number] } } | { kind: "requestElementGeometry"; payload: { ids: ElementId[] } } | { kind: "requestGroupLeaves"; payload: { groupId: string } } | { kind: "requestPathAnchors"; payload: { id: ElementId } } | { kind: "requestNearestPathPoint"; payload: { id: ElementId; point: [number, number] } } | { kind: "requestPlanarRegions"; payload: { elementIds: ElementId[]; point?: [number, number] | null } } | { kind: "requestLayers" } | { kind: "requestCollection"; payload: { name: CollectionName } } | { kind: "requestFrameChain"; payload: { storyId: string } } | { kind: "requestStoryContent"; payload: { storyId: string } } | { kind: "requestPlacedAssetBytes"; payload: { elementId: string } } | { kind: "requestFontFaceBytes"; payload: { family: string; style?: string | null } } | { kind: "requestMeasureText"; payload: { family: string; style?: string | null; text: string; sizePt: number } } | { kind: "submitSceneLayer"; payload: { elementId: string; layer: SceneLayer; caller?: string } } | { kind: "clearSceneLayer"; payload: { elementId: string } } | { kind: "submitPixelLayer"; payload: { elementId: string; layer: PixelLayer } } | { kind: "clearPixelLayer"; payload: { elementId: string } } | { kind: "claimImageResource"; payload: { imageId: string; levels: number; tileSize: number; baseWidth: number; baseHeight: number; revision: number } } | { kind: "releaseImageResource"; payload: { imageId: string } } | { kind: "submitResourceTiles"; payload: { imageId: string; level: number; tiles: ProviderTileWire[]; generation: number } } | { kind: "requestDocumentMeta" } | { kind: "requestDocumentPlaceholders" } | { kind: "requestColorPreview"; payload: { swatchId: string } } | { kind: "requestColorCompute"; payload: { space: string; value: number[]; tint?: number | null; model?: string | null; alternateSpace?: string | null; alternateValue?: number[] | null } } | { kind: "requestGradientDetail"; payload: { gradientId: string } } | { kind: "exportSwatchLibrary"; payload: { groupId?: string | null } } | { kind: "executeScript"; payload: { source: string } } | { kind: "exportPdfBegin"; payload: { options: ExportPdfWireOptions } } | { kind: "exportPdfPage"; payload: { session: number } } | { kind: "exportPdfFinish"; payload: { session: number } } | { kind: "exportPdfCancel"; payload: { session: number } } | { kind: "exportIdml"; payload: {} } | { kind: "writePagedPart"; payload: { path: string; bytes: number[]; caller?: string } } | { kind: "readPagedPart"; payload: { path: string } } | { kind: "listPagedParts"; payload: { prefix: string } } | { kind: "exportPaged"; payload: {} } | { kind: "requestElementProperties"; payload: { id: ElementId } } | { kind: "requestSceneTree" } | { kind: "beginGesture"; payload: { nodes: ElementId[]; gesture: GestureType; anchor?: GestureAnchor | null; cameraScale?: number | null } } | { kind: "updateGesture"; payload: { handle: GestureHandle; delta: [number, number]; modifiers: GestureModifiers } } | { kind: "commitGesture"; payload: { handle: GestureHandle } } | { kind: "cancelGesture"; payload: { handle: GestureHandle } };
 
 /**
  * Track J — wire-shape mirror of `paged_model::PathAnchor`. The
