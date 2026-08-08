@@ -130,6 +130,9 @@ async function axisOf(
   // A zero/unset length displays as half the frame's smaller side so
   // the axis is visible at all (display fallback only — never written).
   const fallback = Math.min(Math.abs(right - left), Math.abs(bottom - top)) / 2;
+  // C-23 — the annotator draws page-space chrome, so a pasteboard
+  // frame gets none (the same rule the host overlays follow).
+  if (!geom.pageId) return null;
   return {
     pageId: geom.pageId,
     center,

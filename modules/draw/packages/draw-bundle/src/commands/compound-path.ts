@@ -325,6 +325,8 @@ export async function compoundSourceOf(
 ): Promise<CompoundSource | null> {
   const read = await host.document.pathAnchors(id).catch(() => null);
   if (read && read.anchors.length >= 2) {
+    // C-23 — see appearance-bake: the combine inserts onto a page.
+    if (!read.pageId) return null;
     const m = (read.itemTransform ?? null) as Affine | null;
     return {
       id,
@@ -344,6 +346,8 @@ export async function compoundSourceOf(
   const items = await host.document.elementGeometry([id]).catch(() => []);
   const item = items[0];
   if (!item) return null;
+  // C-23 — pasteboard source: this path inserts onto a page.
+  if (!item.pageId) return null;
   const [top, left, bottom, right] = item.bounds;
   const m = (item.itemTransform ?? null) as Affine | null;
   const corners: [number, number][] = [

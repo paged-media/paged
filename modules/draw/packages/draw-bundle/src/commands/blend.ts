@@ -1216,6 +1216,8 @@ export async function blendKeyOfElement(
     paint.fill ??
     ((await valueForCriterion(host, id, "fill").catch(() => null)) as
       string | null);
+  // C-23 — see appearance-bake: a blend inserts onto a page.
+  if (!table.pageId) return null;
   return {
     pageId: table.pageId,
     key: {

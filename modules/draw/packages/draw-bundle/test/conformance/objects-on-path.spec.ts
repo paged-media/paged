@@ -605,7 +605,7 @@ describe("draw conformance — OBJECTS ON A PATH (§16.3)", () => {
       expect(await transformOf(h, INNER)).toEqual([1, 0, 0, 1, 0, 0]);
     });
 
-    it("RFI C-23 ON TRANSFORMS: geometry goes silent — metadata and the TREE do NOT", async () => {
+    it("RFI C-23 CLOSED: an off-page element is PAGELESS, not silent — geometry, metadata and the TREE all answer", async () => {
       // Stamp a link first, so "does metadata survive" is a real
       // question and not a vacuous one.
       await h.host.document.mutate({
@@ -624,12 +624,27 @@ describe("draw conformance — OBJECTS ON A PATH (§16.3)", () => {
         frameTransformMutationFor(INNER, [1, 0, 0, 1, 9000, 9000]),
       );
       expect(stamped.applied).toBe(true);
-      // The GEOMETRY doors go silent…
-      expect(await h.host.document.elementGeometry([INNER])).toHaveLength(0);
-      expect(await h.host.document.pathAnchors(INNER)).toBeNull();
-      // …and these two do NOT, which is the half that is easy to assume
-      // wrongly: the element keeps its metadata and its place in the
-      // tree, so it is never actually LOST — only unmeasurable.
+      // C-23 CLOSED (core 6df4851, canvas-wasm 0.61.1). This used to
+      // assert that the geometry doors went SILENT — `elementGeometry`
+      // returning [] and `pathAnchors` null — because core DROPPED an
+      // off-page element rather than reporting it pageless. That was
+      // the defect, and this pin is what said so out loud. It now
+      // asserts the fix: both doors answer, with `pageId: null` naming
+      // the pasteboard and `spreadId` giving the frame of reference the
+      // geometry composes against.
+      const geom = await h.host.document.elementGeometry([INNER]);
+      expect(geom, "the element is REPORTED, not dropped").toHaveLength(1);
+      expect(geom[0].pageId ?? null, "on no page, and says so").toBeNull();
+      expect(
+        (geom[0] as { spreadId?: string | null }).spreadId ?? null,
+        "the spread is what makes a pageless answer usable",
+      ).not.toBeNull();
+      const anchors = await h.host.document.pathAnchors(INNER);
+      expect(anchors, "anchors answer too").not.toBeNull();
+      expect(anchors!.pageId ?? null).toBeNull();
+      // These two were ALWAYS true and stay true — the half of this pin
+      // that was right all along: metadata and the tree never went
+      // quiet, so an off-page element was never LOST, only unmeasurable.
       expect(await h.host.document.getMetadata(INNER)).not.toBeNull();
       expect(await leafIds(h)).toContain("uinner");
       // A write BY ID still reaches it and brings it back.
@@ -660,8 +675,13 @@ describe("draw conformance — OBJECTS ON A PATH (§16.3)", () => {
       await h.host.document.mutate(
         frameTransformMutationFor(OUTER, [1, 0, 0, 1, 400, 0]),
       );
-      // 500..800 — mostly past the right edge, and now silent.
-      expect(await h.host.document.elementGeometry([OUTER])).toHaveLength(0);
+      // 500..800 — mostly past the right edge. C-23: it is now
+      // REPORTED as pageless rather than dropped. The overhang boundary
+      // this test is about is unchanged; what changed is that crossing
+      // it yields `pageId: null` instead of an empty answer.
+      const off = await h.host.document.elementGeometry([OUTER]);
+      expect(off).toHaveLength(1);
+      expect(off[0].pageId ?? null).toBeNull();
       // …and its metadata and tree place survive even here.
       expect(await leafIds(h)).toContain("uouter");
     });
@@ -841,7 +861,10 @@ describe("draw conformance — OBJECTS ON A PATH (§16.3)", () => {
       await h.host.document.mutate(
         frameTransformMutationFor(SMALL_A, [1, 0, 0, 1, 9000, 9000]),
       );
-      expect(await h.host.document.elementGeometry([SMALL_A])).toHaveLength(0);
+      // C-23: pageless, not absent — the stranded object still answers.
+      const stranded = await h.host.document.elementGeometry([SMALL_A]);
+      expect(stranded).toHaveLength(1);
+      expect(stranded[0].pageId ?? null).toBeNull();
       // The LINK WALK still sees it — this is the assertion that keeps
       // the module header honest about which doors C-23 actually takes.
       expect((await objectsOnPathLinks(h.host, "op-1")).objects).toHaveLength(

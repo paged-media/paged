@@ -953,7 +953,7 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
 
     // ---------------------------------------------- RFI C-23 + refusals
 
-    it("RFI C-23 — a fitted repeat is READABLE; fitToArtboard:false reaches the off-page case", async () => {
+    it("RFI C-23 CLOSED — a fitted repeat is READABLE, and so is an off-page one: fitToArtboard:false now yields PAGELESS tiles, not unreadable ones", async () => {
       const page = await repeatPageRect(h.host, F6_RING_PAIR.pageId);
       expect(page).toEqual({ pageId: "usp", width: 612, height: 792 });
 
@@ -990,14 +990,29 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
         fitToArtboard: false,
       });
       expect(loose).toHaveLength(5);
-      const unreadable = [];
+      // C-23 CLOSED (core 6df4851, canvas-wasm 0.61.1). This block used
+      // to collect tiles whose geometry answered NOTHING and assert
+      // that at least one existed — the artboard-fit feature was built
+      // precisely to avoid making them. Core no longer drops an
+      // off-page element: EVERY tile answers, and the ones past the
+      // page edge report `pageId: null`.
+      //
+      // The fit option keeps its point: fitted tiles are all page-owned
+      // (asserted above), loose ones are not. What changed is that a
+      // loose tile is now MEASURABLE, which is what made it worth
+      // fixing — art on the pasteboard was created, grouped, and then
+      // impossible to read back.
+      const pageless: string[] = [];
       for (const id of loose) {
-        if ((await h.host.document.elementGeometry([id])).length === 0) {
-          unreadable.push(id);
-          expect(await h.host.document.pathAnchors(id)).toBeNull();
-        }
+        const g = await h.host.document.elementGeometry([id]);
+        expect(g, "every tile answers now").toHaveLength(1);
+        expect(await h.host.document.pathAnchors(id)).not.toBeNull();
+        if ((g[0].pageId ?? null) === null) pageless.push(id as string);
       }
-      expect(unreadable.length).toBeGreaterThan(0);
+      expect(
+        pageless.length,
+        "fitToArtboard:false still reaches the off-page case",
+      ).toBeGreaterThan(0);
       await undoTo(h, 1);
       expect(await sortedLeafIds(h)).toEqual(PRISTINE);
     });

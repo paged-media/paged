@@ -730,6 +730,8 @@ async function traceSourceOf(host: BundleHost): Promise<TraceSource | null> {
     );
     return null;
   }
+  // C-23 — a trace inserts its result onto a page.
+  if (!item.pageId) return null;
   return {
     id,
     pageId: item.pageId,

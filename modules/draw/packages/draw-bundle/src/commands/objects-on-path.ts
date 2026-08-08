@@ -827,6 +827,8 @@ export async function readOnPathObject(
   const items = await host.document.elementGeometry([id]).catch(() => []);
   const item = items[0];
   if (!item) return null;
+  // C-23 — pasteboard source: this flow inserts onto a page.
+  if (!item.pageId) return null;
   return {
     pageId: item.pageId,
     object: {
@@ -849,6 +851,8 @@ export async function readOnPathSpine(
   if (!run || run.length < 2) return null;
   const metric = measureAnchorRun(run, { close: !(source.open[0] ?? false) });
   if (!(metric.length > 0)) return null;
+  // C-23 — the spine's page is what callers place objects onto.
+  if (!table.pageId) return null;
   return { metric, pageId: table.pageId };
 }
 

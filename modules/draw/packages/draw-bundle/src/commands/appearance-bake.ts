@@ -264,7 +264,16 @@ export interface BakeGeometry {
 }
 
 /** Why a bake refused (the honest diagnostic; null = it can proceed). */
-export type BakeRefusal = "no-geometry" | "compound-path" | "empty-stack";
+export type BakeRefusal =
+  | "no-geometry"
+  | "compound-path"
+  | "empty-stack"
+  // C-23 — the source sits on the PASTEBOARD. A bake stacks new
+  // polygons via `insertPath(pageId, …)`, so with no page there is
+  // nowhere to put them. NOT new behaviour: before C-23 the engine
+  // omitted off-page elements from `pathAnchors` entirely, so this
+  // flow already failed here — anonymously. Naming it is the change.
+  | "pasteboard";
 
 const affine = (
   m: [number, number, number, number, number, number] | null | undefined,
@@ -288,6 +297,7 @@ export async function bakeGeometryOf(
   const table = await host.document.pathAnchors(id).catch(() => null);
   if (table && table.anchors.length >= 2) {
     if (table.subpathStarts.length > 1) return { refusal: "compound-path" };
+    if (!table.pageId) return { refusal: "pasteboard" };
     return {
       geometry: {
         pageId: table.pageId,
@@ -310,6 +320,7 @@ export async function bakeGeometryOf(
     [right, bottom],
     [left, bottom],
   ];
+  if (!item.pageId) return { refusal: "pasteboard" };
   return {
     geometry: {
       pageId: item.pageId,

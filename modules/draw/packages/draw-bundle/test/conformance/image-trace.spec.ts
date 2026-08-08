@@ -677,7 +677,7 @@ describe("draw conformance — IMAGE TRACE v0", () => {
       expect(items[0].pageId).toBe(F7_PLACED_IMAGE.pageId);
     });
 
-    it("THE HONEST GAP: headless serves no placed bytes, so the command REFUSES", async () => {
+    it("THE HONEST GAP: the bytes now arrive, but Node cannot DECODE them — so the command still REFUSES", async () => {
       // `assets.images@1` is unconditionally implemented (the read is
       // engine-served through `requestPlacedAssetBytes`, not an injected
       // source) …
@@ -685,19 +685,24 @@ describe("draw conformance — IMAGE TRACE v0", () => {
       // … but the engine only serves what its BUILD already decoded and
       // cached UNDER THE LINK URI. This fixture's pixels ride inline
       // `<Image><Contents>` base64, which core caches under an
-      // `inline:<ptr>:<len>` key, not the URI — so the C-5 door answers
-      // null here. Measured, not assumed.
+      // `inline:<ptr>:<len>` key, not the URI — so the C-5 door answered
+      // null here.
       //
-      // FIXED IN CORE 2026-08-07 (C-26): the inline cache is now keyed
-      // by the owning element's id, so this door serves embedded bytes.
-      // The pin below therefore FLIPS THE MOMENT the editor picks up a
-      // canvas-wasm built after that change — which is the pin working,
-      // not a regression. When it goes red, replace the `toBeNull()`
-      // with the positive assertion (bytes + natural size) and delete
-      // the "no placed bytes" half of this test's name; the decoder half
-      // below is a separate, still-true gap (Node has no ImageBitmap).
-      expect(await h.host.assets.getPlacedImage(F7_PLACED_IMAGE.imageId)).toBeNull();
-      // And this realm is Node: no createImageBitmap, no OffscreenCanvas.
+      // THE PIN FIRED, EXACTLY AS DESIGNED (2026-08-08). C-26 rekeyed
+      // the inline cache by the owning element's id, canvas-wasm 0.61.1
+      // shipped it, and this assertion went red on the first run
+      // afterwards. It now asserts the FIXED behaviour: an
+      // inline-embedded payload is reachable, with its real natural
+      // size. Keeping the old `toBeNull()` would have meant a green
+      // test asserting a bug.
+      const placed = await h.host.assets.getPlacedImage(F7_PLACED_IMAGE.imageId);
+      expect(placed, "C-26 — inline-embedded bytes are served").not.toBeNull();
+      expect(placed!.bytes.byteLength).toBeGreaterThan(0);
+      expect(placed!.width).toBeGreaterThan(0);
+      expect(placed!.height).toBeGreaterThan(0);
+      // The DECODER half is a separate, still-true gap and is why the
+      // command still refuses: this realm is Node — no createImageBitmap,
+      // no OffscreenCanvas.
       expect(rasterDecoderAvailable()).toBe(false);
       // So the full command inserts NOTHING and says why (it never
       // throws — the dash-command convention).
