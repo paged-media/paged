@@ -17,6 +17,9 @@ importers:
 
   packages/draw-bundle:
     devDependencies:
+      '@paged-media/canvas-wasm':
+        specifier: 0.61.1
+        version: 0.61.1
       '@paged-media/draw-geometry':
         specifier: workspace:*
         version: link:../draw-geometry
@@ -378,6 +381,9 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
+
+  '@paged-media/canvas-wasm@0.61.1':
+    resolution: {integrity: sha512-NFYWCkQmXPrKr/Ti0DSc2/0eZZPQ+FUZi4KZN3acadho+UjWTQSwkaiBEivVm6hvGSN9NPD8GY8KChZURtHAxg==}
 
   '@paged-media/plugin-api@0.2.24-canary.0':
     resolution: {integrity: sha512-4TXZeTEivmHbfExYT6LW8HpvkDhLw8TFjtiq+4kmf6MCLfmd2362Vvhbi4+TJrTcUAhu19u/Gbr8TFITcPFCgw==}
@@ -1082,6 +1088,8 @@ snapshots:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
+
+  '@paged-media/canvas-wasm@0.61.1': {}
 
   '@paged-media/plugin-api@0.2.24-canary.0':
     dependencies:

@@ -56,6 +56,18 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const editorClientAnchor = (): string | undefined => {
   const repoRoot = resolve(HERE, "../../../.."); // …/plugin-draw
   for (const candidate of [
+    // OUR OWN package first. `@paged-media/canvas-wasm` is a
+    // devDependency of draw-bundle precisely so this works with no
+    // sibling checkout at all — which is the difference between a
+    // developer's machine and a CI runner, and was the whole bug: CI
+    // found none of the anchors below, `resolveCanvasWasm` threw by
+    // design, and all 41 specs that call `openHost()` failed. The
+    // registry showed ONE of them, because only one is mapped.
+    //
+    // The published SDK cannot supply the engine itself: it carries
+    // canvas-wasm as a devDependency, and a consumer never installs
+    // those. So the consumer has to bring its own.
+    resolve(repoRoot, "packages/draw-bundle"),
     resolve(repoRoot, "../../editor/packages/client"), // ~/paged/plugins/<repo> layout
     resolve(repoRoot, "../editor/packages/client"), // sibling (CI) layout
   ]) {
