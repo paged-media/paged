@@ -1002,12 +1002,15 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
       // loose tile is now MEASURABLE, which is what made it worth
       // fixing — art on the pasteboard was created, grouped, and then
       // impossible to read back.
-      const pageless: string[] = [];
+      // Typed as the ELEMENT ID it is — an `ElementId` is a tagged
+      // object, not a string, and casting it to one only to count the
+      // entries was a cast that bought nothing.
+      const pageless: typeof loose = [];
       for (const id of loose) {
         const g = await h.host.document.elementGeometry([id]);
         expect(g, "every tile answers now").toHaveLength(1);
         expect(await h.host.document.pathAnchors(id)).not.toBeNull();
-        if ((g[0].pageId ?? null) === null) pageless.push(id as string);
+        if ((g[0].pageId ?? null) === null) pageless.push(id);
       }
       expect(
         pageless.length,
