@@ -536,7 +536,7 @@ export function makeBlendPanel(host: BundleHost): {
     );
   };
   return {
-    title: "Blend Options (draw)",
+    title: "Blend options",
     component: Component,
     defaultDock: "right",
   };

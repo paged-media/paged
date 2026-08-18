@@ -1302,7 +1302,7 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
       );
       expect(panel).toBeTruthy();
       const value = panel!.value as { title: string; defaultDock: string };
-      expect(value.title).toBe("Repeat Options (draw)");
+      expect(value.title).toBe("Repeat options");
       expect(value.defaultDock).toBe("right");
       expect(
         repeatRowLabel(

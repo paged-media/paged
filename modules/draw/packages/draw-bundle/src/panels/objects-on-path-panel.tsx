@@ -411,7 +411,7 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
     );
   };
   return {
-    title: "Objects on Path (draw)",
+    title: "Objects on path",
     component: Component,
     defaultDock: "right",
   };

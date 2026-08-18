@@ -460,7 +460,7 @@ export function makeAppearancePanel(host: BundleHost): {
     );
   };
   return {
-    title: "Appearance (draw)",
+    title: "Appearance",
     component: Component,
     defaultDock: "right",
   };

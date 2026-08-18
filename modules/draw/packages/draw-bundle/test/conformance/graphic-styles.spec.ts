@@ -529,7 +529,7 @@ describe("draw conformance — GRAPHIC STYLES (Illustrator Phase 2)", () => {
         .panelsContributed()
         .find((p) => p.id === GRAPHIC_STYLES_PANEL_ID);
       expect(panel).toBeDefined();
-      expect(panel!.title).toBe("Graphic Styles (draw)");
+      expect(panel!.title).toBe("Graphic styles");
       expect(panel!.defaultDock).toBe("right");
       expect(typeof panel!.component).toBe("function");
     });

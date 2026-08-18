@@ -326,7 +326,7 @@ export function makeSymbolsPanel(host: BundleHost): {
     );
   };
   return {
-    title: "Symbols (draw)",
+    title: "Symbols",
     component: Component,
     defaultDock: "right",
   };

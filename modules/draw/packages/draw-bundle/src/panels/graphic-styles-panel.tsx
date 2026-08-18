@@ -381,7 +381,7 @@ export function makeGraphicStylesPanel(host: BundleHost): {
     );
   };
   return {
-    title: "Graphic Styles (draw)",
+    title: "Graphic styles",
     component: Component,
     defaultDock: "right",
   };

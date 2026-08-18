@@ -422,7 +422,7 @@ export function makePatternPanel(host: BundleHost): {
     );
   };
   return {
-    title: "Pattern Options (draw)",
+    title: "Pattern options",
     component: Component,
     defaultDock: "right",
   };

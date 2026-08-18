@@ -616,7 +616,7 @@ describe("draw conformance — LIVE PAINT v0 (against the real engine, F4)", () 
     );
     const panel = h.panelsContributed().find((p) => p.id === LIVE_PAINT_PANEL_ID);
     expect(panel).toBeDefined();
-    expect(panel!.title).toBe("Live Paint (draw)");
+    expect(panel!.title).toBe("Live paint");
     expect(panel!.defaultDock).toBe("right");
     expect(typeof panel!.component).toBe("function");
   });

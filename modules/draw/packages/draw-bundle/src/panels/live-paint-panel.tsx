@@ -368,7 +368,7 @@ export function makeLivePaintPanel(host: BundleHost): {
     );
   };
   return {
-    title: "Live Paint (draw)",
+    title: "Live paint",
     component: Component,
     defaultDock: "right",
   };

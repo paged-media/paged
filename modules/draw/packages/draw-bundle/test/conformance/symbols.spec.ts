@@ -707,7 +707,7 @@ describe("draw conformance — SYMBOLS (Illustrator Phase 2, §16.1)", () => {
       );
       const panel = h.panelsContributed().find((p) => p.id === SYMBOLS_PANEL_ID);
       expect(panel).toBeDefined();
-      expect(panel!.title).toBe("Symbols (draw)");
+      expect(panel!.title).toBe("Symbols");
       expect(panel!.defaultDock).toBe("right");
       expect(typeof panel!.component).toBe("function");
     });

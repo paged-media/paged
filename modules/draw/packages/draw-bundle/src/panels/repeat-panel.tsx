@@ -466,7 +466,7 @@ export function makeRepeatPanel(host: BundleHost): {
     );
   };
   return {
-    title: "Repeat Options (draw)",
+    title: "Repeat options",
     component: Component,
     defaultDock: "right",
   };

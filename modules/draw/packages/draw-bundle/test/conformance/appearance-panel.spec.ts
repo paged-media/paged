@@ -173,7 +173,7 @@ describe("draw conformance — Appearance panel", () => {
         .panelsContributed()
         .find((p) => p.id === APPEARANCE_PANEL_ID);
       expect(panel).toBeDefined();
-      expect(panel!.title).toBe("Appearance (draw)");
+      expect(panel!.title).toBe("Appearance");
       expect(panel!.defaultDock).toBe("right");
       expect(typeof panel!.component).toBe("function");
     });
