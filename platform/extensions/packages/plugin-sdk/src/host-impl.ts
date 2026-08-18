@@ -1178,7 +1178,15 @@ export function createBundleHost(
         "contribute.panel",
         `contributes.panels[] must include "${c.id}"`,
       );
-      return store.add(getEditor().registries.panels.register(c));
+      // Provenance is HOST-stamped from the manifest (U8/U9): the
+      // contribution's `source` is never bundle-authored — overwrite
+      // whatever the bundle passed so the field stays trustworthy.
+      return store.add(
+        getEditor().registries.panels.register({
+          ...c,
+          source: manifest.name,
+        }),
+      );
     },
     schemaPanel(c) {
       // SAME gates as `panel`: the namespace rule (always loud) then the
@@ -1201,6 +1209,8 @@ export function createBundleHost(
         defaultGroup: c.defaultGroup,
         closable: c.closable,
         movable: c.movable,
+        // Host-stamped provenance, same as `panel()` above.
+        source: manifest.name,
         component: makeSchemaPanelComponent(
           c,
           bindings,

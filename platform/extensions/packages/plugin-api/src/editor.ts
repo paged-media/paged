@@ -262,6 +262,12 @@ export interface PanelContribution {
   when?: VisibilityPredicate;
   closable?: boolean;
   movable?: boolean;
+  /** Provenance — the display name of the OWNING BUNDLE (e.g.
+   *  "paged.draw"), stamped by the HOST at registration time from the
+   *  bundle's manifest. Plugins never set this themselves; any value a
+   *  bundle passes is overwritten by the host adapter. Additive: older
+   *  editors simply ignore it. */
+  source?: string;
 }
 
 // ------------------------------------------------------------- overlays

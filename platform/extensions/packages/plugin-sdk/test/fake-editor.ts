@@ -22,6 +22,7 @@ type Listener = (msg: unknown) => void;
 
 export interface FakeRegistry {
   ids(): string[];
+  get(id: string): unknown;
   register(c: { id: string }): { dispose(): void };
 }
 
@@ -29,6 +30,7 @@ function fakeRegistry(): FakeRegistry {
   const byId = new Map<string, unknown>();
   return {
     ids: () => Array.from(byId.keys()),
+    get: (id) => byId.get(id),
     register(c: { id: string }) {
       if (byId.has(c.id)) throw new Error(`duplicate id ${c.id}`);
       byId.set(c.id, c);

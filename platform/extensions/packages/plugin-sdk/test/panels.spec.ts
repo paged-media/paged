@@ -57,6 +57,21 @@ describe("contributePanel", () => {
     expect(host.supports("shell.openPanel@1")).toBe(true);
   });
 
+  it("stamps HOST provenance (source = manifest.name) on the contribution", () => {
+    const fake = makeFakeEditor();
+    const { host } = createBundleHost(() => fake.editor, MANIFEST, {
+      console: silent,
+      shell: { openPanel() {}, closePanel() {}, async pickFile() { return []; } },
+    });
+    // Even a bundle-authored `source` is overwritten — the field is
+    // trustworthy only because the host owns it.
+    contributePanel(host, { ...PANEL, source: "forged" });
+    const stored = fake.panels.get("media.paged.test.panel.source") as {
+      source?: string;
+    };
+    expect(stored.source).toBe(MANIFEST.name);
+  });
+
   it("warns and no-ops without host-app shell actions", () => {
     const fake = makeFakeEditor();
     const warn = vi.fn();
