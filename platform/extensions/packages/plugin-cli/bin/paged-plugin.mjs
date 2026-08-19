@@ -53,10 +53,18 @@ const ASSET_KINDS_RESERVED = new Set([]);
 
 // WASM packaging budgets (W-07). Keep in sync with the host loader's
 // WASM_BUDGETS in plugin-sdk/src/wasm-bundle-loader.ts and the schema's
-// `maxBytes` maximum (8 MiB) — the CLI hand-mirrors the contract.
-const WASM_MAX_ARTIFACT_BYTES = 8 * 1024 * 1024; // 8 MiB layout/codec/compute
-const WASM_MAX_ENGINE_ARTIFACT_BYTES = 64 * 1024 * 1024; // D-07b: purpose:"engine" (DuckDB-WASM)
-const WASM_MAX_TOTAL_BYTES = 80 * 1024 * 1024; // declared total
+// `maxBytes` maximum (100 MB) — the CLI hand-mirrors the contract.
+//
+// 2026-08-19 (maintainer decision): the budget is now 100 MB for the WHOLE
+// APP including every plugin, not a set of per-thing ceilings. This CLI
+// validates ONE manifest, so it cannot see the app total — the app-wide gate
+// lives in the editor (scripts/wasm-budget.mjs, its `checks` CI job). These
+// three keep the same value as the envelope: they are a hard upper stop and
+// something for a manifest `maxBytes` to tighten, not the governance.
+// KEEP IN SYNC with plugin-sdk WASM_BUDGETS.
+const WASM_MAX_ARTIFACT_BYTES = 100 * 1000 * 1000;
+const WASM_MAX_ENGINE_ARTIFACT_BYTES = 100 * 1000 * 1000; // D-07b purpose:"engine"
+const WASM_MAX_TOTAL_BYTES = 100 * 1000 * 1000; // declared total, one bundle
 
 // Bundle-relative wasm path: no leading slash, no `..` segment, .wasm.
 const WASM_PATH_OK = /^(?!\/)(?!.*\.\.).+\.wasm$/;

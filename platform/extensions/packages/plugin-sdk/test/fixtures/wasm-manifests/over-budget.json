@@ -9,7 +9,7 @@
         "name": "layout",
         "path": "engine/layout.wasm",
         "purpose": "layout",
-        "maxBytes": 16777216
+        "maxBytes": 100000001
       }
     ]
   }

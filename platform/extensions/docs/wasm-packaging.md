@@ -61,7 +61,7 @@ host can reason about what role a module plays before granting it — a
 `layout` engine and a `compute` blob warrant different scrutiny and,
 later, different host services. `engine` (D-07b) marks a vendored
 data/query/DB engine whose release artifact legitimately exceeds the
-default 8 MiB ceiling (DuckDB-WASM ≈ 36 MiB; paged.data) — it earns the
+100 MB app-wide ceiling (DuckDB-WASM ≈ 36 MiB; paged.data) — it earns the
 **higher 64 MiB per-artifact ceiling** and is otherwise an ordinary
 declared+budgeted module. Unknown purposes are **rejected at
 validation**: a bundle cannot smuggle an unmodelled role past the gate.
@@ -117,8 +117,9 @@ isolation + a threads story is a later milestone.)
 
 | Budget | v1 value | Why |
 |---|---|---|
-| **Per-artifact byte ceiling** | **8 MiB** (layout/codec/compute), **64 MiB** (`purpose: "engine"`, D-07b) | A release-optimised wasm layout engine (Blitz-class, `-O`/`wasm-opt`) lands in the low single-digit MiB. 8 MiB fits one real engine with headroom while **rejecting an accidentally-bundled debug build** (tens of MiB) — the most common foot-gun. A vendored DB engine (DuckDB-WASM ≈ 36 MiB) legitimately needs more, so `engine` earns the 64 MiB cap. A manifest `maxBytes` may only **tighten** this; the loader enforces the stricter of the two. |
-| **Total bundle wasm ceiling** | **80 MiB** | Sum across all declared artifacts. Sized so one `engine` artifact + a codec fit. |
+| **App-wide wasm ceiling** | **100 MB** (whole editor + every plugin) | **THE budget since 2026-08-19** (maintainer decision). Every earlier ceiling was per-thing — one artifact, one bundle — so eight bundles could each pass their own gate while the app shipped a quarter of a gigabyte, and nothing in any repo measured the sum. What a user downloads is the sum. Enforced where the app is assembled: the editor's `scripts/wasm-budget.mjs`, run in its `checks` CI job, since only the app knows which bundles ship. It deduplicates **by real path** — pnpm links one store entry from many packages and a naive walk over-counts nearly 6x (286 MB reported for an app carrying 49). Measured 2026-08-19: **49.4 MB across 9 distinct artifacts**, ~50 MB headroom. |
+| **Per-artifact byte ceiling** | **100 MB** — folded into the envelope | Was 8 MiB, briefly 25. A single artifact stopped being independently interesting once the sum is bounded, so this is now a hard upper stop rather than a policy: it keeps a manifest `maxBytes` something to **tighten**, and keeps the loader refusing an absurd module. The `purpose: "engine"` distinction (D-07b) survives for governance and telemetry, no longer for size. |
+| **Total bundle wasm ceiling** | **100 MB** | Same number: one bundle may in principle spend the whole envelope. The app-wide check is what stops the app. |
 | **Load-time budget** | **3000 ms** | Wall-clock for fetch + compile + instantiate. Protects the editor's main flow from a pathological module; the loader aborts with a clear stage-tagged error rather than hanging the host. |
 | **Memory-growth ceiling** | **256 MiB** (4096 × 64 KiB pages) | Passed as `WebAssembly.Memory({ maximum })` when the host owns memory. A per-page layout pass should sit far under this; the cap turns "runaway `memory.grow`" into a trapped failure, not an OOM of the tab. |
 
@@ -225,7 +226,7 @@ one applies is decided by the module's *shape*, not by preference:
    (`packages/sheet-bundle/src/engine.ts` `bootEngine`).
 
    The module is **still declared** under `capabilities.wasm[]` — the
-   declaration is governance + the plugin-cli 8 MiB size gate, NOT the
+   declaration is governance + the plugin-cli size gate, NOT the
    loader. `paged-sheet` (S-10) and `paged-image` (I-07) both ship this
    way. **This is the v1 contract**: there is no host-side wasm-bindgen
    loader and none is needed; the glue path is the answer. (If a future

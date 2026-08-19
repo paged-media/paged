@@ -143,10 +143,11 @@ describe("loadBundleWasm — budgets", () => {
   });
 
   it("D-07b: purpose:'engine' earns the higher 64 MiB ceiling (DuckDB-class)", async () => {
-    // A 36 MiB artifact (DuckDB-WASM-scale) is OVER the 8 MiB default
+    // A 36 MiB artifact (DuckDB-WASM-scale) is UNDER the 100 MB app
+    // envelope now, so this asserts the loader's hard stop, not a size policy
     // but UNDER the engine ceiling — a `compute` artifact rejects it,
     // an `engine` artifact accepts it.
-    const big = new Uint8Array(WASM_BUDGETS.maxArtifactBytes + 1); // > 8 MiB
+    const big = new Uint8Array(WASM_BUDGETS.maxArtifactBytes + 1); // > the cap
     const asCompute = bundleWith({
       wasm: [{ name: "duck", path: "duck.wasm", purpose: "compute" }],
     });

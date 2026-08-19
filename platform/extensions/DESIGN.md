@@ -769,7 +769,7 @@ contribution (it registers nothing). `purpose` is a closed vocabulary
 about a module's role before granting it. The loader
 (`plugin-sdk/loadBundleWasm`) enforces **declared-only** access (a name
 absent from the manifest never loads), a **host grant** (wasm is opt-in;
-no grant = refuse), the **budgets** (8 MiB/artifact, 16 MiB/bundle, 3 s
+no grant = refuse), the **budgets** (100 MB app-wide across editor + all plugins, 3 s
 load-time, 256 MiB memory ceiling — `docs/wasm-packaging.md` §3 carries
 the rationale), and instantiates with **no ambient authority**: the
 module gets only the imports the caller passes — no engine/DOM/network

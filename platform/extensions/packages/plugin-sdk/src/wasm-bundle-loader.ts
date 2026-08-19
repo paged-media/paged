@@ -42,20 +42,39 @@ import type { PagedBundle, WasmArtifact } from "@paged-media/plugin-api";
  *  KEEP IN SYNC with plugin-cli's WASM_MAX_* and the schema's `maxBytes`
  *  maximum — the CLI hand-mirrors the contract. */
 export const WASM_BUDGETS = {
-  /** Hard per-artifact byte ceiling for layout/codec/compute. A
-   *  release-optimised wasm layout engine (Blitz-class) lands in the
-   *  low-single-digit MiB; 8 MiB rejects an accidentally-bundled debug
-   *  build while leaving headroom for one real engine. A manifest
-   *  `maxBytes` may only TIGHTEN this. */
-  maxArtifactBytes: 8 * 1024 * 1024,
-  /** D-07b — the governed HIGHER ceiling for `purpose: "engine"` (a
-   *  vendored DB/query engine like DuckDB-WASM ≈ 36 MiB). 64 MiB fits the
-   *  real artifacts with headroom; still a hard cap a manifest may only
-   *  tighten. Only the `engine` purpose earns it. */
-  maxEngineArtifactBytes: 64 * 1024 * 1024,
-  /** Total declared wasm across one bundle. Sized so one `engine`
-   *  artifact + a codec fit. */
-  maxTotalBytes: 80 * 1024 * 1024,
+  /**
+   * THE budget, as of 2026-08-19 (maintainer decision): **100 MB for the
+   * whole app including every plugin.**
+   *
+   * The per-thing ceilings below used to be the governance. They were
+   * the wrong shape: each capped one artifact or one bundle, so eight
+   * bundles could each pass their own gate while the app shipped a
+   * quarter of a gigabyte, and nothing in any repo measured the sum.
+   * What a user downloads is the sum, so the sum is what is governed.
+   *
+   * This constant is the CONTRACT; the enforcement lives where the app
+   * is assembled, in the editor's `scripts/wasm-budget.mjs` (run in its
+   * `checks` CI job), because only the app knows which bundles ship. It
+   * deduplicates by real path — pnpm links one store entry from many
+   * packages, and a naive walk over-counts nearly 6x. Measured 2026-08-19:
+   * 49.4 MB across 9 distinct artifacts, ~50 MB of headroom.
+   */
+  maxAppTotalBytes: 100 * 1000 * 1000,
+  /** Per-artifact ceiling for layout/codec/compute. Folded into the
+   *  app-wide envelope on 2026-08-19 (was 8 MiB, briefly 25): a single
+   *  artifact is no longer independently interesting, since the sum is
+   *  bounded. Kept — not deleted — so a manifest `maxBytes` still has
+   *  something to TIGHTEN and the loader keeps a hard upper stop. */
+  maxArtifactBytes: 100 * 1000 * 1000,
+  /** D-07b — was the HIGHER ceiling for `purpose: "engine"` (a vendored
+   *  DB/query engine like DuckDB-WASM ≈ 36 MiB) back when ordinary
+   *  artifacts were capped far lower. Now equal to the ordinary cap; the
+   *  `purpose` distinction survives for governance/telemetry, not size. */
+  maxEngineArtifactBytes: 100 * 1000 * 1000,
+  /** Total declared wasm across ONE bundle. Also the app-wide number —
+   *  one bundle may in principle spend the entire envelope, and the
+   *  app-wide check is what stops the app as a whole. */
+  maxTotalBytes: 100 * 1000 * 1000,
   /** Wall-clock budget for fetch + compile + instantiate. Protects the
    *  editor's main flow from a pathological module; advisory, the loader
    *  aborts with a clear error when exceeded. */
@@ -185,7 +204,7 @@ export async function loadBundleWasm(
   // 2. byte-budget gate — host hard ceiling, tightened by the manifest's
   //    own maxBytes (the stricter wins). D-07b: a `purpose: "engine"`
   //    artifact earns the higher governed ceiling; everything else stays
-  //    at the default 8 MiB.
+  //    at the default (the 100 MB app-wide cap).
   const hostCeiling =
     artifact.purpose === "engine"
       ? WASM_BUDGETS.maxEngineArtifactBytes
