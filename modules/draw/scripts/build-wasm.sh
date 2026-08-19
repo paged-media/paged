@@ -25,7 +25,8 @@ OUT=packages/draw-bundle/wasm
 # Declared in manifest.json under capabilities.wasm[].maxBytes. Keep the
 # two in step — the check below is against THIS value and the manifest is
 # what the host enforces.
-BUDGET=$((2 * 1024 * 1024))
+# 100 MB — the app-wide envelope (2026-08-19); see plugin-sdk WASM_BUDGETS.
+BUDGET=$((100 * 1000 * 1000))
 
 cargo build --release --target wasm32-unknown-unknown -p trace-js
 
