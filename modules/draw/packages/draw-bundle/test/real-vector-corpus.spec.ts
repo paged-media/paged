@@ -69,7 +69,16 @@ function corpusRoot(): string | null {
   return sw;
 }
 
-/** Every `assets/vector/*.<ext>` across every pack group. */
+/**
+ * Every `assets/vector/*.<ext>` across every pack group, PLUS the pack's
+ * own `primary.<ext>`.
+ *
+ * The primaries matter for the refusal side: a vector pack's headline
+ * artwork is `primary.ai` at the pack root, 26 of them, and reading only
+ * `assets/vector` left every one of them unopened — the file most likely
+ * to be handed to an importer by a user was the file this lane did not
+ * try.
+ */
 function vectorFiles(exts: string[]): string[] {
   const root = corpusRoot();
   if (!root) return [];
@@ -82,6 +91,14 @@ function vectorFiles(exts: string[]): string[] {
       continue;
     }
     for (const pack of packs) {
+      for (const ext of exts) {
+        const primary = join(root, group, "packs", pack, `primary${ext}`);
+        try {
+          if (statSync(primary).isFile()) out.push(primary);
+        } catch {
+          /* the pack's primary is another format */
+        }
+      }
       const dir = join(root, group, "packs", pack, "assets", "vector");
       let names: string[];
       try {
