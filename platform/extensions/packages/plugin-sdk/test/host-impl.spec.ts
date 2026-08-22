@@ -811,3 +811,70 @@ describe("capability gate — selection / overlay", () => {
     expect(() => h.host.diagnostics.set("k", [])).not.toThrow();
   });
 });
+
+describe("contribute.menu — the menu door", () => {
+  const cmd = "media.paged.cap.cmd.x";
+
+  it("registers an entry for a declared command", () => {
+    const h = capHost(baseManifest({ contributes: { commands: [cmd] } }));
+    expect(() =>
+      h.host.contribute.menu({ path: "Object/Insert thing…", command: cmd }),
+    ).not.toThrow();
+    expect(h.fake.menus.count()).toBe(1);
+  });
+
+  it("refuses an entry onto a command the bundle never declared", () => {
+    // An entry pointing at nothing renders, accepts a click and silently
+    // does nothing — the dead-affordance shape the tool rail already
+    // learned to refuse, where the user reads the failure as their own
+    // mistake. Caught at REGISTRATION so the bundle is told, rather than
+    // the user at click time.
+    const h = capHost(baseManifest({ contributes: { commands: [] } }));
+    expect(() =>
+      h.host.contribute.menu({ path: "Object/Insert thing…", command: cmd }),
+    ).toThrow(/contributes\.commands\[\] must include/);
+    expect(h.fake.menus.count()).toBe(0);
+  });
+
+  it("document scope applies whenever a document is open", () => {
+    const h = capHost(baseManifest({ contributes: { commands: [cmd] } }));
+    h.host.contribute.menu({ path: "Object/Insert thing…", command: cmd });
+    const item = h.fake.menus.last() as { when: (s: unknown) => boolean };
+    expect(item.when({ document: { handle: { pageCount: 1 } } })).toBe(true);
+    // …and not on an empty editor, which is what keeps a creation verb
+    // from offering itself before there is anywhere to create into.
+    expect(item.when({ document: { handle: null } })).toBe(false);
+  });
+
+  it("editContext scope applies ONLY inside that context", () => {
+    // The half that matters most: inside a plugin's own edit context the
+    // menu bar otherwise shows the host's menus, about the document the
+    // user stepped out of.
+    const h = capHost(baseManifest({ contributes: { commands: [cmd] } }));
+    h.host.contribute.menu({
+      path: "Sheet/Sort range…",
+      command: cmd,
+      scope: { editContext: "sheet" },
+    });
+    const item = h.fake.menus.last() as { when: (s: unknown) => boolean };
+    const doc = { document: { handle: { pageCount: 1 } } };
+    expect(item.when({ ...doc, editContext: { type: "sheet" } })).toBe(true);
+    expect(item.when({ ...doc, editContext: { type: "vectorGraphic" } })).toBe(
+      false,
+    );
+    expect(item.when(doc)).toBe(false);
+  });
+
+  it("loads on a host that predates the door", () => {
+    // A bundle built against a newer contract must still LOAD on an older
+    // host, with the contribution simply absent — never throwing on a
+    // registry the host has not wired yet.
+    const h = capHost(
+      baseManifest({ contributes: { commands: [cmd] } }),
+    );
+    delete (h.fake.editor.registries as { menus?: unknown }).menus;
+    expect(() =>
+      h.host.contribute.menu({ path: "Object/Insert thing…", command: cmd }),
+    ).not.toThrow();
+  });
+});

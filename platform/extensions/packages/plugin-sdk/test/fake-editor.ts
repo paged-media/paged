@@ -72,6 +72,9 @@ function fakeKeybindingRegistry() {
   const items: unknown[] = [];
   return {
     count: () => items.length,
+    /** The most recently registered contribution — lets a test inspect
+     *  what the SDK derived (e.g. the `when` built from a menu scope). */
+    last: () => items[items.length - 1],
     register(c: unknown) {
       items.push(c);
       return {
@@ -163,6 +166,9 @@ export function makeFakeEditor(opts?: {
   const commands = fakeRegistry();
   const overlays = fakeRegistry();
   const keybindings = fakeKeybindingRegistry();
+  // Same recording shape — the menu door registers and disposes like the
+  // keybinding door does.
+  const menus = fakeKeybindingRegistry();
   const editContexts = fakeTypeRegistry();
   const objectTypes = fakeTypeRegistry();
   const mutations: unknown[] = [];
@@ -246,6 +252,7 @@ export function makeFakeEditor(opts?: {
       commands,
       overlays,
       keybindings,
+      menus,
       ...(wireContextRegistries ? { editContexts, objectTypes } : {}),
     },
     selection: {
@@ -288,6 +295,9 @@ export function makeFakeEditor(opts?: {
     },
     /** Every `client.send` message, in order (kind + payload). */
     sent,
+    /** The menu registry, so a test can count what `contribute.menu`
+     *  registered and inspect the `when` the SDK derived from `scope`. */
+    menus,
     editor: editor as unknown as PagedEditor,
     tools,
     panels,

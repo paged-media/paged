@@ -1249,6 +1249,55 @@ export function createBundleHost(
       );
       return store.add(getEditor().registries.keybindings.register(c));
     },
+    menu(c) {
+      // The entry must point at a command THIS bundle declared. An entry
+      // onto a command that does not exist renders, accepts a click and
+      // silently does nothing — the dead-affordance shape the tool rail
+      // already learned to refuse, where the user reads the failure as
+      // their own mistake. Checked here rather than in the host so the
+      // bundle is told at registration, not the user at click time.
+      assertNamespaced(c.command, "menu");
+      requireDeclared(
+        lists(declared?.commands, c.command),
+        "contribute.menu",
+        `contributes.commands[] must include "${c.command}" before a menu ` +
+          `entry can invoke it`,
+      );
+      const scope = c.scope ?? "document";
+      const editContext =
+        typeof scope === "object" ? scope.editContext : null;
+      const menus = getEditor().registries.menus;
+      if (!menus) {
+        // A host that predates this door. Report it rather than throwing:
+        // a bundle built against a newer contract must still LOAD on an
+        // older host, with the contribution simply absent.
+        return { dispose() {} };
+      }
+      return store.add(
+        menus.register({
+          path: c.path,
+          command: c.command,
+          order: c.order,
+          group: c.group,
+          // The scope becomes a `when` predicate, which is the host's
+          // existing vocabulary for "does this apply where you are
+          // standing" — the same field the Insert items and the Window
+          // menu already use. A context-scoped entry is simply one whose
+          // predicate asks what context is active.
+          when: (state: unknown) => {
+            const st = state as {
+              document?: { handle?: { pageCount?: number } | null } | null;
+              editContext?: { type?: string } | null;
+            } | null;
+            if (!st?.document?.handle || (st.document.handle.pageCount ?? 0) === 0) {
+              return false;
+            }
+            if (editContext === null) return true;
+            return st.editContext?.type === editContext;
+          },
+        }),
+      );
+    },
     overlay(c) {
       assertNamespaced(c.id, "overlay");
       requireDeclared(

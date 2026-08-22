@@ -307,6 +307,76 @@ export type ObjectTypeDescriptor = ObjectTypeContribution;
  * (ids start with `<manifest.id>.`) and tracks the registration for
  * automatic teardown on deactivate.
  */
+/** A menu entry a plugin places in the host's menu bar.
+ *
+ *  WHY THIS EXISTS. Until it did, the contract had eleven contribution
+ *  types and no way to reach the menu bar, so a plugin command's only
+ *  host-wide home was the command palette — where the row shows the raw
+ *  command id where every other application puts the key, and where
+ *  nobody ever sees two creation verbs side by side. That is how six
+ *  content types came to teach six different creation idioms (Insert /
+ *  Place / Import, plus a `lowerToFrame` that is compiler vocabulary for
+ *  the step that puts the sheet on the page). The host had begun
+ *  hand-curating entries on plugins' behalf, which works and does not
+ *  scale: the host has to know each plugin by name.
+ *
+ *  TWO SCOPES, because there are two different problems and either one
+ *  alone leaves the other standing.
+ *
+ *  `"document"` is the front door: the entry is in the bar whenever a
+ *  document is open, which is what makes a content type discoverable to
+ *  someone who has not met it yet.
+ *
+ *  `{ editContext }` is the in-context surface: the entry exists only
+ *  while that edit context is active. This is the larger gap. Inside a
+ *  `vectorGraphic` the draw plugin has ~92 relevant commands; inside a
+ *  `sheet` the tool rail is deliberately EMPTY and the plugin still has
+ *  sort, find-and-replace and cell-style verbs — and in both the menu
+ *  bar shows the host's own menus, about the document the user stepped
+ *  out of. The shell already scopes the tool rail (`toolIds`) and the
+ *  Window menu (`panelIds`) to the active context; this is the same
+ *  idea applied to the third surface, and it lands on machinery that
+ *  already exists.
+ */
+export interface MenuContribution {
+  /** Slash-separated path, as the host's own menu items use.
+   *  `"Object/Insert web frame…"`, `"Sheet/Sort range…"`. A path whose
+   *  first segment names an existing menu merges into it; a new first
+   *  segment inserts a new top-level menu. */
+  path: string;
+  /** Command id this entry invokes. Must be a command the bundle has
+   *  registered — the host refuses an entry pointing at nothing, on the
+   *  same principle the tool rail refuses a dead slot: an affordance
+   *  that accepts a click and silently does nothing is worse than an
+   *  absent one, because the user reads it as their own mistake. */
+  command: string;
+  /** Lower floats up within the group. Default 100. */
+  order?: number;
+  /** Separator group; items sharing one cluster together. */
+  group?: string;
+  /** When the entry is in the bar.
+   *
+   *  `"document"` — whenever a document is open.
+   *  `{ editContext }` — only while that context is active.
+   *
+   *  Defaults to `"document"`, because an entry nobody can find is the
+   *  problem this exists to solve. */
+  scope?: "document" | { editContext: string };
+  /** How a context-scoped menu meets the host's own menus.
+   *
+   *  `"augment"` (the default) leaves every host menu live alongside it.
+   *  `"replace"` hides the host's document-level menus that the context
+   *  cannot serve.
+   *
+   *  paged.doc is the case that forces this to exist: it hands the tool
+   *  rail back to the HOST's type and select tools, because a DOCX
+   *  lowers to real text frames and real stories, so the host's Type and
+   *  Edit menus genuinely still apply inside it. A door that only knew
+   *  how to replace would be right for `sheet` and `webFrame` and wrong
+   *  for precisely the one plugin whose content is native. */
+  mode?: "augment" | "replace";
+}
+
 export interface ContributionSurface {
   tool(contribution: ToolContribution): Disposable;
   panel(contribution: PanelContribution): Disposable;
@@ -323,6 +393,12 @@ export interface ContributionSurface {
   schemaPanel(contribution: SchemaPanelContribution): Disposable;
   command(contribution: CommandContribution): Disposable;
   keybinding(contribution: KeybindingContribution): Disposable;
+  /**
+   * Register a MENU ENTRY. See {@link MenuContribution} for the two
+   * scopes and why both are needed. The path's first segment may name an
+   * existing host menu (merging into it) or a new one.
+   */
+  menu(contribution: MenuContribution): Disposable;
   overlay(contribution: OverlayContribution): Disposable;
   /**
    * Register an EDIT CONTEXT (W3.2, closes B-02): a double-click (or

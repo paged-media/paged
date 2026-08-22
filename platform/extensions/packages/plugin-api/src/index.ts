@@ -111,6 +111,7 @@ export type {
   PluginMetadataEnvelope,
   ObjectTypeBaker,
   BakeContext,
+  MenuContribution,
 } from "./host";
 
 export type {

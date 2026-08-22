@@ -398,6 +398,25 @@ export interface OverlayRegistry {
 /** W3.2 — the edit-context registry (the shell owns the stack + chrome
  *  + write-scope; this narrow contract is just the registration door).
  *  The contribution type lives in ./host (the bundle-facing surface). */
+/** The host's menu registry, narrowed to what a bundle may do with it.
+ *
+ *  `register` only, and the item shape is the HOST's own
+ *  `MenuItemContribution` rather than the plugin-facing
+ *  `MenuContribution` — the SDK translates one into the other, turning
+ *  the declarative `scope` into the `when` predicate the host already
+ *  uses for "does this apply where you are standing". Keeping the
+ *  translation in the SDK is what lets the plugin-facing shape stay
+ *  declarative while the host keeps one vocabulary for visibility. */
+export interface MenuRegistry {
+  register(item: {
+    path: string;
+    command: string;
+    order?: number;
+    group?: string;
+    when?: (state: unknown) => boolean;
+  }): Disposable;
+}
+
 export interface EditContextRegistry {
   register(contribution: EditContextContribution): Disposable;
 }
@@ -428,6 +447,10 @@ export interface ShellRegistries {
    *  the contract so a host that hasn't wired the registry yet stays
    *  assignable; the SDK adapter falls back to a recording stub. */
   editContexts?: EditContextRegistry;
+  /** Menu entries (`contribute.menu`). Optional for the same reason as
+   *  `editContexts`: a host predating the door stays assignable, and the
+   *  SDK reports the contribution as unavailable rather than throwing. */
+  menus?: MenuRegistry;
   /** W3.2 — object types (W-03). Optional for the same reason. */
   objectTypes?: ObjectTypeRegistry;
   /** K-2 / S-06 — document importers (file → plugin). Optional on the
