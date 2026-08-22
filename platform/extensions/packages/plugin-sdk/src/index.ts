@@ -60,6 +60,7 @@ export {
   type DataProviderBackend,
   type CreateBundleHostOptions,
   type DiagnosticsSink,
+  type JournalSink,
   type BundleAssetProvider,
   type NativeDocumentBackend,
   type BlobStore,

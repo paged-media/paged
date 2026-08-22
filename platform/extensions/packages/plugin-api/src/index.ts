@@ -95,6 +95,8 @@ export type {
   ProviderField,
   ProviderRecordSet,
   DiagnosticsSurface,
+  JournalSurface,
+  JournalRecord,
   BindingsSurface,
   Diagnostic,
   DocumentChangeEvent,

@@ -47,6 +47,8 @@ import type {
   ContributionSurface,
   Diagnostic,
   DiagnosticsSurface,
+  JournalRecord,
+  JournalSurface,
   Disposable,
   DocumentChangeEvent,
   FrameChainLink,
@@ -275,6 +277,21 @@ function defaultStorageBacking(): StorageBacking {
 export interface DiagnosticsSink {
   publish(bundleId: string, key: string, diagnostics: Diagnostic[]): void;
   clear(bundleId: string, key?: string): void;
+}
+
+/**
+ * ADR 025 — the host's journal buffer, injected the same way `DiagnosticsSink`
+ * is, and for the same reason: the ring lives in the app (one per session,
+ * created outside any bundle), and every loaded bundle fans INTO it with its
+ * own id stamped by the host.
+ *
+ * Structurally identical to the diagnostics fan-out on purpose: `manifest`,
+ * `storage`, `diagnostics`, `supports` and `log` are the members DESIGN.md §6
+ * already lists as "trivial proxy" across the future isolate boundary, and a
+ * plain-JSON, bundleId-keyed sink joins them without adding a new problem.
+ */
+export interface JournalSink {
+  record(bundleId: string, entry: JournalRecord): void;
 }
 
 /** Asset-store budgets (W-06). The per-face cap mirrors the wasm lane's
@@ -847,8 +864,17 @@ export interface CreateBundleHostOptions {
    *  (nothing would ever consult the provider) and
    *  `supports("bindings.provider@1")` is false. */
   bindingProviders?: BindingProviderBackend;
-  /** Console sink override (tests). */
+  /** Console sink override.
+   *
+   *  Originally a test hook, and now ALSO the production capture point: the
+   *  editor passes a sink that censuses every `host.log` line (severity + a
+   *  hash of the message) into the journal while forwarding the real text to
+   *  the real console. See ADR 025 §5 — a census, not a mirror, because
+   *  `host.log` is free text across ~900 call sites. */
   console?: Pick<Console, "debug" | "info" | "warn" | "error">;
+  /** ADR 025 — where `host.journal` entries go. Absent = the surface is
+   *  inert and `supports("journal@1")` is false. */
+  journal?: JournalSink;
   /** Shell actions the HOST APP owns (the cockpit's panel placement).
    *  When absent, `host.shell` warns and no-ops, and
    *  `supports("shell.openPanel@1")` answers false. Typed as
@@ -998,6 +1024,49 @@ export function createBundleHost(
     info: (m, ...a) => sink.info(`${tag} ${m}`, ...a),
     warn: (m, ...a) => sink.warn(`${tag} ${m}`, ...a),
     error: (m, ...a) => sink.error(`${tag} ${m}`, ...a),
+  };
+
+  // ADR 025 — the journal door. Deliberately NOT capability-gated: the
+  // capability system gates AUTHORITY (reading the document, the network,
+  // storage), and a write-only, bounded, sanitised, host-attributed sink
+  // grants none. There is no capability for `host.log` either, and this is
+  // strictly less powerful than `log` — log carries free text to the console,
+  // this carries scalars to a ring.
+  const journalSink = options?.journal;
+  const journal: JournalSurface = {
+    record(entry: JournalRecord): void {
+      if (!journalSink) return; // inert, never throwing
+      try {
+        // The same namespace chokepoint every other contribution id passes,
+        // so an entry is always attributable and can never be spoofed onto
+        // another plugin's namespace.
+        assertNamespaced(entry.code, "journal");
+        journalSink.record(manifest.id, entry);
+      } catch (err) {
+        // An instrumentation door that can break the plugin it instruments is
+        // worse than no door. A bad code is the AUTHOR's bug, so say so once
+        // through the logger rather than throwing into their call stack.
+        log.warn(`journal.record refused: ${String(err)}`);
+      }
+    },
+    async time<T>(code: string, fn: () => T | Promise<T>): Promise<T> {
+      const t0 = Date.now();
+      try {
+        const out = await fn();
+        journal.record({ code, durMs: Date.now() - t0, data: { ok: true } });
+        return out;
+      } catch (err) {
+        // Record the failure, then RETHROW unchanged: timing a call must not
+        // alter what it returns or swallow what it throws.
+        journal.record({
+          code,
+          severity: "error",
+          durMs: Date.now() - t0,
+          data: { ok: false },
+        });
+        throw err;
+      }
+    },
   };
 
   // ------------------------------------------ capability enforcement
@@ -2972,6 +3041,13 @@ export function createBundleHost(
   };
 
   const featureSet = new Set(HOST_FEATURES);
+  if (options?.journal) {
+    // ADR 025 — DYNAMIC, not static: the door always exists (it is inert
+    // without a backend), so the flag means "a real ring is wired and your
+    // entries will actually be kept". Same static-door / dynamic-backing
+    // split as contribute.schemaPanel@1 vs schemaPanel.renderer@1.
+    featureSet.add("journal@1");
+  }
   if (getEditor().text) {
     // The door always exists (it falls back to an estimate); the FEATURE
     // flag means "a real engine shaper is wired" — a bundle probes it to
@@ -3116,6 +3192,7 @@ export function createBundleHost(
     network,
     dataProviders,
     diagnostics,
+    journal,
     bindings,
     widgets,
     assets,

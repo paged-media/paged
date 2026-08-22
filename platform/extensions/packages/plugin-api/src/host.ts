@@ -1464,6 +1464,57 @@ export interface DiagnosticsSurface {
   onDidChange(listener: (key: string) => void): Disposable;
 }
 
+// ------------------------------------------------------------- journal
+//
+// ADR 025. The rule that separates this from `diagnostics` above:
+//
+//   Diagnostics describe the DOCUMENT. The journal describes the PROGRAM.
+//
+// A diagnostic is a STATE keyed to a location in the user's content and is
+// user-actionable — it belongs in the Problems panel next to that content. A
+// journal entry is an EVENT keyed to a moment and is developer-actionable —
+// it belongs in a bounded ring the user can inspect and export.
+//
+// Nothing recorded here is ever transmitted. The host keeps a local ring; the
+// user exports it explicitly if they want to attach it to a bug report. It is
+// KEPT, not SENT, which is why it is not called telemetry.
+
+/** One entry a bundle contributes to the host's journal.
+ *
+ *  The host stamps `plugin`, `seq`, `t` and `origin` — a bundle cannot forge
+ *  attribution, the same provenance rule `contribute.panel` already applies. */
+export interface JournalRecord {
+  /** Dotted, and MUST be namespaced under the manifest id — the same
+   *  chokepoint as every other contribution id, so an entry is always
+   *  attributable. e.g. `media.paged.draw.boolean.union`. */
+  code: string;
+  severity?: "debug" | "info" | "warn" | "error";
+  durMs?: number;
+  /** Bounded scalars. String values MUST match
+   *  `/^[a-z0-9][a-z0-9._:-]{0,63}$/` — a sentence, a file path, a font
+   *  family or any user text CANNOT pass, BY DESIGN. There is deliberately no
+   *  free-text field anywhere on this type: that is the field through which
+   *  PII leaks in every telemetry system ever built. A rejected value is
+   *  dropped and COUNTED, never silently truncated (a truncated path is still
+   *  a path). Keep the human sentence in `host.log`, which goes to the
+   *  console and is not part of any exported artifact. */
+  data?: Record<string, number | boolean | string>;
+}
+
+/** The JOURNAL door — a local, in-memory flight recorder.
+ *
+ *  With no host buffer wired this surface is INERT and
+ *  `supports("journal@1")` is false. That means "recording goes nowhere",
+ *  never "calling this throws": an instrumentation door that can break the
+ *  plugin it instruments is worse than no door. */
+export interface JournalSurface {
+  record(entry: JournalRecord): void;
+  /** Time a thunk (sync or async) and record one entry carrying `durMs` and
+   *  `data.ok`. The thunk's own result and exceptions pass through unchanged
+   *  — instrumenting a call must not alter what it returns or hide a throw. */
+  time<T>(code: string, fn: () => T | Promise<T>): Promise<T>;
+}
+
 // ------------------------------------------------------------- bindings
 //
 // The PUBLISH-BINDINGS door (W3.1 — the dynamic half of the panel
@@ -1559,6 +1610,9 @@ export interface BundleHost {
    *  `supports("dataProviders@1")` is false (the honest no-registry posture). */
   readonly dataProviders: DataProvidersSurface;
   readonly diagnostics: DiagnosticsSurface;
+  /** ADR 025 — the local flight recorder. Probe `supports("journal@1")`
+   *  before relying on it reaching a buffer; calling it is always safe. */
+  readonly journal: JournalSurface;
   /** Published reactive values (W3.1) — the dynamic half of schema
    *  panels: a bundle publishes named booleans (and JSON values) that
    *  schema rows reference for `visible`/`enabled`. The plugin owns the

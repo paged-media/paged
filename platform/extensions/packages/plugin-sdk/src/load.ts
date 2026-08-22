@@ -17,7 +17,11 @@
 // teardown. Refusals are loud (throws) — during incubation a silently
 // skipped bundle is worse than a crash on boot.
 
-import type { PagedBundle, PagedEditor } from "@paged-media/plugin-api";
+import type {
+  BundleHandle,
+  PagedBundle,
+  PagedEditor,
+} from "@paged-media/plugin-api";
 
 import {
   createBundleHost,
@@ -30,6 +34,10 @@ const ID_PATTERN = /^[a-z][a-z0-9]*(\.[a-z][a-z0-9-]*)+$/;
 export interface LoadedBundle {
   readonly id: string;
   readonly active: boolean;
+  /** Set when `activate()` threw. `active` is then false and this bundle
+   *  contributed nothing — the host can surface the reason rather than
+   *  discovering an inert plugin by its absence. */
+  readonly activationError?: unknown;
   dispose(): void;
 }
 
@@ -78,7 +86,44 @@ export function loadBundle(
     manifest,
     options,
   );
-  const handle = bundle.activate(host);
+  // ADR 025 — GUARD ACTIVATION.
+  //
+  // This call used to be bare. The editor loads its eight first-party
+  // bundles in one array literal, so a throw here prevented every bundle
+  // AFTER the failing one from loading at all, with nothing naming the
+  // culprit: no journal entry, no Problems row, no console attribution.
+  // Seven working plugins beat eight broken ones.
+  //
+  // It does NOT rethrow. The failure lands in three visible places — the
+  // journal entry below, the diagnostics fan-out, and `active === false` on
+  // the returned handle — which is the same posture as the write doors
+  // (`mutate` never throws; it returns a non-applied outcome). A host that
+  // wants the old behaviour reads `active`.
+  let handle: BundleHandle;
+  try {
+    handle = bundle.activate(host);
+  } catch (err) {
+    options?.journal?.record(manifest.id, {
+      code: `${manifest.id}.activate`,
+      severity: "error",
+      // Only the error KIND crosses: an activation throw routinely carries a
+      // module path or a bundler message in its text.
+      data: { ok: false, error: errorKind(err) },
+    });
+    options?.diagnosticsSink?.publish(manifest.id, "activation", [
+      {
+        severity: "error",
+        message: `${manifest.id} failed to activate: ${String(err)}`,
+        source: "loadBundle",
+      },
+    ]);
+    disposeHost();
+    return inertBundle(manifest.id, err);
+  }
+  options?.journal?.record(manifest.id, {
+    code: `${manifest.id}.activate`,
+    data: { ok: true },
+  });
   let active = true;
   return {
     id: manifest.id,
@@ -96,5 +141,33 @@ export function loadBundle(
         disposeHost();
       }
     },
+  };
+}
+
+/** The error's constructor name, lowercased — never its message or stack,
+ *  both of which routinely carry disk paths. */
+function errorKind(err: unknown): string {
+  const raw =
+    err && typeof err === "object" && typeof err.constructor?.name === "string"
+      ? err.constructor.name
+      : typeof err;
+  const lowered = raw.toLowerCase();
+  return /^[a-z0-9][a-z0-9._:-]{0,63}$/.test(lowered) ? lowered : "unknown";
+}
+
+/** What a bundle that never activated looks like to the host.
+ *
+ *  Deliberately not a fake handle with a working `dispose()`: that would be a
+ *  teardown that lies about having set anything up. `active` is false, the
+ *  reason is readable, and `dispose()` is a genuine no-op because the host
+ *  scope was already torn down. */
+function inertBundle(id: string, error: unknown): LoadedBundle {
+  return {
+    id,
+    get active() {
+      return false;
+    },
+    activationError: error,
+    dispose() {},
   };
 }
