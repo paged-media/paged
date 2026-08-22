@@ -27,18 +27,31 @@
 // Paged knows the rectangle's corners are plugin-managed (the §13.3
 // metadata-baked "live" marker; the baked IDML corners are always valid).
 //
-// ENGINE GAP, named (the task's "be honest about what needs an engine op
-// that doesn't exist yet"): the apply layer accepts `frameCornerOption*` /
-// `frameCornerRadius*` ONLY on `NodeId::Rectangle` (verified in
-// core paged-mutate `apply/set_property.rs` — the match arm is
-// `NodeId::Rectangle(id)`). A POLYGON has corners too (Illustrator's Live
-// Corners works on any path corner), but the engine has no apply arm for
-// polygon corner options/radii — RFI gap B-23. So this command targets
-// rectangles; a polygon in the selection is skipped with a debug log
-// (never a throw). Per-corner editing (different radius per corner) is on
-// the wire and supported by `cornerRadiiMutationFor`; the preset commands
-// set a UNIFORM radius across the four corners (the common case), and the
+// WHICH KINDS, and a gap that CLOSED. This used to read "the apply layer
+// accepts `frameCornerOption*` / `frameCornerRadius*` ONLY on
+// `NodeId::Rectangle` … RFI gap B-23", and the gate below filtered every
+// polygon out of the selection before a mutation was ever built. B-23
+// landed (Rectangle + Polygon) and C-18 finished the rest in 2026-08:
+// `set_property.rs`'s arm is now six kinds wide and `find_corners_mut`
+// has a `NodeId::Polygon` branch. The comment outlived it, so the presets
+// went on being a silent no-op on a polygon for months — long after real
+// IDML packs in the corpus (30 corner-carrying `<Polygon>`s in one
+// template alone) proved the format expects them.
+//
+// Probed against the wasm this editor runs, on a closed triangle: the
+// engine applied both writes and the page changed by 2,019 px — more than
+// the same preset on a rectangle (393 px), because a polygon has three
+// corners to cut and the rectangle's rounding is subtler. A stale
+// comment, not a missing arm. See `LIVE_CORNER_KINDS`.
+//
+// Per-corner editing (different radius per corner) is on the wire and
+// supported by `cornerRadiiMutationFor`; the preset commands set a
+// UNIFORM radius across the four corners (the common case), and the
 // builder is exported so a future on-canvas handle drives one corner.
+// NOTE for polygons: only the TOP-LEFT slot drives geometry (the
+// renderer's `uniform_corner` reads `corners[0]`), because "top left" has
+// no meaning for an N-gon; the presets write that slot first, so they
+// take effect, and the other three round-trip.
 
 import type {
   BundleHost,
@@ -116,9 +129,23 @@ export const LIVE_CORNER_PRESETS: readonly LiveCornerPreset[] = [
 /** The contributed command ids, in registration order. */
 export const LIVE_CORNER_COMMAND_IDS = LIVE_CORNER_PRESETS.map((p) => p.id);
 
-/** Only rectangles carry an engine corner-option apply arm (gap B-23). */
+/**
+ * The kinds whose corners the engine both ACCEPTS and RENDERS.
+ *
+ * `frameCornerOption*` / `frameCornerRadius*` apply to six kinds
+ * (`find_corners_mut` in core's `paged-mutate`), but the other three are
+ * storage only — its own doc comment: "Oval / GraphicLine / Group —
+ * stored and round-tripped, never rendered: an ellipse has no corner, an
+ * open stroke-only line has no enclosed corner, and a group has no
+ * outline of its own." Offering a preset that writes a property nothing
+ * draws would be the same lie the rectangle-only gate told, pointed the
+ * other way, so this lists what a designer will actually SEE change.
+ */
+const LIVE_CORNER_KINDS = ["rectangle", "polygon", "textFrame"] as const;
+
+/** Whether a live-corner preset changes anything on `id`. */
 export function supportsLiveCorners(id: ElementId): boolean {
-  return id.kind === "rectangle";
+  return (LIVE_CORNER_KINDS as readonly string[]).includes(id.kind);
 }
 
 // ---------------------------------------------------------- builders
@@ -232,20 +259,23 @@ export function withLiveCornerMarker(
 
 // ------------------------------------------------------------ appliers
 
-/** Apply one live-corner preset to the current selection: per rectangle,
- *  commit the eight-write batch AND stamp/clear the `liveCorners`
- *  metadata marker. Non-rectangles are skipped (gap B-23). No rectangle
- *  selected ⇒ no-op (a debug log, never a throw). */
+/** Apply one live-corner preset to the current selection: per corner-
+ *  bearing item, commit the eight-write batch AND stamp/clear the
+ *  `liveCorners` metadata marker. Kinds whose corners nothing renders are
+ *  skipped (see `LIVE_CORNER_KINDS`). Nothing eligible selected ⇒ no-op
+ *  (a debug log, never a throw). */
 export async function applyLiveCornerPreset(
   host: BundleHost,
   preset: LiveCornerPreset,
 ): Promise<void> {
-  const rects = host.selection.get().filter(supportsLiveCorners);
-  if (rects.length === 0) {
-    host.log.debug(`${preset.id}: no rectangle in selection — no-op`);
+  const targets = host.selection.get().filter(supportsLiveCorners);
+  if (targets.length === 0) {
+    host.log.debug(
+      `${preset.id}: nothing with renderable corners in selection — no-op`,
+    );
     return;
   }
-  for (const id of rects) {
+  for (const id of targets) {
     const outcome = await host.document.mutate(cornerStyleMutationFor(id, preset));
     if (!outcome.applied) {
       host.log.warn(

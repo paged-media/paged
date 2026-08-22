@@ -27,8 +27,9 @@
 //       undo restores the prior corners;
 //   (4) the §13.3 "live" metadata marker round-trips (write → read →
 //       undo), merged into the envelope alongside other draw metadata;
-//   (5) the Rectangle-only gap (B-23): a polygon is not a live-corner
-//       target.
+//   (5) WHICH KINDS carry live corners — rectangle AND polygon (B-23 /
+//       C-18 closed both arms), proven against the real engine on the
+//       polygon, not just asserted about the gate.
 
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 
@@ -49,6 +50,9 @@ import { openHost } from "./host";
 
 const RECT = { kind: "rectangle", id: F1_MULTI_SHAPE.ids.rectangle! } as ElementId;
 const POLY = { kind: "polygon", id: F1_MULTI_SHAPE.ids.polygon! } as ElementId;
+const LINE = { kind: "graphicLine", id: F1_MULTI_SHAPE.ids.graphicLine! } as ElementId;
+/** No oval in F1 — the gate is a pure kind test, so a bare id is enough. */
+const OVAL = { kind: "oval", id: "unever" } as ElementId;
 
 const OPTION_PATHS = [
   "frameCornerOptionTopLeft",
@@ -195,10 +199,21 @@ describe("draw conformance — Live Corners (Phase 9 Tier B)", () => {
     });
   });
 
-  describe("Rectangle-only gap (B-23)", () => {
-    it("rectangles support live corners; polygons do not", () => {
+  // B-23 (Rectangle + Polygon) and C-18 (the rest) closed the engine's
+  // corner-option apply arm in 2026-08. This gate went on saying
+  // `kind === "rectangle"` — so every preset was a SILENT no-op on a
+  // polygon, filtered out of the selection before a mutation was built.
+  // The old shape of this block PINNED that: `expect(supportsLiveCorners
+  // (POLY)).toBe(false)`. A conformance test that agrees with the bug is
+  // worse than no test, so this one asks the ENGINE.
+  describe("which kinds carry live corners", () => {
+    it("rectangles and polygons do; an oval does not (nothing renders)", () => {
       expect(supportsLiveCorners(RECT)).toBe(true);
-      expect(supportsLiveCorners(POLY)).toBe(false);
+      expect(supportsLiveCorners(POLY)).toBe(true);
+      // `find_corners_mut` ACCEPTS an oval/line/group and core's own doc
+      // comment says they are "stored and round-tripped, never
+      // rendered" — so offering the preset there would be a second lie.
+      expect(supportsLiveCorners(OVAL)).toBe(false);
     });
   });
 
@@ -262,7 +277,14 @@ describe("draw conformance — Live Corners (Phase 9 Tier B)", () => {
       await h.host.document.setMetadata(RECT, null);
     });
 
-    it("with no rectangle selected the command is a no-op (no throw)", async () => {
+    // The test this replaces asserted the OPPOSITE and passed for
+    // months: it selected the polygon, invoked the command, and checked
+    // only that the promise resolved — which a no-op does. Nothing read
+    // the polygon back.
+    it("a Rounded preset applies to a POLYGON and reads back", async () => {
+      const beforeOption = await readProp(h, POLY, "frameCornerOptionTopLeft");
+      const beforeRadius = await readProp(h, POLY, "frameCornerRadiusTopLeft");
+
       await h.host.selection.set([POLY]);
       const rec = h.contributions.find(
         (c) => c.kind === "command" && c.id === "media.paged.draw.command.cornersRounded",
@@ -270,6 +292,36 @@ describe("draw conformance — Live Corners (Phase 9 Tier B)", () => {
       await expect(
         (rec!.value as { handler: (p?: unknown) => unknown }).handler(undefined),
       ).resolves.toBeUndefined();
+
+      // The TOP-LEFT slot is the one the renderer reads for a polygon
+      // (`uniform_corner` takes `corners[0]`), so it is the one that has
+      // to land.
+      expect(await readProp(h, POLY, "frameCornerOptionTopLeft")).toEqual({
+        type: "text",
+        value: "RoundedCorner",
+      });
+      expect(await readProp(h, POLY, "frameCornerRadiusTopLeft")).toEqual({
+        type: "length",
+        value: DEFAULT_CORNER_RADIUS_PT,
+      });
+
+      await h.host.document.undo(); // metadata marker
+      await h.host.document.undo(); // corner batch
+      await h.host.document.setMetadata(POLY, null);
+      expect(await readProp(h, POLY, "frameCornerOptionTopLeft")).toEqual(beforeOption);
+      expect(await readProp(h, POLY, "frameCornerRadiusTopLeft")).toEqual(beforeRadius);
+    });
+
+    it("with nothing corner-bearing selected the command is a no-op (no throw)", async () => {
+      await h.host.selection.set([LINE]);
+      const rec = h.contributions.find(
+        (c) => c.kind === "command" && c.id === "media.paged.draw.command.cornersRounded",
+      );
+      await expect(
+        (rec!.value as { handler: (p?: unknown) => unknown }).handler(undefined),
+      ).resolves.toBeUndefined();
+      // …and it wrote nothing: a no-op must not stamp the live marker.
+      expect(await h.host.document.getMetadata(LINE)).toBeNull();
     });
   });
 });

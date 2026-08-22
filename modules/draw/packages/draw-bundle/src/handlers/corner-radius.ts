@@ -81,8 +81,15 @@ export function createCornerRadiusHandler(host: BundleHost): GestureHandler {
         (id) => (id as { kind?: string }).kind === "rectangle",
       );
       if (!rect) {
+        // Rectangle-only HERE is a HANDLE-GEOMETRY limit, not an engine
+        // one: B-23/C-18 closed the polygon apply arm and the presets in
+        // commands/live-corners.ts now drive it, but `cornerAt` hit-tests
+        // the four corners of an axis-aligned BOX. An N-gon's corners are
+        // its anchors, which this handler cannot address — driving one
+        // needs a vertex hit-test over `pathAnchors`, not a wider filter.
         host.log.debug?.(
-          "cornerRadius: select a rectangle (polygon corners await the engine arm, B-23)",
+          "cornerRadius: select a rectangle (the drag handle hit-tests a " +
+            "box's four corners; use the Corners commands on a polygon)",
         );
         return;
       }

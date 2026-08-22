@@ -46,6 +46,8 @@ import type {
   SchemaPanelContribution,
 } from "@paged-media/plugin-api";
 
+import { supportsLiveCorners } from "../commands/live-corners";
+
 export const STROKE_PANEL_ID = "media.paged.draw.panel.stroke";
 
 /** Published binding names the schema gates reference. The bundle
@@ -60,9 +62,11 @@ export const BIND_DASH_CONTROLS_VISIBLE = "media.paged.draw.dashControlsVisible"
 export const BIND_ARROWHEAD_CONTROLS_VISIBLE =
   "media.paged.draw.arrowheadControlsVisible";
 /** Phase 9 (Tier B) — gates the Corners section: true when the FIRST
- *  selected element is a RECTANGLE (the engine's corner-option apply arm
- *  is Rectangle-only — see commands/live-corners.ts gap B-23; the section
- *  honestly hides elsewhere). */
+ *  selected element is a kind whose corners the engine RENDERS
+ *  (`supportsLiveCorners` — rectangle, polygon, text frame; B-23/C-18
+ *  closed the polygon arm, and this gate used to be `=== "rectangle"`
+ *  long after). The section honestly hides on an oval / line / group,
+ *  where the writes apply but nothing draws. */
 export const BIND_CORNER_CONTROLS_VISIBLE =
   "media.paged.draw.cornerControlsVisible";
 /** Phase 9 (Tier B) — gates the Appearance section: true when ANYTHING is
@@ -198,8 +202,11 @@ export const strokePanel: SchemaPanelContribution = {
         // a vector across four `frameCornerOption*` writes + a metadata
         // marker, so it is COMMAND-driven (the readout points the author
         // at the Corners commands). The whole section's VISIBILITY gates
-        // on the selection being a RECTANGLE (the engine's corner apply
-        // arm is Rectangle-only — gap B-23).
+        // on the selection being a kind whose corners RENDER
+        // (`supportsLiveCorners`). On a POLYGON only the ◰ (top-left)
+        // scrub changes the shape — the renderer's `uniform_corner`
+        // reads `corners[0]` because an N-gon has no "top right" — while
+        // all four round-trip.
         title: "Corners",
         visible: { bind: BIND_CORNER_CONTROLS_VISIBLE },
         rows: [
@@ -307,14 +314,14 @@ export function installStrokePanelBindings(host: BundleHost): Disposable {
       BIND_ARROWHEAD_CONTROLS_VISIBLE,
       has && selection[0].kind === "graphicLine",
     );
-    // Phase 9 (Tier B) — the Corners section gates on the selection being
-    // a RECTANGLE (the engine's corner-option apply arm is Rectangle-only,
-    // gap B-23); the Appearance section gates on any non-empty selection
-    // (the stack is plugin metadata applicable to any frame). Plain
-    // selection reads, no document round-trip.
+    // Phase 9 (Tier B) — the Corners section gates on the selection's
+    // corners being RENDERABLE (`supportsLiveCorners`); the Appearance
+    // section gates on any non-empty selection (the stack is plugin
+    // metadata applicable to any frame). Plain selection reads, no
+    // document round-trip.
     host.bindings.publish(
       BIND_CORNER_CONTROLS_VISIBLE,
-      has && selection[0].kind === "rectangle",
+      has && supportsLiveCorners(selection[0]),
     );
     host.bindings.publish(BIND_APPEARANCE_CONTROLS_VISIBLE, has);
     if (!has) {
