@@ -57,6 +57,7 @@
 // arrowhead properties, gated by a published kind binding).
 
 import type { BundleHandle, BundleHost } from "@paged-media/plugin-api";
+import { contributeMenu } from "./menu";
 import {
   contributeEditContext,
   contributeSchemaPanel,
@@ -537,6 +538,9 @@ export function activate(host: BundleHost): BundleHandle {
   // (selection → SVG bytes). Capability-gated; degrades honestly when the
   // host predates the importer/exporter doors.
   const svgIoSub = contributeSvgIo(host);
+  // F1 — the menu bar. 92 commands and, until plugin-api 0.2.33, no
+  // route to a menu: every verb was Cmd+K only, shown as a raw id.
+  const menuSub = contributeMenu(host);
   host.log.info(
     `activated — ${tools.length} tools + 2 schema panels + 8 React panels + ` +
       `${
@@ -577,6 +581,7 @@ export function activate(host: BundleHost): BundleHandle {
       // rollback point rather than a deletion.
       layersProviderHandle?.dispose();
       svgIoSub.dispose();
+      menuSub.dispose();
       imageTraceCommandSub.dispose();
       objectsOnPathCommandsSub.dispose();
       blendCommandsSub.dispose();
