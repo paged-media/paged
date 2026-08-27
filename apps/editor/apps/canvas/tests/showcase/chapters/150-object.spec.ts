@@ -22,23 +22,23 @@
 // p48/49 spread, stroke anatomy, path topology + every planar verb,
 // and grouping/nesting with the object-style battery.
 
+// Ch.8 splits across TWO chapter specs on purpose: its ~400 wire ops
+// at the measured in-chain cost (~3.8 s/op against the grown document)
+// legitimately exceed one chapter budget, and the checkpoint chain
+// absorbs a split with zero logic change. This half: opener + the
+// transforms/corners spread.
+
 import { annualChapter } from "../chapter";
 import { p } from "../names-annual";
 
 import { build as opener } from "../pages/150-object/01-opener";
 import { build as transforms } from "../pages/150-object/02-transforms";
-import { build as strokes } from "../pages/150-object/03-strokes";
-import { build as paths } from "../pages/150-object/04-paths";
-import { build as grouping } from "../pages/150-object/05-grouping";
 
 annualChapter({
   id: "150-object",
-  title: "Ch.8 The Object",
+  title: "Ch.8 The Object — z-order, transforms, corners",
   modules: [
     { id: "ob-opener", pages: [p(47)], build: opener },
     { id: "ob-transforms", pages: [p(48), p(49)], build: transforms },
-    { id: "ob-strokes", pages: [p(50)], build: strokes },
-    { id: "ob-paths", pages: [p(51)], build: paths },
-    { id: "ob-grouping", pages: [p(52)], build: grouping },
   ],
 });
