@@ -49,13 +49,10 @@ import { build as table } from "../pages/240-catalog/06-table";
 
 annualChapter({
   id: "240-catalog",
-  title: "Ch.18 The Catalog",
+  title: "Ch.18 The Catalog - source, cards, sets",
   modules: [
     { id: "ct-opener", pages: [p(109)], build: opener },
     { id: "ct-cards", pages: [p(110)], build: cards },
     { id: "ct-sets", pages: [p(113)], build: sets },
-    { id: "ct-dsl", pages: [p(114)], build: dsl },
-    { id: "ct-barcodes", pages: [p(112)], build: barcodes },
-    { id: "ct-table", pages: [p(111)], build: table },
   ],
 });

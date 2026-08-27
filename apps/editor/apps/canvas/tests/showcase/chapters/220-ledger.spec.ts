@@ -38,13 +38,9 @@ import { build as roundtrip } from "../pages/220-ledger/06-roundtrip";
 
 annualChapter({
   id: "220-ledger",
-  title: "Ch.16 The Ledger",
+  title: "Ch.16 The Ledger - the chart wall",
   modules: [
     { id: "lg-opener", pages: [p(95)], build: opener },
     { id: "lg-chart-wall", pages: [p(96), p(97)], build: chartWall },
-    { id: "lg-pour", pages: [p(98)], build: pour },
-    { id: "lg-formulas", pages: [p(99)], build: formulas },
-    { id: "lg-chain", pages: [p(100), p(101)], build: chain },
-    { id: "lg-roundtrip", pages: [p(102)], build: roundtrip },
   ],
 });

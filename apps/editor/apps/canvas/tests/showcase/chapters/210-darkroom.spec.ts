@@ -40,7 +40,7 @@ import { build as loop } from "../pages/210-darkroom/07-loop";
 
 annualChapter({
   id: "210-darkroom",
-  title: "Ch.15 The Darkroom",
+  title: "Ch.15 The Darkroom - the loop and the contact sheet",
   modules: [
     { id: "dk-opener", pages: [p(87)], build: opener },
     {
@@ -49,10 +49,5 @@ annualChapter({
       build: contactSheet,
       needsGpu: true,
     },
-    { id: "dk-selections", pages: [p(90)], build: selections, needsGpu: true },
-    { id: "dk-retouch", pages: [p(91)], build: retouch, needsGpu: true },
-    { id: "dk-paint-type", pages: [p(92)], build: paintType, needsGpu: true },
-    { id: "dk-psd", pages: [p(93)], build: psd, needsGpu: true },
-    { id: "dk-loop", pages: [p(94)], build: loop, needsGpu: true },
   ],
 });

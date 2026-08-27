@@ -41,18 +41,10 @@ import { build as tracePlate } from "../pages/200-drawing-office/11-plate";
 
 annualChapter({
   id: "200-drawing-office",
-  title: "Part II · Ch.14 The Drawing Office",
+  title: "Part II . Ch.14 The Drawing Office - crest and instruments",
   modules: [
     { id: "do-divider", pages: [p(75), p(76)], build: divider },
     { id: "do-opener", pages: [p(77)], build: opener },
     { id: "do-drafting", pages: [p(78)], build: drafting },
-    { id: "do-pathfinder", pages: [p(79)], build: pathfinder },
-    { id: "do-livepaint", pages: [p(80)], build: livepaint },
-    { id: "do-appearance", pages: [p(81)], build: appearance },
-    { id: "do-paint", pages: [p(82)], build: paint },
-    { id: "do-repeats", pages: [p(83)], build: repeats },
-    { id: "do-blends", pages: [p(84)], build: blends },
-    { id: "do-typepath", pages: [p(85)], build: typepath },
-    { id: "do-plate", pages: [p(86)], build: tracePlate },
   ],
 });

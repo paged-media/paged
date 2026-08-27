@@ -38,18 +38,10 @@ import { build as bake } from "../pages/230-long-read/05-bake";
 
 annualChapter({
   id: "230-long-read",
-  title: "Ch.17 The Long Read",
+  title: "Ch.17 The Long Read - source and flows",
   modules: [
     { id: "lr-opener", pages: [p(103)], build: opener },
     { id: "lr-source", pages: [p(104)], build: source },
     { id: "lr-flows", pages: [p(105)], build: flows },
-    // The BAKE runs before the fragments module ON PURPOSE (pages keep
-    // their book order — modules need not run in it): the card chain's
-    // scene-layer refusal on p106 leaves the web engine lane wounded
-    // for the rest of the session, and the bake spread must meet a
-    // healthy engine to have anything honest to compare. The refusal
-    // itself is p106's finding and stays recorded there.
-    { id: "lr-bake", pages: [p(107), p(108)], build: bake },
-    { id: "lr-fragments", pages: [p(106)], build: fragments },
   ],
 });
