@@ -41,11 +41,9 @@ import { build as roundtrip } from "../pages/220-ledger/06-roundtrip";
 // the checkpoint chain absorbs splits with zero logic change.
 annualChapter({
   id: "222-ledger-b",
-  title: "Ch.16 The Ledger - pours, formulas, the chain",
+  title: "Ch.16 The Ledger - pour and formulas",
   modules: [
     { id: "lg-pour", pages: [p(98)], build: pour },
     { id: "lg-formulas", pages: [p(99)], build: formulas },
-    { id: "lg-chain", pages: [p(100), p(101)], build: chain },
-    { id: "lg-roundtrip", pages: [p(102)], build: roundtrip },
   ],
 });
