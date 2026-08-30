@@ -17,28 +17,25 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The appendix — p127–p134, all G-Appendix, the book's quietest pages
-// and its whole point. A·1–A·4 compile the LIMITS LEDGER from the
-// page sources themselves (every ◪ margin note in the book, deduped,
-// classified, folio-resolved) and close with the campaign's ten
-// engine findings. A·5–A·6 resolve the index apparatus from the
-// document's own export. A·7–A·8 read the colophon's numbers from the
-// ledger fragments, the universes and the container — and end the
-// book on its one-line thesis, alone on the final verso.
+// The appendix, first half — p127–p132. A·1–A·4 compile the LIMITS
+// LEDGER from the page sources themselves (every ◪ margin note in the
+// book, deduped, classified, folio-resolved) and close with the
+// campaign's engine findings. A·5–A·6 resolve the index apparatus from
+// the document's own IDML export — a whole-book door, and the reason
+// this spec carries the enlarged budget.
 
 import { annualChapter } from "../chapter";
 import { p } from "../names-annual";
 
 import { build as limits } from "../pages/310-appendix/01-limits";
 import { build as index } from "../pages/310-appendix/02-index";
-import { build as colophon } from "../pages/310-appendix/03-colophon";
 
 annualChapter({
   id: "310-appendix",
-  title: "Appendix — Limits, Index, Colophon",
+  title: "Appendix - Limits and Index",
+  budgetMinutes: 70,
   modules: [
     { id: "ax-limits", pages: [p(127), p(128), p(129), p(130)], build: limits },
     { id: "ax-index", pages: [p(131), p(132)], build: index },
-    { id: "ax-colophon", pages: [p(133), p(134)], build: colophon },
   ],
 });
