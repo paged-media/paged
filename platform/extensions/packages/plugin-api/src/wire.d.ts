@@ -1,7 +1,7 @@
 // GENERATED — do not edit. Vendored verbatim from the published
 // @paged-media/canvas-wasm .d.ts (tsify output from paged-media/core,
 // MPL-2.0 OR PMEL). Sync: node scripts/sync-wire.mjs · Check: --check.
-// Synced from @paged-media/canvas-wasm@0.62.0
+// Synced from @paged-media/canvas-wasm@0.63.0
 /* tslint:disable */
 /* eslint-disable */
 
@@ -46,8 +46,33 @@ export type SceneBlendMode = "multiply" | "screen" | "overlay" | "darken" | "lig
  * A content-space mutation. Phase 1 carries the *envelope* only —
  * the worker rejects each variant with `WorkerError::NotImplemented`.
  * Phase 3 lights these up incrementally.
+ *
+ * Behind the default `mutations` feature: its payload types come from
+ * `paged-mutate`, and the read-only viewer SDK must not link that.
+ * See the crate docs.
  */
 export type Mutation = { op: "insertText"; args: { storyId: string; offset: number; text: string; cell?: TextCellAddr | null } } | { op: "deleteRange"; args: { storyId: string; start: number; end: number; cell?: TextCellAddr | null } } | { op: "applyStyle"; args: { storyId: string; start: number; end: number; style: string; scope: StyleScope; cell?: TextCellAddr | null } } | { op: "insertField"; args: { storyId: string; offset: number; field: FieldKind } } | { op: "insertAnchoredFrame"; args: { storyId: string; offset: number; width: number; height: number; imageUri?: string | null } } | { op: "insertHyperlink"; args: { storyId: string; start: number; end: number; url: string } } | { op: "setFieldValue"; args: { storyId: string; offset: number; value?: string | null } } | { op: "placeImage"; args: { elementId: string; uri: string; fit?: string | null } } | { op: "replaceImageBytes"; args: { elementId: string; bytes?: number[] | null } } | { op: "moveFrame"; args: { frameId: string; transform: [number, number, number, number, number, number] } } | { op: "resizeFrame"; args: { frameId: string; bounds: [number, number, number, number] } } | { op: "linkFrames"; args: { from: string; to: string } } | { op: "unlinkFrames"; args: { frame: string } } | { op: "insertPage"; args: { afterPageId: PageId | null; masterId: string | null } } | { op: "deletePage"; args: { pageId: PageId } } | { op: "resizePage"; args: { pageId: PageId; bounds: [number, number, number, number] } } | { op: "insertFrame"; args: { pageId: PageId; bounds: [number, number, number, number] } } | { op: "insertTextFrame"; args: { pageId: PageId; bounds: [number, number, number, number] } } | { op: "deleteFrame"; args: { frameId: string } } | { op: "insertLine"; args: { pageId: PageId; start: [number, number]; end: [number, number] } } | { op: "insertPath"; args: { pageId: PageId; anchors: PathAnchorSpec[]; open: boolean; smooth?: boolean } } | { op: "setDocumentDefaults"; args: { fillColor: string | null; strokeColor: string | null; strokeWeight: number | null } } | { op: "setColorSettings"; args: { cmykProfileName: string | null; rgbPolicy: string | null; intent: string | null; bpc: boolean | null } } | { op: "setProofSetup"; args: { profileName: string | null; simulatePaperWhite?: boolean; intent: string | null } } | { op: "importSwatchLibrary"; args: { bytes: number[]; groupName?: string | null } } | { op: "setInkSetting"; args: { spotId: string; convertToProcess?: boolean; aliasTo?: string | null } } | { op: "setUseStandardLabForSpots"; args: { enabled: boolean } } | { op: "pathPointInsert"; args: { elementId: ElementId; index: number; anchor: PathAnchorSpec; prevSubpathStarts?: number[] | null } } | { op: "pathPointRemove"; args: { elementId: ElementId; index: number } } | { op: "pathOpenAt"; args: { elementId: ElementId; index: number } } | { op: "outlineStroke"; args: { elementId: ElementId; width: number; cap: string; join: string; miterLimit: number } } | { op: "offsetPath"; args: { elementId: ElementId; delta: number; join: string; miterLimit: number } } | { op: "simplifyPath"; args: { elementId: ElementId; tolerance: number } } | { op: "closePath"; args: { elementId: ElementId; subpath?: number | null } } | { op: "joinPaths"; args: { elementId: ElementId; otherId: ElementId } } | { op: "pasteInto"; args: { containerId: ElementId; childId: ElementId } } | { op: "releaseFrom"; args: { childId: ElementId } } | { op: "reorderElement"; args: { elementId: ElementId; to: ZOrderTarget } } | { op: "applyOpacityMask"; args: { targetId: ElementId; maskId: ElementId; maskType?: string | null; invert?: boolean | null } } | { op: "releaseOpacityMask"; args: { targetId: ElementId } } | { op: "attachTextToPath"; args: { elementId: ElementId; storyId: string; pathTypeAlignment?: string | null; flipPathEffect?: string | null; startBracket?: number | null; endBracket?: number | null } } | { op: "detachTextFromPath"; args: { elementId: ElementId } } | { op: "createGroup"; args: { memberIds: ElementId[] } } | { op: "dissolveGroup"; args: { groupId: string } } | { op: "setGroupTransform"; args: { groupId: string; transform?: [number, number, number, number, number, number] | null } } | { op: "setPluginMetadata"; args: { elementId: ElementId; key: string; value?: string | null; caller?: string | null } } | { op: "pathPointCurveType"; args: { elementId: ElementId; index: number; smooth: boolean } } | { op: "pathPointSet"; args: { elementId: ElementId; index: number; role: PathPointRole; position: [number, number] } } | { op: "batch"; args: { ops: Mutation[] } } | { op: "bindCreated"; args: { handle: string } } | { op: "layerSetVisible"; args: { layerId: string; visible: boolean } } | { op: "layerSetLocked"; args: { layerId: string; locked: boolean } } | { op: "layerSetPrintable"; args: { layerId: string; printable: boolean } } | { op: "layerSetName"; args: { layerId: string; name: string } } | { op: "layerMove"; args: { layerId: string; newIndex: number } } | { op: "layerInsert"; args: { position: number; name: string } } | { op: "layerRemove"; args: { layerId: string } } | { op: "setElementProperty"; args: { elementId: ElementId; path: PropertyPath; value: Value } } | { op: "pathfinderBoolean"; args: { kept: ElementId; others: ElementId[]; kind: PathfinderKind } } | { op: "pathfinderDivide"; args: { elementIds: ElementId[] } } | { op: "pathfinderTrim"; args: { elementIds: ElementId[] } } | { op: "pathfinderMerge"; args: { elementIds: ElementId[] } } | { op: "pathfinderCrop"; args: { elementIds: ElementId[] } } | { op: "pathfinderOutline"; args: { elementIds: ElementId[] } } | { op: "pathfinderMinusBack"; args: { elementIds: ElementId[] } } | { op: "pathfinderFaces"; args: { elementIds: ElementId[]; faces: string[]; mode: FaceSelectMode } } | { op: "createSwatch"; args: { spec: SwatchSpec } } | { op: "editSwatch"; args: { swatchId: string; spec: SwatchSpec } } | { op: "deleteSwatch"; args: { swatchId: string } } | { op: "createGradient"; args: { spec: GradientSpec } } | { op: "editGradient"; args: { gradientId: string; spec: GradientSpec } } | { op: "deleteGradient"; args: { gradientId: string } } | { op: "createColorGroup"; args: { spec: ColorGroupSpec } } | { op: "editColorGroup"; args: { groupId: string; spec: ColorGroupSpec } } | { op: "deleteColorGroup"; args: { groupId: string } } | { op: "createNumberingList"; args: { spec: NumberingListSpec } } | { op: "editNumberingList"; args: { listId: string; spec: NumberingListSpec } } | { op: "deleteNumberingList"; args: { listId: string } } | { op: "createParagraphStyle"; args: { selfId?: string | null; name?: string | null; basedOn?: string | null } } | { op: "renameParagraphStyle"; args: { styleId: string; name: string } } | { op: "deleteParagraphStyle"; args: { styleId: string } } | { op: "createCharacterStyle"; args: { selfId?: string | null; name?: string | null; basedOn?: string | null } } | { op: "renameCharacterStyle"; args: { styleId: string; name: string } } | { op: "deleteCharacterStyle"; args: { styleId: string } } | { op: "createObjectStyle"; args: { selfId?: string | null; name?: string | null; basedOn?: string | null } } | { op: "renameObjectStyle"; args: { styleId: string; name: string } } | { op: "deleteObjectStyle"; args: { styleId: string } } | { op: "createCellStyle"; args: { selfId?: string | null; name?: string | null; basedOn?: string | null } } | { op: "renameCellStyle"; args: { styleId: string; name: string } } | { op: "deleteCellStyle"; args: { styleId: string } } | { op: "createTableStyle"; args: { selfId?: string | null; name?: string | null; basedOn?: string | null } } | { op: "renameTableStyle"; args: { styleId: string; name: string } } | { op: "deleteTableStyle"; args: { styleId: string } } | { op: "setStyleProperty"; args: { collection: StyleCollection; styleId: string; path: PropertyPath; value: Value } } | { op: "insertOval"; args: { pageId: PageId; bounds: [number, number, number, number] } } | { op: "insertGuide"; args: { spreadId: string; orientation: GuideOrientationSpec; position: number; pageIndex?: number } } | { op: "moveGuide"; args: { guideId: string; position: number } } | { op: "deleteGuide"; args: { guideId: string } } | { op: "setConditionVisible"; args: { condition: string; visible: boolean } } | { op: "activateConditionSet"; args: { set: string } } | { op: "applyMasterToPage"; args: { page: PageId; master?: string | null } } | { op: "duplicatePage"; args: { page: PageId } } | { op: "insertSection"; args: { atPage: PageId; prefix?: string | null; numberingStyle?: string | null; startAt?: number | null } } | { op: "editSection"; args: { sectionId: string; prefix?: string | null | null; numberingStyle?: string | null; startAt?: number | null | null } } | { op: "deleteSection"; args: { sectionId: string } } | { op: "setRowHeight"; args: { storyId: string; tableId: string; row: number; height?: number | null } } | { op: "setColumnWidth"; args: { storyId: string; tableId: string; col: number; width?: number | null } } | { op: "insertTableRow"; args: { storyId: string; tableId: string; at: number } } | { op: "deleteTableRow"; args: { storyId: string; tableId: string; at: number } } | { op: "insertTableColumn"; args: { storyId: string; tableId: string; at: number } } | { op: "deleteTableColumn"; args: { storyId: string; tableId: string; at: number } } | { op: "insertHeaderRow"; args: { storyId: string; tableId: string } } | { op: "removeHeaderRow"; args: { storyId: string; tableId: string } } | { op: "insertFooterRow"; args: { storyId: string; tableId: string } } | { op: "removeFooterRow"; args: { storyId: string; tableId: string } } | { op: "setCellSpan"; args: { storyId: string; tableId: string; row: number; col: number; rowSpan: number; columnSpan: number } } | { op: "insertTable"; args: { storyId: string; rows: number; cols: number; headerRows?: number; footerRows?: number; columnWidths?: number[]; rowHeights?: number[] } };
+
+/**
+ * A per-run script budget on the wire (v63). Every field is optional
+ * and falls back to the engine\'s default, so a caller overrides only
+ * what it means to.
+ *
+ * `wall_clock_ms: Some(0)` DISABLES the deadline — the loop, recursion
+ * and stack guards still apply. Absent keeps the default 2 s. The zero
+ * sentinel exists because a nested `Option<Option<u64>>` on the wire
+ * distinguishes \"unset\" from \"explicitly none\" only by JSON `null`
+ * nesting, which is not worth the ambiguity in a hand-written payload.
+ */
+export interface ScriptBudgetWire {
+    loopIterations?: number | null;
+    recursionDepth?: number | null;
+    stackSize?: number | null;
+    /**
+     * Milliseconds; `0` disables the wall clock.
+     */
+    wallClockMs?: number | null;
+}
 
 /**
  * A plugin gradient paint for [`SceneItem::FillPathGradient`] (C-1.3).
@@ -426,57 +451,26 @@ export interface GradientStopWire {
  * Concept 3 — PDF export options as the dialog sends them. Every
  * field is optional/defaulted so the wire stays forward-compatible;
  * the worker maps it onto `paged_export_pdf::ExportOptions`.
+ * One file an IDML export\'s image links point at — the wire form of
+ * `idml_export::ExportedLink` (see `IdmlExported.links`).
  */
-export interface ExportPdfWireOptions {
+export interface ExportedLinkWire {
     /**
-     * \"pdf17\" (default) | \"pdfx4\".
+     * The basename the `<Link>` was written with (decoded: the name on
+     * disk).
      */
-    standard?: string | null;
+    fileName: string;
     /**
-     * Output-intent profile NAME, resolved against the worker\'s
-     * registered profile registry. `None` ⇒ the active working
-     * space profile.
+     * The URI the model held for the asset — empty for an image that
+     * existed only as bytes (its name was minted from the frame id).
      */
-    outputIntentProfile?: string | null;
+    sourceUri: string;
     /**
-     * Human-readable output condition for the OutputIntent dict.
+     * Whether `bytes` carries the image\'s encoded file. `false` for a
+     * link-only frame: the host copies the file from `source_uri`.
      */
-    outputCondition?: string | null;
-    /**
-     * \"preserveNumbers\" (default) | \"convertToDestination\".
-     */
-    colorPolicy?: string | null;
-    /**
-     * 0-based inclusive page range; both `None` = all pages.
-     */
-    pageFrom?: number | null;
-    pageTo?: number | null;
-    cropMarks?: boolean;
-    registrationMarks?: boolean;
-    colorBars?: boolean;
-    pageInfo?: boolean;
-    marksOffsetPt?: number | null;
-    /**
-     * Bleed override in pt (top, inside/left, bottom,
-     * outside/right); `None` = the document\'s declared bleed.
-     */
-    bleedOverridePt?: [number, number, number, number] | null;
-    /**
-     * Resample images above this effective ppi; `None` = never.
-     */
-    downsamplePpi?: number | null;
-    /**
-     * Raster resolution for effect soft-mask stamps (default 150).
-     */
-    effectDpi?: number | null;
-    /**
-     * \"outline\" (default) | \"fail\".
-     */
-    restrictedFontPolicy?: string | null;
-    /**
-     * Document title for Info/XMP.
-     */
-    title?: string | null;
+    hasBytes: boolean;
+    bytes: number[];
 }
 
 /**
@@ -550,7 +544,7 @@ export type CaretDirection = "up" | "down";
 /**
  * Discriminated payload of a `WorkerToMain` message.
  */
-export type WorkerToMainKind = { kind: "ready"; payload: { protocol: ProtocolVersion } } | { kind: "documentLoaded"; payload: DocumentHandle } | { kind: "loadFailed"; payload: { error: LoadError } } | { kind: "mutationFailed"; payload: { error: WorkerError } } | { kind: "displayListReady"; payload: { pageId: PageId; lod: LodTier; commands: number; layoutGeneration: number; numberingGeneration: number } } | { kind: "hitResult"; payload: HitResult } | { kind: "pagesDirty"; payload: { pageIds: PageId[] } } | { kind: "storyDirty"; payload: { storyId: string } } | { kind: "warning"; payload: { kind: string; details: string } } | { kind: "stats"; payload: DocumentStats } | { kind: "snapshotReady"; payload: SnapshotPng } | { kind: "snapshotFailed"; payload: { error: SnapshotError } } | { kind: "mutationApplied"; payload: { clientSeq: number; appliedSeq: number; pageIds: PageId[]; cacheStats: LayoutCacheStats; createdId?: ElementId | null; pageStructureChanged?: boolean; pageSizesPt?: [number, number][] | null; reflow?: FrameReflowInfo | null } } | { kind: "selectionGeometry"; payload: { rects: SelectionRect[] } } | { kind: "caretGeometry"; payload: { caret: CaretGeometry | null } } | { kind: "caretNavResult"; payload: { offset?: number | null } } | { kind: "lineBoundsResult"; payload: { bounds?: LineBounds | null } } | { kind: "wordBoundsResult"; payload: { bounds?: WordBounds | null } } | { kind: "paragraphBoundsResult"; payload: { bounds?: ParagraphBounds | null } } | { kind: "storyContentResult"; payload: { content?: StoryContent | null } } | { kind: "undoApplied"; payload: { undoneSeq: number; appliedSeq: number; pageIds: PageId[]; cacheStats: LayoutCacheStats; pageStructureChanged?: boolean; pageSizesPt?: [number, number][] | null } } | { kind: "redoApplied"; payload: { redoneSeq: number; appliedSeq: number; pageIds: PageId[]; cacheStats: LayoutCacheStats; pageStructureChanged?: boolean; pageSizesPt?: [number, number][] | null } } | { kind: "fontRegistered"; payload: { family: string } } | { kind: "fontRegistryCleared" } | { kind: "colorProfileRegistered"; payload: { name: string } } | { kind: "elementSelectionApplied"; payload: { ids: ElementId[] } } | { kind: "marqueeHits"; payload: { ids: ElementId[] } } | { kind: "elementGeometry"; payload: { items: ElementGeometryItem[] } } | { kind: "groupLeaves"; payload: { ids: ElementId[] } } | { kind: "pathAnchors"; payload: { result: PathAnchorsResult | null } } | { kind: "planarRegions"; payload: { result: PlanarRegionsResult } } | { kind: "nearestPathPoint"; payload: { result: NearestPathPointResult | null } } | { kind: "layers"; payload: { items: LayerSummary[] } } | { kind: "collectionReply"; payload: { name: CollectionName; items: any } } | { kind: "frameChainResult"; payload: { links: FrameChainLink[] } } | { kind: "documentPlaceholders"; payload: { items: PlaceholderItem[] } } | { kind: "placedAssetBytes"; payload: { elementId: string; found: boolean; uri: string; width: number; height: number; encoded: number[] } } | { kind: "fontFaceBytes"; payload: { found: boolean; family: string; style: string | null; postscriptName: string | null; format: string; bytes: number[] } } | { kind: "measureTextResult"; payload: { advance: number; ascender: number; descender: number } } | { kind: "sceneLayerApplied"; payload: { elementId: string; applied: boolean } } | { kind: "resourceClaimApplied"; payload: { imageId: string; applied: boolean; needed?: ResourceTilesNeededWire[] } } | { kind: "resourceTilesNeeded"; payload: ResourceTilesNeededWire } | { kind: "frameReflow"; payload: { frameId: string; contentBox: [number, number, number, number] } } | { kind: "documentMetaReply"; payload: { meta: DocumentMeta } } | { kind: "colorPreviewReply"; payload: { result: ColorPreview | null } } | { kind: "colorComputeReply"; payload: { rgbHex: string; cmyk: [number, number, number, number] | null; outOfGamut: boolean } } | { kind: "gradientDetailReply"; payload: { result: GradientDetail | null } } | { kind: "swatchLibraryExported"; payload: { aseBytes: number[] } } | { kind: "exportPdfBegun"; payload: { session: number; pageCount: number } } | { kind: "exportPdfProgress"; payload: { session: number; done: number; total: number } } | { kind: "pdfExported"; payload: { pdfBytes: number[]; diagnostics: string[]; findings?: PreflightFinding[] } } | { kind: "exportPdfCancelled"; payload: { session: number } } | { kind: "exportPdfFailed"; payload: { error: string } } | { kind: "idmlExported"; payload: { idmlBytes: number[]; lost?: string[] } } | { kind: "exportIdmlFailed"; payload: { error: string } } | { kind: "pagedPartWritten"; payload: {} } | { kind: "pagedPartRead"; payload: { found: boolean; bytes: number[] } } | { kind: "pagedPartList"; payload: { paths: string[] } } | { kind: "pagedExported"; payload: { bytes: number[] } } | { kind: "pagedPartFailed"; payload: { error: string } } | { kind: "elementProperties"; payload: { result: ElementProperties | null } } | { kind: "sceneTree"; payload: { roots: SceneTreeNode[] } } | { kind: "scriptResult"; payload: { output: string[]; error: string | null; budgetKind?: ScriptBudgetKind } } | { kind: "gestureBegun"; payload: { handle: GestureHandle } } | { kind: "gestureUpdated"; payload: { handle: GestureHandle; pageIds: PageId[]; snapLines?: SnapLine[] } } | { kind: "gestureCommitted"; payload: { handle: GestureHandle; appliedSeq: number; pageIds: PageId[]; cacheStats: LayoutCacheStats } } | { kind: "gestureCancelled"; payload: { handle: GestureHandle; pageIds: PageId[] } } | { kind: "gestureFailed"; payload: { error: GestureFailure } } | { kind: "attachReady"; payload: { gpuActive: boolean; sceneCacheBudget: number } } | { kind: "gestureSnapLines"; payload: { snapLines: SnapLine[] } } | { kind: "resolutionDone"; payload: ResolutionResult };
+export type WorkerToMainKind = { kind: "ready"; payload: { protocol: ProtocolVersion } } | { kind: "documentLoaded"; payload: DocumentHandle } | { kind: "loadFailed"; payload: { error: LoadError } } | { kind: "mutationFailed"; payload: { error: WorkerError } } | { kind: "displayListReady"; payload: { pageId: PageId; lod: LodTier; commands: number; layoutGeneration: number; numberingGeneration: number } } | { kind: "hitResult"; payload: HitResult } | { kind: "pagesDirty"; payload: { pageIds: PageId[] } } | { kind: "storyDirty"; payload: { storyId: string } } | { kind: "warning"; payload: { kind: string; details: string } } | { kind: "stats"; payload: DocumentStats } | { kind: "snapshotReady"; payload: SnapshotPng } | { kind: "snapshotFailed"; payload: { error: SnapshotError } } | { kind: "mutationApplied"; payload: { clientSeq: number; appliedSeq: number; pageIds: PageId[]; cacheStats: LayoutCacheStats; createdId?: ElementId | null; minted?: MintedElement[]; pageStructureChanged?: boolean; pageSizesPt?: [number, number][] | null; reflow?: FrameReflowInfo | null } } | { kind: "selectionGeometry"; payload: { rects: SelectionRect[] } } | { kind: "caretGeometry"; payload: { caret: CaretGeometry | null } } | { kind: "caretNavResult"; payload: { offset?: number | null } } | { kind: "lineBoundsResult"; payload: { bounds?: LineBounds | null } } | { kind: "wordBoundsResult"; payload: { bounds?: WordBounds | null } } | { kind: "paragraphBoundsResult"; payload: { bounds?: ParagraphBounds | null } } | { kind: "storyContentResult"; payload: { content?: StoryContent | null } } | { kind: "undoApplied"; payload: { undoneSeq: number; appliedSeq: number; pageIds: PageId[]; cacheStats: LayoutCacheStats; pageStructureChanged?: boolean; pageSizesPt?: [number, number][] | null } } | { kind: "redoApplied"; payload: { redoneSeq: number; appliedSeq: number; pageIds: PageId[]; cacheStats: LayoutCacheStats; pageStructureChanged?: boolean; pageSizesPt?: [number, number][] | null } } | { kind: "fontRegistered"; payload: { family: string } } | { kind: "fontRegistryCleared" } | { kind: "colorProfileRegistered"; payload: { name: string } } | { kind: "elementSelectionApplied"; payload: { ids: ElementId[] } } | { kind: "marqueeHits"; payload: { ids: ElementId[] } } | { kind: "elementGeometry"; payload: { items: ElementGeometryItem[] } } | { kind: "groupLeaves"; payload: { ids: ElementId[] } } | { kind: "pathAnchors"; payload: { result: PathAnchorsResult | null } } | { kind: "planarRegions"; payload: { result: PlanarRegionsResult } } | { kind: "nearestPathPoint"; payload: { result: NearestPathPointResult | null } } | { kind: "layers"; payload: { items: LayerSummary[] } } | { kind: "collectionReply"; payload: { name: CollectionName; items: any } } | { kind: "frameChainResult"; payload: { links: FrameChainLink[] } } | { kind: "documentPlaceholders"; payload: { items: PlaceholderItem[] } } | { kind: "placedAssetBytes"; payload: { elementId: string; found: boolean; uri: string; width: number; height: number; encoded: number[] } } | { kind: "fontFaceBytes"; payload: { found: boolean; family: string; style: string | null; postscriptName: string | null; format: string; bytes: number[] } } | { kind: "measureTextResult"; payload: { advance: number; ascender: number; descender: number } } | { kind: "sceneLayerApplied"; payload: { elementId: string; applied: boolean } } | { kind: "resourceClaimApplied"; payload: { imageId: string; applied: boolean; needed?: ResourceTilesNeededWire[] } } | { kind: "resourceTilesNeeded"; payload: ResourceTilesNeededWire } | { kind: "frameReflow"; payload: { frameId: string; contentBox: [number, number, number, number] } } | { kind: "documentMetaReply"; payload: { meta: DocumentMeta } } | { kind: "colorPreviewReply"; payload: { result: ColorPreview | null } } | { kind: "colorComputeReply"; payload: { rgbHex: string; cmyk: [number, number, number, number] | null; outOfGamut: boolean } } | { kind: "gradientDetailReply"; payload: { result: GradientDetail | null } } | { kind: "swatchLibraryExported"; payload: { aseBytes: number[] } } | { kind: "exportPdfBegun"; payload: { session: number; pageCount: number } } | { kind: "exportPdfProgress"; payload: { session: number; done: number; total: number } } | { kind: "pdfExported"; payload: { pdfBytes: number[]; diagnostics: string[]; findings?: PreflightFinding[] } } | { kind: "exportPdfCancelled"; payload: { session: number } } | { kind: "exportPdfFailed"; payload: { error: string } } | { kind: "idmlExported"; payload: { idmlBytes: number[]; lost?: string[]; links?: ExportedLinkWire[] } } | { kind: "exportIdmlFailed"; payload: { error: string } } | { kind: "pagedPartWritten"; payload: {} } | { kind: "pagedPartRead"; payload: { found: boolean; bytes: number[] } } | { kind: "pagedPartList"; payload: { paths: string[] } } | { kind: "pagedExported"; payload: { bytes: number[] } } | { kind: "pagedPartFailed"; payload: { error: string } } | { kind: "elementProperties"; payload: { result: ElementProperties | null } } | { kind: "sceneTree"; payload: { roots: SceneTreeNode[] } } | { kind: "scriptResult"; payload: { output: string[]; error: string | null; budgetKind?: ScriptBudgetKind } } | { kind: "gestureBegun"; payload: { handle: GestureHandle } } | { kind: "gestureUpdated"; payload: { handle: GestureHandle; pageIds: PageId[]; snapLines?: SnapLine[] } } | { kind: "gestureCommitted"; payload: { handle: GestureHandle; appliedSeq: number; pageIds: PageId[]; cacheStats: LayoutCacheStats } } | { kind: "gestureCancelled"; payload: { handle: GestureHandle; pageIds: PageId[] } } | { kind: "gestureFailed"; payload: { error: GestureFailure } } | { kind: "attachReady"; payload: { gpuActive: boolean; sceneCacheBudget: number } } | { kind: "gestureSnapLines"; payload: { snapLines: SnapLine[] } } | { kind: "resolutionDone"; payload: ResolutionResult };
 
 /**
  * Editor-ops — wire mirror of `paged_model::GradientFeatherParams`.
@@ -833,6 +827,41 @@ export interface SceneGradientStop {
  * One drawable in a [`SceneLayer`]. Coordinates are frame-content points.
  */
 export type SceneItem = { kind: "fillPath"; path: ScenePathSeg[]; paint: ScenePaint } | { kind: "strokePath"; path: ScenePathSeg[]; paint: ScenePaint; width: number } | ({ kind: "text" } & SceneTextItem) | { kind: "image"; rgba: number[]; width: number; height: number; x: number; y: number; w: number; h: number } | { kind: "fillPathGradient"; path: ScenePathSeg[]; gradient: SceneGradient } | { kind: "fillPathBlend"; path: ScenePathSeg[]; paint: ScenePaint; blend: SceneBlendMode } | { kind: "dropShadow"; path: ScenePathSeg[]; offset_x: number; offset_y: number; blur_radius: number; r: number; g: number; b: number; a: number } | { kind: "innerShadow"; path: ScenePathSeg[]; offset_x: number; offset_y: number; blur_radius: number; choke: number; r: number; g: number; b: number; a: number } | { kind: "strokePathGradient"; path: ScenePathSeg[]; gradient: SceneGradient; width: number } | { kind: "fillPathGradientBlend"; path: ScenePathSeg[]; gradient: SceneGradient; blend: SceneBlendMode };
+
+/**
+ * One element a mutation minted, in the order it was minted.
+ *
+ * A single mutation reports its one creation as
+ * `MutationApplied::created_id`. A `Batch` mints as many as it has
+ * creating children and used to report only the LAST — so a caller
+ * authoring through batches could not learn what it had just made, and
+ * had to either send one mutation per element (paying a full rebuild
+ * each) or re-discover the ids with a scene walk. This is the list it
+ * could not get.
+ *
+ * `handle` is the name a C-15 `BindCreated` child gave the element
+ * (`None` when nothing named it); `story_id` is the story the creating
+ * child minted alongside it — a text frame\'s `ParentStory` — which is
+ * what a later `insertText` addresses.
+ *
+ * Additive per governance rule 1 (`#[serde(default)]` on the reply
+ * field): an older main thread that ignores it reads exactly what it
+ * read before, so this is not a PROTOCOL_VERSION bump.
+ */
+export interface MintedElement {
+    /**
+     * The C-15 handle bound to this element, if any.
+     */
+    handle: string | null;
+    /**
+     * The element the creating child minted.
+     */
+    element: ElementId;
+    /**
+     * The story minted with it, for the kinds that carry one.
+     */
+    storyId: string | null;
+}
 
 /**
  * One entry in the field diff: a field whose resolved text
@@ -1725,18 +1754,6 @@ export type PathfinderKind = "union" | "intersect" | "subtract" | "exclude";
 export type NodeId = { kind: "TextFrame"; id: string } | { kind: "Rectangle"; id: string } | { kind: "Oval"; id: string } | { kind: "Polygon"; id: string } | { kind: "GraphicLine"; id: string } | { kind: "Group"; id: string } | { kind: "Spread"; id: string } | { kind: "Page"; id: string } | { kind: "Story"; id: string } | { kind: "Layer"; id: string } | { kind: "StoryRange"; id: { story_id: string; start: number; end: number } } | { kind: "Table"; id: { story_id: string; table_id: string } } | { kind: "TableCell"; id: { story_id: string; table_id: string; row: number; col: number } };
 
 /**
- * Stable page identity, independent of position in the page vector.
- *
- * Derived from the IDML `<Page Self=\"...\">` attribute where present;
- * synthesised as `\"page-<spread_idx>-<local_idx>\"` when missing
- * (older / synthetic fixtures without `Self`). The canvas keys
- * display-list caches and LOD tiles by `PageId`, so the value must
- * stay stable across re-layouts — only document-structural edits
- * (insert/delete page) should ever change the set of `PageId`s.
- */
-export type PageId = string;
-
-/**
  * Step 5 — `RequestPathAnchors` reply payload. `anchors.len()` may
  * be zero (e.g. a Rectangle with no `<PathGeometry>`); the overlay
  * treats that as \"nothing to draw\" without surfacing an error.
@@ -1825,7 +1842,7 @@ export type Operation = { kind: "SetProperty"; node: NodeId; path: PropertyPath;
  * variants so e.g. `cmyk_icc_profile` becomes `cmykIccProfile` on
  * the wire — the TS protocol mirror locks the camelCase contract.
  */
-export type MainToWorkerKind = { kind: "hello" } | { kind: "loadDocument"; payload: { bytes: number[]; font?: number[] | null; cmykIccProfile?: number[] | null } } | { kind: "newBlankDocument"; payload: { widthPt: number; heightPt: number; font?: number[] | null } } | { kind: "registerFont"; payload: { family: string; style?: string | null; bytes: number[] } } | { kind: "clearFontRegistry" } | { kind: "registerColorProfile"; payload: { name: string; bytes: number[] } } | { kind: "mutate"; payload: Mutation } | { kind: "requestPage"; payload: { pageId: PageId; lod: LodTier } } | { kind: "hitTest"; payload: { pageId: PageId; docPoint: [number, number]; filter: HitFilter } } | { kind: "requestSnapshot"; payload: { pageId: PageId; targetWidthPx: number; dpi?: number | null } } | { kind: "setSelection"; payload: { selection: ContentSelection | null } } | { kind: "requestSelectionGeometry"; payload: { selection: ContentSelection } } | { kind: "requestCaretGeometry"; payload: { selection: ContentSelection } } | { kind: "requestCaretNav"; payload: { storyId: string; offset: number; direction: CaretDirection; cell?: TextCellAddr | null } } | { kind: "requestLineBounds"; payload: { storyId: string; offset: number; cell?: TextCellAddr | null } } | { kind: "requestWordBounds"; payload: { storyId: string; offset: number; cell?: TextCellAddr | null } } | { kind: "requestParagraphBounds"; payload: { storyId: string; offset: number; cell?: TextCellAddr | null } } | { kind: "undo" } | { kind: "redo" } | { kind: "setElementSelection"; payload: { ids: ElementId[]; mode: SelectionMode } } | { kind: "requestMarqueeHits"; payload: { pageId: PageId; rect: [number, number, number, number] } } | { kind: "requestElementGeometry"; payload: { ids: ElementId[] } } | { kind: "requestGroupLeaves"; payload: { groupId: string } } | { kind: "requestPathAnchors"; payload: { id: ElementId } } | { kind: "requestNearestPathPoint"; payload: { id: ElementId; point: [number, number] } } | { kind: "requestPlanarRegions"; payload: { elementIds: ElementId[]; point?: [number, number] | null } } | { kind: "requestLayers" } | { kind: "requestCollection"; payload: { name: CollectionName } } | { kind: "requestFrameChain"; payload: { storyId: string } } | { kind: "requestStoryContent"; payload: { storyId: string } } | { kind: "requestPlacedAssetBytes"; payload: { elementId: string } } | { kind: "requestFontFaceBytes"; payload: { family: string; style?: string | null } } | { kind: "requestMeasureText"; payload: { family: string; style?: string | null; text: string; sizePt: number } } | { kind: "submitSceneLayer"; payload: { elementId: string; layer: SceneLayer; caller?: string } } | { kind: "clearSceneLayer"; payload: { elementId: string } } | { kind: "submitPixelLayer"; payload: { elementId: string; layer: PixelLayer } } | { kind: "clearPixelLayer"; payload: { elementId: string } } | { kind: "claimImageResource"; payload: { imageId: string; levels: number; tileSize: number; baseWidth: number; baseHeight: number; revision: number } } | { kind: "releaseImageResource"; payload: { imageId: string } } | { kind: "submitResourceTiles"; payload: { imageId: string; level: number; tiles: ProviderTileWire[]; generation: number } } | { kind: "requestDocumentMeta" } | { kind: "requestDocumentPlaceholders" } | { kind: "requestColorPreview"; payload: { swatchId: string } } | { kind: "requestColorCompute"; payload: { space: string; value: number[]; tint?: number | null; model?: string | null; alternateSpace?: string | null; alternateValue?: number[] | null } } | { kind: "requestGradientDetail"; payload: { gradientId: string } } | { kind: "exportSwatchLibrary"; payload: { groupId?: string | null } } | { kind: "executeScript"; payload: { source: string } } | { kind: "exportPdfBegin"; payload: { options: ExportPdfWireOptions } } | { kind: "exportPdfPage"; payload: { session: number } } | { kind: "exportPdfFinish"; payload: { session: number } } | { kind: "exportPdfCancel"; payload: { session: number } } | { kind: "exportIdml"; payload: {} } | { kind: "writePagedPart"; payload: { path: string; bytes: number[]; caller?: string } } | { kind: "readPagedPart"; payload: { path: string } } | { kind: "listPagedParts"; payload: { prefix: string } } | { kind: "exportPaged"; payload: {} } | { kind: "requestElementProperties"; payload: { id: ElementId } } | { kind: "requestSceneTree" } | { kind: "beginGesture"; payload: { nodes: ElementId[]; gesture: GestureType; anchor?: GestureAnchor | null; cameraScale?: number | null } } | { kind: "updateGesture"; payload: { handle: GestureHandle; delta: [number, number]; modifiers: GestureModifiers } } | { kind: "commitGesture"; payload: { handle: GestureHandle } } | { kind: "cancelGesture"; payload: { handle: GestureHandle } };
+export type MainToWorkerKind = { kind: "hello" } | { kind: "loadDocument"; payload: { bytes: number[]; font?: number[] | null; cmykIccProfile?: number[] | null } } | { kind: "newBlankDocument"; payload: { widthPt: number; heightPt: number; font?: number[] | null } } | { kind: "registerFont"; payload: { family: string; style?: string | null; bytes: number[] } } | { kind: "clearFontRegistry" } | { kind: "registerColorProfile"; payload: { name: string; bytes: number[] } } | { kind: "mutate"; payload: Mutation } | { kind: "requestPage"; payload: { pageId: PageId; lod: LodTier } } | { kind: "hitTest"; payload: { pageId: PageId; docPoint: [number, number]; filter: HitFilter } } | { kind: "requestSnapshot"; payload: { pageId: PageId; targetWidthPx: number; dpi?: number | null } } | { kind: "setSelection"; payload: { selection: ContentSelection | null } } | { kind: "requestSelectionGeometry"; payload: { selection: ContentSelection } } | { kind: "requestCaretGeometry"; payload: { selection: ContentSelection } } | { kind: "requestCaretNav"; payload: { storyId: string; offset: number; direction: CaretDirection; cell?: TextCellAddr | null } } | { kind: "requestLineBounds"; payload: { storyId: string; offset: number; cell?: TextCellAddr | null } } | { kind: "requestWordBounds"; payload: { storyId: string; offset: number; cell?: TextCellAddr | null } } | { kind: "requestParagraphBounds"; payload: { storyId: string; offset: number; cell?: TextCellAddr | null } } | { kind: "undo" } | { kind: "redo" } | { kind: "setElementSelection"; payload: { ids: ElementId[]; mode: SelectionMode } } | { kind: "requestMarqueeHits"; payload: { pageId: PageId; rect: [number, number, number, number] } } | { kind: "requestElementGeometry"; payload: { ids: ElementId[] } } | { kind: "requestGroupLeaves"; payload: { groupId: string } } | { kind: "requestPathAnchors"; payload: { id: ElementId } } | { kind: "requestNearestPathPoint"; payload: { id: ElementId; point: [number, number] } } | { kind: "requestPlanarRegions"; payload: { elementIds: ElementId[]; point?: [number, number] | null } } | { kind: "requestLayers" } | { kind: "requestCollection"; payload: { name: CollectionName } } | { kind: "requestFrameChain"; payload: { storyId: string } } | { kind: "requestStoryContent"; payload: { storyId: string } } | { kind: "requestPlacedAssetBytes"; payload: { elementId: string } } | { kind: "requestFontFaceBytes"; payload: { family: string; style?: string | null } } | { kind: "requestMeasureText"; payload: { family: string; style?: string | null; text: string; sizePt: number } } | { kind: "submitSceneLayer"; payload: { elementId: string; layer: SceneLayer; caller?: string } } | { kind: "clearSceneLayer"; payload: { elementId: string } } | { kind: "submitPixelLayer"; payload: { elementId: string; layer: PixelLayer } } | { kind: "clearPixelLayer"; payload: { elementId: string } } | { kind: "claimImageResource"; payload: { imageId: string; levels: number; tileSize: number; baseWidth: number; baseHeight: number; revision: number } } | { kind: "releaseImageResource"; payload: { imageId: string } } | { kind: "submitResourceTiles"; payload: { imageId: string; level: number; tiles: ProviderTileWire[]; generation: number } } | { kind: "requestDocumentMeta" } | { kind: "requestDocumentPlaceholders" } | { kind: "requestColorPreview"; payload: { swatchId: string } } | { kind: "requestColorCompute"; payload: { space: string; value: number[]; tint?: number | null; model?: string | null; alternateSpace?: string | null; alternateValue?: number[] | null } } | { kind: "requestGradientDetail"; payload: { gradientId: string } } | { kind: "exportSwatchLibrary"; payload: { groupId?: string | null } } | { kind: "executeScript"; payload: { source: string; budget?: ScriptBudgetWire | null } } | { kind: "exportPdfBegin"; payload: { options: ExportPdfWireOptions } } | { kind: "exportPdfPage"; payload: { session: number } } | { kind: "exportPdfFinish"; payload: { session: number } } | { kind: "exportPdfCancel"; payload: { session: number } } | { kind: "exportIdml"; payload: { linkBase?: string | null } } | { kind: "writePagedPart"; payload: { path: string; bytes: number[]; caller?: string } } | { kind: "readPagedPart"; payload: { path: string } } | { kind: "listPagedParts"; payload: { prefix: string } } | { kind: "exportPaged"; payload: {} } | { kind: "requestElementProperties"; payload: { id: ElementId } } | { kind: "requestSceneTree" } | { kind: "beginGesture"; payload: { nodes: ElementId[]; gesture: GestureType; anchor?: GestureAnchor | null; cameraScale?: number | null } } | { kind: "updateGesture"; payload: { handle: GestureHandle; delta: [number, number]; modifiers: GestureModifiers } } | { kind: "commitGesture"; payload: { handle: GestureHandle } } | { kind: "cancelGesture"; payload: { handle: GestureHandle } };
 
 /**
  * Track J — wire-shape mirror of `paged_model::PathAnchor`. The
@@ -2622,6 +2639,58 @@ export interface CaretGeometry {
     heightPt: number;
 }
 
+export interface ExportPdfWireOptions {
+    /**
+     * \"pdf17\" (default) | \"pdfx4\".
+     */
+    standard?: string | null;
+    /**
+     * Output-intent profile NAME, resolved against the worker\'s
+     * registered profile registry. `None` ⇒ the active working
+     * space profile.
+     */
+    outputIntentProfile?: string | null;
+    /**
+     * Human-readable output condition for the OutputIntent dict.
+     */
+    outputCondition?: string | null;
+    /**
+     * \"preserveNumbers\" (default) | \"convertToDestination\".
+     */
+    colorPolicy?: string | null;
+    /**
+     * 0-based inclusive page range; both `None` = all pages.
+     */
+    pageFrom?: number | null;
+    pageTo?: number | null;
+    cropMarks?: boolean;
+    registrationMarks?: boolean;
+    colorBars?: boolean;
+    pageInfo?: boolean;
+    marksOffsetPt?: number | null;
+    /**
+     * Bleed override in pt (top, inside/left, bottom,
+     * outside/right); `None` = the document\'s declared bleed.
+     */
+    bleedOverridePt?: [number, number, number, number] | null;
+    /**
+     * Resample images above this effective ppi; `None` = never.
+     */
+    downsamplePpi?: number | null;
+    /**
+     * Raster resolution for effect soft-mask stamps (default 150).
+     */
+    effectDpi?: number | null;
+    /**
+     * \"outline\" (default) | \"fail\".
+     */
+    restrictedFontPolicy?: string | null;
+    /**
+     * Document title for Info/XMP.
+     */
+    title?: string | null;
+}
+
 export interface FrameBounds {
     left: number;
     top: number;
@@ -2658,6 +2727,8 @@ export interface TocEntry {
 export type AnchorId = string;
 
 export type GuideOrientationWire = "vertical" | "horizontal";
+
+export type PageId = string;
 
 export type ProtocolVersion = number;
 

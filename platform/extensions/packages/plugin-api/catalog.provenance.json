@@ -1,9 +1,9 @@
 {
   "$comment": "Where the vendored catalog.json came from, and — when it leads the published engine — why that is allowed. `sync-catalog.mjs --check` enforces every claim in this file, in both directions: an unexplained difference fails, and so does an `aheadOfPublished` marker that the publish has since caught up with.",
   "source": "core",
-  "rev": "eafdaa0",
+  "rev": "e86c902",
   "targetsProtocol": 63,
   "publishedPackage": "@paged-media/introspect-wasm",
-  "aheadOfPublished": true,
-  "why": "The vendored catalog was re-synced from core's own crates/paged-introspect/catalog.json during the capability-parity campaign, because the copy taken from the published package had drifted badly: 30 host functions against the engine's 144, 176 settable paths against 202, four phantom paths (layerLocked/Name/Printable/Visible) that no engine has ever accepted, and no `operations` key at all. Re-syncing from the published 0.62.0 would restore that. So the copy leads the publish, by exactly one protocol, and clears the moment core v0.63.x ships and the wire stamp moves with it — the ordinary protocol bump chain: engine tag/publish, plugin-sdk re-syncs, editor moves its pins."
+  "aheadOfPublished": false,
+  "why": "IN SYNC as of @paged-media/introspect-wasm@0.63.0 (2026-09-10): the vendored copy and the published package are byte-identical, verified by `sync-catalog.mjs --check` against a scratch install of that exact version. It led the publish by one protocol for a few hours — the copy had been re-synced from core's own crates/paged-introspect/catalog.json during the capability-parity campaign, because the copy taken from the published 0.62.0 had drifted badly (30 host functions against the engine's 144, 176 settable paths against 202, four phantom layer* paths no engine has ever accepted, and no `operations` key at all), and re-syncing from npm would have restored that. v0.63.0 closed the gap. The lead is recorded here rather than deleted because the NEXT protocol bump will open it again, and the shape of the allowance is the thing worth keeping."
 }
