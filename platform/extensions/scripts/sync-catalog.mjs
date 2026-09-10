@@ -27,7 +27,12 @@ import process from "node:process";
 
 const ROOT = new URL("..", import.meta.url).pathname;
 const TARGET = resolve(ROOT, "packages/plugin-api/src/catalog.json");
-const PROVENANCE = resolve(ROOT, "packages/plugin-api/src/catalog.provenance.json");
+// Beside the package, NOT inside `src/`. Everything under a package's
+// `src/` is contract source by the contract-guard's rule, and a version
+// bump is owed for any change there; this file is repo metadata that
+// `files:` does not even ship, so putting it there would have made
+// every provenance edit look like a contract change.
+const PROVENANCE = resolve(ROOT, "packages/plugin-api/catalog.provenance.json");
 // TWO layouts, the same probe sync-wire.mjs carries: the plugin repos
 // moved under `~/paged/plugins/` on 2026-08-03, so a bare `../editor`
 // now points at `~/paged/plugins/editor`, which does not exist. First
@@ -193,7 +198,7 @@ export function checkVendored(opts = {}) {
         reason:
           `the vendored catalog matches ${PKG}@${src.version}, but the provenance still claims it LEADS the publish. ` +
           "The chain has caught up: set aheadOfPublished to false (and update rev / targetsProtocol) in " +
-          "packages/plugin-api/src/catalog.provenance.json. An excuse that has outlived its gap is the half that rots.",
+          "packages/plugin-api/catalog.provenance.json. An excuse that has outlived its gap is the half that rots.",
         version: src.version,
       };
     }
