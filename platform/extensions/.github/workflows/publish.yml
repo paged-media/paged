@@ -53,6 +53,28 @@ jobs:
           printf '{"name":"wire-src-scratch","private":true}' > .wire-src/package.json
           ( cd .wire-src && npm install "@paged-media/canvas-wasm@$VER" --no-audit --no-fund --no-package-lock )
           PAGED_CANVAS_WASM_FROM="$PWD/.wire-src" node scripts/sync-wire.mjs --check
+      # ADR 019's own "still open" item, finally armed. sync-catalog.mjs
+      # has sat beside sync-wire.mjs since ADR 019 and was never run by
+      # anything, which is how the vendored catalog reached 30 host
+      # functions against the engine's 144, 176 settable paths against
+      # 202, and four phantom paths no engine has ever accepted.
+      #
+      # It resolves the SAME version the wire is stamped with — the two
+      # packages ship from one core tag — and understands three
+      # outcomes, not two: in sync, drifted, or deliberately LEADING the
+      # publish while a protocol bump is in flight. The lead must be
+      # recorded in catalog.provenance.json with a reason, and it is
+      # checked for rot in the other direction too: once the published
+      # package catches up, the marker must go or this fails.
+      - name: capability-catalog vendoring lockstep (hard gate)
+        run: |
+          set -e
+          VER=$(sed -n 's#^// Synced from @paged-media/canvas-wasm@##p' packages/plugin-api/src/wire.d.ts)
+          test -n "$VER" || { echo "wire.d.ts has no version stamp"; exit 1; }
+          mkdir -p .catalog-src
+          printf '{"name":"catalog-src-scratch","private":true}' > .catalog-src/package.json
+          ( cd .catalog-src && npm install "@paged-media/introspect-wasm@$VER" --no-audit --no-fund --no-package-lock )
+          PAGED_INTROSPECT_WASM_FROM="$PWD/.catalog-src" node scripts/sync-catalog.mjs --check
       - name: publish changed versions via OIDC (canary)
         run: |
           set -e

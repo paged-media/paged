@@ -27,10 +27,67 @@ import process from "node:process";
 
 const ROOT = new URL("..", import.meta.url).pathname;
 const TARGET = resolve(ROOT, "packages/plugin-api/src/catalog.json");
+const PROVENANCE = resolve(ROOT, "packages/plugin-api/src/catalog.provenance.json");
+// TWO layouts, the same probe sync-wire.mjs carries: the plugin repos
+// moved under `~/paged/plugins/` on 2026-08-03, so a bare `../editor`
+// now points at `~/paged/plugins/editor`, which does not exist. First
+// existing candidate wins.
+const RESOLVE_CANDIDATES = [
+  resolve(ROOT, "../../editor/packages/client"), // ~/paged/editor — local
+  resolve(ROOT, "../editor/packages/client"), // sibling — CI checkout
+];
 const RESOLVE_FROM =
-  process.env.PAGED_INTROSPECT_WASM_FROM ?? resolve(ROOT, "../editor/packages/client");
+  process.env.PAGED_INTROSPECT_WASM_FROM ??
+  RESOLVE_CANDIDATES.find((c) => existsSync(resolve(c, "package.json"))) ??
+  RESOLVE_CANDIDATES[0];
+// core's own generated catalog, when a checkout is beside us. It is the
+// SOURCE the published package is built from, so comparing against it is
+// stricter than comparing against npm — and it is the only comparison
+// that can be made while the vendored copy legitimately leads a publish.
+const CORE_CANDIDATES = [
+  resolve(ROOT, "../../core/crates/paged-introspect/catalog.json"),
+  resolve(ROOT, "../core/crates/paged-introspect/catalog.json"),
+];
+const CORE_CATALOG =
+  process.env.CORE_REPO
+    ? resolve(process.env.CORE_REPO, "crates/paged-introspect/catalog.json")
+    : CORE_CANDIDATES.find((c) => existsSync(c));
 const PKG = "@paged-media/introspect-wasm";
 const CATALOG_FILE = "catalog.json";
+
+/**
+ * The recorded provenance of the vendored copy.
+ *
+ * The vendored catalog is allowed to LEAD the published engine — that is
+ * what the protocol bump chain looks like from the middle of it — but
+ * only while this file says so and says why. Silence is not permission.
+ */
+export function provenance() {
+  if (!existsSync(PROVENANCE)) {
+    throw new Error(
+      `sync-catalog: ${PROVENANCE} is missing. The vendored catalog must record where it came from; ` +
+        "without it, a difference from the published package cannot be told apart from a mistake.",
+    );
+  }
+  return validateProvenance(JSON.parse(readFileSync(PROVENANCE, "utf8")));
+}
+
+/** The claims a provenance record must actually make. */
+export function validateProvenance(p) {
+  for (const key of ["source", "targetsProtocol", "aheadOfPublished", "why"]) {
+    if (p[key] === undefined) throw new Error(`sync-catalog: provenance is missing "${key}"`);
+  }
+  if (p.aheadOfPublished && String(p.why).length < 120) {
+    throw new Error("sync-catalog: leading the published engine costs a real explanation, not a phrase");
+  }
+  return p;
+}
+
+/** `0.<protocol>.<patch>` — the scheme every engine package is versioned by. */
+function protocolOf(version) {
+  const m = /^0\.(\d+)\./.exec(String(version));
+  return m ? Number(m[1]) : null;
+}
 
 /** Resolve the source catalog.json and its package version. */
 export function resolveSource(opts = {}) {
@@ -71,8 +128,55 @@ export function buildVendored({ path }) {
   return readFileSync(path, "utf8").trimEnd() + "\n";
 }
 
-/** Run a --check: drift iff the vendored copy differs from the source. */
+/**
+ * Run a --check.
+ *
+ * Three outcomes, not two. A difference from the published package is
+ * only a failure when nothing explains it: while the bump chain is in
+ * flight the vendored copy is SUPPOSED to lead, and a gate that cannot
+ * express that would either be switched off (which is what happened to
+ * this one for months) or force a re-sync that undoes a real fix.
+ *
+ * The lead is also checked for rot, which is the half that usually
+ * goes unwatched: once the published package reaches the protocol the
+ * provenance targets, the marker must go, and this fails until it does.
+ */
 export function checkVendored(opts = {}) {
+  const target = opts.target ?? TARGET;
+  const current = existsSync(target) ? readFileSync(target, "utf8") : "";
+
+  // Provenance is about THE vendored copy. A call that points target and
+  // source somewhere else is exercising the pure vendor/drift logic, and
+  // reading this repo's provenance into it would make an unrelated
+  // comparison answer for the real one.
+  const vendored = target === TARGET;
+  let prov = null;
+  try {
+    if (opts.provenance) prov = validateProvenance(opts.provenance);
+    else if (vendored) prov = provenance();
+  } catch (err) {
+    return { ok: false, reason: String(err.message ?? err).replace(/^sync-catalog:\s*/, "") };
+  }
+
+  // Strictest available comparison: core's own generated catalog, which
+  // is what the published package is BUILT from.
+  // `core: null` says "do not consult a core checkout" — the tests need
+  // the npm path even on a machine that has core beside it.
+  const coreCatalog = opts.core === undefined ? CORE_CATALOG : opts.core;
+  if (prov && !opts.source && coreCatalog && existsSync(coreCatalog)) {
+    const fresh = buildVendored({ path: coreCatalog });
+    if (current !== fresh) {
+      return {
+        ok: false,
+        reason:
+          `vendored catalog.json differs from core's own ${coreCatalog} — run ` +
+          "`node scripts/sync-catalog.mjs --source <that file>` and commit. " +
+          "core is the source the published package is built from, so this comparison is the strict one.",
+      };
+    }
+    return { ok: true, version: `core (protocol ${prov.targetsProtocol})`, against: "core" };
+  }
+
   let src;
   try {
     src = resolveSource(opts);
@@ -80,17 +184,41 @@ export function checkVendored(opts = {}) {
     return { ok: false, reason: String(err.message ?? err).replace(/^sync-catalog:\s*/, "") };
   }
   const fresh = buildVendored(src);
-  const target = opts.target ?? TARGET;
-  const current = existsSync(target) ? readFileSync(target, "utf8") : "";
-  if (current !== fresh) {
+  const publishedProtocol = protocolOf(src.version);
+
+  if (current === fresh) {
+    if (prov?.aheadOfPublished) {
+      return {
+        ok: false,
+        reason:
+          `the vendored catalog matches ${PKG}@${src.version}, but the provenance still claims it LEADS the publish. ` +
+          "The chain has caught up: set aheadOfPublished to false (and update rev / targetsProtocol) in " +
+          "packages/plugin-api/src/catalog.provenance.json. An excuse that has outlived its gap is the half that rots.",
+        version: src.version,
+      };
+    }
+    return { ok: true, version: src.version, against: "npm" };
+  }
+
+  if (prov?.aheadOfPublished && publishedProtocol !== null && prov.targetsProtocol > publishedProtocol) {
     return {
-      ok: false,
-      reason: `vendored catalog.json has drifted from ${PKG}@${src.version} — run ` +
-        `\`node scripts/sync-catalog.mjs\` and commit`,
+      ok: true,
       version: src.version,
+      against: "npm",
+      ahead: `leads ${PKG}@${src.version} (protocol ${publishedProtocol}) by design, targeting protocol ${prov.targetsProtocol}: ${prov.why}`,
     };
   }
-  return { ok: true, version: src.version };
+
+  return {
+    ok: false,
+    reason:
+      `vendored catalog.json has drifted from ${PKG}@${src.version} and nothing explains it — either run ` +
+      "`node scripts/sync-catalog.mjs` and commit, or record the lead in catalog.provenance.json with the reason. " +
+      (publishedProtocol === null || !prov
+        ? `(${src.version} does not parse as 0.<protocol>.<patch>, so the lead could not be checked.)`
+        : `(published protocol ${publishedProtocol}, provenance targets ${prov.targetsProtocol}.)`),
+    version: src.version,
+  };
 }
 
 /** Write the vendored copy from the resolved source. */
@@ -121,7 +249,10 @@ function main() {
       console.error(`sync-catalog: ${res.reason}`);
       process.exit(1);
     }
-    console.log(`sync-catalog: vendored catalog in sync (${PKG}@${res.version})`);
+    console.log(
+      `sync-catalog: vendored catalog in sync — checked against ${res.against ?? "the resolved source"} (${res.version})`,
+    );
+    if (res.ahead) console.log(`sync-catalog: ${res.ahead}`);
     process.exit(0);
   }
   try {

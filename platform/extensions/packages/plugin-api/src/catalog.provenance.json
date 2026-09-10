@@ -1,0 +1,9 @@
+{
+  "$comment": "Where the vendored catalog.json came from, and — when it leads the published engine — why that is allowed. `sync-catalog.mjs --check` enforces every claim in this file, in both directions: an unexplained difference fails, and so does an `aheadOfPublished` marker that the publish has since caught up with.",
+  "source": "core",
+  "rev": "eafdaa0",
+  "targetsProtocol": 63,
+  "publishedPackage": "@paged-media/introspect-wasm",
+  "aheadOfPublished": true,
+  "why": "The vendored catalog was re-synced from core's own crates/paged-introspect/catalog.json during the capability-parity campaign, because the copy taken from the published package had drifted badly: 30 host functions against the engine's 144, 176 settable paths against 202, four phantom paths (layerLocked/Name/Printable/Visible) that no engine has ever accepted, and no `operations` key at all. Re-syncing from the published 0.62.0 would restore that. So the copy leads the publish, by exactly one protocol, and clears the moment core v0.63.x ships and the wire stamp moves with it — the ordinary protocol bump chain: engine tag/publish, plugin-sdk re-syncs, editor moves its pins."
+}
