@@ -37,8 +37,8 @@ importers:
         version: link:../plugin-api
     devDependencies:
       '@paged-media/canvas-wasm':
-        specifier: 0.63.0
-        version: 0.63.0
+        specifier: 0.64.0
+        version: 0.64.0
       '@types/node':
         specifier: 20.19.39
         version: 20.19.39
@@ -370,8 +370,8 @@ packages:
     cpu: [x64]
     os: [linux]
 
-  '@paged-media/canvas-wasm@0.63.0':
-    resolution: {integrity: sha512-BZi3nGw7OvCT+GDWqrswVvqK965KCMPhnzcN2f0kJf9oDK/8SvcnkVO1PAQTmwP5KrOo6HLLI4DEbpDuU2oEDQ==}
+  '@paged-media/canvas-wasm@0.64.0':
+    resolution: {integrity: sha512-/twx/joIlfKVeS6123M7m8C4jlGIBCwDMW8D1w5BuQKKtNctZEoQ8G0x4OqhLHw5pNvXhvJuBgOzWZmlVqod8w==}
 
   '@rollup/rollup-android-arm-eabi@4.63.1':
     resolution: {integrity: sha512-UZ8sUxPTiHWYX9QNdJedb1kDZSpS1t/VPWBWGSgqHNi9w3Cu6IXvu2mzbhiTiPvtrqgTQJ+zqiAq2iPIPilpaQ==}
@@ -1133,7 +1133,7 @@ snapshots:
   '@napi-rs/lzma-linux-x64-gnu@1.5.1':
     optional: true
 
-  '@paged-media/canvas-wasm@0.63.0': {}
+  '@paged-media/canvas-wasm@0.64.0': {}
 
   '@rollup/rollup-android-arm-eabi@4.63.1':
     optional: true
