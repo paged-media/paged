@@ -97,6 +97,31 @@ describe("host doors — measurement / picker / widgets / frame-chain / scene-la
     await expect(host.document.frameChain("story-1")).rejects.toThrow();
   });
 
+  // ── DOC-03 structured story read (document.readStory@1) ────────────
+  // Was a reserved throw "awaiting canvas-wasm v54"; the published wire has
+  // carried requestStoryContent since then, and paged.doc's edited save-back
+  // silently fell back to the unedited source because supports() said false.
+  it("document.storyContent forwards requestStoryContent and is advertised", async () => {
+    const fake = makeFakeEditor();
+    const { host } = createBundleHost(() => fake.editor, manifest({ document: { read: "broad" } }), {
+      console: silent,
+      storage: mapBacking(),
+      capabilityMode: "enforce",
+    });
+    expect(host.supports("document.readStory@1")).toBe(true);
+    // The fake engine does not answer the kind, so the honest result is null.
+    expect(await host.document.storyContent("story-1")).toBeNull();
+    expect(fake.sent).toContainEqual({
+      kind: "requestStoryContent",
+      payload: { storyId: "story-1" },
+    });
+  });
+
+  it("document.storyContent is gated — refused without capabilities.document.read", async () => {
+    const { host } = makeHost();
+    await expect(host.document.storyContent("story-1")).rejects.toThrow();
+  });
+
   // ── C-1 scene-layer contribution (plugin-platform.scene-layer) ──────
   it("contribute.sceneLayer registers behind capabilities.rendering ∋ sceneLayer", () => {
     const { host } = makeHost({ rendering: ["sceneLayer"] });

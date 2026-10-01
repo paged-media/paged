@@ -176,6 +176,11 @@ export const HOST_FEATURES: readonly string[] = [
   // honesty split as the protocol-ahead mutations (mutations.ts): the
   // engine-level gate is the worker handshake, not `supports()`.
   "document.planarRegions@1",
+  // DOC-03 structured whole-story read (canvas-wasm v54). Static for the same
+  // reason as storage.parts@1: the pinned engine is the server, and the worker
+  // handshake refuses a protocol older than the pin — so a running bundle is
+  // always talking to an engine that answers RequestStoryContent.
+  "document.readStory@1",
 ];
 
 /** Thrown by reserved surface members — a visible seam, never
@@ -1992,18 +1997,19 @@ export function createBundleHost(
       });
       return reply.kind === "frameChainResult" ? reply.payload.links : [];
     },
-    async storyContent(_storyId: string): Promise<StoryContent | null> {
-      // DOC-03 (protocol v54). The core read op (`RequestStoryContent` →
-      // `StoryContentResult`) exists on the engine, but the vendored `wire.d.ts`
-      // is synced from the PUBLISHED @paged-media/canvas-wasm — which does not
-      // carry v54 yet. Reserved (a visible seam, never a fake value) until core
-      // publishes canvas-wasm v54 and `sync-wire.mjs` pulls the kinds; then this
-      // forwards `requestStoryContent` like `frameChain` and gains a
-      // `document.readStory@1` HOST_FEATURES entry so `supports(...)` answers true.
-      throw new PluginApiNotImplemented(
-        "document.storyContent",
-        "awaiting @paged-media/canvas-wasm v54 publish + sync-wire; core op RequestStoryContent already exists",
-      );
+    async storyContent(storyId: string): Promise<StoryContent | null> {
+      // DOC-03 (protocol v54): the structured whole-story read. Forwards like
+      // frameChain — the plugin gets text + styles back as data it can diff,
+      // which `readModel`'s opaque core-native bytes could never give an
+      // isolation-clean plugin.
+      requireDocRead("document.storyContent");
+      const reply = await getEditor().client.send({
+        kind: "requestStoryContent",
+        payload: { storyId },
+      });
+      return reply.kind === "storyContentResult"
+        ? (reply.payload.content ?? null)
+        : null;
     },
     onDidChange(listener: (e: DocumentChangeEvent) => void): Disposable {
       requireDocRead("document.onDidChange");
