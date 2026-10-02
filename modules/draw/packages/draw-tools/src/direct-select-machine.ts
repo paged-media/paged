@@ -109,6 +109,12 @@ import type { ElementId } from "@paged-media/plugin-api";
 
 import { segmentPairFrom } from "./anchor-machine";
 import {
+  applyPathOps,
+  modelOf,
+  remapIndexThrough,
+  type ModelTable,
+} from "./apply-path-ops";
+import {
   pathEditBatch,
   type PathEditBatchWire,
   type PathPointOp,
@@ -385,6 +391,12 @@ export class DirectSelectMachine {
   /** The previewed table, pointer space (`=== base` when nothing is in
    *  flight). Replaced, never mutated. */
   private live: Table;
+  /** The committed table in path-INNER space — what the engine holds
+   *  once every plan this machine produced has been applied. Kept so
+   *  `apply(ops)` (inner-space ops, the planners' output) has exactly the
+   *  table those ops are written against, rather than a round trip of the
+   *  pointer-space preview through the inverse transform. */
+  private inner: ModelTable;
   private transform: Affine | null;
   private singular: boolean;
   private selection = new Set<number>();
@@ -411,6 +423,7 @@ export class DirectSelectMachine {
     this.transform = null;
     this.singular = false;
     this.base = this.live = { anchors: [], subpathStarts: [] };
+    this.inner = modelOf(this.base);
     this.install(options.table, options.transform ?? null);
     this.setSelectionInternal(options.selection ?? []);
   }
@@ -501,6 +514,37 @@ export class DirectSelectMachine {
       smoothTolerance: this.smoothTolerance,
       doubleClickInterval: this.doubleClickInterval,
     };
+  }
+
+  /**
+   * Apply a plan's ops to the machine's OWN table — the preview of an
+   * edit the machine did not plan itself: the insert a segment-click
+   * adds (`planAnchorAddAt` → `anchorEditOps`), the convert a
+   * double-click makes (`planAnchorConvertAt`), a delete. The host sends
+   * the same ops to the engine and carries on editing at once, instead
+   * of freezing input until its `pathAnchors` re-read lands; that
+   * re-read still arrives, and `sync` it as before (the engine stores
+   * f32 — its table is the truth).
+   *
+   * `ops` are what every planner emits: flat-indexed, in path-INNER
+   * space, applied in order by the engine's own rules
+   * (`apply-path-ops.ts`). The SELECTION follows them: an anchor keeps
+   * being selected at its new index, a removed one drops out. A gesture
+   * in flight is dropped, as `sync` drops it — the table changed under
+   * it. Throws, changing nothing, on an op the engine would reject (an
+   * index out of range) or that is not an edit of one table
+   * (`joinPaths`): a plan that names one is a bug.
+   */
+  apply(ops: readonly PathPointOp[]): DirectSelectSnapshot {
+    const next = applyPathOps(this.inner, ops);
+    const keep = this.sorted()
+      .map((i) => remapIndexThrough(this.inner, ops, i))
+      .filter((i): i is number => i !== null);
+    this.gesture = null;
+    this.marquee = null;
+    this.install(next, this.transform);
+    this.setSelectionInternal(keep);
+    return this.snap();
   }
 
   /** Replace the selection (Select All, a host-side lasso, …). Indices
@@ -822,6 +866,7 @@ export class DirectSelectMachine {
       index,
     }));
     const gone = this.selection;
+    this.inner = applyPathOps(this.inner, ops);
     this.base = this.live = {
       anchors: this.base.anchors.filter((_, i) => !gone.has(i)),
       // No contour vanishes (each keeps ≥ 2), so every start survives —
@@ -880,6 +925,9 @@ export class DirectSelectMachine {
       return this.snap();
     }
     this.base = this.live;
+    // The inner table follows by the SAME ops the engine is about to
+    // apply, so a later `apply(ops)` is written against what it holds.
+    this.inner = applyPathOps(this.inner, ops);
     return this.snap({ commit: { kind, ops } });
   }
 
@@ -898,6 +946,7 @@ export class DirectSelectMachine {
       this.transform !== null &&
       inverseApplyAffine(this.transform, 0, 0) === null;
     this.base = this.live = toPointerSpace(table, this.transform);
+    this.inner = modelOf(table);
   }
 
   private toInner(p: Vec2): Vec2Mut | null {

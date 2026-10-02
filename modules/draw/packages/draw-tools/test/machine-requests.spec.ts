@@ -40,6 +40,7 @@ import {
   DirectSelectMachine,
   PenMachine,
   anchorEditOps,
+  applyPathOps,
   penEndpointAt,
   planAnchorAddAt,
   planAnchorConvert,
@@ -401,5 +402,111 @@ describe("4 — the click COUNT: a double-click without a second clock", () => {
     clickAt(m, [50, 0], seg(0.5), { timeStamp: 1000 });
     expect(clickAt(m, [50, 0], seg(0.5), { timeStamp: 1150 }).doubleClick).toBe(false);
     expect(m.currentOptions().doubleClickInterval).toBe(100);
+  });
+});
+
+describe("5 — apply(ops): an insert or a convert previewed on the machine's own table", () => {
+  const ARCH: AnchorTable = {
+    anchors: [corner(0, 0), corner(50, 50), corner(100, 0)],
+    subpathStarts: [0],
+    subpathOpen: [true],
+  };
+  const ds = (table: AnchorTable, extra: { transform?: [number, number, number, number, number, number]; selection?: number[] } = {}) =>
+    new DirectSelectMachine({ table, slop: 2, nudgeStep: 1, ...extra });
+
+  it("a segment-click INSERT: the anchor appears at once, and the selection follows its anchor to its new index", () => {
+    const m = ds(QUAD, { selection: [2] });
+    const ops = anchorEditOps(planAnchorAddAt(QUAD, 0, 0.5)!);
+    const snap = m.apply(ops);
+    expect(snap.table.anchors.map((a) => a.anchor)).toEqual([
+      [0, 0],
+      [50, 0],
+      [100, 0],
+      [100, 100],
+      [0, 100],
+    ]);
+    expect(snap.selected).toEqual([3]);
+    expect(snap.table).toEqual(applyPathOps(QUAD, ops));
+  });
+
+  it("a double-click CONVERT: the engine's smooth rule — tangent from the previous to the next anchor, a third of each distance", () => {
+    const m = ds(ARCH);
+    const snap = m.apply(anchorEditOps(planAnchorConvertAt(ARCH, 1)!));
+    const h = Math.hypot(50, 50) / 3;
+    const mid = snap.table.anchors[1];
+    expect(mid.anchor).toEqual([50, 50]);
+    expect(mid.left[0]).toBeCloseTo(50 - h, 9);
+    expect(mid.left[1]).toBeCloseTo(50, 9);
+    expect(mid.right[0]).toBeCloseTo(50 + h, 9);
+    expect(mid.right[1]).toBeCloseTo(50, 9);
+    // …and back: a smooth anchor converts to a corner.
+    const back = m.apply(anchorEditOps(planAnchorConvertAt(snap.table, 1)!));
+    expect(back.table.anchors[1]).toEqual(corner(50, 50));
+  });
+
+  it("a convert at a contour's END (no neighbour on one side — no wrap, even when closed) stays a corner", () => {
+    const open = ds(ARCH).apply([{ op: "pathPointCurveType", index: 0, smooth: true }]);
+    expect(open.table.anchors[0]).toEqual(corner(0, 0));
+    const closed = ds(QUAD).apply([{ op: "pathPointCurveType", index: 0, smooth: true }]);
+    expect(closed.table.anchors[0]).toEqual(corner(0, 0));
+  });
+
+  it("ops are INNER space: through a transform the preview lands where the pointer sees it", () => {
+    const m = ds(QUAD, { transform: [2, 0, 0, 2, 10, 20] });
+    const snap = m.apply(anchorEditOps(planAnchorAddAt(QUAD, 0, 0.5)!));
+    expect(snap.table.anchors[1].anchor).toEqual([110, 20]);
+  });
+
+  it("the machine keeps editing on the applied table: the next drag plans against the NEW indices", () => {
+    const m = ds(QUAD);
+    m.apply(anchorEditOps(planAnchorAddAt(QUAD, 0, 0.5)!));
+    m.handle({ type: "down", point: [50, 0], hit: anchorHit(1), modifiers: NONE });
+    m.handle({ type: "move", point: [50, -20], modifiers: NONE });
+    const snap = m.handle({ type: "up", point: [50, -20], modifiers: NONE });
+    expect(snap.commit?.ops).toEqual([
+      { op: "pathPointSet", index: 1, role: "anchor", position: [50, -20] },
+    ]);
+  });
+
+  it("an apply after a DRAG is written against the table the drag left (the machine tracks it in inner space)", () => {
+    const m = ds(QUAD, { transform: [1, 0, 0, 1, 5, 5] });
+    m.handle({ type: "down", point: [105, 5], hit: anchorHit(1), modifiers: NONE });
+    m.handle({ type: "move", point: [125, 5], modifiers: NONE });
+    const dragged = m.handle({ type: "up", point: [125, 5], modifiers: NONE });
+    const afterDrag = applyPathOps(QUAD, dragged.commit!.ops);
+    const insert = anchorEditOps(planAnchorAddAt(afterDrag, 0, 0.5)!);
+    const snap = m.apply(insert);
+    // Inner (60, 0) — the midpoint of the dragged edge — at pointer +5.
+    expect(snap.table.anchors[1].anchor).toEqual([65, 5]);
+    expect(snap.table.anchors[2].anchor).toEqual([125, 5]);
+  });
+
+  it("a removed anchor drops out of the selection; the others shift down", () => {
+    const m = ds(QUAD, { selection: [1, 3] });
+    const snap = m.apply([{ op: "pathPointRemove", index: 1 }]);
+    expect(snap.selected).toEqual([2]);
+    expect(snap.table.anchors).toHaveLength(3);
+  });
+
+  it("drops a gesture in flight, as sync does", () => {
+    const m = ds(QUAD);
+    m.handle({ type: "down", point: [0, 0], hit: anchorHit(0), modifiers: NONE });
+    m.handle({ type: "move", point: [30, 0], modifiers: NONE });
+    const snap = m.apply([{ op: "pathPointCurveType", index: 2, smooth: false }]);
+    expect(snap.mode).toBe("idle");
+    // The trailing `up` of the dropped gesture commits nothing.
+    expect(m.handle({ type: "up", point: [30, 0], modifiers: NONE }).commit).toBeNull();
+    expect(snap.table.anchors[0]).toEqual(corner(0, 0));
+  });
+
+  it("refuses — THROWS and changes nothing — an out-of-range index or a joinPaths", () => {
+    const m = ds(QUAD, { selection: [1] });
+    const before = m.snapshot();
+    expect(() => m.apply([{ op: "pathPointRemove", index: 9 }])).toThrow(RangeError);
+    expect(() =>
+      m.apply([{ op: "joinPaths", otherId: { kind: "polygon", id: "x" } as ElementId }]),
+    ).toThrow(/not an edit of one table/);
+    expect(m.snapshot().table).toEqual(before.table);
+    expect(m.snapshot().selected).toEqual([1]);
   });
 });
