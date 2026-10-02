@@ -45,6 +45,14 @@
 // instruction to flip it to `it`. The passing property beside it states
 // its exclusion (an `fc.pre`, or a narrower generator) in so many words.
 // `grep -rn "it.fails(" test/` is the defect list.
+//
+// FIXED DEFECTS. A pinned defect that has been fixed keeps its case and
+// its comment block — the block now says what WAS wrong and what the fix
+// is — and the test becomes a plain `it("FIXED DEFECT …")`: the record of
+// the defect and the regression test for it in one place. The exclusion
+// the neighbouring property carried for it (the `fc.pre`, the narrower
+// generator) comes off in the same change, so the property covers the
+// case again. `grep -rn "FIXED DEFECT" test/` is that list.
 
 import fc from "fast-check";
 
@@ -228,12 +236,12 @@ export const starPolygon: fc.Arbitrary<StarPolygon> = fc
  * A table the SVG path parser itself could have produced, built
  * directly: 1..3 contours of 1..5 anchors on the 1/8 pt lattice (so three
  * decimals print it exactly). Open contours keep their two OUTWARD
- * handles collapsed (path data has nowhere to put them); closed contours
- * of 2+ anchors do not end on their own start (the stacked-close shape —
- * svg-path's pinned round-trip defect).
+ * handles collapsed (path data has nowhere to put them). A closed contour
+ * MAY end on its own start: that stacked-close shape was filtered out
+ * here while svg-path's round trip lost an anchor on it, and is
+ * generated again now that it does not.
  */
 export const canonicalTable: fc.Arbitrary<AnchorTable> = (() => {
-  const same = (a: Vec2, b: Vec2): boolean => a[0] === b[0] && a[1] === b[1];
   const point = fc.tuple(gridCoord, gridCoord);
   const anchor: fc.Arbitrary<AnchorTriple> = fc.oneof(
     point.map(cornerOf),
@@ -255,11 +263,7 @@ export const canonicalTable: fc.Arbitrary<AnchorTable> = (() => {
         last.right = [last.anchor[0], last.anchor[1]];
       }
       return { run, open };
-    })
-    .filter(
-      ({ run, open }) =>
-        open || run.length < 2 || !same(run[run.length - 1].anchor, run[0].anchor),
-    );
+    });
   return fc.array(contour, { minLength: 1, maxLength: 3 }).map((contours) => {
     const anchors: AnchorTriple[] = [];
     const subpathStarts: number[] = [];

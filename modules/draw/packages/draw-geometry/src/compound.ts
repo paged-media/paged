@@ -39,25 +39,59 @@
 // are named as such on `contourDepths`.
 
 import { flattenAnchorRun } from "./bezier";
-import { pointInAnchorPath } from "./polygon";
-import type { AnchorTable, AnchorTriple } from "./types";
+import { pointInPolygon } from "./polygon";
+import type { AnchorTable, AnchorTriple, Vec2 } from "./types";
+
+/** One surviving contour: its `[from, to)` anchor range and the index it
+ *  had in `subpathStarts` BEFORE any empty range was dropped. */
+interface ContourSpan {
+  from: number;
+  to: number;
+  /** Index into `subpathStarts` — and therefore into `subpathOpen`,
+   *  which runs parallel to it. NOT the position in the returned list:
+   *  the two differ from the first dropped range on. */
+  index: number;
+}
+
+function contourSpans(
+  anchorCount: number,
+  subpathStarts: readonly number[] = [],
+): ContourSpan[] {
+  if (anchorCount <= 0) return [];
+  const starts = subpathStarts.length > 0 ? [...subpathStarts] : [0];
+  const spans: ContourSpan[] = [];
+  for (let i = 0; i < starts.length; i++) {
+    const from = starts[i];
+    const to = i + 1 < starts.length ? starts[i + 1] : anchorCount;
+    if (to > from && from >= 0 && to <= anchorCount) {
+      spans.push({ from, to, index: i });
+    }
+  }
+  return spans;
+}
+
+/** A surviving contour's open flag — read at the contour's ORIGINAL
+ *  index, so a dropped empty contour does not shift every later flag
+ *  onto its neighbour. */
+const openFlagOf = (table: AnchorTable, span: ContourSpan): boolean =>
+  table.subpathOpen?.[span.index] ?? false;
 
 /** `[from, to)` anchor ranges, one per contour. An empty
  *  `subpathStarts` means the single-contour case (the wire's
- *  convention); empty/degenerate ranges are dropped. */
+ *  convention); empty/degenerate ranges are dropped.
+ *
+ *  BECAUSE ranges are dropped, position `i` in the answer is NOT index
+ *  `i` of `subpathStarts` / `subpathOpen` once a table holds an empty
+ *  contour. Everything in this module that needs a contour's flag reads
+ *  it through the contour's original index; a caller pairing these
+ *  ranges with `subpathOpen` itself must do the same. */
 export function contourRanges(
   anchorCount: number,
   subpathStarts: readonly number[] = [],
 ): [number, number][] {
-  if (anchorCount <= 0) return [];
-  const starts = subpathStarts.length > 0 ? [...subpathStarts] : [0];
-  const ranges: [number, number][] = [];
-  for (let i = 0; i < starts.length; i++) {
-    const from = starts[i];
-    const to = i + 1 < starts.length ? starts[i + 1] : anchorCount;
-    if (to > from && from >= 0 && to <= anchorCount) ranges.push([from, to]);
-  }
-  return ranges;
+  return contourSpans(anchorCount, subpathStarts).map(
+    ({ from, to }): [number, number] => [from, to],
+  );
 }
 
 /** Shoelace signed area of ONE contour, flattened as a CLOSED ring
@@ -114,17 +148,29 @@ export function reverseContour(
  * is defined for) a single point decides the whole contour. Crossing
  * contours get an answer, but not a meaningful one; the caller owns
  * that choice.
+ *
+ * A CONTAINER IS ANY CONTOUR WITH AREA, however few anchors draw it. A
+ * polygon needs three vertices to enclose anything, but a CUBIC contour
+ * does not need three anchors: two anchors joined by two curved segments
+ * are a lens, and one anchor with two handles is a teardrop — both
+ * ordinary closed shapes (`contourSignedArea` measures them). So each
+ * contour is flattened as a closed ring and the ring is what is tested,
+ * with the polygon rule's own "fewer than three VERTICES" guard: a
+ * straight two-anchor contour flattens to a doubled-back line and
+ * contains nothing, a curved one flattens to a ring and does.
  */
 export function contourDepths(table: AnchorTable): number[] {
-  const ranges = contourRanges(table.anchors.length, table.subpathStarts);
-  return ranges.map(([from], i) => {
+  const spans = contourSpans(table.anchors.length, table.subpathStarts);
+  // One flattening per contour, not one per pair.
+  const rings = spans.map(({ from, to }): Vec2[] =>
+    flattenAnchorRun(table.anchors.slice(from, to), { close: true }),
+  );
+  return spans.map(({ from }, i) => {
     const probe = table.anchors[from].anchor;
     let depth = 0;
-    for (let j = 0; j < ranges.length; j++) {
+    for (let j = 0; j < spans.length; j++) {
       if (j === i) continue;
-      const [jf, jt] = ranges[j];
-      if (jt - jf < 3) continue;
-      if (pointInAnchorPath(probe, table.anchors.slice(jf, jt))) depth++;
+      if (pointInPolygon(probe, rings[j])) depth++;
     }
     return depth;
   });
@@ -132,28 +178,40 @@ export function contourDepths(table: AnchorTable): number[] {
 
 /**
  * Re-orient a table's contours so the engine's NON-ZERO fill paints the
- * even-odd region: every even-depth (outer) contour winds like the
- * FIRST contour, every odd-depth (hole) contour winds against it.
+ * even-odd region: contours at depths of the SAME parity wind the same
+ * way, contours at depths of opposite parity wind against each other —
+ * so every hole runs against the contour it is cut from.
  *
  * Contour 0 is the anchor of the convention and is never flipped — the
  * survivor of a "make compound path" keeps its own authored direction,
  * so a caller that cached its anchor order does not get a surprise.
+ * That holds AT ANY DEPTH: when contour 0 is itself a hole (the user
+ * selected the inner shape first), the direction the OUTER contours
+ * must take is the opposite of contour 0's, and it is they that turn.
+ * Which also makes the function idempotent — a second call finds every
+ * contour already where the first one put it — and that is what keeps
+ * make → release → make from reversing the whole path on each cycle.
  * Degenerate contours (zero area) are left alone.
  */
 export function orientForNonZeroHoles(table: AnchorTable): AnchorTable {
-  const ranges = contourRanges(table.anchors.length, table.subpathStarts);
-  if (ranges.length < 2) return table;
+  const spans = contourSpans(table.anchors.length, table.subpathStarts);
+  if (spans.length < 2) return table;
   const depths = contourDepths(table);
-  const areas = ranges.map(([from, to]) =>
+  const areas = spans.map(({ from, to }) =>
     contourSignedArea(table.anchors.slice(from, to)),
   );
-  const base = Math.sign(areas[0]) || 1;
+  // `base` is the direction of the EVEN depths. Contour 0 keeps the
+  // direction it has, so `base` is that direction when contour 0 is at
+  // an even depth and the opposite one when it is at an odd depth.
+  const first = Math.sign(areas[0]) || 1;
+  const base = depths[0] % 2 === 0 ? first : -first;
   const anchors: AnchorTriple[] = [];
   const subpathStarts: number[] = [];
   const subpathOpen: boolean[] = [];
-  ranges.forEach(([from, to], i) => {
+  spans.forEach((span, i) => {
+    const { from, to } = span;
     subpathStarts.push(anchors.length);
-    subpathOpen.push(table.subpathOpen?.[i] ?? false);
+    subpathOpen.push(openFlagOf(table, span));
     const contour = table.anchors.slice(from, to);
     const want = depths[i] % 2 === 0 ? base : -base;
     const have = Math.sign(areas[i]);
@@ -179,12 +237,11 @@ export function mergeCompound(tables: readonly AnchorTable[]): AnchorTable {
   const subpathStarts: number[] = [];
   const subpathOpen: boolean[] = [];
   for (const table of tables) {
-    const ranges = contourRanges(table.anchors.length, table.subpathStarts);
-    ranges.forEach(([from, to], i) => {
+    for (const span of contourSpans(table.anchors.length, table.subpathStarts)) {
       subpathStarts.push(anchors.length);
-      subpathOpen.push(table.subpathOpen?.[i] ?? false);
-      anchors.push(...table.anchors.slice(from, to));
-    });
+      subpathOpen.push(openFlagOf(table, span));
+      anchors.push(...table.anchors.slice(span.from, span.to));
+    }
   }
   return { anchors, subpathStarts, subpathOpen };
 }
@@ -204,11 +261,11 @@ export function makeCompoundTable(
  *  released hole keeps the direction it was given, which is what makes
  *  make→release→make stable. */
 export function splitCompound(table: AnchorTable): AnchorTable[] {
-  return contourRanges(table.anchors.length, table.subpathStarts).map(
-    ([from, to], i) => ({
-      anchors: table.anchors.slice(from, to),
+  return contourSpans(table.anchors.length, table.subpathStarts).map(
+    (span) => ({
+      anchors: table.anchors.slice(span.from, span.to),
       subpathStarts: [0],
-      subpathOpen: [table.subpathOpen?.[i] ?? false],
+      subpathOpen: [openFlagOf(table, span)],
     }),
   );
 }

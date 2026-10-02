@@ -172,6 +172,16 @@ function tangentBetween(a: Vec2, b: Vec2): number {
  *
  * A degenerate metric (length 0) answers its single point with a 0°
  * tangent.
+ *
+ * THE TANGENT IS NEVER TAKEN FROM A ZERO-LENGTH SEGMENT. A repeated
+ * point (a doubled anchor, or a closed path whose last anchor sits on
+ * its first) flattens to a segment with no direction — `atan2(0, 0)` is
+ * 0°, which is a direction, and the wrong one. The search below already
+ * walks PAST such a segment everywhere except at the very end of the
+ * path, where there is nothing after it to walk to; there it steps BACK
+ * to the last segment that has length. So the tangent at the end of a
+ * path is the direction the path ARRIVES in, as the tangent at the start
+ * is the direction it LEAVES in.
  */
 export function pointAtLength(metric: PathMetric, s: number): PathPoint {
   const stations = metric.stations;
@@ -179,7 +189,8 @@ export function pointAtLength(metric: PathMetric, s: number): PathPoint {
     return { point: [...stations[0].point] as Vec2, tangentDeg: 0, s: 0, u: 0 };
   }
   const want = Math.min(metric.length, Math.max(0, Number.isFinite(s) ? s : 0));
-  // Binary search for the segment containing `want`.
+  // Binary search for the segment containing `want`: the LAST station
+  // at or before it, and the one after.
   let lo = 0;
   let hi = stations.length - 1;
   while (hi - lo > 1) {
@@ -187,15 +198,27 @@ export function pointAtLength(metric: PathMetric, s: number): PathPoint {
     if (stations[mid].s <= want) lo = mid;
     else hi = mid;
   }
+  // Only at `want === length` can that segment be empty (every station
+  // from `lo` on is at the end). Step back to one with length; there is
+  // one, because the path has length.
+  while (lo > 0 && !(stations[hi].s - stations[lo].s > 0)) {
+    lo--;
+    hi--;
+  }
   const a = stations[lo];
   const b = stations[hi];
   const span = b.s - a.s;
   const t = span > 0 ? (want - a.s) / span : 0;
   return {
-    point: [
-      a.point[0] + (b.point[0] - a.point[0]) * t,
-      a.point[1] + (b.point[1] - a.point[1]) * t,
-    ],
+    // At the far station the point is that station, not `a + (b − a)`,
+    // which need not round back to `b`: the end of a path is exact.
+    point:
+      t === 1
+        ? [b.point[0], b.point[1]]
+        : [
+            a.point[0] + (b.point[0] - a.point[0]) * t,
+            a.point[1] + (b.point[1] - a.point[1]) * t,
+          ],
     tangentDeg: tangentBetween(a.point, b.point),
     s: want,
     u: want / metric.length,
@@ -315,14 +338,37 @@ export function distributeAlongPath(args: DistributeArgs): PathSlot[] {
   const max = Math.max(1, Math.round(args.maxSlots ?? 1000));
   // A closed path stops after ONE lap; an open one at its end.
   const limit = metric.length + (metric.closed ? -1e-9 : 1e-9);
-  for (let j = 0; j < max; j++) {
+  // `maxSlots` bounds the slots PRODUCED, so the walk must not spend it
+  // on steps that produce none. On an open path with a negative start
+  // offset the steps before the path's start are exactly that — they
+  // used to be walked one by one and counted, so an offset more than
+  // `maxSlots` steps before the start returned nothing at all. The walk
+  // now STARTS at the first step that lands on the path. Slots keep
+  // their step number as `index` (the first one produced is step
+  // `first`, not 0), so the caller can still tell which steps fell off.
+  const first = metric.closed ? 0 : firstStepOnPath(offset, spacing);
+  for (let k = 0; k < max; k++) {
+    const j = first + k;
     const s = offset + j * spacing;
     const walked = metric.closed ? j * spacing : s;
-    if (walked > limit) break;
+    if (!(walked <= limit)) break;
     if (!metric.closed && s < 0) continue;
     out.push(at(s, j));
   }
   return out;
+}
+
+/** The smallest step `j ≥ 0` with `offset + j · spacing ≥ 0` — where a
+ *  spacing walk with a negative start offset first reaches an open path.
+ *  The quotient is corrected by one step either way against the very
+ *  expression the walk evaluates, so a rounding of the division cannot
+ *  cost (or invent) a slot at the path's start. */
+function firstStepOnPath(offset: number, spacing: number): number {
+  if (!(offset < 0)) return 0;
+  let j = Math.ceil(-offset / spacing);
+  if (offset + j * spacing < 0) j += 1;
+  else if (j > 0 && offset + (j - 1) * spacing >= 0) j -= 1;
+  return j;
 }
 
 /** Arc length normalised into the metric: wrapped for a closed path,

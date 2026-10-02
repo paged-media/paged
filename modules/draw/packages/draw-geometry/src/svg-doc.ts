@@ -220,6 +220,47 @@ const num = (s: string | undefined, fallback = 0): number => {
   return Number.isFinite(v) ? v : fallback;
 };
 
+/** One SVG number, anchored where the scan stands: an optional sign,
+ *  digits with an optional fraction (or a bare fraction), an optional
+ *  exponent. Sticky, so it never skips over junk to find one. */
+const SVG_NUMBER = /[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?/y;
+
+/**
+ * Read an SVG number LIST — a transform function's arguments, a
+ * `points` attribute, a `viewBox`.
+ *
+ * Whitespace and commas separate numbers, but they are not the only
+ * thing that does: in SVG's number grammar a SIGN starts the next number
+ * with no separator before it, and so does a second decimal point.
+ * `10-5` is the two numbers 10 and −5, and `.5.5` is 0.5 twice. That is
+ * the spelling a minifier writes whenever a coordinate is negative, and
+ * the one the path parser (svg-path.ts) has always read. Splitting on
+ * separators and `parseFloat`-ing the pieces reads `10-5` as the single
+ * number 10 and silently loses the −5.
+ *
+ * So each separator-delimited piece is scanned for as many numbers as it
+ * holds, back to back. What a piece holds AFTER its numbers is ignored,
+ * and a piece that does not start with a number at all is one `NaN`
+ * (`parseFloat`'s answer) — both exactly as lenient as before; a caller
+ * that cannot use a `NaN` filters it.
+ */
+function parseNumberList(text: string): number[] {
+  const out: number[] = [];
+  for (const piece of text.split(/[\s,]+/)) {
+    if (piece.length === 0) continue;
+    let at = 0;
+    while (at < piece.length) {
+      SVG_NUMBER.lastIndex = at;
+      const found = SVG_NUMBER.exec(piece);
+      if (found === null) break;
+      out.push(parseFloat(found[0]));
+      at = SVG_NUMBER.lastIndex;
+    }
+    if (at === 0) out.push(parseFloat(piece));
+  }
+  return out;
+}
+
 /** Parse a `transform="..."` attribute into a single composed affine
  *  (functions apply left-to-right, i.e. the leftmost is outermost). */
 export function parseTransform(value: string): Affine {
@@ -228,10 +269,7 @@ export function parseTransform(value: string): Affine {
   let match: RegExpExecArray | null;
   while ((match = re.exec(value)) !== null) {
     const fn = match[1].toLowerCase();
-    const args = match[2]
-      .split(/[\s,]+/)
-      .filter((s) => s.length > 0)
-      .map((s) => parseFloat(s));
+    const args = parseNumberList(match[2]);
     const t = transformFn(fn, args);
     if (t) m = composeAffine(m, t);
   }
@@ -396,10 +434,18 @@ function shapeFromElement(
       if (style.stroke === undefined) style.stroke = "#000000";
       return lineToPath(num(a.x1), num(a.y1), num(a.x2), num(a.y2));
     }
-    case "polyline":
-      return polyToPath(parsePoints(a.points ?? ""), false);
-    case "polygon":
-      return polyToPath(parsePoints(a.points ?? ""), true);
+    // Fewer than two points lower to NO geometry (`polyToPath` answers
+    // an empty table), and no geometry is no shape — the same rule the
+    // four cases above apply. An empty table pushed as a shape would
+    // count as one in the importer's "no shapes in <file>" check.
+    case "polyline": {
+      const t = polyToPath(parsePoints(a.points ?? ""), false);
+      return t.anchors.length ? t : null;
+    }
+    case "polygon": {
+      const t = polyToPath(parsePoints(a.points ?? ""), true);
+      return t.anchors.length ? t : null;
+    }
     default:
       return null;
   }
@@ -412,10 +458,7 @@ const NaNto0 = (s: string | undefined): number => {
 };
 
 function parsePoints(s: string): Vec2[] {
-  const nums = s
-    .split(/[\s,]+/)
-    .map((x) => parseFloat(x))
-    .filter((x) => Number.isFinite(x));
+  const nums = parseNumberList(s).filter((x) => Number.isFinite(x));
   const out: Vec2[] = [];
   for (let i = 0; i + 1 < nums.length; i += 2) out.push([nums[i], nums[i + 1]]);
   return out;
@@ -465,10 +508,7 @@ export function parseSvgDocument(src: string): SvgDocument | null {
     if (Number.isFinite(h)) doc.height = h;
   }
   if (ra.viewbox !== undefined) {
-    const vb = ra.viewbox
-      .split(/[\s,]+/)
-      .map((x) => parseFloat(x))
-      .filter((x) => Number.isFinite(x));
+    const vb = parseNumberList(ra.viewbox).filter((x) => Number.isFinite(x));
     if (vb.length === 4) doc.viewBox = [vb[0], vb[1], vb[2], vb[3]];
   }
   return doc;

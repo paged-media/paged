@@ -110,12 +110,40 @@ function evalCubicDerivative(
   ];
 }
 
+/** How many times the refinement step of `closestTOnCubic` is halved
+ *  before the coarse sample is kept as it is. */
+const REFINE_HALVINGS = 6;
+
 /**
  * Parameter `t ∈ [0, 1]` minimising the distance from the cubic to
- * `click`. Coarse N-sample search + one Newton refinement step on the
- * squared-distance derivative (skipping the second-derivative term —
- * under-counts, but converges from the coarse start; stability over
- * speed).
+ * `click`: a coarse scan of `samples + 1` evenly spaced parameters, then
+ * ONE Gauss-Newton step from the best of them (the squared distance's
+ * derivative over |B'|², the second-derivative term dropped).
+ *
+ * THE STEP IS GUARDED, and the two guards are the contract:
+ *
+ *   · it never LEAVES THE COARSE BRACKET — the answer is within
+ *     `1 / samples` of the best coarse sample. That sample's two
+ *     neighbours are no nearer than it is, so the bracket holds a local
+ *     minimum; a step that lands outside has left the basin the scan
+ *     found and is on its way to a different part of the curve.
+ *   · it never returns a point FURTHER from the click than the best
+ *     coarse sample. A candidate is taken only if it is strictly nearer.
+ *
+ * Both are needed because a full Gauss-Newton step is only a descent
+ * STEP while the click is close to the curve compared with the curve's
+ * radius of curvature; where |B'| is small (an apex, a near-cusp) or the
+ * click is far off, the same step overshoots. It is always a descent
+ * DIRECTION, though, so an overshoot is answered by halving the step
+ * (up to `REFINE_HALVINGS` times) rather than by giving up on the
+ * refinement — a short enough step along a descent direction is nearer.
+ * If none is, the best coarse sample is the answer.
+ *
+ * What the answer is therefore good to: never worse than the coarse
+ * scan, i.e. within `3·L / (2·samples)` of the true closest distance,
+ * `L` being the longest leg of the control polygon; and exact for a
+ * uniformly parametrised straight segment, where one step lands on the
+ * foot of the perpendicular.
  */
 export function closestTOnCubic(
   start: Vec2,
@@ -125,14 +153,17 @@ export function closestTOnCubic(
   click: Vec2,
   samples = 30,
 ): number {
+  const distSq = (t: number): number => {
+    const p = evalCubic(start, startRight, endLeft, end, t);
+    const dx = p[0] - click[0];
+    const dy = p[1] - click[1];
+    return dx * dx + dy * dy;
+  };
   let bestT = 0;
   let bestDist = Infinity;
   for (let i = 0; i <= samples; i++) {
     const t = i / samples;
-    const p = evalCubic(start, startRight, endLeft, end, t);
-    const dx = p[0] - click[0];
-    const dy = p[1] - click[1];
-    const d = dx * dx + dy * dy;
+    const d = distSq(t);
     if (d < bestDist) {
       bestDist = d;
       bestT = t;
@@ -144,9 +175,21 @@ export function closestTOnCubic(
   const f = diff[0] * pp[0] + diff[1] * pp[1];
   const fp = pp[0] * pp[0] + pp[1] * pp[1];
   if (Math.abs(fp) < 1e-6) return bestT;
-  const refined = bestT - f / fp;
-  if (refined < 0 || refined > 1) return bestT;
-  return refined;
+
+  // The bracket: one coarse interval either side, inside [0, 1]. The
+  // step is cut back to it BEFORE the halving starts, so every halving
+  // tries a new parameter instead of re-trying the bracket's edge.
+  const reach = 1 / samples;
+  const lo = Math.max(0, bestT - reach);
+  const hi = Math.min(1, bestT + reach);
+  let step = Math.min(hi - bestT, Math.max(lo - bestT, -f / fp));
+  for (let k = 0; k <= REFINE_HALVINGS; k++) {
+    const t = Math.min(hi, Math.max(lo, bestT + step));
+    if (!(t !== bestT)) break; // nowhere to go: a zero step, or an end
+    if (distSq(t) < bestDist) return t;
+    step /= 2;
+  }
+  return bestT;
 }
 
 export interface SegmentReshape {

@@ -296,9 +296,10 @@ describe("bezier — closestTOnCubic (properties)", () => {
     // holds (every ellipse, every rounded corner), and it is TAME: nearly
     // uniform speed, no cusp. One Newton step from a sample ≤ 1/60 away
     // leaves a parameter error of order (1/60)², i.e. ~1e-4 of the radius.
-    // Stated to 1e-3. (For an ARBITRARY cubic no such statement holds —
-    // see the defect block below, whose on-curve counterexample misses by
-    // 3.27 units.)
+    // Stated to 1e-3. (For an ARBITRARY cubic the statement is the weaker
+    // one of the two guards below: never worse than the coarse scan. The
+    // defect block's on-curve counterexample sits beside a near-cusp,
+    // where one step cannot do better than that.)
     const KAPPA = (4 / 3) * (Math.SQRT2 - 1);
     fc.assert(
       fc.property(
@@ -327,23 +328,24 @@ describe("bezier — closestTOnCubic (properties)", () => {
   });
 
   // ------------------------------------------------------------------
-  // DEFECT (bezier.ts, closestTOnCubic) — the Newton refinement is
-  // UNGUARDED and routinely returns a parameter that is WORSE than the
-  // coarse sample it started from.
+  // DEFECT (bezier.ts, closestTOnCubic) — the Newton refinement was
+  // UNGUARDED and routinely returned a parameter that was WORSE than the
+  // coarse sample it started from. FIXED.
   //
-  // The function scans 31 samples, then takes ONE Gauss-Newton step
-  // (`refined = bestT − f/fp`, second-derivative term dropped) and returns
-  // `refined` whenever it lands in [0, 1] — without checking that it is
-  // any closer. A full Gauss-Newton step is a descent step only while the
-  // residual (click → curve) is small against the radius of curvature.
-  // For a click off the curve, or where |B'| is small (an apex, a
-  // near-cusp), the step overshoots and the answer moves AWAY. The
-  // docstring's "converges from the coarse start; stability over speed"
-  // is the claim this contradicts.
+  // The function scans 31 samples, then took ONE Gauss-Newton step
+  // (`refined = bestT − f/fp`, second-derivative term dropped) and
+  // returned `refined` whenever it landed in [0, 1] — without checking
+  // that it was any closer. A full Gauss-Newton step is a descent step
+  // only while the residual (click → curve) is small against the radius
+  // of curvature. For a click off the curve, or where |B'| is small (an
+  // apex, a near-cusp), the step overshoots and the answer moves AWAY.
+  // The docstring's "converges from the coarse start; stability over
+  // speed" was the claim this contradicted.
   //
   // Measured over 200 000 random integer cubics in a ±10 box with clicks
   // in ±15: 28 % of the answers were further from the click than the
-  // function's own coarse best.
+  // function's own coarse best. (Re-measured with the fix: none, and
+  // none outside the coarse bracket.)
   //
   // MINIMAL counterexample (fast-check shrink, seed 20261002):
   //   start (1,−1), startRight (0,0), endLeft (0,0), end (0,−1) — a
@@ -353,29 +355,34 @@ describe("bezier — closestTOnCubic (properties)", () => {
   //   There B' = (−0.75, 0) and click→curve = (0.125, −1.25), so the step
   //   is +0.09375 / 0.5625 = +1/6.
   //   EXPECTED: a parameter no further than 1.2562 from the click.
-  //   ACTUAL:   t = 0.6667, distance 1.3338.
+  //   WAS:      t = 0.6667, distance 1.3338.
   //
   // A LARGE one, same cause: start (−1,5), startRight (−7,9), endLeft
-  // (6,7), end (7,−6), click (−11,12). Coarse best t = 0 at 9.99;
-  // answered t = 0.913 at 22.94 — the far end of the curve.
+  // (6,7), end (7,−6), click (−11,12). Coarse best t = 0.2 at 9.99 (the
+  // note that stood here said t = 0; the start anchor is 12.2 away);
+  // it answered t = 0.913 at 22.94 — the far end of the curve.
   //
   // And a click EXACTLY ON the curve, which is the case the Add Anchor
   // tool lives on: start (5,7), startRight (−2,−8), endLeft (6,10), end
   // (7,8), click = B(0.3225334362697478) — beside the curve's near-cusp.
-  // Coarse best 0.031 away; answered t = 0.583, 3.27 away from a point
-  // that is on the curve. (2 000 000 random on-curve clicks: 16 answers
-  // beyond the coarse bound, 509 worse than the coarse sample. Rare, and
-  // exactly where a user clicks to fix a kink.)
+  // Coarse best 0.031 away; it answered t = 0.583, 3.27 away from a
+  // point that is on the curve. (2 000 000 random on-curve clicks: 16
+  // answers beyond the coarse bound, 509 worse than the coarse sample.
+  // Rare, and exactly where a user clicks to fix a kink.)
   //
   // Consumer: `planAnchorAdd` (draw-tools anchor-machine) accepts a
   // segment only when `dist(evalCubic(t), click) ≤ tolerance`. A
-  // refinement that walks away turns a click that WAS within tolerance of
-  // the coarse sample into a miss, so Add Anchor can refuse a click near
-  // a tight bend, or pick the split point visibly off the cursor.
+  // refinement that walked away turned a click that WAS within tolerance
+  // of the coarse sample into a miss, so Add Anchor could refuse a click
+  // near a tight bend, or pick the split point visibly off the cursor.
   //
-  // The fix is one comparison (keep `bestT` unless the refined point is
-  // nearer). NOT applied — these tests are the record. When it is fixed
-  // all three go red; flip them to `it`.
+  // THE FIX is the two guards the properties below state: the step is
+  // cut back to the coarse bracket (one coarse interval either side of
+  // the best sample) and a candidate is taken only if it is strictly
+  // nearer. An overshoot is HALVED rather than discarded — the direction
+  // is a descent direction even when the full step is not a descent
+  // step — which, measured on the same 200 000 clicks, refines 64 % of
+  // the answers where the bare comparison alone refines 30 %.
   // ------------------------------------------------------------------
   const coarseBest = (c: Cubic, click: Vec2): number => {
     let best = Infinity;
@@ -385,8 +392,87 @@ describe("bezier — closestTOnCubic (properties)", () => {
     return best;
   };
 
-  it.fails(
-    "DEFECT: is no worse than a dense brute-force scan (tolerance: the coarse-grid bound)",
+  it("GUARD 1: is never further from the click than its own best coarse sample", () => {
+    // Over page-scale reals AND the small integer box (cusps, loops,
+    // hairpins), with the click anywhere.
+    fc.assert(
+      fc.property(
+        fc.oneof(cubic, smallCubic),
+        fc.oneof(vec2, smallVec2),
+        (c, click) => {
+          const t = closestTOnCubic(c[0], c[1], c[2], c[3], click);
+          const d = dist(evalCubic(c[0], c[1], c[2], c[3], t), click);
+          const coarse = coarseBest(c, click);
+          assertTrue(
+            d <= coarse + FP * magnitude(...c, click),
+            `answered t=${t} at distance ${d}; the coarse scan alone finds ${coarse}`,
+          );
+        },
+      ),
+    );
+  });
+
+  it("GUARD 2: never leaves the coarse bracket — within one coarse interval of a best coarse sample", () => {
+    fc.assert(
+      fc.property(
+        fc.oneof(cubic, smallCubic),
+        fc.oneof(vec2, smallVec2),
+        (c, click) => {
+          const t = closestTOnCubic(c[0], c[1], c[2], c[3], click);
+          const coarse = coarseBest(c, click);
+          // Two coarse samples can tie (a symmetric curve); the kernel
+          // and this reference may break the tie differently, so the
+          // bracket is taken about ANY sample that ties for best.
+          const slack = FP * magnitude(...c, click);
+          let nearest = Infinity;
+          for (let k = 0; k <= COARSE; k++) {
+            if (dist(refEvalCubic(c, k / COARSE), click) <= coarse + slack) {
+              nearest = Math.min(nearest, Math.abs(t - k / COARSE));
+            }
+          }
+          assertTrue(
+            nearest <= 1 / COARSE + 1e-12,
+            `answered t=${t}, ${nearest} from the nearest best coarse sample`,
+          );
+        },
+      ),
+    );
+  });
+
+  it("the refinement REFINES: on a click off a tame arc it beats the coarse sample it started from", () => {
+    // The guards alone would be satisfied by returning the coarse sample
+    // every time. This is the half that says the step is still taken: a
+    // click near a quarter arc, at a parameter strictly between two
+    // coarse samples, is answered strictly nearer than any coarse sample.
+    const KAPPA = (4 / 3) * (Math.SQRT2 - 1);
+    fc.assert(
+      fc.property(
+        real(5, 500),
+        fc.integer({ min: 0, max: COARSE - 1 }),
+        real(0.25, 0.75),
+        real(0.9, 1.1),
+        (r, k, within, radial) => {
+          const c: Cubic = [
+            [r, 0],
+            [r, KAPPA * r],
+            [KAPPA * r, r],
+            [0, r],
+          ];
+          const on = refEvalCubic(c, (k + within) / COARSE);
+          const click: Vec2 = [on[0] * radial, on[1] * radial];
+          const t = closestTOnCubic(c[0], c[1], c[2], c[3], click);
+          const d = dist(evalCubic(c[0], c[1], c[2], c[3], t), click);
+          assertTrue(
+            d < coarseBest(c, click),
+            `answered t=${t} at ${d}, no nearer than the coarse scan (${coarseBest(c, click)})`,
+          );
+        },
+      ),
+    );
+  });
+
+  it(
+    "FIXED DEFECT: is no worse than a dense brute-force scan (tolerance: the coarse-grid bound)",
     () => {
       fc.assert(
         fc.property(smallCubic, smallVec2, (c, click) => {
@@ -403,8 +489,8 @@ describe("bezier — closestTOnCubic (properties)", () => {
     },
   );
 
-  it.fails(
-    "DEFECT (minimal counterexample): the refinement is not worse than the coarse scan it started from",
+  it(
+    "FIXED DEFECT (minimal counterexample): the refinement is not worse than the coarse scan it started from",
     () => {
       const c: Cubic = [
         [1, -1],
@@ -415,13 +501,14 @@ describe("bezier — closestTOnCubic (properties)", () => {
       const click: Vec2 = [0, 1];
       const t = closestTOnCubic(c[0], c[1], c[2], c[3], click);
       const d = dist(evalCubic(c[0], c[1], c[2], c[3], t), click);
-      // coarse 1.2562 (t = 0.5); answered t = 2/3 at 1.3338.
+      // coarse 1.2562 (t = 0.5); it answered t = 2/3 at 1.3338.
       expect(d).toBeLessThanOrEqual(coarseBest(c, click) + 1e-9);
+      expect(Math.abs(t - 0.5)).toBeLessThanOrEqual(1 / COARSE + 1e-12);
     },
   );
 
-  it.fails(
-    "DEFECT (on-curve counterexample): a click ON the curve is found to within the coarse-grid bound",
+  it(
+    "FIXED DEFECT (on-curve counterexample): a click ON the curve is found to within the coarse-grid bound",
     () => {
       const c: Cubic = [
         [5, 7],
@@ -432,13 +519,15 @@ describe("bezier — closestTOnCubic (properties)", () => {
       const click = refEvalCubic(c, 0.3225334362697478);
       const t = closestTOnCubic(c[0], c[1], c[2], c[3], click);
       const d = dist(evalCubic(c[0], c[1], c[2], c[3], t), click);
-      // coarse bound 0.985, coarse best 0.031; answered t ≈ 0.583 at 3.27.
+      // coarse bound 0.985, coarse best 0.031; it answered t ≈ 0.583 at
+      // 3.27. Now no further than the coarse best itself.
       expect(d).toBeLessThanOrEqual(coarseBound(c));
+      expect(d).toBeLessThanOrEqual(coarseBest(c, click) + 1e-9);
     },
   );
 
-  it.fails(
-    "DEFECT (large counterexample): a far click is not sent to the wrong end of the curve",
+  it(
+    "FIXED DEFECT (large counterexample): a far click is not sent to the wrong end of the curve",
     () => {
       const c: Cubic = [
         [-1, 5],
@@ -449,8 +538,10 @@ describe("bezier — closestTOnCubic (properties)", () => {
       const click: Vec2 = [-11, 12];
       const t = closestTOnCubic(c[0], c[1], c[2], c[3], click);
       const d = dist(evalCubic(c[0], c[1], c[2], c[3], t), click);
-      // coarse 9.99 (t = 0); answered t ≈ 0.913 at 22.94.
+      // coarse 9.99 (t = 0.2, where the curve bulges toward the click);
+      // it answered t ≈ 0.913 at 22.94.
       expect(d).toBeLessThanOrEqual(coarseBest(c, click) + 1e-9);
+      expect(Math.abs(t - 0.2)).toBeLessThanOrEqual(1 / COARSE + 1e-12);
     },
   );
 });

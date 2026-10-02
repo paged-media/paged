@@ -361,29 +361,35 @@ describe("along-path — pointAtLength / pointAtFraction (properties)", () => {
 
   // ------------------------------------------------------------------
   // DEFECT (along-path.ts, pointAtLength) — the tangent at the END of a
-  // path whose last flattened segment has zero length is reported as 0°.
+  // path whose last flattened segment has zero length was reported as
+  // 0°. FIXED.
   //
   // The binary search keeps `stations[lo].s ≤ want` and stops at
-  // `hi − lo = 1`. For `want = length` it therefore always answers the
+  // `hi − lo = 1`. For `want = length` it therefore always answered the
   // LAST segment, `[n−2, n−1]`. When that segment is degenerate (the last
   // anchor repeats the one before it; or, on a closed path, the last
   // anchor sits on the first so the closing segment is empty) its
   // direction is `atan2(0, 0) = 0`. At the START the same search walks
   // PAST leading zero-length segments (previous test), so the two ends of
-  // one path behave differently.
+  // one path behaved differently.
   //
   // Minimal counterexample: the corner run (0,0) → (0,10) → (0,10), a
   // vertical line whose end anchor is doubled.
   //   EXPECTED: pointAtFraction(metric, 1).tangentDeg === 90 (the path
   //             runs straight DOWN the page, as it reports at u = 0.5).
-  //   ACTUAL:   0.
+  //   WAS:      0.
   //
   // Consumer: objects-on-a-path with `endpoints: "inclusive"` puts its
-  // last object at s = length; with rotate-to-path on, that object is
+  // last object at s = length; with rotate-to-path on, that object was
   // turned to 0° instead of along the path. A doubled end anchor is what
   // a double-click-to-finish pen path carries.
+  //
+  // THE FIX: when the segment the search lands on has no length — which
+  // can only be at the very end — it steps back to the last one that
+  // has. The POINT is unchanged by that (it is still the end of the
+  // path, exactly); only the direction is taken from further back.
   // ------------------------------------------------------------------
-  it.fails("DEFECT (minimal counterexample): the end tangent survives a doubled last anchor", () => {
+  it("FIXED DEFECT (minimal counterexample): the end tangent survives a doubled last anchor", () => {
     const m = measureAnchorRun(
       ([
         [0, 0],
@@ -393,9 +399,10 @@ describe("along-path — pointAtLength / pointAtFraction (properties)", () => {
     );
     expect(pointAtFraction(m, 0.5).tangentDeg).toBe(90);
     expect(pointAtFraction(m, 1).tangentDeg).toBe(90);
+    expect(pointAtFraction(m, 1).point).toEqual([0, 10]);
   });
 
-  it.fails("DEFECT: at the END of a path, the tangent skips a trailing zero-length segment", () => {
+  it("FIXED DEFECT: at the END of a path, the tangent skips a trailing zero-length segment", () => {
     fc.assert(
       fc.property(cleanPolyline, (pts) => {
         const n = pts.length;
@@ -408,6 +415,45 @@ describe("along-path — pointAtLength / pointAtFraction (properties)", () => {
         assertClose(pointAtFraction(m, 1).tangentDeg, expected, 1e-9, "tangentDeg");
       }),
     );
+  });
+
+  it("FIXED DEFECT: property — however many times the last anchor is repeated, the end is the same point and direction", () => {
+    // The undoubled path is the reference: repeating its last anchor
+    // adds no length, so the point and the tangent at the end must be
+    // the ones the path had without the repeats — exactly.
+    fc.assert(
+      fc.property(cleanPolyline, fc.integer({ min: 1, max: 4 }), (pts, repeats) => {
+        const last = pts[pts.length - 1];
+        const plain = measureAnchorRun(pts.map(cornerOf));
+        const padded = measureAnchorRun(
+          [...pts, ...Array.from({ length: repeats }, () => last)].map(cornerOf),
+        );
+        expect(padded.length).toBe(plain.length);
+        const want = pointAtFraction(plain, 1);
+        const got = pointAtFraction(padded, 1);
+        expect(got.tangentDeg).toBe(want.tangentDeg);
+        assertVecClose(got.point, last, 0, "end point");
+        assertVecClose(want.point, last, 0, "end point of the plain path");
+        expect(got.s).toBe(padded.length);
+      }),
+    );
+  });
+
+  it("FIXED DEFECT: a CLOSED path whose last anchor sits on its first has an end tangent too", () => {
+    // The closing segment is empty; the end of the lap is reached along
+    // the segment before it.
+    const m = measureAnchorRun(
+      ([
+        [0, 0],
+        [10, 0],
+        [10, 10],
+        [0, 0],
+      ] as Vec2[]).map(cornerOf),
+      { close: true },
+    );
+    const end = pointAtLength(m, m.length);
+    assertClose(end.tangentDeg, -135, 1e-9, "tangentDeg"); // (10,10) → (0,0)
+    expect(end.point).toEqual([0, 0]);
   });
 });
 
@@ -656,14 +702,14 @@ describe("along-path — distributeAlongPath (properties)", () => {
 
   // ------------------------------------------------------------------
   // DEFECT (along-path.ts, distributeAlongPath, SPACING mode) — steps
-  // that fall BEFORE the start of an open path are counted against
-  // `maxSlots`, so a large negative start offset returns NOTHING.
+  // that fall BEFORE the start of an open path were counted against
+  // `maxSlots`, so a large negative start offset returned NOTHING. FIXED.
   //
   // `maxSlots` is documented as "how many slots may be PRODUCED before
-  // the walk gives up". The loop is `for (j = 0; j < max; j++)` and a
-  // step with `s < 0` is skipped with `continue` — it produces no slot
-  // but still spends one of the `max` iterations. Once more than `max`
-  // steps lie before the path's start, the walk ends before it reaches
+  // the walk gives up". The loop was `for (j = 0; j < max; j++)` and a
+  // step with `s < 0` was skipped with `continue` — it produced no slot
+  // but still spent one of the `max` iterations. Once more than `max`
+  // steps lay before the path's start, the walk ended before it reached
   // the path.
   //
   // Minimal counterexample: a straight 100 pt path, spacing 1 pt, start
@@ -671,12 +717,17 @@ describe("along-path — distributeAlongPath (properties)", () => {
   //   The walk −1500, −1499, … reaches the path at step 1500; steps
   //   1500…1600 are the 101 slots at s = 0, 1, …, 100.
   //   EXPECTED: those 101 slots.
-  //   ACTUAL:   [] — indistinguishable from "the path has no room".
+  //   WAS:      [] — indistinguishable from "the path has no room".
   //
-  // Low severity: it needs an offset more than `maxSlots` steps before
-  // the start. The count mode is not affected.
+  // Low severity: it needed an offset more than `maxSlots` steps before
+  // the start. The count mode was not affected.
+  //
+  // THE FIX: the walk starts at the first step that lands on the path
+  // (computed, then corrected by one against the walk's own expression)
+  // instead of walking up to it. Slots keep their step number as
+  // `index`, as before.
   // ------------------------------------------------------------------
-  it.fails("DEFECT (minimal counterexample): skipped steps before the start do not use up maxSlots", () => {
+  it("FIXED DEFECT (minimal counterexample): skipped steps before the start do not use up maxSlots", () => {
     const slots = distributeAlongPath({
       metric: measureSegment([0, 0], [100, 0]),
       mode: "spacing",
@@ -684,6 +735,78 @@ describe("along-path — distributeAlongPath (properties)", () => {
       startOffsetPt: -1500,
     });
     expect(slots).toHaveLength(101);
+    expect(slots[0].index).toBe(1500);
+    expect(slots[0].s).toBe(0);
+    expect(slots[100].index).toBe(1600);
+    expect(slots[100].s).toBe(100);
+  });
+
+  it("FIXED DEFECT: property — maxSlots caps the slots PRODUCED, however far before the start the walk begins", () => {
+    fc.assert(
+      fc.property(
+        real(1, 500),
+        fc.integer({ min: 1, max: 60 }),
+        fc.integer({ min: 0, max: 5000 }),
+        real(0.1, 0.9),
+        fc.integer({ min: 1, max: 40 }),
+        (length, steps, skipped, fraction, maxSlots) => {
+          const metric = measureSegment([0, 0], [length, 0]);
+          const spacingPt = length / steps;
+          // `skipped` whole steps and a part of one lie before the start.
+          const startOffsetPt = -(skipped + fraction) * spacingPt;
+          // REFERENCE: the walk, step by step, with no cap at all.
+          const onPath: number[] = [];
+          const edge = 1e-6 * length;
+          let ambiguous = false;
+          for (let j = 0; j <= skipped + steps + 2; j++) {
+            const at = startOffsetPt + j * spacingPt;
+            if (Math.abs(at) <= edge || Math.abs(at - length) <= edge) ambiguous = true;
+            if (at >= 0 && at <= length) onPath.push(j);
+          }
+          fc.pre(!ambiguous);
+          const slots = distributeAlongPath({
+            metric,
+            mode: "spacing",
+            spacingPt,
+            startOffsetPt,
+            maxSlots,
+          });
+          expect(slots.map((slot) => slot.index)).toEqual(onPath.slice(0, maxSlots));
+          slots.forEach((slot) => {
+            assertClose(
+              slot.s,
+              startOffsetPt + slot.index * spacingPt,
+              lengthTol(metric),
+              `slot ${slot.index} s`,
+            );
+          });
+        },
+      ),
+    );
+  });
+
+  it("FIXED DEFECT: a start offset exactly a whole number of steps before the start lands a slot ON the start", () => {
+    // The division that finds the first step is corrected against the
+    // walk's own arithmetic, so neither is a slot at s = 0 lost nor one
+    // invented at s < 0.
+    for (const [spacingPt, back] of [
+      [0.1, 30],
+      [0.3, 7],
+      [1 / 3, 9],
+      [0.7, 1001],
+      [2.5, 4000],
+    ]) {
+      const slots = distributeAlongPath({
+        metric: measureSegment([0, 0], [10, 0]),
+        mode: "spacing",
+        spacingPt,
+        startOffsetPt: -back * spacingPt,
+        maxSlots: 3,
+      });
+      expect(slots.map((slot) => slot.index)).toEqual([back, back + 1, back + 2]);
+      for (const slot of slots) assertTrue(slot.s >= 0, `slot at s = ${slot.s}`);
+      assertClose(slots[0].s, 0, 1e-9, "first slot");
+    }
   });
 
   it("SPACING on a closed path: exactly one lap, never a slot back on the start", () => {

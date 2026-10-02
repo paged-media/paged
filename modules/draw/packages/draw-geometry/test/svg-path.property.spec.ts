@@ -269,32 +269,6 @@ function lowerReference(cmds: readonly Cmd[]): string {
 
 const same = (a: Vec2, b: Vec2): boolean => a[0] === b[0] && a[1] === b[1];
 
-/**
- * The shape the round-trip DEFECT below needs: a CLOSED contour of two or
- * more anchors whose LAST anchor sits exactly on its FIRST, joined by a
- * straight (zero-length) closing segment. The serializer writes such a
- * contour in a form its own parser folds — see the defect block.
- */
-function hasStackedClose(table: AnchorTable): boolean {
-  const starts = table.subpathStarts;
-  for (let s = 0; s < starts.length; s++) {
-    if (table.subpathOpen?.[s] ?? false) continue;
-    const from = starts[s];
-    const to = s + 1 < starts.length ? starts[s + 1] : table.anchors.length;
-    if (to - from < 2) continue;
-    const first = table.anchors[from];
-    const last = table.anchors[to - 1];
-    if (
-      same(last.anchor, first.anchor) &&
-      same(last.right, last.anchor) &&
-      same(first.left, first.anchor)
-    ) {
-      return true;
-    }
-  }
-  return false;
-}
-
 const roundTrip = (table: AnchorTable): AnchorTable =>
   parsePathData(serializePathData(table));
 
@@ -422,8 +396,9 @@ describe("svg-path — the grammar's semantics (properties)", () => {
 describe("svg-path — parse → serialize → parse is a fixed point (properties)", () => {
   it("EXACT: for path data with ≤ 3 decimals, serialize ∘ parse reads back the very same table", () => {
     // Absolute M/L/H/V/C/Z over multiples of 1/8: nothing is rounded, so
-    // the round trip must reproduce every anchor and handle to the bit.
-    // (Contours ending on their own start are the pinned defect below.)
+    // the round trip must reproduce every anchor and handle to the bit —
+    // INCLUDING a contour that ends on its own start, which this property
+    // excluded while that was a pinned defect (see the block below).
     fc.assert(
       fc.property(
         fc.oneof(
@@ -432,7 +407,6 @@ describe("svg-path — parse → serialize → parse is a fixed point (propertie
         ),
         (cmds) => {
           const table = parsePathData(render(cmds));
-          fc.pre(!hasStackedClose(table));
           assertTableClose(roundTrip(table), table, 0);
         },
       ),
@@ -461,7 +435,6 @@ describe("svg-path — parse → serialize → parse is a fixed point (propertie
         ),
         (cmds) => {
           const once = roundTrip(parsePathData(render(cmds)));
-          fc.pre(!hasStackedClose(once));
           const twice = roundTrip(once);
           assertTableClose(twice, once, 0);
           expect(serializePathData(twice)).toBe(serializePathData(once));
@@ -540,19 +513,20 @@ describe("svg-path — parse → serialize → parse is a fixed point (propertie
 });
 
 // --------------------------------------------------------------------
-// DEFECTS (svg-path.ts)
+// DEFECTS (svg-path.ts) — FIXED ones stay as the record and as the
+// regression tests (`it("FIXED DEFECT …")`).
 // --------------------------------------------------------------------
 describe("svg-path — DEFECTS", () => {
   // ------------------------------------------------------------------
-  // (1) ARC FLAGS WRITTEN WITHOUT A SEPARATOR ARE MISREAD — and the rest
-  //     of the path with them.
+  // (1) ARC FLAGS WRITTEN WITHOUT A SEPARATOR WERE MISREAD — and the rest
+  //     of the path with them. FIXED.
   //
   // The SVG grammar makes each arc flag a SINGLE character, `0` or `1`,
   // with the separator after it optional: `a5 5 0 1110 0` is rx 5, ry 5,
-  // rotation 0, large-arc 1, sweep 1, then (10, 0). The tokenizer reads
-  // numbers greedily, so `1110` becomes ONE number, 1110: the large-arc
-  // flag is "1110 ≠ 0", the sweep flag is the next number, and every
-  // argument after it is shifted by two.
+  // rotation 0, large-arc 1, sweep 1, then (10, 0). The tokenizer read
+  // numbers greedily, so `1110` became ONE number, 1110: the large-arc
+  // flag was "1110 ≠ 0", the sweep flag the next number, and every
+  // argument after it was shifted by two.
   //
   // This is not an exotic spelling. It is what SVGO emits by default, so
   // it is how the arcs of an optimised icon set are written — a circle
@@ -562,11 +536,15 @@ describe("svg-path — DEFECTS", () => {
   //   parsePathData("M0 0a5 5 0 1110 0")
   //   EXPECTED: the same 3 anchors as "M0 0a5 5 0 1 1 10 0" — a half
   //             circle from (0,0) over (5,−5) to (10,0).
-  //   ACTUAL:   ONE anchor at (0,0). The arc is read as large=1110,
+  //   WAS:      ONE anchor at (0,0). The arc was read as large=1110,
   //             sweep=0, end = (missing, missing) = (0,0) relative, i.e.
-  //             zero length, and is dropped without a word.
+  //             zero length, and was dropped without a word.
+  //
+  // THE FIX: the tokenizer counts its position in an arc's argument list
+  // and takes ONE character at the fourth and fifth argument of every
+  // group of seven.
   // ------------------------------------------------------------------
-  it.fails("DEFECT (1, minimal counterexample): compact arc flags read like spaced ones", () => {
+  it("FIXED DEFECT (1, minimal counterexample): compact arc flags read like spaced ones", () => {
     assertTableClose(
       parsePathData("M0 0a5 5 0 1110 0"),
       parsePathData("M0 0a5 5 0 1 1 10 0"),
@@ -574,14 +552,37 @@ describe("svg-path — DEFECTS", () => {
     );
   });
 
-  it.fails("DEFECT (1): an SVGO-minified circle icon is a circle", () => {
+  it("FIXED DEFECT (1): an SVGO-minified circle icon is a circle", () => {
     const minified = parsePathData("M12 2a10 10 0 100 20 10 10 0 000-20z");
     const spaced = parsePathData("M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0 -20z");
     expect(spaced.anchors.length).toBeGreaterThanOrEqual(4);
     assertTableClose(minified, spaced, 0);
   });
 
-  it.fails("DEFECT (1): property — arc flags need no separator", () => {
+  it("FIXED DEFECT (1): a flag is ONE character wherever it stands — glued, comma'd, repeated", () => {
+    const spaced = parsePathData("M0 0 a5 5 0 0 1 10 0 a5 5 0 1 0 -10 0");
+    // Both flags and the number after them in one run of digits…
+    assertTableClose(parsePathData("M0 0a5 5 0 0110 0a5 5 0 10-10 0"), spaced, 0);
+    // …a comma between the flags only…
+    assertTableClose(parsePathData("M0 0a5 5 0 0,110 0a5 5 0 1,0-10 0"), spaced, 0);
+    // …and the implicit repeat of the command: the second group's flags
+    // are the 11th and 12th argument, counted through the first group.
+    assertTableClose(parsePathData("M0 0a5 5 0 0110 0 5 5 0 10-10 0"), spaced, 0);
+    // A flag is not a number: `0.5` after the rotation is the flag 0 and
+    // then `.5`, so this arc ends at (0.5, 3) — not at (3, <missing>).
+    assertTableClose(
+      parsePathData("M0 0a5 5 0 10.5 3"),
+      parsePathData("M0 0a5 5 0 1 0 .5 3"),
+      0,
+    );
+    // Outside an arc nothing changed: `10` is still ten.
+    expect(parsePathData("M10 10L110 0").anchors.map((a) => a.anchor)).toEqual([
+      [10, 10],
+      [110, 0],
+    ]);
+  });
+
+  it("FIXED DEFECT (1): property — arc flags need no separator", () => {
     fc.assert(
       fc.property(
         fc.integer({ min: 1, max: 9 }),
@@ -602,61 +603,252 @@ describe("svg-path — DEFECTS", () => {
   });
 
   // ------------------------------------------------------------------
-  // (2) THE TWO-ARC CIRCLE DOES NOT CLOSE ONTO ITS START.
+  // (2) THE TWO-ARC CIRCLE DID NOT CLOSE ONTO ITS START. FIXED (in
+  //     svg-arc.ts).
   //
   // `Z` folds a trailing anchor that restates the subpath start, moving
   // its incoming handle onto the start anchor — but only when the
-  // coordinates are `===`. An arc's last anchor is the point
+  // coordinates are `===`. An arc's last anchor was the point
   // `arcToCubics` recomputed, not the end point in the path data (see
-  // svg-arc's defect block), so it is an ulp off and the fold is skipped.
+  // svg-arc's defect block), so it was an ulp off and the fold was
+  // skipped.
   //
   // Minimal counterexample: the canonical way to write a circle,
   //   "M 0 5 a 5 5 0 1 0 10 0 a 5 5 0 1 0 -10 0 Z"
   //   EXPECTED: 4 anchors, the first one SMOOTH (its `left` handle is the
   //             closing quarter's control point, (0, 2.239)).
-  //   ACTUAL:   5 anchors — the fifth at (0, 4.999999999999999) — and the
-  //             first is a CORNER (`left` collapsed onto (0,5)).
+  //   WAS:      5 anchors — the fifth at (0, 4.999999999999999) — and the
+  //             first a CORNER (`left` collapsed onto (0,5)).
   //
-  // In the editor that is two stacked anchors at the seam of every circle
-  // imported this way, and a seam that kinks when either is moved.
+  // In the editor that was two stacked anchors at the seam of every
+  // circle imported this way, and a seam that kinked when either moved.
+  //
+  // THE FIX is not here: `arcToCubics` now ends on the end point it was
+  // given, so the pen is where the path data says it is when `Z` asks
+  // whether the contour has returned to its start. (What "returned"
+  // means for a RELATIVE path, whose pen is a chain of rounded
+  // additions, is the block after this one.)
   // ------------------------------------------------------------------
-  it.fails("DEFECT (2, minimal counterexample): a two-arc circle parses to four smooth anchors", () => {
+  it("FIXED DEFECT (2, minimal counterexample): a two-arc circle parses to four smooth anchors", () => {
     const circle = parsePathData("M 0 5 a 5 5 0 1 0 10 0 a 5 5 0 1 0 -10 0 Z");
     expect(circle.anchors).toHaveLength(4);
     expect(same(circle.anchors[0].left, circle.anchors[0].anchor)).toBe(false);
+    // The seam is SMOOTH, not merely non-corner: the start anchor's two
+    // handles mirror each other, as at the other three.
+    for (const a of circle.anchors) {
+      assertVecClose(
+        a.left,
+        [2 * a.anchor[0] - a.right[0], 2 * a.anchor[1] - a.right[1]],
+        1e-9,
+        "handles mirror through the anchor",
+      );
+    }
+    // And the SVGO spelling of the same circle is the same four anchors.
+    assertTableClose(parsePathData("M0 5a5 5 0 1010 0 5 5 0 10-10 0z"), circle, 0);
+  });
+
+  it("FIXED DEFECT (2): property — an arc back to the subpath start closes onto it, absolute or relative", () => {
+    // Any circle drawn as two half-turn arcs, from any start point: the
+    // second arc's end IS the start, so `Z` must fold it. Four anchors,
+    // never five.
+    fc.assert(
+      fc.property(
+        gridCoord,
+        gridCoord,
+        fc.integer({ min: 1, max: 400 }).map((n) => n / 8),
+        fc.boolean(),
+        fc.boolean(),
+        (x, y, r, sweep, relative) => {
+          const f = sweep ? 1 : 0;
+          const d = relative
+            ? `M ${x} ${y} a ${r} ${r} 0 1 ${f} ${2 * r} 0 a ${r} ${r} 0 1 ${f} ${-2 * r} 0 Z`
+            : `M ${x} ${y} A ${r} ${r} 0 1 ${f} ${x + 2 * r} ${y} A ${r} ${r} 0 1 ${f} ${x} ${y} Z`;
+          const circle = parsePathData(d);
+          expect(circle.anchors).toHaveLength(4);
+          expect(circle.subpathOpen).toEqual([false]);
+          expect(circle.anchors[0].anchor).toEqual([x, y]);
+          assertTrue(
+            !same(circle.anchors[0].left, circle.anchors[0].anchor),
+            "the start anchor lost the closing arc's handle",
+          );
+        },
+      ),
+    );
   });
 
   // ------------------------------------------------------------------
-  // (3) THE ROUND TRIP EATS AN ANCHOR from a closed contour whose last
-  //     anchor sits on its first — one per cycle.
+  // (2b) A RELATIVE PATH THAT RETURNS TO ITS START DID NOT CLOSE ONTO IT
+  //      EITHER — found on the real-artwork corpus while measuring (2),
+  //      not by a property. FIXED.
+  //
+  // `Z` folded the returning anchor only when its coordinates were `===`
+  // the start's. A path in relative commands reaches its last point by a
+  // chain of rounded additions, so deltas that sum to zero on paper land
+  // a few units in the last place off the start:
+  //
+  //   "M 0.1 0.1 l 0.2 0 l 0 0.2 l -0.2 0 l 0 -0.2 z"
+  //   EXPECTED: 4 anchors (the square).
+  //   WAS:      5 — the fifth at (0.10000000000000003, 0.10000000000000003).
+  //
+  // On the corpus (476 real SVGs) that was 53 of the 5 274 closed
+  // contours the importer yields: a stacked anchor at the seam, and for
+  // the 33 that close with a curve, a corner where the artwork is
+  // smooth. And it is why fixing (2) alone moved one real path the
+  // WRONG way: its arc's old, drifted end point happened to make the
+  // rest of the chain sum back onto the start to the bit; the exact end
+  // point did not.
+  //
+  // THE FIX: "restates the start" allows for the parser's own rounding —
+  // 4096 ulps of the subpath's largest coordinate (9.1e-13 of its size).
+  // That is not a snapping tolerance: a gap WRITTEN into path data is at
+  // least one unit of its last decimal, a thousand times larger than
+  // that (the two populations in the corpus are ≤ 1e-15 and ≥ 1e-9 of
+  // the artwork's size, with nothing in between), and such a gap is
+  // still not folded — the last two cases below.
+  // ------------------------------------------------------------------
+  it("FIXED DEFECT (2b, minimal counterexample): a relative square closes onto its start", () => {
+    const d = "M 0.1 0.1 l 0.2 0 l 0 0.2 l -0.2 0 l 0 -0.2 z";
+    // The premise: the chain of additions does NOT land on the start.
+    expect(0.1 + 0.2 - 0.2).not.toBe(0.1);
+    const square = parsePathData(d);
+    expect(square.anchors).toHaveLength(4);
+    expect(square.subpathOpen).toEqual([false]);
+    expect(square.anchors[0].anchor).toEqual([0.1, 0.1]);
+  });
+
+  it("FIXED DEFECT (2b): a relative CURVED return hands its handle to the start anchor", () => {
+    // A lens drawn with two relative cubics; the second returns to the
+    // start, a rounding step off. Its incoming handle belongs on the
+    // start anchor, exactly as for the absolute spelling.
+    const relative = parsePathData("M 0.1 0.7 c 0.1 -0.3 0.5 -0.3 0.6 0 c -0.1 0.3 -0.5 0.3 -0.6 0 z");
+    const absolute = parsePathData("M 0.1 0.7 C 0.2 0.4 0.6 0.4 0.7 0.7 C 0.6 1 0.2 1 0.1 0.7 Z");
+    expect(absolute.anchors).toHaveLength(2);
+    expect(relative.anchors).toHaveLength(2);
+    assertTableClose(relative, absolute, 1e-12);
+    expect(same(relative.anchors[0].left, relative.anchors[0].anchor)).toBe(false);
+    // `Z` puts the pen ON the start (it always did), so the drift does
+    // not leak into what follows: a second, relative subpath starts
+    // where the absolute one would — and with the fold, at index 4.
+    const two = parsePathData("M 0.1 0.1 l 0.2 0 l 0 0.2 l -0.2 0 l 0 -0.2 z m 1 0 l 1 0");
+    expect(two.subpathStarts).toEqual([0, 4]);
+    expect(two.anchors[4].anchor).toEqual([1.1, 0.1]);
+  });
+
+  it("FIXED DEFECT (2b): property — a closed polygon is the same table written relative or absolute", () => {
+    // Vertices on a 0.1 lattice at page scale, so nearly every relative
+    // sum is inexact; the deltas are exact DECIMALS (integer tenths
+    // subtracted, then printed), so on paper the chain returns to the
+    // start. The absolute spelling restates the start exactly.
+    const tenths = fc.integer({ min: -9999, max: 9999 });
+    const text = (n: number): string => (n / 10).toString();
+    fc.assert(
+      fc.property(
+        fc.array(fc.tuple(tenths, tenths), { minLength: 3, maxLength: 40 }),
+        (pts) => {
+          fc.pre(pts.every((p, i) => i === 0 || p[0] !== pts[i - 1][0] || p[1] !== pts[i - 1][1]));
+          const last = pts[pts.length - 1];
+          fc.pre(last[0] !== pts[0][0] || last[1] !== pts[0][1]);
+          const absolute =
+            `M ${text(pts[0][0])} ${text(pts[0][1])} ` +
+            [...pts.slice(1), pts[0]].map((p) => `L ${text(p[0])} ${text(p[1])}`).join(" ") +
+            " Z";
+          const loop = [...pts, pts[0]];
+          const relative =
+            `M ${text(pts[0][0])} ${text(pts[0][1])} ` +
+            loop
+              .slice(1)
+              .map((p, i) => `l ${text(p[0] - loop[i][0])} ${text(p[1] - loop[i][1])}`)
+              .join(" ") +
+            " z";
+          const expected = parsePathData(absolute);
+          expect(expected.anchors).toHaveLength(pts.length);
+          assertTableClose(parsePathData(relative), expected, 1e-9, relative);
+        },
+      ),
+    );
+  });
+
+  it("FIXED DEFECT (2b): a gap the path data STATES is not folded, however small it is written", () => {
+    // One unit in the sixth decimal, at unit scale and at page scale: far
+    // inside "a hair", far outside rounding. The anchor is the author's.
+    expect(parsePathData("M 0 0 L 1 0 L 0.000001 0 Z").anchors).toHaveLength(3);
+    expect(parsePathData("M 100 100 L 500 100 L 100.000001 100 Z").anchors).toHaveLength(3);
+    // Even the ninth decimal of a page-scale coordinate is a statement:
+    // 1e-9 in 500 is 2e-12 of the size, twice the allowance.
+    expect(parsePathData("M 100 100 L 500 100 L 100.000000001 100 Z").anchors).toHaveLength(3);
+    // And the same path with the gap closed folds, as it always did.
+    expect(parsePathData("M 100 100 L 500 100 L 100 100 Z").anchors).toHaveLength(2);
+  });
+
+  // ------------------------------------------------------------------
+  // (3) THE ROUND TRIP ATE AN ANCHOR from a closed contour whose last
+  //     anchor sits on its first — one per cycle. FIXED.
   //
   // `serializePathData` omits a closed contour's straight closing segment
   // ("`Z` implies it"). When that segment has ZERO length — the last
-  // anchor coincides with the first — what it leaves behind is
+  // anchor coincides with the first — what that left behind was
   // `… L x0 y0 Z`, which `parsePathData` reads as "an explicit return to
-  // the start" and folds away. The serializer writes a form its own
-  // parser understands differently.
+  // the start" and folds away. The serializer wrote a form its own
+  // parser understood differently.
   //
   // Minimal counterexample: "M 0 0 L 1 0 L 0 0 L 0 0 Z"
   //   parse      → 3 anchors (0,0) (1,0) (0,0), closed
-  //   serialize  → "M 0 0 L 1 0 L 0 0 Z"
-  //   parse      → 2 anchors
+  //   serialize  → WAS "M 0 0 L 1 0 L 0 0 Z"
+  //   parse      → WAS 2 anchors
   //   EXPECTED: parse(serialize(t)) deep-equals t.
-  //   ACTUAL:   one anchor fewer; with k stacked anchors, k cycles each
-  //             remove one.
+  //   WAS:      one anchor fewer; with k stacked anchors, k cycles each
+  //             removed one.
   //
-  // Low severity: the outline is unchanged, and a curved incoming handle
-  // is carried over onto the start anchor correctly. What is lost is the
-  // anchor COUNT, so an SVG export → import is not anchor-faithful for
-  // such a contour (anchor indices shift).
+  // Low severity: the outline was unchanged, and a curved incoming handle
+  // was carried over onto the start anchor correctly. What was lost is
+  // the anchor COUNT, so an SVG export → import was not anchor-faithful
+  // for such a contour (anchor indices shifted).
+  //
+  // THE FIX, and the one that was NOT taken. The note that stood here
+  // said "always emitting the closing segment is table-equivalent and
+  // fixes it". Checked over 200 000 random tables, that is TRUE of this
+  // parser: both forms read back as the same table, and both are fixed
+  // points. But it is not free — it restates the start point of every
+  // closed contour with a straight closing edge (`… L 0 10 L 0 0 Z` for
+  // a rectangle), which changes the text of every polygon the exporter
+  // writes and hands every OTHER reader a duplicate node at the seam. So
+  // the closing segment is written out only where leaving it implicit is
+  // what loses the anchor: when the last anchor PRINTS as the start
+  // point. Every other contour serializes byte-for-byte as it did
+  // (svg-path.spec.ts pins "M 0 0 L 10 0 L 10 10 Z").
   // ------------------------------------------------------------------
-  it.fails("DEFECT (3, minimal counterexample): a contour ending on its own start survives the round trip", () => {
+  it("FIXED DEFECT (3, minimal counterexample): a contour ending on its own start survives the round trip", () => {
     const table = parsePathData("M 0 0 L 1 0 L 0 0 L 0 0 Z");
     expect(table.anchors).toHaveLength(3);
+    expect(serializePathData(table)).toBe("M 0 0 L 1 0 L 0 0 L 0 0 Z");
     assertTableClose(roundTrip(table), table, 0);
   });
 
-  it.fails("DEFECT (3): property — serialize ∘ parse is the identity on exact path data", () => {
+  it("FIXED DEFECT (3): the closing segment is written out ONLY for a stacked close", () => {
+    // The rectangle keeps the compact form: `Z` draws its last edge.
+    expect(serializePathData(parsePathData("M 0 0 L 10 0 L 10 10 L 0 10 Z"))).toBe(
+      "M 0 0 L 10 0 L 10 10 L 0 10 Z",
+    );
+    // Two anchors that only ROUND to the same text stack just the same:
+    // (0.0004, 0) prints as "0 0" at three decimals.
+    const hair: AnchorTable = {
+      anchors: [
+        { anchor: [0, 0], left: [0, 0], right: [0, 0] },
+        { anchor: [1, 0], left: [1, 0], right: [1, 0] },
+        { anchor: [0.0004, 0], left: [0.0004, 0], right: [0.0004, 0] },
+      ],
+      subpathStarts: [0],
+      subpathOpen: [false],
+    };
+    expect(serializePathData(hair)).toBe("M 0 0 L 1 0 L 0 0 L 0 0 Z");
+    expect(roundTrip(hair).anchors).toHaveLength(3);
+    // …and at a precision that tells them apart, they do not.
+    expect(serializePathData(hair, 4)).toBe("M 0 0 L 1 0 L 0.0004 0 Z");
+    // A closed contour of ONE anchor has nothing to stack on.
+    expect(serializePathData(parsePathData("M 3 4 Z"))).toBe("M 3 4 Z");
+  });
+
+  it("FIXED DEFECT (3): property — serialize ∘ parse is the identity on exact path data", () => {
     fc.assert(
       fc.property(pathOf(tinyInt, EXACT, { relative: false }), (cmds) => {
         const table = parsePathData(render(cmds));

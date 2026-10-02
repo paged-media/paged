@@ -318,25 +318,39 @@ describe("parametric — rectGridPaths (properties)", () => {
 
   // ------------------------------------------------------------------
   // DEFECT (parametric.ts, rectGridPaths) — a NON-INTEGER row or column
-  // count draws a grid with no closing border.
+  // count drew a grid with no closing border. FIXED.
   //
   // The docstring promises the lines "INCLUDING the border". The loops
-  // run `for (i = 0; i <= rows; i++)` over integer `i` and place line i
-  // at `top + h·i/rows`. With rows = 2.5 that is i = 0, 1, 2 at 0, 0.4h,
-  // 0.8h — the bottom edge is never reached. `polarGridPaths`, its
-  // sibling, floors both of its counts first.
+  // ran `for (i = 0; i <= rows; i++)` over integer `i` and placed line i
+  // at `top + h·i/rows`. With rows = 2.5 that was i = 0, 1, 2 at 0,
+  // 0.4h, 0.8h — the bottom edge was never reached. `polarGridPaths`,
+  // its sibling, floors both of its counts first.
   //
   // Minimal counterexample: rectGridPaths([0, 0, 10, 10], 2.5, 2)
   //   EXPECTED: the last horizontal line at y = 10 (the bottom border).
-  //   ACTUAL:   horizontals at y = 0, 4, 8 — the box is left open.
+  //   WAS:      horizontals at y = 0, 4, 8 — the box was left open.
   //
-  // Low severity TODAY: the one caller (draw-bundle insert-shapes) passes
+  // Low severity: the one caller (draw-bundle insert-shapes) passes
   // integer defaults.
+  //
+  // THE FIX: both counts are floored, as the sibling's are — 2.5 rows
+  // is two rows.
   // ------------------------------------------------------------------
-  it.fails("DEFECT (minimal counterexample): a fractional row count still closes the border", () => {
+  it("FIXED DEFECT (minimal counterexample): a fractional row count still closes the border", () => {
     const lines = rectGridPaths([0, 0, 10, 10], 2.5, 2);
     const horizontals = lines.filter((l) => l.anchors[0].anchor[1] === l.anchors[1].anchor[1]);
     expect(Math.max(...horizontals.map((l) => l.anchors[0].anchor[1]))).toBe(10);
+    expect(horizontals.map((l) => l.anchors[0].anchor[1])).toEqual([0, 5, 10]);
+  });
+
+  it("FIXED DEFECT: property — a fractional count is the grid of its floor, border and all", () => {
+    fc.assert(
+      fc.property(box, cells, cells, real(0, 0.99), real(0, 0.99), (bounds, rows, cols, dr, dc) => {
+        expect(rectGridPaths(bounds, rows + dr, cols + dc)).toEqual(
+          rectGridPaths(bounds, rows, cols),
+        );
+      }),
+    );
   });
 });
 
