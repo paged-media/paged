@@ -34,9 +34,9 @@
 // (`setElementProperty{ frameFillColor }`), so a sweep's style flows
 // through the DOCUMENT CREATION DEFAULTS: capture them, point them at
 // the sweep's style, insert, restore. Each commit is therefore a short
-// SEQUENCE of mutations (defaults → insert → outline → restore →
-// boolean), i.e. several undo steps — the same trade the pencil's
-// two-step (insert + outline) commit already makes.
+// SEQUENCE of ops (defaults → insert → outline → restore → boolean) —
+// which used to be a sequence of MUTATIONS, several undo steps a lift,
+// and is now ONE batch and one undo step (see "commit flows" below).
 //
 // ENGINE NOTE (`variable_width_outline_stroke`, core kurbo_kernel v1):
 // the widths are STOPS lerped over the centerline's arc length by index
@@ -52,6 +52,7 @@ import type {
   ElementId,
   GestureHandler,
   Mutation,
+  MutationInput,
   MutationOutcome,
 } from "@paged-media/plugin-api";
 
@@ -70,6 +71,11 @@ import {
   supportsPathOps,
 } from "../commands/path-ops";
 import { pathfinderMutationFor } from "../commands/pathfinder";
+import {
+  batchMutationFor,
+  bindCreatedMutationFor,
+  handleElementId,
+} from "../commands/v59-wire";
 
 /** Screen-space RDP fidelity (the pencil's constant). */
 const SIMPLIFY_TOLERANCE_PX = 2;
@@ -120,11 +126,144 @@ export function outlineStrokeVariableMutationFor(
 }
 
 // ------------------------------------------------------------ commit flows
+//
+// ONE BATCH PER LIFT. Each tool's commit is built whole and sent once:
+// one rebuild, one undo step. `bindCreated` is what makes that possible —
+// the batch names the sweep it just inserted (`"$h:<handle>"`) so the
+// outline and the boolean can address it before the engine has answered
+// with its id. Measured before this, against the same strokes:
+//
+//                               mutations   undo steps   reads
+//   paintbrush                      4            2          1
+//   blob brush, same-fill target    5            3          2
+//   eraser, 12 selected            60           36         12
+//   now, each                       1            1        1 / 2 / 0
+//
+// Three things measured about what may ride in the batch:
+//   · `setDocumentDefaults` may, and the insert that follows it in the
+//     SAME batch takes the new defaults (the sweep comes out styled
+//     exactly as the stepwise chain styled it);
+//   · `pathfinderBoolean` accepts a `$h:` handle among its `others`, and
+//     a subtract that removes nothing APPLIES (it consumes the sweep and
+//     leaves the target as it was) — so one selected element the stroke
+//     never touched does not refuse the whole eraser batch;
+//   · a refused child refuses the batch and leaves NOTHING behind — no
+//     half-styled centerline, no orphaned sweep, the defaults untouched.
+//
+// The eraser's batch inserts EVERY sweep copy before it subtracts any of
+// them. A boolean consumes its `others`, and a batch that deletes and
+// then inserts is refused (the insert's z-position resolves against the
+// spread the batch started with — CLAUDE.md, "Two batch-ORDERING rules").
+//
+// A REFUSED BATCH FALLS BACK TO THE STEPWISE CHAIN, unchanged from how
+// these tools shipped. That keeps two things true: an engine that
+// predates `bindCreated` still paints, and a sweep whose OUTLINE the
+// kernel rejects still leaves its centerline standing — the degrade the
+// stepwise chain always had, which an all-or-nothing batch alone would
+// have turned into "nothing happened".
+
+/** The handle a sweep is named by inside its own batch. */
+const SWEEP_HANDLE = "sweep";
+
+/** How a sweep is outlined: per-anchor stops (paintbrush, blob) or one
+ *  uniform width (eraser). */
+type SweepOutline = { widths: number[] } | { width: number };
+
+function outlineMutationFor(id: ElementId, outline: SweepOutline): Mutation {
+  return "widths" in outline
+    ? outlineStrokeVariableMutationFor(id, outline.widths)
+    : outlineStrokeMutationFor(id, {
+        width: outline.width,
+        cap: "round",
+        join: "round",
+        miterLimit: DEFAULT_MITER_LIMIT,
+      });
+}
+
+/** Insert the centerline, name it `handle`, outline it. The centerline
+ *  is always OPEN (the machines never close a brush contour — see the
+ *  ENGINE NOTE in the header). */
+function sweepOpsFor(
+  pageId: string,
+  commit: BrushCommit,
+  outline: SweepOutline,
+  handle: string,
+): MutationInput[] {
+  return [
+    insertPathMutationFor(pageId, commit.anchors, commit.open),
+    bindCreatedMutationFor(handle),
+    outlineMutationFor(handleElementId(handle), outline),
+  ];
+}
+
+/** The style a PAINTED sweep takes, and how to put the creation defaults
+ *  back afterwards. */
+interface SweepStyle {
+  /** The fill the sweep carries: the creation-default fill, or the
+   *  Black fallback when the document declares none. */
+  fill: string;
+  paint: Mutation;
+  restore: Mutation;
+}
+
+/** ONE `document.meta` read per lift. */
+async function readSweepStyle(host: BundleHost): Promise<SweepStyle> {
+  const meta = await host.document.meta();
+  const fill = meta.defaultFillColor ?? FALLBACK_FILL_REF;
+  return {
+    fill,
+    paint: {
+      op: "setDocumentDefaults",
+      args: { fillColor: fill, strokeColor: null, strokeWeight: null },
+    },
+    restore: {
+      op: "setDocumentDefaults",
+      args: {
+        fillColor: meta.defaultFillColor ?? null,
+        strokeColor: meta.defaultStrokeColor ?? null,
+        strokeWeight: meta.defaultStrokeWeight ?? null,
+      },
+    },
+  };
+}
+
+/** A painted sweep, whole: defaults → insert → bind → outline → restore.
+ *  The defaults are back where they were before the batch ends, so a
+ *  refusal cannot leave them swapped. */
+function paintedSweepOpsFor(
+  pageId: string,
+  commit: BrushCommit,
+  style: SweepStyle,
+): MutationInput[] {
+  return [
+    style.paint,
+    ...sweepOpsFor(pageId, commit, { widths: commit.widths }, SWEEP_HANDLE),
+    style.restore,
+  ];
+}
+
+/** Send one batch. A refusal is logged at DEBUG, not WARN: the caller
+ *  falls back to the stepwise chain, which warns about the step that
+ *  actually fails. */
+async function mutateBatch(
+  host: BundleHost,
+  label: string,
+  ops: readonly MutationInput[],
+): Promise<MutationOutcome> {
+  const outcome = await host.document.mutate(batchMutationFor(ops));
+  if (!outcome.applied) {
+    host.log.debug(
+      `${label}: the one-batch commit was refused (${JSON.stringify(outcome.error)}) — ` +
+        "falling back to the stepwise chain",
+    );
+  }
+  return outcome;
+}
 
 async function mutateLogged(
   host: BundleHost,
   label: string,
-  mutation: Mutation,
+  mutation: MutationInput,
   what: string,
 ): Promise<MutationOutcome> {
   const outcome = await host.document.mutate(mutation);
@@ -136,18 +275,19 @@ async function mutateLogged(
   return outcome;
 }
 
-/** Materialize one swept shape from a brush commit: swap the creation
- *  defaults for the sweep's style, insert the centerline, outline it
- *  (variable widths or a uniform band), restore the defaults. Returns
- *  the created element (null when the insert was rejected) + the fill
- *  ref the sweep carries (null in "invisible" mode — the eraser's
- *  transient shape). */
+/** THE STEPWISE CHAIN (the fallback — see the note above). Materialize
+ *  one swept shape from a brush commit: swap the creation defaults for
+ *  the sweep's style, insert the centerline, outline it (variable widths
+ *  or a uniform band), restore the defaults. Returns the created element
+ *  (null when the insert was rejected) + the fill ref the sweep carries
+ *  (null in "invisible" mode — the eraser's transient shape, which in
+ *  this chain IS on screen between its insert and its subtract). */
 async function insertSweptShape(
   host: BundleHost,
   label: string,
   pageId: string,
   commit: BrushCommit,
-  outline: { widths: number[] } | { width: number },
+  outline: SweepOutline,
   fillMode: "paint" | "invisible",
 ): Promise<{ created: ElementId | null; fill: string | null }> {
   const meta = await host.document.meta();
@@ -170,8 +310,6 @@ async function insertSweptShape(
     },
     "setDocumentDefaults",
   );
-  // The centerline is always OPEN (the machines never close a brush
-  // contour — see the ENGINE NOTE in the header).
   const inserted = await mutateLogged(
     host,
     label,
@@ -180,18 +318,14 @@ async function insertSweptShape(
   );
   const created = inserted.applied ? inserted.createdId : null;
   if (created) {
-    const outlineMutation =
-      "widths" in outline
-        ? outlineStrokeVariableMutationFor(created, outline.widths)
-        : outlineStrokeMutationFor(created, {
-            width: outline.width,
-            cap: "round",
-            join: "round",
-            miterLimit: DEFAULT_MITER_LIMIT,
-          });
     // A rejected outline keeps the centerline path standing (already
     // warned) — honest degrade, same as the pencil's pressure lane.
-    await mutateLogged(host, label, outlineMutation, "outline sweep");
+    await mutateLogged(
+      host,
+      label,
+      outlineMutationFor(created, outline),
+      "outline sweep",
+    );
   }
   await mutateLogged(host, label, restoreDefaults, "restore defaults");
   return { created, fill };
@@ -202,6 +336,16 @@ async function commitPaintbrush(
   pageId: string,
   commit: BrushCommit,
 ): Promise<void> {
+  const style = await readSweepStyle(host);
+  const swept = await mutateBatch(
+    host,
+    "paintbrush",
+    paintedSweepOpsFor(pageId, commit, style),
+  );
+  if (swept.applied) {
+    if (swept.createdId) await host.selection.set([swept.createdId]);
+    return;
+  }
   const { created } = await insertSweptShape(
     host,
     "paintbrush",
@@ -213,6 +357,27 @@ async function commitPaintbrush(
   if (created) await host.selection.set([created]);
 }
 
+/** The first selected path element whose fill is `fill` — what a blob
+ *  sweep merges into. One property read per candidate until one
+ *  matches; that read is the only way to learn an element's fill. */
+async function sameFillTarget(
+  host: BundleHost,
+  selected: readonly ElementId[],
+  fill: string,
+): Promise<ElementId | null> {
+  for (const id of selected) {
+    if (!supportsPathOps(id)) continue;
+    const props = await host.document.elementProperties(id);
+    for (const entry of props?.entries ?? []) {
+      if (entry.path === "frameFillColor" && entry.value?.type === "colorRef") {
+        if (entry.value.value === fill) return id;
+        break;
+      }
+    }
+  }
+  return null;
+}
+
 async function commitBlobBrush(
   host: BundleHost,
   pageId: string,
@@ -220,7 +385,35 @@ async function commitBlobBrush(
 ): Promise<void> {
   // Capture the selection BEFORE the sweep lands (the commit re-selects).
   const selected = host.selection.get();
-  const { created, fill } = await insertSweptShape(
+  const style = await readSweepStyle(host);
+  // HONEST v0 SCOPE: Illustrator's Blob Brush merges with nearby
+  // same-styled artwork by PROXIMITY; v0 merges only with the current
+  // SELECTION — the first selected path element whose fill matches the
+  // sweep's fill is united with it (kept = the selected element, so its
+  // identity/styling survives; the sweep is consumed). No proximity
+  // detection, no multi-target merge.
+  const target = await sameFillTarget(host, selected, style.fill);
+  const painted = paintedSweepOpsFor(pageId, commit, style);
+  if (target) {
+    const united = await mutateBatch(host, "blobBrush", [
+      ...painted,
+      pathfinderMutationFor(target, [handleElementId(SWEEP_HANDLE)], "union"),
+    ]);
+    if (united.applied) {
+      await host.selection.set([target]);
+      return;
+    }
+  }
+  // No same-fill selected element (or the batch WITH the unite was
+  // refused): the sweep stands as its own filled shape, selected — the
+  // paintbrush outcome.
+  const alone = await mutateBatch(host, "blobBrush", painted);
+  if (alone.applied) {
+    if (alone.createdId) await host.selection.set([alone.createdId]);
+    return;
+  }
+  // Neither batch applied: the stepwise chain, as shipped.
+  const { created } = await insertSweptShape(
     host,
     "blobBrush",
     pageId,
@@ -229,24 +422,6 @@ async function commitBlobBrush(
     "paint",
   );
   if (!created) return;
-  // HONEST v0 SCOPE: Illustrator's Blob Brush merges with nearby
-  // same-styled artwork by PROXIMITY; v0 merges only with the current
-  // SELECTION — the first selected path element whose fill matches the
-  // sweep's fill is united with it (kept = the selected element, so its
-  // identity/styling survives; the sweep is consumed). No proximity
-  // detection, no multi-target merge.
-  let target: ElementId | null = null;
-  for (const id of selected) {
-    if (!supportsPathOps(id)) continue;
-    const props = await host.document.elementProperties(id);
-    for (const entry of props?.entries ?? []) {
-      if (entry.path === "frameFillColor" && entry.value?.type === "colorRef") {
-        if (entry.value.value === fill) target = id;
-        break;
-      }
-    }
-    if (target) break;
-  }
   if (target) {
     const united = await mutateLogged(
       host,
@@ -259,9 +434,6 @@ async function commitBlobBrush(
       return;
     }
   }
-  // No same-fill selected element (or the unite was rejected): the
-  // sweep stands as its own filled shape, selected — the paintbrush
-  // outcome.
   await host.selection.set([created]);
 }
 
@@ -273,8 +445,7 @@ async function commitEraserBrush(
   // HONEST v0 SCOPE: the eraser erases from the SELECTED path elements
   // only (no hit-testing of everything under the sweep). And because
   // `pathfinderBoolean` CONSUMES its `others`, each target subtracts
-  // its OWN materialized copy of the sweep — one insert→outline→
-  // subtract sequence per selected element (several undo steps).
+  // its OWN materialized copy of the sweep.
   const targets = host.selection.get().filter(supportsPathOps);
   if (targets.length === 0) {
     host.log.debug(
@@ -282,6 +453,31 @@ async function commitEraserBrush(
     );
     return;
   }
+  // ONE batch for the gesture: every copy inserted and outlined FIRST,
+  // then every subtract (inserts ride before deletes — the note above).
+  // Payload order (the pathfinder command convention, first selected =
+  // kept): kept = the erased TARGET (it receives the boolean result and
+  // keeps its styling/identity), others = [its sweep copy].
+  //
+  // No defaults swap and no `meta` read here: a copy is inserted and
+  // consumed inside the same batch, so it is never on screen and its
+  // style is never seen. `outlineStroke` takes its width from its own
+  // argument, not from the element's stroke, so the band — and the bite
+  // it takes — is the one the stepwise chain cut (asserted, target by
+  // target, in the perf budget).
+  const handles = targets.map((_, i) => `${SWEEP_HANDLE}${i}`);
+  const erased = await mutateBatch(host, "eraserBrush", [
+    ...handles.flatMap((handle) =>
+      sweepOpsFor(pageId, commit, { width: ERASER_NIB.size }, handle),
+    ),
+    ...targets.map((target, i) =>
+      pathfinderMutationFor(target, [handleElementId(handles[i])], "subtract"),
+    ),
+  ]);
+  if (erased.applied) return;
+
+  // The stepwise chain, as shipped: one insert → outline → subtract
+  // sequence per selected element (several undo steps).
   for (const target of targets) {
     // The transient sweep is INVISIBLE (no fill, no stroke) — it exists
     // only to be consumed by the subtract.
@@ -294,9 +490,6 @@ async function commitEraserBrush(
       "invisible",
     );
     if (!created) continue;
-    // Payload order (the pathfinder command convention, first selected
-    // = kept): kept = the erased TARGET (it receives the boolean
-    // result and keeps its styling/identity), others = [the sweep].
     const outcome = await mutateLogged(
       host,
       "eraserBrush",
