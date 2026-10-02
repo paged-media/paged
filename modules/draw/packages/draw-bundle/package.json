@@ -10,6 +10,7 @@
     ".": "./src/index.ts",
     "./geometry": "./src/geometry.ts",
     "./machines": "./src/machines.ts",
+    "./trace-worker": "./src/trace-worker.ts",
     "./manifest.json": "./manifest.json"
   },
   "scripts": {
@@ -58,6 +59,10 @@
       "./machines": {
         "types": "./dist/machines.d.ts",
         "default": "./dist/machines.js"
+      },
+      "./trace-worker": {
+        "types": "./dist/trace-worker.d.ts",
+        "default": "./dist/trace-worker.js"
       },
       "./manifest.json": "./manifest.json"
     }

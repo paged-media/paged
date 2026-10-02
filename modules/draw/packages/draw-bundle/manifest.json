@@ -20,6 +20,9 @@
       "images"
     ],
     "network": false,
+    "workers": {
+      "max": 2
+    },
     "wasm": [
       {
         "name": "trace",
