@@ -368,13 +368,11 @@ describe("perf budgets — the tools that read as they move", () => {
       await w.h.host.selection.set([]);
       report("live paint click", counted, { undoSteps });
 
-      // Insert, then paint-and-link. TARGET 1 batch, 1 undo step — the
-      // `bindCreated` conversion this flow has not had yet.
-      expect(counted.mutations).toEqual([
-        { op: "batch", ops: 1 },
-        { op: "batch", ops: 3 },
-      ]);
-      expect(undoSteps).toBe(2);
+      // Insert, bind, fill, stroke, face link: ONE batch since the fill
+      // lane names what it inserts (`livePaintBatchFor`). As found: TWO
+      // batches (1, then 3) and 2 undo steps.
+      expect(counted.mutations).toEqual([{ op: "batch", ops: 5 }]);
+      expect(undoSteps).toBe(1);
       // LINK DISCOVERY: one metadata read for every leaf of the document
       // — 518 of them, 12 of which belong to this group — looking for a
       // stale fill of this face. There is none. TARGET 0: the recipe can
@@ -387,9 +385,10 @@ describe("perf budgets — the tools that read as they move", () => {
       // second click on an unchanged document would read none — but a
       // click changes it.)
       expect(counted.count("document.getMetadata")).toBe(517);
-      // The link walk's tree, then one either side of the insert to
-      // learn what it created. TARGET 0.
-      expect(counted.count("document.tree")).toBe(3);
+      // The link walk's tree. What the batch created comes off the
+      // engine's reply (`commands/minted.ts`). As found: 3 — one either
+      // side of the insert on top. TARGET 0.
+      expect(counted.count("document.tree")).toBe(1);
       // The press asks twice (point query + enumeration); the commit
       // then derives the same arrangement a third time. TARGET 2.
       expect(counted.count("document.planarRegions")).toBe(3);
