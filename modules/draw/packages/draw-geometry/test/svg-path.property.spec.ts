@@ -603,28 +603,76 @@ describe("svg-path — DEFECTS", () => {
   });
 
   // ------------------------------------------------------------------
-  // (2) THE TWO-ARC CIRCLE DOES NOT CLOSE ONTO ITS START.
+  // (2) THE TWO-ARC CIRCLE DID NOT CLOSE ONTO ITS START. FIXED (in
+  //     svg-arc.ts).
   //
   // `Z` folds a trailing anchor that restates the subpath start, moving
   // its incoming handle onto the start anchor — but only when the
-  // coordinates are `===`. An arc's last anchor is the point
+  // coordinates are `===`. An arc's last anchor was the point
   // `arcToCubics` recomputed, not the end point in the path data (see
-  // svg-arc's defect block), so it is an ulp off and the fold is skipped.
+  // svg-arc's defect block), so it was an ulp off and the fold was
+  // skipped.
   //
   // Minimal counterexample: the canonical way to write a circle,
   //   "M 0 5 a 5 5 0 1 0 10 0 a 5 5 0 1 0 -10 0 Z"
   //   EXPECTED: 4 anchors, the first one SMOOTH (its `left` handle is the
   //             closing quarter's control point, (0, 2.239)).
-  //   ACTUAL:   5 anchors — the fifth at (0, 4.999999999999999) — and the
-  //             first is a CORNER (`left` collapsed onto (0,5)).
+  //   WAS:      5 anchors — the fifth at (0, 4.999999999999999) — and the
+  //             first a CORNER (`left` collapsed onto (0,5)).
   //
-  // In the editor that is two stacked anchors at the seam of every circle
-  // imported this way, and a seam that kinks when either is moved.
+  // In the editor that was two stacked anchors at the seam of every
+  // circle imported this way, and a seam that kinked when either moved.
+  //
+  // THE FIX is not here: `arcToCubics` now ends on the end point it was
+  // given, so the `===` this parser closes with is true whenever the
+  // path data returns to its start. The comparison stays exact — a
+  // tolerance would fold anchors the author put a hair apart on purpose.
   // ------------------------------------------------------------------
-  it.fails("DEFECT (2, minimal counterexample): a two-arc circle parses to four smooth anchors", () => {
+  it("FIXED DEFECT (2, minimal counterexample): a two-arc circle parses to four smooth anchors", () => {
     const circle = parsePathData("M 0 5 a 5 5 0 1 0 10 0 a 5 5 0 1 0 -10 0 Z");
     expect(circle.anchors).toHaveLength(4);
     expect(same(circle.anchors[0].left, circle.anchors[0].anchor)).toBe(false);
+    // The seam is SMOOTH, not merely non-corner: the start anchor's two
+    // handles mirror each other, as at the other three.
+    for (const a of circle.anchors) {
+      assertVecClose(
+        a.left,
+        [2 * a.anchor[0] - a.right[0], 2 * a.anchor[1] - a.right[1]],
+        1e-9,
+        "handles mirror through the anchor",
+      );
+    }
+    // And the SVGO spelling of the same circle is the same four anchors.
+    assertTableClose(parsePathData("M0 5a5 5 0 1010 0 5 5 0 10-10 0z"), circle, 0);
+  });
+
+  it("FIXED DEFECT (2): property — an arc back to the subpath start closes onto it, absolute or relative", () => {
+    // Any circle drawn as two half-turn arcs, from any start point: the
+    // second arc's end IS the start, so `Z` must fold it. Four anchors,
+    // never five.
+    fc.assert(
+      fc.property(
+        gridCoord,
+        gridCoord,
+        fc.integer({ min: 1, max: 400 }).map((n) => n / 8),
+        fc.boolean(),
+        fc.boolean(),
+        (x, y, r, sweep, relative) => {
+          const f = sweep ? 1 : 0;
+          const d = relative
+            ? `M ${x} ${y} a ${r} ${r} 0 1 ${f} ${2 * r} 0 a ${r} ${r} 0 1 ${f} ${-2 * r} 0 Z`
+            : `M ${x} ${y} A ${r} ${r} 0 1 ${f} ${x + 2 * r} ${y} A ${r} ${r} 0 1 ${f} ${x} ${y} Z`;
+          const circle = parsePathData(d);
+          expect(circle.anchors).toHaveLength(4);
+          expect(circle.subpathOpen).toEqual([false]);
+          expect(circle.anchors[0].anchor).toEqual([x, y]);
+          assertTrue(
+            !same(circle.anchors[0].left, circle.anchors[0].anchor),
+            "the start anchor lost the closing arc's handle",
+          );
+        },
+      ),
+    );
   });
 
   // ------------------------------------------------------------------

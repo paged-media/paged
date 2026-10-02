@@ -49,6 +49,10 @@ const TAU = Math.PI * 2;
  * Out-of-range radii are corrected per spec (§F.6.6): zero radius / a
  * coincident endpoint collapses to a single straight cubic (a degenerate
  * line), never throws.
+ *
+ * The last slice ends EXACTLY on `end` (a fresh tuple holding the two
+ * numbers given, not a recomputation of them) — see the note at the
+ * slicing loop.
  */
 export function arcToCubics(
   start: Vec2,
@@ -149,11 +153,23 @@ export function arcToCubics(
     return [cosPhi * dx - sinPhi * dy, sinPhi * dx + cosPhi * dy];
   };
 
+  // THE TWO END POINTS ARE INPUTS, NOT RESULTS. The arc runs from `start`
+  // to `end` because the path data says so; `point(theta1)` and
+  // `point(theta1 + dTheta)` only RECOMPUTE those two points from the
+  // derived centre and angles, and both angles come out of an `acos`
+  // that keeps half its digits near 0 and π. The recomputed end is an
+  // ulp or two off in the ordinary case and up to ~1e-8 of the radius
+  // off for a start on the major axis or a half-turn sweep. So the first
+  // slice hangs its handle on `start` itself and the last slice ends on
+  // `end` itself; only the INTERIOR boundaries are computed. svg-path.ts
+  // advances its pen to the last slice's end and decides with `===`
+  // whether `Z` has returned to the subpath start — an exact end is what
+  // makes the two-arc circle close onto its first anchor.
   for (let i = 0; i < segments; i++) {
     const th0 = theta;
     const th1 = theta + delta;
-    const p0 = point(th0);
-    const p1 = point(th1);
+    const p0: Vec2 = i === 0 ? [x1, y1] : point(th0);
+    const p1: Vec2 = i === segments - 1 ? [x2, y2] : point(th1);
     const tan0 = tangent(th0);
     const tan1 = tangent(th1);
     const c1: Vec2 = [p0[0] + t * tan0[0], p0[1] + t * tan0[1]];

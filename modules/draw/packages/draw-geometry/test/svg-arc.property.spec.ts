@@ -119,20 +119,56 @@ const scaleOf = (arc: CentreArc): number =>
 const KAPPA_ERROR = 3e-4;
 
 describe("svg-arc — arcToCubics against the centre form (properties)", () => {
-  it("ends on the arc's END point (to √ε of its size)", () => {
-    // 1e-7, not 1e-9: see the defect block at the end of this file. With
-    // a start within ~1e-8 rad of the ellipse's major axis the start
-    // angle comes out of `acos` with half its digits, and the end point
-    // inherits the error.
+  it("ends EXACTLY on the arc's END point", () => {
+    // Tolerance 0. This stood at 1e-7 of the arc's size while the end
+    // point was recomputed from the derived angles (see the defect block
+    // at the end of this file); the end point is an input and is now
+    // handed back as given. The INTERIOR slice boundaries are still
+    // computed, and still good to √ε only — the next property.
     fc.assert(
       fc.property(centreArc, (arc) => {
         const { end, cubics } = lower(arc);
         assertTrue(cubics.length > 0, "no cubics for a real arc");
+        assertVecClose(cubics[cubics.length - 1].end, end, 0, "last slice end");
+      }),
+    );
+  });
+
+  it("hangs its first and last handles on the given end points, along the ellipse's tangent there", () => {
+    // The other half of "the end points are inputs": the first control
+    // point is measured from `start` itself and the last from `end`
+    // itself, each along the tangent of the ellipse at that end, the
+    // same length on both (the slices are equal). Stated without the
+    // kernel's angles: the handle is perpendicular to the ellipse's
+    // gradient at the point, and points the way the sweep goes.
+    fc.assert(
+      fc.property(centreArc, (arc) => {
+        const { start, end, cubics } = lower(arc);
+        const phi = (arc.phiDeg * Math.PI) / 180;
+        const tangentAt = (theta: number): Vec2 => {
+          const dx = -arc.rx * Math.sin(theta);
+          const dy = arc.ry * Math.cos(theta);
+          return [
+            Math.cos(phi) * dx - Math.sin(phi) * dy,
+            Math.sin(phi) * dx + Math.cos(phi) * dy,
+          ];
+        };
+        const k = (4 / 3) * Math.tan(arc.dTheta / cubics.length / 4);
+        const t0 = tangentAt(arc.theta1);
+        const t1 = tangentAt(arc.theta1 + arc.dTheta);
+        const tol = 1e-7 * scaleOf(arc);
         assertVecClose(
-          cubics[cubics.length - 1].end,
-          end,
-          1e-7 * scaleOf(arc),
-          "last slice end",
+          cubics[0].c1,
+          [start[0] + k * t0[0], start[1] + k * t0[1]],
+          tol,
+          "first handle",
+        );
+        const last = cubics[cubics.length - 1];
+        assertVecClose(
+          last.c2,
+          [end[0] - k * t1[0], end[1] - k * t1[1]],
+          tol,
+          "last handle",
         );
       }),
     );
@@ -279,14 +315,14 @@ describe("svg-arc — arcToCubics from raw endpoint arguments (properties)", () 
     return Math.max(rx, ry) * Math.max(1, Math.sqrt(lambda));
   };
 
-  it("answers finite cubics that end on the END point to √ε of the radius, whatever the radii", () => {
+  it("answers finite cubics that end EXACTLY on the END point, whatever the radii", () => {
     // Includes radii too small to span the chord (the spec scales them up
     // until the arc is a half ellipse) and every flag combination.
     //
-    // THE TOLERANCE IS √ε·R, NOT ε·R, and that is the measured truth of
-    // the implementation rather than a courtesy: the sweep comes out of
-    // an `acos`, which keeps only half its digits near 0 and π, and a
-    // scaled-up arc is ALWAYS a half turn. See the defect block below.
+    // TOLERANCE 0. This stood at √ε·R while the end point was recomputed
+    // (the sweep comes out of an `acos`, which keeps only half its digits
+    // near 0 and π, and a scaled-up arc is ALWAYS a half turn). See the
+    // defect block below.
     fc.assert(
       fc.property(vec2, vec2, rawRadius, rawRadius, angleDeg, flag, flag, (start, end, rx, ry, phi, large, sweep) => {
         const chord = Math.hypot(end[0] - start[0], end[1] - start[1]);
@@ -298,12 +334,15 @@ describe("svg-arc — arcToCubics from raw endpoint arguments (properties)", () 
             assertTrue(Number.isFinite(p[0]) && Number.isFinite(p[1]), "non-finite output");
           }
         }
-        const size = Math.max(Math.abs(start[0]), Math.abs(start[1]), Math.abs(end[0]), Math.abs(end[1]), 1);
-        assertVecClose(
-          cubics[cubics.length - 1].end,
-          end,
-          1e-7 * effectiveRadius(start, end, rx, ry, phi) + 1e-9 * size,
-          "last slice end",
+        assertVecClose(cubics[cubics.length - 1].end, end, 0, "last slice end");
+        // And the handle that arrives there is a real handle of a real
+        // arc: within the (corrected) radius of the end point, times the
+        // quarter-turn handle factor 4/3·tan(π/8) ≈ 0.552, plus slack.
+        const last = cubics[cubics.length - 1];
+        const reach = Math.hypot(last.c2[0] - end[0], last.c2[1] - end[1]);
+        assertTrue(
+          reach <= 0.5523 * effectiveRadius(start, end, rx, ry, phi) * (1 + 1e-6),
+          `the last handle is ${reach} from the end point`,
         );
       }),
     );
@@ -354,53 +393,65 @@ describe("svg-arc — arcToCubics from raw endpoint arguments (properties)", () 
   });
 
   // ------------------------------------------------------------------
-  // DEFECT (svg-arc.ts, arcToCubics) — the arc does not end EXACTLY on
-  // the end point it was given.
+  // DEFECT (svg-arc.ts, arcToCubics) — the arc did not end EXACTLY on
+  // the end point it was given. FIXED.
   //
-  // The SVG `A` command draws "to (x, y)". The last slice's `end` is
+  // The SVG `A` command draws "to (x, y)". The last slice's `end` was
   // instead recomputed from the derived centre and angles
   // (`point(theta1 + dTheta)`), and both angles come out of `acos`, which
-  // keeps only HALF its digits near 0 and π. So the recomputed end is
+  // keeps only HALF its digits near 0 and π. So the recomputed end was
   //   · an ulp or two off in the ordinary case, and
   //   · up to ~1.5e-8 × the larger radius off for a start on the major
   //     axis or a half-turn sweep — which is every arc whose radii the
   //     spec scales up (measured: start (0,−8), end (−2,0), rx 0.0157,
-  //     ry 1 misses the end by 1.3e-6).
-  // Invisible on a page. It matters because svg-path.ts
-  //   · advances the pen to the drifted point (`cx = a[0]`), so every
-  //     following RELATIVE command inherits the error, and
+  //     ry 1 missed the end by 1.3e-6).
+  // Invisible on a page. It mattered because svg-path.ts
+  //   · advances the pen to the last slice's end (`cx = a[0]`), so every
+  //     following RELATIVE command inherited the error, and
   //   · decides whether `Z` returns to the subpath start with an exact
   //     `===` on the coordinates.
   // So the standard two-arc circle, `M 0 5 a 5 5 0 1 0 10 0 a 5 5 0 1 0
-  // -10 0 Z`, parses to FIVE anchors — the fifth 1e-15 from the first —
-  // instead of four, and its start anchor is a corner (see svg-path's
+  // -10 0 Z`, parsed to FIVE anchors — the fifth 1e-15 from the first —
+  // instead of four, and its start anchor was a corner (see svg-path's
   // defect block for that end of it).
   //
   // Minimal counterexample: the second arc of that circle,
   //   arcToCubics([10, 5], 5, 5, 0, true, false, [0, 5])
   //   EXPECTED last slice end: [0, 5]
-  //   ACTUAL:                  [0, 4.999999999999999]
+  //   WAS:                     [0, 4.999999999999999]
   //
-  // The fix is to emit `end` itself as the last slice's end point.
+  // THE FIX: the end point is an input, so the last slice ends on `end`
+  // itself (and hangs its handle on it); likewise the first slice hangs
+  // its handle on `start` itself. Only the interior slice boundaries are
+  // computed — those remain good to √ε, which is what the properties
+  // that look at them are stated to.
   // ------------------------------------------------------------------
-  it.fails("DEFECT (minimal counterexample): the arc ends exactly on its end point", () => {
+  it("FIXED DEFECT (minimal counterexample): the arc ends exactly on its end point", () => {
     const cubics = arcToCubics([10, 5], 5, 5, 0, true, false, [0, 5]);
     expect(cubics[cubics.length - 1].end).toEqual([0, 5]);
   });
 
-  it.fails("DEFECT (√ε counterexample): a unit arc starting a hair off the −x axis ends within 1e-9 of its end point", () => {
+  it("FIXED DEFECT (√ε counterexample): a unit arc starting a hair off the −x axis ends on its end point", () => {
     // Found by the centre-form property once it was stated to 1e-9 (seed
     // 20261002): start angle −π + 5.9e-9, a 0.05 rad sweep on the unit
-    // circle. The end point comes back 5.85e-9 away — seven orders above
-    // an ulp.
+    // circle. The end point came back 5.85e-9 away — seven orders above
+    // an ulp. Stated to 1e-9 while it was pinned; exact now.
     const theta1 = -3.1415926477381206;
     const start: Vec2 = [Math.cos(theta1), Math.sin(theta1)];
     const end: Vec2 = [Math.cos(theta1 + 0.05), Math.sin(theta1 + 0.05)];
     const cubics = arcToCubics(start, 1, 1, 0, false, true, end);
-    assertVecClose(cubics[cubics.length - 1].end, end, 1e-9, "last slice end");
+    assertVecClose(cubics[cubics.length - 1].end, end, 0, "last slice end");
   });
 
-  it.fails("DEFECT: property — the last slice ends EXACTLY on the end point", () => {
+  it("FIXED DEFECT: the end handed back is a fresh tuple, not the caller's array", () => {
+    const end: Vec2 = [0, 5];
+    const cubics = arcToCubics([10, 5], 5, 5, 0, true, false, end);
+    const last = cubics[cubics.length - 1].end;
+    expect(last).toEqual(end);
+    expect(last).not.toBe(end);
+  });
+
+  it("FIXED DEFECT: property — the last slice ends EXACTLY on the end point", () => {
     fc.assert(
       fc.property(smallVec2, smallVec2, fc.constantFrom(1, 5, 10, 25), flag, flag, (start, end, r, large, sweep) => {
         fc.pre(start[0] !== end[0] || start[1] !== end[1]);
