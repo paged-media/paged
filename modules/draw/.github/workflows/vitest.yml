@@ -1,20 +1,19 @@
-# CI evidence for the state matrix (plugin.draw stage): run the
-# machine unit tests and upload the junit as an artifact for the private
-# state repo to pull (see the step comment for why the direction is
-# inverted). Vitest's junit output carries no @feat: tags — state applies
-# its ingest/test-map.yaml bridge at convert time. Cadence is central
-# (state ingest/schedules.yaml → scheduler.yml workflow_dispatch); no
-# schedule here.
+# The test gate for this repo, and the CI evidence for the feature
+# registry (plugin.draw stage). It runs every package's vitest — the
+# draw-bundle suite boots the REAL engine wasm, pinned as its own
+# devDependency — then the contract-import lint and the typecheck, and
+# FAILS when any of them is red. The JUnit is uploaded first either way,
+# for the registry to pull (see the step comment for why the direction is
+# inverted); vitest's JUnit carries no @feat: tags, the registry applies
+# its test-map bridge at convert time.
 #
-# Layout note: the link: chain (draw-* → ../../../sdk/packages/*)
-# requires plugin-draw/ and sdk/ as SIBLINGS under the workspace, so
-# both checkouts are nested. The editor checkout is NOT needed —
-# plugin-api re-exports editor types only (erased at runtime), and
-# this job runs tests, not typecheck (wire-compat lives there).
+# Runs on pull requests too. It used to run on push to main only, with a
+# red suite reported as a green job.
 name: vitest
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -53,11 +52,18 @@ jobs:
           node-version: 22
       - name: install (published contract; no sibling checkout needed)
         run: pnpm install --frozen-lockfile --dir plugin-draw
-      - name: vitest (junit per package; red results still publish)
+      # Red results must still upload (the registry wants the failure), so
+      # the run does not abort here. It records the failure instead, and the
+      # gate at the END of the job fails it once the artifact is safe. This
+      # step used to end in `|| true` with no such gate, so a red suite was
+      # a green job — and `publish.yml` shipped from it.
+      - name: vitest (junit per package; red results still upload)
         run: |
+          set -uo pipefail
           pnpm -r --no-bail --dir plugin-draw exec \
-            vitest run --reporter=junit --outputFile=junit.xml || true
-          cat plugin-draw/packages/*/junit.xml > junit-all.xml
+            vitest run --reporter=junit --outputFile=junit.xml \
+            || echo "TS_FAILED=1" >> "$GITHUB_ENV"
+          cat plugin-draw/packages/*/junit.xml > junit-all.xml 2>/dev/null || true
           [ -s junit-all.xml ] # at least one package must have produced results
       # Evidence hand-off, INVERTED (2026-07-25). This step used to call
       # paged-media/state/actions/publish-results@main, but that action lives in the
@@ -77,3 +83,18 @@ jobs:
           path: junit-all.xml
           if-no-files-found: error
           retention-days: 14
+      # The two gates the root `pnpm test` / `pnpm typecheck` scripts carry
+      # and this job used to bypass by calling vitest directly: the
+      # contract-import lint (plugin-api is the ONLY sanctioned contract
+      # import) and the typecheck that holds `wire-compat.ts`.
+      - name: contract-import lint
+        if: ${{ !cancelled() }}
+        run: node scripts/check-contract-imports.mjs
+        working-directory: plugin-draw
+      - name: typecheck
+        if: ${{ !cancelled() }}
+        run: pnpm -r typecheck
+        working-directory: plugin-draw
+      - name: tests failed
+        if: ${{ !cancelled() && env.TS_FAILED == '1' }}
+        run: exit 1

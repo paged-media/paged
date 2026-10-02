@@ -12,9 +12,11 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "build": "tsup src/index.ts --format esm --dts --out-dir dist --clean",
-    "prepublishOnly": "pnpm run build"
+    "prepublishOnly": "pnpm run build",
+    "bench": "vitest bench --run"
   },
   "devDependencies": {
+    "fast-check": "^4.10.2",
     "typescript": "^5.9.3",
     "vitest": "^2.1.9"
   },

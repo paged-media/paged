@@ -8,7 +8,8 @@
     "typecheck": "pnpm -r run typecheck",
     "build": "pnpm -r run typecheck",
     "lint:contract": "node scripts/check-contract-imports.mjs",
-    "test": "node scripts/check-contract-imports.mjs && pnpm -r run test"
+    "test": "node scripts/check-contract-imports.mjs && pnpm -r run test",
+    "bench": "pnpm -r --if-present run bench"
   },
   "devDependencies": {
     "tsup": "^8.5.1",

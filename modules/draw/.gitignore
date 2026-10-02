@@ -7,3 +7,7 @@ dist/
 # plugin-cli size gate all have to work on a fresh checkout with no Rust
 # toolchain installed.
 /target
+
+# Per-package vitest JUnit output (CI artifact, never a tracked file).
+junit.xml
+junit-all.xml
