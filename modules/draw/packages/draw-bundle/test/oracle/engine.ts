@@ -115,6 +115,9 @@ export interface EngineRun {
   apply(mutation: MutationArg): Promise<MutationOutcome>;
   /** Apply one mutation and report the outcome without throwing. */
   attempt(mutation: MutationArg): Promise<MutationOutcome>;
+  /** Tell the run that `steps` undo steps were taken BEHIND its back —
+   *  by a bundle command's own handler — so they are undone too. */
+  took(steps: number): void;
   /** Elements that exist now and did not before the run began — the
    *  inputs that survive plus anything the op created — in tree order. */
   created(): Promise<ElementId[]>;
@@ -193,6 +196,9 @@ export async function onEngine<T>(
       ids,
       apply,
       attempt,
+      took: (n) => {
+        steps += n;
+      },
       created: async () => (await leafIds(h)).filter((id) => !before.has(key(id))),
     });
   } finally {

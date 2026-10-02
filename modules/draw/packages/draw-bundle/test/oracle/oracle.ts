@@ -88,6 +88,9 @@ export interface OracleMeasuredPath extends OraclePath {
   stroked?: boolean;
   strokeWidth?: number;
   stroke?: Rgb;
+  /** `PathItem.evenodd` (recorded from the compound-path probe on):
+   *  false = non-zero winding, where direction decides what is a hole. */
+  evenodd?: boolean;
   /** Index of the compound path this subpath belongs to, when the
    *  result is a compound path; absent for a plain path. */
   compound?: number;

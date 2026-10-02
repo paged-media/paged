@@ -264,6 +264,9 @@ var PagedProbe = (function () {
         out.stroke = [item.strokeColor.red, item.strokeColor.green, item.strokeColor.blue];
       }
     }
+    // The fill RULE travels with the path: `evenodd` false means
+    // non-zero winding, where direction decides what is a hole.
+    out.evenodd = item.evenodd;
     if (compoundIndex !== undefined) out.compound = compoundIndex;
     return out;
   }

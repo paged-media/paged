@@ -33,6 +33,12 @@ Recorded with **Adobe Illustrator 30.1.0** (build 136R, de_DE, macOS
 | `outline-stroke` | 11 | Exactly the stroke's closed form for all nine cap × join pairs, same miter-limit rule. One SIMPLE clockwise outline that does not overlap itself. |
 | `pathfinder-boolean` | 8 | The set operation, exactly on rectangles and within 0.1 pt² on a circle. Subtract is back minus front. Exclude is two separate paths, not a compound path. Every result is COUNTER-clockwise — the opposite of the two probes above. |
 | `pathfinder-region` | 9 | Divide: one piece per face, the overlap in the FRONT fill. Trim: front whole (with the crossing points inserted), back minus front. Merge: Trim, unless the fills are equal. Crop: back clipped to front, in the BACK fill. Outline: open zero-weight strokes cut at the crossings. Minus Back: FRONT minus back. |
+| `compound-path` | 9 | Make Compound Path keeps the fill rule NON-ZERO and rewrites direction by PAINT ORDER: the backmost path clockwise, every other counter-clockwise, whatever the inputs were. So overlaps are knocked out, and a shape nested three levels deep is solid again (31600, where even-odd would give 31200). |
+
+Each fixture's `script_sha256` identifies the exact text (library + probe)
+that produced it. The library has grown since the first recording (stroke,
+paint and fill-rule fields), so older fixtures carry fewer fields; re-record
+a probe to pick them up.
 
 ## Record (or re-record) one probe
 
@@ -82,6 +88,7 @@ header of the spec that pins it.
 | Outline stroke | stroke set on the `PathItem` (`strokeWidth`, `strokeCap`, `strokeJoin`, `strokeMiterLimit`), then `app.executeMenuCommand("OffsetPath v22")` | Recorded. No dialog. The live effect `Adobe Outline Stroke` + `expandStyle` returns the identical path. |
 | Unite / Minus Front / Intersect / Exclude | group the inputs (`groupItems.add` + `move`), `app.executeMenuCommand("Live Pathfinder Add" \| "… Subtract" \| "… Intersect" \| "… Exclude")` on the group, then `expandStyle` | Recorded. No dialog (only Soft Mix and Trap have one). The Pathfinder PANEL's buttons have no script entry point; these are the same operations as Effect › Pathfinder. |
 | Divide / Trim / Merge / Crop / Outline / Minus Back | the same, with `"Live Pathfinder Divide"` … `"Live Pathfinder Minus Back"` | Recorded. No dialog. Inputs carry explicit fills (`fill: [r, g, b]`) because Merge, Divide and Crop answer in paint; every measured path records `filled`, `stroked`, `fill`, `stroke`, `strokeWidth`. |
+| Make Compound Path | all inputs selected, `app.executeMenuCommand("compoundPath")` | Recorded. No dialog. Make leaves the anchors where they were, so these cases set `allowUnchanged` and the probe checks instead that exactly one `CompoundPathItem` exists. Every subpath records `evenodd`. |
 
 The menu versions of Offset Path (Object › Path = `OffsetPath v23`, and
 Effect › Path = `Live Offset Path`) open a dialog that `executeMenuCommand`
