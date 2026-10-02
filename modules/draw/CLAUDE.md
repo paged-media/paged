@@ -373,10 +373,15 @@ and a `$h:` handle in text is stored as written, never resolved
 first mutation has answered with the ids. What changed is that those ids
 come off the reply (`commands/minted.ts`): 0 tree reads, was 2.
 
-THE OTHER FOUR FLOWS ARE STILL TWO BATCHES — `compound-path.ts`
-(release), `symbols.ts`, `image-trace.ts`, `live-paint.ts`. Their "TWO
-batches ⇒ 2 undo steps" notes are still TRUE as shipped; the reason is
-"not yet converted".
+COMPOUND-PATH RELEASE IS ONE BATCH FOR THE WHOLE SELECTION (`release
+BatchForAll`): per element, contour 0 back onto the survivor and every
+other contour inserted, named and painted by name. It was two batches PER
+ELEMENT. Nothing is deleted, so no ordering rule binds; the two-per-
+element lane is the fallback.
+
+THE OTHER THREE FLOWS ARE STILL TWO BATCHES — `symbols.ts`,
+`image-trace.ts`, `live-paint.ts`. Their "TWO batches ⇒ 2 undo steps"
+notes are still TRUE as shipped; the reason is "not yet converted".
 
 **"WHAT DID MY BATCH CREATE" HAS ONE SEAM: `commands/minted.ts`.** A
 batch outcome carries ONE `createdId`, so a flow that inserted several

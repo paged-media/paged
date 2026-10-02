@@ -61,11 +61,17 @@
 //     of two does not apply here. The ONE exception is named below: a
 //     survivor whose own contour is OPEN needs a `closePath` first, and
 //     that is a separate mutation ⇒ 2 undo steps in that case only.
-//   · release = TWO batches ⇒ 2 undo steps. Batch 1 rewrites the
-//     survivor to contour 0 and inserts the other contours; batch 2
-//     paints the inserted pieces to match the source — and `insertPath`
-//     mints the ids batch 2 addresses, which a batch cannot do to itself
-//     (the appearance-bake / blend.ts finding).
+//   · release = ONE batch ⇒ 1 undo step for the WHOLE selection
+//     (measured, engine 0.64.0). Per element: rewrite the survivor to
+//     contour 0, insert every other contour and NAME it (`bindCreated`),
+//     paint the piece like its source through that name. It was TWO
+//     batches PER ELEMENT — 2 undo steps for one compound, 2N for N —
+//     because `insertPath` mints the ids the paint addresses and a batch
+//     could not name one. Nothing is deleted, so none of the batch
+//     ordering rules bind here. The two-batch-per-element lane is kept as
+//     the fallback for an engine that refuses the one batch (one that
+//     predates `bindCreated` does), and what a batch created is read off
+//     the engine's reply (`commands/minted.ts`), not a tree diff.
 //
 // HONEST SCOPE — stated here, asserted in conformance:
 //   · OPEN contours. `framePath` carries `anchors` + `subpathStarts` and
@@ -103,6 +109,7 @@ import type {
   Disposable,
   ElementId,
   Mutation,
+  MutationInput,
   PathAnchorSpec,
 } from "@paged-media/plugin-api";
 import {
@@ -117,7 +124,13 @@ import {
 } from "@paged-media/draw-geometry";
 
 import { closePathMutationFor } from "./join-average";
+import { bindMinted, mintedLeaves, mutateMinting } from "./minted";
 import { supportsPathOps } from "./path-ops";
+import {
+  batchMutationFor,
+  bindCreatedMutationFor,
+  handleElementId,
+} from "./v59-wire";
 
 export const COMPOUND_PATH_COMMAND_CATEGORY = "Path";
 
@@ -189,9 +202,10 @@ export function makeCompoundBatchFor(
   };
 }
 
-/** Batch 1 of "Release compound path": the survivor keeps contour 0,
- *  every other contour becomes a fresh `insertPath` (page-space
- *  anchors, the `insertPath` convention). */
+/** STEPWISE LANE, batch 1 of "Release compound path": the survivor
+ *  keeps contour 0, every other contour becomes a fresh `insertPath`
+ *  (page-space anchors, the `insertPath` convention). The shipped lane
+ *  is {@link releaseBatchForAll}. */
 export function releaseInsertBatchFor(
   kept: ElementId,
   pageId: string,
@@ -227,13 +241,24 @@ export interface CompoundPaint {
   weight: number | null;
 }
 
-/** Batch 2 of "Release compound path": paint the inserted pieces like
- *  the source. Empty ops (nothing to inherit) still ride a batch so the
- *  caller's undo arithmetic stays honest. */
+/** STEPWISE LANE, batch 2 of "Release compound path": paint the
+ *  inserted pieces like the source. Empty ops (nothing to inherit) still
+ *  ride a batch so the caller's undo arithmetic stays honest. `created`
+ *  may be real ids (batch 2) or `$h:` handles (the one-batch lane rides
+ *  the same ops). */
 export function releasePaintBatchFor(
   created: readonly ElementId[],
   paint: CompoundPaint,
 ): Mutation {
+  return { op: "batch", args: { ops: releasePaintOpsFor(created, paint) } };
+}
+
+/** The paint ops behind {@link releasePaintBatchFor} — shared with the
+ *  one-batch lane so the two cannot drift. */
+function releasePaintOpsFor(
+  created: readonly ElementId[],
+  paint: CompoundPaint,
+): Mutation[] {
   const ops: Mutation[] = [];
   for (const elementId of created) {
     ops.push({
@@ -263,7 +288,51 @@ export function releasePaintBatchFor(
       });
     }
   }
-  return { op: "batch", args: { ops } };
+  return ops;
+}
+
+/** One selected compound, resolved for a release: the survivor's new
+ *  contour-0 table (in its inner space), the other contours (page
+ *  space) and the paint every piece inherits. */
+export interface ReleasePlan {
+  id: ElementId;
+  pageId: string;
+  kept: AnchorTable;
+  rest: readonly AnchorTable[];
+  paint: CompoundPaint;
+}
+
+/** The batch-local handle of plan `element`'s released piece `piece`.
+ *  Deterministic, so the conformance spec asserts the exact wire. */
+export const releaseHandle = (element: number, piece: number): string =>
+  `rc${element}_${piece}`;
+
+/**
+ * THE ONE BATCH of a release — every selected compound at once: per
+ * element the stepwise lane's batch 1 (contour 0 back onto the survivor,
+ * an `insertPath` per other contour), each insert NAMED, then batch 2's
+ * paint ops addressing the pieces by those names. ONE batch ⇒ ONE undo
+ * step however many compounds are selected. Nothing is deleted, so the
+ * delete-then-insert rule does not bind.
+ */
+export function releaseBatchForAll(plans: readonly ReleasePlan[]): MutationInput {
+  const ops: MutationInput[] = [];
+  plans.forEach((plan, e) => {
+    const [framePath, ...inserts] = (
+      releaseInsertBatchFor(plan.id, plan.pageId, plan.kept, plan.rest) as Extract<
+        Mutation,
+        { op: "batch" }
+      >
+    ).args.ops;
+    ops.push(framePath!);
+    const pieces: ElementId[] = [];
+    inserts.forEach((insert, k) => {
+      ops.push(insert, bindCreatedMutationFor(releaseHandle(e, k)));
+      pieces.push(handleElementId(releaseHandle(e, k)));
+    });
+    ops.push(...releasePaintOpsFor(pieces, plan.paint));
+  });
+  return batchMutationFor(ops);
 }
 
 // ------------------------------------------------------ geometry reads
@@ -399,32 +468,6 @@ export async function compoundPaintOf(
 export const contourCountOf = (table: AnchorTable): number =>
   contourRanges(table.anchors.length, table.subpathStarts).length;
 
-/** Every leaf element id in the scene tree — the honest enumeration of
- *  what a multi-insert batch created (a batch outcome reports ONE
- *  `createdId`; the blend.ts / appearance-bake precedent). */
-async function leafElements(host: BundleHost): Promise<ElementId[]> {
-  const out: ElementId[] = [];
-  const walk = (nodes: readonly { id?: ElementId | null; children?: unknown }[]) => {
-    for (const node of nodes) {
-      const children = (node.children ?? []) as {
-        id?: ElementId | null;
-        children?: unknown;
-      }[];
-      if (children.length > 0) walk(children);
-      else if (node.id) out.push(node.id);
-    }
-  };
-  walk(await host.document.tree().catch(() => []));
-  return out;
-}
-
-const idSet = (list: readonly ElementId[]): Set<string> =>
-  new Set(
-    list
-      .map((e) => (typeof e.id === "string" ? e.id : null))
-      .filter((s): s is string => s !== null),
-  );
-
 // ---------------------------------------------------------- appliers
 
 /**
@@ -551,9 +594,33 @@ export async function applyReleaseCompoundPath(
     host.log.debug(`${label}: no path-bearing selection — no-op`);
     return [];
   }
-  const created: ElementId[] = [];
+  const plans: ReleasePlan[] = [];
   for (const id of selection) {
-    created.push(...(await releaseOne(host, id)));
+    const plan = await releasePlanFor(host, id);
+    if (plan) plans.push(plan);
+  }
+  if (plans.length === 0) return [];
+
+  const batch = releaseBatchForAll(plans);
+  const built = await mutateMinting(host, batch);
+  let created: ElementId[];
+  if (built.outcome.applied) {
+    const bound = bindMinted(built, batch);
+    created = bound
+      ? plans.flatMap((plan, e) =>
+          plan.rest.map((_, k) => bound.byHandle.get(releaseHandle(e, k))!),
+        )
+      : // The engine's account does not match the batch. The batch made
+        // nothing but these pieces, so what it minted IS them.
+        mintedLeaves(built);
+  } else {
+    host.log.debug(
+      `${label}: the one-batch release was refused ` +
+        `(${JSON.stringify(built.outcome.error)}) — falling back to two ` +
+        "batches per element",
+    );
+    created = [];
+    for (const plan of plans) created.push(...(await releaseStepwise(host, plan)));
   }
   if (created.length > 0) {
     await host.selection.set([...selection, ...created]);
@@ -561,45 +628,63 @@ export async function applyReleaseCompoundPath(
   return created;
 }
 
-async function releaseOne(
+/** Everything a release of `id` needs, read up front. Null (logged) when
+ *  `id` is not a releasable compound. */
+async function releasePlanFor(
   host: BundleHost,
   id: ElementId,
-): Promise<ElementId[]> {
+): Promise<ReleasePlan | null> {
   const label = RELEASE_COMPOUND_PATH_COMMAND_ID;
   const source = await compoundSourceOf(host, id);
   if (!source) {
     host.log.debug(`${label}: ${id.kind} exposes no readable geometry — no-op`);
-    return [];
+    return null;
   }
   const parts = splitCompound(source.table);
   if (parts.length < 2) {
     host.log.debug(
       `${label}: ${String(id.id)} is not a compound path (1 contour) — no-op`,
     );
-    return [];
+    return null;
   }
-  const keptInner = tableInInnerSpace(parts[0], source.itemTransform);
-  if (!keptInner) {
+  const kept = tableInInnerSpace(parts[0], source.itemTransform);
+  if (!kept) {
     host.log.warn(`${label}: ${String(id.id)}'s ItemTransform is singular — no-op`);
-    return [];
+    return null;
   }
-  const paint = await compoundPaintOf(host, id);
-  const before = idSet(await leafElements(host));
-  const split = await host.document.mutate(
-    releaseInsertBatchFor(id, source.pageId, keptInner, parts.slice(1)),
+  return {
+    id,
+    pageId: source.pageId,
+    kept,
+    rest: parts.slice(1),
+    paint: await compoundPaintOf(host, id),
+  };
+}
+
+/** THE STEPWISE LANE — one element, two batches: split, then paint. The
+ *  release as it was before `bindCreated` reached the contract, kept as
+ *  the fallback. What the split minted comes through the same seam as
+ *  everywhere else. */
+async function releaseStepwise(
+  host: BundleHost,
+  plan: ReleasePlan,
+): Promise<ElementId[]> {
+  const label = RELEASE_COMPOUND_PATH_COMMAND_ID;
+  const { id, paint, rest } = plan;
+  const split = await mutateMinting(
+    host,
+    releaseInsertBatchFor(id, plan.pageId, plan.kept, rest),
   );
-  if (!split.applied) {
+  if (!split.outcome.applied) {
     host.log.warn(
-      `${label} rejected by engine: ${JSON.stringify(split.error)}`,
+      `${label} rejected by engine: ${JSON.stringify(split.outcome.error)}`,
     );
     return [];
   }
-  const minted = (await leafElements(host)).filter(
-    (e) => typeof e.id === "string" && !before.has(e.id),
-  );
-  if (minted.length !== parts.length - 1) {
+  const minted = mintedLeaves(split);
+  if (minted.length !== rest.length) {
     host.log.warn(
-      `${label}: expected ${parts.length - 1} released pieces, found ` +
+      `${label}: expected ${rest.length} released pieces, found ` +
         `${minted.length} — leaving them unpainted`,
     );
     return minted;

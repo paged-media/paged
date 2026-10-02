@@ -846,7 +846,7 @@ describe("perf budgets — commands over a busy document", () => {
 
     it("compound path, release", async () => {
       const pair = [w.plain[0]!, w.plain[1]!];
-      const { work, undoSteps, result } = await countedWrite(
+      const { work, undoSteps, result, added, selected, restored } = await countedWrite(
         w,
         "compound release",
         [pair[0]!],
@@ -857,14 +857,17 @@ describe("perf budgets — commands over a busy document", () => {
         },
       );
       expect(result).toHaveLength(1);
-      // TARGET 1 batch, 1 undo step.
-      expect(work.mutations).toEqual([
-        { op: "batch", ops: 2 },
-        { op: "batch", ops: 3 },
-      ]);
-      expect(undoSteps).toBe(2);
-      // TARGET 0.
-      expect(work.count("document.tree")).toBe(2);
+      // framePath back to contour 0, the piece inserted and named, its
+      // fill, stroke and weight by name. As found: TWO batches (2, then
+      // 3) and 2 undo steps — two per selected compound.
+      expect(work.mutations).toEqual([{ op: "batch", ops: 6 }]);
+      expect(undoSteps).toBe(1);
+      // One new piece, selected beside the survivor; one undo restores.
+      expect(added).toEqual(["polygon"]);
+      expect(selected).toEqual([pair[0]!, result[0]!]);
+      expect(restored).toBe(true);
+      // As found: 2, the before/after diff.
+      expect(work.count("document.tree")).toBe(0);
     });
   });
 });
