@@ -207,9 +207,11 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "command",
         "command",
         "command",
-        // PATH OPTIONS — the seven "…" commands (Offset / Simplify /
-        // Outline stroke / Arc / Spiral / Rect grid / Polar grid): each
-        // raises the panel at its section and mutates nothing.
+        // PATH OPTIONS — the eight "…" commands (Offset / Simplify /
+        // Outline stroke / Arc / Spiral / Rect grid / Polar grid / Select
+        // same stroke weight within): each raises the panel at its
+        // section and mutates nothing.
+        "command",
         "command",
         "command",
         "command",

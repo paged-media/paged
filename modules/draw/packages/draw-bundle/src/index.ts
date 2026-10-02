@@ -894,6 +894,10 @@ export {
   valueForCriterion,
   leafIdsOf,
   selectSameMatches,
+  applySelectSameStrokeWeight,
+  strokeWeightToleranceOf,
+  STROKE_WEIGHT_EPSILON,
+  MAX_STROKE_WEIGHT_TOLERANCE,
   contributeSelectSameCommands,
   type SelectSameCriterion,
 } from "./commands/select-same";
@@ -1005,6 +1009,7 @@ export {
   OPEN_PANEL_FEATURE,
   FROM_ELEMENT,
   OFFSET_JOIN_NOTE,
+  SELECTION_SECTIONS,
   sanitizePathOptions,
   lastUsedPathOptions,
   lastUsedPayload,
@@ -1024,11 +1029,13 @@ export {
   type OffsetOptions,
   type SimplifyOptions,
   type OutlineStrokeOptions,
+  type SelectSameWeightOptions,
 } from "./commands/path-options";
 export {
   makePathOptionsPanel,
   ownStrokeLabel,
   PATH_OPTIONS_PANEL_NOTE,
+  SELECT_SAME_TOLERANCE_NOTE,
 } from "./panels/path-options-panel";
 // Illustrator Phase 3 (§16.2) — BLENDS v1: the three SPACING MODES
 // (Smooth Color derives its count from the colour distance, Specified

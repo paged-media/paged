@@ -159,6 +159,13 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   ["Edit/Select same/Fill", "selectSameFill", "select-same"],
   ["Edit/Select same/Stroke", "selectSameStroke", "select-same"],
   ["Edit/Select same/Stroke weight", "selectSameStrokeWeight", "select-same"],
+  //    The tolerance row raises the Path Options panel; the plain row
+  //    above stays an exact match (commands/select-same.ts).
+  [
+    "Edit/Select same/Stroke weight within…",
+    "selectSameStrokeWeightOptions",
+    "select-same",
+  ],
 
   // ── Trace ── (STILL an ellipsis over fixed settings: Image Trace has
   //    no section in the Path Options panel yet, so this is the one row

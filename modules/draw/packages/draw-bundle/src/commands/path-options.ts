@@ -86,6 +86,10 @@ import {
   type StrokeCapToken,
   type StrokeJoinToken,
 } from "./path-ops";
+import {
+  applySelectSameStrokeWeight,
+  MAX_STROKE_WEIGHT_TOLERANCE,
+} from "./select-same";
 
 export const PATH_OPTIONS_PANEL_ID = "media.paged.draw.panel.pathOptions";
 
@@ -100,6 +104,7 @@ export const PATH_OPTION_SECTIONS = [
   "spiral",
   "rectGrid",
   "polarGrid",
+  "selectSameWeight",
 ] as const;
 
 export type PathOptionSection = (typeof PATH_OPTION_SECTIONS)[number];
@@ -112,7 +117,25 @@ export const PATH_OPTION_SECTION_TITLES: Record<PathOptionSection, string> = {
   spiral: "Insert spiral",
   rectGrid: "Insert rectangular grid",
   polarGrid: "Insert polar grid",
+  selectSameWeight: "Select same stroke weight",
 };
+
+/** The sections whose Apply acts on the SELECTION (the inserts need
+ *  none). */
+export const SELECTION_SECTIONS: ReadonlySet<PathOptionSection> = new Set([
+  "offset",
+  "simplify",
+  "outlineStroke",
+  "selectSameWeight",
+]);
+
+/** Select same stroke weight — the one SELECTION verb here. Its
+ *  tolerance is a stroke weight in pt (a colour cannot take one; see
+ *  `commands/select-same.ts`). */
+export interface SelectSameWeightOptions {
+  /** pt, inclusive — 0 is the exact match the plain command makes. */
+  tolerance: number;
+}
 
 export const STROKE_JOINS: readonly StrokeJoinToken[] = ["miter", "round", "bevel"];
 export const STROKE_CAPS: readonly StrokeCapToken[] = ["butt", "round", "square"];
@@ -170,6 +193,7 @@ export interface PathOptions {
   spiral: SpiralParams;
   rectGrid: RectGridParams;
   polarGrid: PolarGridParams;
+  selectSameWeight: SelectSameWeightOptions;
 }
 
 /** What every section holds before anything is typed — each value the
@@ -193,6 +217,7 @@ export const PATH_OPTIONS_DEFAULTS: PathOptions = {
   spiral: SPIRAL_PARAM_DEFAULTS,
   rectGrid: RECT_GRID_PARAM_DEFAULTS,
   polarGrid: POLAR_GRID_PARAM_DEFAULTS,
+  selectSameWeight: { tolerance: 0.5 },
 };
 
 // --------------------------------------------------------- sanitising
@@ -249,6 +274,15 @@ export function sanitizePathOptions(raw: unknown): PathOptions {
     spiral: spiralParamsFrom(loose(r?.spiral)),
     rectGrid: rectGridParamsFrom(loose(r?.rectGrid)),
     polarGrid: polarGridParamsFrom(loose(r?.polarGrid)),
+    selectSameWeight: {
+      tolerance: Math.min(
+        MAX_STROKE_WEIGHT_TOLERANCE,
+        Math.max(
+          0,
+          num(loose(r?.selectSameWeight)?.tolerance, d.selectSameWeight.tolerance),
+        ),
+      ),
+    },
   };
 }
 
@@ -326,7 +360,7 @@ export function outlineStrokePayloadOf(
  *  the section has been applied from the panel. */
 export function lastUsedPayload(
   host: BundleHost,
-  section: Exclude<PathOptionSection, "outlineStroke">,
+  section: Exclude<PathOptionSection, "outlineStroke" | "selectSameWeight">,
 ): Record<string, unknown> | undefined {
   if (!hasLastUsed(host, section)) return undefined;
   const all = lastUsedPathOptions(host);
@@ -381,6 +415,9 @@ export async function applyPathOptions<S extends PathOptionSection>(
     case "polarGrid":
       await applyInsertPolarGrid(host, { ...all.polarGrid });
       return;
+    case "selectSameWeight":
+      await applySelectSameStrokeWeight(host, all.selectSameWeight.tolerance);
+      return;
   }
 }
 
@@ -412,6 +449,14 @@ async function applyLastUsed(
       return;
     case "polarGrid":
       await applyInsertPolarGrid(host, lastUsedPayload(host, "polarGrid"));
+      return;
+    case "selectSameWeight":
+      // The "within…" row was chosen explicitly, so it may use the
+      // remembered tolerance (the plain "Stroke weight" row never does).
+      await applySelectSameStrokeWeight(
+        host,
+        lastUsedPathOptions(host).selectSameWeight.tolerance,
+      );
       return;
   }
 }
@@ -479,6 +524,7 @@ export const PATH_OPTIONS_COMMANDS: Record<PathOptionSection, string> = {
   spiral: `${C}.insertSpiralOptions`,
   rectGrid: `${C}.insertRectGridOptions`,
   polarGrid: `${C}.insertPolarGridOptions`,
+  selectSameWeight: `${C}.selectSameStrokeWeightOptions`,
 };
 
 /** The contributed command ids, in registration order. */
@@ -501,7 +547,7 @@ export async function openPathOptions(
   await applyLastUsed(host, section);
 }
 
-/** Register the seven "…" commands. */
+/** Register the "…" commands, one per section. */
 export function contributePathOptionsCommands(host: BundleHost): Disposable {
   const disposers = PATH_OPTION_SECTIONS.map((section) =>
     host.contribute.command({

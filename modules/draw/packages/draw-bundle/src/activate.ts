@@ -391,7 +391,7 @@ export function activate(host: BundleHost): BundleHandle {
     offset: () => lastUsedPayload(host, "offset"),
     simplify: () => lastUsedPayload(host, "simplify"),
   });
-  // The seven "…" commands: each RAISES the Path Options panel at its
+  // The "…" commands (one per section): each RAISES the Path Options panel at its
   // section (and mutates nothing) — what the menu rows point at.
   const pathOptionsCommandsSub = contributePathOptionsCommands(host);
   // Phase 4c — Join/Average over open-path endpoints (pathPointSet

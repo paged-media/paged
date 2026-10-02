@@ -84,6 +84,7 @@
       "media.paged.draw.command.insertSpiralOptions",
       "media.paged.draw.command.insertRectGridOptions",
       "media.paged.draw.command.insertPolarGridOptions",
+      "media.paged.draw.command.selectSameStrokeWeightOptions",
       "media.paged.draw.command.joinEndpoints",
       "media.paged.draw.command.closePath",
       "media.paged.draw.command.averageEndpoints",

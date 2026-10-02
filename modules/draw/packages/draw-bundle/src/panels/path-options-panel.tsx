@@ -18,8 +18,10 @@
 
 // The PATH OPTIONS panel — the dialog the menu's "…" promised.
 //
-// Seven sections, one per operation that takes parameters: Offset path,
-// Simplify, Outline stroke, and the four Insert shapes. Each is a form
+// One section per operation that takes parameters: Offset path,
+// Simplify, Outline stroke, the four Insert shapes, and Select same
+// stroke weight (its tolerance — a selection verb, but "…" means a
+// question whatever the verb, and this is where questions live). Each is a form
 // over its command's real payload and an Apply button that runs the
 // EXISTING command with what was typed (`commands/path-options.ts` owns
 // the values, their defaults and where "last used" is kept; this file
@@ -47,6 +49,7 @@ import type { BundleHost, PanelProps } from "@paged-media/plugin-api";
 import * as React from "react";
 
 import { INSERT_SHAPE_LIMITS } from "../commands/insert-shapes";
+import { MAX_STROKE_WEIGHT_TOLERANCE } from "../commands/select-same";
 import {
   outlineParamsOf,
   supportsPathOps,
@@ -62,6 +65,7 @@ import {
   PATH_OPTION_SECTIONS,
   PATH_OPTION_SECTION_TITLES,
   PATH_OPTIONS_PANEL_ID,
+  SELECTION_SECTIONS,
   STROKE_CAPS,
   STROKE_JOINS,
   type PathOptionSection,
@@ -79,16 +83,18 @@ export const PATH_OPTIONS_PANEL_NOTE =
   "— run bare it always outlines the element's own stroke. The undo " +
   "arithmetic: Offset, Simplify and Outline stroke are one undo step per " +
   "selected path; each Insert is ONE undo step however many paths it " +
-  "adds. Image Trace has no options here yet — its menu row still runs " +
+  "adds; Select same changes only the selection. Image Trace has no " +
+  "options here yet — its menu row still runs " +
   "fixed settings.";
 
-/** The sections that act on the SELECTION (the rest insert new paths
- *  and need none). */
-const NEEDS_SELECTION: ReadonlySet<PathOptionSection> = new Set([
-  "offset",
-  "simplify",
-  "outlineStroke",
-]);
+/** What the Select same stroke weight section says, verbatim (pinned by
+ *  a test) — the colour half of the request, and why it is not here. */
+export const SELECT_SAME_TOLERANCE_NOTE =
+  "Matches every object whose stroke weight is within this many points " +
+  "of the first selected object's, the reference included; 0 is an exact " +
+  "match. Colours take no tolerance: an object's fill and stroke are read " +
+  "as swatch references, and no door gives this plugin a swatch's colour " +
+  "values to compare.";
 
 const rowStyle: React.CSSProperties = {
   display: "flex",
@@ -187,6 +193,9 @@ export function makePathOptionsPanel(host: BundleHost): {
     );
     const [open, setOpenState] = React.useState<PathOptionSection>(session.open);
     const [targets, setTargets] = React.useState(0);
+    /** Everything selected, path or not — Select same's reference may be
+     *  any kind that carries a stroke weight. */
+    const [selected, setSelected] = React.useState(0);
     const [own, setOwn] = React.useState<OutlineStrokeParams | null>(null);
 
     const setOpen = React.useCallback((section: PathOptionSection) => {
@@ -238,6 +247,7 @@ export function makePathOptionsPanel(host: BundleHost): {
         const stroke = first ? await outlineParamsOf(host, first) : null;
         if (!live()) return;
         setTargets(paths.length);
+        setSelected(selection.length);
         setOwn(stroke);
         // Follow the STORED last-used values — only the sections that
         // changed since this panel last took them, so neither a reload
@@ -460,6 +470,19 @@ export function makePathOptionsPanel(host: BundleHost): {
               })}
             </>
           );
+        case "selectSameWeight":
+          return (
+            <>
+              {numberRow("selectSameWeight", "tolerance", "Tolerance (pt)", {
+                step: 0.25,
+                min: 0,
+                max: MAX_STROKE_WEIGHT_TOLERANCE,
+              })}
+              <div style={mutedStyle} data-draw-pathopts-select-note>
+                {SELECT_SAME_TOLERANCE_NOTE}
+              </div>
+            </>
+          );
       }
     };
 
@@ -471,7 +494,10 @@ export function makePathOptionsPanel(host: BundleHost): {
       >
         {PATH_OPTION_SECTIONS.map((section) => {
           const isOpen = section === open;
-          const needsSelection = NEEDS_SELECTION.has(section);
+          const needsSelection = SELECTION_SECTIONS.has(section);
+          const selects = section === "selectSameWeight";
+          // A path operation needs a PATH; Select same needs a reference.
+          const have = selects ? selected : targets;
           return (
             <div
               key={section}
@@ -493,23 +519,27 @@ export function makePathOptionsPanel(host: BundleHost): {
               {isOpen && (
                 <div style={{ paddingBottom: 8 }}>
                   {fields(section)}
-                  {needsSelection && targets === 0 && (
+                  {needsSelection && have === 0 && (
                     <div style={mutedStyle} data-draw-pathopts-needs-selection>
-                      Select a path first.
+                      {selects
+                        ? "Select the reference object first."
+                        : "Select a path first."}
                     </div>
                   )}
                   <button
                     type="button"
                     style={applyStyle}
                     data-draw-pathopts-apply={section}
-                    disabled={needsSelection && targets === 0}
+                    disabled={needsSelection && have === 0}
                     onClick={() =>
                       void run(applyPathOptions(host, section, draft[section]))
                     }
                   >
-                    {needsSelection
-                      ? `Apply to ${targets} path${targets === 1 ? "" : "s"}`
-                      : "Insert"}
+                    {selects
+                      ? "Select matching"
+                      : needsSelection
+                        ? `Apply to ${targets} path${targets === 1 ? "" : "s"}`
+                        : "Insert"}
                   </button>
                 </div>
               )}

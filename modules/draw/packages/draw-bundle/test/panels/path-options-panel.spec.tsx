@@ -63,6 +63,7 @@ import {
   PATH_OPTIONS_PANEL_NOTE,
   PATH_OPTION_SECTIONS,
   PATH_OPTION_SECTION_TITLES,
+  SELECT_SAME_TOLERANCE_NOTE,
 } from "../../src";
 import { MENU_COMMAND_PREFIX, MENU_ENTRIES } from "../../src/menu";
 import { pathItem } from "../fixtures/build-idml";
@@ -563,6 +564,60 @@ describe("Path options panel — rendered against the engine", () => {
       expect(await leafIds(h)).toHaveLength(PRISTINE);
     });
 
+    it("SELECT SAME STROKE WEIGHT: the tolerance typed decides what is selected; nothing is mutated", async () => {
+      // The seeds' weights: sq 1 pt (as authored), wob 1.4 pt, ln 2 pt.
+      const weigh = async (id: ElementId, pt: number) => {
+        const out = await h.host.document.mutate({
+          op: "setElementProperty",
+          args: {
+            elementId: id,
+            path: "frameStrokeWeight",
+            value: { type: "length", value: pt },
+          },
+        });
+        if (!out.applied) throw new Error("stroke weight refused");
+      };
+      await weigh(SQ, 1);
+      await weigh(WOB, 1.4);
+      await weigh(LN, 2);
+      const panel = await mountPanel(h, makePathOptionsPanel);
+      await panel.click(header("selectSameWeight"));
+      expect(panel.get("[data-draw-pathopts-select-note]").textContent).toBe(
+        SELECT_SAME_TOLERANCE_NOTE,
+      );
+      // No reference yet.
+      expect(panel.disabled(apply("selectSameWeight"))).toBe(true);
+      await drive(() => h.host.selection.set([LN]), panel.work);
+      expect(panel.get(apply("selectSameWeight")).textContent).toBe("Select matching");
+      const ids = () => h.host.selection.get().map((e) => e.id).sort();
+
+      panel.change(field("selectSameWeight.tolerance"), "0.6");
+      panel.reset();
+      await panel.click(apply("selectSameWeight"));
+      expect(ids()).toEqual(["ln", "wob"]);
+      expect(panel.work.mutations).toEqual([]);
+
+      await drive(() => h.host.selection.set([LN]), panel.work);
+      panel.change(field("selectSameWeight.tolerance"), "0");
+      await panel.click(apply("selectSameWeight"));
+      expect(ids()).toEqual(["ln"]);
+
+      // The PLAIN command ignores the remembered tolerance.
+      panel.change(field("selectSameWeight.tolerance"), "5");
+      await panel.click(apply("selectSameWeight"));
+      expect(lastUsedPathOptions(h.host).selectSameWeight.tolerance).toBe(5);
+      await drive(() => h.host.selection.set([LN]), panel.work);
+      await drive(
+        () =>
+          commandFor(h, "media.paged.draw.command.selectSameStrokeWeight").handler(
+            undefined,
+          ),
+        panel.work,
+      );
+      expect(ids()).toEqual(["ln"]);
+      for (let i = 0; i < 3; i++) await h.host.document.undo();
+    });
+
     it("INSERT SPIRAL and POLAR GRID: the counts typed are the anchors and paths inserted", async () => {
       const panel = await mountPanel(h, makePathOptionsPanel);
       const before = await leafIds(h);
@@ -770,6 +825,7 @@ describe("Path options panel — rendered against the engine", () => {
         "Object/Insert spiral…",
         "Object/Insert rectangular grid…",
         "Object/Insert polar grid…",
+        "Edit/Select same/Stroke weight within…",
         "Draw/Image trace…",
       ]);
       expect(

@@ -44,6 +44,29 @@
 // "same fill" followed by "same stroke" on an unchanged document reads
 // nothing the second time. What is kept is the three values per leaf,
 // not the property tables they were read from.
+//
+// TOLERANCE — for STROKE WEIGHT ONLY, and why only there. A weight is a
+// number (`{ type: "length", value }`), so "within 0.5 pt" means
+// something: the command's payload `{ tolerance }` (pt, inclusive) widens
+// the match to every leaf whose weight is within that distance of the
+// reference's; absent or 0 it is the exact match it always was (1e-3,
+// for round-tripped floats). The Path Options panel's "Select same
+// stroke weight" section is where the number is typed.
+//
+// A COLOUR CANNOT TAKE ONE HERE, and this is a contract gap, not a
+// choice. What `elementProperties` returns for `frameFillColor` /
+// `frameStrokeColor` is `{ type: "colorRef", value: "Color/u12" }` — a
+// swatch IDENTITY — and there is no door from a bundle to that swatch's
+// numbers: `document.collection("swatches")` answers `SwatchSummary`
+// (`selfId`, `name`, `kind`, `totalAreaCoveragePct` — no channels), and
+// the one wire message that does carry them (`requestColorPreview
+// { swatchId }` → `colorPreviewReply { result: ColorPreview { cmyk,
+// rgbHex } }`) has no `DocumentSurface` facade; it is reachable only
+// through the raw `host.editor.client` escape hatch, which this bundle
+// does not take for a feature. Two DIFFERENT swatches holding the same
+// colour are therefore not "the same fill" here, exactly as before. A
+// tolerance passed to the fill / stroke commands is ignored, and the log
+// says why.
 
 import type {
   BundleHost,
@@ -127,12 +150,39 @@ function criterionValue(
   return null;
 }
 
-/** Equality with a small tolerance for stroke-weight (pt) reads so a
- *  round-tripped 1.0 vs 0.9999 doesn't miss. Colors compare exactly. */
-function sameValue(a: string | number | null, b: string | number | null): boolean {
+/** The exact-match slack for a stroke weight (pt): a round-tripped 1.0
+ *  vs 0.9999 must not miss. What "no tolerance" means. */
+export const STROKE_WEIGHT_EPSILON = 1e-3;
+
+/** The largest stroke-weight tolerance a payload may ask for (pt). A
+ *  typo of 1e6 would select every stroked leaf — clamped, not obeyed. */
+export const MAX_STROKE_WEIGHT_TOLERANCE = 1000;
+
+/** A payload's tolerance as a usable number: finite, ≥ 0, clamped; 0
+ *  for anything else. Exported for the spec and the panel. */
+export function strokeWeightToleranceOf(payload: unknown): number {
+  const t =
+    payload !== null && typeof payload === "object"
+      ? (payload as { tolerance?: unknown }).tolerance
+      : undefined;
+  if (typeof t !== "number" || !Number.isFinite(t) || t <= 0) return 0;
+  return Math.min(t, MAX_STROKE_WEIGHT_TOLERANCE);
+}
+
+/** Equality for a criterion's value. Numbers (stroke weight, pt) match
+ *  within `tolerance` INCLUSIVE when one is given, else within the
+ *  round-trip epsilon; colours (swatch refs) compare by identity — see
+ *  the header for why a colour cannot take a tolerance. */
+function sameValue(
+  a: string | number | null,
+  b: string | number | null,
+  tolerance = 0,
+): boolean {
   if (a === null || b === null) return false;
   if (typeof a === "number" && typeof b === "number") {
-    return Math.abs(a - b) < 1e-3;
+    return tolerance > 0
+      ? Math.abs(a - b) <= tolerance + 1e-9
+      : Math.abs(a - b) < STROKE_WEIGHT_EPSILON;
   }
   return a === b;
 }
@@ -195,14 +245,17 @@ function paintFacts(
 }
 
 /** Compute the matching set (the pure core, exported for the conformance
- *  spec): every leaf whose criterion value equals the reference's. The
- *  reference is included. Returns `[]` when the reference value is null
- *  (nothing to match on). */
+ *  spec): every leaf whose criterion value equals the reference's — for
+ *  `strokeWeight`, within `tolerance` pt when one is given (ignored for
+ *  the colour criteria). The reference is included. Returns `[]` when the
+ *  reference value is null (nothing to match on). */
 export async function selectSameMatches(
   host: BundleHost,
   reference: ElementId,
   c: SelectSameCriterion,
+  tolerance = 0,
 ): Promise<ElementId[]> {
+  const slack = c === "strokeWeight" ? tolerance : 0;
   const index = linkIndex(host);
   let leaves = await index.peek<LeafFacts>(PAINT_FACTS_KEY);
   let refValue: string | number | null;
@@ -227,7 +280,7 @@ export async function selectSameMatches(
   }
   if (refValue === null || !leaves) return [];
   return leaves
-    .filter((leaf) => sameValue(leaf.facts[c], refValue))
+    .filter((leaf) => sameValue(leaf.facts[c], refValue, slack))
     .map((leaf) => leaf.id);
 }
 
@@ -235,21 +288,47 @@ async function applySelectSame(
   host: BundleHost,
   commandId: string,
   c: SelectSameCriterion,
-): Promise<void> {
+  payload?: unknown,
+): Promise<ElementId[]> {
+  const tolerance = strokeWeightToleranceOf(payload);
+  if (tolerance > 0 && c !== "strokeWeight") {
+    host.log.debug(
+      `${commandId}: a tolerance applies to stroke WEIGHT only — a colour is ` +
+        "a swatch reference here, and no bundle door reads a swatch's values " +
+        "(see commands/select-same.ts) — matching exactly",
+    );
+  }
   const selection = host.selection.get();
   if (selection.length === 0) {
     host.log.debug(`${commandId}: no reference selected — no-op`);
-    return;
+    return [];
   }
   const reference = selection[0];
-  const matches = await selectSameMatches(host, reference, c);
+  const matches = await selectSameMatches(host, reference, c, tolerance);
   if (matches.length === 0) {
     host.log.debug(
       `${commandId}: reference exposes no ${c} (or no matches) — no-op`,
     );
-    return;
+    return [];
   }
   await host.selection.set(matches);
+  return matches;
+}
+
+/** Select every leaf whose stroke weight is within `tolerance` pt of the
+ *  first selected element's — what the Path Options panel's "Select same
+ *  stroke weight" section runs. Answers the new selection (empty = a
+ *  no-op, logged). */
+export function applySelectSameStrokeWeight(
+  host: BundleHost,
+  tolerance: number,
+): Promise<ElementId[]> {
+  return applySelectSame(
+    host,
+    SELECT_SAME_STROKE_WEIGHT_COMMAND_ID,
+    "strokeWeight",
+    { tolerance },
+  );
 }
 
 /** Register the three Select-same commands (same fill / stroke / stroke
@@ -260,25 +339,40 @@ export function contributeSelectSameCommands(host: BundleHost): Disposable {
       id: SELECT_SAME_FILL_COMMAND_ID,
       title: "Select same: Fill",
       category: SELECT_SAME_COMMAND_CATEGORY,
-      handler: () => applySelectSame(host, SELECT_SAME_FILL_COMMAND_ID, "fill"),
+      handler: async (_paged, payload) => {
+        await applySelectSame(host, SELECT_SAME_FILL_COMMAND_ID, "fill", payload);
+      },
     }),
     host.contribute.command({
       id: SELECT_SAME_STROKE_COMMAND_ID,
       title: "Select same: Stroke",
       category: SELECT_SAME_COMMAND_CATEGORY,
-      handler: () =>
-        applySelectSame(host, SELECT_SAME_STROKE_COMMAND_ID, "stroke"),
+      handler: async (_paged, payload) => {
+        await applySelectSame(
+          host,
+          SELECT_SAME_STROKE_COMMAND_ID,
+          "stroke",
+          payload,
+        );
+      },
     }),
     host.contribute.command({
       id: SELECT_SAME_STROKE_WEIGHT_COMMAND_ID,
+      // Run bare it is the EXACT match it always was; a payload
+      // `{ tolerance }` (pt) widens it. A remembered tolerance is NOT
+      // applied here — "same" from the menu must not quietly mean
+      // "within whatever was typed last week". The "within…" row is the
+      // Path Options panel's.
       title: "Select same: Stroke weight",
       category: SELECT_SAME_COMMAND_CATEGORY,
-      handler: () =>
-        applySelectSame(
+      handler: async (_paged, payload) => {
+        await applySelectSame(
           host,
           SELECT_SAME_STROKE_WEIGHT_COMMAND_ID,
           "strokeWeight",
-        ),
+          payload,
+        );
+      },
     }),
   ];
   return {

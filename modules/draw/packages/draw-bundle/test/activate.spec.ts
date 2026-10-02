@@ -196,7 +196,7 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.outlineStroke",
       "media.paged.draw.command.offsetPath",
       "media.paged.draw.command.simplifyPath",
-      // PATH OPTIONS — the seven "…" commands: each RAISES the Path
+      // PATH OPTIONS — the "…" commands: each RAISES the Path
       // Options panel at its section and mutates nothing.
       "media.paged.draw.command.offsetPathOptions",
       "media.paged.draw.command.simplifyPathOptions",
@@ -205,6 +205,7 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.insertSpiralOptions",
       "media.paged.draw.command.insertRectGridOptions",
       "media.paged.draw.command.insertPolarGridOptions",
+      "media.paged.draw.command.selectSameStrokeWeightOptions",
       "media.paged.draw.command.joinEndpoints",
       "media.paged.draw.command.closePath",
       "media.paged.draw.command.averageEndpoints",
