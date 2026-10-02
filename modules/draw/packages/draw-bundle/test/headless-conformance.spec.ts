@@ -223,6 +223,8 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "command",
         "command",
         "command",
+        // Reverse path direction.
+        "command",
         // Phase 4c — Pathfinder Unite / Subtract / Intersect / Exclude.
         "command",
         "command",

@@ -151,6 +151,10 @@ import {
   PATH_OPTIONS_PANEL_ID,
 } from "./commands/path-options";
 import {
+  contributeReversePathCommands,
+  REVERSE_PATH_COMMAND_IDS,
+} from "./commands/reverse-path";
+import {
   contributePathfinderCommands,
   PATHFINDER_COMMAND_IDS,
 } from "./commands/pathfinder";
@@ -394,6 +398,10 @@ export function activate(host: BundleHost): BundleHandle {
   // consumers; the TRUE join/close is a named engine-op gap — see
   // commands/join-average.ts).
   const joinAverageCommandsSub = contributeJoinAverageCommands(host);
+  // Reverse path direction — every contour of every selected path, in
+  // ONE framePath batch. A visual no-op that the non-zero fill (holes)
+  // and Type on a Path both read (commands/reverse-path.ts).
+  const reversePathCommandsSub = contributeReversePathCommands(host);
   // Phase 4c — Pathfinder Unite/Subtract/Intersect/Exclude (the
   // pathfinderBoolean wire consumers; first selected = kept).
   const pathfinderCommandsSub = contributePathfinderCommands(host);
@@ -587,6 +595,7 @@ export function activate(host: BundleHost): BundleHandle {
         PATH_OPS_COMMAND_IDS.length +
         PATH_OPTIONS_COMMAND_IDS.length +
         JOIN_AVERAGE_COMMAND_IDS.length +
+        REVERSE_PATH_COMMAND_IDS.length +
         PATHFINDER_COMMAND_IDS.length +
         PATHFINDER_REGION_COMMAND_IDS.length +
         COMPOUND_PATH_COMMAND_IDS.length +
@@ -639,6 +648,7 @@ export function activate(host: BundleHost): BundleHandle {
       compoundPathCommandsSub.dispose();
       pathfinderRegionCommandsSub.dispose();
       pathfinderCommandsSub.dispose();
+      reversePathCommandsSub.dispose();
       joinAverageCommandsSub.dispose();
       pathOptionsCommandsSub.dispose();
       pathOpsCommandsSub.dispose();

@@ -87,6 +87,7 @@
       "media.paged.draw.command.joinEndpoints",
       "media.paged.draw.command.closePath",
       "media.paged.draw.command.averageEndpoints",
+      "media.paged.draw.command.reversePathDirection",
       "media.paged.draw.command.pathfinderUnite",
       "media.paged.draw.command.pathfinderSubtract",
       "media.paged.draw.command.pathfinderIntersect",

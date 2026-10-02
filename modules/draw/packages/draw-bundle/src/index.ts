@@ -198,6 +198,19 @@ export {
   contributeJoinAverageCommands,
   type EndpointMove,
 } from "./commands/join-average";
+// Reverse path direction — the per-contour reversal over draw-geometry's
+// `reverseContour` and its one-batch framePath write, exported for the
+// conformance spec (the no-second-copy rule).
+export {
+  REVERSE_PATH_COMMAND_ID,
+  REVERSE_PATH_COMMAND_IDS,
+  REVERSE_PATH_COMMAND_CATEGORY,
+  reverseTable,
+  tableOf as reversePathTableOf,
+  reversePathBatchFor,
+  applyReversePath,
+  contributeReversePathCommands,
+} from "./commands/reverse-path";
 export {
   PATHFINDER_PRESETS,
   PATHFINDER_COMMAND_IDS,

@@ -208,6 +208,8 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.joinEndpoints",
       "media.paged.draw.command.closePath",
       "media.paged.draw.command.averageEndpoints",
+      // Reverse path direction (framePath, one batch).
+      "media.paged.draw.command.reversePathDirection",
       "media.paged.draw.command.pathfinderUnite",
       "media.paged.draw.command.pathfinderSubtract",
       "media.paged.draw.command.pathfinderIntersect",

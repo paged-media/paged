@@ -58,6 +58,7 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   ["Draw/Path/Join endpoints", "joinEndpoints", "path-ends"],
   ["Draw/Path/Average endpoints", "averageEndpoints", "path-ends"],
   ["Draw/Path/Close path", "closePath", "path-ends"],
+  ["Draw/Path/Reverse path direction", "reversePathDirection", "path-direction"],
 
   // ── Pathfinder — the ten boolean ops, in Illustrator's own order so
   //    the muscle memory transfers. ──
