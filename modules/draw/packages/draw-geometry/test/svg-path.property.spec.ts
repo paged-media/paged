@@ -624,9 +624,10 @@ describe("svg-path — DEFECTS", () => {
   // circle imported this way, and a seam that kinked when either moved.
   //
   // THE FIX is not here: `arcToCubics` now ends on the end point it was
-  // given, so the `===` this parser closes with is true whenever the
-  // path data returns to its start. The comparison stays exact — a
-  // tolerance would fold anchors the author put a hair apart on purpose.
+  // given, so the pen is where the path data says it is when `Z` asks
+  // whether the contour has returned to its start. (What "returned"
+  // means for a RELATIVE path, whose pen is a chain of rounded
+  // additions, is the block after this one.)
   // ------------------------------------------------------------------
   it("FIXED DEFECT (2, minimal counterexample): a two-arc circle parses to four smooth anchors", () => {
     const circle = parsePathData("M 0 5 a 5 5 0 1 0 10 0 a 5 5 0 1 0 -10 0 Z");
@@ -673,6 +674,110 @@ describe("svg-path — DEFECTS", () => {
         },
       ),
     );
+  });
+
+  // ------------------------------------------------------------------
+  // (2b) A RELATIVE PATH THAT RETURNS TO ITS START DID NOT CLOSE ONTO IT
+  //      EITHER — found on the real-artwork corpus while measuring (2),
+  //      not by a property. FIXED.
+  //
+  // `Z` folded the returning anchor only when its coordinates were `===`
+  // the start's. A path in relative commands reaches its last point by a
+  // chain of rounded additions, so deltas that sum to zero on paper land
+  // a few units in the last place off the start:
+  //
+  //   "M 0.1 0.1 l 0.2 0 l 0 0.2 l -0.2 0 l 0 -0.2 z"
+  //   EXPECTED: 4 anchors (the square).
+  //   WAS:      5 — the fifth at (0.10000000000000003, 0.10000000000000003).
+  //
+  // On the corpus (476 real SVGs) that was 53 of the 5 274 closed
+  // contours the importer yields: a stacked anchor at the seam, and for
+  // the 33 that close with a curve, a corner where the artwork is
+  // smooth. And it is why fixing (2) alone moved one real path the
+  // WRONG way: its arc's old, drifted end point happened to make the
+  // rest of the chain sum back onto the start to the bit; the exact end
+  // point did not.
+  //
+  // THE FIX: "restates the start" allows for the parser's own rounding —
+  // 4096 ulps of the subpath's largest coordinate (9.1e-13 of its size).
+  // That is not a snapping tolerance: a gap WRITTEN into path data is at
+  // least one unit of its last decimal, a thousand times larger than
+  // that (the two populations in the corpus are ≤ 1e-15 and ≥ 1e-9 of
+  // the artwork's size, with nothing in between), and such a gap is
+  // still not folded — the last two cases below.
+  // ------------------------------------------------------------------
+  it("FIXED DEFECT (2b, minimal counterexample): a relative square closes onto its start", () => {
+    const d = "M 0.1 0.1 l 0.2 0 l 0 0.2 l -0.2 0 l 0 -0.2 z";
+    // The premise: the chain of additions does NOT land on the start.
+    expect(0.1 + 0.2 - 0.2).not.toBe(0.1);
+    const square = parsePathData(d);
+    expect(square.anchors).toHaveLength(4);
+    expect(square.subpathOpen).toEqual([false]);
+    expect(square.anchors[0].anchor).toEqual([0.1, 0.1]);
+  });
+
+  it("FIXED DEFECT (2b): a relative CURVED return hands its handle to the start anchor", () => {
+    // A lens drawn with two relative cubics; the second returns to the
+    // start, a rounding step off. Its incoming handle belongs on the
+    // start anchor, exactly as for the absolute spelling.
+    const relative = parsePathData("M 0.1 0.7 c 0.1 -0.3 0.5 -0.3 0.6 0 c -0.1 0.3 -0.5 0.3 -0.6 0 z");
+    const absolute = parsePathData("M 0.1 0.7 C 0.2 0.4 0.6 0.4 0.7 0.7 C 0.6 1 0.2 1 0.1 0.7 Z");
+    expect(absolute.anchors).toHaveLength(2);
+    expect(relative.anchors).toHaveLength(2);
+    assertTableClose(relative, absolute, 1e-12);
+    expect(same(relative.anchors[0].left, relative.anchors[0].anchor)).toBe(false);
+    // `Z` puts the pen ON the start (it always did), so the drift does
+    // not leak into what follows: a second, relative subpath starts
+    // where the absolute one would — and with the fold, at index 4.
+    const two = parsePathData("M 0.1 0.1 l 0.2 0 l 0 0.2 l -0.2 0 l 0 -0.2 z m 1 0 l 1 0");
+    expect(two.subpathStarts).toEqual([0, 4]);
+    expect(two.anchors[4].anchor).toEqual([1.1, 0.1]);
+  });
+
+  it("FIXED DEFECT (2b): property — a closed polygon is the same table written relative or absolute", () => {
+    // Vertices on a 0.1 lattice at page scale, so nearly every relative
+    // sum is inexact; the deltas are exact DECIMALS (integer tenths
+    // subtracted, then printed), so on paper the chain returns to the
+    // start. The absolute spelling restates the start exactly.
+    const tenths = fc.integer({ min: -9999, max: 9999 });
+    const text = (n: number): string => (n / 10).toString();
+    fc.assert(
+      fc.property(
+        fc.array(fc.tuple(tenths, tenths), { minLength: 3, maxLength: 40 }),
+        (pts) => {
+          fc.pre(pts.every((p, i) => i === 0 || p[0] !== pts[i - 1][0] || p[1] !== pts[i - 1][1]));
+          const last = pts[pts.length - 1];
+          fc.pre(last[0] !== pts[0][0] || last[1] !== pts[0][1]);
+          const absolute =
+            `M ${text(pts[0][0])} ${text(pts[0][1])} ` +
+            [...pts.slice(1), pts[0]].map((p) => `L ${text(p[0])} ${text(p[1])}`).join(" ") +
+            " Z";
+          const loop = [...pts, pts[0]];
+          const relative =
+            `M ${text(pts[0][0])} ${text(pts[0][1])} ` +
+            loop
+              .slice(1)
+              .map((p, i) => `l ${text(p[0] - loop[i][0])} ${text(p[1] - loop[i][1])}`)
+              .join(" ") +
+            " z";
+          const expected = parsePathData(absolute);
+          expect(expected.anchors).toHaveLength(pts.length);
+          assertTableClose(parsePathData(relative), expected, 1e-9, relative);
+        },
+      ),
+    );
+  });
+
+  it("FIXED DEFECT (2b): a gap the path data STATES is not folded, however small it is written", () => {
+    // One unit in the sixth decimal, at unit scale and at page scale: far
+    // inside "a hair", far outside rounding. The anchor is the author's.
+    expect(parsePathData("M 0 0 L 1 0 L 0.000001 0 Z").anchors).toHaveLength(3);
+    expect(parsePathData("M 100 100 L 500 100 L 100.000001 100 Z").anchors).toHaveLength(3);
+    // Even the ninth decimal of a page-scale coordinate is a statement:
+    // 1e-9 in 500 is 2e-12 of the size, twice the allowance.
+    expect(parsePathData("M 100 100 L 500 100 L 100.000000001 100 Z").anchors).toHaveLength(3);
+    // And the same path with the gap closed folds, as it always did.
+    expect(parsePathData("M 100 100 L 500 100 L 100 100 Z").anchors).toHaveLength(2);
   });
 
   // ------------------------------------------------------------------

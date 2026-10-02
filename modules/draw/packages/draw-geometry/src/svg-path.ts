@@ -148,6 +148,49 @@ const corner = (p: Vec2): PendingAnchor => ({
   right: [p[0], p[1]],
 });
 
+/** How far, in units of the subpath's own size, the pen may have drifted
+ *  from the start point and still be "back on it": 4096 rounding steps
+ *  of a double (2⁻⁴⁰ ≈ 9.1e-13). */
+const CLOSE_DRIFT = 4096 * Number.EPSILON;
+
+/**
+ * Does a subpath's last anchor restate its start point — is the contour
+ * one that RETURNS to where it began before `Z` closes it?
+ *
+ * Equal coordinates, or coordinates that differ only by THIS PARSER'S
+ * OWN ROUNDING. A path written in relative commands is a chain of
+ * additions: the pen is `start + d₁ + d₂ + …`, each sum rounded to a
+ * double. Path data whose deltas add up to exactly zero ON PAPER — which
+ * is what a design tool writes when it closes a shape — therefore lands
+ * a few units in the last place away from the start, not on it
+ * (`0.1 + 0.2 − 0.2` is `0.10000000000000003`). That difference is not
+ * in the file; it is made here, so it must not decide the shape of the
+ * result. Compared with `===` it did: such a contour kept a stacked
+ * anchor at its seam and its start anchor lost the closing curve's
+ * handle — on the real-artwork corpus, 50 of the 5 274 closed contours
+ * the importer yields.
+ *
+ * The allowance is `CLOSE_DRIFT` × the largest coordinate the subpath's
+ * anchors reach — the size the rounding errors scale with — which
+ * covers a chain of thousands of relative commands and is still about a
+ * thousand times finer than anything decimal path data states on
+ * purpose (a gap written into the file is at least one unit of its last
+ * decimal; in that corpus the smallest is 1e-9 of the artwork's size,
+ * the largest drift 1e-15).
+ */
+function restatesStart(s: Subpath, startX: number, startY: number): boolean {
+  const last = s.pts[s.pts.length - 1].anchor;
+  if (last[0] === startX && last[1] === startY) return true;
+  let reach = 0;
+  for (const p of s.pts) {
+    reach = Math.max(reach, Math.abs(p.anchor[0]), Math.abs(p.anchor[1]));
+  }
+  const allowed = CLOSE_DRIFT * reach;
+  return (
+    Math.abs(last[0] - startX) <= allowed && Math.abs(last[1] - startY) <= allowed
+  );
+}
+
 /**
  * Parse an SVG path `d` string into an `AnchorTable` (one or more
  * subpaths flattened into the engine's anchor model).
@@ -379,7 +422,7 @@ export function parsePathData(d: string): AnchorTable {
           const s = cur;
           if (s.pts.length > 1) {
             const last = s.pts[s.pts.length - 1];
-            if (last.anchor[0] === startX && last.anchor[1] === startY) {
+            if (restatesStart(s, startX, startY)) {
               const first = s.pts[0];
               const incomingCurved =
                 last.left[0] !== last.anchor[0] ||
