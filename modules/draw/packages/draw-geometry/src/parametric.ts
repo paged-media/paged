@@ -132,6 +132,12 @@ export function spiralPath(
  * right]` — that is `rows + 1` horizontal lines then `cols + 1`
  * vertical lines, INCLUDING the border. Degenerate bounds or counts
  * < 1 yield an empty list.
+ *
+ * The counts are CELL counts, so they are whole numbers: a fractional
+ * count is floored (as `polarGridPaths` floors its own), `2.5` rows
+ * being two rows. Dividing the height by the unfloored `2.5` would put
+ * the lines at 0, 0.4h and 0.8h and never reach the bottom edge — a
+ * grid with its border left open.
  */
 export function rectGridPaths(
   bounds: readonly [number, number, number, number],
@@ -140,16 +146,18 @@ export function rectGridPaths(
 ): AnchorTable[] {
   const [top, left, bottom, right] = bounds;
   if (!finite(top, left, bottom, right, rows, cols)) return [];
-  if (rows < 1 || cols < 1 || bottom <= top || right <= left) return [];
+  const nRows = Math.floor(rows);
+  const nCols = Math.floor(cols);
+  if (nRows < 1 || nCols < 1 || bottom <= top || right <= left) return [];
   const out: AnchorTable[] = [];
   const h = bottom - top;
   const w = right - left;
-  for (let i = 0; i <= rows; i++) {
-    const y = top + (h * i) / rows;
+  for (let i = 0; i <= nRows; i++) {
+    const y = top + (h * i) / nRows;
     out.push(lineToPath(left, y, right, y));
   }
-  for (let j = 0; j <= cols; j++) {
-    const x = left + (w * j) / cols;
+  for (let j = 0; j <= nCols; j++) {
+    const x = left + (w * j) / nCols;
     out.push(lineToPath(x, top, x, bottom));
   }
   return out;
