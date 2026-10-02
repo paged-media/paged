@@ -66,6 +66,10 @@
 // in, and face outlines back through it on the way out. Exact when the
 // inputs share a transform (the ordinary case, and identity for anything
 // the editor authors); approximate — and named here — when they do not.
+//
+// That matrix is read ONCE per gesture scope and dropped with the cache
+// (`frontmostTransform` below) — it costs the frontmost input's whole
+// anchor table, and the point lane used to pay that per query.
 
 import type {
   BundleHost,
@@ -243,6 +247,44 @@ export function createRegionCache(
   /** Log the round-trip-per-move degradation once per gesture scope. */
   let warnedPointOnly = false;
 
+  /** The frontmost input's itemTransform, READ ONCE PER GESTURE SCOPE.
+   *
+   *  It is the one matrix that maps raw ↔ page space (module header),
+   *  and the only way to learn it is to read that input's whole anchor
+   *  table. The enumeration read it once; the point lane read it again
+   *  for EVERY query — and on an arrangement past the face cap, where
+   *  the point lane is all there is, that was the frontmost table
+   *  across the door on every pointer move (measured: 101 reads and
+   *  20 200 anchors for a 100-move hover over a 200-anchor input).
+   *
+   *  Held as the PROMISE, keyed by the element it was read for, so the
+   *  enumeration and the cold-start point query that fire on the same
+   *  sample share one read rather than racing two.
+   *
+   *  It cannot go stale inside a scope: `drop()` clears it, and the
+   *  owners call `drop()` on every document change and every change of
+   *  the input set — the only two things that can move the matrix. */
+  let frontmost: { key: string; matrix: Promise<Affine | null> } | null = null;
+
+  const frontmostTransform = (id: ElementId): Promise<Affine | null> => {
+    const forKey = planarInputKey([id]);
+    if (frontmost?.key === forKey) return frontmost.matrix;
+    const read: { key: string; matrix: Promise<Affine | null> } = {
+      key: forKey,
+      matrix: host.document.pathAnchors(id).then(
+        (table) => table?.itemTransform ?? null,
+        () => {
+          // A read that FAILED answers "unknown" this once and is not
+          // kept: the next sample asks again, as every sample used to.
+          if (frontmost === read) frontmost = null;
+          return null;
+        },
+      ),
+    };
+    frontmost = read;
+    return read.matrix;
+  };
+
   /** Fill the cache for `ids` (ONE full enumeration). */
   const ensure = (ids: readonly ElementId[]): void => {
     const next = planarInputKey(ids);
@@ -252,7 +294,7 @@ export function createRegionCache(
       try {
         // The frontmost input's transform maps raw ↔ page space (module
         // header). Read it with the arrangement so both land together.
-        const table = await host.document.pathAnchors(ids[0]).catch(() => null);
+        const matrix = await frontmostTransform(ids[0]);
         const result = await readPlanarRegions(host, ids);
         if (!result) return;
         if (!result.found) {
@@ -269,7 +311,7 @@ export function createRegionCache(
               `face(s) listed are real, but they do not tile the union (a sliver was missed)`,
           );
         }
-        transform = table?.itemTransform ?? null;
+        transform = matrix;
         cached = result.faces.map((f) => faceToPageSpace(f, transform));
         key = next;
         hooks.onFaces(cached);
@@ -289,8 +331,7 @@ export function createRegionCache(
     ids: readonly ElementId[],
     point: readonly [number, number],
   ): Promise<{ face: string | null } | undefined> => {
-    const table = await host.document.pathAnchors(ids[0]).catch(() => null);
-    const m = table?.itemTransform ?? transform;
+    const m = (await frontmostTransform(ids[0])) ?? transform;
     const local = inverseApplyAffine(m ?? null, point[0], point[1]);
     if (!local) return undefined;
     const result = await readPlanarRegions(host, ids, [local[0], local[1]]);
@@ -382,6 +423,7 @@ export function createRegionCache(
     drop() {
       key = null;
       transform = null;
+      frontmost = null;
       cached = [];
       pointQueryOnly = false;
       warnedPointOnly = false;

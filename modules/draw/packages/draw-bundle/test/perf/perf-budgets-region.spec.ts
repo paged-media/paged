@@ -30,10 +30,16 @@
 
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-import type { ElementId } from "@paged-media/plugin-api";
+import type {
+  ElementId,
+  MutationInput,
+  ToolPreviewShape,
+} from "@paged-media/plugin-api";
+import { pointInAnchorPath, type AnchorTriple } from "@paged-media/draw-geometry";
 import type { MeasureReadout } from "@paged-media/draw-tools";
 
 import {
+  BIND_LIVE_PAINT_FACE,
   BIND_MEASURE_READOUT,
   applyMakeLivePaintGroup,
   createLivePaintBucketHandler,
@@ -89,12 +95,35 @@ describe("perf budgets — the tools that read as they move", () => {
   // COVERS: the FACE-CAP lane of `handlers/planar-regions.ts`. Two
   // inputs that divide into ~300 faces: the engine refuses to enumerate
   // past 256, the cache can never warm, and the hover is left with the
-  // point query. Each one re-reads the frontmost input's whole anchor
-  // table to learn a transform.
+  // point query.
+  //
+  // History (a budget only goes DOWN):
+  //
+  //                         pathAnchors   anchors read
+  //   as found   paced          101          20 200
+  //              burst            3             600
+  //   now        either           1             200
+  //
+  // As found, every point query re-read the frontmost input's whole
+  // anchor table to learn the one matrix that maps the pointer into the
+  // arrangement's space. It is read once per gesture scope now, and
+  // dropped with the cache.
   describe("Shape Builder — a 100-move hover over an arrangement past the 256-face cap", () => {
     const MOVES = 100;
 
-    const hover = async (pacing: Pacing): Promise<WorkLog> => {
+    /** The highlight standing when a stream ended must be the face UNDER
+     *  the pointer: an outline that contains the last point. A stale
+     *  face (an old answer delivered late) or a face found through the
+     *  wrong transform does not. */
+    const expectFaceUnder = (highlight: ToolPreviewShape | null, point: Pt): void => {
+      const anchors = (highlight as { anchors?: AnchorTriple[] } | null)?.anchors;
+      expect(anchors, "the hover ends over a face").toBeDefined();
+      expect(pointInAnchorPath(point, anchors!)).toBe(true);
+    };
+
+    const hover = async (
+      pacing: Pacing,
+    ): Promise<{ work: WorkLog; highlight: ToolPreviewShape | null }> => {
       await w.h.host.selection.set(w.faceCap);
       const { host, work } = countingHost(w.h.host);
       const handler = createShapeBuilderHandler(host);
@@ -109,9 +138,11 @@ describe("perf budgets — the tools that read as they move", () => {
         pacing,
       );
       const counted = work.snapshot();
+      const highlight = w.h.lastToolPreview();
       handler.onDeactivate("switch" as never);
       await w.h.host.selection.set([]);
-      return report(`shape builder face cap, ${pacing}`, counted);
+      report(`shape builder face cap, ${pacing}`, counted);
+      return { work: counted, highlight };
     };
 
     it("the scenario is what it says: the engine refuses the enumeration, in its own words", async () => {
@@ -123,8 +154,8 @@ describe("perf budgets — the tools that read as they move", () => {
       );
     });
 
-    it("paced: the engine keeps up, so every move is a point query — and an anchor-table read", async () => {
-      const work = await hover("paced");
+    it("paced: the engine keeps up, so every move is a point query — and the transform is read once", async () => {
+      const { work, highlight } = await hover("paced");
       expect(work.mutations).toEqual([]);
       expect(work.count("document.hitTest")).toBe(0);
 
@@ -132,29 +163,87 @@ describe("perf budgets — the tools that read as they move", () => {
       // face list to test against locally, that is what a hover over
       // this arrangement costs. The floor, short of an engine change.
       expect(work.count("document.planarRegions")).toBe(101);
-      // The frontmost input's anchor table, re-read for every one of
-      // them, to learn a transform that cannot change mid-hover.
-      // TARGET 1.
-      expect(work.count("document.pathAnchors")).toBe(101);
-      // 101 × the comb's 200 anchors, across the door, for one matrix.
-      // TARGET 200.
-      expect(work.anchorsRead).toBe(101 * FACE_CAP_ANCHORS);
+      // As found: 101 — the frontmost input's anchor table, re-read for
+      // every query, to learn a transform that cannot change mid-hover.
+      expect(work.count("document.pathAnchors")).toBe(1);
+      // As found: 101 × the comb's 200 anchors, for one matrix.
+      expect(work.anchorsRead).toBe(FACE_CAP_ANCHORS);
       // The machine's publish, then the answer's. TARGET 100.
       expect(work.previews()).toBe(200);
+
+      expectFaceUnder(highlight, FACE_CAP_SWEEP[1]);
     });
 
     it("burst: the newest-wins guard holds here too — three queries, not a hundred", async () => {
-      const work = await hover("burst");
+      const { work, highlight } = await hover("burst");
       expect(work.mutations).toEqual([]);
       expect(work.count("document.hitTest")).toBe(0);
 
       // The refused enumeration, the first sample, the last one. As
       // found on 01603ab, before the guard: 101.
       expect(work.count("document.planarRegions")).toBe(3);
-      // Still one table read per query. TARGET 1.
-      expect(work.count("document.pathAnchors")).toBe(3);
-      expect(work.anchorsRead).toBe(3 * FACE_CAP_ANCHORS);
+      // As found: 3, one table read per query.
+      expect(work.count("document.pathAnchors")).toBe(1);
+      expect(work.anchorsRead).toBe(FACE_CAP_ANCHORS);
       expect(work.previews()).toBe(101);
+
+      expectFaceUnder(highlight, FACE_CAP_SWEEP[1]);
+    });
+
+    // "Once per scope" is only safe if the scope ENDS when the matrix can
+    // change. Every workload path sits at the identity, where a stale
+    // transform and a fresh one are the same thing — so move both inputs
+    // (one shift, so the arrangement itself is unchanged) while the tool
+    // is active, and hover where they went. A cache that outlived the
+    // edit maps the pointer through the OLD matrix and finds the face
+    // under somewhere else.
+    it("a document change ends the scope: the transform is read again, and the face is the one under the pointer", async () => {
+      const SHIFT: Pt = [40, 30];
+      const sweep = linePoints(FACE_CAP_SWEEP[0], FACE_CAP_SWEEP[1], 10);
+      const shifted = sweep.map((p): Pt => [p[0] + SHIFT[0], p[1] + SHIFT[1]]);
+
+      await w.h.host.selection.set(w.faceCap);
+      const mark = await undoMark(w);
+      const { host, work } = countingHost(w.h.host);
+      const handler = createShapeBuilderHandler(host);
+      handler.onActivate(undefined as never);
+      await settle();
+      work.reset();
+      try {
+        const over = (points: readonly Pt[]) =>
+          drive(
+            points.map((p) => pointerAt(w.pageId, p)),
+            (e) => handler.onPointerMove(e),
+            "paced",
+          );
+
+        await over(sweep);
+        expect(work.count("document.pathAnchors")).toBe(1);
+        expectFaceUnder(w.h.lastToolPreview(), sweep[sweep.length - 1]!);
+
+        const moved = await w.h.host.document.mutate({
+          op: "batch",
+          args: {
+            ops: w.faceCap.map((id) =>
+              frameTransformMutationFor(id, [1, 0, 0, 1, SHIFT[0], SHIFT[1]]),
+            ),
+          },
+        } as MutationInput);
+        expect(moved.applied).toBe(true);
+        await settle();
+
+        await over(shifted);
+        // The face first: it is what a stale matrix gets WRONG. (Checked
+        // by breaking it — with `drop()` keeping the transform, this is
+        // the line that fails.)
+        expectFaceUnder(w.h.lastToolPreview(), shifted[shifted.length - 1]!);
+        // Read again — once — for the new scope.
+        expect(work.count("document.pathAnchors")).toBe(2);
+      } finally {
+        handler.onDeactivate("switch" as never);
+        await w.h.host.selection.set([]);
+        expect(await undoStepsSince(w, mark)).toBe(1);
+      }
     });
   });
 
@@ -187,17 +276,31 @@ describe("perf budgets — the tools that read as they move", () => {
       return { handler, work };
     };
 
-    const hover = async (pacing: Pacing): Promise<WorkLog> => {
+    /** A hover from the top-left corner, across the arrangement, to
+     *  `to`. What it left standing — the overlay highlight and the
+     *  hovered-face binding — is read before the teardown clears them. */
+    const hover = async (
+      pacing: Pacing,
+      to: Pt = [280, 276],
+      moves = MOVES,
+    ): Promise<{
+      work: WorkLog;
+      highlight: ToolPreviewShape | null;
+      hovered: unknown;
+    }> => {
       const { handler, work } = await arm();
       await drive(
-        linePoints([15, 11], [280, 276], MOVES).map((p) => pointerAt(w.pageId, p)),
+        linePoints([15, 11], to, moves).map((p) => pointerAt(w.pageId, p)),
         (e) => handler.onPointerMove(e),
         pacing,
       );
       const counted = work.snapshot();
+      const highlight = w.h.lastToolPreview();
+      const hovered = w.h.host.bindings.get(BIND_LIVE_PAINT_FACE);
       handler.onDeactivate("switch" as never);
       await w.h.host.selection.set([]);
-      return report(`live paint hover, ${pacing}`, counted);
+      report(`live paint hover, ${pacing}`, counted);
+      return { work: counted, highlight, hovered };
     };
 
     it("the arrangement is the largest the engine enumerates: 12 inputs, 133 faces", async () => {
@@ -213,17 +316,39 @@ describe("perf budgets — the tools that read as they move", () => {
     // published 401 previews). 39f923d gave the shared seam a
     // newest-wins guard for hovers; the same stream is now the cold-cache
     // floor at either pacing, so the two cases are pinned as one.
+    //
+    // pathAnchors since then: 2 → 1. The enumeration and the cold-start
+    // point query each read the frontmost table for its transform; they
+    // share one read now (`frontmostTransform` in planar-regions.ts).
     for (const pacing of ["paced", "burst"] as const) {
       it(`hover, ${pacing}: one enumeration, one cold-start point query, nothing per move`, async () => {
-        const work = await hover(pacing);
+        const { work, highlight, hovered } = await hover(pacing);
         expect(work.mutations).toEqual([]);
         expect(work.count("document.hitTest")).toBe(0);
         expect(work.count("document.planarRegions")).toBe(2);
-        expect(work.count("document.pathAnchors")).toBe(2);
+        expect(work.count("document.pathAnchors")).toBe(1);
         // One preview and one binding publish per move, plus the one the
         // arrangement landing adds. Fine as it is.
         expect(work.previews()).toBe(201);
         expect(work.count("bindings.publish")).toBe(201);
+
+        // The stream ends OFF the arrangement, so nothing may be left
+        // highlighted — a late answer for an earlier point would be.
+        expect(highlight).toBeNull();
+        expect(hovered).toBeNull();
+      });
+
+      it(`hover, ${pacing}, ending ON the arrangement: the face under the pointer is the one highlighted`, async () => {
+        const END: Pt = [100, 100];
+        const { work, highlight, hovered } = await hover(pacing, END, 40);
+        expect(work.count("document.pathAnchors")).toBe(1);
+        const anchors = (highlight as { anchors?: AnchorTriple[] } | null)?.anchors;
+        expect(anchors, "the hover ends over a face").toBeDefined();
+        expect(pointInAnchorPath(END, anchors!)).toBe(true);
+        // …and it is the face the engine itself names at that point.
+        const asked = await w.h.host.document.planarRegions(w.arrangement, END);
+        expect(asked.faces).toHaveLength(1);
+        expect(hovered).toBe(asked.faces[0]!.id);
       });
     }
 

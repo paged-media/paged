@@ -136,13 +136,20 @@ describe("perf budgets — work counted at the host doors", () => {
     // History of these two budgets (a budget only goes DOWN):
     //   as found   paced  200 hitTest, 2 planarRegions, 2 pathAnchors, 402 previews
     //              burst  200 hitTest, 201 planarRegions, 201 pathAnchors, 601 previews
-    //   now        both   0, 2, 2, 201
+    //   39f923d    both   0, 2, 2, 201
+    //   now        both   0, 2, 1, 201
     // Two causes, both removed: a hit-test per move whose answer the
     // machine drops outside a drag, and a cold-start point query with no
     // in-flight guard, which asked for the same arrangement once per move.
     // The guard is newest-wins and drops stale answers — the face check
     // below is what proves it: a first cut of the guard left the face of
     // an OLD pointer position highlighted, and only that check saw it.
+    //
+    // The last pathAnchors went when the seam started reading the
+    // frontmost input's transform ONCE per gesture scope: the enumeration
+    // and the cold-start point query each read that input's anchor table
+    // for the same matrix, and now share one read. (Its own budget, with
+    // the stale-transform check, is in perf-budgets-region.spec.ts.)
     for (const pacing of ["paced", "burst"] as const) {
       it(`hover, ${pacing}: no round trip per move, and the right face is highlighted`, async () => {
         const { work, highlight } = await hover(pacing);
@@ -152,7 +159,8 @@ describe("perf budgets — work counted at the host doors", () => {
         // One full enumeration plus one cold-start point query for the
         // first sample. That is the designed floor on a cold cache.
         expect(work.count("document.planarRegions")).toBe(2);
-        expect(work.count("document.pathAnchors")).toBe(2);
+        // The frontmost input's transform, once for both. Was 2.
+        expect(work.count("document.pathAnchors")).toBe(1);
         // One publish per move, plus one when the arrangement lands.
         expect(work.previews()).toBe(201);
 
@@ -172,7 +180,8 @@ describe("perf budgets — work counted at the host doors", () => {
       // The enumeration, plus a point query for each of the two samples
       // that arrive before it lands (a drag collects EVERY sample).
       expect(work.count("document.planarRegions")).toBe(3);
-      expect(work.count("document.pathAnchors")).toBe(3);
+      // One transform read for all three. Was 3, one per query.
+      expect(work.count("document.pathAnchors")).toBe(1);
     });
 
     it("drag with nothing selected: the element lane still hit-tests every move", async () => {
