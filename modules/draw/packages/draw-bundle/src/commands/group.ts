@@ -58,7 +58,7 @@
 //    there and in `commands/repeat.ts`.
 //
 // So what remains for the cross-repo RFI
-// (`thoughts/docs/paged/plugin-platform/rfi-core-sdk-gaps.md`) is a
+// (the internal gap register) is a
 // GroupSpec/scene clip extension — an ARBITRARY clip path over a set of
 // items — not the container-nesting case, which is built.
 //

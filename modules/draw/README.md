@@ -2,17 +2,24 @@
 
 **paged.draw** — the vector-illustration plugin for the Paged editor, and the
 forcing function for the plugin platform. Concept:
-`thoughts/docs/paged/plugin-draw/base-idea.md`; verified reality + strategy:
-`thoughts/docs/paged/plugin-draw/reality-check.md`.
+[`docs/concept.md`](./docs/concept.md).
 
 Strategy: **incubate-then-extract.** Draw capability grows as host-agnostic
 packages here; the editor consumes the published bundle and wraps the
 machines in thin gesture-handler shims. Gaps in the plugin surface are
-recorded in the cross-repo RFI
-(`thoughts/docs/paged/plugin-platform/rfi-core-sdk-gaps.md`); the full
-state of the plugin against its concept is
-`thoughts/docs/paged/plugin-draw/analysis-2026-10-02.md`. `CLAUDE.md` is
-the detailed orientation for this repo.
+recorded in the internal gap register. `CLAUDE.md` is the detailed
+orientation for this repo.
+
+## Documentation
+
+Everything about how the plugin is designed and built is in [`docs/`](./docs/README.md):
+
+- [`docs/concept.md`](./docs/concept.md): the capability specification, with notes on what was built.
+- [`docs/architecture.md`](./docs/architecture.md): packages, how drawing reaches the document, host doors.
+- [`docs/status.md`](./docs/status.md): what ships today and what does not.
+- [`docs/adr/`](./docs/adr/README.md): the architecture decisions, one per file.
+
+`docs/status.md` is the current record of what ships; the sections below are older in places.
 
 ## Packages
 
@@ -20,7 +27,7 @@ the detailed orientation for this repo.
 |---|---|
 | `@paged-media/draw-geometry` | pure path math, zero deps: Bézier split / closest-t / flatten, RDP, compound winding, arc-length placement, affine, SVG path / arc / document parsing |
 | `@paged-media/draw-tools` | host-agnostic state machines (pen, anchor edit, pencil, curvature, brush, width, shape builder, live paint, measure, corner radius, repeat) — points in, snapshots and plans out |
-| `@paged-media/draw` (`packages/draw-bundle`) | the published bundle: `manifest.json` (id `media.paged.draw` — 19 tools, 10 panels, 92 commands, SVG import/export, 7 `.paged` part types) + `activate(host)`, gesture handlers, commands, panels |
+| `@paged-media/draw` (`packages/draw-bundle`) | the published bundle: `manifest.json` (id `media.paged.draw` — 19 tools, 11 panels, 101 commands, SVG import/export, 7 `.paged` part types) + `activate(host)`, gesture handlers, commands, panels |
 | `crates/draw-trace`, `crates/trace-js` | the Image Trace kernel (Rust → wasm, over `visioncortex`); the built artifact is committed in `packages/draw-bundle/wasm/` |
 
 `panels/*.panel.json` are **design prototypes** (not interpreted by any
