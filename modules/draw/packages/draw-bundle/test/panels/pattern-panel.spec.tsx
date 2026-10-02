@@ -154,11 +154,15 @@ describe("Pattern options panel — rendered against the engine", () => {
       }
       expect(tiles).toEqual(["pat-1"]);
       // ONE batch, and no refusal. It was two until the bake named what
-      // it inserted (`bindCreated`) — and the panel's own note still says
-      // "Baking and re-planning are TWO undo steps each", which this
-      // count has now overtaken: the NOTE is what is stale.
+      // it inserted (`bindCreated`), and the panel's note said "TWO undo
+      // steps each" for a while after; it says ONE now, and the count and
+      // the words are pinned together here.
       expect(panel.work.mutations.map((m) => m.op)).toEqual(["batch"]);
       expect(panel.work.count("log.warn")).toBe(0);
+      expect(PATTERN_PANEL_NOTE).toContain(
+        "Baking, re-planning, releasing and deleting the tiles are ONE undo step each",
+      );
+      expect(PATTERN_PANEL_NOTE).not.toContain("TWO undo steps");
 
       // THE PANEL followed.
       expect(panel.attr(PANEL, "data-draw-pattern-panel")).toBe("1");

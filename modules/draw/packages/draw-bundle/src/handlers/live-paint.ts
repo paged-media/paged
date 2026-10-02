@@ -22,8 +22,10 @@
 //   · BUCKET (`"fill"`)  — hover highlights the face under the cursor
 //     through the overlay tool-preview; a click paints it; a drag paints
 //     every face it crosses. Commit = the shared `fillLivePaintFaces`
-//     lane (2 batches ⇒ 2 undo steps), so the recipe and the artwork
-//     always move together.
+//     lane — ONE batch ⇒ 1 undo step, however many faces the gesture
+//     painted (`commands/live-paint.ts`; the two-batch lane is only the
+//     fallback for an engine that refuses the one batch) — so the recipe
+//     and the artwork always move together.
 //   · FACE SELECTION (`"select"`) — the identical resolve/collect, but
 //     the commit puts the MATERIALISED FILLS of those faces on the
 //     selection so they can be restyled or deleted with the ordinary
@@ -183,8 +185,8 @@ export function createLivePaintHandler(
     );
     if (painted.length > 0) {
       // The arrangement itself did not change (the fills are new artwork
-      // ABOVE the members, not new members), but the document did — and
-      // the scene-tree diff the emit ran invalidates the cached ids.
+      // ABOVE the members, not new members), but the document did, and
+      // the cached answers were given for the document as it was.
       dropCache();
     }
   };

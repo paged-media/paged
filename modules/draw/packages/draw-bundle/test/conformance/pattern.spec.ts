@@ -276,12 +276,14 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
       expect(PATTERN_PANEL_NOTE).toContain("THIS IS NOT A PATTERN SWATCH");
       expect(PATTERN_PANEL_NOTE).toContain("always paint ABOVE the source");
       expect(PATTERN_PANEL_NOTE).toContain("real frameOpacity");
-      // STALE, and pinned as SHIPPED so the correction cannot be missed:
-      // baking and re-planning are ONE undo step each now (measured
-      // below). The sentence lives in `src/panels/pattern-panel.tsx`,
-      // which the change that made it untrue did not own. Whoever
-      // corrects the panel changes this line with it.
-      expect(PATTERN_PANEL_NOTE).toContain("TWO undo steps");
+      // Baking and re-planning are ONE undo step each (measured below);
+      // the note said TWO until it was corrected to match, and the
+      // stepwise fallback's two is named as the older engine's.
+      expect(PATTERN_PANEL_NOTE).toContain(
+        "Baking, re-planning, releasing and deleting the tiles are ONE undo step each",
+      );
+      expect(PATTERN_PANEL_NOTE).toContain("an older engine that refuses the one batch");
+      expect(PATTERN_PANEL_NOTE).not.toContain("TWO undo steps");
     });
 
     it("every command TITLE carries what the contract has no field to say", () => {
