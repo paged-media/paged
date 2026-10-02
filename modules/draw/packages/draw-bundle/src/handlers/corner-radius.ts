@@ -23,11 +23,15 @@
 // side), the overlay previews the extent, pointer-up commits ONE
 // per-corner mutation (`cornerRadiiMutationFor` → RoundedCorner).
 //
-// Honest scope (mirrors the preset commands): RECTANGLES only — the
-// engine has no polygon corner apply arm (RFI B-23); a non-rectangle
-// selection is a no-op with a debug log. Axis-aligned bounds only: a
-// rotated rectangle's corners don't sit on its page bounds, so the tool
-// skips it (the transform-aware hit is the follow-up).
+// Honest scope: RECTANGLES only, and the reason is this TOOL's, not the
+// engine's — the engine applies corners to polygons too (RFI B-23 is
+// closed, and the preset commands in `commands/live-corners.ts` cover
+// rectangle, polygon and text frame). What is rectangle-only here is the
+// HANDLE GEOMETRY: the drag is hit-tested and clamped against the four
+// corners of a box (see the body below). A non-rectangle selection is a
+// no-op with a debug log. Axis-aligned bounds only: a rotated
+// rectangle's corners don't sit on its page bounds, so the tool skips it
+// (the transform-aware hit is the follow-up).
 
 import type {
   BundleHost,

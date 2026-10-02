@@ -6,74 +6,58 @@ forcing function for the plugin platform. Concept:
 `thoughts/docs/paged/plugin-draw/reality-check.md`.
 
 Strategy: **incubate-then-extract.** Draw capability grows as host-agnostic
-packages here while the editor consumes them through thin gesture-handler
-shims; the bundle (`activate(host)`) takes over registration at milestone D3.
-`BREAKAGE_LOG.md` records every place the plugin surface fell short — it is
-the API-v1 punch list.
+packages here; the editor consumes the published bundle and wraps the
+machines in thin gesture-handler shims. Gaps in the plugin surface are
+recorded in the cross-repo RFI
+(`thoughts/docs/paged/plugin-platform/rfi-core-sdk-gaps.md`); the full
+state of the plugin against its concept is
+`thoughts/docs/paged/plugin-draw/analysis-2026-10-02.md`. `CLAUDE.md` is
+the detailed orientation for this repo.
 
 ## Packages
 
 | Package | Contents |
 |---|---|
-| `@paged-media/draw-geometry` | pure path math, zero deps: RDP, de Casteljau split, closest-t, flatten, constrain, handle derivation, affine |
-| `@paged-media/draw-tools` | host-agnostic state machines: `PenMachine` (full modifier matrix), anchor-edit planning (add/delete/convert incl. closing-edge subpath bookkeeping) |
-| `@paged-media/draw-bundle` | `manifest.json` (id `media.paged.draw`) + `activate(host)` skeleton (registers at D3) |
+| `@paged-media/draw-geometry` | pure path math, zero deps: Bézier split / closest-t / flatten, RDP, compound winding, arc-length placement, affine, SVG path / arc / document parsing |
+| `@paged-media/draw-tools` | host-agnostic state machines (pen, anchor edit, pencil, curvature, brush, width, shape builder, live paint, measure, corner radius, repeat) — points in, snapshots and plans out |
+| `@paged-media/draw` (`packages/draw-bundle`) | the published bundle: `manifest.json` (id `media.paged.draw` — 19 tools, 10 panels, 92 commands, SVG import/export, 7 `.paged` part types) + `activate(host)`, gesture handlers, commands, panels |
+| `crates/draw-trace`, `crates/trace-js` | the Image Trace kernel (Rust → wasm, over `visioncortex`); the built artifact is committed in `packages/draw-bundle/wasm/` |
 
 `panels/*.panel.json` are **design prototypes** (not interpreted by any
-host) — the paper's §8 schema rewritten against the catalog's real binding
-ceiling; the P4 test corpus.
+host).
 
 ## Setup
 
-Sibling checkout layout required (pnpm `link:` deps into `../plugin-sdk`, which
-links into `../editor` — install order: editor → plugin-sdk → here):
+No sibling checkout is needed: the plugin contract
+(`@paged-media/plugin-api`, `@paged-media/plugin-sdk`) and the engine
+(`@paged-media/canvas-wasm`) are published packages, pinned in
+`packages/draw-bundle/package.json`.
 
 ```bash
-cd ~/paged/editor && pnpm install
-cd ~/paged/plugin-sdk && pnpm install
-cd ~/paged/plugin-draw && pnpm install
-pnpm -r test        # vitest — pure machines + the headless conformance corpus
-pnpm -r typecheck   # includes the wire-compat assertions against plugin-api
+pnpm install
+pnpm test           # contract-import lint + vitest in every package
+pnpm typecheck      # includes the wire-compat assertions against plugin-api
+pnpm bench          # geometry benches (trended, never gated)
 node ../plugin-sdk/packages/plugin-cli/bin/paged-plugin.mjs validate packages/draw-bundle/manifest.json
 ```
 
-### Conformance corpus (W4.15)
+## Tests
 
-`draw-bundle/test/` carries a headless **conformance-fixture replay
-harness** on the B-13 foundation (`@paged-media/plugin-sdk`'s
-`createHeadlessHost` — the published engine wasm booted in Node):
+- **Machines and geometry** — unit specs beside each package; no host.
+- **Conformance** (`packages/draw-bundle/test/conformance/`) — every spec
+  boots the REAL engine wasm headlessly (`createHeadlessHost`) and drives
+  the bundle's own handlers and commands against it, asserting the
+  resulting document and that undo restores it. `test/engine-pin.spec.ts`
+  pins the booted engine to the version `package.json` names.
+- **Perf budgets** (`packages/draw-bundle/test/perf/`) — work COUNTED at
+  the host doors (engine round trips, mutations, preview publishes), not
+  timed. A budget is the measured value and only ever goes down.
+- **Real artwork** — `PAGED_SVG_CORPUS=1 pnpm --filter @paged-media/draw test`
+  parses the private corpus's SVGs and checks `.ai` / `.eps` are refused
+  rather than half-read.
 
-- `fixtures/build-idml.ts` — a pure-TS IDML package builder (no `zip`
-  CLI, deterministic bytes); `fixtures/corpus.ts` — named multi-shape
-  documents (F1 rect + open polygon + line, F2 closed quad, F3
-  curved-open).
-- `replay.ts` — records a `GesturePlan` (`{ tool, click, tolerance }`,
-  the anchor machines' deterministic output) and replays it through
-  `host.document.mutate` using the bundle's OWN `mutationFor`, asserting
-  the resulting anchor table **and** that one undo restores the baseline.
-- `conformance/*.spec.ts` — per-fixture assertions (geometry round-trips;
-  add / delete / convert plan shapes incl. closing-edge add + the delete
-  floor; plugin-metadata persistence across mutate + undo + the namespace
-  gate). One wasm boot per spec-file (the host supports reload).
-
-Residuals + the corpus findings (rectangle-vs-polygon metadata carrier;
-rectangles expose no `pathAnchors`) are tracked under **B-13** in
-`BREAKAGE_LOG.md`. Pointer-event-level gesture replay stays gated on
-**B-17**.
-
-## Milestones
-
-- **D1 — done** — geometry + machines extracted, tested standalone; the
-  editor's pencil re-imports RDP from here.
-- **D2 — done** — pen + add/delete/convert-anchor live in the editor as
-  shims over `draw-tools` (E2E: editor `tests/e2e/draw-plugin.spec.ts`).
-- **D3 — done** — `drawBundle.activate(host)` registers the three
-  `media.paged.draw.tool.*` anchor-editing tools (with activation
-  commands + guarded shortcuts via `contributeTool`) through
-  `@paged-media/plugin-sdk` 0.2; the editor loads the bundle with one
-  `loadBundle()` call and removing it removes draw cleanly (B-11
-  resolved). The Pen itself is a built-in core-document tool (editor
-  W2.5 division): built-ins author new paths, the bundle edits them.
+CI (`.github/workflows/vitest.yml`) runs all of it on every pull request
+and fails on red; nothing publishes from a red suite.
 
 ## License
 
