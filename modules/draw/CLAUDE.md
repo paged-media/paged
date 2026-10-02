@@ -154,9 +154,10 @@ stroke panel raised, Esc pops out). The bundle drives end-to-end through the rea
 the draw-plugin e2e (`editor` `apps/canvas/tests/e2e/draw-plugin.spec.ts`)
 and a DTP journey (`tests/journey/plugins/draw.journey.spec.ts`) author a
 path with the built-in Pen, then refine its anchors (add/delete/convert)
-and stroke through the bundle. The three TS packages carry 940 passing
-vitest (geometry 210, tools 126, bundle 604) and typecheck clean; the two
-crates carry 26 `cargo test` (draw-trace 22, trace-js 4).
+and stroke through the bundle. The three TS packages carry 1 855 passing
+vitest (geometry 601, tools 267, bundle 987; 3 skipped, 1 todo) and
+typecheck clean; the two crates carry 26 `cargo test` (draw-trace 22,
+trace-js 4).
 
 **ONE SHARED KERNEL, AND ONLY ONE.** §16.2 (blend spines) and §16.3
 (objects on a path) landed together, so the "is there a common placement
