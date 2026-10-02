@@ -26,8 +26,9 @@
 // THE ODD ONE OUT. This panel's "records" are the LAYERS of the selected
 // object's stack, so its reload reads the selection and nothing else: it
 // does NOT walk the document, and its cost does not depend on how many
-// leaves there are. What it does do is read the selection SYNCHRONOUSLY
-// inside a selection listener — and that is one selection behind.
+// leaves there are. What it DID do is read the selection SYNCHRONOUSLY
+// inside a selection listener — and that is one selection behind. It
+// now takes the ids the event hands it (`src/panels/reload.ts`).
 
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
@@ -113,9 +114,11 @@ describe("Appearance panel — rendered against the engine", () => {
 
     it("THE FLOOR: what a reload costs before the document holds anything", async () => {
       const panel = await mountPanel(h, makeAppearancePanel);
-      // Nothing is selected, so the reload reads nothing at all.
+      // The mount's own reload — and nothing is selected, so it reads
+      // nothing at all.
       expect(panel.cost()).toEqual({
         events: 0,
+        reloads: 1,
         walks: 0,
         reads: 0,
         partReads: 0,
@@ -275,21 +278,23 @@ describe("Appearance panel — rendered against the engine", () => {
       expect(panel.count("[data-draw-appearance-row]")).toBe(0);
     });
 
-    // BUG (measured). The panel's selection listener is `() => void
-    // reload()`: it throws away the ids the host hands it and re-reads
-    // `host.selection.get()` — synchronously, as reload's FIRST statement.
-    // The SDK adapter's `host.selection.set` awaits the engine, the
-    // `elementSelectionApplied` subscribers fire INSIDE that call, and
-    // only afterwards does the adapter store the new selection — so the
-    // reload sees the PREVIOUS one. The panel is one selection behind
-    // after every selection made through `host.selection.set` (Select
-    // Same, Place symbol, a face's Select, …) until a document change
-    // makes it reload again. That adapter is the same code in the editor;
-    // what a user's own CLICK does there goes through the editor's
-    // selection context and is NOT measured here. The other seven panels
-    // read the selection after an `await` and get away with it. Flip to
-    // `it` when the panel uses the ids it is given.
-    it.fails("follows a selection change (it is one selection behind)", async () => {
+    // WAS A BUG (measured, then fixed). The panel's selection listener
+    // was `() => void reload()`: it threw away the ids the host hands it
+    // and re-read `host.selection.get()` — synchronously, as reload's
+    // FIRST statement. The SDK adapter's `host.selection.set` awaits the
+    // engine, the `elementSelectionApplied` subscribers fire INSIDE that
+    // call, and only afterwards does the adapter store the new selection
+    // — so the reload saw the PREVIOUS one ("0" layers, and still "Select
+    // an object…"). The panel was one selection behind after every
+    // selection made through `host.selection.set` (Select Same, Place
+    // symbol, a face's Select, …) until a document change made it reload
+    // again. That adapter is the same code in the editor; what a user's
+    // own CLICK does there goes through the editor's selection context
+    // and is NOT measured here. The reload is now handed the ids the
+    // event carried (`ReloadContext.selection`) — for all eight panels,
+    // seven of which read the selection after an `await` and got away
+    // with it.
+    it("follows a selection change (it was one selection behind)", async () => {
       await commitAppearance(h.host, R0, STACK, await h.host.document.getMetadata(R0));
       const panel = await mountPanel(h, makeAppearancePanel);
       expect(panel.text()).toContain("Select an object");
@@ -297,9 +302,13 @@ describe("Appearance panel — rendered against the engine", () => {
       await drive(() => h.host.selection.set([R0]), panel.work);
 
       expect(h.host.selection.get()).toEqual([R0]);
-      // MEASURED "0", and still "Select an object…": the reload read the
-      // empty selection that R0 replaced.
       expect(panel.attr(PANEL, "data-draw-appearance-panel")).toBe("5");
+      expect(panel.text()).not.toContain("Select an object");
+
+      // …and back: clearing the selection is followed too.
+      await drive(() => h.host.selection.set([]), panel.work);
+      expect(panel.attr(PANEL, "data-draw-appearance-panel")).toBe("0");
+      expect(panel.text()).toContain("Select an object");
     });
   });
 
@@ -326,64 +335,74 @@ describe("Appearance panel — rendered against the engine", () => {
       expect(stack.fills.length + stack.strokes.length).toBe(RECORDS);
     });
 
-    it("NO walk at all: one reload = 2 reads, whatever the document holds", async () => {
+    it("NO walk at all: one reload = 1 read, whatever the document holds", async () => {
       await h.host.selection.set([R0]);
       const panel = await mountPanel(h, makeAppearancePanel);
-      expect(panel.cost()).toEqual({ events: 0, walks: 0, reads: 2, partReads: 0 });
+      expect(panel.cost()).toEqual({
+        events: 0,
+        reloads: 1,
+        walks: 0,
+        reads: 1,
+        partReads: 0,
+      });
 
       const one = await panel.costOf(() => plainChange(h, 0));
       expect(one).toEqual({
         events: 1,
+        reloads: 1,
         walks: 0,
-        // The SAME element's metadata, twice: once to resolve the carrier
-        // of a baked layer, once to read the stack. TARGET 1.
-        reads: 2,
+        // The selected element's metadata, ONCE: resolving the carrier
+        // of a baked layer and reading the stack are the same envelope,
+        // and the link index holds it for the revision. As found: 2.
+        reads: 1,
         partReads: 0,
       });
-      expect(panel.work.count("document.getMetadata")).toBe(2);
+      expect(panel.work.count("document.getMetadata")).toBe(1);
     });
 
     it("with nothing selected a reload reads nothing", async () => {
       const panel = await mountPanel(h, makeAppearancePanel);
       expect(await panel.costOf(() => plainChange(h, 0))).toEqual({
         events: 1,
+        reloads: 1,
         walks: 0,
         reads: 0,
         partReads: 0,
       });
     });
 
-    it("a burst of 20 document changes = 20 reloads = 40 reads", async () => {
+    it("a burst of 20 document changes = ONE reload = 1 read", async () => {
       await h.host.selection.set([R0]);
       const panel = await mountPanel(h, makeAppearancePanel);
       expect(await documentBurst(h, panel)).toEqual({
-        // No debounce, no cancellation. TARGET 1 (O(1) per burst).
         events: 20,
+        // As found: 20 — no debounce, no cancellation.
+        reloads: 1,
         walks: 0,
-        // 20 × 2. TARGET 1 — the selection's stack at the revision the
-        // burst ends on.
-        reads: 40,
+        // The selection's stack at the revision the burst ends on. As
+        // found: 40.
+        reads: 1,
         partReads: 0,
       });
     });
 
-    it("a burst of 20 selection changes = 20 reloads = 40 reads — of the PREVIOUS selections", async () => {
+    it("a burst of 20 selection changes = ONE reload = 1 read — of the LAST selection", async () => {
       await h.host.selection.set([R0]);
       const panel = await mountPanel(h, makeAppearancePanel);
       expect(await selectionBurst(h, panel)).toEqual({
-        // TARGET 1.
         events: 20,
+        // As found: 20.
+        reloads: 1,
         walks: 0,
-        // 20 × 2 — but each reload read the selection it REPLACED (the
-        // `it.fails` above): R0, then p1 … p19. The last one, p20, was
-        // never read. TARGET 1, and of p20.
-        reads: 40,
+        // p20's — the selection the burst ENDS on. As found: 40, and
+        // none of them p20: each reload read the selection it REPLACED
+        // (R0, then p1 … p19).
+        reads: 1,
         partReads: 0,
       });
-      // The proof it is the previous selection: the panel still shows a
-      // target while its own count attribute says p20 has no layers — it
-      // is showing p19's (empty) stack.
+      // p20 is selected and has no layers: a target, and an empty stack.
       expect(panel.text()).not.toContain("Select an object");
+      expect(panel.attr(PANEL, "data-draw-appearance-panel")).toBe("0");
     });
   });
 });

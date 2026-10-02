@@ -122,7 +122,7 @@ import type {
 
 import { stampDrawMetadata } from "./appearance-bake";
 import { selectionTopToBottom } from "./pathfinder-region";
-import { leafIdsOf } from "./select-same";
+import { linkIndex } from "../link-index";
 import {
   applyOpacityMaskMutationFor,
   releaseOpacityMaskMutationFor,
@@ -298,25 +298,26 @@ export async function resolveMaskTarget(
   const named = idOf(payload?.targetId);
   if (named) return named;
   const selection = host.selection.get();
+  const index = linkIndex(host);
   for (const id of selection) {
-    const env = await host.document.getMetadata(id).catch(() => null);
+    const env = await index.envelopeOf(id);
     if (opacityMaskOf(env)) return id;
   }
   return selection[0] ?? null;
 }
 
-/** Every element whose envelope records a mask, with the relation. One
- *  scene walk plus one metadata read per leaf (the `livePaintLinks`
- *  precedent). The MASK items themselves are not in the tree while they
- *  mask, which is exactly why the record lives on the target. */
+/** Every element whose envelope records a mask, with the relation — a
+ *  parse of the shared link index (`../link-index`), which walks the
+ *  document once per revision for every feature at once. The MASK items
+ *  themselves are not in the tree while they mask, which is exactly why
+ *  the record lives on the target. */
 export async function opacityMaskLinks(
   host: BundleHost,
 ): Promise<{ id: ElementId; ref: OpacityMaskRef }[]> {
   const found: { id: ElementId; ref: OpacityMaskRef }[] = [];
-  const roots = await host.document.tree().catch(() => []);
-  for (const id of leafIdsOf(roots)) {
-    const env = await host.document.getMetadata(id).catch(() => null);
-    const ref = opacityMaskOf(env);
+  const { linked } = await linkIndex(host).snapshot();
+  for (const { id, envelope } of linked) {
+    const ref = opacityMaskOf(envelope);
     if (ref) found.push({ id, ref });
   }
   return found;

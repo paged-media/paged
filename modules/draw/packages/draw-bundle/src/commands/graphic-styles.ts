@@ -140,7 +140,11 @@ import {
   resolveAppearanceCarrier,
   stampDrawMetadata,
 } from "./appearance-bake";
-import { leafIdsOf } from "./select-same";
+import {
+  announceRecipeChange,
+  linkIndex,
+  type ElementProperties,
+} from "../link-index";
 
 export const GRAPHIC_STYLES_COMMAND_CATEGORY = "Graphic Styles";
 
@@ -642,7 +646,9 @@ export function applyGraphicStyleBatchFor(args: {
 
 // -------------------------------------------------------- host: the part
 
-type PartsHost = Pick<BundleHost, "parts" | "supports" | "log">;
+type PartsHost = Pick<BundleHost, "parts" | "supports" | "log"> & {
+  bindings?: BundleHost["bindings"];
+};
 
 /** Read the library out of the container part. A host with no container
  *  writer (`supports("storage.parts@1")` false — an older editor) is not
@@ -685,6 +691,10 @@ export async function writeGraphicStyleLibrary(
       GRAPHIC_STYLES_PART,
       serializeGraphicStyleLibrary(library),
     );
+    // A part write is not a document event: without this an open panel
+    // keeps offering a style Delete just dropped (the library is written
+    // AFTER the last unlink), and never hears a Rename at all.
+    announceRecipeChange(host);
     return true;
   } catch (e) {
     host.log.warn(`graphic styles: library write failed (${String(e)})`);
@@ -711,29 +721,54 @@ export async function readGraphicAppearance(
   id: ElementId,
 ): Promise<GraphicAppearanceRead> {
   const envelope = await host.document.getMetadata(id).catch(() => null);
-  const base: GraphicStyleBase = { ...EMPTY_GRAPHIC_STYLE_BASE };
-  const supported: string[] = [];
+  let props: ElementProperties = null;
   try {
-    const props = await host.document.elementProperties(id);
-    for (const e of props?.entries ?? []) {
-      supported.push(e.path);
-      const v = e.value;
-      if (!v) continue;
-      if (e.path === "frameFillColor" && v.type === "colorRef") base.fill = v.value;
-      else if (e.path === "frameFillTint" && v.type === "length") {
-        base.fillTint = v.value;
-      } else if (e.path === "frameStrokeColor" && v.type === "colorRef") {
-        base.stroke = v.value;
-      } else if (e.path === "frameStrokeWeight" && v.type === "length") {
-        base.strokeWeight = v.value;
-      } else if (e.path === "frameOpacity" && v.type === "length") {
-        base.opacity = v.value;
-      } else if (e.path === "frameBlendMode" && v.type === "text") {
-        base.blendMode = strOrNull(v.value);
-      }
-    }
+    props = await host.document.elementProperties(id);
   } catch {
     /* an unreadable element yields the empty base + no vocabulary */
+  }
+  return graphicAppearanceFrom(envelope, props);
+}
+
+/** The same read OUT OF THE LINK INDEX (`../link-index`): the envelope
+ *  and the property table as the current document revision already has
+ *  them, each read at most once per revision. For the callers that only
+ *  LOOK — the panel's selection line, the link walk below. A write flow
+ *  keeps the direct read above. */
+export async function graphicAppearanceOf(
+  host: BundleHost,
+  id: ElementId,
+): Promise<GraphicAppearanceRead> {
+  const index = linkIndex(host);
+  const envelope = await index.envelopeOf(id);
+  const props = await index.propertiesOf(id).catch(() => null);
+  return graphicAppearanceFrom(envelope, props);
+}
+
+/** An appearance out of an envelope and a property table that have been
+ *  read. Pure — the one rule both reads above share. */
+function graphicAppearanceFrom(
+  envelope: PluginMetadataEnvelope | null,
+  props: ElementProperties,
+): GraphicAppearanceRead {
+  const base: GraphicStyleBase = { ...EMPTY_GRAPHIC_STYLE_BASE };
+  const supported: string[] = [];
+  for (const e of props?.entries ?? []) {
+    supported.push(e.path);
+    const v = e.value;
+    if (!v) continue;
+    if (e.path === "frameFillColor" && v.type === "colorRef") base.fill = v.value;
+    else if (e.path === "frameFillTint" && v.type === "length") {
+      base.fillTint = v.value;
+    } else if (e.path === "frameStrokeColor" && v.type === "colorRef") {
+      base.stroke = v.value;
+    } else if (e.path === "frameStrokeWeight" && v.type === "length") {
+      base.strokeWeight = v.value;
+    } else if (e.path === "frameOpacity" && v.type === "length") {
+      base.opacity = v.value;
+    } else if (e.path === "frameBlendMode" && v.type === "text") {
+      base.blendMode = strOrNull(v.value);
+    }
   }
   return {
     appearance: { stack: appearanceOf(envelope), base },
@@ -743,25 +778,52 @@ export async function readGraphicAppearance(
 }
 
 /** The elements linked to `styleId` (or to ANY style when omitted), each
- *  with its reference and whether it is currently overridden. One scene
- *  walk + one metadata read per leaf — the `select-same` precedent. */
+ *  with its reference and whether it is currently overridden.
+ *
+ *  The links come out of the shared link index (one walk per document
+ *  revision, whoever asks). Whether a link is OVERRIDDEN needs the
+ *  element's own paint, so the linked elements — and only those — cost
+ *  one property read each, once per revision. It used to be a metadata
+ *  read AND a property read for every leaf of the document, linked or
+ *  not. */
 export async function graphicStyleLinks(
   host: BundleHost,
   styleId?: string,
 ): Promise<
   Array<{ id: ElementId; ref: GraphicStyleRef; overridden: boolean }>
 > {
-  const out: Array<{ id: ElementId; ref: GraphicStyleRef; overridden: boolean }> =
-    [];
-  const roots = await host.document.tree().catch(() => []);
-  for (const id of leafIdsOf(roots)) {
-    const read = await readGraphicAppearance(host, id);
-    const ref = graphicStyleRefOf(read.envelope);
-    if (!ref) continue;
-    if (styleId !== undefined && ref.id !== styleId) continue;
-    out.push({ id, ref, overridden: graphicStyleOverridden(ref, read.appearance) });
+  const { linked } = await linkIndex(host).snapshot();
+  const followers = linked
+    .map(({ id, envelope }) => ({ id, ref: graphicStyleRefOf(envelope) }))
+    .filter(
+      (l): l is { id: ElementId; ref: GraphicStyleRef } =>
+        l.ref !== null && (styleId === undefined || l.ref.id === styleId),
+    );
+  return Promise.all(
+    followers.map(async ({ id, ref }) => ({
+      id,
+      ref,
+      overridden: graphicStyleOverridden(
+        ref,
+        (await graphicAppearanceOf(host, id)).appearance,
+      ),
+    })),
+  );
+}
+
+/** How many elements follow each style — a count out of the link index
+ *  and nothing else. The panel's row badge needs HOW MANY, not whether
+ *  each one is overridden, so it costs no property read at all. */
+export async function graphicStyleLinkCounts(
+  host: BundleHost,
+): Promise<Record<string, number>> {
+  const counts: Record<string, number> = {};
+  const { linked } = await linkIndex(host).snapshot();
+  for (const { envelope } of linked) {
+    const ref = graphicStyleRefOf(envelope);
+    if (ref) counts[ref.id] = (counts[ref.id] ?? 0) + 1;
   }
-  return out;
+  return counts;
 }
 
 // ------------------------------------------------------------ appliers

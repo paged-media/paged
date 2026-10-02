@@ -49,17 +49,18 @@ import {
   applyGraphicStyleToSelection,
   applyRedefineGraphicStyle,
   applySaveGraphicStyle,
-  graphicStyleLinks,
+  graphicAppearanceOf,
+  graphicStyleLinkCounts,
   graphicStyleOverridden,
   graphicStyleRefOf,
   graphicStyleRefusalOf,
-  readGraphicAppearance,
   readGraphicStyleLibrary,
   GRAPHIC_STYLES_FEATURE,
   type GraphicStyle,
   type GraphicStyleRef,
 } from "../commands/graphic-styles";
 import { resolveAppearanceCarrier } from "../commands/appearance-bake";
+import { usePanelReload } from "./use-panel-reload";
 
 export const GRAPHIC_STYLES_PANEL_ID = "media.paged.draw.panel.graphicStyles";
 
@@ -172,50 +173,50 @@ export function makeGraphicStylesPanel(host: BundleHost): {
     const [link, setLink] = React.useState<SelectionLink>(NO_LINK);
     const [portable, setPortable] = React.useState(true);
 
-    const reload = React.useCallback(async () => {
-      setPortable(host.supports(GRAPHIC_STYLES_FEATURE));
-      const library = await readGraphicStyleLibrary(host);
-      setStyles(library.styles);
+    // WHAT A RELOAD COSTS (`test/panels/graphic-styles-panel.spec.tsx`,
+    // and it may only go down): the library part once, and — once per
+    // document REVISION — the links (out of the walk every panel shares)
+    // and ONE property read, of the selected element, for its
+    // "overridden" line. It used to read every leaf's metadata AND
+    // properties on every event, and the selected leaf three times.
+    const reload = usePanelReload(
+      host,
+      "graphic-styles",
+      async ({ live, selection }) => {
+        const library = await readGraphicStyleLibrary(host);
+        if (!live()) return;
+        const tally = await graphicStyleLinkCounts(host);
+        if (!live()) return;
 
-      const tally: Record<string, number> = {};
-      for (const l of await graphicStyleLinks(host)) {
-        tally[l.ref.id] = (tally[l.ref.id] ?? 0) + 1;
-      }
-      setCounts(tally);
-
-      const first = host.selection.get()[0] ?? null;
-      if (!first) {
-        setLink(NO_LINK);
-        return;
-      }
-      try {
-        // A baked stack can be selected as its group or as one of its
-        // derived layers — both resolve to the carrier that owns the
-        // appearance (and therefore the style link).
-        const target = await resolveAppearanceCarrier(host, first);
-        const read = await readGraphicAppearance(host, target);
-        const ref = graphicStyleRefOf(read.envelope);
-        setLink({
-          target,
-          ref,
-          overridden: ref ? graphicStyleOverridden(ref, read.appearance) : false,
-          baked: graphicStyleRefusalOf(read.envelope) === "baked",
-        });
-      } catch {
-        setLink({ ...NO_LINK, target: first });
-      }
-    }, []);
-
-    React.useEffect(() => {
-      void reload();
-      const subs = [
-        host.selection.onDidChange(() => void reload()),
-        host.document.onDidChange(() => void reload()),
-      ];
-      return () => {
-        for (const s of subs) s.dispose();
-      };
-    }, [reload]);
+        const first = selection[0] ?? null;
+        let next: SelectionLink = NO_LINK;
+        if (first) {
+          try {
+            // A baked stack can be selected as its group or as one of its
+            // derived layers — both resolve to the carrier that owns the
+            // appearance (and therefore the style link).
+            const target = await resolveAppearanceCarrier(host, first);
+            const read = await graphicAppearanceOf(host, target);
+            const ref = graphicStyleRefOf(read.envelope);
+            next = {
+              target,
+              ref,
+              overridden: ref
+                ? graphicStyleOverridden(ref, read.appearance)
+                : false,
+              baked: graphicStyleRefusalOf(read.envelope) === "baked",
+            };
+          } catch {
+            next = { ...NO_LINK, target: first };
+          }
+          if (!live()) return;
+        }
+        setPortable(host.supports(GRAPHIC_STYLES_FEATURE));
+        setStyles(library.styles);
+        setCounts(tally);
+        setLink(next);
+      },
+    );
 
     const run = async (work: Promise<unknown>) => {
       try {
@@ -223,7 +224,7 @@ export function makeGraphicStylesPanel(host: BundleHost): {
       } catch (e) {
         host.log.warn(`graphic styles panel: ${String(e)}`);
       }
-      void reload();
+      reload();
     };
 
     const linkedName =

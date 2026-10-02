@@ -58,9 +58,7 @@
 //   · `reloads` — the reloads the panel STARTED, counted at the journal
 //     door (`usePanelReload` records one entry per started reload).
 //     Exact, and it includes the mount's own reload and a button's, which
-//     the event count never did. Reported only for a panel that is on the
-//     scheduler — an unconverted one records nothing, and "0 reloads"
-//     would be a false statement about it.
+//     the event count never did.
 // Everything a spec does to the document goes through the RAW `h.host`,
 // so only the panel's own work is counted.
 
@@ -192,9 +190,8 @@ export interface ReloadCost {
    *  What the panel was told, not what it did about it. */
   events: number;
   /** Reloads the panel STARTED (journal entries — see the header). The
-   *  mount's own reload is one of them. Absent for a panel that is not
-   *  on the shared scheduler yet. */
-  reloads?: number;
+   *  mount's own reload is one of them. */
+  reloads: number;
   /** `document.tree()` calls. A walk is one of these plus one read per
    *  leaf, so this is how many times the panel walked the document. */
   walks: number;
@@ -254,32 +251,18 @@ function mounted(
     if (!el) throw new Error(`panel ${id}: nothing matches ${selector}`);
     return el;
   };
-  /** Is this panel on the shared scheduler? Every panel reloads when it
-   *  mounts, and the scheduler journals every reload it starts — so one
-   *  entry, ever, answers it. Looked at before each reset, so the mount
-   *  reload is seen whatever the spec does first. */
-  let journals = false;
-  const started = (): number => {
-    const count = work.count("journal.record");
-    if (count > 0) journals = true;
-    return count;
-  };
   const reset = (): void => {
-    started();
     work.reset();
     events.selection = 0;
     events.document = 0;
   };
-  const cost = (): ReloadCost => {
-    const reloads = started();
-    return {
-      events: events.selection + events.document,
-      ...(journals ? { reloads } : {}),
-      walks: work.count("document.tree"),
-      reads: work.reads(),
-      partReads: work.count("parts.read"),
-    };
-  };
+  const cost = (): ReloadCost => ({
+    events: events.selection + events.document,
+    reloads: work.count("journal.record"),
+    walks: work.count("document.tree"),
+    reads: work.reads(),
+    partReads: work.count("parts.read"),
+  });
   return {
     container: view.container,
     work,

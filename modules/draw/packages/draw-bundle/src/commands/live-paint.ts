@@ -171,6 +171,7 @@ import {
   type PlanarRegionsWire,
 } from "../handlers/planar-regions";
 import { resolveTargetPage } from "../io/svg";
+import { announceRecipeChange, linkIndex } from "../link-index";
 
 export const LIVE_PAINT_COMMAND_CATEGORY = "Live Paint";
 
@@ -662,7 +663,9 @@ export function livePaintDeleteBatchFor(ids: readonly ElementId[]): Mutation {
 
 // -------------------------------------------------------- host: the part
 
-type PartsHost = Pick<BundleHost, "parts" | "supports" | "log">;
+type PartsHost = Pick<BundleHost, "parts" | "supports" | "log"> & {
+  bindings?: BundleHost["bindings"];
+};
 
 /** Read the recipes out of the container part. A host with no container
  *  writer (`supports("storage.parts@1")` false — an older editor) is not
@@ -705,6 +708,10 @@ export async function writeLivePaintLibrary(
       LIVE_PAINT_PART,
       serializeLivePaintLibrary(library),
     );
+    // A part write is not a document event: without this an open panel
+    // shows no row for a face the bucket just painted (the recipe is
+    // written AFTER the artwork is inserted).
+    announceRecipeChange(host);
     return true;
   } catch (e) {
     host.log.warn(`live paint: recipe write failed (${String(e)})`);
@@ -719,9 +726,9 @@ export function livePaintInputs(group: LivePaintRecipe): ElementId[] {
   return group.inputs.map((i) => ({ kind: i.kind, id: i.id }) as ElementId);
 }
 
-/** Every leaf carrying a live-paint link, split by which one. One scene
- *  walk + one metadata read per leaf — the `select-same` /
- *  `symbolInstances` precedent. */
+/** Every leaf carrying a live-paint link, split by which one — a parse
+ *  of the shared link index (`../link-index`), which walks the document
+ *  once per revision for every feature at once. */
 export async function livePaintLinks(
   host: BundleHost,
   groupId?: string,
@@ -731,9 +738,8 @@ export async function livePaintLinks(
 }> {
   const members: { id: ElementId; ref: LivePaintMemberRef }[] = [];
   const fills: { id: ElementId; ref: LivePaintFillRef }[] = [];
-  const roots = await host.document.tree().catch(() => []);
-  for (const id of leafIdsOf(roots)) {
-    const env = await host.document.getMetadata(id).catch(() => null);
+  const { linked } = await linkIndex(host).snapshot();
+  for (const { id, envelope: env } of linked) {
     const member = livePaintMemberOf(env);
     if (member && (groupId === undefined || member.group === groupId)) {
       members.push({ id, ref: member });
@@ -749,14 +755,17 @@ export async function livePaintLinks(
 
 /** The recipe the current selection belongs to — a member, a fill, or
  *  (when the selection carries no link) the ONLY recipe in the library.
- *  Null when there is nothing to act on. */
+ *  Null when there is nothing to act on. `known` is the library when the
+ *  caller has just read it. */
 export async function selectedLivePaintGroup(
   host: BundleHost,
+  known?: LivePaintLibrary,
 ): Promise<LivePaintRecipe | null> {
-  const library = await readLivePaintLibrary(host);
+  const library = known ?? (await readLivePaintLibrary(host));
   if (library.groups.length === 0) return null;
+  const index = linkIndex(host);
   for (const id of host.selection.get()) {
-    const env = await host.document.getMetadata(id).catch(() => null);
+    const env = await index.envelopeOf(id);
     const group =
       livePaintMemberOf(env)?.group ?? livePaintFillOf(env)?.group ?? null;
     if (group) {
@@ -1250,6 +1259,8 @@ export async function applyReleaseLivePaint(
     return false;
   }
   const links = await livePaintLinks(host, group.id);
+  // The envelopes the links were just parsed from, not a re-read.
+  const index = linkIndex(host);
   const leaves: {
     id: ElementId;
     envelope: PluginMetadataEnvelope | null;
@@ -1258,14 +1269,14 @@ export async function applyReleaseLivePaint(
   for (const m of links.members) {
     leaves.push({
       id: m.id,
-      envelope: await host.document.getMetadata(m.id).catch(() => null),
+      envelope: await index.envelopeOf(m.id),
       key: "livePaintMember",
     });
   }
   for (const f of links.fills) {
     leaves.push({
       id: f.id,
-      envelope: await host.document.getMetadata(f.id).catch(() => null),
+      envelope: await index.envelopeOf(f.id),
       key: "livePaintFill",
     });
   }

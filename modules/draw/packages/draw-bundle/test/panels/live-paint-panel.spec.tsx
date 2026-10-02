@@ -26,6 +26,11 @@
 // WHAT WAS MEASURED, in one line: ONE walk per reload, whatever the
 // record count, plus the swatch collection — re-read on every selection
 // change, which cannot have changed it.
+//
+// WHAT IT IS NOW (the history is beside each budget): one reload per
+// burst; the links (out of the shared link index, `src/link-index.ts`)
+// and the swatch collection once per document REVISION, so a selection
+// change reads neither; one part read per reload.
 
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
@@ -34,6 +39,7 @@ import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import {
   drawBundle,
+  applyDeleteLivePaintFace,
   applyFillLivePaintFace,
   applyMakeLivePaintGroup,
   getLivePaintFill,
@@ -59,6 +65,7 @@ import {
   poly,
   seedRow,
   selectionBurst,
+  slowRecipeWrites,
   teardownPanels,
   unmountAll,
   PLAIN_LEAVES,
@@ -105,13 +112,16 @@ describe("Live paint panel — rendered against the engine", () => {
 
     it("THE FLOOR: what a reload costs before the document holds anything", async () => {
       const panel = await mountPanel(h, makeLivePaintPanel);
-      // One tree read, the swatch collection, and the recipe twice.
-      // TARGET 1 part read.
+      // The mount's own reload: one tree read (the link index, with no
+      // leaf under it), the swatch collection, and the recipe once. As
+      // found: the recipe twice (the panel, then
+      // `selectedLivePaintGroup`).
       expect(panel.cost()).toEqual({
         events: 0,
+        reloads: 1,
         walks: 1,
         reads: 2,
-        partReads: 2,
+        partReads: 1,
       });
     });
   });
@@ -249,17 +259,18 @@ describe("Live paint panel — rendered against the engine", () => {
       expect(panel.get(ROW).textContent).toContain("2 members · 0 painted faces");
     });
 
-    // BUG (measured). The panel reloads on document events, selection
-    // events and its own buttons — and a `.paged` container-part write is
-    // none of those. `fillLivePaintFaces` (the command AND the bucket
-    // tool) inserts the artwork first and writes the recipe LAST, so the
-    // reload the insert triggers reads the recipe BEFORE the face is in
-    // it, and nothing reloads afterwards. An open panel therefore shows no
-    // face row for a face the bucket just painted, until some unrelated
-    // selection or document change comes along. (Release through the
-    // command leaves the released group's row up the same way.) Flip to
-    // `it` when a recipe write reaches the panel.
-    it.fails("an OPEN panel shows the face the bucket's command just painted", async () => {
+    // WAS A BUG (measured, then fixed). The panel reloaded on document
+    // events, selection events and its own buttons — and a `.paged`
+    // container-part write is none of those. `fillLivePaintFaces` (the
+    // command AND the bucket tool) inserts the artwork first and writes
+    // the recipe LAST, so the reload the insert triggered read the recipe
+    // BEFORE the face was in it, and nothing reloaded afterwards. An open
+    // panel therefore showed no face row (0) for a face the bucket had
+    // just painted, until some unrelated selection or document change
+    // came along. (Release through the command left the released group's
+    // row up the same way.) `writeLivePaintLibrary` now announces the
+    // write, and the panel reloads on that.
+    it("an OPEN panel shows the face the bucket's command just painted", async () => {
       const panel = await mountPanel(h, makeLivePaintPanel);
       expect(panel.count("[data-draw-live-paint-face]")).toBe(0);
       await drive(async () => {
@@ -267,7 +278,41 @@ describe("Live paint panel — rendered against the engine", () => {
       }, panel.work);
       // The document has it…
       expect(await fills()).toHaveLength(1);
-      // …MEASURED 0: the panel does not.
+      // …and so does the panel.
+      expect(panel.count("[data-draw-live-paint-face]")).toBe(1);
+    });
+
+    // The same, in the order the EDITOR has (see blend-panel.spec.tsx):
+    // the recipe write lands a task after the reload the insert started.
+    // This is the case that fails without the announcement.
+    it("…and when the recipe write lands AFTER the reload its insert started", async () => {
+      const panel = await mountPanel(h, makeLivePaintPanel);
+      expect(panel.count("[data-draw-live-paint-face]")).toBe(1);
+      const facesOf = async () =>
+        (await readLivePaintLibrary(h.host)).groups[0]!.faces.map((f) => f.face);
+      const before = await facesOf();
+
+      // A SECOND face: a0 alone, at (45, 45).
+      await drive(async () => {
+        const painted = await applyFillLivePaintFace(slowRecipeWrites(h.host), {
+          groupId: "lp-1",
+          x: 45,
+          y: 45,
+        });
+        if (painted.length !== 1) throw new Error("not painted");
+      }, panel.work);
+      const added = (await facesOf()).filter((face) => !before.includes(face));
+      expect(added).toHaveLength(1);
+      expect(await fills()).toHaveLength(2);
+      expect(panel.count("[data-draw-live-paint-face]")).toBe(2);
+
+      // Taken off again, so the cases below see the document they expect
+      // — and the panel follows that too.
+      await drive(
+        () => applyDeleteLivePaintFace(h.host, { groupId: "lp-1", face: added[0] }),
+        panel.work,
+      );
+      expect(await fills()).toHaveLength(1);
       expect(panel.count("[data-draw-live-paint-face]")).toBe(1);
     });
 
@@ -332,49 +377,64 @@ describe("Live paint panel — rendered against the engine", () => {
 
     it("ONE reload = 1 walk = 52 reads", async () => {
       const panel = await mountPanel(h, makeLivePaintPanel);
-      expect(panel.cost()).toEqual({ events: 0, walks: 1, reads: 52, partReads: 2 });
+      expect(panel.cost()).toEqual({
+        events: 0,
+        reloads: 1,
+        walks: 1,
+        reads: 52,
+        partReads: 1,
+      });
 
       const one = await panel.costOf(() => plainChange(h, 0));
       expect(one).toEqual({
         events: 1,
-        // TARGET 1 per document REVISION, shared.
+        reloads: 1,
+        // One walk per document REVISION, shared by every panel and
+        // every command on this host.
         walks: 1,
-        // 1 tree + 50 getMetadata + the swatch collection. TARGET 52 for
-        // this panel alone; the walk itself is the shared part.
+        // 1 tree + 50 getMetadata (in parallel) + the swatch collection.
+        // TARGET 3 — a tree, ONE bulk metadata read (RFI C-65) and the
+        // collection.
         reads: 52,
-        // The recipe is read twice (the panel, then
-        // `selectedLivePaintGroup`). TARGET 1.
-        partReads: 2,
+        // As found: 2 (the panel, then `selectedLivePaintGroup`).
+        partReads: 1,
       });
       expect(panel.work.count("document.collection")).toBe(1);
     });
 
-    it("a burst of 20 document changes = 20 reloads = 1040 reads", async () => {
+    it("a burst of 20 document changes = ONE reload = 52 reads", async () => {
       const panel = await mountPanel(h, makeLivePaintPanel);
       expect(await documentBurst(h, panel)).toEqual({
-        // No debounce, no cancellation. TARGET 1 (O(1) per burst).
         events: 20,
-        walks: 20,
-        // 20 × 52. TARGET 52 — one walk for the revision the burst ends on.
-        reads: 1040,
-        partReads: 40,
+        // As found: 20 — no debounce, no cancellation.
+        reloads: 1,
+        // As found: 20.
+        walks: 1,
+        // One walk, of the revision the burst ends on. As found: 1 040.
+        reads: 52,
+        // As found: 40.
+        partReads: 1,
       });
     });
 
-    it("a burst of 20 selection changes = 20 reloads = 1060 reads", async () => {
+    it("a burst of 20 selection changes = ONE reload = 0 reads", async () => {
       const panel = await mountPanel(h, makeLivePaintPanel);
       expect(await selectionBurst(h, panel)).toEqual({
-        // TARGET 1.
         events: 20,
-        // The DOCUMENT did not change once during this burst. TARGET 0.
-        walks: 20,
-        // 20 × (52 + 1 read of the selected leaf's own link). The swatch
-        // collection is in there 20 times; a selection change cannot
-        // have changed it. TARGET 1.
-        reads: 1060,
-        partReads: 40,
+        // As found: 20.
+        reloads: 1,
+        // The DOCUMENT did not change once during this burst. As found:
+        // 20.
+        walks: 0,
+        // Neither the links nor the swatches are read again: both are
+        // kept per document revision. As found: 1 060.
+        reads: 0,
+        // As found: 40.
+        partReads: 1,
       });
-      expect(panel.work.count("document.collection")).toBe(20);
+      // As found: 20 — once per selection change, which cannot have
+      // changed it.
+      expect(panel.work.count("document.collection")).toBe(0);
     });
   });
 });

@@ -32,11 +32,16 @@
 //
 //  · LINK DISCOVERY. A feature finds its records by reading the plugin
 //    metadata of every leaf in the document — one `getMetadata` round
-//    trip each — and keeping the ones that carry its key. Six features,
-//    six copies of the same loop (`blendLinks`, `repeatLinks`,
+//    trip each — and keeping the ones that carry its key. AS FOUND: six
+//    features, six copies of the same loop (`blendLinks`, `repeatLinks`,
 //    `patternLinks`, `livePaintLinks`, `objectsOnPathLinks`,
 //    `symbolInstances`), each blind to the other five's leaves and to
-//    the 500 that belong to nobody.
+//    the 500 that belong to nobody, and run again by every command.
+//    NOW: one shared walk per document REVISION (`src/link-index.ts`),
+//    so a command costs one walk at most and the next command on an
+//    unchanged document costs none. The walk itself is still a read per
+//    leaf — there is no bulk metadata door (RFI C-65) — which is why the
+//    COLD budgets below still equal the leaf count.
 //  · "WHAT DID THIS BATCH CREATE". A batch outcome carries one
 //    `createdId`, so a flow that inserts several paths reads the whole
 //    scene tree before the batch and again after it, and diffs.
@@ -188,23 +193,28 @@ describe("perf budgets — commands over a busy document", () => {
   //
   // SUSPICION CONFIRMED, exactly: one `getMetadata` per leaf of the
   // whole document, for every feature, whichever record is asked for.
-  describe("link discovery — one metadata read per leaf of the document", () => {
-    type Walked = Exclude<LinkedFeature, "symbols">;
-    const SELECT: Record<
-      Walked,
-      (host: BundleHost, id?: string) => Promise<ElementId[]>
-    > = {
-      blend: (host, id) => applySelectBlendObjects(host, id ? { blendId: id } : {}),
-      repeat: (host, id) =>
-        applySelectRepeatInstances(host, id ? { repeatId: id } : {}),
-      pattern: (host, id) =>
-        applySelectPatternTiles(host, id ? { patternId: id } : {}),
-      objectsOnPath: (host, id) =>
-        applySelectObjectsOnPath(host, id ? { onPathId: id } : {}),
-      livePaint: (host, id) =>
-        applySelectLivePaintFaces(host, id ? { groupId: id } : {}),
-    };
+  type Walked = Exclude<LinkedFeature, "symbols">;
+  /** The one read-only verb each walked feature has. */
+  const SELECT: Record<
+    Walked,
+    (host: BundleHost, id?: string) => Promise<ElementId[]>
+  > = {
+    blend: (host, id) => applySelectBlendObjects(host, id ? { blendId: id } : {}),
+    repeat: (host, id) =>
+      applySelectRepeatInstances(host, id ? { repeatId: id } : {}),
+    pattern: (host, id) =>
+      applySelectPatternTiles(host, id ? { patternId: id } : {}),
+    objectsOnPath: (host, id) =>
+      applySelectObjectsOnPath(host, id ? { onPathId: id } : {}),
+    livePaint: (host, id) =>
+      applySelectLivePaintFaces(host, id ? { groupId: id } : {}),
+  };
 
+  // Every scenario in this describe hands its command a FRESH view of
+  // the host — a cold link index — so what it counts is what a walk
+  // costs when nothing has read the document at this revision yet. What
+  // a walk costs the NEXT command is in the describe after it.
+  describe("link discovery — one metadata read per leaf of the document", () => {
     // [feature, what the command selects — the leaves it was looking for]
     it.each<[Walked, number]>([
       ["blend", 2],
@@ -226,18 +236,13 @@ describe("perf budgets — commands over a busy document", () => {
       expect(work.count("document.getMetadata")).toBe(LEAVES);
     });
 
-    // [feature, reads]. As found, every row was LEAVES + 1: the selected
-    // leaf's own link names the record (1 read) — and then the whole
-    // document was walked anyway, that leaf included. A feature on the
-    // link index reads each leaf ONCE per revision, so the walk skips
-    // the one the resolve already read.
-    it.each<[Walked, number]>([
-      ["blend", LEAVES],
-      ["repeat", LEAVES],
-      ["pattern", LEAVES],
-      ["objectsOnPath", LEAVES],
-      ["livePaint", LEAVES + 1],
-    ])("%s, record resolved from the selection: %i reads", async (feature, reads) => {
+    it.each<[Walked]>([
+      ["blend"],
+      ["repeat"],
+      ["pattern"],
+      ["objectsOnPath"],
+      ["livePaint"],
+    ])("%s, record resolved from the selection: the same walk, no extra read", async (feature) => {
       const { work, result } = await counted(
         w,
         `${feature} select from selection`,
@@ -245,8 +250,12 @@ describe("perf budgets — commands over a busy document", () => {
         (host) => SELECT[feature](host),
       );
       expect(result.length).toBeGreaterThan(0);
+      // As found: LEAVES + 1 — the selected leaf's own link names the
+      // record (1 read), and then the whole document was walked anyway,
+      // that leaf included. The link index reads each leaf ONCE per
+      // revision, so the walk skips the one the resolve already read.
       // TARGET as above.
-      expect(work.count("document.getMetadata")).toBe(reads);
+      expect(work.count("document.getMetadata")).toBe(LEAVES);
     });
 
     it.each<[Walked]>([["blend"], ["repeat"], ["pattern"], ["objectsOnPath"]])(
@@ -296,6 +305,43 @@ describe("perf budgets — commands over a busy document", () => {
   // there is ONE host for the bundle's life: a walk is paid once per
   // document REVISION, by whichever command or panel asks first.
   describe("one host, several commands — the walk is paid once per revision", () => {
+    it("SIX features, ONE walk: whoever asks first pays, and the other five read nothing", async () => {
+      const { host, work } = countingHost(w.h.host);
+
+      // The first to ask — blend, here — walks the document.
+      expect(await SELECT.blend(host, recordOf("blend"))).toHaveLength(2);
+      expect(work.count("document.tree")).toBe(1);
+      expect(work.count("document.getMetadata")).toBe(LEAVES);
+
+      // The other five find their own leaves in what that walk read. As
+      // found: five more walks, 7 015 more reads — each feature's loop
+      // was blind to what the others had just read.
+      work.reset();
+      for (const [feature, found] of [
+        ["repeat", 2],
+        ["pattern", 2],
+        ["objectsOnPath", 2],
+        ["livePaint", 1],
+      ] as const) {
+        expect(await SELECT[feature](host, recordOf(feature)), feature).toHaveLength(
+          found,
+        );
+      }
+      expect(
+        await symbolInstances(host, w.linked.symbols!.symbolId),
+      ).toHaveLength(50);
+      expect(work.count("document.tree")).toBe(0);
+      expect(work.count("document.getMetadata")).toBe(0);
+      // What is left is not a document read: the two features that
+      // consult their recipe to answer (repeat for its clipped
+      // instances, live paint for its group).
+      expect(work.reads()).toBe(0);
+      expect(work.count("parts.read")).toBe(2);
+      report("five features on a warm index", work.snapshot());
+
+      await w.h.host.selection.set([]);
+    });
+
     it("blend: select, select another, update, select what the update built", async () => {
       const parts = await snapshotParts(w.h);
       const mark = await undoMark(w);
@@ -539,11 +585,13 @@ describe("perf budgets — commands over a busy document", () => {
       expect(undoSteps).toBe(2);
       // TARGET 1 — the selected leaf's own link.
       expect(work.count("document.getMetadata")).toBe(LEAVES);
-      // TARGET 0.
-      expect(work.count("document.tree")).toBe(5);
+      // The index's one tree and the before/after diff. As found: 5 —
+      // expanding the selection, the walk and the instance's group
+      // lookup each read the same tree for themselves. TARGET 0.
+      expect(work.count("document.tree")).toBe(3);
     });
 
-    it("redefine: 50 instances are 100 mutations, 100 undo steps and 152 tree reads", async () => {
+    it("redefine: 50 instances are 100 mutations, 100 undo steps and 150 tree reads", async () => {
       const { work, undoSteps, result } = await countedWrite(
         w,
         "symbol redefine",
@@ -557,10 +605,12 @@ describe("perf budgets — commands over a busy document", () => {
       // ONE command, a HUNDRED presses of undo to take it back.
       // TARGET 1.
       expect(undoSteps).toBe(100);
-      // Three whole-document tree reads per instance, plus two. A
-      // rebuild reads the tree for its group, then diffs around its
-      // insert. TARGET 1.
-      expect(work.count("document.tree")).toBe(152);
+      // Three whole-document tree reads per instance: a rebuild reads
+      // the tree for its group, then diffs around its insert. As found:
+      // 152 — the capture and the instance walk read it once each on
+      // top; they and the FIRST rebuild's group lookup now share one
+      // read (the same revision), so it is 3 × 50 exactly. TARGET 1.
+      expect(work.count("document.tree")).toBe(150);
       // The one thing redefine does once.
       expect(work.count("document.getMetadata")).toBe(LEAVES);
       expect(work.count("document.pathAnchors")).toBe(101);

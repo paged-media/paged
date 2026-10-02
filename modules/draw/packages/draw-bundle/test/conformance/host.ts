@@ -93,7 +93,11 @@ const editorClientAnchor = (): string | undefined => {
  *  into a live host (four of them do, in a `beforeEach`) would otherwise
  *  hand the bundle's link index (`src/link-index.ts`) a new document
  *  under the old one's links — same fixture, same ids, nothing to tell
- *  them apart by. So `load` says what the editor's says. */
+ *  them apart by. So `load` says what the editor's says.
+ *
+ *  MEASURED without it: `symbols.spec.ts` places an instance into a
+ *  freshly loaded document and gets the id `si-3` instead of `si-1`,
+ *  because the instance ids it mints around are the PREVIOUS test's. */
 export const openHost = async (): Promise<HeadlessHost> => {
   const h = await createHeadlessHost({
     console: silent,
