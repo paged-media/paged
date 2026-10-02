@@ -163,8 +163,9 @@ describe("Symbols panel — rendered against the engine", () => {
       expect(
         symbolInstanceOf(await h.host.document.getMetadata(leaves[0]!))?.symbol,
       ).toBe("sym-1");
-      // TWO batches — insert, then paint + link (the note's undo count).
-      expect(panel.work.mutations.map((m) => m.op)).toEqual(["batch", "batch"]);
+      // ONE batch: the insert is named, and the paint and link follow it
+      // in the same mutation. (It was two — insert, then paint + link.)
+      expect(panel.work.mutations.map((m) => m.op)).toEqual(["batch"]);
       expect(panel.work.count("log.warn")).toBe(0);
 
       // THE PANEL followed: the command selects what it placed, so the

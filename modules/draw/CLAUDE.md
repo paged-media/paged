@@ -379,9 +379,19 @@ other contour inserted, named and painted by name. It was two batches PER
 ELEMENT. Nothing is deleted, so no ordering rule binds; the two-per-
 element lane is the fallback.
 
-THE OTHER THREE FLOWS ARE STILL TWO BATCHES — `symbols.ts`,
-`image-trace.ts`, `live-paint.ts`. Their "TWO batches ⇒ 2 undo steps"
-notes are still TRUE as shipped; the reason is "not yet converted".
+SYMBOLS — place, reset AND REDEFINE — ARE ONE BATCH, however many
+instances: a redefine of 50 instances was 100 mutations, 100 undo steps
+and 150 tree reads, and is 1, 1 and 1. `symbolBatchFor` sorts every
+instance's ops into the one order several rebuilds allow (inserts,
+dissolves, deletes, finishes, groups — below). That order also fixed an
+as-found failure: three two-piece instances rebuilt one after another hit
+the engine defect below and only the LAST was rebuilt; all their groups
+are dissolved before anything is deleted now. The two-batches-per-
+instance lane is the fallback.
+
+THE OTHER TWO FLOWS ARE STILL TWO BATCHES — `image-trace.ts`,
+`live-paint.ts`. Their "TWO batches ⇒ 2 undo steps" notes are still TRUE
+as shipped; the reason is "not yet converted".
 
 **"WHAT DID MY BATCH CREATE" HAS ONE SEAM: `commands/minted.ts`.** A
 batch outcome carries ONE `createdId`, so a flow that inserted several

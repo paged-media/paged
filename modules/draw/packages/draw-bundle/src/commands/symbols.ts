@@ -113,41 +113,57 @@
 // · BREAK LINK drops the reference from every leaf and leaves the
 //   artwork exactly where it is (the graphic-styles precedent).
 //
-// MUTATION / UNDO SHAPE (probed against the booted engine; the RFI C-15
-// rule — assert the real count, never claim "one"):
+// MUTATION / UNDO SHAPE (measured against the booted engine, 0.64.0; the
+// RFI C-15 rule — assert the real count, never claim "one"):
 //   · define            = 0 document mutations (library only).
 //   · rename            = 0 document mutations (the leaf stores the id,
 //                         so a rename never walks the document).
-//   · place             = TWO batches ⇒ 2 undo steps.
-//   · reset / rebuild   = TWO batches ⇒ 2 undo steps PER INSTANCE.
-//   · redefine          = 2 × (instances) undo steps; the library write
-//                         itself is not on the undo stack.
+//   · place             = ONE batch ⇒ 1 undo step.
+//   · reset             = ONE batch ⇒ 1 undo step for EVERY selected
+//                         instance together.
+//   · redefine          = ONE batch ⇒ 1 undo step for EVERY instance of
+//                         the symbol; the library write itself is not on
+//                         the undo stack.
 //   · break link        = ONE batch ⇒ 1 undo step for the whole selection.
 //   · delete            = ONE batch ⇒ 1 undo step (every follower of the
 //                         symbol is unlinked together).
 //
-// A REBUILD IS STILL TWO BATCHES, not three, and the reason is a measured
-// engine constraint rather than a preference: a batch that DELETES and
-// then INSERTS is refused — the insert's z-position resolves against the
-// spread length the batch STARTED with, so the child fails with
-// `notImplemented` / `position 4 out of range for parent Spread("us")
-// (len 3)` and the whole atomic batch rolls back. So the teardown
-// (dissolve + delete) rides BATCH 2, which contains no inserts, next to
-// the deletes the compound re-merge already performs.
+// Place was TWO batches and every rebuild TWO PER INSTANCE — a redefine
+// of 50 instances was 100 mutations and 100 presses of undo — because
+// `insertPath` mints the ids the paint, the link and the group address,
+// and a batch could not name an id it had just minted. C-15's
+// `bindCreated` reached the contract (CLAUDE.md, "RFI C-15 IS NOW IN THE
+// CONTRACT"), so every insert is named and the rest of the build follows
+// it in the same batch (`symbolBatchFor`).
 //
-// WHY PLACE IS STILL TWO BATCHES, given RFI C-15 LANDED (core b8e2b6b,
-// 2026-08-04). C-15 does let a batch address an id an earlier child
-// minted — `bindCreated { handle }` plus `$h:` references — and the
-// locally-synced engine wasm speaks it. It is NOT reachable from here:
-// `@paged-media/plugin-api`'s `Mutation` union has no `bindCreated` arm
-// (checked in the published 0.2.25-canary.0 AND in plugin-sdk's
-// unpublished HEAD source), and this repo's rule is that the contract
-// package is the only sanctioned import — emitting an op the union does
-// not carry would be a cast around the §12.3 wire-compat alarm, and it
-// would only work against a locally-overridden engine anyway. So the
-// floor here is the same two batches `pattern.ts` and
-// `appearance-bake.ts` record, and it stays two until the contract
-// carries the op. Recorded rather than worked around.
+// THE ORDER INSIDE THE BATCH is the only one the engine accepts, and it
+// is why ANY number of rebuilds fits in one (each rule measured; the
+// sentences are pinned in `test/conformance/minted.spec.ts`):
+//   1. EVERY insert first. A batch that DELETES and then INSERTS is
+//      refused ("position N out of range for parent Spread"): the
+//      insert's z-position resolves against the spread length the batch
+//      STARTED with.
+//   2. EVERY old group dissolved, before any of its members is deleted
+//      ("group has an id-less member that cannot round-trip" otherwise).
+//   3. EVERY delete — the old leaves and the absorbed contours of a
+//      compound piece.
+//   4. the paint, the re-merge and the link of every piece.
+//   5. EVERY new group LAST. Rebuild by rebuild — tear one down, group
+//      one up, then the next — is NOT refused: it applies and leaves an
+//      EMPTY group, paths in no tree, and an undo that does not restore.
+// Ordered this way the batch also no longer trips over its OWN records:
+// as found, rebuilding a multi-piece instance that had another instance's
+// group above it was refused ("a member already belongs to another
+// group" — the engine defect `minted.spec.ts` pins), so a redefine of
+// three two-piece instances rebuilt only the last one. All their groups
+// are dissolved before anything is deleted now. A group of ANOTHER
+// feature above a rebuilt instance still trips it; that is the engine's.
+//
+// THE TWO-BATCH LANE IS KEPT, instance by instance, as the fallback for
+// an engine that refuses the one batch (one that predates `bindCreated`
+// does) — `emitSymbolInstanceStepwise`. What a batch created comes off
+// the engine's reply (`commands/minted.ts`), not two reads of the scene
+// tree per instance.
 //
 // ------------------------------------------------------------- limits
 // · THE LIBRARY IS NOT UNDOABLE. `host.parts.write` is a container
@@ -193,6 +209,7 @@ import type {
   Disposable,
   ElementId,
   Mutation,
+  MutationInput,
   PluginMetadataEnvelope,
   SceneTreeNode,
 } from "@paged-media/plugin-api";
@@ -206,9 +223,14 @@ import {
   type CompoundPaint,
 } from "./compound-path";
 import { groupMutationFor } from "./group";
+import { bindMinted, mintedLeaves, mutateMinting } from "./minted";
 import { offsetTable } from "./pattern";
-import { leafIdsOf } from "./select-same";
 import { parentGroupOf } from "./parentage";
+import {
+  batchMutationFor,
+  bindCreatedMutationFor,
+  handleElementId,
+} from "./v59-wire";
 import { insertPathMutationFor } from "../handlers/insert-path";
 import { resolveTargetPage } from "../io/svg";
 import { announceRecipeChange, linkIndex } from "../link-index";
@@ -701,11 +723,11 @@ export interface SymbolReplacement {
   stale: readonly ElementId[];
 }
 
-/** BATCH 1 — one `insertPath` per piece per contour, in the order
- *  `symbolContourCounts` reports (which is how the minted ids are
- *  chunked back onto their pieces afterwards). Inserts ONLY: see
+/** STEPWISE LANE, BATCH 1 — one `insertPath` per piece per contour, in
+ *  the order `symbolContourCounts` reports (which is how the minted ids
+ *  are chunked back onto their pieces afterwards). Inserts ONLY: see
  *  {@link symbolFinishBatchFor} for why a rebuild's deletes cannot ride
- *  here. */
+ *  here. The shipped lane is {@link symbolBatchFor}. */
 export function symbolInsertBatchFor(plan: SymbolPlacePlan): Mutation {
   const ops: Mutation[] = [];
   for (const piece of plan.pieces) {
@@ -731,21 +753,19 @@ const colorRef = (
   args: { elementId, path, value: { type: "colorRef", value } },
 });
 
-/** BATCH 2 — for a REBUILD, tear the old instance down FIRST (dissolve
- *  its group, delete its leaves); then re-merge every compound piece
- *  through the SAME `framePath` door Make Compound Path uses, paint each
- *  surviving leaf, stamp the instance link on it, and (for a multi-piece
- *  symbol only) wrap the leaves in one group. One batch ⇒ one undo step.
+/** THE FINISH of one instance — for a REBUILD, tear the old instance
+ *  down FIRST (dissolve its group, delete its leaves); then re-merge
+ *  every compound piece through the SAME `framePath` door Make Compound
+ *  Path uses, paint each surviving leaf, stamp the instance link on it,
+ *  and (for a multi-piece symbol only) wrap the leaves in one group.
  *
- *  WHY THE TEARDOWN IS HERE AND NOT IN BATCH 1 — measured against the
- *  booted engine, not assumed. A batch that DELETES and then INSERTS is
- *  refused: the insert's z-position is resolved against the spread
- *  length the batch STARTED with, so the second child fails with
- *  `notImplemented` / "position 4 out of range for parent Spread(\"us\")
- *  (len 3)" and the whole atomic batch rolls back. Deletes alone in a
- *  batch that also groups are fine (the pattern bake proves it), so the
- *  teardown rides batch 2 and a rebuild stays TWO batches instead of
- *  three. */
+ *  In the STEPWISE lane this is batch 2, the bindings are real ids, and
+ *  the teardown leads it because a batch that DELETES and then INSERTS
+ *  is refused (the insert's z-position resolves against the spread
+ *  length the batch STARTED with: "position N out of range for parent
+ *  Spread"). In the one-batch lane {@link symbolBatchFor} takes these
+ *  SAME ops over handle bindings and sorts them behind every insert —
+ *  one builder, so the two lanes cannot drift. */
 export function symbolFinishBatchFor(args: {
   plan: SymbolPlacePlan;
   bindings: readonly SymbolPieceBinding[];
@@ -804,6 +824,82 @@ export function symbolFinishBatchFor(args: {
     ops.push(groupMutationFor(args.bindings.map((b) => b.keep)));
   }
   return { op: "batch", args: { ops } };
+}
+
+/** One instance a batch builds: what to emit, and (a rebuild) what it
+ *  replaces. */
+export interface SymbolBuild {
+  plan: SymbolPlacePlan;
+  replace?: SymbolReplacement;
+}
+
+/** The batch-local handle of build `build`'s piece `piece`, contour
+ *  `contour`. Deterministic, so the conformance spec asserts the exact
+ *  wire. Pure. */
+export const symbolHandle = (build: number, piece: number, contour: number): string =>
+  `sy${build}_${piece}_${contour}`;
+
+/** What the one batch resolves each piece of build `build` to: its first
+ *  contour's handle survives, the rest are absorbed into it. Pure. */
+export function symbolHandleBindings(
+  plan: SymbolPlacePlan,
+  build: number,
+): SymbolPieceBinding[] {
+  return symbolContourCounts(plan).map((count, pieceIndex) => ({
+    pieceIndex,
+    keep: handleElementId(symbolHandle(build, pieceIndex, 0)),
+    absorb: Array.from({ length: count - 1 }, (_, c) =>
+      handleElementId(symbolHandle(build, pieceIndex, c + 1)),
+    ),
+  }));
+}
+
+/**
+ * THE ONE BATCH — any number of instances placed or rebuilt together, in
+ * the ONE order the engine accepts (module header): every insert, named;
+ * then every old group dissolved; then every delete; then every piece's
+ * re-merge, paint and link; then every new group. The ops are
+ * {@link symbolFinishBatchFor}'s, over handle bindings, sorted into those
+ * phases. ONE batch ⇒ ONE undo step however many instances.
+ */
+export function symbolBatchFor(builds: readonly SymbolBuild[]): MutationInput {
+  const inserts: MutationInput[] = [];
+  const dissolves: MutationInput[] = [];
+  const deletes: MutationInput[] = [];
+  const finishes: MutationInput[] = [];
+  const groups: MutationInput[] = [];
+  builds.forEach(({ plan, replace }, b) => {
+    plan.pieces.forEach((piece, p) => {
+      splitCompound(piece.table).forEach((contour, c) => {
+        inserts.push(
+          insertPathMutationFor(
+            plan.pageId,
+            contour.anchors,
+            contour.subpathOpen?.[0] ?? false,
+          ),
+          bindCreatedMutationFor(symbolHandle(b, p, c)),
+        );
+      });
+    });
+    const finish = symbolFinishBatchFor({
+      plan,
+      bindings: symbolHandleBindings(plan, b),
+      replace,
+    }) as Extract<Mutation, { op: "batch" }>;
+    for (const op of finish.args.ops) {
+      if (op.op === "dissolveGroup") dissolves.push(op);
+      else if (op.op === "deleteFrame") deletes.push(op);
+      else if (op.op === "createGroup") groups.push(op);
+      else finishes.push(op);
+    }
+  });
+  return batchMutationFor([
+    ...inserts,
+    ...dissolves,
+    ...deletes,
+    ...finishes,
+    ...groups,
+  ]);
 }
 
 /** The UNLINK batch — drop the instance reference from every leaf,
@@ -1011,13 +1107,29 @@ export async function liveInstanceOrigin(
   instance: SymbolInstance,
   registration: SymbolRegistration,
 ): Promise<[number, number] | null> {
+  return (await liveInstanceSources(host, instance, registration)).origin;
+}
+
+/** {@link liveInstanceOrigin}, and the page the instance's FIRST leaf is
+ *  on — from the same one read per leaf (a rebuild needs both, and used
+ *  to read the first leaf twice). */
+async function liveInstanceSources(
+  host: BundleHost,
+  instance: SymbolInstance,
+  registration: SymbolRegistration,
+): Promise<{ origin: [number, number] | null; pageId: string | null }> {
   const tables: AnchorTable[] = [];
-  for (const leaf of instance.leaves) {
+  let pageId: string | null = null;
+  for (const [i, leaf] of instance.leaves.entries()) {
     const source = await compoundSourceOf(host, leaf);
+    if (i === 0) pageId = source?.pageId ?? null;
     if (source) tables.push(source.table);
   }
   const bounds = symbolBoundsOf(tables);
-  return bounds === null ? null : registrationPointOf(bounds, registration);
+  return {
+    origin: bounds === null ? null : registrationPointOf(bounds, registration),
+    pageId,
+  };
 }
 
 // ------------------------------------------------------------- appliers
@@ -1068,55 +1180,146 @@ export async function captureSymbolSources(
   return out;
 }
 
-/** Place ONE instance of `symbol` at `origin` — the shared engine flow
- *  behind place, redefine and reset. `replace` tears an existing
- *  instance down inside the FIRST batch (a rebuild). Returns the created
- *  leaves; empty on a refusal (always logged, never thrown — the
- *  dash-command convention).
- *
- *  TWO batches ⇒ 2 undo steps: `insertPath` mints the ids batch 2
- *  addresses, and this contract's `Mutation` union carries no C-15
- *  `bindCreated` arm to bind them inside one batch (module header). */
+/** One instance to emit: the shared input of place, reset and redefine.
+ *  `replace` names what a REBUILD tears down. */
+export interface SymbolEmit {
+  symbol: SymbolDefinition;
+  pageId: string;
+  instanceId: string;
+  origin: readonly [number, number];
+  replace?: SymbolReplacement;
+}
+
+/** Place ONE instance of `symbol` at `origin` — {@link emitSymbolInstances}
+ *  for one. Returns the created leaves; empty on a refusal (always
+ *  logged, never thrown — the dash-command convention). ONE batch ⇒ 1
+ *  undo step. */
 export async function emitSymbolInstance(
   host: BundleHost,
-  args: {
-    symbol: SymbolDefinition;
-    pageId: string;
-    instanceId: string;
-    origin: readonly [number, number];
-    replace?: SymbolReplacement;
-    label: string;
-  },
+  args: SymbolEmit & { label: string },
 ): Promise<ElementId[]> {
-  const { label } = args;
-  if (args.symbol.pieces.length === 0) {
-    host.log.warn(`${label}: "${args.symbol.name}" has no pieces — no-op`);
-    return [];
-  }
-  const plan = symbolPlacePlanFor({
-    symbol: args.symbol,
-    pageId: args.pageId,
-    instanceId: args.instanceId,
-    origin: args.origin,
-  });
+  return (await emitSymbolInstances(host, [args], args.label))[0] ?? [];
+}
 
-  const before = new Set(
-    leafIdsOf(await host.document.tree().catch(() => [])).map((e) =>
-      String(e.id),
+/**
+ * Emit — or rebuild — EVERY instance in `emits` in ONE batch ⇒ ONE undo
+ * step (module header). Answers each instance's new leaves, in order;
+ * an empty list for one that was not built (always logged).
+ *
+ * An engine that refuses the batch gets the STEPWISE lane instead: each
+ * instance in two batches, one after the other, as it was before.
+ */
+export async function emitSymbolInstances(
+  host: BundleHost,
+  emits: readonly SymbolEmit[],
+  label: string,
+): Promise<ElementId[][]> {
+  const out: ElementId[][] = emits.map(() => []);
+  const builds: { at: number; build: SymbolBuild }[] = [];
+  emits.forEach((emit, at) => {
+    if (emit.symbol.pieces.length === 0) {
+      host.log.warn(`${label}: "${emit.symbol.name}" has no pieces — no-op`);
+      return;
+    }
+    builds.push({
+      at,
+      build: {
+        plan: symbolPlacePlanFor({
+          symbol: emit.symbol,
+          pageId: emit.pageId,
+          instanceId: emit.instanceId,
+          origin: emit.origin,
+        }),
+        replace: emit.replace,
+      },
+    });
+  });
+  if (builds.length === 0) return out;
+
+  const batch = symbolBatchFor(builds.map((b) => b.build));
+  const built = await mutateMinting(host, batch);
+  if (!built.outcome.applied) {
+    host.log.debug(
+      `${label}: the one-batch build was refused ` +
+        `(${JSON.stringify(built.outcome.error)}) — falling back to two ` +
+        "batches per instance",
+    );
+    for (const { at, build } of builds) {
+      out[at] = await emitSymbolInstanceStepwise(host, build, label);
+    }
+    return out;
+  }
+  const bound = bindMinted(built, batch);
+  if (bound) {
+    builds.forEach(({ at, build }, b) => {
+      out[at] = build.plan.pieces.map(
+        (_, p) => bound.byHandle.get(symbolHandle(b, p, 0))!,
+      );
+    });
+  } else {
+    // The instances ARE built and the engine's account does not match the
+    // batch. Every leaf carries its instance link, so ask the document.
+    host.log.debug(
+      `${label}: the batch applied but did not account for its leaves — ` +
+        "reading them back by their links",
+    );
+    const live = await symbolInstances(host);
+    for (const { at, build } of builds) {
+      out[at] =
+        live.find((i) => i.instance === build.plan.instanceId)?.leaves ?? [];
+    }
+  }
+  // RFI C-23, handled rather than left mute — and ONE read for every
+  // instance, not one each.
+  const leaves = out.flat();
+  const measured = new Set(
+    (await host.document.elementGeometry(leaves).catch(() => [])).map((g) =>
+      String(g.id.id),
     ),
   );
-  const inserted = await host.document.mutate(symbolInsertBatchFor(plan));
-  if (!inserted.applied) {
+  for (const { at, build } of builds) {
+    if (out[at]!.some((leaf) => measured.has(String(leaf.id)))) continue;
+    warnUnmeasurable(host, label, build.plan.origin);
+  }
+  return out;
+}
+
+/** RFI C-23: an instance whose origin falls outside every page's bounds
+ *  belongs to no page, and BOTH page-keyed geometry doors then answer
+ *  nothing for it. */
+function warnUnmeasurable(
+  host: BundleHost,
+  label: string,
+  origin: readonly [number, number],
+): void {
+  host.log.warn(
+    `${label}: the instance was created at [${origin.join(", ")}] but ` +
+      "no page claims it — `elementGeometry` / `pathAnchors` are PAGE-KEYED " +
+      "and answer nothing for an element outside every page (RFI C-23). The " +
+      "artwork is real; a later Reset falls back to the recorded origin " +
+      "instead of measuring one",
+  );
+}
+
+/** THE STEPWISE LANE — one instance, two batches: insert, then finish
+ *  (with a rebuild's teardown leading the finish). The flow as it was
+ *  before `bindCreated` reached the contract, kept as the fallback. What
+ *  batch 1 minted comes through the same seam as everywhere else. */
+async function emitSymbolInstanceStepwise(
+  host: BundleHost,
+  { plan, replace }: SymbolBuild,
+  label: string,
+): Promise<ElementId[]> {
+  const inserted = await mutateMinting(host, symbolInsertBatchFor(plan));
+  if (!inserted.outcome.applied) {
     host.log.warn(
       `${label}: instance insert rejected by engine: ${JSON.stringify(
-        inserted.error,
+        inserted.outcome.error,
       )}`,
     );
     return [];
   }
-  const minted = leafIdsOf(await host.document.tree().catch(() => [])).filter(
-    (e) => !before.has(String(e.id)),
-  );
+  const minted = mintedLeaves(inserted);
   const bindings = bindSymbolPieces(plan, minted);
   if (!bindings) {
     host.log.warn(
@@ -1129,7 +1332,7 @@ export async function emitSymbolInstance(
     return minted;
   }
   const finished = await host.document.mutate(
-    symbolFinishBatchFor({ plan, bindings, replace: args.replace }),
+    symbolFinishBatchFor({ plan, bindings, replace }),
   );
   if (!finished.applied) {
     host.log.warn(
@@ -1140,19 +1343,8 @@ export async function emitSymbolInstance(
     return bindings.map((b) => b.keep);
   }
   const keeps = bindings.map((b) => b.keep);
-  // RFI C-23, handled rather than left mute: an instance whose origin
-  // falls outside every page's bounds belongs to no page, and BOTH
-  // page-keyed geometry doors then answer nothing for it.
   const measured = await host.document.elementGeometry([...keeps]).catch(() => []);
-  if (measured.length === 0) {
-    host.log.warn(
-      `${label}: the instance was created at [${plan.origin.join(", ")}] but ` +
-        "no page claims it — `elementGeometry` / `pathAnchors` are PAGE-KEYED " +
-        "and answer nothing for an element outside every page (RFI C-23). The " +
-        "artwork is real; a later Reset falls back to the recorded origin " +
-        "instead of measuring one",
-    );
-  }
+  if (measured.length === 0) warnUnmeasurable(host, label, plan.origin);
   return keeps;
 }
 
@@ -1234,33 +1426,30 @@ export async function applyPlaceSymbolInstance(
   return created;
 }
 
-/** Rebuild ONE instance from `symbol` at `origin` — the shared half of
- *  reset and redefine. */
-async function rebuildInstance(
+/** What rebuilding ONE instance from `symbol` takes — the shared half of
+ *  reset and redefine. Read entirely BEFORE the batch, so every rebuild of
+ *  a command is planned against the SAME revision (one tree read for all
+ *  of them, out of the link index). Null (logged) when the instance has no
+ *  page to rebuild on. */
+async function rebuildPlanFor(
   host: BundleHost,
   args: {
     symbol: SymbolDefinition;
     instance: SymbolInstance;
     label: string;
   },
-): Promise<ElementId[]> {
+): Promise<SymbolEmit | null> {
   const { instance, symbol, label } = args;
-  // The CURRENT revision's tree: the one the instances were read from
-  // for the first rebuild of a command, a fresh one after each rebuild
-  // that follows (a rebuild is two batches, so the tree has moved).
-  const roots = await linkIndex(host).tree();
   const first = instance.leaves[0];
-  if (!first) return [];
-  const group = parentGroupOf(roots, first);
-  const pageId =
-    (await compoundSourceOf(host, first))?.pageId ??
-    (await resolveTargetPage(host));
+  if (!first) return null;
+  const group = parentGroupOf(await linkIndex(host).tree(), first);
+  const live = await liveInstanceSources(host, instance, symbol.registration);
+  const pageId = live.pageId ?? (await resolveTargetPage(host));
   if (!pageId) {
     host.log.warn(`${label}: no target page for instance ${instance.instance}`);
-    return [];
+    return null;
   }
-  const live = await liveInstanceOrigin(host, instance, symbol.registration);
-  if (!live) {
+  if (!live.origin) {
     host.log.warn(
       `${label}: instance ${instance.instance} cannot be measured — its ` +
         "artwork is outside every page's bounds and the geometry doors are " +
@@ -1268,20 +1457,38 @@ async function rebuildInstance(
         `[${instance.origin.join(", ")}] instead`,
     );
   }
-  return emitSymbolInstance(host, {
+  return {
     symbol,
     pageId,
     instanceId: instance.instance,
-    origin: live ?? instance.origin,
+    origin: live.origin ?? instance.origin,
     replace: { group, stale: instance.leaves },
-    label,
-  });
+  };
+}
+
+/** Rebuild `instances` from `symbolOf` their symbol, all in ONE batch.
+ *  Answers how many were rebuilt. */
+async function rebuildInstances(
+  host: BundleHost,
+  instances: readonly SymbolInstance[],
+  symbolOf: (instance: SymbolInstance) => SymbolDefinition | null,
+  label: string,
+): Promise<number> {
+  const emits: SymbolEmit[] = [];
+  for (const instance of instances) {
+    const symbol = symbolOf(instance);
+    if (!symbol) continue;
+    const emit = await rebuildPlanFor(host, { symbol, instance, label });
+    if (emit) emits.push(emit);
+  }
+  const built = await emitSymbolInstances(host, emits, label);
+  return built.filter((leaves) => leaves.length > 0).length;
 }
 
 /** RESET TRANSFORM — rebuild every selected instance from its unchanged
  *  definition, re-anchored at its CURRENT registration point. Whatever
  *  transform or edit the artwork picked up is discarded; the position
- *  survives. TWO undo steps per instance. */
+ *  survives. ONE undo step for every selected instance together. */
 export async function applyResetSymbolTransform(
   host: BundleHost,
 ): Promise<number> {
@@ -1292,21 +1499,21 @@ export async function applyResetSymbolTransform(
     return 0;
   }
   const library = await readSymbolLibrary(host);
-  let done = 0;
-  for (const instance of instances) {
-    const symbol = findSymbol(library, instance.symbol);
-    if (!symbol) {
-      host.log.warn(
-        `${label}: instance ${instance.instance} follows "${instance.symbol}", ` +
-          "which is not in the library — no-op for it",
-      );
-      continue;
-    }
-    if ((await rebuildInstance(host, { symbol, instance, label })).length > 0) {
-      done++;
-    }
-  }
-  return done;
+  return rebuildInstances(
+    host,
+    instances,
+    (instance) => {
+      const symbol = findSymbol(library, instance.symbol);
+      if (!symbol) {
+        host.log.warn(
+          `${label}: instance ${instance.instance} follows "${instance.symbol}", ` +
+            "which is not in the library — no-op for it",
+        );
+      }
+      return symbol;
+    },
+    label,
+  );
 }
 
 /** REDEFINE — re-capture `symbolId` from the selection (same id, name and
@@ -1353,9 +1560,7 @@ export async function applyRedefineSymbol(
         "(break its link first to keep a deviation)",
     );
   }
-  for (const instance of instances) {
-    await rebuildInstance(host, { symbol, instance, label });
-  }
+  await rebuildInstances(host, instances, () => symbol, label);
   return symbol;
 }
 
