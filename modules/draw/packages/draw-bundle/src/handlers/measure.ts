@@ -65,6 +65,7 @@ import {
   affineScale,
   applyAffine,
   inverseApplyAffine,
+  type Affine,
 } from "@paged-media/draw-geometry";
 import {
   MeasureMachine,
@@ -152,17 +153,33 @@ interface NearestPathPointWire {
  *  Wire-level `requestNearestPathPoint` via the MARKED escape hatch;
  *  the engine answers in the element's local (PathAnchors) space, which
  *  maps back to the page through the itemTransform. Exported for the
- *  conformance spec (the exact door the live tool drives). */
+ *  conformance spec (the exact door the live tool drives).
+ *
+ *  `known` — the element's itemTransform when the caller ALREADY HOLDS
+ *  it (null = identity). The only thing this function wants from the
+ *  element is that one matrix, and without `known` it has to read the
+ *  whole anchor table to get it: 10 000 anchors across the door for six
+ *  numbers, measured on a long path. A hit-test reply carries the same
+ *  matrix (`HitResult.itemTransform` and `PathAnchorsResult
+ *  .itemTransform` are both the frame's own ItemTransform), so the live
+ *  tool — which has just hit-tested to find `target` — passes it and
+ *  reads no table. Without `known` the table is read, as before. */
 export async function nearestPathPointOnPage(
   host: BundleHost,
   target: ElementId,
   pagePoint: [number, number],
   tolerancePt: number,
+  known?: { itemTransform: Affine | null },
 ): Promise<[number, number] | null> {
   try {
-    const table = await host.document.pathAnchors(target);
-    if (!table) return null;
-    const matrix = table.itemTransform ?? null;
+    let matrix: Affine | null;
+    if (known) {
+      matrix = known.itemTransform;
+    } else {
+      const table = await host.document.pathAnchors(target);
+      if (!table) return null;
+      matrix = table.itemTransform ?? null;
+    }
     const local = inverseApplyAffine(matrix, pagePoint[0], pagePoint[1]);
     if (!local) return null;
     // ESCAPE HATCH (named): no `document.nearestPathPoint` facade door
@@ -251,11 +268,14 @@ export function createMeasureHandler(host: BundleHost): GestureHandler {
           const hit = await host.document.hitTest(e.pageId!, point, "any");
           const target = hit?.element ?? null;
           if (!target || !PATH_KINDS.has(target.kind) || !machine) return;
+          // The hit-test reply already carries the hit element's
+          // transform — hand it over rather than re-reading the path.
           const snapped = await nearestPathPointOnPage(
             host,
             target,
             point,
             host.viewport.pxToPt(SNAP_TOLERANCE_PX),
+            { itemTransform: hit?.itemTransform ?? null },
           );
           if (snapped && machine) render(machine.snapStart(snapped));
         } catch {

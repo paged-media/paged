@@ -30,11 +30,17 @@
 
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
+import type { ElementId } from "@paged-media/plugin-api";
+import type { MeasureReadout } from "@paged-media/draw-tools";
+
 import {
+  BIND_MEASURE_READOUT,
   applyMakeLivePaintGroup,
   createLivePaintBucketHandler,
   createMeasureHandler,
   createShapeBuilderHandler,
+  frameTransformMutationFor,
+  nearestPathPointOnPage,
 } from "../../src";
 import {
   BUDGET_TIMEOUT_MS,
@@ -259,13 +265,41 @@ describe("perf budgets — the tools that read as they move", () => {
   });
 
   // COVERS: `handlers/measure.ts` — the origin snap goes through the raw
-  // `editor.client.send` escape hatch, and reads the hit path's anchors
-  // first to learn its transform.
+  // `editor.client.send` escape hatch, and needs the hit path's
+  // transform to ask it.
+  //
+  // History (a budget only goes DOWN):
+  //
+  //                         pathAnchors   anchors read
+  //   as found   spiral          1           10 000
+  //              comb            1            1 000
+  //   now        either          0                0
+  //
+  // As found, the snap read the hit path's WHOLE anchor table to learn
+  // one matrix. The hit-test reply the handler has just received carries
+  // that matrix, so the table is no longer read.
   describe("Measure — one 200-move drag that starts on a long path", () => {
     const MOVES = 200;
     const TO: Pt = [560, 700];
+    /** The spiral's centre (`workload.ts`); a rotation about it keeps
+     *  the spiral where it is on the page. */
+    const SPIRAL_CENTRE: Pt = [105, 395];
+    /** How far off the path the spiral measurements start, in pt. */
+    const OFF_PATH = 1.5;
+    /** `p`, moved `OFF_PATH` towards the spiral's centre. The spiral's
+     *  end is the outermost point of its bounding box and the hit-test
+     *  is a box test, so "beside the end" has to mean INSIDE it. */
+    const inward = (p: Pt): Pt => {
+      const dx = SPIRAL_CENTRE[0] - p[0];
+      const dy = SPIRAL_CENTRE[1] - p[1];
+      const d = Math.hypot(dx, dy);
+      return [p[0] + (dx / d) * OFF_PATH, p[1] + (dy / d) * OFF_PATH];
+    };
 
-    const measure = async (scenario: string, from: Pt): Promise<WorkLog> => {
+    const measure = async (
+      scenario: string,
+      from: Pt,
+    ): Promise<{ work: WorkLog; readout: MeasureReadout }> => {
       await w.h.host.selection.set([]);
       const { host, work } = countingHost(w.h.host);
       const handler = createMeasureHandler(host);
@@ -280,12 +314,37 @@ describe("perf budgets — the tools that read as they move", () => {
       handler.onPointerUp(pointerAt(w.pageId, TO));
       await settle();
       const counted = work.snapshot();
+      // Read before the teardown deletes it.
+      const readout = w.h.host.bindings.get(BIND_MEASURE_READOUT) as MeasureReadout;
       handler.onDeactivate("switch" as never);
-      return report(scenario, counted);
+      report(scenario, counted);
+      return { work: counted, readout };
+    };
+
+    /** Where the snap SHOULD put the origin: the same request, asked the
+     *  way it was before — with the transform read off the element's own
+     *  anchor table rather than taken from the hit. The frozen readout
+     *  must start exactly there. A transform taken from the wrong place
+     *  (or composed differently) moves `from`, and only this sees it. */
+    const snapByTable = async (
+      element: ElementId,
+      from: Pt,
+    ): Promise<[number, number]> => {
+      const snapped = await nearestPathPointOnPage(
+        w.h.host,
+        element,
+        from,
+        w.h.host.viewport.pxToPt(8),
+      );
+      expect(snapped, "the origin is within snap range of the path").not.toBeNull();
+      return snapped!;
     };
 
     it("from the 10 000-anchor spiral", async () => {
-      const work = await measure("measure from spiral", spiralEnd());
+      // Beside the path's end, not on it: near enough to snap, far
+      // enough that a snapped origin is visibly not the raw one.
+      const from = inward(spiralEnd());
+      const { work, readout } = await measure("measure from spiral", from);
       expect(work.mutations).toEqual([]);
 
       // SUSPICION WRONG: the raw send is ONE per drag — the origin snap
@@ -293,24 +352,79 @@ describe("perf budgets — the tools that read as they move", () => {
       expect(work.count("editor.client.send")).toBe(1);
       expect(work.count("editor.client.send:requestNearestPathPoint")).toBe(1);
       expect(work.count("document.hitTest")).toBe(1);
-      // What the snap does cost: the hit path's WHOLE anchor table, read
-      // for its transform alone — and the hit-test reply it just got
-      // already carries `itemTransform`. TARGET 0 reads, 0 anchors.
-      expect(work.count("document.pathAnchors")).toBe(1);
-      expect(work.anchorsRead).toBe(10_000);
+      // As found: 1 table read, 10 000 anchors, for a transform the
+      // hit-test reply already carried.
+      expect(work.count("document.pathAnchors")).toBe(0);
+      expect(work.anchorsRead).toBe(0);
       // One preview and one readout publish per pointer event (the snap
       // landing adds one). Fine as it is.
       expect(work.previews()).toBe(203);
       expect(work.count("bindings.publish")).toBe(203);
+
+      // The measurement starts ON the path, where the table-reading snap
+      // puts it, and ends where the pointer lifted.
+      const snapped = await snapByTable(w.spiral!, from);
+      expect(readout.from).toEqual(snapped);
+      expect(readout.from).not.toEqual(from);
+      expect(readout.to).toEqual(TO);
     });
 
-    it("from the 1 000-anchor comb: the same drag, a tenth of the anchors", async () => {
-      const work = await measure("measure from comb", COMB_BODY_POINT);
+    it("from the 1 000-anchor comb: the same drag, and nothing read here either", async () => {
+      const { work, readout } = await measure("measure from comb", COMB_BODY_POINT);
       expect(work.count("editor.client.send")).toBe(1);
-      expect(work.count("document.pathAnchors")).toBe(1);
-      // The read scales with the path; what the tool needs from it does
-      // not. TARGET 0.
-      expect(work.anchorsRead).toBe(1000);
+      // As found: 1 read, 1 000 anchors — the read scaled with the path;
+      // what the tool needs from it never did.
+      expect(work.count("document.pathAnchors")).toBe(0);
+      expect(work.anchorsRead).toBe(0);
+      expect(readout.from).toEqual(await snapByTable(w.comb!, COMB_BODY_POINT));
+    });
+
+    // Every workload path sits at the identity, where a wrong transform
+    // and no transform are the same thing. So: turn the spiral 20° about
+    // its own centre and measure from where its end has MOVED to. The
+    // snap must use the transform the hit reported.
+    it("a ROTATED path: the snap uses the transform the hit-test reported", async () => {
+      const mark = await undoMark(w);
+      try {
+        const [cx, cy] = SPIRAL_CENTRE;
+        const a = (20 * Math.PI) / 180;
+        const [cos, sin] = [Math.cos(a), Math.sin(a)];
+        const turn: [number, number, number, number, number, number] = [
+          cos,
+          sin,
+          -sin,
+          cos,
+          cx - (cos * cx - sin * cy),
+          cy - (sin * cx + cos * cy),
+        ];
+        const turned = await w.h.host.document.mutate(
+          frameTransformMutationFor(w.spiral!, turn),
+        );
+        expect(turned.applied).toBe(true);
+
+        const end = spiralEnd();
+        const moved: Pt = [
+          turn[0] * end[0] + turn[2] * end[1] + turn[4],
+          turn[1] * end[0] + turn[3] * end[1] + turn[5],
+        ];
+        // The end really is somewhere else now (≈ 29 pt away).
+        expect(Math.hypot(moved[0] - end[0], moved[1] - end[1])).toBeGreaterThan(20);
+        const from = inward(moved);
+
+        const { work, readout } = await measure("measure from rotated spiral", from);
+        expect(work.count("document.hitTest")).toBe(1);
+        expect(work.count("document.pathAnchors")).toBe(0);
+        expect(work.anchorsRead).toBe(0);
+
+        const snapped = await snapByTable(w.spiral!, from);
+        expect(readout.from).toEqual(snapped);
+        // On the rotated path: within the offset of where its end went.
+        expect(Math.hypot(snapped[0] - moved[0], snapped[1] - moved[1])).toBeLessThan(2 * OFF_PATH);
+        expect(readout.from).not.toEqual(from);
+      } finally {
+        expect(await undoStepsSince(w, mark)).toBe(1);
+      }
+      expect(await leafIds(w.h)).toHaveLength(518);
     });
   });
 });
