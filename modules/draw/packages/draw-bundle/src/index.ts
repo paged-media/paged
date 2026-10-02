@@ -110,7 +110,30 @@ export {
   PAINTBRUSH_NIB,
   ERASER_NIB,
   FALLBACK_FILL_REF,
+  nibFromOptions,
+  eraserNibFromOptions,
 } from "./handlers/brush";
+// TOOL OPTIONS — the per-tool definitions (the contract's spec plus the
+// defaults it has no room for), the one structural probe for the host's
+// undeclared tool-settings store, and the live reader the handlers use.
+export {
+  TOOL_OPTIONS,
+  PENCIL_OPTIONS,
+  PAINTBRUSH_OPTIONS,
+  BLOB_BRUSH_OPTIONS,
+  ERASER_OPTIONS,
+  WIDTH_OPTIONS,
+  defineToolOptions,
+  toolOptionsSpecOf,
+  toolSettingsDoorOf,
+  createToolOptionsReader,
+  type ToolOptionsDef,
+  type ToolOptionsReader,
+  type ToolSettingsDoor,
+  type OptionDef,
+  type NumberOption,
+  type SelectOption,
+} from "./tool-options";
 export { createCurvatureHandler } from "./handlers/curvature";
 export { createPencilHandler } from "./handlers/pencil";
 export {

@@ -58,6 +58,14 @@ import { createRepeatHandler } from "./handlers/repeat";
 import { createShapeBuilderHandler } from "./handlers/shape-builder";
 import { createTypeOnPathHandler } from "./handlers/text-on-path";
 import { createWidthHandler } from "./handlers/width";
+import {
+  BLOB_BRUSH_OPTIONS,
+  ERASER_OPTIONS,
+  PAINTBRUSH_OPTIONS,
+  PENCIL_OPTIONS,
+  WIDTH_OPTIONS,
+  toolOptionsSpecOf,
+} from "./tool-options";
 
 const CROSS: CursorSpec = { kind: "css", token: "crosshair" };
 
@@ -180,6 +188,8 @@ export function drawTools(host: BundleHost): ToolContribution[] {
       order: 5,
       cursor: CROSS,
       gesture: () => createPencilHandler(host),
+      // Double-click the slot: fidelity / smoothing / close distance.
+      options: toolOptionsSpecOf(PENCIL_OPTIONS),
     },
     {
       id: "media.paged.draw.tool.gradientAnnotator",
@@ -239,8 +249,10 @@ export function drawTools(host: BundleHost): ToolContribution[] {
     // per-anchor calligraphic widths → insertPath →
     // outlineStrokeVariable = a filled swept shape. They AUTHOR new
     // paths, so they join the pen flyout slot with Pencil/Curvature.
-    // v0 fixed nib defaults (no options UI yet): size 6pt, nib angle
-    // 45°, roundness 0.3; eraser = uniform 6pt round nib.
+    // The nib is a TOOL OPTION (./tool-options.ts — double-click the
+    // slot): size / angle / roundness / fidelity, defaulting to what
+    // these tools shipped with (6pt, 45°, roundness 30%, 2px); the
+    // eraser = a uniform round nib whose SIZE is its option (6pt).
     // SHORTCUTS (INV-REG-1, globally unique tool shortcuts): shift+j /
     // shift+k / shift+i — verified free against the editor built-ins
     // (v a u b t f m l c e r s o g i k h z p n w x d j q \ = - and the
@@ -256,6 +268,7 @@ export function drawTools(host: BundleHost): ToolContribution[] {
       order: 7,
       cursor: CROSS,
       gesture: () => createPaintbrushHandler(host),
+      options: toolOptionsSpecOf(PAINTBRUSH_OPTIONS),
     },
     {
       id: "media.paged.draw.tool.blobBrush",
@@ -267,6 +280,7 @@ export function drawTools(host: BundleHost): ToolContribution[] {
       order: 8,
       cursor: CROSS,
       gesture: () => createBlobBrushHandler(host),
+      options: toolOptionsSpecOf(BLOB_BRUSH_OPTIONS),
     },
     {
       id: "media.paged.draw.tool.eraserBrush",
@@ -278,6 +292,7 @@ export function drawTools(host: BundleHost): ToolContribution[] {
       order: 9,
       cursor: CROSS,
       gesture: () => createEraserBrushHandler(host),
+      options: toolOptionsSpecOf(ERASER_OPTIONS),
     },
     // Wave 2 — Eyedropper / Width / Lasso. SHORTCUTS (INV-REG-1,
     // globally unique tool shortcuts): shift+d / shift+s / shift+q —
@@ -319,6 +334,8 @@ export function drawTools(host: BundleHost): ToolContribution[] {
       order: 3,
       cursor: CROSS,
       gesture: () => createWidthHandler(host),
+      // Peak limit / width per drag / falloff.
+      options: toolOptionsSpecOf(WIDTH_OPTIONS),
     },
     // Lasso select — freehand region; elements whose bounds CENTERS
     // fall inside are selected (handlers/lasso.ts documents the
