@@ -21,6 +21,7 @@ import { describe, expect, it } from "vitest";
 import {
   cornerAnchor,
   isCornerAnchor,
+  isSmoothAnchor,
   smoothAnchorFromDrag,
   type AnchorTriple,
 } from "../src";
@@ -93,21 +94,47 @@ describe("isCornerAnchor — IDML's zero-handle corner convention", () => {
   });
 
   // ------------------------------------------------------------------
-  // DEFECT (classify.ts, isCornerAnchor) — with `eps = 0` NOTHING is a
+  // DEFECT (classify.ts, isCornerAnchor) — with `eps = 0` NOTHING was a
   // corner, not even an anchor whose handles are bit-identical to it.
+  // FIXED.
   //
-  // The test is `dist(...) < eps`, strictly. The module's own definition
+  // The test was `dist(...) < eps`, strictly. The module's own definition
   // is "an anchor is a corner iff BOTH handles coincide with it", and
   // `eps = 0` is how a caller asks for exactly that; `0 < 0` is false.
   //
   //   isCornerAnchor(cornerAnchor([1, 1]), 0)
   //   EXPECTED: true (the handles coincide with the anchor).
-  //   ACTUAL:   false.
+  //   WAS:      false.
   //
   // Low severity: the one caller (draw-tools anchor-machine) uses the
-  // 1e-3 default. `<=` is the fix.
+  // 1e-3 default.
+  //
+  // THE FIX: the bound is inclusive (`<=`) — a handle AT MOST `eps` from
+  // its anchor is collapsed. `isSmoothAnchor` reads "collapsed" with the
+  // same `eps` and was moved to the same inclusive bound, so the two
+  // tests cannot disagree about a handle exactly `eps` long.
   // ------------------------------------------------------------------
-  it.fails("DEFECT (boundary): an EXACT corner is a corner at zero tolerance", () => {
+  it("FIXED DEFECT (boundary): an EXACT corner is a corner at zero tolerance", () => {
     expect(isCornerAnchor(cornerAnchor([1, 1]), 0)).toBe(true);
+    // Zero tolerance means zero: the smallest handle there is stops it.
+    expect(
+      isCornerAnchor({ anchor: [1, 1], left: [1, 1], right: [1 + 2 ** -52, 1] }, 0),
+    ).toBe(false);
+  });
+
+  it("FIXED DEFECT (boundary): a handle EXACTLY the tolerance long is collapsed — for both tests", () => {
+    // 0.5 is exactly representable, so the distance IS the tolerance.
+    const onTheLine: AnchorTriple = { anchor: [0, 0], left: [-0.5, 0], right: [0.5, 0] };
+    expect(isCornerAnchor(onTheLine, 0.5)).toBe(true);
+    // The same anchor, the same tolerance: collapsed handles are not the
+    // two EXTENDED handles a smooth anchor needs. Before the bound was
+    // made inclusive in both, this anchor was neither corner NOR
+    // collapsed-for-smooth, i.e. "smooth" with handles the corner test's
+    // neighbour called zero-length.
+    expect(isSmoothAnchor(onTheLine, 0.5)).toBe(false);
+    // A hair longer, and it is a real (smooth) handle pair again.
+    const longer: AnchorTriple = { anchor: [0, 0], left: [-0.75, 0], right: [0.75, 0] };
+    expect(isCornerAnchor(longer, 0.5)).toBe(false);
+    expect(isSmoothAnchor(longer, 0.5)).toBe(true);
   });
 });

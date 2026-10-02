@@ -24,8 +24,15 @@
 import { dist } from "./types";
 import type { AnchorTriple } from "./types";
 
+/**
+ * `eps` is the collapsed-handle length: a handle counts as collapsed
+ * when it is AT MOST `eps` from its anchor. The bound is inclusive so
+ * that `eps = 0` asks the module's own definition literally — "both
+ * handles coincide with it" — and an exact corner answers yes; with a
+ * strict `<`, nothing was a corner at zero tolerance.
+ */
 export function isCornerAnchor(a: AnchorTriple, eps = 1e-3): boolean {
-  return dist(a.left, a.anchor) < eps && dist(a.right, a.anchor) < eps;
+  return dist(a.left, a.anchor) <= eps && dist(a.right, a.anchor) <= eps;
 }
 
 /**
@@ -36,8 +43,10 @@ export function isCornerAnchor(a: AnchorTriple, eps = 1e-3): boolean {
  * differ (an asymmetric smooth point is still smooth). Everything else
  * — a corner, a one-handled curve end, a cusp — is not.
  *
- * `eps` is the collapsed-handle length (same default as
- * `isCornerAnchor`); `angleTol` bounds |sin θ| of the deviation from a
+ * `eps` is the collapsed-handle length (same default, and the same
+ * inclusive bound, as `isCornerAnchor` — a handle exactly `eps` long is
+ * collapsed for both, so no anchor is a corner by one test and smooth by
+ * the other); `angleTol` bounds |sin θ| of the deviation from a
  * straight line (1e-3 ≈ 0.06°, well above the f32 round-off the engine's
  * anchor table carries and well below anything a user draws on purpose).
  */
@@ -52,7 +61,7 @@ export function isSmoothAnchor(
   const ry = a.right[1] - a.anchor[1];
   const ll = Math.hypot(lx, ly);
   const rl = Math.hypot(rx, ry);
-  if (ll < eps || rl < eps) return false;
+  if (ll <= eps || rl <= eps) return false;
   const dot = lx * rx + ly * ry;
   if (dot >= 0) return false;
   return Math.abs(lx * ry - ly * rx) <= angleTol * ll * rl;
