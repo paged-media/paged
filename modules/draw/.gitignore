@@ -11,3 +11,6 @@ dist/
 # Per-package vitest JUnit output (CI artifact, never a tracked file).
 junit.xml
 junit-all.xml
+
+# Agent worktrees (local only).
+.claude/worktrees/

@@ -188,6 +188,21 @@ export interface RegionCacheHooks {
   onPointFace(id: string | null): void;
 }
 
+/** What a sample's answer is FOR — which decides whether a point query
+ *  may be skipped.
+ *
+ *  - `"every"`: a DRAG collects the face under each sample, so each one
+ *    is asked and each answer delivered. One round trip per sample while
+ *    the cache is cold or face-capped; that is what collection costs.
+ *  - `"latest"`: a HOVER only highlights the face under the pointer NOW.
+ *    One query in flight at a time; a sample arriving meanwhile replaces
+ *    the pending one, and an answer is dropped once it is stale (a newer
+ *    sample is waiting, or the full enumeration landed and the owner has
+ *    already resolved its real last point locally). Measured before this
+ *    existed: a 200-move burst asked for the same arrangement 201 times.
+ */
+export type SampleNeed = "every" | "latest";
+
 /** The per-gesture arrangement cache (see the module header). */
 export interface RegionCache {
   /** Every page-space face outline currently known — the full
@@ -200,8 +215,13 @@ export interface RegionCache {
   warm(ids: readonly ElementId[]): boolean;
   /** One pointer sample: a no-op while warm, an enumeration + a
    *  cold-start point query while not. Fire-and-forget by design — the
-   *  hooks fire when the engine answers. */
-  sample(ids: readonly ElementId[], point: readonly [number, number]): void;
+   *  hooks fire when the engine answers. `need` says what the owner
+   *  does with the answer (default `"every"`). */
+  sample(
+    ids: readonly ElementId[],
+    point: readonly [number, number],
+    need?: SampleNeed,
+  ): void;
   /** Invalidate everything (the selection changed, or the document
    *  mutated — either invalidates the geometry it was built from). */
   drop(): void;
@@ -259,51 +279,105 @@ export function createRegionCache(
     })();
   };
 
+  const isWarm = (ids: readonly ElementId[]): boolean =>
+    key === planarInputKey(ids) && !pointQueryOnly;
+
   /** COLD-START / face-cap path: ask the engine for the single face
-   *  under `point` and hand its id to the owner. */
-  const pointQuery = (
+   *  under `point`. Resolves to the face id (null = no face there), or
+   *  to `undefined` when the engine gave no usable answer. */
+  const askPoint = async (
+    ids: readonly ElementId[],
+    point: readonly [number, number],
+  ): Promise<{ face: string | null } | undefined> => {
+    const table = await host.document.pathAnchors(ids[0]).catch(() => null);
+    const m = table?.itemTransform ?? transform;
+    const local = inverseApplyAffine(m ?? null, point[0], point[1]);
+    if (!local) return undefined;
+    const result = await readPlanarRegions(host, ids, [local[0], local[1]]);
+    if (!result) return undefined;
+    if (!result.found) {
+      reportPlanarRefusal(host, hooks.label, result);
+      return undefined;
+    }
+    if (pointQueryOnly && !warnedPointOnly) {
+      warnedPointOnly = true;
+      host.log.warn(
+        `${hooks.label}: the full arrangement exceeded the engine's face cap — ` +
+          "hover stays live through the point query, at one round trip per move",
+      );
+    }
+    const face = result.faces[0] ?? null;
+    if (face) {
+      // Keep the outline available to the overlay even without a full
+      // enumeration (one face is still a legible highlight).
+      const mapped = faceToPageSpace(face, m ?? null);
+      if (!cached.some((f) => f.id === mapped.id))
+        cached = [...cached, mapped];
+    }
+    return { face: face ? face.id : null };
+  };
+
+  /** `"every"`: ask for this sample and deliver its answer, always. */
+  const pointQueryEvery = (
     ids: readonly ElementId[],
     point: readonly [number, number],
   ): void => {
     void (async () => {
-      const table = await host.document.pathAnchors(ids[0]).catch(() => null);
-      const m = table?.itemTransform ?? transform;
-      const local = inverseApplyAffine(m ?? null, point[0], point[1]);
-      if (!local) return;
-      const result = await readPlanarRegions(host, ids, [local[0], local[1]]);
-      if (!result) return;
-      if (!result.found) {
-        reportPlanarRefusal(host, hooks.label, result);
-        return;
+      const answer = await askPoint(ids, point);
+      if (answer) hooks.onPointFace(answer.face);
+    })();
+  };
+
+  /** A `"latest"` query is in flight. */
+  let latestInFlight = false;
+  /** The newest `"latest"` sample that arrived while one was in flight. */
+  let pendingLatest: {
+    ids: readonly ElementId[];
+    point: readonly [number, number];
+  } | null = null;
+
+  /** `"latest"`: one in flight, newest-wins, stale answers dropped. */
+  const pointQueryLatest = (
+    ids: readonly ElementId[],
+    point: readonly [number, number],
+  ): void => {
+    if (latestInFlight) {
+      pendingLatest = { ids, point };
+      return;
+    }
+    latestInFlight = true;
+    void (async () => {
+      let answer: { face: string | null } | undefined;
+      try {
+        answer = await askPoint(ids, point);
+      } finally {
+        latestInFlight = false;
+        const next = pendingLatest;
+        pendingLatest = null;
+        if (next) {
+          // This answer is for an OLDER point. Delivering it would put a
+          // stale face under the pointer — and when the enumeration has
+          // landed meanwhile it would overwrite the owner's correct
+          // local resolution. Ask about the newest sample instead,
+          // unless the owner no longer needs the engine for it.
+          if (!isWarm(next.ids)) pointQueryLatest(next.ids, next.point);
+        } else if (answer && !isWarm(ids)) {
+          hooks.onPointFace(answer.face);
+        }
       }
-      if (pointQueryOnly && !warnedPointOnly) {
-        warnedPointOnly = true;
-        host.log.warn(
-          `${hooks.label}: the full arrangement exceeded the engine's face cap — ` +
-            "hover stays live through the point query, at one round trip per move",
-        );
-      }
-      const face = result.faces[0] ?? null;
-      if (face) {
-        // Keep the outline available to the overlay even without a full
-        // enumeration (one face is still a legible highlight).
-        const mapped = faceToPageSpace(face, m ?? null);
-        if (!cached.some((f) => f.id === mapped.id))
-          cached = [...cached, mapped];
-      }
-      hooks.onPointFace(face ? face.id : null);
     })();
   };
 
   return {
     faces: () => cached,
     matrix: () => transform,
-    warm: (ids) => key === planarInputKey(ids) && !pointQueryOnly,
-    sample(ids, point) {
+    warm: isWarm,
+    sample(ids, point, need = "every") {
       if (ids.length === 0) return;
-      if (key === planarInputKey(ids) && !pointQueryOnly) return;
+      if (isWarm(ids)) return;
       ensure(ids);
-      pointQuery(ids, point);
+      if (need === "latest") pointQueryLatest(ids, point);
+      else pointQueryEvery(ids, point);
     },
     drop() {
       key = null;
@@ -311,6 +385,7 @@ export function createRegionCache(
       cached = [];
       pointQueryOnly = false;
       warnedPointOnly = false;
+      pendingLatest = null;
     },
   };
 }

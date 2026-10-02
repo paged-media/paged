@@ -164,9 +164,11 @@ export function createLivePaintHandler(
     }
   };
 
-  const sample = (point: [number, number]): void => {
+  const sample = (point: [number, number], painting: boolean): void => {
     if (!machine || inputs.length < 2) return;
-    cache.sample(inputs, point);
+    // A paint drag collects the face under EVERY sample; a hover only
+    // needs the one under the pointer now (see `SampleNeed`).
+    cache.sample(inputs, point, painting ? "every" : "latest");
   };
 
   /** Paint the faces the gesture collected. */
@@ -232,16 +234,18 @@ export function createLivePaintHandler(
     onPointerDown(e: CanvasPointerEvent) {
       if (!machine || e.button !== 0 || !e.pageId || !e.pagePoint) return;
       pageId = e.pageId;
-      render(machine.handle({ type: "down", point: e.pagePoint }));
-      sample(e.pagePoint);
+      const snapshot = machine.handle({ type: "down", point: e.pagePoint });
+      render(snapshot);
+      sample(e.pagePoint, snapshot.painting);
     },
     onPointerMove(e: CanvasPointerEvent) {
       // A hover BEFORE any click still highlights — that is half the
       // interaction, so a move outside a gesture is not discarded.
       if (!machine || !e.pagePoint || !e.pageId) return;
       pageId = e.pageId;
-      render(machine.handle({ type: "move", point: e.pagePoint }));
-      sample(e.pagePoint);
+      const snapshot = machine.handle({ type: "move", point: e.pagePoint });
+      render(snapshot);
+      sample(e.pagePoint, snapshot.painting);
     },
     onPointerUp(e: CanvasPointerEvent) {
       if (!machine || !e.pagePoint || e.pageId !== pageId) return;

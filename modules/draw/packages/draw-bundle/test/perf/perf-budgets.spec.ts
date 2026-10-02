@@ -36,7 +36,7 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import type { ElementId } from "@paged-media/plugin-api";
+import type { ElementId, ToolPreviewShape } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import { createShapeBuilderHandler, drawBundle } from "../../src";
@@ -53,13 +53,15 @@ import {
 
 describe("perf budgets — work counted at the host doors", () => {
   // COVERS: the per-pointer-move path of a region tool over a two-input
-  // arrangement (F4: two overlapping polygons, three faces). A hover,
-  // because hovering is half of this tool and costs the same per move as
-  // a drag.
-  describe("Shape Builder — a 200-move hover across two overlapping shapes", () => {
+  // arrangement. F4 is two overlapping squares, A = 100..300 and
+  // B = 200..400, so the diagonal 120 → 380 crosses all three faces:
+  // A-only, the overlap, B-only.
+  describe("Shape Builder — 200 moves across two overlapping shapes", () => {
     const A = { kind: "polygon", id: F4_OVERLAP.ids.polygon! } as ElementId;
     const B = { kind: "polygon", id: F4_OVERLAP.secondId } as ElementId;
     const MOVES = 200;
+    const FROM: [number, number] = [120, 120];
+    const TO: [number, number] = [380, 380];
     let h: HeadlessHost;
 
     beforeAll(async () => {
@@ -69,51 +71,119 @@ describe("perf budgets — work counted at the host doors", () => {
     });
     afterAll(() => h?.dispose());
 
-    const hover = async (pacing: Pacing): Promise<WorkLog> => {
+    const stream = () =>
+      linePoints(FROM, TO, MOVES).map((p) => pointerAt(F4_OVERLAP.pageId, p));
+
+    /** `PERF_SHOW=1` prints what was counted — how a budget is found
+     *  before it is pinned, and how a failing one is read. */
+    const show = (label: string, work: WorkLog): void => {
+      if (process.env.PERF_SHOW) console.log(`[perf] ${label}:`, work.calls);
+    };
+
+    const hover = async (
+      pacing: Pacing,
+    ): Promise<{ work: WorkLog; highlight: ToolPreviewShape | null }> => {
       await h.host.selection.set([A, B]);
       const { host, work } = countingHost(h.host);
       const handler = createShapeBuilderHandler(host);
       handler.onActivate(undefined as never);
       await settle();
       work.reset();
-      await drive(
-        linePoints([120, 120], [380, 380], MOVES).map((p) =>
-          pointerAt(F4_OVERLAP.pageId, p),
-        ),
-        (e) => handler.onPointerMove(e),
-        pacing,
-      );
+      await drive(stream(), (e) => handler.onPointerMove(e), pacing);
+      const counted = work.snapshot();
+      const highlight = h.lastToolPreview();
+      handler.onDeactivate("switch" as never);
+      show(`shape builder hover, ${pacing}`, counted);
+      return { work: counted, highlight };
+    };
+
+    const drag = async (
+      selection: ElementId[],
+      pacing: Pacing,
+    ): Promise<WorkLog> => {
+      await h.host.selection.set(selection);
+      const { host, work } = countingHost(h.host);
+      const handler = createShapeBuilderHandler(host);
+      handler.onActivate(undefined as never);
+      await settle();
+      work.reset();
+      handler.onPointerDown(pointerAt(F4_OVERLAP.pageId, FROM));
+      await drive(stream(), (e) => handler.onPointerMove(e), pacing);
+      handler.onPointerUp(pointerAt(F4_OVERLAP.pageId, TO));
+      await settle();
       const counted = work.snapshot();
       handler.onDeactivate("switch" as never);
+      show(`shape builder drag (${selection.length} selected), ${pacing}`, counted);
       return counted;
     };
 
-    it("paced: the engine keeps up, and every move still costs a hit-test", async () => {
-      const work = await hover("paced");
-      expect(work.mutations).toEqual([]); // a hover writes nothing
+    /** The hover ends at 380,380 — inside B only. Its highlight must be
+     *  that face: an outline that stays inside B's box and reaches past
+     *  A's (x or y beyond 300). A stale highlight — the overlap, or
+     *  A-only — is what a coalescing bug would leave behind. */
+    const expectBOnlyFace = (shape: ToolPreviewShape | null): void => {
+      const anchors = (shape as { anchors?: { anchor: [number, number] }[] })
+        ?.anchors;
+      expect(anchors, "the hover ends over a face").toBeDefined();
+      const xs = anchors!.map((a) => a.anchor[0]);
+      const ys = anchors!.map((a) => a.anchor[1]);
+      expect(Math.min(...xs)).toBeGreaterThanOrEqual(200 - 1e-6);
+      expect(Math.min(...ys)).toBeGreaterThanOrEqual(200 - 1e-6);
+      expect(Math.max(...xs)).toBeCloseTo(400, 6);
+      expect(Math.max(...ys)).toBeCloseTo(400, 6);
+    };
 
-      // One `hitTest` round trip per move, although the arrangement is
-      // warm and the face under the pointer is resolved locally.
-      // TARGET 0 while the region lane is warm.
-      expect(work.count("document.hitTest")).toBe(200);
-      // The arrangement is read twice, not once. TARGET 1.
-      expect(work.count("document.planarRegions")).toBe(2);
-      expect(work.count("document.pathAnchors")).toBe(2);
-      // Two preview publishes per move (the machine's, then the
-      // sweep's). TARGET <= 200, one per move.
-      expect(work.previews()).toBe(402);
+    // History of these two budgets (a budget only goes DOWN):
+    //   as found   paced  200 hitTest, 2 planarRegions, 2 pathAnchors, 402 previews
+    //              burst  200 hitTest, 201 planarRegions, 201 pathAnchors, 601 previews
+    //   now        both   0, 2, 2, 201
+    // Two causes, both removed: a hit-test per move whose answer the
+    // machine drops outside a drag, and a cold-start point query with no
+    // in-flight guard, which asked for the same arrangement once per move.
+    // The guard is newest-wins and drops stale answers — the face check
+    // below is what proves it: a first cut of the guard left the face of
+    // an OLD pointer position highlighted, and only that check saw it.
+    for (const pacing of ["paced", "burst"] as const) {
+      it(`hover, ${pacing}: no round trip per move, and the right face is highlighted`, async () => {
+        const { work, highlight } = await hover(pacing);
+        expect(work.mutations).toEqual([]); // a hover writes nothing
+
+        expect(work.count("document.hitTest")).toBe(0);
+        // One full enumeration plus one cold-start point query for the
+        // first sample. That is the designed floor on a cold cache.
+        expect(work.count("document.planarRegions")).toBe(2);
+        expect(work.count("document.pathAnchors")).toBe(2);
+        // One publish per move, plus one when the arrangement lands.
+        expect(work.previews()).toBe(201);
+
+        expectBOnlyFace(highlight);
+      });
+    }
+
+    it("drag with both shapes selected: the region lane commits once", async () => {
+      const work = await drag([A, B], "paced");
+      await h.host.document.undo();
+
+      expect(work.mutations).toEqual([{ op: "pathfinderFaces", ops: 1 }]);
+      // The element lane stays armed until the drag has collected its
+      // first face — the press and the first move — and not after.
+      // As found: 201, one per sample for the whole drag.
+      expect(work.count("document.hitTest")).toBe(2);
+      // The enumeration, plus a point query for each of the two samples
+      // that arrive before it lands (a drag collects EVERY sample).
+      expect(work.count("document.planarRegions")).toBe(3);
+      expect(work.count("document.pathAnchors")).toBe(3);
     });
 
-    it("burst: moves outrun the engine, and every move re-asks for the arrangement", async () => {
-      const work = await hover("burst");
-      expect(work.mutations).toEqual([]);
+    it("drag with nothing selected: the element lane still hit-tests every move", async () => {
+      const work = await drag([], "paced");
+      await h.host.document.undo();
 
-      expect(work.count("document.hitTest")).toBe(200);
-      // No in-flight guard on the cold-start query: 200 moves ask the
-      // engine for the SAME planar arrangement 201 times. TARGET 1.
-      expect(work.count("document.planarRegions")).toBe(201);
-      expect(work.count("document.pathAnchors")).toBe(201);
-      expect(work.previews()).toBe(601);
+      expect(work.mutations).toEqual([{ op: "pathfinderBoolean", ops: 1 }]);
+      // The element lane finds its operands by hit-testing: one on the
+      // press and one per move. That is this lane's whole input, so it
+      // stays — TARGET: one marquee-style query per drag instead.
+      expect(work.count("document.hitTest")).toBe(201);
     });
   });
 });

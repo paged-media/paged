@@ -32,11 +32,16 @@
 // CACHING, THE DOOR AND THE COORDINATE SPACE all live in
 // `handlers/planar-regions.ts` now — the shared arrangement seam, which
 // Live Paint became the second consumer of. Read that module's header
-// for the escape hatch (`requestPlanarRegions` wire-level, because the
-// vendored contract has no `document.planarRegions` facade yet), the
+// for the `host.document.planarRegions` facade it calls, the
 // once-per-gesture-scope cache with its cold-start / face-cap point
 // queries, and the raw↔page mapping through the frontmost input's
 // itemTransform.
+//
+// WHAT A POINTER MOVE COSTS is pinned in `test/perf/perf-budgets.spec.ts`
+// and may only go down: a hover makes NO engine round trip per move (it
+// used to make one hit-test per move, and under a burst one arrangement
+// query per move as well); a drag hit-tests only until it has collected
+// its first face.
 //
 // HONEST SURFACES:
 //   · The overlay channel is SINGLE-SLOT, so the preview shows the
@@ -154,6 +159,10 @@ export function createShapeBuilderHandler(host: BundleHost): GestureHandler {
   let inputs: ElementId[] = [];
   /** Resolved once per handler: does this engine carry the region ops? */
   let regionLane: boolean | null = null;
+  /** The engine's vocabulary was READ and it lists `pathfinderFaces` —
+   *  as opposed to `regionLane` being true only because the vocabulary
+   *  was unreadable and the probe answered optimistically. */
+  let regionLaneProven = false;
   /** Live subscriptions — allocated on activate, released on the
    *  non-suspend deactivate (GestureHandler has no dispose hook). */
   let subs: Disposable[] = [];
@@ -212,19 +221,42 @@ export function createShapeBuilderHandler(host: BundleHost): GestureHandler {
   /** One pointer sample in the REGION lane: purely local while the
    *  cache is warm (the machine already resolved it), an engine point
    *  query only while it is not. The seam owns both. */
-  const sampleRegion = (point: [number, number]): void => {
+  const sampleRegion = (
+    point: [number, number],
+    snapshot: ShapeBuilderSnapshot,
+  ): void => {
     if (inputs.length < 2 || !machine) return;
-    cache.sample(inputs, point);
+    // A drag collects the face under EVERY sample; a hover only needs
+    // the one under the pointer now (see `SampleNeed`).
+    cache.sample(inputs, point, snapshot.building ? "every" : "latest");
   };
+
+  /** Can the ELEMENT lane still be the one that commits this gesture?
+   *  It is the fallback `onPointerUp` reaches when the region lane has
+   *  nothing to send, and its operands are the elements `sweep` crossed.
+   *
+   *  It cannot be reached once ALL of these hold, and then a hit-test is
+   *  a round trip whose answer nothing reads: the engine PROVABLY has
+   *  the region op (so the commit cannot bounce as an unknown variant),
+   *  two or more inputs are selected, and the drag has already collected
+   *  a face (so `pathfinderFaces` has something to send). */
+  const elementLaneReachable = (snapshot: ShapeBuilderSnapshot): boolean =>
+    !(regionLaneProven && inputs.length >= 2 && snapshot.collected.length > 0);
 
   /** Hit-test the engine at `point` and, when it resolves a boolean-
    *  capable element, feed the machine a `cross` event (de-duped there).
    *  Arms the ELEMENT-lane fallback; best-effort + async, a miss is
    *  silent. Runs in both lanes: the region probe is optimistic when the
    *  vocabulary is unreadable, and this is what makes the fall-through
-   *  in `onPointerUp` real rather than theoretical. */
-  const sweep = (point: [number, number]) => {
+   *  in `onPointerUp` real rather than theoretical.
+   *
+   *  Only DURING A DRAG, and only while the element lane can still
+   *  commit (`elementLaneReachable`). The machine drops a `cross` that
+   *  arrives outside a drag, so a hover used to pay one engine round
+   *  trip per pointer move for an answer that was thrown away. */
+  const sweep = (point: [number, number], snapshot: ShapeBuilderSnapshot) => {
     if (!machine || !pageId) return;
+    if (!snapshot.building || !elementLaneReachable(snapshot)) return;
     void (async () => {
       try {
         const hit = await host.document.hitTest(pageId!, point, "frame");
@@ -245,6 +277,7 @@ export function createShapeBuilderHandler(host: BundleHost): GestureHandler {
     if (regionLane !== null) return regionLane;
     const vocab = await engineOpVocabulary(host);
     regionLane = vocab ? vocab.has("pathfinderFaces") : true;
+    regionLaneProven = vocab !== null && regionLane;
     if (!regionLane) {
       host.log.debug(
         "shapeBuilder: this engine predates pathfinderFaces — running the " +
@@ -293,24 +326,24 @@ export function createShapeBuilderHandler(host: BundleHost): GestureHandler {
       if (!machine || e.button !== 0 || !e.pageId || !e.pagePoint) return;
       pageId = e.pageId;
       byKey.clear();
-      render(
-        machine.handle({
-          type: "down",
-          point: e.pagePoint,
-          modifiers: { alt: e.modifiers.alt },
-        }),
-      );
-      sampleRegion(e.pagePoint);
-      sweep(e.pagePoint);
+      const snapshot = machine.handle({
+        type: "down",
+        point: e.pagePoint,
+        modifiers: { alt: e.modifiers.alt },
+      });
+      render(snapshot);
+      sampleRegion(e.pagePoint, snapshot);
+      sweep(e.pagePoint, snapshot);
     },
     onPointerMove(e: CanvasPointerEvent) {
       // A hover BEFORE any drag still highlights — that is half the
       // interaction, so a move outside a gesture is not discarded.
       if (!machine || !e.pagePoint || !e.pageId) return;
       pageId = e.pageId;
-      render(machine.handle({ type: "move", point: e.pagePoint }));
-      sampleRegion(e.pagePoint);
-      sweep(e.pagePoint);
+      const snapshot = machine.handle({ type: "move", point: e.pagePoint });
+      render(snapshot);
+      sampleRegion(e.pagePoint, snapshot);
+      sweep(e.pagePoint, snapshot);
     },
     onPointerUp(e: CanvasPointerEvent) {
       if (!machine || !e.pagePoint || e.pageId !== pageId) return;
