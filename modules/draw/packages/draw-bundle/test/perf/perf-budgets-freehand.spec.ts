@@ -22,12 +22,20 @@
 // lowered, and every scenario says which expensive path it exercises.
 //
 // What these tools cost is not the engine — a stroke in flight never
-// reads the document. It is the OVERLAY: each pointer move re-maps the
-// whole sample array into a fresh preview shape, so a stroke of S
-// samples hands the overlay S²/2 points. `work.previewPoints` is that
-// number. The commit is the other half: how many mutations one lift
-// issues, and how many undo steps it leaves behind — measured
-// separately, because they turned out not to be the same number.
+// reads the document. It is the OVERLAY, and that cost has two halves
+// which are counted separately because only one of them is the
+// handler's to remove:
+//
+//   · what the handler BUILDS to hand over (`built`, measured here) —
+//     as found, every move re-mapped the whole sample array into a fresh
+//     shape: S arrays and S²/2 points for a stroke of S samples;
+//   · what CROSSES the door (`work.previewPoints`) — the length of every
+//     shape published. The door holds one whole shape, so this stays
+//     S²/2 however the handler builds it.
+//
+// The commit is the other half: how many mutations one lift issues, and
+// how many undo steps it leaves behind — measured separately, because
+// they turned out not to be the same number.
 //
 // THE DOCUMENT is the gesture workload (`./workload.ts`): 518 leaves.
 // The in-flight budgets do not depend on it — and say so, by asserting
@@ -39,6 +47,7 @@ import type {
   BundleHost,
   ElementId,
   GestureHandler,
+  ToolPreviewShape,
 } from "@paged-media/plugin-api";
 
 import {
@@ -101,6 +110,28 @@ const lassoSpiral = (samples: number): FreehandSample[] =>
 const penStroke = (samples: number): FreehandSample[] =>
   jitteredFreehand([40, 560], [570, 620], samples);
 
+/** The samples a decimation floor KEEPS: the first, then every one at
+ *  least `floor` from the last one kept. Written out here rather than
+ *  asked of the machine — it is what the preview is checked AGAINST. */
+const keptAbove = (samples: readonly FreehandSample[], floor: number): Pt[] => {
+  const kept: Pt[] = [samples[0]!.point];
+  for (const { point } of samples.slice(1)) {
+    const last = kept[kept.length - 1]!;
+    if (Math.hypot(point[0] - last[0], point[1] - last[1]) >= floor) {
+      kept.push(point);
+    }
+  }
+  return kept;
+};
+
+/** The sweep machines' decimation floor (`pencil-machine.ts`), in pt. */
+const SWEEP_FLOOR_PT = 0.5;
+
+/** How many of `penStroke(2000)`'s samples that floor keeps. */
+const KEPT_OF_2000 = 1860;
+/** 2 + 3 + … + KEPT_OF_2000: what its preview hands across the door. */
+const PEN_2000_PREVIEW_POINTS = 1_730_729;
+
 vi.setConfig({ testTimeout: BUDGET_TIMEOUT_MS });
 
 describe("perf budgets — the freehand tools", () => {
@@ -115,17 +146,69 @@ describe("perf budgets — the freehand tools", () => {
   }, 120_000);
   afterAll(() => w?.h.dispose());
 
-  /** Pointer-down on the first sample, one move per remaining sample. */
+  /** Pointer-down on the first sample, one move per remaining sample.
+   *  `afterEach` runs after every delivered event, the pointer-down
+   *  included. */
   const draw = async (
     handler: GestureHandler,
     samples: readonly FreehandSample[],
     pacing: Pacing,
+    afterEach: () => void = () => {},
   ): Promise<void> => {
     const at = (s: FreehandSample) =>
       pointerAt(w.pageId, s.point, { pressure: s.pressure });
     handler.onPointerDown(at(samples[0]!));
-    await drive(samples.slice(1).map(at), (e) => handler.onPointerMove(e), pacing);
+    afterEach();
+    await drive(
+      samples.slice(1).map(at),
+      (e) => {
+        handler.onPointerMove(e);
+        afterEach();
+      },
+      pacing,
+    );
   };
+
+  /** What the handler BUILT for the overlay over one stroke — the half
+   *  of the preview cost `work.previewPoints` cannot see. That counter
+   *  is what crosses the door (the length of every shape handed over);
+   *  this one is what was allocated to hand over: a point counts once
+   *  per ARRAY it was written into. A handler that re-maps the stroke
+   *  per move builds S²/2 points in S arrays; one that appends builds S
+   *  points in one.
+   *
+   *  Read off the harness after every event (`lastToolPreview` hands
+   *  back the very object the handler published), so it sees the last
+   *  publish of each event — and these handlers publish at most once. */
+  interface Built {
+    arrays: number;
+    points: number;
+  }
+  const builtMeter = (): { built: Built; look: () => void } => {
+    const seen = new Map<object, number>();
+    const built: Built = { arrays: 0, points: 0 };
+    return {
+      built,
+      look() {
+        const shape = w.h.lastToolPreview() as
+          | { points?: readonly unknown[]; anchors?: readonly unknown[] }
+          | null;
+        const list = shape?.points ?? shape?.anchors;
+        if (!list) return;
+        const had = seen.get(list);
+        if (had === undefined) built.arrays += 1;
+        if (list.length > (had ?? 0)) built.points += list.length - (had ?? 0);
+        seen.set(list, list.length);
+      },
+    };
+  };
+
+  interface InFlight {
+    work: WorkLog;
+    built: Built;
+    /** The preview standing when the last move had been delivered. */
+    preview: ToolPreviewShape | null;
+  }
 
   /** What a stroke costs WHILE IT IS IN FLIGHT: everything from the
    *  pointer-down to the last move. Cancelled, so nothing is committed
@@ -135,17 +218,20 @@ describe("perf budgets — the freehand tools", () => {
     make: MakeHandler,
     samples: readonly FreehandSample[],
     pacing: Pacing = "burst",
-  ): Promise<WorkLog> => {
+  ): Promise<InFlight> => {
     await w.h.host.selection.set([]);
     const { host, work } = countingHost(w.h.host);
     const handler = make(host);
     handler.onActivate(undefined as never);
     work.reset();
-    await draw(handler, samples, pacing);
+    const meter = builtMeter();
+    await draw(handler, samples, pacing, meter.look);
     const counted = work.snapshot();
+    const preview = w.h.lastToolPreview();
     handler.onKey?.({ key: "Escape" } as KeyboardEvent);
     handler.onDeactivate("switch" as never);
-    return report(scenario, counted);
+    report(scenario, counted, { built: meter.built });
+    return { work: counted, built: meter.built, preview };
   };
 
   /** What the LIFT costs: everything from pointer-up until the commit
@@ -174,71 +260,160 @@ describe("perf budgets — the freehand tools", () => {
     return { work: counted, undoSteps };
   };
 
-  // COVERS: `sync()` in `handlers/pencil.ts` and `createSweepHandler` in
-  // `handlers/brush.ts` — `snapshot.points.map(...)` over the WHOLE
-  // stroke, into a fresh preview, on every pointer move.
+  // COVERS: `handlers/stroke-preview.ts`, which the preview `sync()` in
+  // `handlers/pencil.ts` and `createSweepHandler` in `handlers/brush.ts`
+  // both publish through.
   //
-  // SUSPICION CONFIRMED, for all four tools and identically: they share
-  // the loop. 500 samples hand the overlay 125 249 points, 2 000 hand it
-  // 2 000 999 — four times the stroke, sixteen times the work.
-  describe("pencil / paintbrush / blob brush / eraser — the preview re-sends the whole stroke per move", () => {
+  // History (a budget only goes DOWN), identical for all four tools —
+  // they share the loop:
+  //
+  //                      arrays built   points built   points across the door
+  //   as found   500         499           125 249            125 249
+  //             2 000      1 999         2 000 999          2 000 999
+  //   now        500           1               500            125 249
+  //             2 000          1             2 000          2 000 999
+  //
+  // As found, every move ran `snapshot.points.map(...)` over the WHOLE
+  // stroke. Now a kept sample is copied once, into one array per stroke.
+  //
+  // The last column did NOT move and is pinned as it is: the overlay door
+  // (`setToolPreview(shape)`) holds one whole shape, last write wins, so
+  // each publish names the entire polyline. TARGET S — which needs a door
+  // that can EXTEND a retained preview; no handler change reaches it.
+  describe("pencil / paintbrush / blob brush / eraser — one array per stroke, each sample copied once", () => {
+    /** The preview standing after the last move IS the stroke: every
+     *  kept sample, in order. An append that skipped, repeated or
+     *  reordered a sample — or a handler still showing an earlier
+     *  stroke's array — fails here, whatever the counts say. */
+    const expectWholeStroke = (preview: unknown, kept: readonly Pt[]): void => {
+      expect(preview).toEqual({ pageId: w.pageId, points: kept });
+    };
+
     it.each(Object.keys(SWEEP_TOOLS))("%s: 500 samples", async (tool) => {
-      const work = await inFlight(`${tool} 500`, SWEEP_TOOLS[tool]!, spiral(500));
+      const stroke = spiral(500);
+      const { work, built, preview } = await inFlight(`${tool} 500`, SWEEP_TOOLS[tool]!, stroke);
       // A stroke in flight touches the overlay and nothing else.
       expect(work.mutations).toEqual([]);
       expect(work.reads()).toBe(0);
       // One publish per pointer event, the pointer-down's empty one
       // included. Fine as it is.
       expect(work.previews()).toBe(500);
-      // 2 + 3 + … + 500: move k re-sends all k+1 samples.
-      // TARGET 500 — each sample crosses the overlay door once.
+      expectWholeStroke(preview, stroke.map((s) => s.point));
+      // As found: 499 arrays, 125 249 points.
+      expect(built).toEqual({ arrays: 1, points: 500 });
+      // 2 + 3 + … + 500: publish k names all k+1 samples. The door's
+      // cost, not the handler's — see the history above. TARGET 500.
       expect(work.previewPoints).toBe(125_249);
     });
 
     it.each(Object.keys(SWEEP_TOOLS))("%s: 2 000 samples", async (tool) => {
-      const work = await inFlight(`${tool} 2000`, SWEEP_TOOLS[tool]!, spiral(2000));
+      const stroke = spiral(2000);
+      const { work, built, preview } = await inFlight(`${tool} 2000`, SWEEP_TOOLS[tool]!, stroke);
       expect(work.mutations).toEqual([]);
       expect(work.reads()).toBe(0);
       expect(work.previews()).toBe(2000);
-      // 2 + 3 + … + 2 000. TARGET 2 000.
+      expectWholeStroke(preview, stroke.map((s) => s.point));
+      // As found: 1 999 arrays, 2 000 999 points.
+      expect(built).toEqual({ arrays: 1, points: 2000 });
+      // 2 + 3 + … + 2 000. TARGET 2 000 (the door).
       expect(work.previewPoints).toBe(2_000_999);
     });
 
     it("pacing changes nothing: the handler is synchronous and waits on no reply", async () => {
-      const work = await inFlight("pencil 500 paced", createPencilHandler, spiral(500), "paced");
+      const stroke = spiral(500);
+      const { work, built, preview } = await inFlight("pencil 500 paced", createPencilHandler, stroke, "paced");
       expect(work.previews()).toBe(500);
+      expectWholeStroke(preview, stroke.map((s) => s.point));
+      expect(built).toEqual({ arrays: 1, points: 500 });
       expect(work.previewPoints).toBe(125_249);
     });
 
-    it("a jittered 2 000-sample pen stroke: dropped samples are still re-published", async () => {
-      const work = await inFlight("pencil pen 2000", createPencilHandler, penStroke(2000));
-      // The 0.5 pt floor drops the samples jitter put too close together
-      // — and the handler publishes the unchanged stroke again for every
-      // one of them. TARGET: one publish per KEPT sample.
-      expect(work.previews()).toBe(2000);
-      // Under 2 000 999 only because fewer samples were kept; the growth
-      // is the same. TARGET: the kept sample count.
-      expect(work.previewPoints).toBe(1_861_241);
+    it("a jittered 2 000-sample pen stroke: a dropped sample publishes nothing", async () => {
+      const stroke = penStroke(2000);
+      const kept = keptAbove(stroke, SWEEP_FLOOR_PT);
+      // The stream is what it says: jitter put samples closer together
+      // than the floor, so the machine keeps fewer than it was sent.
+      expect(kept).toHaveLength(KEPT_OF_2000);
+      const { work, built, preview } = await inFlight("pencil pen 2000", createPencilHandler, stroke);
+      // The preview is the KEPT samples — a dropped one never shows.
+      expectWholeStroke(preview, kept);
+      // One publish per kept sample. As found: 2 000 — the unchanged
+      // stroke went out again for every sample the floor dropped.
+      expect(work.previews()).toBe(KEPT_OF_2000);
+      // As found: 1 999 arrays, 1 861 241 points.
+      expect(built).toEqual({ arrays: 1, points: KEPT_OF_2000 });
+      // 2 + 3 + … + K, K the kept count. As found 1 861 241. TARGET K
+      // (the door).
+      expect(work.previewPoints).toBe(PEN_2000_PREVIEW_POINTS);
+      expect(PEN_2000_PREVIEW_POINTS).toBe((KEPT_OF_2000 * (KEPT_OF_2000 + 1)) / 2 - 1);
+    });
+
+    // The array handed to the overlay keeps growing while its stroke is
+    // in flight. What that sharing must never do is reach PAST the
+    // stroke: a second stroke appending to the first one's array would
+    // draw both, and would rewrite a shape a host may still be holding.
+    it.each(Object.keys(SWEEP_TOOLS))("%s: a second stroke gets its own array, and leaves the first one's alone", async (tool) => {
+      await w.h.host.selection.set([]);
+      const handler = SWEEP_TOOLS[tool]!(w.h.host);
+      handler.onActivate(undefined as never);
+      const first = spiral(50);
+      const second = mouse(linePoints([40, 40], [140, 90], 30));
+
+      await draw(handler, first, "burst");
+      const firstShape = w.h.lastToolPreview() as { points: readonly Pt[] };
+      handler.onKey?.({ key: "Escape" } as KeyboardEvent);
+      expect(w.h.lastToolPreview()).toBeNull();
+
+      await draw(handler, second, "burst");
+      const secondShape = w.h.lastToolPreview() as { points: readonly Pt[] };
+      handler.onKey?.({ key: "Escape" } as KeyboardEvent);
+      handler.onDeactivate("switch" as never);
+
+      expect(secondShape.points).toEqual(second.map((s) => s.point));
+      expect(secondShape.points).not.toBe(firstShape.points);
+      expect(firstShape.points).toEqual(first.map((s) => s.point));
     });
   });
 
-  // COVERS: `preview()` in `handlers/lasso.ts` — the same whole-array
-  // re-map, as cubic anchor triples — and its release: `commit()` reads
+  // COVERS: `preview()` in `handlers/lasso.ts` — the same stroke-long
+  // outline, as cubic anchor triples — and its release: `commit()` reads
   // the scene tree and asks for the geometry of EVERY leaf.
   //
-  // SUSPICION CONFIRMED for the preview (the same quadratic), and the
-  // release is one call but not a small one: it carries all 518 ids.
+  // History of the in-flight budgets:
+  //
+  //                      arrays built   anchors built   anchors across the door
+  //   as found   500         499           125 249            125 249
+  //             2 000      1 999         2 000 999          2 000 999
+  //   now        500           1               500            125 249
+  //             2 000          1             2 000          2 000 999
+  //
+  // The door column is the sweep tools' story again and stays pinned.
   describe("lasso — the region preview and the release walk", () => {
     it.each([
       [500, 125_249],
       [2000, 2_000_999],
     ])("%i samples in flight", async (samples, previewPoints) => {
-      const work = await inFlight(`lasso ${samples}`, createLassoSelectHandler, lassoSpiral(samples));
+      const stroke = lassoSpiral(samples);
+      const { work, built, preview } = await inFlight(`lasso ${samples}`, createLassoSelectHandler, stroke);
       expect(work.mutations).toEqual([]);
       expect(work.reads()).toBe(0);
       // No publish on pointer-down, one per move.
       expect(work.previews()).toBe(samples - 1);
-      // TARGET `samples` — each point once.
+      // The outline standing after the last move is the polygon the
+      // release would test: every sample a corner, closed, dashed.
+      expect(preview).toEqual({
+        pageId: w.pageId,
+        anchors: stroke.map(({ point }) => ({
+          anchor: point,
+          left: point,
+          right: point,
+        })),
+        close: true,
+        dashed: true,
+      });
+      // As found: `samples - 1` arrays, S²/2 anchors.
+      expect(built).toEqual({ arrays: 1, points: samples });
+      // TARGET `samples` — each point once (the door).
       expect(work.previewPoints).toBe(previewPoints);
       // The px→pt conversion is asked again on every move. TARGET 1 per
       // stroke.

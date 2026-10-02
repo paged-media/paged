@@ -23,6 +23,10 @@
 // actually drawn), and the pointer-up commit (RDP-simplified +
 // Catmull-Rom-fitted anchors) becomes ONE `insertPath` through
 // `host.document.mutate`.
+//
+// The preview is APPENDED TO, not re-mapped: `./stroke-preview.ts` owns
+// the one array a stroke hands the overlay, and says what the overlay
+// door still costs.
 
 import type {
   BundleHost,
@@ -34,6 +38,7 @@ import { strokeWidthFromPressure } from "@paged-media/draw-geometry";
 import { PencilMachine, type PencilSnapshot } from "@paged-media/draw-tools";
 
 import { insertPathMutationFor } from "./insert-path";
+import { createStrokePreview } from "./stroke-preview";
 
 /** Screen-space RDP fidelity: pointer wobble below this collapses. */
 const SIMPLIFY_TOLERANCE_PX = 2;
@@ -57,11 +62,12 @@ const CLOSE_TOLERANCE_PX = 8;
 export function createPencilHandler(host: BundleHost): GestureHandler {
   let machine: PencilMachine | null = null;
   let pageId: string | null = null;
+  const preview = createStrokePreview(host);
 
   const reset = () => {
     machine = null;
     pageId = null;
-    host.overlay.setToolPreview(null);
+    preview.clear();
   };
 
   const sync = (snapshot: PencilSnapshot) => {
@@ -120,16 +126,7 @@ export function createPencilHandler(host: BundleHost): GestureHandler {
       reset();
       return;
     }
-    host.overlay.setToolPreview(
-      pageId && snapshot.points.length >= 2
-        ? {
-            pageId,
-            points: snapshot.points.map(
-              (p) => [p[0], p[1]] as [number, number],
-            ),
-          }
-        : null,
-    );
+    if (pageId) preview.show(pageId, snapshot.points);
   };
 
   return {

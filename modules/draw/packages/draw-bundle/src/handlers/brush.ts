@@ -63,6 +63,7 @@ import {
 } from "@paged-media/draw-tools";
 
 import { insertPathMutationFor } from "./insert-path";
+import { createStrokePreview } from "./stroke-preview";
 import {
   DEFAULT_MITER_LIMIT,
   outlineStrokeMutationFor,
@@ -320,8 +321,8 @@ async function commitEraserBrush(
 
 /** The shared pencil-shaped gesture shim: pointer samples feed the
  *  machine, the live stroke previews as a POLYLINE (honest — the sweep
- *  happens at commit), and the pointer-up commit runs the tool's async
- *  commit flow. */
+ *  happens at commit; appended to, not re-mapped — `./stroke-preview.ts`),
+ *  and the pointer-up commit runs the tool's async commit flow. */
 function createSweepHandler(
   host: BundleHost,
   label: string,
@@ -330,11 +331,12 @@ function createSweepHandler(
 ): GestureHandler {
   let machine: BrushMachine | null = null;
   let pageId: string | null = null;
+  const preview = createStrokePreview(host);
 
   const reset = () => {
     machine = null;
     pageId = null;
-    host.overlay.setToolPreview(null);
+    preview.clear();
   };
 
   const sync = (snapshot: BrushSnapshot) => {
@@ -351,16 +353,7 @@ function createSweepHandler(
       reset();
       return;
     }
-    host.overlay.setToolPreview(
-      pageId && snapshot.points.length >= 2
-        ? {
-            pageId,
-            points: snapshot.points.map(
-              (p) => [p[0], p[1]] as [number, number],
-            ),
-          }
-        : null,
-    );
+    if (pageId) preview.show(pageId, snapshot.points);
   };
 
   return {
