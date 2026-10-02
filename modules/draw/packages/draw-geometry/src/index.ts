@@ -111,7 +111,13 @@ export { peakedWidthProfile } from "./width";
 // Wave 2 — blend interpolation (anchor-run lerp + sRGB colour mix).
 export { interpolateAnchors, mixRgb } from "./blend";
 // Wave 2 — the lasso-select region test.
-export { pointInPolygon, pointInAnchorPath } from "./polygon";
+export {
+  pointInPolygon,
+  pointInAnchorPath,
+  flattenAnchorPath,
+  pointInFlatPath,
+  type FlatAnchorPath,
+} from "./polygon";
 // Illustrator Phase 2 — compound paths: the contour algebra (merge /
 // split) plus the NON-ZERO winding re-orientation that makes a nested
 // contour render as a HOLE instead of a solid island.

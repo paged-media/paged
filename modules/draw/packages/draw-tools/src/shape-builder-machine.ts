@@ -24,8 +24,9 @@
 //     protocol v57 / B-22). The host installs the planar ARRANGEMENT of
 //     the input set once per gesture (`setRegions`); from then on every
 //     pointer sample resolves the FACE under the cursor locally
-//     (`pointInAnchorPath` over the face outlines — even-odd, holes
-//     included). `hovered` is what the host highlights; `collected` is
+//     (`./region-lookup.ts` — even-odd over the face outlines, holes
+//     included, each outline flattened once at install). `hovered` is
+//     what the host highlights; `collected` is
 //     the ordered set of distinct faces the drag has crossed, which
 //     pointer-up commits as `pathfinderFaces`.
 //
@@ -59,12 +60,13 @@
 // engine's RAW path space to page space before installing, so the two
 // agree). Element keys and face ids are opaque strings.
 
+import { clone, type AnchorTriple, type Vec2 } from "@paged-media/draw-geometry";
+
 import {
-  clone,
-  pointInAnchorPath,
-  type AnchorTriple,
-  type Vec2,
-} from "@paged-media/draw-geometry";
+  prepareRegions,
+  regionAt,
+  type PreparedRegions,
+} from "./region-lookup";
 
 /** Modifier snapshot the mode is decided from (at gesture start). */
 export interface ShapeBuilderModifiers {
@@ -99,8 +101,17 @@ export type ShapeBuilderEvent =
 
 /** What the host renders / plans from. */
 export interface ShapeBuilderSnapshot {
-  /** The gesture polyline so far (page-local pt), or null when idle. */
-  path: readonly Vec2[] | null;
+  /** The gesture polyline so far (page-local pt), or null when idle.
+   *
+   *  A COPY, MADE ON FIRST READ. It is this snapshot's own array of its
+   *  own points, holding the polyline as it stood when the snapshot was
+   *  TAKEN (however much later it is read) — so a caller may keep it, or
+   *  scribble on it, without touching the machine or any other snapshot,
+   *  exactly as before. What changed is WHEN the copy is made: it used
+   *  to be made for every event, so a drag of N moves cloned the whole
+   *  polyline N times (N²/2 point copies) whether or not anyone looked.
+   *  A snapshot nobody asks for its path now copies nothing. */
+  readonly path: readonly Vec2[] | null;
   /** ELEMENT-lane operands: the distinct element keys the gesture has
    *  swept, in first-cross order (the fallback `pathfinderBoolean`
    *  operands). */
@@ -124,6 +135,17 @@ export interface ShapeBuilderSnapshot {
   hasRegions: boolean;
 }
 
+/** A copy of the first `length` points of `path`, each point its own
+ *  array. Read straight away (the usual case) the polyline is still the
+ *  length it was when its snapshot was taken; read after later events it
+ *  has grown, and only the first `length` points are that snapshot's. */
+function copyOfFirst(path: readonly Vec2[], length: number): Vec2[] {
+  const taken = path.length === length ? path : path.slice(0, length);
+  return taken.map(clonePoint);
+}
+
+const clonePoint = (p: Vec2): Vec2 => clone(p);
+
 /** Pure machine: gesture samples + (cached faces | injected face ids |
  *  crossed element keys) in, ordered operands + the hovered face out.
  *  No host, no engine — the handler shim installs the arrangement and
@@ -135,7 +157,8 @@ export class ShapeBuilderMachine {
   private hovered: string | null = null;
   private mode: ShapeBuilderMode = "unite";
   private dragging = false;
-  private regions: readonly RegionFace[] | null = null;
+  /** The installed arrangement, flattened once (`./region-lookup.ts`). */
+  private regions: PreparedRegions | null = null;
   private lastPoint: Vec2 | null = null;
 
   /** Install (or clear, with `null`) the cached planar arrangement the
@@ -143,7 +166,7 @@ export class ShapeBuilderMachine {
    *  point, so a cache that lands mid-hover highlights immediately
    *  rather than at the next pointermove. */
   setRegions(faces: readonly RegionFace[] | null): ShapeBuilderSnapshot {
-    this.regions = faces;
+    this.regions = faces ? prepareRegions(faces) : null;
     if (this.lastPoint) this.resolveAt(this.lastPoint);
     return this.snapshot();
   }
@@ -200,13 +223,7 @@ export class ShapeBuilderMachine {
    *  flicker the highlight off between engine round trips. */
   private resolveAt(point: Vec2): void {
     if (!this.regions) return;
-    let hit: string | null = null;
-    for (const face of this.regions) {
-      if (pointInAnchorPath(point, face.anchors, face.subpathStarts ?? [])) {
-        hit = face.id;
-        break;
-      }
-    }
+    const hit = regionAt(this.regions, point);
     this.hovered = hit;
     this.collect(hit);
   }
@@ -217,15 +234,56 @@ export class ShapeBuilderMachine {
   }
 
   private snapshot(): ShapeBuilderSnapshot {
-    return {
-      path: this.path ? this.path.map((p) => clone(p)) : null,
-      crossed: [...this.crossed],
-      collected: [...this.collected],
-      hovered: this.hovered,
-      mode: this.mode,
-      faceMode: this.mode === "subtract" ? "remove" : "keep",
-      building: this.dragging,
-      hasRegions: this.regions !== null,
-    };
+    return new Snapshot(
+      this.path,
+      [...this.crossed],
+      [...this.collected],
+      this.hovered,
+      this.mode,
+      this.dragging,
+      this.regions !== null,
+    );
+  }
+}
+
+/** One snapshot. A class only so that `path` can be copied on first read
+ *  without each snapshot carrying a closure of its own (measured: an
+ *  object literal with a getter costs more per event than the copy it
+ *  defers, whenever the path IS read).
+ *
+ *  The polyline is APPEND-ONLY within a gesture (a `down` starts a new
+ *  array, `key` drops it, and a stored point is never written to again),
+ *  so "the polyline as it stands now" is fully described by the array
+ *  and its length at this moment. Holding those two lets the copy wait
+ *  until somebody reads `path` — see the field's note on the interface.
+ *
+ *  ONE THING THIS CHANGES for a caller that does more than read fields:
+ *  `path` is an accessor on the class, not an own property, so a spread
+ *  (`{ ...snapshot }`), `Object.keys` or `JSON.stringify` of a snapshot
+ *  no longer carries it. Nothing in this repo or the editor does that. */
+class Snapshot implements ShapeBuilderSnapshot {
+  readonly #source: readonly Vec2[] | null;
+  readonly #length: number;
+  #copy: Vec2[] | null = null;
+  readonly faceMode: FaceMode;
+
+  constructor(
+    source: readonly Vec2[] | null,
+    readonly crossed: readonly string[],
+    readonly collected: readonly string[],
+    readonly hovered: string | null,
+    readonly mode: ShapeBuilderMode,
+    readonly building: boolean,
+    readonly hasRegions: boolean,
+  ) {
+    this.#source = source;
+    this.#length = source ? source.length : 0;
+    this.faceMode = mode === "subtract" ? "remove" : "keep";
+  }
+
+  get path(): readonly Vec2[] | null {
+    if (!this.#source) return null;
+    if (!this.#copy) this.#copy = copyOfFirst(this.#source, this.#length);
+    return this.#copy;
   }
 }
