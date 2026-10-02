@@ -73,15 +73,17 @@
 // gap (a placed-image placement read), not something to guess at here —
 // the command logs the assumption every time it runs.
 //
-// BLOCKING, with MEASURED numbers rather than a comforting adjective: the
-// trace runs synchronously in the bundle realm — the MAIN thread in the
-// editor — and cannot be interrupted once started. Flat artwork at
-// 2048×2048 takes ~0.3 s; a NOISY PHOTOGRAPH at the same size took 41 s
-// on the bench (`../trace-engine.ts` carries the whole table). That is
-// why the default trace budget is 1 MP, not the kernel's 4 MP refusal
-// cap, and why anything over `TRACE_SLOW_PIXELS` gets a warning BEFORE
-// the call. v0 does not use `host.workers`; that is the named v1 step and
-// the real fix.
+// WHERE THE TRACE RUNS, with MEASURED numbers rather than a comforting
+// adjective. The kernel call is synchronous and cannot be interrupted:
+// flat artwork at 2048×2048 takes ~0.3 s; a NOISY PHOTOGRAPH at the same
+// size took 41 s on the bench (`../trace-engine.ts` carries the whole
+// table). So the command does not make that call itself: it opens a
+// TRACE SESSION (`openTraceSession`), which runs the kernel in a
+// `host.workers` worker — the pixels handed over, not copied — and only
+// falls back to this thread, the editor's UI thread, when the host cannot
+// spawn the worker. The fallback is the old behaviour exactly, so the
+// 1 MP default budget and the warning BEFORE a long call both stay; the
+// warning is only raised when the call is actually going to block.
 
 import type {
   BundleHost,
@@ -103,11 +105,11 @@ import {
 
 import manifest from "../../manifest.json";
 import {
-  bootTraceEngine,
+  openTraceSession,
   traceBudget,
   TRACE_DEFAULTS,
-  type TraceEngine,
   type TraceLimits,
+  type TraceSession,
   type TraceOptions,
   type TraceRegion,
   type TraceResult,
@@ -667,11 +669,11 @@ export function traceOptionsFrom(payload: unknown): Required<TraceOptions> {
   return out;
 }
 
-/** Above this many traced pixels the command warns BEFORE it starts —
- *  there is no way to interrupt a synchronous wasm call once it is
- *  running, so a warning first is the only honesty available. Set from
- *  the measured timings in `../trace-engine.ts`: a noisy photograph at
- *  1 MP took 6.3 s. */
+/** Above this many traced pixels the command warns BEFORE it starts when
+ *  the trace is going to run on the calling thread — there is no way to
+ *  interrupt a synchronous wasm call once it is running, so a warning
+ *  first is the only honesty available. Set from the measured timings in
+ *  `../trace-engine.ts`: a noisy photograph at 1 MP took 6.3 s. */
 export const TRACE_SLOW_PIXELS = 700_000;
 
 /** The four things the applier needs from the host before it can trace —
@@ -761,9 +763,19 @@ export async function applyImageTrace(
   const source = await traceSourceOf(host);
   if (!source) return [];
 
-  let engine: TraceEngine;
+  // Before the session, not after: opening one may spawn a worker, and
+  // there is nothing to trace in a realm that cannot decode the image.
+  if (!rasterDecoderAvailable()) {
+    host.log.warn(
+      `${label}: this realm cannot decode placed-image bytes ` +
+        `(createImageBitmap / OffscreenCanvas absent) — no-op`,
+    );
+    return [];
+  }
+
+  let session: TraceSession;
   try {
-    engine = await bootTraceEngine();
+    session = await openTraceSession(host);
   } catch (err) {
     host.log.warn(
       `${label}: trace engine unavailable — ${
@@ -772,73 +784,92 @@ export async function applyImageTrace(
     );
     return [];
   }
-  const limits: TraceLimits = engine.limits();
-  // The DECODE budget: the caller's `maxTracePixels` (1 MP by default)
-  // clamped to the kernel's hard refusal cap. This — not the cap — is
-  // what a trace actually runs at, and it is the difference between a
-  // 6-second worst case and a 41-second one.
-  const budget = traceBudget(limits, options.maxTracePixels);
-
-  if (!rasterDecoderAvailable()) {
-    host.log.warn(
-      `${label}: this realm cannot decode placed-image bytes ` +
-        `(createImageBitmap / OffscreenCanvas absent) — no-op`,
-    );
-    return [];
-  }
-  let raster;
+  // Everything the trace needs from the raster is read out here: on a
+  // worker session the pixel buffer is TRANSFERRED and is gone afterwards.
+  let traced: {
+    result: TraceResult;
+    width: number;
+    height: number;
+    scale: number;
+    sourcePixels: [number, number];
+  };
   try {
-    raster = await decodeRasterBytes(source.bytes, budget);
-  } catch (err) {
-    host.log.warn(
-      `${label}: ${err instanceof Error ? err.message : String(err)}`,
-    );
-    return [];
-  }
-  if (raster.scale < 1) {
-    host.log.info(
-      `${label}: ${source.uri} is ${raster.sourceWidth}×${raster.sourceHeight}, ` +
-        `over the ${budget.maxPixels} px trace budget ` +
-        `(maxTracePixels${
-          budget.maxPixels === limits.maxPixels ? ", at the kernel's hard cap" : ""
-        }) — DOWNSAMPLED to ${raster.width}×${raster.height} ` +
-        `(×${raster.scale.toFixed(3)}). Detail below the new sample grid is gone.`,
-    );
-  }
-  if (raster.width * raster.height > TRACE_SLOW_PIXELS) {
-    // No way to interrupt a synchronous wasm call, so warn BEFORE.
-    host.log.warn(
-      `${label}: tracing ${raster.width}×${raster.height} px on the calling ` +
-        `thread — this BLOCKS (measured: ~0.3 s on flat artwork, up to ~6 s ` +
-        `on a noisy photograph at this size). Lower maxTracePixels for a ` +
-        `faster, coarser trace.`,
-    );
-  }
+    const limits: TraceLimits = await session.limits();
+    // The DECODE budget: the caller's `maxTracePixels` (1 MP by default)
+    // clamped to the kernel's hard refusal cap. This — not the cap — is
+    // what a trace actually runs at, and it is the difference between a
+    // 6-second worst case and a 41-second one.
+    const budget = traceBudget(limits, options.maxTracePixels);
 
-  // Synchronous, CPU-bound, on this thread. Said in the module header,
-  // said again here, because this is the line that freezes the UI.
-  let result: TraceResult;
-  try {
-    result = engine.trace(
-      new Uint8Array(raster.data.buffer, raster.data.byteOffset, raster.data.byteLength),
-      raster.width,
-      raster.height,
-      options,
-    );
-  } catch (err) {
-    host.log.warn(
-      `${label}: the tracer refused — ${
-        err instanceof Error ? err.message : String(err)
-      }`,
-    );
-    return [];
+    let raster;
+    try {
+      raster = await decodeRasterBytes(source.bytes, budget);
+    } catch (err) {
+      host.log.warn(
+        `${label}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return [];
+    }
+    if (raster.scale < 1) {
+      host.log.info(
+        `${label}: ${source.uri} is ${raster.sourceWidth}×${raster.sourceHeight}, ` +
+          `over the ${budget.maxPixels} px trace budget ` +
+          `(maxTracePixels${
+            budget.maxPixels === limits.maxPixels ? ", at the kernel's hard cap" : ""
+          }) — DOWNSAMPLED to ${raster.width}×${raster.height} ` +
+          `(×${raster.scale.toFixed(3)}). Detail below the new sample grid is gone.`,
+      );
+    }
+    if (
+      session.thread === "calling" &&
+      raster.width * raster.height > TRACE_SLOW_PIXELS
+    ) {
+      // No way to interrupt a synchronous wasm call, so warn BEFORE.
+      host.log.warn(
+        `${label}: tracing ${raster.width}×${raster.height} px on the calling ` +
+          `thread — this BLOCKS (measured: ~0.3 s on flat artwork, up to ~6 s ` +
+          `on a noisy photograph at this size). Lower maxTracePixels for a ` +
+          `faster, coarser trace.`,
+      );
+    }
+
+    // On a worker session this await leaves the thread free; on the
+    // calling-thread fallback it is the line that freezes the UI.
+    try {
+      traced = {
+        width: raster.width,
+        height: raster.height,
+        scale: raster.scale,
+        sourcePixels: [raster.sourceWidth, raster.sourceHeight],
+        result: await session.trace(
+          raster.data,
+          raster.width,
+          raster.height,
+          options,
+        ),
+      };
+    } catch (err) {
+      host.log.warn(
+        `${label}: the tracer refused — ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      return [];
+    }
+  } finally {
+    session.close();
   }
+  host.log.debug(
+    `${label}: traced ${traced.width}×${traced.height} px ${
+      session.thread === "worker" ? "in a worker" : "on the calling thread"
+    }`,
+  );
 
   const pixelToPage = pixelToPageAffine(
     source.bounds,
     source.itemTransform,
-    raster.width,
-    raster.height,
+    traced.width,
+    traced.height,
   );
   if (!pixelToPage) {
     host.log.warn(`${label}: the frame has no mappable bounds — no-op`);
@@ -856,10 +887,10 @@ export async function applyImageTrace(
       pageId: source.pageId,
       source: source.id,
       sourceUri: source.uri,
-      result,
+      result: traced.result,
       pixelToPage,
-      scale: raster.scale,
-      sourcePixels: [raster.sourceWidth, raster.sourceHeight],
+      scale: traced.scale,
+      sourcePixels: traced.sourcePixels,
       options,
     }),
   );

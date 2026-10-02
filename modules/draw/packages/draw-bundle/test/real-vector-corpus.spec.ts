@@ -23,8 +23,8 @@
  * emitted by Illustrator, Figma, Sketch and a dozen web export
  * pipelines. None of them were written with our parser in mind.
  *
- * Two properties, and the second is the one that would actually hurt if
- * it broke:
+ * Three properties, and the second is the one that would actually hurt
+ * if it broke:
  *
  * 1. **A real SVG never throws.** `shapesFromSvgBytes` is the importer's
  *    whole front door. A file that crashes it takes the editor with it.
@@ -49,6 +49,16 @@
  *    `shapesFromSvgBytes` signals refusal by returning no shapes rather
  *    than by throwing, so "refused" here means an empty result.
  *
+ * 3. **A real SVG is ONE undo step.** Parsing is half an import; the
+ *    other half is the document it lands in. Every file that yields
+ *    shapes is committed to a real engine through the File ▸ Open lane
+ *    and must arrive as one batch — nothing refused, one element per
+ *    contour — and leave again on ONE undo. The importer used to be a
+ *    loop of single mutations: these 457 files cost 14 057 of them and
+ *    9 107 presses of undo. A file that needs a second batch means the
+ *    engine refused something real artwork contains, and that is worth
+ *    knowing about by name.
+ *
  * OPT-IN — the assets live in the private corpus checkout:
  *
  *     PAGED_SVG_CORPUS=1 pnpm --filter @paged-media/draw test
@@ -58,7 +68,10 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { shapesFromSvgBytes } from "../src/io/svg";
+import { leafIdsOf } from "../src";
+import { commitSvgImport, shapesFromSvgBytes } from "../src/io/svg";
+import { openHost } from "./conformance/host";
+import { F4_OVERLAP } from "./fixtures/corpus";
 
 const GROUPS = ["idml", "docx", "psd", "html", "vector", "pptx"] as const;
 
@@ -164,6 +177,64 @@ describe.skipIf(!gated)("real SVG corpus", () => {
         `what real design tools emit`,
     ).toBeGreaterThan(0);
   });
+});
+
+describe.skipIf(!gated)("real SVG corpus — the import", () => {
+  it("commits every real SVG as one batch, and one undo takes it back", async () => {
+    const h = await openHost();
+    try {
+      await h.load(F4_OVERLAP.bytes());
+      const leafCount = async (): Promise<number> =>
+        leafIdsOf(await h.host.document.tree()).length;
+      const base = await leafCount();
+      const wrong: string[] = [];
+      let files = 0;
+      let elements = 0;
+      let swatches = 0;
+
+      for (const path of svgs) {
+        const bytes = new Uint8Array(readFileSync(path));
+        const shapes = shapesFromSvgBytes(bytes);
+        if (shapes.length === 0) continue;
+        const contours = shapes.reduce(
+          (n, s) => n + Math.max(1, s.anchors.subpathStarts.length),
+          0,
+        );
+        const name = path.split("/").slice(-4).join("/");
+        const done = await commitSvgImport(h.host, {
+          name,
+          bytes,
+          mimeType: "image/svg+xml",
+        });
+        files += 1;
+        elements += done.elements;
+        swatches += done.swatches;
+        if (done.batches !== 1 || done.refused !== 0) {
+          wrong.push(`${name}: ${done.batches} batches, ${done.refused} refused`);
+        }
+        if ((await leafCount()) - base !== done.elements || done.elements > contours) {
+          wrong.push(`${name}: ${done.elements} elements for ${contours} contours`);
+        }
+        await h.host.document.undo();
+        if ((await leafCount()) !== base) {
+          wrong.push(`${name}: one undo left ${(await leafCount()) - base} element(s)`);
+          break; // the document is no longer the baseline; stop counting
+        }
+      }
+
+      console.log(
+        `real SVG corpus, imported: ${files} file(s), ${elements} elements, ` +
+          `${swatches} swatches — one batch and one undo step each`,
+      );
+      expect(
+        wrong,
+        `real SVGs that did NOT import as one batch / one undo step:\n  ${wrong.join("\n  ")}`,
+      ).toEqual([]);
+      expect(files).toBeGreaterThan(0);
+    } finally {
+      h.dispose();
+    }
+  }, 600_000);
 });
 
 describe.skipIf(foreign.length === 0)("foreign vector formats are refused, not half-read", () => {
