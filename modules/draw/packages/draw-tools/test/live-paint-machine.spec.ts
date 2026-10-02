@@ -149,4 +149,31 @@ describe("LivePaintMachine", () => {
     (s.collected as string[]).push("bogus");
     expect(m.handle({ type: "up", point: [50, 50] }).collected).toEqual(["0#0"]);
   });
+
+  // The lookup is the Shape Builder's (`region-lookup.ts`): flattened
+  // once at install, first installed face wins.
+  it("where outlines overlap, the FIRST face installed is the one painted", () => {
+    const m = new LivePaintMachine();
+    const under = { ...LEFT, id: "under#0" };
+    m.setRegions([LEFT, under]);
+    expect(m.handle({ type: "move", point: [50, 50] }).hovered).toBe("0#0");
+    m.setRegions([under, LEFT]);
+    expect(m.handle({ type: "move", point: [50, 50] }).hovered).toBe("under#0");
+  });
+
+  it("a curved two-anchor face (a lens) is painted like any other", () => {
+    const m = new LivePaintMachine();
+    m.setRegions([
+      {
+        id: "lens#0",
+        anchors: [
+          { anchor: [0, 0], left: [3, -5], right: [3, 5] },
+          { anchor: [10, 0], left: [7, 5], right: [7, -5] },
+        ],
+      },
+    ]);
+    m.handle({ type: "down", point: [5, 0] });
+    expect(m.handle({ type: "up", point: [5, 0] }).collected).toEqual(["lens#0"]);
+    expect(m.handle({ type: "move", point: [0.5, 3] }).hovered).toBeNull();
+  });
 });

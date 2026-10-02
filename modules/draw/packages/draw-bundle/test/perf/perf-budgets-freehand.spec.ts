@@ -22,12 +22,20 @@
 // lowered, and every scenario says which expensive path it exercises.
 //
 // What these tools cost is not the engine — a stroke in flight never
-// reads the document. It is the OVERLAY: each pointer move re-maps the
-// whole sample array into a fresh preview shape, so a stroke of S
-// samples hands the overlay S²/2 points. `work.previewPoints` is that
-// number. The commit is the other half: how many mutations one lift
-// issues, and how many undo steps it leaves behind — measured
-// separately, because they turned out not to be the same number.
+// reads the document. It is the OVERLAY, and that cost has two halves
+// which are counted separately because only one of them is the
+// handler's to remove:
+//
+//   · what the handler BUILDS to hand over (`built`, measured here) —
+//     as found, every move re-mapped the whole sample array into a fresh
+//     shape: S arrays and S²/2 points for a stroke of S samples;
+//   · what CROSSES the door (`work.previewPoints`) — the length of every
+//     shape published. The door holds one whole shape, so this stays
+//     S²/2 however the handler builds it.
+//
+// The commit is the other half: how many mutations one lift issues, and
+// how many undo steps it leaves behind — measured separately, because
+// they turned out not to be the same number.
 //
 // THE DOCUMENT is the gesture workload (`./workload.ts`): 518 leaves.
 // The in-flight budgets do not depend on it — and say so, by asserting
@@ -39,6 +47,8 @@ import type {
   BundleHost,
   ElementId,
   GestureHandler,
+  MutationInput,
+  ToolPreviewShape,
 } from "@paged-media/plugin-api";
 
 import {
@@ -101,31 +111,116 @@ const lassoSpiral = (samples: number): FreehandSample[] =>
 const penStroke = (samples: number): FreehandSample[] =>
   jitteredFreehand([40, 560], [570, 620], samples);
 
+/** The samples a decimation floor KEEPS: the first, then every one at
+ *  least `floor` from the last one kept. Written out here rather than
+ *  asked of the machine — it is what the preview is checked AGAINST. */
+const keptAbove = (samples: readonly FreehandSample[], floor: number): Pt[] => {
+  const kept: Pt[] = [samples[0]!.point];
+  for (const { point } of samples.slice(1)) {
+    const last = kept[kept.length - 1]!;
+    if (Math.hypot(point[0] - last[0], point[1] - last[1]) >= floor) {
+      kept.push(point);
+    }
+  }
+  return kept;
+};
+
+/** The sweep machines' decimation floor (`pencil-machine.ts`), in pt. */
+const SWEEP_FLOOR_PT = 0.5;
+
+/** The lasso's decimation floor (`handlers/lasso.ts`), in screen px —
+ *  which is pt at the harness camera's scale of 1. */
+const LASSO_FLOOR_PX = 3;
+/** How many of `penStroke(2000)`'s samples the lasso's floor keeps. */
+const LASSO_KEPT_OF_2000 = 305;
+
+/** How many of `penStroke(2000)`'s samples that floor keeps. */
+const KEPT_OF_2000 = 1860;
+/** 2 + 3 + … + KEPT_OF_2000: what its preview hands across the door. */
+const PEN_2000_PREVIEW_POINTS = 1_730_729;
+
 vi.setConfig({ testTimeout: BUDGET_TIMEOUT_MS });
 
 describe("perf budgets — the freehand tools", () => {
   let w: Workload;
+  /** The ids of the workload's own leaves — whatever is not in here was
+   *  added by the gesture under test. */
+  let baseline: ReadonlySet<string>;
 
   beforeAll(async () => {
     w = await buildGestureWorkload();
     // Nothing was refused, so every count below is over the document
     // the workload describes — not over a shorter one.
     expect(w.refusals).toEqual([]);
-    expect(await leafIds(w.h)).toHaveLength(518);
+    const leaves = await leafIds(w.h);
+    expect(leaves).toHaveLength(518);
+    baseline = new Set(leaves.map((e) => String(e.id)));
   }, 120_000);
   afterAll(() => w?.h.dispose());
 
-  /** Pointer-down on the first sample, one move per remaining sample. */
+  /** Pointer-down on the first sample, one move per remaining sample.
+   *  `afterEach` runs after every delivered event, the pointer-down
+   *  included. */
   const draw = async (
     handler: GestureHandler,
     samples: readonly FreehandSample[],
     pacing: Pacing,
+    afterEach: () => void = () => {},
   ): Promise<void> => {
     const at = (s: FreehandSample) =>
       pointerAt(w.pageId, s.point, { pressure: s.pressure });
     handler.onPointerDown(at(samples[0]!));
-    await drive(samples.slice(1).map(at), (e) => handler.onPointerMove(e), pacing);
+    afterEach();
+    await drive(
+      samples.slice(1).map(at),
+      (e) => {
+        handler.onPointerMove(e);
+        afterEach();
+      },
+      pacing,
+    );
   };
+
+  /** What the handler BUILT for the overlay over one stroke — the half
+   *  of the preview cost `work.previewPoints` cannot see. That counter
+   *  is what crosses the door (the length of every shape handed over);
+   *  this one is what was allocated to hand over: a point counts once
+   *  per ARRAY it was written into. A handler that re-maps the stroke
+   *  per move builds S²/2 points in S arrays; one that appends builds S
+   *  points in one.
+   *
+   *  Read off the harness after every event (`lastToolPreview` hands
+   *  back the very object the handler published), so it sees the last
+   *  publish of each event — and these handlers publish at most once. */
+  interface Built {
+    arrays: number;
+    points: number;
+  }
+  const builtMeter = (): { built: Built; look: () => void } => {
+    const seen = new Map<object, number>();
+    const built: Built = { arrays: 0, points: 0 };
+    return {
+      built,
+      look() {
+        const shape = w.h.lastToolPreview() as
+          | { points?: readonly unknown[]; anchors?: readonly unknown[] }
+          | null;
+        const list = shape?.points ?? shape?.anchors;
+        if (!list) return;
+        const had = seen.get(list);
+        if (had === undefined) built.arrays += 1;
+        if (list.length > (had ?? 0)) built.points += list.length - (had ?? 0);
+        seen.set(list, list.length);
+      },
+    };
+  };
+
+  interface InFlight {
+    work: WorkLog;
+    built: Built;
+    /** The preview standing when the last move had been delivered. */
+    preview: ToolPreviewShape | null;
+  }
 
   /** What a stroke costs WHILE IT IS IN FLIGHT: everything from the
    *  pointer-down to the last move. Cancelled, so nothing is committed
@@ -135,31 +230,41 @@ describe("perf budgets — the freehand tools", () => {
     make: MakeHandler,
     samples: readonly FreehandSample[],
     pacing: Pacing = "burst",
-  ): Promise<WorkLog> => {
+  ): Promise<InFlight> => {
     await w.h.host.selection.set([]);
     const { host, work } = countingHost(w.h.host);
     const handler = make(host);
     handler.onActivate(undefined as never);
     work.reset();
-    await draw(handler, samples, pacing);
+    const meter = builtMeter();
+    await draw(handler, samples, pacing, meter.look);
     const counted = work.snapshot();
+    const preview = w.h.lastToolPreview();
     handler.onKey?.({ key: "Escape" } as KeyboardEvent);
     handler.onDeactivate("switch" as never);
-    return report(scenario, counted);
+    report(scenario, counted, { built: meter.built });
+    return { work: counted, built: meter.built, preview };
   };
 
   /** What the LIFT costs: everything from pointer-up until the commit
-   *  chain has landed, plus the undo steps it left — measured against
-   *  the undo log, not inferred. The document is put back afterwards. */
-  const lift = async (
+   *  has landed, plus the undo steps it left — measured against the undo
+   *  log, not inferred. The document is put back afterwards.
+   *
+   *  `inspect` runs once the commit has landed and BEFORE it is undone —
+   *  the place to read what the lift did to the document. `via` wraps
+   *  the host the handler is given (under the counter, so what the
+   *  handler ASKS is still counted). */
+  const lift = async <T = undefined>(
     scenario: string,
     make: MakeHandler,
     samples: readonly FreehandSample[],
     selection: ElementId[],
-  ): Promise<{ work: WorkLog; undoSteps: number }> => {
+    inspect?: () => Promise<T>,
+    via: (host: BundleHost) => BundleHost = (host) => host,
+  ): Promise<{ work: WorkLog; undoSteps: number; seen: T }> => {
     await w.h.host.selection.set(selection);
     const mark = await undoMark(w);
-    const { host, work } = countingHost(w.h.host);
+    const { host, work } = countingHost(via(w.h.host));
     const handler = make(host);
     handler.onActivate(undefined as never);
     await draw(handler, samples, "burst");
@@ -169,80 +274,226 @@ describe("perf budgets — the freehand tools", () => {
     await settle();
     const counted = work.snapshot();
     handler.onDeactivate("switch" as never);
+    const seen = (inspect ? await inspect() : undefined) as T;
     const undoSteps = await undoStepsSince(w, mark);
     report(scenario, counted, { undoSteps });
-    return { work: counted, undoSteps };
+    return { work: counted, undoSteps, seen };
   };
 
-  // COVERS: `sync()` in `handlers/pencil.ts` and `createSweepHandler` in
-  // `handlers/brush.ts` — `snapshot.points.map(...)` over the WHOLE
-  // stroke, into a fresh preview, on every pointer move.
+  // COVERS: `handlers/stroke-preview.ts`, which the preview `sync()` in
+  // `handlers/pencil.ts` and `createSweepHandler` in `handlers/brush.ts`
+  // both publish through.
   //
-  // SUSPICION CONFIRMED, for all four tools and identically: they share
-  // the loop. 500 samples hand the overlay 125 249 points, 2 000 hand it
-  // 2 000 999 — four times the stroke, sixteen times the work.
-  describe("pencil / paintbrush / blob brush / eraser — the preview re-sends the whole stroke per move", () => {
+  // History (a budget only goes DOWN), identical for all four tools —
+  // they share the loop:
+  //
+  //                      arrays built   points built   points across the door
+  //   as found   500         499           125 249            125 249
+  //             2 000      1 999         2 000 999          2 000 999
+  //   now        500           1               500            125 249
+  //             2 000          1             2 000          2 000 999
+  //
+  // As found, every move ran `snapshot.points.map(...)` over the WHOLE
+  // stroke. Now a kept sample is copied once, into one array per stroke.
+  //
+  // The last column did NOT move and is pinned as it is: the overlay door
+  // (`setToolPreview(shape)`) holds one whole shape, last write wins, so
+  // each publish names the entire polyline. TARGET S — which needs a door
+  // that can EXTEND a retained preview; no handler change reaches it.
+  describe("pencil / paintbrush / blob brush / eraser — one array per stroke, each sample copied once", () => {
+    /** The preview standing after the last move IS the stroke: every
+     *  kept sample, in order. An append that skipped, repeated or
+     *  reordered a sample — or a handler still showing an earlier
+     *  stroke's array — fails here, whatever the counts say. */
+    const expectWholeStroke = (preview: unknown, kept: readonly Pt[]): void => {
+      expect(preview).toEqual({ pageId: w.pageId, points: kept });
+    };
+
     it.each(Object.keys(SWEEP_TOOLS))("%s: 500 samples", async (tool) => {
-      const work = await inFlight(`${tool} 500`, SWEEP_TOOLS[tool]!, spiral(500));
+      const stroke = spiral(500);
+      const { work, built, preview } = await inFlight(`${tool} 500`, SWEEP_TOOLS[tool]!, stroke);
       // A stroke in flight touches the overlay and nothing else.
       expect(work.mutations).toEqual([]);
       expect(work.reads()).toBe(0);
       // One publish per pointer event, the pointer-down's empty one
       // included. Fine as it is.
       expect(work.previews()).toBe(500);
-      // 2 + 3 + … + 500: move k re-sends all k+1 samples.
-      // TARGET 500 — each sample crosses the overlay door once.
+      expectWholeStroke(preview, stroke.map((s) => s.point));
+      // As found: 499 arrays, 125 249 points.
+      expect(built).toEqual({ arrays: 1, points: 500 });
+      // 2 + 3 + … + 500: publish k names all k+1 samples. The door's
+      // cost, not the handler's — see the history above. TARGET 500.
       expect(work.previewPoints).toBe(125_249);
     });
 
     it.each(Object.keys(SWEEP_TOOLS))("%s: 2 000 samples", async (tool) => {
-      const work = await inFlight(`${tool} 2000`, SWEEP_TOOLS[tool]!, spiral(2000));
+      const stroke = spiral(2000);
+      const { work, built, preview } = await inFlight(`${tool} 2000`, SWEEP_TOOLS[tool]!, stroke);
       expect(work.mutations).toEqual([]);
       expect(work.reads()).toBe(0);
       expect(work.previews()).toBe(2000);
-      // 2 + 3 + … + 2 000. TARGET 2 000.
+      expectWholeStroke(preview, stroke.map((s) => s.point));
+      // As found: 1 999 arrays, 2 000 999 points.
+      expect(built).toEqual({ arrays: 1, points: 2000 });
+      // 2 + 3 + … + 2 000. TARGET 2 000 (the door).
       expect(work.previewPoints).toBe(2_000_999);
     });
 
     it("pacing changes nothing: the handler is synchronous and waits on no reply", async () => {
-      const work = await inFlight("pencil 500 paced", createPencilHandler, spiral(500), "paced");
+      const stroke = spiral(500);
+      const { work, built, preview } = await inFlight("pencil 500 paced", createPencilHandler, stroke, "paced");
       expect(work.previews()).toBe(500);
+      expectWholeStroke(preview, stroke.map((s) => s.point));
+      expect(built).toEqual({ arrays: 1, points: 500 });
       expect(work.previewPoints).toBe(125_249);
     });
 
-    it("a jittered 2 000-sample pen stroke: dropped samples are still re-published", async () => {
-      const work = await inFlight("pencil pen 2000", createPencilHandler, penStroke(2000));
-      // The 0.5 pt floor drops the samples jitter put too close together
-      // — and the handler publishes the unchanged stroke again for every
-      // one of them. TARGET: one publish per KEPT sample.
-      expect(work.previews()).toBe(2000);
-      // Under 2 000 999 only because fewer samples were kept; the growth
-      // is the same. TARGET: the kept sample count.
-      expect(work.previewPoints).toBe(1_861_241);
+    it("a jittered 2 000-sample pen stroke: a dropped sample publishes nothing", async () => {
+      const stroke = penStroke(2000);
+      const kept = keptAbove(stroke, SWEEP_FLOOR_PT);
+      // The stream is what it says: jitter put samples closer together
+      // than the floor, so the machine keeps fewer than it was sent.
+      expect(kept).toHaveLength(KEPT_OF_2000);
+      const { work, built, preview } = await inFlight("pencil pen 2000", createPencilHandler, stroke);
+      // The preview is the KEPT samples — a dropped one never shows.
+      expectWholeStroke(preview, kept);
+      // One publish per kept sample. As found: 2 000 — the unchanged
+      // stroke went out again for every sample the floor dropped.
+      expect(work.previews()).toBe(KEPT_OF_2000);
+      // As found: 1 999 arrays, 1 861 241 points.
+      expect(built).toEqual({ arrays: 1, points: KEPT_OF_2000 });
+      // 2 + 3 + … + K, K the kept count. As found 1 861 241. TARGET K
+      // (the door).
+      expect(work.previewPoints).toBe(PEN_2000_PREVIEW_POINTS);
+      expect(PEN_2000_PREVIEW_POINTS).toBe((KEPT_OF_2000 * (KEPT_OF_2000 + 1)) / 2 - 1);
+    });
+
+    // The array handed to the overlay keeps growing while its stroke is
+    // in flight. What that sharing must never do is reach PAST the
+    // stroke: a second stroke appending to the first one's array would
+    // draw both, and would rewrite a shape a host may still be holding.
+    it.each(Object.keys(SWEEP_TOOLS))("%s: a second stroke gets its own array, and leaves the first one's alone", async (tool) => {
+      await w.h.host.selection.set([]);
+      const handler = SWEEP_TOOLS[tool]!(w.h.host);
+      handler.onActivate(undefined as never);
+      const first = spiral(50);
+      const second = mouse(linePoints([40, 40], [140, 90], 30));
+
+      await draw(handler, first, "burst");
+      const firstShape = w.h.lastToolPreview() as { points: readonly Pt[] };
+      handler.onKey?.({ key: "Escape" } as KeyboardEvent);
+      expect(w.h.lastToolPreview()).toBeNull();
+
+      await draw(handler, second, "burst");
+      const secondShape = w.h.lastToolPreview() as { points: readonly Pt[] };
+      handler.onKey?.({ key: "Escape" } as KeyboardEvent);
+      handler.onDeactivate("switch" as never);
+
+      expect(secondShape.points).toEqual(second.map((s) => s.point));
+      expect(secondShape.points).not.toBe(firstShape.points);
+      expect(firstShape.points).toEqual(first.map((s) => s.point));
     });
   });
 
-  // COVERS: `preview()` in `handlers/lasso.ts` — the same whole-array
-  // re-map, as cubic anchor triples — and its release: `commit()` reads
+  // COVERS: `preview()` in `handlers/lasso.ts` — the same stroke-long
+  // outline, as cubic anchor triples — and its release: `commit()` reads
   // the scene tree and asks for the geometry of EVERY leaf.
   //
-  // SUSPICION CONFIRMED for the preview (the same quadratic), and the
-  // release is one call but not a small one: it carries all 518 ids.
+  // History of the in-flight budgets:
+  //
+  //                      arrays built   anchors built   anchors across the door
+  //   as found   500         499           125 249            125 249
+  //             2 000      1 999         2 000 999          2 000 999
+  //   now        500           1               500            125 249
+  //             2 000          1             2 000          2 000 999
+  //
+  // The door column is the sweep tools' story again and stays pinned.
   describe("lasso — the region preview and the release walk", () => {
     it.each([
       [500, 125_249],
       [2000, 2_000_999],
     ])("%i samples in flight", async (samples, previewPoints) => {
-      const work = await inFlight(`lasso ${samples}`, createLassoSelectHandler, lassoSpiral(samples));
+      const stroke = lassoSpiral(samples);
+      const { work, built, preview } = await inFlight(`lasso ${samples}`, createLassoSelectHandler, stroke);
       expect(work.mutations).toEqual([]);
       expect(work.reads()).toBe(0);
       // No publish on pointer-down, one per move.
       expect(work.previews()).toBe(samples - 1);
-      // TARGET `samples` — each point once.
+      // The outline standing after the last move is the polygon the
+      // release would test: every sample a corner, closed, dashed.
+      expect(preview).toEqual({
+        pageId: w.pageId,
+        anchors: stroke.map(({ point }) => ({
+          anchor: point,
+          left: point,
+          right: point,
+        })),
+        close: true,
+        dashed: true,
+      });
+      // As found: `samples - 1` arrays, S²/2 anchors.
+      expect(built).toEqual({ arrays: 1, points: samples });
+      // TARGET `samples` — each point once (the door).
       expect(work.previewPoints).toBe(previewPoints);
-      // The px→pt conversion is asked again on every move. TARGET 1 per
-      // stroke.
-      expect(work.count("viewport.pxToPt")).toBe(samples - 1);
+      // The px→pt conversion: once, on the press. As found: `samples - 1`
+      // — asked again on every move for a number that does not change.
+      expect(work.count("viewport.pxToPt")).toBe(1);
+    });
+
+    // The floor is what the conversion is FOR, so the budget above is
+    // only safe if the floor still decimates. This stream is jittered:
+    // most of its samples sit closer than 3 px to the last one kept.
+    it("a jittered 2 000-sample lasso: the 3 px floor still decides what is recorded", async () => {
+      const stroke = penStroke(2000);
+      const kept = keptAbove(stroke, LASSO_FLOOR_PX);
+      expect(kept).toHaveLength(LASSO_KEPT_OF_2000);
+      const { work, built, preview } = await inFlight("lasso pen 2000", createLassoSelectHandler, stroke);
+      expect(preview).toEqual({
+        pageId: w.pageId,
+        anchors: kept.map((point) => ({ anchor: point, left: point, right: point })),
+        close: true,
+        dashed: true,
+      });
+      // One publish per recorded point after the first; none for a
+      // dropped sample (the lasso never did publish those).
+      expect(work.previews()).toBe(LASSO_KEPT_OF_2000 - 1);
+      expect(built).toEqual({ arrays: 1, points: LASSO_KEPT_OF_2000 });
+      expect(work.count("viewport.pxToPt")).toBe(1);
+    });
+
+    // "Once per drag" must not become "once per handler": the floor is
+    // screen-space, so a drag begun at another zoom has another floor.
+    // The harness camera is identity; doubling its scale halves the
+    // floor to 1.5 pt, and the second drag must record by THAT.
+    it("the floor is read again on the next press, so it follows a zoom between drags", async () => {
+      const camera = (w.h.host.editor as unknown as { camera: { camera: { scale: number } } })
+        .camera.camera;
+      const stroke = penStroke(600);
+      const outline = (shape: unknown): Pt[] =>
+        (shape as { anchors: { anchor: Pt }[] }).anchors.map((a) => a.anchor);
+      const { host, work } = countingHost(w.h.host);
+      const handler = createLassoSelectHandler(host);
+      handler.onActivate(undefined as never);
+      try {
+        await draw(handler, stroke, "burst");
+        const atScale1 = outline(w.h.lastToolPreview());
+        handler.onKey?.({ key: "Escape" } as KeyboardEvent);
+
+        camera.scale = 2;
+        await draw(handler, stroke, "burst");
+        const atScale2 = outline(w.h.lastToolPreview());
+        handler.onKey?.({ key: "Escape" } as KeyboardEvent);
+
+        expect(atScale1).toEqual(keptAbove(stroke, LASSO_FLOOR_PX));
+        expect(atScale2).toEqual(keptAbove(stroke, LASSO_FLOOR_PX / 2));
+        // The two are different recordings — the scenario discriminates.
+        expect(atScale2.length).toBeGreaterThan(atScale1.length);
+        // One conversion per press, two presses.
+        expect(work.count("viewport.pxToPt")).toBe(2);
+      } finally {
+        camera.scale = 1;
+        handler.onDeactivate("switch" as never);
+      }
     });
 
     it("the release: one tree read, one geometry call — carrying every leaf of the document", async () => {
@@ -257,24 +508,149 @@ describe("perf budgets — the freehand tools", () => {
       expect(work.count("document.tree")).toBe(1);
       expect(work.count("document.elementGeometry")).toBe(1);
       // All 518 leaves, whatever the lasso enclosed. TARGET: the leaves
-      // inside the lasso's bounding box — the engine already answers a
-      // marquee query (`marqueeHits` on the wire), there is no facade.
+      // whose bounds touch the lasso's bounding box (502 for this lasso,
+      // 14 for a small one over the arrangement).
+      //
+      // NOT LOWERED, and not for want of a request that answers it. The
+      // wire has `requestMarqueeHits`, and over a one-layer document it
+      // returns exactly the candidates needed (measured: 14 lassos over
+      // two documents, groups and transformed items included, selected
+      // the same elements either way). It was left alone because it is
+      // not the same QUESTION, and no `host.document` door asks it:
+      //   · it skips locked and hidden layers; this walk does not, so
+      //     the lasso would stop selecting what it selects today;
+      //   · it answers top-first BY LAYER, the walk in tree order. The
+      //     two are mirror images only on one layer — and this bundle
+      //     reads selection ORDER (first selected = kept);
+      //   · it is reachable only through `host.editor.client.send`, the
+      //     raw hatch this repo has been closing, not opening.
+      // What would lower it: a `document.marqueeHits(pageId, rect)`
+      // facade that states its gating and order — or `elementGeometry`
+      // taking a rect.
       expect(work.geometryIdsAsked).toBe(518);
       expect(work.count("selection.set")).toBe(1);
     });
   });
 
-  // COVERS: the commit chains — `sync()` in `handlers/pencil.ts` and
-  // `insertSweptShape` / `commitBlobBrush` / `commitEraserBrush` in
-  // `handlers/brush.ts`: awaited mutations in sequence, each a rebuild.
+  // COVERS: the commits — `commit()` in `handlers/pencil.ts` and
+  // `commitPaintbrush` / `commitBlobBrush` / `commitEraserBrush` in
+  // `handlers/brush.ts`.
   //
-  // SUSPICION CONFIRMED for the mutation count (4 + a read for one
-  // paintbrush stroke) and WRONG for the undo steps: `brush.ts` says the
-  // chain is "several undo steps", one per mutation, and it is not. The
-  // two `setDocumentDefaults` never reach the undo log, so a paintbrush
-  // stroke is TWO steps, not four. Still one more than a stroke should
-  // be, and the eraser multiplies it by the selection.
-  describe("the lift — mutations issued and undo steps left behind", () => {
+  // History (a budget only goes DOWN):
+  //
+  //                                  mutations   undo steps   reads
+  //   as found  pencil, pressure         2            2          0
+  //             paintbrush               4            2          1
+  //             blob, same-fill target   5            3          2
+  //             eraser, 12 selected     60           36         12
+  //   now       pencil, pressure         1            1          0
+  //             paintbrush               1            1          1
+  //             blob, same-fill target   1            1          2
+  //             eraser, 12 selected      1            1          0
+  //
+  // As found, each chain was awaited mutations in sequence, each a
+  // rebuild. (And `brush.ts` called that "several undo steps", one per
+  // mutation, which it was not: the two `setDocumentDefaults` never reach
+  // the undo log, so a paintbrush stroke was TWO steps, not four.) Each
+  // lift is ONE batch now — `bindCreated` lets the batch address the path
+  // it has just inserted.
+  //
+  // WHAT GUARDS IT. A batch could apply and still be the wrong edit, so
+  // every scenario runs TWICE: once as shipped, and once through a host
+  // that refuses batches, which forces the handler's stepwise fallback —
+  // the chain exactly as it was before. The two must leave the SAME
+  // document: the same new element (paint, anchors, contours), the same
+  // selection, the same creation defaults, the same bite out of every
+  // target. The stepwise run is also where the as-found numbers above are
+  // still measured, rather than remembered.
+  describe("the lift — one batch, one undo step, and the same document the stepwise chain leaves", () => {
+    /** One element as the document holds it: its paint and its outline. */
+    interface Shape {
+      fill: unknown;
+      stroke: unknown;
+      weight: unknown;
+      anchors: unknown;
+      subpathStarts: unknown;
+      subpathOpen: unknown;
+    }
+    const shapeOf = async (id: ElementId): Promise<Shape> => {
+      const props = await w.h.host.document.elementProperties(id);
+      const value = (path: string): unknown =>
+        props?.entries.find((e) => e.path === path)?.value ?? null;
+      const table = await w.h.host.document.pathAnchors(id);
+      return {
+        fill: value("frameFillColor"),
+        stroke: value("frameStrokeColor"),
+        weight: value("frameStrokeWeight"),
+        anchors: table?.anchors ?? null,
+        subpathStarts: table?.subpathStarts ?? null,
+        subpathOpen: table?.subpathOpen ?? null,
+      };
+    };
+
+    /** What a lift left behind, read BEFORE it is undone. */
+    interface Landed {
+      /** Leaves in the document. */
+      leaves: number;
+      /** Every leaf the lift added, as a shape (ids are not compared:
+       *  they are minted per run). */
+      created: Shape[];
+      /** Is each created leaf selected, and nothing else? */
+      createdIsSelection: boolean;
+      selection: ElementId[];
+      defaults: { fill: unknown; stroke: unknown; weight: unknown };
+      /** The elements the lift was aimed at, in the order given. */
+      targets: Shape[];
+    }
+    const landedOver =
+      (targets: readonly ElementId[]) => async (): Promise<Landed> => {
+        const now = await leafIds(w.h);
+        const added = now.filter((e) => !baseline.has(String(e.id)));
+        const selection = w.h.host.selection.get();
+        const meta = await w.h.host.document.meta();
+        return {
+          leaves: now.length,
+          created: await Promise.all(added.map(shapeOf)),
+          createdIsSelection:
+            selection.length === added.length &&
+            added.every((a) => selection.some((s) => s.id === a.id)),
+          selection,
+          defaults: {
+            fill: meta.defaultFillColor ?? null,
+            stroke: meta.defaultStrokeColor ?? null,
+            weight: meta.defaultStrokeWeight ?? null,
+          },
+          targets: await Promise.all(targets.map(shapeOf)),
+        };
+      };
+
+    /** A host whose engine refuses every batch (what one predating
+     *  `bindCreated` does) and passes everything else through. */
+    const refusingBatches = (host: BundleHost): BundleHost => {
+      const document = new Proxy(host.document, {
+        get(target, prop, receiver) {
+          if (prop !== "mutate") return Reflect.get(target, prop, receiver);
+          return (mutation: MutationInput) =>
+            mutation.op === "batch"
+              ? Promise.resolve({
+                  applied: false,
+                  error: "batch refused — the spec standing in for an engine without bindCreated",
+                })
+              : target.mutate(mutation);
+        },
+      });
+      return new Proxy(host, {
+        get(target, prop, receiver) {
+          return prop === "document" ? document : Reflect.get(target, prop, receiver);
+        },
+      });
+    };
+
+    /** The document is the workload again: every lift below ends here. */
+    const expectPutBack = async (): Promise<void> => {
+      expect(await leafIds(w.h)).toHaveLength(518);
+    };
+
     it("pencil, mouse: one insert, one step", async () => {
       const { work, undoSteps } = await lift("pencil lift mouse", createPencilHandler, spiral(500), []);
       expect(work.mutations.map((m) => m.op)).toEqual(["insertPath"]);
@@ -282,73 +658,183 @@ describe("perf budgets — the freehand tools", () => {
       expect(undoSteps).toBe(1);
     });
 
-    it("pencil, pen pressure: the insert, then a variable-width outline", async () => {
-      const { work, undoSteps } = await lift("pencil lift pen", createPencilHandler, penStroke(2000), []);
-      // TARGET 1 mutation and 1 undo step: a batch with `bindCreated`.
-      expect(work.mutations.map((m) => m.op)).toEqual([
+    it("pencil, pen pressure: the insert and its variable-width outline are one batch", async () => {
+      const stroke = penStroke(2000);
+      const batched = await lift("pencil lift pen", createPencilHandler, stroke, [], landedOver([]));
+      const stepwise = await lift("pencil lift pen, stepwise", createPencilHandler, stroke, [], landedOver([]), refusingBatches);
+
+      // insert + bind + outline. As found: 2 mutations, 2 undo steps.
+      expect(batched.work.mutations).toEqual([{ op: "batch", ops: 3 }]);
+      expect(batched.undoSteps).toBe(1);
+      expect(batched.work.reads()).toBe(0);
+
+      // One new element, selected, and it is the OUTLINE — a closed
+      // contour — not the open centerline the stroke was drawn as.
+      expect(batched.seen.leaves).toBe(519);
+      expect(batched.seen.created).toHaveLength(1);
+      expect(batched.seen.createdIsSelection).toBe(true);
+      expect(batched.seen.created[0]!.subpathOpen).toEqual([false]);
+      // …and exactly the element the two-step chain leaves.
+      expect(batched.seen.created).toEqual(stepwise.seen.created);
+
+      // The fallback is the chain as found, after the one refused batch.
+      expect(stepwise.work.mutations.map((m) => m.op)).toEqual([
+        "batch",
         "insertPath",
         "setElementProperty",
       ]);
-      expect(undoSteps).toBe(2);
+      expect(stepwise.undoSteps).toBe(2);
+      await expectPutBack();
     });
 
-    it("paintbrush: a read and four mutations for one stroke", async () => {
-      const { work, undoSteps } = await lift("paintbrush lift", createPaintbrushHandler, spiral(500), []);
-      // TARGET 1 mutation: the whole chain as one batch.
-      expect(work.mutations.map((m) => m.op)).toEqual([
+    it("paintbrush: one read, one batch, one undo step", async () => {
+      const stroke = spiral(500);
+      const before = await landedOver([])();
+      const batched = await lift("paintbrush lift", createPaintbrushHandler, stroke, [], landedOver([]));
+      const stepwise = await lift("paintbrush lift, stepwise", createPaintbrushHandler, stroke, [], landedOver([]), refusingBatches);
+
+      // defaults → insert → bind → outline → restore. As found: 4
+      // mutations, 2 undo steps.
+      expect(batched.work.mutations).toEqual([{ op: "batch", ops: 5 }]);
+      expect(batched.undoSteps).toBe(1);
+      // The creation defaults, to know the sweep's fill and to put them
+      // back. Fine as it is.
+      expect(batched.work.count("document.meta")).toBe(1);
+      expect(batched.work.reads()).toBe(1);
+
+      // One new FILLED, CLOSED shape, selected; the defaults as they were.
+      expect(batched.seen.leaves).toBe(519);
+      expect(batched.seen.created).toHaveLength(1);
+      expect(batched.seen.createdIsSelection).toBe(true);
+      expect(batched.seen.created[0]!.subpathOpen).toEqual([false]);
+      expect(batched.seen.created[0]!.fill).toEqual({
+        type: "colorRef",
+        value: before.defaults.fill ?? "Color/Black",
+      });
+      expect(batched.seen.defaults).toEqual(before.defaults);
+      // …and exactly the shape the stepwise chain leaves.
+      expect(batched.seen.created).toEqual(stepwise.seen.created);
+      expect(stepwise.seen.defaults).toEqual(before.defaults);
+
+      expect(stepwise.work.mutations.map((m) => m.op)).toEqual([
+        "batch",
         "setDocumentDefaults",
         "insertPath",
         "setElementProperty",
         "setDocumentDefaults",
       ]);
-      expect(work.count("document.meta")).toBe(1);
-      // TARGET 1.
-      expect(undoSteps).toBe(2);
+      expect(stepwise.undoSteps).toBe(2);
+      await expectPutBack();
     });
 
-    it("blob brush onto a same-fill selection: the sweep, then a unite", async () => {
-      const { work, undoSteps } = await lift(
-        "blob lift",
-        createBlobBrushHandler,
-        mouse(linePoints([296, 20], [420, 60], 60)),
-        [w.plain[0]!],
-      );
-      // TARGET 1 mutation.
-      expect(work.mutations.map((m) => m.op)).toEqual([
+    it("blob brush onto a same-fill selection: the sweep and its unite are one batch", async () => {
+      const stroke = mouse(linePoints([296, 20], [420, 60], 60));
+      const target = w.plain[0]!;
+      const before = await landedOver([target])();
+      const batched = await lift("blob lift", createBlobBrushHandler, stroke, [target], landedOver([target]));
+      const stepwise = await lift("blob lift, stepwise", createBlobBrushHandler, stroke, [target], landedOver([target]), refusingBatches);
+      const after = await landedOver([target])();
+
+      // The five sweep ops, then the unite. As found: 5 mutations, 3
+      // undo steps.
+      expect(batched.work.mutations).toEqual([{ op: "batch", ops: 6 }]);
+      expect(batched.undoSteps).toBe(1);
+      // The creation defaults, and one property read per selected
+      // element to find the same-fill one. TARGET 1 read in all — not
+      // reachable from here: an element's fill is only readable by
+      // asking for its properties, and the sweep's fill only by asking
+      // for the defaults.
+      expect(batched.work.count("document.meta")).toBe(1);
+      expect(batched.work.count("document.elementProperties")).toBe(1);
+      expect(batched.work.reads()).toBe(2);
+
+      // The sweep was CONSUMED by the unite: no new leaf, the selected
+      // element grew, and it is still the selection.
+      expect(batched.seen.leaves).toBe(518);
+      expect(batched.seen.created).toEqual([]);
+      expect(batched.seen.selection).toEqual([target]);
+      expect(batched.seen.targets).not.toEqual(before.targets);
+      expect(batched.seen.defaults).toEqual(before.defaults);
+      // …into exactly the outline the stepwise chain unites it into.
+      expect(batched.seen.targets).toEqual(stepwise.seen.targets);
+      // One undo each took the whole edit back.
+      expect(after.targets).toEqual(before.targets);
+
+      // The fallback: both batches refused (with the unite, then
+      // without), then the chain as found.
+      expect(stepwise.work.mutations.map((m) => m.op)).toEqual([
+        "batch",
+        "batch",
         "setDocumentDefaults",
         "insertPath",
         "setElementProperty",
         "setDocumentDefaults",
         "pathfinderBoolean",
       ]);
-      // One property read per selected element, to find the same-fill one.
-      expect(work.count("document.elementProperties")).toBe(1);
-      expect(work.count("document.meta")).toBe(1);
-      // TARGET 1.
-      expect(undoSteps).toBe(3);
+      expect(stepwise.undoSteps).toBe(3);
+      await expectPutBack();
     });
 
-    it("eraser across 12 selected shapes: one sweep-and-subtract chain PER TARGET", async () => {
-      const { work, undoSteps } = await lift(
-        "eraser lift x12",
-        createEraserBrushHandler,
-        mouse(linePoints([10, 10], [270, 260], 60)),
-        [...w.arrangement],
-      );
-      // Five mutations per selected element: defaults, insert, outline,
-      // defaults, subtract. TARGET 1 — one batch for the gesture.
-      expect(work.mutations).toHaveLength(60);
-      expect(work.mutations.slice(0, 5).map((m) => m.op)).toEqual([
+    it("blob brush with nothing to merge into: the sweep stands alone, in one batch", async () => {
+      const stroke = mouse(linePoints([296, 20], [420, 60], 60));
+      const batched = await lift("blob lift, alone", createBlobBrushHandler, stroke, [], landedOver([]));
+      const painted = await lift("paintbrush, same stroke", createPaintbrushHandler, stroke, [], landedOver([]));
+      expect(batched.work.mutations).toEqual([{ op: "batch", ops: 5 }]);
+      expect(batched.undoSteps).toBe(1);
+      expect(batched.seen.created).toHaveLength(1);
+      expect(batched.seen.createdIsSelection).toBe(true);
+      // "The paintbrush outcome" — literally.
+      expect(batched.seen.created).toEqual(painted.seen.created);
+      await expectPutBack();
+    });
+
+    it("eraser across 12 selected shapes: one batch for the gesture, not a chain per target", async () => {
+      const stroke = mouse(linePoints([10, 10], [270, 260], 60));
+      const targets = [...w.arrangement];
+      expect(targets).toHaveLength(12);
+      const before = await landedOver(targets)();
+      const batched = await lift("eraser lift x12", createEraserBrushHandler, stroke, targets, landedOver(targets));
+      const stepwise = await lift("eraser lift x12, stepwise", createEraserBrushHandler, stroke, targets, landedOver(targets), refusingBatches);
+      const after = await landedOver(targets)();
+
+      // 12 × (insert, bind, outline), then 12 subtracts. As found: 60
+      // mutations and THIRTY-SIX presses of undo for one stroke.
+      expect(batched.work.mutations).toEqual([{ op: "batch", ops: 48 }]);
+      expect(batched.undoSteps).toBe(1);
+      // As found: the creation defaults re-read for every target (12).
+      // A sweep copy now lives and dies inside the batch, so it needs no
+      // style and the eraser reads nothing.
+      expect(batched.work.count("document.meta")).toBe(0);
+      expect(batched.work.reads()).toBe(0);
+
+      // No sweep copy survives, the selection is untouched, and the
+      // stroke took a bite out of EVERY target.
+      expect(batched.seen.leaves).toBe(518);
+      expect(batched.seen.created).toEqual([]);
+      expect(batched.seen.selection).toEqual(targets);
+      batched.seen.targets.forEach((shape, i) => {
+        expect(shape.anchors, `target ${i}`).not.toEqual(before.targets[i]!.anchors);
+      });
+      // …the SAME bite the stepwise chain takes, target by target —
+      // which is what licenses dropping the defaults swap.
+      expect(batched.seen.targets).toEqual(stepwise.seen.targets);
+      expect(batched.seen.defaults).toEqual(before.defaults);
+      // One undo put all twelve back.
+      expect(after.targets).toEqual(before.targets);
+
+      // The fallback is the chain as found: five mutations per target.
+      expect(stepwise.work.mutations).toHaveLength(61);
+      expect(stepwise.work.mutations.slice(0, 6).map((m) => m.op)).toEqual([
+        "batch",
         "setDocumentDefaults",
         "insertPath",
         "outlineStroke",
         "setDocumentDefaults",
         "pathfinderBoolean",
       ]);
-      // The creation defaults are re-read for every target. TARGET 1.
-      expect(work.count("document.meta")).toBe(12);
-      // One eraser stroke is THIRTY-SIX presses of undo. TARGET 1.
-      expect(undoSteps).toBe(36);
+      expect(stepwise.work.count("document.meta")).toBe(12);
+      expect(stepwise.undoSteps).toBe(36);
+      await expectPutBack();
     });
   });
 });

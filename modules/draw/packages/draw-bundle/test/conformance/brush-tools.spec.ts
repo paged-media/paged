@@ -25,10 +25,13 @@
 // eraser SUBTRACTING a uniform band from each selected path element
 // with no transient sweep left behind, and a no-op without a selection.
 //
-// The commits are multi-mutation flows (defaults → insert → outline →
-// restore [→ boolean]) — several undo steps by design (documented in
-// handlers/brush.ts), so these specs assert forward outcomes rather
-// than undo round-trips.
+// The commits are multi-OP flows (defaults → insert → outline →
+// restore [→ boolean]). They used to be multi-MUTATION flows, several
+// undo steps a stroke, which is why these specs assert forward outcomes
+// rather than undo round-trips. Each lift is ONE batch and one undo step
+// now (handlers/brush.ts, "commit flows"); the undo round-trip, and the
+// batch leaving the same document the stepwise chain leaves, are
+// asserted where the counts are — test/perf/perf-budgets-freehand.spec.ts.
 
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 

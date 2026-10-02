@@ -57,6 +57,13 @@ import { leafIdsOf } from "../commands/select-same";
 /** Screen-space decimation floor between recorded lasso points. */
 const MIN_SAMPLE_PX = 3;
 
+/** One corner of the preview outline (the `ToolPreviewPath` anchor). */
+interface PreviewAnchor {
+  anchor: [number, number];
+  left: [number, number];
+  right: [number, number];
+}
+
 /** The page-space CENTER of one geometry item: the raw bounds
  *  `[top, left, bottom, right]` midpoint mapped through the item
  *  transform (identity when absent). */
@@ -84,9 +91,25 @@ export function lassoMatches(
 export function createLassoSelectHandler(host: BundleHost): GestureHandler {
   let points: Vec2[] = [];
   let pageId: string | null = null;
+  /** The corner anchors handed to the overlay — ONE array per drag,
+   *  appended to as `points` grows (the `./stroke-preview.ts` rule, in
+   *  the path form: a recorded point is turned into its anchor triple
+   *  once, not once per later move). Null between drags. */
+  let outline: PreviewAnchor[] | null = null;
+  /** `MIN_SAMPLE_PX` in page pt, converted ONCE per drag, on the press.
+   *  It used to be asked of the viewport on every move (1 999 times for
+   *  a 2 000-sample lasso) for a number that is the same throughout.
+   *
+   *  "Per drag" is as fine as the contract allows: `host.viewport` has
+   *  `camera()` and `pxToPt()` and no change event, so a zoom DURING a
+   *  drag cannot be noticed without asking every move — which is the
+   *  cost this removes. The next press reads the new zoom. The pencil
+   *  and the brushes have always fixed their tolerances this way. */
+  let floorPt = 0;
 
   const reset = () => {
     points = [];
+    outline = null;
     pageId = null;
     host.overlay.setToolPreview(null);
   };
@@ -96,15 +119,18 @@ export function createLassoSelectHandler(host: BundleHost): GestureHandler {
       host.overlay.setToolPreview(null);
       return;
     }
+    if (!outline) outline = [];
+    for (let i = outline.length; i < points.length; i++) {
+      const [x, y] = points[i];
+      outline.push({ anchor: [x, y], left: [x, y], right: [x, y] });
+    }
     // The in-flight region previews as a dashed CLOSED path (corner
-    // anchors — the polygon the release will test).
+    // anchors — the polygon the release will test). A fresh shape around
+    // the same array: the overlay door holds one whole shape, so the
+    // whole outline is still what each publish names.
     host.overlay.setToolPreview({
       pageId,
-      anchors: points.map((p) => ({
-        anchor: [p[0], p[1]] as [number, number],
-        left: [p[0], p[1]] as [number, number],
-        right: [p[0], p[1]] as [number, number],
-      })),
+      anchors: outline,
       close: true,
       dashed: true,
     });
@@ -138,11 +164,12 @@ export function createLassoSelectHandler(host: BundleHost): GestureHandler {
       if (e.button !== 0 || !e.pageId || !e.pagePoint) return;
       pageId = e.pageId;
       points = [e.pagePoint];
+      floorPt = host.viewport.pxToPt(MIN_SAMPLE_PX);
     },
     onPointerMove(e: CanvasPointerEvent) {
       if (!pageId || !e.pagePoint || e.pageId !== pageId) return;
       const last = points[points.length - 1];
-      if (dist(last, e.pagePoint) < host.viewport.pxToPt(MIN_SAMPLE_PX)) return;
+      if (dist(last, e.pagePoint) < floorPt) return;
       points.push(e.pagePoint);
       preview();
     },

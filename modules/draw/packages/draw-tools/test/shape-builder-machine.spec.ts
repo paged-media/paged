@@ -109,6 +109,59 @@ describe("ShapeBuilderMachine", () => {
       [1, 1],
     ]);
   });
+
+  // The path is copied on FIRST READ, not on every event (a drag of N
+  // moves used to clone the whole polyline N times). These pin what that
+  // must not change: a snapshot is still a snapshot.
+  it("a snapshot's path is the polyline as it stood when the snapshot was TAKEN, however late it is read", () => {
+    const m = new ShapeBuilderMachine();
+    m.handle({ type: "down", point: [0, 0], modifiers: NONE });
+    const early = m.handle({ type: "move", point: [1, 1] });
+    // …the gesture goes on before anyone looks at `early`.
+    m.handle({ type: "move", point: [2, 2] });
+    const late = m.handle({ type: "up", point: [3, 3] });
+    expect(early.path).toEqual([
+      [0, 0],
+      [1, 1],
+    ]);
+    expect(late.path).toEqual([
+      [0, 0],
+      [1, 1],
+      [2, 2],
+      [3, 3],
+    ]);
+    // And a NEW gesture does not reach back into an old snapshot.
+    m.handle({ type: "down", point: [50, 50], modifiers: NONE });
+    expect(late.path).toHaveLength(4);
+    expect(late.path?.[0]).toEqual([0, 0]);
+  });
+
+  it("a snapshot's path is its OWN copy: stable across reads, shared with no other snapshot", () => {
+    const m = new ShapeBuilderMachine();
+    m.handle({ type: "down", point: [0, 0], modifiers: NONE });
+    const a = m.handle({ type: "move", point: [1, 1] });
+    const b = m.handle({ type: "move", point: [2, 2] });
+    // The same array every time it is asked for (what a caller wrote
+    // into it is still there on the next read, as it always was).
+    expect(a.path).toBe(a.path);
+    (a.path as unknown as number[][])[0][0] = 99;
+    expect(a.path?.[0]).toEqual([99, 0]);
+    // …and neither the array nor a point in it belongs to anyone else.
+    expect(b.path).not.toBe(a.path);
+    expect(b.path?.[0]).not.toBe(a.path?.[0]);
+    expect(b.path?.[0]).toEqual([0, 0]);
+    expect(m.handle({ type: "move", point: [3, 3] }).path?.[0]).toEqual([0, 0]);
+  });
+
+  it("an idle machine has no path, before a gesture and after Escape", () => {
+    const m = new ShapeBuilderMachine();
+    expect(m.handle({ type: "move", point: [5, 5] }).path).toBeNull();
+    const dragging = m.handle({ type: "down", point: [0, 0], modifiers: NONE });
+    const cleared = m.handle({ type: "key", key: "Escape" });
+    expect(cleared.path).toBeNull();
+    // The snapshot taken DURING the gesture still has its point.
+    expect(dragging.path).toEqual([[0, 0]]);
+  });
 });
 
 // ---------------------------------------------------------------------
@@ -279,5 +332,60 @@ describe("ShapeBuilderMachine — region lane (B-22)", () => {
     const s = m.handle({ type: "cross", key: "ub" });
     expect(s.crossed).toEqual(["ua", "ub"]);
     expect(s.collected).toEqual(["0-1#0", "1#0"]);
+  });
+
+  // The lookup flattens every face ONCE, when the arrangement is
+  // installed, and skips a face whose bounding box does not hold the
+  // point. These pin the three things that could quietly change with it.
+  it("where outlines overlap, the FIRST face installed is the one resolved", () => {
+    const m = new ShapeBuilderMachine();
+    // (250, 250) is inside all three outlines of the fixture.
+    m.setRegions(FACES);
+    expect(m.handle({ type: "move", point: [250, 250] }).hovered).toBe("0-1#0");
+    m.setRegions([FACES[2], FACES[1], FACES[0]]);
+    expect(m.handle({ type: "move", point: [250, 250] }).hovered).toBe("1#0");
+  });
+
+  it("a face with a HOLE is not hit through the hole, and a curved two-anchor face is hit", () => {
+    const m = new ShapeBuilderMachine();
+    const ring = {
+      id: "ring#0",
+      anchors: [...rect(0, 0, 100, 100), ...rect(40, 40, 60, 60)],
+      subpathStarts: [0, 4],
+    };
+    // The lens between two overlapping circles, as its two crossing
+    // anchors — fewer than three anchors, and still a face.
+    const lens = {
+      id: "lens#0",
+      anchors: [
+        { anchor: [200, 0], left: [203, -5], right: [203, 5] },
+        { anchor: [210, 0], left: [207, 5], right: [207, -5] },
+      ] as Array<{
+        anchor: [number, number];
+        left: [number, number];
+        right: [number, number];
+      }>,
+    };
+    m.setRegions([ring, lens]);
+    expect(m.handle({ type: "move", point: [20, 20] }).hovered).toBe("ring#0");
+    expect(m.handle({ type: "move", point: [50, 50] }).hovered).toBeNull();
+    expect(m.handle({ type: "move", point: [205, 0] }).hovered).toBe("lens#0");
+    // Inside the lens's bounding box, outside the lens.
+    expect(m.handle({ type: "move", point: [200.5, 3] }).hovered).toBeNull();
+  });
+
+  it("a point on the edge of a face's bounding box resolves as the outline decides", () => {
+    const m = new ShapeBuilderMachine();
+    m.setRegions([{ id: "sq#0", anchors: rect(100, 100, 200, 200) }]);
+    const at = (x: number, y: number) =>
+      m.handle({ type: "move", point: [x, y] }).hovered;
+    // The crossing rule's own convention: the left and top edges are
+    // in, the right and bottom ones are out.
+    expect(at(100, 150)).toBe("sq#0");
+    expect(at(150, 100)).toBe("sq#0");
+    expect(at(200, 150)).toBeNull();
+    expect(at(150, 200)).toBeNull();
+    expect(at(99.999999, 150)).toBeNull();
+    expect(at(150, 99.999999)).toBeNull();
   });
 });

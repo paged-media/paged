@@ -19,7 +19,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  flattenAnchorPath,
+  flattenAnchorRun,
   pointInAnchorPath,
+  pointInFlatPath,
   pointInPolygon,
   type AnchorTriple,
   type Vec2,
@@ -136,9 +139,32 @@ describe("pointInAnchorPath", () => {
     expect(pointInAnchorPath([50, -40], bowed)).toBe(false);
   });
 
-  it("fewer than 3 anchors answers false", () => {
+  it("fewer than 3 CORNER anchors enclose nothing and answer false", () => {
     expect(pointInAnchorPath([0, 0], [])).toBe(false);
     expect(pointInAnchorPath([0, 0], OUTER.slice(0, 2))).toBe(false);
+    // Not on the degenerate ring itself either: nowhere is inside it.
+    expect(pointInAnchorPath([50, 0.5], OUTER.slice(0, 2))).toBe(false);
+    expect(pointInAnchorPath([0.5, 0.5], OUTER.slice(0, 1))).toBe(false);
+  });
+
+  it("two CURVED anchors are a lens, and it contains its middle", () => {
+    // The count of anchors does not decide — the flattened ring does.
+    const lens: AnchorTriple[] = [
+      { anchor: [0, 0], left: [3, -5], right: [3, 5] },
+      { anchor: [10, 0], left: [7, 5], right: [7, -5] },
+    ];
+    expect(pointInAnchorPath([5, 0], lens)).toBe(true);
+    expect(pointInAnchorPath([5, 6], lens)).toBe(false);
+    expect(pointInAnchorPath([-1, 0], lens)).toBe(false);
+    // As a HOLE in a larger contour it is subtracted like any other.
+    const plate: AnchorTriple[] = corners([
+      [-20, -20],
+      [30, -20],
+      [30, 20],
+      [-20, 20],
+    ]);
+    expect(pointInAnchorPath([5, 0], [...plate, ...lens], [0, 4])).toBe(false);
+    expect(pointInAnchorPath([-10, 0], [...plate, ...lens], [0, 4])).toBe(true);
   });
 
   it("a degenerate contour in the table is skipped, not counted", () => {
@@ -150,5 +176,123 @@ describe("pointInAnchorPath", () => {
       ]),
     ];
     expect(pointInAnchorPath([50, 50], anchors, [0, OUTER.length])).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------
+// `flattenAnchorPath` + `pointInFlatPath`: the same test, flattened once,
+// behind a bounding box. The box is an optimisation and must not be an
+// opinion — so it is checked against a crossing count that has NO box,
+// written out here, at exactly the places a box could disagree: on its
+// edges, a rounding error either side of them, and well clear of them.
+
+/** Even-odd over the flattened contours, edge by edge, nothing skipped. */
+function crossingsOnly(
+  point: Vec2,
+  anchors: readonly AnchorTriple[],
+  starts: readonly number[],
+): boolean {
+  const [px, py] = point;
+  const from = starts.length > 0 ? starts : [0];
+  let inside = false;
+  from.forEach((start, s) => {
+    const end = s + 1 < from.length ? from[s + 1] : anchors.length;
+    const ring = flattenAnchorRun(anchors.slice(start, end), { close: true });
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [xi, yi] = ring[i];
+      const [xj, yj] = ring[j];
+      if (yi > py !== yj > py && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) {
+        inside = !inside;
+      }
+    }
+  });
+  return inside;
+}
+
+describe("flattenAnchorPath + pointInFlatPath", () => {
+  const circle = (cx: number, cy: number, r: number): AnchorTriple[] => {
+    const k = r * 0.5522847498;
+    return [
+      { anchor: [cx + r, cy], left: [cx + r, cy - k], right: [cx + r, cy + k] },
+      { anchor: [cx, cy + r], left: [cx + k, cy + r], right: [cx - k, cy + r] },
+      { anchor: [cx - r, cy], left: [cx - r, cy + k], right: [cx - r, cy - k] },
+      { anchor: [cx, cy - r], left: [cx - k, cy - r], right: [cx + k, cy - r] },
+    ];
+  };
+  const SHAPES: Array<{
+    name: string;
+    anchors: AnchorTriple[];
+    starts: number[];
+  }> = [
+    { name: "a square", anchors: OUTER, starts: [] },
+    { name: "a square with a hole", anchors: [...OUTER, ...HOLE], starts: [0, OUTER.length] },
+    { name: "a circle", anchors: circle(306.25, 395.5, 84.3), starts: [0] },
+    {
+      name: "a lens",
+      anchors: [
+        { anchor: [0, 0], left: [3, -5], right: [3, 5] },
+        { anchor: [10, 0], left: [7, 5], right: [7, -5] },
+      ],
+      starts: [],
+    },
+    {
+      name: "a circle and a far square, one table",
+      anchors: [...circle(-40.7, 12.3, 9.9), ...OUTER],
+      starts: [0, 4],
+    },
+    // Far from the origin, where an ulp is big.
+    { name: "a circle a million points out", anchors: circle(1e6 + 0.3, -1e6 - 0.7, 50.1), starts: [] },
+  ];
+  /** Offsets from a box edge: on it, a rounding error off it, a hair
+   *  off it, clearly off it. */
+  const NUDGES = [0, 1e-13, -1e-13, 1e-10, -1e-10, 1e-7, -1e-7, 1e-3, -1e-3, 5, -5];
+
+  it.each(SHAPES)("$name: the flat form answers exactly what the anchor form answers", ({ anchors, starts }) => {
+    const flat = flattenAnchorPath(anchors, starts);
+    const xs = [flat.minX, flat.maxX, (flat.minX + flat.maxX) / 2];
+    const ys = [flat.minY, flat.maxY, (flat.minY + flat.maxY) / 2];
+    // Also every vertex height: a ray through a vertex is where a
+    // crossing count is most easily miscounted.
+    for (const ring of flat.rings) for (const [, y] of ring) ys.push(y);
+    let probes = 0;
+    let inside = 0;
+    for (const x0 of xs) {
+      for (const y0 of ys) {
+        for (const dx of NUDGES) {
+          for (const dy of NUDGES) {
+            const scale = Math.max(1, Math.abs(x0), Math.abs(y0));
+            const p: Vec2 = [x0 + dx * scale, y0 + dy * scale];
+            const expected = crossingsOnly(p, anchors, starts);
+            expect(pointInFlatPath(p, flat), `at ${p[0]}, ${p[1]}`).toBe(expected);
+            expect(pointInAnchorPath(p, anchors, starts)).toBe(expected);
+            probes++;
+            if (expected) inside++;
+          }
+        }
+      }
+    }
+    // The sweep is not all-outside (which a box would get right for
+    // free) nor all-inside.
+    expect(probes).toBeGreaterThan(1000);
+    expect(inside).toBeGreaterThan(0);
+    expect(inside).toBeLessThan(probes);
+  });
+
+  it("the box is the box of the flattened rings, and an empty path contains nothing", () => {
+    const flat = flattenAnchorPath(OUTER);
+    expect([flat.minX, flat.minY, flat.maxX, flat.maxY]).toEqual([0, 0, 100, 100]);
+    expect(flat.rings).toHaveLength(1);
+    const none = flattenAnchorPath([]);
+    expect(none.minX).toBeGreaterThan(none.maxX);
+    expect(pointInFlatPath([0, 0], none)).toBe(false);
+  });
+
+  it("flattening once is flattening the same: the rings are flattenAnchorRun's, per contour", () => {
+    const anchors = [...OUTER, ...HOLE];
+    const flat = flattenAnchorPath(anchors, [0, OUTER.length], { samplesPerSegment: 5 });
+    expect(flat.rings).toEqual([
+      flattenAnchorRun(OUTER, { close: true, samplesPerSegment: 5 }),
+      flattenAnchorRun(HOLE, { close: true, samplesPerSegment: 5 }),
+    ]);
   });
 });

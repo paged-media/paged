@@ -21,8 +21,13 @@
 // stroke previews as a POLYLINE (the raw decimated samples — honest:
 // smoothing happens at commit, so previewing the samples shows what was
 // actually drawn), and the pointer-up commit (RDP-simplified +
-// Catmull-Rom-fitted anchors) becomes ONE `insertPath` through
-// `host.document.mutate`.
+// Catmull-Rom-fitted anchors) becomes ONE mutation through
+// `host.document.mutate`: an `insertPath`, or — for a pressure stroke —
+// one batch that inserts the path and outlines it.
+//
+// The preview is APPENDED TO, not re-mapped: `./stroke-preview.ts` owns
+// the one array a stroke hands the overlay, and says what the overlay
+// door still costs.
 
 import type {
   BundleHost,
@@ -31,9 +36,20 @@ import type {
 } from "@paged-media/plugin-api";
 
 import { strokeWidthFromPressure } from "@paged-media/draw-geometry";
-import { PencilMachine, type PencilSnapshot } from "@paged-media/draw-tools";
+import {
+  PencilMachine,
+  type PencilCommit,
+  type PencilSnapshot,
+} from "@paged-media/draw-tools";
 
+import { outlineStrokeVariableMutationFor } from "./brush";
 import { insertPathMutationFor } from "./insert-path";
+import { createStrokePreview } from "./stroke-preview";
+import {
+  batchMutationFor,
+  bindCreatedMutationFor,
+  handleElementId,
+} from "../commands/v59-wire";
 
 /** Screen-space RDP fidelity: pointer wobble below this collapses. */
 const SIMPLIFY_TOLERANCE_PX = 2;
@@ -53,15 +69,85 @@ const pressuresVary = (pressures: number[]): boolean => {
 };
 /** Screen-space lift-near-the-start radius that closes the contour. */
 const CLOSE_TOLERANCE_PX = 8;
+/** The handle a pressure stroke is named by inside its own batch. */
+const STROKE_HANDLE = "stroke";
 
 export function createPencilHandler(host: BundleHost): GestureHandler {
   let machine: PencilMachine | null = null;
   let pageId: string | null = null;
+  const preview = createStrokePreview(host);
 
   const reset = () => {
     machine = null;
     pageId = null;
-    host.overlay.setToolPreview(null);
+    preview.clear();
+  };
+
+  /** The lift, as one promise. A mouse stroke is ONE `insertPath`. A
+   *  PRESSURE stroke used to be two mutations and two undo steps (the
+   *  insert, then the variable-width outline, each its own rebuild); it
+   *  is ONE batch now — `bindCreated` names the path the batch just
+   *  inserted so the outline can address it — and one undo step.
+   *
+   *  A refused batch falls back to the two steps as they shipped, which
+   *  keeps the degrade they always had: an outline the kernel rejects
+   *  leaves the plain centerline standing rather than nothing at all. */
+  const commit = async (page: string, c: PencilCommit): Promise<void> => {
+    const insert = insertPathMutationFor(page, c.anchors, c.open);
+    // B-08 — pressure → variable-width stroke. When a pressure device
+    // drove the stroke (the sample pressures actually VARY — a mouse's
+    // constant NEUTRAL never triggers this) and the contour is OPEN (the
+    // engine's v1 variable-outline scope), the drawn path becomes a
+    // variable-width outline via the `outlineStrokeVariable` wire op:
+    // per-anchor width stops from the linear pressure ramp.
+    const widths =
+      c.open && pressuresVary(c.pressures)
+        ? c.pressures.map((pr) =>
+            strokeWidthFromPressure(pr, PRESSURE_WIDTH_PROFILE),
+          )
+        : null;
+
+    if (widths) {
+      const outlined = await host.document.mutate(
+        batchMutationFor([
+          insert,
+          bindCreatedMutationFor(STROKE_HANDLE),
+          outlineStrokeVariableMutationFor(
+            handleElementId(STROKE_HANDLE),
+            widths,
+          ),
+        ]),
+      );
+      if (outlined.applied) {
+        if (outlined.createdId) await host.selection.set([outlined.createdId]);
+        return;
+      }
+      host.log.debug(
+        `pencil: the one-batch pressure commit was refused (${JSON.stringify(outlined.error)}) — ` +
+          "falling back to insert, then outline",
+      );
+    }
+
+    const outcome = await host.document.mutate(insert);
+    if (!outcome.applied) {
+      host.log.warn(
+        `pencil insertPath rejected by engine: ${JSON.stringify(outcome.error)}`,
+      );
+      return;
+    }
+    if (outcome.createdId) await host.selection.set([outcome.createdId]);
+    if (outcome.createdId && widths) {
+      // The stepwise outline: its own undo step — undo restores the
+      // plain centerline path.
+      const outlined = await host.document.mutate(
+        outlineStrokeVariableMutationFor(outcome.createdId, widths),
+      );
+      if (!outlined.applied) {
+        host.log.warn(
+          `pencil variable-width outline rejected (path kept as centerline): ${JSON.stringify(outlined.error)}`,
+        );
+      }
+    }
   };
 
   const sync = (snapshot: PencilSnapshot) => {
@@ -69,67 +155,16 @@ export function createPencilHandler(host: BundleHost): GestureHandler {
       const c = snapshot.commit;
       const page = pageId;
       reset();
-      void host.document
-        .mutate(insertPathMutationFor(page, c.anchors, c.open))
-        .then(async (outcome) => {
-          if (!outcome.applied) {
-            host.log.warn(
-              `pencil insertPath rejected by engine: ${JSON.stringify(outcome.error)}`,
-            );
-            return;
-          }
-          if (outcome.createdId) await host.selection.set([outcome.createdId]);
-          // B-08 — pressure → variable-width stroke. When a pressure
-          // device drove the stroke (the sample pressures actually VARY —
-          // a mouse's constant NEUTRAL never triggers this) and the
-          // contour is OPEN (the engine's v1 variable-outline scope), the
-          // drawn path converts to a variable-width outline via the
-          // `outlineStrokeVariable` wire op: per-anchor width stops from
-          // the linear pressure ramp. Its own undo step — undo restores
-          // the plain centerline path.
-          if (
-            outcome.createdId &&
-            c.open &&
-            pressuresVary(c.pressures)
-          ) {
-            const widths = c.pressures.map((pr) =>
-              strokeWidthFromPressure(pr, PRESSURE_WIDTH_PROFILE),
-            );
-            const outlined = await host.document.mutate({
-              op: "setElementProperty",
-              args: {
-                elementId: outcome.createdId,
-                path: "outlineStrokeVariable",
-                value: {
-                  type: "outlineStrokeVariable",
-                  value: { widths, cap: "round", join: "round", miterLimit: 4 },
-                },
-              },
-            });
-            if (!outlined.applied) {
-              host.log.warn(
-                `pencil variable-width outline rejected (path kept as centerline): ${JSON.stringify(outlined.error)}`,
-              );
-            }
-          }
-        })
-        .catch((err) => host.log.warn(`pencil commit failed: ${err}`));
+      void commit(page, c).catch((err) =>
+        host.log.warn(`pencil commit failed: ${err}`),
+      );
       return;
     }
     if (!snapshot.active) {
       reset();
       return;
     }
-    host.overlay.setToolPreview(
-      pageId && snapshot.points.length >= 2
-        ? {
-            pageId,
-            points: snapshot.points.map(
-              (p) => [p[0], p[1]] as [number, number],
-            ),
-          }
-        : null,
-    );
+    if (pageId) preview.show(pageId, snapshot.points);
   };
 
   return {

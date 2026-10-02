@@ -58,8 +58,13 @@
 // their instability across an input edit is the recipe's problem, not
 // the gesture's.
 
-import { clone, pointInAnchorPath, type Vec2 } from "@paged-media/draw-geometry";
+import { clone, type Vec2 } from "@paged-media/draw-geometry";
 
+import {
+  prepareRegions,
+  regionAt,
+  type PreparedRegions,
+} from "./region-lookup";
 import type { RegionFace } from "./shape-builder-machine";
 
 export type LivePaintEvent =
@@ -94,7 +99,9 @@ export class LivePaintMachine {
   private hovered: string | null = null;
   private collected: string[] = [];
   private painting = false;
-  private regions: readonly RegionFace[] | null = null;
+  /** The installed arrangement, flattened once (`./region-lookup.ts` —
+   *  the lookup this machine shares with the Shape Builder's). */
+  private regions: PreparedRegions | null = null;
   private lastPoint: Vec2 | null = null;
 
   /** Install (or clear, with `null`) the cached planar arrangement the
@@ -102,7 +109,7 @@ export class LivePaintMachine {
    *  cache that lands mid-hover highlights immediately rather than at the
    *  next pointermove. */
   setRegions(faces: readonly RegionFace[] | null): LivePaintSnapshot {
-    this.regions = faces;
+    this.regions = faces ? prepareRegions(faces) : null;
     if (this.lastPoint) this.resolveAt(this.lastPoint);
     return this.snapshot();
   }
@@ -147,13 +154,7 @@ export class LivePaintMachine {
    *  flicker the highlight off between engine round trips. */
   private resolveAt(point: Vec2): void {
     if (!this.regions) return;
-    let hit: string | null = null;
-    for (const face of this.regions) {
-      if (pointInAnchorPath(point, face.anchors, face.subpathStarts ?? [])) {
-        hit = face.id;
-        break;
-      }
-    }
+    const hit = regionAt(this.regions, point);
     this.hovered = hit;
     this.collect(hit);
   }
