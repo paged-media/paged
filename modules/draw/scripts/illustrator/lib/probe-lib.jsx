@@ -189,7 +189,7 @@ var PagedProbe = (function () {
 
   function measurePath(item, compoundIndex) {
     var anchors = [];
-    var i, pp, gb, signed, out;
+    var i, pp, gb, signed, winding, out;
     for (i = 0; i < item.pathPoints.length; i++) {
       pp = item.pathPoints[i];
       anchors.push({
@@ -203,12 +203,19 @@ var PagedProbe = (function () {
     // `bottom`.
     gb = item.geometricBounds;
     signed = signedArea(anchors, item.closed);
+    // NOT a nested ternary. ExtendScript parses `a ? x : b ? y : z` as
+    // `(a ? x : b) ? y : z`, so that spelling answered "ccw" for every
+    // path with any area at all -- the first recording said so, and the
+    // replay's own recomputation from the anchors caught it.
+    winding = "none";
+    if (signed > 1e-9) winding = "cw";
+    if (signed < -1e-9) winding = "ccw";
     out = {
       closed: item.closed,
       anchors: anchors,
       area: Math.abs(item.area),
       bounds: [gb[0] - originX, originTop - gb[1], gb[2] - originX, originTop - gb[3]],
-      winding: signed > 1e-9 ? "cw" : signed < -1e-9 ? "ccw" : "none",
+      winding: winding,
       areaSignedApp: item.area,
       polarity: item.polarity === PolarityValues.POSITIVE ? "positive" : "negative"
     };

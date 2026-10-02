@@ -110,12 +110,17 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 export const oracleFixturePath = (probe: string): string =>
   resolve(HERE, "../fixtures/oracle", `${probe}.illustrator.json`);
 
-/** Load a recorded answer, or `null` when it has NOT been recorded yet.
- *  A fixture that exists but is malformed THROWS — a half-written
- *  recording must never read as "nothing to compare". */
-export function loadOracle<P>(probe: string): OracleFixture<P> | null {
+/** Load a recorded answer. A spec exists only for a probe that HAS been
+ *  recorded, so a missing fixture THROWS (a deleted recording must not
+ *  turn its replay into nothing), and so does a malformed one. */
+export function loadOracle<P>(probe: string): OracleFixture<P> {
   const path = oracleFixturePath(probe);
-  if (!existsSync(path)) return null;
+  if (!existsSync(path)) {
+    throw new Error(
+      `${path} is missing — record it with scripts/illustrator/run-probe.sh ` +
+        `scripts/illustrator/probes/${probe}.jsx <that path> (see scripts/illustrator/README.md)`,
+    );
+  }
   const parsed = JSON.parse(readFileSync(path, "utf8")) as OracleFixture<P>;
   if (parsed.fixture !== probe) {
     throw new Error(
