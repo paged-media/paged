@@ -52,6 +52,7 @@ import {
   type PatternLayout,
   type PatternParams,
 } from "../commands/pattern";
+import { useFollowedDraft, usePanelReload } from "./use-panel-reload";
 
 export const PATTERN_PANEL_ID = "media.paged.draw.panel.pattern";
 
@@ -133,35 +134,33 @@ export function makePatternPanel(host: BundleHost): {
     const [placed, setPlaced] = React.useState<Record<string, number>>({});
     const [hasSelection, setHasSelection] = React.useState(false);
     const [portable, setPortable] = React.useState(true);
-    const [draft, setDraft] = React.useState<PatternParams>(PATTERN_DEFAULTS);
+    const [draft, setDraft, followDraft] =
+      useFollowedDraft<PatternParams>(PATTERN_DEFAULTS);
 
-    const reload = React.useCallback(async () => {
-      setPortable(host.supports(PATTERN_FEATURE));
+    // WHAT A RELOAD COSTS (`test/panels/pattern-panel.spec.tsx`, and it
+    // may only go down): the recipe part once, and the document's links
+    // once per document REVISION, out of the walk every panel shares. It
+    // used to walk the document twice per reload (the resolve, then the
+    // tally) and read the recipe twice, on every event.
+    const reload = usePanelReload(host, "pattern", async ({ live, selection }) => {
       const library = await readPatternLibrary(host);
-      setFields(library.fields);
-      setHasSelection(host.selection.get().length > 0);
-      const field = await resolvePatternField(host, undefined);
-      setActive(field);
-      const tally: Record<string, number> = {};
+      if (!live()) return;
+      const field = await resolvePatternField(host, undefined, library);
+      if (!live()) return;
       const links = await patternLinks(host);
+      if (!live()) return;
+      const tally: Record<string, number> = {};
       for (const tile of links.tiles) {
         tally[tile.ref.pattern] = (tally[tile.ref.pattern] ?? 0) + 1;
       }
+      setPortable(host.supports(PATTERN_FEATURE));
+      setFields(library.fields);
+      setHasSelection(selection.length > 0);
+      setActive(field);
       setPlaced(tally);
       const saved = library.fields.find((f) => f.id === field);
-      if (saved) setDraft(saved.params);
-    }, []);
-
-    React.useEffect(() => {
-      void reload();
-      const subs = [
-        host.selection.onDidChange(() => void reload()),
-        host.document.onDidChange(() => void reload()),
-      ];
-      return () => {
-        for (const s of subs) s.dispose();
-      };
-    }, [reload]);
+      if (saved) followDraft(saved.id, saved.params);
+    });
 
     const run = async (work: Promise<unknown>) => {
       try {
@@ -169,7 +168,7 @@ export function makePatternPanel(host: BundleHost): {
       } catch (e) {
         host.log.warn(`pattern panel: ${String(e)}`);
       }
-      void reload();
+      reload();
     };
 
     const numberRow = (

@@ -233,9 +233,9 @@ describe("perf budgets — commands over a busy document", () => {
     // the one the resolve already read.
     it.each<[Walked, number]>([
       ["blend", LEAVES],
-      ["repeat", LEAVES + 1],
-      ["pattern", LEAVES + 1],
-      ["objectsOnPath", LEAVES + 1],
+      ["repeat", LEAVES],
+      ["pattern", LEAVES],
+      ["objectsOnPath", LEAVES],
       ["livePaint", LEAVES + 1],
     ])("%s, record resolved from the selection: %i reads", async (feature, reads) => {
       const { work, result } = await counted(
@@ -398,12 +398,16 @@ describe("perf budgets — commands over a busy document", () => {
       expect(result).toHaveLength(3);
       expect(work.mutations).toEqual([{ op: "batch", ops: 23 }]);
       expect(undoSteps).toBe(1);
+      // One walk, the source envelope the batch is built from, and the 3
+      // new instances the tree diff found. As found: 2 810 — two walks.
       // TARGET <= 5.
-      expect(work.count("document.getMetadata")).toBe(2810);
-      // TARGET 0.
-      expect(work.count("document.tree")).toBe(6);
-      // The recipe part is read four times in one command. TARGET 1.
-      expect(work.count("parts.read")).toBe(4);
+      expect(work.count("document.getMetadata")).toBe(LEAVES + 4);
+      // The index's one tree, the before/after diff, the new group's
+      // lookup. As found: 6. TARGET 0.
+      expect(work.count("document.tree")).toBe(4);
+      // As found: 4 — the command, both `repeatLinks` and the
+      // generation each read the recipe for themselves.
+      expect(work.count("parts.read")).toBe(1);
     });
 
     it("pattern, re-plan: one walk — and still two batches", async () => {
@@ -418,13 +422,17 @@ describe("perf budgets — commands over a busy document", () => {
         { op: "batch", ops: 17 },
       ]);
       expect(undoSteps).toBe(2);
+      // The walk, and the source envelope the second batch is built
+      // from (read after the first batch, so it IS a new read).
       // TARGET <= 4.
       expect(work.count("document.getMetadata")).toBe(LEAVES + 1);
-      // TARGET 0.
-      expect(work.count("document.tree")).toBe(5);
+      // The index's one tree, the before/after diff, the new group's
+      // lookup. As found: 5 — the old group's lookup read the tree the
+      // walk had just read. TARGET 0.
+      expect(work.count("document.tree")).toBe(4);
     });
 
-    it("objects on a path, update: nothing is created, the document is walked anyway", async () => {
+    it("objects on a path, update: nothing is created, the document is walked ONCE", async () => {
       const { work, undoSteps, result } = await countedWrite(
         w,
         "objects on path update",
@@ -438,9 +446,11 @@ describe("perf budgets — commands over a busy document", () => {
       expect(result).toHaveLength(2);
       expect(work.mutations).toEqual([{ op: "batch", ops: 5 }]);
       expect(undoSteps).toBe(1);
-      // The walk plus the three envelopes it re-reads for the batch.
-      // TARGET 3 — the recipe names the path and both objects.
-      expect(work.count("document.getMetadata")).toBe(LEAVES + 3);
+      // The walk, and nothing after it: the batch is built from the
+      // envelopes the walk read. As found: LEAVES + 3 — the path's and
+      // both objects' were read a second time for the batch. TARGET 3 —
+      // the recipe names the path and both objects.
+      expect(work.count("document.getMetadata")).toBe(LEAVES);
       // No tree diff here: this feature creates nothing. The one read is
       // the link walk's. TARGET 0.
       expect(work.count("document.tree")).toBe(1);

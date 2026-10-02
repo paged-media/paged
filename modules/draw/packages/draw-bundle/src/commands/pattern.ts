@@ -208,6 +208,7 @@ import {
   type CompoundPaint,
 } from "./compound-path";
 import { leafIdsOf } from "./select-same";
+import { announceRecipeChange, groupHolding, linkIndex } from "../link-index";
 import { insertPathMutationFor } from "../handlers/insert-path";
 
 export const PATTERN_COMMAND_CATEGORY = "Pattern";
@@ -974,7 +975,9 @@ export function patternDeleteBatchFor(args: {
 
 // -------------------------------------------------------- host: the part
 
-type PartsHost = Pick<BundleHost, "parts" | "supports" | "log">;
+type PartsHost = Pick<BundleHost, "parts" | "supports" | "log"> & {
+  bindings?: BundleHost["bindings"];
+};
 
 /** Read the fields out of the container part. A host with no container
  *  writer (`supports("storage.parts@1")` false — an older editor) is not
@@ -1009,6 +1012,9 @@ export async function writePatternLibrary(
   if (!host.supports(PATTERN_FEATURE)) return false;
   try {
     await host.parts.write(PATTERN_PART, serializePatternLibrary(library));
+    // A part write is not a document event: without this an open panel
+    // misses every recipe change made AFTER a command's last mutation.
+    announceRecipeChange(host);
     return true;
   } catch (e) {
     host.log.warn(`pattern: recipe write failed (${String(e)})`);
@@ -1083,9 +1089,10 @@ export async function selectionTileSize(
   return [bounds.right - bounds.left, bounds.bottom - bounds.top];
 }
 
-/** Every leaf carrying a pattern link, split by which one. One scene
- *  walk + one metadata read per leaf — the `select-same` / `livePaintLinks`
- *  precedent. `field` filters; omit it for every field. */
+/** Every leaf carrying a pattern link, split by which one — a parse of
+ *  the shared link index (`../link-index`), which walks the document
+ *  once per revision for every feature at once. `field` filters; omit
+ *  it for every field. */
 export async function patternLinks(
   host: BundleHost,
   field?: string,
@@ -1095,9 +1102,8 @@ export async function patternLinks(
 }> {
   const sources: { id: ElementId; ref: PatternSourceRef }[] = [];
   const tiles: { id: ElementId; ref: PatternTileRef }[] = [];
-  const roots = await host.document.tree().catch(() => []);
-  for (const id of leafIdsOf(roots)) {
-    const env = await host.document.getMetadata(id).catch(() => null);
+  const { linked } = await linkIndex(host).snapshot();
+  for (const { id, envelope: env } of linked) {
     const source = patternSourceOf(env);
     if (source && (field === undefined || source.pattern === field)) {
       sources.push({ id, ref: source });
@@ -1148,15 +1154,18 @@ export async function patternGroupOf(
 export async function resolvePatternField(
   host: BundleHost,
   patternId: unknown,
+  known?: PatternLibrary,
 ): Promise<string | null> {
   if (typeof patternId === "string") return patternId;
+  const index = linkIndex(host);
   for (const id of host.selection.get()) {
-    const env = await host.document.getMetadata(id).catch(() => null);
+    const env = await index.envelopeOf(id);
     const linked =
       patternSourceOf(env)?.pattern ?? patternTileOf(env)?.pattern ?? null;
     if (linked !== null) return linked;
   }
-  const library = await readPatternLibrary(host);
+  // `known` is the library when the caller has just read it.
+  const library = known ?? (await readPatternLibrary(host));
   if (library.fields.length === 1) return library.fields[0]!.id;
   const links = await patternLinks(host);
   const distinct = new Set([
@@ -1467,7 +1476,9 @@ export async function applyEditPattern(
   });
   if (!plan) return [];
 
-  const group = await patternGroupOf(host, sourceIds[0]!);
+  // The tree the links were just read from — the same revision, so the
+  // same tree, and not a second read of it.
+  const group = groupHolding(await linkIndex(host).tree(), sourceIds[0]!);
   const tiles = await emitPatternField(host, {
     plan,
     label,
@@ -1550,14 +1561,17 @@ export async function applyDeletePatternTiles(
   }
   const sources: { id: ElementId; envelope: PluginMetadataEnvelope | null }[] =
     [];
+  // The envelopes and the tree the links were just read from, not a
+  // second read of either.
+  const index = linkIndex(host);
   for (const source of links.sources) {
     sources.push({
       id: source.id,
-      envelope: await host.document.getMetadata(source.id).catch(() => null),
+      envelope: await index.envelopeOf(source.id),
     });
   }
   const anchor = links.sources[0]?.id ?? links.tiles[0]?.id ?? null;
-  const group = anchor ? await patternGroupOf(host, anchor) : null;
+  const group = anchor ? groupHolding(await index.tree(), anchor) : null;
   const outcome = await host.document.mutate(
     patternDeleteBatchFor({ group, tiles: links.tiles.map((t) => t.id), sources }),
   );
@@ -1609,6 +1623,8 @@ export async function applyReleasePattern(
     );
     return false;
   }
+  // The envelopes the links were just parsed from, not a re-read.
+  const index = linkIndex(host);
   const leaves: {
     id: ElementId;
     envelope: PluginMetadataEnvelope | null;
@@ -1617,14 +1633,14 @@ export async function applyReleasePattern(
   for (const source of links.sources) {
     leaves.push({
       id: source.id,
-      envelope: await host.document.getMetadata(source.id).catch(() => null),
+      envelope: await index.envelopeOf(source.id),
       key: "patternSource",
     });
   }
   for (const tile of links.tiles) {
     leaves.push({
       id: tile.id,
-      envelope: await host.document.getMetadata(tile.id).catch(() => null),
+      envelope: await index.envelopeOf(tile.id),
       key: "patternTile",
     });
   }
