@@ -96,6 +96,16 @@ export function createLassoSelectHandler(host: BundleHost): GestureHandler {
    *  the path form: a recorded point is turned into its anchor triple
    *  once, not once per later move). Null between drags. */
   let outline: PreviewAnchor[] | null = null;
+  /** `MIN_SAMPLE_PX` in page pt, converted ONCE per drag, on the press.
+   *  It used to be asked of the viewport on every move (1 999 times for
+   *  a 2 000-sample lasso) for a number that is the same throughout.
+   *
+   *  "Per drag" is as fine as the contract allows: `host.viewport` has
+   *  `camera()` and `pxToPt()` and no change event, so a zoom DURING a
+   *  drag cannot be noticed without asking every move — which is the
+   *  cost this removes. The next press reads the new zoom. The pencil
+   *  and the brushes have always fixed their tolerances this way. */
+  let floorPt = 0;
 
   const reset = () => {
     points = [];
@@ -154,11 +164,12 @@ export function createLassoSelectHandler(host: BundleHost): GestureHandler {
       if (e.button !== 0 || !e.pageId || !e.pagePoint) return;
       pageId = e.pageId;
       points = [e.pagePoint];
+      floorPt = host.viewport.pxToPt(MIN_SAMPLE_PX);
     },
     onPointerMove(e: CanvasPointerEvent) {
       if (!pageId || !e.pagePoint || e.pageId !== pageId) return;
       const last = points[points.length - 1];
-      if (dist(last, e.pagePoint) < host.viewport.pxToPt(MIN_SAMPLE_PX)) return;
+      if (dist(last, e.pagePoint) < floorPt) return;
       points.push(e.pagePoint);
       preview();
     },

@@ -127,6 +127,12 @@ const keptAbove = (samples: readonly FreehandSample[], floor: number): Pt[] => {
 /** The sweep machines' decimation floor (`pencil-machine.ts`), in pt. */
 const SWEEP_FLOOR_PT = 0.5;
 
+/** The lasso's decimation floor (`handlers/lasso.ts`), in screen px —
+ *  which is pt at the harness camera's scale of 1. */
+const LASSO_FLOOR_PX = 3;
+/** How many of `penStroke(2000)`'s samples the lasso's floor keeps. */
+const LASSO_KEPT_OF_2000 = 305;
+
 /** How many of `penStroke(2000)`'s samples that floor keeps. */
 const KEPT_OF_2000 = 1860;
 /** 2 + 3 + … + KEPT_OF_2000: what its preview hands across the door. */
@@ -415,9 +421,65 @@ describe("perf budgets — the freehand tools", () => {
       expect(built).toEqual({ arrays: 1, points: samples });
       // TARGET `samples` — each point once (the door).
       expect(work.previewPoints).toBe(previewPoints);
-      // The px→pt conversion is asked again on every move. TARGET 1 per
-      // stroke.
-      expect(work.count("viewport.pxToPt")).toBe(samples - 1);
+      // The px→pt conversion: once, on the press. As found: `samples - 1`
+      // — asked again on every move for a number that does not change.
+      expect(work.count("viewport.pxToPt")).toBe(1);
+    });
+
+    // The floor is what the conversion is FOR, so the budget above is
+    // only safe if the floor still decimates. This stream is jittered:
+    // most of its samples sit closer than 3 px to the last one kept.
+    it("a jittered 2 000-sample lasso: the 3 px floor still decides what is recorded", async () => {
+      const stroke = penStroke(2000);
+      const kept = keptAbove(stroke, LASSO_FLOOR_PX);
+      expect(kept).toHaveLength(LASSO_KEPT_OF_2000);
+      const { work, built, preview } = await inFlight("lasso pen 2000", createLassoSelectHandler, stroke);
+      expect(preview).toEqual({
+        pageId: w.pageId,
+        anchors: kept.map((point) => ({ anchor: point, left: point, right: point })),
+        close: true,
+        dashed: true,
+      });
+      // One publish per recorded point after the first; none for a
+      // dropped sample (the lasso never did publish those).
+      expect(work.previews()).toBe(LASSO_KEPT_OF_2000 - 1);
+      expect(built).toEqual({ arrays: 1, points: LASSO_KEPT_OF_2000 });
+      expect(work.count("viewport.pxToPt")).toBe(1);
+    });
+
+    // "Once per drag" must not become "once per handler": the floor is
+    // screen-space, so a drag begun at another zoom has another floor.
+    // The harness camera is identity; doubling its scale halves the
+    // floor to 1.5 pt, and the second drag must record by THAT.
+    it("the floor is read again on the next press, so it follows a zoom between drags", async () => {
+      const camera = (w.h.host.editor as unknown as { camera: { camera: { scale: number } } })
+        .camera.camera;
+      const stroke = penStroke(600);
+      const outline = (shape: unknown): Pt[] =>
+        (shape as { anchors: { anchor: Pt }[] }).anchors.map((a) => a.anchor);
+      const { host, work } = countingHost(w.h.host);
+      const handler = createLassoSelectHandler(host);
+      handler.onActivate(undefined as never);
+      try {
+        await draw(handler, stroke, "burst");
+        const atScale1 = outline(w.h.lastToolPreview());
+        handler.onKey?.({ key: "Escape" } as KeyboardEvent);
+
+        camera.scale = 2;
+        await draw(handler, stroke, "burst");
+        const atScale2 = outline(w.h.lastToolPreview());
+        handler.onKey?.({ key: "Escape" } as KeyboardEvent);
+
+        expect(atScale1).toEqual(keptAbove(stroke, LASSO_FLOOR_PX));
+        expect(atScale2).toEqual(keptAbove(stroke, LASSO_FLOOR_PX / 2));
+        // The two are different recordings — the scenario discriminates.
+        expect(atScale2.length).toBeGreaterThan(atScale1.length);
+        // One conversion per press, two presses.
+        expect(work.count("viewport.pxToPt")).toBe(2);
+      } finally {
+        camera.scale = 1;
+        handler.onDeactivate("switch" as never);
+      }
     });
 
     it("the release: one tree read, one geometry call — carrying every leaf of the document", async () => {
@@ -432,8 +494,25 @@ describe("perf budgets — the freehand tools", () => {
       expect(work.count("document.tree")).toBe(1);
       expect(work.count("document.elementGeometry")).toBe(1);
       // All 518 leaves, whatever the lasso enclosed. TARGET: the leaves
-      // inside the lasso's bounding box — the engine already answers a
-      // marquee query (`marqueeHits` on the wire), there is no facade.
+      // whose bounds touch the lasso's bounding box (502 for this lasso,
+      // 14 for a small one over the arrangement).
+      //
+      // NOT LOWERED, and not for want of a request that answers it. The
+      // wire has `requestMarqueeHits`, and over a one-layer document it
+      // returns exactly the candidates needed (measured: 14 lassos over
+      // two documents, groups and transformed items included, selected
+      // the same elements either way). It was left alone because it is
+      // not the same QUESTION, and no `host.document` door asks it:
+      //   · it skips locked and hidden layers; this walk does not, so
+      //     the lasso would stop selecting what it selects today;
+      //   · it answers top-first BY LAYER, the walk in tree order. The
+      //     two are mirror images only on one layer — and this bundle
+      //     reads selection ORDER (first selected = kept);
+      //   · it is reachable only through `host.editor.client.send`, the
+      //     raw hatch this repo has been closing, not opening.
+      // What would lower it: a `document.marqueeHits(pageId, rect)`
+      // facade that states its gating and order — or `elementGeometry`
+      // taking a rect.
       expect(work.geometryIdsAsked).toBe(518);
       expect(work.count("selection.set")).toBe(1);
     });
