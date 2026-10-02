@@ -24,6 +24,8 @@ import {
   pointInAnchorPath,
   pointInFlatPath,
   pointInPolygon,
+  polylineTouchesPolygon,
+  segmentsTouch,
   type AnchorTriple,
   type Vec2,
 } from "../src";
@@ -294,5 +296,75 @@ describe("flattenAnchorPath + pointInFlatPath", () => {
       flattenAnchorRun(OUTER, { close: true, samplesPerSegment: 5 }),
       flattenAnchorRun(HOLE, { close: true, samplesPerSegment: 5 }),
     ]);
+  });
+});
+
+describe("polylineTouchesPolygon — the lasso's outline-intersection test", () => {
+  const BOX: Vec2[] = [
+    [0, 0],
+    [10, 0],
+    [10, 10],
+    [0, 10],
+  ];
+
+  it("segmentsTouch is inclusive: crossing, touching an end and collinear overlap all count", () => {
+    expect(segmentsTouch([0, 0], [10, 10], [0, 10], [10, 0])).toBe(true);
+    expect(segmentsTouch([0, 0], [5, 5], [5, 5], [9, 1])).toBe(true);
+    expect(segmentsTouch([0, 0], [6, 0], [4, 0], [9, 0])).toBe(true);
+    expect(segmentsTouch([0, 0], [3, 0], [4, 0], [9, 0])).toBe(false);
+    expect(segmentsTouch([0, 0], [10, 0], [0, 1], [10, 1])).toBe(false);
+    expect(segmentsTouch([0, 0], [4, 4], [5, 0], [9, -4])).toBe(false);
+  });
+
+  it("a polyline with a vertex inside touches", () => {
+    expect(polylineTouchesPolygon([[5, 5], [50, 50]], BOX)).toBe(true);
+  });
+
+  it("a polyline that only CROSSES the region (no vertex inside) touches", () => {
+    expect(polylineTouchesPolygon([[-5, 5], [15, 5]], BOX)).toBe(true);
+  });
+
+  it("a polyline outside a CONCAVE lasso's region but inside its box does not touch", () => {
+    // An L-shaped lasso; (7..9, 7..9) is in its box, not its region.
+    const L: Vec2[] = [
+      [0, 0],
+      [10, 0],
+      [10, 4],
+      [4, 4],
+      [4, 10],
+      [0, 10],
+    ];
+    expect(polylineTouchesPolygon([[7, 7], [9, 9]], L)).toBe(false);
+    expect(polylineTouchesPolygon([[20, 20], [30, 30]], L)).toBe(false);
+  });
+
+  it("the CLOSING segment counts only for a closed polyline", () => {
+    // A U whose closing edge (15,5)→(-5,5) would cut through the box.
+    const u: Vec2[] = [
+      [15, 5],
+      [15, 20],
+      [-5, 20],
+      [-5, 5],
+    ];
+    expect(polylineTouchesPolygon(u, BOX)).toBe(false);
+    expect(polylineTouchesPolygon(u, BOX, { closed: true })).toBe(true);
+  });
+
+  it("a lasso wholly INSIDE a closed outline does not touch the outline (the documented scope)", () => {
+    const big: Vec2[] = [
+      [-100, -100],
+      [100, -100],
+      [100, 100],
+      [-100, 100],
+    ];
+    expect(polylineTouchesPolygon(big, BOX, { closed: true })).toBe(false);
+    expect(pointInPolygon(BOX[0], big)).toBe(true);
+  });
+
+  it("degenerate input answers false, never throws; a single point is a point test", () => {
+    expect(polylineTouchesPolygon([], BOX)).toBe(false);
+    expect(polylineTouchesPolygon([[5, 5]], [[0, 0], [1, 1]])).toBe(false);
+    expect(polylineTouchesPolygon([[5, 5]], BOX)).toBe(true);
+    expect(polylineTouchesPolygon([[50, 5]], BOX)).toBe(false);
   });
 });

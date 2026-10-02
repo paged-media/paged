@@ -123,6 +123,7 @@ export {
   BLOB_BRUSH_OPTIONS,
   ERASER_OPTIONS,
   WIDTH_OPTIONS,
+  LASSO_OPTIONS,
   defineToolOptions,
   toolOptionsSpecOf,
   toolSettingsDoorOf,
@@ -950,6 +951,13 @@ export {
   createLassoSelectHandler,
   lassoMatches,
   itemCenterOnPage,
+  lassoIntersections,
+  lassoTouchesOutline,
+  outlineOfPath,
+  outlineOfBounds,
+  readLassoOutlines,
+  type LassoMode,
+  type LassoOutline,
 } from "./handlers/lasso";
 // Wave 2 — the parametric insert-shape commands (the v0 defaults, the
 // typed payload each now takes, the count ceilings) + their exact-wire

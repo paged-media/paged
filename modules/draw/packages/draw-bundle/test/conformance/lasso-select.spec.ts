@@ -18,18 +18,31 @@
 
 // Wave 2 conformance — Lasso select: the LIVE freehand-region handler
 // against the real engine. Enumeration is the tree + ONE
-// elementGeometry read (no hitTest grid sampling); membership is the
-// CENTERS-inside rule (handlers/lasso.ts documents the honest v0
-// semantics). F1's leaf centers: rectangle (200, 200), polygon
-// (250, 500), line (250, 675).
+// elementGeometry read (no hitTest grid sampling); membership is, by
+// default, INTERSECTION with each element's outline (its real path for
+// the path-bearing kinds — one pathAnchors read each — its transformed
+// bounds otherwise), and the v0 CENTERS-inside rule behind the tool's
+// `mode` option. handlers/lasso.ts documents both. F1's leaf centers:
+// rectangle (200, 200), polygon (250, 500), line (250, 675).
 
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, beforeEach, afterAll } from "vitest";
 
-import type { CanvasPointerEvent } from "@paged-media/plugin-api";
+import type { CanvasPointerEvent, ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
+import { pointInPolygon } from "@paged-media/draw-geometry";
 
-import { drawBundle, createLassoSelectHandler, lassoMatches } from "../../src";
+import {
+  drawBundle,
+  createLassoSelectHandler,
+  lassoIntersections,
+  lassoMatches,
+  lassoTouchesOutline,
+  outlineOfBounds,
+  outlineOfPath,
+  LASSO_OPTIONS,
+} from "../../src";
 import { F1_MULTI_SHAPE } from "../fixtures/corpus";
+import { countingHost } from "../perf/counting-host";
 import { openHost } from "./host";
 
 function pointer(
@@ -158,6 +171,274 @@ describe("draw conformance — lasso select (wave 2)", () => {
       await until(async () => h.host.selection.get().length === 0);
       handler.onDeactivate("switch");
     });
+
+    it("a click / short drag (< 3 points) leaves the selection alone (the default rule)", async () => {
+      await h.host.selection.set([{ kind: "rectangle", id: "urect" } as never]);
+      const handler = createLassoSelectHandler(h.host);
+      handler.onActivate(undefined as never);
+      handler.onPointerDown(pointer(F1_MULTI_SHAPE.pageId, [500, 50]));
+      handler.onPointerUp(pointer(F1_MULTI_SHAPE.pageId, [500, 50]));
+      await new Promise((r) => setTimeout(r, 100));
+      expect(h.host.selection.get().map((e) => e.id)).toEqual(["urect"]);
+      handler.onDeactivate("switch");
+    });
+  });
+
+  // INTERSECTION — the default rule since the lasso grew a `mode` option.
+  // Each scenario is run under BOTH rules, so it discriminates: the
+  // lasso touches the outline and does not hold the bounds centre (or
+  // holds the centre and touches nothing).
+  describe("intersection with the OUTLINE (the default) vs the bounds CENTRE (real engine, F1)", () => {
+    let h: HeadlessHost;
+    const PAGE = F1_MULTI_SHAPE.pageId;
+    const POLY = { kind: "polygon", id: "upoly" } as ElementId;
+    const RECT = { kind: "rectangle", id: "urect" } as ElementId;
+
+    /** Run one lasso under `mode` (null = no host store: the default)
+     *  and answer the ids it selected, sorted. */
+    const lassoIds = async (
+      ring: [number, number][],
+      mode: "intersect" | "centre" | null,
+      host = h.host,
+    ): Promise<string[]> => {
+      await h.host.selection.set([{ kind: "rectangle", id: "urect" } as never]);
+      await h.host.selection.set([]);
+      const handler = createLassoSelectHandler(host);
+      const paged =
+        mode === null
+          ? undefined
+          : {
+              toolSettings: {
+                getValue: (tool: string, key: string) =>
+                  tool === LASSO_OPTIONS.toolId && key === "mode" ? mode : undefined,
+              },
+            };
+      handler.onActivate(paged as never);
+      handler.onPointerDown(pointer(PAGE, ring[0]));
+      for (const p of ring.slice(1, -1)) handler.onPointerMove(pointer(PAGE, p, 40));
+      handler.onPointerUp(pointer(PAGE, ring[ring.length - 1], 40));
+      // Settle: the commit is a few awaited reads, then one selection set.
+      for (let i = 0; i < 20; i++) await new Promise((r) => setTimeout(r, 2));
+      handler.onDeactivate("switch");
+      return h.host.selection
+        .get()
+        .map((e) => String(e.id))
+        .sort();
+    };
+
+    beforeAll(async () => {
+      h = await openHost();
+      h.loadBundle(drawBundle);
+    });
+    beforeEach(async () => {
+      await h.load(F1_MULTI_SHAPE.bytes());
+    });
+    afterAll(() => h?.dispose());
+
+    it("a lasso across the rectangle's right EDGE (its centre far outside) selects it — centre mode does not", async () => {
+      const acrossEdge: [number, number][] = [
+        [280, 180],
+        [340, 180],
+        [340, 220],
+        [280, 220],
+      ];
+      expect(await lassoIds(acrossEdge, null)).toEqual(["urect"]);
+      expect(await lassoIds(acrossEdge, "intersect")).toEqual(["urect"]);
+      expect(await lassoIds(acrossEdge, "centre")).toEqual([]);
+    });
+
+    it("a lasso around ONE END of the open polygon selects it — the outline is the open V, not its box", async () => {
+      const atEnd: [number, number][] = [
+        [90, 390],
+        [120, 390],
+        [120, 420],
+        [90, 420],
+      ];
+      expect(await lassoIds(atEnd, null)).toEqual(["upoly"]);
+      expect(await lassoIds(atEnd, "centre")).toEqual([]);
+    });
+
+    it("a lasso INSIDE the V's bounding box but clear of its path selects NOTHING — the path, not the box, decides", async () => {
+      // upoly is (100,400) → (250,600) → (400,400); its box is
+      // 100..400 × 400..600 and (250, 450) sits in it, above the V.
+      const inTheBox: [number, number][] = [
+        [240, 440],
+        [260, 440],
+        [260, 460],
+        [240, 460],
+      ];
+      expect(await lassoIds(inTheBox, "intersect")).toEqual([]);
+      // Contrast: the lasso lies INSIDE the item's transformed bounds, so
+      // any box-based test (bounds overlap, a marquee) would have hit it.
+      const [item] = await h.host.document.elementGeometry([POLY]);
+      const box = outlineOfBounds(item).rings[0];
+      expect(inTheBox.every((p) => pointInPolygon(p, box))).toBe(true);
+    });
+
+    it("a path MOVED by a framePath write is found where it IS — the bounds still say where it was (measured)", async () => {
+      const moved = await h.host.document.mutate({
+        op: "setElementProperty",
+        args: {
+          elementId: POLY,
+          path: "framePath",
+          value: {
+            type: "framePath",
+            value: {
+              anchors: [
+                { anchor: [450, 100], left: [450, 100], right: [450, 100] },
+                { anchor: [520, 160], left: [520, 160], right: [520, 160] },
+              ],
+              subpathStarts: [0],
+            },
+          },
+        },
+      });
+      expect(moved.applied).toBe(true);
+      // The stale box — the reason intersection reads every path.
+      const [item] = await h.host.document.elementGeometry([POLY]);
+      expect(item.bounds).toEqual([400, 100, 600, 400]);
+      const atNewPlace: [number, number][] = [
+        [470, 110],
+        [500, 110],
+        [500, 150],
+        [470, 150],
+      ];
+      expect(await lassoIds(atNewPlace, "intersect")).toEqual(["upoly"]);
+    });
+
+    it("a TRANSFORMED element is tested where it is drawn: its outline goes through its item transform", async () => {
+      const out = await h.host.document.mutate({
+        op: "setElementProperty",
+        args: {
+          elementId: RECT,
+          path: "frameTransform",
+          value: { type: "transform", value: [1, 0, 0, 1, 300, 400] },
+        },
+      });
+      expect(out.applied).toBe(true);
+      // The rectangle now spans 400..600 × 500..700: a lasso over its
+      // translated top edge selects it; one over its untransformed edge
+      // does not.
+      const overNewEdge: [number, number][] = [
+        [480, 490],
+        [520, 490],
+        [520, 510],
+        [480, 510],
+      ];
+      const overOldEdge: [number, number][] = [
+        [180, 90],
+        [220, 90],
+        [220, 110],
+        [180, 110],
+      ];
+      expect(await lassoIds(overNewEdge, "intersect")).toEqual(["urect"]);
+      expect(await lassoIds(overOldEdge, "intersect")).toEqual([]);
+    });
+
+    it("the loop around the polygon + line selects the same two under BOTH rules", async () => {
+      const big: [number, number][] = [
+        [50, 350],
+        [450, 350],
+        [450, 720],
+        [50, 720],
+      ];
+      expect(await lassoIds(big, "intersect")).toEqual(["uline", "upoly"]);
+      expect(await lassoIds(big, "centre")).toEqual(["uline", "upoly"]);
+    });
+
+    it("what it costs: intersection reads each PATH-bearing leaf once; centre mode reads no path at all", async () => {
+      const big: [number, number][] = [
+        [50, 350],
+        [450, 350],
+        [450, 720],
+        [50, 720],
+      ];
+      const inter = countingHost(h.host);
+      await lassoIds(big, "intersect", inter.host);
+      expect(inter.work.count("document.tree")).toBe(1);
+      expect(inter.work.count("document.elementGeometry")).toBe(1);
+      // F1 is three path-bearing leaves (rectangle, polygon, line).
+      expect(inter.work.count("document.pathAnchors")).toBe(3);
+      const centre = countingHost(h.host);
+      await lassoIds(big, "centre", centre.host);
+      expect(centre.work.count("document.pathAnchors")).toBe(0);
+      expect(centre.work.count("document.elementGeometry")).toBe(1);
+    });
+  });
+
+  describe("the pure intersection core", () => {
+    it("an OPEN outline is not closed for the test; a CLOSED one is", () => {
+      // A U: open, its mouth faces down; a lasso in the mouth touches
+      // the closed U's closing segment only.
+      const read = {
+        id: { kind: "polygon", id: "u" },
+        anchors: [
+          { anchor: [0, 10], left: [0, 10], right: [0, 10] },
+          { anchor: [0, 0], left: [0, 0], right: [0, 0] },
+          { anchor: [10, 0], left: [10, 0], right: [10, 0] },
+          { anchor: [10, 10], left: [10, 10], right: [10, 10] },
+        ],
+        subpathStarts: [0],
+        subpathOpen: [true],
+      } as never;
+      const inMouth: [number, number][] = [
+        [3, 8],
+        [7, 8],
+        [7, 12],
+        [3, 12],
+      ];
+      expect(lassoTouchesOutline(outlineOfPath(read)!, inMouth)).toBe(false);
+      const closed = { ...(read as object), subpathOpen: [false] } as never;
+      expect(lassoTouchesOutline(outlineOfPath(closed)!, inMouth)).toBe(true);
+    });
+
+    it("an item with no path outline falls back to its transformed bounds", () => {
+      const items = [
+        {
+          id: { kind: "oval", id: "o" },
+          pageId: "usp",
+          bounds: [0, 0, 10, 10],
+          itemTransform: [1, 0, 0, 1, 100, 100],
+        },
+      ] as never;
+      const ring: [number, number][] = [
+        [105, 95],
+        [115, 95],
+        [115, 105],
+        [105, 105],
+      ];
+      expect(lassoIntersections(items, new Map(), ring).map((e) => e.id)).toEqual(["o"]);
+      expect(
+        lassoIntersections(items, new Map(), [
+          [5, -5],
+          [15, -5],
+          [15, 5],
+        ]),
+      ).toEqual([]);
+    });
+  });
+
+  describe("the mode option", () => {
+    it("is declared on the tool, intersection first (the displayed default)", () => {
+      expect(LASSO_OPTIONS.toolId).toBe("media.paged.draw.tool.lassoSelect");
+      const mode = LASSO_OPTIONS.fields[0];
+      expect(mode.kind).toBe("select");
+      expect(mode.kind === "select" && mode.options.map((o) => o.value)).toEqual([
+        "intersect",
+        "centre",
+      ]);
+    });
+  });
+
+  describe("v0 regression lane (F1, as shipped)", () => {
+    let h: HeadlessHost;
+
+    beforeAll(async () => {
+      h = await openHost();
+      await h.load(F1_MULTI_SHAPE.bytes());
+      h.loadBundle(drawBundle);
+    });
+    afterAll(() => h?.dispose());
 
     it("a click / short drag (< 3 points) leaves the selection alone", async () => {
       await h.host.selection.set([{ kind: "rectangle", id: "urect" } as never]);

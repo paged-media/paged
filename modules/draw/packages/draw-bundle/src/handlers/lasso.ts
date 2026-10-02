@@ -16,26 +16,46 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Lasso select (wave 2) — drag a freehand region; on release every
-// leaf element whose BOUNDS CENTER falls inside the lasso polygon
-// (draw-geometry's `pointInPolygon`) becomes the selection.
+// Lasso select (wave 2) — drag a freehand region; on release every leaf
+// element the region TOUCHES becomes the selection.
 //
-// ENUMERATION (honest + cheap): the document's leaf elements come
-// from the `host.document.tree()` read door (the select-same
-// flattener, `leafIdsOf`) and ONE `host.document.elementGeometry`
-// call answers every candidate's bounds + item transform — no
-// per-point hitTest grid sampling needed. Each element's raw
-// GeometricBounds center is mapped through its item transform into
-// page space and tested against the polygon.
+// TWO RULES, chosen by the tool's `mode` option (`../tool-options.ts`,
+// the double-click popover):
 //
-// HONEST v0 SEMANTICS:
-//   · CENTERS-inside, not intersection — an element overlapping the
-//     region whose center lies outside is NOT selected (documented;
-//     a true marquee-intersection test needs per-element outline
-//     geometry).
-//   · An empty lasso CLEARS the selection (the marquee convention).
-//   · Group members are matched as leaves (the tree flattener descends
-//     into groups — the same choice select-same makes).
+//   · "intersect" — THE DEFAULT. An element is selected when the lasso
+//     region touches its OUTLINE: some point of the outline lies inside
+//     the lasso, or some segment of it crosses a lasso edge
+//     (draw-geometry `polylineTouchesPolygon`). For the four path-bearing
+//     kinds the outline is the element's real path — its anchor table,
+//     every contour flattened (`flattenAnchorRun`, open contours left
+//     open) and mapped through its item transform; for any other kind,
+//     or a path whose table cannot be read, it is the element's
+//     TRANSFORMED BOUNDS as a closed ring. A lasso drawn wholly INSIDE a
+//     big shape touches no outline and does not select it — the rule is
+//     about the path, not the paint it encloses (the function's
+//     documented scope).
+//   · "centre" — the v0 rule, kept reachable: the element's bounds
+//     CENTRE (mapped through its item transform) lies inside the lasso
+//     (`pointInPolygon`). An element overlapping the region whose centre
+//     is outside is NOT selected.
+//
+// WHAT INTERSECTION COSTS, and why it cannot be cheaper here. Enumeration
+// is unchanged — the `host.document.tree()` read door (the select-same
+// flattener, `leafIdsOf`) and ONE `host.document.elementGeometry` call
+// for every candidate's page, bounds and transform. Intersection then
+// reads `pathAnchors` once per PATH-BEARING leaf on the lasso's page
+// (windowed, in parallel). The bounds cannot be used to skip those reads:
+// they are STALE after a whole-path write — measured, protocol 64: a
+// `framePath` write, an `offsetPath` and a Make Compound Path all leave
+// `elementGeometry.bounds` at the element's ORIGINAL box — so pruning by
+// bounds would miss exactly the paths that were edited. What would lower
+// it: `pathAnchors` taking a list, or a `document.marqueeHits`-style
+// facade that intersects in the engine. "centre" mode costs what it
+// always did (two reads).
+//
+// Always: an empty lasso CLEARS the selection (the marquee convention);
+// group members are matched as leaves (the tree flattener descends into
+// groups — the same choice select-same makes).
 
 import type {
   BundleHost,
@@ -43,19 +63,33 @@ import type {
   ElementGeometryItem,
   ElementId,
   GestureHandler,
+  PathAnchorsResult,
 } from "@paged-media/plugin-api";
 
 import {
   applyAffine,
   dist,
+  flattenAnchorRun,
   pointInPolygon,
+  polylineTouchesPolygon,
+  type Affine,
   type Vec2,
 } from "@paged-media/draw-geometry";
 
 import { leafIdsOf } from "../commands/select-same";
+import { supportsPathOps } from "../commands/path-ops";
+import { LASSO_OPTIONS, createToolOptionsReader } from "../tool-options";
 
 /** Screen-space decimation floor between recorded lasso points. */
 const MIN_SAMPLE_PX = 3;
+
+/** Path reads per parallel window (the link walk's reason: the engine
+ *  worker answers in order, and one burst of N reads would queue ahead
+ *  of whatever the user does next). */
+const OUTLINE_READ_WINDOW = 64;
+
+/** The lasso's selection rule — see the header. */
+export type LassoMode = "intersect" | "centre";
 
 /** One corner of the preview outline (the `ToolPreviewPath` anchor). */
 interface PreviewAnchor {
@@ -76,7 +110,7 @@ export function itemCenterOnPage(item: ElementGeometryItem): Vec2 {
 }
 
 /** The ids whose page-space bounds centers fall inside `polygon` —
- *  the pure core, exported for the conformance spec. */
+ *  the "centre" rule, pure, exported for the conformance spec. */
 export function lassoMatches(
   items: readonly ElementGeometryItem[],
   polygon: readonly Vec2[],
@@ -88,9 +122,108 @@ export function lassoMatches(
   return out;
 }
 
+/** An element's outline in PAGE space: one polyline per contour, and
+ *  whether it closes. */
+export interface LassoOutline {
+  rings: Vec2[][];
+  closed: boolean[];
+}
+
+const keyOf = (id: ElementId): string => `${id.kind}\u0000${String(id.id)}`;
+
+/** The outline an anchor table describes, in page space: each contour
+ *  flattened in the element's own space (closed contours with their
+ *  closing segment) and mapped through `itemTransform`. Null when there
+ *  is nothing to draw. Pure; exported for the spec. */
+export function outlineOfPath(read: PathAnchorsResult): LassoOutline | null {
+  const n = read.anchors.length;
+  if (n === 0) return null;
+  const m = (read.itemTransform ?? null) as Affine | null;
+  const starts = read.subpathStarts.length > 0 ? read.subpathStarts : [0];
+  const rings: Vec2[][] = [];
+  const closed: boolean[] = [];
+  for (let i = 0; i < starts.length; i++) {
+    const from = starts[i];
+    const to = i + 1 < starts.length ? starts[i + 1] : n;
+    if (to <= from) continue;
+    const isClosed = read.subpathOpen?.[i] !== true;
+    const flat = flattenAnchorRun(read.anchors.slice(from, to), { close: isClosed });
+    rings.push(flat.map(([x, y]) => (m ? (applyAffine(m, x, y) as Vec2) : [x, y])));
+    closed.push(isClosed);
+  }
+  return rings.length > 0 ? { rings, closed } : null;
+}
+
+/** An element's TRANSFORMED bounds as one closed ring — the outline of a
+ *  kind with no path. */
+export function outlineOfBounds(item: ElementGeometryItem): LassoOutline {
+  const [top, left, bottom, right] = item.bounds;
+  const m = item.itemTransform ?? null;
+  const corners: Vec2[] = [
+    [left, top],
+    [right, top],
+    [right, bottom],
+    [left, bottom],
+  ];
+  return {
+    rings: [corners.map(([x, y]) => (m ? (applyAffine(m, x, y) as Vec2) : [x, y]))],
+    closed: [true],
+  };
+}
+
+/** Does `polygon` touch `outline`? */
+export function lassoTouchesOutline(
+  outline: LassoOutline,
+  polygon: readonly Vec2[],
+): boolean {
+  return outline.rings.some((ring, i) =>
+    polylineTouchesPolygon(ring, polygon, { closed: outline.closed[i] }),
+  );
+}
+
+/** The "intersect" rule, pure (exported for the conformance spec): every
+ *  item whose outline the lasso touches — its PATH outline when `paths`
+ *  holds one for it, its transformed bounds otherwise. In item order. */
+export function lassoIntersections(
+  items: readonly ElementGeometryItem[],
+  paths: ReadonlyMap<string, LassoOutline>,
+  polygon: readonly Vec2[],
+): ElementId[] {
+  const out: ElementId[] = [];
+  for (const item of items) {
+    const outline = paths.get(keyOf(item.id)) ?? outlineOfBounds(item);
+    if (lassoTouchesOutline(outline, polygon)) out.push(item.id);
+  }
+  return out;
+}
+
+/** Read the path outline of every path-bearing item (one `pathAnchors`
+ *  each, windowed). An item whose table is unreadable is left out, and
+ *  so falls back to its bounds. */
+export async function readLassoOutlines(
+  host: BundleHost,
+  items: readonly ElementGeometryItem[],
+): Promise<Map<string, LassoOutline>> {
+  const paths = items.filter((item) => supportsPathOps(item.id));
+  const out = new Map<string, LassoOutline>();
+  for (let at = 0; at < paths.length; at += OUTLINE_READ_WINDOW) {
+    await Promise.all(
+      paths.slice(at, at + OUTLINE_READ_WINDOW).map(async (item) => {
+        const read = await host.document.pathAnchors(item.id).catch(() => null);
+        const outline = read ? outlineOfPath(read) : null;
+        if (outline) out.set(keyOf(item.id), outline);
+      }),
+    );
+  }
+  return out;
+}
+
 export function createLassoSelectHandler(host: BundleHost): GestureHandler {
   let points: Vec2[] = [];
   let pageId: string | null = null;
+  /** The rule this drag selects by — read on the press, with the floor. */
+  let mode: LassoMode = "intersect";
+  const options = createToolOptionsReader(LASSO_OPTIONS);
   /** The corner anchors handed to the overlay — ONE array per drag,
    *  appended to as `points` grows (the `./stroke-preview.ts` rule, in
    *  the path form: a recorded point is turned into its anchor triple
@@ -136,25 +269,33 @@ export function createLassoSelectHandler(host: BundleHost): GestureHandler {
     });
   };
 
-  const commit = async (polygon: readonly Vec2[], onPage: string) => {
+  const commit = async (
+    polygon: readonly Vec2[],
+    onPage: string,
+    rule: LassoMode,
+  ) => {
     const roots = await host.document.tree();
     const leaves = leafIdsOf(roots);
     if (leaves.length === 0) {
       await host.selection.set([]);
       return;
     }
-    const items = await host.document.elementGeometry(leaves);
-    const matches = lassoMatches(
-      items.filter((i) => i.pageId === onPage),
-      polygon,
+    const items = (await host.document.elementGeometry(leaves)).filter(
+      (i) => i.pageId === onPage,
     );
+    const matches =
+      rule === "centre"
+        ? lassoMatches(items, polygon)
+        : lassoIntersections(items, await readLassoOutlines(host, items), polygon);
     // Empty region ⇒ selection clears (the marquee convention).
     await host.selection.set(matches);
   };
 
   return {
-    onActivate() {
-      /* per-drag state allocates on pointer-down */
+    onActivate(paged) {
+      // Per-drag state allocates on pointer-down; this only binds the
+      // options reader to the host's store.
+      options.attach(paged);
     },
     onDeactivate(reason) {
       if (reason === "suspend") return;
@@ -165,6 +306,7 @@ export function createLassoSelectHandler(host: BundleHost): GestureHandler {
       pageId = e.pageId;
       points = [e.pagePoint];
       floorPt = host.viewport.pxToPt(MIN_SAMPLE_PX);
+      mode = options.select("mode") === "centre" ? "centre" : "intersect";
     },
     onPointerMove(e: CanvasPointerEvent) {
       if (!pageId || !e.pagePoint || e.pageId !== pageId) return;
@@ -176,11 +318,12 @@ export function createLassoSelectHandler(host: BundleHost): GestureHandler {
     onPointerUp(e: CanvasPointerEvent) {
       if (!pageId) return;
       const onPage = pageId;
+      const rule = mode;
       const polygon =
         e.pageId === onPage && e.pagePoint ? [...points, e.pagePoint] : points;
       reset();
       if (polygon.length < 3) return; // a click / short drag is no region
-      void commit(polygon, onPage).catch((err) =>
+      void commit(polygon, onPage, rule).catch((err) =>
         host.log.warn(`lassoSelect failed: ${err}`),
       );
     },

@@ -377,6 +377,24 @@ export const WIDTH_OPTIONS = defineToolOptions({
   ],
 });
 
+/** The lasso's selection rule. "Touches the outline" comes FIRST — it is
+ *  the default, and an unset select displays its first option. */
+export const LASSO_OPTIONS = defineToolOptions({
+  toolId: "media.paged.draw.tool.lassoSelect",
+  fields: [
+    {
+      kind: "select",
+      key: "mode",
+      label: "Select objects",
+      options: [
+        { value: "intersect", label: "Touched by the lasso" },
+        { value: "centre", label: "Centre inside the lasso" },
+      ],
+      default: "intersect",
+    },
+  ],
+});
+
 /** Every tool that declares options, by tool id — what `tools.ts`
  *  attaches to the contribution and what the spec walks. */
 export const TOOL_OPTIONS: readonly ToolOptionsDef[] = [
@@ -385,4 +403,5 @@ export const TOOL_OPTIONS: readonly ToolOptionsDef[] = [
   BLOB_BRUSH_OPTIONS,
   ERASER_OPTIONS,
   WIDTH_OPTIONS,
+  LASSO_OPTIONS,
 ];

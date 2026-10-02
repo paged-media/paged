@@ -116,6 +116,8 @@ export {
   pointInAnchorPath,
   flattenAnchorPath,
   pointInFlatPath,
+  segmentsTouch,
+  polylineTouchesPolygon,
   type FlatAnchorPath,
 } from "./polygon";
 // Illustrator Phase 2 — compound paths: the contour algebra (merge /

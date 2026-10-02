@@ -61,6 +61,7 @@ import { createWidthHandler } from "./handlers/width";
 import {
   BLOB_BRUSH_OPTIONS,
   ERASER_OPTIONS,
+  LASSO_OPTIONS,
   PAINTBRUSH_OPTIONS,
   PENCIL_OPTIONS,
   WIDTH_OPTIONS,
@@ -337,9 +338,10 @@ export function drawTools(host: BundleHost): ToolContribution[] {
       // Peak limit / width per drag / falloff.
       options: toolOptionsSpecOf(WIDTH_OPTIONS),
     },
-    // Lasso select — freehand region; elements whose bounds CENTERS
-    // fall inside are selected (handlers/lasso.ts documents the
-    // centers-inside v0 semantics).
+    // Lasso select — freehand region; elements whose OUTLINE the region
+    // touches are selected, or (the `mode` option) those whose bounds
+    // CENTRE falls inside — handlers/lasso.ts documents both rules and
+    // what intersection costs.
     {
       id: "media.paged.draw.tool.lassoSelect",
       title: "Lasso Select",
@@ -350,6 +352,7 @@ export function drawTools(host: BundleHost): ToolContribution[] {
       order: 1,
       cursor: CROSS,
       gesture: () => createLassoSelectHandler(host),
+      options: toolOptionsSpecOf(LASSO_OPTIONS),
     },
     // LIVE PAINT v0 — the bucket hovers/paints the FACES of a recorded
     // group's planar arrangement (commands/live-paint.ts says exactly
