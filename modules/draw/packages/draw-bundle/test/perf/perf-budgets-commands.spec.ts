@@ -908,7 +908,7 @@ describe("perf budgets — Image Trace over a busy document", () => {
   }, 180_000);
   afterAll(() => w?.h.dispose());
 
-  it("committing a traced ring: the tree is read twice to learn what two inserts created", async () => {
+  it("committing a traced ring: the reply says what two inserts created — no tree read", async () => {
     expect(w.refusals).toEqual([]);
     expect(await leafIds(w.h)).toHaveLength(502);
 
@@ -932,16 +932,25 @@ describe("perf budgets — Image Trace over a busy document", () => {
       options: TRACE_DEFAULTS,
     });
 
-    const { work, undoSteps, result } = await countedWrite(w, "image trace commit", [], (host) =>
-      applyImageTracePlan(host, plan),
+    const { work, undoSteps, result, added, restored } = await countedWrite(
+      w,
+      "image trace commit",
+      [],
+      (host) => applyImageTracePlan(host, plan),
     );
-    // One region, two contours: a ring.
+    // One region, two contours: a ring — ONE element once re-merged.
     expect(result).toHaveLength(1);
-    // TARGET 1 batch, 1 undo step.
+    expect(added).toEqual(["polygon"]);
+    // STILL two batches, and that is the floor the rules allow: the
+    // source's trace record names its regions by element id inside its
+    // JSON metadata, and a `$h:` handle in text is stored as written,
+    // never resolved (measured, `test/conformance/minted.spec.ts`).
     expect(work.mutations.map((m) => m.op)).toEqual(["batch", "batch"]);
     expect(undoSteps).toBe(2);
-    // TARGET 0 — see "THE TARGET IS REAL" above.
-    expect(work.count("document.tree")).toBe(2);
+    expect(restored).toBe(true);
+    // What batch 1 minted comes off the engine's reply. As found: 2 —
+    // the before/after diff (3 when a group has to be found too).
+    expect(work.count("document.tree")).toBe(0);
     expect(work.count("document.getMetadata")).toBe(1);
   });
 });

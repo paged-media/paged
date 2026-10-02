@@ -394,8 +394,11 @@ face contours inserted and named, then the replaced fills deleted, the
 holes re-merged, the faces painted and linked. The two-batch lane is the
 fallback.
 
-IMAGE TRACE's commit is STILL TWO BATCHES (`image-trace.ts`); its "TWO
-batches ⇒ 2 undo steps" note is still TRUE as shipped.
+IMAGE TRACE's commit STAYS TWO BATCHES for the appearance bake's reason:
+the source's trace record names its regions by element id inside its
+JSON metadata (`imageTrace.regions`), where a handle is never resolved.
+What each batch created comes off the reply: 0 tree reads, was 2 (3 with
+a group to find).
 
 **"WHAT DID MY BATCH CREATE" HAS ONE SEAM: `commands/minted.ts`.** A
 batch outcome carries ONE `createdId`, so a flow that inserted several
