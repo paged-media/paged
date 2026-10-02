@@ -31,6 +31,7 @@ Recorded with **Adobe Illustrator 30.1.0** (build 136R, de_DE, macOS
 |---|---|---|
 | `offset-path` | 17 | Exactly the closed-form miter / bevel / inward geometry. Miter limit is the stroke rule (mitered while `1/sin(angle/2) <= limit`, bevelled past it). Round joins are cubic arcs, one per 90 degrees or less, so areas bulge by about +0.001 %. Every result is clockwise whatever the input. |
 | `outline-stroke` | 11 | Exactly the stroke's closed form for all nine cap × join pairs, same miter-limit rule. One SIMPLE clockwise outline that does not overlap itself. |
+| `pathfinder-boolean` | 8 | The set operation, exactly on rectangles and within 0.1 pt² on a circle. Subtract is back minus front. Exclude is two separate paths, not a compound path. Every result is COUNTER-clockwise — the opposite of the two probes above. |
 
 ## Record (or re-record) one probe
 
@@ -78,6 +79,7 @@ header of the spec that pins it.
 |---|---|---|
 | Offset path | `PageItem.applyEffect('<LiveEffect name="Adobe Offset Path"><Dict data="R mlim 4 R ofst 10 I jntp 2 "/></LiveEffect>')` then `app.executeMenuCommand("expandStyle")` | Recorded. `jntp` is 0 round / 1 bevel / 2 miter (in no dictionary; settled by the recording). `expandStyle` leaves one plain path. |
 | Outline stroke | stroke set on the `PathItem` (`strokeWidth`, `strokeCap`, `strokeJoin`, `strokeMiterLimit`), then `app.executeMenuCommand("OffsetPath v22")` | Recorded. No dialog. The live effect `Adobe Outline Stroke` + `expandStyle` returns the identical path. |
+| Unite / Minus Front / Intersect / Exclude | group the inputs (`groupItems.add` + `move`), `app.executeMenuCommand("Live Pathfinder Add" \| "… Subtract" \| "… Intersect" \| "… Exclude")` on the group, then `expandStyle` | Recorded. No dialog (only Soft Mix and Trap have one). The Pathfinder PANEL's buttons have no script entry point; these are the same operations as Effect › Pathfinder. |
 
 The menu versions of Offset Path (Object › Path = `OffsetPath v23`, and
 Effect › Path = `Live Offset Path`) open a dialog that `executeMenuCommand`

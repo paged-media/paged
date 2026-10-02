@@ -272,9 +272,9 @@ export function isCurvedSegment(a: OracleAnchor, b: OracleAnchor): boolean {
 }
 
 /** One path as a closed ring of points: every curved cubic cut into
- *  `steps` chords. 32 chords put a 10 pt quarter arc within 0.003 pt of
+ *  `steps` chords. 128 chords put a 50 pt quarter arc within 0.001 pt of
  *  itself. */
-export function flatten(path: OraclePath, steps = 32): Vec2[] {
+export function flatten(path: OraclePath, steps = 128): Vec2[] {
   const ring: Vec2[] = [];
   const n = path.anchors.length;
   for (let i = 0; i < n; i++) {

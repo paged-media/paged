@@ -398,10 +398,24 @@ var PagedProbe = (function () {
     for (i = 0; i < items.length; i++) items[i].selected = true;
   }
 
+  /** Put `items` into one new group WITHOUT changing their paint order:
+   *  items[0] stays at the back, the last item in front. (Each item is
+   *  moved to the group's FRONT in turn, so the last one moved ends up
+   *  frontmost.) The Pathfinder effects act on a group. */
+  function groupInPaintOrder(doc, items) {
+    var group = doc.groupItems.add();
+    var i;
+    for (i = 0; i < items.length; i++) {
+      items[i].move(group, ElementPlacement.PLACEATBEGINNING);
+    }
+    return group;
+  }
+
   return {
     json: json,
     polygon: polygon,
     buildPath: buildPath,
+    groupInPaintOrder: groupInPaintOrder,
     setStroke: setStroke,
     measurePath: measurePath,
     collectPaths: collectPaths,

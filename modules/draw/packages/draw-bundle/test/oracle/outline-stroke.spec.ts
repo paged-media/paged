@@ -281,8 +281,8 @@ describe("oracle — outline stroke", () => {
         expect(got.paths, c.id).toBe(1);
         expect(got.allClosed, c.id).toBe(true);
         expect(got.windings, c.id).toEqual(["cw"]);
-        // Simple: what it paints is what it encloses. (0.2 pt² covers the
-        // 32-chord flattening of two round caps, measured at 0.10.)
+        // Simple: what it paints is what it encloses. (0.2 pt² is far
+        // above the flattening error of two round caps, about 0.01.)
         expect(Math.abs(got.netArea - got.fillArea), c.id).toBeLessThan(0.2);
         expect(paintedArea(RECORDED.get(c.id)!.measured.paths, "evenodd"), c.id).toBeCloseTo(
           got.fillArea,
