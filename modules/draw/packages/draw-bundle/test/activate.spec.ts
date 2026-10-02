@@ -196,6 +196,15 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.outlineStroke",
       "media.paged.draw.command.offsetPath",
       "media.paged.draw.command.simplifyPath",
+      // PATH OPTIONS — the seven "…" commands: each RAISES the Path
+      // Options panel at its section and mutates nothing.
+      "media.paged.draw.command.offsetPathOptions",
+      "media.paged.draw.command.simplifyPathOptions",
+      "media.paged.draw.command.outlineStrokeOptions",
+      "media.paged.draw.command.insertArcOptions",
+      "media.paged.draw.command.insertSpiralOptions",
+      "media.paged.draw.command.insertRectGridOptions",
+      "media.paged.draw.command.insertPolarGridOptions",
       "media.paged.draw.command.joinEndpoints",
       "media.paged.draw.command.closePath",
       "media.paged.draw.command.averageEndpoints",
@@ -334,8 +343,10 @@ describe("drawBundle.activate", () => {
     // parameters + the two honesty notes), blend (§16.2's three spacing
     // modes + the "live preview" that previews the PLAN, not the
     // artwork) and objects-on-path (§16.3's distribution + the note that
-    // this row MOVES your objects rather than copying them) — register
-    // directly, all expert-leaf per B-01's list-widget limit.
+    // this row MOVES your objects rather than copying them) and path
+    // options (the parameters behind the menu's "…" — one section per
+    // operation) — register directly, all expert-leaf per B-01's
+    // list-widget limit.
     //
     // THERE IS NO LAYERS PANEL, and its absence is the assertion: ADR
     // 023 phase D retired it behind the binding-provider seam
@@ -353,6 +364,7 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.panel.repeat",
       "media.paged.draw.panel.blend",
       "media.paged.draw.panel.objectsOnPath",
+      "media.paged.draw.panel.pathOptions",
     ]);
   });
 

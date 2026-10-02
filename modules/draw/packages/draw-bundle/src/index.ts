@@ -171,6 +171,8 @@ export {
   type OffsetPathParams,
   type StrokeCapToken,
   type StrokeJoinToken,
+  type PathOpPayload,
+  type PathOpsLastUsed,
 } from "./commands/path-ops";
 // Phase 4c + the v56 TRUE JOIN — the endpoint planners (the coincide
 // fallback), the real `closePath`/`joinPaths` wire builders and the
@@ -932,8 +934,9 @@ export {
   lassoMatches,
   itemCenterOnPage,
 } from "./handlers/lasso";
-// Wave 2 — the parametric insert-shape commands (v0 fixed defaults) +
-// their exact-wire builders, exported for the conformance spec.
+// Wave 2 — the parametric insert-shape commands (the v0 defaults, the
+// typed payload each now takes, the count ceilings) + their exact-wire
+// builders, exported for the conformance spec.
 export {
   INSERT_SHAPE_COMMAND_IDS,
   INSERT_SHAPE_COMMAND_CATEGORY,
@@ -942,13 +945,78 @@ export {
   INSERT_RECT_GRID_COMMAND_ID,
   INSERT_POLAR_GRID_COMMAND_ID,
   INSERT_SHAPE_DEFAULTS,
+  INSERT_SHAPE_LIMITS,
+  ARC_PARAM_DEFAULTS,
+  SPIRAL_PARAM_DEFAULTS,
+  RECT_GRID_PARAM_DEFAULTS,
+  POLAR_GRID_PARAM_DEFAULTS,
   arcDefaultTable,
   spiralDefaultTable,
   rectGridDefaultTables,
   polarGridDefaultTables,
+  arcParamsFrom,
+  spiralParamsFrom,
+  rectGridParamsFrom,
+  polarGridParamsFrom,
+  arcTablesFor,
+  spiralTablesFor,
+  rectGridTablesFor,
+  polarGridTablesFor,
+  applyInsertArc,
+  applyInsertSpiral,
+  applyInsertRectGrid,
+  applyInsertPolarGrid,
   insertTablesMutationFor,
   contributeInsertShapeCommands,
+  type ArcParams,
+  type SpiralParams,
+  type RectGridParams,
+  type PolarGridParams,
+  type InsertShapePayload,
+  type InsertShapeLastUsed,
 } from "./commands/insert-shapes";
+// PATH OPTIONS — the parameters behind the menu's "…": the per-section
+// values + defaults, the last-used store, the seven commands that RAISE
+// the panel at a section, and the panel itself. Exported for the render
+// spec (the no-second-copy rule).
+export {
+  PATH_OPTIONS_PANEL_ID,
+  PATH_OPTIONS_COMMAND_IDS,
+  PATH_OPTIONS_COMMANDS,
+  PATH_OPTIONS_COMMAND_CATEGORY,
+  PATH_OPTIONS_DEFAULTS,
+  PATH_OPTIONS_STORAGE_KEY,
+  PATH_OPTION_SECTIONS,
+  PATH_OPTION_SECTION_TITLES,
+  BIND_PATH_OPTIONS_FOCUS,
+  OPEN_PANEL_FEATURE,
+  FROM_ELEMENT,
+  OFFSET_JOIN_NOTE,
+  sanitizePathOptions,
+  lastUsedPathOptions,
+  lastUsedPayload,
+  hasLastUsed,
+  rememberPathOptions,
+  applyPathOptions,
+  offsetPayloadOf,
+  simplifyPayloadOf,
+  outlineStrokePayloadOf,
+  pathOptionsFocusOf,
+  showPathOptions,
+  openPathOptions,
+  contributePathOptionsCommands,
+  type PathOptions,
+  type PathOptionSection,
+  type PathOptionsFocus,
+  type OffsetOptions,
+  type SimplifyOptions,
+  type OutlineStrokeOptions,
+} from "./commands/path-options";
+export {
+  makePathOptionsPanel,
+  ownStrokeLabel,
+  PATH_OPTIONS_PANEL_NOTE,
+} from "./panels/path-options-panel";
 // Illustrator Phase 3 (§16.2) — BLENDS v1: the three SPACING MODES
 // (Smooth Color derives its count from the colour distance, Specified
 // Steps is a count, Specified Distance divides the SPINE's arc length),

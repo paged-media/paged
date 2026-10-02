@@ -41,9 +41,20 @@ const C = "media.paged.draw.command";
  *  does not mean renumbering the file. */
 const ENTRIES: [path: string, suffix: string, group: string][] = [
   // ── Paths ──
+  //    AN ELLIPSIS MEANS PARAMETERS, and since the Path Options panel
+  //    it means it truthfully: a "…" row RAISES that panel at its
+  //    section (`commands/path-options.ts`) and changes nothing. The
+  //    rows used to point at `offsetPath` / `simplifyPath` themselves,
+  //    which ran one fixed set of numbers behind a label that promised
+  //    a question. Those ids are still commands — run bare (the command
+  //    palette, a keybinding) they repeat the values last applied from
+  //    the panel — they are just no longer what a "…" row runs.
+  //    "Outline stroke" carries no ellipsis and asks nothing: it
+  //    outlines the element's own stroke. Its overrides are one row down.
   ["Draw/Path/Outline stroke", "outlineStroke", "path"],
-  ["Draw/Path/Offset path…", "offsetPath", "path"],
-  ["Draw/Path/Simplify…", "simplifyPath", "path"],
+  ["Draw/Path/Outline stroke options…", "outlineStrokeOptions", "path"],
+  ["Draw/Path/Offset path…", "offsetPathOptions", "path"],
+  ["Draw/Path/Simplify…", "simplifyPathOptions", "path"],
   ["Draw/Path/Join endpoints", "joinEndpoints", "path-ends"],
   ["Draw/Path/Average endpoints", "averageEndpoints", "path-ends"],
   ["Draw/Path/Close path", "closePath", "path-ends"],
@@ -135,18 +146,22 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
 
   // ── Insert — these MERGE into the host's existing Object menu rather
   //    than living under Draw, because they mint a new page item and
-  //    that is what Object ▸ Insert already means. ──
-  ["Object/Insert arc…", "insertArc", "plugin-insert"],
-  ["Object/Insert spiral…", "insertSpiral", "plugin-insert"],
-  ["Object/Insert rectangular grid…", "insertRectGrid", "plugin-insert"],
-  ["Object/Insert polar grid…", "insertPolarGrid", "plugin-insert"],
+  //    that is what Object ▸ Insert already means. Each raises the Path
+  //    Options panel at its section (see "AN ELLIPSIS MEANS PARAMETERS"
+  //    above); the panel's Insert button is what mints the item. ──
+  ["Object/Insert arc…", "insertArcOptions", "plugin-insert"],
+  ["Object/Insert spiral…", "insertSpiralOptions", "plugin-insert"],
+  ["Object/Insert rectangular grid…", "insertRectGridOptions", "plugin-insert"],
+  ["Object/Insert polar grid…", "insertPolarGridOptions", "plugin-insert"],
 
   // ── Select same — merges into Edit, where selection verbs live. ──
   ["Edit/Select same/Fill", "selectSameFill", "select-same"],
   ["Edit/Select same/Stroke", "selectSameStroke", "select-same"],
   ["Edit/Select same/Stroke weight", "selectSameStrokeWeight", "select-same"],
 
-  // ── Trace ──
+  // ── Trace ── (STILL an ellipsis over fixed settings: Image Trace has
+  //    no section in the Path Options panel yet, so this is the one row
+  //    left where "…" asks nothing.)
   ["Draw/Image trace…", "imageTrace", "trace"],
 ];
 

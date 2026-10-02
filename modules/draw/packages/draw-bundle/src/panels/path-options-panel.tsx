@@ -1,0 +1,531 @@
+/*
+ * This file is part of paged (https://paged.media).
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// The PATH OPTIONS panel — the dialog the menu's "…" promised.
+//
+// Seven sections, one per operation that takes parameters: Offset path,
+// Simplify, Outline stroke, and the four Insert shapes. Each is a form
+// over its command's real payload and an Apply button that runs the
+// EXISTING command with what was typed (`commands/path-options.ts` owns
+// the values, their defaults and where "last used" is kept; this file
+// is the form).
+//
+// A panel, not a dialog, because the contract has no prompt and no
+// dialog door — and that has a consequence a modal would not: the panel
+// STAYS, so it is also where an operation is repeated with different
+// numbers without going back to the menu.
+//
+// ONE SECTION IS OPEN AT A TIME. A "…" menu row opens ITS section (it
+// says which through `BIND_PATH_OPTIONS_FOCUS`); the headers switch
+// between them. A closed section keeps what was typed into it.
+//
+// WHAT SURVIVES WHAT. The typed values are a draft:
+//   · a RELOAD (every selection and document change) never overwrites
+//     it — `useFollowedDraft` loads the stored last-used values only
+//     when the STORED record changes, not on every reload;
+//   · an UNMOUNT (the dock tab hidden or closed) does not lose it
+//     either: the draft, the open section and what was last followed
+//     live in the factory's closure, which outlives the component.
+// Only an Apply turns a draft into "last used".
+
+import type { BundleHost, PanelProps } from "@paged-media/plugin-api";
+import * as React from "react";
+
+import { INSERT_SHAPE_LIMITS } from "../commands/insert-shapes";
+import {
+  outlineParamsOf,
+  supportsPathOps,
+  type OutlineStrokeParams,
+} from "../commands/path-ops";
+import {
+  applyPathOptions,
+  lastUsedPathOptions,
+  pathOptionsFocusOf,
+  BIND_PATH_OPTIONS_FOCUS,
+  FROM_ELEMENT,
+  OFFSET_JOIN_NOTE,
+  PATH_OPTION_SECTIONS,
+  PATH_OPTION_SECTION_TITLES,
+  PATH_OPTIONS_PANEL_ID,
+  STROKE_CAPS,
+  STROKE_JOINS,
+  type PathOptionSection,
+  type PathOptions,
+} from "../commands/path-options";
+import { useFollowedDraft, usePanelReload } from "./use-panel-reload";
+
+export { PATH_OPTIONS_PANEL_ID };
+
+/** What the panel says under the form, verbatim. Pinned by a test. */
+export const PATH_OPTIONS_PANEL_NOTE =
+  "Apply runs the operation with the values above and remembers them: " +
+  "the same command run from the command palette, with no parameters, " +
+  "repeats the values last APPLIED here. Outline stroke is the exception " +
+  "— run bare it always outlines the element's own stroke. The undo " +
+  "arithmetic: Offset, Simplify and Outline stroke are one undo step per " +
+  "selected path; each Insert is ONE undo step however many paths it " +
+  "adds. Image Trace has no options here yet — its menu row still runs " +
+  "fixed settings.";
+
+/** The sections that act on the SELECTION (the rest insert new paths
+ *  and need none). */
+const NEEDS_SELECTION: ReadonlySet<PathOptionSection> = new Set([
+  "offset",
+  "simplify",
+  "outlineStroke",
+]);
+
+const rowStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+  padding: "3px 0",
+  font: "12px var(--font-sans, sans-serif)",
+};
+const headerStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  width: "100%",
+  gap: 6,
+  border: "none",
+  borderTop: "1px solid var(--pg-border, rgba(127,127,127,0.4))",
+  background: "none",
+  cursor: "pointer",
+  padding: "6px 0",
+  textAlign: "left",
+  font: "11px var(--font-sans, sans-serif)",
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+  color: "var(--pg-fg, currentColor)",
+};
+const applyStyle: React.CSSProperties = {
+  marginTop: 4,
+  cursor: "pointer",
+  font: "12px var(--font-sans, sans-serif)",
+};
+const noteStyle: React.CSSProperties = {
+  marginTop: 10,
+  padding: "6px 8px",
+  border: "1px solid var(--pg-border, rgba(127,127,127,0.4))",
+  borderRadius: 3,
+  font: "11px/1.45 var(--font-sans, sans-serif)",
+  opacity: 0.8,
+};
+const mutedStyle: React.CSSProperties = {
+  opacity: 0.6,
+  font: "12px var(--font-sans, sans-serif)",
+};
+const inputStyle: React.CSSProperties = {
+  width: 64,
+  font: "12px var(--font-sans, sans-serif)",
+};
+const selectStyle: React.CSSProperties = {
+  font: "12px var(--font-sans, sans-serif)",
+};
+
+/** "2 pt · butt · miter · limit 4" — what the selected element's own
+ *  stroke says, i.e. what an untouched Outline stroke section applies.
+ *  Pure; exported so the spec pins the wording without a DOM. */
+export function ownStrokeLabel(own: OutlineStrokeParams): string {
+  return `${own.width} pt · ${own.cap} · ${own.join} · limit ${own.miterLimit}`;
+}
+
+export function makePathOptionsPanel(host: BundleHost): {
+  title: string;
+  component: React.ComponentType<PanelProps>;
+  defaultDock: "right";
+} {
+  // What outlives the component (see "WHAT SURVIVES WHAT" above). Filled
+  // on the first mount, not at activate: `host.storage` is read when the
+  // panel is first shown, not when the bundle loads.
+  const session: {
+    draft: PathOptions | null;
+    /** Per section: the stored values the draft last took, serialised. */
+    followed: Partial<Record<PathOptionSection, string>>;
+    open: PathOptionSection;
+    /** The newest focus request already honoured. */
+    focusSeq: number;
+  } = { draft: null, followed: {}, open: "offset", focusSeq: 0 };
+
+  /** Take into the draft every section whose STORED values changed since
+   *  the draft last took them; null when none did. Per SECTION, because
+   *  applying one must not reset what is typed, unapplied, in another. */
+  const followStored = (): PathOptions | null => {
+    const stored = lastUsedPathOptions(host);
+    let next: PathOptions | null = null;
+    for (const section of PATH_OPTION_SECTIONS) {
+      const key = JSON.stringify(stored[section]);
+      if (session.followed[section] === key) continue;
+      session.followed[section] = key;
+      next = { ...(next ?? session.draft ?? stored), [section]: stored[section] };
+    }
+    if (next) session.draft = next;
+    return next;
+  };
+
+  const Component: React.FC<PanelProps> = () => {
+    // The first mount starts from the stored values; a later one from
+    // the draft the last one left.
+    if (session.draft === null) followStored();
+    const [draft, setDraftState, followDraft] = useFollowedDraft<PathOptions>(
+      session.draft as PathOptions,
+    );
+    const [open, setOpenState] = React.useState<PathOptionSection>(session.open);
+    const [targets, setTargets] = React.useState(0);
+    const [own, setOwn] = React.useState<OutlineStrokeParams | null>(null);
+
+    const setOpen = React.useCallback((section: PathOptionSection) => {
+      session.open = section;
+      setOpenState(section);
+    }, []);
+
+    /** Replace one section of the draft. */
+    const edit = <S extends PathOptionSection>(
+      section: S,
+      patch: Partial<PathOptions[S]>,
+    ) => {
+      const next: PathOptions = {
+        ...draft,
+        [section]: { ...draft[section], ...patch },
+      };
+      session.draft = next;
+      setDraftState(next);
+    };
+
+    // A "…" command names its section through a binding: honour the
+    // request that is already there when the panel mounts (the command
+    // raised a panel that was not open yet) and every later one.
+    React.useEffect(() => {
+      const honour = () => {
+        const focus = pathOptionsFocusOf(host);
+        if (!focus || focus.seq <= session.focusSeq) return;
+        session.focusSeq = focus.seq;
+        setOpen(focus.section);
+      };
+      honour();
+      const sub = host.bindings.onDidChange((name) => {
+        if (name === BIND_PATH_OPTIONS_FOCUS) honour();
+      });
+      return () => sub.dispose();
+    }, [setOpen]);
+
+    // WHAT A RELOAD COSTS (`test/panels/path-options-panel.spec.tsx`):
+    // nothing with no path selected, and ONE property read — the first
+    // selected path's own stroke, which is what the Outline stroke
+    // section shows it will use — otherwise. No document walk: this
+    // panel keeps no records.
+    const reload = usePanelReload(
+      host,
+      "path-options",
+      async ({ live, selection }) => {
+        const paths = selection.filter(supportsPathOps);
+        const first = paths[0];
+        const stroke = first ? await outlineParamsOf(host, first) : null;
+        if (!live()) return;
+        setTargets(paths.length);
+        setOwn(stroke);
+        // Follow the STORED last-used values — only the sections that
+        // changed since this panel last took them, so neither a reload
+        // nor a remount throws away what was typed.
+        const next = followStored();
+        if (next) followDraft(JSON.stringify(session.followed), next);
+      },
+    );
+
+    const run = async (work: Promise<unknown>) => {
+      try {
+        await work;
+      } catch (e) {
+        host.log.warn(`path options panel: ${String(e)}`);
+      }
+      reload();
+    };
+
+    const numberRow = <S extends PathOptionSection>(
+      section: S,
+      key: keyof PathOptions[S] & string,
+      label: string,
+      opts: { step?: number; min?: number; max?: number; disabled?: boolean } = {},
+    ) => (
+      <div style={rowStyle}>
+        <span style={{ flex: 1 }}>{label}</span>
+        <input
+          type="number"
+          step={opts.step ?? 1}
+          min={opts.min}
+          max={opts.max}
+          disabled={opts.disabled}
+          style={inputStyle}
+          data-draw-pathopts-field={`${section}.${key}`}
+          value={draft[section][key] as unknown as number}
+          onChange={(e) =>
+            edit(section, {
+              [key]: Number(e.target.value),
+            } as unknown as Partial<PathOptions[S]>)
+          }
+        />
+      </div>
+    );
+
+    const selectRow = <S extends PathOptionSection>(
+      section: S,
+      key: keyof PathOptions[S] & string,
+      label: string,
+      options: readonly { value: string; label: string }[],
+    ) => (
+      <div style={rowStyle}>
+        <span style={{ flex: 1 }}>{label}</span>
+        <select
+          style={selectStyle}
+          data-draw-pathopts-select={`${section}.${key}`}
+          value={draft[section][key] as unknown as string}
+          onChange={(e) =>
+            edit(section, {
+              [key]: e.target.value,
+            } as unknown as Partial<PathOptions[S]>)
+          }
+        >
+          {options.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </div>
+    );
+
+    const checkRow = <S extends PathOptionSection>(
+      section: S,
+      key: keyof PathOptions[S] & string,
+      label: string,
+    ) => (
+      <div style={rowStyle}>
+        <label style={{ flex: 1 }} htmlFor={`draw-pathopts-${section}-${key}`}>
+          {label}
+        </label>
+        <input
+          id={`draw-pathopts-${section}-${key}`}
+          type="checkbox"
+          data-draw-pathopts-toggle={`${section}.${key}`}
+          checked={draft[section][key] as unknown as boolean}
+          onChange={(e) =>
+            edit(section, {
+              [key]: e.target.checked,
+            } as unknown as Partial<PathOptions[S]>)
+          }
+        />
+      </div>
+    );
+
+    const tokens = (list: readonly string[]) =>
+      list.map((value) => ({ value, label: value }));
+    const withElement = (list: readonly string[]) => [
+      { value: FROM_ELEMENT, label: "From the element" },
+      ...tokens(list),
+    ];
+
+    const fields = (section: PathOptionSection): React.ReactNode => {
+      switch (section) {
+        case "offset":
+          return (
+            <>
+              {numberRow("offset", "delta", "Offset (pt, negative shrinks)", {
+                step: 0.5,
+              })}
+              {selectRow("offset", "join", "Joins", tokens(STROKE_JOINS))}
+              {numberRow("offset", "miterLimit", "Miter limit", {
+                step: 0.5,
+                min: 1,
+                disabled: draft.offset.join !== "miter",
+              })}
+              <div style={mutedStyle} data-draw-pathopts-offset-join-note>
+                {OFFSET_JOIN_NOTE}
+              </div>
+            </>
+          );
+        case "simplify":
+          return numberRow("simplify", "tolerance", "Tolerance (pt)", {
+            step: 0.25,
+            min: 0,
+          });
+        case "outlineStroke":
+          return (
+            <>
+              <div style={mutedStyle} data-draw-pathopts-own>
+                {own
+                  ? `The element's own stroke: ${ownStrokeLabel(own)}.`
+                  : "Each path is outlined at its own stroke unless overridden."}
+              </div>
+              {checkRow("outlineStroke", "overrideWidth", "Override the width")}
+              {numberRow("outlineStroke", "width", "Width (pt)", {
+                step: 0.25,
+                min: 0,
+                disabled: !draft.outlineStroke.overrideWidth,
+              })}
+              {selectRow("outlineStroke", "cap", "Caps", withElement(STROKE_CAPS))}
+              {selectRow("outlineStroke", "join", "Joins", withElement(STROKE_JOINS))}
+              {checkRow(
+                "outlineStroke",
+                "overrideMiterLimit",
+                "Override the miter limit",
+              )}
+              {numberRow("outlineStroke", "miterLimit", "Miter limit", {
+                step: 0.5,
+                min: 1,
+                disabled: !draft.outlineStroke.overrideMiterLimit,
+              })}
+            </>
+          );
+        case "arc":
+          return (
+            <>
+              {numberRow("arc", "cx", "Centre X (pt)")}
+              {numberRow("arc", "cy", "Centre Y (pt)")}
+              {numberRow("arc", "rx", "Radius X (pt)", { min: 0 })}
+              {numberRow("arc", "ry", "Radius Y (pt)", { min: 0 })}
+              {numberRow("arc", "startAngleDeg", "Start angle (°)")}
+              {numberRow("arc", "sweepDeg", "Sweep (°, negative reverses)", {
+                min: -360,
+                max: 360,
+              })}
+              {checkRow("arc", "closed", "Close with the chord")}
+            </>
+          );
+        case "spiral":
+          return (
+            <>
+              {numberRow("spiral", "cx", "Centre X (pt)")}
+              {numberRow("spiral", "cy", "Centre Y (pt)")}
+              {numberRow("spiral", "r0", "Start radius (pt)", { min: 0 })}
+              {numberRow("spiral", "decay", "Radius per turn (×)", {
+                step: 0.05,
+                min: 0,
+              })}
+              {numberRow("spiral", "turns", "Turns", {
+                step: 0.25,
+                min: 0,
+                max: INSERT_SHAPE_LIMITS.maxTurns,
+              })}
+              {numberRow("spiral", "segmentsPerTurn", "Segments per turn", {
+                min: 2,
+                max: INSERT_SHAPE_LIMITS.maxSegmentsPerTurn,
+              })}
+            </>
+          );
+        case "rectGrid":
+          return (
+            <>
+              {numberRow("rectGrid", "x", "Left (pt)")}
+              {numberRow("rectGrid", "y", "Top (pt)")}
+              {numberRow("rectGrid", "width", "Width (pt)", { min: 0 })}
+              {numberRow("rectGrid", "height", "Height (pt)", { min: 0 })}
+              {numberRow("rectGrid", "rows", "Rows", {
+                min: 1,
+                max: INSERT_SHAPE_LIMITS.maxCount,
+              })}
+              {numberRow("rectGrid", "cols", "Columns", {
+                min: 1,
+                max: INSERT_SHAPE_LIMITS.maxCount,
+              })}
+            </>
+          );
+        case "polarGrid":
+          return (
+            <>
+              {numberRow("polarGrid", "cx", "Centre X (pt)")}
+              {numberRow("polarGrid", "cy", "Centre Y (pt)")}
+              {numberRow("polarGrid", "r", "Radius (pt)", { min: 0 })}
+              {numberRow("polarGrid", "rings", "Rings", {
+                min: 0,
+                max: INSERT_SHAPE_LIMITS.maxCount,
+              })}
+              {numberRow("polarGrid", "radials", "Spokes", {
+                min: 0,
+                max: INSERT_SHAPE_LIMITS.maxCount,
+              })}
+            </>
+          );
+      }
+    };
+
+    return (
+      <div
+        style={{ padding: 12 }}
+        data-draw-pathopts-panel={open}
+        data-draw-pathopts-targets={targets}
+      >
+        {PATH_OPTION_SECTIONS.map((section) => {
+          const isOpen = section === open;
+          const needsSelection = NEEDS_SELECTION.has(section);
+          return (
+            <div
+              key={section}
+              data-draw-pathopts-section={section}
+              data-draw-pathopts-open={isOpen ? "true" : "false"}
+            >
+              <button
+                type="button"
+                style={{ ...headerStyle, opacity: isOpen ? 1 : 0.65 }}
+                aria-expanded={isOpen}
+                data-draw-pathopts-header={section}
+                onClick={() => setOpen(section)}
+              >
+                <span style={{ flex: 1 }}>
+                  {PATH_OPTION_SECTION_TITLES[section]}
+                </span>
+                <span aria-hidden>{isOpen ? "–" : "+"}</span>
+              </button>
+              {isOpen && (
+                <div style={{ paddingBottom: 8 }}>
+                  {fields(section)}
+                  {needsSelection && targets === 0 && (
+                    <div style={mutedStyle} data-draw-pathopts-needs-selection>
+                      Select a path first.
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    style={applyStyle}
+                    data-draw-pathopts-apply={section}
+                    disabled={needsSelection && targets === 0}
+                    onClick={() =>
+                      void run(applyPathOptions(host, section, draft[section]))
+                    }
+                  >
+                    {needsSelection
+                      ? `Apply to ${targets} path${targets === 1 ? "" : "s"}`
+                      : "Insert"}
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        <div style={noteStyle} data-draw-pathopts-note>
+          {PATH_OPTIONS_PANEL_NOTE}
+        </div>
+      </div>
+    );
+  };
+  return {
+    title: "Path options",
+    component: Component,
+    defaultDock: "right",
+  };
+}

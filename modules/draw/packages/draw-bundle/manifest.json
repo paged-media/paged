@@ -64,7 +64,8 @@
       "media.paged.draw.panel.pattern",
       "media.paged.draw.panel.repeat",
       "media.paged.draw.panel.blend",
-      "media.paged.draw.panel.objectsOnPath"
+      "media.paged.draw.panel.objectsOnPath",
+      "media.paged.draw.panel.pathOptions"
     ],
     "commands": [
       "media.paged.draw.command.strokeDashSolid",
@@ -76,6 +77,13 @@
       "media.paged.draw.command.outlineStroke",
       "media.paged.draw.command.offsetPath",
       "media.paged.draw.command.simplifyPath",
+      "media.paged.draw.command.offsetPathOptions",
+      "media.paged.draw.command.simplifyPathOptions",
+      "media.paged.draw.command.outlineStrokeOptions",
+      "media.paged.draw.command.insertArcOptions",
+      "media.paged.draw.command.insertSpiralOptions",
+      "media.paged.draw.command.insertRectGridOptions",
+      "media.paged.draw.command.insertPolarGridOptions",
       "media.paged.draw.command.joinEndpoints",
       "media.paged.draw.command.closePath",
       "media.paged.draw.command.averageEndpoints",

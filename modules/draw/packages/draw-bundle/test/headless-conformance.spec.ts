@@ -112,10 +112,11 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
       // VERBATIM through the harness's registration hook. Both are
       // honest — the registry really got a panel; the log keeps the
       // schema so conformance can assert it. Stroke first, then fill
-      // (Phase 2d), then the EIGHT React panels (appearance, graphic
+      // (Phase 2d), then the NINE React panels (appearance, graphic
       // styles, symbols, live paint, pattern, repeat, blend,
-      // objects-on-path — Layers is retired). Then the ninety-two
-      // commands in registration order, then the W3.2 edit context.
+      // objects-on-path, path options — Layers is retired). Then the
+      // ninety-nine commands in registration order, then the W3.2 edit
+      // context.
       // (Pen is a core built-in.)
       expect(harness.contributions.map((c) => c.kind)).toEqual([
         // Three anchor editors + the pro set (Curvature, Pencil,
@@ -182,6 +183,9 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         // The OBJECTS ON PATH panel (§16.3's distribution form + the
         // note that this row MOVES your objects and creates none).
         "panel",
+        // The PATH OPTIONS panel (the parameters behind the menu's "…":
+        // Offset / Simplify / Outline stroke / the four Insert shapes).
+        "panel",
         // B-12 — the stroke dash-preset commands (Solid / Dashed /
         // Dotted / Dash-dot).
         "command",
@@ -200,6 +204,16 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "command",
         // Phase 4c — Outline stroke / Offset path / Simplify (v30
         // kernel ops).
+        "command",
+        "command",
+        "command",
+        // PATH OPTIONS — the seven "…" commands (Offset / Simplify /
+        // Outline stroke / Arc / Spiral / Rect grid / Polar grid): each
+        // raises the panel at its section and mutates nothing.
+        "command",
+        "command",
+        "command",
+        "command",
         "command",
         "command",
         "command",

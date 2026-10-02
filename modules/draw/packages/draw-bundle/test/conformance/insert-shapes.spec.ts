@@ -34,6 +34,19 @@ import {
   rectGridDefaultTables,
   polarGridDefaultTables,
   insertTablesMutationFor,
+  arcTablesFor,
+  spiralTablesFor,
+  rectGridTablesFor,
+  polarGridTablesFor,
+  arcParamsFrom,
+  spiralParamsFrom,
+  rectGridParamsFrom,
+  polarGridParamsFrom,
+  ARC_PARAM_DEFAULTS,
+  SPIRAL_PARAM_DEFAULTS,
+  RECT_GRID_PARAM_DEFAULTS,
+  POLAR_GRID_PARAM_DEFAULTS,
+  INSERT_SHAPE_LIMITS,
   INSERT_ARC_COMMAND_ID,
   INSERT_SPIRAL_COMMAND_ID,
   INSERT_RECT_GRID_COMMAND_ID,
@@ -106,6 +119,55 @@ describe("draw conformance — insert-shape commands (wave 2)", () => {
     // Rect grid 4×4 → 5 + 5 lines; polar 3 rings + 6 radials.
     expect(rectGridDefaultTables()).toHaveLength(10);
     expect(polarGridDefaultTables()).toHaveLength(9);
+  });
+
+  it("the payload: none = the v0 table EXACTLY; the defaults typed in degrees = the same geometry", () => {
+    expect(arcTablesFor(undefined)).toEqual([arcDefaultTable()]);
+    expect(spiralTablesFor(undefined)).toEqual([spiralDefaultTable()]);
+    expect(rectGridTablesFor(undefined)).toEqual(rectGridDefaultTables());
+    expect(polarGridTablesFor(undefined)).toEqual(polarGridDefaultTables());
+
+    const typed = arcTablesFor({ ...ARC_PARAM_DEFAULTS })[0];
+    const v0 = arcDefaultTable();
+    expect(typed.anchors).toHaveLength(v0.anchors.length);
+    typed.anchors.forEach((a, i) => {
+      for (const k of ["anchor", "left", "right"] as const) {
+        expect(a[k][0]).toBeCloseTo(v0.anchors[i][k][0], 9);
+        expect(a[k][1]).toBeCloseTo(v0.anchors[i][k][1], 9);
+      }
+    });
+    expect(spiralTablesFor({ ...SPIRAL_PARAM_DEFAULTS })).toEqual([spiralDefaultTable()]);
+    expect(rectGridTablesFor({ ...RECT_GRID_PARAM_DEFAULTS })).toEqual(
+      rectGridDefaultTables(),
+    );
+    expect(polarGridTablesFor({ ...POLAR_GRID_PARAM_DEFAULTS })).toEqual(
+      polarGridDefaultTables(),
+    );
+  });
+
+  it("the payload: each key overrides one parameter, garbage falls back, counts are clamped", () => {
+    expect(arcParamsFrom({ rx: 7, sweepDeg: "lots", closed: 1 })).toEqual({
+      ...ARC_PARAM_DEFAULTS,
+      rx: 7,
+    });
+    expect(rectGridParamsFrom({ rows: 2.9, cols: 1e6 })).toMatchObject({
+      rows: 2,
+      cols: INSERT_SHAPE_LIMITS.maxCount,
+    });
+    expect(rectGridTablesFor({ rows: 1e6, cols: 1 })).toHaveLength(
+      INSERT_SHAPE_LIMITS.maxCount + 1 + 2,
+    );
+    expect(polarGridParamsFrom({ rings: -3, radials: 0 })).toMatchObject({
+      rings: 0,
+      radials: 0,
+    });
+    // Nothing to draw: an empty list, never a throw.
+    expect(polarGridTablesFor({ rings: 0, radials: 0 })).toEqual([]);
+    expect(arcTablesFor({ rx: -1 })[0].anchors).toEqual([]);
+    expect(spiralParamsFrom({ segmentsPerTurn: 1, turns: 999 })).toMatchObject({
+      segmentsPerTurn: 2,
+      turns: INSERT_SHAPE_LIMITS.maxTurns,
+    });
   });
 
   describe("against the real engine (F1)", () => {
