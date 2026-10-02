@@ -62,6 +62,90 @@ export function linePoints(from: Pt, to: Pt, samples: number): Pt[] {
   return out;
 }
 
+/** `samples` points on an Archimedean spiral around `centre`, radius
+ *  growing linearly from `radius.from` to `radius.to` over `turns`
+ *  turns, evenly spaced in ANGLE — so the gap between consecutive
+ *  samples grows with the radius (`2π · r · turns / samples`). Pick
+ *  `radius.from` so the tightest gap clears the tool's decimation floor
+ *  when the scenario wants every sample kept: 0.5 pt for the pencil and
+ *  the brushes, 3 px for the lasso.
+ *
+ *  The freehand shape that is not a straight line: it never revisits a
+ *  point, it turns continuously (so RDP keeps most of it), and it fits a
+ *  page at any length. */
+export function spiralPoints(
+  centre: Pt,
+  radius: { from: number; to: number },
+  turns: number,
+  samples: number,
+): Pt[] {
+  const out: Pt[] = [];
+  for (let i = 0; i < samples; i++) {
+    const t = samples === 1 ? 0 : i / (samples - 1);
+    const a = t * turns * Math.PI * 2;
+    const r = radius.from + (radius.to - radius.from) * t;
+    out.push([centre[0] + r * Math.cos(a), centre[1] + r * Math.sin(a)]);
+  }
+  return out;
+}
+
+/** A linear congruential generator (the Numerical Recipes constants):
+ *  `next()` answers a float in [0, 1). Deterministic by construction —
+ *  the same seed is the same stream on every machine, which is the only
+ *  kind of "random" a budget may use. */
+export function lcg(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 4294967296;
+  };
+}
+
+/** The seed every jittered stream in the budgets uses. */
+export const FREEHAND_SEED = 0x5eed;
+
+/** One sample of a pen stroke: where, and how hard. */
+export interface FreehandSample {
+  point: Pt;
+  pressure: number;
+}
+
+/** `samples` points of a HAND-DRAWN stroke: a slow sine wave from `from`
+ *  to `to`, every sample knocked off the curve by up to `jitter` pt in
+ *  each axis and given its own pressure in [0.2, 0.9) — what a tablet
+ *  actually sends. Seeded (see {@link lcg}), so it is the same stroke on
+ *  every run.
+ *
+ *  Unlike {@link spiralPoints} the samples are NOT evenly spaced: jitter
+ *  puts some of them closer than a tool's decimation floor, so a tool
+ *  keeps fewer samples than it was sent. That is the point — it is the
+ *  case the even streams cannot reach. */
+export function jitteredFreehand(
+  from: Pt,
+  to: Pt,
+  samples: number,
+  options: { jitter?: number; amplitude?: number; waves?: number; seed?: number } = {},
+): FreehandSample[] {
+  const jitter = options.jitter ?? 1.5;
+  const amplitude = options.amplitude ?? 60;
+  const waves = options.waves ?? 3;
+  const next = lcg(options.seed ?? FREEHAND_SEED);
+  const out: FreehandSample[] = [];
+  for (let i = 0; i < samples; i++) {
+    const t = samples === 1 ? 0 : i / (samples - 1);
+    const x = from[0] + (to[0] - from[0]) * t;
+    const y =
+      from[1] +
+      (to[1] - from[1]) * t +
+      amplitude * Math.sin(t * waves * Math.PI * 2);
+    out.push({
+      point: [x + (next() * 2 - 1) * jitter, y + (next() * 2 - 1) * jitter],
+      pressure: 0.2 + next() * 0.7,
+    });
+  }
+  return out;
+}
+
 /** The two ways a stream reaches a handler, and they measure different
  *  things:
  *

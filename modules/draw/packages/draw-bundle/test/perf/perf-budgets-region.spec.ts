@@ -1,0 +1,316 @@
+/*
+ * This file is part of paged (https://paged.media).
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// PERF BUDGETS — the pointer tools that READ the document as they move:
+// the two region tools on the arrangements the small fixtures cannot
+// reach, and the Measure tool on a long path. The rules are in
+// `perf-budgets.spec.ts` and bind here too: a budget is a COUNT, it is
+// the MEASURED value, it is only ever lowered, and every scenario says
+// which expensive path it exercises.
+//
+// THE DOCUMENT is the gesture workload (`./workload.ts`), 518 leaves:
+// 500 plain shapes, a 12-input arrangement of 133 faces (the largest the
+// engine enumerates), a two-input pair of ~300 faces (past its 256-face
+// cap), a 1 000-anchor comb and a 10 000-anchor spiral.
+
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+
+import {
+  applyMakeLivePaintGroup,
+  createLivePaintBucketHandler,
+  createMeasureHandler,
+  createShapeBuilderHandler,
+} from "../../src";
+import {
+  BUDGET_TIMEOUT_MS,
+  countingHost,
+  report,
+  type WorkLog,
+} from "./counting-host";
+import {
+  drive,
+  linePoints,
+  pointerAt,
+  settle,
+  type Pacing,
+  type Pt,
+} from "./pointer-stream";
+import {
+  ARRANGEMENT_INPUTS,
+  COMB_BODY_POINT,
+  FACE_CAP_ANCHORS,
+  FACE_CAP_SWEEP,
+  buildGestureWorkload,
+  leafIds,
+  restoreParts,
+  snapshotParts,
+  spiralEnd,
+  undoMark,
+  undoStepsSince,
+  type Workload,
+} from "./workload";
+
+vi.setConfig({ testTimeout: BUDGET_TIMEOUT_MS });
+
+describe("perf budgets — the tools that read as they move", () => {
+  let w: Workload;
+
+  beforeAll(async () => {
+    w = await buildGestureWorkload();
+    // Nothing was refused, so every count below is over the document
+    // the workload describes — not over a shorter one. Five batches.
+    expect(w.refusals).toEqual([]);
+    expect(w.batches).toBe(5);
+    expect(await leafIds(w.h)).toHaveLength(518);
+  }, 120_000);
+  afterAll(() => w?.h.dispose());
+
+  // COVERS: the FACE-CAP lane of `handlers/planar-regions.ts`. Two
+  // inputs that divide into ~300 faces: the engine refuses to enumerate
+  // past 256, the cache can never warm, and the hover is left with the
+  // point query. Each one re-reads the frontmost input's whole anchor
+  // table to learn a transform.
+  describe("Shape Builder — a 100-move hover over an arrangement past the 256-face cap", () => {
+    const MOVES = 100;
+
+    const hover = async (pacing: Pacing): Promise<WorkLog> => {
+      await w.h.host.selection.set(w.faceCap);
+      const { host, work } = countingHost(w.h.host);
+      const handler = createShapeBuilderHandler(host);
+      handler.onActivate(undefined as never);
+      await settle();
+      work.reset();
+      await drive(
+        linePoints(FACE_CAP_SWEEP[0], FACE_CAP_SWEEP[1], MOVES).map((p) =>
+          pointerAt(w.pageId, p),
+        ),
+        (e) => handler.onPointerMove(e),
+        pacing,
+      );
+      const counted = work.snapshot();
+      handler.onDeactivate("switch" as never);
+      await w.h.host.selection.set([]);
+      return report(`shape builder face cap, ${pacing}`, counted);
+    };
+
+    it("the scenario is what it says: the engine refuses the enumeration, in its own words", async () => {
+      expect(w.faceCap).toHaveLength(2);
+      const refused = await w.h.host.document.planarRegions(w.faceCap);
+      expect(refused.found).toBe(false);
+      expect(refused.reason).toBe(
+        "planar arrangement resolved more than 256 faces; refine the selection",
+      );
+    });
+
+    it("paced: the engine keeps up, so every move is a point query — and an anchor-table read", async () => {
+      const work = await hover("paced");
+      expect(work.mutations).toEqual([]);
+      expect(work.count("document.hitTest")).toBe(0);
+
+      // One refused enumeration, then a point query per move: with no
+      // face list to test against locally, that is what a hover over
+      // this arrangement costs. The floor, short of an engine change.
+      expect(work.count("document.planarRegions")).toBe(101);
+      // The frontmost input's anchor table, re-read for every one of
+      // them, to learn a transform that cannot change mid-hover.
+      // TARGET 1.
+      expect(work.count("document.pathAnchors")).toBe(101);
+      // 101 × the comb's 200 anchors, across the door, for one matrix.
+      // TARGET 200.
+      expect(work.anchorsRead).toBe(101 * FACE_CAP_ANCHORS);
+      // The machine's publish, then the answer's. TARGET 100.
+      expect(work.previews()).toBe(200);
+    });
+
+    it("burst: the newest-wins guard holds here too — three queries, not a hundred", async () => {
+      const work = await hover("burst");
+      expect(work.mutations).toEqual([]);
+      expect(work.count("document.hitTest")).toBe(0);
+
+      // The refused enumeration, the first sample, the last one. As
+      // found on 01603ab, before the guard: 101.
+      expect(work.count("document.planarRegions")).toBe(3);
+      // Still one table read per query. TARGET 1.
+      expect(work.count("document.pathAnchors")).toBe(3);
+      expect(work.anchorsRead).toBe(3 * FACE_CAP_ANCHORS);
+      expect(work.previews()).toBe(101);
+    });
+  });
+
+  // COVERS: `handlers/live-paint.ts` over the largest arrangement the
+  // engine will enumerate — 12 inputs, 133 faces — and the bucket's
+  // click, which is `fillLivePaintFaces`: a link walk of the whole
+  // document, the arrangement derived again, a tree diff, two batches.
+  describe("Live Paint bucket — a 200-move hover across a 12-input arrangement, and a click", () => {
+    const MOVES = 200;
+
+    beforeAll(async () => {
+      await w.h.host.selection.set(w.arrangement);
+      const group = await applyMakeLivePaintGroup(w.h.host, { name: "Perf" });
+      expect(group?.inputs).toHaveLength(ARRANGEMENT_INPUTS);
+      await w.h.host.selection.set([]);
+    });
+
+    /** A bucket with one member selected (the tool resolves its group
+     *  from it), activated and settled. */
+    const arm = async (): Promise<{
+      handler: ReturnType<typeof createLivePaintBucketHandler>;
+      work: WorkLog;
+    }> => {
+      await w.h.host.selection.set([w.arrangement[0]!]);
+      const { host, work } = countingHost(w.h.host);
+      const handler = createLivePaintBucketHandler(host);
+      handler.onActivate(undefined as never);
+      await settle();
+      work.reset();
+      return { handler, work };
+    };
+
+    const hover = async (pacing: Pacing): Promise<WorkLog> => {
+      const { handler, work } = await arm();
+      await drive(
+        linePoints([15, 11], [280, 276], MOVES).map((p) => pointerAt(w.pageId, p)),
+        (e) => handler.onPointerMove(e),
+        pacing,
+      );
+      const counted = work.snapshot();
+      handler.onDeactivate("switch" as never);
+      await w.h.host.selection.set([]);
+      return report(`live paint hover, ${pacing}`, counted);
+    };
+
+    it("the arrangement is the largest the engine enumerates: 12 inputs, 133 faces", async () => {
+      const all = await w.h.host.document.planarRegions(w.arrangement);
+      expect(all.found).toBe(true);
+      expect(all.complete).toBe(true);
+      expect(all.faces).toHaveLength(133);
+    });
+
+    // SUSPICION CONFIRMED, AND ALREADY FIXED. Measured on 01603ab, where
+    // this file was started, the burst asked for this 12-input
+    // arrangement 201 times (and read the frontmost table 201 times,
+    // published 401 previews). 39f923d gave the shared seam a
+    // newest-wins guard for hovers; the same stream is now the cold-cache
+    // floor at either pacing, so the two cases are pinned as one.
+    for (const pacing of ["paced", "burst"] as const) {
+      it(`hover, ${pacing}: one enumeration, one cold-start point query, nothing per move`, async () => {
+        const work = await hover(pacing);
+        expect(work.mutations).toEqual([]);
+        expect(work.count("document.hitTest")).toBe(0);
+        expect(work.count("document.planarRegions")).toBe(2);
+        expect(work.count("document.pathAnchors")).toBe(2);
+        // One preview and one binding publish per move, plus the one the
+        // arrangement landing adds. Fine as it is.
+        expect(work.previews()).toBe(201);
+        expect(work.count("bindings.publish")).toBe(201);
+      });
+    }
+
+    it("a click paints one face — and walks the whole document to do it", async () => {
+      const parts = await snapshotParts(w.h);
+      const mark = await undoMark(w);
+      const { handler, work } = await arm();
+      const at = pointerAt(w.pageId, [100, 100]);
+      handler.onPointerDown(at);
+      await settle();
+      handler.onPointerUp(at);
+      await settle();
+      const counted = work.snapshot();
+      handler.onDeactivate("switch" as never);
+      const undoSteps = await undoStepsSince(w, mark);
+      await restoreParts(w.h, parts);
+      await w.h.host.selection.set([]);
+      report("live paint click", counted, { undoSteps });
+
+      // Insert, then paint-and-link. TARGET 1 batch, 1 undo step — the
+      // `bindCreated` conversion this flow has not had yet.
+      expect(counted.mutations).toEqual([
+        { op: "batch", ops: 1 },
+        { op: "batch", ops: 3 },
+      ]);
+      expect(undoSteps).toBe(2);
+      // LINK DISCOVERY: one metadata read for every leaf of the document
+      // — 518 of them, 12 of which belong to this group — looking for a
+      // stale fill of this face. There is none. TARGET 0: the recipe can
+      // name its own fills.
+      expect(counted.count("document.getMetadata")).toBe(518);
+      // The link walk's tree, then one either side of the insert to
+      // learn what it created. TARGET 0.
+      expect(counted.count("document.tree")).toBe(3);
+      // The press asks twice (point query + enumeration); the commit
+      // then derives the same arrangement a third time. TARGET 2.
+      expect(counted.count("document.planarRegions")).toBe(3);
+    });
+  });
+
+  // COVERS: `handlers/measure.ts` — the origin snap goes through the raw
+  // `editor.client.send` escape hatch, and reads the hit path's anchors
+  // first to learn its transform.
+  describe("Measure — one 200-move drag that starts on a long path", () => {
+    const MOVES = 200;
+    const TO: Pt = [560, 700];
+
+    const measure = async (scenario: string, from: Pt): Promise<WorkLog> => {
+      await w.h.host.selection.set([]);
+      const { host, work } = countingHost(w.h.host);
+      const handler = createMeasureHandler(host);
+      handler.onActivate(undefined as never);
+      work.reset();
+      handler.onPointerDown(pointerAt(w.pageId, from));
+      await drive(
+        linePoints(from, TO, MOVES).map((p) => pointerAt(w.pageId, p)),
+        (e) => handler.onPointerMove(e),
+        "burst",
+      );
+      handler.onPointerUp(pointerAt(w.pageId, TO));
+      await settle();
+      const counted = work.snapshot();
+      handler.onDeactivate("switch" as never);
+      return report(scenario, counted);
+    };
+
+    it("from the 10 000-anchor spiral", async () => {
+      const work = await measure("measure from spiral", spiralEnd());
+      expect(work.mutations).toEqual([]);
+
+      // SUSPICION WRONG: the raw send is ONE per drag — the origin snap
+      // on pointer-down — not one per move. Nothing to lower.
+      expect(work.count("editor.client.send")).toBe(1);
+      expect(work.count("editor.client.send:requestNearestPathPoint")).toBe(1);
+      expect(work.count("document.hitTest")).toBe(1);
+      // What the snap does cost: the hit path's WHOLE anchor table, read
+      // for its transform alone — and the hit-test reply it just got
+      // already carries `itemTransform`. TARGET 0 reads, 0 anchors.
+      expect(work.count("document.pathAnchors")).toBe(1);
+      expect(work.anchorsRead).toBe(10_000);
+      // One preview and one readout publish per pointer event (the snap
+      // landing adds one). Fine as it is.
+      expect(work.previews()).toBe(203);
+      expect(work.count("bindings.publish")).toBe(203);
+    });
+
+    it("from the 1 000-anchor comb: the same drag, a tenth of the anchors", async () => {
+      const work = await measure("measure from comb", COMB_BODY_POINT);
+      expect(work.count("editor.client.send")).toBe(1);
+      expect(work.count("document.pathAnchors")).toBe(1);
+      // The read scales with the path; what the tool needs from it does
+      // not. TARGET 0.
+      expect(work.anchorsRead).toBe(1000);
+    });
+  });
+});
