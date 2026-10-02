@@ -61,7 +61,12 @@ export interface OracleAnchor {
 export interface OraclePath {
   closed: boolean;
   anchors: OracleAnchor[];
+  /** RGB fill, 0–255. Absent = black. Only the Pathfinder region verbs
+   *  care: Merge unites what has the SAME fill. */
+  fill?: Rgb;
 }
+
+export type Rgb = [number, number, number];
 
 export type Winding = "cw" | "ccw" | "none";
 
@@ -77,6 +82,15 @@ export interface OracleMeasuredPath extends OraclePath {
   winding: Winding;
   areaSignedApp?: number;
   polarity?: string;
+  /** Paint of the RESULT (recorded from the pathfinder-region probe on):
+   *  `PathItem.filled` / `.stroked`, and the RGB fill when filled. */
+  filled?: boolean;
+  stroked?: boolean;
+  strokeWidth?: number;
+  stroke?: Rgb;
+  /** `PathItem.evenodd` (recorded from the compound-path probe on):
+   *  false = non-zero winding, where direction decides what is a hole. */
+  evenodd?: boolean;
   /** Index of the compound path this subpath belongs to, when the
    *  result is a compound path; absent for a plain path. */
   compound?: number;
@@ -110,12 +124,17 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 export const oracleFixturePath = (probe: string): string =>
   resolve(HERE, "../fixtures/oracle", `${probe}.illustrator.json`);
 
-/** Load a recorded answer, or `null` when it has NOT been recorded yet.
- *  A fixture that exists but is malformed THROWS — a half-written
- *  recording must never read as "nothing to compare". */
-export function loadOracle<P>(probe: string): OracleFixture<P> | null {
+/** Load a recorded answer. A spec exists only for a probe that HAS been
+ *  recorded, so a missing fixture THROWS (a deleted recording must not
+ *  turn its replay into nothing), and so does a malformed one. */
+export function loadOracle<P>(probe: string): OracleFixture<P> {
   const path = oracleFixturePath(probe);
-  if (!existsSync(path)) return null;
+  if (!existsSync(path)) {
+    throw new Error(
+      `${path} is missing — record it with scripts/illustrator/run-probe.sh ` +
+        `scripts/illustrator/probes/${probe}.jsx <that path> (see scripts/illustrator/README.md)`,
+    );
+  }
   const parsed = JSON.parse(readFileSync(path, "utf8")) as OracleFixture<P>;
   if (parsed.fixture !== probe) {
     throw new Error(
@@ -266,6 +285,121 @@ export function isCurvedSegment(a: OracleAnchor, b: OracleAnchor): boolean {
   return off(p1) > STRAIGHT_TOL || off(p2) > STRAIGHT_TOL;
 }
 
+/** One path as a closed ring of points: every curved cubic cut into
+ *  `steps` chords. 128 chords put a 50 pt quarter arc within 0.001 pt of
+ *  itself. */
+export function flatten(path: OraclePath, steps = 128): Vec2[] {
+  const ring: Vec2[] = [];
+  const n = path.anchors.length;
+  for (let i = 0; i < n; i++) {
+    const a = path.anchors[i];
+    ring.push([a.anchor[0], a.anchor[1]]);
+    if (i === n - 1 && !path.closed) break;
+    const b = path.anchors[(i + 1) % n];
+    if (!isCurvedSegment(a, b)) continue;
+    const [p0, p1, p2, p3] = segment(a, b);
+    for (let k = 1; k < steps; k++) {
+      const t = k / steps;
+      ring.push([
+        cubicAt(p0[0], p1[0], p2[0], p3[0], t),
+        cubicAt(p0[1], p1[1], p2[1], p3[1], t),
+      ]);
+    }
+  }
+  return ring;
+}
+
+/** Length of a path's line work: the flattened ring's chords, WITHOUT the
+ *  closing chord when the path is open. What two Outline results are
+ *  compared on — they cut the same edges into different pieces. */
+export function pathLength(path: OraclePath): number {
+  const ring = flatten(path);
+  let sum = 0;
+  const n = path.closed ? ring.length : ring.length - 1;
+  for (let i = 0; i < n; i++) {
+    const a = ring[i];
+    const b = ring[(i + 1) % ring.length];
+    sum += Math.hypot(b[0] - a[0], b[1] - a[1]);
+  }
+  return sum;
+}
+
+export type FillRule = "nonzero" | "evenodd";
+
+/** The area a fill of `paths` — taken together, as ONE compound shape —
+ *  actually paints. This is the number to compare when a result may
+ *  overlap itself or carry holes: the engine's stroke expansion keeps its
+ *  inner-join loops (correct under its non-zero fill), so its signed area
+ *  counts those loops twice, while Illustrator hands back a clean
+ *  outline. Painted area is what a user sees in both.
+ *
+ *  EXACT for the flattened rings, not sampled: the plane is cut into
+ *  horizontal slabs at every vertex AND at every crossing of two edges, so
+ *  inside a slab no edge starts, ends or swaps order and the painted
+ *  width is linear in y — one midpoint evaluation per slab integrates it
+ *  exactly. (A fixed scanline count was tried first and was off by up to
+ *  0.8 pt² on a shape with a 100 pt horizontal edge.) */
+export function paintedArea(
+  paths: readonly OraclePath[],
+  rule: FillRule = "nonzero",
+): number {
+  type Edge = { x0: number; y0: number; x1: number; y1: number; dir: number };
+  const edges: Edge[] = [];
+  const cuts: number[] = [];
+  for (const p of paths) {
+    const ring = flatten(p);
+    for (let i = 0; i < ring.length; i++) {
+      const a = ring[i];
+      const b = ring[(i + 1) % ring.length];
+      cuts.push(a[1]);
+      if (a[1] === b[1]) continue; // horizontal: never crosses a slab
+      edges.push(
+        a[1] < b[1]
+          ? { x0: a[0], y0: a[1], x1: b[0], y1: b[1], dir: 1 }
+          : { x0: b[0], y0: b[1], x1: a[0], y1: a[1], dir: -1 },
+      );
+    }
+  }
+  if (edges.length === 0) return 0;
+  for (let i = 0; i < edges.length; i++) {
+    for (let j = i + 1; j < edges.length; j++) {
+      const e = edges[i];
+      const f = edges[j];
+      const lo = Math.max(e.y0, f.y0);
+      const hi = Math.min(e.y1, f.y1);
+      if (lo >= hi) continue;
+      // x as a function of y on each edge; where do they meet?
+      const se = (e.x1 - e.x0) / (e.y1 - e.y0);
+      const sf = (f.x1 - f.x0) / (f.y1 - f.y0);
+      if (se === sf) continue;
+      const y = (f.x0 - sf * f.y0 - (e.x0 - se * e.y0)) / (se - sf);
+      if (y > lo && y < hi) cuts.push(y);
+    }
+  }
+  cuts.sort((a, b) => a - b);
+  let area = 0;
+  for (let c = 0; c + 1 < cuts.length; c++) {
+    const height = cuts[c + 1] - cuts[c];
+    if (height <= 0) continue;
+    const y = (cuts[c] + cuts[c + 1]) / 2;
+    const hits: { x: number; dir: number }[] = [];
+    for (const e of edges) {
+      if (y < e.y0 || y >= e.y1) continue;
+      hits.push({ x: e.x0 + ((y - e.y0) / (e.y1 - e.y0)) * (e.x1 - e.x0), dir: e.dir });
+    }
+    hits.sort((p, q) => p.x - q.x);
+    let winding = 0;
+    let width = 0;
+    for (let k = 0; k < hits.length - 1; k++) {
+      winding += hits[k].dir;
+      const inside = rule === "nonzero" ? winding !== 0 : (k + 1) % 2 === 1;
+      if (inside) width += hits[k + 1].x - hits[k].x;
+    }
+    area += width * height;
+  }
+  return area;
+}
+
 /** What two engines are compared on. */
 export interface ShapeSummary {
   /** Number of paths (subpaths). */
@@ -280,6 +414,10 @@ export interface ShapeSummary {
    *  compound path encloses (holes subtract). Equals `area` for one
    *  path. */
   netArea: number;
+  /** What a NON-ZERO fill of all the paths together paints (see
+   *  `paintedArea`). Equals `netArea` for a clean, correctly wound
+   *  result; differs when a result overlaps itself. */
+  fillArea: number;
   /** Union bounds `[minX, minY, maxX, maxY]`. */
   bounds: [number, number, number, number];
   /** Winding per path, in path order. */
@@ -322,6 +460,7 @@ export function summarize(paths: readonly OraclePath[]): ShapeSummary {
     curvedSegments,
     area,
     netArea: Math.abs(net),
+    fillArea: paintedArea(paths),
     bounds,
     windings,
     allClosed: paths.every((p) => p.closed),

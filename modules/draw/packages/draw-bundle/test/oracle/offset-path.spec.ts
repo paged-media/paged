@@ -20,47 +20,74 @@
 // miterLimit }` against two references:
 //
 //   1. THE JOIN'S DEFINITION (closed form). A miter, round or bevel offset
-//      of a convex polygon has an exact area and exact bounds; they need no
-//      application to state, so this half runs everywhere, today.
-//   2. ADOBE ILLUSTRATOR, recorded by
+//      of a convex polygon has an exact area and exact bounds.
+//   2. ADOBE ILLUSTRATOR 30.1.0, recorded 2026-10-02 by
 //        scripts/illustrator/run-probe.sh scripts/illustrator/probes/offset-path.jsx \
 //          packages/draw-bundle/test/fixtures/oracle/offset-path.illustrator.json
 //      and replayed here. CI never drives Illustrator.
 //
-// STATUS 2026-10-02 — the Illustrator half is NOT RECORDED. macOS had not
-// been allowed to let the recording shell send Apple events to Illustrator
-// (an unanswered Automation consent prompt; see scripts/illustrator/
-// README.md), so there is no fixture and the replay below is an `it.todo`,
-// not a pass. The closed-form half is real and already shows the engine's
-// one difference:
+// WHAT ILLUSTRATOR SAID, against the definition (17 cases):
 //
-//   THE ENGINE IGNORES `join` AND `miterLimit`. Every OUTWARD corner comes
-//   back BEVELLED whatever join was asked for (core `paged-mutate`
-//   `offset_closed_path` takes `_join` / `_miter_limit` and says so: "round/
-//   miter joins are a follow-up"). Measured, engine vs definition:
+//   * It IS the definition, to the digit, for every miter, bevel and inward
+//     case: areas 9600 / 9400 / 3200 / 9120 / 2400 exactly, bounds exactly.
+//   * MITER LIMIT is the stroke definition: the corner is mitered while
+//     1/sin(angle/2) <= limit and BEVELLED past it. The triangle's sharpest
+//     corner has ratio 3.1623 — limit 3.2 miters it (area 9600), limit 3.1
+//     bevels it (9330), limit 2 also bevels the 2.2361 corner (9170).
+//   * ROUND joins are cubic arcs with the standard handle (4/3)·tan(θ/4)·r:
+//     one cubic for a 90° corner, TWO equal cubics for the triangle's 126.87°
+//     and 143.13° corners. That approximation bulges: the rectangle measures
+//     9514.249 where the definition is 9514.159 (+0.0009 %), and the
+//     triangle's right bound is 230.0007, not 230. Both are far inside the
+//     tolerances; they are pinned below so a re-recording that changes them
+//     is noticed.
+//   * DIRECTION IS NORMALISED. Every result is CLOCKWISE on the page
+//     (`polarity` positive, Illustrator's own `area` positive) whether the
+//     input was clockwise or counter-clockwise, outward or inward.
+//   * One thing no definition predicts: `tri-round-out` has 9 anchors, not
+//     8. The path STARTS at its lowest point, which falls inside an arc, and
+//     the arc is split there.
+//   * A straight edge is two corner points with collapsed handles.
 //
-//     case             engine area   definition    engine bounds        definition bounds
-//     rect-miter-out      9400         9600        [90,90,210,170]      [90,90,210,170]
-//     rect-round-out      9400         9514.159    [90,90,210,170]      [90,90,210,170]
-//     tri-miter-out       9120         9600        [90,90,226,198]      [90,90,250,210]
-//     tri-round-out       9120         9314.159    [90,90,226,198]      [90,90,230,200]
+// WHAT THE ENGINE DOES, against Illustrator (engine pin: canvas-wasm 0.64.0):
 //
-//   Classification: DEFECT (a wire parameter that is accepted and not
-//   honoured), not a convention — a bevel is not a miter under any reading
-//   of a miter limit: the triangle's sharpest corner has a miter ratio of
-//   3.16, under the limit of 4. The four cases are `it.fails` below, so
-//   they stay visible and flip RED the day the engine honours `join`.
+//   DEFECT — `join` and `miterLimit` are IGNORED. Every outward corner is a
+//   bevel (core `offset_closed_path` took `_join` / `_miter_limit`). Engine
+//   vs Illustrator:
 //
-//   The other eight cases agree exactly: bevel outward, and every inward
-//   offset (an inward offset of a convex shape has no joins to choose).
+//     case                      engine    Illustrator   engine bounds      Illustrator bounds
+//     rect-miter-out             9400       9600        [90,90,210,170]    same
+//     rect-round-out             9400       9514.249    [90,90,210,170]    same
+//     rectccw-miter-out          9400       9600        [90,90,210,170]    same
+//     tri-miter-out              9120       9600        [90,90,226,198]    [90,90,250,210]
+//     tri-round-out              9120       9314.194    [90,90,226,198]    [90,90,230.0007,200]
+//     tri-miter-out-limit2       9120       9170        [90,90,226,198]    same
+//     tri-miter-out-limit3_1     9120       9330        [90,90,226,198]    [90,90,226,210]
+//     tri-miter-out-limit3_2     9120       9600        [90,90,226,198]    [90,90,250,210]
 //
-// A SECOND OBSERVATION, not asserted here because only Illustrator can say
-// what is right: the engine's output DIRECTION is not a function of its
-// input's. Both inputs are clockwise (Y down). The rectangle comes back
-// counter-clockwise when offset outward and clockwise when offset inward;
-// the triangle comes back counter-clockwise both ways. A single contour
-// fills the same either way; a compound path would not. The replay
-// compares direction-relative-to-input with Illustrator once recorded.
+//   These eight are `it.fails`, so they stay visible. The fix is reported
+//   landed in core on a branch that is not yet published; when the engine
+//   pin moves past 0.64.0 they flip RED ("expected to fail, passed") and
+//   the entries come out of ENGINE_IGNORES_JOIN. Expect the ROUND cases to
+//   then need a second look at ANCHOR COUNT, which is a convention, not a
+//   defect, if the engine spends a different number of cubics on an arc.
+//
+//   LATENT DEFECT — direction. Illustrator has a convention (clockwise,
+//   always). The engine has NONE: its result's direction is an accident of
+//   the crossing resolver. Measured over both shapes, both input
+//   directions and every start point: outward is counter-clockwise EXCEPT
+//   for a counter-clockwise input that starts at (100,100), which comes
+//   back clockwise; inward is clockwise for the rectangle and counter-
+//   clockwise for the triangle. Of the 17 cases 5 happen to agree with
+//   Illustrator (ENGINE_DIRECTION_AGREES) and 12 are the opposite. A lone
+//   contour paints the same either way under the engine's non-zero fill,
+//   so nothing is visibly wrong today; it becomes wrong the moment a
+//   result is merged into a compound path, where direction decides what
+//   is a hole. Pinned as a recorded difference, not as `it.fails`: there
+//   is no single engine behaviour to wait for.
+//
+//   AGREEMENT — the other nine cases (bevel outward, every inward offset)
+//   match Illustrator in area, bounds AND anchor count.
 
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 
@@ -74,7 +101,6 @@ import {
   BOUNDS_ABS_TOL,
   boundsDiff,
   loadOracle,
-  oracleFixturePath,
   pathBounds,
   pathsOfTable,
   polygon,
@@ -100,7 +126,7 @@ interface OffsetCase {
 }
 
 // --- the cases: a MIRROR of scripts/illustrator/probes/offset-path.jsx -----
-// Points, page-local, Y down. Both shapes are drawn clockwise.
+// Points, page-local, Y down. RECT and TRI are drawn clockwise.
 
 /** 100 x 60. Area 6000, perimeter 320. */
 const RECT: Vec2[] = [
@@ -109,56 +135,82 @@ const RECT: Vec2[] = [
   [200, 160],
   [100, 160],
 ];
+/** The same rectangle, counter-clockwise. */
+const RECT_CCW: Vec2[] = [RECT[0], RECT[3], RECT[2], RECT[1]];
 /** A 3-4-5 right triangle: legs 120 and 90, hypotenuse 150. Area 5400,
- *  perimeter 360, inradius 30, incentre (130,130). */
+ *  perimeter 360, inradius 30, incentre (130,130). Corners 90°, 36.87°
+ *  (miter ratio 3.1623) and 53.13° (2.2361). */
 const TRI: Vec2[] = [
   [100, 100],
   [220, 100],
   [100, 190],
 ];
 const MITER_LIMIT = 4;
+const DELTAS = [
+  ["out", 10],
+  ["in", -10],
+] as const;
 
-const OFFSET_PATH_CASES: OffsetCase[] = (
-  [
-    ["rect", RECT],
-    ["tri", TRI],
-  ] as const
-).flatMap(([shape, points]) =>
-  (["miter", "round", "bevel"] as const).flatMap((join) =>
-    (
-      [
-        ["out", 10],
-        ["in", -10],
-      ] as const
-    ).map(([dir, delta]) => ({
-      id: `${shape}-${join}-${dir}`,
-      input: { paths: [polygon(points)] },
-      parameters: { delta, join, miterLimit: MITER_LIMIT },
-    })),
+const OFFSET_PATH_CASES: OffsetCase[] = [
+  ...(
+    [
+      ["rect", RECT],
+      ["tri", TRI],
+    ] as const
+  ).flatMap(([shape, points]) =>
+    (["miter", "round", "bevel"] as const).flatMap((join) =>
+      DELTAS.map(([dir, delta]) => ({
+        id: `${shape}-${join}-${dir}`,
+        input: { paths: [polygon(points)] },
+        parameters: { delta, join, miterLimit: MITER_LIMIT },
+      })),
+    ),
   ),
-);
+  // Direction: is the result's direction kept, reversed, or normalised?
+  ...DELTAS.map(([dir, delta]) => ({
+    id: `rectccw-miter-${dir}`,
+    input: { paths: [polygon(RECT_CCW)] },
+    parameters: { delta, join: "miter" as const, miterLimit: MITER_LIMIT },
+  })),
+  // Miter-limit semantics: 3.1 and 3.2 straddle the sharpest corner's
+  // ratio; 2 also catches the 53.13° corner.
+  ...(
+    [
+      ["2", 2],
+      ["3_1", 3.1],
+      ["3_2", 3.2],
+    ] as const
+  ).map(([name, miterLimit]) => ({
+    id: `tri-miter-out-limit${name}`,
+    input: { paths: [polygon(TRI)] },
+    parameters: { delta: 10, join: "miter" as const, miterLimit },
+  })),
+];
 
 // --- reference 1: the join's definition ------------------------------------
 // For a convex polygon of area A and perimeter L, offset OUTWARD by d, with
-// exterior (turning) angles t_i:
-//     miter   A + d·L + d²·Σ tan(t_i / 2)
-//     round   A + d·L + π·d²                (the corner sectors sum to a disc)
-//     bevel   A + d·L + ½·d²·Σ sin(t_i)
-// and offset INWARD by d (no edge vanishing) for EVERY join, because an
-// inward corner is an intersection, not a join:
-//             A − d·L + d²·Σ tan(t_i / 2)
+// exterior (turning) angles t_i, a corner contributes
+//     miter   d²·tan(t_i / 2)        round   ½·d²·t_i  (Σ = π·d²)
+//     bevel   ½·d²·sin(t_i)
+// on top of A + d·L. A miter whose ratio 1/sin(interior/2) exceeds the
+// limit is a bevel. Offset INWARD by d (no edge vanishing) every join gives
+//     A − d·L + d²·Σ tan(t_i / 2)
+// because an inward corner is an intersection, not a join.
 //
 // RECT, d = 10: t = 90° ×4, Σtan = 4, Σsin = 4.
 //     miter 6000+3200+400 = 9600 · round 9200+100π = 9514.159 · bevel 9400
 //     inward 6000−3200+400 = 3200
-// TRI, d = 10: t = 90°, 143.13°, 126.87°; Σtan = 1+3+2 = 6, Σsin = 1+0.6+0.8.
+// TRI, d = 10: t = 90°, 143.13°, 126.87°; tan(t/2) = 1, 3, 2; sin t = 1, 0.6, 0.8.
 //     miter 5400+3600+600 = 9600 · round 9000+100π = 9314.159
 //     bevel 5400+3600+120 = 9120 · inward 5400−3600+600 = 2400
+//     limit 3.1: the 3.1623 corner bevels, 300 → 30:            9330
+//     limit 2:   the 2.2361 corner bevels too, 200 → 40:        9170
 //
 // Bounds. A miter (and an inward) offset of the triangle is the triangle
 // scaled about its incentre (130,130) by (30±10)/30. A round offset's
-// bounds are the input's grown by d. A bevel's are the extremes of the two
-// points each corner yields (corner + d·normal of either edge).
+// bounds are the input's grown by d. A bevelled corner yields two points
+// (corner + d·normal of either edge): (220,90),(226,108) at the sharp
+// corner, (106,198),(90,190) at the 53.13° one.
 const R = 100 * Math.PI;
 const BY_DEFINITION: Record<
   string,
@@ -176,20 +228,43 @@ const BY_DEFINITION: Record<
   "tri-round-in": { area: 2400, bounds: [110, 110, 190, 170] },
   "tri-bevel-out": { area: 9120, bounds: [90, 90, 226, 198] },
   "tri-bevel-in": { area: 2400, bounds: [110, 110, 190, 170] },
+  "rectccw-miter-out": { area: 9600, bounds: [90, 90, 210, 170] },
+  "rectccw-miter-in": { area: 3200, bounds: [110, 110, 190, 150] },
+  "tri-miter-out-limit2": { area: 9170, bounds: [90, 90, 226, 198] },
+  "tri-miter-out-limit3_1": { area: 9330, bounds: [90, 90, 226, 210] },
+  "tri-miter-out-limit3_2": { area: 9600, bounds: [90, 90, 250, 210] },
 };
 
-/** DEFECT — the engine ignores `join`: these four ask for a miter or a
- *  round join outward and get a bevel. Numbers in the header. Run as
- *  `it.fails` against BOTH references; remove an entry when it starts
- *  passing (vitest reports an `it.fails` that passes as a failure). */
+/** DEFECT (engine 0.64.0) — `join` and `miterLimit` are ignored: these ask
+ *  for a miter or a round join outward and get a bevel. Engine number vs
+ *  Illustrator's; the full table is in the header. Run as `it.fails`
+ *  against BOTH references. When the engine pin moves and one starts
+ *  passing, vitest reports it as a failure: remove the entry then. */
 const ENGINE_IGNORES_JOIN: Record<string, string> = {
-  "rect-miter-out": "area 9400 (a bevel) vs 9600",
-  "rect-round-out": "area 9400 (a bevel) vs 9514.159",
-  "tri-miter-out": "area 9120 (a bevel) vs 9600; bounds max [226,198] vs [250,210]",
-  "tri-round-out": "area 9120 (a bevel) vs 9314.159; bounds max [226,198] vs [230,200]",
+  "rect-miter-out": "area 9400 vs 9600",
+  "rect-round-out": "area 9400 vs 9514.249",
+  "rectccw-miter-out": "area 9400 vs 9600",
+  "tri-miter-out": "area 9120 vs 9600; bounds max [226,198] vs [250,210]",
+  "tri-round-out": "area 9120 vs 9314.194; bounds max [226,198] vs [230,200]",
+  "tri-miter-out-limit2": "area 9120 vs 9170",
+  "tri-miter-out-limit3_1": "area 9120 vs 9330; bounds maxY 198 vs 210",
+  "tri-miter-out-limit3_2": "area 9120 vs 9600; bounds max [226,198] vs [250,210]",
 };
+
+/** LATENT DEFECT — Illustrator returns every result CLOCKWISE. The engine
+ *  returns these five clockwise (by accident of its resolver — see the
+ *  header) and the other twelve COUNTER-clockwise. */
+const ENGINE_DIRECTION_AGREES = new Set([
+  "rect-miter-in",
+  "rect-round-in",
+  "rect-bevel-in",
+  "rectccw-miter-out",
+  "rectccw-miter-in",
+]);
 
 const FIXTURE = loadOracle<OffsetParameters>("offset-path");
+const RECORDED = new Map(FIXTURE.cases.map((c) => [c.id, c]));
+const theirs = (id: string): ShapeSummary => summarize(RECORDED.get(id)!.measured.paths);
 
 describe("oracle — offset path", () => {
   let h: HeadlessHost;
@@ -235,79 +310,33 @@ describe("oracle — offset path", () => {
     return result;
   }
 
-  it("the case table is the 12 the probe records, each with a definition", () => {
-    expect(OFFSET_PATH_CASES.map((c) => c.id)).toEqual(Object.keys(BY_DEFINITION));
-    for (const id of Object.keys(ENGINE_IGNORES_JOIN)) {
-      expect(Object.keys(BY_DEFINITION)).toContain(id);
-    }
-  });
-
-  describe("engine vs the join's definition (closed form — no recording needed)", () => {
-    for (const c of OFFSET_PATH_CASES) {
-      const test = c.id in ENGINE_IGNORES_JOIN ? it.fails : it;
-      const note = ENGINE_IGNORES_JOIN[c.id];
-      test(`${c.id}${note ? ` — DEFECT, join ignored: ${note}` : ""}`, async () => {
-        const ours = (await engine(c)).shape;
-        const want = BY_DEFINITION[c.id];
-        expect(ours.paths).toBe(1);
-        expect(ours.allClosed).toBe(true);
-        expect(relDiff(ours.area, want.area)).toBeLessThan(AREA_REL_TOL);
-        expect(boundsDiff(ours.bounds, want.bounds)).toBeLessThan(BOUNDS_ABS_TOL);
-      });
-    }
-
-    it("a join the engine ignores is ignored COMPLETELY: all three joins give one shape", async () => {
-      // The pin that makes the four `it.fails` above a single finding and
-      // not four: outward, miter == round == bevel, to the anchor.
-      for (const shape of ["rect", "tri"]) {
-        // Sequential on purpose: each measurement inserts, offsets and
-        // undoes twice, and the undo stack is shared.
-        const of = (join: Join) =>
-          engine(OFFSET_PATH_CASES.find((c) => c.id === `${shape}-${join}-out`)!);
-        const miter = await of("miter");
-        const round = await of("round");
-        const bevel = await of("bevel");
-        expect(round.paths).toEqual(miter.paths);
-        expect(bevel.paths).toEqual(miter.paths);
-        // …and that shape has no curve in it, so it is not the round join.
-        expect(miter.shape.curvedSegments).toBe(0);
-      }
-    });
-  });
-
-  describe("engine vs Adobe Illustrator (recorded)", () => {
-    if (FIXTURE === null) {
-      it.todo(
-        `NOT RECORDED — ${oracleFixturePath("offset-path")} does not exist. ` +
-          "Record it with scripts/illustrator/run-probe.sh (see scripts/illustrator/README.md); " +
-          "until then this lane compares the engine with the join's definition only.",
-      );
-      return;
-    }
-    const fixture = FIXTURE;
-    const recorded = new Map(fixture.cases.map((c) => [c.id, c]));
-
-    it("the recording says who made it", () => {
-      expect(fixture.produced_by.app).toMatch(/Illustrator/);
-      expect(fixture.produced_by.version).toMatch(/^\d+\.\d+/);
-      expect(fixture.produced_by.script).toBe(
+  describe("the recording", () => {
+    it("says who made it", () => {
+      expect(FIXTURE.produced_by.app).toBe("Adobe Illustrator");
+      expect(FIXTURE.produced_by.version).toMatch(/^\d+\.\d+/);
+      expect(FIXTURE.produced_by.script).toBe(
         "scripts/illustrator/probes/offset-path.jsx",
       );
-      expect(Number.isNaN(Date.parse(fixture.produced_by.recorded_at))).toBe(false);
+      expect(Number.isNaN(Date.parse(FIXTURE.produced_by.recorded_at))).toBe(false);
     });
 
-    it("the recording's cases ARE this spec's cases (probe and spec have not drifted)", () => {
+    it("has exactly this spec's cases (probe and spec have not drifted), each with a definition", () => {
       expect(
-        fixture.cases.map((c) => ({
+        FIXTURE.cases.map((c) => ({
           id: c.id,
           input: c.input,
           parameters: c.parameters,
         })),
       ).toEqual(OFFSET_PATH_CASES);
+      expect(Object.keys(BY_DEFINITION)).toEqual(OFFSET_PATH_CASES.map((c) => c.id));
+      for (const id of [...Object.keys(ENGINE_IGNORES_JOIN), ...ENGINE_DIRECTION_AGREES]) {
+        expect(Object.keys(BY_DEFINITION)).toContain(id);
+      }
     });
 
-    it("the recording is self-consistent: Illustrator's area, bounds and the probe's winding match the anchors it recorded", () => {
-      for (const c of fixture.cases) {
+    it("is self-consistent: Illustrator's area and bounds and the probe's winding match the anchors it recorded", () => {
+      for (const c of FIXTURE.cases) {
+        expect(c.measured.paths, c.id).toHaveLength(1);
         for (const p of c.measured.paths) {
           const signed = signedArea(p);
           expect(relDiff(Math.abs(signed), p.area), `${c.id} area`).toBeLessThan(AREA_REL_TOL);
@@ -318,43 +347,130 @@ describe("oracle — offset path", () => {
         }
       }
     });
+  });
 
-    it("Illustrator's answer is the join that was ASKED for (catches a mis-mapped `jntp`)", () => {
-      // The probe's join enumeration (0 round / 1 bevel / 2 miter) is in no
-      // dictionary on disk. If it is wrong, "miter" measures a round
-      // join's area here. A genuine convention difference (how Illustrator
-      // reads the miter limit, how it approximates an arc) also lands
-      // here: classify it, do not widen the tolerance.
-      for (const c of fixture.cases) {
-        const theirs = summarize(c.measured.paths);
+  describe("Illustrator vs the join's definition", () => {
+    it("every case is the join that was ASKED for, in area and bounds", () => {
+      // Also the guard on the probe's `jntp` enumeration (0 round / 1 bevel /
+      // 2 miter), which is in no dictionary: mis-mapped, "miter" would
+      // measure a round join's area here.
+      for (const c of FIXTURE.cases) {
+        const got = theirs(c.id);
         const want = BY_DEFINITION[c.id];
-        expect(relDiff(theirs.netArea, want.area), `${c.id} area`).toBeLessThan(AREA_REL_TOL);
-        expect(boundsDiff(theirs.bounds, want.bounds), `${c.id} bounds`).toBeLessThan(
+        expect(relDiff(got.netArea, want.area), `${c.id} area`).toBeLessThan(AREA_REL_TOL);
+        expect(boundsDiff(got.bounds, want.bounds), `${c.id} bounds`).toBeLessThan(
           BOUNDS_ABS_TOL,
         );
       }
     });
 
+    it("miter limit is the stroke definition: mitered while 1/sin(angle/2) <= limit, bevelled past it", () => {
+      // Sharpest corner 3.1623, next 2.2361. Anchor count = 3 corners plus
+      // one per bevelled corner.
+      expect(theirs("tri-miter-out-limit3_2").anchors).toBe(3);
+      expect(theirs("tri-miter-out-limit3_1").anchors).toBe(4);
+      expect(theirs("tri-miter-out-limit2").anchors).toBe(5);
+      expect(theirs("tri-miter-out-limit3_2").area).toBe(9600);
+      expect(theirs("tri-miter-out-limit3_1").area).toBe(9330);
+      expect(theirs("tri-miter-out-limit2").area).toBe(9170);
+    });
+
+    it("direction is NORMALISED: every result is clockwise, whatever the input", () => {
+      expect(windingOf(signedArea(polygon(RECT)))).toBe("cw");
+      expect(windingOf(signedArea(polygon(RECT_CCW)))).toBe("ccw");
+      for (const c of FIXTURE.cases) {
+        const [p] = c.measured.paths;
+        expect(p.winding, c.id).toBe("cw");
+        expect(p.polarity, c.id).toBe("positive");
+        expect(p.areaSignedApp, c.id).toBeGreaterThan(0);
+      }
+    });
+
+    it("what the definition does not predict: the arc approximation and one split arc", () => {
+      // One cubic per 90° corner: 4 arcs, 8 anchors, and a bulge of
+      // +0.09 pt² over the exact 9514.159.
+      const rect = theirs("rect-round-out");
+      expect(rect.anchors).toBe(8);
+      expect(rect.curvedSegments).toBe(4);
+      expect(rect.area).toBeCloseTo(9514.249, 3);
+      expect(rect.area - BY_DEFINITION["rect-round-out"].area).toBeGreaterThan(0.08);
+      // The triangle: 90° is one cubic, 126.87° and 143.13° are two each —
+      // 5 arcs, 8 anchors. Illustrator returns 9 anchors and 6 curved
+      // segments: the path starts at its lowest point, (99.9985, 200),
+      // which lies inside an arc, and that arc is split there.
+      const tri = theirs("tri-round-out");
+      expect(tri.anchors).toBe(9);
+      expect(tri.curvedSegments).toBe(6);
+      expect(tri.bounds[2]).toBeGreaterThan(230); // 230.0007: the bulge again
+      // A straight edge has no handles at all.
+      for (const id of ["rect-miter-out", "tri-bevel-out", "rect-round-in"]) {
+        const [p] = RECORDED.get(id)!.measured.paths;
+        for (const a of p.anchors) {
+          expect(a.left, id).toEqual(a.anchor);
+          expect(a.right, id).toEqual(a.anchor);
+        }
+      }
+    });
+  });
+
+  describe("engine vs the join's definition", () => {
     for (const c of OFFSET_PATH_CASES) {
       const test = c.id in ENGINE_IGNORES_JOIN ? it.fails : it;
-      const note = ENGINE_IGNORES_JOIN[c.id];
-      test(`${c.id}: area, bounds, anchor count${note ? ` — DEFECT, join ignored: ${note}` : ""}`, async () => {
+      test(`${c.id}${c.id in ENGINE_IGNORES_JOIN ? " — DEFECT in 0.64.0, join ignored" : ""}`, async () => {
         const ours = (await engine(c)).shape;
-        const theirs = summarize(recorded.get(c.id)!.measured.paths);
-        expect(ours.paths).toBe(theirs.paths);
-        expect(ours.allClosed).toBe(theirs.allClosed);
-        expect(relDiff(ours.netArea, theirs.netArea)).toBeLessThan(AREA_REL_TOL);
-        expect(boundsDiff(ours.bounds, theirs.bounds)).toBeLessThan(BOUNDS_ABS_TOL);
-        expect(ours.anchors).toBe(theirs.anchors);
+        const want = BY_DEFINITION[c.id];
+        expect(ours.paths).toBe(1);
+        expect(ours.allClosed).toBe(true);
+        expect(relDiff(ours.area, want.area)).toBeLessThan(AREA_REL_TOL);
+        expect(boundsDiff(ours.bounds, want.bounds)).toBeLessThan(BOUNDS_ABS_TOL);
       });
     }
 
-    it("direction relative to the input: the engine keeps or reverses it where Illustrator does", async () => {
+    it("a join the engine ignores is ignored COMPLETELY: all three joins, and every miter limit, give one shape", async () => {
+      // The pin that makes the eight `it.fails` a single finding and not
+      // eight: outward, miter == round == bevel, to the anchor.
+      // Sequential on purpose: each measurement inserts, offsets and undoes
+      // twice, and the undo stack is shared.
+      const of = (id: string) => engine(OFFSET_PATH_CASES.find((c) => c.id === id)!);
+      for (const shape of ["rect", "tri"]) {
+        const miter = await of(`${shape}-miter-out`);
+        expect((await of(`${shape}-round-out`)).paths).toEqual(miter.paths);
+        expect((await of(`${shape}-bevel-out`)).paths).toEqual(miter.paths);
+        // …and that shape has no curve in it, so it is not the round join.
+        expect(miter.shape.curvedSegments).toBe(0);
+      }
+      const tri = await of("tri-miter-out");
+      for (const limit of ["2", "3_1", "3_2"]) {
+        expect((await of(`tri-miter-out-limit${limit}`)).paths).toEqual(tri.paths);
+      }
+    });
+  });
+
+  describe("engine vs Adobe Illustrator", () => {
+    for (const c of OFFSET_PATH_CASES) {
+      const note = ENGINE_IGNORES_JOIN[c.id];
+      const test = note ? it.fails : it;
+      test(`${c.id}: area, bounds, anchor count${note ? ` — DEFECT in 0.64.0, join ignored: ${note}` : ""}`, async () => {
+        const ours = (await engine(c)).shape;
+        const want = theirs(c.id);
+        expect(ours.paths).toBe(want.paths);
+        expect(ours.allClosed).toBe(want.allClosed);
+        expect(relDiff(ours.netArea, want.netArea)).toBeLessThan(AREA_REL_TOL);
+        expect(boundsDiff(ours.bounds, want.bounds)).toBeLessThan(BOUNDS_ABS_TOL);
+        expect(ours.anchors).toBe(want.anchors);
+      });
+    }
+
+    it("direction — LATENT DEFECT: Illustrator returns everything clockwise; the engine's direction is an accident (5 of 17 agree)", async () => {
       for (const c of OFFSET_PATH_CASES) {
-        const input = windingOf(signedArea(c.input.paths[0]));
-        const ours = (await engine(c)).shape.windings[0] === input;
-        const theirs = recorded.get(c.id)!.measured.paths[0].winding === input;
-        expect(ours, `${c.id}: engine keeps the input's direction`).toBe(theirs);
+        const ours = (await engine(c)).shape.windings[0];
+        const want = theirs(c.id).windings[0]; // "cw", every case
+        expect(want, c.id).toBe("cw");
+        if (ENGINE_DIRECTION_AGREES.has(c.id)) {
+          expect(ours, c.id).toBe(want);
+        } else {
+          expect(ours, `${c.id}: engine ccw, Illustrator cw`).toBe("ccw");
+        }
       }
     });
   });

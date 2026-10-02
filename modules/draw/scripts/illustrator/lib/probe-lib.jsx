@@ -123,10 +123,24 @@ var PagedProbe = (function () {
     return { closed: closed !== false, anchors: anchors };
   }
 
+  function rgb(triple) {
+    var c = new RGBColor();
+    c.red = triple[0];
+    c.green = triple[1];
+    c.blue = triple[2];
+    return c;
+  }
+
+  function black() {
+    return rgb([0, 0, 0]);
+  }
+
   /** Create one PathItem from a spec `{closed, anchors:[{anchor,left,
-   *  right}]}` given in the ENGINE frame. Black fill, no stroke: the
-   *  default appearance of a new item follows whatever the user last
-   *  used, and an inherited stroke would change what "expand" returns. */
+   *  right}], fill?}` given in the ENGINE frame. Filled (black, or the
+   *  spec's `fill: [r, g, b]`, 0-255), no stroke -- set EXPLICITLY,
+   *  because a new item inherits whatever the user last used and an
+   *  inherited stroke changes what "expand" returns. The fill matters to
+   *  the Pathfinder region verbs: Merge unites what has the SAME fill. */
   function buildPath(doc, spec) {
     var item = doc.pathItems.add();
     var i, a, pp;
@@ -139,14 +153,31 @@ var PagedProbe = (function () {
       pp.pointType = PointType.CORNER;
     }
     item.closed = spec.closed;
-    var black = new RGBColor();
-    black.red = 0;
-    black.green = 0;
-    black.blue = 0;
     item.filled = true;
-    item.fillColor = black;
+    item.fillColor = spec.fill ? rgb(spec.fill) : black();
     item.stroked = false;
     return item;
+  }
+
+  /** Give `item` a plain black stroke and NO fill. `stroke` is
+   *  `{width, cap, join, miterLimit}` in the engine's vocabulary: cap
+   *  "butt" | "round" | "square" (Illustrator calls the last one
+   *  "projecting"), join "miter" | "round" | "bevel". */
+  function setStroke(item, stroke) {
+    item.filled = false;
+    item.stroked = true;
+    item.strokeColor = black();
+    item.strokeWidth = stroke.width;
+    item.strokeDashes = [];
+    item.strokeMiterLimit = stroke.miterLimit;
+    if (stroke.cap === "butt") item.strokeCap = StrokeCap.BUTTENDCAP;
+    else if (stroke.cap === "round") item.strokeCap = StrokeCap.ROUNDENDCAP;
+    else if (stroke.cap === "square") item.strokeCap = StrokeCap.PROJECTINGENDCAP;
+    else throw new Error("unknown cap: " + stroke.cap);
+    if (stroke.join === "miter") item.strokeJoin = StrokeJoin.MITERENDJOIN;
+    else if (stroke.join === "round") item.strokeJoin = StrokeJoin.ROUNDENDJOIN;
+    else if (stroke.join === "bevel") item.strokeJoin = StrokeJoin.BEVELENDJOIN;
+    else throw new Error("unknown join: " + stroke.join);
   }
 
   // -- measuring outputs ----------------------------------------------------
@@ -189,7 +220,7 @@ var PagedProbe = (function () {
 
   function measurePath(item, compoundIndex) {
     var anchors = [];
-    var i, pp, gb, signed, out;
+    var i, pp, gb, signed, winding, out;
     for (i = 0; i < item.pathPoints.length; i++) {
       pp = item.pathPoints[i];
       anchors.push({
@@ -203,15 +234,39 @@ var PagedProbe = (function () {
     // `bottom`.
     gb = item.geometricBounds;
     signed = signedArea(anchors, item.closed);
+    // NOT a nested ternary. ExtendScript parses `a ? x : b ? y : z` as
+    // `(a ? x : b) ? y : z`, so that spelling answered "ccw" for every
+    // path with any area at all -- the first recording said so, and the
+    // replay's own recomputation from the anchors caught it.
+    winding = "none";
+    if (signed > 1e-9) winding = "cw";
+    if (signed < -1e-9) winding = "ccw";
     out = {
       closed: item.closed,
       anchors: anchors,
       area: Math.abs(item.area),
       bounds: [gb[0] - originX, originTop - gb[1], gb[2] - originX, originTop - gb[3]],
-      winding: signed > 1e-9 ? "cw" : signed < -1e-9 ? "ccw" : "none",
+      winding: winding,
       areaSignedApp: item.area,
       polarity: item.polarity === PolarityValues.POSITIVE ? "positive" : "negative"
     };
+    // Paint, because the region verbs answer in paint as much as in
+    // geometry: which piece kept which fill, which came back unpainted,
+    // and that Outline's edges are stroked, not filled.
+    out.filled = item.filled;
+    out.stroked = item.stroked;
+    if (item.filled && item.fillColor.typename === "RGBColor") {
+      out.fill = [item.fillColor.red, item.fillColor.green, item.fillColor.blue];
+    }
+    if (item.stroked) {
+      out.strokeWidth = item.strokeWidth;
+      if (item.strokeColor.typename === "RGBColor") {
+        out.stroke = [item.strokeColor.red, item.strokeColor.green, item.strokeColor.blue];
+      }
+    }
+    // The fill RULE travels with the path: `evenodd` false means
+    // non-zero winding, where direction decides what is a hole.
+    out.evenodd = item.evenodd;
     if (compoundIndex !== undefined) out.compound = compoundIndex;
     return out;
   }
@@ -366,10 +421,25 @@ var PagedProbe = (function () {
     for (i = 0; i < items.length; i++) items[i].selected = true;
   }
 
+  /** Put `items` into one new group WITHOUT changing their paint order:
+   *  items[0] stays at the back, the last item in front. (Each item is
+   *  moved to the group's FRONT in turn, so the last one moved ends up
+   *  frontmost.) The Pathfinder effects act on a group. */
+  function groupInPaintOrder(doc, items) {
+    var group = doc.groupItems.add();
+    var i;
+    for (i = 0; i < items.length; i++) {
+      items[i].move(group, ElementPlacement.PLACEATBEGINNING);
+    }
+    return group;
+  }
+
   return {
     json: json,
     polygon: polygon,
     buildPath: buildPath,
+    groupInPaintOrder: groupInPaintOrder,
+    setStroke: setStroke,
     measurePath: measurePath,
     collectPaths: collectPaths,
     signedArea: signedArea,

@@ -58,16 +58,22 @@
 //     `.pathPoints[i].anchor/leftDirection/rightDirection` are in the
 //     ExtendScript object model (Scripting Dictionaries CC/.../omv.xml).
 //
-// NOT YET CONFIRMED BY A RUN (2026-10-02: macOS had not been allowed to
-// let the recording shell control Illustrator -- see the README), so two
-// things are stated as assumptions and CHECKED by the replay spec the
-// moment a recording exists:
-//   1. the `jntp` enumeration: 0 = round, 1 = bevel, 2 = miter. This is
-//      not in any dictionary on disk. The spec compares every recorded
-//      case with the closed-form area of the join it was ASKED for, so a
-//      wrong mapping shows up as "miter" measuring a round join's area.
-//   2. `ofst` is in points and positive = outward regardless of the
-//      path's direction.
+// CONFIRMED BY THE FIRST RUN (Illustrator 30.1.0, 2026-10-02):
+//   1. the `jntp` enumeration is 0 = round, 1 = bevel, 2 = miter. It is in
+//      no dictionary on disk; the recording settled it (the cases asked
+//      for a miter measure a miter's area, and so on), and the replay
+//      spec re-checks it against the closed form on every run.
+//   2. `ofst` is in points; positive is outward whatever the path's
+//      direction (see the two `rectccw` cases).
+//   3. `expandStyle` leaves ONE plain PathItem -- no group, no copy of
+//      the source path.
+//
+// Beyond the 12 base cases, two families answer a question each:
+//   * `rectccw-*`: the rectangle drawn the OTHER way round. Is the
+//     result's direction kept, reversed, or normalised?
+//   * `tri-miter-out-limit*`: the triangle's sharpest corner has a miter
+//     ratio of 1/sin(36.87 deg / 2) = 3.1623. Limits 3.1 and 3.2 straddle
+//     it; limit 2 also catches the 53.13 deg corner (ratio 2.2361).
 
 (function () {
   var JNTP_ROUND = 0;
@@ -124,6 +130,28 @@
           });
         }
       }
+    }
+    // Direction: the same rectangle, counter-clockwise.
+    var rectCcw = [RECT[0], RECT[3], RECT[2], RECT[1]];
+    for (d = 0; d < deltas.length; d++) {
+      cases.push({
+        id: "rectccw-miter-" + deltas[d].name,
+        input: { paths: [PagedProbe.polygon(rectCcw, true)] },
+        parameters: { delta: deltas[d].value, join: "miter", miterLimit: MITER_LIMIT }
+      });
+    }
+    // Miter-limit semantics.
+    var limits = [
+      { name: "2", value: 2 },
+      { name: "3_1", value: 3.1 },
+      { name: "3_2", value: 3.2 }
+    ];
+    for (d = 0; d < limits.length; d++) {
+      cases.push({
+        id: "tri-miter-out-limit" + limits[d].name,
+        input: { paths: [PagedProbe.polygon(TRI, true)] },
+        parameters: { delta: 10, join: "miter", miterLimit: limits[d].value }
+      });
     }
     return cases;
   }
