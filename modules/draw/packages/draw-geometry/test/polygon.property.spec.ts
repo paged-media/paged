@@ -229,11 +229,14 @@ describe("polygon — pointInAnchorPath (properties)", () => {
   });
 
   // ------------------------------------------------------------------
-  // DEFECT (polygon.ts, pointInAnchorPath) — a closed contour of ONE or
-  // TWO anchors can never contain a point.
+  // DEFECT, FIXED (polygon.ts, pointInAnchorPath) — a closed contour of
+  // ONE or TWO anchors could never contain a point. The two cases below
+  // were pinned with `it.fails` and are plain tests now: both anchor-count
+  // guards are gone and the flattened ring is what gets tested. What
+  // follows is the record of what was wrong.
   //
   // `if (anchors.length < 3) return false;` (and, per contour,
-  // `if (to - from < 3) continue;`) is `pointInPolygon`'s "fewer than 3
+  // `if (to - from < 3) continue;`) was `pointInPolygon`'s "fewer than 3
   // VERTICES" guard carried over to ANCHORS. A polygon with two vertices
   // has no area; a CUBIC contour with two anchors is a lens, and with one
   // anchor a teardrop — both ordinary closed shapes. `contourSignedArea`
@@ -245,28 +248,29 @@ describe("polygon — pointInAnchorPath (properties)", () => {
   // encloses |area| 50.6 (`contourSignedArea`), its flattened ring
   // contains (5,0) under `pointInPolygon`.
   //   EXPECTED: pointInAnchorPath((5,0), lens) === true
-  //   ACTUAL:   false (for every point).
+  //   WAS:      false (for every point).
   //
   // Consumers: Shape Builder and Live Paint resolve the face under the
   // cursor with this function, and the lens between two overlapping
   // circles is the first face anyone tries — when the planar arrangement
-  // returns it with just its two crossing anchors it cannot be hit.
-  // `contourDepths` inherits the same guard (`if (jt - jf < 3) continue`),
-  // so a contour nested inside a lens-shaped outer is reported at depth 0
-  // and "make compound path" does not cut the hole.
+  // returns it with just its two crossing anchors it could not be hit.
+  // `contourDepths` (compound.ts) carries a guard of its OWN
+  // (`if (jt - jf < 3) continue`) which this fix does not touch, so a
+  // contour nested inside a lens-shaped outer is still reported at depth
+  // 0 there until that one goes too.
   // ------------------------------------------------------------------
   const LENS: AnchorTriple[] = [
     { anchor: [0, 0], left: [3, -5], right: [3, 5] },
     { anchor: [10, 0], left: [7, 5], right: [7, -5] },
   ];
 
-  it.fails("DEFECT (minimal counterexample): a two-anchor lens contains its own middle", () => {
+  it("a two-anchor lens contains its own middle (the minimal counterexample of the defect above)", () => {
     const ring = flattenAnchorRun(LENS, { close: true });
     expect(pointInPolygon([5, 0], ring)).toBe(true); // the flattening does
     expect(pointInAnchorPath([5, 0], LENS)).toBe(true);
   });
 
-  it.fails("DEFECT: over a curved contour of 1–2 anchors, is even-odd over its flattening", () => {
+  it("over a curved contour of 1–2 anchors, is even-odd over its flattening", () => {
     fc.assert(
       fc.property(
         fc.array(smallAnchorTriple, { minLength: 1, maxLength: 2 }),

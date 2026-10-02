@@ -136,9 +136,32 @@ describe("pointInAnchorPath", () => {
     expect(pointInAnchorPath([50, -40], bowed)).toBe(false);
   });
 
-  it("fewer than 3 anchors answers false", () => {
+  it("fewer than 3 CORNER anchors enclose nothing and answer false", () => {
     expect(pointInAnchorPath([0, 0], [])).toBe(false);
     expect(pointInAnchorPath([0, 0], OUTER.slice(0, 2))).toBe(false);
+    // Not on the degenerate ring itself either: nowhere is inside it.
+    expect(pointInAnchorPath([50, 0.5], OUTER.slice(0, 2))).toBe(false);
+    expect(pointInAnchorPath([0.5, 0.5], OUTER.slice(0, 1))).toBe(false);
+  });
+
+  it("two CURVED anchors are a lens, and it contains its middle", () => {
+    // The count of anchors does not decide — the flattened ring does.
+    const lens: AnchorTriple[] = [
+      { anchor: [0, 0], left: [3, -5], right: [3, 5] },
+      { anchor: [10, 0], left: [7, 5], right: [7, -5] },
+    ];
+    expect(pointInAnchorPath([5, 0], lens)).toBe(true);
+    expect(pointInAnchorPath([5, 6], lens)).toBe(false);
+    expect(pointInAnchorPath([-1, 0], lens)).toBe(false);
+    // As a HOLE in a larger contour it is subtracted like any other.
+    const plate: AnchorTriple[] = corners([
+      [-20, -20],
+      [30, -20],
+      [30, 20],
+      [-20, 20],
+    ]);
+    expect(pointInAnchorPath([5, 0], [...plate, ...lens], [0, 4])).toBe(false);
+    expect(pointInAnchorPath([-10, 0], [...plate, ...lens], [0, 4])).toBe(true);
   });
 
   it("a degenerate contour in the table is skipped, not counted", () => {

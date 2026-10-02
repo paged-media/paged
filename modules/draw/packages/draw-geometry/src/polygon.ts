@@ -66,6 +66,16 @@ export function pointInPolygon(point: Vec2, polygon: readonly Vec2[]): boolean {
  * `samplesPerSegment` trades accuracy for cost; the default matches the
  * preview flattener. Straight segments emit no intermediate samples, so
  * a rectangle face costs four edges regardless.
+ *
+ * NO GUARD ON THE ANCHOR COUNT, and that is deliberate. This used to
+ * return `false` for a contour of fewer than three anchors —
+ * `pointInPolygon`'s "fewer than 3 VERTICES" rule carried over to
+ * ANCHORS, where it is wrong: two anchors joined by two curves are a
+ * lens, one anchor with both handles out is a teardrop, and both enclose
+ * real area (the lens between two overlapping circles is the first face
+ * anyone hovers). What decides is the FLATTENED ring. A contour with no
+ * area — two corner anchors, one corner anchor — flattens to a ring
+ * whose edges cancel in pairs, so it still contains nothing.
  */
 export function pointInAnchorPath(
   point: Vec2,
@@ -73,14 +83,12 @@ export function pointInAnchorPath(
   subpathStarts: readonly number[] = [],
   options?: { samplesPerSegment?: number },
 ): boolean {
-  if (anchors.length < 3) return false;
   const starts = subpathStarts.length > 0 ? [...subpathStarts] : [0];
   const [px, py] = point;
   let inside = false;
   for (let s = 0; s < starts.length; s++) {
     const from = starts[s];
     const to = s + 1 < starts.length ? starts[s + 1] : anchors.length;
-    if (to - from < 3) continue;
     const ring = flattenAnchorRun(anchors.slice(from, to), {
       close: true,
       samplesPerSegment: options?.samplesPerSegment,
