@@ -404,11 +404,74 @@ describe("perf budgets — commands over a busy document", () => {
       // The workload is painted with one swatch, so most of it matches.
       expect(result).toHaveLength(1253);
       expect(work.count("document.tree")).toBe(1);
-      // The reference, then every leaf — each reply carrying the leaf's
-      // whole property table, to compare one entry of it. TARGET 2: the
-      // reference and one batched read (`elementGeometry` takes a list;
-      // `elementProperties` does not).
-      expect(work.count("document.elementProperties")).toBe(LEAVES + 1);
+      // Every leaf once, in parallel — each reply carrying the leaf's
+      // whole property table, to compare one entry of it. As found:
+      // LEAVES + 1 — the reference was read on its own and then again
+      // as one of the leaves. TARGET 2: the reference and one batched
+      // read (`elementGeometry` takes a list; `elementProperties` does
+      // not).
+      expect(work.count("document.elementProperties")).toBe(LEAVES);
+    });
+
+    it("a reference with nothing to match on still costs ONE read, not a pass", async () => {
+      // A group has no paint of its own. The pass over the document
+      // must not be what finds that out.
+      const group = (await w.h.host.document.tree())
+        .flatMap(function groups(node): ElementId[] {
+          const below = (node.children ?? []).flatMap(groups);
+          return node.id?.kind === "group" ? [node.id, ...below] : below;
+        })
+        .at(0)!;
+      expect(group).toBeDefined();
+      const { work, result } = await counted(w, "select same, no paint", [], (host) =>
+        selectSameMatches(host, group, "fill"),
+      );
+      expect(result).toEqual([]);
+      expect(work.count("document.elementProperties")).toBe(1);
+      expect(work.count("document.tree")).toBe(0);
+    });
+
+    it("the OTHER criteria on an unchanged document read nothing: one pass answers all three", async () => {
+      const { host, work } = countingHost(w.h.host);
+      const fill = await selectSameMatches(host, w.plain[0]!, "fill");
+      expect(fill).toHaveLength(1253);
+      expect(work.count("document.elementProperties")).toBe(LEAVES);
+
+      // Stroke, then stroke weight, then fill again from another
+      // reference. As found: 1 404 reads each.
+      work.reset();
+      const stroke = await selectSameMatches(host, w.plain[0]!, "stroke");
+      const weight = await selectSameMatches(host, w.plain[0]!, "strokeWeight");
+      const again = await selectSameMatches(host, w.plain[1]!, "fill");
+      expect(work.reads()).toBe(0);
+      report("select same, three more on a warm pass", work.snapshot());
+      // The answers are the ones a cold pass gives.
+      expect(again.map((e) => e.id).sort()).toEqual(fill.map((e) => e.id).sort());
+      const cold = countingHost(w.h.host).host;
+      expect(stroke.map((e) => e.id)).toEqual(
+        (await selectSameMatches(cold, w.plain[0]!, "stroke")).map((e) => e.id),
+      );
+      expect(weight.map((e) => e.id)).toEqual(
+        (await selectSameMatches(cold, w.plain[0]!, "strokeWeight")).map((e) => e.id),
+      );
+
+      // A change to the document, and the next one reads it again — and
+      // sees the change.
+      const mark = await undoMark(w);
+      const changed = await w.h.host.document.mutate({
+        op: "setElementProperty",
+        args: {
+          elementId: w.plain[1]!,
+          path: "frameStrokeWeight",
+          value: { type: "length", value: 7.5 },
+        },
+      });
+      expect(changed.applied).toBe(true);
+      work.reset();
+      const heavy = await selectSameMatches(host, w.plain[1]!, "strokeWeight");
+      expect(heavy.map((e) => e.id)).toEqual([w.plain[1]!.id]);
+      expect(work.count("document.elementProperties")).toBe(LEAVES);
+      await undoStepsSince(w, mark);
     });
   });
 
