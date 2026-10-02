@@ -55,6 +55,15 @@ export interface WorkLog {
    *  publish. A handler that re-sends the whole stroke per sample shows
    *  up here as a number growing with the SQUARE of the stroke length. */
   readonly previewPoints: number;
+  /** Total anchors the engine handed BACK across every
+   *  `document.pathAnchors` reply. A call count cannot tell a 4-anchor
+   *  read from a 10 000-anchor one; this can — a tool that re-reads a
+   *  long path per move, or reads a whole table to learn one matrix,
+   *  shows up here. Counted when the reply lands, so `settle()` first. */
+  readonly anchorsRead: number;
+  /** Total element ids ASKED of `document.elementGeometry` across every
+   *  call — the same idea for the door that takes a list. */
+  readonly geometryIdsAsked: number;
   /** Calls to one door (0 when it was never called). */
   count(door: string): number;
   /** Every `document.*` call that is not a write, a history step or a
@@ -98,11 +107,33 @@ export function countingHost(host: BundleHost): {
   let calls: Record<string, number> = {};
   let mutations: CountedMutation[] = [];
   let previewPoints = 0;
+  let anchorsRead = 0;
+  let geometryIdsAsked = 0;
   const wrapped = new WeakMap<object, object>();
+
+  /** Count what a reply CARRIED, without touching what the caller sees:
+   *  the observer hangs off the same promise the caller awaits. */
+  const observe = (door: string, result: unknown): void => {
+    if (door !== "document.pathAnchors") return;
+    if (!result || typeof (result as PromiseLike<unknown>).then !== "function") {
+      return;
+    }
+    (result as PromiseLike<unknown>).then(
+      (table) => {
+        const anchors = (table as { anchors?: unknown } | null)?.anchors;
+        if (Array.isArray(anchors)) anchorsRead += anchors.length;
+      },
+      () => {
+        /* a refused read carried nothing */
+      },
+    );
+  };
 
   const note = (door: string, args: unknown[]): void => {
     calls[door] = (calls[door] ?? 0) + 1;
-    if (door === "document.mutate") {
+    if (door === "document.elementGeometry") {
+      if (Array.isArray(args[0])) geometryIdsAsked += args[0].length;
+    } else if (door === "document.mutate") {
       const m = args[0] as { op?: string; args?: { ops?: unknown[] } };
       mutations.push({
         op: m?.op ?? "?",
@@ -133,7 +164,9 @@ export function countingHost(host: BundleHost): {
         if (typeof value === "function") {
           return (...args: unknown[]) => {
             note(door, args);
-            return Reflect.apply(value, obj, args) as unknown;
+            const result = Reflect.apply(value, obj, args) as unknown;
+            observe(door, result);
+            return result;
           };
         }
         return isPlainObject(value) ? wrap(value, door) : value;
@@ -147,6 +180,8 @@ export function countingHost(host: BundleHost): {
     calls: () => Record<string, number>;
     mutations: () => CountedMutation[];
     previewPoints: () => number;
+    anchorsRead: () => number;
+    geometryIdsAsked: () => number;
     reset: () => void;
   }): WorkLog => ({
     get calls() {
@@ -157,6 +192,12 @@ export function countingHost(host: BundleHost): {
     },
     get previewPoints() {
       return state.previewPoints();
+    },
+    get anchorsRead() {
+      return state.anchorsRead();
+    },
+    get geometryIdsAsked() {
+      return state.geometryIdsAsked();
     },
     count: (door) => state.calls()[door] ?? 0,
     reads: () =>
@@ -172,11 +213,15 @@ export function countingHost(host: BundleHost): {
         calls: { ...state.calls() },
         mutations: [...state.mutations()],
         previewPoints: state.previewPoints(),
+        anchorsRead: state.anchorsRead(),
+        geometryIdsAsked: state.geometryIdsAsked(),
       };
       return logOver({
         calls: () => frozen.calls,
         mutations: () => frozen.mutations,
         previewPoints: () => frozen.previewPoints,
+        anchorsRead: () => frozen.anchorsRead,
+        geometryIdsAsked: () => frozen.geometryIdsAsked,
         reset: () => {
           /* a snapshot is frozen */
         },
@@ -188,12 +233,63 @@ export function countingHost(host: BundleHost): {
     calls: () => calls,
     mutations: () => mutations,
     previewPoints: () => previewPoints,
+    anchorsRead: () => anchorsRead,
+    geometryIdsAsked: () => geometryIdsAsked,
     reset: () => {
       calls = {};
       mutations = [];
       previewPoints = 0;
+      anchorsRead = 0;
+      geometryIdsAsked = 0;
     },
   });
 
   return { host: wrap(host as unknown as object, "") as BundleHost, work };
+}
+
+/** The per-test timeout the budget specs set (`vi.setConfig`). A count
+ *  does not get slower on a loaded CI runner; the wall clock around it
+ *  does, and the slowest scenario here is ~2.5 s on a quiet laptop —
+ *  half of vitest's 5 s default. No budget is a duration, so a generous
+ *  timeout hides nothing. */
+export const BUDGET_TIMEOUT_MS = 60_000;
+
+/** The whole log as one plain object — every door, not only the ones a
+ *  budget names. */
+export function workSummary(work: WorkLog): Record<string, unknown> {
+  const calls: Record<string, number> = {};
+  for (const door of Object.keys(work.calls).sort()) {
+    calls[door] = work.calls[door]!;
+  }
+  return {
+    calls,
+    reads: work.reads(),
+    previews: work.previews(),
+    previewPoints: work.previewPoints,
+    anchorsRead: work.anchorsRead,
+    geometryIdsAsked: work.geometryIdsAsked,
+    mutations: work.mutations.map((m) =>
+      m.op === "batch" ? `batch(${m.ops})` : m.op,
+    ),
+  };
+}
+
+/** HOW TO RE-MEASURE. Run the perf specs with `PERF_SHOW=1` and every
+ *  scenario prints its full work log on one `PERF` line — the numbers a
+ *  budget is pinned from, and the place to look when one moves. Silent
+ *  otherwise. `extra` carries what a scenario measured beside the log
+ *  (its undo steps, the document's leaf count). Returns `work` so a
+ *  scenario can report and hand back in one expression. */
+export function report(
+  scenario: string,
+  work: WorkLog,
+  extra: Record<string, unknown> = {},
+): WorkLog {
+  if (process.env.PERF_SHOW) {
+    // eslint-disable-next-line no-console
+    console.log(
+      `PERF ${scenario} ${JSON.stringify({ ...workSummary(work), ...extra })}`,
+    );
+  }
+  return work;
 }
