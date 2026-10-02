@@ -215,31 +215,37 @@ describe("svg-doc — parseTransform (properties)", () => {
 
   // ------------------------------------------------------------------
   // DEFECT (svg-doc.ts — parseTransform and parsePoints) — numbers
-  // separated only by a SIGN are fused, and the second one is lost.
+  // separated only by a SIGN were fused, and the second one was lost.
+  // FIXED.
   //
-  // Both split their argument text on `/[\s,]+/` and `parseFloat` each
-  // piece. SVG's number-list grammar (the same one the path parser in
-  // svg-path.ts implements correctly) lets a `-` start the next number
-  // with no separator: `10-5` is the two numbers 10 and −5. Here it is
-  // ONE piece, and `parseFloat("10-5")` is 10.
+  // Both split their argument text on `/[\s,]+/` and `parseFloat`-ed
+  // each piece. SVG's number-list grammar (the same one the path parser
+  // in svg-path.ts implements correctly) lets a `-` start the next
+  // number with no separator: `10-5` is the two numbers 10 and −5. Here
+  // it was ONE piece, and `parseFloat("10-5")` is 10.
   //
   //   parseTransform("translate(10-5)")
   //   EXPECTED: [1, 0, 0, 1, 10, -5]
-  //   ACTUAL:   [1, 0, 0, 1, 10, 0]   — the y offset is dropped.
+  //   WAS:      [1, 0, 0, 1, 10, 0]   — the y offset was dropped.
   //
   //   <polygon points="0,0 10-5 20,0"/>
   //   EXPECTED: three anchors (0,0) (10,−5) (20,0)
-  //   ACTUAL:   TWO anchors (0,0) (10,20) — one number is swallowed and
-  //             every later coordinate changes partner.
+  //   WAS:      TWO anchors (0,0) (10,20) — one number was swallowed and
+  //             every later coordinate changed partner.
   //
   // Minified SVG writes exactly this form whenever a coordinate is
   // negative.
+  //
+  // THE FIX: one number-list reader for all three lists in the module
+  // (transform arguments, `points`, and `viewBox`, which split the same
+  // way and was wrong the same way), scanning each piece for as many
+  // numbers as it holds.
   // ------------------------------------------------------------------
-  it.fails("DEFECT (minimal counterexample): translate(10-5) is a translation by (10, −5)", () => {
+  it("FIXED DEFECT (minimal counterexample): translate(10-5) is a translation by (10, −5)", () => {
     expect(parseTransform("translate(10-5)")).toEqual([1, 0, 0, 1, 10, -5]);
   });
 
-  it.fails("DEFECT (minimal counterexample): a polygon's points may be separated by a sign alone", () => {
+  it("FIXED DEFECT (minimal counterexample): a polygon's points may be separated by a sign alone", () => {
     const doc = parseSvgDocument('<svg><polygon points="0,0 10-5 20,0"/></svg>');
     expect(doc!.shapes[0].anchors.anchors.map((a) => a.anchor)).toEqual([
       [0, 0],
@@ -248,7 +254,7 @@ describe("svg-doc — parseTransform (properties)", () => {
     ]);
   });
 
-  it.fails("DEFECT: property — a transform's arguments need no separator before a minus sign", () => {
+  it("FIXED DEFECT: property — a transform's arguments need no separator before a minus sign", () => {
     fc.assert(
       fc.property(tiny, fc.integer({ min: -9, max: -1 }), (tx, ty) => {
         expect(parseTransform(`translate(${tx}${ty})`)).toEqual(
@@ -256,6 +262,49 @@ describe("svg-doc — parseTransform (properties)", () => {
         );
       }),
     );
+  });
+
+  it("FIXED DEFECT: property — a matrix written in the tightest legal form is the spaced matrix", () => {
+    // Every separator a minifier may drop: none before a sign, none
+    // before a dot-led number that follows one with a fraction.
+    const num = fc.oneof(tiny, fc.integer({ min: -99, max: 99 }).map((n) => n / 10));
+    const compact = (n: number): string => {
+      const text = String(n);
+      return text.startsWith("0.") ? text.slice(1) : text.replace(/^-0\./, "-.");
+    };
+    fc.assert(
+      fc.property(fc.tuple(num, num, num, num, num, num), (m) => {
+        let tight = "";
+        m.forEach((n, i) => {
+          const right = compact(n);
+          const left = i > 0 ? compact(m[i - 1]) : "";
+          const fuses =
+            i > 0 && right[0] !== "-" && !(right[0] === "." && left.includes("."));
+          tight += (fuses ? " " : "") + right;
+        });
+        expect(parseTransform(`matrix(${tight})`)).toEqual(
+          parseTransform(`matrix(${m.join(" ")})`),
+        );
+      }),
+    );
+  });
+
+  it("FIXED DEFECT: a viewBox with negative origin needs no separators either", () => {
+    const doc = parseSvgDocument('<svg viewBox="-10-20 100 50"><path d="M0 0L1 1"/></svg>')!;
+    expect(doc.viewBox).toEqual([-10, -20, 100, 50]);
+  });
+
+  it("what a number list ignored before, it still ignores", () => {
+    // A unit suffix after a number is dropped; a piece that does not
+    // start with a number is not a number, and drops out of `points`.
+    const doc = parseSvgDocument('<svg><polyline points="0,0 10px,5 x 20,0"/></svg>')!;
+    expect(doc.shapes[0].anchors.anchors.map((a) => a.anchor)).toEqual([
+      [0, 0],
+      [10, 5],
+      [20, 0],
+    ]);
+    // An exponent is part of its number, sign and all.
+    expect(parseTransform("translate(1e1-5e-1)")).toEqual([1, 0, 0, 1, 10, -0.5]);
   });
 });
 
@@ -409,29 +458,34 @@ describe("svg-doc — reading (properties)", () => {
 
   // ------------------------------------------------------------------
   // DEFECT (svg-doc.ts, shapeFromElement) — a `<polygon>` / `<polyline>`
-  // with fewer than two points is emitted as a shape with NO anchors.
+  // with fewer than two points was emitted as a shape with NO anchors.
+  // FIXED.
   //
   // `path`, `rect`, `circle` and `ellipse` all end in
   // `return t.anchors.length ? t : null`, so an element that lowers to
-  // nothing is skipped (the property above). The two `poly*` cases return
-  // `polyToPath(...)` directly, and `polyToPath` answers an EMPTY table
-  // for fewer than two points — which is then pushed as a shape.
+  // nothing is skipped (the property above). The two `poly*` cases
+  // returned `polyToPath(...)` directly, and `polyToPath` answers an
+  // EMPTY table for fewer than two points — which was then pushed as a
+  // shape.
   //
   // Minimal counterexample: <svg><polygon points="5,5"/></svg>
   //   EXPECTED: shapes = []
-  //   ACTUAL:   one shape, { anchors: [], subpathStarts: [], subpathOpen: [] }
-  // (`<polyline/>` with no `points` at all does the same.)
+  //   WAS:      one shape, { anchors: [], subpathStarts: [], subpathOpen: [] }
+  // (`<polyline/>` with no `points` at all did the same.)
   //
   // Consumer: draw-bundle's SVG importer reports "no shapes in <file>"
   // only when `shapes.length === 0`; a file holding just such an element
-  // skips that warning, and its log line counts a shape that has no
+  // skipped that warning, and its log line counted a shape that has no
   // geometry.
+  //
+  // THE FIX: the two `poly*` cases end in the same empty-table check as
+  // the other four.
   // ------------------------------------------------------------------
-  it.fails("DEFECT (minimal counterexample): a one-point polygon is not a shape", () => {
+  it("FIXED DEFECT (minimal counterexample): a one-point polygon is not a shape", () => {
     expect(parseSvgDocument('<svg><polygon points="5,5"/></svg>')!.shapes).toEqual([]);
   });
 
-  it.fails("DEFECT: a polyline with no points is not a shape", () => {
+  it("FIXED DEFECT: a polyline with no points is not a shape", () => {
     expect(parseSvgDocument("<svg><polyline/></svg>")!.shapes).toEqual([]);
   });
 
