@@ -43,7 +43,7 @@ import {
   applySelectRepeatInstances,
   applyUpdateRepeat,
   readRepeatLibrary,
-  repeatLinks,
+  repeatInstanceCounts,
   resolveRepeat,
   REPEAT_CLIP_NOTE,
   REPEAT_DEFAULTS,
@@ -53,6 +53,7 @@ import {
   type RepeatParams,
   type RepeatRecord,
 } from "../commands/repeat";
+import { useFollowedDraft, usePanelReload } from "./use-panel-reload";
 
 export const REPEAT_PANEL_ID = "media.paged.draw.panel.repeat";
 
@@ -136,35 +137,29 @@ export function makeRepeatPanel(host: BundleHost): {
     const [placed, setPlaced] = React.useState<Record<string, number>>({});
     const [hasSelection, setHasSelection] = React.useState(false);
     const [portable, setPortable] = React.useState(true);
-    const [draft, setDraft] = React.useState<RepeatParams>(REPEAT_DEFAULTS);
+    const [draft, setDraft, followDraft] =
+      useFollowedDraft<RepeatParams>(REPEAT_DEFAULTS);
 
-    const reload = React.useCallback(async () => {
-      setPortable(host.supports(REPEAT_FEATURE));
+    // WHAT A RELOAD COSTS (`test/panels/repeat-panel.spec.tsx`, and it
+    // may only go down): the recipe part once, and the document's links
+    // once per document REVISION, tallied for every record in one pass.
+    // It used to walk the whole document — and re-read the recipe — once
+    // per RECORD, on every event.
+    const reload = usePanelReload(host, "repeat", async ({ live, selection }) => {
       const library = await readRepeatLibrary(host);
+      if (!live()) return;
+      const id = await resolveRepeat(host, undefined, library);
+      if (!live()) return;
+      const tally = await repeatInstanceCounts(host, library);
+      if (!live()) return;
+      setPortable(host.supports(REPEAT_FEATURE));
       setRecords(library.repeats);
-      setHasSelection(host.selection.get().length > 0);
-      const id = await resolveRepeat(host, undefined);
+      setHasSelection(selection.length > 0);
       setActive(id);
-      const tally: Record<string, number> = {};
-      for (const record of library.repeats) {
-        const links = await repeatLinks(host, record.id);
-        tally[record.id] = links.instances.length;
-      }
       setPlaced(tally);
       const saved = library.repeats.find((r) => r.id === id);
-      if (saved) setDraft(saved.params);
-    }, []);
-
-    React.useEffect(() => {
-      void reload();
-      const subs = [
-        host.selection.onDidChange(() => void reload()),
-        host.document.onDidChange(() => void reload()),
-      ];
-      return () => {
-        for (const s of subs) s.dispose();
-      };
-    }, [reload]);
+      if (saved) followDraft(saved.id, saved.params);
+    });
 
     const run = async (work: Promise<unknown>) => {
       try {
@@ -172,7 +167,7 @@ export function makeRepeatPanel(host: BundleHost): {
       } catch (e) {
         host.log.warn(`repeat panel: ${String(e)}`);
       }
-      void reload();
+      reload();
     };
 
     const numberRow = (

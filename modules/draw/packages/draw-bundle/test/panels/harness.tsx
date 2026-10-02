@@ -44,14 +44,21 @@
 // chain of MICROTASKS: one macrotask turn drains every reload in flight,
 // however many overlap. `settle()` does not trust that (`quiesce` waits
 // for the counted work to stop moving), and it runs inside React's `act`
-// so the state the reloads set is on screen when it returns.
+// so the state the reloads set is on screen when it returns. A panel on
+// the shared scheduler (`src/panels/reload.ts`) STARTS its reload one
+// macrotask after the request, which the same wait covers.
 //
-// TWO COUNTERS, and they measure different things:
-//   · `work`   — `countingHost`: door calls the PANEL made.
-//   · `events` — how many times the host DELIVERED a selection / document
-//     event to the panel. Every panel's listener is `() => void reload()`,
-//     so a delivery IS a reload: `reloads()` is an exact count, not an
-//     inference from the reads.
+// THREE COUNTERS, and they measure different things:
+//   · `work`    — `countingHost`: door calls the PANEL made.
+//   · `events`  — how many times the host DELIVERED a selection / document
+//     event to the panel's host. Before the scheduler every panel's
+//     listener was `() => void reload()`, so a delivery WAS a reload and
+//     this number was reported as one. It no longer is: twenty deliveries
+//     are one reload now, and the two are reported side by side.
+//   · `reloads` — the reloads the panel STARTED, counted at the journal
+//     door (`usePanelReload` records one entry per started reload).
+//     Exact, and it includes the mount's own reload and a button's, which
+//     the event count never did.
 // Everything a spec does to the document goes through the RAW `h.host`,
 // so only the panel's own work is counted.
 
@@ -126,6 +133,27 @@ export function tapEvents(host: BundleHost): {
   };
 }
 
+/**
+ * A view of `host` whose RECIPE WRITES take a task to land — the ordering
+ * the editor has and the headless engine does not. There, every door is a
+ * worker round trip, so the reload a command's batch requested starts
+ * (and reads the recipe part) while the command's own `parts.write` is
+ * still out. Here the engine answers synchronously and the whole command
+ * finishes first, which hides exactly the bug a late recipe write causes.
+ * Hand this to the COMMAND under test; the panel stays on its own host.
+ */
+export function slowRecipeWrites(host: BundleHost): BundleHost {
+  const parts = override(
+    host.parts,
+    "write",
+    async (path: string, bytes: Uint8Array): Promise<void> => {
+      await new Promise((r) => setTimeout(r, 0));
+      await host.parts.write(path, bytes);
+    },
+  );
+  return override(host, "parts", parts);
+}
+
 // ----------------------------------------------------------------- the clock
 
 /** Let every reload in flight land, and put what it set on screen. */
@@ -158,9 +186,11 @@ export type PanelFactory = (host: BundleHost) => {
 
 /** What one stretch of panel work cost, counted at the host doors. */
 export interface ReloadCost {
-  /** Reloads the host's EVENTS triggered — one per delivery. The mount's
-   *  own reload and a button's trailing `void reload()` are not events
-   *  and are not in this number. */
+  /** Selection + document events the host DELIVERED to the panel's host.
+   *  What the panel was told, not what it did about it. */
+  events: number;
+  /** Reloads the panel STARTED (journal entries — see the header). The
+   *  mount's own reload is one of them. */
   reloads: number;
   /** `document.tree()` calls. A walk is one of these plus one read per
    *  leaf, so this is how many times the panel walked the document. */
@@ -227,7 +257,8 @@ function mounted(
     events.document = 0;
   };
   const cost = (): ReloadCost => ({
-    reloads: events.selection + events.document,
+    events: events.selection + events.document,
+    reloads: work.count("journal.record"),
     walks: work.count("document.tree"),
     reads: work.reads(),
     partReads: work.count("parts.read"),
@@ -351,9 +382,17 @@ export function selectionBurst(
  * The out-of-order pair: start a reload with NOTHING selected, let it
  * get as far as its first document walk (it has read the selection by
  * then), and only then select `ids` — which starts a second reload while
- * the first is still walking. Deterministic here because the engine
- * answers synchronously, so "inside the walk" is a count of microtasks;
- * in the editor the same window is the walk's wall-clock duration.
+ * the first is still walking.
+ *
+ * HOW THE WINDOW IS MADE. The engine answers synchronously, so a reload
+ * is one unbroken chain of microtasks and nothing a spec does from
+ * outside can land "inside the walk". The walk's own `document.tree()`
+ * read is therefore held open: the FIRST one after the change selects
+ * `ids` and then yields a macrotask before it answers — long enough for
+ * a reload the selection requested to start (a panel on the shared
+ * scheduler starts one a task later; an unscheduled one starts it inside
+ * the event). In the editor the same window is the walk's wall-clock
+ * duration. The read is put back whatever happens.
  */
 export async function selectDuringWalk(
   h: HeadlessHost,
@@ -361,14 +400,24 @@ export async function selectDuringWalk(
   ids: ElementId[],
 ): Promise<void> {
   panel.reset();
-  await drive(async () => {
-    await plainChange(h, 1);
-    for (let i = 0; i < 1000 && panel.work.count("document.tree") < 1; i++) {
-      await Promise.resolve();
+  const document = h.host.document as {
+    tree: HeadlessHost["host"]["document"]["tree"];
+  };
+  const tree = document.tree;
+  let walked = false;
+  document.tree = async function heldOpen(this: unknown) {
+    const roots = await tree.call(this);
+    if (!walked) {
+      walked = true;
+      await h.host.selection.set(ids);
+      await new Promise((r) => setTimeout(r, 0));
     }
-    if (panel.work.count("document.tree") < 1) {
-      throw new Error("the first reload never reached its walk");
-    }
-    await h.host.selection.set(ids);
-  }, panel.work);
+    return roots;
+  };
+  try {
+    await drive(() => plainChange(h, 1), panel.work);
+  } finally {
+    document.tree = tree;
+  }
+  if (!walked) throw new Error("the first reload never reached its walk");
 }

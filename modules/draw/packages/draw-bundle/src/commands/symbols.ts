@@ -211,6 +211,7 @@ import { leafIdsOf } from "./select-same";
 import { parentGroupOf } from "./parentage";
 import { insertPathMutationFor } from "../handlers/insert-path";
 import { resolveTargetPage } from "../io/svg";
+import { announceRecipeChange, linkIndex } from "../link-index";
 
 export const SYMBOLS_COMMAND_CATEGORY = "Symbols";
 
@@ -823,7 +824,9 @@ export function symbolUnlinkBatchFor(
 
 // -------------------------------------------------------- host: the part
 
-type PartsHost = Pick<BundleHost, "parts" | "supports" | "log">;
+type PartsHost = Pick<BundleHost, "parts" | "supports" | "log"> & {
+  bindings?: BundleHost["bindings"];
+};
 
 /** Read the library out of the container part. A host with no container
  *  writer (`supports("storage.parts@1")` false — an older editor) is not
@@ -863,6 +866,9 @@ export async function writeSymbolLibrary(
   }
   try {
     await host.parts.write(SYMBOLS_PART, serializeSymbolLibrary(library));
+    // A part write is not a document event — and Define and Rename write
+    // NOTHING else, so without this an open panel hears nothing at all.
+    announceRecipeChange(host);
     return true;
   } catch (e) {
     host.log.warn(`symbols: library write failed (${String(e)})`);
@@ -885,19 +891,19 @@ export interface SymbolInstance {
 const leafKey = (id: ElementId): string => `${id.kind}:${String(id.id)}`;
 
 /** Every symbol instance in the document (optionally only those of
- *  `symbolId`), in tree order. One scene walk + one metadata read per
- *  leaf — the `select-same` / `graphicStyleLinks` precedent. */
+ *  `symbolId`), in tree order — a parse of the shared link index
+ *  (`../link-index`), which walks the document once per revision for
+ *  every feature at once. */
 export async function symbolInstances(
   host: BundleHost,
   symbolId?: string,
 ): Promise<SymbolInstance[]> {
-  const roots = await host.document.tree().catch(() => [] as SceneTreeNode[]);
+  const { linked } = await linkIndex(host).snapshot();
   const byInstance = new Map<
     string,
     { instance: SymbolInstance; pieces: number[] }
   >();
-  for (const id of leafIdsOf(roots)) {
-    const env = await host.document.getMetadata(id).catch(() => null);
+  for (const { id, envelope: env } of linked) {
     const ref = symbolInstanceOf(env);
     if (!ref) continue;
     if (symbolId !== undefined && ref.symbol !== symbolId) continue;
@@ -975,7 +981,9 @@ export async function selectedSymbolInstances(
 ): Promise<SymbolInstance[]> {
   const selection = host.selection.get();
   if (selection.length === 0) return [];
-  const roots = await host.document.tree().catch(() => [] as SceneTreeNode[]);
+  // The tree the instances are about to be read from — one read for
+  // both, per document revision.
+  const roots = await linkIndex(host).tree();
   const wanted = new Set(
     expandToLeaves(roots, selection).map((id) => String(id.id)),
   );
@@ -1037,7 +1045,7 @@ export async function captureSymbolSources(
     host.log.debug(`${label}: no selection — no-op`);
     return [];
   }
-  const roots = await host.document.tree().catch(() => [] as SceneTreeNode[]);
+  const roots = await linkIndex(host).tree();
   const out: { table: AnchorTable; paint: CompoundPaint }[] = [];
   for (const id of expandToLeaves(roots, selection)) {
     if (id.kind === "textFrame") {
@@ -1237,7 +1245,10 @@ async function rebuildInstance(
   },
 ): Promise<ElementId[]> {
   const { instance, symbol, label } = args;
-  const roots = await host.document.tree().catch(() => [] as SceneTreeNode[]);
+  // The CURRENT revision's tree: the one the instances were read from
+  // for the first rebuild of a command, a fresh one after each rebuild
+  // that follows (a rebuild is two batches, so the tree has moved).
+  const roots = await linkIndex(host).tree();
   const first = instance.leaves[0];
   if (!first) return [];
   const group = parentGroupOf(roots, first);
@@ -1353,13 +1364,12 @@ async function unlinkTargets(
   host: BundleHost,
   instances: readonly SymbolInstance[],
 ): Promise<{ id: ElementId; envelope: PluginMetadataEnvelope | null }[]> {
+  // The envelopes the instances were just parsed from, not a re-read.
+  const index = linkIndex(host);
   const out: { id: ElementId; envelope: PluginMetadataEnvelope | null }[] = [];
   for (const instance of instances) {
     for (const id of instance.leaves) {
-      out.push({
-        id,
-        envelope: await host.document.getMetadata(id).catch(() => null),
-      });
+      out.push({ id, envelope: await index.envelopeOf(id) });
     }
   }
   return out;

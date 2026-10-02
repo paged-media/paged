@@ -26,6 +26,12 @@
 // WHAT WAS MEASURED, in one line: ONE walk per reload, whatever the
 // record count — but TWO engine reads per leaf on it, and both are the
 // same request (`getMetadata` is `requestElementProperties` underneath).
+//
+// WHAT IT IS NOW (the history is beside each budget): one reload per
+// burst, one walk per document REVISION out of the shared link index
+// (`src/link-index.ts`) at ONE read per leaf — a row's badge needs how
+// many elements follow a style, not their paint — and one property read
+// for the selected element.
 
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
@@ -34,6 +40,7 @@ import type { HeadlessHost } from "@paged-media/plugin-sdk";
 import {
   drawBundle,
   applyDeleteGraphicStyle,
+  applyRenameGraphicStyle,
   applySaveGraphicStyle,
   graphicStyleRefOf,
   makeGraphicStylesPanel,
@@ -56,6 +63,7 @@ import {
   propertyOf,
   seedRow,
   selectionBurst,
+  slowRecipeWrites,
   teardownPanels,
   unmountAll,
   PLAIN_LEAVES,
@@ -96,10 +104,10 @@ describe("Graphic styles panel — rendered against the engine", () => {
 
     it("THE FLOOR: what a reload costs before the document holds anything", async () => {
       const panel = await mountPanel(h, makeGraphicStylesPanel);
-      // One tree read and the library once: this is the shape the target
-      // has, before there is a leaf to read twice.
+      // The mount's own reload: one tree read and the library once.
       expect(panel.cost()).toEqual({
-        reloads: 0,
+        events: 0,
+        reloads: 1,
         walks: 1,
         reads: 1,
         partReads: 1,
@@ -210,18 +218,19 @@ describe("Graphic styles panel — rendered against the engine", () => {
       expect(panel.attr(PANEL, "data-draw-graphic-styles-panel")).toBe("0");
     });
 
-    // BUG (measured). The panel reloads on document events, selection
-    // events and its own buttons (each ends in `void reload()`) — and a
-    // `.paged` container-part write is none of those. A SAVE happens to
-    // be followed (the library is written before the link batch), but
-    // `applyDeleteGraphicStyle` unlinks the followers first and drops the
-    // style LAST, so the reload the unlink triggers still reads it. The
-    // panel's own Delete button hides this behind its trailing reload;
-    // the same command from the menu or Cmd+K leaves an open panel
-    // offering Apply / Redefine on a style that no longer exists. (Rename
-    // is library-only: no event at all.) Flip to `it` when a library
-    // write reaches the panel.
-    it.fails(
+    // WAS A BUG (measured, then fixed). The panel reloaded on document
+    // events, selection events and its own buttons (each ended in `void
+    // reload()`) — and a `.paged` container-part write is none of those.
+    // A SAVE happened to be followed (the library is written before the
+    // link batch), but `applyDeleteGraphicStyle` unlinks the followers
+    // first and drops the style LAST, so the reload the unlink triggered
+    // still read it. The panel's own Delete button hid this behind its
+    // trailing reload; the same command from the menu or Cmd+K left an
+    // open panel offering Apply / Redefine on a style that no longer
+    // existed (1 row). (Rename is library-only: no event at all.)
+    // `writeGraphicStyleLibrary` now announces the write, and the panel
+    // reloads on that.
+    it(
       "an OPEN panel drops a style deleted by the COMMAND, not only by its own button",
       async () => {
         await h.host.selection.set([poly("s1")]);
@@ -234,10 +243,49 @@ describe("Graphic styles panel — rendered against the engine", () => {
 
         // The document has let go of it…
         expect((await readGraphicStyleLibrary(h.host)).styles).toEqual([]);
-        // …MEASURED 1: the panel has not.
+        // …and so has the panel.
         expect(panel.count("[data-draw-graphic-style-row]")).toBe(0);
       },
     );
+
+    // The same, in the order the EDITOR has (see blend-panel.spec.tsx):
+    // the library write lands a task after the reload the last unlink
+    // started. This is the case that fails without the announcement.
+    it("…and when the library write lands AFTER the reload its unlink started", async () => {
+      await h.host.selection.set([poly("s1")]);
+      const style = await applySaveGraphicStyle(h.host);
+      expect(style).not.toBeNull();
+      const panel = await mountPanel(h, makeGraphicStylesPanel);
+      expect(panel.count("[data-draw-graphic-style-row]")).toBe(1);
+
+      await drive(
+        () => applyDeleteGraphicStyle(slowRecipeWrites(h.host), style!.id),
+        panel.work,
+      );
+
+      expect((await readGraphicStyleLibrary(h.host)).styles).toEqual([]);
+      expect(panel.count("[data-draw-graphic-style-row]")).toBe(0);
+    });
+
+    it("an OPEN panel follows a RENAME — a library write with no document event at all", async () => {
+      await h.host.selection.set([poly("s1")]);
+      const style = await applySaveGraphicStyle(h.host, { name: "Before" });
+      expect(style).not.toBeNull();
+      const panel = await mountPanel(h, makeGraphicStylesPanel);
+      const row = `[data-draw-graphic-style-row="${style!.id}"]`;
+      expect(panel.get(row).textContent).toContain("Before");
+
+      panel.reset();
+      await drive(
+        () => applyRenameGraphicStyle(h.host, style!.id, "After"),
+        panel.work,
+      );
+
+      expect(panel.cost().events).toBe(0);
+      expect(panel.cost().reloads).toBe(1);
+      expect(panel.get(row).textContent).toContain("After");
+      await applyDeleteGraphicStyle(h.host, style!.id);
+    });
   });
 
   // COVERS: `reload()` on a document with R = 5 styles among L = 40 plain
@@ -276,57 +324,75 @@ describe("Graphic styles panel — rendered against the engine", () => {
     });
 
     it("NO per-record walk here: a reload costs the same whatever the record count", () => {
-      // Index = styles in the library. One `graphicStyleLinks` walk is
-      // tallied for every style at once.
-      expect(readsByRecords).toEqual([91, 91, 91, 91, 91, 91]);
+      // Index = styles in the library. One pass over the link index
+      // counts the followers of every style at once
+      // (`graphicStyleLinkCounts`). As found: 91 each — a metadata read
+      // AND a property read for every leaf.
+      expect(readsByRecords).toEqual([46, 46, 46, 46, 46, 46]);
     });
 
-    it("ONE reload = 1 walk = 91 reads — two per leaf", async () => {
+    it("ONE reload = 1 walk = 46 reads — one per leaf", async () => {
       const panel = await mountPanel(h, makeGraphicStylesPanel);
-      expect(panel.cost()).toEqual({ reloads: 0, walks: 1, reads: 91, partReads: 1 });
+      expect(panel.cost()).toEqual({
+        events: 0,
+        reloads: 1,
+        walks: 1,
+        reads: 46,
+        partReads: 1,
+      });
 
       const one = await panel.costOf(() => plainChange(h, 0));
       expect(one).toEqual({
+        events: 1,
         reloads: 1,
-        // One walk per reload. TARGET 1 per document REVISION, shared by
-        // every panel that needs the links.
+        // One walk per document REVISION, shared by every panel and
+        // every command on this host.
         walks: 1,
-        // 1 tree + 45 × (getMetadata + elementProperties). The two are
-        // ONE engine request asked twice — `getMetadata` is a
-        // `requestElementProperties` filtered to this plugin's key.
-        // TARGET 46.
-        reads: 91,
+        // 1 tree + 45 getMetadata, in parallel. As found: 91 — every
+        // leaf's properties were read as well, to answer "overridden"
+        // for elements the panel shows no such thing for. TARGET 2 — a
+        // tree and ONE bulk metadata read (RFI C-65).
+        reads: 46,
         partReads: 1,
       });
       expect(panel.work.count("document.getMetadata")).toBe(45);
-      expect(panel.work.count("document.elementProperties")).toBe(45);
+      // As found: 45.
+      expect(panel.work.count("document.elementProperties")).toBe(0);
     });
 
-    it("a burst of 20 document changes = 20 reloads = 1820 reads", async () => {
+    it("a burst of 20 document changes = ONE reload = 46 reads", async () => {
       const panel = await mountPanel(h, makeGraphicStylesPanel);
       expect(await documentBurst(h, panel)).toEqual({
-        // No debounce, no cancellation. TARGET 1 (O(1) per burst).
-        reloads: 20,
-        walks: 20,
-        // 20 × 91. TARGET 46 — one walk for the revision the burst ends on.
-        reads: 1820,
-        partReads: 20,
+        events: 20,
+        // As found: 20 — no debounce, no cancellation.
+        reloads: 1,
+        // As found: 20.
+        walks: 1,
+        // One walk, of the revision the burst ends on. As found: 1 820.
+        reads: 46,
+        // As found: 20.
+        partReads: 1,
       });
     });
 
-    it("a burst of 20 selection changes = 20 reloads = 1880 reads", async () => {
+    it("a burst of 20 selection changes = ONE reload = 1 read", async () => {
       const panel = await mountPanel(h, makeGraphicStylesPanel);
       expect(await selectionBurst(h, panel)).toEqual({
-        // TARGET 1.
-        reloads: 20,
-        // The DOCUMENT did not change once during this burst. TARGET 0.
-        walks: 20,
-        // 20 × (91 + 3 reads of the selected leaf: its carrier, its
-        // metadata, its properties — the same request three times).
-        // TARGET 1.
-        reads: 1880,
-        partReads: 20,
+        events: 20,
+        // As found: 20.
+        reloads: 1,
+        // The DOCUMENT did not change once during this burst. As found:
+        // 20.
+        walks: 0,
+        // The properties of the element the burst ENDS on — its
+        // "overridden" line needs its paint. Its carrier and its
+        // metadata are in the walk the mount read. As found: 1 880 — 20 ×
+        // (91 + the selected leaf three times over).
+        reads: 1,
+        // As found: 20.
+        partReads: 1,
       });
+      expect(panel.work.count("document.elementProperties")).toBe(1);
     });
   });
 });

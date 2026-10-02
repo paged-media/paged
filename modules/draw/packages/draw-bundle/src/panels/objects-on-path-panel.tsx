@@ -48,6 +48,7 @@ import {
   type OnPathDistribute,
   type OnPathPivot,
 } from "../commands/objects-on-path";
+import { useFollowedDraft, usePanelReload } from "./use-panel-reload";
 
 export const OBJECTS_ON_PATH_PANEL_ID = "media.paged.draw.panel.objectsOnPath";
 
@@ -127,37 +128,37 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
     const [placed, setPlaced] = React.useState<Record<string, number>>({});
     const [selected, setSelected] = React.useState(0);
     const [portable, setPortable] = React.useState(true);
-    const [draft, setDraft] = React.useState<ObjectsOnPathParams>(
-      OBJECTS_ON_PATH_DEFAULTS,
+    const [draft, setDraft, followDraft] =
+      useFollowedDraft<ObjectsOnPathParams>(OBJECTS_ON_PATH_DEFAULTS);
+
+    // WHAT A RELOAD COSTS (`test/panels/objects-on-path-panel.spec.tsx`,
+    // and it may only go down): the recipe part once, and the document's
+    // links once per document REVISION — one unfiltered
+    // `objectsOnPathLinks`, tallied for every record at once. It used to
+    // walk the whole document once per RECORD, on every event.
+    const reload = usePanelReload(
+      host,
+      "objects-on-path",
+      async ({ live, selection }) => {
+        const library = await readObjectsOnPathLibrary(host);
+        if (!live()) return;
+        const id = await resolveObjectsOnPath(host, undefined, library);
+        if (!live()) return;
+        const links = await objectsOnPathLinks(host);
+        if (!live()) return;
+        const tally: Record<string, number> = {};
+        for (const object of links.objects) {
+          tally[object.ref.onPath] = (tally[object.ref.onPath] ?? 0) + 1;
+        }
+        setPortable(host.supports(OBJECTS_ON_PATH_FEATURE));
+        setRecords(library.associations);
+        setSelected(selection.length);
+        setActive(id);
+        setPlaced(tally);
+        const saved = library.associations.find((r) => r.id === id);
+        if (saved) followDraft(saved.id, saved.params);
+      },
     );
-
-    const reload = React.useCallback(async () => {
-      setPortable(host.supports(OBJECTS_ON_PATH_FEATURE));
-      const library = await readObjectsOnPathLibrary(host);
-      setRecords(library.associations);
-      setSelected(host.selection.get().length);
-      const id = await resolveObjectsOnPath(host, undefined);
-      setActive(id);
-      const tally: Record<string, number> = {};
-      for (const record of library.associations) {
-        const links = await objectsOnPathLinks(host, record.id);
-        tally[record.id] = links.objects.length;
-      }
-      setPlaced(tally);
-      const saved = library.associations.find((r) => r.id === id);
-      if (saved) setDraft(saved.params);
-    }, []);
-
-    React.useEffect(() => {
-      void reload();
-      const subs = [
-        host.selection.onDidChange(() => void reload()),
-        host.document.onDidChange(() => void reload()),
-      ];
-      return () => {
-        for (const s of subs) s.dispose();
-      };
-    }, [reload]);
 
     const run = async (work: Promise<unknown>) => {
       try {
@@ -165,7 +166,7 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
       } catch (e) {
         host.log.warn(`objects-on-path panel: ${String(e)}`);
       }
-      void reload();
+      reload();
     };
 
     const numberRow = (

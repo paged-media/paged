@@ -42,11 +42,11 @@
 import type {
   BundleHost,
   Disposable,
-  ElementId,
   SchemaPanelContribution,
 } from "@paged-media/plugin-api";
 
 import { supportsLiveCorners } from "../commands/live-corners";
+import { createReloader, publishChanges } from "./reload";
 
 export const STROKE_PANEL_ID = "media.paged.draw.panel.stroke";
 
@@ -299,49 +299,72 @@ export const strokePanel: SchemaPanelContribution = {
  * This is exactly B-01's resolution: the conditional (`visibleWhen`)
  * is gone; a DERIVED bound value the plugin computes drives visibility.
  *
+ * WHEN IT RECOMPUTES, and what that fixed (`./reload.ts`, the scheduler
+ * the React panels share). The dash gate is published AFTER an awaited
+ * read, and nothing sequenced it: clear the selection while that read
+ * was out and "nothing selected ⇒ false" landed first, the older read's
+ * "it is a path ⇒ true" on top of it — the Dashes section stayed up with
+ * nothing selected. A recompute now holds a ticket and publishes nothing
+ * once a newer one has started; changes that arrive together are one
+ * recompute; and a gate whose value did not move is not re-published
+ * (measured: 100 publishes for a burst of 20 selection changes, 96 of
+ * them the value already there).
+ *
  * Returns a Disposable that drops the subscription (the host also
  * tracks the bindings store, cleared on bundle teardown).
  */
 export function installStrokePanelBindings(host: BundleHost): Disposable {
-  const recompute = async (ids: ElementId[] | undefined): Promise<void> => {
-    const selection = ids ?? host.selection.get();
-    const has = selection.length > 0;
-    host.bindings.publish(BIND_HAS_SELECTION, has);
-    // Phase 4c — the Line ends section gates on the selection's KIND
-    // (GraphicLine-only, the engine's own arrowhead gate). A plain
-    // selection read, no document round-trip.
-    host.bindings.publish(
-      BIND_ARROWHEAD_CONTROLS_VISIBLE,
-      has && selection[0].kind === "graphicLine",
-    );
-    // Phase 9 (Tier B) — the Corners section gates on the selection's
-    // corners being RENDERABLE (`supportsLiveCorners`); the Appearance
-    // section gates on any non-empty selection (the stack is plugin
-    // metadata applicable to any frame). Plain selection reads, no
-    // document round-trip.
-    host.bindings.publish(
-      BIND_CORNER_CONTROLS_VISIBLE,
-      has && supportsLiveCorners(selection[0]),
-    );
-    host.bindings.publish(BIND_APPEARANCE_CONTROLS_VISIBLE, has);
-    if (!has) {
-      host.bindings.publish(BIND_DASH_CONTROLS_VISIBLE, false);
-      return;
-    }
-    // A path element exposes an anchor table; a rectangle does not.
-    let isPath = false;
-    try {
-      const anchors = await host.document.pathAnchors(selection[0]);
-      isPath = anchors !== null && anchors.anchors.length > 0;
-    } catch {
-      isPath = false;
-    }
-    host.bindings.publish(BIND_DASH_CONTROLS_VISIBLE, isPath);
-  };
+  const publish = publishChanges(host);
+  const reloader = createReloader(
+    host,
+    "stroke panel bindings",
+    async ({ live, selection }) => {
+      const has = selection.length > 0;
+      publish(BIND_HAS_SELECTION, has);
+      // Phase 4c — the Line ends section gates on the selection's KIND
+      // (GraphicLine-only, the engine's own arrowhead gate). A plain
+      // selection read, no document round-trip.
+      publish(
+        BIND_ARROWHEAD_CONTROLS_VISIBLE,
+        has && selection[0].kind === "graphicLine",
+      );
+      // Phase 9 (Tier B) — the Corners section gates on the selection's
+      // corners being RENDERABLE (`supportsLiveCorners`); the Appearance
+      // section gates on any non-empty selection (the stack is plugin
+      // metadata applicable to any frame). Plain selection reads, no
+      // document round-trip.
+      publish(
+        BIND_CORNER_CONTROLS_VISIBLE,
+        has && supportsLiveCorners(selection[0]),
+      );
+      publish(BIND_APPEARANCE_CONTROLS_VISIBLE, has);
+      if (!has) {
+        publish(BIND_DASH_CONTROLS_VISIBLE, false);
+        return;
+      }
+      // A path element exposes an anchor table; a rectangle does not.
+      let isPath = false;
+      try {
+        const anchors = await host.document.pathAnchors(selection[0]);
+        isPath = anchors !== null && anchors.anchors.length > 0;
+      } catch {
+        isPath = false;
+      }
+      // The selection moved on while that read was out: its answer is
+      // about an element that is no longer the one the gates describe.
+      if (!live()) return;
+      publish(BIND_DASH_CONTROLS_VISIBLE, isPath);
+    },
+  );
 
-  // Prime from the current selection, then track changes.
-  void recompute(undefined);
-  return host.selection.onDidChange((ids) => {
-    void recompute(ids);
-  });
+  // Prime from the current selection AT ONCE — the host renders its
+  // gates from what is published — then track changes.
+  reloader.now();
+  const sub = host.selection.onDidChange((ids) => reloader.request(ids));
+  return {
+    dispose() {
+      sub.dispose();
+      reloader.dispose();
+    },
+  };
 }

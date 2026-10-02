@@ -55,6 +55,7 @@ import {
   SYMBOLS_FEATURE,
   type SymbolDefinition,
 } from "../commands/symbols";
+import { usePanelReload } from "./use-panel-reload";
 
 export const SYMBOLS_PANEL_ID = "media.paged.draw.panel.symbols";
 
@@ -154,36 +155,32 @@ export function makeSymbolsPanel(host: BundleHost): {
     const [hasSelection, setHasSelection] = React.useState(false);
     const [portable, setPortable] = React.useState(true);
 
-    const reload = React.useCallback(async () => {
-      setPortable(host.supports(SYMBOLS_FEATURE));
-      setSymbols((await readSymbolLibrary(host)).symbols);
-
+    // WHAT A RELOAD COSTS (`test/panels/symbols-panel.spec.tsx`, and it
+    // may only go down): the library part once, and the document's links
+    // once per document REVISION, out of the walk every panel shares.
+    // Which instances the selection touches is a lookup in that same
+    // walk — it used to be a second walk, and a third tree read.
+    const reload = usePanelReload(host, "symbols", async ({ live, selection }) => {
+      const library = await readSymbolLibrary(host);
+      if (!live()) return;
       const tally: Record<string, number> = {};
       for (const instance of await symbolInstances(host)) {
         tally[instance.symbol] = (tally[instance.symbol] ?? 0) + 1;
       }
-      setCounts(tally);
-
-      setHasSelection(host.selection.get().length > 0);
+      if (!live()) return;
+      let touched: string[] = [];
       try {
-        setSelected(
-          (await selectedSymbolInstances(host)).map((i) => i.symbol),
-        );
+        touched = (await selectedSymbolInstances(host)).map((i) => i.symbol);
       } catch {
-        setSelected([]);
+        touched = [];
       }
-    }, []);
-
-    React.useEffect(() => {
-      void reload();
-      const subs = [
-        host.selection.onDidChange(() => void reload()),
-        host.document.onDidChange(() => void reload()),
-      ];
-      return () => {
-        for (const s of subs) s.dispose();
-      };
-    }, [reload]);
+      if (!live()) return;
+      setPortable(host.supports(SYMBOLS_FEATURE));
+      setSymbols(library.symbols);
+      setCounts(tally);
+      setHasSelection(selection.length > 0);
+      setSelected(touched);
+    });
 
     const run = async (work: Promise<unknown>) => {
       try {
@@ -191,7 +188,7 @@ export function makeSymbolsPanel(host: BundleHost): {
       } catch (e) {
         host.log.warn(`symbols panel: ${String(e)}`);
       }
-      void reload();
+      reload();
     };
 
     const isInstance = selected.length > 0;

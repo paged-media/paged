@@ -63,6 +63,7 @@ import {
   type BlendRecord,
   type BlendSpacing,
 } from "../commands/blend";
+import { useFollowedDraft, usePanelReload } from "./use-panel-reload";
 
 export const BLEND_PANEL_ID = "media.paged.draw.panel.blend";
 
@@ -145,35 +146,35 @@ export function makeBlendPanel(host: BundleHost): {
     const [placed, setPlaced] = React.useState<Record<string, number>>({});
     const [selected, setSelected] = React.useState(0);
     const [portable, setPortable] = React.useState(true);
-    const [draft, setDraft] = React.useState<BlendParams>(BLEND_DEFAULTS);
+    const [draft, setDraft, followDraft] =
+      useFollowedDraft<BlendParams>(BLEND_DEFAULTS);
 
-    const reload = React.useCallback(async () => {
-      setPortable(host.supports(BLEND_FEATURE));
+    // WHAT A RELOAD COSTS (`test/panels/blend-panel.spec.tsx`, and it may
+    // only go down): the recipe part once, and the document's links once
+    // per document REVISION — one unfiltered `blendLinks`, tallied for
+    // every record at once, out of the walk every panel shares. It used
+    // to walk the whole document once per RECORD, on every event.
+    const reload = usePanelReload(host, "blend", async ({ live, selection }) => {
       const library = await readBlendLibrary(host);
-      setRecords(library.blends);
-      setSelected(host.selection.get().length);
-      const id = await resolveBlend(host, undefined);
-      setActive(id);
+      if (!live()) return;
+      const id = await resolveBlend(host, undefined, library);
+      if (!live()) return;
+      const links = await blendLinks(host);
+      if (!live()) return;
       const tally: Record<string, number> = {};
-      for (const record of library.blends) {
-        const links = await blendLinks(host, record.id);
-        tally[record.id] = links.steps.length;
+      for (const step of links.steps) {
+        tally[step.ref.blend] = (tally[step.ref.blend] ?? 0) + 1;
       }
+      // Everything is known; show it in one go, so the panel never
+      // renders half of one reload and half of another.
+      setPortable(host.supports(BLEND_FEATURE));
+      setRecords(library.blends);
+      setSelected(selection.length);
+      setActive(id);
       setPlaced(tally);
       const saved = library.blends.find((r) => r.id === id);
-      if (saved) setDraft(saved.params);
-    }, []);
-
-    React.useEffect(() => {
-      void reload();
-      const subs = [
-        host.selection.onDidChange(() => void reload()),
-        host.document.onDidChange(() => void reload()),
-      ];
-      return () => {
-        for (const s of subs) s.dispose();
-      };
-    }, [reload]);
+      if (saved) followDraft(saved.id, saved.params);
+    });
 
     const run = async (work: Promise<unknown>) => {
       try {
@@ -181,7 +182,7 @@ export function makeBlendPanel(host: BundleHost): {
       } catch (e) {
         host.log.warn(`blend panel: ${String(e)}`);
       }
-      void reload();
+      reload();
     };
 
     // The PLAN preview: the resolved count, its derivation, and the

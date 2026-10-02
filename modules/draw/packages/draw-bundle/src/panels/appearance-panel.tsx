@@ -76,6 +76,8 @@ import {
   releaseAppearance,
   resolveAppearanceCarrier,
 } from "../commands/appearance-bake";
+import { linkIndex } from "../link-index";
+import { usePanelReload } from "./use-panel-reload";
 
 export const APPEARANCE_PANEL_ID = "media.paged.draw.panel.appearance";
 
@@ -178,42 +180,50 @@ export function makeAppearancePanel(host: BundleHost): {
     const [stack, setStack] = React.useState<AppearanceStack>(EMPTY);
     const [baked, setBaked] = React.useState(false);
 
-    const reload = React.useCallback(async () => {
-      const selection = host.selection.get();
-      const first = selection[0] ?? null;
-      setExtra(Math.max(0, selection.length - 1));
-      if (!first) {
-        setTarget(null);
-        setStack(EMPTY);
-        setBaked(false);
-        return;
-      }
-      try {
-        // A baked stack can be selected as its group or as one of its
-        // derived layers — both resolve to the CARRIER that owns the
-        // (still editable) metadata stack.
-        const carrier = await resolveAppearanceCarrier(host, first);
-        const env = await host.document.getMetadata(carrier);
-        setTarget(carrier);
-        setStack(appearanceOf(env));
-        setBaked(appearanceBakeOf(env) !== null);
-      } catch {
-        setTarget(first);
-        setStack(EMPTY);
-        setBaked(false);
-      }
-    }, []);
-
-    React.useEffect(() => {
-      void reload();
-      const subs = [
-        host.selection.onDidChange(() => void reload()),
-        host.document.onDidChange(() => void reload()),
-      ];
-      return () => {
-        for (const s of subs) s.dispose();
-      };
-    }, [reload]);
+    // THE SELECTION IS THE ONE THE HOST HANDED OVER (`./reload.ts`, rule
+    // 3). This panel used to re-read `host.selection.get()` as its
+    // reload's first statement, inside the selection event — where the
+    // SDK adapter has not stored the new selection yet — and so showed
+    // the PREVIOUS selection's stack until something else changed.
+    //
+    // WHAT A RELOAD COSTS (`test/panels/appearance-panel.spec.tsx`, and
+    // it may only go down): nothing with nothing selected, and otherwise
+    // ONE metadata read per document revision — resolving the carrier
+    // and reading its stack are the same element's envelope, which the
+    // link index holds for the revision.
+    const reload = usePanelReload(
+      host,
+      "appearance",
+      async ({ live, selection }) => {
+        const first = selection[0] ?? null;
+        let next: {
+          target: ElementId | null;
+          stack: AppearanceStack;
+          baked: boolean;
+        } = { target: first, stack: EMPTY, baked: false };
+        if (first) {
+          try {
+            // A baked stack can be selected as its group or as one of its
+            // derived layers — both resolve to the CARRIER that owns the
+            // (still editable) metadata stack.
+            const carrier = await resolveAppearanceCarrier(host, first);
+            const env = await linkIndex(host).envelopeOf(carrier);
+            next = {
+              target: carrier,
+              stack: appearanceOf(env),
+              baked: appearanceBakeOf(env) !== null,
+            };
+          } catch {
+            next = { target: first, stack: EMPTY, baked: false };
+          }
+          if (!live()) return;
+        }
+        setExtra(Math.max(0, selection.length - 1));
+        setTarget(next.target);
+        setStack(next.stack);
+        setBaked(next.baked);
+      },
+    );
 
     const run = async (work: Promise<void>) => {
       try {
@@ -221,7 +231,7 @@ export function makeAppearancePanel(host: BundleHost): {
       } catch (e) {
         host.log.warn(`appearance panel: ${String(e)}`);
       }
-      void reload();
+      reload();
     };
 
     const edit = (

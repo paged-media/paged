@@ -202,6 +202,7 @@ import {
 } from "./compound-path";
 import { leafIdsOf } from "./select-same";
 import { insertPathMutationFor } from "../handlers/insert-path";
+import { announceRecipeChange, groupHolding, linkIndex } from "../link-index";
 import {
   batchMutationFor,
   bindCreatedMutationFor,
@@ -1056,7 +1057,9 @@ export function repeatReleaseBatchFor(args: {
 
 // -------------------------------------------------------- host: the part
 
-type PartsHost = Pick<BundleHost, "parts" | "supports" | "log">;
+type PartsHost = Pick<BundleHost, "parts" | "supports" | "log"> & {
+  bindings?: BundleHost["bindings"];
+};
 
 /** Read the records out of the container part. A host with no container
  *  writer is not an error: it reads as an EMPTY library and WARNS. */
@@ -1091,6 +1094,9 @@ export async function writeRepeatLibrary(
   if (!host.supports(REPEAT_FEATURE)) return false;
   try {
     await host.parts.write(REPEAT_PART, serializeRepeatLibrary(library));
+    // A part write is not a document event: without this an open panel
+    // misses every recipe saved AFTER a command's last mutation.
+    announceRecipeChange(host);
     return true;
   } catch (e) {
     host.log.warn(`repeat: recipe write failed (${String(e)})`);
@@ -1156,10 +1162,16 @@ export async function repeatBoundsOf(
 /** Every leaf carrying a repeat link, split by which one — PLUS the
  *  instances the RECIPE names, which is the only way to reach a CLIPPED
  *  one (`document.tree()` does not report a pasted-in child; measured).
- *  `repeat` filters; omit it for every repeat. */
+ *  `repeat` filters; omit it for every repeat. `known` is the library
+ *  when the caller has just read it.
+ *
+ *  The leaves come out of the shared link index (`../link-index`): one
+ *  walk per document revision, whoever asks. The clipped half cannot —
+ *  a walk never reaches it — and is still read by id, once per revision. */
 export async function repeatLinks(
   host: BundleHost,
   repeat?: string,
+  known?: RepeatLibrary,
 ): Promise<{
   sources: { id: ElementId; ref: RepeatSourceRef }[];
   instances: { id: ElementId; ref: RepeatInstanceRef | null }[];
@@ -1169,9 +1181,9 @@ export async function repeatLinks(
   const instances: { id: ElementId; ref: RepeatInstanceRef | null }[] = [];
   const clipFrames: { id: ElementId; ref: RepeatClipRef }[] = [];
   const seen = new Set<string>();
-  const roots = await host.document.tree().catch(() => []);
-  for (const id of leafIdsOf(roots)) {
-    const env = await host.document.getMetadata(id).catch(() => null);
+  const index = linkIndex(host);
+  const { linked } = await index.snapshot();
+  for (const { id, envelope: env } of linked) {
     const source = repeatSourceOf(env);
     if (source && (repeat === undefined || source.repeat === repeat)) {
       sources.push({ id, ref: source });
@@ -1188,21 +1200,69 @@ export async function repeatLinks(
   }
   // The clipped half: ids the tree cannot show. Read them out of the
   // recipe and keep whichever the engine still answers for.
-  const library = await readRepeatLibrary(host);
+  const library = known ?? (await readRepeatLibrary(host));
   for (const record of library.repeats) {
     if (repeat !== undefined && record.id !== repeat) continue;
     for (const entry of record.instances) {
       if (seen.has(entry.id)) continue;
       const id = { kind: entry.kind, id: entry.id } as ElementId;
-      const geo = await host.document.elementGeometry([id]).catch(() => []);
-      if (geo.length === 0) continue;
-      const env = await host.document.getMetadata(id).catch(() => null);
+      if (!(await recipeInstanceAlive(host, entry))) continue;
+      const env = await index.envelopeOf(id);
       instances.push({ id, ref: repeatInstanceOf(env) });
       seen.add(entry.id);
     }
   }
   sources.sort((a, b) => a.ref.index - b.ref.index);
   return { sources, instances, clipFrames };
+}
+
+/** How many instances each record of `library` has on the page — the
+ *  number `repeatLinks(host, record.id).instances.length` answers, for
+ *  every record in ONE pass over the links instead of one walk each.
+ *  (The Repeat panel's row summary; it used to ask per record.) */
+export async function repeatInstanceCounts(
+  host: BundleHost,
+  library: RepeatLibrary,
+): Promise<Record<string, number>> {
+  const index = linkIndex(host);
+  const inTree = new Map<string, Set<string>>();
+  const { linked } = await index.snapshot();
+  for (const { id, envelope } of linked) {
+    const instance = repeatInstanceOf(envelope);
+    if (!instance) continue;
+    let ids = inTree.get(instance.repeat);
+    if (!ids) inTree.set(instance.repeat, (ids = new Set()));
+    ids.add(String(id.id));
+  }
+  const counts: Record<string, number> = {};
+  for (const record of library.repeats) {
+    // The same two halves `repeatLinks` has: what the walk saw, then
+    // what only the recipe can name (a clipped instance).
+    const seen = new Set(inTree.get(record.id));
+    for (const entry of record.instances) {
+      if (seen.has(entry.id)) continue;
+      if (await recipeInstanceAlive(host, entry)) seen.add(entry.id);
+    }
+    counts[record.id] = seen.size;
+  }
+  return counts;
+}
+
+/** Does the engine still answer for an instance only the RECIPE names (a
+ *  clipped one — invisible to the tree, alive by id)? One geometry read
+ *  per instance per document revision. */
+function recipeInstanceAlive(
+  host: BundleHost,
+  entry: { kind: string; id: string },
+): Promise<boolean> {
+  return linkIndex(host).cached(
+    `repeat:alive:${entry.kind}:${entry.id}`,
+    () =>
+      host.document
+        .elementGeometry([{ kind: entry.kind, id: entry.id } as ElementId])
+        .then((geo) => geo.length > 0)
+        .catch(() => false),
+  );
 }
 
 /** The group node holding `member`, or null — a BATCH outcome does not
@@ -1237,14 +1297,17 @@ export async function repeatGroupOf(
 }
 
 /** Which repeat a command acts on: the payload's `repeatId`, else the
- *  selection's own link, else the only repeat the document carries. */
+ *  selection's own link, else the only repeat the document carries.
+ *  `known` is the library when the caller has just read it. */
 export async function resolveRepeat(
   host: BundleHost,
   repeatId: unknown,
+  known?: RepeatLibrary,
 ): Promise<string | null> {
   if (typeof repeatId === "string") return repeatId;
+  const index = linkIndex(host);
   for (const id of host.selection.get()) {
-    const env = await host.document.getMetadata(id).catch(() => null);
+    const env = await index.envelopeOf(id);
     const linked =
       repeatSourceOf(env)?.repeat ??
       repeatInstanceOf(env)?.repeat ??
@@ -1252,9 +1315,9 @@ export async function resolveRepeat(
       null;
     if (linked !== null) return linked;
   }
-  const library = await readRepeatLibrary(host);
+  const library = known ?? (await readRepeatLibrary(host));
   if (library.repeats.length === 1) return library.repeats[0]!.id;
-  const links = await repeatLinks(host);
+  const links = await repeatLinks(host, undefined, library);
   const distinct = new Set([
     ...links.sources.map((s) => s.ref.repeat),
     ...links.instances
@@ -1269,9 +1332,10 @@ export async function resolveRepeat(
 export async function repeatGenerationOf(
   host: BundleHost,
   repeat: string,
+  known?: RepeatLibrary,
 ): Promise<RepeatGeneration> {
-  const links = await repeatLinks(host, repeat);
-  const library = await readRepeatLibrary(host);
+  const library = known ?? (await readRepeatLibrary(host));
+  const links = await repeatLinks(host, repeat, library);
   const record = findRepeatRecord(library, repeat);
   const clipFrame =
     links.clipFrames[0]?.id ??
@@ -1280,7 +1344,11 @@ export async function repeatGenerationOf(
       : null);
   const anchor = links.sources[0]?.id ?? links.instances[0]?.id ?? null;
   return {
-    group: anchor ? await repeatGroupOf(host, anchor) : null,
+    // The tree the links were just read from — the same revision, so the
+    // same tree, and not a second read of it.
+    group: anchor
+      ? groupHolding(await linkIndex(host).tree(), anchor)
+      : null,
     instances: links.instances.map((i) => i.id),
     clipFrame,
     clipped: clipFrame !== null,
@@ -1627,7 +1695,7 @@ export async function applyUpdateRepeat(
   }
   const library = await readRepeatLibrary(host);
   const saved = findRepeatRecord(library, repeat);
-  const links = await repeatLinks(host, repeat);
+  const links = await repeatLinks(host, repeat, library);
   const sourceIds =
     links.sources.length > 0
       ? links.sources.map((s) => s.id)
@@ -1641,7 +1709,7 @@ export async function applyUpdateRepeat(
     return [];
   }
   const params = repeatParamsFrom(p, saved?.params ?? REPEAT_DEFAULTS);
-  const previous = await repeatGenerationOf(host, repeat);
+  const previous = await repeatGenerationOf(host, repeat, library);
   const plan = await repeatPlanFor(host, {
     repeat,
     params,
@@ -1731,8 +1799,8 @@ export async function applyExpandRepeat(
     host.log.warn(`${label}: no repeat resolved — no-op`);
     return false;
   }
-  const links = await repeatLinks(host, repeat);
   const library = await readRepeatLibrary(host);
+  const links = await repeatLinks(host, repeat, library);
   if (
     links.sources.length === 0 &&
     links.instances.length === 0 &&
@@ -1744,6 +1812,8 @@ export async function applyExpandRepeat(
     );
     return false;
   }
+  // The envelopes the links were just parsed from, not a re-read.
+  const index = linkIndex(host);
   const leaves: {
     id: ElementId;
     envelope: PluginMetadataEnvelope | null;
@@ -1752,21 +1822,21 @@ export async function applyExpandRepeat(
   for (const source of links.sources) {
     leaves.push({
       id: source.id,
-      envelope: await host.document.getMetadata(source.id).catch(() => null),
+      envelope: await index.envelopeOf(source.id),
       key: "repeatSource",
     });
   }
   for (const instance of links.instances) {
     leaves.push({
       id: instance.id,
-      envelope: await host.document.getMetadata(instance.id).catch(() => null),
+      envelope: await index.envelopeOf(instance.id),
       key: "repeatInstance",
     });
   }
   for (const clip of links.clipFrames) {
     leaves.push({
       id: clip.id,
-      envelope: await host.document.getMetadata(clip.id).catch(() => null),
+      envelope: await index.envelopeOf(clip.id),
       key: "repeatClip",
     });
   }
@@ -1807,7 +1877,8 @@ export async function applyReleaseRepeat(
     host.log.warn(`${label}: no repeat resolved — no-op`);
     return 0;
   }
-  const links = await repeatLinks(host, repeat);
+  const library = await readRepeatLibrary(host);
+  const links = await repeatLinks(host, repeat, library);
   if (links.instances.length === 0 && links.sources.length === 0) {
     host.log.debug(`${label}: "${repeat}" has no linked artwork — no-op`);
     return 0;
@@ -1817,10 +1888,11 @@ export async function applyReleaseRepeat(
   for (const source of links.sources) {
     sources.push({
       id: source.id,
-      envelope: await host.document.getMetadata(source.id).catch(() => null),
+      // The envelope the link was just parsed from, not a re-read.
+      envelope: await linkIndex(host).envelopeOf(source.id),
     });
   }
-  const generation = await repeatGenerationOf(host, repeat);
+  const generation = await repeatGenerationOf(host, repeat, library);
   const outcome = await host.document.mutate(
     repeatReleaseBatchFor({
       group: generation.group,

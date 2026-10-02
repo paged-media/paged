@@ -379,7 +379,14 @@ describe("perf budgets — the tools that read as they move", () => {
       // — 518 of them, 12 of which belong to this group — looking for a
       // stale fill of this face. There is none. TARGET 0: the recipe can
       // name its own fills.
-      expect(counted.count("document.getMetadata")).toBe(518);
+      //
+      // 517 since the walk moved to the shared link index
+      // (`src/link-index.ts`): the member the tool resolved its group
+      // from when it was ARMED is read once per document revision, and
+      // the click's walk does not read it again. As found: 518. (A
+      // second click on an unchanged document would read none — but a
+      // click changes it.)
+      expect(counted.count("document.getMetadata")).toBe(517);
       // The link walk's tree, then one either side of the insert to
       // learn what it created. TARGET 0.
       expect(counted.count("document.tree")).toBe(3);

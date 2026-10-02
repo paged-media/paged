@@ -26,6 +26,10 @@
 // WHAT WAS MEASURED, in one line: one walk per reload with nothing
 // selected, whatever the record count — and the SAME walk run TWICE as
 // soon as anything at all is selected.
+//
+// WHAT IT IS NOW (the history is beside each budget): one reload per
+// burst, one walk per document REVISION out of the shared link index
+// (`src/link-index.ts`) — and a selection is a lookup in that walk.
 
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
@@ -96,10 +100,10 @@ describe("Symbols panel — rendered against the engine", () => {
 
     it("THE FLOOR: what a reload costs before the document holds anything", async () => {
       const panel = await mountPanel(h, makeSymbolsPanel);
-      // One tree read and the library once: this is the shape the target
-      // has.
+      // The mount's own reload: one tree read and the library once.
       expect(panel.cost()).toEqual({
-        reloads: 0,
+        events: 0,
+        reloads: 1,
         walks: 1,
         reads: 1,
         partReads: 1,
@@ -209,18 +213,23 @@ describe("Symbols panel — rendered against the engine", () => {
       expect(panel.attr(PANEL, "data-draw-symbols-panel")).toBe("0");
     });
 
-    // BUG (measured). The panel reloads on document events, selection
-    // events and its own buttons (each ends in `void reload()`) — and a
-    // `.paged` container-part write is none of those. DEFINE is the pure
-    // case: it writes the library and touches nothing else, so it emits
-    // no event AT ALL. The panel's own "+ From selection" hides this
-    // behind its trailing reload; the same command from the menu or
-    // Cmd+K leaves an open panel with no row for the new symbol — nothing
-    // to Place — until some unrelated selection or document change comes
-    // along. (Rename is the same; Delete drops the definition after its
-    // last unlink, so its row stays up.) Flip to `it` when a library
-    // write reaches the panel.
-    it.fails(
+    // WAS A BUG (measured, then fixed). The panel reloaded on document
+    // events, selection events and its own buttons (each ended in `void
+    // reload()`) — and a `.paged` container-part write is none of those.
+    // DEFINE is the pure case: it writes the library and touches nothing
+    // else, so it emits no event AT ALL. The panel's own "+ From
+    // selection" hid this behind its trailing reload; the same command
+    // from the menu or Cmd+K left an open panel with no row for the new
+    // symbol (0 rows) — nothing to Place — until some unrelated selection
+    // or document change came along. (Rename was the same; Delete drops
+    // the definition after its last unlink, so its row stayed up.)
+    // `writeSymbolLibrary` now announces the write, and the panel reloads
+    // on that.
+    //
+    // No timing can make this one pass by luck: with no document event
+    // and no selection event, the announcement is the ONLY thing that
+    // tells the panel.
+    it(
       "an OPEN panel shows a symbol defined by the COMMAND, not only by its own button",
       async () => {
         await h.host.selection.set([poly("s1")]);
@@ -230,10 +239,12 @@ describe("Symbols panel — rendered against the engine", () => {
           if (!(await applyDefineSymbol(h.host))) throw new Error("not defined");
         }, panel.work);
 
-        // The document has it, and the panel was told nothing…
+        // The document has it, and the host delivered NO event for it —
+        // not a document change, not a selection change…
         expect((await readSymbolLibrary(h.host)).symbols).toHaveLength(1);
-        expect(panel.cost().reloads).toBe(0);
-        // …MEASURED 0 rows.
+        expect(panel.cost().events).toBe(0);
+        // …and the panel reloaded all the same, once, and shows it.
+        expect(panel.cost().reloads).toBe(1);
         expect(panel.count("[data-draw-symbol-row]")).toBe(1);
       },
     );
@@ -287,59 +298,76 @@ describe("Symbols panel — rendered against the engine", () => {
 
     it("ONE reload, nothing selected = 1 walk = 51 reads", async () => {
       const panel = await mountPanel(h, makeSymbolsPanel);
-      expect(panel.cost()).toEqual({ reloads: 0, walks: 1, reads: 51, partReads: 1 });
+      expect(panel.cost()).toEqual({
+        events: 0,
+        reloads: 1,
+        walks: 1,
+        reads: 51,
+        partReads: 1,
+      });
 
       const one = await panel.costOf(() => plainChange(h, 0));
       expect(one).toEqual({
+        events: 1,
         reloads: 1,
-        // TARGET 1 per document REVISION, shared.
+        // One walk per document REVISION, shared by every panel and
+        // every command on this host.
         walks: 1,
-        // 1 tree + 50 getMetadata. This is the target shape for ONE panel.
+        // 1 tree + 50 getMetadata, in parallel. TARGET 2 — a tree and
+        // ONE bulk metadata read (RFI C-65).
         reads: 51,
         partReads: 1,
       });
     });
 
-    it("ONE reload with ANYTHING selected = the same walk twice = 103 reads", async () => {
+    it("ONE reload with ANYTHING selected = no walk at all, 0 reads", async () => {
       const panel = await mountPanel(h, makeSymbolsPanel);
       // A plain leaf: not an instance, not a symbol's source.
       const selected = await panel.costOf(() => h.host.selection.set([plainId(0)]));
       expect(selected).toEqual({
+        events: 1,
         reloads: 1,
-        // `symbolInstances` for the counts, a tree read to expand the
-        // selection, then `selectedSymbolInstances` calls
-        // `symbolInstances` AGAIN. TARGET 0 — the document did not change.
-        walks: 3,
-        // 3 trees + 2 × 50 getMetadata. TARGET 0 new reads: which
-        // instances the selection touches is a lookup in the walk the
-        // panel already has.
-        reads: 103,
+        // The document did not change: the links, and the tree the
+        // selection is expanded against, are the ones the mount read.
+        // As found: 3 — `symbolInstances` for the counts, a tree read to
+        // expand the selection, then `selectedSymbolInstances` calling
+        // `symbolInstances` AGAIN.
+        walks: 0,
+        // Which instances the selection touches is a lookup in the walk
+        // the index already has. As found: 103.
+        reads: 0,
         partReads: 1,
       });
     });
 
-    it("a burst of 20 document changes = 20 reloads = 1020 reads", async () => {
+    it("a burst of 20 document changes = ONE reload = 51 reads", async () => {
       const panel = await mountPanel(h, makeSymbolsPanel);
       expect(await documentBurst(h, panel)).toEqual({
-        // No debounce, no cancellation. TARGET 1 (O(1) per burst).
-        reloads: 20,
-        walks: 20,
-        // 20 × 51. TARGET 51 — one walk for the revision the burst ends on.
-        reads: 1020,
-        partReads: 20,
+        events: 20,
+        // As found: 20 — no debounce, no cancellation.
+        reloads: 1,
+        // As found: 20.
+        walks: 1,
+        // One walk, of the revision the burst ends on. As found: 1 020.
+        reads: 51,
+        // As found: 20.
+        partReads: 1,
       });
     });
 
-    it("a burst of 20 selection changes = 20 reloads = 2060 reads", async () => {
+    it("a burst of 20 selection changes = ONE reload = 0 reads", async () => {
       const panel = await mountPanel(h, makeSymbolsPanel);
       expect(await selectionBurst(h, panel)).toEqual({
-        // TARGET 1.
-        reloads: 20,
-        // The DOCUMENT did not change once during this burst. TARGET 0.
-        walks: 60,
-        // 20 × 103. TARGET 0.
-        reads: 2060,
-        partReads: 20,
+        events: 20,
+        // As found: 20.
+        reloads: 1,
+        // The DOCUMENT did not change once during this burst. As found:
+        // 60.
+        walks: 0,
+        // As found: 2 060.
+        reads: 0,
+        // As found: 20.
+        partReads: 1,
       });
     });
   });

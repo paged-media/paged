@@ -145,7 +145,7 @@ import {
 
 import { stampDrawMetadata } from "./appearance-bake";
 import { blendSourceFrom } from "./blend";
-import { leafIdsOf } from "./select-same";
+import { announceRecipeChange, linkIndex } from "../link-index";
 import {
   registrationPointOf,
   SYMBOL_REGISTRATIONS,
@@ -774,7 +774,9 @@ export function objectsOnPathExpandBatchFor(
 
 // -------------------------------------------------------- host: the part
 
-type PartsHost = Pick<BundleHost, "parts" | "supports" | "log">;
+type PartsHost = Pick<BundleHost, "parts" | "supports" | "log"> & {
+  bindings?: BundleHost["bindings"];
+};
 
 export async function readObjectsOnPathLibrary(
   host: PartsHost,
@@ -807,6 +809,9 @@ export async function writeObjectsOnPathLibrary(
       OBJECTS_ON_PATH_PART,
       serializeObjectsOnPathLibrary(library),
     );
+    // A part write is not a document event: without this an open panel
+    // follows a recipe change only when something else happens after it.
+    announceRecipeChange(host);
     return true;
   } catch (e) {
     host.log.warn(`objects-on-path: recipe write failed (${String(e)})`);
@@ -856,7 +861,9 @@ export async function readOnPathSpine(
   return { metric, pageId: table.pageId };
 }
 
-/** Every leaf carrying an on-path link, split by which one. */
+/** Every leaf carrying an on-path link, split by which one — a parse of
+ *  the shared link index (`../link-index`), which walks the document
+ *  once per revision for every feature at once. */
 export async function objectsOnPathLinks(
   host: BundleHost,
   onPath?: string,
@@ -866,9 +873,8 @@ export async function objectsOnPathLinks(
 }> {
   const objects: { id: ElementId; ref: OnPathObjectRef }[] = [];
   const paths: { id: ElementId; ref: OnPathSpineRef }[] = [];
-  const roots = await host.document.tree().catch(() => []);
-  for (const id of leafIdsOf(roots)) {
-    const env = await host.document.getMetadata(id).catch(() => null);
+  const { linked } = await linkIndex(host).snapshot();
+  for (const { id, envelope: env } of linked) {
     const obj = onPathObjectOf(env);
     if (obj && (onPath === undefined || obj.onPath === onPath)) {
       objects.push({ id, ref: obj });
@@ -882,19 +888,22 @@ export async function objectsOnPathLinks(
   return { objects, paths };
 }
 
-/** Which association a command acts on. */
+/** Which association a command acts on. `known` is the library when the
+ *  caller has just read it. */
 export async function resolveObjectsOnPath(
   host: BundleHost,
   onPathId: unknown,
+  known?: ObjectsOnPathLibrary,
 ): Promise<string | null> {
   if (typeof onPathId === "string") return onPathId;
+  const index = linkIndex(host);
   for (const id of host.selection.get()) {
-    const env = await host.document.getMetadata(id).catch(() => null);
+    const env = await index.envelopeOf(id);
     const linked =
       onPathObjectOf(env)?.onPath ?? onPathSpineOf(env)?.onPath ?? null;
     if (linked !== null) return linked;
   }
-  const library = await readObjectsOnPathLibrary(host);
+  const library = known ?? (await readObjectsOnPathLibrary(host));
   if (library.associations.length === 1) return library.associations[0]!.id;
   const links = await objectsOnPathLinks(host);
   const distinct = new Set([
@@ -1065,12 +1074,13 @@ async function envelopesFor(
   host: BundleHost,
   ids: readonly ElementId[],
 ): Promise<Map<string, PluginMetadataEnvelope | null>> {
+  // Out of the link index when an update has just read them (the same
+  // revision, so the same envelopes); one read each on a Make, which
+  // walks nothing.
+  const index = linkIndex(host);
   const out = new Map<string, PluginMetadataEnvelope | null>();
   for (const id of ids) {
-    out.set(
-      String(id.id),
-      await host.document.getMetadata(id).catch(() => null),
-    );
+    out.set(String(id.id), await index.envelopeOf(id));
   }
   return out;
 }
@@ -1084,9 +1094,7 @@ async function commitPlan(
     host,
     plan.placements.map((p) => p.object.id),
   );
-  const pathEnvelope = await host.document
-    .getMetadata(plan.pathId)
-    .catch(() => null);
+  const pathEnvelope = await linkIndex(host).envelopeOf(plan.pathId);
   const outcome = await host.document.mutate(
     objectsOnPathBatchFor({ plan, envelopes, pathEnvelope }),
   );
@@ -1316,6 +1324,7 @@ export async function applySelectObjectsOnPath(
 async function linkLeavesOf(
   host: BundleHost,
   onPath: string,
+  known?: ObjectsOnPathLibrary,
 ): Promise<
   {
     id: ElementId;
@@ -1325,6 +1334,8 @@ async function linkLeavesOf(
   }[]
 > {
   const links = await objectsOnPathLinks(host, onPath);
+  // The envelopes the links were just parsed from, not a re-read.
+  const index = linkIndex(host);
   const out: {
     id: ElementId;
     envelope: PluginMetadataEnvelope | null;
@@ -1336,13 +1347,13 @@ async function linkLeavesOf(
     seen.add(String(entry.id.id));
     out.push({
       id: entry.id,
-      envelope: await host.document.getMetadata(entry.id).catch(() => null),
+      envelope: await index.envelopeOf(entry.id),
       key: "onPathObject",
       home: entry.ref.home,
     });
   }
   const record = findObjectsOnPathRecord(
-    await readObjectsOnPathLibrary(host),
+    known ?? (await readObjectsOnPathLibrary(host)),
     onPath,
   );
   for (const row of record?.objects ?? []) {
@@ -1362,7 +1373,7 @@ async function linkLeavesOf(
     seen.add(String(entry.id.id));
     out.push({
       id: entry.id,
-      envelope: await host.document.getMetadata(entry.id).catch(() => null),
+      envelope: await index.envelopeOf(entry.id),
       key: "onPathSpine",
       home: null,
     });
@@ -1393,7 +1404,7 @@ export async function applyExpandObjectsOnPath(
     return false;
   }
   const library = await readObjectsOnPathLibrary(host);
-  const leaves = await linkLeavesOf(host, onPath);
+  const leaves = await linkLeavesOf(host, onPath, library);
   if (leaves.length === 0 && !findObjectsOnPathRecord(library, onPath)) {
     host.log.warn(
       `${label}: "${onPath}" names neither a recipe nor any linked artwork — no-op`,

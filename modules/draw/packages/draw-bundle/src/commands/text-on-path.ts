@@ -122,7 +122,7 @@ import type {
 } from "@paged-media/plugin-api";
 
 import { stampDrawMetadata } from "./appearance-bake";
-import { leafIdsOf } from "./select-same";
+import { linkIndex } from "../link-index";
 import {
   attachTextToPathMutationFor,
   detachTextFromPathMutationFor,
@@ -333,17 +333,16 @@ export async function documentStories(
   }
 }
 
-/** Every path host carrying a text-path stamp, with its link. One scene
- *  walk plus one metadata read per leaf (the `livePaintLinks`
- *  precedent). */
+/** Every path host carrying a text-path stamp, with its link — a parse
+ *  of the shared link index (`../link-index`), which walks the document
+ *  once per revision for every feature at once. */
 export async function textOnPathLinks(
   host: BundleHost,
 ): Promise<{ id: ElementId; ref: TextOnPathRef }[]> {
   const found: { id: ElementId; ref: TextOnPathRef }[] = [];
-  const roots = await host.document.tree().catch(() => []);
-  for (const id of leafIdsOf(roots)) {
-    const env = await host.document.getMetadata(id).catch(() => null);
-    const ref = textOnPathOf(env);
+  const { linked } = await linkIndex(host).snapshot();
+  for (const { id, envelope } of linked) {
+    const ref = textOnPathOf(envelope);
     if (ref) found.push({ id, ref });
   }
   return found;

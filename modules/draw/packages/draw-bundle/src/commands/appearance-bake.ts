@@ -129,6 +129,7 @@ import {
 } from "./appearance";
 import { leafIdsOf } from "./select-same";
 import { parentGroupOf } from "./parentage";
+import { linkIndex } from "../link-index";
 
 export const APPEARANCE_BAKE_COMMAND_ID =
   "media.paged.draw.command.bakeAppearance";
@@ -573,15 +574,19 @@ export async function resolveAppearanceCarrier(
   host: BundleHost,
   id: ElementId,
 ): Promise<ElementId> {
+  // Through the link index (`../link-index`): the tree and each envelope
+  // are read once per document revision, so resolving a carrier and then
+  // reading its stack — which every caller does — is one read, not two.
+  const index = linkIndex(host);
   if (id.kind === "group") {
-    const roots = await host.document.tree().catch(() => [] as SceneTreeNode[]);
+    const roots = await index.tree();
     for (const child of groupChildren(roots, id)) {
-      const env = await host.document.getMetadata(child).catch(() => null);
+      const env = await index.envelopeOf(child);
       if (appearanceBakeOf(env)) return child;
     }
     return id;
   }
-  const env = await host.document.getMetadata(id).catch(() => null);
+  const env = await index.envelopeOf(id);
   const marker = appearanceLayerOf(env);
   return marker ? marker.of : id;
 }
@@ -702,9 +707,11 @@ export async function releaseAppearance(
     host.log.debug(`${label}: not a baked appearance — no-op`);
     return false;
   }
-  const roots = await host.document.tree().catch(() => [] as SceneTreeNode[]);
+  // ONE tree read answers both questions (it used to be read twice, back
+  // to back): which group holds the carrier, and which layers are alive.
+  const roots = await linkIndex(host).tree();
   const group = parentGroupOf(roots, id);
-  const alive = idsOf(await leafElements(host));
+  const alive = idsOf(leafIdsOf(roots));
   const stack = appearanceOf(prev);
   const outcome = await host.document.mutate(
     releaseBatchFor({
@@ -739,9 +746,9 @@ export async function rebakeAppearance(
   if (!record) {
     return { applied: false, error: "not baked" };
   }
-  const roots = await host.document.tree().catch(() => [] as SceneTreeNode[]);
+  const roots = await linkIndex(host).tree();
   const group = parentGroupOf(roots, id);
-  const alive = idsOf(await leafElements(host));
+  const alive = idsOf(leafIdsOf(roots));
   // Release carries the NEW stack straight into the carrier's envelope,
   // so the released state is already the edited one.
   const released = await host.document.mutate(

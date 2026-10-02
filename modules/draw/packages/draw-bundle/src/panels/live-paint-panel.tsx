@@ -56,6 +56,8 @@ import {
   getLivePaintFill,
   setLivePaintFill,
 } from "../handlers/live-paint";
+import { linkIndex } from "../link-index";
+import { usePanelReload } from "./use-panel-reload";
 
 export const LIVE_PAINT_PANEL_ID = "media.paged.draw.panel.livePaint";
 
@@ -155,37 +157,39 @@ export function makeLivePaintPanel(host: BundleHost): {
     const [portable, setPortable] = React.useState(true);
     const [painted, setPainted] = React.useState<Record<string, string[]>>({});
 
-    const reload = React.useCallback(async () => {
-      setPortable(host.supports(LIVE_PAINT_FEATURE));
-      const library = await readLivePaintLibrary(host);
-      setGroups(library.groups);
-      setHasSelection(host.selection.get().length > 0);
-      setActive((await selectedLivePaintGroup(host))?.id ?? null);
-      try {
-        setSwatches(
-          (await host.document.collection<SwatchSummary>("swatches")).slice(),
-        );
-      } catch {
-        setSwatches([]);
-      }
-      const tally: Record<string, string[]> = {};
-      const links = await livePaintLinks(host);
-      for (const f of links.fills) {
-        (tally[f.ref.group] ??= []).push(f.ref.face);
-      }
-      setPainted(tally);
-    }, []);
-
-    React.useEffect(() => {
-      void reload();
-      const subs = [
-        host.selection.onDidChange(() => void reload()),
-        host.document.onDidChange(() => void reload()),
-      ];
-      return () => {
-        for (const s of subs) s.dispose();
-      };
-    }, [reload]);
+    // WHAT A RELOAD COSTS (`test/panels/live-paint-panel.spec.tsx`, and
+    // it may only go down): the recipe part once, and — once per document
+    // REVISION, not per reload — the links (out of the walk every panel
+    // shares) and the swatch collection. A selection change cannot have
+    // changed either, and reads neither.
+    const reload = usePanelReload(
+      host,
+      "live-paint",
+      async ({ live, selection }) => {
+        const library = await readLivePaintLibrary(host);
+        if (!live()) return;
+        const group = await selectedLivePaintGroup(host, library);
+        if (!live()) return;
+        const swatches = await linkIndex(host)
+          .cached("collection:swatches", async () =>
+            (await host.document.collection<SwatchSummary>("swatches")).slice(),
+          )
+          .catch(() => [] as SwatchSummary[]);
+        if (!live()) return;
+        const links = await livePaintLinks(host);
+        if (!live()) return;
+        const tally: Record<string, string[]> = {};
+        for (const f of links.fills) {
+          (tally[f.ref.group] ??= []).push(f.ref.face);
+        }
+        setPortable(host.supports(LIVE_PAINT_FEATURE));
+        setGroups(library.groups);
+        setHasSelection(selection.length > 0);
+        setActive(group?.id ?? null);
+        setSwatches(swatches);
+        setPainted(tally);
+      },
+    );
 
     const run = async (work: Promise<unknown>) => {
       try {
@@ -193,7 +197,7 @@ export function makeLivePaintPanel(host: BundleHost): {
       } catch (e) {
         host.log.warn(`live paint panel: ${String(e)}`);
       }
-      void reload();
+      reload();
     };
 
     return (

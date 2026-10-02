@@ -31,14 +31,32 @@
 //
 // Host-agnostic: imports only plugin-api types; every engine touch is a
 // `host.*` facade (elementProperties / tree / selection).
+//
+// WHAT IT COSTS, and what it used to (`test/perf/perf-budgets-commands
+// .spec.ts`): one `elementProperties` round trip per leaf of the
+// document — this door takes ONE id (`elementGeometry` takes a list; it
+// does not), so a pass over the document is a read per leaf, the same
+// engine gap the link walk has. Those reads now go out in parallel
+// windows instead of one awaited after the other, the reference is not
+// read a second time by the pass, and ONE pass answers all three
+// criteria: a leaf's fill, stroke and stroke weight are kept per
+// DOCUMENT REVISION (the link index's revision — `../link-index`), so
+// "same fill" followed by "same stroke" on an unchanged document reads
+// nothing the second time. What is kept is the three values per leaf,
+// not the property tables they were read from.
 
 import type {
   BundleHost,
   Disposable,
   ElementId,
   PropertyPath,
-  SceneTreeNode,
 } from "@paged-media/plugin-api";
+
+import { leafIdsOf, linkIndex } from "../link-index";
+
+// The leaf walk lives beside the index that walks it; every other module
+// keeps importing it from here.
+export { leafIdsOf };
 
 export const SELECT_SAME_COMMAND_CATEGORY = "Select";
 
@@ -79,41 +97,34 @@ export async function valueForCriterion(
   id: ElementId,
   c: SelectSameCriterion,
 ): Promise<string | number | null> {
-  const path = pathForCriterion(c);
   try {
-    const props = await host.document.elementProperties(id);
-    for (const e of props?.entries ?? []) {
-      if (e.path !== path) continue;
-      const v = e.value;
-      if (!v) return null;
-      if (v.type === "colorRef") return v.value; // string | null
-      if (v.type === "length") return v.value; // number | null
-      return null;
-    }
+    return criterionValue(await host.document.elementProperties(id), c);
   } catch {
     /* unreadable ⇒ no match contribution */
   }
   return null;
 }
 
-/** Flatten the scene tree to its selectable LEAF element ids (frames +
- *  paths — NOT groups/spreads/pages; we match on per-frame paint). A
- *  node with children is a container; a node with an id and no children
- *  is a leaf. Groups (id + children) are descended into, not matched. */
-export function leafIdsOf(roots: SceneTreeNode[]): ElementId[] {
-  const out: ElementId[] = [];
-  const walk = (nodes: SceneTreeNode[]) => {
-    for (const node of nodes) {
-      const children = node.children ?? [];
-      if (children.length > 0) {
-        walk(children);
-      } else if (node.id) {
-        out.push(node.id);
-      }
-    }
-  };
-  walk(roots);
-  return out;
+type PropertyTable = Awaited<
+  ReturnType<BundleHost["document"]["elementProperties"]>
+>;
+
+/** One criterion's value off a property table that has been read. The
+ *  one rule both the single read above and the document pass below use. */
+function criterionValue(
+  props: PropertyTable,
+  c: SelectSameCriterion,
+): string | number | null {
+  const path = pathForCriterion(c);
+  for (const e of props?.entries ?? []) {
+    if (e.path !== path) continue;
+    const v = e.value;
+    if (!v) return null;
+    if (v.type === "colorRef") return v.value; // string | null
+    if (v.type === "length") return v.value; // number | null
+    return null;
+  }
+  return null;
 }
 
 /** Equality with a small tolerance for stroke-weight (pt) reads so a
@@ -126,6 +137,63 @@ function sameValue(a: string | number | null, b: string | number | null): boolea
   return a === b;
 }
 
+/** What one leaf answers to all three criteria. */
+type PaintFacts = Record<SelectSameCriterion, string | number | null>;
+
+const NO_FACTS: PaintFacts = { fill: null, stroke: null, strokeWeight: null };
+
+const factsOf = (props: PropertyTable): PaintFacts => ({
+  fill: criterionValue(props, "fill"),
+  stroke: criterionValue(props, "stroke"),
+  strokeWeight: criterionValue(props, "strokeWeight"),
+});
+
+const sameElement = (a: ElementId, b: ElementId): boolean =>
+  a.kind === b.kind && a.id === b.id;
+
+/** Leaves read per parallel window — see `LEAF_READ_WINDOW` in
+ *  `../link-index` for why a window and not all at once. */
+const PAINT_READ_WINDOW = 64;
+
+/** The revision-cache key of the pass below. */
+const PAINT_FACTS_KEY = "select-same:paint";
+
+type LeafFacts = { id: ElementId; facts: PaintFacts }[];
+
+/** Every leaf's three criterion values, in tree order. ONE property read
+ *  per leaf — the engine gap, as for the link walk: `elementProperties`
+ *  takes one id (`elementGeometry` takes a list; this door does not) —
+ *  kept for the document revision, so the next criterion costs nothing.
+ *  `known` is a leaf the caller has already read. */
+function paintFacts(
+  host: BundleHost,
+  known?: { id: ElementId; facts: PaintFacts },
+): Promise<LeafFacts> {
+  const index = linkIndex(host);
+  return index.cached(PAINT_FACTS_KEY, async () => {
+    const leaves = leafIdsOf(await index.tree());
+    const out: LeafFacts = new Array(leaves.length);
+    for (let at = 0; at < leaves.length; at += PAINT_READ_WINDOW) {
+      await Promise.all(
+        leaves.slice(at, at + PAINT_READ_WINDOW).map(async (id, i) => {
+          let facts = NO_FACTS;
+          if (known && sameElement(known.id, id)) {
+            facts = known.facts;
+          } else {
+            try {
+              facts = factsOf(await host.document.elementProperties(id));
+            } catch {
+              /* unreadable ⇒ no match contribution */
+            }
+          }
+          out[at + i] = { id, facts };
+        }),
+      );
+    }
+    return out;
+  });
+}
+
 /** Compute the matching set (the pure core, exported for the conformance
  *  spec): every leaf whose criterion value equals the reference's. The
  *  reference is included. Returns `[]` when the reference value is null
@@ -135,16 +203,32 @@ export async function selectSameMatches(
   reference: ElementId,
   c: SelectSameCriterion,
 ): Promise<ElementId[]> {
-  const refValue = await valueForCriterion(host, reference, c);
-  if (refValue === null) return [];
-  const roots = await host.document.tree();
-  const leaves = leafIdsOf(roots);
-  const matches: ElementId[] = [];
-  for (const id of leaves) {
-    const v = await valueForCriterion(host, id, c);
-    if (sameValue(v, refValue)) matches.push(id);
+  const index = linkIndex(host);
+  let leaves = await index.peek<LeafFacts>(PAINT_FACTS_KEY);
+  let refValue: string | number | null;
+  const own = leaves?.find((leaf) => sameElement(leaf.id, reference));
+  if (own) {
+    // The document was read at this revision and the reference is one of
+    // its leaves: nothing to ask the engine.
+    refValue = own.facts[c];
+  } else {
+    // The reference FIRST, on its own: one with nothing to match on must
+    // not cost a pass over the document.
+    let facts = NO_FACTS;
+    try {
+      facts = factsOf(await host.document.elementProperties(reference));
+    } catch {
+      /* unreadable ⇒ nothing to match on */
+    }
+    refValue = facts[c];
+    if (refValue !== null) {
+      leaves ??= await paintFacts(host, { id: reference, facts });
+    }
   }
-  return matches;
+  if (refValue === null || !leaves) return [];
+  return leaves
+    .filter((leaf) => sameValue(leaf.facts[c], refValue))
+    .map((leaf) => leaf.id);
 }
 
 async function applySelectSame(

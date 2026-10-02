@@ -25,6 +25,11 @@
 //
 // WHAT WAS MEASURED, in one line: one walk of the whole document PER
 // RECORD per reload, plus a container-part read per record on top.
+//
+// WHAT IT IS NOW (the history is beside each budget): one reload per
+// burst, one walk per document REVISION out of the shared link index
+// (`src/link-index.ts`), one part read per reload, the newest reload
+// wins.
 
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
@@ -54,6 +59,7 @@ import {
   seedRow,
   selectDuringWalk,
   selectionBurst,
+  slowRecipeWrites,
   teardownPanels,
   unmountAll,
   PLAIN_LEAVES,
@@ -98,13 +104,15 @@ describe("Repeat options panel — rendered against the engine", () => {
 
     it("THE FLOOR: what a reload costs before the document holds anything", async () => {
       const panel = await mountPanel(h, makeRepeatPanel);
-      // One tree read and the recipe THREE times (the panel, the resolve,
-      // and the resolve's `repeatLinks`). TARGET 1 part read.
+      // The mount's own reload: one tree read (the link index, with no
+      // leaf under it) and the recipe once. As found: the recipe THREE
+      // times (the panel, the resolve, and the resolve's `repeatLinks`).
       expect(panel.cost()).toEqual({
-        reloads: 0,
+        events: 0,
+        reloads: 1,
         walks: 1,
         reads: 1,
-        partReads: 3,
+        partReads: 1,
       });
     });
   });
@@ -186,13 +194,16 @@ describe("Repeat options panel — rendered against the engine", () => {
       expect(panel.text()).toContain("grid · 3 × 1 (2 instances placed)");
     });
 
-    // BUG (measured) — the same one blend-panel.spec.tsx pins, in this
-    // panel's copy of the code. With EXACTLY ONE record in the library
-    // `resolveRepeat` answers that record whatever is selected, and every
-    // reload ends in `if (saved) setDraft(saved.params)`: the selection
-    // change a Make REQUIRES throws away what was typed. Flip to `it`
-    // when the reload stops overwriting a draft the user is editing.
-    it.fails(
+    // WAS A BUG (measured, then fixed) — the same one blend-panel.spec.tsx
+    // pins, in this panel's copy of the code. With EXACTLY ONE record in
+    // the library `resolveRepeat` answers that record whatever is
+    // selected, and every reload ended in `if (saved)
+    // setDraft(saved.params)`: the selection change a Make REQUIRES threw
+    // away what was typed (the field read "3", the only repeat's saved
+    // value). The form now follows the record (`useFollowedDraft`) and
+    // takes its options only when the record, or what is saved for it,
+    // changes.
+    it(
       "typed options survive the selection change that a Make needs (one record in the library)",
       async () => {
         expect((await readRepeatLibrary(h.host)).repeats).toHaveLength(1);
@@ -203,7 +214,6 @@ describe("Repeat options panel — rendered against the engine", () => {
         panel.change('[data-draw-repeat-field="columns"]', "7");
         expect(columns()).toBe("7");
         await drive(() => h.host.selection.set([poly("s1")]), panel.work);
-        // MEASURED "3": the saved options of the only repeat in the library.
         expect(columns()).toBe("7");
       },
     );
@@ -218,14 +228,15 @@ describe("Repeat options panel — rendered against the engine", () => {
       expect(panel.count("[data-draw-repeat-row]")).toBe(0);
     });
 
-    // BUG (measured) — the one blend-panel.spec.tsx explains: a recipe
-    // write is not an event, and `applyMakeRepeat` saves the recipe AFTER
-    // its batch, so the reload the batch triggers reads the library too
-    // early. The panel's own make buttons hide it behind their trailing
-    // reload; the same command from the menu, Cmd+K or the REPEAT TOOL
-    // leaves an open panel showing no repeat. Flip to `it` when a recipe
-    // write reaches the panel.
-    it.fails(
+    // WAS A BUG (measured, then fixed) — the one blend-panel.spec.tsx
+    // explains: a recipe write is not an event, and `applyMakeRepeat`
+    // saves the recipe AFTER its batch, so the reload the batch triggered
+    // read the library too early. The panel's own make buttons hid it
+    // behind their trailing reload; the same command from the menu, Cmd+K
+    // or the REPEAT TOOL left an open panel showing no repeat (0 rows).
+    // `writeRepeatLibrary` now announces the write, and the panel reloads
+    // on that.
+    it(
       "an OPEN panel shows a repeat built by the COMMAND, not only by its own button",
       async () => {
         await h.host.selection.set([poly("s2")]);
@@ -236,10 +247,28 @@ describe("Repeat options panel — rendered against the engine", () => {
         }, panel.work);
         // The document has it…
         expect((await readRepeatLibrary(h.host)).repeats).toHaveLength(1);
-        // …MEASURED 0: the panel does not.
+        // …and so does the panel.
         expect(panel.count("[data-draw-repeat-row]")).toBe(1);
       },
     );
+
+    // The same, in the order the EDITOR has (see blend-panel.spec.tsx):
+    // the recipe write lands a task after the reload the batch started.
+    // This is the case that fails without the announcement.
+    it("…and when the recipe write lands AFTER the reload its batch started", async () => {
+      await h.host.selection.set([poly("s1")]);
+      const panel = await mountPanel(h, makeRepeatPanel);
+      expect(panel.count("[data-draw-repeat-row]")).toBe(1);
+      await drive(async () => {
+        const made = await applyMakeRepeat(slowRecipeWrites(h.host), "grid", {
+          columns: 2,
+          rows: 1,
+        });
+        if (made.length !== 1) throw new Error("the repeat was not built");
+      }, panel.work);
+      expect((await readRepeatLibrary(h.host)).repeats).toHaveLength(2);
+      expect(panel.count("[data-draw-repeat-row]")).toBe(2);
+    });
   });
 
   // COVERS: `reload()` on a document with R = 5 repeats among L = 40 plain
@@ -277,72 +306,87 @@ describe("Repeat options panel — rendered against the engine", () => {
       expect((await readRepeatLibrary(h.host)).repeats).toHaveLength(RECORDS);
     });
 
-    it("THE PER-RECORD WALK IS REAL: walks per reload grow with the record count", () => {
-      // Index = records in the document. `resolveRepeat` walks once to
+    it("ONE WALK PER RELOAD, whatever the record count", () => {
+      // Index = records in the document. The links are tallied for every
+      // record in one pass over the link index (`repeatInstanceCounts`).
+      // As found: [1, 1, 3, 4, 5, 6] — `resolveRepeat` walked once to
       // find "the only repeat the document carries" (skipped when the
       // library holds exactly one), then `repeatLinks(host, record.id)`
-      // walks the WHOLE document again for each record.
-      // TARGET [1, 1, 1, 1, 1, 1] — one walk, whatever R is.
-      expect(walksByRecords).toEqual([1, 1, 3, 4, 5, 6]);
+      // walked the WHOLE document again for each record.
+      expect(walksByRecords).toEqual([1, 1, 1, 1, 1, 1]);
     });
 
-    it("ONE reload = 6 walks = 306 reads + 8 part reads", async () => {
+    it("ONE reload = 1 walk = 51 reads + 1 part read", async () => {
       const panel = await mountPanel(h, makeRepeatPanel);
-      expect(panel.cost()).toEqual({ reloads: 0, walks: 6, reads: 306, partReads: 8 });
+      expect(panel.cost()).toEqual({
+        events: 0,
+        reloads: 1,
+        walks: 1,
+        reads: 51,
+        partReads: 1,
+      });
 
       const one = await panel.costOf(() => plainChange(h, 0));
       expect(one).toEqual({
+        events: 1,
         reloads: 1,
-        // (R + 1) walks. TARGET 1 per document revision, shared.
-        walks: 6,
-        // 6 × (1 tree + 50 getMetadata). TARGET 51.
-        reads: 306,
-        // The recipe is re-read by the panel, by `resolveRepeat`, and by
-        // EVERY `repeatLinks` call (it is the only index of a clipped
-        // instance): 2 + (R + 1). TARGET 1.
-        partReads: 8,
+        // One walk per document REVISION, shared. As found: 6 — (R + 1).
+        walks: 1,
+        // 1 tree + 50 getMetadata, in parallel. As found: 306. TARGET 2 —
+        // a tree and ONE bulk metadata read (RFI C-65).
+        reads: 51,
+        // As found: 8 — the panel, `resolveRepeat`, and EVERY
+        // `repeatLinks` call (the recipe is the only index of a clipped
+        // instance) each read it: 2 + (R + 1).
+        partReads: 1,
       });
-      expect(panel.work.count("document.getMetadata")).toBe(300);
+      expect(panel.work.count("document.getMetadata")).toBe(50);
     });
 
-    it("a burst of 20 document changes = 20 reloads = 6120 reads", async () => {
+    it("a burst of 20 document changes = ONE reload = 51 reads", async () => {
       const panel = await mountPanel(h, makeRepeatPanel);
       expect(await documentBurst(h, panel)).toEqual({
-        // No debounce, no cancellation. TARGET 1 (O(1) per burst).
-        reloads: 20,
-        walks: 120,
-        // 20 × 306. TARGET 51 — one walk for the revision the burst ends on.
-        reads: 6120,
-        partReads: 160,
+        events: 20,
+        // As found: 20 — no debounce, no cancellation.
+        reloads: 1,
+        // As found: 120.
+        walks: 1,
+        // One walk, of the revision the burst ends on. As found: 6 120.
+        reads: 51,
+        // As found: 160.
+        partReads: 1,
       });
     });
 
-    it("a burst of 20 selection changes = 20 reloads = 6140 reads", async () => {
+    it("a burst of 20 selection changes = ONE reload = 0 reads", async () => {
       const panel = await mountPanel(h, makeRepeatPanel);
       expect(await selectionBurst(h, panel)).toEqual({
-        // TARGET 1.
-        reloads: 20,
-        // The DOCUMENT did not change once during this burst. TARGET 0.
-        walks: 120,
-        // 20 × (306 + 1 read of the selected leaf's own link). TARGET 1.
-        reads: 6140,
-        partReads: 160,
+        events: 20,
+        // As found: 20.
+        reloads: 1,
+        // The DOCUMENT did not change once during this burst. As found:
+        // 120.
+        walks: 0,
+        // The selected leaf's own link is in the walk the mount read.
+        // As found: 6 140.
+        reads: 0,
+        // As found: 160.
+        partReads: 1,
       });
     });
 
-    // BUG (measured) — the last reload to FINISH wins, not the last to
-    // start; see blend-panel.spec.tsx for the mechanism. Here the older
-    // reload's `setActive(null)` lands after the newer one resolved the
-    // selected source to rep-1. Flip to `it` when a stale reload is
-    // dropped.
-    it.fails(
+    // WAS A BUG (measured, then fixed) — the last reload to FINISH won,
+    // not the last to start; see blend-panel.spec.tsx for the mechanism.
+    // Here the older reload's `setActive(null)` landed after the newer
+    // one resolved the selected source to rep-1, and the panel showed "".
+    it(
       "the panel ends on the LATEST selection when a slower, older reload is still in flight",
       async () => {
         const panel = await mountPanel(h, makeRepeatPanel);
         expect(panel.attr(PANEL, "data-draw-repeat-active")).toBe("");
         await selectDuringWalk(h, panel, [poly("s0")]);
-        // MEASURED "".
         expect(panel.attr(PANEL, "data-draw-repeat-active")).toBe("rep-1");
+        expect(panel.cost()).toMatchObject({ reloads: 2, walks: 1 });
       },
     );
   });

@@ -25,6 +25,11 @@
 //
 // WHAT WAS MEASURED, in one line: one walk of the whole document PER
 // RECORD per reload.
+//
+// WHAT IT IS NOW (the history is beside each budget): one reload per
+// burst, one walk per document REVISION out of the shared link index
+// (`src/link-index.ts`), one part read per reload, the newest reload
+// wins.
 
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
@@ -111,13 +116,15 @@ describe("Objects on path panel — rendered against the engine", () => {
 
     it("THE FLOOR: what a reload costs before the document holds anything", async () => {
       const panel = await mountPanel(h, makeObjectsOnPathPanel);
-      // One tree read (the resolve looking for "the only association")
-      // and the library twice. TARGET 1 part read.
+      // The mount's own reload: one tree read (the link index, with no
+      // leaf under it) and the library once. As found: the library twice
+      // (the panel, then the resolve).
       expect(panel.cost()).toEqual({
-        reloads: 0,
+        events: 0,
+        reloads: 1,
         walks: 1,
         reads: 1,
-        partReads: 2,
+        partReads: 1,
       });
     });
   });
@@ -195,14 +202,16 @@ describe("Objects on path panel — rendered against the engine", () => {
       expect(panel.text()).toContain("offset 10 pt");
     });
 
-    // BUG (measured) — the same one blend-panel.spec.tsx pins, in this
-    // panel's copy of the code. With EXACTLY ONE record in the library
-    // `resolveObjectsOnPath` answers that record whatever is selected,
-    // and every reload ends in `if (saved) setDraft(saved.params)`: the
-    // selection change a Make REQUIRES throws away what was typed. Flip
-    // to `it` when the reload stops overwriting a draft the user is
-    // editing.
-    it.fails(
+    // WAS A BUG (measured, then fixed) — the same one blend-panel.spec.tsx
+    // pins, in this panel's copy of the code. With EXACTLY ONE record in
+    // the library `resolveObjectsOnPath` answers that record whatever is
+    // selected, and every reload ended in `if (saved)
+    // setDraft(saved.params)`: the selection change a Make REQUIRES threw
+    // away what was typed (the field read "10", the only record's saved
+    // value). The form now follows the record (`useFollowedDraft`) and
+    // takes its options only when the record, or what is saved for it,
+    // changes.
+    it(
       "typed options survive the selection change that + On path needs (one record in the library)",
       async () => {
         expect((await readObjectsOnPathLibrary(h.host)).associations).toHaveLength(1);
@@ -214,7 +223,6 @@ describe("Objects on path panel — rendered against the engine", () => {
         panel.change('[data-draw-onpath-field="startOffsetPt"]', "25");
         expect(offset()).toBe("25");
         await drive(() => h.host.selection.set(trio(1)), panel.work);
-        // MEASURED "10": the saved options of the only record in the library.
         expect(offset()).toBe("25");
       },
     );
@@ -231,12 +239,13 @@ describe("Objects on path panel — rendered against the engine", () => {
     });
 
     it("an OPEN panel follows the COMMAND too, not only its own buttons", async () => {
-      // The contrast case. Five of this panel's siblings go stale when a
-      // record is made or removed by the command instead of the panel's
-      // button (a recipe write is not an event — see blend-panel.spec.tsx).
-      // This one is followed both ways, because both verbs end in a
-      // selection change that lands AFTER the recipe write. Pinned so that
-      // stays true.
+      // The contrast case, as it was found. Five of this panel's siblings
+      // went stale when a record was made or removed by the command
+      // instead of the panel's button (a recipe write is not an event —
+      // see blend-panel.spec.tsx). This one was followed both ways even
+      // then, because both verbs end in a selection change that lands
+      // AFTER the recipe write. A recipe write announces itself now, so
+      // it no longer depends on that — pinned so it stays true.
       await h.host.selection.set(trio(1));
       const panel = await mountPanel(h, makeObjectsOnPathPanel);
       await drive(() => applyMakeObjectsOnPath(h.host, {}), panel.work);
@@ -286,69 +295,85 @@ describe("Objects on path panel — rendered against the engine", () => {
       );
     });
 
-    it("THE PER-RECORD WALK IS REAL: walks per reload grow with the record count", () => {
-      // Index = records in the document. `resolveObjectsOnPath` walks once
-      // to find "the only association the document carries" (skipped when
-      // the library holds exactly one), then
-      // `objectsOnPathLinks(host, record.id)` walks the WHOLE document
-      // again for each record.
-      // TARGET [1, 1, 1, 1, 1, 1] — one walk, whatever R is.
-      expect(walksByRecords).toEqual([1, 1, 3, 4, 5, 6]);
+    it("ONE WALK PER RELOAD, whatever the record count", () => {
+      // Index = records in the document. One unfiltered
+      // `objectsOnPathLinks`, out of the link index, is tallied for every
+      // record at once. As found: [1, 1, 3, 4, 5, 6] —
+      // `resolveObjectsOnPath` walked once to find "the only association
+      // the document carries" (skipped when the library holds exactly
+      // one), then `objectsOnPathLinks(host, record.id)` walked the WHOLE
+      // document again for each record.
+      expect(walksByRecords).toEqual([1, 1, 1, 1, 1, 1]);
     });
 
-    it("ONE reload = 6 walks = 336 reads", async () => {
+    it("ONE reload = 1 walk = 56 reads", async () => {
       const panel = await mountPanel(h, makeObjectsOnPathPanel);
-      expect(panel.cost()).toEqual({ reloads: 0, walks: 6, reads: 336, partReads: 2 });
+      expect(panel.cost()).toEqual({
+        events: 0,
+        reloads: 1,
+        walks: 1,
+        reads: 56,
+        partReads: 1,
+      });
 
       const one = await panel.costOf(() => plainChange(h, 0));
       expect(one).toEqual({
+        events: 1,
         reloads: 1,
-        // (R + 1) walks. TARGET 1 per document revision, shared.
-        walks: 6,
-        // 6 × (1 tree + 55 getMetadata). TARGET 56.
-        reads: 336,
-        // The library is read twice (the panel, then the resolve). TARGET 1.
-        partReads: 2,
+        // One walk per document REVISION, shared. As found: 6 — (R + 1).
+        walks: 1,
+        // 1 tree + 55 getMetadata, in parallel. As found: 336. TARGET 2 —
+        // a tree and ONE bulk metadata read (RFI C-65).
+        reads: 56,
+        // As found: 2 (the panel, then the resolve).
+        partReads: 1,
       });
-      expect(panel.work.count("document.getMetadata")).toBe(330);
+      expect(panel.work.count("document.getMetadata")).toBe(55);
     });
 
-    it("a burst of 20 document changes = 20 reloads = 6720 reads", async () => {
+    it("a burst of 20 document changes = ONE reload = 56 reads", async () => {
       const panel = await mountPanel(h, makeObjectsOnPathPanel);
       expect(await documentBurst(h, panel)).toEqual({
-        // No debounce, no cancellation. TARGET 1 (O(1) per burst).
-        reloads: 20,
-        walks: 120,
-        // 20 × 336. TARGET 56 — one walk for the revision the burst ends on.
-        reads: 6720,
-        partReads: 40,
+        events: 20,
+        // As found: 20 — no debounce, no cancellation.
+        reloads: 1,
+        // As found: 120.
+        walks: 1,
+        // One walk, of the revision the burst ends on. As found: 6 720.
+        reads: 56,
+        // As found: 40.
+        partReads: 1,
       });
     });
 
-    it("a burst of 20 selection changes = 20 reloads = 6740 reads", async () => {
+    it("a burst of 20 selection changes = ONE reload = 0 reads", async () => {
       const panel = await mountPanel(h, makeObjectsOnPathPanel);
       expect(await selectionBurst(h, panel)).toEqual({
-        // TARGET 1.
-        reloads: 20,
-        // The DOCUMENT did not change once during this burst. TARGET 0.
-        walks: 120,
-        // 20 × (336 + 1 read of the selected leaf's own link). TARGET 1.
-        reads: 6740,
-        partReads: 40,
+        events: 20,
+        // As found: 20.
+        reloads: 1,
+        // The DOCUMENT did not change once during this burst. As found:
+        // 120.
+        walks: 0,
+        // The selected leaf's own link is in the walk the mount read.
+        // As found: 6 740.
+        reads: 0,
+        // As found: 40.
+        partReads: 1,
       });
     });
 
-    // BUG (measured) — the last reload to FINISH wins, not the last to
-    // start; see blend-panel.spec.tsx for the mechanism. Flip to `it`
-    // when a stale reload is dropped.
-    it.fails(
+    // WAS A BUG (measured, then fixed) — the last reload to FINISH won,
+    // not the last to start, and the panel showed "" with an object of
+    // op-1 selected; see blend-panel.spec.tsx for the mechanism.
+    it(
       "the panel ends on the LATEST selection when a slower, older reload is still in flight",
       async () => {
         const panel = await mountPanel(h, makeObjectsOnPathPanel);
         expect(panel.attr(PANEL, "data-draw-onpath-active")).toBe("");
         await selectDuringWalk(h, panel, [poly("o0")]);
-        // MEASURED "".
         expect(panel.attr(PANEL, "data-draw-onpath-active")).toBe("op-1");
+        expect(panel.cost()).toMatchObject({ reloads: 2, walks: 1 });
       },
     );
   });
