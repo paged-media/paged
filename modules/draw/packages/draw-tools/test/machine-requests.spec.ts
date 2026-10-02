@@ -39,7 +39,12 @@ import type { ElementId } from "@paged-media/plugin-api";
 import {
   DirectSelectMachine,
   PenMachine,
+  anchorEditOps,
   penEndpointAt,
+  planAnchorAddAt,
+  planAnchorConvert,
+  planAnchorConvertAt,
+  planAnchorDeleteAt,
   type DirectSelectHit,
   type DirectSelectModifiers,
   type PenHit,
@@ -258,5 +263,52 @@ describe("2 — hits: several paths under the pointer, ranked by the machine", (
     // Empty space and no hits: no hit reported.
     expect(pen().handle({ type: "move", point: [9, 9], modifiers: PEN_NONE }).hit).toBeNull();
     expect(hover(pen(), [{ kind: "empty" }]).hit).toBeNull();
+  });
+});
+
+describe("3 — planAnchorConvertAt, beside planAnchorAddAt / planAnchorDeleteAt", () => {
+  const SMOOTH_ARCH: AnchorTable = {
+    anchors: [
+      corner(0, 0),
+      { anchor: [50, 50], left: [30, 50], right: [90, 50] },
+      corner(100, 0),
+    ],
+    subpathStarts: [0],
+    subpathOpen: [true],
+  };
+
+  it("toggles by index: a corner plans smooth, a smooth anchor plans a corner", () => {
+    expect(planAnchorConvertAt(SMOOTH_ARCH, 0)).toEqual({
+      kind: "convert",
+      index: 0,
+      smooth: true,
+    });
+    expect(planAnchorConvertAt(SMOOTH_ARCH, 1)).toEqual({
+      kind: "convert",
+      index: 1,
+      smooth: false,
+    });
+  });
+
+  it("is the same plan the point-and-tolerance planner makes for that anchor", () => {
+    for (const [i, a] of SMOOTH_ARCH.anchors.entries()) {
+      expect(planAnchorConvertAt(SMOOTH_ARCH, i)).toEqual(
+        planAnchorConvert(SMOOTH_ARCH, a.anchor as P, 1),
+      );
+    }
+  });
+
+  it("refuses an index outside the table, like its two siblings", () => {
+    for (const bad of [-1, 3, 1.5, Number.NaN]) {
+      expect(planAnchorConvertAt(SMOOTH_ARCH, bad)).toBeNull();
+      expect(planAnchorDeleteAt(SMOOTH_ARCH, bad)).toBeNull();
+    }
+    expect(planAnchorAddAt(SMOOTH_ARCH, 2, 0.5)).toBeNull(); // last anchor of an open contour
+  });
+
+  it("lowers through anchorEditOps to ONE pathPointCurveType op", () => {
+    expect(anchorEditOps(planAnchorConvertAt(SMOOTH_ARCH, 0)!)).toEqual([
+      { op: "pathPointCurveType", index: 0, smooth: true },
+    ]);
   });
 });

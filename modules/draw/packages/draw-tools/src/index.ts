@@ -169,6 +169,7 @@ export {
   planAnchorDelete,
   planAnchorDeleteAt,
   planAnchorConvert,
+  planAnchorConvertAt,
   nearestAnchorIndex,
   segmentPairsOf,
   segmentPairFrom,
