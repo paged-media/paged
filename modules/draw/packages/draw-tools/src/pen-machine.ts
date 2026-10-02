@@ -460,8 +460,36 @@ export class PenMachine {
   /** The existing path this run continues (v2), else null. */
   private origin: Origin | null = null;
   private done = false;
+  /** The tolerances in force — a COPY, so `setOptions` never writes to
+   *  an object the host still holds. */
+  private options: PenOptions;
 
-  constructor(private readonly options: PenOptions) {}
+  constructor(options: PenOptions) {
+    this.options = { ...options };
+  }
+
+  /**
+   * Change the ZOOM-DEPENDENT tolerances (both are page pt the host
+   * converted from screen px) without rebuilding the machine — which,
+   * mid-run, would lose every anchor placed. Every key is optional; a
+   * non-finite or negative value is ignored. Takes effect from the next
+   * event: the answer returned here already shows a close preview the
+   * new radius brings into (or out of) reach.
+   */
+  setOptions(patch: Partial<PenOptions>): PenSnapshot {
+    const ok = (v: unknown): v is number =>
+      typeof v === "number" && Number.isFinite(v) && v >= 0;
+    const next: PenOptions = { ...this.options };
+    if (ok(patch.closeTolerance)) next.closeTolerance = patch.closeTolerance;
+    if (ok(patch.dragThreshold)) next.dragThreshold = patch.dragThreshold;
+    this.options = next;
+    return this.snapshot(null);
+  }
+
+  /** The tolerances in force (what `setOptions` last left). */
+  currentOptions(): Readonly<PenOptions> {
+    return { ...this.options };
+  }
 
   handle(event: PenEvent): PenSnapshot {
     if (this.done) return this.snapshot(null);

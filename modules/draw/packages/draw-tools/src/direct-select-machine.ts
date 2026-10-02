@@ -346,9 +346,9 @@ export class DirectSelectMachine {
   private selection = new Set<number>();
   private gesture: Gesture | null = null;
   private marquee: MarqueeRect | null = null;
-  private readonly slop: number;
-  private readonly nudgeStep: number;
-  private readonly smoothTolerance: number | undefined;
+  private slop: number;
+  private nudgeStep: number;
+  private smoothTolerance: number | undefined;
 
   constructor(options: DirectSelectOptions) {
     this.slop = options.slop;
@@ -400,6 +400,40 @@ export class DirectSelectMachine {
     this.install(table, transform === undefined ? this.transform : transform);
     this.setSelectionInternal(this.sorted());
     return this.snap();
+  }
+
+  /**
+   * Change the ZOOM-DEPENDENT tolerances without rebuilding the machine —
+   * the host converts its pixel slop and nudge at the current zoom, and a
+   * zoom used to mean a new machine (and a lost selection). Every key is
+   * optional; a non-finite or negative value is ignored (the old one
+   * stays), as is `smoothTolerance: undefined` (pass a number to change
+   * it). Takes effect from the NEXT event, mid-gesture included: a slop
+   * that shrinks under a press can turn it into a drag on the next move,
+   * which is what the pointer has by then done on screen.
+   */
+  setOptions(
+    patch: Partial<Pick<DirectSelectOptions, "slop" | "nudgeStep" | "smoothTolerance">>,
+  ): DirectSelectSnapshot {
+    const ok = (v: unknown): v is number =>
+      typeof v === "number" && Number.isFinite(v) && v >= 0;
+    if (ok(patch.slop)) this.slop = patch.slop;
+    if (ok(patch.nudgeStep)) this.nudgeStep = patch.nudgeStep;
+    if (ok(patch.smoothTolerance)) this.smoothTolerance = patch.smoothTolerance;
+    return this.snap();
+  }
+
+  /** The tolerances in force (what `setOptions` last left). */
+  currentOptions(): {
+    slop: number;
+    nudgeStep: number;
+    smoothTolerance: number | undefined;
+  } {
+    return {
+      slop: this.slop,
+      nudgeStep: this.nudgeStep,
+      smoothTolerance: this.smoothTolerance,
+    };
   }
 
   /** Replace the selection (Select All, a host-side lasso, …). Indices
