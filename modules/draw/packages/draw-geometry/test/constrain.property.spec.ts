@@ -182,39 +182,54 @@ describe("constrain — constrainAngle (properties)", () => {
 
   // ------------------------------------------------------------------
   // DEFECT (constrain.ts, constrainAngle) — for a step that does NOT
-  // divide 180° the snap is not idempotent, and is not the nearest
-  // multiple either.
+  // divide 180° the snap was not idempotent, and was not the nearest
+  // multiple either. FIXED — and the contract DECIDED, because for such
+  // a step "the nearest multiple" had never been defined.
   //
   // `Math.round(atan2(dy, dx) / step) * step` only ever considers the
-  // multiples k·step with |k·step| ≲ 180°, and it treats +180° and −180°
-  // as different candidates although they are one direction. With a step
-  // that divides 180° both ends of the range ARE multiples, so nothing
-  // shows. With any other step the candidate nearest to the ±180° cut
-  // lies BEYOND it, and re-reading that direction through atan2 lands on
-  // the other side of the cut — where the nearest candidate is a
-  // different one.
+  // multiples k·step with |k·step| ≲ 180°, and it treated +180° and
+  // −180° as different candidates although they are one direction. With
+  // a step that divides 180° both ends of the range ARE multiples, so
+  // nothing shows. With any other step the candidate nearest to the
+  // ±180° cut lies BEYOND it, and re-reading that direction through
+  // atan2 lands on the other side of the cut — where the nearest
+  // candidate was a different one.
   //
   // Minimal counterexample: step 100°, a 10 pt arm at 175°.
   //   multiples within reach: −200, −100, 0, 100, 200.
   //   1st snap: round(1.75)·100 = 200°, i.e. the direction −160°.
   //   2nd snap of THAT: round(−1.6)·100 = −200°, i.e. the direction 160°.
   //   EXPECTED: snapping a snapped point leaves it where it is (and the
-  //             first snap would have chosen 160° — it is 15° from the
-  //             arm, 200° is 25°).
-  //   ACTUAL:   the point jumps 40° on every re-application.
+  //             first snap chooses 160° — it is 15° from the arm, 200°
+  //             is 25°).
+  //   WAS:      the point jumped 40° on every re-application.
   //
-  // Low severity TODAY: both callers use the 45° default, and every step
-  // a UI offers (15/30/45/60/90) divides 180°.
+  // Low severity: both callers use the 45° default, and every step a UI
+  // offers (15/30/45/60/90) divides 180°.
+  //
+  // THE CONTRACT (constrain.ts states it in full). The multiples of a
+  // step that does not divide 360° never close up — 100° generates every
+  // multiple of 20° — so the candidates have to be a chosen, finite set.
+  // They are the multiples k·step with |k| ≤ round(180°/step): the fan
+  // counted both ways from the +x axis out to the multiple nearest the
+  // half turn — exactly the directions the function could always answer.
+  // Among them the winner is the one nearest the arm ON THE CIRCLE. That
+  // makes the snap idempotent for every step and keeps the turn within
+  // half a step, and for a step that divides 360° the answer is
+  // bit-for-bit what it was (checked on 3.2 million points).
   // ------------------------------------------------------------------
-  it.fails("DEFECT (minimal counterexample): snapping is idempotent at a 100° step", () => {
+  it("FIXED DEFECT (minimal counterexample): snapping is idempotent at a 100° step", () => {
     const a = 175 * DEG;
     const p: Vec2 = [10 * Math.cos(a), 10 * Math.sin(a)];
     const once = constrainAngle([0, 0], p, 100);
     const twice = constrainAngle([0, 0], once, 100);
     expect(Math.hypot(twice[0] - once[0], twice[1] - once[1])).toBeLessThan(1e-9);
+    // And it is the 160° direction (−200°), 15° from the arm — not the
+    // 200° one, 25° away.
+    assertVecClose(once, [10 * Math.cos(160 * DEG), 10 * Math.sin(160 * DEG)], 1e-9);
   });
 
-  it.fails("DEFECT: is idempotent for ANY positive step", () => {
+  it("FIXED DEFECT: is idempotent for ANY positive step", () => {
     fc.assert(
       fc.property(armed, real(0.5, 180), ([o, p], step) => {
         const once = constrainAngle(o, p, step);
@@ -223,28 +238,97 @@ describe("constrain — constrainAngle (properties)", () => {
     );
   });
 
+  it("THE CONTRACT: the answer is the nearest, on the circle, of the multiples out to the one nearest the half turn", () => {
+    // Stated without atan2 and without rounding an angle: every
+    // candidate direction is laid out as a POINT at the arm's length,
+    // and the answer must be the candidate point nearest the arm's own
+    // end. (Chord length is monotone in the angle between two directions
+    // of the same length, so nearest point = nearest direction.)
+    fc.assert(
+      fc.property(armed, anyStep, ([o, p], step) => {
+        const r = dist(o, p);
+        const reach = Math.round(180 / step);
+        let best = Infinity;
+        let second = Infinity;
+        let at: Vec2 = p;
+        for (let k = -reach; k <= reach; k++) {
+          const a = k * step * DEG;
+          const c: Vec2 = [o[0] + r * Math.cos(a), o[1] + r * Math.sin(a)];
+          const d = dist(c, p);
+          if (d < best) {
+            // A candidate that is the same DIRECTION as the best so far
+            // (+180° and −180°) is not a second candidate.
+            if (dist(c, at) > 1e-9 * r) second = best;
+            best = d;
+            at = c;
+          } else if (dist(c, at) > 1e-9 * r) {
+            second = Math.min(second, d);
+          }
+        }
+        // A near tie may break either way; skip it.
+        fc.pre(second - best > 1e-6 * r);
+        assertVecClose(constrainAngle(o, p, step), at, 1e-9 * magnitude(o, p));
+      }),
+    );
+  });
+
+  it("the sign of the step is ignored", () => {
+    fc.assert(
+      fc.property(armed, anyStep, ([o, p], step) => {
+        // A tie (the arm exactly between two multiples) rounds toward +∞
+        // of k either way and may land differently; skip those.
+        const steps = Math.atan2(p[1] - o[1], p[0] - o[0]) / (step * DEG);
+        fc.pre(Math.abs(Math.abs(steps - Math.round(steps)) - 0.5) > 1e-6);
+        assertVecClose(
+          constrainAngle(o, p, -step),
+          constrainAngle(o, p, step),
+          1e-9 * magnitude(o, p),
+        );
+      }),
+    );
+  });
+
   // ------------------------------------------------------------------
-  // DEFECT (constrain.ts, constrainAngle) — a step of 0° answers
-  // [NaN, NaN].
+  // DEFECT (constrain.ts, constrainAngle) — a step of 0° answered
+  // [NaN, NaN]. FIXED.
   //
   // `step = 0` makes `atan2(...) / step` ±Infinity (or NaN on the +x
-  // axis), `Math.round(±Infinity) * 0` is NaN, and the NaN goes straight
+  // axis), `Math.round(±Infinity) * 0` is NaN, and the NaN went straight
   // into the returned coordinates. Every other function in this package
   // answers a degenerate argument with something inert ("never a throw",
-  // `[]`, the point unchanged); this one answers a poisoned point that a
-  // caller would hand to an `insertPath` / `framePath` op.
+  // `[]`, the point unchanged); this one answered a poisoned point that
+  // a caller would hand to an `insertPath` / `framePath` op.
   //
   // Minimal counterexample: constrainAngle([0,0], [3,4], 0)
   //   EXPECTED: a finite point (no constraint is the only reading of
   //             "snap to multiples of 0°": [3, 4]).
-  //   ACTUAL:   [NaN, NaN].
+  //   WAS:      [NaN, NaN].
   //
-  // Low severity TODAY: both callers (pen-machine, measure-machine) use
-  // the 45° default. It is the first thing a "constrain angle" preference
+  // Low severity: both callers (pen-machine, measure-machine) use the
+  // 45° default. It is the first thing a "constrain angle" preference
   // field would hit.
+  //
+  // THE FIX: a step with no multiples to snap to — 0, NaN, ±∞ — is no
+  // constraint: the point comes back unchanged, as a fresh tuple.
   // ------------------------------------------------------------------
-  it.fails("DEFECT (minimal counterexample): a 0° step answers a finite point", () => {
+  it("FIXED DEFECT (minimal counterexample): a 0° step answers a finite point", () => {
     const out = constrainAngle([0, 0], [3, 4], 0);
     expect(Number.isFinite(out[0]) && Number.isFinite(out[1])).toBe(true);
+    expect(out).toEqual([3, 4]);
+  });
+
+  it("FIXED DEFECT: property — a step that is 0, NaN or infinite is no constraint", () => {
+    fc.assert(
+      fc.property(
+        vec2,
+        vec2,
+        fc.constantFrom(0, -0, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY),
+        (o, point, step) => {
+          const out = constrainAngle(o, point, step);
+          assertVecClose(out, point, 0);
+          expect(out).not.toBe(point);
+        },
+      ),
+    );
   });
 });
