@@ -22,7 +22,7 @@ them in the same change.
   bundles via `BundleHost` at activation.
 - **No speculative surface.** A type joins the façade when a real bundle
   (paged.draw first) needs it. Gaps are recorded in
-  the cross-repo RFI `thoughts/docs/paged/plugin-platform/rfi-core-sdk-gaps.md`, not pre-emptively "fixed" here.
+  the cross-repo RFI (the internal gap register), not pre-emptively "fixed" here.
 - **This package OWNS its types (since the M1.1(a) vendoring pass,
   2026-06-06):** hand-written editor-contract shapes in
   `plugin-api/src/editor.ts` (handles NARROW, contributions 1:1) and

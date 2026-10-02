@@ -1,8 +1,8 @@
 # paged-media/plugin-sdk
 
 Plugin contract + tooling for the Paged editor. Three packages, three
-stability tiers (concept: `thoughts/docs/paged/plugin-draw/base-idea.md` §9,
-reality: `thoughts/docs/paged/plugin-draw/reality-check.md`):
+stability tiers (concept: the original platform concept, §9, not published;
+reality: an internal review note):
 
 | Package | Contents | Tier |
 |---|---|---|
@@ -16,6 +16,16 @@ audit, rejected alternatives, freeze policy — is in **`DESIGN.md`**.
 Note: the npm name `@paged-media/sdk` belongs to the **viewer session**
 (`core/crates/paged-sdk`, WebGPU read-only renderer) — the plugin runtime is
 `plugin-sdk`, deliberately.
+
+## Documentation
+
+How the contract is designed and built is in [`docs/`](./docs/README.md) and in
+[`DESIGN.md`](./DESIGN.md):
+
+- [`docs/concept.md`](./docs/concept.md): what the plugin contract is for and what it will never do.
+- [`docs/architecture.md`](./docs/architecture.md): the three packages and the doors the contract offers, with pointers into `DESIGN.md`.
+- [`docs/status.md`](./docs/status.md): what ships today and what does not.
+- [`docs/adr/`](./docs/adr/README.md): the architecture decisions, one per file, including those every plugin repository shares (314–319).
 
 ## Status: API v0 (incubation)
 

@@ -2,7 +2,7 @@
 
 **2026-06-06 · status: implemented in this repo · informed by:** the
 paged.draw build-out (plugin-draw `BREAKAGE_LOG.md` B-01…B-13), the
-paged.web concept (`thoughts/docs/paged/plugin-web/base-idea.md` §9.1),
+paged.web concept (`plugin-web: docs/concept.md` §9.1),
 an audit of `editor/apps/canvas` (61 panels, registries, gesture spine,
 bundle prototype, cockpit) and `core/` (wasm surface, Operation channel,
 Boa, hit-testing), and the brand system (`brand/editor/ui_kits/editor`).
@@ -528,7 +528,7 @@ tests/headless.
 ### 4.6b `host.network` — the consent door [paged.data D-03]
 `requestConsent(origins, purpose) → ConsentResult` + `consentedOrigins()`.
 The first plugin needing network is paged.data (external datasets;
-base-idea §11 — "the largest attack surface in the suite"), so the door is
+`plugin-data: docs/concept.md` §11 — "the largest attack surface in the suite"), so the door is
 designed against *its* threat model, not a generic fetch. Three deliberate
 choices: (1) **the manifest is the OUTER bound** — `capabilities.network`
 declares a per-origin allow-list (or `"consent"` for author-supplied
@@ -548,7 +548,7 @@ false — the honest no-consent posture, mirroring `host.assets`. Editor
 follow-up: the consent-prompt UI + the CSP enforcement. The host-proxied
 `host.network.fetch` alternative was rejected (breaks DuckDB `httpfs`, adds a
 large chokepoint for no isolation gain over CSP-per-grant). Full RFC:
-`thoughts/docs/paged/plugin-data/rfc-network-consent.md`.
+[`docs/design/network-consent.md`](docs/design/network-consent.md).
 
 ### 4.6c `host.dataProviders` — the cross-plugin data-provider registry [D-09]
 `register(registration) → handle` (provider side) + `discover(category) /
@@ -575,8 +575,8 @@ no-registry posture (discover empty, register a no-op, `supports("dataProviders@
 false). The interchange is the Arrow-aligned columnar shape the engine emits
 (`ProviderRecordSet` — fields keyed `ty`, not `type`). Editor follow-up: create
 the registry once + inject it into every `loadBundle`. Full RFCs:
-`thoughts/docs/paged/plugin-data/rfc-data-provider.md` (contract owner),
-`thoughts/docs/paged/plugin-sheets/rfc-data-provider-consumer.md` (consumer).
+[`docs/design/data-provider.md`](docs/design/data-provider.md) (contract owner),
+`plugin-sheets: docs/design/data-provider-consumer.md` (consumer).
 
 ### 4.7 `host.diagnostics`
 `set(key, Diagnostic[]) / clear / onDidChange` — per-plugin diagnostic
@@ -750,7 +750,7 @@ yet; it earns a member when the W0 spike defines one"). W-07 is that
 moment: the lane now has a concrete contract surface — a manifest field,
 CLI validation, and a host-side loader door. The full deliberation
 (manifest shape, budgets + rationale, the no-ambient-authority trust
-line, non-goals) is in `docs/wasm-packaging.md`; §10 below is the
+line, non-goals) is in `docs/reference/wasm-packaging.md`; §10 below is the
 summary.
 
 `capabilities.keybindings: boolean` [W3.10] — ADDED 2026-06-07. The one
@@ -770,7 +770,7 @@ about a module's role before granting it. The loader
 (`plugin-sdk/loadBundleWasm`) enforces **declared-only** access (a name
 absent from the manifest never loads), a **host grant** (wasm is opt-in;
 no grant = refuse), the **budgets** (100 MB app-wide across editor + all plugins, 3 s
-load-time, 256 MiB memory ceiling — `docs/wasm-packaging.md` §3 carries
+load-time, 256 MiB memory ceiling — `docs/reference/wasm-packaging.md` §3 carries
 the rationale), and instantiates with **no ambient authority**: the
 module gets only the imports the caller passes — no engine/DOM/network
 handle. The wasm is strictly downstream of the bundle's already-gated
@@ -973,7 +973,7 @@ plus the collection/apply-entity plumbing in
 **Consumers.** (1) The editor's own **schema-list demo panel**, which is
 what proved the leaf renders a live collection and commits an
 apply-entity write. (2) The **B-01 RFI row**
-(`thoughts/docs/paged/plugin-platform/rfi-core-sdk-gaps.md`), whose
+(the internal gap register), whose
 closure note explicitly parked layer/style lists as expert-leaf React —
 this is the half that un-parks. (3) FIRST BUNDLE CONSUMER, upcoming:
 **paged.draw's appearance + layers panels** — `layers.panel.json` is the
@@ -1244,7 +1244,7 @@ untouched.
 ## 15. The capability-gated worker door (K-3 / S-07 / I-02 — `host.workers`)
 
 The K-3 design note
-(`thoughts/docs/paged/plugin-platform/k3-worker-capability-design.md`) is
+([`docs/design/worker-capability.md`](docs/design/worker-capability.md)) is
 the deliberation record; this section is the contract summary. The
 deferral (Wave 3b, no-speculative-surface) lifts because two real
 consumers exist: paged.image's decode pool and paged.data's DuckDB
@@ -1301,7 +1301,7 @@ changed; the gate / namespace rule / every other door are untouched.
 ## 16. The host credential store (D-11 — `host.secrets`)
 
 The frozen RFC
-(`thoughts/docs/paged/plugin-data/rfc-credential-store.md`) is the
+([`docs/design/credential-store.md`](docs/design/credential-store.md)) is the
 deliberation record; this section is the contract summary. The deferral
 lifts because a real consumer exists: paged.data's authenticated
 DB-attach / remote sources need a credential the document MUST NOT carry.
@@ -1356,7 +1356,7 @@ changed; the gate / namespace rule / every other door are untouched.
 
 ## 17. The realm-local GPU declaration (I-07 / C-1 Stage B — `capabilities.gpu`)
 
-ADR-018 (`thoughts/docs/paged/adr/018-stage-b-gpu-texture-defer-record-only.md`)
+ADR-018 (`core: docs/adr/018-stage-b-gpu-texture-defer-record-only.md`)
 is the deliberation record; this section is the contract summary. This is the
 BUILDABLE, HONEST half of C-1 Stage B — and ONLY that half. It blesses, within
 the capability contract, the WebGPU usage paged.image's Engine-B already does
@@ -1409,7 +1409,7 @@ record-only (ADR-018); this section adds NONE of `SceneItem::Texture`,
 
 ## 18. Binding providers (ADR-023 phase A — `contribute.bindingProvider`)
 
-ADR-023 (`thoughts/docs/paged/adr/023-shared-panels-binding-providers.md`,
+ADR-023 (`editor: docs/adr/023-shared-panels-binding-providers.md`,
 ACCEPTED 2026-08-04) is the deliberation record; this section is the contract
 it lands. It is **phase A only** — the provider CONTRACT + the host adapter.
 Phase B (the editor's tree/drag/rename widget tier), phase C (the one
