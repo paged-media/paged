@@ -115,7 +115,7 @@ describe("Appearance panel — rendered against the engine", () => {
       const panel = await mountPanel(h, makeAppearancePanel);
       // Nothing is selected, so the reload reads nothing at all.
       expect(panel.cost()).toEqual({
-        reloads: 0,
+        events: 0,
         walks: 0,
         reads: 0,
         partReads: 0,
@@ -329,11 +329,11 @@ describe("Appearance panel — rendered against the engine", () => {
     it("NO walk at all: one reload = 2 reads, whatever the document holds", async () => {
       await h.host.selection.set([R0]);
       const panel = await mountPanel(h, makeAppearancePanel);
-      expect(panel.cost()).toEqual({ reloads: 0, walks: 0, reads: 2, partReads: 0 });
+      expect(panel.cost()).toEqual({ events: 0, walks: 0, reads: 2, partReads: 0 });
 
       const one = await panel.costOf(() => plainChange(h, 0));
       expect(one).toEqual({
-        reloads: 1,
+        events: 1,
         walks: 0,
         // The SAME element's metadata, twice: once to resolve the carrier
         // of a baked layer, once to read the stack. TARGET 1.
@@ -346,7 +346,7 @@ describe("Appearance panel — rendered against the engine", () => {
     it("with nothing selected a reload reads nothing", async () => {
       const panel = await mountPanel(h, makeAppearancePanel);
       expect(await panel.costOf(() => plainChange(h, 0))).toEqual({
-        reloads: 1,
+        events: 1,
         walks: 0,
         reads: 0,
         partReads: 0,
@@ -358,7 +358,7 @@ describe("Appearance panel — rendered against the engine", () => {
       const panel = await mountPanel(h, makeAppearancePanel);
       expect(await documentBurst(h, panel)).toEqual({
         // No debounce, no cancellation. TARGET 1 (O(1) per burst).
-        reloads: 20,
+        events: 20,
         walks: 0,
         // 20 × 2. TARGET 1 — the selection's stack at the revision the
         // burst ends on.
@@ -372,7 +372,7 @@ describe("Appearance panel — rendered against the engine", () => {
       const panel = await mountPanel(h, makeAppearancePanel);
       expect(await selectionBurst(h, panel)).toEqual({
         // TARGET 1.
-        reloads: 20,
+        events: 20,
         walks: 0,
         // 20 × 2 — but each reload read the selection it REPLACED (the
         // `it.fails` above): R0, then p1 … p19. The last one, p20, was

@@ -99,7 +99,7 @@ describe("Graphic styles panel — rendered against the engine", () => {
       // One tree read and the library once: this is the shape the target
       // has, before there is a leaf to read twice.
       expect(panel.cost()).toEqual({
-        reloads: 0,
+        events: 0,
         walks: 1,
         reads: 1,
         partReads: 1,
@@ -283,11 +283,11 @@ describe("Graphic styles panel — rendered against the engine", () => {
 
     it("ONE reload = 1 walk = 91 reads — two per leaf", async () => {
       const panel = await mountPanel(h, makeGraphicStylesPanel);
-      expect(panel.cost()).toEqual({ reloads: 0, walks: 1, reads: 91, partReads: 1 });
+      expect(panel.cost()).toEqual({ events: 0, walks: 1, reads: 91, partReads: 1 });
 
       const one = await panel.costOf(() => plainChange(h, 0));
       expect(one).toEqual({
-        reloads: 1,
+        events: 1,
         // One walk per reload. TARGET 1 per document REVISION, shared by
         // every panel that needs the links.
         walks: 1,
@@ -306,7 +306,7 @@ describe("Graphic styles panel — rendered against the engine", () => {
       const panel = await mountPanel(h, makeGraphicStylesPanel);
       expect(await documentBurst(h, panel)).toEqual({
         // No debounce, no cancellation. TARGET 1 (O(1) per burst).
-        reloads: 20,
+        events: 20,
         walks: 20,
         // 20 × 91. TARGET 46 — one walk for the revision the burst ends on.
         reads: 1820,
@@ -318,7 +318,7 @@ describe("Graphic styles panel — rendered against the engine", () => {
       const panel = await mountPanel(h, makeGraphicStylesPanel);
       expect(await selectionBurst(h, panel)).toEqual({
         // TARGET 1.
-        reloads: 20,
+        events: 20,
         // The DOCUMENT did not change once during this burst. TARGET 0.
         walks: 20,
         // 20 × (91 + 3 reads of the selected leaf: its carrier, its

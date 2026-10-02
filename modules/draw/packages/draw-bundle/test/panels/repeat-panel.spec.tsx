@@ -101,7 +101,7 @@ describe("Repeat options panel — rendered against the engine", () => {
       // One tree read and the recipe THREE times (the panel, the resolve,
       // and the resolve's `repeatLinks`). TARGET 1 part read.
       expect(panel.cost()).toEqual({
-        reloads: 0,
+        events: 0,
         walks: 1,
         reads: 1,
         partReads: 3,
@@ -288,11 +288,11 @@ describe("Repeat options panel — rendered against the engine", () => {
 
     it("ONE reload = 6 walks = 306 reads + 8 part reads", async () => {
       const panel = await mountPanel(h, makeRepeatPanel);
-      expect(panel.cost()).toEqual({ reloads: 0, walks: 6, reads: 306, partReads: 8 });
+      expect(panel.cost()).toEqual({ events: 0, walks: 6, reads: 306, partReads: 8 });
 
       const one = await panel.costOf(() => plainChange(h, 0));
       expect(one).toEqual({
-        reloads: 1,
+        events: 1,
         // (R + 1) walks. TARGET 1 per document revision, shared.
         walks: 6,
         // 6 × (1 tree + 50 getMetadata). TARGET 51.
@@ -309,7 +309,7 @@ describe("Repeat options panel — rendered against the engine", () => {
       const panel = await mountPanel(h, makeRepeatPanel);
       expect(await documentBurst(h, panel)).toEqual({
         // No debounce, no cancellation. TARGET 1 (O(1) per burst).
-        reloads: 20,
+        events: 20,
         walks: 120,
         // 20 × 306. TARGET 51 — one walk for the revision the burst ends on.
         reads: 6120,
@@ -321,7 +321,7 @@ describe("Repeat options panel — rendered against the engine", () => {
       const panel = await mountPanel(h, makeRepeatPanel);
       expect(await selectionBurst(h, panel)).toEqual({
         // TARGET 1.
-        reloads: 20,
+        events: 20,
         // The DOCUMENT did not change once during this burst. TARGET 0.
         walks: 120,
         // 20 × (306 + 1 read of the selected leaf's own link). TARGET 1.

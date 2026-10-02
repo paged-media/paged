@@ -27,6 +27,8 @@ import { fileURLToPath } from "node:url";
 
 import { createHeadlessHost, type HeadlessHost } from "@paged-media/plugin-sdk";
 
+import { forgetAllLinks } from "../../src/link-index";
+
 export const silent = {
   debug: () => {},
   info: () => {},
@@ -82,10 +84,27 @@ const editorClientAnchor = (): string | undefined => {
   return undefined;
 };
 
-/** Boot a headless host with the silent console + in-memory storage. */
-export const openHost = (): Promise<HeadlessHost> =>
-  createHeadlessHost({
+/** Boot a headless host with the silent console + in-memory storage.
+ *
+ *  ONE THING IS ADDED TO IT, and it is the harness catching up with the
+ *  editor, not the other way round. The editor's client BROADCASTS
+ *  `documentLoaded`; this harness's `load()` calls the worker directly
+ *  and tells no subscriber anything. A spec that loads a second document
+ *  into a live host (four of them do, in a `beforeEach`) would otherwise
+ *  hand the bundle's link index (`src/link-index.ts`) a new document
+ *  under the old one's links — same fixture, same ids, nothing to tell
+ *  them apart by. So `load` says what the editor's says. */
+export const openHost = async (): Promise<HeadlessHost> => {
+  const h = await createHeadlessHost({
     console: silent,
     storage: mapBacking(),
     resolveFrom: editorClientAnchor(),
   });
+  const load = h.load.bind(h);
+  h.load = async (bytes) => {
+    const pages = await load(bytes);
+    forgetAllLinks();
+    return pages;
+  };
+  return h;
+};

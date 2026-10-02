@@ -99,7 +99,7 @@ describe("Symbols panel — rendered against the engine", () => {
       // One tree read and the library once: this is the shape the target
       // has.
       expect(panel.cost()).toEqual({
-        reloads: 0,
+        events: 0,
         walks: 1,
         reads: 1,
         partReads: 1,
@@ -232,7 +232,7 @@ describe("Symbols panel — rendered against the engine", () => {
 
         // The document has it, and the panel was told nothing…
         expect((await readSymbolLibrary(h.host)).symbols).toHaveLength(1);
-        expect(panel.cost().reloads).toBe(0);
+        expect(panel.cost().events).toBe(0);
         // …MEASURED 0 rows.
         expect(panel.count("[data-draw-symbol-row]")).toBe(1);
       },
@@ -287,11 +287,11 @@ describe("Symbols panel — rendered against the engine", () => {
 
     it("ONE reload, nothing selected = 1 walk = 51 reads", async () => {
       const panel = await mountPanel(h, makeSymbolsPanel);
-      expect(panel.cost()).toEqual({ reloads: 0, walks: 1, reads: 51, partReads: 1 });
+      expect(panel.cost()).toEqual({ events: 0, walks: 1, reads: 51, partReads: 1 });
 
       const one = await panel.costOf(() => plainChange(h, 0));
       expect(one).toEqual({
-        reloads: 1,
+        events: 1,
         // TARGET 1 per document REVISION, shared.
         walks: 1,
         // 1 tree + 50 getMetadata. This is the target shape for ONE panel.
@@ -305,7 +305,7 @@ describe("Symbols panel — rendered against the engine", () => {
       // A plain leaf: not an instance, not a symbol's source.
       const selected = await panel.costOf(() => h.host.selection.set([plainId(0)]));
       expect(selected).toEqual({
-        reloads: 1,
+        events: 1,
         // `symbolInstances` for the counts, a tree read to expand the
         // selection, then `selectedSymbolInstances` calls
         // `symbolInstances` AGAIN. TARGET 0 — the document did not change.
@@ -322,7 +322,7 @@ describe("Symbols panel — rendered against the engine", () => {
       const panel = await mountPanel(h, makeSymbolsPanel);
       expect(await documentBurst(h, panel)).toEqual({
         // No debounce, no cancellation. TARGET 1 (O(1) per burst).
-        reloads: 20,
+        events: 20,
         walks: 20,
         // 20 × 51. TARGET 51 — one walk for the revision the burst ends on.
         reads: 1020,
@@ -334,7 +334,7 @@ describe("Symbols panel — rendered against the engine", () => {
       const panel = await mountPanel(h, makeSymbolsPanel);
       expect(await selectionBurst(h, panel)).toEqual({
         // TARGET 1.
-        reloads: 20,
+        events: 20,
         // The DOCUMENT did not change once during this burst. TARGET 0.
         walks: 60,
         // 20 × 103. TARGET 0.

@@ -99,7 +99,7 @@ describe("Pattern options panel — rendered against the engine", () => {
       // TWO tree reads — the resolve's walk and the tally's — and the
       // library twice, for a document with nothing in it. TARGET 1 and 1.
       expect(panel.cost()).toEqual({
-        reloads: 0,
+        events: 0,
         walks: 2,
         reads: 2,
         partReads: 2,
@@ -291,11 +291,11 @@ describe("Pattern options panel — rendered against the engine", () => {
 
     it("ONE reload = 2 walks = 102 reads", async () => {
       const panel = await mountPanel(h, makePatternPanel);
-      expect(panel.cost()).toEqual({ reloads: 0, walks: 2, reads: 102, partReads: 2 });
+      expect(panel.cost()).toEqual({ events: 0, walks: 2, reads: 102, partReads: 2 });
 
       const one = await panel.costOf(() => plainChange(h, 0));
       expect(one).toEqual({
-        reloads: 1,
+        events: 1,
         // The resolve's walk, then the tally's. TARGET 1 per document
         // revision, shared.
         walks: 2,
@@ -311,7 +311,7 @@ describe("Pattern options panel — rendered against the engine", () => {
       const panel = await mountPanel(h, makePatternPanel);
       expect(await documentBurst(h, panel)).toEqual({
         // No debounce, no cancellation. TARGET 1 (O(1) per burst).
-        reloads: 20,
+        events: 20,
         walks: 40,
         // 20 × 102. TARGET 51 — one walk for the revision the burst ends on.
         reads: 2040,
@@ -323,7 +323,7 @@ describe("Pattern options panel — rendered against the engine", () => {
       const panel = await mountPanel(h, makePatternPanel);
       expect(await selectionBurst(h, panel)).toEqual({
         // TARGET 1.
-        reloads: 20,
+        events: 20,
         // The DOCUMENT did not change once during this burst. TARGET 0.
         walks: 40,
         // 20 × (102 + 1 read of the selected leaf's own link). TARGET 1.

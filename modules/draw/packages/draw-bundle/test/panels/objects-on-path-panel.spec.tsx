@@ -114,7 +114,7 @@ describe("Objects on path panel — rendered against the engine", () => {
       // One tree read (the resolve looking for "the only association")
       // and the library twice. TARGET 1 part read.
       expect(panel.cost()).toEqual({
-        reloads: 0,
+        events: 0,
         walks: 1,
         reads: 1,
         partReads: 2,
@@ -298,11 +298,11 @@ describe("Objects on path panel — rendered against the engine", () => {
 
     it("ONE reload = 6 walks = 336 reads", async () => {
       const panel = await mountPanel(h, makeObjectsOnPathPanel);
-      expect(panel.cost()).toEqual({ reloads: 0, walks: 6, reads: 336, partReads: 2 });
+      expect(panel.cost()).toEqual({ events: 0, walks: 6, reads: 336, partReads: 2 });
 
       const one = await panel.costOf(() => plainChange(h, 0));
       expect(one).toEqual({
-        reloads: 1,
+        events: 1,
         // (R + 1) walks. TARGET 1 per document revision, shared.
         walks: 6,
         // 6 × (1 tree + 55 getMetadata). TARGET 56.
@@ -317,7 +317,7 @@ describe("Objects on path panel — rendered against the engine", () => {
       const panel = await mountPanel(h, makeObjectsOnPathPanel);
       expect(await documentBurst(h, panel)).toEqual({
         // No debounce, no cancellation. TARGET 1 (O(1) per burst).
-        reloads: 20,
+        events: 20,
         walks: 120,
         // 20 × 336. TARGET 56 — one walk for the revision the burst ends on.
         reads: 6720,
@@ -329,7 +329,7 @@ describe("Objects on path panel — rendered against the engine", () => {
       const panel = await mountPanel(h, makeObjectsOnPathPanel);
       expect(await selectionBurst(h, panel)).toEqual({
         // TARGET 1.
-        reloads: 20,
+        events: 20,
         // The DOCUMENT did not change once during this burst. TARGET 0.
         walks: 120,
         // 20 × (336 + 1 read of the selected leaf's own link). TARGET 1.

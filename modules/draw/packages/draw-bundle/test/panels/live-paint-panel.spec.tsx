@@ -108,7 +108,7 @@ describe("Live paint panel — rendered against the engine", () => {
       // One tree read, the swatch collection, and the recipe twice.
       // TARGET 1 part read.
       expect(panel.cost()).toEqual({
-        reloads: 0,
+        events: 0,
         walks: 1,
         reads: 2,
         partReads: 2,
@@ -332,11 +332,11 @@ describe("Live paint panel — rendered against the engine", () => {
 
     it("ONE reload = 1 walk = 52 reads", async () => {
       const panel = await mountPanel(h, makeLivePaintPanel);
-      expect(panel.cost()).toEqual({ reloads: 0, walks: 1, reads: 52, partReads: 2 });
+      expect(panel.cost()).toEqual({ events: 0, walks: 1, reads: 52, partReads: 2 });
 
       const one = await panel.costOf(() => plainChange(h, 0));
       expect(one).toEqual({
-        reloads: 1,
+        events: 1,
         // TARGET 1 per document REVISION, shared.
         walks: 1,
         // 1 tree + 50 getMetadata + the swatch collection. TARGET 52 for
@@ -353,7 +353,7 @@ describe("Live paint panel — rendered against the engine", () => {
       const panel = await mountPanel(h, makeLivePaintPanel);
       expect(await documentBurst(h, panel)).toEqual({
         // No debounce, no cancellation. TARGET 1 (O(1) per burst).
-        reloads: 20,
+        events: 20,
         walks: 20,
         // 20 × 52. TARGET 52 — one walk for the revision the burst ends on.
         reads: 1040,
@@ -365,7 +365,7 @@ describe("Live paint panel — rendered against the engine", () => {
       const panel = await mountPanel(h, makeLivePaintPanel);
       expect(await selectionBurst(h, panel)).toEqual({
         // TARGET 1.
-        reloads: 20,
+        events: 20,
         // The DOCUMENT did not change once during this burst. TARGET 0.
         walks: 20,
         // 20 × (52 + 1 read of the selected leaf's own link). The swatch

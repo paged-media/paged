@@ -31,9 +31,13 @@
 //     COUNT, written down as MEASURED with its target beside it, and only
 //     ever lowered.
 //
-// WHAT WAS MEASURED, in one line: this panel walks the whole document
-// ONCE PER RECORD, on every reload, and it reloads on every selection
+// WHAT WAS MEASURED, in one line: this panel walked the whole document
+// ONCE PER RECORD, on every reload, and it reloaded on every selection
 // change and every document change with no debounce and no cancellation.
+//
+// WHAT IT IS NOW (the history is beside each budget): one reload per
+// burst, one walk per document REVISION out of the shared link index
+// (`src/link-index.ts`), and the newest reload wins.
 
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
@@ -42,6 +46,8 @@ import type { HeadlessHost } from "@paged-media/plugin-sdk";
 import {
   drawBundle,
   applyMakeBlend,
+  applyReleaseBlend,
+  applyUpdateBlend,
   blendKeyOf,
   blendStepOf,
   makeBlendPanel,
@@ -64,6 +70,7 @@ import {
   seedRow,
   selectDuringWalk,
   selectionBurst,
+  slowRecipeWrites,
   teardownPanels,
   unmountAll,
   PLAIN_LEAVES,
@@ -108,13 +115,15 @@ describe("Blend options panel — rendered against the engine", () => {
 
     it("THE FLOOR: what a reload costs before the document holds anything", async () => {
       const panel = await mountPanel(h, makeBlendPanel);
-      // One tree read (the resolve looking for "the only blend") and the
-      // library twice. TARGET 1 tree per document revision, 1 part read.
+      // The mount's own reload: one tree read (the link index, with no
+      // leaf under it) and the library once. As found: the library twice
+      // (the panel, then `resolveBlend`).
       expect(panel.cost()).toEqual({
-        reloads: 0,
+        events: 0,
+        reloads: 1,
         walks: 1,
         reads: 1,
-        partReads: 2,
+        partReads: 1,
       });
     });
   });
@@ -184,10 +193,12 @@ describe("Blend options panel — rendered against the engine", () => {
       expect(panel.text()).toContain("Blend 1");
       expect(panel.text()).toContain("2 steps (2 intermediates placed)");
 
-      // MEASURED: one click is THREE reloads — the batch's document event,
-      // the selection the command sets, and the button's own trailing
-      // `void reload()` (not an event, so not in this count). TARGET 1.
-      expect(panel.cost().reloads).toBe(2);
+      // ONE reload for the click. As found it was three: the batch's
+      // document event, the selection the command sets, and the button's
+      // own trailing reload each started one. They are still three
+      // requests (four with the recipe write's) — and one reload.
+      expect(panel.cost().events).toBe(2);
+      expect(panel.cost().reloads).toBe(1);
     });
 
     it("Update rebuilds the record with the options above it", async () => {
@@ -202,17 +213,18 @@ describe("Blend options panel — rendered against the engine", () => {
       expect(panel.text()).toContain("4 steps (4 intermediates placed)");
     });
 
-    // BUG (measured). With EXACTLY ONE record in the library `resolveBlend`
-    // answers that record whatever is selected, and every reload ends in
-    // `if (saved) setDraft(saved.params)` — so every selection change and
-    // every document change throws away what was typed into the form. The
-    // selection change here is the one "+ Blend" REQUIRES (it needs two
-    // selected objects), so a second blend cannot be built with options
-    // typed beforehand: the form shows the first blend's again, and that
-    // is what gets built. With zero records, or with two or more, the
-    // form survives. Flip to `it` when the reload stops overwriting a
-    // draft the user is editing.
-    it.fails(
+    // WAS A BUG (measured, then fixed). With EXACTLY ONE record in the
+    // library `resolveBlend` answers that record whatever is selected, and
+    // every reload ended in `if (saved) setDraft(saved.params)` — so every
+    // selection change and every document change threw away what was
+    // typed into the form. The selection change here is the one "+ Blend"
+    // REQUIRES (it needs two selected objects), so a second blend could
+    // not be built with options typed beforehand: the form showed the
+    // first blend's again ("4"), and that is what got built. The form now
+    // FOLLOWS the record (`useFollowedDraft`): it takes the saved options
+    // when the record it follows, or what is saved for it, changes — not
+    // on every reload.
+    it(
       "typed options survive the selection change that + Blend needs (one record in the library)",
       async () => {
         expect((await readBlendLibrary(h.host)).blends).toHaveLength(1);
@@ -223,10 +235,32 @@ describe("Blend options panel — rendered against the engine", () => {
         panel.change('[data-draw-blend-field="steps"]', "9");
         expect(steps()).toBe("9");
         await drive(() => h.host.selection.set([poly("a1"), poly("b1")]), panel.work);
-        // MEASURED "4": the saved options of the only blend in the library.
+        expect(steps()).toBe("9");
+        // A document change that touches no record leaves it alone too.
+        await drive(() => plainChange(h, 3), panel.work);
         expect(steps()).toBe("9");
       },
     );
+
+    it("the form still takes the saved options when what is SAVED changes", async () => {
+      const panel = await mountPanel(h, makeBlendPanel);
+      const steps = () =>
+        panel.get<HTMLInputElement>('[data-draw-blend-field="steps"]').value;
+      expect(steps()).toBe("4");
+      // An update from OUTSIDE the panel — the command, with its own
+      // options — is a change to the record this form follows.
+      await drive(
+        () => applyUpdateBlend(h.host, { blendId: "bl-1", steps: 3 }),
+        panel.work,
+      );
+      expect((await readBlendLibrary(h.host)).blends[0]!.params.steps).toBe(3);
+      expect(steps()).toBe("3");
+      await drive(
+        () => applyUpdateBlend(h.host, { blendId: "bl-1", steps: 4 }),
+        panel.work,
+      );
+      expect(steps()).toBe("4");
+    });
 
     it("Release removes the intermediates and the record, and keeps the keys", async () => {
       const panel = await mountPanel(h, makeBlendPanel);
@@ -239,17 +273,19 @@ describe("Blend options panel — rendered against the engine", () => {
       expect(panel.attr(PANEL, "data-draw-blend-panel")).toBe("0");
     });
 
-    // BUG (measured). The panel reloads on document events, selection
-    // events and its own buttons (each ends in `void reload()`) — and a
-    // `.paged` container-part write is none of those. `applyMakeBlend`
-    // builds the artwork first and saves the recipe LAST, so the reload
-    // the batch triggers reads the library BEFORE the record is in it,
-    // and nothing reloads afterwards. The "+ Blend" button hides this
-    // behind its trailing reload; the SAME command run from the menu or
-    // Cmd+K leaves an open panel showing no blend, until some unrelated
-    // selection or document change comes along. Flip to `it` when a
-    // recipe write reaches the panel.
-    it.fails(
+    // WAS A BUG (measured, then fixed). The panel reloaded on document
+    // events, selection events and its own buttons (each ended in `void
+    // reload()`) — and a `.paged` container-part write is none of those.
+    // `applyMakeBlend` builds the artwork first and saves the recipe LAST,
+    // so the reload the batch triggered read the library BEFORE the
+    // record was in it, and nothing reloaded afterwards. The "+ Blend"
+    // button hid this behind its trailing reload; the SAME command run
+    // from the menu or Cmd+K left an open panel showing no blend (0
+    // rows), until some unrelated selection or document change came
+    // along. A recipe write now ANNOUNCES itself (`announceRecipeChange`,
+    // called by `writeBlendLibrary`), and the panel reloads on that as it
+    // does on a document event.
+    it(
       "an OPEN panel shows a blend built by the COMMAND, not only by its own button",
       async () => {
         await h.host.selection.set([poly("a2"), poly("b2")]);
@@ -260,10 +296,41 @@ describe("Blend options panel — rendered against the engine", () => {
         }, panel.work);
         // The document has it…
         expect((await readBlendLibrary(h.host)).blends).toHaveLength(1);
-        // …MEASURED 0: the panel does not.
+        // …and so does the panel.
         expect(panel.count("[data-draw-blend-row]")).toBe(1);
       },
     );
+
+    // The case above cannot tell the announcement from luck: the headless
+    // engine answers synchronously, so the whole command — recipe write
+    // included — finishes before the reload its batch requested starts.
+    // In the editor every door is a worker round trip, and that reload
+    // starts (and reads the library) while the write is still out. This
+    // is that ordering, made on purpose: the recipe write is held for a
+    // task. Without the announcement the panel ends on the row count it
+    // read too early.
+    it("…and when the recipe write lands AFTER the reload its batch started", async () => {
+      await drive(() => applyReleaseBlend(h.host, { blendId: "bl-1" }));
+      expect((await readBlendLibrary(h.host)).blends).toEqual([]);
+      await h.host.selection.set([poly("a2"), poly("b2")]);
+      const panel = await mountPanel(h, makeBlendPanel);
+      expect(panel.count("[data-draw-blend-row]")).toBe(0);
+
+      panel.reset();
+      await drive(async () => {
+        const made = await applyMakeBlend(slowRecipeWrites(h.host), {
+          spacing: "steps",
+          steps: 1,
+        });
+        if (made.length !== 1) throw new Error("the blend was not built");
+      }, panel.work);
+
+      // TWO reloads, and that is the point: the one the batch started
+      // read an empty library, the one the write announced read the
+      // record.
+      expect(panel.cost().reloads).toBe(2);
+      expect(panel.count("[data-draw-blend-row]")).toBe(1);
+    });
   });
 
   // COVERS: `reload()` on a document with R = 5 blends among L = 40 plain
@@ -300,73 +367,90 @@ describe("Blend options panel — rendered against the engine", () => {
       expect((await readBlendLibrary(h.host)).blends).toHaveLength(RECORDS);
     });
 
-    it("THE PER-RECORD WALK IS REAL: walks per reload grow with the record count", () => {
-      // Index = records in the document. `resolveBlend` walks once to find
+    it("ONE WALK PER RELOAD, whatever the record count", () => {
+      // Index = records in the document. One unfiltered `blendLinks`,
+      // out of the link index, is tallied for every record at once.
+      // As found: [1, 1, 3, 4, 5, 6] — `resolveBlend` walked once to find
       // "the only blend the document carries" (skipped when the library
-      // holds exactly one), then `blendLinks(host, record.id)` walks the
+      // holds exactly one), then `blendLinks(host, record.id)` walked the
       // WHOLE document again for each record, to count three links.
-      // TARGET [1, 1, 1, 1, 1, 1] — one walk, whatever R is.
-      expect(walksByRecords).toEqual([1, 1, 3, 4, 5, 6]);
+      expect(walksByRecords).toEqual([1, 1, 1, 1, 1, 1]);
     });
 
-    it("ONE reload = 6 walks = 336 reads", async () => {
+    it("ONE reload = 1 walk = 56 reads", async () => {
       const panel = await mountPanel(h, makeBlendPanel);
       // The mount reload and an event-driven one cost the same.
-      expect(panel.cost()).toEqual({ reloads: 0, walks: 6, reads: 336, partReads: 2 });
+      expect(panel.cost()).toEqual({
+        events: 0,
+        reloads: 1,
+        walks: 1,
+        reads: 56,
+        partReads: 1,
+      });
 
       const one = await panel.costOf(() => plainChange(h, 0));
       expect(one).toEqual({
+        events: 1,
         reloads: 1,
-        // (R + 1) walks. TARGET 1 per document revision, shared by every
-        // panel that needs the links.
-        walks: 6,
-        // 6 × (1 tree + 55 getMetadata). TARGET 56.
-        reads: 336,
-        // The library is read twice (the panel, then `resolveBlend`).
-        // TARGET 1.
-        partReads: 2,
+        // One walk per document REVISION, shared by every panel and every
+        // command on this host. As found: 6 — (R + 1) per reload.
+        walks: 1,
+        // 1 tree + 55 getMetadata: one read per leaf, in parallel. As
+        // found: 336. TARGET 2 — a tree and ONE bulk metadata read; the
+        // 55 are the engine gap (RFI C-65), not the panel's.
+        reads: 56,
+        // As found: 2 (the panel, then `resolveBlend`).
+        partReads: 1,
       });
-      expect(panel.work.count("document.getMetadata")).toBe(330);
+      expect(panel.work.count("document.getMetadata")).toBe(55);
     });
 
-    it("a burst of 20 document changes = 20 reloads = 6720 reads", async () => {
+    it("a burst of 20 document changes = ONE reload = 56 reads", async () => {
       const panel = await mountPanel(h, makeBlendPanel);
       expect(await documentBurst(h, panel)).toEqual({
-        // No debounce, no cancellation: every change starts a reload and
-        // every reload runs to the end. TARGET 1 (O(1) per burst).
-        reloads: 20,
-        walks: 120,
-        // 20 × 336. TARGET 56 — one walk for the revision the burst ends on.
-        reads: 6720,
-        partReads: 40,
+        events: 20,
+        // Twenty requests, one reload: they all arrive before the task
+        // the first one armed. As found: 20 reloads, every one run to
+        // the end.
+        reloads: 1,
+        // As found: 120.
+        walks: 1,
+        // One walk, of the revision the burst ends on. As found: 6 720.
+        reads: 56,
+        // As found: 40.
+        partReads: 1,
       });
     });
 
-    it("a burst of 20 selection changes = 20 reloads = 6740 reads", async () => {
+    it("a burst of 20 selection changes = ONE reload = 0 reads", async () => {
       const panel = await mountPanel(h, makeBlendPanel);
       expect(await selectionBurst(h, panel)).toEqual({
-        // TARGET 1.
-        reloads: 20,
-        // The DOCUMENT did not change once during this burst. TARGET 0.
-        walks: 120,
-        // 20 × (336 + 1 read of the selected leaf's own link). TARGET 1 —
-        // the one read the final selection needs.
-        reads: 6740,
-        partReads: 40,
+        events: 20,
+        // As found: 20.
+        reloads: 1,
+        // The DOCUMENT did not change once during this burst, so the
+        // links the mount read are still the links. As found: 120.
+        walks: 0,
+        // Not even the selected leaf's own link — it is in that walk.
+        // As found: 6 740.
+        reads: 0,
+        // As found: 40.
+        partReads: 1,
       });
     });
 
-    // BUG (measured). Reloads are not cancelled and not sequenced, so the
-    // LAST ONE TO FINISH wins rather than the last one to start. A reload
-    // that began with nothing selected spends a whole walk inside
-    // `resolveBlend` before it calls `setActive(null)`; one that began
-    // later, with a blend's key selected, resolves in ONE read — and is
-    // then overwritten by the older reload when that finally lands. The
-    // panel says "no active blend" while a key of bl-1 is selected, and
-    // keeps saying it until something else triggers a reload. In the
-    // editor every read is a worker round trip, so the window is the
-    // walk's duration. Flip to `it` when a stale reload is dropped.
-    it.fails(
+    // WAS A BUG (measured, then fixed). Reloads were not cancelled and not
+    // sequenced, so the LAST ONE TO FINISH won rather than the last one to
+    // start. A reload that began with nothing selected spent a whole walk
+    // inside `resolveBlend` before it called `setActive(null)`; one that
+    // began later, with a blend's key selected, resolved in ONE read — and
+    // was then overwritten by the older reload when that finally landed.
+    // The panel said "no active blend" ("") while a key of bl-1 was
+    // selected, and kept saying it until something else triggered a
+    // reload. In the editor every read is a worker round trip, so the
+    // window is the walk's duration. A reload now holds a ticket and shows
+    // nothing once a newer one has started (`src/panels/reload.ts`).
+    it(
       "the panel ends on the LATEST selection when a slower, older reload is still in flight",
       async () => {
         const panel = await mountPanel(h, makeBlendPanel);
@@ -374,8 +458,10 @@ describe("Blend options panel — rendered against the engine", () => {
         // Reload A (nothing selected) is walking when a key of bl-1 is
         // selected and reload B starts.
         await selectDuringWalk(h, panel, [poly("a0")]);
-        // MEASURED "": reload A's `setActive(null)` landed last.
         expect(panel.attr(PANEL, "data-draw-blend-active")).toBe("bl-1");
+        // Both reloads started, and they shared ONE walk: B asked for the
+        // links while A's walk was out, and got the same one.
+        expect(panel.cost()).toMatchObject({ reloads: 2, walks: 1 });
       },
     );
   });

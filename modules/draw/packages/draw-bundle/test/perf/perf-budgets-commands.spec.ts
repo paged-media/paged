@@ -226,13 +226,18 @@ describe("perf budgets — commands over a busy document", () => {
       expect(work.count("document.getMetadata")).toBe(LEAVES);
     });
 
-    it.each<[Walked]>([
-      ["blend"],
-      ["repeat"],
-      ["pattern"],
-      ["objectsOnPath"],
-      ["livePaint"],
-    ])("%s, record resolved from the selection: one more read", async (feature) => {
+    // [feature, reads]. As found, every row was LEAVES + 1: the selected
+    // leaf's own link names the record (1 read) — and then the whole
+    // document was walked anyway, that leaf included. A feature on the
+    // link index reads each leaf ONCE per revision, so the walk skips
+    // the one the resolve already read.
+    it.each<[Walked, number]>([
+      ["blend", LEAVES],
+      ["repeat", LEAVES + 1],
+      ["pattern", LEAVES + 1],
+      ["objectsOnPath", LEAVES + 1],
+      ["livePaint", LEAVES + 1],
+    ])("%s, record resolved from the selection: %i reads", async (feature, reads) => {
       const { work, result } = await counted(
         w,
         `${feature} select from selection`,
@@ -240,9 +245,8 @@ describe("perf budgets — commands over a busy document", () => {
         (host) => SELECT[feature](host),
       );
       expect(result.length).toBeGreaterThan(0);
-      // The selected leaf's own link names the record (1 read) — and
-      // then the whole document is walked anyway. TARGET as above.
-      expect(work.count("document.getMetadata")).toBe(LEAVES + 1);
+      // TARGET as above.
+      expect(work.count("document.getMetadata")).toBe(reads);
     });
 
     it.each<[Walked]>([["blend"], ["repeat"], ["pattern"], ["objectsOnPath"]])(
@@ -286,6 +290,62 @@ describe("perf budgets — commands over a busy document", () => {
     });
   });
 
+  // COVERS: the link index (`src/link-index.ts`) ACROSS commands — the
+  // half no scenario above can show, because each of them hands its
+  // command a fresh view of the host, and so a cold index. In the editor
+  // there is ONE host for the bundle's life: a walk is paid once per
+  // document REVISION, by whichever command or panel asks first.
+  describe("one host, several commands — the walk is paid once per revision", () => {
+    it("blend: select, select another, update, select what the update built", async () => {
+      const parts = await snapshotParts(w.h);
+      const mark = await undoMark(w);
+      const { host, work } = countingHost(w.h.host);
+      const other = w.linked.blend!.records[NTH + 1]!;
+
+      // COLD — the walk.
+      expect(
+        await applySelectBlendObjects(host, { blendId: recordOf("blend") }),
+      ).toHaveLength(2);
+      expect(work.count("document.tree")).toBe(1);
+      expect(work.count("document.getMetadata")).toBe(LEAVES);
+
+      // WARM — another record of the same, unchanged document: no engine
+      // round trip at all. As found: another 1 403.
+      work.reset();
+      expect(await applySelectBlendObjects(host, { blendId: other })).toHaveLength(2);
+      expect(work.reads()).toBe(0);
+
+      // WARM — an update. What is left is the build's own: the two key
+      // envelopes, the before/after tree diff, the 4 new steps' links
+      // and the new group's lookup. As found: 2 812 and 6.
+      work.reset();
+      const steps = await applyUpdateBlend(host, { blendId: other, steps: 4 });
+      expect(steps).toHaveLength(4);
+      expect(work.count("document.getMetadata")).toBe(6);
+      expect(work.count("document.tree")).toBe(3);
+      report("blend update, warm index", work.snapshot());
+
+      // THE UPDATE CHANGED THE DOCUMENT, so the next command walks
+      // again — and what it finds is what the update built, not what
+      // the index held before it.
+      work.reset();
+      const found = await applySelectBlendObjects(host, {
+        blendId: other,
+        which: "steps",
+      });
+      expect(found.map((e) => e.id).sort()).toEqual(steps.map((e) => e.id).sort());
+      expect(work.count("document.tree")).toBe(1);
+      expect(work.count("document.getMetadata")).toBe(
+        (await leafIds(w.h)).length,
+      );
+
+      await undoStepsSince(w, mark);
+      await restoreParts(w.h, parts);
+      await w.h.host.selection.set([]);
+      expect(await leafIds(w.h)).toHaveLength(LEAVES);
+    });
+  });
+
   // COVERS: `selectSameMatches` in `commands/select-same.ts` — the same
   // walk over a different door: one `elementProperties` per leaf.
   //
@@ -311,21 +371,24 @@ describe("perf budgets — commands over a busy document", () => {
   // `applyRegenerateLivePaint` — where the link walk and the tree diff
   // meet. Each acts on ONE record.
   describe("re-plan one record of fifty — the walks stack up", () => {
-    it("blend, update: the document is walked twice and the tree read six times", async () => {
+    it("blend, update: ONE walk, and the tree read four times", async () => {
       const { work, undoSteps, result } = await countedWrite(w, "blend update", [], (host) =>
         applyUpdateBlend(host, { blendId: recordOf("blend"), steps: 4 }),
       );
       expect(result).toHaveLength(4);
       expect(work.mutations).toEqual([{ op: "batch", ops: 39 }]);
       expect(undoSteps).toBe(1);
-      // `blendLinks` runs twice (once for the keys, once inside
-      // `blendGenerationOf`). TARGET <= 7: the record's own 5 leaves and
-      // the 4 new steps' — none of which need a read if the batch
-      // outcome names them.
-      expect(work.count("document.getMetadata")).toBe(2812);
-      // Two link walks, two group lookups, the before/after diff.
-      // TARGET 0.
-      expect(work.count("document.tree")).toBe(6);
+      // One walk (LEAVES), the two key envelopes the batch is built
+      // from, and the 4 new steps the tree diff found. As found: 2 812 —
+      // `blendLinks` ran twice (once for the keys, once inside
+      // `blendGenerationOf`), each a walk of its own. TARGET <= 7: the
+      // record's own 5 leaves and the 4 new steps' — none of which need
+      // a read if the batch outcome names them.
+      expect(work.count("document.getMetadata")).toBe(LEAVES + 6);
+      // The index's one tree, the before/after diff, and the lookup of
+      // the group the batch created. As found: 6 (two link walks and a
+      // second group lookup on top). TARGET 0.
+      expect(work.count("document.tree")).toBe(4);
     });
 
     it("repeat, update: the same shape", async () => {

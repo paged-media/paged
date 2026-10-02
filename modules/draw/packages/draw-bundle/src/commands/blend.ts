@@ -169,6 +169,7 @@ import { supportsPathOps } from "./path-ops";
 import { repeatPageRect } from "./repeat";
 import { leafIdsOf, valueForCriterion } from "./select-same";
 import { insertPathMutationFor } from "../handlers/insert-path";
+import { announceRecipeChange, groupHolding, linkIndex } from "../link-index";
 import {
   batchMutationFor,
   bindCreatedMutationFor,
@@ -1138,7 +1139,9 @@ export function blendReleaseBatchFor(args: {
 
 // -------------------------------------------------------- host: the part
 
-type PartsHost = Pick<BundleHost, "parts" | "supports" | "log">;
+type PartsHost = Pick<BundleHost, "parts" | "supports" | "log"> & {
+  bindings?: BundleHost["bindings"];
+};
 
 /** Read the records out of the container part. A host with no container
  *  writer is not an error: it reads as an EMPTY library and WARNS. */
@@ -1167,6 +1170,9 @@ export async function writeBlendLibrary(
   if (!host.supports(BLEND_FEATURE)) return false;
   try {
     await host.parts.write(BLEND_PART, serializeBlendLibrary(library));
+    // A part write is not a document event: without this an open panel
+    // misses every recipe saved AFTER a command's last mutation.
+    announceRecipeChange(host);
     return true;
   } catch (e) {
     host.log.warn(`blend: recipe write failed (${String(e)})`);
@@ -1232,7 +1238,11 @@ export async function blendKeyOfElement(
 }
 
 /** Every leaf carrying a blend link, split by which one. `blend`
- *  filters; omit it for every blend. */
+ *  filters; omit it for every blend.
+ *
+ *  Reads the shared link index (`../link-index`): the document is walked
+ *  once per revision, by whichever feature asks first, and this is a
+ *  parse of what that walk found. */
 export async function blendLinks(
   host: BundleHost,
   blend?: string,
@@ -1244,9 +1254,8 @@ export async function blendLinks(
   const keys: { id: ElementId; ref: BlendKeyRef }[] = [];
   const steps: { id: ElementId; ref: BlendStepRef }[] = [];
   const spines: { id: ElementId; ref: BlendSpineRef }[] = [];
-  const roots = await host.document.tree().catch(() => []);
-  for (const id of leafIdsOf(roots)) {
-    const env = await host.document.getMetadata(id).catch(() => null);
+  const { linked } = await linkIndex(host).snapshot();
+  for (const { id, envelope: env } of linked) {
     const key = blendKeyOf(env);
     if (key && (blend === undefined || key.blend === blend)) {
       keys.push({ id, ref: key });
@@ -1298,14 +1307,18 @@ export async function blendGroupOf(
 }
 
 /** Which blend a command acts on: the payload's `blendId`, else the
- *  selection's own link, else the only blend the document carries. */
+ *  selection's own link, else the only blend the document carries.
+ *  `known` is the library when the caller has just read it (a panel
+ *  reload has), so it is not read a second time. */
 export async function resolveBlend(
   host: BundleHost,
   blendId: unknown,
+  known?: BlendLibrary,
 ): Promise<string | null> {
   if (typeof blendId === "string") return blendId;
+  const index = linkIndex(host);
   for (const id of host.selection.get()) {
-    const env = await host.document.getMetadata(id).catch(() => null);
+    const env = await index.envelopeOf(id);
     const linked =
       blendKeyOf(env)?.blend ??
       blendStepOf(env)?.blend ??
@@ -1313,7 +1326,7 @@ export async function resolveBlend(
       null;
     if (linked !== null) return linked;
   }
-  const library = await readBlendLibrary(host);
+  const library = known ?? (await readBlendLibrary(host));
   if (library.blends.length === 1) return library.blends[0]!.id;
   const links = await blendLinks(host);
   const distinct = new Set([
@@ -1332,7 +1345,11 @@ export async function blendGenerationOf(
   const links = await blendLinks(host, blend);
   const anchor = links.keys[0]?.id ?? links.steps[0]?.id ?? null;
   return {
-    group: anchor ? await blendGroupOf(host, anchor) : null,
+    // The tree the links were just read from — the same revision, so the
+    // same tree, and not a second read of it.
+    group: anchor
+      ? groupHolding(await linkIndex(host).tree(), anchor)
+      : null,
     steps: links.steps.map((s) => s.id),
   };
 }
@@ -1905,6 +1922,7 @@ async function linkLeavesOf(
   }[]
 > {
   const links = await blendLinks(host, blend);
+  const index = linkIndex(host);
   const out: {
     id: ElementId;
     envelope: PluginMetadataEnvelope | null;
@@ -1918,7 +1936,8 @@ async function linkLeavesOf(
     for (const entry of list) {
       out.push({
         id: entry.id,
-        envelope: await host.document.getMetadata(entry.id).catch(() => null),
+        // The envelope the link was just parsed from, not a re-read.
+        envelope: await index.envelopeOf(entry.id),
         key,
       });
     }
