@@ -123,10 +123,18 @@ var PagedProbe = (function () {
     return { closed: closed !== false, anchors: anchors };
   }
 
+  function black() {
+    var c = new RGBColor();
+    c.red = 0;
+    c.green = 0;
+    c.blue = 0;
+    return c;
+  }
+
   /** Create one PathItem from a spec `{closed, anchors:[{anchor,left,
-   *  right}]}` given in the ENGINE frame. Black fill, no stroke: the
-   *  default appearance of a new item follows whatever the user last
-   *  used, and an inherited stroke would change what "expand" returns. */
+   *  right}]}` given in the ENGINE frame. Black fill, no stroke -- set
+   *  EXPLICITLY, because a new item inherits whatever the user last used
+   *  and an inherited stroke changes what "expand" returns. */
   function buildPath(doc, spec) {
     var item = doc.pathItems.add();
     var i, a, pp;
@@ -139,14 +147,31 @@ var PagedProbe = (function () {
       pp.pointType = PointType.CORNER;
     }
     item.closed = spec.closed;
-    var black = new RGBColor();
-    black.red = 0;
-    black.green = 0;
-    black.blue = 0;
     item.filled = true;
-    item.fillColor = black;
+    item.fillColor = black();
     item.stroked = false;
     return item;
+  }
+
+  /** Give `item` a plain black stroke and NO fill. `stroke` is
+   *  `{width, cap, join, miterLimit}` in the engine's vocabulary: cap
+   *  "butt" | "round" | "square" (Illustrator calls the last one
+   *  "projecting"), join "miter" | "round" | "bevel". */
+  function setStroke(item, stroke) {
+    item.filled = false;
+    item.stroked = true;
+    item.strokeColor = black();
+    item.strokeWidth = stroke.width;
+    item.strokeDashes = [];
+    item.strokeMiterLimit = stroke.miterLimit;
+    if (stroke.cap === "butt") item.strokeCap = StrokeCap.BUTTENDCAP;
+    else if (stroke.cap === "round") item.strokeCap = StrokeCap.ROUNDENDCAP;
+    else if (stroke.cap === "square") item.strokeCap = StrokeCap.PROJECTINGENDCAP;
+    else throw new Error("unknown cap: " + stroke.cap);
+    if (stroke.join === "miter") item.strokeJoin = StrokeJoin.MITERENDJOIN;
+    else if (stroke.join === "round") item.strokeJoin = StrokeJoin.ROUNDENDJOIN;
+    else if (stroke.join === "bevel") item.strokeJoin = StrokeJoin.BEVELENDJOIN;
+    else throw new Error("unknown join: " + stroke.join);
   }
 
   // -- measuring outputs ----------------------------------------------------
@@ -377,6 +402,7 @@ var PagedProbe = (function () {
     json: json,
     polygon: polygon,
     buildPath: buildPath,
+    setStroke: setStroke,
     measurePath: measurePath,
     collectPaths: collectPaths,
     signedArea: signedArea,

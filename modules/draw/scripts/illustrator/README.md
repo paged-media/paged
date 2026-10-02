@@ -30,6 +30,7 @@ Recorded with **Adobe Illustrator 30.1.0** (build 136R, de_DE, macOS
 | Probe | Cases | What Illustrator said |
 |---|---|---|
 | `offset-path` | 17 | Exactly the closed-form miter / bevel / inward geometry. Miter limit is the stroke rule (mitered while `1/sin(angle/2) <= limit`, bevelled past it). Round joins are cubic arcs, one per 90 degrees or less, so areas bulge by about +0.001 %. Every result is clockwise whatever the input. |
+| `outline-stroke` | 11 | Exactly the stroke's closed form for all nine cap × join pairs, same miter-limit rule. One SIMPLE clockwise outline that does not overlap itself. |
 
 ## Record (or re-record) one probe
 
@@ -76,16 +77,23 @@ header of the spec that pins it.
 | Operation | Mechanism | Confirmed by |
 |---|---|---|
 | Offset path | `PageItem.applyEffect('<LiveEffect name="Adobe Offset Path"><Dict data="R mlim 4 R ofst 10 I jntp 2 "/></LiveEffect>')` then `app.executeMenuCommand("expandStyle")` | Recorded. `jntp` is 0 round / 1 bevel / 2 miter (in no dictionary; settled by the recording). `expandStyle` leaves one plain path. |
+| Outline stroke | stroke set on the `PathItem` (`strokeWidth`, `strokeCap`, `strokeJoin`, `strokeMiterLimit`), then `app.executeMenuCommand("OffsetPath v22")` | Recorded. No dialog. The live effect `Adobe Outline Stroke` + `expandStyle` returns the identical path. |
 
-The menu versions of Offset Path (Object › Path and Effect › Path) open a
-dialog that `executeMenuCommand` cannot fill in, so they are unusable with
-alerts suppressed.
+The menu versions of Offset Path (Object › Path = `OffsetPath v23`, and
+Effect › Path = `Live Offset Path`) open a dialog that `executeMenuCommand`
+cannot fill in, so they are unusable with alerts suppressed. Never guess
+at a menu command string: one that opens a dialog leaves it open.
 
-Where to look, since `sdef` needs full Xcode: the AppleScript dictionary
-is `Adobe Illustrator.app/Contents/Resources/Adobe Illustrator.sdef`; the
-ExtendScript object model is `/Library/Application Support/Adobe/Scripting
-Dictionaries CC/Illustrator 2026/omv.xml`; menu command strings are the
-keys of `Presets.localized/<locale>/Tastaturbefehle/*.kys`.
+Where to look, since `sdef` needs full Xcode:
+- the AppleScript dictionary:
+  `Adobe Illustrator.app/Contents/Resources/Adobe Illustrator.sdef`;
+- the ExtendScript object model: `/Library/Application Support/Adobe/
+  Scripting Dictionaries CC/Illustrator 2026/omv.xml`;
+- which menu item a command string IS: the map in
+  `Adobe Illustrator.app/Contents/Required/UXP/extensions/
+  com.adobe.unifiedpanel/js/143.js` (`"Object-Path-Outline_Stroke":
+  "OffsetPath v22"`). The keys of `Presets.localized/<locale>/
+  Tastaturbefehle/*.kys` list the strings but not what they do.
 
 ## Traps
 
