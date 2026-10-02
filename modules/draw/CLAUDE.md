@@ -364,10 +364,19 @@ fallback for an engine that refuses the one batch, and
 cannot say what a batch created — requiring the SAME document from each
 (`test/conformance/one-batch.ts` has the hosts and the comparison).
 
-THE OTHER FIVE FLOWS ARE STILL TWO BATCHES — `appearance-bake.ts`,
-`compound-path.ts` (release), `symbols.ts`, `image-trace.ts`,
-`live-paint.ts`. Their "TWO batches ⇒ 2 undo steps" notes are still TRUE
-as shipped; the reason is "not yet converted".
+THE APPEARANCE BAKE STAYS TWO BATCHES, and that is the floor the rules
+allow, not a conversion left undone: the carrier's bake record names its
+derived layers by element id INSIDE its JSON metadata envelope
+(`appearanceBake.layers`, which release and a reopened document read),
+and a `$h:` handle in text is stored as written, never resolved
+(measured, `minted.spec.ts`). So the record can only be written once a
+first mutation has answered with the ids. What changed is that those ids
+come off the reply (`commands/minted.ts`): 0 tree reads, was 2.
+
+THE OTHER FOUR FLOWS ARE STILL TWO BATCHES — `compound-path.ts`
+(release), `symbols.ts`, `image-trace.ts`, `live-paint.ts`. Their "TWO
+batches ⇒ 2 undo steps" notes are still TRUE as shipped; the reason is
+"not yet converted".
 
 **"WHAT DID MY BATCH CREATE" HAS ONE SEAM: `commands/minted.ts`.** A
 batch outcome carries ONE `createdId`, so a flow that inserted several

@@ -29,7 +29,12 @@
 //       every one of them carrying the source geometry;
 //   (3) the real MUTATION/UNDO count: TWO batches, so exactly two undos
 //       return the document to its pre-bake state (RFI C-15 — assert the
-//       count, never claim "one undo");
+//       count, never claim "one undo"). Two is still the floor after
+//       `bindCreated`: the bake record names its layers by id INSIDE the
+//       carrier's JSON metadata, and a handle in text is never resolved.
+//       What the first batch created comes off the engine's reply now,
+//       not a tree diff — and every lane of that seam must leave the
+//       same document;
 //   (4) release restores a single frame + the metadata stack + the
 //       front-most-layer bake, and bake→release→bake is stable;
 //   (5) an edit on a BAKED stack re-bakes (the derived paths follow the
@@ -85,6 +90,7 @@ import {
 } from "../../src";
 import { F1_MULTI_SHAPE } from "../fixtures/corpus";
 import { openHost } from "./host";
+import { runThrough, type LaneName } from "./one-batch";
 
 const RECT = {
   kind: "rectangle",
@@ -623,6 +629,36 @@ describe("draw conformance — the appearance GROUP BAKE (gap B-24)", () => {
         type: "colorRef",
         value: "Color/Paper",
       });
+    });
+
+    // What batch 1 created used to cost two reads of the whole scene tree
+    // (before and after, diffed). It comes off the engine's reply now
+    // (`commands/minted.ts`). A batch can apply and the ids still be
+    // wrong, so the bake runs through every lane of that seam and each
+    // must leave the SAME document — the group, every layer's paint and
+    // outline, the carrier's record naming its layers, the selection —
+    // in the same two undo steps, which restore it exactly.
+    it("the created ids off the reply: no tree read, and the document every other lane leaves", async () => {
+      const through = (lane: LaneName) =>
+        runThrough(h, lane, {
+          carrier: RECT,
+          command: (host) => bakeAppearance(host, RECT),
+        });
+      const shipped = await through("oneBatch");
+      expect(shipped.result).toHaveLength(3);
+      expect(shipped.work.mutations.map((m) => m.op)).toEqual(["batch", "batch"]);
+      expect(shipped.undoSteps).toBe(2);
+      expect(shipped.restored).toBe(true);
+      // As found: 2 — the before/after diff.
+      expect(shipped.work.count("document.tree")).toBe(0);
+
+      for (const lane of ["diff", "unlisted"] as const) {
+        const run = await through(lane);
+        expect(run.picture, lane).toBe(shipped.picture);
+        expect(run.undoSteps, lane).toBe(2);
+        expect(run.restored, lane).toBe(true);
+        expect(run.work.count("document.tree"), lane).toBe(2);
+      }
     });
 
     it("RELEASE — back to a single frame with the stack + the front-most layer", async () => {

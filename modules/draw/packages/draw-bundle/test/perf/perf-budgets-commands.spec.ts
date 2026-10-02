@@ -808,7 +808,7 @@ describe("perf budgets — commands over a busy document", () => {
         strokes: [{ color: "Color/Black", weight: 2 }],
       };
       const carrier = w.plain[0]!;
-      const { work, undoSteps, result } = await countedWrite(
+      const { work, undoSteps, result, added, restored } = await countedWrite(
         w,
         "appearance bake",
         [carrier],
@@ -825,14 +825,23 @@ describe("perf budgets — commands over a busy document", () => {
         },
       );
       expect(result).toHaveLength(3);
-      // TARGET 1 batch, 1 undo step.
+      // STILL two batches, and that is the floor the rules allow, not a
+      // conversion left undone: the carrier's bake record names its
+      // layers by element id inside its JSON metadata, and a `$h:`
+      // handle in text is stored as written, never resolved (measured,
+      // `test/conformance/minted.spec.ts`). The record can only be
+      // written once a first mutation has answered with the ids.
       expect(work.mutations).toEqual([
         { op: "batch", ops: 3 },
         { op: "batch", ops: 14 },
       ]);
       expect(undoSteps).toBe(2);
-      // The diff, and nothing else. TARGET 0.
-      expect(work.count("document.tree")).toBe(2);
+      // Three layers and their group, and both steps restore it.
+      expect(added.sort()).toEqual(["group", "polygon", "polygon", "polygon"]);
+      expect(restored).toBe(true);
+      // What batch 1 minted comes off the engine's reply. As found: 2,
+      // the before/after diff.
+      expect(work.count("document.tree")).toBe(0);
     });
 
     it("compound path, release", async () => {
