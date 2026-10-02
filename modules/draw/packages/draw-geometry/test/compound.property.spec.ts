@@ -53,9 +53,12 @@ import {
   fc,
   magnitude,
   real,
+  refEvenOddVertical,
+  refRingDistance,
   refSignedArea,
   refWindingNumber,
   smallAnchorTriple,
+  smallVec2,
 } from "./property-kit";
 
 // ------------------------------------------------- the nested-rect family
@@ -251,6 +254,127 @@ describe("compound — contourDepths (properties)", () => {
       ),
     );
   });
+
+  // ------------------------------------------------------------------
+  // DEFECT (compound.ts, contourDepths) — a closed contour of ONE or TWO
+  // anchors could never be a CONTAINER. FIXED here; the twin guard in
+  // polygon.ts (`pointInAnchorPath`) is pinned in polygon.property.spec.ts
+  // and is not this module's to change.
+  //
+  // `if (jt - jf < 3) continue;` skipped every candidate container with
+  // fewer than three anchors — the polygon rule ("fewer than 3 VERTICES
+  // enclose nothing") carried over to ANCHORS. A cubic contour of two
+  // anchors is a lens and of one anchor a teardrop, both with real area
+  // (`contourSignedArea` has always measured them).
+  //
+  // Minimal counterexample: the lens
+  //   a0 = (0,0)  left (3,−5)  right (3,5)
+  //   a1 = (10,0) left (7,5)   right (7,−5)
+  // (|area| 50.6) with a 2×2 square about (5,0) inside it.
+  //   EXPECTED: contourDepths → [0, 1]; "make compound path" winds the
+  //             square against the lens, cutting the hole.
+  //   WAS:      [0, 0] — both contours "outer", the square wound the
+  //             same way as the lens, and the hole painted solid.
+  //
+  // THE FIX: each contour is flattened as a closed ring and the RING is
+  // tested with `pointInPolygon`, whose own guard counts vertices. That
+  // is the same arithmetic `pointInAnchorPath` runs for a contour of
+  // three or more anchors, so nothing changes there.
+  // ------------------------------------------------------------------
+  const LENS: AnchorTriple[] = [
+    { anchor: [0, 0], left: [3, -5], right: [3, 5] },
+    { anchor: [10, 0], left: [7, 5], right: [7, -5] },
+  ];
+  const squareAbout = (cx: number, cy: number, clockwise: boolean): AnchorTriple[] =>
+    rectContour({ x0: cx - 1, y0: cy - 1, x1: cx + 1, y1: cy + 1 }, clockwise, 0);
+
+  it("FIXED DEFECT (minimal counterexample): a contour inside a two-anchor lens is at depth 1", () => {
+    const inside: AnchorTable = {
+      anchors: [...LENS, ...squareAbout(5, 0, true)],
+      subpathStarts: [0, 2],
+      subpathOpen: [false, false],
+    };
+    expect(Math.abs(contourSignedArea(LENS))).toBeGreaterThan(50);
+    expect(contourDepths(inside)).toEqual([0, 1]);
+    // Emission order does not matter…
+    expect(
+      contourDepths({
+        anchors: [...squareAbout(5, 0, true), ...LENS],
+        subpathStarts: [0, 4],
+        subpathOpen: [false, false],
+      }),
+    ).toEqual([1, 0]);
+    // …and a square beside the lens is not inside it.
+    expect(
+      contourDepths({
+        anchors: [...LENS, ...squareAbout(5, 20, true)],
+        subpathStarts: [0, 2],
+        subpathOpen: [false, false],
+      }),
+    ).toEqual([0, 0]);
+  });
+
+  it("FIXED DEFECT: 'make compound path' cuts a hole in a lens, whichever way the hole was drawn", () => {
+    for (const clockwise of [true, false]) {
+      const made = makeCompoundTable([
+        { anchors: LENS, subpathStarts: [0], subpathOpen: [false] },
+        { anchors: squareAbout(5, 0, clockwise), subpathStarts: [0], subpathOpen: [false] },
+      ]);
+      const lens = contourSignedArea(made.anchors.slice(0, 2));
+      const hole = contourSignedArea(made.anchors.slice(2));
+      // Opposite winding = a hole under the engine's non-zero fill.
+      expect(Math.sign(hole)).toBe(-Math.sign(lens));
+      // The lens, contour 0, is as authored.
+      expect(made.anchors.slice(0, 2)).toEqual(LENS);
+    }
+  });
+
+  it("FIXED DEFECT: property — a curved contour of 1–2 anchors contains exactly the points its flattening does", () => {
+    // The container is a random teardrop (one anchor, two handles) or
+    // lens/figure (two anchors); the probe is a second contour of a
+    // single corner anchor, so its depth is 0 or 1. The reference is an
+    // even-odd count over the flattened ring with a VERTICAL ray.
+    const offLattice = fc
+      .tuple(fc.integer({ min: -60, max: 60 }), fc.integer({ min: -60, max: 60 }))
+      .map(([x, y]): Vec2 => [x / 4 + 0.13, y / 4 + 0.29]);
+    fc.assert(
+      fc.property(
+        fc.array(smallAnchorTriple, { minLength: 1, maxLength: 2 }),
+        offLattice,
+        (container, p) => {
+          const ring = flattenAnchorRun(container, { close: true });
+          fc.pre(refRingDistance(p, ring) > 1e-7);
+          const table: AnchorTable = {
+            anchors: [...container, cornerOf(p)],
+            subpathStarts: [0, container.length],
+            subpathOpen: [false, false],
+          };
+          const [outer, probed] = contourDepths(table);
+          expect(probed).toBe(refEvenOddVertical(p, ring) ? 1 : 0);
+          // A single corner anchor encloses nothing, so it contains
+          // nobody — not even a contour that starts on top of it.
+          expect(outer).toBe(0);
+        },
+      ),
+    );
+  });
+
+  it("a STRAIGHT contour of 1–2 anchors still contains nothing", () => {
+    // The other side of the fix: two corner anchors flatten to a line
+    // walked there and back, and a line has no inside.
+    fc.assert(
+      fc.property(smallVec2, smallVec2, smallVec2, (a, b, p) => {
+        for (const container of [[cornerOf(a)], [cornerOf(a), cornerOf(b)]]) {
+          const table: AnchorTable = {
+            anchors: [...container, cornerOf(p)],
+            subpathStarts: [0, container.length],
+            subpathOpen: [false, false],
+          };
+          expect(contourDepths(table)).toEqual([0, 0]);
+        }
+      }),
+    );
+  });
 });
 
 describe("compound — orientForNonZeroHoles (properties)", () => {
@@ -301,10 +425,11 @@ describe("compound — orientForNonZeroHoles (properties)", () => {
     );
   });
 
-  it("is idempotent when contour 0 is an OUTER (even-depth) contour", () => {
+  it("is idempotent, at whatever depth contour 0 sits", () => {
+    // This was restricted to an OUTER (even-depth) contour 0 while the
+    // hole-first case was a pinned defect (the block below).
     fc.assert(
-      fc.property(family, ({ table, depths }) => {
-        fc.pre(depths[0] % 2 === 0);
+      fc.property(family, ({ table }) => {
         const once = orientForNonZeroHoles(table);
         expect(orientForNonZeroHoles(once)).toEqual(once);
       }),
@@ -344,9 +469,9 @@ describe("compound — orientForNonZeroHoles (properties)", () => {
   });
 
   // ------------------------------------------------------------------
-  // DEFECT (compound.ts, orientForNonZeroHoles) — when contour 0 is
-  // itself a HOLE it is flipped, and the function is no longer
-  // idempotent: every further call reverses EVERY contour.
+  // DEFECT (compound.ts, orientForNonZeroHoles) — when contour 0 was
+  // itself a HOLE it was flipped, and the function was no longer
+  // idempotent: every further call reversed EVERY contour. FIXED.
   //
   // The docstring promises "Contour 0 is the anchor of the convention and
   // is never flipped — the survivor of a 'make compound path' keeps its
@@ -355,13 +480,12 @@ describe("compound — orientForNonZeroHoles (properties)", () => {
   // kept "which is what makes make→release→make stable". compound.spec.ts
   // tests both titles — but only ever with the OUTER contour first.
   //
-  // The code takes `base = sign(area of contour 0)` and wants
-  // `depths[i] % 2 === 0 ? base : -base`. When contour 0 sits at an ODD
-  // depth its own `want` is `-base` — the opposite of what it has — so it
-  // is reversed. On the next call `base` is therefore negated, and every
-  // contour's `want` with it: the whole table flips again, forever.
-  // (`base` has to be contour 0's sign CORRECTED for contour 0's depth
-  // parity.)
+  // The code took `base = sign(area of contour 0)` and wanted
+  // `depths[i] % 2 === 0 ? base : -base`. When contour 0 sat at an ODD
+  // depth its own `want` was `-base` — the opposite of what it had — so
+  // it was reversed. On the next call `base` was therefore negated, and
+  // every contour's `want` with it: the whole table flipped again,
+  // forever.
   //
   // Minimal counterexample: the two squares of compound.spec.ts in the
   // OTHER order, both authored clockwise —
@@ -370,15 +494,20 @@ describe("compound — orientForNonZeroHoles (properties)", () => {
   //   EXPECTED: contour 0 comes back as authored,
   //             [(200,200), (300,200), (300,300), (200,300)],
   //             and orient(orient(t)) equals orient(t).
-  //   ACTUAL:   contour 0 is [(200,200), (200,300), (300,300), (300,200)];
-  //             a second call reverses BOTH contours again.
+  //   WAS:      contour 0 was [(200,200), (200,300), (300,300), (300,200)];
+  //             a second call reversed BOTH contours again.
   //
-  // The FILL is right after every call (the pair always alternates — the
-  // properties above hold for every order). What breaks is the stated
+  // The FILL was right after every call (the pair always alternates — the
+  // properties above held for every order). What broke was the stated
   // contract: with the hole first in the selection, the survivor's anchor
-  // order is reversed, and each make→release→make cycle reverses every
+  // order was reversed, and each make→release→make cycle reversed every
   // contour of the compound path once more — anchor indices a caller
-  // cached are stale after each one.
+  // cached were stale after each one.
+  //
+  // THE FIX: `base` is the direction of the EVEN depths, so it is
+  // contour 0's sign CORRECTED for contour 0's depth parity — its own
+  // sign at an even depth, the opposite at an odd one. Contour 0 then
+  // always wants the direction it has, and it is the others that turn.
   // ------------------------------------------------------------------
   const HOLE_FIRST: AnchorTable = {
     anchors: [
@@ -393,18 +522,24 @@ describe("compound — orientForNonZeroHoles (properties)", () => {
     expect(contourDepths(HOLE_FIRST)).toEqual([1, 0]);
   });
 
-  it.fails("DEFECT (minimal counterexample): contour 0 keeps its authored direction when it is the hole", () => {
-    expect(orientForNonZeroHoles(HOLE_FIRST).anchors.slice(0, 4)).toEqual(
-      HOLE_FIRST.anchors.slice(0, 4),
+  it("FIXED DEFECT (minimal counterexample): contour 0 keeps its authored direction when it is the hole", () => {
+    const oriented = orientForNonZeroHoles(HOLE_FIRST);
+    expect(oriented.anchors.slice(0, 4)).toEqual(HOLE_FIRST.anchors.slice(0, 4));
+    // …and it is the OUTER contour that turned, so the pair still
+    // alternates: the hole is still a hole.
+    expect(signsOf(HOLE_FIRST)).toEqual([1, 1]);
+    expect(signsOf(oriented)).toEqual([1, -1]);
+    expect(oriented.anchors.slice(4)).toEqual(
+      reverseContour(HOLE_FIRST.anchors.slice(4)),
     );
   });
 
-  it.fails("DEFECT (minimal counterexample): orienting twice is orienting once when contour 0 is the hole", () => {
+  it("FIXED DEFECT (minimal counterexample): orienting twice is orienting once when contour 0 is the hole", () => {
     const once = orientForNonZeroHoles(HOLE_FIRST);
     expect(orientForNonZeroHoles(once)).toEqual(once);
   });
 
-  it.fails("DEFECT: make → release → make is stable for any contour order", () => {
+  it("FIXED DEFECT: make → release → make is stable for any contour order", () => {
     fc.assert(
       fc.property(family, ({ table }) => {
         const made = makeCompoundTable(splitCompound(table));
@@ -413,7 +548,7 @@ describe("compound — orientForNonZeroHoles (properties)", () => {
     );
   });
 
-  it.fails("DEFECT: contour 0 is never flipped, at any depth", () => {
+  it("FIXED DEFECT: contour 0 is never flipped, at any depth", () => {
     fc.assert(
       fc.property(family, ({ table }) => {
         const oriented = orientForNonZeroHoles(table);
@@ -605,29 +740,33 @@ describe("compound — contourRanges / merge / split (properties)", () => {
 
   // ------------------------------------------------------------------
   // DEFECT (compound.ts — mergeCompound, splitCompound,
-  // orientForNonZeroHoles) — the open/closed FLAG is read at the wrong
-  // index once `contourRanges` has dropped an empty contour.
+  // orientForNonZeroHoles) — the open/closed FLAG was read at the wrong
+  // index once `contourRanges` had dropped an empty contour. FIXED.
   //
   // `contourRanges` documents that "empty/degenerate ranges are dropped".
-  // All three callers then iterate the SURVIVING ranges and read
+  // All three callers then iterated the SURVIVING ranges and read
   // `table.subpathOpen?.[i]` with the survivor's index `i` — which is the
   // ORIGINAL contour index only until the first drop. After it, every
-  // later contour takes the flag of the contour before it.
+  // later contour took the flag of the contour before it.
   //
   // Minimal counterexample: 8 anchors, subpathStarts [0, 4, 4] (the
   // middle contour is empty), subpathOpen [false, true, false].
   //   The two real contours are [0,4) — closed — and [4,8) — closed (its
   //   flag is entry 2).
   //   EXPECTED: splitCompound → flags [false], [false].
-  //   ACTUAL:   [false], [true] — the second square inherits the EMPTY
-  //             contour's `open` flag and becomes an open path.
+  //   WAS:      [false], [true] — the second square inherited the EMPTY
+  //             contour's `open` flag and became an open path.
   //
   // Low severity: a table with a repeated start is malformed and neither
   // the SVG parser nor the anchor read is known to emit one. But the code
-  // chose to tolerate such tables, and it then answers wrongly instead of
-  // either refusing or staying aligned.
+  // chose to tolerate such tables, and it then answered wrongly instead
+  // of either refusing or staying aligned.
+  //
+  // THE FIX: the three callers walk the contours WITH their original
+  // index and read the flag there. `contourRanges` keeps its shape (it
+  // is exported, and draw-bundle counts contours with it).
   // ------------------------------------------------------------------
-  it.fails("DEFECT (minimal counterexample): flags stay with their contour when an empty contour is dropped", () => {
+  it("FIXED DEFECT (minimal counterexample): flags stay with their contour when an empty contour is dropped", () => {
     const sq = (x: number) =>
       rectContour({ x0: x, y0: 0, x1: x + 10, y1: 10 }, true, 0);
     const table: AnchorTable = {
@@ -641,5 +780,50 @@ describe("compound — contourRanges / merge / split (properties)", () => {
     ]);
     expect(splitCompound(table).map((t) => t.subpathOpen)).toEqual([[false], [false]]);
     expect(mergeCompound([table]).subpathOpen).toEqual([false, false]);
+    // The third reader of the flag, and the mirror case: the real open
+    // contour sits AFTER the empty one and must stay open.
+    expect(orientForNonZeroHoles(table).subpathOpen).toEqual([false, false]);
+    const openLast: AnchorTable = { ...table, subpathOpen: [false, false, true] };
+    expect(splitCompound(openLast).map((t) => t.subpathOpen)).toEqual([[false], [true]]);
+    expect(mergeCompound([openLast]).subpathOpen).toEqual([false, true]);
+    expect(orientForNonZeroHoles(openLast).subpathOpen).toEqual([false, true]);
+  });
+
+  it("FIXED DEFECT: property — every surviving contour keeps its own flag, wherever the empty contours are", () => {
+    // A well-formed table with empty contours (a repeated start) spliced
+    // in at random, each carrying the OPPOSITE flag of the contour that
+    // follows it — the flag a misaligned read would pick up.
+    fc.assert(
+      fc.property(
+        wellFormed,
+        fc.array(fc.integer({ min: 0, max: 3 }), { minLength: 4, maxLength: 4 }),
+        (table, emptiesBefore) => {
+          const starts: number[] = [];
+          const open: boolean[] = [];
+          table.subpathStarts.forEach((start, i) => {
+            const flag = table.subpathOpen?.[i] ?? false;
+            for (let k = 0; k < emptiesBefore[i]; k++) {
+              starts.push(start);
+              open.push(!flag);
+            }
+            starts.push(start);
+            open.push(flag);
+          });
+          const holed: AnchorTable = {
+            anchors: table.anchors,
+            subpathStarts: starts,
+            subpathOpen: open,
+          };
+          expect(splitCompound(holed)).toEqual(splitCompound(table));
+          expect(mergeCompound([holed])).toEqual(mergeCompound([table]));
+          // `orientForNonZeroHoles` hands a table of fewer than two
+          // contours back untouched (empties and all), so the two are
+          // compared contour by contour rather than field by field.
+          expect(splitCompound(orientForNonZeroHoles(holed))).toEqual(
+            splitCompound(orientForNonZeroHoles(table)),
+          );
+        },
+      ),
+    );
   });
 });
