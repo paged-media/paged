@@ -113,6 +113,7 @@ import type {
   ExportResult,
   Mutation,
   MutationInput,
+  MutationOutcome,
 } from "@paged-media/plugin-api";
 import {
   parseSvgDocument,
@@ -127,7 +128,7 @@ import {
   type Affine,
 } from "@paged-media/draw-geometry";
 
-import { leafIdsOf } from "../commands/select-same";
+import { mintedLeaves, mutateMinting } from "../commands/minted";
 import {
   batchMutationFor,
   bindCreatedMutationFor,
@@ -465,10 +466,15 @@ function shapesToImport(host: BundleHost, file: ImportRequest): DrawShape[] {
   return shapes;
 }
 
+/** `minted` — when given, every APPLIED batch's created elements are
+ *  appended to it, in insertion order (`commands/minted.ts`). Only the
+ *  caller that wants the ids passes it: on a host whose reply lists
+ *  nothing, finding them costs two scene-tree reads per batch. */
 async function commitShapes(
   host: BundleHost,
   shapes: readonly DrawShape[],
   fileName: string,
+  minted?: ElementId[],
 ): Promise<SvgImportCommit> {
   const done = nothingCommitted(shapes.length);
   const pageId = await resolveTargetPage(host);
@@ -486,9 +492,18 @@ async function commitShapes(
   const commit = async (units: readonly SvgImportUnit[]): Promise<void> => {
     if (units.length === 0) return;
     const trial: SvgSwatchPalette = new Map(palette);
-    const outcome = await host.document.mutate(
-      batchMutationFor(svgImportOpsFor(units, trial)),
-    );
+    const batch = batchMutationFor(svgImportOpsFor(units, trial));
+    let outcome: MutationOutcome;
+    if (minted) {
+      // The batch inserts paths and swatches only, so what it minted is
+      // exactly the contours it inserted, in order (swatches are not
+      // elements and are not listed).
+      const built = await mutateMinting(host, batch);
+      outcome = built.outcome;
+      minted.push(...mintedLeaves(built));
+    } else {
+      outcome = await host.document.mutate(batch);
+    }
     if (outcome.applied) {
       done.swatches += trial.size - palette.size;
       palette = trial;
@@ -537,9 +552,10 @@ async function commitShapes(
  * mutate-never-throws convention), at the cost of an undo step per half
  * the bisection had to commit.
  *
- * It does NOT answer the ids it inserted: a batch outcome carries one
- * `createdId`, so the list costs two scene-tree reads, and File ▸ Open has
- * no use for it. {@link importSvg} is the variant that pays for the list.
+ * It does NOT answer the ids it inserted — File ▸ Open has no use for
+ * them, and on a host whose reply does not list what a batch minted they
+ * would cost two scene-tree reads. {@link importSvg} is the variant that
+ * asks.
  */
 export async function commitSvgImport(
   host: BundleHost,
@@ -554,11 +570,12 @@ export async function commitSvgImport(
  * {@link commitSvgImport}, and the inserted element ids in INSERTION order
  * (= document order = paint order).
  *
- * The ids cost TWO `document.tree()` reads — the tree before and after,
- * diffed — because the published `MutationOutcome` carries only the LAST
- * `createdId` of a batch. The engine already answers the whole list (the
- * wire's `mutationApplied.minted`, in mint order); the SDK facade drops
- * it. When `MutationOutcome` carries `minted`, both reads go.
+ * The ids come off the engine's reply — `mutationApplied.minted`, every
+ * element a batch created, in mint order — through `commands/minted.ts`.
+ * They used to cost TWO `document.tree()` reads (the tree before and
+ * after, diffed), because the published `MutationOutcome` carries only
+ * the LAST `createdId` of a batch (RFI K-15). A host whose reply lists
+ * nothing still gets the diff, per applied batch.
  */
 export async function importSvg(
   host: BundleHost,
@@ -566,13 +583,10 @@ export async function importSvg(
 ): Promise<ElementId[]> {
   const shapes = shapesToImport(host, file);
   if (shapes.length === 0) return [];
-  const key = (id: ElementId): string => JSON.stringify(id);
-  const before = new Set(leafIdsOf(await host.document.tree()).map(key));
-  const committed = await commitShapes(host, shapes, file.name);
+  const minted: ElementId[] = [];
+  const committed = await commitShapes(host, shapes, file.name, minted);
   if (committed.elements === 0) return [];
-  return leafIdsOf(await host.document.tree()).filter(
-    (id) => !before.has(key(id)),
-  );
+  return minted;
 }
 
 // ---------------------------------------------------------- exporter

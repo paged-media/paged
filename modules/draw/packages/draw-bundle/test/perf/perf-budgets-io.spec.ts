@@ -254,15 +254,13 @@ describe("perf budgets — interchange", () => {
     });
 
     // `importSvg` is the same commit, plus the list of what it inserted.
-    // A batch outcome carries ONE `createdId`, so the list is a tree
-    // diff: two more reads. As found the loop got each id from its own
-    // insert's outcome, for free — at 201 mutations.
-    //
-    // TARGET 2 reads. The engine already answers every id a batch minted
-    // (`mutationApplied.minted` on the wire, in mint order); the SDK's
-    // `MutationOutcome` drops it. When the contract carries it, both
-    // tree reads go.
-    it("asking which elements were inserted costs two tree reads on top", async () => {
+    // As found the loop got each id from its own insert's outcome, for
+    // free — at 201 mutations; the one-batch commit then paid two tree
+    // reads for the list, a before/after diff, because a batch outcome
+    // carries ONE `createdId`. The engine's reply lists every id a batch
+    // minted (`mutationApplied.minted`, in mint order), and the list is
+    // read off it now (`commands/minted.ts`): no read on top.
+    it("asking which elements were inserted costs nothing on top", async () => {
       const before = await leafIds(w.h);
       const mark = await undoMark(w);
       const { host, work } = countingHost(w.h.host);
@@ -279,10 +277,12 @@ describe("perf budgets — interchange", () => {
 
       expect(counted.mutations).toEqual([{ op: "batch", ops: 430 }]);
       expect(undoSteps).toBe(1);
-      expect(counted.count("document.tree")).toBe(2);
+      // As found: 2.
+      expect(counted.count("document.tree")).toBe(0);
       expect(counted.count("document.meta")).toBe(1);
       expect(counted.count("document.collection")).toBe(1);
-      expect(counted.reads()).toBe(4);
+      // The commit's own two — the same as File ▸ Open's. As found: 4.
+      expect(counted.reads()).toBe(2);
     });
 
     // COVERS: the same lane on a file bigger than the engine's undo log.
