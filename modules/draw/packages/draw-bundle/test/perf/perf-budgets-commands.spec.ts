@@ -48,7 +48,11 @@
 
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-import type { BundleHost, ElementId } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  ElementId,
+  SceneTreeNode,
+} from "@paged-media/plugin-api";
 
 import {
   applyEditPattern,
@@ -81,6 +85,7 @@ import {
   TRACE_DEFAULTS,
   type AppearanceStack,
 } from "../../src";
+import { treeShapeOf } from "../conformance/one-batch";
 import { F7_PLACED_IMAGE, ringPixels } from "../fixtures/corpus";
 import {
   BUDGET_TIMEOUT_MS,
@@ -131,23 +136,47 @@ async function counted<T>(
  *  measured against the undo log, then the document and the recipe parts
  *  (which are not on the undo stack) are put back, so the next budget
  *  sees the document this file describes. `setup` runs first, uncounted,
- *  and is undone too. */
+ *  and is undone too.
+ *
+ *  A count is not the whole budget: a batch can apply and be the wrong
+ *  edit. So the write also answers what it LEFT — the selection, and the
+ *  nodes it added, as `kind` lists in tree order — and whether taking
+ *  back exactly `undoSteps` steps `restored` the scene tree it started
+ *  from, node for node. */
 async function countedWrite<T>(
   w: Workload,
   scenario: string,
   selection: ElementId[],
   command: (host: BundleHost) => Promise<T>,
   setup?: () => Promise<void>,
-): Promise<{ work: WorkLog; undoSteps: number; result: T }> {
+): Promise<{
+  work: WorkLog;
+  undoSteps: number;
+  result: T;
+  /** What the command left selected. */
+  selected: ElementId[];
+  /** Node kinds the command added to the tree, in tree order. */
+  added: string[];
+  /** Did undoing `undoSteps` steps put the tree back exactly? */
+  restored: boolean;
+}> {
   const parts = await snapshotParts(w.h);
   const outer = await undoMark(w);
   if (setup) await setup();
   await w.h.host.selection.set(selection);
+  const before = await w.h.host.document.tree();
   const mark = await undoMark(w);
   const { host, work } = countingHost(w.h.host);
   const result = await command(host);
   const snapshot = work.snapshot();
+  const selected = [...w.h.host.selection.get()];
+  const known = new Set(nodeIds(before));
+  const added = nodesOf(await w.h.host.document.tree())
+    .filter((id) => !known.has(String(id.id)))
+    .map((id) => id.kind);
   const undoSteps = await undoStepsSince(w, mark);
+  const restored =
+    treeShapeOf(await w.h.host.document.tree()) === treeShapeOf(before);
   await undoStepsSince(w, outer);
   await restoreParts(w.h, parts);
   await w.h.host.selection.set([]);
@@ -155,8 +184,19 @@ async function countedWrite<T>(
     undoSteps,
     returned: Array.isArray(result) ? result.length : result,
   });
-  return { work: snapshot, undoSteps, result };
+  return { work: snapshot, undoSteps, result, selected, added, restored };
 }
+
+/** Every node of a tree that carries an id, in tree order. */
+function nodesOf(roots: readonly SceneTreeNode[]): ElementId[] {
+  return roots.flatMap((node) => [
+    ...(node.id ? [node.id] : []),
+    ...nodesOf(node.children ?? []),
+  ]);
+}
+
+const nodeIds = (roots: readonly SceneTreeNode[]): string[] =>
+  nodesOf(roots).map((id) => String(id.id));
 
 vi.setConfig({ testTimeout: BUDGET_TIMEOUT_MS });
 
@@ -519,26 +559,32 @@ describe("perf budgets — commands over a busy document", () => {
       expect(work.count("parts.read")).toBe(1);
     });
 
-    it("pattern, re-plan: one walk — and still two batches", async () => {
-      const { work, undoSteps, result } = await countedWrite(w, "pattern replan", [], (host) =>
-        applyEditPattern(host, { patternId: recordOf("pattern"), columns: 4 }),
-      );
+    it("pattern, re-plan: one walk, ONE batch, one undo step", async () => {
+      const { work, undoSteps, result, selected, added, restored } =
+        await countedWrite(w, "pattern replan", [], (host) =>
+          applyEditPattern(host, { patternId: recordOf("pattern"), columns: 4 }),
+        );
       expect(result).toHaveLength(3);
-      // Insert, then paint-link-group-and-delete. TARGET 1 batch, 1 undo
-      // step — the `bindCreated` conversion CLAUDE.md lists as owed.
-      expect(work.mutations).toEqual([
-        { op: "batch", ops: 3 },
-        { op: "batch", ops: 17 },
-      ]);
-      expect(undoSteps).toBe(2);
-      // The walk, and the source envelope the second batch is built
-      // from (read after the first batch, so it IS a new read).
-      // TARGET <= 4.
-      expect(work.count("document.getMetadata")).toBe(LEAVES + 1);
-      // The index's one tree, the before/after diff, the new group's
-      // lookup. As found: 5 — the old group's lookup read the tree the
-      // walk had just read. TARGET 0.
-      expect(work.count("document.tree")).toBe(4);
+      // The three inserts with their names, the old group dissolved and
+      // its two tiles deleted, then paint, links and the new group. As
+      // found: TWO batches (3 inserts, then 17) and 2 undo steps — the
+      // first of which left three unpainted paths on the page.
+      expect(work.mutations).toEqual([{ op: "batch", ops: 23 }]);
+      expect(undoSteps).toBe(1);
+      // What it left: three tiles and one group, the group selected —
+      // and one undo put the document back.
+      expect(added.sort()).toEqual(["group", "polygon", "polygon", "polygon"]);
+      expect(selected.map((s) => s.kind)).toEqual(["group"]);
+      expect(restored).toBe(true);
+      // The walk, and nothing after it: the source envelope the batch is
+      // built from is one the walk read. As found: LEAVES + 1 — it was
+      // read again after the first batch. TARGET <= 4.
+      expect(work.count("document.getMetadata")).toBe(LEAVES);
+      // The index's one tree, which also names the old group. As found:
+      // 5, then 4 — the before/after diff and the new group's lookup on
+      // top. What the batch created is read off the engine's reply now
+      // (`commands/minted.ts`). TARGET 0.
+      expect(work.count("document.tree")).toBe(1);
     });
 
     it("objects on a path, update: nothing is created, the document is walked ONCE", async () => {
@@ -739,19 +785,21 @@ describe("perf budgets — commands over a busy document", () => {
       expect(work.count("document.tree")).toBe(3);
     });
 
-    it("pattern", async () => {
-      const { work, undoSteps, result } = await countedWrite(w, "make pattern", [w.plain[0]!], (host) =>
-        applyMakePattern(host, { columns: 3, rows: 1, spacing: [4, 4] }),
-      );
+    it("pattern: ONE batch, and the tree is not read at all", async () => {
+      const { work, undoSteps, result, selected, added, restored } =
+        await countedWrite(w, "make pattern", [w.plain[0]!], (host) =>
+          applyMakePattern(host, { columns: 3, rows: 1, spacing: [4, 4] }),
+        );
       expect(result).toHaveLength(2);
-      // TARGET 1 batch, 1 undo step.
-      expect(work.mutations).toEqual([
-        { op: "batch", ops: 2 },
-        { op: "batch", ops: 10 },
-      ]);
-      expect(undoSteps).toBe(2);
-      // TARGET 0.
-      expect(work.count("document.tree")).toBe(3);
+      // 2 × (insert, bind, fill, stroke, weight, link), the source link,
+      // the group. As found: TWO batches (2, then 10) and 2 undo steps.
+      expect(work.mutations).toEqual([{ op: "batch", ops: 14 }]);
+      expect(undoSteps).toBe(1);
+      expect(added.sort()).toEqual(["group", "polygon", "polygon"]);
+      expect(selected.map((s) => s.kind)).toEqual(["group"]);
+      expect(restored).toBe(true);
+      // As found: 3 — before, after, and a third to find the group.
+      expect(work.count("document.tree")).toBe(0);
     });
 
     it("appearance, bake a three-layer stack", async () => {

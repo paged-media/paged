@@ -354,12 +354,42 @@ keeping separate: it creates NOTHING, so it needs no `bindCreated`, no
 batch-ordering rule and no group — just N `frameTransform` writes in one
 batch.
 
-THE OTHER SIX FLOWS ARE STILL TWO BATCHES — `pattern.ts`,
-`appearance-bake.ts`, `compound-path.ts` (release), `symbols.ts`,
-`image-trace.ts`, `live-paint.ts` — and each is now one mechanical edit
-away from one, not a redesign. Their "TWO batches ⇒ 2 undo steps" notes
-are still TRUE as shipped; the reason is no longer "the contract cannot",
-it is "not yet converted".
+PATTERN (make and re-plan) IS ONE BATCH TOO, and the first flow CONVERTED
+rather than built that way: the inserts are named, and the batch that was
+"batch 2" follows them in the same mutation, addressing the copies by
+handle (`patternBatchFor` = the inserts + `patternFinishBatchFor`'s ops,
+so the two lanes cannot drift). THE TWO-BATCH LANE IS KEPT as the
+fallback for an engine that refuses the one batch, and
+`pattern.spec.ts` runs every bake through both — and through hosts that
+cannot say what a batch created — requiring the SAME document from each
+(`test/conformance/one-batch.ts` has the hosts and the comparison).
+
+THE OTHER FIVE FLOWS ARE STILL TWO BATCHES — `appearance-bake.ts`,
+`compound-path.ts` (release), `symbols.ts`, `image-trace.ts`,
+`live-paint.ts`. Their "TWO batches ⇒ 2 undo steps" notes are still TRUE
+as shipped; the reason is "not yet converted".
+
+**"WHAT DID MY BATCH CREATE" HAS ONE SEAM: `commands/minted.ts`.** A
+batch outcome carries ONE `createdId`, so a flow that inserted several
+paths used to read `document.tree()` before and after its batch and diff
+the two — 2–3 whole-document reads per command. The engine's raw
+`mutationApplied` already lists every element a batch minted, in mint
+order (`minted`); plugin-sdk's `host.document.mutate` drops it (RFI
+K-15). `mutateMinting(host, mutation)` answers it through three lanes
+and a flow never knows which it got: `outcome.minted` (for the SDK that
+carries it — none does yet), the raw reply HEARD on
+`host.editor.client.subscribe` while the facade writes (the headless host
+and the editor both take this one — 0 tree reads), and the tree diff
+(a host with neither). The write itself always goes through
+`host.document.mutate`: `client.send({ kind: "mutate" })` would skip the
+facade's gates, and the headless host does not fan a `send` reply out, so
+no `onDidChange` listener would hear the write. What `minted` contains is
+measured and pinned in `minted.spec.ts`: one entry per CREATING child in
+batch order, a `createGroup` listed as a group, an element the same batch
+deletes again STILL listed, `createSwatch` not listed, and `handle` named
+on some batches and `null` on others — ORDER is the contract. A flow
+never indexes the list by hand: `bindMinted(minting, batch)` reads the
+batch it sent and answers handle → id, the same in every lane.
 
 **THE `frameTransform` DOOR, and three things measured about it** (the
 §16.3 lane rides it; protocol 60):
@@ -394,16 +424,32 @@ as fact and then deleted when they were measured:
   about it is recorded — §16.3's artboard fit simply applies the stricter
   "fully inside" rule, so it never needs to know.
 
-**Two batch-ORDERING rules the engine enforces**, both measured and both
-load-bearing for any bake-then-rebuild flow (Pattern v1's re-plan is the
-first consumer of the second):
+**The batch-ORDERING rules the engine enforces**, all measured
+(`minted.spec.ts` pins each with its sentence) and all load-bearing for
+any flow that builds, replaces and groups in ONE batch:
 - A batch that DELETES and then INSERTS is refused — "position N out of
   range for parent Spread" — because the insert's z-position resolves
-  against the spread length the batch STARTED with. Inserts ride batch 1,
-  deletes ride batch 2. (Insert-then-delete in one batch is fine.)
+  against the spread length the batch STARTED with. So the inserts go
+  FIRST. (Insert-then-delete in one batch is fine.)
 - A group must be DISSOLVED BEFORE its members are deleted. Deleting
   first leaves the group holding a hole and the dissolve is refused with
   "group has an id-less member that cannot round-trip".
+- SEVERAL rebuilds in one batch work in exactly ONE order: every insert,
+  then every dissolve, then every delete, then every `createGroup`.
+  Rebuild by rebuild (dissolve, delete, group, dissolve, delete, group)
+  is NOT refused — it APPLIES and the document is wrong: an empty group,
+  paths that are in no tree, and an undo that does not restore.
+
+**AN ENGINE DEFECT every deleting flow inherits (0.64.0, pinned in
+`minted.spec.ts` so it fails when fixed).** Deleting a page item that
+sits BELOW a group in z-order breaks that group — a plain `deleteFrame`
+shows it, no batch involved: the bystander's member references are not
+moved down. So a re-plan / update / rebuild of a record that is not the
+TOPMOST group on its page is refused ("a member already belongs to
+another group"), and a release / un-bake of one APPLIES and damages the
+groups above it. This predates the one-batch work (measured on the
+two-batch flows) and is not something a flow can order its way around;
+do not "fix" a flow for it.
 
 **B-18 NESTING IS REAL, and `commands/group.ts`'s old "a 'paste into'
 cannot be expressed end-to-end" note was wrong — it is corrected in

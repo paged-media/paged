@@ -127,46 +127,54 @@
 // the LEGACY field id `""` and is still releasable and un-bakeable.
 //
 // ------------------------------ MUTATION / UNDO SHAPE (all measured)
-// Probed against the booted engine (protocol 58) — the RFI C-15 rule:
-// assert the real count, never claim "one undo".
-//   · Make        = TWO batches ⇒ 2 undo steps. Batch 1 inserts every
-//                   copy's contours; batch 2 re-merges the compound
-//                   ones, paints, dims, stamps and groups.
-//   · Re-plan     = TWO batches ⇒ 2 undo steps. Same split; batch 2
-//                   additionally dissolves the old group and deletes
-//                   the old tiles FIRST.
+// Measured against the booted engine (0.64.0, protocol 64) — the RFI
+// C-15 rule: assert the real count, never claim "one undo".
+//   · Make        = ONE batch ⇒ 1 undo step. Every copy's contours are
+//                   inserted and NAMED (`bindCreated`), and the same
+//                   batch re-merges the compound ones, paints, dims,
+//                   stamps and groups them through those names.
+//   · Re-plan     = ONE batch ⇒ 1 undo step. The same batch, with the
+//                   old group dissolved and the old tiles deleted
+//                   between the inserts and the finish.
 //   · Release     = ONE batch ⇒ 1 undo step (every link dropped
 //                   together; the recipe removal is not undoable).
 //   · Delete tiles= ONE batch ⇒ 1 undo step.
 //   · Select tiles= no mutation.
-// TWO is the FLOOR for anything that inserts, and the floor is a
-// CONTRACT floor rather than an engine one — measured, both halves:
-//   (a) the booted engine DOES speak C-15. `bindCreated` is in its op
-//       vocabulary AND resolves end-to-end: `{ op: "bindCreated", args:
-//       { handle } }` placed AFTER a creating child makes `$h:<handle>`
-//       address that child's minted id (placed BEFORE, the engine
-//       refuses with "has nothing to name — no creating child ran
-//       before it in this batch").
-//   (b) `@paged-media/plugin-api`'s `Mutation` union carries NO
-//       `bindCreated` arm, and neither does the protocol-ahead
-//       `PendingMutation` delta plugin-sdk HEAD maintains (re-checked
-//       at `f00d6dd`, and in the published `0.2.25-canary.0` this repo
-//       installs).
-// So the bundle stays at two batches by CONTRACT DISCIPLINE, not
-// because the engine cannot do better. Re-check when the contract bumps
-// — this is one file and one merge away from one undo step.
+// Make and Re-plan were TWO batches and 2 undo steps each until the
+// contract carried C-15's `bindCreated` (CLAUDE.md, "RFI C-15 IS NOW IN
+// THE CONTRACT"): `insertPath` mints the ids the paint, the link and the
+// group address, and a batch could not name an id it had just minted.
+// THAT TWO-BATCH LANE IS STILL HERE, as the fallback for an engine that
+// refuses the one batch (one that predates `bindCreated` does) — see
+// `emitPatternFieldStepwise`. The conformance spec runs every bake both
+// ways and requires the same document from each.
 //
-// TWO MORE ORDERING FACTS, both measured against the engine and both
-// load-bearing for the re-plan path:
-//   · A batch that DELETES and then INSERTS is REFUSED ("position N out
-//     of range for parent Spread"): the insert's z-position resolves
-//     against the spread length the batch STARTED with. So every insert
-//     rides batch 1 and every delete rides batch 2 (the symbols.ts /
-//     live-paint.ts finding, re-verified here).
-//   · Inside batch 2 the group must be DISSOLVED BEFORE its members are
-//     deleted. Deleting first leaves the group holding a hole and the
-//     dissolve is refused with the engine's own sentence: "group has an
-//     id-less member that cannot round-trip".
+// THE ORDER INSIDE THE ONE BATCH is the only one the engine accepts, and
+// each rule is measured (`test/conformance/minted.spec.ts` pins the
+// sentences):
+//   · INSERTS FIRST. A batch that DELETES and then INSERTS is REFUSED
+//     ("position N out of range for parent Spread"): the insert's
+//     z-position resolves against the spread length the batch STARTED
+//     with. Insert-then-delete in one batch is fine.
+//   · the old group is DISSOLVED BEFORE its members are deleted.
+//     Deleting first leaves the group holding a hole and the dissolve is
+//     refused with the engine's own sentence: "group has an id-less
+//     member that cannot round-trip".
+//   · the new group is created LAST, after every delete.
+//
+// WHAT THE BATCH CREATED is read off the engine's reply, not off two
+// reads of the scene tree (`commands/minted.ts`). A bake used to read
+// the whole tree three times — before, after, and once more to find the
+// group — and reads it zero times now.
+//
+// ONE THING THIS DOES NOT FIX, because it is the engine's: a re-plan of
+// a field that is not the TOPMOST group on its page is refused ("a
+// member already belongs to another group"). Deleting a page item below
+// a group leaves that group's member references stale — a plain
+// `deleteFrame` shows it (pinned in `minted.spec.ts`). It was so with
+// two batches, where the refusal left the freshly inserted tiles behind;
+// with one batch the refusal is atomic, and the stepwise fallback then
+// reproduces the old outcome exactly.
 //
 // ------------------------------------------------------------- limits
 // · IT IS STILL A BAKE, not a live fill. The tiles are real page items;
@@ -195,6 +203,7 @@ import type {
   Disposable,
   ElementId,
   Mutation,
+  MutationInput,
   PluginMetadataEnvelope,
 } from "@paged-media/plugin-api";
 import { splitCompound, type AnchorTable } from "@paged-media/draw-geometry";
@@ -207,7 +216,12 @@ import {
   framePathMutationFor,
   type CompoundPaint,
 } from "./compound-path";
-import { leafIdsOf } from "./select-same";
+import { bindMinted, mintedLeaves, mutateMinting } from "./minted";
+import {
+  batchMutationFor,
+  bindCreatedMutationFor,
+  handleElementId,
+} from "./v59-wire";
 import { announceRecipeChange, groupHolding, linkIndex } from "../link-index";
 import { insertPathMutationFor } from "../handlers/insert-path";
 
@@ -754,11 +768,13 @@ export function withPatternKey(
 // Exported so the conformance spec asserts the EXACT wire shapes the
 // live commands emit (no second copy to drift from).
 
-/** BATCH 1 — one `insertPath` per copy per contour, in the order
- *  `patternCopiesFor` reports (which is how the minted ids are chunked
- *  back onto their copies afterwards). INSERTS ONLY: a batch that
- *  deletes and then inserts is refused, because the insert's z-position
- *  resolves against the spread length the batch STARTED with. */
+/** STEPWISE LANE, BATCH 1 — one `insertPath` per copy per contour, in
+ *  the order `patternCopiesFor` reports (which is how the minted ids are
+ *  chunked back onto their copies afterwards). INSERTS ONLY: a batch
+ *  that deletes and then inserts is refused, because the insert's
+ *  z-position resolves against the spread length the batch STARTED with.
+ *  (The shipped lane is {@link patternBatchFor}; this one is its
+ *  fallback.) */
 export function patternInsertBatchFor(plan: PatternPlan): Mutation {
   const ops: Mutation[] = [];
   for (const copy of patternCopiesFor(plan)) {
@@ -829,8 +845,8 @@ export function bindPatternCopies(
   return bindings;
 }
 
-/** BATCH 2 — the whole rest of a Make or a Re-plan, in the ONE order
- *  the engine accepts:
+/** THE FINISH — the whole rest of a Make or a Re-plan after its inserts,
+ *  in the ONE order the engine accepts:
  *    1. DISSOLVE the previous field's group (re-plan only). It must come
  *       BEFORE its members are deleted: deleting first leaves the group
  *       holding a hole and the engine refuses the dissolve with "group
@@ -840,7 +856,11 @@ export function bindPatternCopies(
  *       Make Compound Path uses, paint it like its source, DIM it, and
  *       stamp its tile link.
  *    4. Stamp the source links, then wrap the field in one group.
- *  One batch ⇒ one undo step, however many tiles. */
+ *  `bindings` address the copies by REAL id (the stepwise lane, where
+ *  this is batch 2 and the ids came back from batch 1) or by `$h:`
+ *  HANDLE (the one-batch lane, where {@link patternBatchFor} puts these
+ *  ops behind the inserts that the handles name). The ops are the same
+ *  either way — which is what keeps the two lanes from drifting. */
 export function patternFinishBatchFor(args: {
   plan: PatternPlan;
   bindings: readonly PatternCopyBinding[];
@@ -919,6 +939,66 @@ export function patternFinishBatchFor(args: {
     ]),
   );
   return { op: "batch", args: { ops } };
+}
+
+/** The batch-local handle of copy `copy`'s contour `contour`.
+ *  Deterministic, so the conformance spec asserts the exact wire. Pure. */
+export const patternHandle = (copy: number, contour: number): string =>
+  `pt${copy}_${contour}`;
+
+/** What the one batch resolves each copy to: its first contour's handle
+ *  survives, the rest are absorbed into it and deleted. Pure. */
+export function patternHandleBindings(plan: PatternPlan): PatternCopyBinding[] {
+  return patternCopiesFor(plan).map((copy, i) => ({
+    copy,
+    keep: handleElementId(patternHandle(i, 0)),
+    absorb: Array.from({ length: copy.contours - 1 }, (_, c) =>
+      handleElementId(patternHandle(i, c + 1)),
+    ),
+  }));
+}
+
+/**
+ * THE ONE BATCH — a whole Make or Re-plan: every contour inserted and
+ * NAMED (`insertPath` + `bindCreated`), then {@link patternFinishBatchFor}'s
+ * ops addressing the copies by those names.
+ *
+ * Inserts first, deletes after (a batch that deletes and then inserts is
+ * refused), the old group dissolved before its members go, the new group
+ * last. ONE batch ⇒ ONE undo step, however many tiles.
+ */
+export function patternBatchFor(args: {
+  plan: PatternPlan;
+  sourceEnvelopes: readonly (PluginMetadataEnvelope | null)[];
+  dissolve?: ElementId | null;
+  stale?: readonly ElementId[];
+}): MutationInput {
+  const { plan } = args;
+  const ops: MutationInput[] = [];
+  patternCopiesFor(plan).forEach((copy, i) => {
+    const source = plan.sources[copy.sourceIndex];
+    const moved = offsetTable(
+      source.table,
+      copy.tile.offset[0],
+      copy.tile.offset[1],
+    );
+    splitCompound(moved).forEach((contour, c) => {
+      ops.push(
+        insertPathMutationFor(
+          plan.pageId,
+          contour.anchors,
+          contour.subpathOpen?.[0] ?? false,
+        ),
+      );
+      ops.push(bindCreatedMutationFor(patternHandle(i, c)));
+    });
+  });
+  const finish = patternFinishBatchFor({
+    ...args,
+    bindings: patternHandleBindings(plan),
+  }) as Extract<Mutation, { op: "batch" }>;
+  ops.push(...finish.args.ops);
+  return batchMutationFor(ops);
 }
 
 /** The RELEASE batch — drop every pattern key from every named leaf,
@@ -1281,18 +1361,23 @@ export async function patternPlanFor(
 
 // ------------------------------------------------------------ the emitter
 
-/** Emit a plan as artwork: batch 1 inserts, batch 2 finishes. TWO
- *  batches ⇒ 2 undo steps (the contract floor — module header). Returns
- *  the surviving tile ids, or an empty list on a refusal (always logged,
- *  never thrown — the dash-command convention). */
+interface PatternEmit {
+  plan: PatternPlan;
+  label: string;
+  dissolve?: ElementId | null;
+  stale?: readonly ElementId[];
+}
+
+/** Emit a plan as artwork in ONE batch ⇒ ONE undo step (module header).
+ *  Returns the surviving tile ids, or an empty list on a refusal (always
+ *  logged, never thrown — the dash-command convention).
+ *
+ *  An engine that refuses the batch — one that predates `bindCreated`
+ *  does — gets the STEPWISE lane instead, which is the two batches this
+ *  was before. */
 async function emitPatternField(
   host: BundleHost,
-  args: {
-    plan: PatternPlan;
-    label: string;
-    dissolve?: ElementId | null;
-    stale?: readonly ElementId[];
-  },
+  args: PatternEmit,
 ): Promise<ElementId[]> {
   const { plan, label } = args;
   if (plan.tiles.length === 0) {
@@ -1302,21 +1387,70 @@ async function emitPatternField(
     );
     return [];
   }
-  const before = new Set(
-    leafIdsOf(await host.document.tree().catch(() => [])).map((e) =>
-      String(e.id),
-    ),
+  // Out of the link index: a re-plan has just walked these envelopes at
+  // this revision, so this reads nothing; a Make reads each source once.
+  const index = linkIndex(host);
+  const sourceEnvelopes = await Promise.all(
+    plan.sources.map((s) => index.envelopeOf(s.id).catch(() => null)),
   );
-  const inserted = await host.document.mutate(patternInsertBatchFor(plan));
-  if (!inserted.applied) {
+  const batch = patternBatchFor({
+    plan,
+    sourceEnvelopes,
+    dissolve: args.dissolve ?? null,
+    stale: args.stale ?? [],
+  });
+  const built = await mutateMinting(host, batch);
+  if (!built.outcome.applied) {
+    host.log.debug(
+      `${label}: the one-batch build was refused ` +
+        `(${JSON.stringify(built.outcome.error)}) — falling back to the ` +
+        "stepwise lane (insert, then finish)",
+    );
+    return emitPatternFieldStepwise(host, args);
+  }
+  const copies = patternCopiesFor(plan);
+  const bound = bindMinted(built, batch);
+  let keep = copies.map((_, i) => bound?.byHandle.get(patternHandle(i, 0)));
+  let group = bound?.groups[0] ?? null;
+  if (keep.some((id) => id === undefined)) {
+    // The field IS built — and the engine's account of what it minted
+    // does not match the batch (or could not be read at all). The tiles
+    // carry their own links, so ask the document instead of guessing.
+    host.log.debug(
+      `${label}: the batch applied but did not account for its tiles — ` +
+        "reading them back by their links",
+    );
+    keep = (await patternLinks(host, plan.field)).tiles.map((t) => t.id);
+    group = keep[0] ? groupHolding(await linkIndex(host).tree(), keep[0]) : null;
+  }
+  const tiles = keep.filter((id): id is ElementId => id !== undefined);
+  await host.selection.set(
+    group ? [group] : [...plan.sources.map((s) => s.id), ...tiles],
+  );
+  return tiles;
+}
+
+/** THE STEPWISE LANE — batch 1 inserts, batch 2 finishes: TWO batches ⇒
+ *  2 undo steps. This is the flow as it was before `bindCreated` reached
+ *  the contract, kept as the fallback for an engine that refuses the one
+ *  batch. What batch 1 minted comes through the same seam as everywhere
+ *  else (`commands/minted.ts`) — on the engine this lane exists for,
+ *  that is the tree before and after. */
+async function emitPatternFieldStepwise(
+  host: BundleHost,
+  args: PatternEmit,
+): Promise<ElementId[]> {
+  const { plan, label } = args;
+  const inserted = await mutateMinting(host, patternInsertBatchFor(plan));
+  if (!inserted.outcome.applied) {
     host.log.warn(
-      `${label}: tile insert rejected by engine: ${JSON.stringify(inserted.error)}`,
+      `${label}: tile insert rejected by engine: ${JSON.stringify(
+        inserted.outcome.error,
+      )}`,
     );
     return [];
   }
-  const minted = leafIdsOf(await host.document.tree().catch(() => [])).filter(
-    (e) => !before.has(String(e.id)),
-  );
+  const minted = mintedLeaves(inserted);
   const bindings = bindPatternCopies(plan, minted);
   if (!bindings) {
     host.log.warn(
@@ -1361,8 +1495,8 @@ async function emitPatternField(
 /**
  * **MAKE** — bake a re-editable tile FIELD from the selection.
  *
- * Payload: any subset of {@link PatternParams} plus `{ name? }`. TWO
- * batches ⇒ 2 undo steps. The result is ARTWORK, not a swatch
+ * Payload: any subset of {@link PatternParams} plus `{ name? }`. ONE
+ * batch ⇒ 1 undo step. The result is ARTWORK, not a swatch
  * ({@link PATTERN_SWATCH_NOTE}); the recipe that makes it re-plannable
  * is a container part and is NOT on the undo stack.
  */
@@ -1424,7 +1558,7 @@ export async function applyMakePattern(
  * and re-planning is how a tile change reaches the copies.
  *
  * Payload: `{ patternId?, name?, …params }` — anything omitted keeps the
- * saved value. TWO batches ⇒ 2 undo steps. Every tile gets a NEW element
+ * saved value. ONE batch ⇒ 1 undo step. Every tile gets a NEW element
  * id, so another plugin's metadata on a tile does not survive.
  */
 export async function applyEditPattern(

@@ -32,10 +32,13 @@
 //   (4) RE-EDITABILITY: re-plan (new parameters + fresh source
 //       geometry), release (keep the artwork), delete tiles (un-bake),
 //       select tiles — none of which v0 had;
-//   (5) the MEASURED undo counts (RFI C-15): make = 2, re-plan = 2,
-//       release = 1, delete tiles = 1 — plus the two batch-ORDERING
-//       rules the engine enforces and the fact that the two-batch floor
-//       is a CONTRACT floor, not an engine one (`bindCreated` works);
+//   (5) the MEASURED undo counts (RFI C-15): make = 1, re-plan = 1,
+//       release = 1, delete tiles = 1 — plus the batch-ORDERING rules
+//       the engine enforces. Make and re-plan were 2 each until
+//       `bindCreated` reached the contract; that two-batch lane is still
+//       the FALLBACK, and every bake is run through both and through a
+//       host that cannot say what a batch created — the same document
+//       must come out of each;
 //   (6) the honest refusals kept from v0: a text frame is skipped, a
 //       source with no readable geometry is skipped, nothing selected
 //       is a no-op.
@@ -43,6 +46,7 @@
 import { describe, expect, it, beforeAll, afterAll, beforeEach } from "vitest";
 
 import type {
+  BundleHost,
   CommandContribution,
   ElementId,
   Mutation,
@@ -107,8 +111,20 @@ import {
   SELECT_PATTERN_TILES_COMMAND_ID,
   type PatternPlan,
 } from "../../src";
+import {
+  patternBatchFor,
+  patternHandle,
+  patternHandleBindings,
+} from "../../src/commands/pattern";
 import { F6_RING_PAIR } from "../fixtures/corpus";
+import { countingHost } from "../perf/counting-host";
 import { openHost } from "./host";
+import {
+  NO_BIND_CREATED,
+  refusingBindCreated,
+  runThrough,
+  type LaneName,
+} from "./one-batch";
 
 const poly = (id: string): ElementId => ({ kind: "polygon", id }) as ElementId;
 
@@ -260,6 +276,11 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
       expect(PATTERN_PANEL_NOTE).toContain("THIS IS NOT A PATTERN SWATCH");
       expect(PATTERN_PANEL_NOTE).toContain("always paint ABOVE the source");
       expect(PATTERN_PANEL_NOTE).toContain("real frameOpacity");
+      // STALE, and pinned as SHIPPED so the correction cannot be missed:
+      // baking and re-planning are ONE undo step each now (measured
+      // below). The sentence lives in `src/panels/pattern-panel.tsx`,
+      // which the change that made it untrue did not own. Whoever
+      // corrects the panel changes this line with it.
       expect(PATTERN_PANEL_NOTE).toContain("TWO undo steps");
     });
 
@@ -541,7 +562,75 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
   });
 
   describe("the wire shapes", () => {
-    it("batch 1 is one insertPath per copy per contour, offset applied", () => {
+    it("THE ONE BATCH: every contour inserted and NAMED, then the finish through those names", () => {
+      const ops = (
+        patternBatchFor({ plan: RING, sourceEnvelopes: [null] }) as Extract<
+          Mutation,
+          { op: "batch" }
+        >
+      ).args.ops as { op: string; args: Record<string, unknown> }[];
+      expect(ops.map((o) => o.op)).toEqual([
+        // the ring copy: outer contour, hole — each insert named at once
+        "insertPath",
+        "bindCreated",
+        "insertPath",
+        "bindCreated",
+        // the finish, addressing them by handle
+        "setElementProperty", // framePath: the hole merged back in
+        "deleteFrame", // …and the absorbed contour dropped
+        "setElementProperty", // fill
+        "setElementProperty", // stroke
+        "setPluginMetadata", // tile link
+        "setPluginMetadata", // source link
+        "createGroup",
+      ]);
+      expect(ops[1]!.args).toEqual({ handle: patternHandle(0, 0) });
+      expect(ops[3]!.args).toEqual({ handle: patternHandle(0, 1) });
+      const kept = { kind: "polygon", id: "$h:pt0_0" };
+      expect(ops[4]!.args.elementId).toEqual(kept);
+      expect(ops[4]!.args.path).toBe("framePath");
+      expect(ops[5]).toEqual({ op: "deleteFrame", args: { frameId: "$h:pt0_1" } });
+      expect(ops[10]).toEqual({
+        op: "createGroup",
+        args: { memberIds: [poly("us"), kept] },
+      });
+      // The finish IS the stepwise lane's batch 2, word for word, over
+      // the handle bindings — one builder, so the lanes cannot drift.
+      expect(ops.slice(4)).toEqual(
+        (
+          patternFinishBatchFor({
+            plan: RING,
+            bindings: patternHandleBindings(RING),
+            sourceEnvelopes: [null],
+          }) as Extract<Mutation, { op: "batch" }>
+        ).args.ops,
+      );
+    });
+
+    it("THE ONE BATCH of a re-plan: inserts FIRST, then dissolve, then the deletes, the group LAST", () => {
+      const ops = (
+        patternBatchFor({
+          plan: SQUARE,
+          sourceEnvelopes: [null],
+          dissolve: { kind: "group", id: "ug" } as ElementId,
+          stale: [poly("uold1"), poly("uold2")],
+        }) as Extract<Mutation, { op: "batch" }>
+      ).args.ops as { op: string }[];
+      expect(ops.map((o) => o.op)).toEqual([
+        "insertPath",
+        "bindCreated",
+        "dissolveGroup",
+        "deleteFrame",
+        "deleteFrame",
+        "setElementProperty",
+        "setElementProperty",
+        "setPluginMetadata",
+        "setPluginMetadata",
+        "createGroup",
+      ]);
+    });
+
+    it("the STEPWISE lane's batch 1 is one insertPath per copy per contour, offset applied", () => {
       const batch = patternInsertBatchFor(SQUARE) as Extract<
         Mutation,
         { op: "batch" }
@@ -572,7 +661,7 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
       expect(bindPatternCopies(SQUARE, [poly("u1"), poly("u2")])).toBeNull();
     });
 
-    it("batch 2 paints, links and groups — and writes NO dim op at 100 %", () => {
+    it("the finish paints, links and groups — and writes NO dim op at 100 %", () => {
       const bindings = bindPatternCopies(SQUARE, [poly("u1")])!;
       const batch = patternFinishBatchFor({
         plan: SQUARE,
@@ -809,20 +898,18 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
       ]);
     });
 
-    it("UNDO — the bake is exactly TWO batches (C-15: assert, never claim)", async () => {
-      // (continues from the bake above) Undo #1 unwinds the paint /
-      // link / group batch; the eight inserted paths remain.
-      const withTiles = await leafIds(h);
+    it("UNDO — the bake is exactly ONE batch (C-15: assert, never claim)", async () => {
+      // (continues from the bake above) ONE undo unwinds the whole bake —
+      // the inserts, the paint, the links and the group together. It
+      // was two: the first used to leave eight unpainted paths behind.
+      expect(await leafIds(h)).toHaveLength(3 + 8);
       await h.host.document.undo();
       expect(await groupShape(h)).toBeNull();
-      expect(await leafIds(h)).toHaveLength(withTiles.length);
       expect(patternSourceOf(await h.host.document.getMetadata(INNER))).toBeNull();
-      // Undo #2 unwinds the insert batch: back to the pre-bake document.
-      await h.host.document.undo();
       expect(await sortedLeafIds(h)).toEqual(PRISTINE);
     });
 
-    it("the two-batch floor is a CONTRACT floor — the ENGINE speaks C-15", async () => {
+    it("what the one batch stands on — the ENGINE speaks C-15", async () => {
       // Re-verified rather than assumed. `bindCreated` IS in the booted
       // engine's op vocabulary and resolves end-to-end when it follows
       // the creating child …
@@ -849,14 +936,11 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
             },
           ],
         },
-        // The cast is the point: `@paged-media/plugin-api`'s `Mutation`
-        // union carries NO `bindCreated` arm, and neither does the
-        // protocol-ahead `PendingMutation` delta plugin-sdk HEAD keeps
-        // (f00d6dd) or the published 0.2.25-canary.0 this repo installs.
-        // So the bundle stays at two batches by CONTRACT DISCIPLINE,
-        // not because the engine cannot do better. When the contract
-        // grows the arm, this test is the receipt that the collapse is
-        // one merge away.
+        // This cast used to be the point — the contract had no
+        // `bindCreated` arm, so the bundle stayed at two batches by
+        // contract discipline and this test was the receipt that the
+        // collapse was one merge away. The arm landed; the collapse is
+        // `patternBatchFor`, and this is still what it stands on.
       } as never);
       expect(ok.applied).toBe(true);
       await h.host.document.undo();
@@ -883,7 +967,7 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
       expect(await sortedLeafIds(h)).toEqual(PRISTINE);
     });
 
-    it("a batch that DELETES then INSERTS is refused — so inserts ride batch 1", async () => {
+    it("a batch that DELETES then INSERTS is refused — so the inserts go FIRST", async () => {
       const out = await h.host.document.mutate({
         op: "batch",
         args: {
@@ -917,7 +1001,7 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
         // The whole point of the fit: a placed tile ANSWERS.
         expect(await compoundSourceOf(h.host, id)).not.toBeNull();
       }
-      await undoTo(h, 2);
+      await undoTo(h, 1);
       expect(await sortedLeafIds(h)).toEqual(PRISTINE);
 
       // … and the v0 behaviour is still reachable, still measured, and
@@ -934,7 +1018,7 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
       }
       expect(readable).toHaveLength(3);
       expect(await leafIds(h)).toHaveLength(3 + 8);
-      await undoTo(h, 2);
+      await undoTo(h, 1);
       expect(await sortedLeafIds(h)).toEqual(PRISTINE);
     });
 
@@ -966,7 +1050,7 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
         type: "length",
         value: null,
       });
-      await undoTo(h, 2);
+      await undoTo(h, 1);
       expect(await sortedLeafIds(h)).toEqual(PRISTINE);
     });
 
@@ -995,7 +1079,7 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
       expect(order.indexOf(String(tiles[1].id))).toBeGreaterThan(
         order.indexOf(String(tiles[0].id)),
       );
-      await undoTo(h, 2);
+      await undoTo(h, 1);
       expect(await sortedLeafIds(h)).toEqual(PRISTINE);
     });
 
@@ -1037,12 +1121,14 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
       expect(library.fields[0].params.columns).toBe(3);
       expect(library.fields[0].params.dim).toBe(50);
 
-      // UNDO — a re-plan is exactly TWO batches, same floor as a bake.
+      // UNDO — a re-plan is exactly ONE batch, like a bake: one step and
+      // the old field is back whole — its tile, its group, no leftovers.
       await h.host.document.undo();
       expect(await leafIds(h)).toContain(String(first[0].id));
-      await h.host.document.undo();
-      // …and then the source move, then the first bake's two batches.
-      await undoTo(h, 3);
+      expect(await leafIds(h)).toHaveLength(3 + 1);
+      expect((await groupShape(h))!.members).toHaveLength(2);
+      // …and then the source move, then the first bake.
+      await undoTo(h, 2);
       expect(await sortedLeafIds(h)).toEqual(PRISTINE);
     });
 
@@ -1060,7 +1146,7 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
         includeSources: true,
       });
       expect(withSources).toHaveLength(4);
-      await undoTo(h, 2);
+      await undoTo(h, 1);
       expect(await sortedLeafIds(h)).toEqual(PRISTINE);
     });
 
@@ -1086,7 +1172,7 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
       await h.host.document.undo();
       expect(await leafIds(h)).toHaveLength(3 + 3);
       expect((await patternLinks(h.host, "pat-1")).tiles).toHaveLength(3);
-      await undoTo(h, 2);
+      await undoTo(h, 1);
       expect(await sortedLeafIds(h)).toEqual(PRISTINE);
     });
 
@@ -1110,7 +1196,7 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
       // a container write is not on the undo stack).
       await h.host.document.undo();
       expect((await patternLinks(h.host, "pat-1")).tiles).toHaveLength(3);
-      await undoTo(h, 2);
+      await undoTo(h, 1);
       expect(await sortedLeafIds(h)).toEqual(PRISTINE);
     });
 
@@ -1165,8 +1251,8 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
         expect(contourCountOf((await compoundSourceOf(h.host, id))!.table)).toBe(2);
       }
 
-      // Unwind: pattern (2) + make compound (1) + the setup insert (1).
-      await undoTo(h, 4);
+      // Unwind: pattern (1) + make compound (1) + the setup insert (1).
+      await undoTo(h, 3);
       expect(await sortedLeafIds(h)).toEqual(PRISTINE);
     });
 
@@ -1267,8 +1353,262 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
         undefined as never,
       );
       expect((await patternLinks(h.host)).tiles).toEqual([]);
-      await undoTo(h, 3);
+      await undoTo(h, 2);
       expect(await sortedLeafIds(h)).toEqual(PRISTINE);
+    });
+
+    // A batch can apply and still be the wrong edit. So every bake below
+    // runs through FIVE hosts — as shipped, and four with something taken
+    // away (`./one-batch.ts`) — and each must leave the SAME document:
+    // the same tree, the same paint and outline on every leaf, the same
+    // links, the same recipe, the same selection. Ids are compared as
+    // positions, because each run mints its own.
+    //
+    //                      mutations   undo steps   tree reads
+    //   as found  make         2            2            3
+    //             re-plan      2            2            4
+    //   now       make         1            1            0
+    //             re-plan      1            1            1  (the link walk)
+    //
+    // The "as found" row is not remembered: it is what the `asFound`
+    // lane measures today, on a host that refuses `bindCreated` and has
+    // no raw client — the engine these flows were written against.
+    describe("one batch — and the same document every other lane leaves", () => {
+      const RECIPE = [PATTERN_PART];
+      /** A ring: a 100 pt square with a 40 pt hole, as ONE compound
+       *  source — so a copy is two contours, one of them absorbed. */
+      const ringSource = async (): Promise<ElementId> => {
+        const before = new Set(await leafIds(h));
+        const at = (x: number, y: number, s: number) => ({
+          op: "insertPath" as const,
+          args: {
+            pageId: F6_RING_PAIR.pageId,
+            anchors: [
+              anchorAt([x, y]),
+              anchorAt([x + s, y]),
+              anchorAt([x + s, y + s]),
+              anchorAt([x, y + s]),
+            ],
+            open: false,
+          },
+        });
+        const ins = await h.host.document.mutate({
+          op: "batch",
+          args: { ops: [at(100, 500, 100), at(130, 530, 40)] },
+        });
+        expect(ins.applied).toBe(true);
+        const [small, hole] = (await leafIds(h))
+          .filter((id) => !before.has(id))
+          .map(poly);
+        await h.host.selection.set([small!, hole!]);
+        expect(await applyMakeCompoundPath(h.host)).toBe(2);
+        return small!;
+      };
+
+      /** The bakes. Each names what it is run on and what it expects of
+       *  the shipped lane. */
+      const scenarios: {
+        name: string;
+        setup?: () => Promise<ElementId[]>;
+        run: (host: BundleHost) => Promise<ElementId[]>;
+        tiles: number;
+        /** Children of the one batch. */
+        ops: number;
+        /** `document.tree()` reads as shipped. */
+        trees: number;
+        /** …and as the flow was found: two batches, the created ids from
+         *  a tree diff, the group from a third read. */
+        asFound: number;
+      }[] = [
+        {
+          name: "make, 3 × 3 of a square",
+          setup: async () => [INNER],
+          run: (host) => applyMakePattern(host, { name: "Field" }),
+          tiles: 8,
+          // 8 × (insert, bind, fill, stroke, link) + source link + group
+          ops: 8 * 5 + 2,
+          trees: 0,
+          asFound: 3,
+        },
+        {
+          name: "make, brick + dim of a COMPOUND source (a hole per copy)",
+          setup: async () => [await ringSource()],
+          run: (host) =>
+            applyMakePattern(host, {
+              layout: "brick",
+              columns: 2,
+              rows: 2,
+              spacing: 4,
+              dim: 40,
+            }),
+          tiles: 3,
+          // 3 × (2 inserts, 2 binds, framePath, delete, fill, stroke,
+          // weight, dim, link) + source link + group
+          ops: 3 * 11 + 2,
+          trees: 0,
+          asFound: 3,
+        },
+        {
+          name: "re-plan, 2 × 1 → 3 × 1 with fresh geometry",
+          setup: async () => {
+            await h.host.selection.set([INNER]);
+            expect(await applyMakePattern(h.host, { columns: 2, rows: 1 })).toHaveLength(1);
+            const moved = await h.host.document.mutate({
+              op: "pathPointSet",
+              args: { elementId: INNER, index: 0, role: "anchor", position: [210, 210] },
+            });
+            expect(moved.applied).toBe(true);
+            return [];
+          },
+          run: (host) => applyEditPattern(host, { columns: 3, rows: 1, dim: 50 }),
+          tiles: 2,
+          // 2 × (insert, bind) + dissolve + 1 delete
+          //   + 2 × (fill, stroke, dim, link) + source link + group
+          ops: 2 * 2 + 2 + 2 * 4 + 2,
+          // The link walk's one tree — which also finds the old group.
+          trees: 1,
+          // …that one, the diff's two, and the new group's lookup.
+          asFound: 4,
+        },
+      ];
+
+      for (const scenario of scenarios) {
+        it(`${scenario.name}`, async () => {
+          const through = (lane: LaneName) =>
+            runThrough(h, lane, {
+              carrier: OUTER,
+              parts: RECIPE,
+              setup: async () => {
+                const select = (await scenario.setup?.()) ?? [];
+                await h.host.selection.set(select);
+              },
+              command: scenario.run,
+            });
+
+          const shipped = await through("oneBatch");
+          expect(shipped.result).toHaveLength(scenario.tiles);
+          // ONE batch, ONE undo step, and that step restores the document.
+          expect(shipped.work.mutations).toEqual([{ op: "batch", ops: scenario.ops }]);
+          expect(shipped.undoSteps).toBe(1);
+          expect(shipped.restored).toBe(true);
+          expect(shipped.work.count("document.tree")).toBe(scenario.trees);
+
+          // STEPWISE — the engine refuses the bind batch: the two batches
+          // this was before, and exactly the same document.
+          const stepwise = await through("stepwise");
+          expect(stepwise.picture).toBe(shipped.picture);
+          expect(stepwise.result).toHaveLength(scenario.tiles);
+          expect(stepwise.work.mutations.map((m) => m.op)).toEqual([
+            "batch", // the one batch, refused
+            "batch", // insert
+            "batch", // finish
+          ]);
+          expect(stepwise.undoSteps).toBe(2);
+          expect(stepwise.restored).toBe(true);
+
+          // DIFF and UNLISTED — one batch still, with the created ids
+          // found the old way. Same document, still one undo step.
+          for (const lane of ["diff", "unlisted"] as const) {
+            const run = await through(lane);
+            expect(run.picture, lane).toBe(shipped.picture);
+            expect(run.work.mutations, lane).toEqual([
+              { op: "batch", ops: scenario.ops },
+            ]);
+            expect(run.undoSteps, lane).toBe(1);
+            expect(run.restored, lane).toBe(true);
+            expect(run.work.count("document.tree"), lane).toBe(scenario.trees + 2);
+          }
+
+          // AS FOUND — no bind, no raw client. The numbers this flow
+          // started from, measured — plus ONE read: the refused first
+          // attempt had read its "before" by the time it was refused.
+          const asFound = await through("asFound");
+          expect(asFound.picture).toBe(shipped.picture);
+          expect(asFound.undoSteps).toBe(2);
+          expect(asFound.work.count("document.tree")).toBe(scenario.asFound + 1);
+
+          expect(await sortedLeafIds(h)).toEqual(PRISTINE);
+        });
+      }
+
+      /** `host`, with everything it logs kept. */
+      const recording = (host: BundleHost, sink: string[]): BundleHost =>
+        new Proxy(host, {
+          get(target, prop, receiver) {
+            const keep = (m: string) => void sink.push(m);
+            return prop === "log"
+              ? { ...target.log, debug: keep, info: keep, warn: keep }
+              : (Reflect.get(target, prop, receiver) as unknown);
+          },
+        });
+
+      it("a refused one-batch build says so, in the engine's sentence, and takes the stepwise lane", async () => {
+        const logged: string[] = [];
+        await h.host.selection.set([INNER]);
+        const tiles = await applyMakePattern(
+          recording(refusingBindCreated(h.host), logged),
+          { columns: 2, rows: 1 },
+        );
+        expect(tiles).toHaveLength(1);
+        expect(logged.join("\n")).toContain("the one-batch build was refused");
+        expect(logged.join("\n")).toContain(NO_BIND_CREATED);
+        await undoTo(h, 2);
+        expect(await sortedLeafIds(h)).toEqual(PRISTINE);
+      });
+
+      // THE ENGINE DEFECT (`minted.spec.ts` pins it on a bare
+      // `deleteFrame`), as this flow meets it. A field that is not the
+      // TOPMOST group on its page cannot be re-planned: the old tiles sit
+      // below another group, deleting them leaves that group's member
+      // references stale, and the regroup is refused.
+      //
+      // The one batch refuses ATOMICALLY — nothing is left behind. The
+      // stepwise fallback then does what this flow has always done here:
+      // batch 1 applies, batch 2 is refused, and the freshly inserted
+      // tiles stay on the page, unpainted and unlinked. That is the
+      // as-found outcome, kept because every refusal takes the same
+      // fallback (the engine does not say which refusals a second try
+      // could survive). Fails when the engine is fixed — and the
+      // fallback's leftovers go with it.
+      it("ENGINE DEFECT — a re-plan under another group is refused, and the fallback leaves what it always left", async () => {
+        await h.host.selection.set([INNER]);
+        const first = await applyMakePattern(h.host, { columns: 2, rows: 1 });
+        expect(first).toHaveLength(1);
+        await h.host.selection.set([poly("uopen")]);
+        const above = await applyMakePattern(h.host, {
+          columns: 2,
+          rows: 1,
+          fitToArtboard: false,
+        });
+        expect(above).toHaveLength(1);
+        const before = await leafIds(h);
+
+        const logged: string[] = [];
+        const { host, work } = countingHost(recording(h.host, logged));
+        const replanned = await applyEditPattern(host, {
+          patternId: "pat-1",
+          columns: 3,
+          rows: 1,
+        });
+        // One atomic refusal, then the two-batch lane: insert applied,
+        // finish refused.
+        expect(work.mutations.map((m) => m.op)).toEqual(["batch", "batch", "batch"]);
+        expect(logged.join("\n")).toContain("a member already belongs to another group");
+        // The old field is intact …
+        expect(await leafIds(h)).toEqual(expect.arrayContaining(before));
+        expect((await patternLinks(h.host, "pat-1")).tiles.map((t) => t.id)).toEqual(first);
+        // … and the two new tiles are loose on the page, linked to nothing.
+        expect(replanned).toHaveLength(2);
+        expect(await leafIds(h)).toHaveLength(before.length + 2);
+        for (const stray of replanned) {
+          expect(await h.host.document.getMetadata(stray)).toBeNull();
+        }
+        // The stray insert is the one undo step the refused re-plan left.
+        await undoTo(h, 1);
+        expect(await leafIds(h)).toEqual(before);
+        await undoTo(h, 2);
+        expect(await sortedLeafIds(h)).toEqual(PRISTINE);
+      });
     });
   });
 });
