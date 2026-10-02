@@ -25,14 +25,63 @@ export {
   PenMachine,
   strokeWidthFromPressure,
   penPreview,
+  penPlanMutation,
   type PenEvent,
   type PenSample,
   type PenModifiers,
   type PenSnapshot,
   type PenCommit,
   type PenOptions,
+  type PenPath,
+  type PenHit,
+  type PenIntent,
+  type PenPlan,
   type StrokeWidthProfile,
 } from "./pen-machine";
+
+// PATH EDITING — the Direct Selection machine: drag anchors, handles and
+// segments of one path, marquee/click selection, nudge, delete. Events
+// plus a HOST-supplied hit description in; the previewed table, the
+// selection and the marquee out; on release a plan that lowers to ONE
+// batch (`directSelectMutation`).
+export {
+  DirectSelectMachine,
+  directSelectMutation,
+  type DirectSelectEvent,
+  type DirectSelectHit,
+  type DirectSelectKey,
+  type DirectSelectModifiers,
+  type DirectSelectMode,
+  type DirectSelectOp,
+  type DirectSelectOptions,
+  type DirectSelectPlan,
+  type DirectSelectPlanKind,
+  type DirectSelectRefusal,
+  type DirectSelectSnapshot,
+  type MarqueeRect,
+} from "./direct-select-machine";
+
+// The op vocabulary both path-editing machines plan in, the wire shapes
+// it lowers to (asserted against the engine's `Mutation` union in
+// wire-compat.ts), and the lowering itself.
+export {
+  lowerPathOp,
+  pathEditBatch,
+  targetedPathEditBatch,
+  anchorEditOps,
+  type PathPointRole,
+  type PathPointOp,
+  type TargetedPathOp,
+  type PathPointSetWire,
+  type PathPointInsertWire,
+  type PathPointRemoveWire,
+  type PathPointCurveTypeWire,
+  type ClosePathWire,
+  type JoinPathsWire,
+  type InsertPathWire,
+  type PathEditWireOp,
+  type PathEditBatchWire,
+} from "./path-edit-ops";
 
 export {
   CurvatureMachine,
@@ -114,10 +163,13 @@ export {
 
 export {
   planAnchorAdd,
+  planAnchorAddAt,
   planAnchorDelete,
+  planAnchorDeleteAt,
   planAnchorConvert,
   nearestAnchorIndex,
   segmentPairsOf,
+  segmentPairFrom,
   type AnchorEditPlan,
   type SegmentPair,
 } from "./anchor-machine";
@@ -139,4 +191,15 @@ export {
   type RepeatGuideSpec,
 } from "./repeat-machine";
 
-export type { AnchorTripleFeedsWire } from "./wire-compat";
+export type {
+  AnchorTripleFeedsWire,
+  PathPointSetFeedsWire,
+  PathPointInsertFeedsWire,
+  PathPointRemoveFeedsWire,
+  PathPointCurveTypeFeedsWire,
+  ClosePathFeedsWire,
+  JoinPathsFeedsWire,
+  InsertPathFeedsWire,
+  PathEditBatchFeedsWire,
+  PathPointRoleIsWire,
+} from "./wire-compat";

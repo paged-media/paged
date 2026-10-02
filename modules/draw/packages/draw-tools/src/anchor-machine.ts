@@ -118,7 +118,19 @@ export function planAnchorDelete(
 ): AnchorEditPlan | null {
   const index = nearestAnchorIndex(table, click, tolerance);
   if (index < 0) return null;
+  return planAnchorDeleteAt(table, index);
+}
+
+/** Delete Anchor Point by INDEX — the half of `planAnchorDelete` a
+ *  caller that already knows its hit needs (the Pen's delete-on-anchor
+ *  click: the host supplies the hit, nothing is searched). Same floor:
+ *  a contour never drops below two anchors. */
+export function planAnchorDeleteAt(
+  table: AnchorTable,
+  index: number,
+): AnchorEditPlan | null {
   const n = table.anchors.length;
+  if (!Number.isInteger(index) || index < 0 || index >= n) return null;
   const starts = table.subpathStarts.length > 0 ? table.subpathStarts : [0];
   for (let si = 0; si < starts.length; si++) {
     const subStart = starts[si];
@@ -171,7 +183,40 @@ export function planAnchorAdd(
     }
   }
   if (!best) return null;
-  const [segStart, segEnd, closingSubEnd] = best.pair;
+  return planInsertOnPair(table, best.pair, best.t);
+}
+
+/** The segment whose START anchor is `segStart`, or null when that
+ *  anchor starts no segment (the last anchor of an OPEN contour, or an
+ *  index outside the table). */
+export function segmentPairFrom(
+  table: AnchorTable,
+  segStart: number,
+): SegmentPair | null {
+  return segmentPairsOf(table).find((pair) => pair[0] === segStart) ?? null;
+}
+
+/** Add Anchor Point by SEGMENT + PARAMETER — the half of `planAnchorAdd`
+ *  a caller that already knows its hit needs. `segStart` is the flat
+ *  index of the segment's start anchor (the engine's
+ *  `NearestPathPointResult.segStart` convention); `t` is clamped to
+ *  [0, 1]. */
+export function planAnchorAddAt(
+  table: AnchorTable,
+  segStart: number,
+  t: number,
+): AnchorEditPlan | null {
+  const pair = segmentPairFrom(table, segStart);
+  if (!pair || !Number.isFinite(t)) return null;
+  return planInsertOnPair(table, pair, Math.min(1, Math.max(0, t)));
+}
+
+function planInsertOnPair(
+  table: AnchorTable,
+  pair: SegmentPair,
+  t: number,
+): AnchorEditPlan {
+  const [segStart, segEnd, closingSubEnd] = pair;
   const sA = table.anchors[segStart];
   const eA = table.anchors[segEnd];
   const split = splitSegmentDeCasteljau(
@@ -179,7 +224,7 @@ export function planAnchorAdd(
     sA.right,
     eA.left,
     eA.anchor,
-    best.t,
+    t,
   );
   const insertIndex = closingSubEnd !== null ? closingSubEnd : segStart + 1;
   // Closing-edge inserts at a subpath boundary: bump every start at

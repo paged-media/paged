@@ -149,6 +149,85 @@ export function closestTOnCubic(
   return refined;
 }
 
+export interface SegmentReshape {
+  /** New outgoing handle of the segment-start anchor. */
+  startRight: Vec2Mut;
+  /** New incoming handle of the segment-end anchor. */
+  endLeft: Vec2Mut;
+}
+
+/** Parameters closer than this to a segment end are clamped by
+ *  `reshapeSegmentByDrag` — see its note on the gain. */
+export const SEGMENT_DRAG_T_MIN = 0.05;
+
+/**
+ * How much of a segment drag the END handle absorbs, as a function of
+ * the grabbed parameter: 0 near the start (only the start's handle
+ * moves), 1 near the end, ½ in the middle, with a C¹ cubic ease between
+ * the sixths. The piecewise form is the one curve editors converged on
+ * (Inkscape's curve-drag is the reference):
+ *
+ *   w(t) = 0                              t ≤ 1/6
+ *        = ((6t − 1) / 2)³ / 2            1/6 < t ≤ 1/2
+ *        = 1 − ((6(1 − t) − 1) / 2)³ / 2  1/2 < t ≤ 5/6
+ *        = 1                              t > 5/6
+ */
+export function segmentDragWeight(t: number): number {
+  if (t <= 1 / 6) return 0;
+  if (t <= 0.5) return Math.pow((6 * t - 1) / 2, 3) / 2;
+  if (t <= 5 / 6) return 1 - Math.pow((6 * (1 - t) - 1) / 2, 3) / 2;
+  return 1;
+}
+
+/**
+ * The direct-manipulation solve for dragging a point ON a cubic: move
+ * the two inner control points so the curve point at parameter `t`
+ * travels by exactly `delta`, the anchors staying put.
+ *
+ * With B(t) = (1−t)³P0 + 3(1−t)²t·P1 + 3(1−t)t²·P2 + t³P3 and the
+ * anchors P0/P3 fixed, offsetting the handles by o1/o2 moves the point
+ * by
+ *
+ *   ΔB(t) = 3(1−t)²t · o1 + 3(1−t)t² · o2
+ *
+ * One vector equation, two unknowns: a one-parameter family. Fix it with
+ * the weight w = `segmentDragWeight(t)`:
+ *
+ *   o1 = (1 − w) / (3(1−t)²t) · delta
+ *   o2 =      w  / (3(1−t)t²) · delta
+ *
+ * which gives ΔB(t) = (1 − w)·delta + w·delta = delta for every w — the
+ * grabbed point follows the pointer exactly — while w decides which end
+ * of the segment bends.
+ *
+ * THE GAIN. Both denominators vanish at the ends (a point AT an anchor
+ * cannot be moved by its handles), so the handle travel per unit of
+ * pointer travel grows without bound as t → 0 or 1. `t` is therefore
+ * clamped to [`SEGMENT_DRAG_T_MIN`, 1 − `SEGMENT_DRAG_T_MIN`]; inside
+ * that range the follow is exact, outside it the grabbed point lags the
+ * pointer rather than the handles running away. A host hit-tests
+ * anchors before segments, so a grab that close to an end is rare.
+ */
+export function reshapeSegmentByDrag(
+  startRight: Vec2,
+  endLeft: Vec2,
+  t: number,
+  delta: Vec2,
+): SegmentReshape {
+  const tc = Math.min(
+    1 - SEGMENT_DRAG_T_MIN,
+    Math.max(SEGMENT_DRAG_T_MIN, t),
+  );
+  const u = 1 - tc;
+  const w = segmentDragWeight(tc);
+  const k1 = (1 - w) / (3 * u * u * tc);
+  const k2 = w / (3 * u * tc * tc);
+  return {
+    startRight: [startRight[0] + k1 * delta[0], startRight[1] + k1 * delta[1]],
+    endLeft: [endLeft[0] + k2 * delta[0], endLeft[1] + k2 * delta[1]],
+  };
+}
+
 /**
  * Flatten an anchor run into a polyline for preview rendering — the
  * host's tool-preview signal draws polylines only (a v0 API gap,
