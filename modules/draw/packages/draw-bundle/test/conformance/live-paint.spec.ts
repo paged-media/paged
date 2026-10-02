@@ -36,8 +36,12 @@
 //       id at all, so the catalog's "or stroke edges" half has nothing
 //       to address. Pinned as a shape assertion on the read door.
 //   (5) THE REAL UNDO COUNTS (RFI C-15 — measure them, never claim
-//       "one"): make = 1, fill = 2, regenerate = 2, delete face = 1,
-//       release = 1.
+//       "one"): make = 1, fill = 1, regenerate = 1, delete face = 1,
+//       release = 1. Fill and regenerate were 2 until the inserted face
+//       contours could be named inside the batch; that lane is the
+//       fallback now, and both run through it and through hosts that
+//       cannot say what a batch created — the same document must come
+//       out of each.
 //   (6) The persistence shape (a THIRD container part), the exact wire
 //       shapes, the bucket/selection GESTURES driven with synthetic
 //       pointer events, and the z-order fact a fill inherits.
@@ -45,6 +49,7 @@
 import { describe, expect, it, beforeAll, afterAll, beforeEach } from "vitest";
 
 import type {
+  BundleHost,
   CanvasPointerEvent,
   CommandContribution,
   ElementId,
@@ -117,6 +122,7 @@ import {
 } from "../../src";
 import { F4_OVERLAP, F5_THIRTEEN, F6_RING_PAIR } from "../fixtures/corpus";
 import { openHost } from "./host";
+import { runThrough, type LaneName } from "./one-batch";
 
 /** `ua` — the BACK square (100…300)². */
 const A = { kind: "polygon", id: F4_OVERLAP.ids.polygon! } as ElementId;
@@ -692,7 +698,7 @@ describe("draw conformance — LIVE PAINT v0 (against the real engine, F4)", () 
 
   // ------------------------------------------------------------- fill
 
-  it("FILL a face by POINT inserts the region's artwork — exactly TWO batches", async () => {
+  it("FILL a face by POINT inserts the region's artwork — exactly ONE batch", async () => {
     await h.host.selection.set([A, B]);
     await applyMakeLivePaintGroup(h.host);
     const before = await leaves(h);
@@ -724,9 +730,8 @@ describe("draw conformance — LIVE PAINT v0 (against the real engine, F4)", () 
         .faces,
     ).toEqual([{ face: OVERLAP, fill: "Color/Black" }]);
 
-    // TWO undo steps — measured, not claimed. One is not enough.
-    await h.host.document.undo();
-    expect(await leaves(h)).toHaveLength(before.length + 1);
+    // ONE undo step — measured, not claimed. (Two as found, and the
+    // first left the face's path standing, unpainted and unlinked.)
     await h.host.document.undo();
     expect(idsOf(await leaves(h))).toEqual(idsOf(before));
   });
@@ -797,7 +802,7 @@ describe("draw conformance — LIVE PAINT v0 (against the real engine, F4)", () 
     expect(String(rebuilt.id.id)).not.toBe(String(fillId.id));
   });
 
-  it("REGENERATE is exactly TWO batches for the whole group", async () => {
+  it("REGENERATE is exactly ONE batch for the whole group", async () => {
     await h.host.selection.set([A, B]);
     await applyMakeLivePaintGroup(h.host);
     await applyFillLivePaintFace(h.host, { faces: [OVERLAP, "0#0"] });
@@ -807,9 +812,83 @@ describe("draw conformance — LIVE PAINT v0 (against the real engine, F4)", () 
     await applyRegenerateLivePaint(h.host, { groupId: "lp-1" });
     // Two faces rebuilt: two old fills gone, two new ones in.
     expect(await leaves(h)).toHaveLength(before.length);
-    await h.host.document.undo();
+    expect(idsOf(await leaves(h))).not.toEqual(before);
     await h.host.document.undo();
     expect(idsOf(await leaves(h))).toEqual(before);
+  });
+
+  // A batch can apply and still be the wrong edit. So fill and regenerate
+  // run through every lane (`./one-batch.ts`) and each must leave the
+  // SAME document — every fill's outline, paint and face link, the
+  // members, the selection, the recipe — in its own measured number of
+  // undo steps, which restore it exactly.
+  describe("one batch — and the same document every other lane leaves", () => {
+    const scenarios: {
+      name: string;
+      setup: () => Promise<void>;
+      run: (host: BundleHost) => Promise<unknown>;
+      result: unknown;
+    }[] = [
+      {
+        name: "fill two faces at once",
+        setup: async () => {
+          await h.host.selection.set([A, B]);
+          await applyMakeLivePaintGroup(h.host);
+        },
+        run: (host) =>
+          applyFillLivePaintFace(host, { faces: [OVERLAP, "0#0"], fill: "Color/Black" }),
+        result: [OVERLAP, "0#0"],
+      },
+      {
+        name: "regenerate two painted faces after a member moved",
+        setup: async () => {
+          await h.host.selection.set([A, B]);
+          await applyMakeLivePaintGroup(h.host);
+          await applyFillLivePaintFace(h.host, { faces: [OVERLAP, "0#0"] });
+          await h.host.document.mutate(framePathMutationFor(B, rect(250, 250, 450, 450)));
+          await h.host.selection.set([]);
+        },
+        run: (host) => applyRegenerateLivePaint(host, { groupId: "lp-1" }),
+        result: { rebuilt: 2, dropped: [] },
+      },
+    ];
+
+    for (const scenario of scenarios) {
+      it(scenario.name, async () => {
+        const through = (lane: LaneName) =>
+          runThrough(h, lane, {
+            carrier: A,
+            parts: [LIVE_PAINT_PART],
+            setup: scenario.setup,
+            command: scenario.run,
+          });
+        const shipped = await through("oneBatch");
+        expect(shipped.result).toEqual(scenario.result);
+        expect(shipped.work.mutations.map((m) => m.op)).toEqual(["batch"]);
+        expect(shipped.undoSteps).toBe(1);
+        expect(shipped.restored).toBe(true);
+        // The link walk's one read. As found: 3 — that, and the
+        // before/after diff around the insert batch.
+        expect(shipped.work.count("document.tree")).toBe(1);
+
+        const stepwise = await through("stepwise");
+        expect(stepwise.picture).toBe(shipped.picture);
+        expect(stepwise.work.mutations.map((m) => m.op)).toEqual([
+          "batch", // the one batch, refused
+          "batch", // insert
+          "batch", // finish
+        ]);
+        expect(stepwise.undoSteps).toBe(2);
+        expect(stepwise.restored).toBe(true);
+
+        for (const lane of ["diff", "unlisted", "asFound"] as const) {
+          const run = await through(lane);
+          expect(run.picture, lane).toBe(shipped.picture);
+          expect(run.undoSteps, lane).toBe(lane === "asFound" ? 2 : 1);
+          expect(run.restored, lane).toBe(true);
+        }
+      });
+    }
   });
 
   it("a face id an edit RETIRES loses its paint, is reported, and its stale artwork is removed", async () => {

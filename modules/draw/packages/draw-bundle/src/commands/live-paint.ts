@@ -108,17 +108,21 @@
 // rule — assert the real count, never claim "one"):
 //   · make group      = ONE batch ⇒ 1 undo step (the member stamps). The
 //                       recipe part itself is not on the undo stack.
-//   · fill face(s)    = TWO batches ⇒ 2 undo steps, however many faces
-//                       the gesture painted (they share one plan).
-//   · regenerate      = TWO batches ⇒ 2 undo steps for the whole group —
-//                       or ONE when nothing still resolves and the batch
-//                       is deletes only.
+//   · fill face(s)    = ONE batch ⇒ 1 undo step, however many faces the
+//                       gesture painted (they share one plan).
+//   · regenerate      = ONE batch ⇒ 1 undo step for the whole group.
 //   · delete a face   = ONE batch ⇒ 1 undo step.
 //   · release         = ONE batch ⇒ 1 undo step (every member and fill
 //                       unlinked together).
-// Two is the FLOOR for anything that inserts: `insertPath` mints the ids
-// batch 2 addresses, and this contract's `Mutation` union carries no
-// C-15 `bindCreated` arm (the repo-wide note in CLAUDE.md).
+// Fill and regenerate were TWO batches ⇒ 2 undo steps: `insertPath`
+// mints the ids the paint and the face link address, and a batch could
+// not name an id it had just minted. C-15's `bindCreated` names each
+// inserted contour, so the finish rides the same batch behind the
+// inserts (`livePaintBatchFor`) — INSERTS FIRST, because a batch that
+// deletes and then inserts is refused and a regenerate deletes the fills
+// it replaces. The two-batch lane is kept as the fallback for an engine
+// that refuses the one batch, and what a batch created is read off the
+// engine's reply (`commands/minted.ts`), not a tree diff.
 //
 // ------------------------------------------------------------- limits
 // · Z-ORDER: an inserted item lands at the TOP of the page's z-order —
@@ -145,6 +149,7 @@ import type {
   Disposable,
   ElementId,
   Mutation,
+  MutationInput,
   PluginMetadataEnvelope,
 } from "@paged-media/plugin-api";
 import {
@@ -157,11 +162,16 @@ import type { RegionFace } from "@paged-media/draw-tools";
 
 import { stampDrawMetadata } from "./appearance-bake";
 import { framePathMutationFor } from "./compound-path";
+import { bindMinted, mintedLeaves, mutateMinting } from "./minted";
 import {
   BIND_PATHFINDER_STATUS,
   selectionTopToBottom,
 } from "./pathfinder-region";
-import { leafIdsOf } from "./select-same";
+import {
+  batchMutationFor,
+  bindCreatedMutationFor,
+  handleElementId,
+} from "./v59-wire";
 import { insertPathMutationFor } from "../handlers/insert-path";
 import {
   faceToPageSpace,
@@ -532,11 +542,12 @@ export function bindLivePaintFaces(
 // Exported so the conformance spec asserts the EXACT wire shapes the
 // live commands emit (no second copy to drift from).
 
-/** BATCH 1 — one `insertPath` per face per contour, in the order
- *  `livePaintContourCounts` reports. Inserts ONLY: a batch that DELETES
- *  and then INSERTS is refused by the engine (the symbols.ts finding —
- *  the insert's z-position resolves against the spread length the batch
- *  STARTED with), so a rebuild's tear-down rides batch 2. */
+/** STEPWISE LANE, BATCH 1 — one `insertPath` per face per contour, in
+ *  the order `livePaintContourCounts` reports. Inserts ONLY: a batch that
+ *  DELETES and then INSERTS is refused by the engine (the insert's
+ *  z-position resolves against the spread length the batch STARTED
+ *  with), so a rebuild's tear-down rides batch 2. The shipped lane is
+ *  {@link livePaintBatchFor}. */
 export function livePaintInsertBatchFor(plan: LivePaintFillPlan): Mutation {
   const ops: Mutation[] = [];
   for (const face of plan.faces) {
@@ -556,12 +567,13 @@ const colorRef = (
   args: { elementId, path, value: { type: "colorRef", value } },
 });
 
-/** BATCH 2 — delete the fills this plan replaces, re-merge every
+/** THE FINISH — delete the fills this plan replaces, re-merge every
  *  multi-contour face through the SAME `framePath` door Make Compound
- *  Path uses, paint each survivor, and stamp the face link on it. One
- *  batch ⇒ one undo step, however many faces. The fill carries NO
- *  stroke: an edge belongs to the member path that bounds it, and v0
- *  cannot stroke edges at all (module header). */
+ *  Path uses, paint each survivor, and stamp the face link on it. The
+ *  fill carries NO stroke: an edge belongs to the member path that bounds
+ *  it, and v0 cannot stroke edges at all (module header). In the stepwise
+ *  lane this is batch 2 over real ids; {@link livePaintBatchFor} puts the
+ *  SAME ops, over handle bindings, behind its inserts. */
 export function livePaintFinishBatchFor(args: {
   plan: LivePaintFillPlan;
   bindings: readonly LivePaintFaceBinding[];
@@ -598,6 +610,47 @@ export function livePaintFinishBatchFor(args: {
     );
   }
   return { op: "batch", args: { ops } };
+}
+
+/** The batch-local handle of face `face`'s contour `contour`.
+ *  Deterministic, so the conformance spec asserts the exact wire. Pure. */
+export const livePaintHandle = (face: number, contour: number): string =>
+  `lp${face}_${contour}`;
+
+/** What the one batch resolves each face to: its first contour's handle
+ *  survives, the rest are absorbed into it. Pure. */
+export function livePaintHandleBindings(
+  plan: LivePaintFillPlan,
+): LivePaintFaceBinding[] {
+  return livePaintContourCounts(plan).map((count, faceIndex) => ({
+    faceIndex,
+    keep: handleElementId(livePaintHandle(faceIndex, 0)),
+    absorb: Array.from({ length: count - 1 }, (_, c) =>
+      handleElementId(livePaintHandle(faceIndex, c + 1)),
+    ),
+  }));
+}
+
+/** THE ONE BATCH of a fill or a regenerate: every face contour inserted
+ *  and NAMED, then {@link livePaintFinishBatchFor}'s ops over those names
+ *  — so the deletes of the fills it replaces come AFTER every insert.
+ *  ONE batch ⇒ ONE undo step, however many faces. */
+export function livePaintBatchFor(plan: LivePaintFillPlan): MutationInput {
+  const ops: MutationInput[] = [];
+  plan.faces.forEach((face, f) => {
+    splitCompound(face.table).forEach((contour, c) => {
+      ops.push(
+        insertPathMutationFor(plan.pageId, contour.anchors, false),
+        bindCreatedMutationFor(livePaintHandle(f, c)),
+      );
+    });
+  });
+  const finish = livePaintFinishBatchFor({
+    plan,
+    bindings: livePaintHandleBindings(plan),
+  }) as Extract<Mutation, { op: "batch" }>;
+  ops.push(...finish.args.ops);
+  return batchMutationFor(ops);
 }
 
 /** The MEMBER-stamp batch — one `setPluginMetadata` per member,
@@ -863,9 +916,9 @@ export async function livePaintFaceAt(
 
 // ------------------------------------------------------------- appliers
 
-/** Emit (or re-emit) `faces` as real artwork for `group`. TWO batches ⇒
- *  2 undo steps — or ONE when there is nothing to insert and the batch
- *  is deletes only. Returns the face ids actually materialised. */
+/** Emit (or re-emit) `faces` as real artwork for `group`. ONE batch ⇒
+ *  1 undo step (module header). Returns the face ids actually
+ *  materialised. */
 export async function emitLivePaintFills(
   host: BundleHost,
   args: {
@@ -910,25 +963,58 @@ export async function emitLivePaintFills(
     stale: [...args.stale],
   };
 
-  const before = new Set(
-    leafIdsOf(await host.document.tree().catch(() => [])).map((e) =>
-      String(e.id),
-    ),
+  const batch = livePaintBatchFor(plan);
+  const built = await mutateMinting(host, batch);
+  if (built.outcome.applied) {
+    const bound = bindMinted(built, batch);
+    let created = faces.map((_, f) => bound?.byHandle.get(livePaintHandle(f, 0)));
+    if (created.some((id) => id === undefined)) {
+      // The fills ARE painted, and the engine's account does not match
+      // the batch. Each fill carries its face link: ask the document.
+      host.log.debug(
+        `${label}: the batch applied but did not account for its fills — ` +
+          "reading them back by their links",
+      );
+      const linked = (await livePaintLinks(host, group.id)).fills;
+      created = faces.map((f) => linked.find((l) => l.ref.face === f.face)?.id);
+    }
+    return {
+      painted: faces.map((f) => f.face),
+      unresolved,
+      created: created.filter((id): id is ElementId => id !== undefined),
+    };
+  }
+  host.log.debug(
+    `${label}: the one-batch paint was refused ` +
+      `(${JSON.stringify(built.outcome.error)}) — falling back to the ` +
+      "stepwise lane (insert, then finish)",
   );
+  return emitLivePaintFillsStepwise(host, plan, unresolved, label);
+}
+
+/** THE STEPWISE LANE — batch 1 inserts, batch 2 finishes: TWO batches ⇒
+ *  2 undo steps (ONE when there is nothing to insert and the finish is
+ *  deletes only). The flow as it was before `bindCreated` reached the
+ *  contract, kept as the fallback. */
+async function emitLivePaintFillsStepwise(
+  host: BundleHost,
+  plan: LivePaintFillPlan,
+  unresolved: string[],
+  label: string,
+): Promise<{ painted: string[]; unresolved: string[]; created: ElementId[] }> {
+  const { faces } = plan;
   let bindings: LivePaintFaceBinding[] = [];
   if (faces.length > 0) {
-    const inserted = await host.document.mutate(livePaintInsertBatchFor(plan));
-    if (!inserted.applied) {
+    const inserted = await mutateMinting(host, livePaintInsertBatchFor(plan));
+    if (!inserted.outcome.applied) {
       host.log.warn(
         `${label}: face insert rejected by engine: ${JSON.stringify(
-          inserted.error,
+          inserted.outcome.error,
         )}`,
       );
       return { painted: [], unresolved, created: [] };
     }
-    const minted = leafIdsOf(await host.document.tree().catch(() => [])).filter(
-      (e) => !before.has(String(e.id)),
-    );
+    const minted = mintedLeaves(inserted);
     const bound = bindLivePaintFaces(plan, minted);
     if (!bound) {
       host.log.warn(
@@ -1052,7 +1138,7 @@ export async function applyMakeLivePaintGroup(
 }
 
 /** FILL FACE(S) — paint the named faces (or the face under a page
- *  point). TWO batches ⇒ 2 undo steps, however many faces. */
+ *  point). ONE batch ⇒ 1 undo step, however many faces. */
 export async function applyFillLivePaintFace(
   host: BundleHost,
   payload?: {
@@ -1129,9 +1215,8 @@ export async function fillLivePaintFaces(
 /** REGENERATE — re-derive the arrangement and rebuild every recorded
  *  face. Every existing fill of the group is replaced, so a face id that
  *  no longer resolves loses its stale artwork (and is reported, and is
- *  dropped from the recipe). TWO batches ⇒ 2 undo steps for the whole
- *  group — ONE when nothing still resolves and the batch is deletes
- *  only. */
+ *  dropped from the recipe). ONE batch ⇒ 1 undo step for the whole
+ *  group. */
 export async function applyRegenerateLivePaint(
   host: BundleHost,
   payload?: { groupId?: unknown },

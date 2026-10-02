@@ -613,43 +613,53 @@ describe("perf budgets — commands over a busy document", () => {
 
     it("live paint, fill a second face", async () => {
       const [x, y] = cellOrigin("livePaint", NTH);
-      const { work, undoSteps, result } = await countedWrite(w, "live paint fill", [], (host) =>
-        applyFillLivePaintFace(host, {
-          groupId: recordOf("livePaint"),
-          x: x + 3,
-          y: y + 3,
-        }),
+      const { work, undoSteps, result, added, restored } = await countedWrite(
+        w,
+        "live paint fill",
+        [],
+        (host) =>
+          applyFillLivePaintFace(host, {
+            groupId: recordOf("livePaint"),
+            x: x + 3,
+            y: y + 3,
+          }),
       );
       expect(result).toHaveLength(1);
-      // TARGET 1 batch, 1 undo step.
-      expect(work.mutations).toEqual([
-        { op: "batch", ops: 1 },
-        { op: "batch", ops: 3 },
-      ]);
-      expect(undoSteps).toBe(2);
+      // insert, bind, fill, stroke, face link. As found: TWO batches (1,
+      // then 3) and 2 undo steps.
+      expect(work.mutations).toEqual([{ op: "batch", ops: 5 }]);
+      expect(undoSteps).toBe(1);
+      expect(added).toEqual(["polygon"]);
+      expect(restored).toBe(true);
       // TARGET 0 — the recipe can name its fills.
       expect(work.count("document.getMetadata")).toBe(LEAVES);
-      // TARGET 0.
-      expect(work.count("document.tree")).toBe(3);
+      // The link walk's. As found: 3 — the walk's and the before/after
+      // diff. TARGET 0.
+      expect(work.count("document.tree")).toBe(1);
       // The point query, then the full arrangement for the same two
       // members. TARGET 1.
       expect(work.count("document.planarRegions")).toBe(2);
     });
 
     it("live paint, regenerate one group", async () => {
-      const { work, undoSteps, result } = await countedWrite(w, "live paint regenerate", [], (host) =>
-        applyRegenerateLivePaint(host, { groupId: recordOf("livePaint") }),
+      const { work, undoSteps, result, added, restored } = await countedWrite(
+        w,
+        "live paint regenerate",
+        [],
+        (host) => applyRegenerateLivePaint(host, { groupId: recordOf("livePaint") }),
       );
       expect(result).toEqual({ rebuilt: 1, dropped: [] });
-      // TARGET 1 batch, 1 undo step.
-      expect(work.mutations).toEqual([
-        { op: "batch", ops: 1 },
-        { op: "batch", ops: 4 },
-      ]);
-      expect(undoSteps).toBe(2);
+      // insert, bind, the old fill deleted, fill, stroke, face link. As
+      // found: TWO batches (1, then 4) and 2 undo steps.
+      expect(work.mutations).toEqual([{ op: "batch", ops: 6 }]);
+      expect(undoSteps).toBe(1);
+      // One fill out, one in.
+      expect(added).toEqual(["polygon"]);
+      expect(restored).toBe(true);
       // TARGET 0.
       expect(work.count("document.getMetadata")).toBe(LEAVES);
-      expect(work.count("document.tree")).toBe(3);
+      // The link walk's. As found: 3. TARGET 0.
+      expect(work.count("document.tree")).toBe(1);
     });
   });
 

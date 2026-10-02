@@ -389,9 +389,13 @@ the engine defect below and only the LAST was rebuilt; all their groups
 are dissolved before anything is deleted now. The two-batches-per-
 instance lane is the fallback.
 
-THE OTHER TWO FLOWS ARE STILL TWO BATCHES — `image-trace.ts`,
-`live-paint.ts`. Their "TWO batches ⇒ 2 undo steps" notes are still TRUE
-as shipped; the reason is "not yet converted".
+LIVE PAINT fill and regenerate are ONE BATCH (`livePaintBatchFor`): the
+face contours inserted and named, then the replaced fills deleted, the
+holes re-merged, the faces painted and linked. The two-batch lane is the
+fallback.
+
+IMAGE TRACE's commit is STILL TWO BATCHES (`image-trace.ts`); its "TWO
+batches ⇒ 2 undo steps" note is still TRUE as shipped.
 
 **"WHAT DID MY BATCH CREATE" HAS ONE SEAM: `commands/minted.ts`.** A
 batch outcome carries ONE `createdId`, so a flow that inserted several
