@@ -124,9 +124,11 @@ describe("installFillPanelBindings — what it publishes, and what that costs", 
     expect(gate()).toBe(false);
   });
 
-  it("a selection change publishes the gate from ONE read of the first selected element", async () => {
+  it("a selection change derives the gate from ONE read of the first selected element", async () => {
     expect(await costOf(() => h.host.selection.set([SOLID]))).toEqual({
-      publishes: 1,
+      // The gate was false and a solid fill leaves it false: nothing to
+      // publish. As found: 1.
+      publishes: 0,
       reads: 1,
     });
     expect(work.count("document.elementProperties")).toBe(1);
@@ -155,17 +157,21 @@ describe("installFillPanelBindings — what it publishes, and what that costs", 
     expect(gate()).toBe(false);
   });
 
-  it("a document change re-derives the gate for the CURRENT selection: one read, one publish", async () => {
+  it("a document change re-derives the gate for the CURRENT selection: one read, no publish", async () => {
     await h.host.selection.set([SOLID]);
     await quiesce(work);
     // The change touches a plain leaf — nothing the gate depends on.
     expect(await costOf(() => plainChange(h, 0))).toEqual({
-      // Re-published although the value did not change. TARGET 0.
-      publishes: 1,
-      // TARGET 0 — the selected element was not in the change.
+      // The value did not change, so it is not published again. As
+      // found: 1.
+      publishes: 0,
+      // TARGET 0 — the selected element was not in the change (the
+      // event names pages, not elements, so the driver cannot know).
       reads: 1,
     });
-    expect(work.count("selection.get")).toBe(1);
+    // The selection is the one the last selection event handed over; it
+    // is not asked for again. As found: 1.
+    expect(work.count("selection.get")).toBe(0);
     expect(gate()).toBe(false);
   });
 
@@ -192,49 +198,85 @@ describe("installFillPanelBindings — what it publishes, and what that costs", 
     expect(gate()).toBe(false);
   });
 
-  it("with nothing selected a document change still publishes — false, from no read", async () => {
+  it("with nothing selected a document change publishes nothing, and reads nothing", async () => {
     expect(await costOf(() => plainChange(h, 1))).toEqual({
-      // TARGET 0: the value was false and is false.
-      publishes: 1,
+      // The value was false and is false. As found: 1.
+      publishes: 0,
       reads: 0,
-    });
-  });
-
-  it("a burst of 20 document changes = 20 publishes, 20 reads", async () => {
-    await h.host.selection.set([SOLID]);
-    await quiesce(work);
-    expect(await costOf(() => documentChanges(h))).toEqual({
-      // No debounce: one recompute per change, each re-publishing the
-      // same false. TARGET 0 publishes (nothing changed), 1 read at most.
-      publishes: 20,
-      reads: 20,
-    });
-  });
-
-  it("a burst of 20 selection changes = 20 publishes, 20 reads", async () => {
-    expect(await costOf(() => selectionChanges(h))).toEqual({
-      // TARGET 1 publish and 1 read — the selection the burst ends on.
-      publishes: 20,
-      reads: 20,
     });
     expect(gate()).toBe(false);
   });
 
-  // BUG (measured). `recompute` awaits `elementProperties` before it
-  // publishes, an empty selection publishes `false` WITHOUT awaiting, and
-  // nothing cancels or sequences the two. Select a gradient-filled object
-  // and then clear the selection: the clear's `false` is published first
-  // and the older read's `true` lands on top of it, so the Gradient
-  // section stays up with nothing selected, until the next selection or
-  // document change. No overlap trick is needed — each `selection.set`
-  // below is awaited — because the listener fires inside `set` and the
-  // read outlives it. Flip to `it` when a stale recompute is dropped.
-  it.fails("the gate ends on the LATEST selection (select a gradient, then clear)", async () => {
+  it("a burst of 20 document changes = ONE recompute: 0 publishes, 1 read", async () => {
+    await h.host.selection.set([SOLID]);
+    await quiesce(work);
+    expect(await costOf(() => documentChanges(h))).toEqual({
+      // Nothing changed, so nothing is published. As found: 20 — one
+      // recompute per change, each re-publishing the same false.
+      publishes: 0,
+      // The selection's fill at the revision the burst ends on. As
+      // found: 20.
+      reads: 1,
+    });
+    expect(gate()).toBe(false);
+  });
+
+  it("a burst of 20 selection changes = ONE recompute: 0 publishes, 1 read", async () => {
+    expect(await costOf(() => selectionChanges(h))).toEqual({
+      // Twenty solid-filled leaves: the gate never leaves false. As
+      // found: 20.
+      publishes: 0,
+      // The selection the burst ends on. As found: 20.
+      reads: 1,
+    });
+    expect(gate()).toBe(false);
+  });
+
+  // WAS A BUG (measured, then fixed). `recompute` awaited
+  // `elementProperties` before it published, an empty selection published
+  // `false` WITHOUT awaiting, and nothing cancelled or sequenced the two.
+  // Select a gradient-filled object and then clear the selection: the
+  // clear's `false` was published first and the older read's `true`
+  // landed on top of it, so the Gradient section stayed up with nothing
+  // selected, until the next selection or document change. No overlap
+  // trick was needed — each `selection.set` below is awaited — because
+  // the listener fired inside `set` and the read outlived it. A recompute
+  // now holds a ticket (`src/panels/reload.ts`) and publishes nothing
+  // once a newer one has started.
+  it("the gate ends on the LATEST selection (select a gradient, then clear)", async () => {
     await h.host.selection.set([GRADIENT]);
     await h.host.selection.set([]);
     await quiesce(work);
     expect(h.host.selection.get()).toEqual([]);
-    // MEASURED true.
+    expect(gate()).toBe(false);
+  });
+
+  // The case above is settled by COALESCING here — both changes arrive
+  // before the task the first one armed, so only the clear is ever
+  // recomputed. This is the overlap itself: the gradient's read is held
+  // open until the clear has been recomputed and published.
+  it("…and when the older recompute's read comes back AFTER the newer one published", async () => {
+    const raw = h.host.document as {
+      elementProperties: BundleHost["document"]["elementProperties"];
+    };
+    const elementProperties = raw.elementProperties;
+    let held = 0;
+    raw.elementProperties = async function heldOpen(this: unknown, id: ElementId) {
+      const props = await elementProperties.call(this, id);
+      held += 1;
+      await new Promise((r) => setTimeout(r, 20));
+      return props;
+    };
+    try {
+      await h.host.selection.set([GRADIENT]);
+      // The recompute for the gradient starts, and waits on its read.
+      await new Promise((r) => setTimeout(r, 0));
+      await h.host.selection.set([]);
+      await new Promise((r) => setTimeout(r, 40));
+    } finally {
+      raw.elementProperties = elementProperties;
+    }
+    expect(held).toBe(1);
     expect(gate()).toBe(false);
   });
 

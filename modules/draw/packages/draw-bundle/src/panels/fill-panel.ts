@@ -46,6 +46,7 @@ import type {
   SchemaPanelContribution,
 } from "@paged-media/plugin-api";
 
+import { createReloader, publishChanges } from "./reload";
 import { BIND_HAS_SELECTION } from "./stroke-panel";
 
 export const FILL_PANEL_ID = "media.paged.draw.panel.fill";
@@ -159,34 +160,50 @@ async function fillRefOf(
  * (`hasSelection` is published by the stroke panel's driver — one
  * derivation, shared by name; both drivers are installed by activate.)
  *
+ * WHEN IT RECOMPUTES, and what that fixed (`./reload.ts`, the scheduler
+ * the React panels share). The gate is published AFTER an awaited read,
+ * an empty selection publishes `false` WITHOUT one, and nothing sequenced
+ * the two: select a gradient-filled object and then clear the selection,
+ * and the clear's `false` landed first with the older read's `true` on
+ * top of it — the Gradient section stayed up with nothing selected. A
+ * recompute now holds a ticket and publishes nothing once a newer one has
+ * started; changes that arrive together are one recompute; and the gate
+ * is not re-published when its value did not move.
+ *
  * Returns a Disposable dropping both subscriptions.
  */
 export function installFillPanelBindings(host: BundleHost): Disposable {
-  const recompute = async (ids: ElementId[] | undefined): Promise<void> => {
-    const selection = ids ?? host.selection.get();
-    if (selection.length === 0) {
-      host.bindings.publish(BIND_GRADIENT_CONTROLS_VISIBLE, false);
-      return;
-    }
-    const ref = await fillRefOf(host, selection[0]);
-    host.bindings.publish(
-      BIND_GRADIENT_CONTROLS_VISIBLE,
-      ref !== null && ref.startsWith("Gradient/"),
-    );
-  };
+  const publish = publishChanges(host);
+  const reloader = createReloader(
+    host,
+    "fill panel bindings",
+    async ({ live, selection }) => {
+      if (selection.length === 0) {
+        publish(BIND_GRADIENT_CONTROLS_VISIBLE, false);
+        return;
+      }
+      const ref = await fillRefOf(host, selection[0]);
+      // The selection moved on while that read was out: its answer is
+      // about an element the gate no longer describes.
+      if (!live()) return;
+      publish(
+        BIND_GRADIENT_CONTROLS_VISIBLE,
+        ref !== null && ref.startsWith("Gradient/"),
+      );
+    },
+  );
 
-  // Prime from the current selection, then track selection AND document.
-  void recompute(undefined);
-  const selSub = host.selection.onDidChange((ids) => {
-    void recompute(ids);
-  });
-  const docSub = host.document.onDidChange(() => {
-    void recompute(undefined);
-  });
+  // Prime from the current selection AT ONCE, then track selection AND
+  // document. A document change re-derives the gate for the selection
+  // the host last handed over.
+  reloader.now();
+  const selSub = host.selection.onDidChange((ids) => reloader.request(ids));
+  const docSub = host.document.onDidChange(() => reloader.request());
   return {
     dispose() {
       docSub.dispose();
       selSub.dispose();
+      reloader.dispose();
     },
   };
 }

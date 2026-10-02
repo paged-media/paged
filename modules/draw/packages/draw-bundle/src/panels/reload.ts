@@ -73,6 +73,27 @@ export interface Reloader {
   dispose(): void;
 }
 
+/**
+ * `bindings.publish`, minus the publishes that would change nothing.
+ *
+ * A binding driver derives its gates again on every selection and
+ * document change, and most of the time most of them have not moved:
+ * measured, a burst of 20 selection changes re-published 100 values of
+ * which 96 were the value already there, and every one makes the host
+ * look its schema rows up again. The driver is the only writer of its
+ * gates, so what it last published IS what the host holds.
+ */
+export function publishChanges(
+  host: Pick<BundleHost, "bindings">,
+): (name: string, value: unknown) => void {
+  const published = new Map<string, unknown>();
+  return (name, value) => {
+    if (published.has(name) && Object.is(published.get(name), value)) return;
+    published.set(name, value);
+    host.bindings.publish(name, value);
+  };
+}
+
 /** The scheduler. `name` is what a failure log carries. */
 export function createReloader(
   host: Pick<BundleHost, "selection" | "log">,

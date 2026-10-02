@@ -204,8 +204,8 @@ describe("Live paint panel — rendered against the engine", () => {
 
     it("a face painted by the bundle's own command is a face row", async () => {
       // The overlap of a0 (40..80) and b0 (60..100) — the point (70, 70).
-      // Painted BEFORE the mount: see the `it.fails` below for what an
-      // already-open panel does with the same command.
+      // Painted BEFORE the mount: the two "an OPEN panel…" cases below
+      // are what an already-open panel does with the same command.
       expect(await paintOverlap()).toHaveLength(1);
       const panel = await mountPanel(h, makeLivePaintPanel);
 

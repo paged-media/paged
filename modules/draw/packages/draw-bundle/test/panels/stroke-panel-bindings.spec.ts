@@ -135,10 +135,12 @@ describe("installStrokePanelBindings — what it publishes, and what that costs"
     });
   });
 
-  it("a selection change publishes all five gates, from the selection's KIND and one read", async () => {
+  it("a selection change derives all five gates, from the selection's KIND and one read", async () => {
     // A polygon: corners render, it is a path, it has no arrowheads.
     expect(await costOf(() => h.host.selection.set([POLYGON]))).toEqual({
-      publishes: 5,
+      // The four gates that MOVED. The fifth — arrowheads — was false
+      // and is false, and is not published again. As found: 5.
+      publishes: 4,
       // One `pathAnchors` — the dash gate asks "is this a path?".
       reads: 1,
     });
@@ -177,11 +179,13 @@ describe("installStrokePanelBindings — what it publishes, and what that costs"
     });
   });
 
-  it("clearing the selection publishes five falses and reads nothing", async () => {
+  it("clearing the selection leaves five falses and reads nothing", async () => {
     await h.host.selection.set([POLYGON]);
     await quiesce(work);
     expect(await costOf(() => h.host.selection.set([]))).toEqual({
-      publishes: 5,
+      // The four that a polygon had set; arrowheads was false already.
+      // As found: 5.
+      publishes: 4,
       reads: 0,
     });
     expect(gates()).toEqual({
@@ -215,28 +219,30 @@ describe("installStrokePanelBindings — what it publishes, and what that costs"
     expect(await costOf(() => documentChanges(h))).toEqual({ publishes: 0, reads: 0 });
   });
 
-  it("a burst of 20 selection changes = 100 publishes, 20 reads", async () => {
+  it("a burst of 20 selection changes = ONE recompute: 4 publishes, 1 read", async () => {
     expect(await costOf(() => selectionChanges(h))).toEqual({
-      // 5 per change, every time, changed or not: four of the five did
-      // not move once after the first. No debounce. TARGET 5 — the gates
-      // of the selection the burst ends on (fewer still if an unchanged
-      // value is not re-published).
-      publishes: 100,
-      // One `pathAnchors` per change. TARGET 1.
-      reads: 20,
+      // The gates of the selection the burst ENDS on, and of those only
+      // the four that moved. As found: 100 — 5 per change, every time,
+      // changed or not, with no debounce.
+      publishes: 4,
+      // One `pathAnchors`, of the last selection. As found: 20.
+      reads: 1,
     });
     expect(gates().dashes).toBe(true);
+    expect(gates().hasSelection).toBe(true);
   });
 
-  // BUG (measured). `recompute` publishes four gates synchronously and
-  // the fifth — the dash gate — after awaiting `pathAnchors`, and nothing
-  // cancels or sequences it. When the selection is cleared while that
-  // read is in flight, "nothing selected ⇒ false" is published FIRST and
-  // the older read's "it is a path ⇒ true" lands on top of it: the Dashes
-  // section stays visible with nothing selected (and `hasSelection`
-  // false) until the next selection change. In the editor the window is
-  // one worker round trip. Flip to `it` when a stale recompute is dropped.
-  it.fails("the dash gate ends on the LATEST selection when two changes overlap", async () => {
+  // WAS A BUG (measured, then fixed). `recompute` published four gates
+  // synchronously and the fifth — the dash gate — after awaiting
+  // `pathAnchors`, and nothing cancelled or sequenced it. When the
+  // selection was cleared while that read was in flight, "nothing
+  // selected ⇒ false" was published FIRST and the older read's "it is a
+  // path ⇒ true" landed on top of it: the Dashes section stayed visible
+  // with nothing selected (and `hasSelection` false) until the next
+  // selection change. In the editor the window is one worker round trip.
+  // A recompute now holds a ticket (`src/panels/reload.ts`) and publishes
+  // nothing once a newer one has started.
+  it("the dash gate ends on the LATEST selection when two changes overlap", async () => {
     // Two changes with no reply in between — the second lands while the
     // first's `pathAnchors` is still out.
     await Promise.all([
@@ -246,7 +252,37 @@ describe("installStrokePanelBindings — what it publishes, and what that costs"
     await quiesce(work);
     expect(h.host.selection.get()).toEqual([]);
     expect(gates().hasSelection).toBe(false);
-    // MEASURED true.
+    expect(gates().dashes).toBe(false);
+  });
+
+  // The case above is settled by COALESCING here — both changes arrive
+  // before the task the first one armed, so only the second is ever
+  // recomputed. This is the overlap itself: the first recompute's read
+  // is held open until the second has started and published.
+  it("…and when the older recompute's read comes back AFTER the newer one published", async () => {
+    const raw = h.host.document as {
+      pathAnchors: BundleHost["document"]["pathAnchors"];
+    };
+    const pathAnchors = raw.pathAnchors;
+    let held = 0;
+    raw.pathAnchors = async function heldOpen(this: unknown, id: ElementId) {
+      const table = await pathAnchors.call(this, id);
+      held += 1;
+      // Long enough for the clear below to be recomputed first.
+      await new Promise((r) => setTimeout(r, 20));
+      return table;
+    };
+    try {
+      await h.host.selection.set([POLYGON]);
+      // The recompute for POLYGON starts, and waits on its read.
+      await new Promise((r) => setTimeout(r, 0));
+      await h.host.selection.set([]);
+      await new Promise((r) => setTimeout(r, 40));
+    } finally {
+      raw.pathAnchors = pathAnchors;
+    }
+    expect(held).toBe(1);
+    expect(gates().hasSelection).toBe(false);
     expect(gates().dashes).toBe(false);
   });
 
