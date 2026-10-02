@@ -24,6 +24,7 @@ import {
   contourSignedArea,
   makeCompoundTable,
   mergeCompound,
+  orientByPaintOrder,
   orientForNonZeroHoles,
   pointInAnchorPath,
   reverseContour,
@@ -31,6 +32,7 @@ import {
   type AnchorTable,
   type AnchorTriple,
 } from "../src/index";
+import { refWindingNumber } from "./property-kit";
 
 /** A corner-anchor quad (both handles collapsed onto the anchor). */
 const quad = (
@@ -257,6 +259,129 @@ describe("draw-geometry — compound-path contour algebra", () => {
       expect(
         pointInAnchorPath([50, 50], ring.anchors, ring.subpathStarts),
       ).toBe(false);
+    });
+  });
+
+  // Illustrator's Make Compound Path, recorded (draw-bundle's
+  // `test/oracle/compound-path.spec.ts`): non-zero, the backmost path one
+  // way, every other path the other. These are the recorded cases'
+  // geometry, read as windings at probe points.
+  describe("orientByPaintOrder — Illustrator's Make Compound Path rule", () => {
+    const signAt = (t: AnchorTable, i: number): number => {
+      const [from, to] = contourRanges(t.anchors.length, t.subpathStarts)[i];
+      return Math.sign(contourSignedArea(t.anchors.slice(from, to)));
+    };
+    const signs = (t: AnchorTable): number[] =>
+      contourRanges(t.anchors.length, t.subpathStarts).map((_, i) => signAt(t, i));
+    /** Non-zero winding at `p` (angle summation over the corner rings). */
+    const windingAt = (t: AnchorTable, p: [number, number]): number =>
+      contourRanges(t.anchors.length, t.subpathStarts).reduce(
+        (sum, [from, to]) =>
+          sum + refWindingNumber(p, t.anchors.slice(from, to).map((a) => a.anchor)),
+        0,
+      );
+
+    // The oracle's four-deep case: every square drawn clockwise, the
+    // outer one backmost.
+    const OUT = quad(100, 100, 300, 300);
+    const HOLE = quad(150, 150, 250, 250);
+    const ISLAND = quad(180, 180, 220, 220);
+    const CORE = quad(190, 190, 210, 210);
+
+    it("four levels deep, the CORE paints (−2): Illustrator's 31 600 — where the depth rule makes it a hole (even-odd's 31 200)", () => {
+      const tables = [OUT, HOLE, ISLAND, CORE].map(table);
+      const paint = orientByPaintOrder(mergeCompound(tables), 0);
+      expect(signs(paint)).toEqual([1, -1, -1, -1]);
+      expect(windingAt(paint, [120, 120])).toBe(1); // the outer band
+      expect(windingAt(paint, [160, 160])).toBe(0); // the hole
+      expect(windingAt(paint, [185, 185])).toBe(-1); // the island
+      expect(windingAt(paint, [200, 200])).toBe(-2); // the core: SOLID
+      // Image Trace's rule, on the same contours, is unchanged: it
+      // alternates, and the core is a hole.
+      const depth = makeCompoundTable(tables);
+      expect(signs(depth)).toEqual([1, -1, 1, -1]);
+      expect(windingAt(depth, [200, 200])).toBe(0);
+    });
+
+    it("two shapes that merely OVERLAP: the overlap is knocked out, whichever way either was drawn", () => {
+      const BACK = quad(100, 100, 200, 180);
+      const FRONT = quad(150, 140, 260, 220);
+      for (const [back, front] of [
+        [BACK, FRONT],
+        [BACK, reverseContour(FRONT)],
+        [reverseContour(BACK), FRONT],
+      ]) {
+        const paint = orientByPaintOrder(mergeCompound([table(back), table(front)]), 0);
+        expect(windingAt(paint, [175, 160])).toBe(0); // in both
+        expect(windingAt(paint, [120, 120])).not.toBe(0); // back only
+        expect(windingAt(paint, [240, 200])).not.toBe(0); // front only
+      }
+    });
+
+    it("the backmost need not be contour 0: a hole BEHIND its outer shape keeps its direction, and the outer one turns", () => {
+      // The survivor (OUTER) is merged first; the hole is the path behind.
+      const paint = orientByPaintOrder(mergeCompound([table(OUTER), table(INNER)]), 1);
+      expect(paint.anchors.slice(4)).toEqual(INNER);
+      expect(paint.anchors.slice(0, 4)).toEqual(reverseContour(OUTER));
+      // Still a hole.
+      expect(windingAt(paint, [150, 150])).toBe(-1);
+      expect(windingAt(paint, [250, 250])).toBe(0);
+    });
+
+    it("make → release → make keeps every direction, even when the release RESTACKS the pieces", () => {
+      // Hole behind its outer shape: the hole (contour 1) is backmost.
+      const made = orientByPaintOrder(mergeCompound([table(OUTER), table(INNER)]), 1);
+      // A release inserts the hole's piece ON TOP, so the second make
+      // finds the OUTER shape behind — contour 0 is the backmost now.
+      const again = orientByPaintOrder(mergeCompound(splitCompound(made)), 0);
+      expect(again).toEqual(made);
+    });
+
+    it("keeps the backmost path's OWN direction (Illustrator makes it clockwise; no pixel differs)", () => {
+      const paint = orientByPaintOrder(
+        mergeCompound([table(reverseContour(OUTER)), table(reverseContour(INNER))]),
+        0,
+      );
+      expect(signs(paint)).toEqual([-1, 1]);
+    });
+
+    it("an OPEN contour that turns is reversed as an open run — its endpoints swap, its flag stays", () => {
+      const open: AnchorTable = { anchors: INNER, subpathStarts: [0], subpathOpen: [true] };
+      const paint = orientByPaintOrder(mergeCompound([table(OUTER), open]), 0);
+      expect(paint.subpathOpen).toEqual([false, true]);
+      expect(paint.anchors.slice(0, 4)).toEqual(OUTER);
+      expect(paint.anchors.slice(4)).toEqual(reverseContour(INNER, { closed: false }));
+    });
+
+    it("an EMPTY contour is dropped, and `backmost` counts the contours that remain", () => {
+      const t: AnchorTable = {
+        anchors: [...OUTER, ...INNER],
+        subpathStarts: [0, 4, 4],
+        subpathOpen: [false, true, false],
+      };
+      // Contour 1 of the two that remain is INNER: the path behind.
+      const paint = orientByPaintOrder(t, 1);
+      expect(paint.subpathStarts).toEqual([0, 4]);
+      expect(paint.subpathOpen).toEqual([false, false]);
+      expect(paint.anchors.slice(4)).toEqual(INNER);
+      expect(paint.anchors.slice(0, 4)).toEqual(reverseContour(OUTER));
+    });
+
+    it("leaves a ZERO-AREA contour alone", () => {
+      const t = mergeCompound([table(OUTER), table(OUTER.slice(0, 2))]);
+      expect(contourSignedArea(OUTER.slice(0, 2))).toBe(0);
+      expect(orientByPaintOrder(t, 0)).toEqual(t);
+    });
+
+    it("passes a single contour straight through, and refuses a `backmost` that names no contour", () => {
+      expect(orientByPaintOrder(table(OUTER), 0)).toEqual(table(OUTER));
+      const empty: AnchorTable = { anchors: [], subpathStarts: [] };
+      expect(orientByPaintOrder(empty, 0)).toBe(empty);
+      const two = mergeCompound([table(OUTER), table(INNER)]);
+      for (const bad of [2, -1, 0.5, Number.NaN]) {
+        expect(() => orientByPaintOrder(two, bad)).toThrow(RangeError);
+      }
+      expect(() => orientByPaintOrder(table(OUTER), 1)).toThrow(RangeError);
     });
   });
 });

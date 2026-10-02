@@ -188,6 +188,30 @@ export function orderTopToBottom(
     .map((e) => e.id);
 }
 
+/** The index in `ids` of the BACKMOST of them by the paint order the
+ *  scene tree reports, or null when none of them is in it. Unlike
+ *  {@link orderTopToBottom}, an id the tree does not list is never the
+ *  answer — sorting it "to the back" is right for an operand list and
+ *  wrong for "which one is behind". Pure; Make Compound Path's
+ *  re-orientation hangs on it (`commands/compound-path.ts`). */
+export function backmostIndexOf(
+  ids: readonly ElementId[],
+  paintOrder: readonly string[],
+): number | null {
+  const rank = new Map<string, number>();
+  paintOrder.forEach((key, i) => rank.set(key, i));
+  let best: number | null = null;
+  let bestZ = Infinity;
+  ids.forEach((id, i) => {
+    const z = rank.get(keyOf(id));
+    if (z !== undefined && z < bestZ) {
+      best = i;
+      bestZ = z;
+    }
+  });
+  return best;
+}
+
 /** The selection, ordered top-to-bottom against the live scene tree.
  *  A tree read that fails leaves selection order untouched (and says so
  *  at debug) rather than aborting the command. */

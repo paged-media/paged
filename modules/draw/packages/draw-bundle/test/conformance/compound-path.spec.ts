@@ -40,6 +40,10 @@
 //       non-zero hole, read off the artifact a reader would print.
 //   (5) the honest scope: a single selected element, open contours,
 //       and a text frame in the CONSUMED role.
+//   (6) WHICH contour turns is decided by the scene tree's PAINT ORDER
+//       (Illustrator's rule — `test/oracle/compound-path.spec.ts`), not
+//       by selection order and not by nesting: the backmost path keeps
+//       its direction, every other one is wound against it.
 
 import { inflateSync } from "node:zlib";
 import { describe, expect, it, beforeAll, afterAll, beforeEach } from "vitest";
@@ -56,8 +60,11 @@ import {
   drawBundle,
   applyMakeCompoundPath,
   applyReleaseCompoundPath,
+  backmostContourOf,
+  backmostIndexOf,
   compoundSourceOf,
   contourCountOf,
+  makeCompoundTableByPaintOrder,
   framePathMutationFor,
   makeCompoundBatchFor,
   releaseInsertBatchFor,
@@ -315,6 +322,62 @@ describe("draw conformance — COMPOUND PATHS (make / release)", () => {
       expect(thin.args.ops).toHaveLength(2);
     });
 
+    it("backmostIndexOf reads PAINT order (the tree's first = backmost), never selection order", () => {
+      const order = ["polygon:a", "polygon:b", "polygon:c"];
+      expect(backmostIndexOf([poly("c"), poly("a"), poly("b")], order)).toBe(1);
+      expect(backmostIndexOf([poly("b"), poly("c")], order)).toBe(0);
+      // An id the tree does not list is never "the one behind"…
+      expect(backmostIndexOf([poly("x"), poly("c")], order)).toBe(1);
+      // …and with none listed there is no answer to give.
+      expect(backmostIndexOf([poly("x")], order)).toBeNull();
+    });
+
+    it("backmostContourOf: a single-contour input is its own contour, a COMPOUND input its LARGEST", () => {
+      const sq = (x0: number, y0: number, s: number) => ({
+        anchors: [
+          [x0, y0],
+          [x0 + s, y0],
+          [x0 + s, y0 + s],
+          [x0, y0 + s],
+        ].map((p) => ({ anchor: p, left: p, right: p })),
+        subpathStarts: [0],
+        subpathOpen: [false],
+      });
+      // A ring listed HOLE FIRST: its outer contour is its second.
+      const ring = {
+        anchors: [...sq(20, 20, 10).anchors, ...sq(0, 0, 50).anchors],
+        subpathStarts: [0, 4],
+        subpathOpen: [false, false],
+      };
+      const tables = [sq(100, 0, 10), ring, sq(200, 0, 10)] as never[];
+      expect(backmostContourOf(tables, 0)).toBe(0);
+      expect(backmostContourOf(tables, 1)).toBe(2);
+      expect(backmostContourOf(tables, 2)).toBe(3);
+    });
+
+    it("makeCompoundTableByPaintOrder: the backmost input keeps its direction, every other contour turns against it", () => {
+      const quad = (x0: number, y0: number, x1: number, y1: number) => ({
+        anchors: [
+          [x0, y0],
+          [x1, y0],
+          [x1, y1],
+          [x0, y1],
+        ].map((p) => ({ anchor: p, left: p, right: p })),
+        subpathStarts: [0],
+        subpathOpen: [false],
+      });
+      // Survivor (selected first) is the INNER square; the OUTER one is
+      // behind it. Both drawn the same way round.
+      const inner = quad(200, 200, 300, 300) as never;
+      const outer = quad(100, 100, 400, 400) as never;
+      const made = makeCompoundTableByPaintOrder([inner, outer], 1);
+      expect(made.subpathStarts).toEqual([0, 4]);
+      expect(made.anchors.slice(4)).toEqual((outer as { anchors: unknown[] }).anchors);
+      expect(Math.sign(contourSignedArea(made.anchors.slice(0, 4)))).toBe(
+        -Math.sign(contourSignedArea(made.anchors.slice(4))),
+      );
+    });
+
     it("tableInInnerSpace inverts the survivor's ItemTransform", () => {
       const shifted = tableInInnerSpace(RING as never, [1, 0, 0, 1, 10, 20]);
       expect(shifted!.anchors[0].anchor).toEqual([-10, -20]);
@@ -373,6 +436,29 @@ describe("draw conformance — COMPOUND PATHS (make / release)", () => {
       expect(outer!.starts).toEqual([0]);
       const inner = await contoursOf(h, INNER);
       expect(Math.sign(outer!.areas[0])).toBe(Math.sign(inner!.areas[0]));
+    });
+
+    it("BACKMOST is the scene tree's PAINT ORDER: the inner square selected FIRST survives, and it is the one that turns", async () => {
+      // F6 stacks OUTER behind INNER. Selecting INNER first makes it the
+      // survivor (its contour comes first) — but not the backmost path.
+      const authored = (await contoursOf(h, OUTER))!.areas[0];
+      await h.host.selection.set([INNER, OUTER]);
+      expect(await applyMakeCompoundPath(h.host)).toBe(2);
+
+      const merged = await contoursOf(h, INNER);
+      expect(merged!.starts).toEqual([0, 4]);
+      expect(Math.abs(merged!.areas[0])).toBeCloseTo(10000, 3);
+      expect(Math.abs(merged!.areas[1])).toBeCloseTo(90000, 3);
+      // The path BEHIND keeps its direction; the survivor's own contour
+      // is wound against it. (By selection order — or by "contour 0
+      // never turns", the depth rule's anchor — it would be the other way
+      // round: the same hole, the opposite assignment.)
+      expect(Math.sign(merged!.areas[1])).toBe(Math.sign(authored));
+      expect(Math.sign(merged!.areas[0])).toBe(-Math.sign(authored));
+      expect(await leafIds(h)).toEqual(["uinner", "uopen"]);
+
+      await h.host.document.undo();
+      expect(await leafIds(h)).toEqual(["uinner", "uopen", "uouter"]);
     });
 
     it("THE HOLE RENDERS: the exported PDF paints ONE path, two OPPOSITE contours", async () => {
