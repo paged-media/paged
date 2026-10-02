@@ -40,11 +40,33 @@
 //       has no image decoder, so the full command REFUSES and inserts
 //       nothing. Both are pinned so a future host that closes either gap
 //       breaks this spec loudly instead of silently.
+//   (7) THE TRACE RUNS OFF THE CALLING THREAD when the host can spawn the
+//       worker, and on it when the host cannot — BOTH lanes, to the same
+//       result. The fallback is the real engine on this thread, as
+//       before. The worker lane is the REAL worker entry and the REAL
+//       tracer wasm behind an in-memory stand-in for the worker REALM,
+//       because the headless harness cannot be handed a worker backend
+//       (`HarnessOptions` does not carry `workers`). The stand-in clones
+//       every message WITH its transfer list, so a pixel buffer that was
+//       handed over really is gone on the sender's side.
 
 import { inflateSync } from "node:zlib";
-import { describe, expect, it, beforeAll, afterAll, beforeEach } from "vitest";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import {
+  describe,
+  expect,
+  it,
+  beforeAll,
+  afterAll,
+  afterEach,
+  beforeEach,
+  vi,
+} from "vitest";
 
 import type {
+  BundleHost,
   CommandContribution,
   ElementId,
   Mutation,
@@ -80,6 +102,14 @@ import {
   type TracePlan,
   type TraceResult,
 } from "../../src";
+import {
+  answerTraceRequest,
+  openTraceSession,
+  TRACE_WORKER_MODULE,
+  type TraceWorkerReply,
+  type TraceWorkerRequest,
+} from "../../src/trace-engine";
+import { serveTraceRequests, type TraceWorkerScope } from "../../src/trace-worker";
 import { F7_PLACED_IMAGE, ringPixels } from "../fixtures/corpus";
 import { openHost } from "./host";
 
@@ -882,4 +912,463 @@ describe("draw conformance — IMAGE TRACE v0", () => {
       options: TRACE_DEFAULTS,
     });
   }
+});
+
+// =====================================================================
+// (7) OFF THE CALLING THREAD
+
+/** One spawn, as the stand-in saw it. */
+interface SpawnRecord {
+  module: string;
+  name?: string;
+  terminated: boolean;
+  /** Every post TO the worker, with the transfer list it came with. */
+  posts: { message: TraceWorkerRequest; transfer: Transferable[] }[];
+}
+
+/**
+ * An in-memory stand-in for the worker REALM behind `host.workers`.
+ *
+ * What is real: the worker ENTRY (`serveTraceRequests`, unless a test
+ * hands in a broken one) and, through it, the tracer wasm. What is stood
+ * in for: the thread. Messages are delivered on a later task, and cloned
+ * the way `postMessage` clones them — `structuredClone` WITH the transfer
+ * list — so a transferred buffer is detached on the sender's side exactly
+ * as it would be across a real worker boundary.
+ */
+function standInWorkers(
+  options: {
+    serve?: (scope: TraceWorkerScope) => void;
+    refuse?: string;
+  } = {},
+): { workers: BundleHost["workers"]; spawned: SpawnRecord[] } {
+  const spawned: SpawnRecord[] = [];
+  const workers: BundleHost["workers"] = {
+    concurrency: () => 2,
+    async spawn({ module, name }) {
+      if (options.refuse) throw new Error(options.refuse);
+      const record: SpawnRecord = { module, name, terminated: false, posts: [] };
+      spawned.push(record);
+      const listeners = new Set<(message: unknown) => void>();
+      const scope: TraceWorkerScope = {
+        onmessage: null,
+        postMessage(message) {
+          const copy = structuredClone(message);
+          setTimeout(() => {
+            if (!record.terminated) for (const l of [...listeners]) l(copy);
+          }, 0);
+        },
+      };
+      (options.serve ?? serveTraceRequests)(scope);
+      return {
+        post(message, transfer = []) {
+          record.posts.push({ message: message as TraceWorkerRequest, transfer });
+          const copy = structuredClone(message, { transfer });
+          setTimeout(() => {
+            if (!record.terminated) scope.onmessage?.({ data: copy });
+          }, 0);
+        },
+        onMessage(handler) {
+          listeners.add(handler);
+          return { dispose: () => void listeners.delete(handler) };
+        },
+        allocateShared: () => null,
+        terminate() {
+          record.terminated = true;
+          listeners.clear();
+        },
+      };
+    },
+  };
+  return { workers, spawned };
+}
+
+/** The real headless host with a worker door laid over it, and its log
+ *  captured. (The harness itself cannot be given a worker backend.) */
+function hostWith(
+  host: BundleHost,
+  workers: BundleHost["workers"] | null,
+  logs: string[] = [],
+): BundleHost {
+  const note =
+    (level: string) =>
+    (...args: unknown[]): void =>
+      void logs.push(`${level}: ${args.map(String).join(" ")}`);
+  return new Proxy(host, {
+    get(target, prop, receiver) {
+      if (prop === "log") {
+        return { debug: note("debug"), info: note("info"), warn: note("warn"), error: note("error") };
+      }
+      if (workers) {
+        if (prop === "workers") return workers;
+        if (prop === "supports") {
+          return (feature: string) =>
+            feature === "workers@1" ? true : target.supports(feature);
+        }
+      }
+      return Reflect.get(target, prop, receiver);
+    },
+  });
+}
+
+describe("draw conformance — IMAGE TRACE off the calling thread", () => {
+  let engine: TraceEngine;
+  let h: HeadlessHost;
+
+  beforeAll(async () => {
+    engine = await bootTraceEngine();
+    h = await openHost();
+    await h.load(F7_PLACED_IMAGE.bytes());
+    h.loadBundle(drawBundle);
+  }, 60_000);
+  afterAll(() => h?.dispose());
+  afterEach(() => vi.unstubAllGlobals());
+
+  const RING = { width: 48, height: 48, options: { mode: "bw", pathMode: "polygon" } as const };
+  const ringOnThisThread = (): TraceResult =>
+    engine.trace(ringPixels(48), RING.width, RING.height, RING.options);
+
+  describe("the worker's side of the protocol", () => {
+    it("answers the caps and a trace against the real wasm — the trace as the kernel's own JSON", () => {
+      expect(answerTraceRequest(engine, { id: 7, kind: "limits" })).toEqual({
+        id: 7,
+        ok: true,
+        kind: "limits",
+        limits: engine.limits(),
+      });
+      const pixels = ringPixels(48);
+      const reply = answerTraceRequest(engine, {
+        id: 8,
+        kind: "trace",
+        pixels: pixels.buffer,
+        byteOffset: pixels.byteOffset,
+        byteLength: pixels.byteLength,
+        ...RING,
+      });
+      expect(reply.ok && reply.kind === "trace").toBe(true);
+      const json = (reply as Extract<TraceWorkerReply, { kind: "trace" }>).json;
+      expect(typeof json).toBe("string");
+      expect(JSON.parse(json)).toEqual(ringOnThisThread());
+    });
+
+    it("a kernel REFUSAL is an answer carrying the kernel's own words — never a throw the other side cannot see", () => {
+      const short = new Uint8Array(16);
+      let thrown = "";
+      try {
+        engine.trace(short, 48, 48, {});
+      } catch (err) {
+        // The wasm throws its refusal as a bare string.
+        thrown = err instanceof Error ? err.message : String(err);
+      }
+      expect(thrown).toContain("expected 9216 RGBA bytes, got 16");
+      expect(
+        answerTraceRequest(engine, {
+          id: 9,
+          kind: "trace",
+          pixels: short.buffer,
+          byteOffset: 0,
+          byteLength: short.byteLength,
+          width: 48,
+          height: 48,
+        }),
+      ).toEqual({ id: 9, ok: false, error: thrown });
+    });
+
+    it("the worker ENTRY boots its own engine and answers every request once, in arrival order", async () => {
+      const replies: TraceWorkerReply[] = [];
+      const scope: TraceWorkerScope = {
+        onmessage: null,
+        postMessage: (message) => void replies.push(message as TraceWorkerReply),
+      };
+      serveTraceRequests(scope);
+      const pixels = ringPixels(48);
+      scope.onmessage!({
+        data: {
+          id: 1,
+          kind: "trace",
+          pixels: pixels.buffer,
+          byteOffset: 0,
+          byteLength: pixels.byteLength,
+          ...RING,
+        } satisfies TraceWorkerRequest,
+      });
+      scope.onmessage!({ data: { id: 2, kind: "limits" } satisfies TraceWorkerRequest });
+      await vi.waitFor(() => expect(replies).toHaveLength(2));
+      expect(replies.map((r) => [r.id, r.ok])).toEqual([
+        [1, true],
+        [2, true],
+      ]);
+    });
+
+    it("the worker module is not serving on THIS thread just because it was imported", () => {
+      // Importing `trace-worker` for its types must wire nothing: only a
+      // dedicated worker's global scope gets the message loop.
+      expect((globalThis as { onmessage?: unknown }).onmessage ?? null).toBeNull();
+    });
+  });
+
+  describe("openTraceSession — which thread, and why", () => {
+    it("NO worker backend (this harness): the session is the calling thread, and says so", async () => {
+      const logs: string[] = [];
+      expect(h.host.supports("workers@1")).toBe(false);
+      const session = await openTraceSession(hostWith(h.host, null, logs));
+      expect(session.thread).toBe("calling");
+      expect(logs.join("\n")).toContain('supports("workers@1") is false');
+      expect(await session.limits()).toEqual(engine.limits());
+      const pixels = ringPixels(48);
+      expect(
+        await session.trace(pixels, RING.width, RING.height, RING.options),
+      ).toEqual(ringOnThisThread());
+      // Nothing was handed over: the caller still owns its pixels.
+      expect(pixels.byteLength).toBe(48 * 48 * 4);
+      session.close();
+    });
+
+    it("a host that CAN spawn: the trace runs in the worker, to the SAME result, and the pixels are TRANSFERRED", async () => {
+      const { workers, spawned } = standInWorkers();
+      const session = await openTraceSession(hostWith(h.host, workers));
+      expect(session.thread).toBe("worker");
+      // The module asked for is the declared one, by name.
+      expect(spawned).toHaveLength(1);
+      expect(spawned[0].module).toBe(TRACE_WORKER_MODULE);
+      expect(spawned[0].module).toBe("workers/trace.js");
+      // The caps came from the WORKER's engine (the handshake).
+      expect(await session.limits()).toEqual(engine.limits());
+
+      const pixels = ringPixels(48);
+      const buffer = pixels.buffer;
+      const result = await session.trace(pixels, RING.width, RING.height, RING.options);
+      expect(result).toEqual(ringOnThisThread());
+
+      // TRANSFERRED, not copied: the buffer rode the transfer list, and
+      // this side no longer has it.
+      const trace = spawned[0].posts.find((p) => p.message.kind === "trace")!;
+      expect(trace.transfer).toEqual([buffer]);
+      expect(buffer.byteLength).toBe(0);
+      expect(pixels.byteLength).toBe(0);
+
+      // One worker per session, ended with it.
+      expect(spawned[0].terminated).toBe(false);
+      session.close();
+      expect(spawned[0].terminated).toBe(true);
+      session.close(); // idempotent
+    });
+
+    it("a Uint8ClampedArray VIEW into a larger buffer traces the view, not the buffer", async () => {
+      // What `getImageData` hands back is a clamped array; a view with an
+      // offset is the case a transfer could get wrong.
+      const ring = ringPixels(48);
+      const padded = new Uint8Array(64 + ring.byteLength);
+      padded.set(ring, 64);
+      const view = new Uint8ClampedArray(padded.buffer, 64, ring.byteLength);
+      const { workers } = standInWorkers();
+      const session = await openTraceSession(hostWith(h.host, workers));
+      expect(
+        await session.trace(view, RING.width, RING.height, RING.options),
+      ).toEqual(ringOnThisThread());
+      session.close();
+    });
+
+    it("the kernel's refusal crosses the worker boundary with its message intact", async () => {
+      const short = (): Uint8Array => new Uint8Array(16);
+      const calling = await openTraceSession(hostWith(h.host, null));
+      const onThisThread = await calling
+        .trace(short(), 48, 48, {})
+        .then(() => "", (err: Error) => err.message);
+      expect(onThisThread).toContain("expected 9216 RGBA bytes, got 16");
+
+      const { workers } = standInWorkers();
+      const session = await openTraceSession(hostWith(h.host, workers));
+      await expect(session.trace(short(), 48, 48, {})).rejects.toThrow(onThisThread);
+      session.close();
+    });
+
+    it("spawn REFUSED (the host knows no such module for this bundle): calling thread, with the host's reason logged", async () => {
+      const reason =
+        'WorkerBackend: media.paged.draw has no registered worker-module resolver';
+      const logs: string[] = [];
+      const { workers, spawned } = standInWorkers({ refuse: reason });
+      const session = await openTraceSession(hostWith(h.host, workers, logs));
+      expect(session.thread).toBe("calling");
+      expect(spawned).toHaveLength(0);
+      expect(logs.join("\n")).toContain(reason);
+      expect(
+        await session.trace(ringPixels(48), RING.width, RING.height, RING.options),
+      ).toEqual(ringOnThisThread());
+    });
+
+    it("a worker that never answers (its module failed to load): given up at the boot deadline, terminated, calling thread", async () => {
+      const logs: string[] = [];
+      const { workers, spawned } = standInWorkers({ serve: () => {} });
+      const session = await openTraceSession(hostWith(h.host, workers, logs), {
+        bootMs: 20,
+      });
+      expect(session.thread).toBe("calling");
+      expect(spawned[0].terminated).toBe(true);
+      expect(logs.join("\n")).toContain("did not answer within 20 ms");
+    });
+
+    it("a worker whose wasm will not boot ANSWERS the handshake with the error: terminated, calling thread", async () => {
+      const logs: string[] = [];
+      const { workers, spawned } = standInWorkers({
+        serve: (scope) => {
+          scope.onmessage = (event) =>
+            scope.postMessage({
+              id: (event.data as TraceWorkerRequest).id,
+              ok: false,
+              error: "expected magic word 00 61 73 6d",
+            } satisfies TraceWorkerReply);
+        },
+      });
+      const session = await openTraceSession(hostWith(h.host, workers, logs));
+      expect(session.thread).toBe("calling");
+      expect(spawned[0].terminated).toBe(true);
+      expect(logs.join("\n")).toContain("expected magic word 00 61 73 6d");
+    });
+
+    it("close() ends a trace the worker never finished — the only way out of a dead worker", async () => {
+      // Answers the handshake, then goes silent: what a worker that died
+      // mid-trace looks like through a door with no error channel.
+      const { workers, spawned } = standInWorkers({
+        serve: (scope) => {
+          scope.onmessage = (event) => {
+            const request = event.data as TraceWorkerRequest;
+            if (request.kind === "limits") {
+              scope.postMessage(answerTraceRequest(engine, request));
+            }
+          };
+        },
+      });
+      const session = await openTraceSession(hostWith(h.host, workers));
+      expect(session.thread).toBe("worker");
+      const pending = session.trace(ringPixels(48), 48, 48, {});
+      session.close();
+      await expect(pending).rejects.toThrow("closed");
+      expect(spawned[0].terminated).toBe(true);
+    });
+  });
+
+  describe("the command, through both lanes", () => {
+    /** Give this realm the two decoder globals, answering the fixture's
+     *  own pixels — the one thing Node cannot do for the command. */
+    const stubDecoder = (): void => {
+      const size = 48;
+      vi.stubGlobal("createImageBitmap", async () => ({
+        width: size,
+        height: size,
+        close() {},
+      }));
+      vi.stubGlobal(
+        "OffscreenCanvas",
+        class {
+          constructor(
+            readonly width: number,
+            readonly height: number,
+          ) {}
+          getContext() {
+            return {
+              drawImage() {},
+              getImageData: () => ({ data: new Uint8ClampedArray(ringPixels(size)) }),
+            };
+          }
+        },
+      );
+    };
+
+    /** Run the command on `host`, describe what it made, and take it back. */
+    const traceAndUndo = async (
+      host: BundleHost,
+    ): Promise<{ made: number; contours: number[] }> => {
+      const before = await leafIds(h);
+      await h.host.selection.set([IMAGE]);
+      const created = await applyImageTrace(host, { mode: "bw", pathMode: "polygon" });
+      const made = (await leafIds(h)).filter((id) => !before.includes(id));
+      const contours: number[] = [];
+      for (const id of created) {
+        contours.push((await contoursOf(h, id))?.starts.length ?? 0);
+      }
+      // TWO batches ⇒ two undo steps (unchanged by this lane).
+      await h.host.document.undo();
+      await h.host.document.undo();
+      expect(await leafIds(h)).toEqual(before);
+      return { made: made.length, contours };
+    };
+
+    it("on the calling thread (no worker backend) the command traces the ring as before", async () => {
+      stubDecoder();
+      const logs: string[] = [];
+      const out = await traceAndUndo(hostWith(h.host, null, logs));
+      // One region, a ring: one compound element with two contours.
+      expect(out).toEqual({ made: 1, contours: [2] });
+      expect(logs.join("\n")).toContain("on the calling thread");
+    });
+
+    it("in a worker the command lands the SAME artwork, and leaves no worker behind", async () => {
+      stubDecoder();
+      const logs: string[] = [];
+      const { workers, spawned } = standInWorkers();
+      const out = await traceAndUndo(hostWith(h.host, workers, logs));
+      expect(out).toEqual({ made: 1, contours: [2] });
+      expect(logs.join("\n")).toContain("in a worker");
+      expect(spawned).toHaveLength(1);
+      expect(spawned[0].posts.map((p) => p.message.kind)).toEqual(["limits", "trace"]);
+      expect(spawned[0].posts[1].transfer).toHaveLength(1);
+      expect(spawned[0].terminated).toBe(true);
+    });
+
+    it("a realm that cannot decode never spawns a worker at all", async () => {
+      // No decoder stub: this is Node.
+      const { workers, spawned } = standInWorkers();
+      await h.host.selection.set([IMAGE]);
+      expect(await applyImageTrace(hostWith(h.host, workers))).toEqual([]);
+      expect(spawned).toHaveLength(0);
+    });
+
+    it("a refused trace still ends the worker", async () => {
+      stubDecoder();
+      const { workers, spawned } = standInWorkers({
+        serve: (scope) => {
+          scope.onmessage = (event) => {
+            const request = event.data as TraceWorkerRequest;
+            scope.postMessage(
+              request.kind === "limits"
+                ? answerTraceRequest(engine, request)
+                : ({ id: request.id, ok: false, error: "raster over the cap" } satisfies TraceWorkerReply),
+            );
+          };
+        },
+      });
+      const logs: string[] = [];
+      await h.host.selection.set([IMAGE]);
+      expect(await applyImageTrace(hostWith(h.host, workers, logs))).toEqual([]);
+      expect(logs.join("\n")).toContain("the tracer refused — raster over the cap");
+      expect(spawned[0].terminated).toBe(true);
+    });
+  });
+
+  describe("what the host needs in order to spawn it", () => {
+    const HERE = dirname(fileURLToPath(import.meta.url));
+    const read = (relative: string): string =>
+      readFileSync(resolve(HERE, "../..", relative), "utf8");
+
+    it("the manifest DECLARES the worker door — an undeclared spawn is refused by the host's gate", () => {
+      expect(drawBundle.manifest.capabilities?.workers).toEqual({ max: 2 });
+    });
+
+    it("the worker is its own build entry and its own package export, in source and as published", () => {
+      const pkg = JSON.parse(read("package.json")) as {
+        exports: Record<string, unknown>;
+        publishConfig: { exports: Record<string, { default?: string }> };
+        files: string[];
+      };
+      expect(pkg.exports["./trace-worker"]).toBe("./src/trace-worker.ts");
+      expect(pkg.publishConfig.exports["./trace-worker"].default).toBe(
+        "./dist/trace-worker.js",
+      );
+      expect(read("tsup.config.ts")).toContain('"src/trace-worker.ts"');
+      // The wasm the worker boots ships beside `dist/`, where its
+      // `../wasm/…` import points.
+      expect(pkg.files).toEqual(expect.arrayContaining(["dist", "wasm"]));
+    });
+  });
 });

@@ -46,10 +46,10 @@
 // `src/trace-engine.ts` and from `dist/index.js`.
 //
 // BLOCKING — MEASURED, not estimated, because the first estimate here was
-// wrong by two orders of magnitude. `trace()` is synchronous and
-// CPU-bound and runs on the thread that calls it: in the editor, the MAIN
-// (UI) thread. Nothing is interruptible once it starts. Timings on an
-// M-series laptop, release wasm, default options:
+// wrong by two orders of magnitude. `TraceEngine.trace()` is synchronous
+// and CPU-bound and runs on the thread that calls it. Nothing is
+// interruptible once it starts. Timings on an M-series laptop, release
+// wasm, default options:
 //
 //   flat / smooth artwork      2048×2048   0.3 – 0.8 s
 //   line art (1 025 clusters)  2048×2048   0.6 s
@@ -63,9 +63,18 @@
 // A noisy photograph is therefore the pathological input, and 41 s of
 // frozen UI is not acceptable — which is why the DEFAULT trace budget
 // (`maxTracePixels`, below) is 1 MP rather than the kernel's 4 MP
-// refusal cap, and why the command warns before a long one. Moving the
-// call behind `host.workers` is the real fix and is a named v1 step, not
-// a claim about today.
+// refusal cap, and why the command warns before a long one.
+//
+// OFF THE CALLING THREAD — `openTraceSession`, at the foot of this file.
+// The bundle no longer calls `trace()` itself: it opens a SESSION, and a
+// session runs the kernel in a `host.workers` worker whenever the host
+// can spawn one, and on the calling thread only when it cannot. What
+// "cannot" means is spelled out there, because in a host that injects a
+// worker backend but has not been told about THIS bundle's worker module
+// the answer is still "cannot" — and that is the state of the editor
+// until it registers `TRACE_WORKER_MODULE`.
+
+import type { BundleHost, BundleWorker } from "@paged-media/plugin-api";
 
 /** Trace parameters. Every field is optional; omitted ones take the
  *  documented v0 default (see `TRACE_DEFAULTS`, mirrored from the Rust
@@ -217,6 +226,15 @@ export interface TraceEngine {
     height: number,
     options?: TraceOptions,
   ): TraceResult;
+  /** `trace`, answered as the kernel's own JSON text. What the worker
+   *  posts back: a string crosses a worker boundary as one copy, where
+   *  the parsed result would be re-walked node by node on both sides. */
+  traceJson(
+    pixels: Uint8Array,
+    width: number,
+    height: number,
+    options?: TraceOptions,
+  ): string;
 }
 
 /** Thrown (as the message) when the wasm artifact has not been built.
@@ -289,22 +307,25 @@ async function loadModule(): Promise<TraceWasmModule> {
 /** Wrap a loaded module in the typed facade. Exported for the
  *  conformance spec, which asserts the JSON boundary shape directly. */
 export function wrapTraceEngine(mod: TraceWasmModule): TraceEngine {
+  const traceJson: TraceEngine["traceJson"] = (pixels, width, height, options) => {
+    // `maxTracePixels` is a DECODER knob; the kernel has never heard of
+    // it, so it is stripped here rather than smuggled across as an
+    // ignored field.
+    let payload = "{}";
+    if (options) {
+      const { maxTracePixels: _decodeOnly, ...kernel } = options;
+      payload = JSON.stringify(kernel);
+    }
+    return mod.traceRgba(pixels, width, height, payload);
+  };
   return {
     limits() {
       return JSON.parse(mod.traceLimits()) as TraceLimits;
     },
     trace(pixels, width, height, options) {
-      // `maxTracePixels` is a DECODER knob; the kernel has never heard of
-      // it, so it is stripped here rather than smuggled across as an
-      // ignored field.
-      let payload = "{}";
-      if (options) {
-        const { maxTracePixels: _decodeOnly, ...kernel } = options;
-        payload = JSON.stringify(kernel);
-      }
-      const json = mod.traceRgba(pixels, width, height, payload);
-      return JSON.parse(json) as TraceResult;
+      return JSON.parse(traceJson(pixels, width, height, options)) as TraceResult;
     },
+    traceJson,
   };
 }
 
@@ -319,4 +340,307 @@ export function bootTraceEngine(): Promise<TraceEngine> {
       throw err;
     });
   return cached;
+}
+
+// =====================================================================
+// THE WORKER LANE — the trace, off the calling thread.
+//
+// `trace()` above freezes whatever thread calls it; in the editor that is
+// the UI thread, for anything from a third of a second to most of a
+// minute. `host.workers` (K-3) is the door that moves it: the bundle
+// spawns a module worker it ships, the worker boots ITS OWN copy of the
+// trace wasm (`trace-worker.ts`), and the two talk over `postMessage`.
+//
+// THE PROTOCOL is two requests, each answered once, matched by `id`:
+//
+//   limits → the kernel's caps. Also the HANDSHAKE: the first answer is
+//            the proof that the worker module loaded and its wasm booted.
+//   trace  → the pixels, TRANSFERRED (the buffer changes owner — no copy
+//            of up to 16 MB of RGBA), answered with the kernel's JSON.
+//
+// WHEN THE SESSION IS *NOT* A WORKER — four cases, each of which lands on
+// the calling thread with the reason logged, because a trace that blocks
+// is still better than a command that does nothing:
+//
+//   1. `supports("workers@1")` is false — the host injects no backend
+//      (the headless harness; any host without `Worker`).
+//   2. `spawn` rejects. The door is DECLARED-ONLY: the host resolves
+//      `TRACE_WORKER_MODULE` through a resolver it registers per bundle,
+//      and a host that has not registered this bundle's module refuses
+//      the spawn by name. So does the count cap.
+//   3. The worker never answers the handshake within
+//      `TRACE_WORKER_BOOT_MS` — its module failed to load. The door has
+//      NO error channel (`BundleWorker` is post / onMessage / terminate),
+//      so a worker that dies on import is simply silent; a deadline on
+//      the FIRST answer is the only way to notice.
+//   4. The handshake answers with an error — the worker is up but its
+//      wasm did not boot.
+//
+// WHAT IS NOT COVERED, said plainly: a worker that dies AFTER a good
+// handshake, mid-trace, is silent for the same reason, and there is no
+// honest deadline for a trace (41 s is a real one). `close()` is the way
+// out — it ends the worker and fails whatever was pending.
+//
+// ONE WORKER PER SESSION, ended on `close()`. Wasm linear memory only
+// ever grows, so a worker kept "warm" would hold whatever its largest
+// trace needed for the rest of the editing session; ending it gives the
+// memory back. Spawning is cheap against the call it wraps — measured in
+// Chromium, the worker module and its wasm were up and answering in
+// 18–40 ms. The manifest asks for at most TWO workers
+// (`capabilities.workers.max`): a second trace started while one is
+// running gets its own, a third is refused by the host's count cap and
+// falls back (case 2).
+//
+// MEASURED, in Chromium, the built `dist/trace-worker.js` served the way
+// the editor serves a bundle's worker (Vite `?worker&url`, dev server and
+// production build): a noisy 1024×1024 raster — the size of the 6.3 s row
+// in the table above — traced in 7.6 s in the worker, while a 4 ms ticker
+// on the page's own thread fired 1 896 times and never waited longer than
+// 21 ms.
+
+/** The bundle-relative worker module the session asks `host.workers` to
+ *  spawn. A NAME the host resolves, not a URL: the host maps it to the
+ *  built `trace-worker` entry this package exports (`./trace-worker`). */
+export const TRACE_WORKER_MODULE = "workers/trace.js";
+
+/** How long the worker has to answer its FIRST request before the session
+ *  gives it up and traces on the calling thread. Generous on purpose: it
+ *  covers fetching and compiling the worker module and a ~170 KB wasm,
+ *  measured at 18–40 ms. It is a deadline on the boot, never on a trace. */
+export const TRACE_WORKER_BOOT_MS = 15_000;
+
+/** What the bundle posts to the worker. */
+export type TraceWorkerRequest =
+  | { id: number; kind: "limits" }
+  | {
+      id: number;
+      kind: "trace";
+      /** The RGBA8 raster's buffer — transferred when it is transferable. */
+      pixels: ArrayBufferLike;
+      byteOffset: number;
+      byteLength: number;
+      width: number;
+      height: number;
+      options?: TraceOptions;
+    };
+
+/** What the worker posts back — exactly one per request. */
+export type TraceWorkerReply =
+  | { id: number; ok: true; kind: "limits"; limits: TraceLimits }
+  | { id: number; ok: true; kind: "trace"; json: string }
+  | { id: number; ok: false; error: string };
+
+const messageOf = (err: unknown): string =>
+  err instanceof Error ? err.message : String(err);
+
+/** Answer one request against a booted engine — the worker's whole job,
+ *  kept here (not in the worker entry) so it runs under test against the
+ *  real wasm. A kernel refusal is an ANSWER, with the kernel's own
+ *  message; it never escapes as a throw the other side cannot see. */
+export function answerTraceRequest(
+  engine: TraceEngine,
+  request: TraceWorkerRequest,
+): TraceWorkerReply {
+  try {
+    if (request.kind === "limits") {
+      return { id: request.id, ok: true, kind: "limits", limits: engine.limits() };
+    }
+    const pixels = new Uint8Array(
+      request.pixels,
+      request.byteOffset,
+      request.byteLength,
+    );
+    return {
+      id: request.id,
+      ok: true,
+      kind: "trace",
+      json: engine.traceJson(pixels, request.width, request.height, request.options),
+    };
+  } catch (err) {
+    return { id: request.id, ok: false, error: messageOf(err) };
+  }
+}
+
+/** One trace's worth of tracer: the caps, the call, and where it runs. */
+export interface TraceSession {
+  /** Where `trace` runs: a `host.workers` worker, or the thread that
+   *  called — the one `trace` then BLOCKS. */
+  readonly thread: "worker" | "calling";
+  /** The kernel's hard caps. */
+  limits(): Promise<TraceLimits>;
+  /**
+   * Trace an RGBA8 raster. Rejects with the kernel's own message on a
+   * refusal, on either thread.
+   *
+   * ON A WORKER SESSION `pixels`' BUFFER IS TRANSFERRED: when this
+   * returns, the caller's view is detached (length 0). Read what you need
+   * from the raster first.
+   */
+  trace(
+    pixels: Uint8Array | Uint8ClampedArray,
+    width: number,
+    height: number,
+    options?: TraceOptions,
+  ): Promise<TraceResult>;
+  /** End the session: the worker is terminated and anything still
+   *  pending is failed. Idempotent. */
+  close(): void;
+}
+
+function callingThreadSession(engine: TraceEngine): TraceSession {
+  return {
+    thread: "calling",
+    limits: async () => engine.limits(),
+    trace: async (pixels, width, height, options) => {
+      try {
+        return engine.trace(
+          new Uint8Array(pixels.buffer, pixels.byteOffset, pixels.byteLength),
+          width,
+          height,
+          options,
+        );
+      } catch (err) {
+        // The wasm throws its refusal as a bare STRING. Both lanes reject
+        // with an Error carrying the kernel's message.
+        throw err instanceof Error ? err : new Error(messageOf(err), { cause: err });
+      }
+    },
+    close() {},
+  };
+}
+
+/** A worker session, or `null` with the reason logged (the four cases in
+ *  the section header). */
+async function workerSession(
+  host: BundleHost,
+  bootMs: number,
+): Promise<TraceSession | null> {
+  const why = (reason: string): null => {
+    host.log.info(
+      `image trace: no worker — ${reason} — tracing on the calling thread`,
+    );
+    return null;
+  };
+  if (!host.supports("workers@1")) {
+    return why(`the host has no worker backend (supports("workers@1") is false)`);
+  }
+  let worker: BundleWorker;
+  try {
+    worker = await host.workers.spawn({
+      module: TRACE_WORKER_MODULE,
+      name: "paged.draw image trace",
+    });
+  } catch (err) {
+    return why(messageOf(err));
+  }
+
+  let seq = 0;
+  let closed = false;
+  const pending = new Map<number, (reply: TraceWorkerReply) => void>();
+  const subscription = worker.onMessage((message) => {
+    const reply = message as TraceWorkerReply | null;
+    const settle = reply ? pending.get(reply.id) : undefined;
+    if (!reply || !settle) return;
+    pending.delete(reply.id);
+    settle(reply);
+  });
+  type Ask =
+    | { kind: "limits" }
+    | Omit<Extract<TraceWorkerRequest, { kind: "trace" }>, "id">;
+  const ask = (
+    request: Ask,
+    transfer?: Transferable[],
+  ): Promise<TraceWorkerReply> =>
+    new Promise((resolve) => {
+      const id = ++seq;
+      if (closed) {
+        resolve({ id, ok: false, error: "the trace session is closed" });
+        return;
+      }
+      pending.set(id, resolve);
+      worker.post({ ...request, id } satisfies TraceWorkerRequest, transfer);
+    });
+  const close = (): void => {
+    if (closed) return;
+    closed = true;
+    subscription.dispose();
+    worker.terminate();
+    for (const [id, settle] of pending) {
+      settle({ id, ok: false, error: "the trace session was closed" });
+    }
+    pending.clear();
+  };
+
+  // THE HANDSHAKE — the caps, and the only evidence the worker is alive.
+  let deadline: ReturnType<typeof setTimeout> | undefined;
+  const first = await Promise.race([
+    ask({ kind: "limits" }),
+    new Promise<null>((resolve) => {
+      deadline = setTimeout(() => resolve(null), bootMs);
+    }),
+  ]);
+  clearTimeout(deadline);
+  if (first === null) {
+    close();
+    return why(
+      `the worker module "${TRACE_WORKER_MODULE}" did not answer within ` +
+        `${bootMs} ms (it failed to load, and the worker door has no error ` +
+        `channel to say so)`,
+    );
+  }
+  if (!first.ok || first.kind !== "limits") {
+    close();
+    return why(
+      `the worker could not boot the tracer — ${
+        first.ok ? "unexpected answer" : first.error
+      }`,
+    );
+  }
+  const limits = first.limits;
+
+  return {
+    thread: "worker",
+    limits: async () => limits,
+    async trace(pixels, width, height, options) {
+      const buffer = pixels.buffer;
+      // A SharedArrayBuffer cannot be transferred — and need not be: it
+      // is shared, not copied.
+      const transfer = buffer instanceof ArrayBuffer ? [buffer] : [];
+      const reply = await ask(
+        {
+          kind: "trace",
+          pixels: buffer,
+          byteOffset: pixels.byteOffset,
+          byteLength: pixels.byteLength,
+          width,
+          height,
+          options,
+        },
+        transfer,
+      );
+      if (!reply.ok) throw new Error(reply.error);
+      if (reply.kind !== "trace") throw new Error("unexpected answer from the trace worker");
+      return JSON.parse(reply.json) as TraceResult;
+    },
+    close,
+  };
+}
+
+/**
+ * Open a trace session: in a worker when the host can spawn one, on the
+ * calling thread otherwise (the section header lists when, and each case
+ * is logged). Rejects only when the trace wasm itself cannot be loaded on
+ * the calling thread either (`TRACE_ENGINE_NOT_BUILT`).
+ *
+ * `close()` it when the trace is done.
+ */
+export async function openTraceSession(
+  host: BundleHost,
+  options: { bootMs?: number } = {},
+): Promise<TraceSession> {
+  const session = await workerSession(
+    host,
+    options.bootMs ?? TRACE_WORKER_BOOT_MS,
+  );
+  return session ?? callingThreadSession(await bootTraceEngine());
 }
