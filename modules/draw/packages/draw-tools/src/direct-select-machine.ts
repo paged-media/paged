@@ -150,7 +150,21 @@ export type DirectSelectEvent =
       modifiers: DirectSelectModifiers;
     }
   | { type: "move"; point: Vec2; modifiers: DirectSelectModifiers }
-  | { type: "up"; point: Vec2; modifiers: DirectSelectModifiers }
+  | {
+      type: "up";
+      point: Vec2;
+      modifiers: DirectSelectModifiers;
+      /** The platform's click count for this release (`PointerEvent.
+       *  detail` / `MouseEvent.detail`: 1, 2, 3 …). When given it IS the
+       *  answer, reported as-is on a click. */
+      clickCount?: number;
+      /** The release's time in ms (`event.timeStamp`). When no
+       *  `clickCount` is given the machine counts clicks itself from
+       *  these: the same target, within `doubleClickInterval` and within
+       *  the slop of the previous click. Omit both and every click
+       *  counts 1 — the behaviour before either existed. */
+      timeStamp?: number;
+    }
   | { type: "key"; key: DirectSelectKey; modifiers: DirectSelectModifiers };
 
 export interface DirectSelectOptions {
@@ -172,7 +186,13 @@ export interface DirectSelectOptions {
    *  with two extended handles counts as SMOOTH (`isSmoothAnchor`'s
    *  `angleTol`). */
   smoothTolerance?: number;
+  /** The longest gap, in ms, between two clicks the machine counts as
+   *  one multi-click when it derives the count from `timeStamp`s.
+   *  Default 500 (the common platform default). */
+  doubleClickInterval?: number;
 }
+
+const DEFAULT_DOUBLE_CLICK_INTERVAL_MS = 500;
 
 /** A marquee in pointer space, normalised (width/height ≥ 0). */
 export interface MarqueeRect {
@@ -238,6 +258,14 @@ export interface DirectSelectSnapshot {
    *  the press landed on. The seam for what a host layers on a click —
    *  a double-click convert, a segment-click insert. */
   click: DirectSelectHit | null;
+  /** Which click of a run `click` is: 1 for a single click, 2 for the
+   *  second of a double-click, … — 0 whenever `click` is null. From the
+   *  `up` event's `clickCount` when the host passed one, else counted
+   *  from `timeStamp`s, else 1. */
+  clickCount: number;
+  /** `clickCount >= 2` — the host's double-click, with no second clock
+   *  of its own. */
+  doubleClick: boolean;
   /** Non-null on the event that was refused. */
   refusal: DirectSelectRefusal | null;
 }
@@ -335,6 +363,22 @@ function shifted(p: Vec2, d: Vec2): Vec2Mut {
   return [p[0] + d[0], p[1] + d[1]];
 }
 
+/** What a click landed ON, for chaining clicks into a double-click: the
+ *  same anchor, the same handle of it, the same segment (whatever `t`),
+ *  or empty space. */
+function targetKey(hit: DirectSelectHit): string {
+  switch (hit.kind) {
+    case "anchor":
+      return `a${hit.index}`;
+    case "handle":
+      return `h${hit.index}${hit.side}`;
+    case "segment":
+      return `s${hit.index}`;
+    case "empty":
+      return "e";
+  }
+}
+
 export class DirectSelectMachine {
   /** The committed table, pointer space. */
   private base: Table;
@@ -349,11 +393,21 @@ export class DirectSelectMachine {
   private slop: number;
   private nudgeStep: number;
   private smoothTolerance: number | undefined;
+  private doubleClickInterval: number;
+  /** The previous click, for counting multi-clicks from timestamps. */
+  private lastClick: {
+    target: string;
+    point: Vec2Mut;
+    time: number | null;
+    count: number;
+  } | null = null;
 
   constructor(options: DirectSelectOptions) {
     this.slop = options.slop;
     this.nudgeStep = options.nudgeStep;
     this.smoothTolerance = options.smoothTolerance;
+    this.doubleClickInterval =
+      options.doubleClickInterval ?? DEFAULT_DOUBLE_CLICK_INTERVAL_MS;
     this.transform = null;
     this.singular = false;
     this.base = this.live = { anchors: [], subpathStarts: [] };
@@ -374,7 +428,10 @@ export class DirectSelectMachine {
           : this.snap();
       case "up":
         return this.gesture
-          ? this.onUp(this.gesture, event.point, event.modifiers)
+          ? this.onUp(this.gesture, event.point, event.modifiers, {
+              clickCount: event.clickCount,
+              timeStamp: event.timeStamp,
+            })
           : this.snap();
       case "key":
         return this.onKey(event.key, event.modifiers);
@@ -413,13 +470,21 @@ export class DirectSelectMachine {
    * which is what the pointer has by then done on screen.
    */
   setOptions(
-    patch: Partial<Pick<DirectSelectOptions, "slop" | "nudgeStep" | "smoothTolerance">>,
+    patch: Partial<
+      Pick<
+        DirectSelectOptions,
+        "slop" | "nudgeStep" | "smoothTolerance" | "doubleClickInterval"
+      >
+    >,
   ): DirectSelectSnapshot {
     const ok = (v: unknown): v is number =>
       typeof v === "number" && Number.isFinite(v) && v >= 0;
     if (ok(patch.slop)) this.slop = patch.slop;
     if (ok(patch.nudgeStep)) this.nudgeStep = patch.nudgeStep;
     if (ok(patch.smoothTolerance)) this.smoothTolerance = patch.smoothTolerance;
+    if (ok(patch.doubleClickInterval)) {
+      this.doubleClickInterval = patch.doubleClickInterval;
+    }
     return this.snap();
   }
 
@@ -428,11 +493,13 @@ export class DirectSelectMachine {
     slop: number;
     nudgeStep: number;
     smoothTolerance: number | undefined;
+    doubleClickInterval: number;
   } {
     return {
       slop: this.slop,
       nudgeStep: this.nudgeStep,
       smoothTolerance: this.smoothTolerance,
+      doubleClickInterval: this.doubleClickInterval,
     };
   }
 
@@ -531,12 +598,15 @@ export class DirectSelectMachine {
     g: Gesture,
     point: Vec2,
     modifiers: DirectSelectModifiers,
+    timing: { clickCount?: number; timeStamp?: number },
   ): DirectSelectSnapshot {
     // A release far from the press with no move in between is still a
     // drag (a coalesced pointer stream can deliver exactly that).
     if (!g.dragging && dist(point, g.down) > this.slop) g.dragging = true;
     this.gesture = null;
-    if (!g.dragging) return this.onClick(g);
+    if (!g.dragging) return this.onClick(g, this.countClick(g, timing));
+    // A drag breaks a run of clicks.
+    this.lastClick = null;
     this.applyDrag(g, point, modifiers);
     if (g.kind === "marquee") {
       this.marquee = null;
@@ -545,7 +615,7 @@ export class DirectSelectMachine {
     return this.commit(PLAN_KIND[g.kind]);
   }
 
-  private onClick(g: Gesture): DirectSelectSnapshot {
+  private onClick(g: Gesture, clickCount: number): DirectSelectSnapshot {
     if (g.kind === "anchors") {
       if (!g.shiftAtDown) this.selection = new Set([g.index]);
       // Shift-click TOGGLES: an anchor that was not selected was added
@@ -554,7 +624,50 @@ export class DirectSelectMachine {
     } else if (g.kind === "marquee" && !g.shiftAtDown) {
       this.selection.clear();
     }
-    return this.snap({ click: g.hit });
+    return this.snap({ click: g.hit, clickCount });
+  }
+
+  /**
+   * Which click of a run this one is. A host-supplied `clickCount` is the
+   * answer. Otherwise, with a `timeStamp`, a click counts on from the
+   * previous one when it lands on the SAME TARGET (the same anchor, the
+   * same handle, the same segment — a segment's `t` may differ — or empty
+   * space), within the slop of it and within `doubleClickInterval`.
+   * Neither given: 1.
+   */
+  private countClick(
+    g: Gesture,
+    timing: { clickCount?: number; timeStamp?: number },
+  ): number {
+    const target = targetKey(g.hit);
+    const given = timing.clickCount;
+    let count: number;
+    if (typeof given === "number" && Number.isInteger(given) && given >= 1) {
+      count = given;
+    } else {
+      const t = timing.timeStamp;
+      const last = this.lastClick;
+      const chained =
+        typeof t === "number" &&
+        Number.isFinite(t) &&
+        last !== null &&
+        last.time !== null &&
+        last.target === target &&
+        t - last.time >= 0 &&
+        t - last.time <= this.doubleClickInterval &&
+        dist(g.down, last.point) <= this.slop;
+      count = chained ? last!.count + 1 : 1;
+    }
+    this.lastClick = {
+      target,
+      point: clone(g.down),
+      time:
+        typeof timing.timeStamp === "number" && Number.isFinite(timing.timeStamp)
+          ? timing.timeStamp
+          : null,
+      count,
+    };
+    return count;
   }
 
   /** Recompute the preview from the BASE table and the current pointer —
@@ -658,6 +771,9 @@ export class DirectSelectMachine {
     key: DirectSelectKey,
     modifiers: DirectSelectModifiers,
   ): DirectSelectSnapshot {
+    // A key between two clicks breaks the run (a nudge then a click is
+    // not a double-click).
+    this.lastClick = null;
     if (key === "Escape") {
       // Idle Escape is the host's (it pops the edit context).
       if (this.gesture) this.abort(this.gesture);
@@ -840,17 +956,21 @@ export class DirectSelectMachine {
 
   private snap(
     extra: Partial<
-      Pick<DirectSelectSnapshot, "commit" | "click" | "refusal">
+      Pick<DirectSelectSnapshot, "commit" | "click" | "refusal" | "clickCount">
     > = {},
   ): DirectSelectSnapshot {
     const g = this.gesture;
+    const click = extra.click ?? null;
+    const clickCount = click ? (extra.clickCount ?? 1) : 0;
     return {
       table: this.live,
       selected: this.sorted(),
       marquee: this.marquee,
       mode: !g ? "idle" : g.dragging ? g.kind : "press",
       commit: extra.commit ?? null,
-      click: extra.click ?? null,
+      click,
+      clickCount,
+      doubleClick: clickCount >= 2,
       refusal: extra.refusal ?? null,
     };
   }

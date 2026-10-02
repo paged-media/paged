@@ -109,9 +109,9 @@ describe("1 — setOptions: the zoom-dependent tolerances, changed in place", ()
       smoothTolerance: 0.1,
     });
     m.setOptions({ slop: Number.NaN, nudgeStep: -3 });
-    expect(m.currentOptions()).toEqual({ slop: 2, nudgeStep: 1, smoothTolerance: 0.1 });
+    expect(m.currentOptions()).toMatchObject({ slop: 2, nudgeStep: 1, smoothTolerance: 0.1 });
     m.setOptions({ smoothTolerance: 0.2 });
-    expect(m.currentOptions()).toEqual({ slop: 2, nudgeStep: 1, smoothTolerance: 0.2 });
+    expect(m.currentOptions()).toMatchObject({ slop: 2, nudgeStep: 1, smoothTolerance: 0.2 });
   });
 
   it("Pen: a larger close tolerance brings the first anchor into reach MID-RUN, without losing the run", () => {
@@ -310,5 +310,96 @@ describe("3 — planAnchorConvertAt, beside planAnchorAddAt / planAnchorDeleteAt
     expect(anchorEditOps(planAnchorConvertAt(SMOOTH_ARCH, 0)!)).toEqual([
       { op: "pathPointCurveType", index: 0, smooth: true },
     ]);
+  });
+});
+
+describe("4 — the click COUNT: a double-click without a second clock", () => {
+  const ds = (extra: { doubleClickInterval?: number } = {}) =>
+    new DirectSelectMachine({ table: QUAD, slop: 2, nudgeStep: 1, ...extra });
+  const press = (m: DirectSelectMachine, point: P, hit: DirectSelectHit) =>
+    m.handle({ type: "down", point, hit, modifiers: NONE });
+  const release = (
+    m: DirectSelectMachine,
+    point: P,
+    timing: { clickCount?: number; timeStamp?: number } = {},
+  ) => m.handle({ type: "up", point, modifiers: NONE, ...timing });
+  const clickAt = (
+    m: DirectSelectMachine,
+    point: P,
+    hit: DirectSelectHit,
+    timing: { clickCount?: number; timeStamp?: number } = {},
+  ) => {
+    press(m, point, hit);
+    return release(m, point, timing);
+  };
+
+  it("is ADDITIVE: with neither field every click counts 1, and nothing that is not a click counts at all", () => {
+    const m = ds();
+    const a = clickAt(m, [0, 0], anchorHit(0));
+    const b = clickAt(m, [0, 0], anchorHit(0));
+    expect([a.clickCount, a.doubleClick, b.clickCount, b.doubleClick]).toEqual([1, false, 1, false]);
+    press(m, [0, 0], anchorHit(0));
+    const dragged = release(m, [20, 0], { clickCount: 2 });
+    expect(dragged.click).toBeNull();
+    expect(dragged.clickCount).toBe(0);
+    expect(dragged.doubleClick).toBe(false);
+    expect(m.snapshot().clickCount).toBe(0);
+  });
+
+  it("a host-supplied count IS the answer", () => {
+    const m = ds();
+    expect(clickAt(m, [0, 0], anchorHit(0), { clickCount: 1 }).doubleClick).toBe(false);
+    const second = clickAt(m, [0, 0], anchorHit(0), { clickCount: 2 });
+    expect(second.clickCount).toBe(2);
+    expect(second.doubleClick).toBe(true);
+    expect(second.click).toEqual(anchorHit(0));
+    expect(clickAt(m, [0, 0], anchorHit(0), { clickCount: 3 }).clickCount).toBe(3);
+  });
+
+  it("from timestamps: the same target, inside the interval and the slop, counts on — 1, 2, 3", () => {
+    const m = ds();
+    expect(clickAt(m, [0, 0], anchorHit(0), { timeStamp: 1000 }).clickCount).toBe(1);
+    const two = clickAt(m, [1, 0], anchorHit(0), { timeStamp: 1300 });
+    expect(two.clickCount).toBe(2);
+    expect(two.doubleClick).toBe(true);
+    expect(clickAt(m, [1, 1], anchorHit(0), { timeStamp: 1600 }).clickCount).toBe(3);
+  });
+
+  it("from timestamps: too slow, too far, another target, or a drag / key in between starts over", () => {
+    const slow = ds();
+    clickAt(slow, [0, 0], anchorHit(0), { timeStamp: 0 });
+    expect(clickAt(slow, [0, 0], anchorHit(0), { timeStamp: 501 }).clickCount).toBe(1);
+
+    const far = ds();
+    clickAt(far, [0, 0], anchorHit(0), { timeStamp: 0 });
+    expect(clickAt(far, [5, 0], anchorHit(0), { timeStamp: 100 }).clickCount).toBe(1);
+
+    const other = ds();
+    clickAt(other, [0, 0], anchorHit(0), { timeStamp: 0 });
+    expect(clickAt(other, [0, 0], anchorHit(1), { timeStamp: 100 }).clickCount).toBe(1);
+
+    const dragged = ds();
+    clickAt(dragged, [0, 0], anchorHit(0), { timeStamp: 0 });
+    press(dragged, [0, 0], anchorHit(0));
+    release(dragged, [30, 0], { timeStamp: 50 });
+    dragged.sync(QUAD);
+    expect(clickAt(dragged, [0, 0], anchorHit(0), { timeStamp: 100 }).clickCount).toBe(1);
+
+    const keyed = ds();
+    clickAt(keyed, [0, 0], anchorHit(0), { timeStamp: 0 });
+    keyed.handle({ type: "key", key: "ArrowRight", modifiers: NONE });
+    keyed.sync(QUAD);
+    expect(clickAt(keyed, [0, 0], anchorHit(0), { timeStamp: 100 }).clickCount).toBe(1);
+  });
+
+  it("a segment double-click chains whatever `t` each click found; the interval is an option", () => {
+    const m = ds({ doubleClickInterval: 200 });
+    const seg = (t: number): DirectSelectHit => ({ kind: "segment", index: 0, t });
+    clickAt(m, [50, 0], seg(0.5), { timeStamp: 0 });
+    expect(clickAt(m, [51, 0], seg(0.51), { timeStamp: 150 }).doubleClick).toBe(true);
+    m.setOptions({ doubleClickInterval: 100 });
+    clickAt(m, [50, 0], seg(0.5), { timeStamp: 1000 });
+    expect(clickAt(m, [50, 0], seg(0.5), { timeStamp: 1150 }).doubleClick).toBe(false);
+    expect(m.currentOptions().doubleClickInterval).toBe(100);
   });
 });
