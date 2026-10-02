@@ -1,7 +1,7 @@
 {
   "name": "@paged-media/draw",
   "private": false,
-  "version": "0.1.0-canary.11",
+  "version": "0.1.0-canary.12",
   "license": "AGPL-3.0-only OR LicenseRef-PMEL",
   "type": "module",
   "main": "./src/index.ts",
@@ -9,6 +9,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./geometry": "./src/geometry.ts",
+    "./machines": "./src/machines.ts",
     "./manifest.json": "./manifest.json"
   },
   "scripts": {
@@ -53,6 +54,10 @@
       "./geometry": {
         "types": "./dist/geometry.d.ts",
         "default": "./dist/geometry.js"
+      },
+      "./machines": {
+        "types": "./dist/machines.d.ts",
+        "default": "./dist/machines.js"
       },
       "./manifest.json": "./manifest.json"
     }

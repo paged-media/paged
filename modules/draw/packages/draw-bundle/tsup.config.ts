@@ -5,7 +5,7 @@ import { defineConfig } from "tsup";
 // sits at the same depth as `src/`, which is why src/trace-engine.ts's
 // `../wasm/…` resolves from both.
 export default defineConfig({
-  entry: ["src/index.ts", "src/geometry.ts"],
+  entry: ["src/index.ts", "src/geometry.ts", "src/machines.ts"],
   format: ["esm"],
   dts: true,
   clean: true,
