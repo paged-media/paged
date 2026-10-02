@@ -123,18 +123,24 @@ var PagedProbe = (function () {
     return { closed: closed !== false, anchors: anchors };
   }
 
-  function black() {
+  function rgb(triple) {
     var c = new RGBColor();
-    c.red = 0;
-    c.green = 0;
-    c.blue = 0;
+    c.red = triple[0];
+    c.green = triple[1];
+    c.blue = triple[2];
     return c;
   }
 
+  function black() {
+    return rgb([0, 0, 0]);
+  }
+
   /** Create one PathItem from a spec `{closed, anchors:[{anchor,left,
-   *  right}]}` given in the ENGINE frame. Black fill, no stroke -- set
-   *  EXPLICITLY, because a new item inherits whatever the user last used
-   *  and an inherited stroke changes what "expand" returns. */
+   *  right}], fill?}` given in the ENGINE frame. Filled (black, or the
+   *  spec's `fill: [r, g, b]`, 0-255), no stroke -- set EXPLICITLY,
+   *  because a new item inherits whatever the user last used and an
+   *  inherited stroke changes what "expand" returns. The fill matters to
+   *  the Pathfinder region verbs: Merge unites what has the SAME fill. */
   function buildPath(doc, spec) {
     var item = doc.pathItems.add();
     var i, a, pp;
@@ -148,7 +154,7 @@ var PagedProbe = (function () {
     }
     item.closed = spec.closed;
     item.filled = true;
-    item.fillColor = black();
+    item.fillColor = spec.fill ? rgb(spec.fill) : black();
     item.stroked = false;
     return item;
   }
@@ -244,6 +250,20 @@ var PagedProbe = (function () {
       areaSignedApp: item.area,
       polarity: item.polarity === PolarityValues.POSITIVE ? "positive" : "negative"
     };
+    // Paint, because the region verbs answer in paint as much as in
+    // geometry: which piece kept which fill, which came back unpainted,
+    // and that Outline's edges are stroked, not filled.
+    out.filled = item.filled;
+    out.stroked = item.stroked;
+    if (item.filled && item.fillColor.typename === "RGBColor") {
+      out.fill = [item.fillColor.red, item.fillColor.green, item.fillColor.blue];
+    }
+    if (item.stroked) {
+      out.strokeWidth = item.strokeWidth;
+      if (item.strokeColor.typename === "RGBColor") {
+        out.stroke = [item.strokeColor.red, item.strokeColor.green, item.strokeColor.blue];
+      }
+    }
     if (compoundIndex !== undefined) out.compound = compoundIndex;
     return out;
   }

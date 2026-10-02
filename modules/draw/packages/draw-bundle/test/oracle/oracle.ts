@@ -61,7 +61,12 @@ export interface OracleAnchor {
 export interface OraclePath {
   closed: boolean;
   anchors: OracleAnchor[];
+  /** RGB fill, 0–255. Absent = black. Only the Pathfinder region verbs
+   *  care: Merge unites what has the SAME fill. */
+  fill?: Rgb;
 }
+
+export type Rgb = [number, number, number];
 
 export type Winding = "cw" | "ccw" | "none";
 
@@ -77,6 +82,12 @@ export interface OracleMeasuredPath extends OraclePath {
   winding: Winding;
   areaSignedApp?: number;
   polarity?: string;
+  /** Paint of the RESULT (recorded from the pathfinder-region probe on):
+   *  `PathItem.filled` / `.stroked`, and the RGB fill when filled. */
+  filled?: boolean;
+  stroked?: boolean;
+  strokeWidth?: number;
+  stroke?: Rgb;
   /** Index of the compound path this subpath belongs to, when the
    *  result is a compound path; absent for a plain path. */
   compound?: number;
@@ -293,6 +304,21 @@ export function flatten(path: OraclePath, steps = 128): Vec2[] {
     }
   }
   return ring;
+}
+
+/** Length of a path's line work: the flattened ring's chords, WITHOUT the
+ *  closing chord when the path is open. What two Outline results are
+ *  compared on — they cut the same edges into different pieces. */
+export function pathLength(path: OraclePath): number {
+  const ring = flatten(path);
+  let sum = 0;
+  const n = path.closed ? ring.length : ring.length - 1;
+  for (let i = 0; i < n; i++) {
+    const a = ring[i];
+    const b = ring[(i + 1) % ring.length];
+    sum += Math.hypot(b[0] - a[0], b[1] - a[1]);
+  }
+  return sum;
 }
 
 export type FillRule = "nonzero" | "evenodd";

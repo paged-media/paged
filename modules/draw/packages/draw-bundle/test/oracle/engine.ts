@@ -31,7 +31,7 @@ import type { HeadlessHost } from "@paged-media/plugin-sdk";
 import { drawBundle } from "../../src";
 import { F1_MULTI_SHAPE } from "../fixtures/corpus";
 import { openHost } from "../conformance/host";
-import { pathsOfTable, type OraclePath } from "./oracle";
+import { pathsOfTable, type OraclePath, type Rgb } from "./oracle";
 
 type MutationArg = Parameters<HeadlessHost["host"]["document"]["mutate"]>[0];
 type MutationOutcome = Awaited<ReturnType<HeadlessHost["host"]["document"]["mutate"]>>;
@@ -66,6 +66,48 @@ export async function pathsOf(h: HeadlessHost, id: ElementId): Promise<OraclePat
   return table ? pathsOfTable(table) : [];
 }
 
+/** The swatch an input's `fill` becomes in the engine: one RGB process
+ *  colour per distinct triple, named so it can be read back. */
+export const swatchIdFor = (fill: Rgb): string => `Color/oracle-${fill.join("-")}`;
+
+/** A colour as the oracle lane reads it back: the RGB triple of a swatch
+ *  this lane created, `"none"` for no paint, or the raw swatch id for one
+ *  it did not create (the fixture's own `Color/Black`). */
+export type Paint = Rgb | string;
+
+export interface ElementPaint {
+  fill: Paint;
+  stroke: Paint;
+  /** Stroke weight in points; `null` when the engine reports none. */
+  strokeWeight: number | null;
+}
+
+/** The fill and stroke an element carries now. */
+export async function paintOf(h: HeadlessHost, id: ElementId): Promise<ElementPaint> {
+  const props = await h.host.document.elementProperties(id);
+  const valueOf = (path: string) =>
+    props?.entries.find((e) => e.path === path)?.value as
+      | { type?: string; value?: unknown }
+      | null
+      | undefined;
+  const colour = (path: string): Paint => {
+    const v = valueOf(path);
+    if (!v || v.type !== "colorRef" || typeof v.value !== "string") return "none";
+    if (v.value === "Swatch/None") return "none";
+    const m = /^Color\/oracle-(\d+)-(\d+)-(\d+)$/.exec(v.value);
+    return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : v.value;
+  };
+  const weight = valueOf("frameStrokeWeight");
+  return {
+    fill: colour("frameFillColor"),
+    stroke: colour("frameStrokeColor"),
+    strokeWeight:
+      weight && weight.type === "length" && typeof weight.value === "number"
+        ? weight.value
+        : null,
+  };
+}
+
 export interface EngineRun {
   /** The inserted inputs, in input order (back to front). */
   ids: ElementId[];
@@ -90,6 +132,8 @@ export async function onEngine<T>(
 ): Promise<T> {
   const key = (id: ElementId) => `${id.kind}:${String(id.id)}`;
   const before = new Set((await leafIds(h)).map(key));
+  // Swatches this run created — undone with everything else at the end.
+  const swatches = new Set<string>();
   let steps = 0;
   const attempt = async (mutation: MutationArg) => {
     const outcome = await h.host.document.mutate(mutation);
@@ -116,6 +160,34 @@ export async function onEngine<T>(
       });
       if (!inserted.createdId) throw new Error("insertPath created nothing");
       ids.push(inserted.createdId);
+      // A probe's inputs carry NO stroke; the engine's `insertPath` gives a
+      // new path a 1 pt black one. Take it off so both sides start alike.
+      await apply({
+        op: "setElementProperty",
+        args: {
+          elementId: inserted.createdId,
+          path: "frameStrokeColor",
+          value: { type: "colorRef", value: null },
+        },
+      });
+      if (input.fill) {
+        const swatch = swatchIdFor(input.fill);
+        if (!swatches.has(swatch)) {
+          await apply({
+            op: "createSwatch",
+            args: { spec: { selfId: swatch, name: swatch, space: "RGB", value: input.fill } },
+          });
+          swatches.add(swatch);
+        }
+        await apply({
+          op: "setElementProperty",
+          args: {
+            elementId: inserted.createdId,
+            path: "frameFillColor",
+            value: { type: "colorRef", value: swatch },
+          },
+        });
+      }
     }
     return await body({
       ids,
