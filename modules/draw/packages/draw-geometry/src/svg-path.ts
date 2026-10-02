@@ -36,17 +36,39 @@ type Token = { kind: "cmd"; value: string } | { kind: "num"; value: number };
 
 const COMMANDS = new Set("MmLlHhVvCcSsQqTtAaZz");
 
+/** An arc takes seven arguments; the fourth and fifth are its flags. */
+const ARC_ARGS = 7;
+const ARC_LARGE_FLAG = 3;
+const ARC_SWEEP_FLAG = 4;
+
 /**
  * Tokenize a `d` string. Handles SVG number grammar: leading sign,
  * decimals, exponents, implicit separators (a sign or `.` after digits
  * starts a new number — `1.5.5` is `1.5` then `.5`; `-1-2` is two
  * numbers). Whitespace and commas are separators.
+ *
+ * ARC FLAGS ARE NOT NUMBERS. The grammar gives an elliptical arc seven
+ * arguments — `rx ry x-axis-rotation large-arc-flag sweep-flag x y` —
+ * and makes each of the two flags a SINGLE character, `0` or `1`, with
+ * the separator after it optional. So `a5 5 0 1110 0` is flags `1`, `1`
+ * and then the number `10`, and `a10 10 0 100 20` is flags `1`, `0` and
+ * then `0`, `20`. That spelling is what SVGO and most icon pipelines
+ * emit, so the scanner has to know WHERE in an arc's argument list it
+ * is: at the fourth and fifth argument of every group of seven
+ * (an arc command repeats implicitly) it takes one character instead of
+ * scanning a number. A character there that is not `0` / `1` is not a
+ * flag at all — invalid path data — and falls through to the number
+ * scan, so junk is read as leniently as it always was.
  */
 function tokenize(d: string): Token[] {
   const out: Token[] = [];
   let i = 0;
   const n = d.length;
   const isDigit = (c: string) => c >= "0" && c <= "9";
+  // Position in the current arc command's argument list, or -1 outside
+  // an arc. Counted per NUMBER token, so it survives separators and the
+  // implicit repetition of the command.
+  let arcArg = -1;
   while (i < n) {
     const c = d[i];
     if (c === " " || c === "\t" || c === "\n" || c === "\r" || c === ",") {
@@ -55,8 +77,21 @@ function tokenize(d: string): Token[] {
     }
     if (COMMANDS.has(c)) {
       out.push({ kind: "cmd", value: c });
+      arcArg = c === "A" || c === "a" ? 0 : -1;
       i++;
       continue;
+    }
+    if (arcArg >= 0) {
+      const slot = arcArg % ARC_ARGS;
+      if (
+        (slot === ARC_LARGE_FLAG || slot === ARC_SWEEP_FLAG) &&
+        (c === "0" || c === "1")
+      ) {
+        out.push({ kind: "num", value: c === "1" ? 1 : 0 });
+        arcArg++;
+        i++;
+        continue;
+      }
     }
     // Parse a number: [sign] digits [. digits] [e[sign]digits], or
     // [sign] . digits.
@@ -85,6 +120,7 @@ function tokenize(d: string): Token[] {
       continue;
     }
     out.push({ kind: "num", value: parseFloat(d.slice(start, i)) });
+    if (arcArg >= 0) arcArg++;
   }
   return out;
 }
@@ -461,8 +497,30 @@ export function serializePathData(
       // is implied by `Z` when it's a straight return — emit nothing,
       // else `Z` would draw it twice. A curved closing segment must be
       // emitted explicitly (`Z` then closes the trailing gap, if any).
+      //
+      // ONE straight return IS written out: the one of zero length,
+      // where the last anchor PRINTS as the start point. Left implicit,
+      // the text ends `… L x0 y0 Z`, which `parsePathData` reads as an
+      // explicit return to the start and folds away — the contour would
+      // come back one anchor short on every round trip. With the return
+      // spelled out the text ends `… L x0 y0 L x0 y0 Z`, the parser
+      // folds the return it was given and the stacked anchor survives.
+      // The comparison is on the FORMATTED coordinates, because that is
+      // what the parser will see: two anchors a hair apart that round to
+      // the same text stack just the same.
+      //
+      // (Writing EVERY straight return out would also round-trip, and
+      // parses to the same table — but it would restate the start point
+      // of every rectangle and polygon this writer emits, for a reader
+      // that is not this parser to make a duplicate node of.)
       const isClosingSeg = !isOpen && i === segCount - 1;
-      if (isClosingSeg && straight) continue;
+      if (isClosingSeg && straight) {
+        const stacked =
+          span > 1 &&
+          f(a.anchor[0]) === f(b.anchor[0]) &&
+          f(a.anchor[1]) === f(b.anchor[1]);
+        if (!stacked) continue;
+      }
       if (straight) {
         parts.push(`L ${f(b.anchor[0])} ${f(b.anchor[1])}`);
       } else {
