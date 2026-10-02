@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "build": "tsup src/index.ts --format esm --dts --out-dir dist --clean",
-    "prepublishOnly": "pnpm run build"
+    "prepublishOnly": "pnpm run build",
+    "bench": "vitest bench --run"
   },
   "dependencies": {
     "@paged-media/draw-geometry": "workspace:*",
