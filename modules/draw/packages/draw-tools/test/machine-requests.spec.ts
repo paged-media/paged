@@ -34,12 +34,17 @@ import { describe, expect, it } from "vitest";
 
 import type { AnchorTable, AnchorTriple } from "@paged-media/draw-geometry";
 
+import type { ElementId } from "@paged-media/plugin-api";
+
 import {
   DirectSelectMachine,
   PenMachine,
+  penEndpointAt,
   type DirectSelectHit,
   type DirectSelectModifiers,
+  type PenHit,
   type PenModifiers,
+  type PenPath,
 } from "../src";
 
 type P = [number, number];
@@ -146,5 +151,112 @@ describe("1 — setOptions: the zoom-dependent tolerances, changed in place", ()
     m.setOptions({ closeTolerance: 9, dragThreshold: Number.POSITIVE_INFINITY });
     expect(given).toEqual({ closeTolerance: 4, dragThreshold: 2 });
     expect(m.currentOptions()).toEqual({ closeTolerance: 9, dragThreshold: 2 });
+  });
+});
+
+describe("2 — hits: several paths under the pointer, ranked by the machine", () => {
+  const openPath = (anchors: AnchorTriple[]): AnchorTable => ({
+    anchors,
+    subpathStarts: [0],
+    subpathOpen: [true],
+  });
+  const id = (name: string): ElementId => ({ kind: "polygon", id: name });
+  /** Open, unselected: its endpoint (0, 0) can be picked up. */
+  const A: PenPath = {
+    id: id("a"),
+    table: openPath([corner(0, 0), corner(50, 0), corner(100, 0)]),
+  };
+  /** Closed, SELECTED: its anchor 0 sits at (0, 0) too. */
+  const S: PenPath = { id: id("s"), table: QUAD, selected: true };
+  /** Open, unselected, a second endpoint at (0, 0). */
+  const B: PenPath = {
+    id: id("b"),
+    table: openPath([corner(0, 0), corner(0, -80)]),
+  };
+  const anchor = (path: PenPath, index: number): PenHit => ({ kind: "anchor", path, index });
+  const segment = (path: PenPath, index: number, t: number): PenHit => ({
+    kind: "segment",
+    path,
+    index,
+    t,
+  });
+  const pen = () => new PenMachine({ closeTolerance: 4, dragThreshold: 2 });
+  const hover = (m: PenMachine, hits: PenHit[]) =>
+    m.handle({ type: "move", point: [0, 0], modifiers: PEN_NONE, hits });
+
+  it("penEndpointAt is the endpoint test the ranking uses", () => {
+    expect(penEndpointAt(A, 0)).toMatchObject({ index: 0, end: "start", contour: 0 });
+    expect(penEndpointAt(A, 2)).toMatchObject({ index: 2, end: "end" });
+    expect(penEndpointAt(A, 1)).toBeNull(); // interior
+    expect(penEndpointAt(S, 0)).toBeNull(); // a closed contour has no ends
+    expect(penEndpointAt(A, 7)).toBeNull();
+  });
+
+  it("a hit that DOES something beats one that does not, whatever the host's order", () => {
+    // A's interior anchor (unselected → "draw") listed first, B's
+    // endpoint second.
+    const snap = hover(pen(), [anchor(A, 1), anchor(B, 0)]);
+    expect(snap.intent).toBe("continue");
+    expect(snap.hit).toEqual(anchor(B, 0));
+  });
+
+  it("the SELECTED path wins a tie: its delete beats another path's continue", () => {
+    const snap = hover(pen(), [anchor(A, 0), anchor(S, 0)]);
+    expect(snap.intent).toBe("delete");
+    expect(snap.hit).toEqual(anchor(S, 0));
+  });
+
+  it("on one path an ANCHOR hit beats a SEGMENT hit", () => {
+    const snap = hover(pen(), [segment(S, 0, 0.5), anchor(S, 1)]);
+    expect(snap.intent).toBe("delete");
+    expect(snap.hit).toEqual(anchor(S, 1));
+  });
+
+  it("all else equal, the host's order is the last word", () => {
+    expect(hover(pen(), [anchor(A, 0), anchor(B, 0)]).hit).toEqual(anchor(A, 0));
+    expect(hover(pen(), [anchor(B, 0), anchor(A, 0)]).hit).toEqual(anchor(B, 0));
+  });
+
+  it("mid-run, a CLOSE onto the origin's other end beats a JOIN onto a third path", () => {
+    const m = pen();
+    // Pick A up at its end (100, 0) and add one anchor.
+    m.handle({ type: "down", point: [100, 0], modifiers: PEN_NONE, hit: anchor(A, 2) });
+    m.handle({ type: "up", point: [100, 0], modifiers: PEN_NONE });
+    m.handle({ type: "down", point: [50, 60], modifiers: PEN_NONE });
+    m.handle({ type: "up", point: [50, 60], modifiers: PEN_NONE });
+    const snap = hover(m, [anchor(B, 0), anchor(A, 0)]);
+    expect(snap.intent).toBe("close");
+    expect(snap.hit).toEqual(anchor(A, 0));
+    // …and the press acts on the winner.
+    m.handle({
+      type: "down",
+      point: [0, 0],
+      modifiers: PEN_NONE,
+      hits: [anchor(B, 0), anchor(A, 0)],
+    });
+    const closed = m.handle({ type: "up", point: [0, 0], modifiers: PEN_NONE });
+    expect(closed.plan?.kind).toBe("close");
+  });
+
+  it("is ADDITIVE: a single `hit` means what it always meant, and `hit` + `hits` are ranked together", () => {
+    const single = pen().handle({
+      type: "move",
+      point: [0, 0],
+      modifiers: PEN_NONE,
+      hit: anchor(A, 1),
+    });
+    expect(single.intent).toBe("draw");
+    expect(single.hit).toEqual(anchor(A, 1));
+    const both = pen().handle({
+      type: "move",
+      point: [0, 0],
+      modifiers: PEN_NONE,
+      hit: anchor(A, 1),
+      hits: [anchor(B, 0)],
+    });
+    expect(both.intent).toBe("continue");
+    // Empty space and no hits: no hit reported.
+    expect(pen().handle({ type: "move", point: [9, 9], modifiers: PEN_NONE }).hit).toBeNull();
+    expect(hover(pen(), [{ kind: "empty" }]).hit).toBeNull();
   });
 });

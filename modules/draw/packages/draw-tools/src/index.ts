@@ -26,6 +26,8 @@ export {
   strokeWidthFromPressure,
   penPreview,
   penPlanMutation,
+  penEndpointAt,
+  type PenEndpoint,
   type PenEvent,
   type PenSample,
   type PenModifiers,

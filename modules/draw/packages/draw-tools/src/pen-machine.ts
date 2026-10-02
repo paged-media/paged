@@ -196,6 +196,9 @@ export type PenEvent =
       sample?: PenSample;
       /** Omitted = empty space (v1 behaviour, unchanged). */
       hit?: PenHit;
+      /** EVERY path under the pointer, for the machine to rank (see
+       *  "RANKING" below). Combined with `hit` when both are given. */
+      hits?: readonly PenHit[];
     }
   | {
       type: "move";
@@ -203,6 +206,7 @@ export type PenEvent =
       modifiers: PenModifiers;
       sample?: PenSample;
       hit?: PenHit;
+      hits?: readonly PenHit[];
     }
   | { type: "up"; point: Vec2; modifiers: PenModifiers; sample?: PenSample }
   | { type: "key"; key: "Enter" | "Escape" };
@@ -264,6 +268,10 @@ export interface PenSnapshot {
   /** False once committed or cancelled — the shim resets then. An
    *  add / delete anchor click plans WITHOUT ending the machine. */
   active: boolean;
+  /** The hit `intent` was resolved from — the winner of the ranking when
+   *  the event carried several (`hits`), null over empty space or once
+   *  the machine is done. What the host highlights. */
+  hit: PenHit | null;
 }
 
 export interface PenOptions {
@@ -302,7 +310,7 @@ const MOUSE_PRESSURE = 0.5;
 const TRANSFORM_EPS = 1e-9;
 
 /** One end of an OPEN contour of an existing path. */
-interface Endpoint {
+export interface PenEndpoint {
   path: PenPath;
   /** Subpath index. */
   contour: number;
@@ -313,6 +321,8 @@ interface Endpoint {
   index: number;
   end: "start" | "end";
 }
+
+type Endpoint = PenEndpoint;
 
 /** The path being continued: the endpoint it was picked up at, plus
  *  the outgoing handle that endpoint had (to tell whether a drag
@@ -336,6 +346,31 @@ type Press =
 
 const DRAW: Resolved = { intent: "draw" };
 
+/**
+ * RANKING — what a press does when SEVERAL paths are under the pointer
+ * (`PenEvent.hits`). Each candidate is resolved exactly as a single
+ * `hit` would be, and the winner is the first by, in order:
+ *
+ *   1. it DOES something — any intent beats "draw" (a hit the machine
+ *      cannot use, e.g. an interior anchor of an unselected path, never
+ *      shadows one it can);
+ *   2. it is on the SELECTED path — the path being edited wins a tie
+ *      against one that merely passes under the pointer;
+ *   3. its intent, most specific first: close, join, continue, delete,
+ *      add;
+ *   4. an ANCHOR hit before a SEGMENT hit;
+ *   5. the host's own order — so a host that lists nearest-first (or
+ *      topmost-first) keeps that as the last word.
+ */
+const INTENT_RANK: Record<PenIntent, number> = {
+  close: 0,
+  join: 1,
+  continue: 2,
+  delete: 3,
+  add: 4,
+  draw: 5,
+};
+
 function sameElement(a: ElementId, b: ElementId): boolean {
   return (
     a.kind === b.kind && JSON.stringify(a.id) === JSON.stringify(b.id)
@@ -351,6 +386,13 @@ function sameTransform(
   return m.every((v, i) => Math.abs(v - n[i]) <= TRANSFORM_EPS);
 }
 
+function lexLess(a: readonly number[], b: readonly number[]): boolean {
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return a[i] < b[i];
+  }
+  return false;
+}
+
 function invertible(m: Affine | null | undefined): boolean {
   return !m || inverseApplyAffine(m, 0, 0) !== null;
 }
@@ -361,7 +403,13 @@ function contourCount(table: AnchorTable): number {
 
 /** The open-contour endpoint at `index`, or null when that anchor is
  *  interior or its contour is closed. A one-anchor open contour's only
- *  anchor is its END (continuing it appends). */
+ *  anchor is its END (continuing it appends). Exported as
+ *  `penEndpointAt` — the test the machine ranks hits with, so a host
+ *  drawing endpoint markers asks the same question. */
+export function penEndpointAt(path: PenPath, index: number): PenEndpoint | null {
+  return endpointAt(path, index);
+}
+
 function endpointAt(path: PenPath, index: number): Endpoint | null {
   const { table } = path;
   const n = table.anchors.length;
@@ -457,6 +505,9 @@ export class PenMachine {
   private brokenLeft = false;
   private hover: Vec2 | null = null;
   private hoverResolved: Resolved = DRAW;
+  /** The hits the hover / the press resolved from (snapshot `hit`). */
+  private hoverHit: PenHit | null = null;
+  private pressHit: PenHit | null = null;
   /** The existing path this run continues (v2), else null. */
   private origin: Origin | null = null;
   private done = false;
@@ -499,12 +550,12 @@ export class PenMachine {
           event.point,
           event.modifiers,
           event.sample,
-          event.hit,
+          this.pick(event.hit, event.hits),
         );
       case "move":
         return this.pointerDown
           ? this.onDragMove(event.point, event.modifiers)
-          : this.onHoverMove(event.point, event.hit);
+          : this.onHoverMove(event.point, this.pick(event.hit, event.hits));
       case "up":
         return this.onUp();
       case "key":
@@ -524,8 +575,10 @@ export class PenMachine {
     this.press = null;
     this.hover = null;
     this.hoverResolved = DRAW;
+    this.hoverHit = null;
     const resolved = this.resolve(hit);
     this.pressIntent = resolved.intent;
+    this.pressHit = hit && hit.kind !== "empty" ? hit : null;
     switch (resolved.intent) {
       case "add":
       case "delete":
@@ -611,7 +664,36 @@ export class PenMachine {
   private onHoverMove(point: Vec2, hit?: PenHit): PenSnapshot {
     this.hover = clone(point);
     this.hoverResolved = this.resolve(hit);
+    this.hoverHit = hit && hit.kind !== "empty" ? hit : null;
     return this.snapshot(null);
+  }
+
+  /** The candidate a press here would act on — see RANKING. Undefined
+   *  when there is none (empty space). */
+  private pick(
+    hit: PenHit | undefined,
+    hits: readonly PenHit[] | undefined,
+  ): PenHit | undefined {
+    if (!hits || hits.length === 0) return hit;
+    const candidates = hit ? [hit, ...hits] : [...hits];
+    let best: PenHit | undefined;
+    let bestKey: number[] | null = null;
+    candidates.forEach((c, order) => {
+      if (c.kind === "empty") return;
+      const intent = this.resolve(c).intent;
+      const key = [
+        intent === "draw" ? 1 : 0,
+        c.path.selected ? 0 : 1,
+        INTENT_RANK[intent],
+        c.kind === "anchor" ? 0 : 1,
+        order,
+      ];
+      if (!bestKey || lexLess(key, bestKey)) {
+        best = c;
+        bestKey = key;
+      }
+    });
+    return best;
   }
 
   private onUp(): PenSnapshot {
@@ -620,6 +702,7 @@ export class PenMachine {
     const press = this.press;
     this.press = null;
     this.pressIntent = "draw";
+    this.pressHit = null;
     if (!press) return this.snapshot(null);
     if (press.kind === "edit") {
       // An anchor edit on the selected path: planned, and the pen stays
@@ -856,6 +939,11 @@ export class PenMachine {
       const { path, index } = this.hoverResolved.endpoint;
       rubberTo = toPointer(path.transform, path.table.anchors[index].anchor);
     }
+    let hit: PenHit | null = null;
+    if (!this.done) {
+      if (this.pointerDown) hit = this.pressHit;
+      else if (hovering && !closePreview) hit = this.hoverHit;
+    }
     return {
       anchors: this.anchors,
       pressures: this.pressures,
@@ -866,6 +954,7 @@ export class PenMachine {
       commit,
       plan,
       active: !this.done,
+      hit,
     };
   }
 }
