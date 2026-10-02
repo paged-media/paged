@@ -2,14 +2,24 @@
 
 **paged.draw** — the vector-illustration plugin for the Paged editor, and the
 forcing function for the plugin platform. Concept:
-`thoughts/docs/paged/plugin-draw/base-idea.md`; verified reality + strategy:
-`thoughts/docs/paged/plugin-draw/reality-check.md`.
+[`docs/concept.md`](./docs/concept.md).
 
 Strategy: **incubate-then-extract.** Draw capability grows as host-agnostic
 packages here while the editor consumes them through thin gesture-handler
 shims; the bundle (`activate(host)`) takes over registration at milestone D3.
 `BREAKAGE_LOG.md` records every place the plugin surface fell short — it is
 the API-v1 punch list.
+
+## Documentation
+
+Everything about how the plugin is designed and built is in [`docs/`](./docs/README.md):
+
+- [`docs/concept.md`](./docs/concept.md): the capability specification, with notes on what was built.
+- [`docs/architecture.md`](./docs/architecture.md): packages, how drawing reaches the document, host doors.
+- [`docs/status.md`](./docs/status.md): what ships today and what does not.
+- [`docs/adr/`](./docs/adr/README.md): the architecture decisions, one per file.
+
+`docs/status.md` is the current record of what ships; the sections below are older in places.
 
 ## Packages
 
