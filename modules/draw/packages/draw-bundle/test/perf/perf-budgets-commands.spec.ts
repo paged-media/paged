@@ -401,14 +401,17 @@ describe("perf budgets — commands over a busy document", () => {
       expect(await applySelectBlendObjects(host, { blendId: other })).toHaveLength(2);
       expect(work.reads()).toBe(0);
 
-      // WARM — an update. What is left is the build's own: the two key
-      // envelopes, the before/after tree diff, the 4 new steps' links
-      // and the new group's lookup. As found: 2 812 and 6.
+      // WARM — an update reads NOTHING of the document now: the key
+      // envelopes are the ones the walk read, and what the batch created
+      // — the 4 new steps and their group — comes off the engine's reply.
+      // As found: 2 812 metadata reads and 6 tree reads; then 6 and 3
+      // (the two key envelopes, the 4 new steps' links; the before/after
+      // diff and the group's lookup).
       work.reset();
       const steps = await applyUpdateBlend(host, { blendId: other, steps: 4 });
       expect(steps).toHaveLength(4);
-      expect(work.count("document.getMetadata")).toBe(6);
-      expect(work.count("document.tree")).toBe(3);
+      expect(work.count("document.getMetadata")).toBe(0);
+      expect(work.count("document.tree")).toBe(0);
       report("blend update, warm index", work.snapshot());
 
       // THE UPDATE CHANGED THE DOCUMENT, so the next command walks
@@ -520,40 +523,46 @@ describe("perf budgets — commands over a busy document", () => {
   // `applyRegenerateLivePaint` — where the link walk and the tree diff
   // meet. Each acts on ONE record.
   describe("re-plan one record of fifty — the walks stack up", () => {
-    it("blend, update: ONE walk, and the tree read four times", async () => {
-      const { work, undoSteps, result } = await countedWrite(w, "blend update", [], (host) =>
-        applyUpdateBlend(host, { blendId: recordOf("blend"), steps: 4 }),
-      );
+    it("blend, update: ONE walk, and nothing read after it", async () => {
+      const { work, undoSteps, result, added, selected, restored } =
+        await countedWrite(w, "blend update", [], (host) =>
+          applyUpdateBlend(host, { blendId: recordOf("blend"), steps: 4 }),
+        );
       expect(result).toHaveLength(4);
       expect(work.mutations).toEqual([{ op: "batch", ops: 39 }]);
       expect(undoSteps).toBe(1);
-      // One walk (LEAVES), the two key envelopes the batch is built
-      // from, and the 4 new steps the tree diff found. As found: 2 812 —
-      // `blendLinks` ran twice (once for the keys, once inside
-      // `blendGenerationOf`), each a walk of its own. TARGET <= 7: the
-      // record's own 5 leaves and the 4 new steps' — none of which need
-      // a read if the batch outcome names them.
-      expect(work.count("document.getMetadata")).toBe(LEAVES + 6);
-      // The index's one tree, the before/after diff, and the lookup of
-      // the group the batch created. As found: 6 (two link walks and a
-      // second group lookup on top). TARGET 0.
-      expect(work.count("document.tree")).toBe(4);
+      // Four new steps in a new group, the group selected; one undo
+      // restores the document.
+      expect(added.sort()).toEqual(["group", "polygon", "polygon", "polygon", "polygon"]);
+      expect(selected.map((s) => s.kind)).toEqual(["group"]);
+      expect(restored).toBe(true);
+      // The walk, and nothing after it: the key envelopes are the walk's
+      // and what the batch created is off the engine's reply. As found:
+      // 2 812 — `blendLinks` ran twice, each a walk of its own — then
+      // LEAVES + 6 (the two keys re-read, the 4 new steps' links read to
+      // tell them apart). TARGET: the record's own leaves.
+      expect(work.count("document.getMetadata")).toBe(LEAVES);
+      // The index's one tree. As found: 6, then 4 — the before/after
+      // diff and the new group's lookup on top. TARGET 0.
+      expect(work.count("document.tree")).toBe(1);
     });
 
     it("repeat, update: the same shape", async () => {
-      const { work, undoSteps, result } = await countedWrite(w, "repeat update", [], (host) =>
-        applyUpdateRepeat(host, { repeatId: recordOf("repeat"), columns: 4 }),
-      );
+      const { work, undoSteps, result, added, selected, restored } =
+        await countedWrite(w, "repeat update", [], (host) =>
+          applyUpdateRepeat(host, { repeatId: recordOf("repeat"), columns: 4 }),
+        );
       expect(result).toHaveLength(3);
       expect(work.mutations).toEqual([{ op: "batch", ops: 23 }]);
       expect(undoSteps).toBe(1);
-      // One walk, the source envelope the batch is built from, and the 3
-      // new instances the tree diff found. As found: 2 810 — two walks.
-      // TARGET <= 5.
-      expect(work.count("document.getMetadata")).toBe(LEAVES + 4);
-      // The index's one tree, the before/after diff, the new group's
-      // lookup. As found: 6. TARGET 0.
-      expect(work.count("document.tree")).toBe(4);
+      expect(added.sort()).toEqual(["group", "polygon", "polygon", "polygon"]);
+      expect(selected.map((s) => s.kind)).toEqual(["group"]);
+      expect(restored).toBe(true);
+      // The walk, and nothing after it. As found: 2 810 — two walks —
+      // then LEAVES + 4 (the source re-read, the 3 new instances' links).
+      expect(work.count("document.getMetadata")).toBe(LEAVES);
+      // The index's one tree. As found: 6, then 4. TARGET 0.
+      expect(work.count("document.tree")).toBe(1);
       // As found: 4 — the command, both `repeatLinks` and the
       // generation each read the recipe for themselves.
       expect(work.count("parts.read")).toBe(1);
@@ -780,31 +789,40 @@ describe("perf budgets — commands over a busy document", () => {
       expect(await undoStepsSince(w, mark)).toBe(1);
     });
 
-    it("blend: two reads for the diff, a third to find the group", async () => {
-      const { work, undoSteps, result } = await countedWrite(
-        w,
-        "make blend",
-        [w.plain[0]!, w.plain[2]!],
-        (host) => applyMakeBlend(host, { steps: 3 }),
-      );
+    it("blend: no tree read — the reply names the steps and the group", async () => {
+      const { work, undoSteps, result, added, selected, restored } =
+        await countedWrite(w, "make blend", [w.plain[0]!, w.plain[2]!], (host) =>
+          applyMakeBlend(host, { steps: 3 }),
+        );
       expect(result).toHaveLength(3);
       expect(work.mutations).toEqual([{ op: "batch", ops: 27 }]);
       expect(undoSteps).toBe(1);
-      // Each one returns all 1 403 leaves. TARGET 0.
-      expect(work.count("document.tree")).toBe(3);
-      // The two keys, then the three steps the diff found.
-      expect(work.count("document.getMetadata")).toBe(5);
+      expect(added.sort()).toEqual(["group", "polygon", "polygon", "polygon"]);
+      expect(selected.map((s) => s.kind)).toEqual(["group"]);
+      expect(restored).toBe(true);
+      // As found: 3 — two for the diff, a third to find the group; each
+      // one returns all 1 403 leaves.
+      expect(work.count("document.tree")).toBe(0);
+      // The two keys. As found: 5 — the three new steps were read too,
+      // to tell them apart.
+      expect(work.count("document.getMetadata")).toBe(2);
     });
 
-    it("repeat", async () => {
-      const { work, undoSteps, result } = await countedWrite(w, "make repeat", [w.plain[0]!], (host) =>
-        applyMakeRepeat(host, "grid", { columns: 3, rows: 1, spacing: [4, 4] }),
-      );
+    it("repeat: no tree read", async () => {
+      const { work, undoSteps, result, added, selected, restored } =
+        await countedWrite(w, "make repeat", [w.plain[0]!], (host) =>
+          applyMakeRepeat(host, "grid", { columns: 3, rows: 1, spacing: [4, 4] }),
+        );
       expect(result).toHaveLength(2);
       expect(work.mutations).toEqual([{ op: "batch", ops: 14 }]);
       expect(undoSteps).toBe(1);
-      // TARGET 0.
-      expect(work.count("document.tree")).toBe(3);
+      expect(added.sort()).toEqual(["group", "polygon", "polygon"]);
+      expect(selected.map((s) => s.kind)).toEqual(["group"]);
+      expect(restored).toBe(true);
+      // As found: 3.
+      expect(work.count("document.tree")).toBe(0);
+      // The source. As found: 3 — the two new instances were read too.
+      expect(work.count("document.getMetadata")).toBe(1);
     });
 
     it("pattern: ONE batch, and the tree is not read at all", async () => {

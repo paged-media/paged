@@ -165,9 +165,10 @@ import {
 import { stampDrawMetadata } from "./appearance-bake";
 import { compoundPaintOf, type CompoundPaint } from "./compound-path";
 import { groupMutationFor, ungroupMutationFor } from "./group";
+import { bindMinted, mutateMinting } from "./minted";
 import { supportsPathOps } from "./path-ops";
 import { repeatPageRect } from "./repeat";
-import { leafIdsOf, valueForCriterion } from "./select-same";
+import { valueForCriterion } from "./select-same";
 import { insertPathMutationFor } from "../handlers/insert-path";
 import { announceRecipeChange, groupHolding, linkIndex } from "../link-index";
 import {
@@ -1273,10 +1274,9 @@ export async function blendLinks(
   return { keys, steps, spines };
 }
 
-/** The group node holding `member`, or null — a BATCH outcome does not
- *  echo an inner `createGroup`'s id, so the tree is the source of truth
- *  (and the measured C-15 group edge is why this is read BEFORE a batch
- *  rather than bound inside one). */
+/** The group node holding `member`, or null — one read of the scene
+ *  tree. The build no longer needs it: the group a batch made comes off
+ *  the engine's reply (`commands/minted.ts`). Kept as a public helper. */
 export async function blendGroupOf(
   host: BundleHost,
   member: ElementId,
@@ -1534,10 +1534,6 @@ export interface BlendBuild {
   undoSteps: number;
 }
 
-async function leafElements(host: BundleHost): Promise<ElementId[]> {
-  return leafIdsOf(await host.document.tree().catch(() => []));
-}
-
 async function emitBlend(
   host: BundleHost,
   args: {
@@ -1547,42 +1543,58 @@ async function emitBlend(
   },
 ): Promise<BlendBuild> {
   const { plan, label } = args;
-  const before = new Set((await leafElements(host)).map((e) => String(e.id)));
+  // Out of the link index: an update has just walked these envelopes at
+  // this revision, so this reads nothing; a make reads each key once.
+  const index = linkIndex(host);
   const keyEnvelopes = await Promise.all(
-    plan.keys.map((k) => host.document.getMetadata(k.id).catch(() => null)),
+    plan.keys.map((k) => index.envelopeOf(k.id).catch(() => null)),
   );
   const spineEnvelope = plan.spineId
-    ? await host.document.getMetadata(plan.spineId).catch(() => null)
+    ? await index.envelopeOf(plan.spineId).catch(() => null)
     : null;
-  const outcome = await host.document.mutate(
-    blendBatchFor({
-      plan,
-      keyEnvelopes,
-      spineEnvelope,
-      previous: args.previous ?? null,
-    }),
-  );
-  if (!outcome.applied) {
+  const batch = blendBatchFor({
+    plan,
+    keyEnvelopes,
+    spineEnvelope,
+    previous: args.previous ?? null,
+  });
+  const built = await mutateMinting(host, batch);
+  if (!built.outcome.applied) {
     host.log.warn(
-      `${label}: rejected by engine: ${JSON.stringify(outcome.error)}`,
+      `${label}: rejected by engine: ${JSON.stringify(built.outcome.error)}`,
     );
     return { steps: [], undoSteps: 0 };
   }
-  // A batch outcome carries ONE `createdId`, so the tree diff is the
-  // honest enumeration (the repeat.ts / appearance-bake precedent).
-  const minted = (await leafElements(host)).filter(
-    (e) => !before.has(String(e.id)),
+  // What the batch minted, off the engine's reply (`commands/minted.ts`):
+  // every intermediate subpath by the handle the batch named it with, in
+  // emission order, and the group. It used to be a before/after diff of
+  // the whole scene tree, a metadata read per new leaf to tell steps
+  // apart, and a third tree read to find the group.
+  const bound = bindMinted(built, batch);
+  let steps = plan.steps.flatMap((step, i) =>
+    step.subpaths.map((_, s) => bound?.byHandle.get(blendHandle(i, s))),
   );
-  const steps: ElementId[] = [];
-  for (const id of minted) {
-    const env = await host.document.getMetadata(id).catch(() => null);
-    if (blendStepOf(env)?.blend === plan.blend) steps.push(id);
+  let group = bound?.groups[0] ?? null;
+  if (steps.some((id) => id === undefined)) {
+    // The blend IS built, and the engine's account does not match the
+    // batch — an engine that does not report the group it minted inside
+    // a handle-using batch, for one. Every intermediate carries its step
+    // link, so ask the document (one walk of the new revision).
+    host.log.debug(
+      `${label}: the batch applied but did not account for its ` +
+        "intermediates — reading them back by their links",
+    );
+    steps = (await blendLinks(host, plan.blend)).steps.map((s) => s.id);
+    group =
+      steps.length > 0 && steps[0]
+        ? groupHolding(await linkIndex(host).tree(), steps[0])
+        : null;
   }
-  const group = steps.length > 0 ? await blendGroupOf(host, steps[0]) : null;
+  const made = steps.filter((id): id is ElementId => id !== undefined);
   await host.selection.set(
-    group ? [group] : [plan.keys[0].id, plan.keys[1].id, ...steps],
+    group ? [group] : [plan.keys[0].id, plan.keys[1].id, ...made],
   );
-  return { steps, undoSteps: 1 };
+  return { steps: made, undoSteps: 1 };
 }
 
 // ------------------------------------------------------------- appliers

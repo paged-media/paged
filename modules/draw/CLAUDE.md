@@ -354,6 +354,19 @@ keeping separate: it creates NOTHING, so it needs no `bindCreated`, no
 batch-ordering rule and no group — just N `frameTransform` writes in one
 batch.
 
+BLEND AND REPEAT (make and update) were one batch already; what they
+still paid was learning what the batch built — a before/after tree diff,
+a metadata read per new leaf to tell steps / instances / the clip frame
+apart, and a third tree read for the new group. They read the handles
+and the group off the reply now (`commands/minted.ts`): a make reads no
+tree, an update only the link walk's one. The new GROUP's id relies on
+core minting it at translation time (the fixed edge above); on an engine
+that does not list it, the reply does not match the batch and both fall
+back to their links. A CLIPPED repeat stays two batches, and the reason
+moved: the paste could ride the build by handle now, but on a host whose
+reply lists nothing the tree diff is the only enumeration left, and a
+pasted-in instance is invisible to it — `repeatClipBatchFor` says so.
+
 PATTERN (make and re-plan) IS ONE BATCH TOO, and the first flow CONVERTED
 rather than built that way: the inserts are named, and the batch that was
 "batch 2" follows them in the same mutation, addressing the copies by

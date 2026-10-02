@@ -200,7 +200,7 @@ import {
   framePathMutationFor,
   type CompoundPaint,
 } from "./compound-path";
-import { leafIdsOf } from "./select-same";
+import { bindMinted, mutateMinting } from "./minted";
 import { insertPathMutationFor } from "../handlers/insert-path";
 import { announceRecipeChange, groupHolding, linkIndex } from "../link-index";
 import {
@@ -961,20 +961,26 @@ export function repeatBatchFor(args: {
  * THE CLIP BATCH — one `pasteInto` per instance, and the ONE reason
  * this bundle's clipped repeats cost a SECOND undo step.
  *
- * It cannot ride the build batch, and the reason is not a contract skew
- * this time: `pasteInto` is exactly what HIDES an instance from
- * `document.tree()` (measured — the container reports NO children while
- * `getMetadata` / `elementGeometry` / `pathAnchors` all still answer for
- * the child by id). A batch outcome carries ONE `createdId`, so the only
- * honest enumeration of what a multi-insert batch minted is the tree
- * diff — which has to be taken BEFORE the paste. Deriving the ids
- * instead, from the engine's sequential `u<N>` minting, would be reading
- * an id FORMAT the wire never promised.
+ * It does not ride the build batch, and the reason is not a contract skew:
+ * `pasteInto` is exactly what HIDES an instance from `document.tree()`
+ * (measured — the container reports NO children while `getMetadata` /
+ * `elementGeometry` / `pathAnchors` all still answer for the child by id),
+ * and the recipe has to name every instance, because nothing else ever
+ * will again.
+ *
+ * WHAT CHANGED, and why it is still two. The build's created ids come off
+ * the engine's reply now (`commands/minted.ts`), so on the editor and the
+ * headless host the paste COULD ride the build batch by handle — `$h:`
+ * resolves at both ends of `pasteInto`. But the seam's last lane, for a
+ * host whose reply does not list what it minted, is a tree DIFF; a paste
+ * inside the build batch would hide the instances from it, and their ids
+ * — the recipe's only index — would be unrecoverable. Deriving them from
+ * the engine's sequential `u<N>` minting would be reading an id FORMAT
+ * the wire never promised. So the paste stays its own batch, where every
+ * lane can still see what it is pasting.
  *
  * So: an UNCLIPPED repeat is ONE batch and 1 undo step; a CLIPPED one is
- * TWO and 2. Closing that costs a door — anything that lists a
- * container's children, or a batch outcome that reports every created
- * id — and is filed with the C-23 / B-18 pair rather than papered over.
+ * TWO and 2.
  */
 export function repeatClipBatchFor(
   clipFrame: ElementId,
@@ -1265,8 +1271,9 @@ function recipeInstanceAlive(
   );
 }
 
-/** The group node holding `member`, or null — a BATCH outcome does not
- *  echo an inner `createGroup`'s id, so the tree is the source of truth. */
+/** The group node holding `member`, or null — one read of the scene
+ *  tree. The build no longer needs it: the group a batch made comes off
+ *  the engine's reply (`commands/minted.ts`). Kept as a public helper. */
 export async function repeatGroupOf(
   host: BundleHost,
   member: ElementId,
@@ -1517,41 +1524,58 @@ async function emitRepeat(
     );
     return empty;
   }
-  const before = new Set(
-    leafIdsOf(await host.document.tree().catch(() => [])).map((e) =>
-      String(e.id),
-    ),
-  );
+  // Out of the link index: an update has just walked these envelopes at
+  // this revision, so this reads nothing; a make reads each source once.
+  const index = linkIndex(host);
   const sourceEnvelopes = await Promise.all(
-    plan.sources.map((s) => host.document.getMetadata(s.id).catch(() => null)),
+    plan.sources.map((s) => index.envelopeOf(s.id).catch(() => null)),
   );
-  const outcome = await host.document.mutate(
-    repeatBatchFor({ plan, sourceEnvelopes, previous: args.previous ?? null }),
-  );
-  if (!outcome.applied) {
+  const batch = repeatBatchFor({
+    plan,
+    sourceEnvelopes,
+    previous: args.previous ?? null,
+  });
+  const built = await mutateMinting(host, batch);
+  if (!built.outcome.applied) {
     host.log.warn(
-      `${label}: rejected by engine: ${JSON.stringify(outcome.error)}`,
+      `${label}: rejected by engine: ${JSON.stringify(built.outcome.error)}`,
     );
     return empty;
   }
-  // Which ids the batch minted. A batch outcome carries ONE `createdId`,
-  // so the tree diff is the honest enumeration (the blend.ts /
-  // appearance-bake precedent) — and it has to be taken BEFORE any
-  // `pasteInto`, which is what makes a clipped instance invisible here.
-  const minted = leafIdsOf(await host.document.tree().catch(() => [])).filter(
-    (e) => !before.has(String(e.id)),
-  );
-  const instances: ElementId[] = [];
-  let clipFrame: ElementId | null = null;
-  for (const id of minted) {
-    const env = await host.document.getMetadata(id).catch(() => null);
-    if (repeatClipOf(env)?.repeat === plan.repeat) clipFrame = id;
-    else if (repeatInstanceOf(env)?.repeat === plan.repeat) instances.push(id);
+  // Which ids the batch minted — off the engine's reply
+  // (`commands/minted.ts`): every instance by the handle the batch named
+  // it with, the clip frame by its own, and the group. It used to be a
+  // before/after diff of the whole scene tree, a metadata read per new
+  // leaf to tell instances from the clip frame, and a third tree read for
+  // the group.
+  const bound = bindMinted(built, batch);
+  const copies = repeatCopiesFor(plan);
+  let instances = copies.map((_, i) => bound?.byHandle.get(repeatHandle(i, 0)));
+  let clipFrame: ElementId | null = plan.clipRect
+    ? (bound?.byHandle.get(REPEAT_CLIP_HANDLE) ?? null)
+    : null;
+  let group = bound?.groups[0] ?? null;
+  if (instances.some((id) => id === undefined) || (plan.clipRect && !clipFrame)) {
+    // The repeat IS built, and the engine's account does not match the
+    // batch. Every piece carries its link and nothing is pasted in yet,
+    // so the tree still shows all of it: ask the document.
+    host.log.debug(
+      `${label}: the batch applied but did not account for its instances — ` +
+        "reading them back by their links",
+    );
+    const links = await repeatLinks(host, plan.repeat);
+    instances = links.instances.map((i) => i.id);
+    clipFrame = plan.clipRect ? (links.clipFrames[0]?.id ?? null) : null;
+    group =
+      !plan.clipRect && instances[0]
+        ? groupHolding(await linkIndex(host).tree(), instances[0])
+        : null;
   }
+  const made = instances.filter((id): id is ElementId => id !== undefined);
   let undoSteps = 1;
-  if (plan.clipRect && clipFrame && instances.length > 0) {
+  if (plan.clipRect && clipFrame && made.length > 0) {
     const clipped = await host.document.mutate(
-      repeatClipBatchFor(clipFrame, instances),
+      repeatClipBatchFor(clipFrame, made),
     );
     if (clipped.applied) {
       undoSteps = 2;
@@ -1564,18 +1588,15 @@ async function emitRepeat(
       clipFrame = null;
     }
   }
-  const group =
-    !plan.clipRect && instances.length > 0
-      ? await repeatGroupOf(host, instances[0])
-      : null;
+  if (plan.clipRect || made.length === 0) group = null;
   await host.selection.set(
     group
       ? [group]
       : clipFrame
         ? [...plan.sources.map((s) => s.id), clipFrame]
-        : [...plan.sources.map((s) => s.id), ...instances],
+        : [...plan.sources.map((s) => s.id), ...made],
   );
-  return { instances, clipFrame, undoSteps };
+  return { instances: made, clipFrame, undoSteps };
 }
 
 // ------------------------------------------------------------- appliers
