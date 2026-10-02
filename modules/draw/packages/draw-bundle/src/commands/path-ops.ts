@@ -37,6 +37,12 @@
 // OWN stroke weight / end-cap / join / miter limit from the typed
 // elementProperties door, so the outline matches what is rendered —
 // the payload then overrides per key.
+//
+// WHO TYPES THE PAYLOAD: the Path Options panel
+// (`panels/path-options-panel.tsx`) — the menu's "Offset path…" and
+// "Simplify…" raise it instead of running these with their defaults.
+// These command ids stay what they were, and run bare they repeat the
+// values LAST APPLIED from the panel (the defaults until there are any).
 
 import type {
   BundleHost,
@@ -209,7 +215,7 @@ export async function outlineParamsOf(
 
 // ------------------------------------------------------------ appliers
 
-type PathOpPayload = Record<string, unknown> | undefined;
+export type PathOpPayload = Record<string, unknown> | undefined;
 
 function pathTargets(host: BundleHost, commandId: string): ElementId[] {
   const targets = host.selection.get().filter(supportsPathOps);
@@ -294,9 +300,27 @@ export async function applySimplifyPath(
   );
 }
 
+/** Where Offset Path / Simplify take their parameters when run with NO
+ *  payload — the values last applied from the Path Options panel
+ *  (`commands/path-options.ts`). Absent, or answering `undefined`, a
+ *  payload-free run uses the documented defaults.
+ *
+ *  There is deliberately no `outlineStroke` here: Outline Stroke run
+ *  bare outlines what is RENDERED (the element's own stroke), and a
+ *  width typed into the panel last week silently replacing that would be
+ *  a surprise. Its overrides are applied from the panel, explicitly. */
+export interface PathOpsLastUsed {
+  offset?(): PathOpPayload;
+  simplify?(): PathOpPayload;
+}
+
 /** Register the three path-op commands (the dash-command pattern);
- *  payload rides through to the applier. */
-export function contributePathOpsCommands(host: BundleHost): Disposable {
+ *  payload rides through to the applier, and a payload-free Offset /
+ *  Simplify takes `lastUsed` when there is one. */
+export function contributePathOpsCommands(
+  host: BundleHost,
+  lastUsed: PathOpsLastUsed = {},
+): Disposable {
   const disposers = [
     host.contribute.command({
       id: OUTLINE_STROKE_COMMAND_ID,
@@ -307,17 +331,23 @@ export function contributePathOpsCommands(host: BundleHost): Disposable {
     }),
     host.contribute.command({
       id: OFFSET_PATH_COMMAND_ID,
-      title: "Path: Offset path",
+      title: "Path: Offset path (last used values)",
       category: PATH_OPS_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
-        applyOffsetPath(host, payload as PathOpPayload),
+        applyOffsetPath(
+          host,
+          (payload as PathOpPayload) ?? lastUsed.offset?.(),
+        ),
     }),
     host.contribute.command({
       id: SIMPLIFY_PATH_COMMAND_ID,
-      title: "Path: Simplify",
+      title: "Path: Simplify (last used values)",
       category: PATH_OPS_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
-        applySimplifyPath(host, payload as PathOpPayload),
+        applySimplifyPath(
+          host,
+          (payload as PathOpPayload) ?? lastUsed.simplify?.(),
+        ),
     }),
   ];
   return {

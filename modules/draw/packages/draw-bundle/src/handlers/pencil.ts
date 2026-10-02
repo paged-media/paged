@@ -50,9 +50,18 @@ import {
   bindCreatedMutationFor,
   handleElementId,
 } from "../commands/v59-wire";
+import { PENCIL_OPTIONS, createToolOptionsReader } from "../tool-options";
 
-/** Screen-space RDP fidelity: pointer wobble below this collapses. */
-const SIMPLIFY_TOLERANCE_PX = 2;
+// The three numbers this tool used to run on as constants are OPTIONS
+// now (`../tool-options.ts`, the tool's double-click popover), with the
+// old constants as their defaults:
+//   · fidelity       2 px — the screen-space RDP tolerance: pointer
+//                           wobble below it collapses;
+//   · smoothing      smooth — Catmull-Rom handles through the kept
+//                           samples; "corners" emits corner anchors;
+//   · closeDistance  8 px — lifting this near the start closes the
+//                           contour (0 never closes).
+
 /** B-08 pressure→width ramp (pt at pressure 0 → pt at 1). */
 const PRESSURE_WIDTH_PROFILE = { min: 0.35, max: 4 };
 /** Did a pressure device actually drive the stroke? A mouse reports a
@@ -67,8 +76,6 @@ const pressuresVary = (pressures: number[]): boolean => {
   }
   return max - min > 0.05;
 };
-/** Screen-space lift-near-the-start radius that closes the contour. */
-const CLOSE_TOLERANCE_PX = 8;
 /** The handle a pressure stroke is named by inside its own batch. */
 const STROKE_HANDLE = "stroke";
 
@@ -76,6 +83,7 @@ export function createPencilHandler(host: BundleHost): GestureHandler {
   let machine: PencilMachine | null = null;
   let pageId: string | null = null;
   const preview = createStrokePreview(host);
+  const options = createToolOptionsReader(PENCIL_OPTIONS);
 
   const reset = () => {
     machine = null;
@@ -168,8 +176,11 @@ export function createPencilHandler(host: BundleHost): GestureHandler {
   };
 
   return {
-    onActivate() {
-      /* per-stroke state allocates on pointer-down */
+    onActivate(paged) {
+      // Per-stroke state allocates on pointer-down, and the options are
+      // read there too, LIVE — this only binds the reader to the host's
+      // store.
+      options.attach(paged);
     },
     onDeactivate(reason) {
       if (reason === "suspend") return;
@@ -178,8 +189,11 @@ export function createPencilHandler(host: BundleHost): GestureHandler {
     onPointerDown(e: CanvasPointerEvent) {
       if (e.button !== 0 || !e.pageId || !e.pagePoint) return;
       machine = new PencilMachine({
-        tolerance: host.viewport.pxToPt(SIMPLIFY_TOLERANCE_PX),
-        closeTolerance: host.viewport.pxToPt(CLOSE_TOLERANCE_PX),
+        tolerance: host.viewport.pxToPt(options.number("fidelity")),
+        closeTolerance: host.viewport.pxToPt(options.number("closeDistance")),
+        // `smooth` stays ABSENT for the default, exactly as before — the
+        // machine's own default is the smooth fit.
+        ...(options.select("smoothing") === "corners" ? { smooth: false } : {}),
       });
       pageId = e.pageId;
       sync(

@@ -58,14 +58,17 @@ import { WidthMachine, type WidthSnapshot } from "@paged-media/draw-tools";
 
 import { outlineStrokeVariableMutationFor } from "./brush";
 import { outlineParamsOf, supportsPathOps } from "../commands/path-ops";
+import { WIDTH_OPTIONS, createToolOptionsReader } from "../tool-options";
 
 /** Screen-space pick radius around anchors (the anchors.ts constant
  *  family). */
 const PICK_TOLERANCE_PX = 8;
 
-/** v0 fixed profile parameters (no options UI yet): the peak decays
- *  over 2 neighbors, 1 pt of width per pt of drag, peak capped at
- *  72 pt. */
+/** The profile DEFAULTS: the peak decays over 2 neighbors, 1 pt of
+ *  width per pt of drag, peak capped at 72 pt. All three are tool
+ *  OPTIONS now (`../tool-options.ts` — `falloff` / `gain` / `maxWidth`),
+ *  and these constants are what the options default to (the options spec
+ *  asserts the two never drift apart). */
 export const WIDTH_FALLOFF_ANCHORS = 2;
 export const WIDTH_GAIN = 1;
 export const WIDTH_MAX_PT = 72;
@@ -83,6 +86,7 @@ export function createWidthHandler(host: BundleHost): GestureHandler {
   // The serialized gesture: null = idle; a promise resolving to null =
   // the down could not arm (no valid target / off-anchor).
   let gesture: Promise<WidthGesture | null> | null = null;
+  const options = createToolOptionsReader(WIDTH_OPTIONS);
 
   const clearPreview = () => host.overlay.setToolPreview(null);
 
@@ -118,9 +122,11 @@ export function createWidthHandler(host: BundleHost): GestureHandler {
       anchors: table.anchors.map((a) => [a.anchor[0], a.anchor[1]]),
       tolerance,
       baseWidth: base,
-      falloff: WIDTH_FALLOFF_ANCHORS,
-      gain: WIDTH_GAIN,
-      maxWidth: WIDTH_MAX_PT,
+      // Read on the press, so a drag is one profile from start to
+      // release even if the popover changes a value mid-gesture.
+      falloff: options.number("falloff"),
+      gain: options.number("gain"),
+      maxWidth: options.number("maxWidth"),
     });
     const snap = machine.handle({ type: "down", point: local });
     if (!snap.active) return null; // off-anchor press
@@ -213,8 +219,10 @@ export function createWidthHandler(host: BundleHost): GestureHandler {
   };
 
   return {
-    onActivate() {
-      /* per-drag state allocates on pointer-down */
+    onActivate(paged) {
+      // Per-drag state allocates on pointer-down; this only binds the
+      // options reader to the host's store.
+      options.attach(paged);
     },
     onDeactivate(reason) {
       if (reason === "suspend") return;

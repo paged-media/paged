@@ -26,6 +26,8 @@ export {
   strokeWidthFromPressure,
   penPreview,
   penPlanMutation,
+  penEndpointAt,
+  type PenEndpoint,
   type PenEvent,
   type PenSample,
   type PenModifiers,
@@ -60,6 +62,16 @@ export {
   type DirectSelectSnapshot,
   type MarqueeRect,
 } from "./direct-select-machine";
+
+// The ONE op applier — the engine's path-point rules on a single table
+// (promoted from the test suite's reference model for
+// `DirectSelectMachine.apply`), plus the index remap a selection follows.
+export {
+  applyPathOps,
+  modelOf,
+  remapIndexThrough,
+  type ModelTable,
+} from "./apply-path-ops";
 
 // The op vocabulary both path-editing machines plan in, the wire shapes
 // it lowers to (asserted against the engine's `Mutation` union in
@@ -167,6 +179,7 @@ export {
   planAnchorDelete,
   planAnchorDeleteAt,
   planAnchorConvert,
+  planAnchorConvertAt,
   nearestAnchorIndex,
   segmentPairsOf,
   segmentPairFrom,

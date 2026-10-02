@@ -145,6 +145,16 @@ import {
   PATH_OPS_COMMAND_IDS,
 } from "./commands/path-ops";
 import {
+  contributePathOptionsCommands,
+  lastUsedPayload,
+  PATH_OPTIONS_COMMAND_IDS,
+  PATH_OPTIONS_PANEL_ID,
+} from "./commands/path-options";
+import {
+  contributeReversePathCommands,
+  REVERSE_PATH_COMMAND_IDS,
+} from "./commands/reverse-path";
+import {
   contributePathfinderCommands,
   PATHFINDER_COMMAND_IDS,
 } from "./commands/pathfinder";
@@ -176,6 +186,7 @@ import {
   makeObjectsOnPathPanel,
   OBJECTS_ON_PATH_PANEL_ID,
 } from "./panels/objects-on-path-panel";
+import { makePathOptionsPanel } from "./panels/path-options-panel";
 import { installStrokePanelBindings, strokePanel } from "./panels/stroke-panel";
 import { contributeSvgIo } from "./io/svg";
 
@@ -340,6 +351,22 @@ export function activate(host: BundleHost): BundleHandle {
     icon: "panel-align",
     ...makeObjectsOnPathPanel(host),
   });
+  // PATH OPTIONS — the parameters behind the menu's "…". Offset path,
+  // Simplify and the four Insert shapes each carried an ellipsis and
+  // opened nothing (the contract has no prompt or dialog door); their
+  // commands took a payload nobody could type. This panel is where it is
+  // typed: one section per operation, an Apply that runs the EXISTING
+  // command with those values, and the menu rows now RAISE it at their
+  // section instead of applying fixed defaults
+  // (commands/path-options.ts).
+  // (`panel-pathfinder` is a REAL glyph in the host's kebab-case map and
+  // the honest metaphor — these are path operations. An invented token
+  // renders the dock tab ICONLESS, the stroke panel's recorded lesson.)
+  host.contribute.panel({
+    id: PATH_OPTIONS_PANEL_ID,
+    icon: "panel-pathfinder",
+    ...makePathOptionsPanel(host),
+  });
   // B-12 — the stroke DASH presets as commands (the schema binding
   // ceiling is scalar, a dash array is a vector → command-driven). Each
   // commits `setElementProperty{ frameStrokeDashArray, lengths }` to
@@ -357,12 +384,24 @@ export function activate(host: BundleHost): BundleHandle {
   const fillGradientCommandsSub = contributeFillGradientCommands(host);
   // Phase 4c — the kernel path ops (Outline stroke / Offset path /
   // Simplify, the v30 wire consumers with documented pt defaults +
-  // payload overrides).
-  const pathOpsCommandsSub = contributePathOpsCommands(host);
+  // payload overrides). Run with NO payload, Offset and Simplify repeat
+  // the values last applied from the Path Options panel — the defaults
+  // until there are any.
+  const pathOpsCommandsSub = contributePathOpsCommands(host, {
+    offset: () => lastUsedPayload(host, "offset"),
+    simplify: () => lastUsedPayload(host, "simplify"),
+  });
+  // The "…" commands (one per section): each RAISES the Path Options panel at its
+  // section (and mutates nothing) — what the menu rows point at.
+  const pathOptionsCommandsSub = contributePathOptionsCommands(host);
   // Phase 4c — Join/Average over open-path endpoints (pathPointSet
   // consumers; the TRUE join/close is a named engine-op gap — see
   // commands/join-average.ts).
   const joinAverageCommandsSub = contributeJoinAverageCommands(host);
+  // Reverse path direction — every contour of every selected path, in
+  // ONE framePath batch. A visual no-op that the non-zero fill (holes)
+  // and Type on a Path both read (commands/reverse-path.ts).
+  const reversePathCommandsSub = contributeReversePathCommands(host);
   // Phase 4c — Pathfinder Unite/Subtract/Intersect/Exclude (the
   // pathfinderBoolean wire consumers; first selected = kept).
   const pathfinderCommandsSub = contributePathfinderCommands(host);
@@ -467,9 +506,16 @@ export function activate(host: BundleHost): BundleHandle {
   // stroke-weight; no mutation).
   const selectSameCommandsSub = contributeSelectSameCommands(host);
   // Wave 2 — the parametric insert-shape commands (Arc / Spiral /
-  // Rect grid / Polar grid; v0 fixed default geometry — see
-  // commands/insert-shapes.ts).
-  const insertShapeCommandsSub = contributeInsertShapeCommands(host);
+  // Rect grid / Polar grid). Each takes its generator's real parameters
+  // as a payload (commands/insert-shapes.ts); with none it repeats the
+  // values last applied from the Path Options panel, and before there
+  // are any, the v0 geometry.
+  const insertShapeCommandsSub = contributeInsertShapeCommands(host, {
+    arc: () => lastUsedPayload(host, "arc"),
+    spiral: () => lastUsedPayload(host, "spiral"),
+    rectGrid: () => lastUsedPayload(host, "rectGrid"),
+    polarGrid: () => lastUsedPayload(host, "polarGrid"),
+  });
   // Illustrator Phase 3 (§16.2) — BLENDS v1 (make / update / replace
   // spine / reverse spine / reverse front-to-back / select keys / expand
   // / release). Wave 2's v0 shipped ONE command and two undo steps; the
@@ -542,12 +588,14 @@ export function activate(host: BundleHost): BundleHandle {
   // route to a menu: every verb was Cmd+K only, shown as a raw id.
   const menuSub = contributeMenu(host);
   host.log.info(
-    `activated — ${tools.length} tools + 2 schema panels + 8 React panels + ` +
+    `activated — ${tools.length} tools + 2 schema panels + 9 React panels + ` +
       `${
         DASH_COMMAND_IDS.length +
         FILL_GRADIENT_COMMAND_IDS.length +
         PATH_OPS_COMMAND_IDS.length +
+        PATH_OPTIONS_COMMAND_IDS.length +
         JOIN_AVERAGE_COMMAND_IDS.length +
+        REVERSE_PATH_COMMAND_IDS.length +
         PATHFINDER_COMMAND_IDS.length +
         PATHFINDER_REGION_COMMAND_IDS.length +
         COMPOUND_PATH_COMMAND_IDS.length +
@@ -600,7 +648,9 @@ export function activate(host: BundleHost): BundleHandle {
       compoundPathCommandsSub.dispose();
       pathfinderRegionCommandsSub.dispose();
       pathfinderCommandsSub.dispose();
+      reversePathCommandsSub.dispose();
       joinAverageCommandsSub.dispose();
+      pathOptionsCommandsSub.dispose();
       pathOpsCommandsSub.dispose();
       fillGradientCommandsSub.dispose();
       dashCommandsSub.dispose();

@@ -66,6 +66,13 @@ import {
 import { insertPathMutationFor } from "./insert-path";
 import { createStrokePreview } from "./stroke-preview";
 import {
+  BLOB_BRUSH_OPTIONS,
+  ERASER_OPTIONS,
+  PAINTBRUSH_OPTIONS,
+  createToolOptionsReader,
+  type ToolOptionsReader,
+} from "../tool-options";
+import {
   DEFAULT_MITER_LIMIT,
   outlineStrokeMutationFor,
   supportsPathOps,
@@ -77,11 +84,11 @@ import {
   handleElementId,
 } from "../commands/v59-wire";
 
-/** Screen-space RDP fidelity (the pencil's constant). */
-const SIMPLIFY_TOLERANCE_PX = 2;
-
-/** Paintbrush + Blob Brush nib — v0 fixed defaults (documented in the
- *  tool registration): 6pt base size, 45° nib angle, roundness 0.3. */
+/** Paintbrush + Blob Brush nib — the DEFAULTS (6pt base size, 45° nib
+ *  angle, roundness 0.3). They were the only nib until the tools grew
+ *  options (`../tool-options.ts`); they are now what a stroke uses when
+ *  the user has set nothing, and `nibFromOptions` reproduces them
+ *  exactly from the declared defaults (asserted in the options spec). */
 export const PAINTBRUSH_NIB: NibProfile = {
   angle: Math.PI / 4,
   roundness: 0.3,
@@ -89,9 +96,25 @@ export const PAINTBRUSH_NIB: NibProfile = {
 };
 
 /** Eraser nib — ROUND (roundness 1) and pressure-free in the machine,
- *  so the sweep is a uniform 6pt band (`outlineStroke`, not the
- *  variable op). */
+ *  so the sweep is a uniform band (`outlineStroke`, not the variable
+ *  op). 6pt is the default SIZE; the shape is not an option. */
 export const ERASER_NIB: NibProfile = { angle: 0, roundness: 1, size: 6 };
+
+/** The calligraphic nib a Paintbrush / Blob Brush stroke sweeps with,
+ *  read from the tool's LIVE options: degrees → radians, percent → the
+ *  0..1 ratio `NibProfile` carries. */
+export function nibFromOptions(options: ToolOptionsReader): NibProfile {
+  return {
+    angle: (options.number("angle") * Math.PI) / 180,
+    roundness: options.number("roundness") / 100,
+    size: options.number("size"),
+  };
+}
+
+/** The eraser's nib: the fixed round shape at the LIVE size. */
+export function eraserNibFromOptions(options: ToolOptionsReader): NibProfile {
+  return { ...ERASER_NIB, size: options.number("size") };
+}
 
 /** The fill a sweep falls back to when the document declares NO
  *  creation-default fill (`meta.defaultFillColor` null): the IDML-
@@ -441,6 +464,9 @@ async function commitEraserBrush(
   host: BundleHost,
   pageId: string,
   commit: BrushCommit,
+  /** The band the eraser cuts, in pt — the nib size the stroke was
+   *  STARTED with (the machine and the outline must agree on it). */
+  width: number,
 ): Promise<void> {
   // HONEST v0 SCOPE: the eraser erases from the SELECTED path elements
   // only (no hit-testing of everything under the sweep). And because
@@ -468,7 +494,7 @@ async function commitEraserBrush(
   const handles = targets.map((_, i) => `${SWEEP_HANDLE}${i}`);
   const erased = await mutateBatch(host, "eraserBrush", [
     ...handles.flatMap((handle) =>
-      sweepOpsFor(pageId, commit, { width: ERASER_NIB.size }, handle),
+      sweepOpsFor(pageId, commit, { width }, handle),
     ),
     ...targets.map((target, i) =>
       pathfinderMutationFor(target, [handleElementId(handles[i])], "subtract"),
@@ -486,7 +512,7 @@ async function commitEraserBrush(
       "eraserBrush",
       pageId,
       commit,
-      { width: ERASER_NIB.size },
+      { width },
       "invisible",
     );
     if (!created) continue;
@@ -516,26 +542,36 @@ async function commitEraserBrush(
  *  machine, the live stroke previews as a POLYLINE (honest — the sweep
  *  happens at commit; appended to, not re-mapped — `./stroke-preview.ts`),
  *  and the pointer-up commit runs the tool's async commit flow. */
+/** One stroke's machine plus the commit that goes with it. Built
+ *  TOGETHER, on the press, from one read of the options: a value the
+ *  popover changes mid-stroke must not give the machine one nib and the
+ *  commit another. */
+interface Sweep {
+  machine: BrushMachine;
+  commit: (pageId: string, commit: BrushCommit) => Promise<void>;
+}
+
 function createSweepHandler(
   host: BundleHost,
   label: string,
-  makeMachine: () => BrushMachine,
-  commitSweep: (pageId: string, commit: BrushCommit) => Promise<void>,
+  options: ToolOptionsReader,
+  beginSweep: () => Sweep,
 ): GestureHandler {
-  let machine: BrushMachine | null = null;
+  let sweep: Sweep | null = null;
   let pageId: string | null = null;
   const preview = createStrokePreview(host);
 
   const reset = () => {
-    machine = null;
+    sweep = null;
     pageId = null;
     preview.clear();
   };
 
   const sync = (snapshot: BrushSnapshot) => {
-    if (snapshot.commit && pageId) {
+    if (snapshot.commit && pageId && sweep) {
       const c = snapshot.commit;
       const page = pageId;
+      const commitSweep = sweep.commit;
       reset();
       void commitSweep(page, c).catch((err) =>
         host.log.warn(`${label} commit failed: ${err}`),
@@ -550,8 +586,11 @@ function createSweepHandler(
   };
 
   return {
-    onActivate() {
-      /* per-stroke state allocates on pointer-down */
+    onActivate(paged) {
+      // Per-stroke state allocates on pointer-down, and the options are
+      // read there too, LIVE — this only binds the reader to the host's
+      // store.
+      options.attach(paged);
     },
     onDeactivate(reason) {
       if (reason === "suspend") return;
@@ -559,10 +598,10 @@ function createSweepHandler(
     },
     onPointerDown(e: CanvasPointerEvent) {
       if (e.button !== 0 || !e.pageId || !e.pagePoint) return;
-      machine = makeMachine();
+      sweep = beginSweep();
       pageId = e.pageId;
       sync(
-        machine.handle({
+        sweep.machine.handle({
           type: "down",
           point: e.pagePoint,
           pressure: e.pressure,
@@ -570,9 +609,9 @@ function createSweepHandler(
       );
     },
     onPointerMove(e: CanvasPointerEvent) {
-      if (!machine || !e.pagePoint || e.pageId !== pageId) return;
+      if (!sweep || !e.pagePoint || e.pageId !== pageId) return;
       sync(
-        machine.handle({
+        sweep.machine.handle({
           type: "move",
           point: e.pagePoint,
           pressure: e.pressure,
@@ -580,63 +619,62 @@ function createSweepHandler(
       );
     },
     onPointerUp(e: CanvasPointerEvent) {
-      if (!machine) return;
+      if (!sweep) return;
       // Lifting off-page cancels (a brush sweep needs its page).
       const point =
         e.pageId === pageId && e.pagePoint ? e.pagePoint : undefined;
       const snap = point
-        ? machine.handle({ type: "up", point, pressure: e.pressure })
-        : machine.handle({ type: "key", key: "Escape" });
+        ? sweep.machine.handle({ type: "up", point, pressure: e.pressure })
+        : sweep.machine.handle({ type: "key", key: "Escape" });
       sync(snap);
     },
     onKey(e: KeyboardEvent) {
-      if (!machine || e.key !== "Escape") return;
-      sync(machine.handle({ type: "key", key: "Escape" }));
+      if (!sweep || e.key !== "Escape") return;
+      sync(sweep.machine.handle({ type: "key", key: "Escape" }));
     },
   };
 }
 
 export function createPaintbrushHandler(host: BundleHost): GestureHandler {
-  return createSweepHandler(
-    host,
-    "paintbrush",
-    () =>
-      new BrushMachine({
-        tolerance: host.viewport.pxToPt(SIMPLIFY_TOLERANCE_PX),
-        nib: PAINTBRUSH_NIB,
-        // closeTolerance stays 0 — see the ENGINE NOTE in the header.
-      }),
-    (page, c) => commitPaintbrush(host, page, c),
-  );
+  const options = createToolOptionsReader(PAINTBRUSH_OPTIONS);
+  return createSweepHandler(host, "paintbrush", options, () => ({
+    machine: new BrushMachine({
+      tolerance: host.viewport.pxToPt(options.number("fidelity")),
+      nib: nibFromOptions(options),
+      // closeTolerance stays 0 — see the ENGINE NOTE in the header.
+    }),
+    commit: (page, c) => commitPaintbrush(host, page, c),
+  }));
 }
 
 export function createBlobBrushHandler(host: BundleHost): GestureHandler {
-  return createSweepHandler(
-    host,
-    "blobBrush",
-    () =>
-      new BrushMachine({
-        tolerance: host.viewport.pxToPt(SIMPLIFY_TOLERANCE_PX),
-        nib: PAINTBRUSH_NIB,
-      }),
-    (page, c) => commitBlobBrush(host, page, c),
-  );
+  const options = createToolOptionsReader(BLOB_BRUSH_OPTIONS);
+  return createSweepHandler(host, "blobBrush", options, () => ({
+    machine: new BrushMachine({
+      tolerance: host.viewport.pxToPt(options.number("fidelity")),
+      nib: nibFromOptions(options),
+    }),
+    commit: (page, c) => commitBlobBrush(host, page, c),
+  }));
 }
 
 export function createEraserBrushHandler(host: BundleHost): GestureHandler {
-  return createSweepHandler(
-    host,
-    "eraserBrush",
-    () =>
-      new BrushMachine({
-        tolerance: host.viewport.pxToPt(SIMPLIFY_TOLERANCE_PX),
-        nib: ERASER_NIB,
+  const options = createToolOptionsReader(ERASER_OPTIONS);
+  return createSweepHandler(host, "eraserBrush", options, () => {
+    // ONE read of the size: the machine's stops and the uniform outline
+    // the commit cuts with are the same number.
+    const nib = eraserNibFromOptions(options);
+    return {
+      machine: new BrushMachine({
+        tolerance: host.viewport.pxToPt(options.number("fidelity")),
+        nib,
         // The uniform lane: a round nib with pressure scaling OFF —
         // every stop is nib.size, and the commit outlines with the
         // uniform `outlineStroke` op (proper round caps; the v1
         // variable kernel ignores caps).
         pressure: false,
       }),
-    (page, c) => commitEraserBrush(host, page, c),
-  );
+      commit: (page, c) => commitEraserBrush(host, page, c, nib.size),
+    };
+  });
 }

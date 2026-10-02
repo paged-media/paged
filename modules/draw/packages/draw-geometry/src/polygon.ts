@@ -205,3 +205,103 @@ export function pointInAnchorPath(
 ): boolean {
   return insideRings(point, flattenContours(anchors, subpathStarts, options));
 }
+
+/** The sign of the turn a → b → c: > 0 counter-clockwise (in a y-up
+ *  frame), < 0 clockwise, 0 collinear. */
+function orient(a: Vec2, b: Vec2, c: Vec2): number {
+  return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+}
+
+/** Is `p` on the segment `a`–`b`, given that the three are collinear? */
+function onSegment(a: Vec2, b: Vec2, p: Vec2): boolean {
+  return (
+    Math.min(a[0], b[0]) <= p[0] &&
+    p[0] <= Math.max(a[0], b[0]) &&
+    Math.min(a[1], b[1]) <= p[1] &&
+    p[1] <= Math.max(a[1], b[1])
+  );
+}
+
+/**
+ * Do the closed segments `a`–`b` and `c`–`d` share a point? INCLUSIVE:
+ * touching at an end and overlapping collinearly both count — a lasso
+ * edge that grazes a vertex of an outline TOUCHES it.
+ */
+export function segmentsTouch(a: Vec2, b: Vec2, c: Vec2, d: Vec2): boolean {
+  const d1 = orient(c, d, a);
+  const d2 = orient(c, d, b);
+  const d3 = orient(a, b, c);
+  const d4 = orient(a, b, d);
+  if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) {
+    return true;
+  }
+  if (d1 === 0 && onSegment(c, d, a)) return true;
+  if (d2 === 0 && onSegment(c, d, b)) return true;
+  if (d3 === 0 && onSegment(a, b, c)) return true;
+  if (d4 === 0 && onSegment(a, b, d)) return true;
+  return false;
+}
+
+/**
+ * Does a POLYLINE touch the REGION of a polygon — the lasso's
+ * "intersects the outline" test.
+ *
+ * True when any vertex of `polyline` lies inside `polygon` (even-odd,
+ * `pointInPolygon`), or any of its segments touches any polygon edge
+ * (`segmentsTouch`, inclusive). `closed` adds the segment from the last
+ * vertex back to the first (a closed contour's own closing edge). Those
+ * two cases are exhaustive for a polyline meeting a region: a polyline
+ * that enters the region either has a vertex inside or crosses the
+ * boundary on the way in.
+ *
+ * WHAT IT DOES NOT ANSWER, deliberately: a polygon lying wholly INSIDE a
+ * closed polyline (a small lasso drawn in the middle of a big filled
+ * shape) does not touch the OUTLINE, so it answers `false` — the test is
+ * about the path, not the paint it encloses. A caller who wants "the
+ * lasso is inside this shape" asks `pointInPolygon(polygon[0],
+ * polyline)` as well.
+ *
+ * A polygon of fewer than three vertices has no region and answers
+ * `false`; so does an empty polyline. A one-point polyline is a point
+ * test. Boxes reject first, so a far-away outline costs O(n) to bound
+ * and no edge pair.
+ */
+export function polylineTouchesPolygon(
+  polyline: readonly Vec2[],
+  polygon: readonly Vec2[],
+  options?: { closed?: boolean },
+): boolean {
+  if (polygon.length < 3 || polyline.length === 0) return false;
+  const box = (pts: readonly Vec2[]) => {
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const [x, y] of pts) {
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+    return { minX, minY, maxX, maxY };
+  };
+  const pb = box(polygon);
+  const lb = box(polyline);
+  if (lb.maxX < pb.minX || lb.minX > pb.maxX || lb.maxY < pb.minY || lb.minY > pb.maxY) {
+    return false;
+  }
+  for (const p of polyline) {
+    if (pointInPolygon(p, polygon)) return true;
+  }
+  const n = polyline.length;
+  const segments = options?.closed && n > 2 ? n : n - 1;
+  const m = polygon.length;
+  for (let i = 0; i < segments; i++) {
+    const a = polyline[i];
+    const b = polyline[(i + 1) % n];
+    for (let j = 0, k = m - 1; j < m; k = j++) {
+      if (segmentsTouch(a, b, polygon[k], polygon[j])) return true;
+    }
+  }
+  return false;
+}

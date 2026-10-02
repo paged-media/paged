@@ -131,6 +131,12 @@ const SWEEP_FLOOR_PT = 0.5;
 /** The lasso's decimation floor (`handlers/lasso.ts`), in screen px —
  *  which is pt at the harness camera's scale of 1. */
 const LASSO_FLOOR_PX = 3;
+/** `pathAnchors` reads one INTERSECTION release costs over the workload:
+ *  one per path-bearing leaf on the lasso's page — every one of the 518
+ *  is. MEASURED. TARGET: the leaves whose outline can reach the lasso's
+ *  box, which needs either a bulk `pathAnchors` or bounds that a whole-
+ *  path write keeps current (see the release test). */
+const LASSO_PATH_READS = 518;
 /** How many of `penStroke(2000)`'s samples the lasso's floor keeps. */
 const LASSO_KEPT_OF_2000 = 305;
 
@@ -528,6 +534,38 @@ describe("perf budgets — the freehand tools", () => {
       // facade that states its gating and order — or `elementGeometry`
       // taking a rect.
       expect(work.geometryIdsAsked).toBe(518);
+      expect(work.count("selection.set")).toBe(1);
+      // INTERSECTION (the default rule since the lasso grew a `mode`
+      // option) reads each PATH-bearing leaf on the lasso's page once.
+      // A NEW cost, not a regression of an old one: the centre rule
+      // never looked at a path, and the intersection rule cannot avoid
+      // it — the bounds that could prune the reads are STALE after a
+      // framePath / offsetPath / compound write (measured, protocol 64;
+      // `lasso-select.spec.ts` pins it). What would lower it is the same
+      // door as above, or `pathAnchors` taking a list.
+      expect(work.count("document.pathAnchors")).toBe(LASSO_PATH_READS);
+    });
+
+    it("the release under the CENTRE rule costs what the lasso always cost — no path read", async () => {
+      const store = {
+        toolSettings: {
+          getValue: (_tool: string, key: string) => (key === "mode" ? "centre" : undefined),
+        },
+      };
+      const { work } = await lift(
+        "lasso release (centre rule)",
+        (host) => {
+          const handler = createLassoSelectHandler(host);
+          const activate = handler.onActivate.bind(handler);
+          handler.onActivate = () => activate(store as never);
+          return handler;
+        },
+        mouse(spiralPoints([454, 136], { from: 150, to: 150 }, 1, 200)),
+        [],
+      );
+      expect(work.count("document.tree")).toBe(1);
+      expect(work.count("document.elementGeometry")).toBe(1);
+      expect(work.count("document.pathAnchors")).toBe(0);
       expect(work.count("selection.set")).toBe(1);
     });
   });

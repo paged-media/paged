@@ -110,7 +110,31 @@ export {
   PAINTBRUSH_NIB,
   ERASER_NIB,
   FALLBACK_FILL_REF,
+  nibFromOptions,
+  eraserNibFromOptions,
 } from "./handlers/brush";
+// TOOL OPTIONS — the per-tool definitions (the contract's spec plus the
+// defaults it has no room for), the one structural probe for the host's
+// undeclared tool-settings store, and the live reader the handlers use.
+export {
+  TOOL_OPTIONS,
+  PENCIL_OPTIONS,
+  PAINTBRUSH_OPTIONS,
+  BLOB_BRUSH_OPTIONS,
+  ERASER_OPTIONS,
+  WIDTH_OPTIONS,
+  LASSO_OPTIONS,
+  defineToolOptions,
+  toolOptionsSpecOf,
+  toolSettingsDoorOf,
+  createToolOptionsReader,
+  type ToolOptionsDef,
+  type ToolOptionsReader,
+  type ToolSettingsDoor,
+  type OptionDef,
+  type NumberOption,
+  type SelectOption,
+} from "./tool-options";
 export { createCurvatureHandler } from "./handlers/curvature";
 export { createPencilHandler } from "./handlers/pencil";
 export {
@@ -148,6 +172,8 @@ export {
   type OffsetPathParams,
   type StrokeCapToken,
   type StrokeJoinToken,
+  type PathOpPayload,
+  type PathOpsLastUsed,
 } from "./commands/path-ops";
 // Phase 4c + the v56 TRUE JOIN — the endpoint planners (the coincide
 // fallback), the real `closePath`/`joinPaths` wire builders and the
@@ -173,6 +199,19 @@ export {
   contributeJoinAverageCommands,
   type EndpointMove,
 } from "./commands/join-average";
+// Reverse path direction — the per-contour reversal over draw-geometry's
+// `reverseContour` and its one-batch framePath write, exported for the
+// conformance spec (the no-second-copy rule).
+export {
+  REVERSE_PATH_COMMAND_ID,
+  REVERSE_PATH_COMMAND_IDS,
+  REVERSE_PATH_COMMAND_CATEGORY,
+  reverseTable,
+  tableOf as reversePathTableOf,
+  reversePathBatchFor,
+  applyReversePath,
+  contributeReversePathCommands,
+} from "./commands/reverse-path";
 export {
   PATHFINDER_PRESETS,
   PATHFINDER_COMMAND_IDS,
@@ -856,6 +895,10 @@ export {
   valueForCriterion,
   leafIdsOf,
   selectSameMatches,
+  applySelectSameStrokeWeight,
+  strokeWeightToleranceOf,
+  STROKE_WEIGHT_EPSILON,
+  MAX_STROKE_WEIGHT_TOLERANCE,
   contributeSelectSameCommands,
   type SelectSameCriterion,
 } from "./commands/select-same";
@@ -908,9 +951,17 @@ export {
   createLassoSelectHandler,
   lassoMatches,
   itemCenterOnPage,
+  lassoIntersections,
+  lassoTouchesOutline,
+  outlineOfPath,
+  outlineOfBounds,
+  readLassoOutlines,
+  type LassoMode,
+  type LassoOutline,
 } from "./handlers/lasso";
-// Wave 2 — the parametric insert-shape commands (v0 fixed defaults) +
-// their exact-wire builders, exported for the conformance spec.
+// Wave 2 — the parametric insert-shape commands (the v0 defaults, the
+// typed payload each now takes, the count ceilings) + their exact-wire
+// builders, exported for the conformance spec.
 export {
   INSERT_SHAPE_COMMAND_IDS,
   INSERT_SHAPE_COMMAND_CATEGORY,
@@ -919,13 +970,81 @@ export {
   INSERT_RECT_GRID_COMMAND_ID,
   INSERT_POLAR_GRID_COMMAND_ID,
   INSERT_SHAPE_DEFAULTS,
+  INSERT_SHAPE_LIMITS,
+  ARC_PARAM_DEFAULTS,
+  SPIRAL_PARAM_DEFAULTS,
+  RECT_GRID_PARAM_DEFAULTS,
+  POLAR_GRID_PARAM_DEFAULTS,
   arcDefaultTable,
   spiralDefaultTable,
   rectGridDefaultTables,
   polarGridDefaultTables,
+  arcParamsFrom,
+  spiralParamsFrom,
+  rectGridParamsFrom,
+  polarGridParamsFrom,
+  arcTablesFor,
+  spiralTablesFor,
+  rectGridTablesFor,
+  polarGridTablesFor,
+  applyInsertArc,
+  applyInsertSpiral,
+  applyInsertRectGrid,
+  applyInsertPolarGrid,
   insertTablesMutationFor,
   contributeInsertShapeCommands,
+  type ArcParams,
+  type SpiralParams,
+  type RectGridParams,
+  type PolarGridParams,
+  type InsertShapePayload,
+  type InsertShapeLastUsed,
 } from "./commands/insert-shapes";
+// PATH OPTIONS — the parameters behind the menu's "…": the per-section
+// values + defaults, the last-used store, the seven commands that RAISE
+// the panel at a section, and the panel itself. Exported for the render
+// spec (the no-second-copy rule).
+export {
+  PATH_OPTIONS_PANEL_ID,
+  PATH_OPTIONS_COMMAND_IDS,
+  PATH_OPTIONS_COMMANDS,
+  PATH_OPTIONS_COMMAND_CATEGORY,
+  PATH_OPTIONS_DEFAULTS,
+  PATH_OPTIONS_STORAGE_KEY,
+  PATH_OPTION_SECTIONS,
+  PATH_OPTION_SECTION_TITLES,
+  BIND_PATH_OPTIONS_FOCUS,
+  OPEN_PANEL_FEATURE,
+  FROM_ELEMENT,
+  OFFSET_JOIN_NOTE,
+  SELECTION_SECTIONS,
+  sanitizePathOptions,
+  lastUsedPathOptions,
+  lastUsedPayload,
+  hasLastUsed,
+  rememberPathOptions,
+  applyPathOptions,
+  offsetPayloadOf,
+  simplifyPayloadOf,
+  outlineStrokePayloadOf,
+  pathOptionsFocusOf,
+  showPathOptions,
+  openPathOptions,
+  contributePathOptionsCommands,
+  type PathOptions,
+  type PathOptionSection,
+  type PathOptionsFocus,
+  type OffsetOptions,
+  type SimplifyOptions,
+  type OutlineStrokeOptions,
+  type SelectSameWeightOptions,
+} from "./commands/path-options";
+export {
+  makePathOptionsPanel,
+  ownStrokeLabel,
+  PATH_OPTIONS_PANEL_NOTE,
+  SELECT_SAME_TOLERANCE_NOTE,
+} from "./panels/path-options-panel";
 // Illustrator Phase 3 (§16.2) — BLENDS v1: the three SPACING MODES
 // (Smooth Color derives its count from the colour distance, Specified
 // Steps is a count, Specified Distance divides the SPINE's arc length),

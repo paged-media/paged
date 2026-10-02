@@ -151,6 +151,20 @@ export function planAnchorConvert(
 ): AnchorEditPlan | null {
   const index = nearestAnchorIndex(table, click, tolerance);
   if (index < 0) return null;
+  return planAnchorConvertAt(table, index);
+}
+
+/** Convert Direction Point by INDEX — the half of `planAnchorConvert` a
+ *  caller that already knows its hit needs (Direct Selection's
+ *  double-click on an anchor: the host supplies the hit, nothing is
+ *  searched). Toggles: a corner becomes smooth, anything else a corner.
+ *  Null for an index outside the table. */
+export function planAnchorConvertAt(
+  table: AnchorTable,
+  index: number,
+): AnchorEditPlan | null {
+  const n = table.anchors.length;
+  if (!Number.isInteger(index) || index < 0 || index >= n) return null;
   return {
     kind: "convert",
     index,
