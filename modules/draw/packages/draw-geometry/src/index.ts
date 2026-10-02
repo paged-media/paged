@@ -37,11 +37,15 @@ export {
   evalCubic,
   closestTOnCubic,
   flattenAnchorRun,
+  reshapeSegmentByDrag,
+  segmentDragWeight,
+  SEGMENT_DRAG_T_MIN,
   type SegmentSplit,
+  type SegmentReshape,
 } from "./bezier";
 export { constrainAngle } from "./constrain";
 export { cornerAnchor, mirrorHandle, smoothAnchorFromDrag } from "./handles";
-export { isCornerAnchor } from "./classify";
+export { isCornerAnchor, isSmoothAnchor } from "./classify";
 export {
   applyAffine,
   inverseApplyAffine,
