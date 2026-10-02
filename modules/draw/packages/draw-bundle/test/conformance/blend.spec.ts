@@ -38,9 +38,10 @@
 //       frame, and a TYPED count over the ceiling (which refuses, where
 //       a DERIVED one clamps).
 
-import { describe, expect, it, beforeAll, afterAll, beforeEach } from "vitest";
+import { describe, expect, it, beforeAll, afterAll, beforeEach, vi } from "vitest";
 
 import type {
+  BundleHost,
   CommandContribution,
   ElementId,
   Mutation,
@@ -107,6 +108,7 @@ import {
 import { measureSegment } from "@paged-media/draw-geometry";
 import { F1_MULTI_SHAPE, F4_OVERLAP } from "../fixtures/corpus";
 import { openHost } from "./host";
+import { runThrough, type LaneName } from "./one-batch";
 
 const UA = { kind: "polygon", id: "ua" } as ElementId;
 const UB = { kind: "polygon", id: "ub" } as ElementId;
@@ -809,6 +811,62 @@ describe("draw conformance — BLENDS v1 (§16.2)", () => {
       await undoTo(h, 1);
       expect(await sortedLeafIds(h)).toEqual(PRISTINE);
     });
+
+    // What the batch created used to cost three reads of the whole scene
+    // tree — before and after, diffed, then a lookup for the group — and
+    // a metadata read per new leaf to tell steps apart. It comes off the
+    // engine's reply now (`commands/minted.ts`). A batch can apply and the
+    // ids still be wrong, so make and update run through every lane of
+    // that seam and each must leave the SAME document: the intermediates'
+    // outlines, paint and links, the group, the recipe, the selected
+    // group.
+    for (const [name, setup, run] of [
+      ["make", async () => h.host.selection.set([UA, UB]), (host: BundleHost) => applyMakeBlend(host, { steps: 3 })],
+      [
+        "update",
+        async () => {
+          await h.host.selection.set([UA, UB]);
+          expect(await applyMakeBlend(h.host, { steps: 2 })).toHaveLength(2);
+        },
+        (host: BundleHost) => applyUpdateBlend(host, { steps: 4 }),
+      ],
+    ] as const) {
+      it(`${name}: the created ids off the reply, and the document every other lane leaves`, async () => {
+        const through = (lane: LaneName) =>
+          runThrough(h, lane, {
+            carrier: UA,
+            parts: [BLEND_PART],
+            setup: async () => {
+              await setup();
+            },
+            // The intermediates' swatch ids are a time-seeded nonce; two
+            // runs compare only when both mint the same ones.
+            command: async (host) => {
+              resetBlendSwatchSeq();
+              const now = vi.spyOn(Date, "now").mockReturnValue(0xb1e4d);
+              try {
+                return await run(host);
+              } finally {
+                now.mockRestore();
+              }
+            },
+          });
+        const shipped = await through("oneBatch");
+        expect(shipped.result).toHaveLength(name === "make" ? 3 : 4);
+        expect(shipped.work.mutations.map((m) => m.op)).toEqual(["batch"]);
+        expect(shipped.undoSteps).toBe(1);
+        expect(shipped.restored).toBe(true);
+        // As found: 3 for a make; an update's link walk on top.
+        expect(shipped.work.count("document.tree")).toBe(name === "make" ? 0 : 1);
+        for (const lane of ["diff", "unlisted"] as const) {
+          const run = await through(lane);
+          expect(run.picture, lane).toBe(shipped.picture);
+          expect(run.undoSteps, lane).toBe(1);
+          expect(run.restored, lane).toBe(true);
+        }
+        expect(await sortedLeafIds(h)).toEqual(PRISTINE);
+      });
+    }
 
     it("REVERSE FRONT TO BACK flips PAINT ORDER and moves nothing", async () => {
       await h.host.selection.set([UA, UB]);

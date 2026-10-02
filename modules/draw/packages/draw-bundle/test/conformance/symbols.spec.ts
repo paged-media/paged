@@ -32,8 +32,13 @@
 //       riding the same batch), the finish batch's compound re-merge /
 //       paint / per-leaf stamp / group, and the one-batch unlink;
 //   (4) the REAL undo counts (RFI C-15 — MEASURE them, never claim
-//       "one"): define = 0, rename = 0, place = 2, reset = 2 per
-//       instance, break link = 1 for the whole selection, delete = 1;
+//       "one"): define = 0, rename = 0, place = 1, reset = 1 and
+//       redefine = 1 for EVERY instance together, break link = 1 for the
+//       whole selection, delete = 1. Place and every rebuild were TWO
+//       (per instance) until the inserts could be named inside the
+//       batch; that lane is the fallback now, and place / reset /
+//       redefine run through both and through hosts that cannot say what
+//       a batch created — the same document must come out of each;
 //   (5) the honest refusals and limits: a TEXT FRAME is refused (no
 //       mutation can copy a story), a one-piece symbol is NOT wrapped in
 //       a group, a rebuild MINTS NEW IDS while the instance id survives,
@@ -107,8 +112,44 @@ import {
   type SymbolDefinition,
   type SymbolPlacePlan,
 } from "../../src";
+import { symbolBatchFor, symbolHandle } from "../../src/commands/symbols";
 import { F6_RING_PAIR } from "../fixtures/corpus";
 import { openHost } from "./host";
+import { runThrough, type LaneName } from "./one-batch";
+
+/** Insert a plain 60 pt square at `x, y`. Answers its id. */
+async function placeSquare(
+  h: HeadlessHost,
+  x: number,
+  y: number,
+): Promise<ElementId[]> {
+  const out = await h.host.document.mutate({
+    op: "insertPath",
+    args: {
+      pageId: F6_RING_PAIR.pageId,
+      anchors: [
+        anchorAt([x, y]),
+        anchorAt([x + 60, y]),
+        anchorAt([x + 60, y + 60]),
+        anchorAt([x, y + 60]),
+      ],
+      open: false,
+    },
+  });
+  expect(out.applied).toBe(true);
+  return out.applied && out.createdId ? [out.createdId] : [];
+}
+
+/** `host`, with every warning it logs kept in `sink`. */
+function withWarnings(host: BundleHost, sink: string[]): BundleHost {
+  return new Proxy(host, {
+    get(target, prop, receiver) {
+      return prop === "log"
+        ? { ...target.log, warn: (m: string) => void sink.push(String(m)) }
+        : (Reflect.get(target, prop, receiver) as unknown);
+    },
+  });
+}
 
 const poly = (id: string): ElementId => ({ kind: "polygon", id }) as ElementId;
 
@@ -520,6 +561,50 @@ describe("draw conformance — SYMBOLS (Illustrator Phase 2, §16.1)", () => {
       ]);
     });
 
+    it("THE ONE BATCH of two rebuilds: every insert, every dissolve, every delete, the finishes, every group", () => {
+      const two: SymbolPlacePlan = {
+        ...plan,
+        pieces: [plan.pieces[0]!, plan.pieces[0]!],
+      };
+      const ops = (
+        symbolBatchFor([
+          {
+            plan: two,
+            replace: { group: { kind: "group", id: "g1" } as ElementId, stale: [poly("a1"), poly("b1")] },
+          },
+          {
+            plan: two,
+            replace: { group: { kind: "group", id: "g2" } as ElementId, stale: [poly("a2"), poly("b2")] },
+          },
+        ]) as Extract<Mutation, { op: "batch" }>
+      ).args.ops as { op: string; args: Record<string, unknown> }[];
+      const phases = ops.map((o) => o.op);
+      // 2 instances × 2 pieces: insert + bind each.
+      expect(phases.slice(0, 8)).toEqual([
+        "insertPath", "bindCreated", "insertPath", "bindCreated",
+        "insertPath", "bindCreated", "insertPath", "bindCreated",
+      ]);
+      expect(ops[1]!.args).toEqual({ handle: symbolHandle(0, 0, 0) });
+      expect(ops[7]!.args).toEqual({ handle: symbolHandle(1, 1, 0) });
+      // BOTH old groups dissolved before ANY delete …
+      expect(phases.slice(8, 14)).toEqual([
+        "dissolveGroup", "dissolveGroup",
+        "deleteFrame", "deleteFrame", "deleteFrame", "deleteFrame",
+      ]);
+      // … and BOTH new groups last, addressing the new leaves by handle.
+      expect(phases.slice(-2)).toEqual(["createGroup", "createGroup"]);
+      expect(ops.at(-1)!.args).toEqual({
+        memberIds: [
+          { kind: "polygon", id: "$h:sy1_0_0" },
+          { kind: "polygon", id: "$h:sy1_1_0" },
+        ],
+      });
+      // In between, nothing but paint and links.
+      expect(new Set(phases.slice(14, -2))).toEqual(
+        new Set(["setElementProperty", "setPluginMetadata"]),
+      );
+    });
+
     it("bindSymbolPieces chunks the minted ids back onto their pieces", () => {
       expect(bindSymbolPieces(plan, [poly("u1")])).toEqual([
         { pieceIndex: 0, keep: poly("u1"), absorb: [] },
@@ -750,7 +835,7 @@ describe("draw conformance — SYMBOLS (Illustrator Phase 2, §16.1)", () => {
       expect(await symbolInstances(h.host)).toEqual([]);
     });
 
-    it("PLACE emits a linked instance — exactly TWO batches (C-15: measure it)", async () => {
+    it("PLACE emits a linked instance — exactly ONE batch (C-15: measure it)", async () => {
       await h.host.selection.set([INNER]);
       await applyDefineSymbol(h.host, { name: "Tile" });
       const before = await signature(h);
@@ -785,12 +870,9 @@ describe("draw conformance — SYMBOLS (Illustrator Phase 2, §16.1)", () => {
       // The new instance is selected.
       expect(h.host.selection.get().map((s) => s.id)).toEqual([created[0]!.id]);
 
-      // …and TWO undos put the document back — MEASURED, not claimed.
-      // (`insertPath` mints the ids batch 2 addresses, and this contract's
-      // Mutation union carries no C-15 `bindCreated` arm to bind them
-      // inside one batch — see the module header.)
-      await h.host.document.undo();
-      expect(await signature(h)).not.toBe(before);
+      // …and ONE undo puts the document back — MEASURED, not claimed. It
+      // was two: the insert minted the ids a second batch painted and
+      // linked, and the first undo left the bare path standing.
       await h.host.document.undo();
       expect(await signature(h)).toBe(before);
     });
@@ -857,7 +939,7 @@ describe("draw conformance — SYMBOLS (Illustrator Phase 2, §16.1)", () => {
       ).toBe(2);
     });
 
-    it("RESET TRANSFORM re-emits the definition in place — TWO undo steps", async () => {
+    it("RESET TRANSFORM re-emits the definition in place — ONE undo step", async () => {
       await h.host.selection.set([INNER]);
       await applyDefineSymbol(h.host, { name: "Tile" });
       const [placed] = await applyPlaceSymbolInstance(h.host, "sym-1", {
@@ -917,8 +999,8 @@ describe("draw conformance — SYMBOLS (Illustrator Phase 2, §16.1)", () => {
         [400, 500],
       ]);
 
-      // TWO undos put the deformed instance back — measured.
-      await h.host.document.undo();
+      // ONE undo puts the deformed instance back — measured. (Two, as
+      // found: the rebuild's insert, then its teardown + finish.)
       await h.host.document.undo();
       expect(await signature(h)).toBe(deformed);
     });
@@ -1033,10 +1115,11 @@ describe("draw conformance — SYMBOLS (Illustrator Phase 2, §16.1)", () => {
         v: 1,
         symbols: [{ ...SQUARE_SYMBOL, id: "sym-9", name: "probe" }],
       });
-      // Undo unwinds the MUTATION (the place's batch 2) and leaves the
-      // part exactly as written.
+      // Undo unwinds the MUTATION — the whole place, one batch — and
+      // leaves the part exactly as written.
+      expect(leavesBefore).toHaveLength(4);
       await h.host.document.undo();
-      expect(await leafIds(h)).toEqual(leavesBefore);
+      expect(await leafIds(h)).toEqual(["uinner", "uopen", "uouter"]);
       expect(
         parseSymbolLibrary(await h.host.parts.read(SYMBOLS_PART)).symbols.map(
           (s) => s.id,
@@ -1159,6 +1242,217 @@ describe("draw conformance — SYMBOLS (Illustrator Phase 2, §16.1)", () => {
   });
 
   // ------------------------------------------------------------ the panel
+
+  // A batch can apply and still be the wrong edit. So place, reset and
+  // redefine each run through every lane (`./one-batch.ts`) and the lanes
+  // must leave the SAME document — every leaf's outline, paint and link,
+  // the groups, the selection, the library — in their own measured
+  // number of undo steps, which restore it exactly.
+  //
+  //                                    mutations   undo steps   tree reads
+  //   as found  place                      2            2            3
+  //             reset, one instance        2            2            3
+  //             redefine, N instances     2N           2N           3N
+  //   now       all three                  1            1            1
+  //
+  // (the one tree read left is the link walk's). The "as found" row is
+  // what the `asFound` lane — no `bindCreated`, no raw client — measures
+  // today, give or take the refused attempt's one "before" read.
+  describe("one batch — and the same document every other lane leaves", () => {
+    let h: HeadlessHost;
+    beforeAll(async () => {
+      h = await openHost();
+      h.loadBundle(drawBundle);
+    });
+    afterAll(() => h?.dispose());
+    beforeEach(async () => {
+      await h.load(F6_RING_PAIR.bytes());
+      await h.host.parts.write(
+        SYMBOLS_PART,
+        serializeSymbolLibrary({ v: 1, symbols: [] }),
+      );
+      await h.host.selection.set([]);
+    });
+
+    /** Define `pieces` as sym-1 and place it at each of `at`. Answers the
+     *  placed instances' first leaves. */
+    const definePlace = async (
+      pieces: ElementId[],
+      at: [number, number][],
+    ): Promise<ElementId[]> => {
+      await h.host.selection.set(pieces);
+      expect(await applyDefineSymbol(h.host, { name: "S" })).not.toBeNull();
+      const firsts: ElementId[] = [];
+      for (const [x, y] of at) {
+        const leaves = await applyPlaceSymbolInstance(h.host, "sym-1", { x, y });
+        expect(leaves.length).toBeGreaterThan(0);
+        firsts.push(leaves[0]!);
+      }
+      return firsts;
+    };
+
+    const scenarios: {
+      name: string;
+      setup: () => Promise<ElementId[]>;
+      run: (host: BundleHost) => Promise<unknown>;
+      /** Undo steps in the stepwise lane: two per instance. */
+      stepwise: number;
+      /** `document.tree()` reads as shipped. */
+      trees: number;
+    }[] = [
+      {
+        name: "place, one piece",
+        setup: async () => {
+          await definePlace([INNER], []);
+          return [];
+        },
+        run: (host) => applyPlaceSymbolInstance(host, "sym-1", { x: 450, y: 550 }),
+        stepwise: 2,
+        trees: 1,
+      },
+      {
+        name: "place, two pieces — one of them a ring (a hole to re-merge)",
+        setup: async () => {
+          await h.host.selection.set([OUTER, INNER]);
+          expect(await applyMakeCompoundPath(h.host)).toBe(2);
+          const [extra] = await placeSquare(h, 400, 120);
+          await definePlace([OUTER, extra!], []);
+          return [];
+        },
+        run: (host) => applyPlaceSymbolInstance(host, "sym-1", { x: 260, y: 560 }),
+        stepwise: 2,
+        trees: 1,
+      },
+      {
+        name: "reset, one deformed instance",
+        setup: async () => {
+          const [placed] = await definePlace([INNER], [[450, 550]]);
+          const moved = await h.host.document.mutate({
+            op: "pathPointSet",
+            args: { elementId: placed!, index: 0, role: "anchor", position: [300, 400] },
+          });
+          expect(moved.applied).toBe(true);
+          return [placed!];
+        },
+        run: (host) => applyResetSymbolTransform(host),
+        stepwise: 2,
+        trees: 1,
+      },
+      {
+        name: "redefine, three one-piece instances",
+        setup: async () => {
+          await definePlace([INNER], [
+            [150, 600],
+            [300, 600],
+            [450, 600],
+          ]);
+          return [OUTER];
+        },
+        run: (host) => applyRedefineSymbol(host, "sym-1"),
+        stepwise: 6,
+        trees: 1,
+      },
+    ];
+
+    for (const scenario of scenarios) {
+      it(scenario.name, async () => {
+        const through = (lane: LaneName) =>
+          runThrough(h, lane, {
+            carrier: OUTER,
+            parts: [SYMBOLS_PART],
+            setup: async () => {
+              await h.host.selection.set(await scenario.setup());
+            },
+            command: scenario.run,
+          });
+
+        const shipped = await through("oneBatch");
+        expect(shipped.work.mutations.map((m) => m.op)).toEqual(["batch"]);
+        expect(shipped.undoSteps).toBe(1);
+        expect(shipped.restored).toBe(true);
+        expect(shipped.work.count("document.tree")).toBe(scenario.trees);
+
+        const stepwise = await through("stepwise");
+        expect(stepwise.picture).toBe(shipped.picture);
+        expect(stepwise.work.mutations).toHaveLength(1 + scenario.stepwise);
+        expect(stepwise.undoSteps).toBe(scenario.stepwise);
+        expect(stepwise.restored).toBe(true);
+
+        for (const lane of ["diff", "unlisted"] as const) {
+          const run = await through(lane);
+          expect(run.picture, lane).toBe(shipped.picture);
+          expect(run.undoSteps, lane).toBe(1);
+          expect(run.restored, lane).toBe(true);
+          expect(run.work.count("document.tree"), lane).toBe(scenario.trees + 2);
+        }
+
+        const asFound = await through("asFound");
+        expect(asFound.picture).toBe(shipped.picture);
+        expect(asFound.undoSteps).toBe(scenario.stepwise);
+        // The walk, the refused attempt's "before", then a diff per
+        // instance's insert batch.
+        expect(asFound.work.count("document.tree")).toBe(
+          scenario.trees + 1 + scenario.stepwise,
+        );
+      });
+    }
+
+    // WHAT THE ORDER BUYS, beyond the counts. Three TWO-piece instances:
+    // each is a group. As found, rebuilding them one after another
+    // tripped the engine defect `minted.spec.ts` pins — deleting an
+    // instance's old leaves broke the groups ABOVE it, so every rebuild
+    // but the last was refused ("a member already belongs to another
+    // group") and left its new leaves behind, unlinked. The one batch
+    // dissolves every old group before deleting anything, and all three
+    // rebuild. The stepwise lane is the as-found behaviour and is pinned
+    // as such.
+    it("redefine, three TWO-piece instances: all three rebuild — the old loop rebuilt only the last", async () => {
+      const setup = async (): Promise<void> => {
+        const [extra] = await placeSquare(h, 400, 120);
+        await definePlace([INNER, extra!], [
+          [150, 560],
+          [300, 560],
+          [450, 560],
+        ]);
+        await h.host.selection.set([INNER, extra!]);
+      };
+      const warned: string[] = [];
+      const through = (lane: LaneName) =>
+        runThrough(h, lane, {
+          carrier: OUTER,
+          parts: [SYMBOLS_PART],
+          setup,
+          command: (host) =>
+            applyRedefineSymbol(withWarnings(host, warned), "sym-1"),
+        });
+
+      const shipped = await through("oneBatch");
+      expect(warned).toEqual([]);
+      expect(shipped.work.mutations.map((m) => m.op)).toEqual(["batch"]);
+      expect(shipped.undoSteps).toBe(1);
+      expect(shipped.restored).toBe(true);
+      // Three instances, two leaves each, each in its own group.
+      const groups = (JSON.parse(shipped.picture) as { tree: string }).tree.match(
+        /#\d+\[#\d+ #\d+\]/g,
+      );
+      expect(groups).toHaveLength(3);
+      for (const lane of ["diff", "unlisted"] as const) {
+        expect((await through(lane)).picture, lane).toBe(shipped.picture);
+      }
+
+      // AS FOUND, measured: two of the three rebuilds refused.
+      warned.length = 0;
+      const stepwise = await through("stepwise");
+      expect(stepwise.picture).not.toBe(shipped.picture);
+      expect(
+        warned.filter((w) => w.includes("a member already belongs to another group")),
+      ).toHaveLength(2);
+      // …and its undo steps do NOT put the document back: the groups the
+      // deletes broke stay broken. (Measured on the shipped two-batch code
+      // before this change, too.) This lane runs LAST because of it.
+      expect(stepwise.restored).toBe(false);
+    });
+  });
 
   describe("the panel surface", () => {
     it("the row label names the artwork, the registration and the blast radius", () => {

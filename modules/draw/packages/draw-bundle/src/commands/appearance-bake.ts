@@ -47,14 +47,28 @@
 // survive a bake→release round-trip because the ORIGINAL element is
 // still there.
 //
-// MUTATION / UNDO SHAPE (probed against the booted engine, protocol 57 —
+// MUTATION / UNDO SHAPE (measured against the booted engine, 0.64.0 —
 // the RFI C-15 rule: assert the real count, never claim "one undo"):
 //   · bake    = TWO batches ⇒ 2 undo steps. Batch 1 inserts the N
 //     derived paths; batch 2 paints them, clears the carrier, stamps
-//     every envelope and wraps the group. Two is the FLOOR, not a
-//     shortcut: a batch op cannot reference an id minted EARLIER IN THE
-//     SAME BATCH (the blend.ts finding), and `insertPath` mints the ids
-//     batch 2 addresses.
+//     every envelope and wraps the group.
+//
+//     TWO IS STILL THE FLOOR HERE, and the reason CHANGED. It used to be
+//     that a batch could not address an id it had just minted; C-15's
+//     `bindCreated` ended that, and the paint, the markers and the group
+//     COULD all ride the insert batch by handle now. What cannot is the
+//     BAKE RECORD: the carrier's envelope names its layers by element id
+//     (`appearanceBake.layers`), an envelope is a JSON string, and a
+//     `$h:` handle inside TEXT is content — the engine stores it as
+//     written and never resolves it (measured; pinned in
+//     `test/conformance/minted.spec.ts`). So the record can only be
+//     written once the ids exist, which is after a first mutation has
+//     answered. The record's shape is what release and a reopened
+//     document read, so it is not changed to dodge that.
+//
+//     What DID change: the ids batch 1 minted come off the engine's
+//     reply (`commands/minted.ts`) instead of two reads of the whole
+//     scene tree.
 //   · release = ONE batch ⇒ 1 undo step (dissolve + delete + restore +
 //     re-stamp all ride together; the group and the layers already
 //     exist, so nothing is forward-referenced).
@@ -127,6 +141,7 @@ import {
   type FillLayer,
   type StrokeLayer,
 } from "./appearance";
+import { mintedLeaves, mutateMinting } from "./minted";
 import { leafIdsOf } from "./select-same";
 import { parentGroupOf } from "./parentage";
 import { linkIndex } from "../link-index";
@@ -532,10 +547,6 @@ const idsOf = (list: readonly ElementId[]): Set<string> =>
       .filter((s): s is string => s !== null),
   );
 
-async function leafElements(host: BundleHost): Promise<ElementId[]> {
-  return leafIdsOf(await host.document.tree());
-}
-
 /** Read the carrier's current frame paint (the release-restore seed). */
 async function carrierPaint(
   host: BundleHost,
@@ -645,24 +656,22 @@ export async function bakeAppearance(
   }
 
   const restore = await carrierPaint(host, id);
-  const before = idsOf(await leafElements(host));
-  const inserted = await host.document.mutate(
+  const inserted = await mutateMinting(
+    host,
     bakeInsertBatchFor(geometry.geometry, layers.length),
   );
-  if (!inserted.applied) {
+  if (!inserted.outcome.applied) {
     host.log.warn(
       `${label}: derived-layer insert rejected by engine: ${JSON.stringify(
-        inserted.error,
+        inserted.outcome.error,
       )}`,
     );
     return [];
   }
-  // A batch outcome reports ONE createdId, so the leaf diff is the
-  // honest enumeration (the blend.ts precedent). Tree order == insertion
-  // order == paint order.
-  const created = (await leafElements(host)).filter(
-    (e) => typeof e.id === "string" && !before.has(e.id),
-  );
+  // What the batch minted, in mint order — which is insertion order,
+  // which is paint order. Off the engine's reply, not a tree diff
+  // (`commands/minted.ts`).
+  const created = mintedLeaves(inserted).filter((e) => typeof e.id === "string");
   if (created.length !== layers.length) {
     host.log.warn(
       `${label}: expected ${layers.length} derived layers, found ` +

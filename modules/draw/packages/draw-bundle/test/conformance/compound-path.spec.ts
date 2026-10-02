@@ -26,7 +26,11 @@
 //       contours, the other gone;
 //   (3) the REAL undo count (RFI C-15 — assert it, never claim "one"):
 //       Make = 1 batch, Make-with-an-open-survivor = 2 mutations,
-//       Release = 2 batches;
+//       Release = 1 batch for the whole selection (it was 2 PER ELEMENT
+//       until the pieces could be named inside the batch; that lane is
+//       the fallback now, and every release runs through both and
+//       through hosts that cannot say what a batch created — the same
+//       document must come out of each);
 //   (4) THE HOLE ACTUALLY RENDERS. Anchor-table assertions cannot tell a
 //       ring from a coin — under the engine's NON-ZERO fill that is
 //       decided by the inner contour's WINDING. So the ring is exported
@@ -62,8 +66,14 @@ import {
   MAKE_COMPOUND_PATH_COMMAND_ID,
   RELEASE_COMPOUND_PATH_COMMAND_ID,
 } from "../../src";
+import {
+  releaseBatchForAll,
+  releaseHandle,
+  type ReleasePlan,
+} from "../../src/commands/compound-path";
 import { F6_RING_PAIR } from "../fixtures/corpus";
 import { openHost } from "./host";
+import { runThrough, type LaneName } from "./one-batch";
 
 const poly = (id: string): ElementId => ({ kind: "polygon", id }) as ElementId;
 
@@ -393,7 +403,7 @@ describe("draw conformance — COMPOUND PATHS (make / release)", () => {
       await h.host.document.undo();
     });
 
-    it("RELEASE splits the compound back into one element per contour — TWO batches", async () => {
+    it("RELEASE splits the compound back into one element per contour — ONE batch", async () => {
       await h.host.selection.set([OUTER, INNER]);
       expect(await applyMakeCompoundPath(h.host)).toBe(2);
       const before = await leafIds(h);
@@ -413,10 +423,9 @@ describe("draw conformance — COMPOUND PATHS (make / release)", () => {
         value: "Color/Black",
       });
 
-      // TWO batches: insertPath mints the id the paint batch addresses,
-      // and a batch cannot address an id minted inside itself.
-      await h.host.document.undo();
-      expect(await leafIds(h)).toHaveLength(before.length + 1);
+      // ONE batch: the piece is inserted, named and painted in the same
+      // mutation, so ONE undo takes all of it back. (It was two, and the
+      // first undo used to leave the piece standing, unpainted.)
       await h.host.document.undo();
       expect(await leafIds(h)).toEqual(before);
       expect((await contoursOf(h, OUTER))!.starts).toEqual([0, 4]);
@@ -441,8 +450,8 @@ describe("draw conformance — COMPOUND PATHS (make / release)", () => {
         ring!.areas.map((a) => Math.round(a)),
       );
 
-      // Unwind: make (1) + release (2) + make (1).
-      for (let i = 0; i < 4; i++) await h.host.document.undo();
+      // Unwind: make (1) + release (1) + make (1).
+      for (let i = 0; i < 3; i++) await h.host.document.undo();
       expect(await leafIds(h)).toEqual(["uinner", "uopen", "uouter"]);
     });
 
@@ -504,8 +513,179 @@ describe("draw conformance — COMPOUND PATHS (make / release)", () => {
       expect(contourCountOf((await compoundSourceOf(h.host, OUTER))!.table)).toBe(1);
       expect(await leafIds(h)).toHaveLength(3);
 
-      for (let i = 0; i < 3; i++) await h.host.document.undo();
+      // make (1) + release (1).
+      for (let i = 0; i < 2; i++) await h.host.document.undo();
       expect(await leafIds(h)).toEqual(["uinner", "uopen", "uouter"]);
+    });
+
+    // A batch can apply and still be the wrong edit. So a release runs
+    // through every lane (`./one-batch.ts`) and each must leave the SAME
+    // document — every piece's outline and paint, the survivor's contour
+    // 0, the selection — in its own measured number of undo steps, which
+    // restore it exactly.
+    describe("one batch — and the same document every other lane leaves", () => {
+      /** The F6 ring, made compound: OUTER keeps both contours. */
+      const ring = async (): Promise<void> => {
+        await h.host.selection.set([OUTER, INNER]);
+        expect(await applyMakeCompoundPath(h.host)).toBe(2);
+      };
+      /** A SECOND ring, from two inserted squares. */
+      const secondRing = async (): Promise<ElementId> => {
+        const before = new Set(await leafIds(h));
+        const square = (x: number, y: number, s: number): Mutation => ({
+          op: "insertPath",
+          args: {
+            pageId: F6_RING_PAIR.pageId,
+            anchors: [
+              { anchor: [x, y], left: [x, y], right: [x, y] },
+              { anchor: [x + s, y], left: [x + s, y], right: [x + s, y] },
+              { anchor: [x + s, y + s], left: [x + s, y + s], right: [x + s, y + s] },
+              { anchor: [x, y + s], left: [x, y + s], right: [x, y + s] },
+            ],
+            open: false,
+          },
+        });
+        const ins = await h.host.document.mutate({
+          op: "batch",
+          args: { ops: [square(100, 500, 100), square(130, 530, 40)] },
+        });
+        expect(ins.applied).toBe(true);
+        const [big, hole] = (await leafIds(h)).filter((id) => !before.has(id));
+        // leafIds sorts, and the engine mints ascending: big, then hole.
+        await h.host.selection.set([poly(big!), poly(hole!)]);
+        expect(await applyMakeCompoundPath(h.host)).toBe(2);
+        return poly(big!);
+      };
+
+      const scenarios: {
+        name: string;
+        setup: () => Promise<ElementId[]>;
+        pieces: number;
+        /** Undo steps of the stepwise lane: two per element. */
+        stepwiseSteps: number;
+        /** Tree reads as found: the diff, two per element. */
+        asFound: number;
+      }[] = [
+        {
+          name: "one compound",
+          setup: async () => {
+            await ring();
+            return [OUTER];
+          },
+          pieces: 1,
+          stepwiseSteps: 2,
+          asFound: 2,
+        },
+        {
+          name: "TWO compounds selected — one batch for both (was four)",
+          setup: async () => {
+            await ring();
+            const other = await secondRing();
+            return [OUTER, other];
+          },
+          pieces: 2,
+          stepwiseSteps: 4,
+          asFound: 4,
+        },
+      ];
+
+      for (const scenario of scenarios) {
+        it(scenario.name, async () => {
+          const through = (lane: LaneName) =>
+            runThrough(h, lane, {
+              carrier: OUTER,
+              setup: async () => {
+                await h.host.selection.set(await scenario.setup());
+              },
+              command: (host) => applyReleaseCompoundPath(host),
+            });
+
+          const shipped = await through("oneBatch");
+          expect(shipped.result).toHaveLength(scenario.pieces);
+          expect(shipped.work.mutations.map((m) => m.op)).toEqual(["batch"]);
+          expect(shipped.undoSteps).toBe(1);
+          expect(shipped.restored).toBe(true);
+          // As found: two per element, the before/after diff.
+          expect(shipped.work.count("document.tree")).toBe(0);
+
+          const stepwise = await through("stepwise");
+          expect(stepwise.picture).toBe(shipped.picture);
+          expect(stepwise.work.mutations.map((m) => m.op)).toEqual([
+            "batch", // the one batch, refused
+            ...Array.from({ length: scenario.stepwiseSteps }, () => "batch"),
+          ]);
+          expect(stepwise.undoSteps).toBe(scenario.stepwiseSteps);
+          expect(stepwise.restored).toBe(true);
+
+          for (const lane of ["diff", "unlisted"] as const) {
+            const run = await through(lane);
+            expect(run.picture, lane).toBe(shipped.picture);
+            expect(run.undoSteps, lane).toBe(1);
+            expect(run.restored, lane).toBe(true);
+            expect(run.work.count("document.tree"), lane).toBe(2);
+          }
+
+          // AS FOUND — no bind, no raw client: the numbers this flow
+          // started from, plus the refused attempt's "before" read.
+          const asFound = await through("asFound");
+          expect(asFound.picture).toBe(shipped.picture);
+          expect(asFound.undoSteps).toBe(scenario.stepwiseSteps);
+          expect(asFound.work.count("document.tree")).toBe(scenario.asFound + 1);
+
+          expect(await leafIds(h)).toEqual(["uinner", "uopen", "uouter"]);
+        });
+      }
+
+      it("the ONE batch: per element, contour 0 back, then each piece inserted, NAMED and painted by name", () => {
+        const plan = {
+          id: OUTER,
+          pageId: "usp",
+          kept: {
+            anchors: [{ anchor: [0, 0], left: [0, 0], right: [0, 0] }],
+            subpathStarts: [0],
+          },
+          rest: [
+            {
+              anchors: [{ anchor: [2, 2], left: [2, 2], right: [2, 2] }],
+              subpathStarts: [0],
+              subpathOpen: [false],
+            },
+          ],
+          paint: { fill: "Color/Black", stroke: null, weight: 1 },
+        } as unknown as ReleasePlan;
+        const ops = (
+          releaseBatchForAll([plan, { ...plan, id: INNER }]) as Extract<
+            Mutation,
+            { op: "batch" }
+          >
+        ).args.ops as { op: string; args: Record<string, unknown> }[];
+        expect(ops.map((o) => o.op)).toEqual([
+          "setElementProperty", // framePath
+          "insertPath",
+          "bindCreated",
+          "setElementProperty",
+          "setElementProperty",
+          "setElementProperty",
+          "setElementProperty", // the second element's framePath
+          "insertPath",
+          "bindCreated",
+          "setElementProperty",
+          "setElementProperty",
+          "setElementProperty",
+        ]);
+        expect(ops[2]!.args).toEqual({ handle: releaseHandle(0, 0) });
+        expect(ops[3]!.args.elementId).toEqual({ kind: "polygon", id: "$h:rc0_0" });
+        expect(ops[8]!.args).toEqual({ handle: releaseHandle(1, 0) });
+        // The paint is the stepwise lane's batch 2, word for word.
+        expect(ops.slice(3, 6)).toEqual(
+          (
+            releasePaintBatchFor([{ kind: "polygon", id: "$h:rc0_0" } as ElementId], plan.paint) as Extract<
+              Mutation,
+              { op: "batch" }
+            >
+          ).args.ops,
+        );
+      });
     });
   });
 });

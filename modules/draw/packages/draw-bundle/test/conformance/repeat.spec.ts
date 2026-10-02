@@ -47,6 +47,7 @@
 import { describe, expect, it, beforeAll, afterAll, beforeEach } from "vitest";
 
 import type {
+  BundleHost,
   CanvasPointerEvent,
   CommandContribution,
   ElementId,
@@ -124,6 +125,7 @@ import {
 } from "../../src";
 import { F6_RING_PAIR } from "../fixtures/corpus";
 import { openHost } from "./host";
+import { runThrough, type LaneName } from "./one-batch";
 
 const poly = (id: string): ElementId => ({ kind: "polygon", id }) as ElementId;
 
@@ -711,6 +713,81 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
       await undoTo(h, 1);
       expect(await sortedLeafIds(h)).toEqual(PRISTINE);
     });
+
+    // What the build created used to cost three reads of the whole scene
+    // tree — before and after, diffed, then a lookup for the group — and
+    // a metadata read per new leaf to tell instances from the clip frame.
+    // It comes off the engine's reply now (`commands/minted.ts`). A batch
+    // can apply and the ids still be wrong, so make, a clipped make and an
+    // update run through every lane of that seam, and each must leave the
+    // SAME document. (A clipped repeat's instances are invisible to the
+    // tree, so its picture is the tree, the clip frame and the source —
+    // its recipe names instances no picture can rename, and is left out.)
+    for (const [name, setup, run, undoSteps, trees, parts] of [
+      [
+        "make",
+        async () => h.host.selection.set([INNER]),
+        (host: BundleHost) =>
+          applyMakeRepeat(host, "radial", { count: 4, radiusPt: 120, startDeg: -90 }),
+        1,
+        0,
+        [REPEAT_PART],
+      ],
+      [
+        "make, clipped",
+        async () => h.host.selection.set([INNER]),
+        (host: BundleHost) =>
+          applyMakeRepeat(host, "radial", {
+            count: 4,
+            radiusPt: 120,
+            startDeg: -90,
+            clip: true,
+          }),
+        2,
+        0,
+        [],
+      ],
+      [
+        "update",
+        async () => {
+          await h.host.selection.set([INNER]);
+          expect(
+            await applyMakeRepeat(h.host, "radial", { count: 3, radiusPt: 120, startDeg: -90 }),
+          ).toHaveLength(2);
+        },
+        (host: BundleHost) => applyUpdateRepeat(host, { count: 5 }),
+        1,
+        1,
+        [REPEAT_PART],
+      ],
+    ] as const) {
+      it(`${name}: the created ids off the reply, and the document every other lane leaves`, async () => {
+        const through = (lane: LaneName) =>
+          runThrough(h, lane, {
+            carrier: OUTER,
+            parts,
+            setup: async () => {
+              await setup();
+            },
+            command: run,
+          });
+        const shipped = await through("oneBatch");
+        expect((shipped.result as ElementId[]).length).toBeGreaterThan(0);
+        expect(shipped.undoSteps).toBe(undoSteps);
+        expect(shipped.restored).toBe(true);
+        // As found: 3 for a make (the diff and the group lookup; 2 for a
+        // clipped one, which has no group); an update's walk on top.
+        expect(shipped.work.count("document.tree")).toBe(trees);
+        for (const lane of ["diff", "unlisted"] as const) {
+          const other = await through(lane);
+          expect(other.picture, lane).toBe(shipped.picture);
+          expect(other.result, lane).toHaveLength((shipped.result as ElementId[]).length);
+          expect(other.undoSteps, lane).toBe(undoSteps);
+          expect(other.restored, lane).toBe(true);
+        }
+        expect(await sortedLeafIds(h)).toEqual(PRISTINE);
+      });
+    }
 
     it("EXPAND keeps everything; RELEASE keeps only the source. Both = 1 undo step", async () => {
       // EXPAND

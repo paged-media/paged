@@ -54,14 +54,27 @@
 // winding implementation exists in this repo, and the conformance spec
 // proves the hole in an exported PDF rather than in an anchor table.
 //
-// MUTATION / UNDO SHAPE (probed against the booted engine, protocol 57;
-// the RFI C-15 rule — assert the real count, never claim "one undo"):
+// MUTATION / UNDO SHAPE (measured against the booted engine, 0.64.0; the
+// RFI C-15 rule — assert the real count, never claim "one undo"):
 // TWO batches ⇒ 2 undo steps. Batch 1 creates the colour swatches and
 // inserts every contour as its own path; batch 2 re-merges each region's
 // contours through the `framePath` door, deletes the surplus elements,
-// paints, stamps the record and groups. Two is the FLOOR: `insertPath`
-// mints the ids batch 2 addresses, and a batch cannot address an id
-// minted inside itself (the appearance-bake / blend.ts finding).
+// paints, stamps the record and groups.
+//
+// TWO IS STILL THE FLOOR, and the reason changed. A batch can name what
+// it just inserted now (C-15's `bindCreated`), so the re-merge, the
+// paint and the group COULD all ride batch 1 by handle. The RECORD
+// cannot: it names the traced regions by element id inside the source's
+// JSON metadata (`imageTrace.regions`), and a `$h:` handle in text is
+// stored as written, never resolved (measured, pinned in
+// `test/conformance/minted.spec.ts`). The appearance bake's record hits
+// the same wall. The record is what tells traced artwork from drawn
+// artwork in a reopened document, so its shape is not changed to dodge
+// that.
+//
+// What DID change: what each batch created comes off the engine's reply
+// (`commands/minted.ts`) — the contours batch 1 minted, the group batch
+// 2 made — instead of three reads of the whole scene tree.
 //
 // KNOWN GAP, named rather than papered over: the trace is fitted to the
 // FRAME's bounds. A placed image's OWN transform inside its frame (fit,
@@ -119,6 +132,7 @@ import { decodeRasterBytes, rasterDecoderAvailable } from "../io/raster-decode";
 import { DRAW_METADATA_KEY } from "./appearance-bake";
 import { framePathMutationFor } from "./compound-path";
 import { groupMutationFor } from "./group";
+import { bindMinted, mintedLeaves, mutateMinting } from "./minted";
 import { insertPathMutationFor } from "../handlers/insert-path";
 
 export const IMAGE_TRACE_COMMAND_CATEGORY = "Image";
@@ -497,54 +511,6 @@ export function traceFinishBatchFor(args: {
 
 // ------------------------------------------------------------ appliers
 
-/** Every leaf element id in the scene tree — the honest enumeration of
- *  what a multi-insert batch created (a batch outcome reports ONE
- *  `createdId`; the blend.ts / appearance-bake / pattern precedent). */
-async function leafElements(host: BundleHost): Promise<ElementId[]> {
-  const out: ElementId[] = [];
-  const walk = (nodes: readonly { id?: ElementId | null; children?: unknown }[]) => {
-    for (const node of nodes) {
-      const children = (node.children ?? []) as {
-        id?: ElementId | null;
-        children?: unknown;
-      }[];
-      if (children.length > 0) walk(children);
-      else if (node.id) out.push(node.id);
-    }
-  };
-  walk(await host.document.tree().catch(() => []));
-  return out;
-}
-
-/** The group node holding `member`, or null — a BATCH outcome does not
- *  echo an inner `createGroup`'s minted id, so the tree is the source of
- *  truth (the pattern-bake precedent). */
-async function groupContaining(
-  host: BundleHost,
-  member: ElementId,
-): Promise<ElementId | null> {
-  let found: ElementId | null = null;
-  const walk = (nodes: readonly { id?: ElementId | null; children?: unknown }[]) => {
-    for (const node of nodes) {
-      const children = (node.children ?? []) as {
-        id?: ElementId | null;
-        children?: unknown;
-      }[];
-      if (
-        node.id?.kind === "group" &&
-        children.some((c) => c.id && c.id.id === member.id)
-      ) {
-        found = node.id;
-        return;
-      }
-      if (children.length > 0) walk(children);
-      if (found) return;
-    }
-  };
-  walk(await host.document.tree().catch(() => []));
-  return found;
-}
-
 /**
  * Commit a resolved plan: TWO batches, the undo shape the module header
  * states. Returns the surviving element ids (empty on a refusal, always
@@ -563,23 +529,19 @@ export async function applyImageTracePlan(
     host.log.debug(`${label}: the trace produced no regions — nothing inserted`);
     return [];
   }
-  const before = new Set(
-    (await leafElements(host))
-      .map((e) => (typeof e.id === "string" ? e.id : null))
-      .filter((s): s is string => s !== null),
-  );
-  const inserted = await host.document.mutate(traceInsertBatchFor(plan));
-  if (!inserted.applied) {
+  const inserted = await mutateMinting(host, traceInsertBatchFor(plan));
+  if (!inserted.outcome.applied) {
     host.log.warn(
       `${label}: contour insert rejected by engine: ${JSON.stringify(
-        inserted.error,
+        inserted.outcome.error,
       )}`,
     );
     return [];
   }
-  const minted = (await leafElements(host)).filter(
-    (e) => typeof e.id === "string" && !before.has(e.id),
-  );
+  // What batch 1 minted, in mint order — insertion order, which is how
+  // the ids are chunked back onto their regions. Off the engine's reply,
+  // not a tree diff (`commands/minted.ts`).
+  const minted = mintedLeaves(inserted).filter((e) => typeof e.id === "string");
   const bindings = bindTraceRegions(plan, minted);
   if (!bindings) {
     host.log.warn(
@@ -604,19 +566,24 @@ export async function applyImageTracePlan(
     truncated: plan.truncated,
     oneShot: true,
   };
-  const finished = await host.document.mutate(
-    traceFinishBatchFor({ plan, bindings, record, sourceEnvelope }),
-  );
-  if (!finished.applied) {
+  const finish = traceFinishBatchFor({ plan, bindings, record, sourceEnvelope });
+  const keeps = bindings.map((b) => b.keep);
+  // Batch 2 creates ONE thing, and only with two or more regions: the
+  // group. Then the seam says which id it got; otherwise nothing is
+  // created and there is nothing to ask.
+  const grouped = keeps.length >= 2;
+  const finished = grouped
+    ? await mutateMinting(host, finish)
+    : { outcome: await host.document.mutate(finish), minted: [], lane: "reply" as const };
+  if (!finished.outcome.applied) {
     host.log.warn(
       `${label}: paint/group batch rejected by engine: ${JSON.stringify(
-        finished.error,
+        finished.outcome.error,
       )}`,
     );
-    return bindings.map((b) => b.keep);
+    return keeps;
   }
-  const keeps = bindings.map((b) => b.keep);
-  const group = keeps.length >= 2 ? await groupContaining(host, keeps[0]) : null;
+  const group = grouped ? (bindMinted(finished, finish)?.groups[0] ?? null) : null;
   await host.selection.set(group ? [group] : keeps);
   if (plan.truncated > 0) {
     host.log.warn(

@@ -112,6 +112,7 @@ import {
 import { serveTraceRequests, type TraceWorkerScope } from "../../src/trace-worker";
 import { F7_PLACED_IMAGE, ringPixels } from "../fixtures/corpus";
 import { openHost } from "./host";
+import { runThrough, type LaneName } from "./one-batch";
 
 const IMAGE = { kind: "rectangle", id: F7_PLACED_IMAGE.imageId } as ElementId;
 const poly = (id: string): ElementId => ({ kind: "polygon", id }) as ElementId;
@@ -788,8 +789,10 @@ describe("draw conformance — IMAGE TRACE v0", () => {
       expect(record?.oneShot).toBe(true);
       expect(record?.regions).toEqual([created[0].id]);
 
-      // TWO batches ⇒ TWO undos. `insertPath` mints the ids batch 2
-      // addresses, and a batch cannot address an id minted inside itself.
+      // TWO batches ⇒ TWO undos. The record above names the region by
+      // element id inside JSON metadata, where a `$h:` handle is never
+      // resolved — so it can only be written once a first batch has
+      // answered with the id (module header).
       await h.host.document.undo();
       // Batch 2 undone: the absorbed contour is back as its own element.
       expect(await leafIds(h)).toHaveLength(before.length + 2);
@@ -839,8 +842,9 @@ describe("draw conformance — IMAGE TRACE v0", () => {
         plan.swatches.length,
       );
 
-      // The selection is the GROUP the batch created (found in the tree —
-      // a batch outcome does not echo an inner createGroup's id).
+      // The selection is the GROUP the batch created — named by the
+      // engine's reply (`commands/minted.ts`), no longer looked up in the
+      // tree.
       const selected = h.host.selection.get();
       expect(selected).toHaveLength(1);
       expect(selected[0].kind).toBe("group");
@@ -849,6 +853,48 @@ describe("draw conformance — IMAGE TRACE v0", () => {
       await h.host.document.undo();
       expect(await leafIds(h)).toEqual(before);
     });
+
+    // What each batch created used to cost reads of the whole scene tree:
+    // before and after batch 1, diffed, and once more to find the group.
+    // It comes off the engine's reply now (`commands/minted.ts`). A batch
+    // can apply and the ids still be wrong, so a commit runs through every
+    // lane of that seam and each must leave the SAME document — the
+    // regions' outlines and paint, the group, the record naming the
+    // regions, the selection — in the same two undo steps, which restore
+    // it exactly. Two is the floor: the record names the regions by id
+    // inside the source's JSON metadata, where a handle is never resolved
+    // (module header).
+    // [scenario, plan, tree reads in the diff lane]
+    for (const [name, plan, diffReads] of [
+      ["a ring (one region, no group)", () => ringPlan(), 2],
+      ["two colours (a group)", () => twoColourPlan(), 4],
+    ] as const) {
+      it(`the created ids off the reply, ${name}: no tree read, and the document every other lane leaves`, async () => {
+        const fixed = plan();
+        const through = (lane: LaneName) =>
+          runThrough(h, lane, {
+            carrier: IMAGE,
+            command: (host) => applyImageTracePlan(host, fixed),
+          });
+        const shipped = await through("oneBatch");
+        expect(shipped.result).toHaveLength(fixed.regions.length);
+        expect(shipped.work.mutations.map((m) => m.op)).toEqual(["batch", "batch"]);
+        expect(shipped.undoSteps).toBe(2);
+        expect(shipped.restored).toBe(true);
+        // As found: 2 for the ring, 3 with a group to find.
+        expect(shipped.work.count("document.tree")).toBe(0);
+        for (const lane of ["diff", "unlisted"] as const) {
+          const run = await through(lane);
+          expect(run.picture, lane).toBe(shipped.picture);
+          expect(run.undoSteps, lane).toBe(2);
+          expect(run.restored, lane).toBe(true);
+          // The diff around batch 1, and around batch 2 when it groups
+          // (as found that second pair was ONE lookup — the fallback lane
+          // pays one more read; the shipped lane pays none).
+          expect(run.work.count("document.tree"), lane).toBe(diffReads);
+        }
+      });
+    }
 
     it("a plan with no regions inserts nothing (a blank image is not artwork)", async () => {
       const before = await leafIds(h);
