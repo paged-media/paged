@@ -25,7 +25,7 @@
 // Globals set by the runner:
 //   PAGED_RT_IDML        absolute path of the IDML to open (read-only)
 //   PAGED_RT_PDF         where to export a PDF of the document ("" = none)
-//   PAGED_RT_REEXPORT    where to write InDesign's OWN IDML export ("" = none)
+//   PAGED_RT_EXPORT      where to write InDesign's OWN IDML export (always)
 //   PAGED_RT_LABEL_KEYS  the `<Label><KeyValuePair Key=...>` keys the file
 //                        carries (InDesign can answer a keyed label but
 //                        cannot list the keys), as an array of strings
@@ -42,10 +42,16 @@
 // `geometricBounds` is [top, left, bottom, right]; it is recorded as
 // [minX, minY, maxX, maxY] like the Illustrator oracle lane.
 //
-// Z-ORDER. Items are listed in the order of their parent's `pageItems`
-// collection, and each records InDesign's own `index` beside it. Which end
-// of that collection is the FRONT is a fact of the app, settled by the
-// replay spec from a recorded two-item case, not assumed here.
+// Z-ORDER is NOT read here, because the DOM does not answer it: a
+// parent's `pageItems` collection is grouped BY KIND (every Rectangle,
+// then every Polygon...) and `index` counts within one kind -- measured on
+// 20.0.1, a group holding a Rectangle under three Polygons listed the
+// Rectangle first with index 0 and the frontmost Polygon ALSO at index 0.
+// Both are recorded raw (`position`, `index`). The stacking order comes
+// from InDesign's OWN IDML export of the opened document instead, whose
+// children are written back to front; `run-roundtrip.sh` reads it and
+// `write-fixture.mjs` adds `z` (0 = back) to every item, matching the
+// export's `Self="u<hex id>"` to the item's `id`.
 //
 // ENUMERATIONS are recorded by NAME (`EndCap.ROUND_END_CAP`), never by the
 // four-character number InDesign hands back, and swatch / stroke-style
@@ -424,10 +430,16 @@ var PagedRoundtrip = (function () {
   /** Opening runs with NEVER_INTERACT, so an alert InDesign would have shown
    *  is suppressed and NOT observable from a script. What IS observable is
    *  recorded: fonts that did not resolve, links that are not normal, and
-   *  InDesign's own preflight (its first profile, "[Basic]"). */
+   *  stories that overset.
+   *
+   *  InDesign's PREFLIGHT is deliberately NOT asked: it is an idle task, and
+   *  a script never yields idle time -- measured on 20.0.1, a process over a
+   *  document with an overset frame answered `waitForProcess(30) == false`
+   *  and an EMPTY result list, i.e. it reads as "no problems" while having
+   *  checked nothing. */
   function warningsOf(doc) {
     var out = [];
-    var i, f, l, profile, proc, agg, rules, r;
+    var i, f, l, st;
     try {
       for (i = 0; i < doc.fonts.length; i++) {
         f = doc.fonts[i];
@@ -457,20 +469,14 @@ var PagedRoundtrip = (function () {
       out.push({ source: "link", unreadable: String(e2.message || e2) });
     }
     try {
-      profile = app.preflightProfiles[0];
-      proc = app.preflightProcesses.add(doc, profile);
-      proc.waitForProcess(30);
-      agg = proc.aggregatedResults;
-      // [documentName, profileName, [[ruleName, itemDescription, page,
-      //  ...], ...]] -- recorded verbatim, rule by rule.
-      rules = agg && agg.length > 2 ? agg[2] : [];
-      for (i = 0; i < rules.length; i++) {
-        r = rules[i];
-        out.push({ source: "preflight", profile: String(profile.name), detail: r });
+      for (i = 0; i < doc.stories.length; i++) {
+        st = doc.stories[i];
+        if (st.overflows) {
+          out.push({ source: "overset", story: String(st.contents).substr(0, 40) });
+        }
       }
-      proc.remove();
     } catch (e3) {
-      out.push({ source: "preflight", unreadable: String(e3.message || e3) });
+      out.push({ source: "overset", unreadable: String(e3.message || e3) });
     }
     return out;
   }
@@ -549,11 +555,30 @@ var PagedRoundtrip = (function () {
         );
       }
       result.warnings = warningsOf(doc);
-      if (String(PAGED_RT_PDF) !== "") result.pdf_preset = exportPdf(doc, String(PAGED_RT_PDF));
-      if (String(PAGED_RT_REEXPORT) !== "") {
-        doc.exportFile(ExportFormat.INDESIGN_MARKUP, File(String(PAGED_RT_REEXPORT)));
-        result.reexported = true;
+      // Every story, with what holds it -- a story that arrived with no
+      // container (no frame, no text path) is text InDesign has but shows
+      // nowhere.
+      result.stories = [];
+      for (i = 0; i < doc.stories.length; i++) {
+        result.stories.push({
+          contents: String(doc.stories[i].contents).substr(0, 80),
+          textContainers: doc.stories[i].textContainers.length,
+          containerKinds: (function (st) {
+            var kinds = [];
+            var j;
+            for (j = 0; j < st.textContainers.length; j++) {
+              kinds.push(st.textContainers[j].constructor.name);
+            }
+            return kinds;
+          })(doc.stories[i])
+        });
       }
+      if (String(PAGED_RT_PDF) !== "") result.pdf_preset = exportPdf(doc, String(PAGED_RT_PDF));
+      // InDesign's OWN IDML export, always: the runner reads the stacking
+      // order out of it (see the Z-ORDER note at the top) and keeps it as
+      // the re-import fixture when asked to.
+      doc.exportFile(ExportFormat.INDESIGN_MARKUP, File(String(PAGED_RT_EXPORT)));
+      result.exported = true;
     } catch (e) {
       result.error = String(e.message || e) + (e.line ? " (line " + e.line + ")" : "");
     } finally {

@@ -5,9 +5,9 @@
     "version": "20.0.1.32",
     "locale": "GERMAN_LOCALE",
     "script": "scripts/indesign/lib/read-document.jsx",
-    "script_sha256": "e4baa1bbbcc2cba025e0a3bb7aa30877c62b005aeef6d852292a6a9f273d6ff4",
+    "script_sha256": "4486a78fdd3b45a88c6ef6b18911bc34b94f6cf7ddc3c4d433d3d5e256f4dc08",
     "runner": "scripts/indesign/run-roundtrip.sh",
-    "recorded_at": "2026-10-03T05:58:55.562Z",
+    "recorded_at": "2026-10-03T06:03:36.388Z",
     "host_os": "macOS 26.4",
     "pdf_preset": "[Qualitativ hochwertiger Druck]"
   },
@@ -15,7 +15,6 @@
     "path": "packages/draw-bundle/test/fixtures/roundtrip/offset-path.idml",
     "sha256": "02eec6998e06379798105025ada3d2c5e8866e7236e52a6154727874751bd766"
   },
-  "reexported": false,
   "units": "pt",
   "coordinates": "page-local, origin top-left of the page, Y down (ruler origin PAGE, zero point 0,0, script measurement unit POINTS); bounds as [minX, minY, maxX, maxY]",
   "open": {
@@ -38,6 +37,7 @@
     "Layer 1"
   ],
   "warnings": [],
+  "stories": [],
   "items": [
     {
       "kind": "Polygon",
@@ -78,6 +78,7 @@
       "overprintFill": false,
       "overprintStroke": false,
       "textPaths": [],
+      "z": 0,
       "paths": [
         {
           "closed": true,

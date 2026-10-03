@@ -5,9 +5,9 @@
     "version": "20.0.1.32",
     "locale": "GERMAN_LOCALE",
     "script": "scripts/indesign/lib/read-document.jsx",
-    "script_sha256": "e4baa1bbbcc2cba025e0a3bb7aa30877c62b005aeef6d852292a6a9f273d6ff4",
+    "script_sha256": "4486a78fdd3b45a88c6ef6b18911bc34b94f6cf7ddc3c4d433d3d5e256f4dc08",
     "runner": "scripts/indesign/run-roundtrip.sh",
-    "recorded_at": "2026-10-03T05:59:17.964Z",
+    "recorded_at": "2026-10-03T06:04:16.671Z",
     "host_os": "macOS 26.4",
     "pdf_preset": "[Qualitativ hochwertiger Druck]"
   },
@@ -15,7 +15,6 @@
     "path": "packages/draw-bundle/test/fixtures/roundtrip/svg-import.idml",
     "sha256": "f751e791fd51eda067696e8c93978f50dbab9467f00f8e5760485d254c655c34"
   },
-  "reexported": false,
   "units": "pt",
   "coordinates": "page-local, origin top-left of the page, Y down (ruler origin PAGE, zero point 0,0, script measurement unit POINTS); bounds as [minX, minY, maxX, maxY]",
   "open": {
@@ -38,6 +37,7 @@
     "Layer 1"
   ],
   "warnings": [],
+  "stories": [],
   "items": [
     {
       "kind": "Polygon",
@@ -78,6 +78,7 @@
       "overprintFill": false,
       "overprintStroke": false,
       "textPaths": [],
+      "z": 3,
       "paths": [
         {
           "closed": true,
@@ -129,6 +130,7 @@
       "overprintFill": {"unreadable":"Diese Eigenschaft ist im aktuellen Status nicht zutreffend."},
       "overprintStroke": false,
       "textPaths": [],
+      "z": 2,
       "paths": [
         {
           "closed": false,
@@ -179,6 +181,7 @@
       "overprintFill": false,
       "overprintStroke": false,
       "textPaths": [],
+      "z": 1,
       "paths": [
         {
           "closed": true,
@@ -231,6 +234,7 @@
       "overprintFill": false,
       "overprintStroke": false,
       "textPaths": [],
+      "z": 0,
       "paths": [
         {
           "closed": true,

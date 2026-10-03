@@ -25,20 +25,23 @@
 #      globals), so InDesign reads exactly one file it was given and the
 #      reader's own text never has to be readable by the app;
 #   4. the reader opens the IDML (no window, NEVER_INTERACT), measures every
-#      page item, runs InDesign's preflight, exports a PDF of the page, and
-#      optionally InDesign's OWN IDML export (PAGED_RT_REEXPORT), then
-#      closes the document unsaved and returns a JSON string;
+#      page item, records unresolved fonts / links and overset stories,
+#      exports a PDF of the page and InDesign's OWN IDML export, then closes
+#      the document unsaved and returns a JSON string;
 #   5. pings again -- a reader that left a modal open would leave InDesign
 #      unable to answer;
-#   6. judges the ARTIFACT (lib/write-fixture.mjs), never the exit code, and
-#      only then writes <out.json> with provenance: app, version, locale,
-#      the reader's sha256, the IDML's sha256, date.
+#   6. reads the STACKING ORDER out of InDesign's own export (the DOM's
+#      `pageItems` is grouped by kind, not stacked), judges the ARTIFACT
+#      (lib/write-fixture.mjs), never the exit code, and only then writes
+#      <out.json> with provenance: app, version, locale, the reader's
+#      sha256, the IDML's sha256, date.
 #
 # Environment:
 #   INDESIGN_APP               application name   (default "Adobe InDesign 2025")
 #   INDESIGN_BUNDLE_ID         default com.adobe.InDesign
 #   PAGED_RT_PDF               where the PDF goes (default: <stage>/<name>.pdf)
-#   PAGED_RT_REEXPORT          also write InDesign's own IDML export here
+#   PAGED_RT_REEXPORT          also KEEP InDesign's own IDML export here (the
+#                              re-import fixtures; it is always made)
 #   PAGED_PROBE_PING_TIMEOUT   seconds to wait for the ping   (default 60)
 #   PAGED_PROBE_TIMEOUT        seconds to wait for the reader (default 600)
 #   PAGED_PROBE_STAGE          staging directory (default: a mktemp dir, KEPT,
@@ -96,17 +99,18 @@ SRC="$STAGE/$NAME.combined.jsx"
 RAW="$STAGE/$NAME.raw.json"
 ERR="$STAGE/$NAME.osascript.err"
 PDF="${PAGED_RT_PDF:-$STAGE/$NAME.pdf}"
+EXPORT="$STAGE/$NAME.indesign-export.idml"
+ZORDER="$STAGE/$NAME.zorder.xml"
 REEXPORT="${PAGED_RT_REEXPORT:-}"
 if [ -n "$REEXPORT" ]; then
   mkdir -p "$(dirname "$REEXPORT")"
   REEXPORT="$(cd "$(dirname "$REEXPORT")" && pwd)/$(basename "$REEXPORT")"
 fi
-case "$IDML$PDF$REEXPORT" in
+case "$IDML$PDF$EXPORT" in
   *\"* | *\\*) die 2 "paths may not contain a double quote or a backslash" ;;
 esac
 cp "$IN" "$IDML"
-rm -f "$PDF"
-[ -z "$REEXPORT" ] || rm -f "$REEXPORT"
+rm -f "$PDF" "$EXPORT" "$ZORDER"
 
 # InDesign can answer a KEYED label (`extractLabel(key)`) but cannot list
 # the keys an item carries, so the keys are read from the file itself.
@@ -119,7 +123,7 @@ KEYS_JSON="$({ unzip -p "$IDML" 'Spreads/*.xml' 2>/dev/null || true; } |
 {
   printf 'var PAGED_RT_IDML = "%s";\n' "$IDML"
   printf 'var PAGED_RT_PDF = "%s";\n' "$PDF"
-  printf 'var PAGED_RT_REEXPORT = "%s";\n' "$REEXPORT"
+  printf 'var PAGED_RT_EXPORT = "%s";\n' "$EXPORT"
   printf 'var PAGED_RT_LABEL_KEYS = %s;\n' "$KEYS_JSON"
   cat "$READER"
 } >"$SRC"
@@ -231,13 +235,17 @@ DOCS_AFTER="$(ping_app "String(app.documents.length)")" ||
   die 4 "the reader left documents open: $DOCS_BEFORE before, $DOCS_AFTER after" \
     "Close the document(s) in InDesign WITHOUT saving. Staging kept: $STAGE"
 
-# --- 6. judge the artifact, then write the fixture --------------------------
+# --- 6. the stacking order, then judge the artifact and write the fixture ---
+[ -s "$EXPORT" ] || die 4 "InDesign wrote no IDML export to $EXPORT" "Staging kept: $STAGE"
+unzip -p "$EXPORT" 'Spreads/*.xml' >"$ZORDER" 2>"$ERR" ||
+  die 4 "InDesign's own IDML export has no readable spread" "$(cat "$ERR")" "Staging kept: $STAGE"
 SHA="$(shasum -a 256 <"$READER" | cut -d' ' -f1)"
 IDML_SHA="$(shasum -a 256 <"$IN" | cut -d' ' -f1)"
 node "$WRITER" \
   "$RAW" "$OUT" "$NAME" "${READER#"$ROOT"/}" "$SHA" "${IN#"$ROOT"/}" "$IDML_SHA" \
-  "$(sw_vers -productVersion)" "$PDF" "$REEXPORT" ||
+  "$(sw_vers -productVersion)" "$PDF" "$ZORDER" ||
   die 4 "InDesign's reply was refused; nothing was written to $OUT" "Raw reply kept: $RAW"
+[ -z "$REEXPORT" ] || cp "$EXPORT" "$REEXPORT"
 
 echo "run-roundtrip: PDF for the visual check: $PDF"
 [ -z "$REEXPORT" ] || echo "run-roundtrip: InDesign's own IDML export: $REEXPORT"

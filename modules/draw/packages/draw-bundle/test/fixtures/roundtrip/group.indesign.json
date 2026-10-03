@@ -5,9 +5,9 @@
     "version": "20.0.1.32",
     "locale": "GERMAN_LOCALE",
     "script": "scripts/indesign/lib/read-document.jsx",
-    "script_sha256": "e4baa1bbbcc2cba025e0a3bb7aa30877c62b005aeef6d852292a6a9f273d6ff4",
+    "script_sha256": "4486a78fdd3b45a88c6ef6b18911bc34b94f6cf7ddc3c4d433d3d5e256f4dc08",
     "runner": "scripts/indesign/run-roundtrip.sh",
-    "recorded_at": "2026-10-03T05:58:48.967Z",
+    "recorded_at": "2026-10-03T06:03:27.593Z",
     "host_os": "macOS 26.4",
     "pdf_preset": "[Qualitativ hochwertiger Druck]"
   },
@@ -15,7 +15,6 @@
     "path": "packages/draw-bundle/test/fixtures/roundtrip/group.idml",
     "sha256": "14f332933451ce668557bc01df0bdd80fd329e11d0aaf19bc55c0d1fecf5166a"
   },
-  "reexported": false,
   "units": "pt",
   "coordinates": "page-local, origin top-left of the page, Y down (ruler origin PAGE, zero point 0,0, script measurement unit POINTS); bounds as [minX, minY, maxX, maxY]",
   "open": {
@@ -38,6 +37,7 @@
     "Layer 1"
   ],
   "warnings": [],
+  "stories": [],
   "items": [
     {
       "kind": "Group",
@@ -52,7 +52,8 @@
       "visible": true,
       "locked": false,
       "geometricBounds": [100,100,480,220],
-      "visibleBounds": [99.5,99.5,480.384111,220.5]
+      "visibleBounds": [99.5,99.5,480.384111,220.5],
+      "z": 0
     },
     {
       "kind": "Polygon",
@@ -93,6 +94,7 @@
       "overprintFill": {"unreadable":"Diese Eigenschaft ist im aktuellen Status nicht zutreffend."},
       "overprintStroke": false,
       "textPaths": [],
+      "z": 2,
       "paths": [
         {
           "closed": false,
@@ -143,6 +145,7 @@
       "overprintFill": {"unreadable":"Diese Eigenschaft ist im aktuellen Status nicht zutreffend."},
       "overprintStroke": false,
       "textPaths": [],
+      "z": 1,
       "paths": [
         {
           "closed": true,
@@ -195,6 +198,7 @@
       "overprintFill": false,
       "overprintStroke": false,
       "textPaths": [],
+      "z": 0,
       "paths": [
         {
           "closed": true,

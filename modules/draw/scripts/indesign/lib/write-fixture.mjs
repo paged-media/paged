@@ -9,13 +9,13 @@
 //
 //   node scripts/indesign/lib/write-fixture.mjs \
 //     <raw.json> <out.json> <case> <reader-path> <reader-sha256> \
-//     <idml-path> <idml-sha256> <macos-version> <pdf-path> <reexport-path|"">
+//     <idml-path> <idml-sha256> <macos-version> <pdf-path> <zorder.xml>
 //
 // "Judge by the artifact": an osascript exit code of 0 says only that
 // InDesign returned a string. This says whether the string is an answer.
 import fs from "node:fs";
 
-const [raw, out, name, reader, sha, idml, idmlSha, os, pdf, reexport] = process.argv.slice(2);
+const [raw, out, name, reader, sha, idml, idmlSha, os, pdf, zorderXml] = process.argv.slice(2);
 const fail = (why) => {
   console.error(`run-roundtrip: NOT A RECORDING — ${why}`);
   process.exit(1);
@@ -38,8 +38,45 @@ if (!Array.isArray(reply.items)) fail("no item list");
 if (reply.items.length === 0) fail("InDesign sees NO page item at all");
 if (!Array.isArray(reply.pages) || reply.pages.length === 0) fail("no pages");
 if (!fs.existsSync(pdf) || fs.statSync(pdf).size === 0) fail(`no PDF was written to ${pdf}`);
-if (reexport && (!fs.existsSync(reexport) || fs.statSync(reexport).size === 0)) {
-  fail(`no IDML re-export was written to ${reexport}`);
+if (!reply.exported) fail("the reader did not export InDesign's own IDML");
+
+// THE STACKING ORDER, from InDesign's own export of the opened document:
+// page items are written back to front, each with `Self="u<hex id>"`. The
+// DOM cannot answer it (`pageItems` is grouped by kind — see the reader).
+const PAGE_ITEM = new Set(["Rectangle", "Oval", "Polygon", "GraphicLine", "Group", "TextFrame"]);
+const stack = []; // open elements: { tag, self }
+const zOf = new Map(); // self -> { z, parent }
+const nextZ = new Map(); // parent self -> next z
+const xml = fs.readFileSync(zorderXml, "utf8");
+for (const m of xml.matchAll(/<(\/?)([A-Za-z:]+)([^>]*?)(\/?)>/g)) {
+  const [, closing, tag, attrs, selfClosing] = m;
+  if (tag.startsWith("?") || tag.startsWith("!")) continue;
+  if (closing) {
+    stack.pop();
+    continue;
+  }
+  const self = /\bSelf="([^"]*)"/.exec(attrs)?.[1] ?? null;
+  if (PAGE_ITEM.has(tag) && self) {
+    const owner = [...stack].reverse().find((e) => PAGE_ITEM.has(e.tag));
+    const parent = owner ? owner.self : "spread";
+    const z = nextZ.get(parent) ?? 0;
+    nextZ.set(parent, z + 1);
+    zOf.set(self, { z, parent });
+  }
+  if (!selfClosing) stack.push({ tag, self });
+}
+for (const item of reply.items) {
+  const self = `u${Number(item.id).toString(16)}`;
+  const found = zOf.get(self);
+  if (!found) fail(`item ${item.kind}#${item.id} (${self}) is not in InDesign's own export`);
+  const parentSelf = item.parent === "spread" ? "spread" : `u${Number(item.parent.split("#")[1]).toString(16)}`;
+  if (found.parent !== parentSelf) {
+    fail(`item ${self}: the DOM says parent ${item.parent}, the export says ${found.parent}`);
+  }
+  item.z = found.z;
+}
+if (zOf.size !== reply.items.length) {
+  fail(`InDesign's export holds ${zOf.size} page items, the DOM walk ${reply.items.length}`);
 }
 
 const fixture = {
@@ -56,7 +93,6 @@ const fixture = {
     pdf_preset: reply.pdf_preset ?? null,
   },
   idml: { path: idml, sha256: idmlSha },
-  reexported: Boolean(reply.reexported),
   units: reply.units,
   coordinates: reply.coordinates,
   open: reply.open,
@@ -64,6 +100,7 @@ const fixture = {
   pages: reply.pages,
   layers: reply.layers,
   warnings: reply.warnings ?? [],
+  stories: reply.stories ?? [],
   items: reply.items,
 };
 
