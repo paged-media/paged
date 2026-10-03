@@ -184,6 +184,16 @@ export {
   type LivePaintSnapshot,
 } from "./live-paint-machine";
 
+// SCISSORS AT ANY POINT — the de Casteljau split then `pathOpenAt` at
+// the new anchor, planned pure and lowered to one batch.
+export {
+  planScissorsAt,
+  scissorsMutation,
+  type ScissorsPlan,
+  type ScissorsBatchWire,
+  type PathOpenAtWire,
+} from "./scissors";
+
 export {
   planAnchorAdd,
   planAnchorAddAt,
@@ -226,4 +236,6 @@ export type {
   InsertPathFeedsWire,
   PathEditBatchFeedsWire,
   PathPointRoleIsWire,
+  PathOpenAtFeedsWire,
+  ScissorsBatchFeedsWire,
 } from "./wire-compat";

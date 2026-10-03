@@ -56,6 +56,7 @@ import {
 import { createMeasureHandler } from "./handlers/measure";
 import { createPencilHandler } from "./handlers/pencil";
 import { createRepeatHandler } from "./handlers/repeat";
+import { createScissorsHandler } from "./handlers/scissors";
 import { createShapeBuilderHandler } from "./handlers/shape-builder";
 import { createTypeOnPathHandler } from "./handlers/text-on-path";
 import { createWidthHandler } from "./handlers/width";
@@ -127,7 +128,10 @@ export const REPEAT_TOOL_IDS = ["media.paged.draw.tool.repeat"] as const;
 
 /** The CUTTING tools — they join the host's built-in Scissors flyout
  *  (host-free, the PRO_TOOL_IDS pattern). */
-export const CUT_TOOL_IDS = ["media.paged.draw.tool.knife"] as const;
+export const CUT_TOOL_IDS = [
+  "media.paged.draw.tool.knife",
+  "media.paged.draw.tool.scissorsAnyPoint",
+] as const;
 
 /** Build the three anchor-editing tools bound to `host` — each
  *  gesture handler reaches the engine through the facades only (B-17).
@@ -507,6 +511,21 @@ export function drawTools(host: BundleHost): ToolContribution[] {
       order: 3,
       cursor: CROSS,
       gesture: () => createKnifeHandler(host),
+    },
+    // SCISSORS AT ANY POINT — the host's Scissors cuts at ANCHORS only;
+    // this one splits the clicked segment where the click lands (the
+    // de Casteljau insert) and opens the path there, in one batch
+    // (handlers/scissors.ts). Same flyout, same glyph, same keyless
+    // reason as the Knife above.
+    {
+      id: "media.paged.draw.tool.scissorsAnyPoint",
+      title: "Scissors (any point)",
+      icon: "tool-scissors",
+      group: "scissors",
+      section: "transform",
+      order: 2,
+      cursor: CROSS,
+      gesture: () => createScissorsHandler(host),
     },
   ];
 }

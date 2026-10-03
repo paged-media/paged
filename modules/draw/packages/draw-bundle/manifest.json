@@ -53,7 +53,8 @@
       "media.paged.draw.tool.livePaintSelect",
       "media.paged.draw.tool.typeOnPath",
       "media.paged.draw.tool.repeat",
-      "media.paged.draw.tool.knife"
+      "media.paged.draw.tool.knife",
+      "media.paged.draw.tool.scissorsAnyPoint"
     ],
     "panels": [
       "media.paged.draw.panel.stroke",

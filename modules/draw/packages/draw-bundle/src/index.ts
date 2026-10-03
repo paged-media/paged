@@ -173,6 +173,12 @@ export {
   type KnifeTarget,
 } from "./commands/knife";
 export { createKnifeHandler, type KnifeHandlerOptions } from "./handlers/knife";
+// SCISSORS AT ANY POINT — split the clicked segment, open the path there.
+export {
+  applyScissorsAt,
+  createScissorsHandler,
+  type ScissorsResult,
+} from "./handlers/scissors";
 export {
   PATH_OPS_COMMAND_IDS,
   PATH_OPS_COMMAND_CATEGORY,
