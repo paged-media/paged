@@ -95,9 +95,9 @@ export function defectsOf(known: readonly KnownAt[]): Map<FindingId, KnownAt[]> 
 }
 
 /** A short "ours X, InDesign Y" for a test title. */
-export const bothValues = (entries: readonly KnownAt[]): string =>
+export const bothValues = (entries: readonly KnownAt[], theirs = "InDesign"): string =>
   entries
-    .map((k) => `${k.at} ${k.field}: ours ${short(k.ours)}, InDesign ${short(k.theirs)}`)
+    .map((k) => `${k.at} ${k.field}: ours ${short(k.ours)}, ${theirs} ${short(k.theirs)}`)
     .join("; ");
 
 const short = (v: unknown): string => {
