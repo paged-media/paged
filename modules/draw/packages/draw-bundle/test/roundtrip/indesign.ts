@@ -81,6 +81,9 @@ export interface InDesignItem {
    *  two-item probe listed the later-inserted item first). */
   position: number;
   index: number;
+  /** Stacking order among its siblings, 0 = BACK — read from InDesign's
+   *  own IDML export of the opened document (the writer adds it). */
+  z: number;
   name: string;
   label: string;
   labels: Record<string, string>;
@@ -118,7 +121,7 @@ export interface InDesignItem {
 }
 
 export interface InDesignWarning {
-  source: "font" | "link" | "preflight";
+  source: "font" | "link" | "overset";
   [detail: string]: unknown;
 }
 
@@ -136,7 +139,6 @@ export interface InDesignRecording {
     pdf_preset: string | null;
   };
   idml: { path: string; sha256: string };
-  reexported: boolean;
   units: "pt";
   coordinates: string;
   open: { converted: boolean; modified: boolean };
@@ -144,6 +146,8 @@ export interface InDesignRecording {
   pages: { name: string; bounds: [number, number, number, number] }[];
   layers: string[];
   warnings: InDesignWarning[];
+  /** Every story InDesign holds, with the kinds of what holds it. */
+  stories: { contents: string; textContainers: number; containerKinds: string[] }[];
   items: InDesignItem[];
 }
 
