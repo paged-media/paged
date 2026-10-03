@@ -36,6 +36,31 @@
 // Drag-on-canvas IS supported here — the gesture spine delivers pointer
 // input to the active tool, so no honesty caveat applies; the fill
 // panel's Angle/Length scrubs remain the precise-entry lane.
+//
+// THE STOPS ARE ON THE LINE TOO. The overlay is a multi-shape channel
+// now (`host.overlay.setToolPreviews`, K-9), so the axis is drawn WITH a
+// diamond marker at every stop of the gradient, at its location along
+// the line. A press on a marker grabs that stop (draw-tools
+// `GradientStopMachine`): it slides along the axis between its two
+// neighbours, and the release writes the one location change through
+// `editGradient` — ONE mutation, one undo step per drag. A press anywhere
+// else is the axis drag it always was.
+//
+// Three facts the markers carry, named rather than hidden:
+//   · THE STOPS ARE READ THROUGH THE RAW HATCH. There is no
+//     `document.gradientDetail` facade and `collection("gradients")`
+//     answers id / name / kind only, so `requestGradientDetail` goes
+//     through `raw-wire.ts` (the ONE guarded hatch seam). A host without
+//     the hatch shows the bare axis, as before.
+//   · A GRADIENT HERE IS A SWATCH. `frameFillColor` holds a reference to
+//     a document gradient, and `editGradient` edits that gradient — so a
+//     stop moved on one object moves on EVERY object filled with the same
+//     swatch (Illustrator edits the object's own instance; this engine
+//     has no per-object gradient to edit). The commit's log line says so.
+//   · THE LINE STARTS AT THE FRAME'S CENTRE — the annotator's display
+//     convention since it shipped (the wire carries the fill's angle and
+//     length, not its start point), and the markers are placed along the
+//     line as drawn.
 
 import type {
   BundleHost,
@@ -43,8 +68,18 @@ import type {
   Disposable,
   ElementId,
   GestureHandler,
+  GradientSpec,
   Mutation,
+  ToolPreviewPolyline,
+  ToolPreviewShape,
 } from "@paged-media/plugin-api";
+import {
+  GradientStopMachine,
+  pointOnAxis,
+  type GradientAxis,
+} from "@paged-media/draw-tools";
+
+import { rawGradientDetail, type GradientDetailWire } from "../raw-wire";
 
 /** Minimum drag length (pt) below which the commit is dropped — a
  *  click must not zero the gradient length. */
@@ -82,17 +117,84 @@ export function gradientAxisMutationFor(
   return { op: "batch", args: { ops } };
 }
 
+/** Screen px: a stop marker's half-size, and how near a press must be. */
+const STOP_MARKER_PX = 4;
+const STOP_HIT_PX = 7;
+
+/** The `GradientSpec` an `editGradient` writes for `detail` with stop
+ *  `index` moved to `locationPct` — every other field exactly as read.
+ *  Null for a kind the engine reports as `"unknown"`: a write must not
+ *  guess the ramp type. Pure; exported for the spec. */
+export function gradientSpecWithStop(
+  detail: GradientDetailWire,
+  index: number,
+  locationPct: number,
+): GradientSpec | null {
+  const kind =
+    detail.kind.toLowerCase() === "linear"
+      ? "Linear"
+      : detail.kind.toLowerCase() === "radial"
+        ? "Radial"
+        : null;
+  if (!kind || index < 0 || index >= detail.stops.length) return null;
+  return {
+    selfId: detail.selfId,
+    name: detail.name,
+    kind,
+    stops: detail.stops.map((s, i) => ({
+      stopColor: s.stopColorRef,
+      locationPct: i === index ? locationPct : s.locationPct,
+      ...(s.midpointPct !== null && s.midpointPct !== undefined
+        ? { midpointPct: s.midpointPct }
+        : {}),
+    })),
+  };
+}
+
+/** The ONE mutation a stop drag commits. Null = nothing writable. */
+export function gradientStopMutationFor(
+  detail: GradientDetailWire,
+  index: number,
+  locationPct: number,
+): Mutation | null {
+  const spec = gradientSpecWithStop(detail, index, locationPct);
+  return spec ? { op: "editGradient", args: { gradientId: detail.selfId, spec } } : null;
+}
+
+/** A stop marker: a closed diamond `r` pt across its half-diagonal. */
+export function stopMarker(
+  pageId: string,
+  point: readonly [number, number],
+  r: number,
+): ToolPreviewPolyline {
+  const [x, y] = point;
+  return {
+    pageId,
+    points: [
+      [x, y - r],
+      [x + r, y],
+      [x, y + r],
+      [x - r, y],
+    ],
+    close: true,
+  };
+}
+
+/** What the annotator draws for one gradient-filled element. */
+interface AxisState {
+  pageId: string;
+  center: [number, number];
+  angleDeg: number;
+  lengthPt: number;
+  gradientId: string;
+}
+
 /** Read the first selected element's gradient-axis display state:
  *  null when it isn't gradient-filled. */
 async function axisOf(
   host: BundleHost,
   id: ElementId,
-): Promise<{
-  pageId: string;
-  center: [number, number];
-  angleDeg: number;
-  lengthPt: number;
-} | null> {
+): Promise<AxisState | null> {
   const props = await host.document.elementProperties(id);
   if (!props) return null;
   let fillRef: string | null = null;
@@ -138,35 +240,64 @@ async function axisOf(
     center,
     angleDeg,
     lengthPt: lengthPt > 0 ? lengthPt : fallback,
+    gradientId: fillRef,
   };
+}
+
+export interface GradientAnnotatorOptions {
+  /** Called when a stop drag's write settles — the spec's hook. */
+  onStopCommit?: (applied: boolean) => void;
 }
 
 export function createGradientAnnotatorHandler(
   host: BundleHost,
+  options: GradientAnnotatorOptions = {},
 ): GestureHandler {
   let subs: Disposable[] = [];
   let drag: { pageId: string; start: [number, number] } | null = null;
+  /** What was last drawn: the axis and, when readable, its stops. */
+  type Shown = { axis: AxisState; detail: GradientDetailWire | null };
+  let shown: Shown | null = null;
+  /** A stop drag in flight. */
+  let stopDrag: { machine: GradientStopMachine; shown: Shown } | null = null;
+
+  const axisLine = (a: AxisState): ToolPreviewPolyline => {
+    const end = pointOnAxis(lineOf(a), 100);
+    return { pageId: a.pageId, points: [a.center, [end[0], end[1]]] };
+  };
+  const lineOf = (a: AxisState): GradientAxis => ({
+    origin: a.center,
+    angleDeg: a.angleDeg,
+    lengthPt: a.lengthPt,
+  });
+
+  /** The axis, then one marker per stop at `points`. */
+  const draw = (a: AxisState, points: readonly (readonly [number, number])[]) => {
+    const r = host.viewport.pxToPt(STOP_MARKER_PX);
+    const shapes: ToolPreviewShape[] = [
+      axisLine(a),
+      ...points.map((p) => stopMarker(a.pageId, p, r)),
+    ];
+    host.overlay.setToolPreviews(shapes);
+  };
 
   /** Show the CURRENT axis (selection-derived) — the idle annotation. */
   const renderAxis = async (): Promise<void> => {
-    if (drag) return; // the live drag owns the preview
+    if (drag || stopDrag) return; // the live drag owns the preview
     const selection = host.selection.get();
     const axis = selection.length > 0 ? await axisOf(host, selection[0]) : null;
     if (!axis) {
+      shown = null;
       host.overlay.setToolPreview(null);
       return;
     }
-    const rad = (axis.angleDeg * Math.PI) / 180;
-    host.overlay.setToolPreview({
-      pageId: axis.pageId,
-      points: [
-        axis.center,
-        [
-          axis.center[0] + axis.lengthPt * Math.cos(rad),
-          axis.center[1] + axis.lengthPt * Math.sin(rad),
-        ],
-      ],
-    });
+    const detail = await rawGradientDetail(host, axis.gradientId);
+    if (drag || stopDrag) return;
+    shown = { axis, detail };
+    draw(
+      axis,
+      (detail?.stops ?? []).map((s) => pointOnAxis(lineOf(axis), s.locationPct)),
+    );
   };
 
   return {
@@ -182,14 +313,34 @@ export function createGradientAnnotatorHandler(
       for (const s of subs) s.dispose();
       subs = [];
       drag = null;
+      stopDrag = null;
+      shown = null;
       host.overlay.setToolPreview(null);
     },
     onPointerDown(e: CanvasPointerEvent) {
       if (e.button !== 0 || !e.pageId || !e.pagePoint) return;
       if (host.selection.get().length === 0) return;
+      // A press on a STOP marker grabs that stop.
+      if (shown?.detail && shown.axis.pageId === e.pageId) {
+        const machine = new GradientStopMachine({
+          axis: lineOf(shown.axis),
+          locations: shown.detail.stops.map((s) => s.locationPct),
+          hitTolerance: host.viewport.pxToPt(STOP_HIT_PX),
+        });
+        if (machine.handle({ type: "down", point: e.pagePoint }).grabbed) {
+          stopDrag = { machine, shown };
+          return;
+        }
+      }
       drag = { pageId: e.pageId, start: e.pagePoint };
     },
     onPointerMove(e: CanvasPointerEvent) {
+      if (stopDrag) {
+        if (!e.pagePoint || e.pageId !== stopDrag.shown.axis.pageId) return;
+        const snap = stopDrag.machine.handle({ type: "move", point: e.pagePoint });
+        draw(stopDrag.shown.axis, snap.points);
+        return;
+      }
       if (!drag || !e.pagePoint || e.pageId !== drag.pageId) return;
       host.overlay.setToolPreview({
         pageId: drag.pageId,
@@ -197,6 +348,39 @@ export function createGradientAnnotatorHandler(
       });
     },
     onPointerUp(e: CanvasPointerEvent) {
+      if (stopDrag) {
+        const { machine, shown: at } = stopDrag;
+        stopDrag = null;
+        const snap =
+          e.pagePoint && e.pageId === at.axis.pageId
+            ? machine.handle({ type: "up", point: e.pagePoint })
+            : machine.handle({ type: "key", key: "Escape" });
+        const mutation =
+          snap.commit && at.detail
+            ? gradientStopMutationFor(at.detail, snap.commit.index, snap.commit.locationPct)
+            : null;
+        if (!mutation) {
+          void renderAxis();
+          return;
+        }
+        void host.document
+          .mutate(mutation)
+          .then((outcome) => {
+            if (!outcome.applied) {
+              host.log.warn(`gradient stop rejected by engine: ${JSON.stringify(outcome.error)}`);
+            } else {
+              host.log.info(
+                `gradient stop ${snap.commit!.index + 1} of ${at.axis.gradientId} moved to ` +
+                  `${snap.commit!.locationPct}% — the gradient is a swatch, so every ` +
+                  "object filled with it changes",
+              );
+            }
+            options.onStopCommit?.(outcome.applied);
+          })
+          .catch((err) => host.log.warn(`gradient stop failed: ${err}`))
+          .finally(() => void renderAxis());
+        return;
+      }
       if (!drag) return;
       const start = drag.start;
       const samePage = e.pageId === drag.pageId;
@@ -227,7 +411,14 @@ export function createGradientAnnotatorHandler(
         .finally(() => void renderAxis());
     },
     onKey(e: KeyboardEvent) {
-      if (e.key !== "Escape" || !drag) return;
+      if (e.key !== "Escape") return;
+      if (stopDrag) {
+        stopDrag.machine.handle({ type: "key", key: "Escape" });
+        stopDrag = null;
+        void renderAxis();
+        return;
+      }
+      if (!drag) return;
       drag = null;
       void renderAxis();
     },

@@ -155,6 +155,21 @@ export {
   type CornerIndex,
 } from "./corner-radius-machine";
 
+// ON-CANVAS GRADIENT STOPS — the Gradient Annotator's stop markers:
+// grab the nearest, slide it along the axis between its neighbours, one
+// location change on release.
+export {
+  GradientStopMachine,
+  pointOnAxis,
+  axisPercentAt,
+  clampStopLocation,
+  type GradientAxis,
+  type GradientStopEvent,
+  type GradientStopOptions,
+  type GradientStopCommit,
+  type GradientStopSnapshot,
+} from "./gradient-stop-machine";
+
 export {
   MeasureMachine,
   measureReadout,

@@ -154,7 +154,23 @@ export {
 export {
   createGradientAnnotatorHandler,
   gradientAxisMutationFor,
+  gradientSpecWithStop,
+  gradientStopMutationFor,
+  stopMarker,
+  type GradientAnnotatorOptions,
 } from "./handlers/gradient-annotator";
+// THE RAW WIRE — the one guarded seam over the `host.editor.client.send`
+// hatch (the facade gaps it covers are named in the module).
+export {
+  hasRawWire,
+  rawRead,
+  rawNearestPathPoint,
+  rawGradientDetail,
+  type RawRequest,
+  type NearestPathPointWire,
+  type GradientDetailWire,
+  type GradientStopWire,
+} from "./raw-wire";
 // THE KNIFE — the freehand cut over the engine's planar arrangement: the
 // probe/withdraw/cut flow, its pure halves (the pieces read off the
 // faces, the one cut batch) and the gesture handler.
