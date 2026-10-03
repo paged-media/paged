@@ -1,0 +1,96 @@
+{
+  "fixture": "gradient-linear",
+  "produced_by": {
+    "app": "Adobe InDesign",
+    "version": "20.0.1.32",
+    "locale": "GERMAN_LOCALE",
+    "script": "scripts/indesign/lib/read-document.jsx",
+    "script_sha256": "4486a78fdd3b45a88c6ef6b18911bc34b94f6cf7ddc3c4d433d3d5e256f4dc08",
+    "runner": "scripts/indesign/run-roundtrip.sh",
+    "recorded_at": "2026-10-03T06:03:23.171Z",
+    "host_os": "macOS 26.4",
+    "pdf_preset": "[Qualitativ hochwertiger Druck]"
+  },
+  "idml": {
+    "path": "packages/draw-bundle/test/fixtures/roundtrip/gradient-linear.idml",
+    "sha256": "49609e43fd7a8824baf65a9d1fe30e5bcb70798da7f9d4487e1383e084bc973c"
+  },
+  "units": "pt",
+  "coordinates": "page-local, origin top-left of the page, Y down (ruler origin PAGE, zero point 0,0, script measurement unit POINTS); bounds as [minX, minY, maxX, maxY]",
+  "open": {
+    "converted": false,
+    "modified": true
+  },
+  "spreads": 1,
+  "pages": [
+    {
+      "name": "1",
+      "bounds": [
+        0,
+        0,
+        612,
+        792
+      ]
+    }
+  ],
+  "layers": [
+    "Layer 1"
+  ],
+  "warnings": [],
+  "stories": [],
+  "items": [
+    {
+      "kind": "Polygon",
+      "id": 212,
+      "parent": "spread",
+      "position": 0,
+      "index": 0,
+      "name": "",
+      "label": "",
+      "labels": {},
+      "layer": "Layer 1",
+      "visible": true,
+      "locked": false,
+      "geometricBounds": [100,100,400,300],
+      "visibleBounds": [99.5,99.5,400.5,300.5],
+      "fill": {"name":"Fill Linear","type":"Gradient","gradientType":"LINEAR","stops":[{"location":0,"midpoint":{"unreadable":"Diese Eigenschaft ist im aktuellen Status nicht zutreffend."},"color":{"name":"Linear stop A","type":"Color","model":"PROCESS","space":"RGB","value":[0,0,0]}},{"location":100,"midpoint":50,"color":{"name":"Linear stop B","type":"Color","model":"PROCESS","space":"RGB","value":[255,255,255]}}]},
+      "fillTint": -1,
+      "gradientFillAngle": 30,
+      "gradientFillLength": 250,
+      "gradientFillStart": [99.5,300.5],
+      "stroke": {"name":"Black","type":"Color","model":"PROCESS","space":"CMYK","value":[0,0,0,100]},
+      "strokeTint": -1,
+      "strokeWeight": 1,
+      "endCap": "BUTT_END_CAP",
+      "endJoin": "MITER_END_JOIN",
+      "miterLimit": 4,
+      "strokeAlignment": "CENTER_ALIGNMENT",
+      "strokeType": {"name":"Durchgezogen","key":"$ID/Solid"},
+      "strokeDashAndGap": {"unreadable":"Diese Eigenschaft ist im aktuellen Status nicht zutreffend."},
+      "gapColor": {"name":"None","type":"Swatch"},
+      "gapTint": -1,
+      "leftLineEnd": "NONE",
+      "rightLineEnd": "NONE",
+      "corners": {"topLeft":{"option":"NONE","radius":12},"topRight":{"option":"NONE","radius":12},"bottomRight":{"option":"NONE","radius":12},"bottomLeft":{"option":"NONE","radius":12}},
+      "transparency": {"opacity":100,"blendMode":"NORMAL"},
+      "fillTransparency": {"opacity":100,"blendMode":"NORMAL"},
+      "strokeTransparency": {"opacity":100,"blendMode":"NORMAL"},
+      "overprintFill": false,
+      "overprintStroke": false,
+      "textPaths": [],
+      "z": 0,
+      "paths": [
+        {
+          "closed": true,
+          "pathType": "CLOSED_PATH",
+          "anchors": [
+            {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+            {"anchor":[400,100],"left":[400,100],"right":[400,100]},
+            {"anchor":[400,300],"left":[400,300],"right":[400,300]},
+            {"anchor":[100,300],"left":[100,300],"right":[100,300]}
+          ]
+        }
+      ]
+    }
+  ]
+}

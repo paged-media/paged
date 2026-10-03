@@ -1,0 +1,252 @@
+{
+  "fixture": "svg-import",
+  "produced_by": {
+    "app": "Adobe InDesign",
+    "version": "20.0.1.32",
+    "locale": "GERMAN_LOCALE",
+    "script": "scripts/indesign/lib/read-document.jsx",
+    "script_sha256": "4486a78fdd3b45a88c6ef6b18911bc34b94f6cf7ddc3c4d433d3d5e256f4dc08",
+    "runner": "scripts/indesign/run-roundtrip.sh",
+    "recorded_at": "2026-10-03T06:04:16.671Z",
+    "host_os": "macOS 26.4",
+    "pdf_preset": "[Qualitativ hochwertiger Druck]"
+  },
+  "idml": {
+    "path": "packages/draw-bundle/test/fixtures/roundtrip/svg-import.idml",
+    "sha256": "f751e791fd51eda067696e8c93978f50dbab9467f00f8e5760485d254c655c34"
+  },
+  "units": "pt",
+  "coordinates": "page-local, origin top-left of the page, Y down (ruler origin PAGE, zero point 0,0, script measurement unit POINTS); bounds as [minX, minY, maxX, maxY]",
+  "open": {
+    "converted": false,
+    "modified": true
+  },
+  "spreads": 1,
+  "pages": [
+    {
+      "name": "1",
+      "bounds": [
+        0,
+        0,
+        612,
+        792
+      ]
+    }
+  ],
+  "layers": [
+    "Layer 1"
+  ],
+  "warnings": [],
+  "stories": [],
+  "items": [
+    {
+      "kind": "Polygon",
+      "id": 217,
+      "parent": "spread",
+      "position": 0,
+      "index": 0,
+      "name": "",
+      "label": "",
+      "labels": {},
+      "layer": "Layer 1",
+      "visible": true,
+      "locked": false,
+      "geometricBounds": [220,180,380,280],
+      "visibleBounds": [218.959688,179.199609,381.040312,280.5],
+      "fill": {"name":"#264653","type":"Color","model":"PROCESS","space":"RGB","value":[38,70,83]},
+      "fillTint": -1,
+      "gradientFillAngle": 0,
+      "gradientFillLength": 0,
+      "gradientFillStart": [0,0],
+      "stroke": {"name":"Black","type":"Color","model":"PROCESS","space":"CMYK","value":[0,0,0,100]},
+      "strokeTint": -1,
+      "strokeWeight": 1,
+      "endCap": "BUTT_END_CAP",
+      "endJoin": "MITER_END_JOIN",
+      "miterLimit": 4,
+      "strokeAlignment": "CENTER_ALIGNMENT",
+      "strokeType": {"name":"Durchgezogen","key":"$ID/Solid"},
+      "strokeDashAndGap": {"unreadable":"Diese Eigenschaft ist im aktuellen Status nicht zutreffend."},
+      "gapColor": {"name":"None","type":"Swatch"},
+      "gapTint": -1,
+      "leftLineEnd": "NONE",
+      "rightLineEnd": "NONE",
+      "corners": {"topLeft":{"option":"NONE","radius":12},"topRight":{"option":"NONE","radius":12},"bottomRight":{"option":"NONE","radius":12},"bottomLeft":{"option":"NONE","radius":12}},
+      "transparency": {"opacity":100,"blendMode":"NORMAL"},
+      "fillTransparency": {"opacity":100,"blendMode":"NORMAL"},
+      "strokeTransparency": {"opacity":100,"blendMode":"NORMAL"},
+      "overprintFill": false,
+      "overprintStroke": false,
+      "textPaths": [],
+      "z": 3,
+      "paths": [
+        {
+          "closed": true,
+          "pathType": "CLOSED_PATH",
+          "anchors": [
+            {"anchor":[300,180],"left":[300,180],"right":[300,180]},
+            {"anchor":[380,280],"left":[380,280],"right":[380,280]},
+            {"anchor":[220,280],"left":[220,280],"right":[220,280]}
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "Polygon",
+      "id": 216,
+      "parent": "spread",
+      "position": 1,
+      "index": 1,
+      "name": "",
+      "label": "",
+      "labels": {},
+      "layer": "Layer 1",
+      "visible": true,
+      "locked": false,
+      "geometricBounds": [40,231.132487,280,288.867513],
+      "visibleBounds": [37.657394,228.132487,282.342606,291.867513],
+      "fill": {"name":"None","type":"Swatch"},
+      "fillTint": -1,
+      "gradientFillAngle": 0,
+      "gradientFillLength": 0,
+      "gradientFillStart": [0,0],
+      "stroke": {"name":"#2a9d8f","type":"Color","model":"PROCESS","space":"RGB","value":[42,157,143]},
+      "strokeTint": -1,
+      "strokeWeight": 6,
+      "endCap": "BUTT_END_CAP",
+      "endJoin": "MITER_END_JOIN",
+      "miterLimit": 4,
+      "strokeAlignment": "CENTER_ALIGNMENT",
+      "strokeType": {"name":"Durchgezogen","key":"$ID/Solid"},
+      "strokeDashAndGap": {"unreadable":"Diese Eigenschaft ist im aktuellen Status nicht zutreffend."},
+      "gapColor": {"name":"None","type":"Swatch"},
+      "gapTint": -1,
+      "leftLineEnd": "NONE",
+      "rightLineEnd": "NONE",
+      "corners": {"topLeft":{"option":"NONE","radius":12},"topRight":{"option":"NONE","radius":12},"bottomRight":{"option":"NONE","radius":12},"bottomLeft":{"option":"NONE","radius":12}},
+      "transparency": {"opacity":100,"blendMode":"NORMAL"},
+      "fillTransparency": {"opacity":100,"blendMode":"NORMAL"},
+      "strokeTransparency": {"opacity":100,"blendMode":"NORMAL"},
+      "overprintFill": {"unreadable":"Diese Eigenschaft ist im aktuellen Status nicht zutreffend."},
+      "overprintStroke": false,
+      "textPaths": [],
+      "z": 2,
+      "paths": [
+        {
+          "closed": false,
+          "pathType": "OPEN_PATH",
+          "anchors": [
+            {"anchor":[40,260],"left":[40,260],"right":[120,160]},
+            {"anchor":[280,260],"left":[200,360],"right":[280,260]}
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "Polygon",
+      "id": 215,
+      "parent": "spread",
+      "position": 2,
+      "index": 2,
+      "name": "",
+      "label": "",
+      "labels": {},
+      "layer": "Layer 1",
+      "visible": true,
+      "locked": false,
+      "geometricBounds": [220,20,340,140],
+      "visibleBounds": [219.5,19.5,340.5,140.5],
+      "fill": {"name":"#fcbf49","type":"Color","model":"PROCESS","space":"RGB","value":[252,191,73]},
+      "fillTint": -1,
+      "gradientFillAngle": 0,
+      "gradientFillLength": 0,
+      "gradientFillStart": [0,0],
+      "stroke": {"name":"Black","type":"Color","model":"PROCESS","space":"CMYK","value":[0,0,0,100]},
+      "strokeTint": -1,
+      "strokeWeight": 1,
+      "endCap": "BUTT_END_CAP",
+      "endJoin": "MITER_END_JOIN",
+      "miterLimit": 4,
+      "strokeAlignment": "CENTER_ALIGNMENT",
+      "strokeType": {"name":"Durchgezogen","key":"$ID/Solid"},
+      "strokeDashAndGap": {"unreadable":"Diese Eigenschaft ist im aktuellen Status nicht zutreffend."},
+      "gapColor": {"name":"None","type":"Swatch"},
+      "gapTint": -1,
+      "leftLineEnd": "NONE",
+      "rightLineEnd": "NONE",
+      "corners": {"topLeft":{"option":"NONE","radius":12},"topRight":{"option":"NONE","radius":12},"bottomRight":{"option":"NONE","radius":12},"bottomLeft":{"option":"NONE","radius":12}},
+      "transparency": {"opacity":100,"blendMode":"NORMAL"},
+      "fillTransparency": {"opacity":100,"blendMode":"NORMAL"},
+      "strokeTransparency": {"opacity":100,"blendMode":"NORMAL"},
+      "overprintFill": false,
+      "overprintStroke": false,
+      "textPaths": [],
+      "z": 1,
+      "paths": [
+        {
+          "closed": true,
+          "pathType": "CLOSED_PATH",
+          "anchors": [
+            {"anchor":[340,80],"left":[340,46.8629],"right":[340,113.1371]},
+            {"anchor":[280,140],"left":[313.1371,140],"right":[246.8629,140]},
+            {"anchor":[220,80],"left":[220,113.1371],"right":[220,46.8629]},
+            {"anchor":[280,20],"left":[246.8629,20],"right":[313.1371,20]}
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "Polygon",
+      "id": 214,
+      "parent": "spread",
+      "position": 3,
+      "index": 3,
+      "name": "",
+      "label": "",
+      "labels": {},
+      "layer": "Layer 1",
+      "visible": true,
+      "locked": false,
+      "geometricBounds": [20,20,170,120],
+      "visibleBounds": [18,18,172,122],
+      "fill": {"name":"#d62828","type":"Color","model":"PROCESS","space":"RGB","value":[214,40,40]},
+      "fillTint": -1,
+      "gradientFillAngle": 0,
+      "gradientFillLength": 0,
+      "gradientFillStart": [0,0],
+      "stroke": {"name":"#003049","type":"Color","model":"PROCESS","space":"RGB","value":[0,48,73]},
+      "strokeTint": -1,
+      "strokeWeight": 4,
+      "endCap": "BUTT_END_CAP",
+      "endJoin": "MITER_END_JOIN",
+      "miterLimit": 4,
+      "strokeAlignment": "CENTER_ALIGNMENT",
+      "strokeType": {"name":"Durchgezogen","key":"$ID/Solid"},
+      "strokeDashAndGap": {"unreadable":"Diese Eigenschaft ist im aktuellen Status nicht zutreffend."},
+      "gapColor": {"name":"None","type":"Swatch"},
+      "gapTint": -1,
+      "leftLineEnd": "NONE",
+      "rightLineEnd": "NONE",
+      "corners": {"topLeft":{"option":"NONE","radius":12},"topRight":{"option":"NONE","radius":12},"bottomRight":{"option":"NONE","radius":12},"bottomLeft":{"option":"NONE","radius":12}},
+      "transparency": {"opacity":100,"blendMode":"NORMAL"},
+      "fillTransparency": {"opacity":100,"blendMode":"NORMAL"},
+      "strokeTransparency": {"opacity":100,"blendMode":"NORMAL"},
+      "overprintFill": false,
+      "overprintStroke": false,
+      "textPaths": [],
+      "z": 0,
+      "paths": [
+        {
+          "closed": true,
+          "pathType": "CLOSED_PATH",
+          "anchors": [
+            {"anchor":[20,20],"left":[20,20],"right":[20,20]},
+            {"anchor":[170,20],"left":[170,20],"right":[170,20]},
+            {"anchor":[170,120],"left":[170,120],"right":[170,120]},
+            {"anchor":[20,120],"left":[20,120],"right":[20,120]}
+          ]
+        }
+      ]
+    }
+  ]
+}
