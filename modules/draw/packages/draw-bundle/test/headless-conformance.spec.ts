@@ -104,8 +104,10 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "media.paged.draw.tool.livePaintSelect",
         "media.paged.draw.tool.typeOnPath",
         "media.paged.draw.tool.repeat",
+        // The Knife — joins the host's Scissors flyout.
+        "media.paged.draw.tool.knife",
       ]);
-      // The contribution log holds the nineteen tools, then EACH schema
+      // The contribution log holds the twenty tools, then EACH schema
       // panel as TWO entries: the synthesized React `panel` the panels
       // registry sees (the host turns a schema into a registry panel via
       // the injected renderer / seam) AND the `schemaPanel` recorded
@@ -125,7 +127,9 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         // wave-2 trio (Eyedropper, Width, Lasso Select) + the Live
         // Paint pair (Bucket, Face Selection) + Type on a Path
         // (C-29) + the Repeat steering widget (§12.4, the one tool
-        // with no shortcut — see tools.ts) — nineteen tools.
+        // with no shortcut — see tools.ts) + the Knife (keyless too)
+        // — twenty tools.
+        "tool",
         "tool",
         "tool",
         "tool",
@@ -495,7 +499,7 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
     const before = await treeSize();
 
     const handle = harness.loadBundle(drawBundle);
-    expect(harness.toolsContributed()).toHaveLength(19);
+    expect(harness.toolsContributed()).toHaveLength(20);
     handle.dispose();
 
     // After dispose: the contribution log is empty (registrations torn

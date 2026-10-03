@@ -113,6 +113,17 @@ export {
   type PencilOptions,
 } from "./pencil-machine";
 
+// The KNIFE's gesture: freehand (or Alt-straight) samples in, the cut
+// polyline out. What the cut does is the bundle's (`commands/knife.ts`).
+export {
+  KnifeMachine,
+  type KnifeEvent,
+  type KnifeModifiers,
+  type KnifeOptions,
+  type KnifeCommit,
+  type KnifeSnapshot,
+} from "./knife-machine";
+
 // Brush tools v0 — the pencil sampling pipeline with a calligraphic
 // per-anchor width lane on the commit (centerline + widths →
 // outlineStrokeVariable in the bundle).

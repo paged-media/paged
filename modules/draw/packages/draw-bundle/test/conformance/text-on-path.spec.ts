@@ -402,7 +402,12 @@ describe("draw conformance — type on a path (C-29, engine protocol v58)", () =
       // button glyphless — the stroke panel's recorded lesson).
       expect(tools[0]!.group).toBe("type");
       expect(tools[0]!.icon).toBe("tool-typePath");
-      const all = h.toolsContributed().map((t) => t.shortcut);
+      // Unique KEYS: a keyless tool (Repeat, Knife — see tools.ts) has no
+      // key to collide, so it is not counted as one.
+      const all = h
+        .toolsContributed()
+        .map((t) => t.shortcut)
+        .filter((k): k is string => k !== undefined);
       expect(new Set(all).size).toBe(all.length);
       expect(all).not.toContain("shift+t");
       expect(all).not.toContain("t");

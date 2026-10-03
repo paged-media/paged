@@ -97,6 +97,7 @@ export {
   LIVE_PAINT_TOOL_IDS,
   TEXT_ON_PATH_TOOL_IDS,
   REPEAT_TOOL_IDS,
+  CUT_TOOL_IDS,
 } from "./tools";
 export { insertPathMutationFor } from "./handlers/insert-path";
 // Brush tools v0 — the sweep handler factories, the exact
@@ -150,6 +151,28 @@ export {
   createGradientAnnotatorHandler,
   gradientAxisMutationFor,
 } from "./handlers/gradient-annotator";
+// THE KNIFE — the freehand cut over the engine's planar arrangement: the
+// probe/withdraw/cut flow, its pure halves (the pieces read off the
+// faces, the one cut batch) and the gesture handler.
+export {
+  applyKnife,
+  faceTable,
+  knifeBatchFor,
+  knifeCandidates,
+  knifePieceHandle,
+  knifePiecesFrom,
+  knifeStripBatchFor,
+  knifeStripHandle,
+  knifeTargetOf,
+  KNIFE_MIN_PIECE_AREA_PT2,
+  KNIFE_SNAP_TOLERANCE_PT,
+  KNIFE_STRIP_WIDTH_PT,
+  type KnifePlan,
+  type KnifeResult,
+  type KnifeSkip,
+  type KnifeTarget,
+} from "./commands/knife";
+export { createKnifeHandler, type KnifeHandlerOptions } from "./handlers/knife";
 export {
   PATH_OPS_COMMAND_IDS,
   PATH_OPS_COMMAND_CATEGORY,

@@ -174,6 +174,9 @@ describe("drawBundle.activate", () => {
       // register is the canonical key of a paged.draw tool currently on
       // a substitute.
       "media.paged.draw.tool.repeat",
+      // The Knife — joins the host's built-in Scissors flyout, keyless
+      // for the Repeat tool's reason.
+      "media.paged.draw.tool.knife",
     ]);
     // B-15: TOOL activation commands + shortcuts are HOST-derived from
     // the registry — the bundle registers tools only. The commands it
