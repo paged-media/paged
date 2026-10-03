@@ -171,6 +171,12 @@ export {
   type GradientDetailWire,
   type GradientStopWire,
 } from "./raw-wire";
+// §13.2 — the on-canvas corner widget: box corners and polygon corners,
+// in the element's own space (rotated frames included).
+export {
+  createCornerRadiusHandler,
+  cornerDragMutationFor,
+} from "./handlers/corner-radius";
 // THE KNIFE — the freehand cut over the engine's planar arrangement: the
 // probe/withdraw/cut flow, its pure halves (the pieces read off the
 // faces, the one cut batch) and the gesture handler.

@@ -240,9 +240,10 @@ export function drawTools(host: BundleHost): ToolContribution[] {
       gesture: () => createShapeBuilderHandler(host),
     },
     // §13.2 — the on-canvas corner widget: press near a corner of the
-    // selected rectangle, drag inward, release → ONE per-corner
-    // RoundedCorner mutation (the handle the live-corners commands
-    // reserved; rectangles only, B-23).
+    // selected rectangle, text frame or polygon (any rotation — the drag
+    // runs in the element's own space), drag inward, release → ONE batch
+    // (handlers/corner-radius.ts: a box corner's radius, or a polygon's
+    // uniform one).
     {
       id: "media.paged.draw.tool.cornerRadius",
       title: "Corner Radius",

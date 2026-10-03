@@ -151,8 +151,14 @@ export {
   cornerPreview,
   maxRadius,
   radiusFromDrag,
+  polygonCorners,
+  polygonCornerAt,
+  polygonCornerPreview,
+  polygonRadiusFromDrag,
+  polygonTangentFromDrag,
   type Bounds,
   type CornerIndex,
+  type PolygonCorner,
 } from "./corner-radius-machine";
 
 // ON-CANVAS GRADIENT STOPS — the Gradient Annotator's stop markers:
