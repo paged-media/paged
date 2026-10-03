@@ -32,8 +32,11 @@
 // instance and lives in `draw-geometry/src/repeat.ts`.
 //
 // ---------------------------------------------- ONE BATCH. ONE UNDO.
-// Every other bake in this repo pays TWO undo steps because it predates
-// RFI C-15. This one does not, and the reason is a contract bump, not a
+// Repeats were the FIRST bake in this repo to build in one undo step
+// (the others predated RFI C-15 and paid two; pattern, symbols, live
+// paint and compound release have since been converted, and only the
+// appearance bake and Image Trace's commit keep two, for the reason
+// `commands/minted.ts` gives). The reason is a contract bump, not a
 // cleverness: plugin-sdk `bc52766` added `bindCreated` to
 // `@paged-media/plugin-api`'s protocol-ahead delta. So a batch can now
 // insert geometry and then ADDRESS it — `{ op: "bindCreated", args: {
