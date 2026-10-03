@@ -214,10 +214,11 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "command",
         "command",
         "command",
-        // PATH OPTIONS — the nine "…" commands (Offset / Simplify /
-        // Outline stroke / Stroke dashes / Arc / Spiral / Rect grid /
-        // Polar grid / Select same stroke weight within): each raises the
-        // panel at its section and mutates nothing.
+        // PATH OPTIONS — the ten "…" commands (Offset / Simplify /
+        // Outline stroke / Stroke dashes / Reflect / Arc / Spiral / Rect
+        // grid / Polar grid / Select same stroke weight within): each
+        // raises the panel at its section and mutates nothing.
+        "command",
         "command",
         "command",
         "command",
@@ -234,6 +235,11 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "command",
         "command",
         // Reverse path direction.
+        "command",
+        // Object ▸ Transform — Reflect horizontally / vertically and
+        // Transform again.
+        "command",
+        "command",
         "command",
         // Phase 4c — Pathfinder Unite / Subtract / Intersect / Exclude.
         "command",

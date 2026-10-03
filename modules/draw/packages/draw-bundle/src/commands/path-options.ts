@@ -109,6 +109,7 @@ import {
   MAX_STROKE_WEIGHT_TOLERANCE,
 } from "./select-same";
 import { applyDashArray, MAX_DASH_PAIRS } from "./dash";
+import { applyReflect } from "./transform";
 import { supportsPathOps } from "./path-ops";
 
 export const PATH_OPTIONS_PANEL_ID = "media.paged.draw.panel.pathOptions";
@@ -121,6 +122,7 @@ export const PATH_OPTION_SECTIONS = [
   "simplify",
   "outlineStroke",
   "dash",
+  "reflect",
   "arc",
   "spiral",
   "rectGrid",
@@ -135,6 +137,7 @@ export const PATH_OPTION_SECTION_TITLES: Record<PathOptionSection, string> = {
   simplify: "Simplify",
   outlineStroke: "Outline stroke",
   dash: "Stroke dashes",
+  reflect: "Reflect",
   arc: "Insert arc",
   spiral: "Insert spiral",
   rectGrid: "Insert rectangular grid",
@@ -149,6 +152,7 @@ export const SELECTION_SECTIONS: ReadonlySet<PathOptionSection> = new Set([
   "simplify",
   "outlineStroke",
   "dash",
+  "reflect",
   "selectSameWeight",
 ]);
 
@@ -222,11 +226,20 @@ export interface DashOptions {
   gap3: number;
 }
 
+/** REFLECT — the mirror axis' angle (degrees from +x, y down: 90 flips
+ *  left ↔ right, 0 top ↔ bottom) and whether a COPY is reflected
+ *  (`commands/transform.ts` — needs the engine's `duplicateElements`). */
+export interface ReflectOptions {
+  angleDeg: number;
+  copy: boolean;
+}
+
 export interface PathOptions {
   offset: OffsetOptions;
   simplify: SimplifyOptions;
   outlineStroke: OutlineStrokeOptions;
   dash: DashOptions;
+  reflect: ReflectOptions;
   arc: ArcParams;
   spiral: SpiralParams;
   rectGrid: RectGridParams;
@@ -253,6 +266,7 @@ export const PATH_OPTIONS_DEFAULTS: PathOptions = {
   },
   // The "Dashed" preset's 6 / 3, so ticking the box gives a dash at once.
   dash: { dashed: false, dash1: 6, gap1: 3, dash2: 0, gap2: 0, dash3: 0, gap3: 0 },
+  reflect: { angleDeg: 90, copy: false },
   arc: ARC_PARAM_DEFAULTS,
   spiral: SPIRAL_PARAM_DEFAULTS,
   rectGrid: RECT_GRID_PARAM_DEFAULTS,
@@ -311,6 +325,10 @@ export function sanitizePathOptions(raw: unknown): PathOptions {
       miterLimit: num(outline?.miterLimit, d.outlineStroke.miterLimit),
     },
     dash: dashOptionsFrom(loose(r?.dash)),
+    reflect: {
+      angleDeg: num(loose(r?.reflect)?.angleDeg, d.reflect.angleDeg),
+      copy: bool(loose(r?.reflect)?.copy, d.reflect.copy),
+    },
     arc: arcParamsFrom(loose(r?.arc)),
     spiral: spiralParamsFrom(loose(r?.spiral)),
     rectGrid: rectGridParamsFrom(loose(r?.rectGrid)),
@@ -464,7 +482,10 @@ export function outlineStrokePayloadOf(
  *  the section has been applied from the panel. */
 export function lastUsedPayload(
   host: BundleHost,
-  section: Exclude<PathOptionSection, "outlineStroke" | "selectSameWeight" | "dash">,
+  section: Exclude<
+    PathOptionSection,
+    "outlineStroke" | "selectSameWeight" | "dash" | "reflect"
+  >,
 ): Record<string, unknown> | undefined {
   if (!hasLastUsed(host, section)) return undefined;
   const all = lastUsedPathOptions(host);
@@ -510,6 +531,9 @@ export async function applyPathOptions<S extends PathOptionSection>(
     case "dash":
       await applyDashArray(host, dashLengthsOf(all.dash), dashTargetsOf(host));
       return;
+    case "reflect":
+      await applyReflect(host, all.reflect.angleDeg, all.reflect.copy);
+      return;
     case "arc":
       await applyInsertArc(host, { ...all.arc });
       return;
@@ -552,6 +576,11 @@ async function applyLastUsed(
         dashTargetsOf(host),
       );
       return;
+    case "reflect": {
+      const r = lastUsedPathOptions(host).reflect;
+      await applyReflect(host, r.angleDeg, r.copy);
+      return;
+    }
     case "arc":
       await applyInsertArc(host, lastUsedPayload(host, "arc"));
       return;
@@ -635,6 +664,7 @@ export const PATH_OPTIONS_COMMANDS: Record<PathOptionSection, string> = {
   simplify: `${C}.simplifyPathOptions`,
   outlineStroke: `${C}.outlineStrokeOptions`,
   dash: `${C}.strokeDashOptions`,
+  reflect: `${C}.reflectOptions`,
   arc: `${C}.insertArcOptions`,
   spiral: `${C}.insertSpiralOptions`,
   rectGrid: `${C}.insertRectGridOptions`,

@@ -193,6 +193,32 @@ export {
   type KnifeTarget,
 } from "./commands/knife";
 export { createKnifeHandler, type KnifeHandlerOptions } from "./handlers/knife";
+// REFLECT and TRANSFORM AGAIN — the one transform seam, its pure batch
+// and the copy probe (engine 0.65's duplicateElements).
+export {
+  applyReflect,
+  applySelectionTransform,
+  applyTransformAgain,
+  contributeTransformCommands,
+  forgetLastTransform,
+  lastSelectionTransform,
+  selectionCentre,
+  supportsDuplicate,
+  transformBatchFor,
+  transformMatrixOf,
+  transformTargetsOf,
+  COPY_UNAVAILABLE_NOTE,
+  DUPLICATE_ENGINE,
+  DUPLICATE_OP,
+  REFLECT_HORIZONTAL_COMMAND_ID,
+  REFLECT_VERTICAL_COMMAND_ID,
+  TRANSFORM_AGAIN_COMMAND_ID,
+  TRANSFORM_COMMAND_CATEGORY,
+  TRANSFORM_COMMAND_IDS,
+  type TransformRecord,
+  type TransformResult,
+  type TransformTarget,
+} from "./commands/transform";
 // SCISSORS AT ANY POINT — split the clicked segment, open the path there.
 export {
   applyScissorsAt,
@@ -1094,6 +1120,7 @@ export {
   type OutlineStrokeOptions,
   type SelectSameWeightOptions,
   type DashOptions,
+  type ReflectOptions,
 } from "./commands/path-options";
 export {
   makePathOptionsPanel,
@@ -1101,6 +1128,8 @@ export {
   dashPatternLabel,
   hiddenPairsNote,
   DASH_SECTION_NOTE,
+  REFLECT_SECTION_NOTE,
+  REFLECT_COPY_UNAVAILABLE_NOTE,
   PATH_OPTIONS_PANEL_NOTE,
   SELECT_SAME_TOLERANCE_NOTE,
 } from "./panels/path-options-panel";

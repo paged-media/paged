@@ -159,6 +159,10 @@ import {
   PATHFINDER_COMMAND_IDS,
 } from "./commands/pathfinder";
 import {
+  contributeTransformCommands,
+  TRANSFORM_COMMAND_IDS,
+} from "./commands/transform";
+import {
   contributePathfinderRegionCommands,
   PATHFINDER_REGION_COMMAND_IDS,
 } from "./commands/pathfinder-region";
@@ -402,6 +406,13 @@ export function activate(host: BundleHost): BundleHandle {
   // ONE framePath batch. A visual no-op that the non-zero fill (holes)
   // and Type on a Path both read (commands/reverse-path.ts).
   const reversePathCommandsSub = contributeReversePathCommands(host);
+  // Object ▸ Transform — REFLECT (horizontal / vertical / a typed angle,
+  // about the selection's centre, composed onto each object's own
+  // transform because `frameTransform` replaces) and TRANSFORM AGAIN,
+  // which repeats the last one on the current selection. The copy
+  // variant needs engine 0.65's `duplicateElements` and is probed, not
+  // assumed (commands/transform.ts).
+  const transformCommandsSub = contributeTransformCommands(host);
   // Phase 4c — Pathfinder Unite/Subtract/Intersect/Exclude (the
   // pathfinderBoolean wire consumers; first selected = kept).
   const pathfinderCommandsSub = contributePathfinderCommands(host);
@@ -596,6 +607,7 @@ export function activate(host: BundleHost): BundleHandle {
         PATH_OPTIONS_COMMAND_IDS.length +
         JOIN_AVERAGE_COMMAND_IDS.length +
         REVERSE_PATH_COMMAND_IDS.length +
+        TRANSFORM_COMMAND_IDS.length +
         PATHFINDER_COMMAND_IDS.length +
         PATHFINDER_REGION_COMMAND_IDS.length +
         COMPOUND_PATH_COMMAND_IDS.length +
@@ -648,6 +660,7 @@ export function activate(host: BundleHost): BundleHandle {
       compoundPathCommandsSub.dispose();
       pathfinderRegionCommandsSub.dispose();
       pathfinderCommandsSub.dispose();
+      transformCommandsSub.dispose();
       reversePathCommandsSub.dispose();
       joinAverageCommandsSub.dispose();
       pathOptionsCommandsSub.dispose();

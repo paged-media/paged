@@ -53,6 +53,11 @@ import * as React from "react";
 
 import { INSERT_SHAPE_LIMITS } from "../commands/insert-shapes";
 import { dashArrayFrom, MAX_DASH_PAIRS } from "../commands/dash";
+import {
+  supportsDuplicate,
+  DUPLICATE_ENGINE,
+  DUPLICATE_OP,
+} from "../commands/transform";
 import { MAX_STROKE_WEIGHT_TOLERANCE } from "../commands/select-same";
 import {
   outlineParamsFrom,
@@ -89,7 +94,8 @@ export const PATH_OPTIONS_PANEL_NOTE =
   "— run bare it always outlines the element's own stroke. The undo " +
   "arithmetic: Offset, Simplify and Outline stroke are one undo step per " +
   "selected path; each Insert is ONE undo step however many paths it " +
-  "adds; Stroke dashes is ONE undo step for every selected path; " +
+  "adds; Stroke dashes is ONE undo step for every selected path, and " +
+  "so is Reflect for the whole selection; " +
   "Select same changes only the selection. Image Trace has no " +
   "options here yet — its menu row still runs " +
   "fixed settings.";
@@ -113,6 +119,17 @@ export function hiddenPairsNote(hidden: number): string {
 export function dashPatternLabel(lengths: readonly number[]): string {
   return lengths.length === 0 ? "Solid" : `${lengths.join(" · ")} pt`;
 }
+
+/** What the Reflect section says, verbatim (pinned by a test). */
+export const REFLECT_SECTION_NOTE =
+  "Mirrors the selection across an axis at this angle through the centre " +
+  "of the selection's box: 90° flips left and right, 0° top and bottom. " +
+  "Draw ▸ Transform ▸ Transform again repeats it on whatever is selected next.";
+
+/** What the Reflect section says when the engine cannot copy. */
+export const REFLECT_COPY_UNAVAILABLE_NOTE =
+  `Copy needs the engine's ${DUPLICATE_OP} op (engine ${DUPLICATE_ENGINE}), ` +
+  "which this engine does not have.";
 
 /** What the Select same stroke weight section says, verbatim (pinned by
  *  a test) — the colour half of the request, and why it is not here. */
@@ -237,6 +254,10 @@ export function makePathOptionsPanel(host: BundleHost): {
     const [selected, setSelected] = React.useState(0);
     const [own, setOwn] = React.useState<OutlineStrokeParams | null>(null);
     const [dashHidden, setDashHidden] = React.useState(session.dashHidden);
+    /** Can this engine COPY (`duplicateElements`)? Probed when the
+     *  Reflect section is first opened — never on a reload — and cached
+     *  per host by the probe itself. Null until known. */
+    const [copyAvailable, setCopyAvailable] = React.useState<boolean | null>(null);
 
     const setOpen = React.useCallback((section: PathOptionSection) => {
       session.open = section;
@@ -272,6 +293,18 @@ export function makePathOptionsPanel(host: BundleHost): {
       });
       return () => sub.dispose();
     }, [setOpen]);
+
+    // The copy probe — once, when Reflect is first shown.
+    React.useEffect(() => {
+      if (open !== "reflect" || copyAvailable !== null) return;
+      let live = true;
+      void supportsDuplicate(host).then((ok) => {
+        if (live) setCopyAvailable(ok);
+      });
+      return () => {
+        live = false;
+      };
+    }, [open, copyAvailable]);
 
     // WHAT A RELOAD COSTS (`test/panels/path-options-panel.spec.tsx`):
     // nothing with no path selected, and ONE property read — the first
@@ -383,6 +416,7 @@ export function makePathOptionsPanel(host: BundleHost): {
       section: S,
       key: keyof PathOptions[S] & string,
       label: string,
+      opts: { disabled?: boolean } = {},
     ) => (
       <div style={rowStyle}>
         <label style={{ flex: 1 }} htmlFor={`draw-pathopts-${section}-${key}`}>
@@ -392,6 +426,7 @@ export function makePathOptionsPanel(host: BundleHost): {
           id={`draw-pathopts-${section}-${key}`}
           type="checkbox"
           data-draw-pathopts-toggle={`${section}.${key}`}
+          disabled={opts.disabled}
           checked={draft[section][key] as unknown as boolean}
           onChange={(e) =>
             edit(section, {
@@ -486,6 +521,23 @@ export function makePathOptionsPanel(host: BundleHost): {
             </>
           );
         }
+        case "reflect":
+          return (
+            <>
+              {numberRow("reflect", "angleDeg", "Axis angle (°)", { min: -360, max: 360 })}
+              {checkRow("reflect", "copy", "Copy (reflect a copy)", {
+                disabled: copyAvailable !== true,
+              })}
+              {copyAvailable === false && (
+                <div style={mutedStyle} data-draw-pathopts-reflect-copy-note>
+                  {REFLECT_COPY_UNAVAILABLE_NOTE}
+                </div>
+              )}
+              <div style={mutedStyle} data-draw-pathopts-reflect-note>
+                {REFLECT_SECTION_NOTE}
+              </div>
+            </>
+          );
         case "arc":
           return (
             <>
@@ -581,8 +633,10 @@ export function makePathOptionsPanel(host: BundleHost): {
           const isOpen = section === open;
           const needsSelection = SELECTION_SECTIONS.has(section);
           const selects = section === "selectSameWeight";
-          // A path operation needs a PATH; Select same needs a reference.
-          const have = selects ? selected : targets;
+          const reflects = section === "reflect";
+          // A path operation needs a PATH; Select same needs a reference;
+          // Reflect takes any object (groups included).
+          const have = selects || reflects ? selected : targets;
           return (
             <div
               key={section}
@@ -608,7 +662,9 @@ export function makePathOptionsPanel(host: BundleHost): {
                     <div style={mutedStyle} data-draw-pathopts-needs-selection>
                       {selects
                         ? "Select the reference object first."
-                        : "Select a path first."}
+                        : reflects
+                          ? "Select something first."
+                          : "Select a path first."}
                     </div>
                   )}
                   <button
@@ -622,7 +678,9 @@ export function makePathOptionsPanel(host: BundleHost): {
                   >
                     {selects
                       ? "Select matching"
-                      : needsSelection
+                      : reflects
+                        ? `Reflect ${selected} object${selected === 1 ? "" : "s"}`
+                        : needsSelection
                         ? `Apply to ${targets} path${targets === 1 ? "" : "s"}`
                         : "Insert"}
                   </button>

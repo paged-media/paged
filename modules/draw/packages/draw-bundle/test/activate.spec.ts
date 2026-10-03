@@ -207,6 +207,7 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.simplifyPathOptions",
       "media.paged.draw.command.outlineStrokeOptions",
       "media.paged.draw.command.strokeDashOptions",
+      "media.paged.draw.command.reflectOptions",
       "media.paged.draw.command.insertArcOptions",
       "media.paged.draw.command.insertSpiralOptions",
       "media.paged.draw.command.insertRectGridOptions",
@@ -217,6 +218,10 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.averageEndpoints",
       // Reverse path direction (framePath, one batch).
       "media.paged.draw.command.reversePathDirection",
+      // Object ▸ Transform — Reflect ×2 and Transform again.
+      "media.paged.draw.command.reflectHorizontal",
+      "media.paged.draw.command.reflectVertical",
+      "media.paged.draw.command.transformAgain",
       "media.paged.draw.command.pathfinderUnite",
       "media.paged.draw.command.pathfinderSubtract",
       "media.paged.draw.command.pathfinderIntersect",

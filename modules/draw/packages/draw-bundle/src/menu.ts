@@ -60,6 +60,14 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   ["Draw/Path/Close path", "closePath", "path-ends"],
   ["Draw/Path/Reverse path direction", "reversePathDirection", "path-direction"],
 
+  // ── Transform — Reflect (the "…" row raises the Path Options panel's
+  //    Reflect section: a typed axis angle, and Copy where the engine can)
+  //    and Transform again, which repeats the last one. ──
+  ["Draw/Transform/Reflect horizontally", "reflectHorizontal", "transform"],
+  ["Draw/Transform/Reflect vertically", "reflectVertical", "transform"],
+  ["Draw/Transform/Reflect…", "reflectOptions", "transform"],
+  ["Draw/Transform/Transform again", "transformAgain", "transform-again"],
+
   // ── Stroke — the dash EDITOR (the Path Options panel's Stroke dashes
   //    section: up to three dash/gap pairs, read back for the selection).
   //    An ellipsis, so it RAISES the panel at that section. ──
