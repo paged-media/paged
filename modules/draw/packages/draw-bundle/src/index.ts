@@ -149,6 +149,7 @@ export {
   measureTextPreview,
   BIND_MEASURE_READOUT,
   OVERLAY_TEXT_FEATURE,
+  OVERLAY_MULTI_FEATURE,
   type ToolPreviewTextMirror,
 } from "./handlers/measure";
 export {

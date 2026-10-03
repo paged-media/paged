@@ -20,24 +20,21 @@
 // the measured segment displays through the shared tool-preview overlay
 // channel, and the numbers publish as a named binding (+ an info log).
 //
-// THE ON-CANVAS READOUT (the RFI gap "the overlay channel carries
-// shapes only" — CLOSED by the `ToolPreviewText` primitive, guarded by
-// `host.supports("overlay.text@1")`):
-//   · while the drag is IN FLIGHT the preview slot carries the measured
-//     LINE (the geometry feedback that matters mid-drag);
-//   · the moment the drag ENDS the slot carries the readout as TEXT —
-//     `"124.60 pt · 53.1°"`, anchored at the segment midpoint, offset
-//     perpendicular to the line so it reads beside where it was
-//     measured, with the backing plate on for legibility over content.
-//   · WHY the swap and not both at once: `overlay.setToolPreview` is a
-//     SINGLE-SLOT channel (one `ToolPreviewShape`, last write wins) —
-//     the host has no preview LIST. So the frozen line is traded for
-//     the frozen numbers; that trade is named here rather than hidden.
-//     A multi-primitive preview channel is the follow-up RFI item.
-//   · FALLBACK: on a host whose plugin-sdk predates `overlay.text@1`
-//     (the shipped 0.2.25-canary.0 does — the contract lags the local
-//     build) `supports` answers false and the tool keeps publishing the
-//     LINE after pointer-up, exactly as before.
+// THE ON-CANVAS READOUT (the `ToolPreviewText` primitive, guarded by
+// `host.supports("overlay.text@1")`): `"124.60 pt · 53.1°"`, anchored at
+// the segment midpoint, offset perpendicular to the line so it reads
+// beside where it was measured, with the backing plate on.
+//
+// LINE AND READOUT TOGETHER. This tool used to trade the frozen line for
+// the frozen numbers at pointer-up, because it believed the overlay was
+// SINGLE-SLOT — and it was, until K-9 put a multi-shape door in the
+// contract (`host.overlay.setToolPreviews`, probed by
+// `overlay.multiPreview@1`). On a host with the multi-shape sink the
+// line and its readout are ONE publish, `[line, text]`, while dragging
+// AND after the drag ends. The two older postures keep what they had:
+//   · text but NO multi-shape sink (an editor between the two doors):
+//     the single-slot swap — the line in flight, the text once frozen;
+//   · NO text primitive: the line throughout.
 //   · The `media.paged.draw.measureReadout` BINDING publishes in BOTH
 //     branches (panels and host surfaces read it), and pointer-up still
 //     mirrors to `host.log.info`.
@@ -45,13 +42,12 @@
 // HONEST SUBSET, named:
 //   · nearest-path-point SNAP: the wire carries
 //     `requestNearestPathPoint` (B-06) but `host.document` has no
-//     facade door for it yet — the snap goes through the MARKED v0
-//     escape hatch `host.editor.client.send` (DESIGN.md §4.9). A
-//     `document.nearestPathPoint` facade door (and curating
-//     `NearestPathPointResult` into plugin-api's wire subset) is the
-//     RFI follow-up; the reply shape is typed locally below until then.
-//     When the snap fails the tool measures from the raw point
-//     (best-effort, never a throw).
+//     facade door for it (RFI K-14) — the snap goes through the MARKED v0
+//     escape hatch, and only through `raw-wire.ts`, the ONE guarded seam
+//     every hatch read in this bundle uses (it types the reply locally,
+//     answers null on a host without the hatch, a throwing send or a
+//     wrong reply kind). When the snap fails the tool measures from the
+//     raw point (best-effort, never a throw).
 
 import type {
   BundleHost,
@@ -73,12 +69,18 @@ import {
   type MeasureSnapshot,
 } from "@paged-media/draw-tools";
 
+import { rawNearestPathPoint } from "../raw-wire";
+
 /** The published readout binding (a `MeasureReadout` JSON object,
  *  deleted when nothing is measured). */
 export const BIND_MEASURE_READOUT = "media.paged.draw.measureReadout";
 
 /** The host feature flag that gates the on-canvas readout. */
 export const OVERLAY_TEXT_FEATURE = "overlay.text@1";
+
+/** The host feature flag that says the multi-shape preview sink is real
+ *  (`setToolPreviews` otherwise forwards only its first shape). */
+export const OVERLAY_MULTI_FEATURE = "overlay.multiPreview@1";
 
 /** How far (page pt) the readout sits off the measured line, along its
  *  normal — "beside the line", not on top of it. */
@@ -137,17 +139,6 @@ const PATH_KINDS = new Set([
   "graphicLine",
 ]);
 
-/** The `nearestPathPoint` reply payload (wire B-06) — typed LOCALLY
- *  because plugin-api's curated wire subset doesn't carry it yet (no
- *  facade door exists; see the module-header honesty note). */
-interface NearestPathPointWire {
-  segStart: number;
-  segEnd: number;
-  t: number;
-  point: [number, number];
-  distance: number;
-}
-
 /** Resolve the nearest on-path point to `pagePoint` on `target`, in
  *  PAGE coordinates — or null when out of tolerance / unavailable.
  *  Wire-level `requestNearestPathPoint` via the MARKED escape hatch;
@@ -182,15 +173,9 @@ export async function nearestPathPointOnPage(
     }
     const local = inverseApplyAffine(matrix, pagePoint[0], pagePoint[1]);
     if (!local) return null;
-    // ESCAPE HATCH (named): no `document.nearestPathPoint` facade door
-    // exists yet — wire-level `requestNearestPathPoint` via host.editor.
-    const reply = await host.editor.client.send({
-      kind: "requestNearestPathPoint",
-      payload: { id: target, point: [local[0], local[1]] },
-    });
-    if (reply.kind !== "nearestPathPoint") return null;
-    const result = (reply.payload as { result: NearestPathPointWire | null })
-      .result;
+    // ESCAPE HATCH (named, RFI K-14): no `document.nearestPathPoint`
+    // facade — the read goes through the ONE guarded seam.
+    const result = await rawNearestPathPoint(host, target, [local[0], local[1]]);
     // The reply's distance is LOCAL-space — scale the page-space
     // tolerance into local (the anchors.ts pick-tolerance idiom).
     if (!result || result.distance > tolerancePt / affineScale(matrix)) {
@@ -208,8 +193,10 @@ export function createMeasureHandler(host: BundleHost): GestureHandler {
   let pageId: string | null = null;
 
   // Probed ONCE per handler: the host either has the overlay TEXT
-  // primitive or it doesn't — the answer cannot change mid-gesture.
+  // primitive / the multi-shape sink or it doesn't — the answer cannot
+  // change mid-gesture.
   const canDrawText = host.supports(OVERLAY_TEXT_FEATURE);
+  const canDrawBoth = canDrawText && host.supports(OVERLAY_MULTI_FEATURE);
 
   const render = (snapshot: MeasureSnapshot) => {
     if (!snapshot.line || !pageId) {
@@ -217,19 +204,23 @@ export function createMeasureHandler(host: BundleHost): GestureHandler {
       host.bindings.delete(BIND_MEASURE_READOUT);
       return;
     }
-    // Single-slot channel: the LINE while the drag is in flight, the
-    // TEXT readout once it freezes (module-header honesty note). Without
-    // `overlay.text@1` the line stays in both states — the old behavior.
-    if (canDrawText && !snapshot.measuring && snapshot.readout) {
+    const line = {
+      pageId,
+      points: [
+        [snapshot.line[0][0], snapshot.line[0][1]],
+        [snapshot.line[1][0], snapshot.line[1][1]],
+      ] as [number, number][],
+    };
+    if (canDrawBoth) {
+      // The line AND its readout, in one publish, live and frozen.
+      host.overlay.setToolPreviews(
+        snapshot.readout ? [line, measureTextPreview(pageId, snapshot.readout)] : [line],
+      );
+    } else if (canDrawText && !snapshot.measuring && snapshot.readout) {
+      // A single-slot host: the frozen numbers replace the frozen line.
       host.overlay.setToolPreview(measureTextPreview(pageId, snapshot.readout));
     } else {
-      host.overlay.setToolPreview({
-        pageId,
-        points: [
-          [snapshot.line[0][0], snapshot.line[0][1]],
-          [snapshot.line[1][0], snapshot.line[1][1]],
-        ],
-      });
+      host.overlay.setToolPreview(line);
     }
     if (snapshot.readout) {
       // The binding publishes in BOTH branches — panels and host

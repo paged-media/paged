@@ -26,13 +26,15 @@
 //     overlay channel and the numeric readout as the
 //     `media.paged.draw.measureReadout` binding, and tears both down on
 //     deactivate;
-//   · the ON-CANVAS READOUT, BOTH branches of the `overlay.text@1`
-//     guard: with the flag the frozen measurement publishes the
-//     `ToolPreviewText` primitive (single-slot channel — the line while
-//     dragging, the label once frozen); WITHOUT it (the installed
-//     plugin-sdk 0.2.25-canary.0 predates the flag — real skew, not a
-//     hypothetical) the line stays published and the binding remains the
-//     only readout;
+//   · the ON-CANVAS READOUT, all three postures: with the TEXT primitive
+//     AND the multi-shape sink (`overlay.multiPreview@1`, K-9) the line
+//     and its label are ONE publish, live and frozen; with text but no
+//     multi-shape sink the old single-slot swap (the line while dragging,
+//     the label once frozen); without text the line stays published and
+//     the binding remains the only readout;
+//   · the snap's raw-hatch read goes through the ONE guarded seam
+//     (`raw-wire.ts`): a host without the hatch answers null, never a
+//     throw;
 //   · the tool drives NO mutations (read-only proof: the document is
 //     untouched).
 
@@ -54,10 +56,12 @@ import {
   measureTextPreview,
   nearestPathPointOnPage,
   BIND_MEASURE_READOUT,
+  OVERLAY_MULTI_FEATURE,
   OVERLAY_TEXT_FEATURE,
   type ToolPreviewTextMirror,
 } from "../../src";
 import { F1_MULTI_SHAPE } from "../fixtures/corpus";
+import { countingHost } from "../perf/counting-host";
 import { liveTable } from "../replay";
 import { openHost } from "./host";
 
@@ -89,6 +93,19 @@ describe("draw conformance — measure tool (Phase 4c)", () => {
     h.loadBundle(drawBundle);
   });
   afterAll(() => h?.dispose());
+
+  it("the snap's hatch read is GUARDED: a host without the hatch answers null, never a throw", async () => {
+    const bare = new Proxy(h.host, {
+      get(target, prop, receiver) {
+        return prop === "editor" ? {} : (Reflect.get(target, prop, receiver) as unknown);
+      },
+    }) as BundleHost;
+    await expect(nearestPathPointOnPage(bare, POLY, [175, 500], 6)).resolves.toBeNull();
+    // …and through the counting host the one hatch call is the named request.
+    const { host, work } = countingHost(h.host);
+    await nearestPathPointOnPage(host, POLY, [175, 500], 6);
+    expect(work.count("editor.client.send:requestNearestPathPoint")).toBe(1);
+  });
 
   it("the requestNearestPathPoint door answers and maps back to page space (escape hatch, B-06)", async () => {
     // [175, 500] is the midpoint of the polygon's first segment
@@ -205,7 +222,10 @@ describe("draw conformance — measure tool (Phase 4c)", () => {
       handler.onActivate(undefined as never);
       handler.onPointerDown(pointer([10, 10]));
       handler.onPointerUp(pointer([110, 10]));
-      const frozen = h.lastToolPreview() as unknown as ToolPreviewTextMirror;
+      // The installed host ALSO wires the multi-shape sink, so the frozen
+      // label rides BESIDE the frozen line (see the posture tests below).
+      const shapes = h.lastToolPreviews()!;
+      const frozen = shapes[1] as unknown as ToolPreviewTextMirror;
       expect(frozen.kind).toBe("text");
       expect(frozen.text).toBe("100.00 pt · 0.0°");
       // The binding still publishes in BOTH branches — panels read it.
@@ -242,15 +262,46 @@ describe("draw conformance — measure tool (Phase 4c)", () => {
       handler.onDeactivate("switch");
     });
 
-    it("WITH the flag the frozen measurement publishes the TEXT primitive; the drag still shows the line", () => {
-      // A host that DOES carry the flag (the contract's own shape — the
-      // local plugin-api already defines `ToolPreviewText`). Everything
-      // else delegates to the real headless host, so the preview lands
-      // on the real overlay channel.
+    it("WITH text AND the multi-shape sink the line and its readout are ONE publish — while dragging and frozen", () => {
+      expect(h.host.supports(OVERLAY_MULTI_FEATURE)).toBe(true);
+      const { host, work } = countingHost(h.host);
+      const handler = createMeasureHandler(host);
+      handler.onActivate(undefined as never);
+      handler.onPointerDown(pointer([10, 10]));
+      handler.onPointerMove(pointer([110, 10]));
+      const live = h.lastToolPreviews()!;
+      expect(live).toHaveLength(2);
+      expect((live[0] as ToolPreviewPolyline).points).toEqual([
+        [10, 10],
+        [110, 10],
+      ]);
+      expect((live[1] as unknown as ToolPreviewTextMirror).text).toBe("100.00 pt · 0.0°");
+      handler.onPointerUp(pointer([110, 10]));
+      const frozen = h.lastToolPreviews()!;
+      expect((frozen[0] as ToolPreviewPolyline).points).toEqual([
+        [10, 10],
+        [110, 10],
+      ]);
+      expect((frozen[1] as unknown as ToolPreviewTextMirror).text).toBe("100.00 pt · 0.0°");
+      // Every publish was the multi-shape door; none was the single slot.
+      expect(work.count("overlay.setToolPreview")).toBe(0);
+      expect(work.count("overlay.setToolPreviews")).toBeGreaterThanOrEqual(3);
+      handler.onDeactivate("switch");
+      expect(h.lastToolPreview()).toBeNull();
+    });
+
+    it("WITH text but NO multi-shape sink the frozen measurement publishes the TEXT primitive; the drag still shows the line", () => {
+      // An editor between the two doors: the text primitive, a single
+      // preview slot. Everything else delegates to the real headless
+      // host, so the preview lands on the real overlay channel.
       const textHost = {
         ...h.host,
         supports: (feature: string) =>
-          feature === OVERLAY_TEXT_FEATURE || h.host.supports(feature),
+          feature === OVERLAY_TEXT_FEATURE
+            ? true
+            : feature === OVERLAY_MULTI_FEATURE
+              ? false
+              : h.host.supports(feature),
       } as unknown as BundleHost;
 
       const handler = createMeasureHandler(textHost);
