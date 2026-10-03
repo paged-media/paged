@@ -121,14 +121,16 @@ export {
   type FlatAnchorPath,
 } from "./polygon";
 // Illustrator Phase 2 — compound paths: the contour algebra (merge /
-// split) plus the NON-ZERO winding re-orientation that makes a nested
-// contour render as a HOLE instead of a solid island.
+// split) plus the two NON-ZERO winding re-orientations — by nesting
+// depth (Image Trace) and by paint order (Make Compound Path, the rule
+// Illustrator applies).
 export {
   contourRanges,
   contourSignedArea,
   reverseContour,
   contourDepths,
   orientForNonZeroHoles,
+  orientByPaintOrder,
   mergeCompound,
   makeCompoundTable,
   splitCompound,

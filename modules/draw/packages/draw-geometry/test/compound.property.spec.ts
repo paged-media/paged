@@ -16,9 +16,11 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Property tests for compound.ts — the contour algebra and the ONE
-// winding implementation in this repo: `orientForNonZeroHoles`, the step
-// that makes a nested contour a HOLE under the engine's NON-ZERO fill.
+// Property tests for compound.ts — the contour algebra and the TWO
+// winding rules in this repo, both for the engine's NON-ZERO fill:
+// `orientForNonZeroHoles` (by nesting depth — even-odd in effect; Image
+// Trace's) and `orientByPaintOrder` (by paint order — Illustrator's Make
+// Compound Path, which is NOT even-odd three levels deep).
 //
 // The generator builds a random LAMINAR family of rectangles (every two
 // are either disjoint or strictly nested), in random order, each wound
@@ -36,6 +38,7 @@ import {
   flattenAnchorRun,
   makeCompoundTable,
   mergeCompound,
+  orientByPaintOrder,
   orientForNonZeroHoles,
   pointInAnchorPath,
   reverseContour,
@@ -554,6 +557,129 @@ describe("compound — orientForNonZeroHoles (properties)", () => {
         const oriented = orientForNonZeroHoles(table);
         const end = table.subpathStarts[1] ?? table.anchors.length;
         expect(oriented.anchors.slice(0, end)).toEqual(table.anchors.slice(0, end));
+      }),
+    );
+  });
+});
+
+describe("compound — orientByPaintOrder (properties)", () => {
+  // The family, plus WHICH contour stands for the backmost path — any of
+  // them: paint order is independent of nesting, so the backmost may be
+  // an outer boundary, a hole or a shape off to the side.
+  const stacked = fc
+    .tuple(family, fc.nat())
+    .map(([f, n]) => ({ ...f, backmost: n % f.boxes.length }));
+
+  const inside = (p: Vec2, b: Box): boolean =>
+    p[0] > b.x0 && p[0] < b.x1 && p[1] > b.y0 && p[1] < b.y1;
+
+  it("the backmost contour keeps its direction and EVERY other contour winds against it — whatever the nesting and the input directions", () => {
+    fc.assert(
+      fc.property(stacked, ({ table, backmost }) => {
+        const before = signsOf(table);
+        const after = signsOf(orientByPaintOrder(table, backmost));
+        for (let i = 0; i < after.length; i++) {
+          assertTrue(
+            after[i] === (i === backmost ? before[backmost] : -before[backmost]),
+            `contour ${i} winds ${after[i]}; the backmost (contour ` +
+              `${backmost}) was given winding ${before[backmost]}`,
+          );
+        }
+      }),
+    );
+  });
+
+  it("paints by PAINT ORDER: the non-zero winding anywhere is [inside the backmost] − [inside each other contour]", () => {
+    // The rule stated on the fill, against the angle-summation winding
+    // number and the rectangles' own coordinates. Under it an overlap
+    // with the backmost is knocked out, and two contours in front of it
+    // that overlap each other paint (−2) — which even-odd would not.
+    fc.assert(
+      fc.property(stacked, probe, ({ table, boxes, backmost }, p) => {
+        fc.pre(clearOf(p, boxes));
+        const oriented = orientByPaintOrder(table, backmost);
+        const winding = ringsOf(oriented).reduce(
+          (sum, ring) => sum + refWindingNumber(p, ring),
+          0,
+        );
+        const s = Math.sign(refSignedArea(ringsOf(table)[backmost]));
+        const expected =
+          s *
+          ((inside(p, boxes[backmost]) ? 1 : 0) -
+            boxes.filter((b, i) => i !== backmost && inside(p, b)).length);
+        // `===`, not Object.is: s · 0 is −0 for a backmost drawn the
+        // other way, and that is the same winding.
+        assertTrue(
+          winding === expected,
+          `winding ${winding} at [${p[0]}, ${p[1]}], expected ${expected}`,
+        );
+      }),
+    );
+  });
+
+  it("agrees with the depth rule (even-odd) when the backmost path CONTAINS every other one, two levels deep", () => {
+    // The generator nests at most two levels below a root, so this is
+    // exactly the range where the two rules are the same region; the
+    // third level, where they part, is a unit case in compound.spec.ts.
+    fc.assert(
+      fc.property(family, probe, ({ table, boxes, depths }, p) => {
+        fc.pre(depths.filter((d) => d === 0).length === 1);
+        fc.pre(clearOf(p, boxes));
+        const backmost = depths.indexOf(0);
+        const winding = (t: AnchorTable) =>
+          ringsOf(t).reduce((sum, ring) => sum + refWindingNumber(p, ring), 0);
+        expect(winding(orientByPaintOrder(table, backmost)) !== 0).toBe(
+          winding(orientForNonZeroHoles(table)) !== 0,
+        );
+      }),
+    );
+  });
+
+  it("is idempotent, whichever contour is the backmost", () => {
+    fc.assert(
+      fc.property(stacked, ({ table, backmost }) => {
+        const once = orientByPaintOrder(table, backmost);
+        expect(orientByPaintOrder(once, backmost)).toEqual(once);
+      }),
+    );
+  });
+
+  it("keeps every contour's anchors, start point and bookkeeping — only direction changes — and the backmost exactly as given", () => {
+    fc.assert(
+      fc.property(stacked, ({ table, backmost }) => {
+        const oriented = orientByPaintOrder(table, backmost);
+        expect(oriented.anchors).toHaveLength(table.anchors.length);
+        if (table.subpathStarts.length > 1) {
+          expect(oriented.subpathStarts).toEqual(table.subpathStarts);
+          expect(oriented.subpathOpen).toEqual(table.subpathOpen);
+        }
+        const before = ringsOf(table);
+        const after = ringsOf(oriented);
+        before.forEach((ring, i) => {
+          // A closed contour is reversed about its FIRST anchor.
+          expect(after[i][0]).toEqual(ring[0]);
+          const key = (r: Vec2[]) => r.map((v) => `${v[0]},${v[1]}`).sort();
+          expect(key(after[i])).toEqual(key(ring));
+        });
+        const [from, to] = contourRanges(table.anchors.length, table.subpathStarts)[backmost];
+        expect(oriented.anchors.slice(from, to)).toEqual(table.anchors.slice(from, to));
+      }),
+    );
+  });
+
+  it("leaves the depth rule alone: orientForNonZeroHoles and makeCompoundTable still alternate by depth on the same tables", () => {
+    // Image Trace rides `makeCompoundTable`; the new rule is a separate
+    // function and must not have leaked into it.
+    fc.assert(
+      fc.property(family, ({ table, depths }) => {
+        const signs = signsOf(makeCompoundTable(splitCompound(table)));
+        for (let i = 0; i < signs.length; i++) {
+          const sameParity = (depths[i] - depths[0]) % 2 === 0;
+          assertTrue(
+            signs[i] === (sameParity ? signs[0] : -signs[0]),
+            `makeCompoundTable: contour ${i} (depth ${depths[i]}) winds ${signs[i]}`,
+          );
+        }
       }),
     );
   });

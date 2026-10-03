@@ -67,8 +67,9 @@ export const PATTERN_PANEL_NOTE =
   "because rows are the outer loop). And DIMMING is a real frameOpacity " +
   "written on every copy — Illustrator dims copies only while its pattern " +
   "editor is open, and this engine has no such mode, so the value is what " +
-  "the document keeps. Baking and re-planning are TWO undo steps each; " +
-  "releasing and deleting the tiles are one; the recipe itself is a " +
+  "the document keeps. Baking, re-planning, releasing and deleting the " +
+  "tiles are ONE undo step each (an older engine that refuses the one " +
+  "batch makes a bake or a re-plan two); the recipe itself is a " +
   "container write and is not on the undo stack at all.";
 
 const rowStyle: React.CSSProperties = {

@@ -550,8 +550,14 @@ over a set of items. The `GroupSpec` has no clip flag and core's parsed
   `draw-geometry` — in particular the tracer does NOT decide winding: it
   reports contours, and `makeCompoundTable` (`mergeCompound` +
   `orientForNonZeroHoles`) re-winds holes by nesting depth, because the
-  engine fills NON-ZERO. There is exactly one winding implementation in
-  this repo and it is in TS.
+  engine fills NON-ZERO. Winding is decided in TS, in
+  `draw-geometry/src/compound.ts`, and nowhere else. There are TWO rules
+  there, for two kinds of contour, and they are NOT interchangeable:
+  nesting depth (even-odd in effect) for traced contours, which have no
+  paint order; PAINT ORDER (`orientByPaintOrder` — the backmost path one
+  way, every other path the other) for Make Compound Path, because that
+  is what Illustrator does — measured, `test/oracle/compound-path.spec.ts`:
+  it stays non-zero and paints a square nested three levels deep SOLID.
 - **`flo_curves` 0.3 (transitively, via visioncortex) is NOT the version
   the engine had to patch.** Core patches flo_curves 0.8 for a
   non-transitive comparator in `GraphPath::exterior_paths` that aborts

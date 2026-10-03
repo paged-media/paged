@@ -28,15 +28,29 @@
 // `f*`. Under non-zero a contour inside another cuts a HOLE only when
 // it is wound OPPOSITE to its container; wound the SAME way it paints a
 // solid island and the ring silently becomes a disc. So the contours
-// must be re-oriented by NESTING DEPTH before they are handed to the
-// engine — `orientForNonZeroHoles` is that step, and it is the
-// difference between a doughnut and a coin.
+// must be re-oriented before they are handed to the engine, and the
+// direction each one gets IS the region the compound paints.
 //
-// Illustrator states the same rule from the other side ("even-odd"
-// fill): even-odd and depth-alternating non-zero describe the SAME
-// region for any set of non-self-intersecting contours, which is what a
-// compound path is. Crossing contours are outside that guarantee and
-// are named as such on `contourDepths`.
+// TWO ORIENTATION RULES live here, because two callers have different
+// FACTS about their contours — and they paint different regions:
+//   · `orientForNonZeroHoles` — by NESTING DEPTH, alternating. Every
+//     hole runs against the contour it is cut from, so non-zero paints
+//     the EVEN-ODD region. For contours that come with nesting and
+//     nothing else: Image Trace's (a traced letter "O" must have a
+//     hole, and a tracer's contours have no paint order).
+//   · `orientByPaintOrder` — by PAINT ORDER: the backmost path one way,
+//     every other path the other. This is Adobe Illustrator's Make
+//     Compound Path, recorded against Illustrator 30.1.0
+//     (`draw-bundle/test/oracle/compound-path.spec.ts`): it keeps the
+//     fill rule NON-ZERO — it is not even-odd — so two shapes that
+//     merely overlap knock the overlap out, and a square nested three
+//     levels deep paints SOLID (31 600 pt² where even-odd paints
+//     31 200). For contours that ARE user objects with a stacking
+//     order: draw-bundle's Make Compound Path.
+// The two agree on one and two levels of nesting under a backmost
+// container, and nowhere else is that guaranteed. Crossing contours are
+// outside the depth rule's meaning (named on `contourDepths`); the
+// paint-order rule needs no nesting at all, crossing or not.
 
 import { flattenAnchorRun } from "./bezier";
 import { pointInPolygon } from "./polygon";
@@ -177,21 +191,24 @@ export function contourDepths(table: AnchorTable): number[] {
 }
 
 /**
- * Re-orient a table's contours so the engine's NON-ZERO fill paints the
- * even-odd region: contours at depths of the SAME parity wind the same
- * way, contours at depths of opposite parity wind against each other —
- * so every hole runs against the contour it is cut from.
+ * Re-orient a table's contours BY NESTING DEPTH so the engine's NON-ZERO
+ * fill paints the even-odd region: contours at depths of the SAME parity
+ * wind the same way, contours at depths of opposite parity wind against
+ * each other — so every hole runs against the contour it is cut from.
  *
- * Contour 0 is the anchor of the convention and is never flipped — the
- * survivor of a "make compound path" keeps its own authored direction,
- * so a caller that cached its anchor order does not get a surprise.
- * That holds AT ANY DEPTH: when contour 0 is itself a hole (the user
- * selected the inner shape first), the direction the OUTER contours
- * must take is the opposite of contour 0's, and it is they that turn.
- * Which also makes the function idempotent — a second call finds every
- * contour already where the first one put it — and that is what keeps
- * make → release → make from reversing the whole path on each cycle.
- * Degenerate contours (zero area) are left alone.
+ * This is the rule for contours that carry nesting and NO paint order —
+ * Image Trace's (`makeCompoundTable`). It is NOT Illustrator's Make
+ * Compound Path, which orients by paint order and is not even-odd: that
+ * is {@link orientByPaintOrder}.
+ *
+ * Contour 0 is the anchor of the convention and is never flipped, so a
+ * caller that cached its anchor order does not get a surprise. That
+ * holds AT ANY DEPTH: when contour 0 is itself a hole, the direction the
+ * OUTER contours must take is the opposite of contour 0's, and it is
+ * they that turn. Which also makes the function idempotent — a second
+ * call finds every contour already where the first one put it — and
+ * that is what keeps merge → split → merge from reversing the whole path
+ * on each cycle. Degenerate contours (zero area) are left alone.
  */
 export function orientForNonZeroHoles(table: AnchorTable): AnchorTable {
   const spans = contourSpans(table.anchors.length, table.subpathStarts);
@@ -216,6 +233,88 @@ export function orientForNonZeroHoles(table: AnchorTable): AnchorTable {
     const want = depths[i] % 2 === 0 ? base : -base;
     const have = Math.sign(areas[i]);
     anchors.push(...(have !== 0 && have !== want ? reverseContour(contour) : contour));
+  });
+  return { anchors, subpathStarts, subpathOpen };
+}
+
+/**
+ * Re-orient a table's contours BY PAINT ORDER — Adobe Illustrator's
+ * Object ▸ Compound Path ▸ Make, as recorded against Illustrator 30.1.0
+ * (`draw-bundle/test/oracle/compound-path.spec.ts`): the contour at
+ * position `backmost` stands for the BACKMOST of the merged paths and
+ * keeps its direction; EVERY other contour is wound the opposite way.
+ * Nothing else is consulted — not nesting, not how the inputs were
+ * drawn.
+ *
+ * WHAT THAT PAINTS under the engine's non-zero fill, with `+1` the
+ * backmost contour's winding:
+ *   · a contour inside the backmost one is a HOLE (+1 −1 = 0);
+ *   · an island inside that hole paints again (+1 −1 −1 = −1);
+ *   · two shapes that merely OVERLAP knock the overlap out (+1 −1).
+ *     Crossing contours have no nesting depth, so what
+ *     {@link orientForNonZeroHoles} does there rests on whether one
+ *     contour's first anchor happens to lie inside the other;
+ *   · a contour nested three levels deep paints SOLID (−2), where
+ *     even-odd, and therefore the depth rule, makes it a hole;
+ *   · two shapes that are both IN FRONT of the backmost one, outside
+ *     it, paint their overlap SOLID too (−1 −1), where even-odd knocks
+ *     it out.
+ * So this is the rule for contours that ARE stacked objects (Make
+ * Compound Path); contours with nesting and no paint order (Image
+ * Trace) keep the depth rule.
+ *
+ * DIRECTION. The backmost contour KEEPS the direction it has (a
+ * zero-area one counts as positive), so the rule fixes only the
+ * RELATION, which is all non-zero reads. Illustrator also makes the
+ * backmost clockwise; that absolute choice changes no pixel and is not
+ * copied: keeping it leaves the backmost path's anchors exactly as
+ * given, and keeps make → release → make from reversing every contour
+ * when a release restacks the pieces (a released piece is inserted on
+ * top, so the path behind can change between the two makes).
+ *
+ * `backmost` is a POSITION in contour order — the order
+ * {@link contourRanges} lists them in, empty ranges dropped — and must
+ * name one (0 for a table with none); otherwise this throws a
+ * `RangeError`. Zero-area contours are left alone. A contour that turns
+ * is reversed the way its own flag says: a closed one about its first
+ * anchor, an open one outright (`reverseContour`). Fewer than two
+ * contours ⇒ the table itself.
+ */
+export function orientByPaintOrder(
+  table: AnchorTable,
+  backmost: number,
+): AnchorTable {
+  const spans = contourSpans(table.anchors.length, table.subpathStarts);
+  if (
+    !Number.isInteger(backmost) ||
+    backmost < 0 ||
+    backmost >= Math.max(spans.length, 1)
+  ) {
+    throw new RangeError(
+      `orientByPaintOrder: backmost contour ${backmost} is not one of the ` +
+        `table's ${spans.length} contours`,
+    );
+  }
+  if (spans.length < 2) return table;
+  const areas = spans.map(({ from, to }) =>
+    contourSignedArea(table.anchors.slice(from, to)),
+  );
+  const back = Math.sign(areas[backmost]) || 1;
+  const anchors: AnchorTriple[] = [];
+  const subpathStarts: number[] = [];
+  const subpathOpen: boolean[] = [];
+  spans.forEach((span, i) => {
+    const open = openFlagOf(table, span);
+    subpathStarts.push(anchors.length);
+    subpathOpen.push(open);
+    const contour = table.anchors.slice(span.from, span.to);
+    const want = i === backmost ? back : -back;
+    const have = Math.sign(areas[i]);
+    anchors.push(
+      ...(have !== 0 && have !== want
+        ? reverseContour(contour, { closed: !open })
+        : contour),
+    );
   });
   return { anchors, subpathStarts, subpathOpen };
 }
@@ -246,10 +345,12 @@ export function mergeCompound(tables: readonly AnchorTable[]): AnchorTable {
   return { anchors, subpathStarts, subpathOpen };
 }
 
-/** `mergeCompound` + `orientForNonZeroHoles` — the whole pure half of
- *  "make compound path", in the order that matters (orientation is
- *  resolved over the MERGED table, because nesting is a relation
- *  BETWEEN the former elements). */
+/** `mergeCompound` + `orientForNonZeroHoles` — the DEPTH-rule compound,
+ *  in the order that matters (orientation is resolved over the MERGED
+ *  table, because nesting is a relation BETWEEN the former contours).
+ *  This is Image Trace's lowering of a traced region. Make Compound Path
+ *  does NOT use it: user objects have a paint order, and Illustrator
+ *  orients by it — `mergeCompound` + {@link orientByPaintOrder}. */
 export function makeCompoundTable(
   tables: readonly AnchorTable[],
 ): AnchorTable {

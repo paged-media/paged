@@ -42,17 +42,41 @@
 // element, in one batch; Release is `framePath` back to one contour +
 // `insertPath` per remaining contour.
 //
-// WINDING, NOT EVEN-ODD (the part that actually decides whether a hole
-// is a hole). Illustrator describes a compound path as even-odd filled.
-// This engine fills NON-ZERO: `paged-compose`'s display list documents
-// "Paths are filled with `FillRule::NonZero`, matching IDML's
-// path-geometry convention", and `paged-export-pdf` emits `f`, never
-// `f*`. Under non-zero, a contour inside another only carves a hole when
-// it is wound the OTHER WAY; wound the same way it paints a solid island
-// and the ring silently becomes a coin. draw-geometry's
-// `makeCompoundTable` re-orients every contour by NESTING DEPTH before
-// this module ever reaches the wire — the two rules agree on the region
-// for any set of non-crossing contours, which is what a compound path is.
+// WINDING BY PAINT ORDER, AND NON-ZERO (the part that actually decides
+// whether a hole is a hole). This engine fills NON-ZERO:
+// `paged-compose`'s display list documents "Paths are filled with
+// `FillRule::NonZero`, matching IDML's path-geometry convention", and
+// `paged-export-pdf` emits `f`, never `f*`. Under non-zero, a contour
+// inside another only carves a hole when it is wound the OTHER WAY;
+// wound the same way it paints a solid island and the ring silently
+// becomes a coin. So the direction each merged contour gets IS the
+// region the compound paints, and the rule is Illustrator's, MEASURED
+// (Illustrator 30.1.0, `test/oracle/compound-path.spec.ts`): Make
+// Compound Path keeps the fill rule NON-ZERO — it is NOT even-odd, as
+// this note used to claim — and rewrites direction by PAINT ORDER, the
+// backmost path one way and every other path the other.
+// draw-geometry's `orientByPaintOrder` is that step. What it paints,
+// against the EVEN-ODD region a nesting-depth re-wind paints:
+//   · a hole in a shape, an island in that hole, and two shapes that
+//     merely OVERLAP with the overlap knocked out (12 800 pt² in the
+//     recorded case, not the union's 14 800) — the same;
+//   · a square nested THREE levels deep — SOLID (31 600 pt² at four
+//     levels, where even-odd paints 31 200). This module re-wound by
+//     depth until 2026-10-02 and painted the even-odd 31 200 there —
+//     and it agreed on the overlap only because a crossing contour has
+//     no depth, and the probe anchor of the front shape happened to lie
+//     inside the back one.
+// "Backmost" is the SCENE TREE's paint order (`backmostIndexOf`, the
+// reading the region Pathfinder uses), not selection order: the
+// survivor is still the FIRST SELECTED element, and it need not be the
+// one behind. The backmost path keeps the direction it has; only the
+// relation is the rule's (Illustrator also makes it clockwise, which
+// changes no pixel). A COMPOUND input — merging a compound path into
+// another — is stood for by its LARGEST contour, which is its outermost:
+// no recording covers that case, and the largest is what "the object
+// behind" means for a ring. Image Trace keeps the depth rule
+// (`makeCompoundTable`): its contours come from a tracer, with nesting
+// and no paint order.
 //
 // MUTATION / UNDO SHAPE (probed against the booted engine, protocol 57 —
 // the RFI C-15 rule: assert the real count, never claim "one undo"):
@@ -115,8 +139,10 @@ import type {
 import {
   applyAffine,
   contourRanges,
+  contourSignedArea,
   inverseApplyAffine,
-  makeCompoundTable,
+  mergeCompound,
+  orientByPaintOrder,
   splitCompound,
   type Affine,
   type AnchorTable,
@@ -126,6 +152,7 @@ import {
 import { closePathMutationFor } from "./join-average";
 import { bindMinted, mintedLeaves, mutateMinting } from "./minted";
 import { supportsPathOps } from "./path-ops";
+import { backmostIndexOf, paintOrderLeaves } from "./pathfinder-region";
 import {
   batchMutationFor,
   bindCreatedMutationFor,
@@ -468,14 +495,79 @@ export async function compoundPaintOf(
 export const contourCountOf = (table: AnchorTable): number =>
   contourRanges(table.anchors.length, table.subpathStarts).length;
 
+/** The position, in `mergeCompound(tables)`'s contour order, of the
+ *  contour that stands for `tables[backmost]` — the backmost path. A
+ *  single-contour input is its own contour; a COMPOUND input is stood
+ *  for by its LARGEST contour (its outermost), a choice no recording
+ *  covers (module header). Pure. */
+export function backmostContourOf(
+  tables: readonly AnchorTable[],
+  backmost: number,
+): number {
+  let offset = 0;
+  for (let i = 0; i < backmost; i++) offset += contourCountOf(tables[i]);
+  const table = tables[backmost];
+  let best = -1;
+  let bestArea = -1;
+  contourRanges(table.anchors.length, table.subpathStarts).forEach(([from, to], k) => {
+    const area = Math.abs(contourSignedArea(table.anchors.slice(from, to)));
+    if (area > bestArea) {
+      best = k;
+      bestArea = area;
+    }
+  });
+  // An input with no contour at all cannot stand for anything; the
+  // survivor's first contour does (compoundSourceOf never yields one).
+  return best < 0 ? 0 : offset + best;
+}
+
+/** THE PURE HALF OF MAKE: merge `tables` (the survivor's first), then
+ *  re-wind every contour by PAINT ORDER with `tables[backmost]` as the
+ *  path behind the others — Illustrator's rule (module header). */
+export function makeCompoundTableByPaintOrder(
+  tables: readonly AnchorTable[],
+  backmost: number,
+): AnchorTable {
+  return orientByPaintOrder(mergeCompound(tables), backmostContourOf(tables, backmost));
+}
+
+/** Which of `sources` is BACKMOST in the scene tree's paint order — an
+ *  index into `sources`. The tree is read once; a tree that cannot be
+ *  read, or that lists none of them, leaves the survivor (index 0)
+ *  standing for the backmost, and says so at debug. */
+async function backmostSourceOf(
+  host: BundleHost,
+  sources: readonly CompoundSource[],
+): Promise<number> {
+  const label = MAKE_COMPOUND_PATH_COMMAND_ID;
+  try {
+    const found = backmostIndexOf(
+      sources.map((s) => s.id),
+      paintOrderLeaves(await host.document.tree()),
+    );
+    if (found !== null) return found;
+    host.log.debug(
+      `${label}: none of the merged paths is in the scene tree — the ` +
+        "survivor stands for the backmost path",
+    );
+  } catch {
+    host.log.debug(
+      `${label}: the scene tree is unreadable — the survivor (first ` +
+        "selected) stands for the backmost path",
+    );
+  }
+  return 0;
+}
+
 // ---------------------------------------------------------- appliers
 
 /**
  * **Make compound path** — merge the selected path elements' contours
  * into ONE element's anchor table, keeping the FIRST selected as the
  * survivor (the kept-is-top convention `commands/pathfinder.ts` uses)
- * and deleting the rest. Returns the survivor's new contour count, or
- * null on a refusal (always logged, never thrown — the dash-command
+ * and deleting the rest, every contour re-wound by the scene tree's
+ * PAINT ORDER (module header). Returns the survivor's new contour count,
+ * or null on a refusal (always logged, never thrown — the dash-command
  * convention).
  */
 export async function applyMakeCompoundPath(
@@ -556,9 +648,12 @@ export async function applyMakeCompoundPath(
     sources.push(source);
   }
 
-  // One space, then the winding re-orientation that makes a nested
-  // contour a HOLE under the engine's non-zero fill.
-  const merged = makeCompoundTable(sources.map((s) => s.table));
+  // One space, then Illustrator's re-orientation: by PAINT ORDER, the
+  // backmost path one way and every other the other (module header).
+  const merged = makeCompoundTableByPaintOrder(
+    sources.map((s) => s.table),
+    await backmostSourceOf(host, sources),
+  );
   const inner = tableInInnerSpace(merged, keptSource.itemTransform);
   if (!inner) {
     host.log.warn(

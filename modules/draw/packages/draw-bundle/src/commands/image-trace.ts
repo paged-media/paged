@@ -50,9 +50,14 @@
 // list says so; `paged-export-pdf` emits `f`, never `f*`). Contours wound
 // the SAME way paint a solid coin. So every region's contours go through
 // draw-geometry's `makeCompoundTable` — `mergeCompound` +
-// `orientForNonZeroHoles` — which re-winds by NESTING DEPTH. No second
-// winding implementation exists in this repo, and the conformance spec
-// proves the hole in an exported PDF rather than in an anchor table.
+// `orientForNonZeroHoles` — which re-winds by NESTING DEPTH, and the
+// conformance spec proves the hole in an exported PDF rather than in an
+// anchor table. Make Compound Path re-winds by PAINT ORDER instead
+// (`orientByPaintOrder`, Illustrator's rule); that is not for here: a
+// traced contour comes from the tracer with nesting and no paint order,
+// and a hole cut in a traced island — three levels deep — must stay a
+// hole, which the paint-order rule paints solid. Both rules live in
+// draw-geometry; no winding is written in this module.
 //
 // MUTATION / UNDO SHAPE (measured against the booted engine, 0.64.0; the
 // RFI C-15 rule — assert the real count, never claim "one undo"):
