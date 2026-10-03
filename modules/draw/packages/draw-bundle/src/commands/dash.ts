@@ -127,6 +127,62 @@ export async function applyDashPreset(
   }
 }
 
+// ------------------------------------------------------- the dash EDITOR
+//
+// The presets above are four fixed arrays. The editor (the Stroke dashes
+// section of the Path Options panel — `commands/path-options.ts` says
+// why it lives there) types its own: up to `MAX_DASH_PAIRS` dash/gap
+// pairs, written through the SAME property, read back for the selection.
+
+/** The most dash/gap pairs the editor offers — Illustrator's three. */
+export const MAX_DASH_PAIRS = 3;
+
+/** The engine's dash array as it reads back (`elementProperties`
+ *  answers `{ type: "lengths", value: [] }` for a solid stroke). Null
+ *  when the entry is absent. Pure. */
+export function dashArrayFrom(
+  entries: readonly { path: string; value?: { type: string; value?: unknown } | null }[],
+): number[] | null {
+  for (const e of entries) {
+    if (e.path !== DASH_PATH || !e.value || e.value.type !== "lengths") continue;
+    const v = e.value.value;
+    return Array.isArray(v) ? v.filter((n): n is number => typeof n === "number") : [];
+  }
+  return null;
+}
+
+/** ONE batch writing `lengths` to every element — one undo step for the
+ *  whole selection (the presets above write one mutation per element). */
+export function dashBatchFor(elementIds: readonly ElementId[], lengths: readonly number[]): Mutation {
+  return {
+    op: "batch",
+    args: {
+      ops: elementIds.map((elementId) =>
+        dashMutationFor(elementId, { id: "", title: "", lengths: [...lengths] }),
+      ),
+    },
+  };
+}
+
+/** Write `lengths` to every PATH in the selection (`[]` = solid), in one
+ *  batch. Answers the ids written; empty = a logged no-op. */
+export async function applyDashArray(
+  host: BundleHost,
+  lengths: readonly number[],
+  targets: readonly ElementId[],
+): Promise<ElementId[]> {
+  if (targets.length === 0) {
+    host.log.debug("stroke dashes: no path selected — no-op");
+    return [];
+  }
+  const outcome = await host.document.mutate(dashBatchFor(targets, lengths));
+  if (!outcome.applied) {
+    host.log.warn(`stroke dashes rejected by engine: ${JSON.stringify(outcome.error)}`);
+    return [];
+  }
+  return [...targets];
+}
+
 /** Register all four dash-preset commands. Each handler ignores its
  *  `(paged, payload)` args and drives the bundle's own `host` (the
  *  plugin-web command pattern). Returns a Disposable that drops every

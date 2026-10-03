@@ -135,6 +135,18 @@ export {
   makeCompoundTable,
   splitCompound,
 } from "./compound";
+// The KNIFE's pure half — the closed strip a cut polyline becomes (the
+// engine's planar arrangement only divides by closed regions), the
+// snap that closes the strip's gap again, and the carrier-bounds hull.
+export {
+  sliverAround,
+  nearestOnPolyline,
+  snapOntoPolyline,
+  tableBounds,
+  boundsOverlap,
+  MITRE_LIMIT,
+  SNAP_SLIDE_LIMIT,
+} from "./knife";
 // Illustrator Phase 3 (§12.4) — REPEATS: the placement algebra for
 // radial / grid / mirror repeat objects. One AFFINE per instance (a
 // repeat rotates and reflects, so a pattern-style translation offset is

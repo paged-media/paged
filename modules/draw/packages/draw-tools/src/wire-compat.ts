@@ -42,6 +42,7 @@ import type {
   PathPointRole,
   PathPointSetWire,
 } from "./path-edit-ops";
+import type { PathOpenAtWire, ScissorsBatchWire } from "./scissors";
 import type { RegionFace } from "./shape-builder-machine";
 
 type Extends<A, B> = A extends B ? true : false;
@@ -126,5 +127,18 @@ export type PathEditBatchFeedsWire = Assert<
 export type PathPointRoleIsWire = Assert<
   Extends<PathPointRole, WirePathPointRole> extends true
     ? Extends<WirePathPointRole, PathPointRole>
+    : false
+>;
+
+/** `pathOpenAt` — the scissors cut at an anchor index (the host
+ *  Scissors' op; Scissors-at-any-point inserts the anchor first). */
+export type PathOpenAtFeedsWire = Assert<
+  Extends<PathOpenAtWire, WireOp<"pathOpenAt">>
+>;
+
+/** A scissors cut is ONE settled batch, accepted by `mutate`. */
+export type ScissorsBatchFeedsWire = Assert<
+  Extends<ScissorsBatchWire, WireOp<"batch">> extends true
+    ? Extends<ScissorsBatchWire, MutationInput>
     : false
 >;

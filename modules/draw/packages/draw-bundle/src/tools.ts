@@ -47,6 +47,7 @@ import { createCornerRadiusHandler } from "./handlers/corner-radius";
 import { createCurvatureHandler } from "./handlers/curvature";
 import { createEyedropperHandler } from "./handlers/eyedropper";
 import { createGradientAnnotatorHandler } from "./handlers/gradient-annotator";
+import { createKnifeHandler } from "./handlers/knife";
 import { createLassoSelectHandler } from "./handlers/lasso";
 import {
   createLivePaintBucketHandler,
@@ -55,6 +56,7 @@ import {
 import { createMeasureHandler } from "./handlers/measure";
 import { createPencilHandler } from "./handlers/pencil";
 import { createRepeatHandler } from "./handlers/repeat";
+import { createScissorsHandler } from "./handlers/scissors";
 import { createShapeBuilderHandler } from "./handlers/shape-builder";
 import { createTypeOnPathHandler } from "./handlers/text-on-path";
 import { createWidthHandler } from "./handlers/width";
@@ -123,6 +125,13 @@ export const TEXT_ON_PATH_TOOL_IDS = [
 /** REPEATS (§12.4) — the on-canvas steering widget (host-free, the
  *  PRO_TOOL_IDS pattern). */
 export const REPEAT_TOOL_IDS = ["media.paged.draw.tool.repeat"] as const;
+
+/** The CUTTING tools — they join the host's built-in Scissors flyout
+ *  (host-free, the PRO_TOOL_IDS pattern). */
+export const CUT_TOOL_IDS = [
+  "media.paged.draw.tool.knife",
+  "media.paged.draw.tool.scissorsAnyPoint",
+] as const;
 
 /** Build the three anchor-editing tools bound to `host` — each
  *  gesture handler reaches the engine through the facades only (B-17).
@@ -231,9 +240,10 @@ export function drawTools(host: BundleHost): ToolContribution[] {
       gesture: () => createShapeBuilderHandler(host),
     },
     // §13.2 — the on-canvas corner widget: press near a corner of the
-    // selected rectangle, drag inward, release → ONE per-corner
-    // RoundedCorner mutation (the handle the live-corners commands
-    // reserved; rectangles only, B-23).
+    // selected rectangle, text frame or polygon (any rotation — the drag
+    // runs in the element's own space), drag inward, release → ONE batch
+    // (handlers/corner-radius.ts: a box corner's radius, or a polygon's
+    // uniform one).
     {
       id: "media.paged.draw.tool.cornerRadius",
       title: "Corner Radius",
@@ -480,6 +490,43 @@ export function drawTools(host: BundleHost): ToolContribution[] {
       order: 4,
       cursor: CROSS,
       gesture: () => createRepeatHandler(host),
+    },
+    // THE KNIFE — a freehand cut through every closed path it crosses,
+    // each split into separate closed pieces along it; Alt draws a
+    // straight cut, Alt+Shift snaps it to 45° (commands/knife.ts says
+    // which engine door does the geometry, and why the others do not).
+    //
+    // It joins the host's built-in `scissors` group — Illustrator keeps
+    // Scissors and Knife in one flyout, and both CUT. NO SHORTCUT, for
+    // the Repeat tool's reason above: the four free registers are owed
+    // to the tools on substitutes (`shift+t`, `i`, `k`) or are a trap
+    // (`shift+z`). `tool-scissors` is a REAL glyph in the host's map and
+    // the honest metaphor; there is no knife glyph, and an invented
+    // token renders the rail button glyphless.
+    {
+      id: "media.paged.draw.tool.knife",
+      title: "Knife",
+      icon: "tool-scissors",
+      group: "scissors",
+      section: "transform",
+      order: 3,
+      cursor: CROSS,
+      gesture: () => createKnifeHandler(host),
+    },
+    // SCISSORS AT ANY POINT — the host's Scissors cuts at ANCHORS only;
+    // this one splits the clicked segment where the click lands (the
+    // de Casteljau insert) and opens the path there, in one batch
+    // (handlers/scissors.ts). Same flyout, same glyph, same keyless
+    // reason as the Knife above.
+    {
+      id: "media.paged.draw.tool.scissorsAnyPoint",
+      title: "Scissors (any point)",
+      icon: "tool-scissors",
+      group: "scissors",
+      section: "transform",
+      order: 2,
+      cursor: CROSS,
+      gesture: () => createScissorsHandler(host),
     },
   ];
 }

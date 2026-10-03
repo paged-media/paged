@@ -113,6 +113,17 @@ export {
   type PencilOptions,
 } from "./pencil-machine";
 
+// The KNIFE's gesture: freehand (or Alt-straight) samples in, the cut
+// polyline out. What the cut does is the bundle's (`commands/knife.ts`).
+export {
+  KnifeMachine,
+  type KnifeEvent,
+  type KnifeModifiers,
+  type KnifeOptions,
+  type KnifeCommit,
+  type KnifeSnapshot,
+} from "./knife-machine";
+
 // Brush tools v0 — the pencil sampling pipeline with a calligraphic
 // per-anchor width lane on the commit (centerline + widths →
 // outlineStrokeVariable in the bundle).
@@ -140,9 +151,30 @@ export {
   cornerPreview,
   maxRadius,
   radiusFromDrag,
+  polygonCorners,
+  polygonCornerAt,
+  polygonCornerPreview,
+  polygonRadiusFromDrag,
+  polygonTangentFromDrag,
   type Bounds,
   type CornerIndex,
+  type PolygonCorner,
 } from "./corner-radius-machine";
+
+// ON-CANVAS GRADIENT STOPS — the Gradient Annotator's stop markers:
+// grab the nearest, slide it along the axis between its neighbours, one
+// location change on release.
+export {
+  GradientStopMachine,
+  pointOnAxis,
+  axisPercentAt,
+  clampStopLocation,
+  type GradientAxis,
+  type GradientStopEvent,
+  type GradientStopOptions,
+  type GradientStopCommit,
+  type GradientStopSnapshot,
+} from "./gradient-stop-machine";
 
 export {
   MeasureMachine,
@@ -172,6 +204,16 @@ export {
   type LivePaintEvent,
   type LivePaintSnapshot,
 } from "./live-paint-machine";
+
+// SCISSORS AT ANY POINT — the de Casteljau split then `pathOpenAt` at
+// the new anchor, planned pure and lowered to one batch.
+export {
+  planScissorsAt,
+  scissorsMutation,
+  type ScissorsPlan,
+  type ScissorsBatchWire,
+  type PathOpenAtWire,
+} from "./scissors";
 
 export {
   planAnchorAdd,
@@ -215,4 +257,6 @@ export type {
   InsertPathFeedsWire,
   PathEditBatchFeedsWire,
   PathPointRoleIsWire,
+  PathOpenAtFeedsWire,
+  ScissorsBatchFeedsWire,
 } from "./wire-compat";

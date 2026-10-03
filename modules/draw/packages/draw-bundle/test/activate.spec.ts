@@ -174,6 +174,11 @@ describe("drawBundle.activate", () => {
       // register is the canonical key of a paged.draw tool currently on
       // a substitute.
       "media.paged.draw.tool.repeat",
+      // The Knife — joins the host's built-in Scissors flyout, keyless
+      // for the Repeat tool's reason.
+      "media.paged.draw.tool.knife",
+      // Scissors at any point — the same flyout, keyless likewise.
+      "media.paged.draw.tool.scissorsAnyPoint",
     ]);
     // B-15: TOOL activation commands + shortcuts are HOST-derived from
     // the registry — the bundle registers tools only. The commands it
@@ -201,6 +206,8 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.offsetPathOptions",
       "media.paged.draw.command.simplifyPathOptions",
       "media.paged.draw.command.outlineStrokeOptions",
+      "media.paged.draw.command.strokeDashOptions",
+      "media.paged.draw.command.reflectOptions",
       "media.paged.draw.command.insertArcOptions",
       "media.paged.draw.command.insertSpiralOptions",
       "media.paged.draw.command.insertRectGridOptions",
@@ -211,6 +218,10 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.averageEndpoints",
       // Reverse path direction (framePath, one batch).
       "media.paged.draw.command.reversePathDirection",
+      // Object ▸ Transform — Reflect ×2 and Transform again.
+      "media.paged.draw.command.reflectHorizontal",
+      "media.paged.draw.command.reflectVertical",
+      "media.paged.draw.command.transformAgain",
       "media.paged.draw.command.pathfinderUnite",
       "media.paged.draw.command.pathfinderSubtract",
       "media.paged.draw.command.pathfinderIntersect",

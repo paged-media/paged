@@ -104,8 +104,12 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "media.paged.draw.tool.livePaintSelect",
         "media.paged.draw.tool.typeOnPath",
         "media.paged.draw.tool.repeat",
+        // The Knife — joins the host's Scissors flyout.
+        "media.paged.draw.tool.knife",
+        // Scissors at any point — the same flyout.
+        "media.paged.draw.tool.scissorsAnyPoint",
       ]);
-      // The contribution log holds the nineteen tools, then EACH schema
+      // The contribution log holds the twenty-one tools, then EACH schema
       // panel as TWO entries: the synthesized React `panel` the panels
       // registry sees (the host turns a schema into a registry panel via
       // the injected renderer / seam) AND the `schemaPanel` recorded
@@ -125,7 +129,10 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         // wave-2 trio (Eyedropper, Width, Lasso Select) + the Live
         // Paint pair (Bucket, Face Selection) + Type on a Path
         // (C-29) + the Repeat steering widget (§12.4, the one tool
-        // with no shortcut — see tools.ts) — nineteen tools.
+        // with no shortcut — see tools.ts) + the Knife and Scissors
+        // at any point (keyless too) — twenty-one tools.
+        "tool",
+        "tool",
         "tool",
         "tool",
         "tool",
@@ -207,10 +214,12 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "command",
         "command",
         "command",
-        // PATH OPTIONS — the eight "…" commands (Offset / Simplify /
-        // Outline stroke / Arc / Spiral / Rect grid / Polar grid / Select
-        // same stroke weight within): each raises the panel at its
-        // section and mutates nothing.
+        // PATH OPTIONS — the ten "…" commands (Offset / Simplify /
+        // Outline stroke / Stroke dashes / Reflect / Arc / Spiral / Rect
+        // grid / Polar grid / Select same stroke weight within): each
+        // raises the panel at its section and mutates nothing.
+        "command",
+        "command",
         "command",
         "command",
         "command",
@@ -226,6 +235,11 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "command",
         "command",
         // Reverse path direction.
+        "command",
+        // Object ▸ Transform — Reflect horizontally / vertically and
+        // Transform again.
+        "command",
+        "command",
         "command",
         // Phase 4c — Pathfinder Unite / Subtract / Intersect / Exclude.
         "command",
@@ -495,7 +509,7 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
     const before = await treeSize();
 
     const handle = harness.loadBundle(drawBundle);
-    expect(harness.toolsContributed()).toHaveLength(19);
+    expect(harness.toolsContributed()).toHaveLength(21);
     handle.dispose();
 
     // After dispose: the contribution log is empty (registrations torn

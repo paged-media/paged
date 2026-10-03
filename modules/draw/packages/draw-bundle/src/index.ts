@@ -58,6 +58,10 @@ export {
   DASH_COMMAND_CATEGORY,
   dashMutationFor,
   applyDashPreset,
+  applyDashArray,
+  dashArrayFrom,
+  dashBatchFor,
+  MAX_DASH_PAIRS,
   contributeDashCommands,
   type DashPreset,
 } from "./commands/dash";
@@ -97,6 +101,7 @@ export {
   LIVE_PAINT_TOOL_IDS,
   TEXT_ON_PATH_TOOL_IDS,
   REPEAT_TOOL_IDS,
+  CUT_TOOL_IDS,
 } from "./tools";
 export { insertPathMutationFor } from "./handlers/insert-path";
 // Brush tools v0 — the sweep handler factories, the exact
@@ -144,12 +149,89 @@ export {
   measureTextPreview,
   BIND_MEASURE_READOUT,
   OVERLAY_TEXT_FEATURE,
+  OVERLAY_MULTI_FEATURE,
   type ToolPreviewTextMirror,
 } from "./handlers/measure";
 export {
   createGradientAnnotatorHandler,
   gradientAxisMutationFor,
+  gradientSpecWithStop,
+  gradientStopMutationFor,
+  stopMarker,
+  type GradientAnnotatorOptions,
 } from "./handlers/gradient-annotator";
+// THE RAW WIRE — the one guarded seam over the `host.editor.client.send`
+// hatch (the facade gaps it covers are named in the module).
+export {
+  hasRawWire,
+  rawRead,
+  rawNearestPathPoint,
+  rawGradientDetail,
+  type RawRequest,
+  type NearestPathPointWire,
+  type GradientDetailWire,
+  type GradientStopWire,
+} from "./raw-wire";
+// §13.2 — the on-canvas corner widget: box corners and polygon corners,
+// in the element's own space (rotated frames included).
+export {
+  createCornerRadiusHandler,
+  cornerDragMutationFor,
+} from "./handlers/corner-radius";
+// THE KNIFE — the freehand cut over the engine's planar arrangement: the
+// probe/withdraw/cut flow, its pure halves (the pieces read off the
+// faces, the one cut batch) and the gesture handler.
+export {
+  applyKnife,
+  faceTable,
+  knifeBatchFor,
+  knifeCandidates,
+  knifePieceHandle,
+  knifePiecesFrom,
+  knifeStripBatchFor,
+  knifeStripHandle,
+  knifeTargetOf,
+  KNIFE_MIN_PIECE_AREA_PT2,
+  KNIFE_SNAP_TOLERANCE_PT,
+  KNIFE_STRIP_WIDTH_PT,
+  type KnifePlan,
+  type KnifeResult,
+  type KnifeSkip,
+  type KnifeTarget,
+} from "./commands/knife";
+export { createKnifeHandler, type KnifeHandlerOptions } from "./handlers/knife";
+// REFLECT and TRANSFORM AGAIN — the one transform seam, its pure batch
+// and the copy probe (engine 0.65's duplicateElements).
+export {
+  applyReflect,
+  applySelectionTransform,
+  applyTransformAgain,
+  contributeTransformCommands,
+  forgetLastTransform,
+  lastSelectionTransform,
+  selectionCentre,
+  supportsDuplicate,
+  transformBatchFor,
+  transformMatrixOf,
+  transformTargetsOf,
+  COPY_UNAVAILABLE_NOTE,
+  DUPLICATE_ENGINE,
+  DUPLICATE_OP,
+  REFLECT_HORIZONTAL_COMMAND_ID,
+  REFLECT_VERTICAL_COMMAND_ID,
+  TRANSFORM_AGAIN_COMMAND_ID,
+  TRANSFORM_COMMAND_CATEGORY,
+  TRANSFORM_COMMAND_IDS,
+  type TransformRecord,
+  type TransformResult,
+  type TransformTarget,
+} from "./commands/transform";
+// SCISSORS AT ANY POINT — split the clicked segment, open the path there.
+export {
+  applyScissorsAt,
+  createScissorsHandler,
+  type ScissorsResult,
+} from "./handlers/scissors";
 export {
   PATH_OPS_COMMAND_IDS,
   PATH_OPS_COMMAND_CATEGORY,
@@ -1030,6 +1112,9 @@ export {
   offsetPayloadOf,
   simplifyPayloadOf,
   outlineStrokePayloadOf,
+  dashLengthsOf,
+  dashOptionsFromLengths,
+  dashTargetsOf,
   pathOptionsFocusOf,
   showPathOptions,
   openPathOptions,
@@ -1041,10 +1126,17 @@ export {
   type SimplifyOptions,
   type OutlineStrokeOptions,
   type SelectSameWeightOptions,
+  type DashOptions,
+  type ReflectOptions,
 } from "./commands/path-options";
 export {
   makePathOptionsPanel,
   ownStrokeLabel,
+  dashPatternLabel,
+  hiddenPairsNote,
+  DASH_SECTION_NOTE,
+  REFLECT_SECTION_NOTE,
+  REFLECT_COPY_UNAVAILABLE_NOTE,
   PATH_OPTIONS_PANEL_NOTE,
   SELECT_SAME_TOLERANCE_NOTE,
 } from "./panels/path-options-panel";

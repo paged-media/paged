@@ -110,6 +110,10 @@ describe("draw conformance — dash-preset commands (B-12)", () => {
         "media.paged.draw.command.strokeDashDashed",
         "media.paged.draw.command.strokeDashDotted",
         "media.paged.draw.command.strokeDashDashDot",
+        // The dash EDITOR's "…" command (Draw ▸ Stroke ▸ Dashes…): it
+        // raises the Path Options panel at its Stroke dashes section and
+        // writes nothing itself (pinned in `panels/dash-editor.spec.tsx`).
+        "media.paged.draw.command.strokeDashOptions",
       ]);
     });
 

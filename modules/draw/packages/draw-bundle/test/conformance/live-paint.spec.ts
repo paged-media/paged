@@ -637,7 +637,12 @@ describe("draw conformance — LIVE PAINT v0 (against the real engine, F4)", () 
     // key and `shift+l` (selection) is held by paged.image — so neither
     // is taken here, and nothing in the bundle collides either.
     expect(shortcuts).toEqual(["shift+o", "shift+v"]);
-    const all = h.toolsContributed().map((t) => t.shortcut);
+    // Unique KEYS: a keyless tool (Repeat, Knife — see tools.ts) has no
+    // key to collide, so it is not counted as one.
+    const all = h
+      .toolsContributed()
+      .map((t) => t.shortcut)
+      .filter((k): k is string => k !== undefined);
     expect(new Set(all).size).toBe(all.length);
     expect(all).not.toContain("k");
     expect(all).not.toContain("shift+l");

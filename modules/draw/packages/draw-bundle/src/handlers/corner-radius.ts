@@ -18,56 +18,151 @@
 
 // The CORNER-RADIUS gesture tool (concept §13.2 "drag corner widgets") —
 // the on-canvas handle the live-corners command module reserved via its
-// exported per-corner builder. Press near a corner of the selected
-// RECTANGLE, drag inward: the radius follows (clamped to half the short
-// side), the overlay previews the extent, pointer-up commits ONE
-// per-corner mutation (`cornerRadiiMutationFor` → RoundedCorner).
+// exported per-corner builders. Press near a corner of the selected
+// frame, drag inward: the radius follows, the overlay previews the
+// extent, pointer-up commits ONE batch (one undo step).
 //
-// Honest scope: RECTANGLES only, and the reason is this TOOL's, not the
-// engine's — the engine applies corners to polygons too (RFI B-23 is
-// closed, and the preset commands in `commands/live-corners.ts` cover
-// rectangle, polygon and text frame). What is rectangle-only here is the
-// HANDLE GEOMETRY: the drag is hit-tested and clamped against the four
-// corners of a box (see the body below). A non-rectangle selection is a
-// no-op with a debug log. Axis-aligned bounds only: a rotated
-// rectangle's corners don't sit on its page bounds, so the tool skips it
-// (the transform-aware hit is the follow-up).
+// THE KINDS ARE THE ENGINE'S (`supportsLiveCorners`: rectangle, polygon,
+// text frame), and the handle geometry is now each one's own:
+//   · a RECTANGLE or TEXT FRAME is a BOX — four corners, a radius per
+//     corner (`cornerRadiiMutationFor`, two writes);
+//   · a POLYGON has a handle at EVERY corner anchor the renderer rounds
+//     (straight edges both sides, closed contour — draw-tools
+//     `polygonCorners`), and the drag reads the renderer's own
+//     inscribed-circle rule. A polygon has ONE radius: the renderer reads
+//     only the top-left slot for an N-gon (core `uniform_corner`), so any
+//     corner's handle sets the uniform radius, written to all four slots
+//     the way the Corners presets write it (`cornerStyleMutationFor`).
+//
+// ROTATED AND SCALED FRAMES WORK, because the whole gesture happens in
+// the element's OWN space: the pointer is mapped through the INVERSE item
+// transform (draw-geometry `inverseApplyAffine`) before the hit-test and
+// the drag, the hit tolerance is scaled into that space so it stays a
+// constant 8 px on screen, and the preview is mapped back through the
+// transform. The radius written is an own-space length, which is what
+// the frame's corner properties are. This used to skip any transformed
+// rectangle, because its corners do not sit on its page bounds.
 
 import type {
   BundleHost,
   CanvasPointerEvent,
   ElementId,
   GestureHandler,
+  Mutation,
 } from "@paged-media/plugin-api";
+import {
+  affineScale,
+  applyAffine,
+  inverseApplyAffine,
+  type Affine,
+  type Vec2,
+} from "@paged-media/draw-geometry";
 import {
   cornerAt,
   cornerPreview,
+  polygonCornerAt,
+  polygonCornerPreview,
+  polygonCorners,
+  polygonRadiusFromDrag,
   radiusFromDrag,
   type Bounds,
   type CornerIndex,
+  type PolygonCorner,
 } from "@paged-media/draw-tools";
 
-import { cornerRadiiMutationFor } from "../commands/live-corners";
+import {
+  cornerRadiiMutationFor,
+  cornerStyleMutationFor,
+  supportsLiveCorners,
+} from "../commands/live-corners";
 
 /** Screen-space corner hit tolerance. */
 const CORNER_TOL_PX = 8;
 
-const IDENTITY: readonly number[] = [1, 0, 0, 1, 0, 0];
+/** One drag in flight, in the element's own space. */
+type CornerDrag =
+  | { kind: "box"; target: ElementId; m: Affine | null; bounds: Bounds; corner: CornerIndex }
+  | { kind: "polygon"; target: ElementId; m: Affine | null; corner: PolygonCorner };
+
+/** What a finished drag writes: a box corner's two writes, or a
+ *  polygon's uniform radius in all four slots. One batch either way.
+ *  Exported for the spec. */
+export function cornerDragMutationFor(
+  drag: Pick<CornerDrag, "kind" | "target"> & { corner?: CornerIndex | PolygonCorner },
+  radius: number,
+): Mutation {
+  if (drag.kind === "box") {
+    return cornerRadiiMutationFor(drag.target, drag.corner as CornerIndex, "RoundedCorner", radius);
+  }
+  return cornerStyleMutationFor(drag.target, {
+    id: "",
+    title: "",
+    style: "RoundedCorner",
+    radius,
+  });
+}
 
 export function createCornerRadiusHandler(host: BundleHost): GestureHandler {
-  let target: ElementId | null = null;
-  let bounds: Bounds | null = null;
-  let corner: CornerIndex | null = null;
+  let drag: CornerDrag | null = null;
   let pageId: string | null = null;
   let radius = 0;
 
   const reset = () => {
-    target = null;
-    bounds = null;
-    corner = null;
+    drag = null;
     pageId = null;
     radius = 0;
     host.overlay.setToolPreview(null);
+  };
+
+  const toInner = (m: Affine | null, p: Vec2): Vec2 | null => inverseApplyAffine(m, p[0], p[1]);
+
+  /** Follow the pointer: the radius, then the preview mapped to the page. */
+  const follow = (d: CornerDrag, page: string, pointer: Vec2) => {
+    const inner = toInner(d.m, pointer);
+    if (!inner) return;
+    radius =
+      d.kind === "box"
+        ? radiusFromDrag(d.bounds, d.corner, inner)
+        : polygonRadiusFromDrag(d.corner, inner);
+    const preview =
+      d.kind === "box" ? cornerPreview(d.bounds, d.corner, radius) : polygonCornerPreview(d.corner, radius);
+    host.overlay.setToolPreview({
+      pageId: page,
+      points: preview.map((p) => {
+        const q = applyAffine(d.m, p[0], p[1]);
+        return [q[0], q[1]] as [number, number];
+      }),
+    });
+  };
+
+  /** Resolve a press on `target` into a drag, or null (no corner hit). */
+  const grab = async (target: ElementId, page: string, pointer: Vec2): Promise<CornerDrag | null> => {
+    const tolPx = host.viewport.pxToPt(CORNER_TOL_PX);
+    if (target.kind === "polygon") {
+      const read = await host.document.pathAnchors(target).catch(() => null);
+      if (!read || read.pageId !== page) return null;
+      const m = (read.itemTransform ?? null) as Affine | null;
+      const inner = toInner(m, pointer);
+      if (!inner) return null;
+      const corner = polygonCornerAt(
+        polygonCorners({
+          anchors: read.anchors,
+          subpathStarts: read.subpathStarts,
+          subpathOpen: read.subpathOpen,
+        }),
+        inner,
+        tolPx / affineScale(m),
+      );
+      return corner ? { kind: "polygon", target, m, corner } : null;
+    }
+    const [geom] = await host.document.elementGeometry([target]).catch(() => []);
+    if (!geom?.bounds || geom.pageId !== page) return null;
+    const m = (geom.itemTransform ?? null) as Affine | null;
+    const inner = toInner(m, pointer);
+    if (!inner) return null;
+    const bounds = geom.bounds as Bounds;
+    const corner = cornerAt(bounds, inner, tolPx / affineScale(m));
+    return corner === null ? null : { kind: "box", target, m, bounds, corner };
   };
 
   return {
@@ -80,76 +175,40 @@ export function createCornerRadiusHandler(host: BundleHost): GestureHandler {
     },
     onPointerDown(e: CanvasPointerEvent) {
       if (e.button !== 0 || !e.pageId || !e.pagePoint) return;
-      const selection = host.selection.get();
-      const rect = selection.find(
-        (id) => (id as { kind?: string }).kind === "rectangle",
-      );
-      if (!rect) {
-        // Rectangle-only HERE is a HANDLE-GEOMETRY limit, not an engine
-        // one: B-23/C-18 closed the polygon apply arm and the presets in
-        // commands/live-corners.ts now drive it, but `cornerAt` hit-tests
-        // the four corners of an axis-aligned BOX. An N-gon's corners are
-        // its anchors, which this handler cannot address — driving one
-        // needs a vertex hit-test over `pathAnchors`, not a wider filter.
+      const target = host.selection.get().find(supportsLiveCorners);
+      if (!target) {
         host.log.debug?.(
-          "cornerRadius: select a rectangle (the drag handle hit-tests a " +
-            "box's four corners; use the Corners commands on a polygon)",
+          "cornerRadius: select a rectangle, polygon or text frame (the kinds whose corners the engine renders)",
         );
         return;
       }
+      const page = e.pageId;
+      const pointer = e.pagePoint as Vec2;
       void (async () => {
-        const [geom] = await host.document.elementGeometry([rect]);
-        if (!geom?.bounds) return;
-        const t = (geom as { itemTransform?: number[] }).itemTransform;
-        if (t && t.some((v, i) => v !== IDENTITY[i])) {
-          host.log.debug?.(
-            "cornerRadius: rotated/transformed rectangle — the axis-aligned hit would lie; skipped",
-          );
-          return;
-        }
-        const hit = cornerAt(
-          geom.bounds as Bounds,
-          e.pagePoint as [number, number],
-          host.viewport.pxToPt(CORNER_TOL_PX),
-        );
-        if (hit === null) return;
-        target = rect;
-        bounds = geom.bounds as Bounds;
-        corner = hit;
-        pageId = e.pageId ?? null;
-        radius = radiusFromDrag(bounds, corner, e.pagePoint as [number, number]);
-        if (pageId) {
-          host.overlay.setToolPreview({
-            pageId,
-            points: cornerPreview(bounds, corner, radius) as [number, number][],
-          });
-        }
+        const d = await grab(target, page, pointer);
+        if (!d) return;
+        drag = d;
+        pageId = page;
+        follow(d, page, pointer);
       })();
     },
     onPointerMove(e: CanvasPointerEvent) {
-      if (!bounds || corner === null || !e.pagePoint || !pageId) return;
-      radius = radiusFromDrag(bounds, corner, e.pagePoint as [number, number]);
-      host.overlay.setToolPreview({
-        pageId,
-        points: cornerPreview(bounds, corner, radius) as [number, number][],
-      });
+      if (!drag || !e.pagePoint || !pageId || e.pageId !== pageId) return;
+      follow(drag, pageId, e.pagePoint as Vec2);
     },
     onPointerUp() {
-      if (!target || corner === null) {
+      if (!drag) {
         reset();
         return;
       }
-      const id = target;
-      const c = corner;
+      const d = drag;
       const r = radius;
       reset();
       void host.document
-        .mutate(cornerRadiiMutationFor(id, c, "RoundedCorner", r))
+        .mutate(cornerDragMutationFor(d, r))
         .then((outcome) => {
           if (!outcome.applied) {
-            host.log.warn(
-              `cornerRadius rejected by engine: ${JSON.stringify(outcome.error)}`,
-            );
+            host.log.warn(`cornerRadius rejected by engine: ${JSON.stringify(outcome.error)}`);
           }
         })
         .catch((err) => host.log.warn(`cornerRadius commit failed: ${err}`));
