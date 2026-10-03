@@ -1,0 +1,104 @@
+{
+  "fixture": "outline-stroke",
+  "produced_by": {
+    "app": "Adobe InDesign",
+    "version": "20.0.1.32",
+    "locale": "GERMAN_LOCALE",
+    "script": "scripts/indesign/lib/read-document.jsx",
+    "script_sha256": "e4baa1bbbcc2cba025e0a3bb7aa30877c62b005aeef6d852292a6a9f273d6ff4",
+    "runner": "scripts/indesign/run-roundtrip.sh",
+    "recorded_at": "2026-10-03T05:59:00.270Z",
+    "host_os": "macOS 26.4",
+    "pdf_preset": "[Qualitativ hochwertiger Druck]"
+  },
+  "idml": {
+    "path": "packages/draw-bundle/test/fixtures/roundtrip/outline-stroke.idml",
+    "sha256": "a1af685462421a345779046e223479763810cb3e6ce7cd62c274c20c50e5641c"
+  },
+  "reexported": false,
+  "units": "pt",
+  "coordinates": "page-local, origin top-left of the page, Y down (ruler origin PAGE, zero point 0,0, script measurement unit POINTS); bounds as [minX, minY, maxX, maxY]",
+  "open": {
+    "converted": false,
+    "modified": true
+  },
+  "spreads": 1,
+  "pages": [
+    {
+      "name": "1",
+      "bounds": [
+        0,
+        0,
+        612,
+        792
+      ]
+    }
+  ],
+  "layers": [
+    "Layer 1"
+  ],
+  "warnings": [],
+  "items": [
+    {
+      "kind": "Polygon",
+      "id": 209,
+      "parent": "spread",
+      "position": 0,
+      "index": 0,
+      "name": "",
+      "label": "",
+      "labels": {},
+      "layer": "Layer 1",
+      "visible": true,
+      "locked": false,
+      "geometricBounds": [111.999709,217,488.000291,352.445854],
+      "visibleBounds": [103.999709,209,496.000291,360.445854],
+      "fill": {"name":"None","type":"Swatch"},
+      "fillTint": -1,
+      "gradientFillAngle": 0,
+      "gradientFillLength": 0,
+      "gradientFillStart": [0,0],
+      "stroke": {"name":"Black","type":"Color","model":"PROCESS","space":"CMYK","value":[0,0,0,100]},
+      "strokeTint": -1,
+      "strokeWeight": 16,
+      "endCap": "BUTT_END_CAP",
+      "endJoin": "MITER_END_JOIN",
+      "miterLimit": 4,
+      "strokeAlignment": "CENTER_ALIGNMENT",
+      "strokeType": {"name":"Durchgezogen","key":"$ID/Solid"},
+      "strokeDashAndGap": {"unreadable":"Diese Eigenschaft ist im aktuellen Status nicht zutreffend."},
+      "gapColor": {"name":"None","type":"Swatch"},
+      "gapTint": -1,
+      "leftLineEnd": "NONE",
+      "rightLineEnd": "NONE",
+      "corners": {"topLeft":{"option":"NONE","radius":12},"topRight":{"option":"NONE","radius":12},"bottomRight":{"option":"NONE","radius":12},"bottomLeft":{"option":"NONE","radius":12}},
+      "transparency": {"opacity":100,"blendMode":"NORMAL"},
+      "fillTransparency": {"opacity":100,"blendMode":"NORMAL"},
+      "strokeTransparency": {"opacity":100,"blendMode":"NORMAL"},
+      "overprintFill": {"unreadable":"Diese Eigenschaft ist im aktuellen Status nicht zutreffend."},
+      "overprintStroke": false,
+      "textPaths": [],
+      "paths": [
+        {
+          "closed": true,
+          "pathType": "CLOSED_PATH",
+          "anchors": [
+            {"anchor":[113.7531,295.0024],"left":[113.7531,295.0024],"right":[154.2815,244.3419]},
+            {"anchor":[220,217],"left":[186.2274,217],"right":[253.7726,217]},
+            {"anchor":[326.2469,295.0024],"left":[285.7185,244.3419],"right":[356.8516,333.2583]},
+            {"anchor":[426.9203,330.119],"left":[390.7219,345.2007],"right":[455.0287,318.4079]},
+            {"anchor":[473.7531,295.0024],"left":[473.7531,295.0024],"right":[476.5131,291.5523]},
+            {"anchor":[484.9976,293.7531],"left":[481.5475,290.993],"right":[488.4477,296.5131]},
+            {"anchor":[486.2469,304.9976],"left":[489.007,301.5475],"right":[483.1375,308.8844]},
+            {"anchor":[433.0738,344.8883],"left":[462.6703,332.5573],"right":[406.6305,355.9057]},
+            {"anchor":[313.7531,304.9976],"left":[360.2687,363.1422],"right":[274.5292,255.9677]},
+            {"anchor":[220,233],"left":[246.3636,233],"right":[193.6364,233]},
+            {"anchor":[126.2469,304.9976],"left":[165.4708,255.9677],"right":[123.4869,308.4477]},
+            {"anchor":[115.0024,306.2469],"left":[118.4525,309.007],"right":[111.5523,303.4869]},
+            {"anchor":[113.7531,295.0024],"left":[110.993,298.4525],"right":[113.7531,295.0024]}
+          ]
+        }
+      ]
+    }
+  ]
+}
