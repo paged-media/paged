@@ -19,9 +19,12 @@
 // The PATH OPTIONS panel — the dialog the menu's "…" promised.
 //
 // One section per operation that takes parameters: Offset path,
-// Simplify, Outline stroke, the four Insert shapes, and Select same
-// stroke weight (its tolerance — a selection verb, but "…" means a
-// question whatever the verb, and this is where questions live). Each is a form
+// Simplify, Outline stroke, Stroke dashes (the one section that edits a
+// PROPERTY the selection already has, so its values follow the
+// selection — `commands/path-options.ts` says why it lives here), the
+// four Insert shapes, and Select same stroke weight (its tolerance — a
+// selection verb, but "…" means a question whatever the verb, and this
+// is where questions live). Each is a form
 // over its command's real payload and an Apply button that runs the
 // EXISTING command with what was typed (`commands/path-options.ts` owns
 // the values, their defaults and where "last used" is kept; this file
@@ -49,14 +52,17 @@ import type { BundleHost, PanelProps } from "@paged-media/plugin-api";
 import * as React from "react";
 
 import { INSERT_SHAPE_LIMITS } from "../commands/insert-shapes";
+import { dashArrayFrom, MAX_DASH_PAIRS } from "../commands/dash";
 import { MAX_STROKE_WEIGHT_TOLERANCE } from "../commands/select-same";
 import {
-  outlineParamsOf,
+  outlineParamsFrom,
   supportsPathOps,
   type OutlineStrokeParams,
 } from "../commands/path-ops";
 import {
   applyPathOptions,
+  dashLengthsOf,
+  dashOptionsFromLengths,
   lastUsedPathOptions,
   pathOptionsFocusOf,
   BIND_PATH_OPTIONS_FOCUS,
@@ -83,9 +89,30 @@ export const PATH_OPTIONS_PANEL_NOTE =
   "— run bare it always outlines the element's own stroke. The undo " +
   "arithmetic: Offset, Simplify and Outline stroke are one undo step per " +
   "selected path; each Insert is ONE undo step however many paths it " +
-  "adds; Select same changes only the selection. Image Trace has no " +
+  "adds; Stroke dashes is ONE undo step for every selected path; " +
+  "Select same changes only the selection. Image Trace has no " +
   "options here yet — its menu row still runs " +
   "fixed settings.";
+
+/** What the Stroke dashes section says, verbatim (pinned by a test). */
+export const DASH_SECTION_NOTE =
+  "Shows the first selected path's own dash and follows the selection. " +
+  "A pair whose dash and gap are both 0 is not used; untick Dashed for a " +
+  "solid stroke. Apply writes this pattern to every selected path.";
+
+/** What the section says when the path's dash has more pairs than the
+ *  editor shows — an Apply would rewrite it with the three shown. */
+export function hiddenPairsNote(hidden: number): string {
+  return (
+    `This path's dash has ${MAX_DASH_PAIRS + hidden} pairs; the editor shows ` +
+    `the first ${MAX_DASH_PAIRS}, and Apply writes only those.`
+  );
+}
+
+/** "6 · 3 · 1 · 3 pt", or "Solid" — the pattern an Apply writes. Pure. */
+export function dashPatternLabel(lengths: readonly number[]): string {
+  return lengths.length === 0 ? "Solid" : `${lengths.join(" · ")} pt`;
+}
 
 /** What the Select same stroke weight section says, verbatim (pinned by
  *  a test) — the colour half of the request, and why it is not here. */
@@ -166,7 +193,19 @@ export function makePathOptionsPanel(host: BundleHost): {
     open: PathOptionSection;
     /** The newest focus request already honoured. */
     focusSeq: number;
-  } = { draft: null, followed: {}, open: "offset", focusSeq: 0 };
+    /** The dash section follows the SELECTION: the path + dash it last
+     *  loaded, so a reload that changes neither keeps what was typed. */
+    dashFollowed: string | null;
+    /** Pairs the followed path's dash has beyond the three shown. */
+    dashHidden: number;
+  } = {
+    draft: null,
+    followed: {},
+    open: "offset",
+    focusSeq: 0,
+    dashFollowed: null,
+    dashHidden: 0,
+  };
 
   /** Take into the draft every section whose STORED values changed since
    *  the draft last took them; null when none did. Per SECTION, because
@@ -197,6 +236,7 @@ export function makePathOptionsPanel(host: BundleHost): {
      *  any kind that carries a stroke weight. */
     const [selected, setSelected] = React.useState(0);
     const [own, setOwn] = React.useState<OutlineStrokeParams | null>(null);
+    const [dashHidden, setDashHidden] = React.useState(session.dashHidden);
 
     const setOpen = React.useCallback((section: PathOptionSection) => {
       session.open = section;
@@ -236,24 +276,44 @@ export function makePathOptionsPanel(host: BundleHost): {
     // WHAT A RELOAD COSTS (`test/panels/path-options-panel.spec.tsx`):
     // nothing with no path selected, and ONE property read — the first
     // selected path's own stroke, which is what the Outline stroke
-    // section shows it will use — otherwise. No document walk: this
-    // panel keeps no records.
+    // section shows it will use AND what the Stroke dashes section
+    // loads — otherwise. No document walk: this panel keeps no records.
     const reload = usePanelReload(
       host,
       "path-options",
       async ({ live, selection }) => {
         const paths = selection.filter(supportsPathOps);
         const first = paths[0];
-        const stroke = first ? await outlineParamsOf(host, first) : null;
+        const props = first
+          ? await host.document.elementProperties(first).catch(() => null)
+          : null;
         if (!live()) return;
+        const entries = props?.entries ?? [];
         setTargets(paths.length);
         setSelected(selection.length);
-        setOwn(stroke);
+        setOwn(first ? outlineParamsFrom(entries) : null);
         // Follow the STORED last-used values — only the sections that
         // changed since this panel last took them, so neither a reload
         // nor a remount throws away what was typed.
-        const next = followStored();
-        if (next) followDraft(JSON.stringify(session.followed), next);
+        let next = followStored();
+        // …and the dash section follows the SELECTED PATH's own dash,
+        // when the path or its dash changed since it was last loaded.
+        if (first) {
+          const dash = dashArrayFrom(entries);
+          const key = JSON.stringify([first.kind, String(first.id), dash]);
+          if (key !== session.dashFollowed) {
+            session.dashFollowed = key;
+            const base = (next ?? session.draft ?? lastUsedPathOptions(host)).dash;
+            const read = dashOptionsFromLengths(dash, base);
+            session.dashHidden = read.hiddenPairs;
+            setDashHidden(read.hiddenPairs);
+            next = { ...(next ?? (session.draft as PathOptions)), dash: read.options };
+            session.draft = next;
+          }
+        }
+        if (next) {
+          followDraft(JSON.stringify([session.followed, session.dashFollowed]), next);
+        }
       },
     );
 
@@ -401,6 +461,31 @@ export function makePathOptionsPanel(host: BundleHost): {
               })}
             </>
           );
+        case "dash": {
+          const off = !draft.dash.dashed;
+          return (
+            <>
+              {checkRow("dash", "dashed", "Dashed line")}
+              {numberRow("dash", "dash1", "Dash 1 (pt)", { step: 0.5, min: 0, disabled: off })}
+              {numberRow("dash", "gap1", "Gap 1 (pt)", { step: 0.5, min: 0, disabled: off })}
+              {numberRow("dash", "dash2", "Dash 2 (pt)", { step: 0.5, min: 0, disabled: off })}
+              {numberRow("dash", "gap2", "Gap 2 (pt)", { step: 0.5, min: 0, disabled: off })}
+              {numberRow("dash", "dash3", "Dash 3 (pt)", { step: 0.5, min: 0, disabled: off })}
+              {numberRow("dash", "gap3", "Gap 3 (pt)", { step: 0.5, min: 0, disabled: off })}
+              <div style={mutedStyle} data-draw-pathopts-dash-pattern>
+                {dashPatternLabel(dashLengthsOf(draft.dash))}
+              </div>
+              {dashHidden > 0 && (
+                <div style={mutedStyle} data-draw-pathopts-dash-hidden>
+                  {hiddenPairsNote(dashHidden)}
+                </div>
+              )}
+              <div style={mutedStyle} data-draw-pathopts-dash-note>
+                {DASH_SECTION_NOTE}
+              </div>
+            </>
+          );
+        }
         case "arc":
           return (
             <>

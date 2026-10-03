@@ -206,6 +206,7 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.offsetPathOptions",
       "media.paged.draw.command.simplifyPathOptions",
       "media.paged.draw.command.outlineStrokeOptions",
+      "media.paged.draw.command.strokeDashOptions",
       "media.paged.draw.command.insertArcOptions",
       "media.paged.draw.command.insertSpiralOptions",
       "media.paged.draw.command.insertRectGridOptions",

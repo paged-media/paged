@@ -821,6 +821,7 @@ describe("Path options panel — rendered against the engine", () => {
         "Draw/Path/Outline stroke options…",
         "Draw/Path/Offset path…",
         "Draw/Path/Simplify…",
+        "Draw/Stroke/Dashes…",
         "Object/Insert arc…",
         "Object/Insert spiral…",
         "Object/Insert rectangular grid…",

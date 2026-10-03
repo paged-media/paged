@@ -60,6 +60,11 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   ["Draw/Path/Close path", "closePath", "path-ends"],
   ["Draw/Path/Reverse path direction", "reversePathDirection", "path-direction"],
 
+  // ── Stroke — the dash EDITOR (the Path Options panel's Stroke dashes
+  //    section: up to three dash/gap pairs, read back for the selection).
+  //    An ellipsis, so it RAISES the panel at that section. ──
+  ["Draw/Stroke/Dashes…", "strokeDashOptions", "stroke"],
+
   // ── Pathfinder — the ten boolean ops, in Illustrator's own order so
   //    the muscle memory transfers. ──
   ["Draw/Pathfinder/Unite", "pathfinderUnite", "pf-shape"],

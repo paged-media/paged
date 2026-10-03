@@ -58,6 +58,10 @@ export {
   DASH_COMMAND_CATEGORY,
   dashMutationFor,
   applyDashPreset,
+  applyDashArray,
+  dashArrayFrom,
+  dashBatchFor,
+  MAX_DASH_PAIRS,
   contributeDashCommands,
   type DashPreset,
 } from "./commands/dash";
@@ -1059,6 +1063,9 @@ export {
   offsetPayloadOf,
   simplifyPayloadOf,
   outlineStrokePayloadOf,
+  dashLengthsOf,
+  dashOptionsFromLengths,
+  dashTargetsOf,
   pathOptionsFocusOf,
   showPathOptions,
   openPathOptions,
@@ -1070,10 +1077,14 @@ export {
   type SimplifyOptions,
   type OutlineStrokeOptions,
   type SelectSameWeightOptions,
+  type DashOptions,
 } from "./commands/path-options";
 export {
   makePathOptionsPanel,
   ownStrokeLabel,
+  dashPatternLabel,
+  hiddenPairsNote,
+  DASH_SECTION_NOTE,
   PATH_OPTIONS_PANEL_NOTE,
   SELECT_SAME_TOLERANCE_NOTE,
 } from "./panels/path-options-panel";

@@ -54,6 +54,24 @@
 //
 // IMAGE TRACE is not here. Its menu row still carries an ellipsis and
 // still runs fixed options; its command file belongs to another change.
+//
+// STROKE DASHES ARE HERE, and that is a decision, not a convenience. The
+// four dash presets (`commands/dash.ts`) were the only way to set a dash,
+// because the Stroke panel is a SCHEMA panel and its binding ceiling is
+// scalar — a dash array is a vector, so no schema row can bind it. The
+// two homes left were a new React panel or a section here. Here wins:
+// this panel already IS the stroke's typed-parameter form (Outline
+// stroke's caps/joins/miter live in it), it already reads the first
+// selected path's stroke on every reload, it already has the "…" door a
+// menu row raises at a section, and a draft that survives reloads. A
+// separate Dashes panel would copy all of that to hold six numbers, and
+// put a third stroke surface in the dock beside Stroke and this one.
+//
+// ONE THING IS DIFFERENT about this section, and the panel says so: its
+// values FOLLOW THE SELECTION. Every other section edits the parameters
+// of an operation; this one edits a PROPERTY the selected path already
+// has, so a selection change loads that path's own dash (read from the
+// same property read Outline stroke uses — no extra round trip).
 
 import type { BundleHost, Disposable } from "@paged-media/plugin-api";
 
@@ -90,6 +108,8 @@ import {
   applySelectSameStrokeWeight,
   MAX_STROKE_WEIGHT_TOLERANCE,
 } from "./select-same";
+import { applyDashArray, MAX_DASH_PAIRS } from "./dash";
+import { supportsPathOps } from "./path-ops";
 
 export const PATH_OPTIONS_PANEL_ID = "media.paged.draw.panel.pathOptions";
 
@@ -100,6 +120,7 @@ export const PATH_OPTION_SECTIONS = [
   "offset",
   "simplify",
   "outlineStroke",
+  "dash",
   "arc",
   "spiral",
   "rectGrid",
@@ -113,6 +134,7 @@ export const PATH_OPTION_SECTION_TITLES: Record<PathOptionSection, string> = {
   offset: "Offset path",
   simplify: "Simplify",
   outlineStroke: "Outline stroke",
+  dash: "Stroke dashes",
   arc: "Insert arc",
   spiral: "Insert spiral",
   rectGrid: "Insert rectangular grid",
@@ -126,6 +148,7 @@ export const SELECTION_SECTIONS: ReadonlySet<PathOptionSection> = new Set([
   "offset",
   "simplify",
   "outlineStroke",
+  "dash",
   "selectSameWeight",
 ]);
 
@@ -185,10 +208,25 @@ export interface OutlineStrokeOptions {
   miterLimit: number;
 }
 
+/** STROKE DASHES — up to three dash/gap pairs, Illustrator's six
+ *  fields. `dashed` off is a SOLID stroke whatever the fields hold (they
+ *  are kept, so ticking it again restores them). A pair whose dash AND
+ *  gap are both 0 is unused; the first pair is always used. */
+export interface DashOptions {
+  dashed: boolean;
+  dash1: number;
+  gap1: number;
+  dash2: number;
+  gap2: number;
+  dash3: number;
+  gap3: number;
+}
+
 export interface PathOptions {
   offset: OffsetOptions;
   simplify: SimplifyOptions;
   outlineStroke: OutlineStrokeOptions;
+  dash: DashOptions;
   arc: ArcParams;
   spiral: SpiralParams;
   rectGrid: RectGridParams;
@@ -213,6 +251,8 @@ export const PATH_OPTIONS_DEFAULTS: PathOptions = {
     overrideMiterLimit: false,
     miterLimit: DEFAULT_MITER_LIMIT,
   },
+  // The "Dashed" preset's 6 / 3, so ticking the box gives a dash at once.
+  dash: { dashed: false, dash1: 6, gap1: 3, dash2: 0, gap2: 0, dash3: 0, gap3: 0 },
   arc: ARC_PARAM_DEFAULTS,
   spiral: SPIRAL_PARAM_DEFAULTS,
   rectGrid: RECT_GRID_PARAM_DEFAULTS,
@@ -270,6 +310,7 @@ export function sanitizePathOptions(raw: unknown): PathOptions {
       ),
       miterLimit: num(outline?.miterLimit, d.outlineStroke.miterLimit),
     },
+    dash: dashOptionsFrom(loose(r?.dash)),
     arc: arcParamsFrom(loose(r?.arc)),
     spiral: spiralParamsFrom(loose(r?.spiral)),
     rectGrid: rectGridParamsFrom(loose(r?.rectGrid)),
@@ -284,6 +325,69 @@ export function sanitizePathOptions(raw: unknown): PathOptions {
       ),
     },
   };
+}
+
+// -------------------------------------------------------------- dashes
+
+const DASH_FIELDS = ["dash1", "gap1", "dash2", "gap2", "dash3", "gap3"] as const;
+
+/** A stored / typed dash record, sanitised: a length is a finite number
+ *  ≥ 0 (a negative one is 0), anything unreadable is its default. */
+function dashOptionsFrom(raw: Loose): DashOptions {
+  const d = PATH_OPTIONS_DEFAULTS.dash;
+  const out: DashOptions = { ...d, dashed: bool(raw?.dashed, d.dashed) };
+  for (const key of DASH_FIELDS) out[key] = Math.max(0, num(raw?.[key], d[key]));
+  return out;
+}
+
+/** The engine's `lengths` for `o`: `[]` (solid) when not dashed or when
+ *  every length is 0; otherwise the first pair and every later pair
+ *  that is not 0 / 0, in order. Pure. */
+export function dashLengthsOf(o: DashOptions): number[] {
+  if (!o.dashed) return [];
+  const clean = dashOptionsFrom(o as unknown as Loose);
+  const pairs: [number, number][] = [
+    [clean.dash1, clean.gap1],
+    [clean.dash2, clean.gap2],
+    [clean.dash3, clean.gap3],
+  ];
+  const out: number[] = [];
+  pairs.forEach(([dash, gap], i) => {
+    if (i === 0 || dash > 0 || gap > 0) out.push(dash, gap);
+  });
+  return out.every((n) => n === 0) ? [] : out;
+}
+
+/** What the section shows for a path whose dash array is `lengths`
+ *  (null = unreadable, shown as solid). An ODD-length array repeats to
+ *  even (the SVG/PDF dash rule); pairs past the third are not shown, and
+ *  `hiddenPairs` says how many — the section puts that in front of the
+ *  user, because an Apply rewrites the dash with the three it shows. */
+export function dashOptionsFromLengths(
+  lengths: readonly number[] | null,
+  base: DashOptions = PATH_OPTIONS_DEFAULTS.dash,
+): { options: DashOptions; hiddenPairs: number } {
+  const values = (lengths ?? []).filter((n) => Number.isFinite(n) && n >= 0);
+  if (values.length === 0 || values.every((n) => n === 0)) {
+    return { options: { ...base, dashed: false }, hiddenPairs: 0 };
+  }
+  const even = values.length % 2 === 1 ? [...values, ...values] : values;
+  const pairs = even.length / 2;
+  const options: DashOptions = {
+    dashed: true,
+    dash1: even[0] ?? 0,
+    gap1: even[1] ?? 0,
+    dash2: even[2] ?? 0,
+    gap2: even[3] ?? 0,
+    dash3: even[4] ?? 0,
+    gap3: even[5] ?? 0,
+  };
+  return { options, hiddenPairs: Math.max(0, pairs - MAX_DASH_PAIRS) };
+}
+
+/** The selection's paths — what a dash Apply writes to. */
+export function dashTargetsOf(host: BundleHost) {
+  return host.selection.get().filter(supportsPathOps);
 }
 
 // ----------------------------------------------------------- last used
@@ -360,7 +464,7 @@ export function outlineStrokePayloadOf(
  *  the section has been applied from the panel. */
 export function lastUsedPayload(
   host: BundleHost,
-  section: Exclude<PathOptionSection, "outlineStroke" | "selectSameWeight">,
+  section: Exclude<PathOptionSection, "outlineStroke" | "selectSameWeight" | "dash">,
 ): Record<string, unknown> | undefined {
   if (!hasLastUsed(host, section)) return undefined;
   const all = lastUsedPathOptions(host);
@@ -403,6 +507,9 @@ export async function applyPathOptions<S extends PathOptionSection>(
     case "outlineStroke":
       await applyOutlineStroke(host, outlineStrokePayloadOf(all.outlineStroke));
       return;
+    case "dash":
+      await applyDashArray(host, dashLengthsOf(all.dash), dashTargetsOf(host));
+      return;
     case "arc":
       await applyInsertArc(host, { ...all.arc });
       return;
@@ -437,6 +544,13 @@ async function applyLastUsed(
     case "outlineStroke":
       // Bare Outline Stroke = the element's own stroke (path-ops.ts).
       await applyOutlineStroke(host);
+      return;
+    case "dash":
+      await applyDashArray(
+        host,
+        dashLengthsOf(lastUsedPathOptions(host).dash),
+        dashTargetsOf(host),
+      );
       return;
     case "arc":
       await applyInsertArc(host, lastUsedPayload(host, "arc"));
@@ -520,6 +634,7 @@ export const PATH_OPTIONS_COMMANDS: Record<PathOptionSection, string> = {
   offset: `${C}.offsetPathOptions`,
   simplify: `${C}.simplifyPathOptions`,
   outlineStroke: `${C}.outlineStrokeOptions`,
+  dash: `${C}.strokeDashOptions`,
   arc: `${C}.insertArcOptions`,
   spiral: `${C}.insertSpiralOptions`,
   rectGrid: `${C}.insertRectGridOptions`,

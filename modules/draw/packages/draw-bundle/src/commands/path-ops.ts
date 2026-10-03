@@ -49,6 +49,7 @@ import type {
   Disposable,
   ElementId,
   Mutation,
+  Value,
 } from "@paged-media/plugin-api";
 
 export const PATH_OPS_COMMAND_CATEGORY = "Path";
@@ -169,6 +170,45 @@ function joinFromIdml(token: string): StrokeJoinToken | undefined {
   return undefined;
 }
 
+/** The element's OWN stroke attributes, read off an `elementProperties`
+ *  answer: what Outline Stroke outlines. Unreadable values fall to the
+ *  defaults. Pure — the Path Options panel derives this AND the dash
+ *  array from ONE read. */
+export function outlineParamsFrom(
+  entries: readonly { path: string; value?: Value | null }[],
+): OutlineStrokeParams {
+  const params: OutlineStrokeParams = {
+    width: DEFAULT_OUTLINE_WIDTH_PT,
+    cap: "butt",
+    join: "miter",
+    miterLimit: DEFAULT_MITER_LIMIT,
+  };
+  for (const entry of entries) {
+    const v = entry.value;
+    if (!v) continue;
+    if (
+      entry.path === "frameStrokeWeight" &&
+      v.type === "length" &&
+      v.value !== null &&
+      v.value > 0
+    ) {
+      params.width = v.value;
+    } else if (entry.path === "frameStrokeEndCap" && v.type === "text") {
+      params.cap = capFromIdml(v.value) ?? params.cap;
+    } else if (entry.path === "frameStrokeJoin" && v.type === "text") {
+      params.join = joinFromIdml(v.value) ?? params.join;
+    } else if (
+      entry.path === "frameStrokeMiterLimit" &&
+      v.type === "length" &&
+      v.value !== null &&
+      v.value > 0
+    ) {
+      params.miterLimit = v.value;
+    }
+  }
+  return params;
+}
+
 /** Read the element's OWN stroke attributes so Outline Stroke outlines
  *  what is rendered. Unreadable values fall to the defaults — never a
  *  throw. */
@@ -176,41 +216,12 @@ export async function outlineParamsOf(
   host: BundleHost,
   id: ElementId,
 ): Promise<OutlineStrokeParams> {
-  const params: OutlineStrokeParams = {
-    width: DEFAULT_OUTLINE_WIDTH_PT,
-    cap: "butt",
-    join: "miter",
-    miterLimit: DEFAULT_MITER_LIMIT,
-  };
   try {
     const props = await host.document.elementProperties(id);
-    for (const entry of props?.entries ?? []) {
-      const v = entry.value;
-      if (!v) continue;
-      if (
-        entry.path === "frameStrokeWeight" &&
-        v.type === "length" &&
-        v.value !== null &&
-        v.value > 0
-      ) {
-        params.width = v.value;
-      } else if (entry.path === "frameStrokeEndCap" && v.type === "text") {
-        params.cap = capFromIdml(v.value) ?? params.cap;
-      } else if (entry.path === "frameStrokeJoin" && v.type === "text") {
-        params.join = joinFromIdml(v.value) ?? params.join;
-      } else if (
-        entry.path === "frameStrokeMiterLimit" &&
-        v.type === "length" &&
-        v.value !== null &&
-        v.value > 0
-      ) {
-        params.miterLimit = v.value;
-      }
-    }
+    return outlineParamsFrom(props?.entries ?? []);
   } catch {
-    /* defaults stand */
+    return outlineParamsFrom([]);
   }
-  return params;
 }
 
 // ------------------------------------------------------------ appliers
