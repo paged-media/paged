@@ -696,6 +696,7 @@ export function blendStepsFor(args: {
     endpoints: "interior",
   });
   const out: BlendStep[] = [];
+  const minted: MintedByName = new Map();
   slots.forEach((slot, i) => {
     // The kernel owns the interior rule (`k / (count + 1)`, never on a
     // key); easing then RE-PARAMETERIZES it, which is why the point is
@@ -732,8 +733,14 @@ export function blendStepsFor(args: {
         ? params.easingStrength
         : params.colorEasingStrength,
     );
-    const fill = mixOrKeep(a.rgb, b.rgb, colorT, a.paint.fill);
-    const stroke = mixOrKeep(a.strokeRgb, b.strokeRgb, colorT, a.paint.stroke);
+    const fill = mixOrKeep(a.rgb, b.rgb, colorT, a.paint.fill, minted);
+    const stroke = mixOrKeep(
+      a.strokeRgb,
+      b.strokeRgb,
+      colorT,
+      a.paint.stroke,
+      minted,
+    );
     out.push({
       index: i + 1,
       t,
@@ -763,20 +770,35 @@ function mapTriple(p: AnchorTriple, m: Affine): AnchorTriple {
 
 /** Interpolate two colours when BOTH resolve, else keep the first key's
  *  ref verbatim (v0's rule, now applied to stroke as well as fill). */
+/** The swatches one plan has minted so far, by name (= the hex). */
+type MintedByName = Map<string, { selfId: string; name: string }>;
+
 function mixOrKeep(
   from: Rgb | null,
   to: Rgb | null,
   t: number,
   keepRef: string | null,
+  minted: MintedByName,
 ): { mint: { selfId: string; name: string } | null; ref: string | null } {
   if (from && to) {
+    // Both keys carry the SAME colour: every step does too, so it keeps
+    // the key's own swatch. Minting here gave every step its own copy of
+    // one colour under one name, and InDesign renamed them "#000000 2",
+    // "#000000 3" on import (the InDesign round-trip lane,
+    // `blendDuplicateSwatchNames`).
+    if (keepRef !== null && from.every((c, k) => c === to[k])) {
+      return { mint: null, ref: keepRef };
+    }
     const rgb = mixRgb(from, to, t);
     // Name = the hex (the io/svg convention, so the SVG exporter
-    // resolves the ref back).
-    return {
-      mint: { selfId: mintBlendSwatchId(), name: rgbToHex(rgb) },
-      ref: null,
-    };
+    // resolves the ref back). One swatch per distinct colour in a plan:
+    // a second step landing on the same hex reuses the first's.
+    const name = rgbToHex(rgb);
+    const seen = minted.get(name);
+    if (seen) return { mint: null, ref: seen.selfId };
+    const mint = { selfId: mintBlendSwatchId(), name };
+    minted.set(name, mint);
+    return { mint, ref: null };
   }
   return { mint: null, ref: keepRef };
 }

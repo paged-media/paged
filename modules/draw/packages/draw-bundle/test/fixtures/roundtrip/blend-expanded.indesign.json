@@ -7,13 +7,13 @@
     "script": "scripts/indesign/lib/read-document.jsx",
     "script_sha256": "4486a78fdd3b45a88c6ef6b18911bc34b94f6cf7ddc3c4d433d3d5e256f4dc08",
     "runner": "scripts/indesign/run-roundtrip.sh",
-    "recorded_at": "2026-10-03T06:03:16.797Z",
+    "recorded_at": "2026-10-03T17:21:32.392Z",
     "host_os": "macOS 26.4",
     "pdf_preset": "[Qualitativ hochwertiger Druck]"
   },
   "idml": {
     "path": "packages/draw-bundle/test/fixtures/roundtrip/blend-expanded.idml",
-    "sha256": "2724f2009839885d0359210ce9e98500e5323921c8f83c8667e3173f425c9932"
+    "sha256": "c6feadfbe8af0495928a4a27edb1c2b31c650c84de8766a81a694b3de579b8d4"
   },
   "units": "pt",
   "coordinates": "page-local, origin top-left of the page, Y down (ruler origin PAGE, zero point 0,0, script measurement unit POINTS); bounds as [minX, minY, maxX, maxY]",
@@ -41,7 +41,7 @@
   "items": [
     {
       "kind": "Group",
-      "id": 217,
+      "id": 214,
       "parent": "spread",
       "position": 0,
       "index": 0,
@@ -57,8 +57,8 @@
     },
     {
       "kind": "Polygon",
-      "id": 222,
-      "parent": "Group#217",
+      "id": 219,
+      "parent": "Group#214",
       "position": 0,
       "index": 0,
       "name": "",
@@ -74,7 +74,7 @@
       "gradientFillAngle": 0,
       "gradientFillLength": 0,
       "gradientFillStart": [0,0],
-      "stroke": {"name":"#000000 3","type":"Color","model":"PROCESS","space":"RGB","value":[0,0,0]},
+      "stroke": {"name":"Black","type":"Color","model":"PROCESS","space":"CMYK","value":[0,0,0,100]},
       "strokeTint": -1,
       "strokeWeight": 1,
       "endCap": "BUTT_END_CAP",
@@ -110,8 +110,8 @@
     },
     {
       "kind": "Polygon",
-      "id": 221,
-      "parent": "Group#217",
+      "id": 218,
+      "parent": "Group#214",
       "position": 1,
       "index": 1,
       "name": "",
@@ -127,7 +127,7 @@
       "gradientFillAngle": 0,
       "gradientFillLength": 0,
       "gradientFillStart": [0,0],
-      "stroke": {"name":"#000000 2","type":"Color","model":"PROCESS","space":"RGB","value":[0,0,0]},
+      "stroke": {"name":"Black","type":"Color","model":"PROCESS","space":"CMYK","value":[0,0,0,100]},
       "strokeTint": -1,
       "strokeWeight": 1,
       "endCap": "BUTT_END_CAP",
@@ -163,8 +163,8 @@
     },
     {
       "kind": "Polygon",
-      "id": 220,
-      "parent": "Group#217",
+      "id": 217,
+      "parent": "Group#214",
       "position": 2,
       "index": 2,
       "name": "",
@@ -180,7 +180,7 @@
       "gradientFillAngle": 0,
       "gradientFillLength": 0,
       "gradientFillStart": [0,0],
-      "stroke": {"name":"#000000","type":"Color","model":"PROCESS","space":"RGB","value":[0,0,0]},
+      "stroke": {"name":"Black","type":"Color","model":"PROCESS","space":"CMYK","value":[0,0,0,100]},
       "strokeTint": -1,
       "strokeWeight": 1,
       "endCap": "BUTT_END_CAP",
@@ -216,8 +216,8 @@
     },
     {
       "kind": "Polygon",
-      "id": 219,
-      "parent": "Group#217",
+      "id": 216,
+      "parent": "Group#214",
       "position": 3,
       "index": 3,
       "name": "",
@@ -269,8 +269,8 @@
     },
     {
       "kind": "Polygon",
-      "id": 218,
-      "parent": "Group#217",
+      "id": 215,
+      "parent": "Group#214",
       "position": 4,
       "index": 4,
       "name": "",

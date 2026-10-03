@@ -54,7 +54,7 @@ made by another reader or from another IDML.
 | `opacity-blend` | opacity 50 + Multiply via a Graphic Style | identical |
 | `group` | a group | identical |
 | `appearance-bake` | bake: a group of stacked items | DEFECT: Color/Paper undeclared → no fill |
-| `repeat-expanded`, `blend-expanded` | expanded repeat / blend | repeat identical; DEFECT (draw): duplicate swatch names |
+| `repeat-expanded`, `blend-expanded` | expanded repeat / blend | identical (the blend's duplicate stroke swatches were fixed in draw and the case re-recorded) |
 | `svg-import` | SVG import | identical |
 | `text-on-path` | Type on a Path | DEFECT: not exported, `lost` silent |
 | `opacity-mask` | opacity mask | EXPECTED LOSS, named in `lost` |

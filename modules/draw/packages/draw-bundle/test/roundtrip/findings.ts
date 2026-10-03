@@ -110,16 +110,6 @@ export const FINDINGS = {
       "Polygon's property list does not carry them, so the model cannot be read back. " +
       "(Unset, InDesign answers angle 0 and DERIVES a length from the item.)",
   },
-  blendDuplicateSwatchNames: {
-    verdict: "defect",
-    owner: "draw",
-    title: "a blend mints one swatch per step for an unchanged stroke, all with one name",
-    why:
-      "Both keys stroke Black, so every step's stroke is #000000 — and `blendBatchFor` " +
-      "mints a NEW swatch for each, all named \"#000000\". IDML swatch names are " +
-      "unique in InDesign, which renames the 2nd and 3rd \"#000000 2\" / \"#000000 3\". " +
-      "Same colour, three swatches, two of them renamed (draw-bundle/src/commands/blend.ts).",
-  },
   bevelSpelling: {
     verdict: "convention",
     owner: "engine",
@@ -276,10 +266,6 @@ export const KNOWN: Record<string, readonly Known[]> = {
   ],
   "appearance-bake": [
     { at: "0/2", field: "fill", ours: "Paper", theirs: "None", finding: "paperNotDeclared" },
-  ],
-  "blend-expanded": [
-    { at: "0/3", field: "stroke", ours: "#000000", theirs: "#000000 2", finding: "blendDuplicateSwatchNames" },
-    { at: "0/4", field: "stroke", ours: "#000000", theirs: "#000000 3", finding: "blendDuplicateSwatchNames" },
   ],
   "text-on-path": [
     { at: "0", field: "textPath", ours: "Type on a path", theirs: null, finding: "textPathNotExported" },

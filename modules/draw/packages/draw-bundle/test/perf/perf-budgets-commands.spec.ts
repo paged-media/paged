@@ -444,8 +444,11 @@ describe("perf budgets — commands over a busy document", () => {
       const { work, result } = await counted(w, "select same fill", [], (host) =>
         selectSameMatches(host, w.plain[0]!, "fill"),
       );
-      // The workload is painted with one swatch, so most of it matches.
-      expect(result).toHaveLength(1253);
+      // The workload is painted with one swatch, so most of it matches —
+      // now ALL of it: a blend between two keys of one colour keeps the
+      // key's swatch instead of minting one per step (fixed after the
+      // InDesign round trip), so the 150 blend steps match too. Was 1253.
+      expect(result).toHaveLength(1403);
       expect(work.count("document.tree")).toBe(1);
       // Every leaf once, in parallel — each reply carrying the leaf's
       // whole property table, to compare one entry of it. As found:
@@ -477,7 +480,7 @@ describe("perf budgets — commands over a busy document", () => {
     it("the OTHER criteria on an unchanged document read nothing: one pass answers all three", async () => {
       const { host, work } = countingHost(w.h.host);
       const fill = await selectSameMatches(host, w.plain[0]!, "fill");
-      expect(fill).toHaveLength(1253);
+      expect(fill).toHaveLength(1403);
       expect(work.count("document.elementProperties")).toBe(LEAVES);
 
       // Stroke, then stroke weight, then fill again from another
@@ -529,7 +532,9 @@ describe("perf budgets — commands over a busy document", () => {
           applyUpdateBlend(host, { blendId: recordOf("blend"), steps: 4 }),
         );
       expect(result).toHaveLength(4);
-      expect(work.mutations).toEqual([{ op: "batch", ops: 39 }]);
+      // Was 39: the steps no longer mint a swatch each for a colour both
+      // keys already share.
+      expect(work.mutations).toEqual([{ op: "batch", ops: 31 }]);
       expect(undoSteps).toBe(1);
       // Four new steps in a new group, the group selected; one undo
       // restores the document.
@@ -795,7 +800,8 @@ describe("perf budgets — commands over a busy document", () => {
           applyMakeBlend(host, { steps: 3 }),
         );
       expect(result).toHaveLength(3);
-      expect(work.mutations).toEqual([{ op: "batch", ops: 27 }]);
+      // Was 27 (one swatch minted per step for the shared colour).
+      expect(work.mutations).toEqual([{ op: "batch", ops: 21 }]);
       expect(undoSteps).toBe(1);
       expect(added.sort()).toEqual(["group", "polygon", "polygon", "polygon"]);
       expect(selected.map((s) => s.kind)).toEqual(["group"]);
