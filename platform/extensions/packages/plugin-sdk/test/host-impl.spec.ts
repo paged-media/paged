@@ -151,6 +151,36 @@ describe("document surface", () => {
     });
   });
 
+  it("copies the engine's minted list onto the outcome (a batch's every creation)", async () => {
+    const h = host();
+    const minted = [
+      { handle: "f", element: { kind: "textFrame", id: "u10" }, storyId: "u11" },
+      { handle: null, element: { kind: "rectangle", id: "u12" }, storyId: null },
+    ];
+    h.fake.setNextMutateReply({
+      kind: "mutationApplied",
+      payload: { createdId: { kind: "rectangle", id: "u12" }, minted, pageIds: ["p1"] },
+    });
+    const out = await h.host.document.mutate({ op: "batch", args: { ops: [] } } as never);
+    expect(out).toEqual({
+      applied: true,
+      createdId: { kind: "rectangle", id: "u12" },
+      pageIds: ["p1"],
+      minted,
+    });
+  });
+
+  it("leaves minted absent when the engine did not send it (older engine)", async () => {
+    const h = host();
+    h.fake.setNextMutateReply({
+      kind: "mutationApplied",
+      payload: { createdId: null, pageIds: ["p1"] },
+    });
+    const out = await h.host.document.mutate({ op: "batch", args: { ops: [] } } as never);
+    expect(out.applied).toBe(true);
+    expect("minted" in out).toBe(false);
+  });
+
   it("deleteTable is a typed wire op and reaches the engine unchanged", async () => {
     const h = host();
     // No cast: `deleteTable` is on the vendored `Mutation` union, so a

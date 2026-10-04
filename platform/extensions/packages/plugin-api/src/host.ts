@@ -30,6 +30,7 @@ import type {
   ElementId,
   HitFilter,
   HitResult,
+  MintedElement,
   Mutation,
   PageId,
   ElementProperties,
@@ -780,9 +781,24 @@ export interface SecretsSurface {
 // ------------------------------------------------------------ document
 
 /** Expected mutation failures are results, not throws — mirroring the
- *  editor's mutate-never-throws convention. */
+ *  editor's mutate-never-throws convention.
+ *
+ *  `createdId` is the engine's single-creation answer: for a `batch` it is
+ *  only the LAST element the batch minted. `minted` is the whole list, in
+ *  mint order — every element a `batch` (or a `duplicateElements`)
+ *  created, each with the `bindCreated` handle that named it (`null` when
+ *  none did) and the story minted alongside it (a text frame's
+ *  `ParentStory`, else `null`). Present whenever the engine reported it
+ *  (it is additive on the wire; an older engine omits it), so a bundle
+ *  placing a frame + table + chart in ONE mutate reads back every id here
+ *  instead of re-discovering them with a scene walk. */
 export type MutationOutcome =
-  | { applied: true; createdId: ElementId | null; pageIds: PageId[] }
+  | {
+      applied: true;
+      createdId: ElementId | null;
+      pageIds: PageId[];
+      minted?: MintedElement[];
+    }
   | { applied: false; error: unknown };
 
 /** Options of {@link DocumentSurface.mutateWithBytes}. */

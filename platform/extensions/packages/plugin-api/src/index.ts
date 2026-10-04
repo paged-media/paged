@@ -184,6 +184,10 @@ export type {
 // so the editor channel + the SDK adapter share one tile type.
 export type { ProviderTileWire } from "./wire";
 
+// One element a mutation minted (`MutationOutcome.minted`): the element,
+// the `bindCreated` handle that named it, and the story minted with it.
+export type { MintedElement } from "./wire";
+
 export type {
   ClipboardSurface,
   ClipboardPayload,

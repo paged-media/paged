@@ -1962,10 +1962,15 @@ export function createBundleHost(
   /** A `Mutate` reply envelope as the bundle-facing outcome. */
   const mutateOutcome = (reply: MutateReply): MutationOutcome => {
     if (reply.kind === "mutationApplied") {
+      // `minted` is copied through when the engine sent it (additive on
+      // the wire): a batch's `createdId` is only its LAST creation, so
+      // without the list a bundle could not learn what its batch made.
+      const minted = reply.payload.minted;
       return {
         applied: true,
         createdId: reply.payload.createdId ?? null,
         pageIds: reply.payload.pageIds,
+        ...(minted !== undefined ? { minted } : {}),
       };
     }
     return {
