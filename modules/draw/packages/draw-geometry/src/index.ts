@@ -31,6 +31,14 @@ export {
   type AnchorTable,
 } from "./types";
 export { segmentDistance, simplifyRdp, simplifyRdpIndices } from "./rdp";
+export {
+  anchorTargets,
+  closestOnSegment,
+  pageTargets,
+  snapPoint,
+  type SnapResult,
+  type SnapTarget,
+} from "./snap";
 export { smoothAnchorsThrough } from "./spline";
 export {
   splitSegmentDeCasteljau,

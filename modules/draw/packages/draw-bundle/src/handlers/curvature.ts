@@ -36,6 +36,7 @@ import {
 } from "@paged-media/draw-tools";
 
 import { insertPathMutationFor } from "./insert-path";
+import { createSnapper } from "./snapping";
 
 /** Screen-space radius for close-the-path / corner-toggle clicks. */
 const CLICK_TOLERANCE_PX = 8;
@@ -83,6 +84,15 @@ export function createCurvatureHandler(host: BundleHost): GestureHandler {
     );
   };
 
+  // C-68 — points snap to the page's edges and centre and to this run's
+  // own placed points (Cmd held bypasses).
+  const snapper = createSnapper(host);
+  let placed: [number, number][] = [];
+  const at = (e: CanvasPointerEvent): [number, number] | null => {
+    const p = snapper.snap(e, placed);
+    return p ? [p[0], p[1]] : null;
+  };
+
   return {
     onActivate() {
       /* machine is created lazily on the first down (per-run state) */
@@ -99,23 +109,27 @@ export function createCurvatureHandler(host: BundleHost): GestureHandler {
           closeTolerance: host.viewport.pxToPt(CLICK_TOLERANCE_PX),
         });
         pageId = e.pageId;
+        placed = [];
+        void snapper.prepare(e.pageId);
       }
       if (e.pageId !== pageId) return; // one page per run
+      const point = at(e)!;
+      placed.push(point);
       sync(
         machine.handle({
           type: "down",
-          point: e.pagePoint,
+          point,
           modifiers: { alt: e.modifiers.alt },
         }),
       );
     },
     onPointerMove(e: CanvasPointerEvent) {
       if (!machine || !e.pagePoint || e.pageId !== pageId) return;
-      sync(machine.handle({ type: "move", point: e.pagePoint }));
+      sync(machine.handle({ type: "move", point: at(e)! }));
     },
     onPointerUp(e: CanvasPointerEvent) {
       if (!machine || !e.pagePoint || e.pageId !== pageId) return;
-      sync(machine.handle({ type: "up", point: e.pagePoint }));
+      sync(machine.handle({ type: "up", point: at(e)! }));
     },
     onKey(e: KeyboardEvent) {
       if (!machine) return;
