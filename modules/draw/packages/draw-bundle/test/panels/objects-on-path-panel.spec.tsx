@@ -33,6 +33,8 @@
 
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
+import { metadataReadsPerLeaf } from "../engine-reads";
+
 import type { ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
@@ -85,6 +87,13 @@ const trio = (i: number): ElementId[] => [
 ];
 
 const PANEL = "[data-draw-onpath-panel]";
+
+
+/** Per-leaf `getMetadata` one link walk costs on this engine (RFI C-65:
+ *  1 before tree rows carried metadata, 0 after), and what a walk over
+ *  this file's 55 leaves therefore reads besides the tree. */
+let perLeaf: 0 | 1 = 1;
+const leafReads = (): number => 55 * perLeaf;
 
 describe("Objects on path panel — rendered against the engine", () => {
   describe("an EMPTY document (no page item at all)", () => {
@@ -271,6 +280,7 @@ describe("Objects on path panel — rendered against the engine", () => {
       h = await openHost();
       await h.load(panelDocument(trios(RECORDS)));
       h.loadBundle(drawBundle);
+      perLeaf = await metadataReadsPerLeaf(h.host);
       const panel = await mountPanel(h, makeObjectsOnPathPanel);
       for (let k = 0; k <= RECORDS; k++) {
         if (k > 0) {
@@ -312,7 +322,7 @@ describe("Objects on path panel — rendered against the engine", () => {
         events: 0,
         reloads: 1,
         walks: 1,
-        reads: 56,
+        reads: 1 + leafReads(),
         partReads: 1,
       });
 
@@ -324,11 +334,11 @@ describe("Objects on path panel — rendered against the engine", () => {
         walks: 1,
         // 1 tree + 55 getMetadata, in parallel. As found: 336. TARGET 2 —
         // a tree and ONE bulk metadata read (RFI C-65).
-        reads: 56,
+        reads: 1 + leafReads(),
         // As found: 2 (the panel, then the resolve).
         partReads: 1,
       });
-      expect(panel.work.count("document.getMetadata")).toBe(55);
+      expect(panel.work.count("document.getMetadata")).toBe(leafReads());
     });
 
     it("a burst of 20 document changes = ONE reload = 56 reads", async () => {
@@ -340,7 +350,7 @@ describe("Objects on path panel — rendered against the engine", () => {
         // As found: 120.
         walks: 1,
         // One walk, of the revision the burst ends on. As found: 6 720.
-        reads: 56,
+        reads: 1 + leafReads(),
         // As found: 40.
         partReads: 1,
       });

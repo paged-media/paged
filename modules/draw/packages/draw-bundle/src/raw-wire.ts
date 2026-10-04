@@ -27,7 +27,9 @@
 //   · `requestGradientDetail` — a gradient swatch's STOPS, which the
 //     annotator's on-canvas stop markers draw and edit (no
 //     `document.gradientDetail` facade; `collection("gradients")` lists
-//     a swatch's id, name and kind and nothing about its stops).
+//     a swatch's id, name and kind and nothing about its stops);
+//   · `requestTextOutlines` — a text frame's glyphs as outlines, for
+//     Create Outlines (protocol 66, RFI C-69; no facade yet).
 //
 // GUARDED, so a gap never becomes a crash: a host whose handle has no
 // `send` (an isolate, a stub), a send that throws or rejects, and a reply
@@ -40,12 +42,14 @@ import type { BundleHost, ElementId } from "@paged-media/plugin-api";
 /** The request kinds this bundle sends raw — the facade gaps, named. */
 export type RawRequest =
   | { kind: "requestNearestPathPoint"; payload: { id: ElementId; point: [number, number] } }
-  | { kind: "requestGradientDetail"; payload: { gradientId: string } };
+  | { kind: "requestGradientDetail"; payload: { gradientId: string } }
+  | { kind: "requestTextOutlines"; payload: { id: ElementId } };
 
 /** The reply kind each request expects. */
 const REPLY_KIND: Record<RawRequest["kind"], string> = {
   requestNearestPathPoint: "nearestPathPoint",
   requestGradientDetail: "gradientDetailReply",
+  requestTextOutlines: "textOutlines",
 };
 
 /** Does this host carry the hatch at all? */
@@ -62,7 +66,13 @@ export function hasRawWire(host: BundleHost): boolean {
 export async function rawRead(host: BundleHost, request: RawRequest): Promise<unknown> {
   if (!hasRawWire(host)) return null;
   try {
-    const reply = (await host.editor.client.send(request)) as {
+    // `requestTextOutlines` is protocol-AHEAD of the installed wire types
+    // (protocol 66; the pinned canvas-wasm is 64), so the request is
+    // widened to the send's parameter here, in the one place the hatch
+    // is called. An older engine answers it with an error reply, which
+    // the reply-kind check below turns into null.
+    type SendArg = Parameters<BundleHost["editor"]["client"]["send"]>[0];
+    const reply = (await host.editor.client.send(request as unknown as SendArg)) as {
       kind?: string;
       payload?: unknown;
     } | null;
@@ -126,4 +136,34 @@ export async function rawGradientDetail(
   })) as { result?: GradientDetailWire | null } | null;
   const result = payload?.result ?? null;
   return result && Array.isArray(result.stops) ? result : null;
+}
+
+/** `requestTextOutlines`' answer (protocol 66) — typed HERE until the
+ *  curated wire subset carries `TextOutlinesResult`. Page space; one run
+ *  per fill colour; `rgb` / `cmyk` are 0..1. */
+export interface TextOutlinesWire {
+  id: ElementId;
+  pageId: string;
+  runs: {
+    rgb: [number, number, number];
+    cmyk?: [number, number, number, number] | null;
+    anchors: { anchor: [number, number]; left: [number, number]; right: [number, number] }[];
+    subpathStarts: number[];
+    glyphs: number;
+  }[];
+  skippedGlyphs: number;
+}
+
+/** `id`'s glyph outlines, or null (not a text frame, or an engine older
+ *  than protocol 66 — which answers an unknown request kind with an
+ *  error reply, not `textOutlines`). */
+export async function rawTextOutlines(
+  host: BundleHost,
+  id: ElementId,
+): Promise<TextOutlinesWire | null> {
+  const payload = (await rawRead(host, {
+    kind: "requestTextOutlines",
+    payload: { id },
+  })) as { result?: TextOutlinesWire | null } | null;
+  return payload?.result ?? null;
 }

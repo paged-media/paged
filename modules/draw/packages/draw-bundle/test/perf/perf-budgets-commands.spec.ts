@@ -48,6 +48,8 @@
 
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
+import { metadataReadsPerLeaf } from "../engine-reads";
+
 import type {
   BundleHost,
   ElementId,
@@ -202,9 +204,14 @@ vi.setConfig({ testTimeout: BUDGET_TIMEOUT_MS });
 
 describe("perf budgets — commands over a busy document", () => {
   let w: Workload;
+  /** Per-leaf `getMetadata` one link walk costs on this engine (RFI
+   *  C-65): 1 before tree rows carried metadata — every "LEAVES" budget
+   *  below as found — and 0 after, when the walk is its one tree read. */
+  let perLeaf: 0 | 1 = 1;
 
   beforeAll(async () => {
     w = await buildLinkedWorkload();
+    perLeaf = await metadataReadsPerLeaf(w.h.host);
   }, 180_000);
   afterAll(() => w?.h.dispose());
 
@@ -273,7 +280,7 @@ describe("perf budgets — commands over a busy document", () => {
       // features own between them, the fixture's 2 — for a record that
       // owns 5 at most. TARGET: the record's own leaves; the recipe part
       // already names them.
-      expect(work.count("document.getMetadata")).toBe(LEAVES);
+      expect(work.count("document.getMetadata")).toBe(LEAVES * perLeaf);
     });
 
     it.each<[Walked]>([
@@ -295,7 +302,8 @@ describe("perf budgets — commands over a busy document", () => {
       // that leaf included. The link index reads each leaf ONCE per
       // revision, so the walk skips the one the resolve already read.
       // TARGET as above.
-      expect(work.count("document.getMetadata")).toBe(LEAVES);
+      // On a C-65 engine only the selected leaf's own read is left.
+      expect(work.count("document.getMetadata")).toBe(perLeaf ? LEAVES : 1);
     });
 
     it.each<[Walked]>([["blend"], ["repeat"], ["pattern"], ["objectsOnPath"]])(
@@ -313,7 +321,7 @@ describe("perf budgets — commands over a busy document", () => {
         // … after reading every leaf to count how many records there
         // are, which the recipe part it read first had already said.
         // TARGET 0.
-        expect(work.count("document.getMetadata")).toBe(LEAVES);
+        expect(work.count("document.getMetadata")).toBe(LEAVES * perLeaf);
       },
     );
 
@@ -335,7 +343,7 @@ describe("perf budgets — commands over a busy document", () => {
       expect(work.count("document.tree")).toBe(1);
       // TARGET 50 — a read per instance, not per leaf. (An instance is
       // its own index: the symbol recipe holds definitions only.)
-      expect(work.count("document.getMetadata")).toBe(LEAVES);
+      expect(work.count("document.getMetadata")).toBe(LEAVES * perLeaf);
     });
   });
 
@@ -351,7 +359,7 @@ describe("perf budgets — commands over a busy document", () => {
       // The first to ask — blend, here — walks the document.
       expect(await SELECT.blend(host, recordOf("blend"))).toHaveLength(2);
       expect(work.count("document.tree")).toBe(1);
-      expect(work.count("document.getMetadata")).toBe(LEAVES);
+      expect(work.count("document.getMetadata")).toBe(LEAVES * perLeaf);
 
       // The other five find their own leaves in what that walk read. As
       // found: five more walks, 7 015 more reads — each feature's loop
@@ -393,7 +401,7 @@ describe("perf budgets — commands over a busy document", () => {
         await applySelectBlendObjects(host, { blendId: recordOf("blend") }),
       ).toHaveLength(2);
       expect(work.count("document.tree")).toBe(1);
-      expect(work.count("document.getMetadata")).toBe(LEAVES);
+      expect(work.count("document.getMetadata")).toBe(LEAVES * perLeaf);
 
       // WARM — another record of the same, unchanged document: no engine
       // round trip at all. As found: another 1 403.
@@ -425,7 +433,7 @@ describe("perf budgets — commands over a busy document", () => {
       expect(found.map((e) => e.id).sort()).toEqual(steps.map((e) => e.id).sort());
       expect(work.count("document.tree")).toBe(1);
       expect(work.count("document.getMetadata")).toBe(
-        (await leafIds(w.h)).length,
+        (await leafIds(w.h)).length * perLeaf,
       );
 
       await undoStepsSince(w, mark);
@@ -546,7 +554,7 @@ describe("perf budgets — commands over a busy document", () => {
       // 2 812 — `blendLinks` ran twice, each a walk of its own — then
       // LEAVES + 6 (the two keys re-read, the 4 new steps' links read to
       // tell them apart). TARGET: the record's own leaves.
-      expect(work.count("document.getMetadata")).toBe(LEAVES);
+      expect(work.count("document.getMetadata")).toBe(LEAVES * perLeaf);
       // The index's one tree. As found: 6, then 4 — the before/after
       // diff and the new group's lookup on top. TARGET 0.
       expect(work.count("document.tree")).toBe(1);
@@ -565,7 +573,7 @@ describe("perf budgets — commands over a busy document", () => {
       expect(restored).toBe(true);
       // The walk, and nothing after it. As found: 2 810 — two walks —
       // then LEAVES + 4 (the source re-read, the 3 new instances' links).
-      expect(work.count("document.getMetadata")).toBe(LEAVES);
+      expect(work.count("document.getMetadata")).toBe(LEAVES * perLeaf);
       // The index's one tree. As found: 6, then 4. TARGET 0.
       expect(work.count("document.tree")).toBe(1);
       // As found: 4 — the command, both `repeatLinks` and the
@@ -593,7 +601,7 @@ describe("perf budgets — commands over a busy document", () => {
       // The walk, and nothing after it: the source envelope the batch is
       // built from is one the walk read. As found: LEAVES + 1 — it was
       // read again after the first batch. TARGET <= 4.
-      expect(work.count("document.getMetadata")).toBe(LEAVES);
+      expect(work.count("document.getMetadata")).toBe(LEAVES * perLeaf);
       // The index's one tree, which also names the old group. As found:
       // 5, then 4 — the before/after diff and the new group's lookup on
       // top. What the batch created is read off the engine's reply now
@@ -619,7 +627,7 @@ describe("perf budgets — commands over a busy document", () => {
       // envelopes the walk read. As found: LEAVES + 3 — the path's and
       // both objects' were read a second time for the batch. TARGET 3 —
       // the recipe names the path and both objects.
-      expect(work.count("document.getMetadata")).toBe(LEAVES);
+      expect(work.count("document.getMetadata")).toBe(LEAVES * perLeaf);
       // No tree diff here: this feature creates nothing. The one read is
       // the link walk's. TARGET 0.
       expect(work.count("document.tree")).toBe(1);
@@ -646,7 +654,7 @@ describe("perf budgets — commands over a busy document", () => {
       expect(added).toEqual(["polygon"]);
       expect(restored).toBe(true);
       // TARGET 0 — the recipe can name its fills.
-      expect(work.count("document.getMetadata")).toBe(LEAVES);
+      expect(work.count("document.getMetadata")).toBe(LEAVES * perLeaf);
       // The link walk's. As found: 3 — the walk's and the before/after
       // diff. TARGET 0.
       expect(work.count("document.tree")).toBe(1);
@@ -671,7 +679,7 @@ describe("perf budgets — commands over a busy document", () => {
       expect(added).toEqual(["polygon"]);
       expect(restored).toBe(true);
       // TARGET 0.
-      expect(work.count("document.getMetadata")).toBe(LEAVES);
+      expect(work.count("document.getMetadata")).toBe(LEAVES * perLeaf);
       // The link walk's. As found: 3. TARGET 0.
       expect(work.count("document.tree")).toBe(1);
     });
@@ -700,7 +708,7 @@ describe("perf budgets — commands over a busy document", () => {
       expect(restored).toBe(true);
       // Every leaf is read to mint an instance id nobody else holds.
       // TARGET 0 — a counter in the recipe.
-      expect(work.count("document.getMetadata")).toBe(LEAVES);
+      expect(work.count("document.getMetadata")).toBe(LEAVES * perLeaf);
       // That walk's tree. As found: 3 — the walk's, and the before/after
       // diff around the insert. TARGET 0.
       expect(work.count("document.tree")).toBe(1);
@@ -722,7 +730,7 @@ describe("perf budgets — commands over a busy document", () => {
       expect(added).toEqual(["polygon"]);
       expect(restored).toBe(true);
       // TARGET 1 — the selected leaf's own link.
-      expect(work.count("document.getMetadata")).toBe(LEAVES);
+      expect(work.count("document.getMetadata")).toBe(LEAVES * perLeaf);
       // The index's one tree, shared by the selection's expansion, the
       // walk and the group lookup. As found: 5, then 3 — the
       // before/after diff on top. TARGET 0.
@@ -752,7 +760,7 @@ describe("perf budgets — commands over a busy document", () => {
       // before/after diff per instance.
       expect(work.count("document.tree")).toBe(1);
       // The one thing redefine does once.
-      expect(work.count("document.getMetadata")).toBe(LEAVES);
+      expect(work.count("document.getMetadata")).toBe(LEAVES * perLeaf);
       // The capture's one read, and ONE per instance: the instance's
       // page and its live origin come from the same read now. As found:
       // 101 — the first leaf was read twice.

@@ -154,6 +154,7 @@ import {
   contributeReversePathCommands,
   REVERSE_PATH_COMMAND_IDS,
 } from "./commands/reverse-path";
+import { contributeCreateOutlinesCommands } from "./commands/create-outlines";
 import {
   contributePathfinderCommands,
   PATHFINDER_COMMAND_IDS,
@@ -406,6 +407,9 @@ export function activate(host: BundleHost): BundleHandle {
   // ONE framePath batch. A visual no-op that the non-zero fill (holes)
   // and Type on a Path both read (commands/reverse-path.ts).
   const reversePathCommandsSub = contributeReversePathCommands(host);
+  // Type ▸ Create outlines — a text frame's glyphs as compound paths, one
+  // per colour, in one batch (commands/create-outlines.ts; protocol 66).
+  const createOutlinesCommandsSub = contributeCreateOutlinesCommands(host);
   // Object ▸ Transform — REFLECT (horizontal / vertical / a typed angle,
   // about the selection's centre, composed onto each object's own
   // transform because `frameTransform` replaces) and TRANSFORM AGAIN,
@@ -662,6 +666,7 @@ export function activate(host: BundleHost): BundleHandle {
       pathfinderCommandsSub.dispose();
       transformCommandsSub.dispose();
       reversePathCommandsSub.dispose();
+      createOutlinesCommandsSub.dispose();
       joinAverageCommandsSub.dispose();
       pathOptionsCommandsSub.dispose();
       pathOpsCommandsSub.dispose();

@@ -33,6 +33,8 @@
 
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
+import { metadataReadsPerLeaf } from "../engine-reads";
+
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import {
@@ -67,6 +69,13 @@ import {
 } from "./harness";
 
 const PANEL = "[data-draw-repeat-panel]";
+
+
+/** Per-leaf `getMetadata` one link walk costs on this engine (RFI C-65:
+ *  1 before tree rows carried metadata, 0 after), and what a walk over
+ *  this file's 50 leaves therefore reads besides the tree. */
+let perLeaf: 0 | 1 = 1;
+const leafReads = (): number => 50 * perLeaf;
 
 describe("Repeat options panel — rendered against the engine", () => {
   describe("an EMPTY document (no page item at all)", () => {
@@ -284,6 +293,7 @@ describe("Repeat options panel — rendered against the engine", () => {
       h = await openHost();
       await h.load(panelDocument(seedRow("s", RECORDS)));
       h.loadBundle(drawBundle);
+      perLeaf = await metadataReadsPerLeaf(h.host);
       const panel = await mountPanel(h, makeRepeatPanel);
       for (let k = 0; k <= RECORDS; k++) {
         if (k > 0) {
@@ -322,7 +332,7 @@ describe("Repeat options panel — rendered against the engine", () => {
         events: 0,
         reloads: 1,
         walks: 1,
-        reads: 51,
+        reads: 1 + leafReads(),
         partReads: 1,
       });
 
@@ -334,13 +344,13 @@ describe("Repeat options panel — rendered against the engine", () => {
         walks: 1,
         // 1 tree + 50 getMetadata, in parallel. As found: 306. TARGET 2 —
         // a tree and ONE bulk metadata read (RFI C-65).
-        reads: 51,
+        reads: 1 + leafReads(),
         // As found: 8 — the panel, `resolveRepeat`, and EVERY
         // `repeatLinks` call (the recipe is the only index of a clipped
         // instance) each read it: 2 + (R + 1).
         partReads: 1,
       });
-      expect(panel.work.count("document.getMetadata")).toBe(50);
+      expect(panel.work.count("document.getMetadata")).toBe(leafReads());
     });
 
     it("a burst of 20 document changes = ONE reload = 51 reads", async () => {
@@ -352,7 +362,7 @@ describe("Repeat options panel — rendered against the engine", () => {
         // As found: 120.
         walks: 1,
         // One walk, of the revision the burst ends on. As found: 6 120.
-        reads: 51,
+        reads: 1 + leafReads(),
         // As found: 160.
         partReads: 1,
       });

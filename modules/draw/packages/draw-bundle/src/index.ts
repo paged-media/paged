@@ -294,6 +294,18 @@ export {
   applyReversePath,
   contributeReversePathCommands,
 } from "./commands/reverse-path";
+// Create outlines (protocol 66, RFI C-69) — the batch builder and its
+// swatch rule, exported for the conformance spec.
+export {
+  CREATE_OUTLINES_COMMAND_ID,
+  CREATE_OUTLINES_COMMAND_IDS,
+  applyCreateOutlines,
+  createOutlinesBatchFor,
+  outlineSwatchFor,
+  outlineTableOf,
+  contributeCreateOutlinesCommands,
+} from "./commands/create-outlines";
+export { rawTextOutlines, type TextOutlinesWire } from "./raw-wire";
 export {
   PATHFINDER_PRESETS,
   PATHFINDER_COMMAND_IDS,

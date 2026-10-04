@@ -41,6 +41,8 @@
 
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
+import { metadataReadsPerLeaf } from "../engine-reads";
+
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import {
@@ -82,6 +84,13 @@ const keyPairs = (count: number): string =>
   seedRow("a", count) + seedRow("b", count, { x: 100 });
 
 const PANEL = "[data-draw-blend-panel]";
+
+
+/** Per-leaf `getMetadata` one link walk costs on this engine (RFI C-65:
+ *  1 before tree rows carried metadata, 0 after), and what a walk over
+ *  this file's 55 leaves therefore reads besides the tree. */
+let perLeaf: 0 | 1 = 1;
+const leafReads = (): number => 55 * perLeaf;
 
 describe("Blend options panel — rendered against the engine", () => {
   describe("an EMPTY document (no page item at all)", () => {
@@ -345,6 +354,7 @@ describe("Blend options panel — rendered against the engine", () => {
       h = await openHost();
       await h.load(panelDocument(keyPairs(RECORDS)));
       h.loadBundle(drawBundle);
+      perLeaf = await metadataReadsPerLeaf(h.host);
       const panel = await mountPanel(h, makeBlendPanel);
       for (let k = 0; k <= RECORDS; k++) {
         if (k > 0) {
@@ -384,7 +394,7 @@ describe("Blend options panel — rendered against the engine", () => {
         events: 0,
         reloads: 1,
         walks: 1,
-        reads: 56,
+        reads: 1 + leafReads(),
         partReads: 1,
       });
 
@@ -398,11 +408,11 @@ describe("Blend options panel — rendered against the engine", () => {
         // 1 tree + 55 getMetadata: one read per leaf, in parallel. As
         // found: 336. TARGET 2 — a tree and ONE bulk metadata read; the
         // 55 are the engine gap (RFI C-65), not the panel's.
-        reads: 56,
+        reads: 1 + leafReads(),
         // As found: 2 (the panel, then `resolveBlend`).
         partReads: 1,
       });
-      expect(panel.work.count("document.getMetadata")).toBe(55);
+      expect(panel.work.count("document.getMetadata")).toBe(leafReads());
     });
 
     it("a burst of 20 document changes = ONE reload = 56 reads", async () => {
@@ -416,7 +426,7 @@ describe("Blend options panel — rendered against the engine", () => {
         // As found: 120.
         walks: 1,
         // One walk, of the revision the burst ends on. As found: 6 720.
-        reads: 56,
+        reads: 1 + leafReads(),
         // As found: 40.
         partReads: 1,
       });
