@@ -206,6 +206,12 @@ export interface EditContextContribution {
   /** K-1 — a key while the context is active. The shell owns Esc (→
    *  `onCancel`) and Enter (→ `onCommit`); every other key forwards here. */
   onContentKey?(e: KeyboardEvent): void;
+  /** A plain wheel over the ACTIVE context's frame, in frame-content
+   *  points. Return `true` when the context scrolled its own content (a
+   *  sheet's in-frame grid window) — the canvas then does not pan;
+   *  `false` keeps the host's pan. Cmd/Ctrl wheel is the host's zoom and
+   *  never reaches here. Optional: absent ⇒ the canvas always pans. */
+  onContentWheel?(e: ContentWheelEvent): boolean;
   /** K-1 — unsaved-edit probe: gates the discard prompt + the §8.0
    *  seamless-undo boundary. Absent ⇒ treated as never dirty. */
   isDirty?(): boolean;
@@ -264,6 +270,20 @@ export interface ContentPointerEvent {
   modifiers: { shift: boolean; alt: boolean; cmd: boolean; ctrl: boolean };
   /** Mouse button (0 = primary). */
   button: number;
+}
+
+/** A wheel delivered to the ACTIVE edit context (`onContentWheel`).
+ *  `delta` is the scroll in frame-content points — the screen delta
+ *  divided by the camera scale, line/page modes normalised to pixels
+ *  first — x right / y down, the same axes as `contentPoint`. */
+export interface ContentWheelEvent {
+  /** Pointer in frame-content points (origin = the content-box top-left). */
+  contentPoint: [number, number];
+  /** The frame the active context edits (the stack's scope root). */
+  elementId: string;
+  /** Scroll amount in frame-content points [x, y]. */
+  delta: [number, number];
+  modifiers: { shift: boolean; alt: boolean; cmd: boolean; ctrl: boolean };
 }
 
 /**
