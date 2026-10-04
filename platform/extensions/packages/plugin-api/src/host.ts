@@ -232,6 +232,11 @@ export interface EditContextContribution {
    *  always enabled. */
   onCanUndo?(): boolean;
   onCanRedo?(): boolean;
+  /** Labels for the host's Edit-menu items while this context owns undo
+   *  (e.g. "Undo Brush Stroke"). `null` or absent ⇒ the host's generic
+   *  label. Read when the menu renders, so return the current step. */
+  undoLabel?(): string | null;
+  redoLabel?(): string | null;
   /** HOST-STAMPED, not author-supplied: the `x-paged:<manifest id>`
    *  metadata key the host resolves the candidate's `metadata` from
    *  before calling `matches`. The SDK adapter fills this from the
@@ -492,6 +497,63 @@ export interface SceneLayerSurface extends Disposable {
   /** Clear the layer for `elementId` (returns the frame to native
    *  content). */
   clear(elementId: string): Promise<void>;
+  /**
+   * Make the frame's layer ONE RGBA8 image (protocol 66). Where the host
+   * wires the binary lane (`supports("rendering.sceneLayer.binary@1")`)
+   * the bytes cross as a `Uint8Array` — no `number[]`, no JSON parse —
+   * and only the pages showing the frame repaint. On an older host the
+   * SDK falls back to `submit()` with an image item; the bundle calls
+   * the same method either way. Replaces any previous layer.
+   */
+  submitImage(
+    elementId: string,
+    image: SceneImage,
+    options?: SceneImageSubmitOptions,
+  ): Promise<void>;
+  /**
+   * Patch rectangles of the image this surface last `submitImage`d for
+   * `elementId` (a brush stroke dirties a window, not the image). Rejects
+   * when no image was submitted for the element. A tile outside the
+   * image, or a byte count that does not match `width*height*4`, rejects
+   * the whole call and changes nothing.
+   */
+  submitImageTiles(
+    elementId: string,
+    tiles: readonly SceneImageTile[],
+    options?: SceneImageSubmitOptions,
+  ): Promise<void>;
+}
+
+/** One whole RGBA8 image for {@link SceneLayerSurface.submitImage}. */
+export interface SceneImage {
+  /** Tightly packed RGBA8, row-major, `width*height*4` bytes. */
+  rgba: Uint8Array;
+  /** Pixel width of the buffer. */
+  width: number;
+  /** Pixel height of the buffer. */
+  height: number;
+  /** Destination `[x, y, w, h]` in frame-content points. */
+  dest: [number, number, number, number];
+}
+
+/** One rectangle of new pixels for
+ *  {@link SceneLayerSurface.submitImageTiles}; the origin is in IMAGE
+ *  pixels of the submitted image. */
+export interface SceneImageTile {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** Tightly packed RGBA8, `width*height*4` bytes. */
+  rgba: Uint8Array;
+}
+
+/** How the bytes of a scene-image submission are handed over. */
+export interface SceneImageSubmitOptions {
+  /** `true`: the buffers are TRANSFERRED to the host and are detached
+   *  (unusable) in the bundle afterwards — no copy. Default `false`: the
+   *  host copies, and the bundle keeps its buffers. */
+  transfer?: boolean;
 }
 
 // ------------------------------------------------------- images (C-6)
@@ -722,6 +784,12 @@ export interface SecretsSurface {
 export type MutationOutcome =
   | { applied: true; createdId: ElementId | null; pageIds: PageId[] }
   | { applied: false; error: unknown };
+
+/** What {@link DocumentSurface.onWillSave} listeners receive. */
+export interface WillSaveEvent {
+  /** The container being written. */
+  format: "paged";
+}
 
 export interface DocumentChangeEvent {
   kind: "mutationApplied" | "undoApplied" | "redoApplied";
@@ -963,6 +1031,14 @@ export interface DocumentSurface {
   storyContent(storyId: string): Promise<StoryContent | null>;
   onDidChange(listener: (e: DocumentChangeEvent) => void): Disposable;
   /**
+   * Called before the host serialises the document to a file; the save
+   * WAITS for the returned promise, so a bundle can commit pending state
+   * (write parts, bake pixels) first. An error is logged and does not
+   * stop the save. Probe `supports("document.onWillSave@1")`: without a
+   * host backend the listener is held but never called.
+   */
+  onWillSave(listener: (e: WillSaveEvent) => void | Promise<void>): Disposable;
+  /**
    * Plugin-metadata carrier (protocol v33) — read this plugin's
    * metadata envelope on a leaf page item, or `null` when absent.
    * The key is implicit: `x-paged:<manifest shortname>` — a bundle
@@ -1179,6 +1255,16 @@ export interface ShellSurface {
    * `false`.
    */
   saveFile(options: SaveFileOptions): Promise<boolean>;
+  /**
+   * Enter one of THIS bundle's registered edit contexts on `elementId`
+   * programmatically (a panel button, an importer that just placed a
+   * frame) — the same stack push a double-click on the frame performs.
+   * Throws for a type the bundle did not register. Resolves `false` when
+   * the host could not enter (no backend — probe
+   * `supports("shell.enterEditContext@1")` — or the element does not
+   * exist / is not the context's).
+   */
+  enterEditContext(type: string, elementId: ElementId): Promise<boolean>;
 }
 
 /** What `ShellSurface.saveFile` delivers (K-10) — the inverse of
@@ -1288,6 +1374,10 @@ export interface PartsSurface {
   /** List part paths under `prefix` (relative) — this plugin's namespace only,
    *  returned as relative paths. */
   list(prefix?: string): Promise<string[]>;
+  /** Delete the part at `path` (protocol 66, `storage.parts@2`). Resolves
+   *  `true` when it existed. A part the loaded file carries is dropped
+   *  from the next save, not only hidden. Not undoable, like `write`. */
+  delete(path: string): Promise<boolean>;
 }
 
 // ------------------------------------------------------- nativeDocument
@@ -1548,6 +1638,24 @@ export interface BindingsSurface {
   onDidChange(listener: (name: string) => void): Disposable;
 }
 
+// ---------------------------------------------------------------- tools
+
+/** A tool-option value as the host's tool-options UI stores it. */
+export type ToolSettingValue = number | boolean | string;
+
+/** Read access to the values the host's tool-options UI holds for this
+ *  bundle's tools (the fields declared in `ToolContribution.options`).
+ *  `toolId` must be one of this bundle's own tool ids. Probe
+ *  `supports("tools.settings@1")`: without a host backend `settings`
+ *  answers `{}` and `onDidChangeSettings` never fires. */
+export interface ToolsSurface {
+  settings(toolId: string): Readonly<Record<string, ToolSettingValue>>;
+  onDidChangeSettings(
+    toolId: string,
+    listener: (settings: Readonly<Record<string, ToolSettingValue>>) => void,
+  ): Disposable;
+}
+
 // ----------------------------------------------------------------- host
 
 /**
@@ -1667,6 +1775,11 @@ export interface BundleHost {
    *  `capabilities.clipboard`: `"full"` grants text + tabular, `"vector"`
    *  grants text only, `"none"`/absent denies. */
   readonly clipboard: ClipboardSurface;
+  /** The tool-settings READ door: the option values the host's
+   *  tool-options UI holds for this bundle's tools, plus a change
+   *  subscription. Always present; `supports("tools.settings@1")`
+   *  reports whether a host store is wired. */
+  readonly tools: ToolsSurface;
   /** Capability detection over version sniffing: feature strings of
    *  the form `"area.member@major"` (see HOST_FEATURES in plugin-sdk). */
   supports(feature: string): boolean;

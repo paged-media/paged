@@ -52,6 +52,12 @@ export type {
   BundleHost,
   ContributionSurface,
   SceneLayerSurface,
+  SceneImage,
+  SceneImageTile,
+  SceneImageSubmitOptions,
+  WillSaveEvent,
+  ToolsSurface,
+  ToolSettingValue,
   ImagesSurface,
   ImageResourceClaimOptions,
   TileBytes,
@@ -136,6 +142,7 @@ export type {
 
 export type {
   WidgetSurface,
+  ColorPickerProps,
   CodeEditorProps,
   CodeEditorDiagnostic,
   CodeEditorLanguage,

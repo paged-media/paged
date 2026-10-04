@@ -103,7 +103,7 @@ The adapter imports no editor code. From the handle `getEditor()` returns it use
 
 ## The doors the contract offers
 
-`BundleHost` (`packages/plugin-api/src/host.ts:1558`) has 26 members. "Declaration" is what
+`BundleHost` (`packages/plugin-api/src/host.ts`) has 27 members. "Declaration" is what
 the capability gate requires in the manifest. "Flag" is the `supports()` name that is true
 only when the host wires the backend.
 
@@ -118,21 +118,22 @@ only when the host wires the backend.
 | `contribute.editContext`, `objectType` | claim a content type that is entered by double-click; recognise a frame as that type by its metadata | the type listed in `contributes.editContexts` / `objectTypes` | | §4.2, §19, [ADR 012](adr/012-k1-modal-session-undo-coalescing.md) |
 | `contribute.bindingProvider` | answer the values of host-owned panels while one of the bundle's edit contexts is active | that edit context's declaration | `bindings.provider@1` | §18 |
 | `contribute.importer`, `exporter` | take the bytes of an opened file by extension; produce bytes for export | id listed in `contributes.importers` / `exporters` | | [ADR 017](adr/017-importer-exporter-door-shape.md) |
-| `contribute.sceneLayer()` | submit or clear vector content drawn inside a frame | `rendering` includes `sceneLayer` | `rendering.sceneLayer@1` | `packages/plugin-api/src/host.ts:472` |
-| `document` reads | collections, meta, scene tree, parent, path anchors, geometry, properties, planar regions, placeholders, frame chain, story content, own metadata, change events | `document.read`; `hitTest` also needs `rendering` includes `hitTest` | | §4.3, §4.3c, §4.3d |
+| `contribute.sceneLayer()` | submit or clear vector content drawn inside a frame; submit one image and patch tiles of it, as bytes where the host has the binary lane | `rendering` includes `sceneLayer` | `rendering.sceneLayer@1`, `rendering.sceneLayer.binary@1` | [ADR 320](adr/320-binary-lanes-for-scene-images-and-parts.md) |
+| `document` reads | collections, meta, scene tree, parent, path anchors, geometry, properties, planar regions, placeholders, frame chain, story content, own metadata, change events; `onWillSave` (awaited before a save, flag `document.onWillSave@1`, [ADR 322](adr/322-plugin-hooks-save-entry-tool-settings-undo-labels.md)) | `document.read`; `hitTest` also needs `rendering` includes `hitTest` | | §4.3, §4.3c, §4.3d |
 | `document.mutate`, `setMetadata`, `undo`, `redo` | the one write path, and the shared history | `document.write` | | §4.3, [ADR 310](adr/310-one-write-door.md) |
 | `selection`, `viewport` | read, observe and set the selection; camera snapshot, screen px to points | none; `selection.set` needs `document.write` | | §4.4 |
 | `text` | measure a string; read the text caret | none | `text.measure@1`, `text.caret@1` | §4.5b |
-| `shell` | open or close a panel; pick files in; hand bytes out to be saved | none | `shell.openPanel@1`, `shell.pickFile@1`, `shell.saveFile@1` | §4.5c |
+| `shell` | open or close a panel; pick files in; hand bytes out to be saved; enter one of the bundle's own edit contexts | none | `shell.openPanel@1`, `shell.pickFile@1`, `shell.saveFile@1`, `shell.enterEditContext@1` | §4.5c, [ADR 322](adr/322-plugin-hooks-save-entry-tool-settings-undo-labels.md) |
 | `storage` | JSON key-value per plugin | none | | §4.6 |
 | `blob` | bytes per plugin, with a quota | `storage.blob: true` | `storage.blob@1` | `packages/plugin-api/src/host.ts:1254` |
-| `parts` | bytes stored inside the document file | scoped by path to `paged/<manifest.id>/` | | `packages/plugin-api/src/host.ts:1281`, [ADR 311](adr/311-plugin-state-under-own-id.md) |
+| `parts` | bytes stored inside the document file; write, read, list, delete | scoped by path to `paged/<manifest.id>/` | `storage.parts@1`, `storage.parts@2` (delete) | `packages/plugin-api/src/host.ts:1281`, [ADR 311](adr/311-plugin-state-under-own-id.md) |
 | `nativeDocument` | read the engine's own document parts; load a package as the active document | `document.readNative`; `open` needs `document.openNative` | `document.readNative@1`, `document.openNative@1` | §4.3b, [ADR 017](adr/017-importer-exporter-door-shape.md) |
 | `network` | ask the user to allow origins; no fetch is offered | `network: true`, or `{ origins }` with a list or `"consent"` | `network.consent@1` | §4.6b |
 | `dataProviders` | publish a dataset, or discover and read one, without the two plugins meeting | `dataProviders.publish` includes the category (to register); `dataProviders.consume` is declared (to discover or read) | `dataProviders@1` | §4.6c |
 | `diagnostics` | findings per plugin, mirrored to the console | none | `diagnostics.publish@1` | §4.7 |
 | `journal` | record a namespaced event or a timing | none | `journal@1` | `packages/plugin-api/src/host.ts:1486` |
-| `widgets` | a code editor component; a plain textarea without a host catalog | none | `widgets.codeEditor@1` | `packages/plugin-api/src/widgets.ts` |
+| `widgets` | a code editor component and a colour picker; a plain textarea and a native colour input without a host catalog | none | `widgets.codeEditor@1`, `widgets.colorPicker@1` | [ADR 321](adr/321-host-colour-picker-widget.md) |
+| `tools` | read the option values the host holds for the bundle's own tools, and observe changes | the tool id is namespaced under the manifest id | `tools.settings@1` | [ADR 322](adr/322-plugin-hooks-save-entry-tool-settings-undo-labels.md) |
 | `assets` | bytes of a document font face; original bytes of a placed image | `assets` includes `fonts` / `images` | `assets.fonts@1` | §13 |
 | `images` | serve tiles of a placed image to the renderer on request | `rendering` includes `resourceProvider` | `rendering.resourceProvider@1` | `packages/plugin-api/src/host.ts:497` |
 | `workers` | spawn a worker through the host; allocate shared memory under a budget | `workers` | `workers@1` | §15, [ADR 318](adr/318-host-spawned-workers.md) |

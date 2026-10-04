@@ -87,6 +87,11 @@ import type {
   PluginMetadataEnvelope,
   SceneTreeNode,
   SceneLayerSurface,
+  SceneImage,
+  SceneImageTile,
+  ToolSettingValue,
+  ToolsSurface,
+  WillSaveEvent,
   SchemaPanelContribution,
   SchemaPanelRenderer,
   SelectionMode,
@@ -166,6 +171,11 @@ export const HOST_FEATURES: readonly string[] = [
   // v51) is the writer, so it is live whenever a bundle runs (the worker
   // handshake guarantees a v51-protocol worker).
   "storage.parts@1",
+  // Protocol 66 — `host.parts.delete`. Static for the same reason as @1:
+  // the pinned engine (the worker handshake refuses an older one) answers
+  // `deletePagedPart`, and the binary lane is an optimisation the SDK
+  // falls back from, not a different contract.
+  "storage.parts@2",
   // B-22 (protocol v57) — the planar-region read door. STATIC, and the
   // flag means exactly one thing: this SDK's document surface IMPLEMENTS
   // `planarRegions` and forwards it (retiring the `host.editor.client`
@@ -837,8 +847,25 @@ export type BundleTrust = "first-party";
  * omits `saveFile` still injects a valid backend and
  * `supports("shell.saveFile@1")` reports the truth.
  */
-export type ShellBackend = Omit<ShellSurface, "saveFile"> &
-  Partial<Pick<ShellSurface, "saveFile">>;
+export type ShellBackend = Omit<ShellSurface, "saveFile" | "enterEditContext"> &
+  Partial<Pick<ShellSurface, "saveFile" | "enterEditContext">>;
+
+/** The host's will-save registry (protocol 66 batch): the editor awaits
+ *  every registered listener before it serialises the document. The SDK
+ *  wraps each bundle listener so it is awaited and its errors contained. */
+export interface WillSaveBackend {
+  register(
+    pluginId: string,
+    listener: (e: WillSaveEvent) => Promise<void>,
+  ): Disposable;
+}
+
+/** The host's tool-options store, read side: the values its tool-options
+ *  UI holds per tool id, plus a change subscription. */
+export interface ToolSettingsBackend {
+  get(toolId: string): Record<string, ToolSettingValue>;
+  subscribe(toolId: string, listener: () => void): () => void;
+}
 
 export interface CreateBundleHostOptions {
   /**
@@ -891,7 +918,14 @@ export interface CreateBundleHostOptions {
    *  the editor's UI package and is injected here. When absent,
    *  `host.widgets` is the plain-textarea fallback and
    *  `supports("widgets.codeEditor@1")` answers false. */
-  widgets?: WidgetSurface;
+  widgets?: Partial<WidgetSurface>;
+  /** The host's will-save registry. When absent, `document.onWillSave`
+   *  holds listeners that never run and `supports("document.onWillSave@1")`
+   *  is false. */
+  willSave?: WillSaveBackend;
+  /** The host's tool-options store. When absent, `host.tools.settings`
+   *  answers `{}` and `supports("tools.settings@1")` is false. */
+  toolSettings?: ToolSettingsBackend;
   /** Host-provided SCHEMA-PANEL renderer (W3.1): the editor's
    *  `SchemaPanelRenderer` that walks a `PanelSchema` through the
    *  catalog + subscribes to the bundle's bindings. When absent,
@@ -997,6 +1031,79 @@ export interface BundleHostHandle {
   host: BundleHost;
   /** Tears down every registration made through the host's facades. */
   dispose(): void;
+}
+
+/** Refuse a malformed scene image before any lane sees it. */
+function checkImage(image: SceneImage): void {
+  const { width, height, rgba } = image;
+  if (
+    !Number.isInteger(width) ||
+    !Number.isInteger(height) ||
+    width <= 0 ||
+    height <= 0 ||
+    rgba.length !== width * height * 4
+  ) {
+    throw new Error(
+      `contribute.sceneLayer().submitImage: ${rgba.length} bytes for a ` +
+        `${width}x${height} RGBA8 image (want width*height*4)`,
+    );
+  }
+}
+
+/** The JSON-lane layer for one image (the pre-66 `submit` shape). */
+function imageLayer(image: SceneImage) {
+  const [x, y, w, h] = image.dest;
+  return {
+    items: [
+      {
+        kind: "image" as const,
+        rgba: Array.from(image.rgba),
+        width: image.width,
+        height: image.height,
+        x,
+        y,
+        w,
+        h,
+      },
+    ],
+  };
+}
+
+/** Every tile inside the image, with the right byte count — checked for
+ *  the whole call before any byte moves (the engine's rule too). */
+function checkTiles(
+  image: { width: number; height: number },
+  tiles: readonly SceneImageTile[],
+): void {
+  for (const t of tiles) {
+    if (
+      t.width <= 0 ||
+      t.height <= 0 ||
+      t.x < 0 ||
+      t.y < 0 ||
+      t.x + t.width > image.width ||
+      t.y + t.height > image.height ||
+      t.rgba.length !== t.width * t.height * 4
+    ) {
+      throw new Error(
+        `contribute.sceneLayer().submitImageTiles: tile ${t.x},${t.y} ` +
+          `${t.width}x${t.height} (${t.rgba.length} bytes) does not fit the ` +
+          `${image.width}x${image.height} image`,
+      );
+    }
+  }
+}
+
+/** Patch already-checked `tiles` into `image` in place. */
+function patchImage(image: SceneImage, tiles: readonly SceneImageTile[]): void {
+  const stride = image.width * 4;
+  for (const t of tiles) {
+    const row = t.width * 4;
+    for (let j = 0; j < t.height; j++) {
+      const dst = (t.y + j) * stride + t.x * 4;
+      image.rgba.set(t.rgba.subarray(j * row, j * row + row), dst);
+    }
+  }
 }
 
 export function createBundleHost(
@@ -1593,6 +1700,12 @@ export function createBundleHost(
         'capabilities.rendering must include "sceneLayer"',
       );
       const submitted = new Set<string>();
+      // Elements this surface gave a whole image (the tiles' target), with
+      // its pixel size so tiles are checked on either lane.
+      const imaged = new Map<string, { width: number; height: number }>();
+      // Fallback lane only: the SDK's own copy of each element's image,
+      // patched by tiles and resent whole over JSON.
+      const retained = new Map<string, SceneImage>();
       const channel = () => getEditor().sceneLayers;
       const surface: SceneLayerSurface = {
         async submit(elementId, layer) {
@@ -1614,7 +1727,82 @@ export function createBundleHost(
         },
         async clear(elementId) {
           submitted.delete(elementId);
+          imaged.delete(elementId);
+          retained.delete(elementId);
           await channel()?.clear(elementId);
+        },
+        // Protocol 66 — the binary scene-image lane, with the SDK owning
+        // the fallback so a bundle calls one method on every host.
+        async submitImage(elementId, image, options) {
+          const ch = channel();
+          if (!ch) {
+            log.warn(
+              `contribute.sceneLayer().submitImage("${elementId}") ignored — ` +
+                `the host wired no scene channel (probe ` +
+                `supports("rendering.sceneLayer@1"))`,
+            );
+            return;
+          }
+          checkImage(image);
+          submitted.add(elementId);
+          imaged.set(elementId, { width: image.width, height: image.height });
+          if (ch.submitImage && ch.submitImageTiles) {
+            retained.delete(elementId);
+            await ch.submitImage(
+              elementId,
+              image,
+              manifest.id,
+              options?.transfer ?? false,
+            );
+            return;
+          }
+          // Older host: keep a COPY to patch tiles into (the bundle may
+          // reuse or transfer its own buffer), and send the whole image
+          // over the JSON lane.
+          const copy: SceneImage = {
+            rgba: new Uint8Array(image.rgba),
+            width: image.width,
+            height: image.height,
+            dest: [...image.dest] as [number, number, number, number],
+          };
+          retained.set(elementId, copy);
+          await ch.submit(elementId, imageLayer(copy), manifest.id);
+        },
+        async submitImageTiles(elementId, tiles, options) {
+          const ch = channel();
+          if (!ch) {
+            log.warn(
+              `contribute.sceneLayer().submitImageTiles("${elementId}") ` +
+                `ignored — the host wired no scene channel`,
+            );
+            return;
+          }
+          const size = imaged.get(elementId);
+          if (!size) {
+            throw new Error(
+              `contribute.sceneLayer().submitImageTiles("${elementId}"): no ` +
+                `image was submitted for this element — call submitImage first`,
+            );
+          }
+          checkTiles(size, tiles);
+          if (ch.submitImage && ch.submitImageTiles) {
+            await ch.submitImageTiles(
+              elementId,
+              tiles,
+              manifest.id,
+              options?.transfer ?? false,
+            );
+            return;
+          }
+          const image = retained.get(elementId);
+          if (!image) {
+            throw new Error(
+              `contribute.sceneLayer().submitImageTiles("${elementId}"): the ` +
+                `retained image is gone (the binary lane went away mid-session)`,
+            );
+          }
+          patchImage(image, tiles);
+          await ch.submit(elementId, imageLayer(image), manifest.id);
         },
         dispose() {
           const ch = channel();
@@ -1622,6 +1810,8 @@ export function createBundleHost(
             for (const id of submitted) void ch.clear(id);
           }
           submitted.clear();
+          imaged.clear();
+          retained.clear();
         },
       };
       return store.add(surface);
@@ -2035,6 +2225,25 @@ export function createBundleHost(
       });
       return store.add(toDisposable(off));
     },
+    // Protocol 66 batch — the save hook. The host awaits every
+    // registered listener before it serialises the document; the wrapper
+    // makes a bundle's failure a logged event, never a failed save.
+    onWillSave(listener) {
+      const backend = options?.willSave;
+      if (!backend) {
+        // Held, never called: the honest no-backend door
+        // (supports("document.onWillSave@1") is false).
+        return store.add(toDisposable(() => {}));
+      }
+      const wrapped = async (e: WillSaveEvent): Promise<void> => {
+        try {
+          await listener(e);
+        } catch (err) {
+          log.error(`document.onWillSave listener failed: ${String(err)}`);
+        }
+      };
+      return store.add(backend.register(manifest.id, wrapped));
+    },
   };
 
   // ----------------------------------------------------- selection
@@ -2404,13 +2613,56 @@ export function createBundleHost(
       );
       return false;
     },
+    // Programmatic entry into one of THIS bundle's edit contexts — the
+    // same stack push a double-click performs. A foreign or unregistered
+    // type is a bug in the bundle, so it throws; a host that cannot enter
+    // answers false.
+    async enterEditContext(type, elementId) {
+      if (!registeredContexts.has(type)) {
+        throw new Error(
+          `plugin-api: shell.enterEditContext("${type}") — ${manifest.id} has ` +
+            `registered no edit context of that type. A bundle enters only ` +
+            `its own contexts: call contribute.editContext({ type: "${type}", … }) first.`,
+        );
+      }
+      if (!shellBackend?.enterEditContext) {
+        log.warn(
+          `shell.enterEditContext("${type}") ignored — the host app wired no ` +
+            `context entry (probe with supports("shell.enterEditContext@1"))`,
+        );
+        return false;
+      }
+      return shellBackend.enterEditContext(type, elementId);
+    },
+  };
+
+  // --------------------------------------------------------- tools
+  // The tool-settings READ door: the values the host's tool-options UI
+  // holds for this bundle's own tools. Namespaced like every tool id —
+  // a bundle cannot read another plugin's tool state.
+  const toolSettingsBackend = options?.toolSettings;
+  const tools: ToolsSurface = {
+    settings(toolId) {
+      assertNamespaced(toolId, "tools.settings tool");
+      return { ...(toolSettingsBackend?.get(toolId) ?? {}) };
+    },
+    onDidChangeSettings(toolId, listener) {
+      assertNamespaced(toolId, "tools.onDidChangeSettings tool");
+      if (!toolSettingsBackend) return store.add(toDisposable(() => {}));
+      const off = toolSettingsBackend.subscribe(toolId, () =>
+        listener({ ...toolSettingsBackend.get(toolId) }),
+      );
+      return store.add(toDisposable(off));
+    },
   };
 
   // --------------------------------------------------------- widgets
   // The host app owns the widget catalog (W-04). When it injects one,
   // bundles get the rich CodeEditor; otherwise the plain-textarea
-  // fallback stands in — same props contract, honest seam.
-  const widgets: WidgetSurface = options?.widgets ?? FALLBACK_WIDGETS;
+  // fallback stands in — same props contract, honest seam. Merged per
+  // member: a host that injects only the code editor keeps the native
+  // colour-input fallback, and vice versa.
+  const widgets: WidgetSurface = { ...FALLBACK_WIDGETS, ...options?.widgets };
 
   // --------------------------------------------------------- assets
   // The capability-gated asset store (W-06). READ-ONLY: serves the
@@ -2672,10 +2924,21 @@ export function createBundleHost(
   };
   const parts: PartsSurface = {
     async write(path, bytes) {
+      const full = partsFull(path);
+      // Protocol 66 — the binary lane: the bytes cross as a Uint8Array.
+      const binary = getEditor().parts;
+      if (binary) {
+        try {
+          await binary.write(full, bytes, manifest.id);
+        } catch (err) {
+          throw new Error(`host.parts.write("${path}"): ${String(err)}`);
+        }
+        return;
+      }
       const reply = await getEditor().client.send({
         kind: "writePagedPart",
         payload: {
-          path: partsFull(path),
+          path: full,
           bytes: Array.from(bytes),
           // C-34 — DECLARE WHO IS WRITING, so the engine
           // confines this to `paged/<id>/` instead of trusting that we
@@ -2707,9 +2970,12 @@ export function createBundleHost(
       }
     },
     async read(path) {
+      const full = partsFull(path);
+      const binary = getEditor().parts;
+      if (binary) return binary.read(full);
       const reply = await getEditor().client.send({
         kind: "readPagedPart",
-        payload: { path: partsFull(path) },
+        payload: { path: full },
       });
       if (reply.kind === "pagedPartRead") {
         return reply.payload.found ? Uint8Array.from(reply.payload.bytes) : null;
@@ -2726,6 +2992,30 @@ export function createBundleHost(
       return reply.payload.paths.map((p) =>
         p.startsWith(partsBase) ? p.slice(partsBase.length) : p,
       );
+    },
+    // Protocol 66 — `deletePagedPart`. The engine tombstones a part the
+    // loaded file carries, so it leaves the next save rather than
+    // reappearing from the source container.
+    async delete(path) {
+      const full = partsFull(path);
+      const binary = getEditor().parts;
+      if (binary) {
+        try {
+          return await binary.delete(full, manifest.id);
+        } catch (err) {
+          throw new Error(`host.parts.delete("${path}"): ${String(err)}`);
+        }
+      }
+      const reply = await getEditor().client.send({
+        kind: "deletePagedPart",
+        payload: { path: full, caller: manifest.id },
+        // Typed against the vendored wire; `deletePagedPart` joins it at
+        // the protocol-66 re-sync, which deletes this cast.
+      } as never);
+      const r = reply as { kind: string; payload?: { existed?: boolean; error?: string } };
+      if (r.kind === "pagedPartDeleted") return r.payload?.existed === true;
+      const err = r.kind === "pagedPartFailed" ? r.payload?.error : `unexpected ${r.kind}`;
+      throw new Error(`host.parts.delete("${path}"): ${err}`);
     },
   };
 
@@ -3099,8 +3389,34 @@ export function createBundleHost(
       featureSet.add("shell.saveFile@1");
     }
   }
-  if (options?.widgets) {
+  if (options?.widgets?.CodeEditor) {
     featureSet.add("widgets.codeEditor@1");
+  }
+  if (options?.widgets?.ColorPicker) {
+    // The host's own mixer is wired; without it the bundle gets the
+    // native `<input type="color">`.
+    featureSet.add("widgets.colorPicker@1");
+  }
+  if (options?.willSave) {
+    featureSet.add("document.onWillSave@1");
+  }
+  if (typeof options?.shell?.enterEditContext === "function") {
+    featureSet.add("shell.enterEditContext@1");
+  }
+  if (options?.toolSettings) {
+    featureSet.add("tools.settings@1");
+  }
+  {
+    // Protocol 66 — the binary scene-image lane. Both members, or the SDK
+    // keeps the JSON fallback for both (a half-wired host would patch an
+    // image the other lane never set).
+    const sl = getEditor().sceneLayers;
+    if (
+      typeof sl?.submitImage === "function" &&
+      typeof sl?.submitImageTiles === "function"
+    ) {
+      featureSet.add("rendering.sceneLayer.binary@1");
+    }
   }
   if (options?.schemaPanelRenderer) {
     featureSet.add("schemaPanel.renderer@1");
@@ -3206,6 +3522,7 @@ export function createBundleHost(
     workers,
     secrets,
     clipboard,
+    tools,
     supports: (feature) => featureSet.has(feature),
     get editor() {
       return getEditor();

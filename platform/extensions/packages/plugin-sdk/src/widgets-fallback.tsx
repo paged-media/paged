@@ -31,7 +31,11 @@
 // construction; a headless consumer never reaches the render path, and if
 // one somehow does it gets a named seam rather than a crash.
 
-import type { CodeEditorProps, WidgetSurface } from "@paged-media/plugin-api";
+import type {
+  CodeEditorProps,
+  ColorPickerProps,
+  WidgetSurface,
+} from "@paged-media/plugin-api";
 
 import { type CreateElement, requireCreateElement } from "./react-optional";
 
@@ -65,8 +69,44 @@ function TextareaCodeEditor(
   });
 }
 
-/** The default widget catalog: a textarea CodeEditor. Replaced wholesale
- *  when the host app injects `widgets` into `createBundleHost`. */
+/** The native colour input — the honest fallback when the host injects
+ *  no picker. React's `onChange` on an `<input type="color">` fires on
+ *  every pick (it listens to the DOM `input` event), so it feeds
+ *  `onChange`; the value the picker settles on is reported on blur as
+ *  `onCommit`. */
+function NativeColorPicker(
+  props: ColorPickerProps,
+): ReturnType<CreateElement> {
+  const createElement = requireCreateElement(
+    "plugin-sdk: host.widgets.ColorPicker fell back to <input type=color>, " +
+      "but React is not installed. Install react, or inject a widget catalog " +
+      "via createBundleHost({ widgets }).",
+  );
+  return createElement("input", {
+    type: "color",
+    value: props.value,
+    disabled: props.disabled,
+    "aria-label": props.ariaLabel,
+    "data-color-picker-fallback": "native",
+    onChange: (e: { currentTarget: { value: string } }) =>
+      props.onChange(e.currentTarget.value),
+    onBlur: (e: { currentTarget: { value: string } }) =>
+      props.onCommit?.(e.currentTarget.value),
+    style: {
+      width: 40,
+      height: 24,
+      padding: 0,
+      border: "1px solid var(--pg-border)",
+      borderRadius: "var(--radius-sm, 4px)",
+      background: "var(--pg-bg)",
+    },
+  });
+}
+
+/** The default widget catalog: a textarea CodeEditor and a native colour
+ *  input. Each member is replaced by the one the host app injects through
+ *  `createBundleHost({ widgets })`; members it omits keep the fallback. */
 export const FALLBACK_WIDGETS: WidgetSurface = {
   CodeEditor: TextareaCodeEditor,
+  ColorPicker: NativeColorPicker,
 };

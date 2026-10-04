@@ -22,6 +22,8 @@
 export { defineBundle } from "./define-bundle";
 export {
   createHeadlessHost,
+  inMemoryWillSave,
+  inMemoryToolSettings,
   type HarnessOptions,
   type HeadlessHost,
   type HeadlessHostHandle,
@@ -72,6 +74,9 @@ export {
   // K-10 — what a host app injects as `shell` (saveFile optional).
   type ShellBackend,
   type StorageBacking,
+  // Protocol 66 batch — the save hook and tool-options store a host injects.
+  type WillSaveBackend,
+  type ToolSettingsBackend,
 } from "./host-impl";
 export { FALLBACK_WIDGETS } from "./widgets-fallback";
 export {

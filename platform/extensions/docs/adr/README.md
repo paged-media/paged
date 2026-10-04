@@ -38,6 +38,9 @@ that follow it and those that do not.
 | [317](317-registry-driven-dispatch.md) | Function and kernel dispatch is generated from a registry, with a coverage gate | Accepted, recorded retroactively 2026-10-02 |
 | [318](318-host-spawned-workers.md) | Workers are spawned by the host on a declared capability | Accepted, recorded retroactively 2026-10-02 |
 | [319](319-trust-line.md) | The trust line: first-party bundles run in-process today; the isolate boundary is the real line | Accepted, recorded retroactively 2026-10-02 |
+| [320](320-binary-lanes-for-scene-images-and-parts.md) | Scene images and container parts cross as bytes; the SDK keeps the JSON fallback | Accepted 2026-10-04 |
+| [321](321-host-colour-picker-widget.md) | The host lends its colour picker as a widget; it never writes the document | Accepted 2026-10-04 |
+| [322](322-plugin-hooks-save-entry-tool-settings-undo-labels.md) | Four host hooks for stateful content plugins: will-save, context entry, tool settings, undo labels | Accepted 2026-10-04 |
 
 Decisions made in other repositories that this repository's code rests on are listed in
 [`../README.md`](../README.md).
