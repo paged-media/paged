@@ -108,6 +108,48 @@ import { DisposableStore, toDisposable } from "./disposables";
 import { FALLBACK_WIDGETS } from "./widgets-fallback";
 import { makeSchemaPanelComponent } from "./schema-panel";
 
+/** The reply envelope `client.mutate` resolves with. */
+type MutateReply = Awaited<ReturnType<PagedEditor["client"]["mutate"]>>;
+
+/** Is `bytes: []` a slot? The engine fills a `replaceImageBytes` whose
+ *  `bytes` is PRESENT and empty — an absent `bytes` is not a slot. */
+function isBytesSlot(m: MutationInput): boolean {
+  if (m.op !== "replaceImageBytes") return false;
+  const b = (m.args as { bytes?: unknown }).bytes;
+  return Array.isArray(b) && b.length === 0;
+}
+
+/** Does `m` carry a slot for `mutateWithBytes`: a `replaceImageBytes` with
+ *  `bytes: []`, itself or depth-first inside a `batch` (the engine's
+ *  `fill_bytes_slot` rule)? */
+function hasBytesSlot(m: MutationInput): boolean {
+  if (isBytesSlot(m)) return true;
+  if (m.op === "batch") return m.args.ops.some((op) => hasBytesSlot(op));
+  return false;
+}
+
+/** `m` with `bytes` in its FIRST slot (depth-first, as the engine fills
+ *  it) — a copy; the bundle's mutation is not touched. Only the first slot
+ *  is filled, so a later `bytes: []` stays empty, as on the binary lane. */
+function spliceBytesSlot(m: MutationInput, bytes: number[]): MutationInput {
+  let filled = false;
+  const visit = (node: MutationInput): MutationInput => {
+    if (filled) return node;
+    if (isBytesSlot(node)) {
+      filled = true;
+      return { ...node, args: { ...node.args, bytes } } as MutationInput;
+    }
+    if (node.op === "batch") {
+      return {
+        ...node,
+        args: { ...node.args, ops: node.args.ops.map((op) => visit(op) as Mutation) },
+      };
+    }
+    return node;
+  };
+  return visit(m);
+}
+
 /** The implemented feature set — `host.supports()` answers from this,
  *  so docs/tests can't drift from code. Form: `"area.member@major"`. */
 export const HOST_FEATURES: readonly string[] = [
@@ -1899,22 +1941,46 @@ export function createBundleHost(
     return index;
   };
 
+  /** The gates every raw write door applies, in order: the declared
+   *  `document.write` capability (mutate-never-throws → a non-applied
+   *  outcome), then the metadata namespace (loud regardless). `null` =
+   *  the write may proceed. */
+  const gateRawWrite = (
+    mutation: MutationInput,
+    door: string,
+  ): MutationOutcome | null => {
+    const denied = denyWrite(hasDoc("write"), door, "capabilities.document.write");
+    if (denied !== null) return { applied: false, error: denied };
+    const foreign = foreignMetadataKey(mutation);
+    if (foreign !== null) {
+      const error = `setPluginMetadata key "${foreign}" is outside this plugin's namespace ("${metadataKey(manifest)}")`;
+      log.warn(error);
+      return { applied: false, error };
+    }
+    return null;
+  };
+  /** A `Mutate` reply envelope as the bundle-facing outcome. */
+  const mutateOutcome = (reply: MutateReply): MutationOutcome => {
+    if (reply.kind === "mutationApplied") {
+      return {
+        applied: true,
+        createdId: reply.payload.createdId ?? null,
+        pageIds: reply.payload.pageIds,
+      };
+    }
+    return {
+      applied: false,
+      error:
+        reply.kind === "mutationFailed"
+          ? (reply as { payload?: unknown }).payload
+          : reply,
+    };
+  };
+
   const document: DocumentSurface = {
     async mutate(mutation: MutationInput): Promise<MutationOutcome> {
-      // Write-door capability gate (mutate-never-throws → non-applied
-      // outcome). The namespace gate below stays loud regardless.
-      const denied = denyWrite(
-        hasDoc("write"),
-        "document.mutate",
-        "capabilities.document.write",
-      );
-      if (denied !== null) return { applied: false, error: denied };
-      const foreign = foreignMetadataKey(mutation);
-      if (foreign !== null) {
-        const error = `setPluginMetadata key "${foreign}" is outside this plugin's namespace ("${metadataKey(manifest)}")`;
-        log.warn(error);
-        return { applied: false, error };
-      }
+      const gated = gateRawWrite(mutation, "document.mutate");
+      if (gated !== null) return gated;
       try {
         // The narrow `PagedClient.mutate` handle is typed against the
         // VENDORED `Mutation` (protocol 51). A protocol-ahead op (v56;
@@ -1924,20 +1990,43 @@ export function createBundleHost(
         // union absorbs it. Widening the handle instead would demand
         // more of every host than the published wire promises.
         const reply = await getEditor().client.mutate(mutation as Mutation);
-        if (reply.kind === "mutationApplied") {
-          return {
-            applied: true,
-            createdId: reply.payload.createdId ?? null,
-            pageIds: reply.payload.pageIds,
-          };
-        }
+        return mutateOutcome(reply);
+      } catch (error) {
+        return { applied: false, error };
+      }
+    },
+    async mutateWithBytes(
+      mutation: MutationInput,
+      bytes: Uint8Array,
+      options?: { transfer?: boolean },
+    ): Promise<MutationOutcome> {
+      const gated = gateRawWrite(mutation, "document.mutateWithBytes");
+      if (gated !== null) return gated;
+      // Both lanes refuse a mutation without a slot for the bytes, so a
+      // bundle sees the same answer on every host (the engine's own words
+      // on the binary lane; these on the fallback, before anything moves).
+      if (!hasBytesSlot(mutation)) {
         return {
           applied: false,
           error:
-            reply.kind === "mutationFailed"
-              ? (reply as { payload?: unknown }).payload
-              : reply,
+            "mutateWithBytes: no replaceImageBytes with an empty `bytes` slot to fill",
         };
+      }
+      try {
+        const editor = getEditor();
+        if (typeof editor.mutateWithBytes === "function") {
+          const reply = await editor.mutateWithBytes(
+            mutation as Mutation,
+            bytes,
+            options?.transfer === true,
+          );
+          return mutateOutcome(reply);
+        }
+        // Older host: the bytes ride the JSON channel as a `number[]`.
+        const reply = await editor.client.mutate(
+          spliceBytesSlot(mutation, Array.from(bytes)) as Mutation,
+        );
+        return mutateOutcome(reply);
       } catch (error) {
         return { applied: false, error };
       }
@@ -3407,6 +3496,13 @@ export function createBundleHost(
     ) {
       featureSet.add("rendering.sceneLayer.binary@1");
     }
+  }
+  if (typeof getEditor().mutateWithBytes === "function") {
+    // Protocol 66 — the binary commit lane. `document.mutateWithBytes`
+    // always exists (it splices a `number[]` into the JSON mutate without
+    // this); the flag tells a bundle its bytes are not converted, so the
+    // JSON channel's size limit does not apply.
+    featureSet.add("document.mutateBinary@1");
   }
   if (options?.schemaPanelRenderer) {
     featureSet.add("schemaPanel.renderer@1");

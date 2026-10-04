@@ -652,6 +652,19 @@ export interface PagedEditor {
     read(path: string): Promise<Uint8Array | null>;
     delete(path: string, caller?: string): Promise<boolean>;
   };
+  /** Protocol 66 — the BINARY commit lane (canvas-wasm
+   *  `mutateWithBytesDirect`): apply `mutation` (a `batch` included) after
+   *  handing `bytes` to its FIRST `replaceImageBytes` whose `bytes` is `[]`,
+   *  depth-first through batches. The engine refuses a mutation with no such
+   *  slot. The buffer moves to the worker when `transfer` is true. Resolves
+   *  with the same reply `client.mutate` does. Optional: absent on an older
+   *  host, and the SDK then splices `Array.from(bytes)` into that slot and
+   *  calls `client.mutate`. */
+  mutateWithBytes?(
+    mutation: Mutation,
+    bytes: Uint8Array,
+    transfer?: boolean,
+  ): Promise<WorkerToMain>;
   /** C-6 (I-06) — the renderer RESOURCE-PROVIDER channel. The editor
    *  routes these to the canvas-wasm `claimImageResource` /
    *  `submitResourceTiles` / `releaseImageResource` messages (the v44

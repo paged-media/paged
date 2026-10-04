@@ -132,6 +132,12 @@ draw B-02). The headless harness records both
   door. Undo/validation/collab semantics stay engine-owned.
   `MutationInput = Mutation | PendingMutation` (§4.3a) — a WIDENED
   accepted input, which is additive: every `Mutation` still passes.
+- `mutateWithBytes(m, bytes, { transfer? })` — the same door, same gates
+  and outcome, with the bytes of the first `replaceImageBytes` whose
+  `bytes` is `[]` crossing as a `Uint8Array` (protocol 66, ADR 320).
+  Without the host seam `PagedEditor.mutateWithBytes` the SDK splices
+  `Array.from(bytes)` into that slot and calls `mutate`;
+  `document.mutateBinary@1` reports the binary lane.
 - reads: `collection(name)`, `meta()`, `pathAnchors(id)`,
   `hitTest(pageId, pt, filter)` [draw: scissors/anchor tools],
   `elementGeometry(ids)`, `tree()`,

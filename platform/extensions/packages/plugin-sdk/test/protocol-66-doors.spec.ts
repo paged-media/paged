@@ -20,7 +20,9 @@
 //     is always present;
 //   · document.onWillSave: awaited, errors contained, inert without backend;
 //   · shell.enterEditContext: own registered types only;
-//   · tools.settings: own tools only, read + subscribe.
+//   · tools.settings: own tools only, read + subscribe;
+//   · document.mutateWithBytes: the binary commit lane when the host wires
+//     it, the `number[]` splice into the first empty slot when it does not.
 
 import { describe, expect, it } from "vitest";
 
@@ -346,5 +348,161 @@ describe("tools.settings", () => {
     const { host } = createBundleHost(() => fake.editor, MANIFEST, { console: silent });
     expect(host.supports("tools.settings@1")).toBe(false);
     expect(host.tools.settings("media.paged.image.tool.brush")).toEqual({});
+  });
+});
+
+describe("document.mutateWithBytes", () => {
+  const WRITER: PluginManifest = {
+    ...MANIFEST,
+    capabilities: { ...MANIFEST.capabilities, document: { read: "broad", write: "broad" } },
+  };
+  const KEY = "x-paged:media.paged.image";
+  const baked = () =>
+    ({
+      op: "batch",
+      args: {
+        ops: [
+          { op: "replaceImageBytes", args: { elementId: "r1", bytes: [] } },
+          {
+            op: "setPluginMetadata",
+            args: { elementId: { kind: "rectangle", id: "r1" }, key: KEY, value: "{}" },
+          },
+          { op: "replaceImageBytes", args: { elementId: "r2", bytes: [] } },
+        ],
+      },
+    }) as never;
+
+  /** A fake editor; `binary` wires the protocol-66 seam. */
+  function writer(binary: boolean, manifest: PluginManifest = WRITER) {
+    const fake = makeFakeEditor();
+    const calls: { mutation: unknown; bytes: Uint8Array; transfer?: boolean }[] = [];
+    if (binary) {
+      (fake.editor as unknown as { mutateWithBytes: unknown }).mutateWithBytes = async (
+        mutation: unknown,
+        bytes: Uint8Array,
+        transfer?: boolean,
+      ) => {
+        calls.push({ mutation, bytes, transfer });
+        return { kind: "mutationApplied", payload: { createdId: null, pageIds: ["p1"] } };
+      };
+    }
+    const { host } = createBundleHost(() => fake.editor, manifest, { console: silent });
+    return { host, fake, calls };
+  }
+
+  it("uses the binary seam when the host wires it, bytes untouched", async () => {
+    const { host, fake, calls } = writer(true);
+    expect(host.supports("document.mutateBinary@1")).toBe(true);
+    const png = new Uint8Array([137, 80, 78, 71]);
+    const outcome = await host.document.mutateWithBytes(baked(), png, { transfer: true });
+    expect(outcome).toEqual({ applied: true, createdId: null, pageIds: ["p1"] });
+    expect(fake.mutations).toHaveLength(0);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].bytes).toBe(png);
+    expect(calls[0].transfer).toBe(true);
+    // The slot stays empty: the engine fills it from the buffer.
+    expect(JSON.stringify(calls[0].mutation)).toContain('"bytes":[]');
+  });
+
+  it("falls back to number[] in the first slot on an older host", async () => {
+    const { host, fake } = writer(false);
+    expect(host.supports("document.mutateBinary@1")).toBe(false);
+    const mutation = baked();
+    const outcome = await host.document.mutateWithBytes(mutation, new Uint8Array([1, 2, 255]));
+    expect(outcome).toEqual({ applied: true, createdId: null, pageIds: ["p1"] });
+    expect(fake.mutations).toHaveLength(1);
+    const sent = fake.mutations[0] as {
+      op: string;
+      args: { ops: { op: string; args: { bytes?: number[] } }[] };
+    };
+    expect(sent.op).toBe("batch");
+    expect(sent.args.ops[0].args.bytes).toEqual([1, 2, 255]);
+    expect(sent.args.ops[1].op).toBe("setPluginMetadata");
+    // Only the first slot takes the bytes, as on the binary lane.
+    expect(sent.args.ops[2].args.bytes).toEqual([]);
+    // The bundle's own mutation is not modified.
+    expect(
+      (mutation as unknown as { args: { ops: { args: { bytes?: number[] } }[] } }).args.ops[0]
+        .args.bytes,
+    ).toEqual([]);
+  });
+
+  it("splices a bare replaceImageBytes too", async () => {
+    const { host, fake } = writer(false);
+    await host.document.mutateWithBytes(
+      { op: "replaceImageBytes", args: { elementId: "r1", bytes: [] } },
+      new Uint8Array([7]),
+    );
+    expect(fake.mutations[0]).toEqual({
+      op: "replaceImageBytes",
+      args: { elementId: "r1", bytes: [7] },
+    });
+  });
+
+  it("refuses a mutation without a slot on both lanes, sending nothing", async () => {
+    for (const binary of [true, false]) {
+      const { host, fake, calls } = writer(binary);
+      const outcome = await host.document.mutateWithBytes(
+        { op: "replaceImageBytes", args: { elementId: "r1" } },
+        new Uint8Array([1]),
+      );
+      expect(outcome.applied).toBe(false);
+      expect(String((outcome as { error: unknown }).error)).toMatch(/no replaceImageBytes/);
+      expect(fake.mutations).toHaveLength(0);
+      expect(calls).toHaveLength(0);
+    }
+  });
+
+  it("applies mutate's gates: write capability and the metadata namespace", async () => {
+    for (const binary of [true, false]) {
+      const readOnly = writer(binary, {
+        ...MANIFEST,
+        capabilities: { ...MANIFEST.capabilities, document: { read: "broad" } },
+      });
+      const denied = await readOnly.host.document.mutateWithBytes(baked(), new Uint8Array([1]));
+      expect(denied.applied).toBe(false);
+      expect(readOnly.calls).toHaveLength(0);
+      expect(readOnly.fake.mutations).toHaveLength(0);
+
+      const { host, fake, calls } = writer(binary);
+      const foreign = await host.document.mutateWithBytes(
+        {
+          op: "batch",
+          args: {
+            ops: [
+              { op: "replaceImageBytes", args: { elementId: "r1", bytes: [] } },
+              {
+                op: "setPluginMetadata",
+                args: {
+                  elementId: { kind: "rectangle", id: "r1" },
+                  key: "x-paged:media.paged.sheet",
+                  value: "{}",
+                },
+              },
+            ],
+          },
+        } as never,
+        new Uint8Array([1]),
+      );
+      expect(foreign.applied).toBe(false);
+      expect(String((foreign as { error: unknown }).error)).toMatch(/outside this plugin's namespace/);
+      expect(calls).toHaveLength(0);
+      expect(fake.mutations).toHaveLength(0);
+    }
+  });
+
+  it("reports an engine refusal and a channel failure as outcomes", async () => {
+    const { host, fake } = writer(true);
+    (fake.editor as unknown as { mutateWithBytes: unknown }).mutateWithBytes = async () => ({
+      kind: "mutationFailed",
+      payload: { error: "not an image" },
+    });
+    const refused = await host.document.mutateWithBytes(baked(), new Uint8Array([1]));
+    expect(refused).toEqual({ applied: false, error: { error: "not an image" } });
+    (fake.editor as unknown as { mutateWithBytes: unknown }).mutateWithBytes = async () => {
+      throw new Error("dispatchError");
+    };
+    const failed = await host.document.mutateWithBytes(baked(), new Uint8Array([1]));
+    expect(failed.applied).toBe(false);
   });
 });

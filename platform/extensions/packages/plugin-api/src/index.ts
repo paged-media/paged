@@ -67,6 +67,7 @@ export type {
   SecretsSurface,
   SecretMaterial,
   DocumentSurface,
+  MutateWithBytesOptions,
   SelectionSurface,
   ViewportSurface,
   TextSurface,

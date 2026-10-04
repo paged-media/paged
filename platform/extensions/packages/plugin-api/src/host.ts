@@ -785,6 +785,13 @@ export type MutationOutcome =
   | { applied: true; createdId: ElementId | null; pageIds: PageId[] }
   | { applied: false; error: unknown };
 
+/** Options of {@link DocumentSurface.mutateWithBytes}. */
+export interface MutateWithBytesOptions {
+  /** Hand the buffer to the host instead of copying it; it may be detached
+   *  afterwards. Default `false`. */
+  transfer?: boolean;
+}
+
 /** What {@link DocumentSurface.onWillSave} listeners receive. */
 export interface WillSaveEvent {
   /** The container being written. */
@@ -936,6 +943,41 @@ export interface DocumentSurface {
    *  hasn't absorbed yet (see mutations.ts). Widening an accepted
    *  input is additive: every `Mutation` still passes. */
   mutate(mutation: MutationInput): Promise<MutationOutcome>;
+  /**
+   * Protocol 66 — the same write door as {@link mutate}, with image bytes
+   * that cross as a `Uint8Array` instead of a JSON `number[]`. `bytes` goes
+   * to the FIRST `replaceImageBytes` in `mutation` whose `bytes` is `[]`
+   * (depth-first through a `batch`), so a baked image and the
+   * `setPluginMetadata` that describes it commit as one undoable step:
+   *
+   * ```ts
+   * await host.document.mutateWithBytes(
+   *   { op: "batch", args: { ops: [
+   *     { op: "replaceImageBytes", args: { elementId, bytes: [] } },
+   *     { op: "setPluginMetadata", args: { elementId, key, value } },
+   *   ] } },
+   *   png,
+   *   { transfer: true },
+   * );
+   * ```
+   *
+   * A mutation with no such slot is refused (`applied: false`) rather
+   * than applied without the bytes. Same gates and outcome as `mutate`:
+   * `capabilities.document.write`, metadata only under this plugin's own
+   * key, never a throw. `options.transfer: true` hands the buffer to the
+   * host, which may detach it; the default copies.
+   *
+   * Call it unconditionally. Where the host wires the binary lane,
+   * `supports("document.mutateBinary@1")` is true and the bytes are not
+   * converted; otherwise the SDK splices `Array.from(bytes)` into the slot
+   * and takes the `mutate` path (the size limit of the JSON channel then
+   * applies).
+   */
+  mutateWithBytes(
+    mutation: MutationInput,
+    bytes: Uint8Array,
+    options?: MutateWithBytesOptions,
+  ): Promise<MutationOutcome>;
   undo(): Promise<void>;
   redo(): Promise<void>;
   collection<T>(name: CollectionName): Promise<readonly T[]>;
