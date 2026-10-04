@@ -2954,15 +2954,7 @@ export function createBundleHost(
           // probe needed — there is no degraded path to choose between.
           caller: manifest.id,
         },
-        // THE CAST, named rather than left to be discovered. `wire.d.ts`
-        // is vendored from the PUBLISHED `@paged-media/canvas-wasm`
-        // (0.61.0), whose `writePagedPart` has no `caller` — the field
-        // exists in core today and reaches these types only when the
-        // next canvas-wasm publishes and `sync-wire` runs. Same escape-hatch
-        // shape the repo already uses elsewhere: a cast pointing at a
-        // contract that EXISTS AND IS COMMITTED, not at a hope. It
-        // deletes itself at the repin.
-      } as never);
+      });
       if (reply.kind !== "pagedPartWritten") {
         const err =
           reply.kind === "pagedPartFailed" ? reply.payload.error : `unexpected ${reply.kind}`;
@@ -3009,12 +3001,10 @@ export function createBundleHost(
       const reply = await getEditor().client.send({
         kind: "deletePagedPart",
         payload: { path: full, caller: manifest.id },
-        // Typed against the vendored wire; `deletePagedPart` joins it at
-        // the protocol-66 re-sync, which deletes this cast.
-      } as never);
-      const r = reply as { kind: string; payload?: { existed?: boolean; error?: string } };
-      if (r.kind === "pagedPartDeleted") return r.payload?.existed === true;
-      const err = r.kind === "pagedPartFailed" ? r.payload?.error : `unexpected ${r.kind}`;
+      });
+      if (reply.kind === "pagedPartDeleted") return reply.payload.existed;
+      const err =
+        reply.kind === "pagedPartFailed" ? reply.payload.error : `unexpected ${reply.kind}`;
       throw new Error(`host.parts.delete("${path}"): ${err}`);
     },
   };
