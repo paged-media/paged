@@ -149,15 +149,16 @@
 //      compound piece.
 //   4. the paint, the re-merge and the link of every piece.
 //   5. EVERY new group LAST. Rebuild by rebuild — tear one down, group
-//      one up, then the next — is NOT refused: it applies and leaves an
-//      EMPTY group, paths in no tree, and an undo that does not restore.
-// Ordered this way the batch also no longer trips over its OWN records:
-// as found, rebuilding a multi-piece instance that had another instance's
-// group above it was refused ("a member already belongs to another
-// group" — the engine defect `minted.spec.ts` pins), so a redefine of
-// three two-piece instances rebuilt only the last one. All their groups
-// are dissolved before anything is deleted now. A group of ANOTHER
-// feature above a rebuilt instance still trips it; that is the engine's.
+//      one up, then the next — was a trap on 0.64 (it applied and left an
+//      EMPTY group, paths in no tree, and an undo that did not restore);
+//      0.65 gets it right, and this order is right on both.
+// Ordered this way the batch also never tripped over its OWN records: on
+// 0.64, rebuilding a multi-piece instance with another instance's group
+// above it was refused ("a member already belongs to another group" — the
+// delete-below-a-group defect), so a redefine of three two-piece
+// instances rebuilt only the last one. 0.65 fixed that defect in core
+// (`minted.spec.ts`), so a group of ANOTHER feature above a rebuilt
+// instance no longer trips it either.
 //
 // THE TWO-BATCH LANE IS KEPT, instance by instance, as the fallback for
 // an engine that refuses the one batch (one that predates `bindCreated`

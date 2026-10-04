@@ -18,8 +18,8 @@ importers:
   packages/draw-bundle:
     devDependencies:
       '@paged-media/canvas-wasm':
-        specifier: 0.64.0
-        version: 0.64.0
+        specifier: 0.65.0
+        version: 0.65.0
       '@paged-media/draw-geometry':
         specifier: workspace:*
         version: link:../draw-geometry
@@ -478,8 +478,8 @@ packages:
     cpu: [x64]
     os: [linux]
 
-  '@paged-media/canvas-wasm@0.64.0':
-    resolution: {integrity: sha512-/twx/joIlfKVeS6123M7m8C4jlGIBCwDMW8D1w5BuQKKtNctZEoQ8G0x4OqhLHw5pNvXhvJuBgOzWZmlVqod8w==}
+  '@paged-media/canvas-wasm@0.65.0':
+    resolution: {integrity: sha512-kx4GkDG4LJ2yYNrLCrt3HOmNfP5DS2y8UAi7dCZ2juNVKcr9NwqDh5fEtiKzb5LG+ib4eLgGq1TSPC81V6E4DA==}
 
   '@paged-media/plugin-api@0.2.37-canary.0':
     resolution: {integrity: sha512-qdzOPRkwNDoLXjxfGLcd9LIVaMa3flH5ftvdV5Kr7tKQWQ4E3yJNbPc8athfkd4sRbU9Lo552x+3E+uzBvK6VA==}
@@ -1413,7 +1413,7 @@ snapshots:
   '@napi-rs/lzma-linux-x64-gnu@1.5.1':
     optional: true
 
-  '@paged-media/canvas-wasm@0.64.0': {}
+  '@paged-media/canvas-wasm@0.65.0': {}
 
   '@paged-media/plugin-api@0.2.37-canary.0':
     dependencies:

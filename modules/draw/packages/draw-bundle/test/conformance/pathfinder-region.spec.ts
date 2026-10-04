@@ -393,14 +393,16 @@ describe("draw conformance — the region Pathfinder row (B-22)", () => {
       expect(idsOf(await leaves(h))).toEqual(["ua", "ub"]);
     });
 
-    it("Minus back keeps the BACKMOST object minus everything in front", async () => {
+    it("Minus back keeps the FRONTMOST object minus everything behind it (Illustrator's verb; 0.64.0 had it inverted)", async () => {
       const outcome = await h.host.document.mutate(
         pathfinderRegionMutationFor("pathfinderMinusBack", TOP_TO_BOTTOM),
       );
       expect(outcome.applied).toBe(true);
-      expect(idsOf(await leaves(h))).toEqual(["ua"]);
-      // `ua` minus `ub` = the six-vertex L.
-      expect(await bboxOf(h, A)).toEqual({ n: 6, box: [100, 100, 300, 300] });
+      expect(idsOf(await leaves(h))).toEqual(["ub"]);
+      // `ub` minus `ua` = the six-vertex L. (0.64.0 answered `ua` minus
+      // `ub` — Minus FRONT; the Illustrator oracle,
+      // test/oracle/pathfinder-region.spec.ts, is what says which is right.)
+      expect(await bboxOf(h, B)).toEqual({ n: 6, box: [200, 200, 400, 400] });
       await h.host.document.undo();
       expect(await leaves(h)).toHaveLength(2);
     });
@@ -418,8 +420,8 @@ describe("draw conformance — the region Pathfinder row (B-22)", () => {
       await h.host.document.mutate(
         pathfinderRegionMutationFor("pathfinderMinusBack", reversed),
       );
-      expect(idsOf(await leaves(h))).toEqual(["ub"]);
-      expect(await bboxOf(h, B)).toEqual({ n: 6, box: [200, 200, 400, 400] });
+      expect(idsOf(await leaves(h))).toEqual(["ua"]);
+      expect(await bboxOf(h, A)).toEqual({ n: 6, box: [100, 100, 300, 300] });
       await h.host.document.undo();
       expect(await leaves(h)).toHaveLength(2);
     });

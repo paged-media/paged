@@ -7,13 +7,13 @@
     "script": "scripts/indesign/lib/read-document.jsx",
     "script_sha256": "4486a78fdd3b45a88c6ef6b18911bc34b94f6cf7ddc3c4d433d3d5e256f4dc08",
     "runner": "scripts/indesign/run-roundtrip.sh",
-    "recorded_at": "2026-10-03T06:03:36.388Z",
+    "recorded_at": "2026-10-04T15:17:02.001Z",
     "host_os": "macOS 26.4",
     "pdf_preset": "[Qualitativ hochwertiger Druck]"
   },
   "idml": {
     "path": "packages/draw-bundle/test/fixtures/roundtrip/offset-path.idml",
-    "sha256": "02eec6998e06379798105025ada3d2c5e8866e7236e52a6154727874751bd766"
+    "sha256": "c785769a5ff2c24ff8dd027d8e100a9c01ad894bd3755165628d093355b82732"
   },
   "units": "pt",
   "coordinates": "page-local, origin top-left of the page, Y down (ruler origin PAGE, zero point 0,0, script measurement unit POINTS); bounds as [minX, minY, maxX, maxY]",
@@ -51,8 +51,8 @@
       "layer": "Layer 1",
       "visible": true,
       "locked": false,
-      "geometricBounds": [138.6094,115.734514,384.265521,361.3906],
-      "visibleBounds": [138.069554,115.234514,384.765521,361.930446],
+      "geometricBounds": [134.8281,115.776229,384.223308,365.1719],
+      "visibleBounds": [134.196293,115.276229,384.723308,365.803707],
       "fill": {"name":"rt-green","type":"Color","model":"PROCESS","space":"RGB","value":[60,170,70]},
       "fillTint": -1,
       "gradientFillAngle": 0,
@@ -84,15 +84,18 @@
           "closed": true,
           "pathType": "CLOSED_PATH",
           "anchors": [
-            {"anchor":[138.6094,153.7969],"left":[141.1406,148.7344],"right":[155.2813,203.7969]},
-            {"anchor":[188.6094,303.7969],"left":[171.9531,253.7969],"right":[191.1406,306.3281]},
-            {"anchor":[196.2031,311.3906],"left":[193.6719,308.8594],"right":[246.2031,328.0469]},
-            {"anchor":[346.2031,361.3906],"left":[296.2031,344.7188],"right":[351.2656,358.8594]},
-            {"anchor":[361.3906,353.7969],"left":[356.3281,356.3281],"right":[361.4844,353.5156]},
-            {"anchor":[374.9219,302.3906],"left":[368.6406,332.0469],"right":[384.875,255.375]},
-            {"anchor":[358.4844,141.5156],"left":[395.1563,178.1875],"right":[321.8125,104.8438]},
-            {"anchor":[197.6094,125.0781],"left":[244.625,115.125],"right":[167.9531,131.3594]},
-            {"anchor":[146.2031,138.6094],"left":[146.4844,138.5156],"right":[143.6719,143.6719]}
+            {"anchor":[134.8281,142.4063],"left":[134.8281,142.4063],"right":[134.8281,142.4063]},
+            {"anchor":[146.2031,138.6094],"left":[146.2031,138.6094],"right":[146.6563,138.4688]},
+            {"anchor":[229.5625,119.375],"left":[184.875,125.75],"right":[280.4063,112.1094]},
+            {"anchor":[358.4844,141.5156],"left":[331.1094,114.1406],"right":[386.0313,169.0625]},
+            {"anchor":[380.625,270.4375],"left":[387.8125,220.125],"right":[374.2344,315.25]},
+            {"anchor":[361.3906,353.7969],"left":[361.4688,353.5313],"right":[361.3906,353.7969]},
+            {"anchor":[357.5938,365.1719],"left":[357.5938,365.1719],"right":[357.5938,365.1719]},
+            {"anchor":[346.2031,361.3906],"left":[346.2031,361.3906],"right":[346.2031,361.3906]},
+            {"anchor":[196.2031,311.3906],"left":[196.2031,311.3906],"right":[196.2031,311.3906]},
+            {"anchor":[190.5156,309.4844],"left":[190.5156,309.4844],"right":[190.5156,309.4844]},
+            {"anchor":[188.6094,303.7969],"left":[188.6094,303.7969],"right":[188.6094,303.7969]},
+            {"anchor":[138.6094,153.7969],"left":[138.6094,153.7969],"right":[138.6094,153.7969]}
           ]
         }
       ]

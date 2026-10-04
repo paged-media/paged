@@ -1440,17 +1440,15 @@ describe("draw conformance — SYMBOLS (Illustrator Phase 2, §16.1)", () => {
         expect((await through(lane)).picture, lane).toBe(shipped.picture);
       }
 
-      // AS FOUND, measured: two of the three rebuilds refused.
+      // The stepwise lane too, since 0.65.0. On 0.64.0 two of its three
+      // rebuilds were refused ("a member already belongs to another
+      // group") and its undo steps did not put the document back — the
+      // delete-below-a-group defect, fixed in core (`minted.spec.ts`).
       warned.length = 0;
       const stepwise = await through("stepwise");
-      expect(stepwise.picture).not.toBe(shipped.picture);
-      expect(
-        warned.filter((w) => w.includes("a member already belongs to another group")),
-      ).toHaveLength(2);
-      // …and its undo steps do NOT put the document back: the groups the
-      // deletes broke stay broken. (Measured on the shipped two-batch code
-      // before this change, too.) This lane runs LAST because of it.
-      expect(stepwise.restored).toBe(false);
+      expect(stepwise.picture).toBe(shipped.picture);
+      expect(warned).toEqual([]);
+      expect(stepwise.restored).toBe(true);
     });
   });
 

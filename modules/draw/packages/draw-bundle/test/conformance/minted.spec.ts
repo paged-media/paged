@@ -491,10 +491,20 @@ describe("draw conformance — the minted seam (what did my write create)", () =
       );
     });
 
-    it("a group whose members are deleted BEFORE it is dissolved cannot be dissolved", async () => {
+    // ENGINE DEFECT (0.65.0), pinned so it fails when fixed. On 0.64.0 this
+    // batch was REFUSED ("group has an id-less member that cannot
+    // round-trip"). On 0.65.0 it APPLIES — and its ONE undo step does not
+    // bring the group or its members back. So the rule stands, for a new
+    // reason: dissolve BEFORE deleting members, which every flow here does.
+    it("ENGINE DEFECT — deleting a group's members BEFORE dissolving it applies, and its undo does not restore them", async () => {
       const [a, b, g] = await pair(40);
+      const before = await treeShape(h);
+      expect(before).toBe("ua ub ue[uc ud]");
       const reply = await raw(batch(remove(a), remove(b), dissolve(g)));
-      expect(refusal(reply)).toContain("group has an id-less member that cannot round-trip");
+      expect(reply.kind).toBe("mutationApplied");
+      expect(await treeShape(h)).toBe("ua ub");
+      await h.host.document.undo();
+      expect(await treeShape(h)).toBe("ua ub"); // not `before`
     });
 
     it("ONE rebuild in one batch: insert, dissolve, delete, group — one undo, exactly restored", async () => {
@@ -530,11 +540,11 @@ describe("draw conformance — the minted seam (what did my write create)", () =
       expect(await treeShape(h)).toBe("ua ub u1b[u15 u16] u1c[u17 u18] u1d[u19 u1a]");
     });
 
-    it("…and NOT rebuild by rebuild: interleaved, the batch APPLIES and the document is wrong", async () => {
-      // No refusal, which is what makes this the rule that matters: a
-      // flow that loops "tear one down, group one up" inside a batch
-      // gets `applied: true`, an EMPTY group, two paths that are in no
-      // tree at all, and an undo that does not put the document back.
+    it("…and, since 0.65.0, rebuild by rebuild too: interleaved, the batch applies, the document is right and one undo restores it", async () => {
+      // On 0.64.0 this APPLIED and was wrong — an EMPTY group, two paths
+      // in no tree, and an undo that did not put the document back. The
+      // flows keep the grouped order above (it is what every engine
+      // accepts); this pins that the interleaved one is no longer a trap.
       const [a1, b1, g1] = await pair(40);
       const [a2, b2, g2] = await pair(100);
       const before = await treeShape(h);
@@ -553,44 +563,40 @@ describe("draw conformance — the minted seam (what did my write create)", () =
         ),
       );
       expect(reply.kind).toBe("mutationApplied");
-      expect(await treeShape(h)).toBe("ua ub u17[u14 u15] u16[]");
+      expect(await treeShape(h)).toBe("ua ub u16[u12 u13] u17[u14 u15]");
       await h.host.document.undo();
-      expect(await treeShape(h)).not.toBe(before);
+      expect(await treeShape(h)).toBe(before);
     });
 
-    // AN ENGINE DEFECT, pinned so this fails when the engine fixes it —
-    // and so nobody "fixes" a flow for what the flow did not do.
-    //
-    // Deleting a page item that sits BELOW a group in z-order breaks that
-    // group: its member references are not moved down with the items
-    // above the deleted one. A plain `deleteFrame` shows it; no batch,
-    // no handle, nothing of this bundle's is involved. Every flow here
-    // that deletes — a re-plan, an update, a release, a rebuild —
-    // inherits it whenever ANOTHER group sits above what it deletes:
-    // either the engine refuses the regroup ("a member already belongs
-    // to another group"), or it applies and the bystander is damaged.
-    // It was so before the flows became one batch (measured on the
-    // two-batch flows at 9d994a7) and it is so after.
-    describe("ENGINE DEFECT — a delete below a group breaks that group", () => {
-      it("a single deleteFrame under a bystander group: the group loses a member it still owns", async () => {
+    // FIXED in 0.65.0 — a delete below a group no longer breaks that
+    // group. On 0.64.0 a page item deleted BELOW a group in z-order left
+    // the group's member references pointing one slot too high: a plain
+    // deleteFrame dropped a member out of every tree, and a rebuild under
+    // a bystander group was refused ("a member already belongs to another
+    // group"). Every deleting flow here inherited it. Both now hold.
+    describe("FIXED in 0.65.0 — a delete below a group leaves that group whole", () => {
+      it("a single deleteFrame under a bystander group: the group keeps both members, and one undo restores", async () => {
         const below = (await raw(square(10, 200))).payload.createdId!;
-        const [a, b, g] = await pair(100);
-        expect(await treeShape(h)).toBe(`ua ub uc ${String(g.id)}[ud ue]`);
+        const [, , g] = await pair(100);
+        const before = await treeShape(h);
+        expect(before).toBe(`ua ub uc ${String(g.id)}[ud ue]`);
         expect((await raw(remove(below))).kind).toBe("mutationApplied");
-        // The bystander was not touched by the mutation. It shows ONE
-        // member now; the other is in no tree and still answers by id.
-        expect(await treeShape(h)).toBe(`ua ub ${String(g.id)}[ud]`);
-        expect(await h.host.document.elementGeometry([a, b])).toHaveLength(2);
+        expect(await treeShape(h)).toBe(`ua ub ${String(g.id)}[ud ue]`);
+        await h.host.document.undo();
+        expect(await treeShape(h)).toBe(before);
       });
 
-      it("a rebuild under a bystander group is REFUSED, in the engine's words", async () => {
+      it("a rebuild under a bystander group applies, leaves the bystander alone, and one undo restores", async () => {
         const [a, b, g] = await pair(40);
         await pair(100); // the bystander, above
         const before = await treeShape(h);
+        expect(before).toBe("ua ub ue[uc ud] u11[uf u10]");
         const reply = await raw(
           batch(...fresh(0, 40), dissolve(g), remove(a), remove(b), group(ref("n0_0"), ref("n0_1"))),
         );
-        expect(refusal(reply)).toContain("a member already belongs to another group");
+        expect(reply.kind).toBe("mutationApplied");
+        expect(await treeShape(h)).toBe("ua ub u11[uf u10] u14[u12 u13]");
+        await h.host.document.undo();
         expect(await treeShape(h)).toBe(before);
       });
     });

@@ -21,7 +21,7 @@
     "bench": "vitest bench --run"
   },
   "devDependencies": {
-    "@paged-media/canvas-wasm": "0.64.0",
+    "@paged-media/canvas-wasm": "0.65.0",
     "@paged-media/draw-geometry": "workspace:*",
     "@paged-media/draw-tools": "workspace:*",
     "@paged-media/plugin-api": "0.2.37-canary.0",

@@ -49,42 +49,28 @@
 //     the arc is split there.
 //   * A straight edge is two corner points with collapsed handles.
 //
-// WHAT THE ENGINE DOES, against Illustrator (engine pin: canvas-wasm 0.64.0):
+// WHAT THE ENGINE DOES, against Illustrator (engine pin: canvas-wasm 0.65.0):
 //
-//   DEFECT — `join` and `miterLimit` are IGNORED. Every outward corner is a
-//   bevel (core `offset_closed_path` took `_join` / `_miter_limit`). Engine
-//   vs Illustrator:
+//   FIXED in 0.65.0 — `join` and `miterLimit` are honoured. On 0.64.0 every
+//   outward corner was a bevel (core `offset_closed_path` took `_join` /
+//   `_miter_limit`): area 9400 for a miter asked of the rectangle, 9120
+//   for every triangle case. Now all seventeen match Illustrator in AREA
+//   and BOUNDS, and every miter-limit case bevels exactly where the stroke
+//   definition says.
 //
-//     case                      engine    Illustrator   engine bounds      Illustrator bounds
-//     rect-miter-out             9400       9600        [90,90,210,170]    same
-//     rect-round-out             9400       9514.249    [90,90,210,170]    same
-//     rectccw-miter-out          9400       9600        [90,90,210,170]    same
-//     tri-miter-out              9120       9600        [90,90,226,198]    [90,90,250,210]
-//     tri-round-out              9120       9314.194    [90,90,226,198]    [90,90,230.0007,200]
-//     tri-miter-out-limit2       9120       9170        [90,90,226,198]    same
-//     tri-miter-out-limit3_1     9120       9330        [90,90,226,198]    [90,90,226,210]
-//     tri-miter-out-limit3_2     9120       9600        [90,90,226,198]    [90,90,250,210]
+//   FIXED in 0.65.0 — direction. 0.64.0 had no convention (5 of 17 agreed
+//   with Illustrator's clockwise, by accident of the crossing resolver);
+//   0.65.0 returns every result clockwise, as Illustrator does (RFI C-81).
 //
-//   These eight are `it.fails`, so they stay visible. The fix is reported
-//   landed in core on a branch that is not yet published; when the engine
-//   pin moves past 0.64.0 they flip RED ("expected to fail, passed") and
-//   the entries come out of ENGINE_IGNORES_JOIN. Expect the ROUND cases to
-//   then need a second look at ANCHOR COUNT, which is a convention, not a
-//   defect, if the engine spends a different number of cubics on an arc.
-//
-//   LATENT DEFECT — direction. Illustrator has a convention (clockwise,
-//   always). The engine has NONE: its result's direction is an accident of
-//   the crossing resolver. Measured over both shapes, both input
-//   directions and every start point: outward is counter-clockwise EXCEPT
-//   for a counter-clockwise input that starts at (100,100), which comes
-//   back clockwise; inward is clockwise for the rectangle and counter-
-//   clockwise for the triangle. Of the 17 cases 5 happen to agree with
-//   Illustrator (ENGINE_DIRECTION_AGREES) and 12 are the opposite. A lone
-//   contour paints the same either way under the engine's non-zero fill,
-//   so nothing is visibly wrong today; it becomes wrong the moment a
-//   result is merged into a compound path, where direction decides what
-//   is a hole. Pinned as a recorded difference, not as `it.fails`: there
-//   is no single engine behaviour to wait for.
+//   CONVENTION, not a defect — ANCHOR COUNT on a mitered or rounded
+//   outward corner. A miter apex arrives with the two edge endpoints it
+//   was built from still in the table, collinear with their edges:
+//   12 anchors for the rectangle where Illustrator has 4, 9 for the
+//   triangle where it has 3. The shape is identical (area and bounds
+//   above); only a later anchor edit can tell. The round join spends one
+//   cubic fewer than Illustrator on the triangle (8 vs 9 anchors) and
+//   matches it on the rectangle. ENGINE_ANCHOR_CONVENTION pins both
+//   counts, so a change either way is seen.
 //
 //   AGREEMENT — the other nine cases (bevel outward, every inward offset)
 //   match Illustrator in area, bounds AND anchor count.
@@ -235,32 +221,18 @@ const BY_DEFINITION: Record<
   "tri-miter-out-limit3_2": { area: 9600, bounds: [90, 90, 250, 210] },
 };
 
-/** DEFECT (engine 0.64.0) — `join` and `miterLimit` are ignored: these ask
- *  for a miter or a round join outward and get a bevel. Engine number vs
- *  Illustrator's; the full table is in the header. Run as `it.fails`
- *  against BOTH references. When the engine pin moves and one starts
- *  passing, vitest reports it as a failure: remove the entry then. */
-const ENGINE_IGNORES_JOIN: Record<string, string> = {
-  "rect-miter-out": "area 9400 vs 9600",
-  "rect-round-out": "area 9400 vs 9514.249",
-  "rectccw-miter-out": "area 9400 vs 9600",
-  "tri-miter-out": "area 9120 vs 9600; bounds max [226,198] vs [250,210]",
-  "tri-round-out": "area 9120 vs 9314.194; bounds max [226,198] vs [230,200]",
-  "tri-miter-out-limit2": "area 9120 vs 9170",
-  "tri-miter-out-limit3_1": "area 9120 vs 9330; bounds maxY 198 vs 210",
-  "tri-miter-out-limit3_2": "area 9120 vs 9600; bounds max [226,198] vs [250,210]",
+/** CONVENTION (engine 0.65.0) — anchor count where the engine and
+ *  Illustrator spend a different number of points on the same shape:
+ *  [engine, Illustrator]. See the header. */
+const ENGINE_ANCHOR_CONVENTION: Record<string, [engine: number, illustrator: number]> = {
+  "rect-miter-out": [12, 4],
+  "rectccw-miter-out": [12, 4],
+  "tri-miter-out": [9, 3],
+  "tri-miter-out-limit2": [7, 5],
+  "tri-miter-out-limit3_1": [8, 4],
+  "tri-miter-out-limit3_2": [9, 3],
+  "tri-round-out": [8, 9],
 };
-
-/** LATENT DEFECT — Illustrator returns every result CLOCKWISE. The engine
- *  returns these five clockwise (by accident of its resolver — see the
- *  header) and the other twelve COUNTER-clockwise. */
-const ENGINE_DIRECTION_AGREES = new Set([
-  "rect-miter-in",
-  "rect-round-in",
-  "rect-bevel-in",
-  "rectccw-miter-out",
-  "rectccw-miter-in",
-]);
 
 const FIXTURE = loadOracle<OffsetParameters>("offset-path");
 const RECORDED = new Map(FIXTURE.cases.map((c) => [c.id, c]));
@@ -329,7 +301,7 @@ describe("oracle — offset path", () => {
         })),
       ).toEqual(OFFSET_PATH_CASES);
       expect(Object.keys(BY_DEFINITION)).toEqual(OFFSET_PATH_CASES.map((c) => c.id));
-      for (const id of [...Object.keys(ENGINE_IGNORES_JOIN), ...ENGINE_DIRECTION_AGREES]) {
+      for (const id of Object.keys(ENGINE_ANCHOR_CONVENTION)) {
         expect(Object.keys(BY_DEFINITION)).toContain(id);
       }
     });
@@ -415,8 +387,7 @@ describe("oracle — offset path", () => {
 
   describe("engine vs the join's definition", () => {
     for (const c of OFFSET_PATH_CASES) {
-      const test = c.id in ENGINE_IGNORES_JOIN ? it.fails : it;
-      test(`${c.id}${c.id in ENGINE_IGNORES_JOIN ? " — DEFECT in 0.64.0, join ignored" : ""}`, async () => {
+      it(c.id, async () => {
         const ours = (await engine(c)).shape;
         const want = BY_DEFINITION[c.id];
         expect(ours.paths).toBe(1);
@@ -426,51 +397,53 @@ describe("oracle — offset path", () => {
       });
     }
 
-    it("a join the engine ignores is ignored COMPLETELY: all three joins, and every miter limit, give one shape", async () => {
-      // The pin that makes the eight `it.fails` a single finding and not
-      // eight: outward, miter == round == bevel, to the anchor.
-      // Sequential on purpose: each measurement inserts, offsets and undoes
-      // twice, and the undo stack is shared.
+    it("FIXED in 0.65.0 — the join is honoured: miter, round and bevel are three shapes, and the miter limit decides", async () => {
+      // On 0.64.0 all three joins, and every miter limit, gave ONE shape
+      // (a bevel). Sequential on purpose: each measurement inserts,
+      // offsets and undoes twice, and the undo stack is shared.
       const of = (id: string) => engine(OFFSET_PATH_CASES.find((c) => c.id === id)!);
       for (const shape of ["rect", "tri"]) {
         const miter = await of(`${shape}-miter-out`);
-        expect((await of(`${shape}-round-out`)).paths).toEqual(miter.paths);
-        expect((await of(`${shape}-bevel-out`)).paths).toEqual(miter.paths);
-        // …and that shape has no curve in it, so it is not the round join.
+        const round = await of(`${shape}-round-out`);
+        const bevel = await of(`${shape}-bevel-out`);
+        expect(round.paths).not.toEqual(miter.paths);
+        expect(bevel.paths).not.toEqual(miter.paths);
+        expect(bevel.paths).not.toEqual(round.paths);
         expect(miter.shape.curvedSegments).toBe(0);
+        expect(round.shape.curvedSegments).toBeGreaterThan(0);
       }
-      const tri = await of("tri-miter-out");
-      for (const limit of ["2", "3_1", "3_2"]) {
-        expect((await of(`tri-miter-out-limit${limit}`)).paths).toEqual(tri.paths);
-      }
+      // Limit 2 bevels the triangle's sharp corners; 3.2 miters them all.
+      const limit2 = await of("tri-miter-out-limit2");
+      const limit32 = await of("tri-miter-out-limit3_2");
+      expect(limit2.shape.area).toBeLessThan(limit32.shape.area);
     });
   });
 
   describe("engine vs Adobe Illustrator", () => {
     for (const c of OFFSET_PATH_CASES) {
-      const note = ENGINE_IGNORES_JOIN[c.id];
-      const test = note ? it.fails : it;
-      test(`${c.id}: area, bounds, anchor count${note ? ` — DEFECT in 0.64.0, join ignored: ${note}` : ""}`, async () => {
+      const convention = ENGINE_ANCHOR_CONVENTION[c.id];
+      it(`${c.id}: area, bounds, anchor count${convention ? ` — anchors by convention, engine ${convention[0]} vs Illustrator ${convention[1]}` : ""}`, async () => {
         const ours = (await engine(c)).shape;
         const want = theirs(c.id);
         expect(ours.paths).toBe(want.paths);
         expect(ours.allClosed).toBe(want.allClosed);
         expect(relDiff(ours.netArea, want.netArea)).toBeLessThan(AREA_REL_TOL);
         expect(boundsDiff(ours.bounds, want.bounds)).toBeLessThan(BOUNDS_ABS_TOL);
-        expect(ours.anchors).toBe(want.anchors);
+        if (convention) {
+          expect(want.anchors).toBe(convention[1]);
+          expect(ours.anchors).toBe(convention[0]);
+        } else {
+          expect(ours.anchors).toBe(want.anchors);
+        }
       });
     }
 
-    it("direction — LATENT DEFECT: Illustrator returns everything clockwise; the engine's direction is an accident (5 of 17 agree)", async () => {
+    it("direction — FIXED in 0.65.0: every result is clockwise, as Illustrator's (0.64.0 agreed in 5 of 17, by accident)", async () => {
       for (const c of OFFSET_PATH_CASES) {
         const ours = (await engine(c)).shape.windings[0];
-        const want = theirs(c.id).windings[0]; // "cw", every case
+        const want = theirs(c.id).windings[0];
         expect(want, c.id).toBe("cw");
-        if (ENGINE_DIRECTION_AGREES.has(c.id)) {
-          expect(ours, c.id).toBe(want);
-        } else {
-          expect(ours, `${c.id}: engine ccw, Illustrator cw`).toBe("ccw");
-        }
+        expect(ours, c.id).toBe("cw");
       }
     });
   });

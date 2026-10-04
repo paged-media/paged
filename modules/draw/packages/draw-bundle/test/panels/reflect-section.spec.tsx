@@ -94,12 +94,14 @@ describe("the Reflect section — rendered against the engine", () => {
     expect(back[1]).toBeCloseTo(100, 3);
   });
 
-  it("COPY is offered only where the engine can copy: here it is disabled, and the section says why", async () => {
+  it("COPY is offered where the engine can copy (0.65, duplicateElements): enabled, and no excuse is shown", async () => {
     const panel = await mountPanel(h, makePathOptionsPanel);
     await panel.click(HEADER);
-    expect(panel.get<HTMLInputElement>(`[data-draw-pathopts-toggle="reflect.copy"]`).disabled).toBe(true);
-    expect(panel.get("[data-draw-pathopts-reflect-copy-note]").textContent).toBe(
-      REFLECT_COPY_UNAVAILABLE_NOTE,
-    );
+    await expect
+      .poll(() => panel.get<HTMLInputElement>(`[data-draw-pathopts-toggle="reflect.copy"]`).disabled)
+      .toBe(false);
+    expect(panel.count("[data-draw-pathopts-reflect-copy-note]")).toBe(0);
+    // The note's wording is still the one an older engine is shown.
+    expect(REFLECT_COPY_UNAVAILABLE_NOTE).toMatch(/duplicateElements/);
   });
 });

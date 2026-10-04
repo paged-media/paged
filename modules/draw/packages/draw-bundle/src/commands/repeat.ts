@@ -104,10 +104,12 @@
 //      pasted into a container — release it before removing"). Release
 //      therefore emits `releaseFrom` BEFORE `deleteFrame` for every
 //      clipped instance.
-//   4. DELETING THE CONTAINER DOES NOT DELETE ITS CHILDREN — it ORPHANS
-//      them: they leave the tree and still answer `elementGeometry`.
-//      So the clip frame is always deleted LAST, after its children are
-//      released and removed.
+//   4. DELETING THE CONTAINER ON ENGINE 0.64 DID NOT DELETE ITS CHILDREN
+//      — it ORPHANED them: they left the tree and still answered
+//      `elementGeometry`. 0.65 removes them with it (core's delete fix,
+//      `repeat.spec.ts` CONSEQUENCE 4). The clip frame is still deleted
+//      LAST, after its children are released and removed: that order is
+//      right on both engines, and the bundle runs on whichever is booted.
 //   Only the INSTANCES are clipped. The source stays an ordinary
 //   top-level item, because it is the artwork the user keeps editing and
 //   burying it in a container would hide it from the tree too.
@@ -283,9 +285,9 @@ export const REPEAT_CLIP_NOTE =
   "to the scene tree, though it still answers geometry and metadata by " +
   "id, so the recipe is the only index and clipping degrades OFF on a " +
   "host with no container writer; deleteFrame REFUSES a pasted-in child, " +
-  "so Release releases before it removes; and deleting the container " +
-  "ORPHANS its children rather than deleting them, so the clip frame " +
-  "goes last. Only the INSTANCES are clipped — the source stays an " +
+  "so Release releases before it removes; and the clip frame goes " +
+  "last (an engine older than 0.65 orphaned a deleted container's " +
+  "children). Only the INSTANCES are clipped — the source stays an " +
   "ordinary top-level item you can keep editing.";
 
 // ---------------------------------------------------------------- model
@@ -1021,14 +1023,14 @@ export function repeatExpandBatchFor(
 
 /** The RELEASE batch — remove the instances, keep the SOURCE exactly as
  *  it was. In the ONE order the engine accepts (module header):
- *    1. dissolve the group (BEFORE its members are deleted — deleting
- *       first leaves the group holding a hole and the dissolve is
- *       refused with "group has an id-less member that cannot
- *       round-trip");
+ *    1. dissolve the group (BEFORE its members are deleted — on 0.64
+ *       deleting first was refused ("group has an id-less member that
+ *       cannot round-trip"); on 0.65 it applies and its undo does not
+ *       restore the group, `minted.spec.ts`);
  *    2. `releaseFrom` every clipped instance (deleteFrame REFUSES a
  *       pasted-in child), then delete it;
- *    3. delete the clip frame LAST (deleting it first ORPHANS its
- *       children — they leave the tree and still answer geometry);
+ *    3. delete the clip frame LAST (on 0.64 deleting it first ORPHANED
+ *       its children; 0.65 takes them with it);
  *    4. unlink the sources.
  *  ONE batch ⇒ 1 undo step. */
 export function repeatReleaseBatchFor(args: {

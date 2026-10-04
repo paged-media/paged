@@ -45,20 +45,18 @@
 //   Minus Back  FRONT minus back, with the front object's fill.
 //   Every closed piece is counter-clockwise, as with the booleans.
 //
-// WHAT THE ENGINE DOES, against Illustrator (engine pin: canvas-wasm 0.64.0):
-//   AGREEMENT — Divide, Trim, Merge (both ways) and Crop: the same pieces,
-//   piece for piece, in area, bounds, anchor count and fill, on rectangles
-//   and on the circle. Trim's extra two anchors included.
+// WHAT THE ENGINE DOES, against Illustrator (engine pin: canvas-wasm 0.65.0):
+//   AGREEMENT — Divide, Trim, Merge (both ways), Crop AND Minus Back: the
+//   same pieces, piece for piece, in area, bounds, anchor count and fill,
+//   on rectangles and on the circle. Trim's extra two anchors included.
 //
-//   DEFECT — `pathfinderMinusBack` is Illustrator's Minus FRONT. With the
-//   ids top to bottom, as the bundle's command sends them, the engine keeps
-//   the BACK object minus the front one:
-//       rectangles   engine 6000 pt², red, [100,100,200,180]
-//                    Illustrator 6800 pt², blue, [150,140,260,220]
-//       circle       engine 4446.4 pt², red
-//                    Illustrator 3190.8 pt², blue
-//   Handing the engine the ids BOTTOM to top gives Illustrator's answer,
-//   which is pinned below: the verb is inverted, not broken. `it.fails`.
+//   FIXED in 0.65.0 — `pathfinderMinusBack` was Illustrator's Minus FRONT
+//   on 0.64.0: with the ids top to bottom, as the bundle sends them, it
+//   kept the BACK object minus the front one (rectangles 6000 pt², red,
+//   where Illustrator keeps 6800 pt², blue). It now keeps the front.
+//
+//   FIXED in 0.65.0 — direction: every closed piece counter-clockwise, as
+//   Illustrator's (RFI C-81). 0.64.0 had no convention.
 //
 //   CONVENTION — Outline's segmentation and paint. The engine cuts the line
 //   work at every vertex (12 two-anchor lines), Illustrator only at the
@@ -67,9 +65,6 @@
 //   0 pt. And the two edges of the back object that the front one covers
 //   are RED in the engine (the edge's owner) and BLUE in Illustrator (what
 //   is on top there).
-//
-//   LATENT DEFECT — direction, as in the other specs: Illustrator's closed
-//   pieces are all counter-clockwise, the engine's are not (ENGINE_WINDINGS).
 
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 
@@ -278,24 +273,8 @@ function expectPiecesByDefinition(got: Piece[], c: RegionCase) {
   });
 }
 
-/** LATENT DEFECT — the engine's direction per piece, smallest piece first.
- *  Illustrator's closed pieces are all "ccw". */
-const ENGINE_WINDINGS: Record<string, Winding[]> = {
-  "rects-divide": ["cw", "cw", "cw"],
-  "rects-trim": ["cw", "ccw"],
-  "rects-merge": ["cw", "ccw"],
-  "rects-crop": ["cw"],
-  "rects-minus-back": ["cw"],
-  "rects-merge-same-fill": ["cw"],
-  "circle-rect-divide": ["ccw", "cw", "ccw"],
-  "circle-rect-minus-back": ["cw"],
-};
-
-/** DEFECT — the two Minus Back cases. */
-const ENGINE_MINUS_BACK_IS_MINUS_FRONT = new Set([
-  "rects-minus-back",
-  "circle-rect-minus-back",
-]);
+/** The two Minus Back cases (a 0.64.0 defect, fixed in 0.65.0). */
+const MINUS_BACK_CASES = ["rects-minus-back", "circle-rect-minus-back"];
 
 describe("oracle — pathfinder region verbs", () => {
   let h: HeadlessHost;
@@ -413,9 +392,7 @@ describe("oracle — pathfinder region verbs", () => {
     for (const c of PATHFINDER_REGION_CASES.filter(
       (x) => x.parameters.verb !== "pathfinderOutline",
     )) {
-      const defect = ENGINE_MINUS_BACK_IS_MINUS_FRONT.has(c.id);
-      const test = defect ? it.fails : it;
-      test(`${c.id}${defect ? " — DEFECT in 0.64.0: the engine subtracts the front from the back" : ""}`, async () => {
+      it(c.id, async () => {
         expectPiecesByDefinition(await engine(c), c);
       });
     }
@@ -425,9 +402,7 @@ describe("oracle — pathfinder region verbs", () => {
     for (const c of PATHFINDER_REGION_CASES.filter(
       (x) => x.parameters.verb !== "pathfinderOutline",
     )) {
-      const defect = ENGINE_MINUS_BACK_IS_MINUS_FRONT.has(c.id);
-      const test = defect ? it.fails : it;
-      test(`${c.id}: the same pieces — area, bounds, anchor count, fill${defect ? " — DEFECT in 0.64.0: Minus Back is Minus Front" : ""}`, async () => {
+      it(`${c.id}: the same pieces — area, bounds, anchor count, fill`, async () => {
         const ours = await engine(c);
         const want = theirs(c.id);
         expect(ours.length).toBe(want.length);
@@ -446,25 +421,18 @@ describe("oracle — pathfinder region verbs", () => {
       });
     }
 
-    it("DEFECT pinned — the engine's Minus Back with the ids BOTTOM to top is Illustrator's Minus Back", async () => {
-      for (const id of ENGINE_MINUS_BACK_IS_MINUS_FRONT) {
+    it("FIXED in 0.65.0 — Minus Back, as the bundle sends it (top to bottom), is Illustrator's: the front minus the back, the front's fill", async () => {
+      for (const id of MINUS_BACK_CASES) {
         const c = caseOf(id);
-        const [back, front] = c.input.paths;
+        const [, front] = c.input.paths;
         const overlap =
           paintedArea(c.input.paths, "nonzero") - paintedArea(c.input.paths, "evenodd");
-        // As the bundle sends it: back − front, the back object's fill.
         const [asSent] = await engine(c);
-        expect(relDiff(asSent.area, paintedArea([back]) - overlap), id).toBeLessThan(AREA_REL_TOL);
-        expect(asSent.fill, id).toEqual(RED);
-        // Reversed: front − back, the front object's fill — Illustrator's.
-        const [reversed] = await measure(c, "bottomToTop");
         const [want] = theirs(id);
-        expect(relDiff(reversed.area, paintedArea([front]) - overlap), id).toBeLessThan(
-          AREA_REL_TOL,
-        );
-        expect(relDiff(reversed.area, want.area), id).toBeLessThan(AREA_REL_TOL);
-        expect(boundsDiff(reversed.bounds, want.bounds), id).toBeLessThan(BOUNDS_ABS_TOL);
-        expect(reversed.fill, id).toEqual(BLUE);
+        expect(relDiff(asSent.area, paintedArea([front]) - overlap), id).toBeLessThan(AREA_REL_TOL);
+        expect(relDiff(asSent.area, want.area), id).toBeLessThan(AREA_REL_TOL);
+        expect(boundsDiff(asSent.bounds, want.bounds), id).toBeLessThan(BOUNDS_ABS_TOL);
+        expect(asSent.fill, id).toEqual(BLUE);
       }
     });
 
@@ -507,11 +475,13 @@ describe("oracle — pathfinder region verbs", () => {
       expect(length(ours, BLUE)).toBeCloseTo(380, 6);
     });
 
-    it("LATENT DEFECT — direction: Illustrator's closed pieces are all counter-clockwise; the engine's direction is an accident", async () => {
-      for (const [id, windings] of Object.entries(ENGINE_WINDINGS)) {
-        const ours = await engine(caseOf(id));
-        expect(ours.flatMap((p) => p.windings), `${id}: engine`).toEqual(windings);
-        expect(new Set(theirs(id).flatMap((p) => p.windings)), `${id}: Illustrator`).toEqual(
+    it("direction — FIXED in 0.65.0: every closed piece counter-clockwise, as Illustrator's", async () => {
+      for (const c of PATHFINDER_REGION_CASES.filter(
+        (x) => x.parameters.verb !== "pathfinderOutline",
+      )) {
+        const ours = await engine(c);
+        expect(new Set(ours.flatMap((p) => p.windings)), `${c.id}: engine`).toEqual(new Set(["ccw"]));
+        expect(new Set(theirs(c.id).flatMap((p) => p.windings)), `${c.id}: Illustrator`).toEqual(
           new Set(["ccw"]),
         );
       }

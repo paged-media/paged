@@ -468,25 +468,26 @@ any flow that builds, replaces and groups in ONE batch:
   range for parent Spread" — because the insert's z-position resolves
   against the spread length the batch STARTED with. So the inserts go
   FIRST. (Insert-then-delete in one batch is fine.)
-- A group must be DISSOLVED BEFORE its members are deleted. Deleting
-  first leaves the group holding a hole and the dissolve is refused with
-  "group has an id-less member that cannot round-trip".
-- SEVERAL rebuilds in one batch work in exactly ONE order: every insert,
-  then every dissolve, then every delete, then every `createGroup`.
-  Rebuild by rebuild (dissolve, delete, group, dissolve, delete, group)
-  is NOT refused — it APPLIES and the document is wrong: an empty group,
-  paths that are in no tree, and an undo that does not restore.
+- A group must be DISSOLVED BEFORE its members are deleted. On 0.64
+  deleting first was refused ("group has an id-less member that cannot
+  round-trip"); on 0.65 it APPLIES — and its undo does not bring the
+  group or its members back (a NEW engine defect, pinned in
+  `minted.spec.ts`). Either way: dissolve first.
+- SEVERAL rebuilds in one batch: every insert, then every dissolve, then
+  every delete, then every `createGroup`. That order is right on every
+  engine. Rebuild by rebuild (dissolve, delete, group, …) was a trap on
+  0.64 (it applied and the document was wrong); 0.65 gets it right and
+  one undo restores it — the flows keep the grouped order anyway.
 
-**AN ENGINE DEFECT every deleting flow inherits (0.64.0, pinned in
-`minted.spec.ts` so it fails when fixed).** Deleting a page item that
-sits BELOW a group in z-order breaks that group — a plain `deleteFrame`
-shows it, no batch involved: the bystander's member references are not
-moved down. So a re-plan / update / rebuild of a record that is not the
-TOPMOST group on its page is refused ("a member already belongs to
-another group"), and a release / un-bake of one APPLIES and damages the
-groups above it. This predates the one-batch work (measured on the
-two-batch flows) and is not something a flow can order its way around;
-do not "fix" a flow for it.
+**FIXED in 0.65 — the defect every deleting flow used to inherit.**
+On 0.64 deleting a page item that sat BELOW a group in z-order broke that
+group (its member references were not moved down): a re-plan / update /
+rebuild of a record that was not the TOPMOST group on its page was
+refused ("a member already belongs to another group"), and a release /
+un-bake APPLIED and damaged the groups above it. Core fixed it; the pins
+in `minted.spec.ts`, `pattern.spec.ts` and `symbols.spec.ts` now assert
+the fixed behaviour (a re-plan under another group is one batch and one
+undo restores it).
 
 **B-18 NESTING IS REAL, and `commands/group.ts`'s old "a 'paste into'
 cannot be expressed end-to-end" note was wrong — it is corrected in
@@ -506,9 +507,10 @@ else on nesting:
    keep its own index;
 3. `deleteFrame` REFUSES a nested child ("B-18: the item is pasted into
    a container — release it before removing") — release first;
-4. deleting the CONTAINER does not delete its children, it ORPHANS them:
-   they leave the tree and still answer `elementGeometry`. Delete the
-   children first, the container last.
+4. deleting the CONTAINER on 0.64 did not delete its children, it
+   ORPHANED them (they left the tree and still answered
+   `elementGeometry`); 0.65 removes them with it. Delete the children
+   first, the container last — right on both engines.
 What is still NOT representable is a clip GROUP — an arbitrary clip path
 over a set of items. The `GroupSpec` has no clip flag and core's parsed
 `Group` has no mask member; that half stays in the RFI.

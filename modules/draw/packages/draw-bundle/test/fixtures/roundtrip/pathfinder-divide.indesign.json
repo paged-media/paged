@@ -7,13 +7,13 @@
     "script": "scripts/indesign/lib/read-document.jsx",
     "script_sha256": "4486a78fdd3b45a88c6ef6b18911bc34b94f6cf7ddc3c4d433d3d5e256f4dc08",
     "runner": "scripts/indesign/run-roundtrip.sh",
-    "recorded_at": "2026-10-03T06:04:02.150Z",
+    "recorded_at": "2026-10-04T15:17:03.865Z",
     "host_os": "macOS 26.4",
     "pdf_preset": "[Qualitativ hochwertiger Druck]"
   },
   "idml": {
     "path": "packages/draw-bundle/test/fixtures/roundtrip/pathfinder-divide.idml",
-    "sha256": "0bfdca2c8d73fc6e96a8478636ef09a5c20ec96e9a2e4782637ccb6f03530c05"
+    "sha256": "589f740ef6a8111f24a87e0cb82a94b95b29d8da1305167a8e478a1b14a1d6e8"
   },
   "units": "pt",
   "coordinates": "page-local, origin top-left of the page, Y down (ruler origin PAGE, zero point 0,0, script measurement unit POINTS); bounds as [minX, minY, maxX, maxY]",
@@ -85,10 +85,10 @@
           "pathType": "CLOSED_PATH",
           "anchors": [
             {"anchor":[150,130],"left":[150,130],"right":[150,130]},
-            {"anchor":[200.0007,130],"left":[174.2642,130],"right":[206.2791,138.3572]},
-            {"anchor":[210,160],"left":[210,148.745],"right":[210,171.255]},
-            {"anchor":[200.0007,190],"left":[206.2791,181.6428],"right":[174.2642,190]},
-            {"anchor":[150,190],"left":[150,190],"right":[150,190]}
+            {"anchor":[150,190],"left":[150,190],"right":[150,190]},
+            {"anchor":[200.0007,190],"left":[174.2642,190],"right":[206.2791,181.6428]},
+            {"anchor":[210,160],"left":[210,171.255],"right":[210,148.745]},
+            {"anchor":[200.0007,130],"left":[206.2791,138.3572],"right":[174.2642,130]}
           ]
         }
       ]

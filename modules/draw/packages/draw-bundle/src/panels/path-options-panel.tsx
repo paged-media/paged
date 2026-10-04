@@ -294,9 +294,12 @@ export function makePathOptionsPanel(host: BundleHost): {
       return () => sub.dispose();
     }, [setOpen]);
 
-    // The copy probe — once, when Reflect is first shown.
+    // The engine-0.65 probe — once, when Reflect or Offset is first shown:
+    // Reflect ▸ Copy needs `duplicateElements`, and the same release made
+    // the offset honour its join (OFFSET_JOIN_NOTE is only for an older
+    // engine).
     React.useEffect(() => {
-      if (open !== "reflect" || copyAvailable !== null) return;
+      if ((open !== "reflect" && open !== "offset") || copyAvailable !== null) return;
       let live = true;
       void supportsDuplicate(host).then((ok) => {
         if (live) setCopyAvailable(ok);
@@ -458,9 +461,11 @@ export function makePathOptionsPanel(host: BundleHost): {
                 min: 1,
                 disabled: draft.offset.join !== "miter",
               })}
-              <div style={mutedStyle} data-draw-pathopts-offset-join-note>
-                {OFFSET_JOIN_NOTE}
-              </div>
+              {copyAvailable === false && (
+                <div style={mutedStyle} data-draw-pathopts-offset-join-note>
+                  {OFFSET_JOIN_NOTE}
+                </div>
+              )}
             </>
           );
         case "simplify":

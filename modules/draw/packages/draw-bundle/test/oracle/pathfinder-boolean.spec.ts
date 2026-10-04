@@ -42,21 +42,20 @@
 //   * Curves are cut at the crossings and kept as cubics: the circle's
 //     union has 7 anchors and 4 curved segments.
 //
-// WHAT THE ENGINE DOES, against Illustrator (engine pin: canvas-wasm 0.64.0):
+// WHAT THE ENGINE DOES, against Illustrator (engine pin: canvas-wasm 0.65.0):
 //   AGREEMENT — painted area and bounds in all 8 cases, and anchor count and
 //   path count too (largest area gap 0.25 pt², on the circle's union).
 //
-//   CONVENTION — the shape of EXCLUDE. The engine leaves ONE element with
-//   two subpaths: the union's outline and the intersection wound the other
-//   way, i.e. a hole. Illustrator leaves two disjoint pieces. Both paint
-//   12800 (rectangles) / 7637.6 (circle), under non-zero and even-odd
-//   alike; what differs is that the engine's Σ|area| is union + overlap
-//   (16800 vs 12800) and that its result is not two objects a user can
-//   move apart.
+//   FIXED in 0.65.0 — direction. Every result is counter-clockwise, as
+//   Illustrator's are (RFI C-81). On 0.64.0 the rectangles came back
+//   clockwise and the circle mixed.
 //
-//   LATENT DEFECT — direction, as in offset-path.spec.ts. Illustrator's
-//   results are all counter-clockwise; the engine's are clockwise for the
-//   rectangles and mixed for the circle (ENGINE_WINDINGS).
+//   CONVENTION — EXCLUDE's container. Since 0.65.0 the engine's pieces ARE
+//   Illustrator's: the two disjoint shapes, wound the same way, Σ|area| =
+//   the painted area (12800 / 7637.6). On 0.64.0 it was the union's
+//   outline with the overlap as a hole (Σ|area| 16800). What remains is
+//   that the engine keeps both pieces in ONE element (a compound path)
+//   where Illustrator leaves two objects a user can move apart.
 
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 
@@ -78,7 +77,6 @@ import {
   windingOf,
   type OraclePath,
   type ShapeSummary,
-  type Winding,
 } from "./oracle";
 
 type Kind = "union" | "subtract" | "intersect" | "exclude";
@@ -172,19 +170,6 @@ const BOUNDS: Record<string, [number, number, number, number]> = {
   "circle-rect-exclude": [110, 110, 260, 210],
 };
 
-/** LATENT DEFECT — the engine's direction per subpath. Illustrator's is
- *  "ccw" for every path of every case. */
-const ENGINE_WINDINGS: Record<string, Winding[]> = {
-  "rects-union": ["cw"],
-  "rects-subtract": ["cw"],
-  "rects-intersect": ["cw"],
-  "rects-exclude": ["cw", "ccw"],
-  "circle-rect-union": ["ccw"],
-  "circle-rect-subtract": ["ccw"],
-  "circle-rect-intersect": ["cw"],
-  "circle-rect-exclude": ["cw", "ccw"],
-};
-
 const FIXTURE = loadOracle<BooleanParameters>("pathfinder-boolean");
 const RECORDED = new Map(FIXTURE.cases.map((c) => [c.id, c]));
 const theirs = (id: string): ShapeSummary => summarize(RECORDED.get(id)!.measured.paths);
@@ -237,7 +222,6 @@ describe("oracle — pathfinder booleans", () => {
       ).toEqual(PATHFINDER_BOOLEAN_CASES);
       const ids = PATHFINDER_BOOLEAN_CASES.map((c) => c.id);
       expect(Object.keys(BOUNDS)).toEqual(ids);
-      expect(Object.keys(ENGINE_WINDINGS)).toEqual(ids);
     });
 
     it("is self-consistent: Illustrator's area and bounds and the probe's winding match the anchors it recorded", () => {
@@ -323,34 +307,31 @@ describe("oracle — pathfinder booleans", () => {
       });
     }
 
-    it("CONVENTION — exclude: the engine keeps ONE element, an outline with a hole; Illustrator leaves two disjoint pieces", async () => {
+    it("CONVENTION — exclude: the engine keeps Illustrator's two pieces in ONE element; Illustrator leaves two objects", async () => {
       for (const id of ["rects-exclude", "circle-rect-exclude"]) {
         const c = PATHFINDER_BOOLEAN_CASES.find((x) => x.id === id)!;
         const { elements, paths, shape: ours } = await engine(c);
         const want = theirs(id);
-        const union = paintedArea(c.input.paths, "nonzero");
         const exclude = paintedArea(c.input.paths, "evenodd");
-        // Engine: one element, two subpaths wound opposite ways — the
-        // union's outline and the overlap as a hole. Σ|area| = union +
-        // overlap (16800 on the rectangles).
+        // Engine: one element, two subpaths wound the SAME way — the two
+        // disjoint pieces, no hole. Σ|area| is the painted area.
         expect(elements, id).toBe(1);
         expect(ours.paths, id).toBe(2);
-        expect(new Set(ours.windings).size, id).toBe(2);
-        expect(relDiff(ours.area, union + (union - exclude)), id).toBeLessThan(AREA_REL_TOL);
-        // Illustrator: two pieces wound the same way; Σ|area| IS the
-        // painted area (12800).
+        expect(new Set(ours.windings).size, id).toBe(1);
+        expect(relDiff(ours.area, exclude), id).toBeLessThan(AREA_REL_TOL);
+        // Illustrator: the same two pieces, the same way round.
+        expect(want.paths, id).toBe(2);
         expect(new Set(want.windings).size, id).toBe(1);
         expect(relDiff(want.area, exclude), id).toBeLessThan(AREA_REL_TOL);
         // Either way the same pixels, under either fill rule.
         expect(relDiff(paintedArea(paths, "evenodd"), exclude), id).toBeLessThan(AREA_REL_TOL);
+        expect(relDiff(paintedArea(paths, "nonzero"), exclude), id).toBeLessThan(AREA_REL_TOL);
       }
     });
 
-    it("LATENT DEFECT — direction: Illustrator returns every path counter-clockwise; the engine's direction is an accident", async () => {
+    it("direction — FIXED in 0.65.0: every path counter-clockwise, as Illustrator's", async () => {
       for (const c of PATHFINDER_BOOLEAN_CASES) {
-        expect((await engine(c)).shape.windings, `${c.id}: engine`).toEqual(
-          ENGINE_WINDINGS[c.id],
-        );
+        expect(new Set((await engine(c)).shape.windings), `${c.id}: engine`).toEqual(new Set(["ccw"]));
         expect(new Set(theirs(c.id).windings), `${c.id}: Illustrator`).toEqual(new Set(["ccw"]));
       }
     });

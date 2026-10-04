@@ -54,7 +54,7 @@
 //    `commands/repeat.ts` ships on them for §12.4's clipping. The wire
 //    seam is `commands/v59-wire.ts`; the four measured consequences of
 //    nesting (no group, invisible to `document.tree()`, `deleteFrame`
-//    refused, a deleted container ORPHANS its children) are documented
+//    refused, a deleted container ORPHANED its children before 0.65) are documented
 //    there and in `commands/repeat.ts`.
 //
 // So what remains for the cross-repo RFI

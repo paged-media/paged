@@ -187,10 +187,16 @@ export interface OffsetOptions {
  *  fields are offered because the choice is real on the wire and takes
  *  effect the day the kernel honours it; the sentence is there because
  *  until then a control that changes nothing must say so. */
+/** Shown only on an engine OLDER than 0.65, whose offset bevelled every
+ *  outward corner (core `offset_closed_path` took `_join` / `_miter_limit`).
+ *  0.65.0 honours both — `test/oracle/offset-path.spec.ts` against
+ *  Illustrator — and the same release added `duplicateElements`, which is
+ *  how the panel tells the two apart (one vocabulary probe, shared with
+ *  Reflect ▸ Copy). */
 export const OFFSET_JOIN_NOTE =
-  "The engine currently bevels every outward corner whatever join is " +
-  "chosen — the join and the miter limit are sent with the offset and " +
-  "remembered, and take effect once the engine's offset honours them.";
+  "This engine bevels every outward corner whatever join is chosen — " +
+  "the join and the miter limit are sent with the offset and remembered, " +
+  "and take effect on engine 0.65 or later.";
 
 export interface SimplifyOptions {
   /** pt — the largest deviation a removed anchor may introduce. */

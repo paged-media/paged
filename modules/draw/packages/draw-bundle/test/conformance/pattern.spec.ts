@@ -1558,21 +1558,13 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
         expect(await sortedLeafIds(h)).toEqual(PRISTINE);
       });
 
-      // THE ENGINE DEFECT (`minted.spec.ts` pins it on a bare
-      // `deleteFrame`), as this flow meets it. A field that is not the
-      // TOPMOST group on its page cannot be re-planned: the old tiles sit
-      // below another group, deleting them leaves that group's member
-      // references stale, and the regroup is refused.
-      //
-      // The one batch refuses ATOMICALLY — nothing is left behind. The
-      // stepwise fallback then does what this flow has always done here:
-      // batch 1 applies, batch 2 is refused, and the freshly inserted
-      // tiles stay on the page, unpainted and unlinked. That is the
-      // as-found outcome, kept because every refusal takes the same
-      // fallback (the engine does not say which refusals a second try
-      // could survive). Fails when the engine is fixed — and the
-      // fallback's leftovers go with it.
-      it("ENGINE DEFECT — a re-plan under another group is refused, and the fallback leaves what it always left", async () => {
+      // FIXED in 0.65.0 (`minted.spec.ts` pins the engine half). On 0.64.0
+      // a field that was not the TOPMOST group on its page could not be
+      // re-planned: deleting its old tiles left the group above with stale
+      // member references, the one batch was refused ("a member already
+      // belongs to another group"), and the stepwise fallback left the new
+      // tiles loose on the page. Now the one batch applies.
+      it("FIXED in 0.65.0 — a re-plan under another group is ONE batch, and one undo restores the old field", async () => {
         await h.host.selection.set([INNER]);
         const first = await applyMakePattern(h.host, { columns: 2, rows: 1 });
         expect(first).toHaveLength(1);
@@ -1584,6 +1576,8 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
         });
         expect(above).toHaveLength(1);
         const before = await leafIds(h);
+        const oldTiles = (await patternLinks(h.host, "pat-1")).tiles.map((t) => String(t.id.id));
+        expect(oldTiles.length).toBeGreaterThan(0);
 
         const logged: string[] = [];
         const { host, work } = countingHost(recording(h.host, logged));
@@ -1592,20 +1586,16 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
           columns: 3,
           rows: 1,
         });
-        // One atomic refusal, then the two-batch lane: insert applied,
-        // finish refused.
-        expect(work.mutations.map((m) => m.op)).toEqual(["batch", "batch", "batch"]);
-        expect(logged.join("\n")).toContain("a member already belongs to another group");
-        // The old field is intact …
-        expect(await leafIds(h)).toEqual(expect.arrayContaining(before));
-        expect((await patternLinks(h.host, "pat-1")).tiles.map((t) => t.id)).toEqual(first);
-        // … and the two new tiles are loose on the page, linked to nothing.
+        expect(work.mutations.map((m) => m.op)).toEqual(["batch"]);
+        expect(logged.join("\n")).not.toContain("a member already belongs to another group");
+        // The field now has the new tiles, linked; the old ones are gone.
         expect(replanned).toHaveLength(2);
-        expect(await leafIds(h)).toHaveLength(before.length + 2);
-        for (const stray of replanned) {
-          expect(await h.host.document.getMetadata(stray)).toBeNull();
-        }
-        // The stray insert is the one undo step the refused re-plan left.
+        expect(
+          (await patternLinks(h.host, "pat-1")).tiles.map((t) => String(t.id.id)).sort(),
+        ).toEqual(replanned.map((t) => String(t.id)).sort());
+        const now = await leafIds(h);
+        for (const old of oldTiles) expect(now).not.toContain(old);
+        // ONE undo puts the old field back.
         await undoTo(h, 1);
         expect(await leafIds(h)).toEqual(before);
         await undoTo(h, 2);

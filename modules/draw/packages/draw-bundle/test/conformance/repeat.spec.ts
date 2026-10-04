@@ -960,7 +960,7 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
       expect(await sortedLeafIds(h)).toEqual(PRISTINE);
     });
 
-    it("CONSEQUENCE 4 — deleting a container ORPHANS its children, so Release drops it LAST", async () => {
+    it("CONSEQUENCE 4 — FIXED in 0.65: deleting a container takes its children WITH it (it used to orphan them); Release still drops it last", async () => {
       await h.host.selection.set([INNER]);
       await applyMakeRepeat(h.host, "radial", {
         count: 3,
@@ -973,16 +973,21 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
         "rep-1",
       )!;
       const child = poly(record.instances[0].id);
-      // The hazard, demonstrated: drop the container on its own…
+      // What used to be the hazard: drop the container on its own. On
+      // 0.64 the child left every tree and STILL answered geometry — an
+      // orphan nothing could enumerate or delete. Core's delete fix
+      // (canvas-wasm 0.65.0) removes the nested children with their
+      // container, so nothing is orphaned and ONE undo brings both back.
       const dropped = await h.host.document.mutate({
         op: "deleteFrame",
         args: { frameId: record.clipFrame!.id },
       } as Mutation);
       expect(dropped.applied).toBe(true);
-      // …and the child is in NO tree while still answering geometry.
       expect(await leafIds(h)).not.toContain(child.id);
+      expect(await h.host.document.elementGeometry([child])).toHaveLength(0);
+      await h.host.document.undo(); // the delete — container and child back
       expect(await h.host.document.elementGeometry([child])).toHaveLength(1);
-      await undoTo(h, 3); // the stray delete, the clip, the build
+      await undoTo(h, 2); // the clip, the build
       expect(await sortedLeafIds(h)).toEqual(PRISTINE);
     });
 
@@ -1365,7 +1370,7 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
       expect(REPEAT_CLIP_NOTE).toContain("NO GROUP");
       expect(REPEAT_CLIP_NOTE).toContain("INVISIBLE");
       expect(REPEAT_CLIP_NOTE).toContain("deleteFrame REFUSES");
-      expect(REPEAT_CLIP_NOTE).toContain("ORPHANS");
+      expect(REPEAT_CLIP_NOTE).toContain("orphaned");
       // The panel repeats both AND states the undo arithmetic.
       expect(REPEAT_PANEL_NOTE).toContain(REPEAT_LIVE_NOTE);
       expect(REPEAT_PANEL_NOTE).toContain(REPEAT_CLIP_NOTE);

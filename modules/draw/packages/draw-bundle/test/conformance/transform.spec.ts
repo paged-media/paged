@@ -26,9 +26,11 @@
 //   (4) the whole selection is ONE batch, ONE undo step;
 //   (5) Transform again repeats the last reflection about the NEW
 //       selection's centre; with nothing remembered it does nothing;
-//   (6) COPY on this engine (0.64, no duplicateElements) is REFUSED by
-//       name — only the vocabulary probe reaches the engine — and the
-//       copy batch's wire is what an 0.65 engine would be sent.
+//   (6) COPY (engine 0.65, `duplicateElements`): ONE batch duplicates
+//       the selection in place and reflects the sources, so the original
+//       stays where it was and its mirror image appears — ONE undo. (On
+//       0.64 the op did not exist and COPY was refused by name; the
+//       refusal path is pinned against a host whose vocabulary lacks it.)
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
@@ -267,20 +269,69 @@ describe("draw conformance — Reflect and Transform again", () => {
     expect(work.mutations).toEqual([]);
   });
 
-  it("COPY on this engine (no duplicateElements) is REFUSED by name; only the probe reaches it; nothing is remembered", async () => {
+  it("COPY (0.65): the original stays, its mirror image appears, in ONE batch and ONE undo step", async () => {
+    const leafKeys = async () => {
+      const out: string[] = [];
+      const walk = (nodes: { id?: ElementId | null; children?: unknown[] }[]) => {
+        for (const n of nodes) {
+          if (n.children?.length) walk(n.children as never);
+          else if (n.id) out.push(`${n.id.kind}:${String(n.id.id)}`);
+        }
+      };
+      walk((await h.host.document.tree()) as never);
+      return out;
+    };
     await h.host.selection.set([TRI]);
     const before = await pageAnchors(h, TRI);
+    const keysBefore = await leafKeys();
     const { host, work } = countingHost(h.host);
+    const done = await applyReflect(host, 90, true);
+    expect(done.applied).toBe(true);
+    expect(work.mutations.map((m) => m.op)).toEqual(["mediaPagedDrawOpProbe", "batch"]);
+    const keysAfter = await leafKeys();
+    const added = keysAfter.filter((k) => !keysBefore.includes(k));
+    expect(added).toHaveLength(1);
+    // One of the two is where the triangle was, the other is mirrored
+    // about the vertical axis through the selection's centre (x = 150).
+    const copy = { kind: "polygon", id: added[0]!.slice("polygon:".length) } as ElementId;
+    const shapes = [await pageAnchors(h, TRI), await pageAnchors(h, copy)];
+    const mirrored = before.map(([x, y]) => [300 - x, y] as [number, number]);
+    const isAt = (got: [number, number][], want: [number, number][]) =>
+      got.every((p, i) => Math.abs(p[0] - want[i]![0]) < 1e-3 && Math.abs(p[1] - want[i]![1]) < 1e-3);
+    expect(shapes.filter((s) => isAt(s, before))).toHaveLength(1);
+    expect(shapes.filter((s) => isAt(s, mirrored))).toHaveLength(1);
+    expect(lastSelectionTransform()).toEqual({ kind: "reflect", angleDeg: 90, copy: true });
+    await h.host.document.undo();
+    expect(await leafKeys()).toEqual(keysBefore);
+    near(await pageAnchors(h, TRI), before);
+  });
+
+  it("COPY on an engine WITHOUT duplicateElements is REFUSED by name; only the probe reaches it; nothing is remembered", async () => {
+    // The 0.64 vocabulary, played back: the probe's refusal lists the
+    // engine's ops, and this one leaves `duplicateElements` out.
+    const old = new Proxy(h.host, {
+      get(obj, prop, receiver) {
+        if (prop !== "document") return Reflect.get(obj, prop, receiver) as unknown;
+        return new Proxy(obj.document, {
+          get(doc, key, r) {
+            if (key !== "mutate") return Reflect.get(doc, key, r) as unknown;
+            return async (m: { op: string }) => {
+              const out = await doc.mutate(m as never);
+              if (m.op !== "mediaPagedDrawOpProbe") return out;
+              return JSON.parse(JSON.stringify(out).replace(/`duplicateElements`, ?|duplicateElements, ?/g, ""));
+            };
+          },
+        });
+      },
+    });
+    await h.host.selection.set([TRI]);
+    const before = await pageAnchors(h, TRI);
+    const { host, work } = countingHost(old);
     const done = await applyReflect(host, 90, true);
     expect(done).toEqual({ applied: false, targets: [], refusal: COPY_UNAVAILABLE_NOTE });
     expect(work.mutations.map((m) => m.op)).toEqual(["mediaPagedDrawOpProbe"]);
     near(await pageAnchors(h, TRI), before);
     expect(lastSelectionTransform()).toBeNull();
-    // The undo stack holds nothing of it: the probe was refused.
-    await h.host.selection.set([TRI]);
-    await applyReflect(h.host, 0);
-    await h.host.document.undo();
-    near(await pageAnchors(h, TRI), before);
   });
 
   it("the COPY batch an 0.65 engine would be sent: duplicate (offset 0) FIRST, then the sources reflected", () => {

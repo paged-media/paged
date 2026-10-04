@@ -33,7 +33,11 @@ packages/draw-bundle/test/fixtures/roundtrip/
 ## What is recorded
 
 Recorded with **Adobe InDesign 20.0.1.32** (InDesign 2025, German locale,
-macOS 26.4) on 2026-10-03, engine `@paged-media/canvas-wasm` 0.64.0. Each
+macOS 26.4) on 2026-10-03, engine `@paged-media/canvas-wasm` 0.64.0 —
+except `offset-path` and `pathfinder-{divide,exclude,intersect}`, whose
+IDML the 0.65.0 engine exports differently (joins honoured, every result
+wound one way, Exclude as two pieces) and which were regenerated and
+re-recorded on 0.65.0 on 2026-10-04, all four still identical. Each
 recording's `produced_by` is the authority: app, version, locale, the
 reader's sha256 and the IDML's sha256 — the replay refuses a recording
 made by another reader or from another IDML.

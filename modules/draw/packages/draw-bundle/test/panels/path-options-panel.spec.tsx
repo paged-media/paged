@@ -362,7 +362,7 @@ describe("Path options panel — rendered against the engine", () => {
       return { sent, table };
     };
 
-    it("OFFSET: the JOIN and MITER LIMIT typed are on the WIRE — and the section says the engine does not read them yet", async () => {
+    it("OFFSET: the JOIN and MITER LIMIT typed are on the WIRE — and on an engine that reads them (0.65) no excuse is shown", async () => {
       const panel = await mountPanel(h, makePathOptionsPanel);
       const before = await tableOf(SQ);
       const round = await offsetWithJoin(panel, "round");
@@ -377,35 +377,31 @@ describe("Path options panel — rendered against the engine", () => {
       expect(panel.get<HTMLInputElement>(field("offset.miterLimit")).disabled).toBe(
         true,
       );
-      expect(panel.get("[data-draw-pathopts-offset-join-note]").textContent).toBe(
-        OFFSET_JOIN_NOTE,
-      );
+      expect(panel.count("[data-draw-pathopts-offset-join-note]")).toBe(0);
+      expect(OFFSET_JOIN_NOTE).toMatch(/0\.65/);
       expect(shapeOf(await tableOf(SQ))).toEqual(shapeOf(before));
     });
 
-    // ENGINE DEFECT, pinned the way `test/oracle/offset-path.spec.ts`
-    // pins it: core's `offset_closed_path(_join, _miter_limit)` bevels
-    // every outward corner whatever join it is sent, so a MITER offset of
-    // a square comes back with eight anchors (a chamfer at each corner)
-    // instead of four. `it.fails` — it flips RED the day the kernel
-    // honours `join`, which is the day `OFFSET_JOIN_NOTE` must go.
-    it.fails(
-      "OFFSET: a MITER join gives a square its four corners back (engine: bevels regardless)",
-      async () => {
-        const panel = await mountPanel(h, makePathOptionsPanel);
-        const miter = await offsetWithJoin(panel, "miter");
-        expect(miter.table.anchors).toHaveLength(4);
-      },
-    );
-
-    it("OFFSET: …and until then every join is the same bevel, which is what the note says", async () => {
+    // FIXED in 0.65.0 (`test/oracle/offset-path.spec.ts` against
+    // Illustrator): the offset honours its join. On 0.64.0 every outward
+    // corner was a bevel, so miter, round and bevel gave one shape.
+    it("OFFSET: miter keeps the square's sharp corners, round rounds them, bevel cuts them — three shapes", async () => {
       const panel = await mountPanel(h, makePathOptionsPanel);
       const miter = await offsetWithJoin(panel, "miter");
       const round = await offsetWithJoin(panel, "round");
       const bevel = await offsetWithJoin(panel, "bevel");
-      expect(miter.table.anchors).toHaveLength(8);
-      expect(shapeOf(round.table)).toEqual(shapeOf(miter.table));
-      expect(shapeOf(bevel.table)).toEqual(shapeOf(miter.table));
+      // Miter: the 12 pt offset square, corners sharp — [48,48]–[172,172].
+      // 12 anchors where Illustrator has 4: the apex keeps the two
+      // collinear edge ends it was built from (a convention; the oracle
+      // pins it), so the BOX is the check, not the count.
+      expect(miter.table.anchors).toHaveLength(12);
+      const box = boxOf(miter.table);
+      expect(box[0]).toBeCloseTo(48, 3);
+      expect(box[2]).toBeCloseTo(172, 3);
+      expect(shapeOf(round.table)).not.toEqual(shapeOf(miter.table));
+      expect(shapeOf(bevel.table)).not.toEqual(shapeOf(miter.table));
+      expect(shapeOf(bevel.table)).not.toEqual(shapeOf(round.table));
+      expect(bevel.table.anchors).toHaveLength(8);
     });
 
     it("SIMPLIFY: the TOLERANCE typed decides how many anchors survive", async () => {
