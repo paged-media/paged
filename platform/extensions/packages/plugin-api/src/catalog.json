@@ -71,6 +71,13 @@
       "summary": "Group two-or-more elements; <2 valid members returns false."
     },
     {
+      "name": "paged.duplicateElements",
+      "params": "([id, ...], dx, dy)",
+      "returns": "string[] (created ids) JSON | null",
+      "kind": "author",
+      "summary": "Duplicate page items: a whole clone of each (properties, plugin metadata, group members, pasted-in children, a text frame's story), offset by (dx, dy) pt and inserted directly above its source, in one undo step. Selects the clones and returns their kind:id addresses in source order; null when the engine refuses (threaded text frame, anchored object, opacity mask, an element named together with its group)."
+    },
+    {
       "name": "paged.undo",
       "params": "()",
       "returns": "bool",
@@ -1252,7 +1259,8 @@
     "paragraphNumberingStartAt",
     "paragraphNumberingContinue",
     "paragraphBulletsCharacterStyle",
-    "paragraphNumberingCharacterStyle"
+    "paragraphNumberingCharacterStyle",
+    "paragraphComposer"
   ],
   "constraints": [
     "Scripts run in Boa (pure ECMAScript), NOT Node: no require/import, fetch, fs, setTimeout, or network. Use only paged.* and console.*.",
@@ -1308,6 +1316,7 @@
     "detachTextFromPath",
     "createGroup",
     "dissolveGroup",
+    "duplicateElements",
     "setGroupTransform",
     "setPluginMetadata",
     "pathPointCurveType",
