@@ -283,21 +283,12 @@ Eyedropper) and `k` (a dead Measure). The current global picture:
 - paged.image holds `shift+x y shift+y shift+l shift+w q shift+f shift+e`;
 - paged.draw holds `= -` plus
   `shift+c/u/n/a/m/b/r/j/k/i/d/s/q/o/v/h`.
-So the free registers are exactly `shift+t`, `i`, `k` and `shift+z`. THE
-FIRST THREE ARE EACH THE CANONICAL KEY OF A paged.draw TOOL CURRENTLY ON
-A SUBSTITUTE — `shift+t` → Type on a Path (on `shift+h`), `i` →
-Eyedropper (on `shift+d`), `k` → Live Paint Bucket (on `shift+o`) — and
-the editor's own retirement note asks paged.draw to claim them for those
-tools. `shift+z` reads as an undo variant on every platform and would be
-a trap. That is why the §12.4 REPEAT tool ships with NO shortcut: a
-keyless working tool is honest (`paged.tool.smooth` is one), a stolen
-canonical key is not. Moving the three tools onto their canonical keys
-is a separate, deliberate change — do it as one pass, not by taking one
-key here. **The §16.2 and §16.3 rows changed nothing above**: they ship
-as COMMANDS AND PANELS ONLY, with no new tool and therefore no shortcut
-question at all. `shift+t`, `i`, `k` and `shift+z` are still the four
-free registers, and the first three are still owed to the tools whose
-canonical keys they are.
+So the free registers WERE exactly `shift+t`, `i`, `k` and `shift+z`.
+UPDATE 2026-10-04: `k` now belongs to the Live Paint Bucket, its
+canonical key; the host's working Eyedropper holds `i` and paged.image
+took `shift+t`, so Type on a Path (`shift+h`) and draw's Eyedropper
+(`shift+d`) stay where they are. Free now: `shift+o` and `shift+z`
+(which reads as an undo variant and stays a trap).
 
 **`.paged` CONTAINER PARTS: there are now SEVEN** — graphic styles,
 symbols, live paint, pattern, repeat, blend (`blend.json`) and objects-on-

@@ -1401,10 +1401,11 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
         .toolsContributed()
         .filter((t) => (REPEAT_TOOL_IDS as readonly string[]).includes(t.id));
       expect(tools.map((t) => t.id)).toEqual([...REPEAT_TOOL_IDS]);
-      // Deliberately keyless — see tools.ts. The three registers the
-      // editor freed on 2026-08-03 (`shift+t`, `i`, `k`) are each the
-      // CANONICAL key of a paged.draw tool currently on a substitute,
-      // and `shift+z` reads as an undo variant everywhere.
+      // Deliberately keyless — see tools.ts. Of the three registers the
+      // editor freed on 2026-08-03, `k` went to the Live Paint Bucket
+      // (its canonical key), while `i` (the host Eyedropper) and
+      // `shift+t` (paged.image) were taken elsewhere; `shift+z` reads as
+      // an undo variant everywhere.
       expect(tools[0]!.shortcut).toBeUndefined();
       const all = h
         .toolsContributed()
@@ -1413,7 +1414,6 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
       expect(new Set(all).size).toBe(all.length);
       expect(all).not.toContain("shift+t");
       expect(all).not.toContain("i");
-      expect(all).not.toContain("k");
       expect(all).not.toContain("shift+z");
       // A REAL glyph token — an invented one renders the rail button
       // glyphless (the stroke panel's recorded lesson).

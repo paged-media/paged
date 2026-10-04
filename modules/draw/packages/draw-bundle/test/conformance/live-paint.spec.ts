@@ -627,16 +627,17 @@ describe("draw conformance — LIVE PAINT v0 (against the real engine, F4)", () 
     expect(typeof panel!.component).toBe("function");
   });
 
-  it("INV-REG-1: the two tool shortcuts avoid BOTH catalog keys, which are taken", () => {
+  it("INV-REG-1: the bucket is on its catalog key `k`; the selection avoids `shift+l`, which is taken", () => {
     const tools = h
       .toolsContributed()
       .filter((t) => (LIVE_PAINT_TOOL_IDS as readonly string[]).includes(t.id));
     expect(tools.map((t) => t.id)).toEqual([...LIVE_PAINT_TOOL_IDS]);
     const shortcuts = tools.map((t) => t.shortcut);
-    // Illustrator's own keys: `k` (bucket) is an editor built-in single
-    // key and `shift+l` (selection) is held by paged.image — so neither
-    // is taken here, and nothing in the bundle collides either.
-    expect(shortcuts).toEqual(["shift+o", "shift+v"]);
+    // Illustrator's own keys: `k` (bucket) — free since the editor
+    // retired its dead built-in Measure, so the bucket is on it — and
+    // `shift+l` (selection), held by paged.image. Nothing in the bundle
+    // collides either.
+    expect(shortcuts).toEqual(["k", "shift+v"]);
     // Unique KEYS: a keyless tool (Repeat, Knife — see tools.ts) has no
     // key to collide, so it is not counted as one.
     const all = h
@@ -644,7 +645,7 @@ describe("draw conformance — LIVE PAINT v0 (against the real engine, F4)", () 
       .map((t) => t.shortcut)
       .filter((k): k is string => k !== undefined);
     expect(new Set(all).size).toBe(all.length);
-    expect(all).not.toContain("k");
+    expect(all.filter((k) => k === "k")).toHaveLength(1);
     expect(all).not.toContain("shift+l");
   });
 

@@ -386,6 +386,14 @@ export function drawTools(host: BundleHost): ToolContribution[] {
     // Selection tool), which is what the face picker is. (Type on a Path
     // has since taken shift+h; shift+z is the only one still free.)
     //
+    // UPDATE 2026-10-04: the editor retired its dead built-in Measure and
+    // freed `k`, so the bucket moved onto its canonical key (re-checked
+    // against editor main and every plugin's tools: nothing else holds
+    // `k`). `shift+o` is free again. The other two owed keys are gone:
+    // the host's working Eyedropper holds `i`, and paged.image took
+    // `shift+t`, so Type on a Path stays on `shift+h` and the Eyedropper
+    // on `shift+d`.
+    //
     // ICONS: the host's kebab-case glyph map has no `tool-livePaint*`
     // entry, and an INVENTED token renders the rail button GLYPHLESS
     // (the stroke panel's recorded lesson) — so both borrow a REAL
@@ -396,7 +404,7 @@ export function drawTools(host: BundleHost): ToolContribution[] {
       id: "media.paged.draw.tool.livePaintBucket",
       title: "Live Paint Bucket",
       icon: "tool-gradientSwatch",
-      shortcut: "shift+o",
+      shortcut: "k",
       group: "livePaintBucket",
       section: "drawType",
       order: 10,
