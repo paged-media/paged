@@ -184,7 +184,9 @@ fn guides(el: Option<&El>) -> Vec<(String, String)> {
     .unwrap_or_default()
 }
 
-fn custom_geometry(el: &El) -> CustomGeometry {
+/// `a:custGeom` (and, with the same elements, a preset definition from
+/// `presetShapeDefinitions.xml`).
+pub fn custom_geometry(el: &El) -> CustomGeometry {
     let pt = |p: &El| {
         (
             p.attr("x").unwrap_or("0").to_string(),

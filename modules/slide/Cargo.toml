@@ -9,6 +9,7 @@ members = [
     "vendor/paged-ooxml",
     "pptx-core",
     "pptx-import",
+    "slide-geom",
     "slide-js",
 ]
 
@@ -36,6 +37,7 @@ wasm-bindgen = "0.2"
 paged-ooxml = { path = "vendor/paged-ooxml" }
 pptx-core = { path = "pptx-core" }
 pptx-import = { path = "pptx-import" }
+slide-geom = { path = "slide-geom" }
 slide-js = { path = "slide-js" }
 
 [workspace.lints.clippy]
