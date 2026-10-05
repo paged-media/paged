@@ -7,13 +7,13 @@
     "script": "scripts/indesign/lib/read-document.jsx",
     "script_sha256": "4486a78fdd3b45a88c6ef6b18911bc34b94f6cf7ddc3c4d433d3d5e256f4dc08",
     "runner": "scripts/indesign/run-roundtrip.sh",
-    "recorded_at": "2026-10-03T06:04:15.171Z",
+    "recorded_at": "2026-10-05T10:21:55.439Z",
     "host_os": "macOS 26.4",
     "pdf_preset": "[Qualitativ hochwertiger Druck]"
   },
   "idml": {
     "path": "packages/draw-bundle/test/fixtures/roundtrip/stroke-attributes.idml",
-    "sha256": "6e678731cb1d4019154474fcec97951e39a83daeaf62d5f8efd8cd6807d33e24"
+    "sha256": "cdb60c9035e9519e41f8d968460bc796842a7ee31a10ff2550682d329bffb663"
   },
   "units": "pt",
   "coordinates": "page-local, origin top-left of the page, Y down (ruler origin PAGE, zero point 0,0, script measurement unit POINTS); bounds as [minX, minY, maxX, maxY]",
@@ -158,7 +158,7 @@
       "visible": true,
       "locked": false,
       "geometricBounds": [100,100,400,160],
-      "visibleBounds": [97.427521,94.169048,402.572479,165.830952],
+      "visibleBounds": [95,94.169048,405,165.830952],
       "fill": {"name":"None","type":"Swatch"},
       "fillTint": -1,
       "gradientFillAngle": 0,
@@ -167,7 +167,7 @@
       "stroke": {"name":"Black","type":"Color","model":"PROCESS","space":"CMYK","value":[0,0,0,100]},
       "strokeTint": -1,
       "strokeWeight": 10,
-      "endCap": "BUTT_END_CAP",
+      "endCap": "ROUND_END_CAP",
       "endJoin": "MITER_END_JOIN",
       "miterLimit": 4,
       "strokeAlignment": "CENTER_ALIGNMENT",

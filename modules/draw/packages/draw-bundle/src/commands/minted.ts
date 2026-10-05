@@ -29,16 +29,18 @@
 //
 // THE ANSWER WAS ALREADY ON THE WIRE. The engine's `mutationApplied`
 // reply lists every element a batch minted, in mint order (`minted`).
-// plugin-sdk's `host.document.mutate` builds a `MutationOutcome` from
-// that reply and drops the list (RFI K-15).
+// Before plugin-sdk 0.2.38, `host.document.mutate` built a
+// `MutationOutcome` from that reply and dropped the list (RFI K-15);
+// since 0.2.38 the outcome carries it.
 //
 // THREE LANES, tried in this order, and a flow never knows which it got:
 //
 //   "outcome"  `outcome.minted` — a `MutationOutcome` that carries the
-//              list. No published SDK does yet; when one does, this lane
-//              answers and nothing below it runs.
-//   "reply"    the raw reply, read off the documented escape hatch
-//              `host.editor.client`. THE WRITE STILL GOES THROUGH
+//              list, as plugin-sdk 0.2.38 and later do. This lane answers
+//              and nothing below it runs; once a host has answered here
+//              it is not even listened to.
+//   "reply"    (an older SDK) the raw reply, read off the documented
+//              escape hatch `host.editor.client`. THE WRITE STILL GOES THROUGH
 //              `host.document.mutate`: this module only LISTENS
 //              (`client.subscribe`) while the facade writes, and takes the
 //              last `mutationApplied` it heard — the reply that resolves

@@ -37,7 +37,10 @@ macOS 26.4) on 2026-10-03, engine `@paged-media/canvas-wasm` 0.64.0 —
 except `offset-path` and `pathfinder-{divide,exclude,intersect}`, whose
 IDML the 0.65.0 engine exports differently (joins honoured, every result
 wound one way, Exclude as two pieces) and which were regenerated and
-re-recorded on 0.65.0 on 2026-10-04, all four still identical. Each
+re-recorded on 0.65.0 on 2026-10-04, all four still identical; and
+`arrowheads` and `stroke-attributes`, whose IDML the 0.66.0 engine
+exports with the cap and line ends a Pen path now takes (C-62), which
+were regenerated and re-recorded on 0.66.0 on 2026-10-05. Each
 recording's `produced_by` is the authority: app, version, locale, the
 reader's sha256 and the IDML's sha256 — the replay refuses a recording
 made by another reader or from another IDML.
@@ -52,9 +55,10 @@ made by another reader or from another IDML.
 | `live-corners-rectangle` | every corner style on a source `<Rectangle>` | corners survive; DEFECT absent StrokeColor; CONVENTION bevel spelling |
 | `live-corners-polygon` | every corner style on a draw Polygon | DEFECT: corners not exported |
 | `dash-presets` | the four dash presets | DEFECT: dash not exported |
-| `arrowheads` | line ends | GraphicLine survives; DEFECT: refused on a Pen path (C-62) |
-| `stroke-attributes` | weight / cap / join / miter | weight survives; DEFECT: join + miter not exported; cap refused (C-62) |
-| `gradient-linear`, `gradient-radial` | gradient fills | gradient, stops, angle, length survive; DEFECT: no read door for the axis on a Polygon |
+| `arrowheads` | line ends | identical — a GraphicLine's and a Pen path's (C-62, fixed in 0.66.0) |
+| `stroke-attributes` | weight / cap / join / miter | weight and cap survive; DEFECT: join + miter not exported |
+| `gradient-linear` | linear gradient fill | identical — the axis reads back since 0.66.0 (C-83b) |
+| `gradient-radial` | radial gradient fill | gradient and stops survive; CONVENTION: an unset length, which InDesign derives from the item |
 | `opacity-blend` | opacity 50 + Multiply via a Graphic Style | identical |
 | `group` | a group | identical |
 | `appearance-bake` | bake: a group of stacked items | DEFECT: Color/Paper undeclared → no fill |

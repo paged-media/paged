@@ -111,6 +111,7 @@ export const INDESIGN_DEFAULTS = {
   endCap: "BUTT_END_CAP",
   endJoin: "MITER_END_JOIN",
   miterLimit: 4,
+  gradientAngle: 0,
   strokeAlignment: "CENTER_ALIGNMENT",
   strokeType: "$ID/Solid",
   lineEnd: "NONE",
@@ -240,11 +241,14 @@ export async function engineView(h: HeadlessHost, defaults: DefaultsUsed = new S
             stops: detail.stops.map((s) => ({ color: nameOf(s.stopColorRef), location: s.locationPct })),
           }
         : null;
-      // The gradient AXIS has no read door on every kind (measured: a
-      // Polygon's property list carries no `frameGradientFillAngle` /
-      // `…Length`, although the write is accepted and exported). Say so
-      // instead of reading the absence as "unset".
-      out.gradientAngle = has("frameGradientFillAngle") ? num("frameGradientFillAngle") : NO_READ_DOOR;
+      // The gradient AXIS: a kind whose property list does not carry
+      // `frameGradientFillAngle` / `…Length` says so instead of reading
+      // the absence as "unset" (until 0.66.0 a Polygon was one — C-83b).
+      // An angle the model holds unset is InDesign's default; an unset
+      // length is not a default (`gradientLengthDerived`).
+      out.gradientAngle = has("frameGradientFillAngle")
+        ? Number(orDefault("gradientAngle", num("frameGradientFillAngle")))
+        : NO_READ_DOOR;
       out.gradientLength = has("frameGradientFillLength") ? num("frameGradientFillLength") : NO_READ_DOOR;
     }
     out.stroke = nameOf(raw("frameStrokeColor") as string | null);

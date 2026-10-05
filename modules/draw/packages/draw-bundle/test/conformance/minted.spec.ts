@@ -63,6 +63,7 @@ import {
   undoStepsBackTo,
   withMintedOutcome,
   withoutHatch,
+  withoutMintedOutcome,
   withoutMintedReplies,
 } from "./one-batch";
 
@@ -299,9 +300,43 @@ describe("draw conformance — the minted seam (what did my write create)", () =
       return { minting, bound, shape, undoSteps, reads };
     };
 
-    it("REPLY (the headless host, and the editor): the list off the raw reply, no tree read", async () => {
+    // Since plugin-sdk 0.2.38 the OUTCOME carries `minted` (RFI K-15),
+    // so the headless host and the editor answer through the first lane.
+    // The raw client is still listened to on the first write (nothing has
+    // shown yet that the outcome carries the list) — and is not needed.
+    it("OUTCOME (the headless host, and the editor, on plugin-sdk 0.2.38): the list off the outcome, no tree read", async () => {
       const before = await treeShape(h);
       const counted = countingHost(h.host);
+      const { minting, bound, shape, undoSteps, reads } = await run(counted);
+      expect(minting.lane).toBe("outcome");
+      expect(mintLaneOf(counted.host)).toBe("outcome");
+      expect(reads).toBe(0);
+      // Everything minted, in order — the absorbed contour included.
+      expect(mintedIds(minting).map((e) => `${e.kind}:${String(e.id)}`)).toEqual([
+        "polygon:uc",
+        "polygon:ud",
+        "polygon:ue",
+        "group:uf",
+      ]);
+      expect(Object.fromEntries(bound!.byHandle)).toEqual({
+        p0: { kind: "polygon", id: "uc" },
+        p0_hole: { kind: "polygon", id: "ud" },
+        p1: { kind: "polygon", id: "ue" },
+      });
+      expect(bound!.groups).toEqual([{ kind: "group", id: "uf" }]);
+      expect(shape).toBe("uf[ua uc ue] ub");
+      expect(undoSteps).toBe(1);
+      expect(await treeShape(h)).toBe(before);
+      // Having answered through the outcome, the host no longer listens.
+      const again = await run(counted);
+      expect(again.minting.lane).toBe("outcome");
+      expect(again.reads).toBe(0);
+      expect(counted.work.count("editor.client.subscribe")).toBe(0);
+    });
+
+    it("REPLY (an SDK before 0.2.38, with the raw client): the list off the raw reply, no tree read", async () => {
+      const before = await treeShape(h);
+      const counted = countingHost(withoutMintedOutcome(h.host));
       const { minting, bound, shape, undoSteps, reads } = await run(counted);
       expect(minting.lane).toBe("reply");
       expect(mintLaneOf(counted.host)).toBe("reply");
@@ -334,7 +369,7 @@ describe("draw conformance — the minted seam (what did my write create)", () =
       expect(work.count("editor.client.mutate")).toBe(0);
     });
 
-    it("OUTCOME (the SDK K-15 asks for): the same list, with no raw client to read", async () => {
+    it("OUTCOME with no raw client beside it: the same list, and the first write's one tree read", async () => {
       const host = countingHost(withMintedOutcome(h.host));
       const { minting, bound, undoSteps, reads } = await run(host);
       expect(minting.lane).toBe("outcome");
@@ -355,8 +390,8 @@ describe("draw conformance — the minted seam (what did my write create)", () =
       });
     });
 
-    it("DIFF (a host with neither): two tree reads, and the same binding for everything that survived", async () => {
-      const host = countingHost(withoutHatch(h.host));
+    it("DIFF (a host with neither — no raw client, an SDK before 0.2.38): two tree reads, and the same binding for everything that survived", async () => {
+      const host = countingHost(withoutHatch(withoutMintedOutcome(h.host)));
       const { minting, bound, shape, undoSteps, reads } = await run(host);
       expect(minting.lane).toBe("diff");
       expect(reads).toBe(2);
@@ -376,8 +411,8 @@ describe("draw conformance — the minted seam (what did my write create)", () =
       expect(undoSteps).toBe(1);
     });
 
-    it("a hatch whose replies carry no list: found out ONCE, by stepping back and forward — then the diff lane", async () => {
-      const counted = countingHost(withoutMintedReplies(h.host));
+    it("a hatch whose replies carry no list (and an outcome without one): found out ONCE, by stepping back and forward — then the diff lane", async () => {
+      const counted = countingHost(withoutMintedReplies(withoutMintedOutcome(h.host)));
       const before = await treeShape(h);
       const mark = await undoMarkOn(h, A);
       const mutation = build();
@@ -412,7 +447,12 @@ describe("draw conformance — the minted seam (what did my write create)", () =
       const before = await treeShape(h);
       // The bind before its creating child — refused BY NAME.
       const early = batch(bind("x"), square(10, 10));
-      for (const host of [h.host, withoutHatch(h.host), withMintedOutcome(h.host)]) {
+      for (const host of [
+        h.host,
+        withoutMintedOutcome(h.host),
+        withoutHatch(withoutMintedOutcome(h.host)),
+        withMintedOutcome(h.host),
+      ]) {
         const minting = await mutateMinting(host, early);
         expect(minting.outcome.applied).toBe(false);
         expect(minting.minted).toEqual([]);

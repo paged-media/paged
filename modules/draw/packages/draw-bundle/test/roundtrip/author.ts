@@ -537,9 +537,9 @@ export const ROUNDTRIP_CASES: readonly RoundtripCase[] = [
       const line = { kind: "graphicLine", id: "uline" } as ElementId;
       await ctx.mutate(textProp(line, "frameStrokeStartArrowhead", "CircleSolidArrowHead"), "start arrowhead");
       await ctx.mutate(textProp(line, "frameStrokeEndArrowhead", "TriangleArrowHead"), "end arrowhead");
-      // A Pen-drawn line is a POLYGON: the same two writes are attempted
-      // and their refusal is recorded (RFI C-62 — caps / arrowheads on
-      // paths are being added to the engine).
+      // A Pen-drawn line is a POLYGON: the same two writes, ATTEMPTED so a
+      // refusal would be recorded. Until 0.66.0 the engine refused both
+      // (RFI C-62); now they apply and InDesign reads both line ends.
       const pen = await ctx.pen([{ at: [100, 300] }, { at: [500, 300] }], false);
       await ctx.strokeWeight(pen, 3);
       await ctx.attempt(textProp(pen, "frameStrokeStartArrowhead", "CircleSolidArrowHead"), "start arrowhead on a pen path");
@@ -570,8 +570,9 @@ export const ROUNDTRIP_CASES: readonly RoundtripCase[] = [
         ctx.surfaces.add("wire");
         await ctx.attempt(textProp(id, "frameStrokeJoin", join), `join ${join}`);
         if (miter !== null) await ctx.attempt(lengthProp(id, "frameStrokeMiterLimit", miter), "miter limit");
-        // The Stroke panel's Cap row on the first one (a POLYGON — RFI
-        // C-62: the attempt is recorded either way).
+        // The Stroke panel's Cap row on the first one (a POLYGON; refused
+        // until 0.66.0 — RFI C-62 — and applied since, InDesign reading a
+        // round cap).
         if (i === 0) await ctx.attempt(textProp(id, "frameStrokeEndCap", "RoundEndCap"), "cap on a pen path");
       }
     },

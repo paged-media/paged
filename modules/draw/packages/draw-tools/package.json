@@ -17,7 +17,7 @@
   },
   "dependencies": {
     "@paged-media/draw-geometry": "workspace:*",
-    "@paged-media/plugin-api": "0.2.37-canary.0"
+    "@paged-media/plugin-api": "0.2.38-canary.3"
   },
   "devDependencies": {
     "fast-check": "^4.10.2",

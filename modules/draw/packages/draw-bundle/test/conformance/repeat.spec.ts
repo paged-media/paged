@@ -778,6 +778,16 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
         // As found: 3 for a make (the diff and the group lookup; 2 for a
         // clipped one, which has no group); an update's walk on top.
         expect(shipped.work.count("document.tree")).toBe(trees);
+        // REPLY — an SDK before plugin-sdk 0.2.38, whose outcome carries no
+        // `minted`: the ids off the raw reply. The same document, the same
+        // writes and the same reads as the shipped (outcome) lane.
+        const reply = await through("reply");
+        expect(reply.picture).toBe(shipped.picture);
+        expect(reply.work.mutations).toEqual(shipped.work.mutations);
+        expect(reply.undoSteps).toBe(shipped.undoSteps);
+        expect(reply.restored).toBe(true);
+        expect(reply.work.count("document.tree")).toBe(shipped.work.count("document.tree"));
+
         for (const lane of ["diff", "unlisted"] as const) {
           const other = await through(lane);
           expect(other.picture, lane).toBe(shipped.picture);

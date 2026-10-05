@@ -29,7 +29,14 @@
 // A difference that is not listed here fails the replay; so does a listed
 // one that no longer occurs. Both values are the ones MEASURED — Adobe
 // InDesign 20.0.1.32 on the committed recordings, the engine pinned by
-// `engine-pin.spec.ts` (canvas-wasm 0.64.0).
+// `engine-pin.spec.ts` (canvas-wasm 0.66.0).
+//
+// FIXED in 0.66.0, and gone from these tables: a Pen-drawn path (a
+// Polygon) now takes a cap and arrowheads (RFI C-62) — `arrowheads` and
+// `stroke-attributes` were regenerated and re-recorded, and InDesign
+// reads the round cap and both line ends; and a Polygon's gradient axis
+// now reads back (C-83b) — `gradient-linear` reads angle 30 and length
+// 250, InDesign's own values.
 
 import { enumName } from "./view";
 
@@ -100,15 +107,17 @@ export const FINDINGS = {
       "that as no stroke; InDesign applies its default (Black, 1 pt). The export keeps " +
       "the attribute absent, so the file InDesign opens strokes what the canvas does not.",
   },
-  gradientAxisNoReadDoor: {
-    verdict: "defect",
-    owner: "engine",
-    title: "a Polygon's gradient axis has no read door",
+  gradientLengthDerived: {
+    verdict: "convention",
+    owner: "indesign",
+    title: "an unset gradient length is unset in the model; InDesign derives one from the item",
     why:
-      "`frameGradientFillAngle` / `…Length` are accepted on a Polygon and EXPORTED " +
-      "(InDesign reads the angle and length the Gradient Annotator set), but the " +
-      "Polygon's property list does not carry them, so the model cannot be read back. " +
-      "(Unset, InDesign answers angle 0 and DERIVES a length from the item.)",
+      "The radial-gradient command sets no axis, so the model reads " +
+      "`frameGradientFillLength` back as unset (null — the read door is there since " +
+      "0.66.0) and the export writes no `GradientFillLength`. InDesign does not answer a " +
+      "constant default for the absence: it DERIVES a length from the item (the circle's " +
+      "radius plus half its stroke), so it cannot sit in INDESIGN_DEFAULTS. Both say " +
+      "\"no explicit axis\" — pinned with both values.",
   },
   bevelSpelling: {
     verdict: "convention",
@@ -172,22 +181,14 @@ export interface KnownRefusal {
   what: string;
   /** A substring of the engine's own sentence. */
   error: string;
-  finding: "capsArrowheadsOnPaths";
+  finding: string;
 }
 
-export const REFUSAL_FINDINGS = {
-  capsArrowheadsOnPaths: {
-    verdict: "defect",
-    owner: "engine",
-    title: "a Pen-drawn path takes no cap and no arrowheads (RFI C-62)",
-    why:
-      "Every draw path is a Polygon, and the engine refuses `frameStrokeEndCap` / " +
-      "`frameStrokeStart|EndArrowhead` on a Polygon (`notImplemented`). The Stroke " +
-      "panel's Cap row and Line-ends section therefore do nothing on draw's own art; " +
-      "the IDML carries no cap or line end, and InDesign shows butt caps and none. " +
-      "(Being added to the engine now — this flips when it lands.)",
-  },
-} as const satisfies Record<string, Finding>;
+/** What each known refusal IS. Empty since 0.66.0: the one refusal the
+ *  authoring met — a cap and arrowheads on a Pen-drawn path, RFI C-62 —
+ *  is fixed, and the same attempts now apply (`arrowheads`,
+ *  `stroke-attributes`). */
+export const REFUSAL_FINDINGS: Record<string, Finding> = {};
 
 // ---------------------------------------------------------------------------
 // The tables
@@ -254,15 +255,14 @@ export const KNOWN: Record<string, readonly Known[]> = {
     { at: "1", field: "endJoin", ours: "BEVEL_END_JOIN", theirs: "MITER_END_JOIN", finding: "writeNewDropsJoin" },
     { at: "2", field: "miterLimit", ours: 2, theirs: 4, finding: "writeNewDropsJoin" },
   ],
-  "gradient-linear": [
-    { at: "0", field: "gradientAngle", ours: "(no read door on this kind)", theirs: 30, finding: "gradientAxisNoReadDoor" },
-    { at: "0", field: "gradientLength", ours: "(no read door on this kind)", theirs: 250, finding: "gradientAxisNoReadDoor" },
-  ],
+  // `gradient-linear` has none since 0.66.0: angle 30 and length 250 read
+  // back, as InDesign reads them. `gradient-radial`'s unset angle is
+  // compared as InDesign's default (0, INDESIGN_DEFAULTS); its length is
+  // not a default — see the finding.
   "gradient-radial": [
-    { at: "0", field: "gradientAngle", ours: "(no read door on this kind)", theirs: 0, finding: "gradientAxisNoReadDoor" },
     // 120.5 = the circle's radius (120) + half its 1 pt stroke: InDesign's
     // derived length for an axis the file does not state.
-    { at: "0", field: "gradientLength", ours: "(no read door on this kind)", theirs: 120.5, finding: "gradientAxisNoReadDoor" },
+    { at: "0", field: "gradientLength", ours: null, theirs: 120.5, finding: "gradientLengthDerived" },
   ],
   "appearance-bake": [
     { at: "0/2", field: "fill", ours: "Paper", theirs: "None", finding: "paperNotDeclared" },
@@ -275,28 +275,9 @@ export const KNOWN: Record<string, readonly Known[]> = {
   ],
 };
 
-/** What the authoring ASKED for and the engine refused, per case. */
-export const KNOWN_REFUSALS: Record<string, readonly KnownRefusal[]> = {
-  arrowheads: [
-    {
-      what: "start arrowhead on a pen path",
-      error: "property FrameStrokeStartArrowhead is not supported on Polygon",
-      finding: "capsArrowheadsOnPaths",
-    },
-    {
-      what: "end arrowhead on a pen path",
-      error: "property FrameStrokeEndArrowhead is not supported on Polygon",
-      finding: "capsArrowheadsOnPaths",
-    },
-  ],
-  "stroke-attributes": [
-    {
-      what: "cap on a pen path",
-      error: "property FrameStrokeEndCap is not supported on Polygon",
-      finding: "capsArrowheadsOnPaths",
-    },
-  ],
-};
+/** What the authoring ASKED for and the engine refused, per case. None
+ *  since 0.66.0 (C-62, above). */
+export const KNOWN_REFUSALS: Record<string, readonly KnownRefusal[]> = {};
 
 /** The engine's `lost` list per case: one pattern per entry, in order. */
 export const KNOWN_LOST: Record<string, readonly RegExp[]> = {

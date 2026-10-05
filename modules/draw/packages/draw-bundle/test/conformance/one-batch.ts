@@ -27,15 +27,25 @@
 //  · `refusingBindCreated` — an engine that predates C-15. It refuses any
 //    batch carrying a `bindCreated` child, which is what sends a flow
 //    down its STEPWISE lane (the two batches it was before).
+//  · `withoutMintedOutcome` — an SDK older than plugin-sdk 0.2.38, whose
+//    `MutationOutcome` does not carry `minted` (RFI K-15). Since 0.2.38
+//    the real outcome DOES, so `mutateMinting` (`src/commands/minted.ts`)
+//    answers through its "outcome" lane on the real host; this view is
+//    what keeps the two lanes below it reachable. Every view that stands
+//    for an older host sits on top of it.
 //  · `withoutMintedReplies` — an engine that speaks C-15 but whose
 //    `mutationApplied` does not list what a batch minted, behind a host
-//    that does have the raw client. `mutateMinting`
-//    (`src/commands/minted.ts`) finds out on its first write and takes
-//    its diff lane from then on.
-//  · `withoutHatch` — a host with no raw client at all: the diff lane
-//    from the first write.
-//  · `withMintedOutcome` — the SDK that RFI K-15 asks for: the outcome
-//    itself carries `minted`, and nothing needs the raw client.
+//    that does have the raw client (and an SDK without the outcome list).
+//    `mutateMinting` finds out on its first write and takes its diff lane
+//    from then on.
+//  · `withoutHatch` — a host with no raw client at all. On its own it is
+//    the "outcome" lane since 0.2.38 (the first write reads the tree
+//    once, in case the outcome says nothing); over `withoutMintedOutcome`
+//    it is the diff lane from the first write.
+//  · `withMintedOutcome` — the outcome carries `minted` and there is no
+//    raw client beside it, built from the raw reply so it does not depend
+//    on which SDK is installed. What RFI K-15 asked for, and what
+//    plugin-sdk 0.2.38 ships.
 //
 // AND HOW TWO RUNS ARE COMPARED. A batch can apply and still be the wrong
 // edit, so "one batch" is never asserted alone: `runThrough` runs a flow
@@ -127,6 +137,19 @@ export function withoutMintedReplies(host: BundleHost): BundleHost {
         }),
       };
     },
+  });
+}
+
+/** An SDK before plugin-sdk 0.2.38: the outcome of an applied mutation
+ *  does not carry `minted` (the raw reply still does). */
+export function withoutMintedOutcome(host: BundleHost): BundleHost {
+  return withMutate(host, async (mutation, real) => {
+    const outcome = await real(mutation);
+    if (!outcome.applied) return outcome;
+    const { minted: _dropped, ...rest } = outcome as MutationOutcome & {
+      minted?: unknown;
+    };
+    return rest as MutationOutcome;
   });
 }
 
@@ -387,18 +410,24 @@ export async function restoreRecipes(
 
 // ------------------------------------------------------------- the lanes
 
-/** The hosts a flow is run through. `oneBatch` is the flow as shipped;
- *  the rest take one thing away each (the file header says which).
- *  `asFound` takes both away — the engine every one of these flows was
- *  written against, and where the numbers they started from are still
- *  MEASURED rather than remembered. */
+/** The hosts a flow is run through. `oneBatch` is the flow as shipped
+ *  (since plugin-sdk 0.2.38 its created ids come off the OUTCOME); the
+ *  rest take one thing away each (the file header says which). `reply`,
+ *  `diff` and `unlisted` are hosts whose SDK predates the outcome list —
+ *  without that, the real SDK would answer them all through the outcome
+ *  and the two older lanes would go untested. `asFound` takes everything
+ *  away — the engine and SDK every one of these flows was written
+ *  against, and where the numbers they started from are still MEASURED
+ *  rather than remembered. */
 export const LANES = {
   oneBatch: (host: BundleHost): BundleHost => host,
   stepwise: refusingBindCreated,
-  diff: withoutHatch,
-  unlisted: withoutMintedReplies,
+  reply: withoutMintedOutcome,
+  diff: (host: BundleHost): BundleHost => withoutHatch(withoutMintedOutcome(host)),
+  unlisted: (host: BundleHost): BundleHost =>
+    withoutMintedReplies(withoutMintedOutcome(host)),
   asFound: (host: BundleHost): BundleHost =>
-    refusingBindCreated(withoutHatch(host)),
+    refusingBindCreated(withoutHatch(withoutMintedOutcome(host))),
 } as const;
 
 export type LaneName = keyof typeof LANES;

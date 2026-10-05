@@ -154,8 +154,8 @@ stroke panel raised, Esc pops out). The bundle drives end-to-end through the rea
 the draw-plugin e2e (`editor` `apps/canvas/tests/e2e/draw-plugin.spec.ts`)
 and a DTP journey (`tests/journey/plugins/draw.journey.spec.ts`) author a
 path with the built-in Pen, then refine its anchors (add/delete/convert)
-and stroke through the bundle. The three TS packages carry 2 489 passing
-vitest (geometry 663, tools 327, bundle 1 499; 30 skipped — 27 of them the
+and stroke through the bundle. The three TS packages carry 2 502 passing
+vitest (geometry 671, tools 327, bundle 1 504; 31 skipped — 27 of them the
 InDesign round-trip generator, which runs only with `PAGED_ROUNDTRIP_WRITE`) and
 typecheck clean; the two crates carry 26 `cargo test` (draw-trace 22,
 trace-js 4).
@@ -411,14 +411,16 @@ batch outcome carries ONE `createdId`, so a flow that inserted several
 paths used to read `document.tree()` before and after its batch and diff
 the two — 2–3 whole-document reads per command. The engine's raw
 `mutationApplied` already lists every element a batch minted, in mint
-order (`minted`); plugin-sdk's `host.document.mutate` drops it (RFI
-K-15). `mutateMinting(host, mutation)` answers it through three lanes
-and a flow never knows which it got: `outcome.minted` (for the SDK that
-carries it — none does yet), the raw reply HEARD on
-`host.editor.client.subscribe` while the facade writes (the headless host
-and the editor both take this one — 0 tree reads), and the tree diff
-(a host with neither). The write itself always goes through
-`host.document.mutate`: `client.send({ kind: "mutate" })` would skip the
+order (`minted`); plugin-sdk's `host.document.mutate` dropped it before
+0.2.38 (RFI K-15) and carries it on the outcome since.
+`mutateMinting(host, mutation)` answers it through three lanes and a flow
+never knows which it got: `outcome.minted` (plugin-sdk ≥ 0.2.38 — the
+headless host and the editor both take this one, 0 tree reads), the raw
+reply HEARD on `host.editor.client.subscribe` while the facade writes (an
+older SDK with the hatch — 0 tree reads), and the tree diff (a host with
+neither). The conformance `LANES` reach the two older lanes through
+`withoutMintedOutcome` (`test/conformance/one-batch.ts`). The write
+itself always goes through `host.document.mutate`: `client.send({ kind: "mutate" })` would skip the
 facade's gates, and the headless host does not fan a `send` reply out, so
 no `onDidChange` listener would hear the write. What `minted` contains is
 measured and pinned in `minted.spec.ts`: one entry per CREATING child in

@@ -858,6 +858,16 @@ describe("draw conformance — BLENDS v1 (§16.2)", () => {
         expect(shipped.restored).toBe(true);
         // As found: 3 for a make; an update's link walk on top.
         expect(shipped.work.count("document.tree")).toBe(name === "make" ? 0 : 1);
+        // REPLY — an SDK before plugin-sdk 0.2.38, whose outcome carries no
+        // `minted`: the ids off the raw reply. The same document, the same
+        // writes and the same reads as the shipped (outcome) lane.
+        const reply = await through("reply");
+        expect(reply.picture).toBe(shipped.picture);
+        expect(reply.work.mutations).toEqual(shipped.work.mutations);
+        expect(reply.undoSteps).toBe(shipped.undoSteps);
+        expect(reply.restored).toBe(true);
+        expect(reply.work.count("document.tree")).toBe(shipped.work.count("document.tree"));
+
         for (const lane of ["diff", "unlisted"] as const) {
           const run = await through(lane);
           expect(run.picture, lane).toBe(shipped.picture);
