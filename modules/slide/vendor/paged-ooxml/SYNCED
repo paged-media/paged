@@ -1,0 +1,9 @@
+# Vendored copy of plugin-doc's paged-ooxml (ADR 701).
+# Source: paged-media/plugin-doc, directory paged-ooxml/, at the commit below.
+# Do not edit here: change plugin-doc first, then re-sync with
+#   scripts/sync-ooxml.sh <path-to-plugin-doc>
+# CI (scripts/sync-ooxml.sh --check) fails if this tree drifts from the
+# recorded tree hash.
+source = paged-media/plugin-doc
+commit = 77874f94bf890ddeb4df5cb173344433016c924a
+tree = c1f4a5d3bc2038bbba9a6fbdbf3c49d0fe79feaffdce88b4702e06b4a84d892b

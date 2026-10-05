@@ -1,0 +1,47 @@
+# paged.slide — Cargo workspace.
+#
+# Crates live at REPO TOP LEVEL (as in plugin-doc). `vendor/paged-ooxml` is a
+# vendored copy of plugin-doc's shared MPL-2.0 OOXML foundation (ADR 701); every
+# pptx-* / slide-* crate is AGPL-3.0-only OR PMEL (the workspace default below).
+[workspace]
+resolver = "2"
+members = [
+    "vendor/paged-ooxml",
+    "pptx-core",
+    "pptx-import",
+    "slide-js",
+]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.93"
+license = "AGPL-3.0-only OR LicenseRef-PMEL"
+publish = false
+
+[workspace.dependencies]
+# OOXML typed part DOM (PresentationML, DrawingML main/chart/diagram/picture).
+ooxmlsdk = { version = "0.12", features = ["mce"] }
+zip = { version = "2", default-features = false, features = ["deflate"] }
+quick-xml = "0.41"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+compact_str = { version = "0.8", features = ["serde"] }
+base64 = "0.22"
+# wasm boundary (slide-js only).
+wasm-bindgen = "0.2"
+
+# Intra-workspace crates.
+paged-ooxml = { path = "vendor/paged-ooxml" }
+pptx-core = { path = "pptx-core" }
+pptx-import = { path = "pptx-import" }
+slide-js = { path = "slide-js" }
+
+[workspace.lints.clippy]
+all = "warn"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1

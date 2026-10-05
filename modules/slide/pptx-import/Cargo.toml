@@ -1,0 +1,20 @@
+[package]
+name = "pptx-import"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "paged.slide: read a .pptx (OPC + PresentationML + DrawingML) into the pptx-core IR."
+
+[lints]
+workspace = true
+
+[dependencies]
+pptx-core.workspace = true
+paged-ooxml.workspace = true
+quick-xml.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
