@@ -16,9 +16,12 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// C-68 — draw's point-placing tools snap (plugin-side): Curvature points
-// land exactly on the page's centre within 6 screen px, Cmd bypasses it,
-// and the page is read once per run, not per move.
+// C-68 — draw's point-placing tools snap: Curvature points land exactly
+// on the page's centre, Cmd bypasses it, and the page is read once per
+// run, not per move. Since engine protocol 67 the ENGINE resolves the
+// point, so a Curvature point also lands on ANOTHER path's anchor — a
+// target the plugin-side fallback cannot see. That case skips on an
+// older engine; `PAGED_REQUIRE_V67=1` makes the skip a failure.
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -81,6 +84,36 @@ describe("draw conformance — snapping for point-placing tools (C-68)", () => {
     ]);
     expect(anchors[1]![0]).toBeCloseTo(CENTRE[0], 3);
     expect(anchors[1]![1]).toBeCloseTo(CENTRE[1], 3);
+  });
+
+  it("protocol 67: a Curvature point lands on another path's anchor", async (ctx) => {
+    const probe = await h.host.document.snapPoint?.({
+      pageId: PAGE,
+      point: [1, 1],
+      cameraScale: 1,
+    });
+    if (!probe || probe.tolerancePt === 0) {
+      if (process.env.PAGED_REQUIRE_V67 === "1") {
+        throw new Error("PAGED_REQUIRE_V67=1 but the engine does not answer requestSnapPoint");
+      }
+      ctx.skip();
+    }
+    // A first path with an anchor at (200, 520): clear of the page's
+    // centre lines (306 / 396) and edges.
+    await curve(h, [
+      [100, 500],
+      [200, 520],
+      [300, 500],
+    ]);
+    // A second run clicks 2.2 pt from that anchor. The fallback only knows
+    // the page and the run's own points; the engine knows the first path.
+    const anchors = await curve(h, [
+      [120, 600],
+      [201.5, 518.4],
+      [300, 620],
+    ]);
+    expect(anchors[1]![0]).toBeCloseTo(200, 3);
+    expect(anchors[1]![1]).toBeCloseTo(520, 3);
   });
 
   it("with Cmd held the point stays where the pointer was", async () => {

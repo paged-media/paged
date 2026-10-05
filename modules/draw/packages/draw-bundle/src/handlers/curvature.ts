@@ -84,13 +84,22 @@ export function createCurvatureHandler(host: BundleHost): GestureHandler {
     );
   };
 
-  // C-68 — points snap to the page's edges and centre and to this run's
-  // own placed points (Cmd held bypasses).
+  // C-68 — points snap through the engine (v67: every visible element,
+  // guides, the page, this run's own placed points); on an older host,
+  // to the page and the placed points. Cmd held bypasses. The engine
+  // answer is asynchronous, so pointer and key events run IN ORDER on one
+  // chain — a machine must never see an up before the down it follows.
   const snapper = createSnapper(host);
   let placed: [number, number][] = [];
-  const at = (e: CanvasPointerEvent): [number, number] | null => {
-    const p = snapper.snap(e, placed);
+  const at = async (e: CanvasPointerEvent): Promise<[number, number] | null> => {
+    const p = await snapper.snapAsync(e, placed);
     return p ? [p[0], p[1]] : null;
+  };
+  let chain: Promise<void> = Promise.resolve();
+  const enqueue = (step: () => Promise<void> | void) => {
+    chain = chain
+      .then(step)
+      .catch((err) => host.log.warn(`curvature: ${String(err)}`));
   };
 
   return {
@@ -104,38 +113,50 @@ export function createCurvatureHandler(host: BundleHost): GestureHandler {
     },
     onPointerDown(e: CanvasPointerEvent) {
       if (e.button !== 0 || !e.pageId || !e.pagePoint) return;
-      if (!machine) {
-        machine = new CurvatureMachine({
-          closeTolerance: host.viewport.pxToPt(CLICK_TOLERANCE_PX),
-        });
-        pageId = e.pageId;
-        placed = [];
-        void snapper.prepare(e.pageId);
-      }
-      if (e.pageId !== pageId) return; // one page per run
-      const point = at(e)!;
-      placed.push(point);
-      sync(
-        machine.handle({
-          type: "down",
-          point,
-          modifiers: { alt: e.modifiers.alt },
-        }),
-      );
+      enqueue(async () => {
+        if (!machine) {
+          machine = new CurvatureMachine({
+            closeTolerance: host.viewport.pxToPt(CLICK_TOLERANCE_PX),
+          });
+          pageId = e.pageId;
+          placed = [];
+          await snapper.prepare(e.pageId!);
+        }
+        if (e.pageId !== pageId) return; // one page per run
+        const point = (await at(e))!;
+        if (!machine) return;
+        placed.push(point);
+        sync(
+          machine.handle({
+            type: "down",
+            point,
+            modifiers: { alt: e.modifiers.alt },
+          }),
+        );
+      });
     },
     onPointerMove(e: CanvasPointerEvent) {
-      if (!machine || !e.pagePoint || e.pageId !== pageId) return;
-      sync(machine.handle({ type: "move", point: at(e)! }));
+      if (!e.pagePoint) return;
+      enqueue(async () => {
+        if (!machine || e.pageId !== pageId) return;
+        const point = (await at(e))!;
+        if (machine) sync(machine.handle({ type: "move", point }));
+      });
     },
     onPointerUp(e: CanvasPointerEvent) {
-      if (!machine || !e.pagePoint || e.pageId !== pageId) return;
-      sync(machine.handle({ type: "up", point: at(e)! }));
+      if (!e.pagePoint) return;
+      enqueue(async () => {
+        if (!machine || e.pageId !== pageId) return;
+        const point = (await at(e))!;
+        if (machine) sync(machine.handle({ type: "up", point }));
+      });
     },
     onKey(e: KeyboardEvent) {
-      if (!machine) return;
-      if (e.key === "Enter" || e.key === "Escape") {
-        sync(machine.handle({ type: "key", key: e.key }));
-      }
+      const key = e.key;
+      if (key !== "Enter" && key !== "Escape") return;
+      enqueue(() => {
+        if (machine) sync(machine.handle({ type: "key", key }));
+      });
     },
   };
 }
