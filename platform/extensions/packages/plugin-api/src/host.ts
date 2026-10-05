@@ -38,6 +38,8 @@ import type {
   PathAnchorTriple,
   SceneTreeNode,
   SelectionMode,
+  SnapPointQuery,
+  SnapPointResult,
 } from "./wire";
 import type {
   CommandContribution,
@@ -1054,6 +1056,25 @@ export interface DocumentSurface {
     elementIds: ElementId[],
     point?: [number, number],
   ): Promise<PlanarRegionsResult>;
+  /**
+   * v67 (RFI C-68) — snap one page-local point the way the host's own
+   * tools do: to the anchors, frame corners and centres of every visible
+   * element, the page, the x / y lines through all of them (smart
+   * guides), ruler guides, the document grid and the nearest outline,
+   * with the session's tolerance and switches. One engine resolver
+   * answers the Pen, Direct Selection, a move and this door, so a plugin
+   * tool snaps exactly like the host.
+   *
+   * Leave the path being edited out with `exclude` (`anchors` names the
+   * dragged ones; the element's outline is then skipped too, since the
+   * host is previewing a shape the engine has not seen), and add the
+   * points of a path still being drawn with `extraPoints`.
+   *
+   * Pure READ, gated on `capabilities.document.read`. Never throws: a
+   * host whose engine predates v67 answers the point unsnapped
+   * (`snapped: false`). Probe `supports("document.snapPoint@1")`.
+   */
+  snapPoint(query: SnapPointQuery): Promise<SnapPointResult>;
   /** D-01 (protocol v43) — enumerate every plugin-tagged placeholder
    *  field in the document, in story order. Offsets are FRESH-READ
    *  addresses (a placeholder is its own tagged run; re-enumerate

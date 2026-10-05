@@ -102,6 +102,8 @@ import type {
   TextSurface,
   ViewportSurface,
   WidgetSurface,
+  SnapPointQuery,
+  SnapPointResult,
 } from "@paged-media/plugin-api";
 
 import { DisposableStore, toDisposable } from "./disposables";
@@ -228,6 +230,10 @@ export const HOST_FEATURES: readonly string[] = [
   // honesty split as the protocol-ahead mutations (mutations.ts): the
   // engine-level gate is the worker handshake, not `supports()`.
   "document.planarRegions@1",
+  // v67 (RFI C-68) — the engine's point snapper. Static like the region
+  // door: the flag says this SDK forwards `snapPoint`; an engine older
+  // than v67 answers the point unsnapped, never a throw.
+  "document.snapPoint@1",
   // DOC-03 structured whole-story read (canvas-wasm v54). Static for the same
   // reason as storage.parts@1: the pinned engine is the server, and the worker
   // handshake refuses a protocol older than the pin — so a running bundle is
@@ -2172,6 +2178,27 @@ export function createBundleHost(
         );
       } catch (error) {
         return refusal(`the region read door failed: ${String(error)}`);
+      }
+    },
+    async snapPoint(query: SnapPointQuery): Promise<SnapPointResult> {
+      // v67 (RFI C-68). An unanswered query is the point UNSNAPPED — the
+      // one answer that is never wrong for a tool to act on — not a throw
+      // a pointer handler would have to catch on every move.
+      requireDocRead("document.snapPoint");
+      const unsnapped = (): SnapPointResult => ({
+        point: [query.point[0], query.point[1]],
+        snapped: false,
+        lines: [],
+        tolerancePt: 0,
+      });
+      try {
+        const reply = await getEditor().client.send({
+          kind: "requestSnapPoint",
+          payload: { query },
+        });
+        return reply.kind === "snapPoint" ? reply.payload.result : unsnapped();
+      } catch {
+        return unsnapped();
       }
     },
     async tree(): Promise<SceneTreeNode[]> {

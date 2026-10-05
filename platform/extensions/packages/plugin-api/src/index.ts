@@ -185,6 +185,18 @@ export type {
 // so the editor channel + the SDK adapter share one tile type.
 export type { ProviderTileWire } from "./wire";
 
+// v67 (RFI C-68) — `host.document.snapPoint`'s query and answer.
+export type {
+  SnapPointQuery,
+  SnapPointResult,
+  SnapPointHit,
+  SnapAxisHit,
+  SnapSegmentHit,
+  SnapExclude,
+  SnapSource,
+  SnapSettings,
+} from "./wire";
+
 // One element a mutation minted (`MutationOutcome.minted`): the element,
 // the `bindCreated` handle that named it, and the story minted with it.
 export type { MintedElement } from "./wire";

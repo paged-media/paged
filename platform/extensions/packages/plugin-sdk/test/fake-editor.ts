@@ -192,6 +192,8 @@ export function makeFakeEditor(opts?: {
   // engine predates the door, so `send` falls through to the generic
   // `noop` (the honest unsupported path the adapter must survive).
   let planarRegionsReply: unknown = null;
+  // v67 — scripted `snapPoint` reply; `null` = a pre-v67 engine.
+  let snapPointReply: unknown = null;
   /** Every message that crossed `client.send`, in order. */
   const sent: { kind: string; payload?: unknown }[] = [];
 
@@ -211,6 +213,9 @@ export function makeFakeEditor(opts?: {
       sent.push({ kind: msg.kind, payload: msg.payload });
       if (msg.kind === "requestPlanarRegions" && planarRegionsReply !== null) {
         return planarRegionsReply;
+      }
+      if (msg.kind === "requestSnapPoint" && snapPointReply !== null) {
+        return snapPointReply;
       }
       if (msg.kind === "hitTest") {
         return { kind: "hitResult", payload: { element: null } };
@@ -297,6 +302,10 @@ export function makeFakeEditor(opts?: {
      *  back to a pre-v57 engine that never answers the kind). */
     setPlanarRegionsReply(reply: unknown) {
       planarRegionsReply = reply;
+    },
+    /** v67 — script the `requestSnapPoint` reply. */
+    setSnapPointReply(reply: unknown) {
+      snapPointReply = reply;
     },
     /** Every `client.send` message, in order (kind + payload). */
     sent,
