@@ -49,6 +49,25 @@ pub struct Written {
     pub diagnostics: Vec<String>,
 }
 
+/// Where PowerPoint puts a text frame's first baseline, in pt below the top
+/// inset, when the font does not decide it. With a percentage line spacing
+/// it is three quarters of the first line's pitch, whatever the font
+/// (measured: fixture `baselines`, five fonts × three sizes × four
+/// spacings). `None`: the font's ascent places it, as in the engine.
+pub fn first_baseline(tf: &TextFrame) -> Option<f64> {
+    match tf.paragraphs.first() {
+        Some(Para {
+            line_percent: Some(_),
+            leading: Some(lead),
+            ..
+        }) => Some(0.75 * lead),
+        _ => None,
+    }
+}
+
+/// The width a `wrap="none"` text frame is widened to.
+const UNWRAPPED_WIDTH_PT: f64 = 4000.0;
+
 fn n(v: f64) -> String {
     let r = (v * 1000.0).round() / 1000.0;
     if r == 0.0 {
@@ -511,7 +530,24 @@ impl Writer<'_> {
 
     fn text_frame(&mut self, out: &mut String, it: &Item, tf: &TextFrame) {
         let story = format!("st{}", it.id);
-        let (l, t, r, b) = tf.rect;
+        let (mut l, t, mut r, b) = tf.rect;
+        // `wrap="none"`: PowerPoint lays each line out unbounded and places
+        // it by its alignment against the box. The engine always wraps at
+        // the frame width (its HeightAndWidth sizing looks for the narrowest
+        // column), so the frame is widened away from the alignment edge
+        // instead: no line reaches the far side, and every line keeps its
+        // place.
+        if !tf.wrap {
+            let extra = (UNWRAPPED_WIDTH_PT - (r - l)).max(0.0);
+            match tf.paragraphs.first().map(|p| p.align.as_str()) {
+                Some("ctr") => {
+                    l -= extra / 2.0;
+                    r += extra / 2.0;
+                }
+                Some("r") => l -= extra,
+                _ => r += extra,
+            }
+        }
         // Vertical text (`vert`, `vert270`): the frame is the text rectangle
         // turned a quarter, so lines run along its long side.
         let (paths, transform) = if tf.rotation != 0.0 {
@@ -571,31 +607,21 @@ impl Writer<'_> {
             "bottom" => "Bottom",
             _ => "Top",
         };
-        let reference = if tf.wrap {
-            match vertical {
-                "Center" => "CenterPoint".to_string(),
-                v => format!("{v}CenterPoint"),
-            }
-        } else {
-            let horizontal = match tf.paragraphs.first().map(|p| p.align.as_str()) {
-                Some("ctr") => "Center",
-                Some("r") => "Right",
-                _ => "Left",
-            };
-            match (vertical, horizontal) {
-                ("Center", "Center") => "CenterPoint".to_string(),
-                ("Center", h) => format!("{h}CenterPoint"),
-                (v, h) => format!("{v}{h}Point"),
-            }
+        let reference = match vertical {
+            "Center" => "CenterPoint".to_string(),
+            v => format!("{v}CenterPoint"),
         };
-        let sizing = if tf.wrap {
-            "HeightOnly"
-        } else {
-            "HeightAndWidth"
+        let sizing = "HeightOnly";
+        let first_baseline = match first_baseline(tf) {
+            Some(v) => format!(
+                r#"FirstBaselineOffset="FixedHeight" MinimumFirstBaselineOffset="{}""#,
+                n(v)
+            ),
+            None => r#"FirstBaselineOffset="AscentOffset""#.to_string(),
         };
         let _ = write!(
             out,
-            r#"<TextFramePreference VerticalJustification="{vj}" FirstBaselineOffset="AscentOffset" AutoSizingType="{sizing}" AutoSizingReferencePoint="{reference}"{cols}><Properties><InsetSpacing type="list"><ListItem type="unit">{}</ListItem><ListItem type="unit">{}</ListItem><ListItem type="unit">{}</ListItem><ListItem type="unit">{}</ListItem></InsetSpacing></Properties></TextFramePreference>"#,
+            r#"<TextFramePreference VerticalJustification="{vj}" {first_baseline} AutoSizingType="{sizing}" AutoSizingReferencePoint="{reference}"{cols}><Properties><InsetSpacing type="list"><ListItem type="unit">{}</ListItem><ListItem type="unit">{}</ListItem><ListItem type="unit">{}</ListItem><ListItem type="unit">{}</ListItem></InsetSpacing></Properties></TextFramePreference>"#,
             n(it_),
             n(il),
             n(ib),

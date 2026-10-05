@@ -32,7 +32,9 @@ fonts = {}  # (family, style) -> path
 for d in FONT_DIRS:
     for p in glob.glob(d + "/**/*.[ot]t[fc]", recursive=True):
         q = subprocess.run(["fc-query", "-f", "%{family[0]}|%{style[0]}\n", p], capture_output=True, text=True).stdout.splitlines()
-        for line in q[:1]:
+        # A variable font reports one line per named instance; each
+        # instance's style maps to the same file.
+        for line in q:
             fam, _, style = line.partition("|")
             fonts.setdefault((fam, style), p)
 def face(fam, style):

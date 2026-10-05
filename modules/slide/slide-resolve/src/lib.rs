@@ -261,6 +261,42 @@ fn paint(fill: &Fill, ctx: &Ctx, ph: Option<Rgba>) -> Paint {
     }
 }
 
+/// `a:grpFill` means "the enclosing group's fill": substitute it into the
+/// direct children that ask for it (a nested group passes it on the same way
+/// when its own children resolve). Without a group fill they draw no fill.
+fn inherit_group_fill<'a>(
+    children: &'a [Shape],
+    fill: Option<&Fill>,
+) -> std::borrow::Cow<'a, [Shape]> {
+    let asks = |p: &ShapeProps| matches!(p.fill, Some(Fill::Group));
+    let any = children.iter().any(|c| match c {
+        Shape::Sp(sp) => asks(&sp.props),
+        Shape::Group(g) => asks(&g.props),
+        _ => false,
+    });
+    if !any {
+        return std::borrow::Cow::Borrowed(children);
+    }
+    let with = fill
+        .filter(|f| !matches!(f, Fill::Group))
+        .cloned()
+        .unwrap_or(Fill::None);
+    std::borrow::Cow::Owned(
+        children
+            .iter()
+            .map(|c| {
+                let mut c = c.clone();
+                match &mut c {
+                    Shape::Sp(sp) if asks(&sp.props) => sp.props.fill = Some(with.clone()),
+                    Shape::Group(g) if asks(&g.props) => g.props.fill = Some(with.clone()),
+                    _ => {}
+                }
+                c
+            })
+            .collect(),
+    )
+}
+
 fn shape_fill(props: &ShapeProps, style: Option<&ShapeStyle>, ctx: &Ctx) -> Paint {
     if let Some(f) = &props.fill {
         return paint(f, ctx, None);
@@ -715,7 +751,8 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
             }
             let x = g.props.xfrm.clone().unwrap_or_default();
             let inner = space.child(&x);
-            let children: Vec<Item> = ordered(&g.children, &inner, ctx);
+            let children = inherit_group_fill(&g.children, g.props.fill.as_ref());
+            let children: Vec<Item> = ordered(&children, &inner, ctx);
             if children.is_empty() {
                 return None;
             }
@@ -1083,4 +1120,50 @@ pub fn resolve(deck: &Presentation) -> Deck {
     d.dedup();
     out.diagnostics = d;
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pptx_core::{Color, ColorBase, Group, Sp};
+
+    fn sp(fill: Option<Fill>) -> Shape {
+        let mut s = Sp::default();
+        s.props.fill = fill;
+        Shape::Sp(s)
+    }
+
+    #[test]
+    fn grp_fill_takes_the_enclosing_groups_fill() {
+        let red = Fill::Solid(Color {
+            base: ColorBase::Srgb(0xC01010),
+            transforms: vec![],
+        });
+        let inner = Shape::Group(Group {
+            nv: Default::default(),
+            props: ShapeProps {
+                fill: Some(Fill::Group),
+                ..Default::default()
+            },
+            children: vec![sp(Some(Fill::Group))],
+        });
+        let kids = vec![sp(Some(Fill::Group)), sp(None), inner];
+        let out = inherit_group_fill(&kids, Some(&red));
+        let fill_of = |s: &Shape| match s {
+            Shape::Sp(s) => s.props.fill.clone(),
+            Shape::Group(g) => g.props.fill.clone(),
+            _ => None,
+        };
+        assert_eq!(fill_of(&out[0]), Some(red.clone()));
+        assert_eq!(fill_of(&out[1]), None);
+        // The nested group takes the fill, and hands it on when its own
+        // children resolve.
+        assert_eq!(fill_of(&out[2]), Some(red.clone()));
+        let Shape::Group(g) = &out[2] else { panic!() };
+        let nested = inherit_group_fill(&g.children, g.props.fill.as_ref());
+        assert_eq!(fill_of(&nested[0]), Some(red));
+        // No group fill: a grpFill child draws nothing.
+        let none = inherit_group_fill(&kids, None);
+        assert_eq!(fill_of(&none[0]), Some(Fill::None));
+    }
 }

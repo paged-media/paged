@@ -355,6 +355,7 @@ dependencies = [
  "base64",
  "paged-ooxml",
  "pptx-import",
+ "serde_json",
  "slide-geom",
  "slide-resolve",
  "zip 2.4.2",
