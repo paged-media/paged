@@ -1,0 +1,21 @@
+[package]
+name = "slide-idml"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "paged.slide: write a resolved deck as a complete IDML package (masters, spreads, stories, swatches, styles, inline images)."
+
+[lints]
+workspace = true
+
+[dependencies]
+slide-resolve.workspace = true
+slide-geom.workspace = true
+zip.workspace = true
+base64.workspace = true
+
+[dev-dependencies]
+pptx-import.workspace = true
+paged-ooxml.workspace = true

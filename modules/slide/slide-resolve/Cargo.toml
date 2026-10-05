@@ -1,0 +1,20 @@
+[package]
+name = "slide-resolve"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "paged.slide: PowerPoint's inheritance rules applied — theme, master, layout, placeholder, colour, font — to a resolved deck in points."
+
+[lints]
+workspace = true
+
+[dependencies]
+pptx-core.workspace = true
+slide-geom.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+pptx-import.workspace = true
