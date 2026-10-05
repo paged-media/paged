@@ -14,6 +14,11 @@ workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+paged-ooxml.workspace = true
+pptx-core.workspace = true
 pptx-import.workspace = true
+serde.workspace = true
 serde_json.workspace = true
+slide-idml.workspace = true
+slide-resolve.workspace = true
 wasm-bindgen.workspace = true

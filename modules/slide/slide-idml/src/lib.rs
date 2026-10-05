@@ -46,6 +46,10 @@ pub struct Written {
     pub idml: Vec<u8>,
     /// Story id of each text frame, by item id (for the host's metadata).
     pub stories: BTreeMap<String, String>,
+    /// The page element each item became, by item id: its wire kind
+    /// (`polygon`, `rectangle`, `textFrame`, `group`) and `Self` id. A shape
+    /// with both art and text names its polygon.
+    pub elements: BTreeMap<String, (&'static str, String)>,
     pub diagnostics: Vec<String>,
 }
 
@@ -168,11 +172,19 @@ struct Writer<'a> {
     stories: Vec<(String, String)>,
     story_of: BTreeMap<String, String>,
     para_styles: BTreeSet<String>,
+    elements: BTreeMap<String, (&'static str, String)>,
     diagnostics: Vec<String>,
     next: u32,
 }
 
 impl Writer<'_> {
+    /// Record the element an item became (the first one written wins).
+    fn element(&mut self, item: &str, kind: &'static str, id: &str) {
+        self.elements
+            .entry(item.to_string())
+            .or_insert_with(|| (kind, id.to_string()));
+    }
+
     fn id(&mut self, prefix: &str) -> String {
         self.next += 1;
         format!("{prefix}{:x}", self.next)
@@ -356,6 +368,7 @@ impl Writer<'_> {
     fn item(&mut self, out: &mut String, it: &Item) {
         match &it.kind {
             ItemKind::Group { children } => {
+                self.element(&it.id, "group", &it.id);
                 let _ = write!(
                     out,
                     r#"<Group Self="{}" ItemTransform="1 0 0 1 0 0" Name="{}">"#,
@@ -373,9 +386,10 @@ impl Writer<'_> {
                 stroke,
                 text,
             } => {
-                // Detail paths a preset draws stroke-only (fill="none") still
-                // belong to the outline; the engine fills every subpath, so
-                // they are skipped when the shape has a fill.
+                // Detail paths a preset draws stroke-only (fill="none", a
+                // callout's leader) still belong to the outline; the engine
+                // fills every subpath, so a filled shape writes them as a
+                // second, unfilled polygon above it.
                 let has_fill = !matches!(fill, Paint::None);
                 let paths: Vec<SubPath> = outline
                     .iter()
@@ -388,11 +402,14 @@ impl Writer<'_> {
                     let ga = angle
                         .map(|a| format!(r#" GradientFillAngle="{}""#, n(a)))
                         .unwrap_or_default();
+                    // Item ids are `u` + hex, so derived ids take suffixes
+                    // that are not hex digits (`p`, `s`, `t`, `i`).
                     let pid = if text.is_some() {
-                        format!("{}a", it.id)
+                        format!("{}p", it.id)
                     } else {
                         it.id.clone()
                     };
+                    self.element(&it.id, "polygon", &pid);
                     let _ = write!(
                         out,
                         r#"<Polygon Self="{pid}" Name="{}" ItemTransform="{}" FillColor="{fc}"{sa}{ga} AppliedObjectStyle="ObjectStyle/$ID/[None]">"#,
@@ -409,6 +426,23 @@ impl Writer<'_> {
                     };
                     Self::transparency(out, it.opacity, it.shadow.as_ref(), feather, self);
                     out.push_str("</Polygon>");
+                    let details: Vec<SubPath> = outline
+                        .iter()
+                        .filter(|s| !s.filled && s.stroked)
+                        .cloned()
+                        .collect();
+                    if has_fill && stroke.is_some() && !details.is_empty() {
+                        let _ = write!(
+                            out,
+                            r#"<Polygon Self="{}s" Name="{}" ItemTransform="{}" FillColor="Swatch/None"{sa} AppliedObjectStyle="ObjectStyle/$ID/[None]">"#,
+                            it.id,
+                            esc(&it.name),
+                            matrix(&it.transform)
+                        );
+                        Self::path_geometry(out, &details);
+                        Self::transparency(out, it.opacity, None, None, self);
+                        out.push_str("</Polygon>");
+                    }
                 }
                 if let Some(tf) = text {
                     self.text_frame(out, it, tf);
@@ -431,6 +465,7 @@ impl Writer<'_> {
                     return;
                 };
                 let sa = self.stroke_attrs(stroke.as_ref());
+                self.element(&it.id, "rectangle", &it.id);
                 let _ = write!(
                     out,
                     r#"<Rectangle Self="{}" Name="{}" ItemTransform="{}" FillColor="Swatch/None"{sa} AppliedObjectStyle="ObjectStyle/$ID/[None]" ContentType="GraphicType">"#,
@@ -485,6 +520,7 @@ impl Writer<'_> {
     fn table(&mut self, out: &mut String, it: &Item, t: &Table) {
         let story = format!("st{}", it.id);
         let fid = format!("{}t", it.id);
+        self.element(&it.id, "textFrame", &fid);
         let _ = write!(
             out,
             r#"<TextFrame Self="{fid}" Name="{}" ParentStory="{story}" PreviousTextFrame="n" NextTextFrame="n" ContentType="TextType" AppliedObjectStyle="ObjectStyle/$ID/[None]" ItemTransform="{}" FillColor="Swatch/None" StrokeColor="Swatch/None" StrokeWeight="0">"#,
@@ -630,6 +666,7 @@ impl Writer<'_> {
             (Self::rect_path(l, t, r, b), it.transform)
         };
         let fid = format!("{}t", it.id);
+        self.element(&it.id, "textFrame", &fid);
         let _ = write!(
             out,
             r#"<TextFrame Self="{fid}" Name="{}" ParentStory="{story}" PreviousTextFrame="n" NextTextFrame="n" ContentType="TextType" AppliedObjectStyle="ObjectStyle/$ID/[None]" ItemTransform="{}" FillColor="Swatch/None" StrokeColor="Swatch/None" StrokeWeight="0">"#,
@@ -842,6 +879,7 @@ pub fn write(
         stories: Vec::new(),
         story_of: BTreeMap::new(),
         para_styles: BTreeSet::new(),
+        elements: BTreeMap::new(),
         diagnostics: Vec::new(),
         next: 0,
     };
@@ -993,6 +1031,7 @@ pub fn write(
     Ok(Written {
         idml: out.into_inner(),
         stories: w.story_of,
+        elements: w.elements,
         diagnostics: w.diagnostics,
     })
 }

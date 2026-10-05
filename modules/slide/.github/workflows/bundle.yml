@@ -1,0 +1,52 @@
+name: bundle
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bundle-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.93.0
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: install pinned wasm-bindgen-cli (Cargo.lock version)
+        run: |
+          V=$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock | grep version | head -1 | cut -d'"' -f2)
+          cargo install wasm-bindgen-cli --version "$V" --locked
+      - name: install pinned binaryen (reftypes-safe; old apt binaryen breaks externref table grow)
+        run: |
+          curl -fsSL https://github.com/WebAssembly/binaryen/releases/download/version_119/binaryen-version_119-x86_64-linux.tar.gz | tar xz
+          echo "$PWD/binaryen-version_119/bin" >> "$GITHUB_PATH"
+      - name: build the engine wasm (100 MB app-wide budget gate)
+        run: bash scripts/build-wasm.sh
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # The bundle consumes the published @paged-media canaries and the
+      # published canvas-wasm (the conformance engine), so a plain install
+      # suffices.
+      - run: pnpm install --frozen-lockfile
+      - name: contract-import lint
+        run: node scripts/check-contract-imports.mjs
+      - name: typecheck
+        run: pnpm -r run typecheck
+      - name: validate manifest
+        run: npx --yes @paged-media/plugin-cli@canary validate packages/slide-bundle/manifest.json
+      - name: vitest (importer + conformance against the real engine)
+        run: pnpm -r run test

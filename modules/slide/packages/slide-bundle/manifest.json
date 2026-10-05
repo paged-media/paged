@@ -1,0 +1,31 @@
+{
+  "id": "media.paged.slide",
+  "name": "paged.slide",
+  "version": "0.1.0",
+  "apiVersion": "^0.2",
+  "publisher": "paged.media",
+  "capabilities": {
+    "document": {
+      "read": "broad",
+      "write": "broad",
+      "readNative": true,
+      "openNative": true
+    },
+    "clipboard": "none",
+    "wasm": [
+      {
+        "name": "slide-engine",
+        "path": "bin/slide_js_bg.wasm",
+        "purpose": "compute",
+        "maxBytes": 8388608
+      }
+    ]
+  },
+  "contributes": {
+    "importers": ["media.paged.slide.importer.pptx"],
+    "partTypes": [
+      { "type": "pptx", "role": "source", "format": "opc", "linkable": false },
+      { "type": "slideImport", "role": "derived", "format": "json" }
+    ]
+  }
+}

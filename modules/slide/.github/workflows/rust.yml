@@ -57,17 +57,3 @@ jobs:
       - name: tests failed
         if: ${{ env.RUST_FAILED == '1' }}
         run: exit 1
-
-  wasm:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: 1.93.0
-          targets: wasm32-unknown-unknown
-      - uses: Swatinem/rust-cache@v2
-      - name: slide-js builds for wasm32
-        run: |
-          cargo build --release --target wasm32-unknown-unknown -p slide-js
-          ls -l target/wasm32-unknown-unknown/release/slide_js.wasm

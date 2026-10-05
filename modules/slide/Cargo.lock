@@ -373,8 +373,13 @@ dependencies = [
 name = "slide-js"
 version = "0.0.0"
 dependencies = [
+ "paged-ooxml",
+ "pptx-core",
  "pptx-import",
+ "serde",
  "serde_json",
+ "slide-idml",
+ "slide-resolve",
  "wasm-bindgen",
 ]
 
