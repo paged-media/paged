@@ -31,6 +31,8 @@
 //! for export (`Transition::xml`, `Slide::timing_xml`) and otherwise reported in
 //! [`Presentation::diagnostics`].
 
+pub mod chart;
+
 use serde::{Deserialize, Serialize};
 
 /// English Metric Units: 914 400 per inch, 12 700 per point.
@@ -60,6 +62,8 @@ pub struct Presentation {
     pub embedded_fonts: Vec<EmbeddedFont>,
     /// Sections from the `p14:sectionLst` extension.
     pub sections: Vec<Section>,
+    /// Every chart a slide, layout or master shows, keyed by part name.
+    pub charts: std::collections::BTreeMap<String, chart::Chart>,
     /// Things the importer met and did not model, one line each.
     pub diagnostics: Vec<String>,
 }

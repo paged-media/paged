@@ -340,6 +340,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a219298ac11a56ea9a6d2120044824d6f01aeb034955e7af7bc16858527deea"
 
 [[package]]
+name = "slide-chart"
+version = "0.0.0"
+dependencies = [
+ "pptx-core",
+ "serde",
+]
+
+[[package]]
 name = "slide-geom"
 version = "0.0.0"
 dependencies = [
@@ -378,6 +386,7 @@ dependencies = [
  "pptx-import",
  "serde",
  "serde_json",
+ "slide-chart",
  "slide-geom",
 ]
 

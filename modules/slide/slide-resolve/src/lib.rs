@@ -42,6 +42,7 @@ use pptx_core::{
     Placeholder, Presentation, Shape, ShapeProps, ShapeStyle, Sp, Theme, Xfrm, EMU_PER_PT,
 };
 
+mod chart;
 pub mod color;
 pub mod model;
 pub mod text;
@@ -826,9 +827,28 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                     },
                 })
             }
-            FrameContent::Chart { .. } => {
-                ctx.note(format!("chart {:?} not drawn yet", f.nv.name));
-                None
+            FrameContent::Chart { part } => {
+                let Some(c) = part.as_ref().and_then(|p| ctx.deck.charts.get(p)) else {
+                    ctx.note(format!("chart {:?}: part missing", f.nv.name));
+                    return None;
+                };
+                let x = f.xfrm.clone()?;
+                let (t, w, h) = space.place(&x);
+                let children = chart::items(c, t, w, h, ctx);
+                Some(Item {
+                    id: ctx.id(),
+                    name: f.nv.name.clone(),
+                    transform: t,
+                    w,
+                    h,
+                    kind: ItemKind::Group { children },
+                    opacity: 1.0,
+                    shadow: None,
+                    meta: ItemMeta {
+                        shape_id: f.nv.id,
+                        ..Default::default()
+                    },
+                })
             }
             FrameContent::Diagram { .. } => {
                 ctx.note(format!("SmartArt {:?} not drawn yet", f.nv.name));

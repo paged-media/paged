@@ -33,10 +33,11 @@ use std::collections::BTreeMap;
 
 use paged_ooxml::{part_dir, rels_part_name, resolve_target, OpcPackage, Relationships};
 use pptx_core::{
-    Background, ColorMap, EmbeddedFont, FontSet, Layout, Master, Presentation, Section, Slide,
-    Theme, Transition,
+    Background, ColorMap, EmbeddedFont, FontSet, FrameContent, GraphicFrame, Layout, Master,
+    Presentation, Section, Shape, Slide, Theme, Transition,
 };
 
+pub mod chart;
 pub mod paint;
 pub mod shapes;
 pub mod text;
@@ -189,8 +190,45 @@ pub fn import_pptx(bytes: &[u8]) -> Result<Presentation, ImportError> {
         }
     }
 
+    // Charts, once per part.
+    let mut chart_parts = Vec::new();
+    for shapes in deck
+        .slides
+        .iter()
+        .map(|s| &s.shapes)
+        .chain(deck.layouts.iter().map(|l| &l.shapes))
+        .chain(deck.masters.iter().map(|m| &m.shapes))
+    {
+        collect_charts(shapes, &mut chart_parts);
+    }
+    for part in chart_parts {
+        if deck.charts.contains_key(&part) {
+            continue;
+        }
+        match read_part(&pkg, &part) {
+            Ok(el) => {
+                let c = chart::chart(&el, &Ctx::new(&pkg, &part, &diagnostics));
+                deck.charts.insert(part, c);
+            }
+            Err(e) => diagnostics.borrow_mut().push(e.to_string()),
+        }
+    }
+
     deck.diagnostics = summarise(diagnostics.into_inner());
     Ok(deck)
+}
+
+fn collect_charts(shapes: &[Shape], out: &mut Vec<String>) {
+    for s in shapes {
+        match s {
+            Shape::Frame(GraphicFrame {
+                content: FrameContent::Chart { part: Some(p) },
+                ..
+            }) => out.push(p.clone()),
+            Shape::Group(g) => collect_charts(&g.children, out),
+            _ => {}
+        }
+    }
 }
 
 /// Collapse repeated lines into "line (×n)" so a deck with 300 unmodelled

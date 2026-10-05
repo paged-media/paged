@@ -10,6 +10,7 @@ members = [
     "pptx-core",
     "pptx-import",
     "slide-geom",
+    "slide-chart",
     "slide-resolve",
     "slide-idml",
     "slide-js",
@@ -40,6 +41,7 @@ paged-ooxml = { path = "vendor/paged-ooxml" }
 pptx-core = { path = "pptx-core" }
 pptx-import = { path = "pptx-import" }
 slide-geom = { path = "slide-geom" }
+slide-chart = { path = "slide-chart" }
 slide-resolve = { path = "slide-resolve" }
 slide-idml = { path = "slide-idml" }
 slide-js = { path = "slide-js" }
