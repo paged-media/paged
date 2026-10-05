@@ -224,14 +224,21 @@ fn paint(fill: &Fill, ctx: &Ctx, ph: Option<Rgba>) -> Paint {
             }
         }
         Fill::Gradient(g) => {
-            let mut stops: Vec<(f64, Rgb)> = g
+            let mut stops: Vec<Stop> = g
                 .stops
                 .iter()
-                .map(|(pos, c)| (*pos as f64 / 1000.0, resolve_color(c, &colors).bytes()))
+                .map(|(pos, c)| {
+                    let rgba = resolve_color(c, &colors);
+                    Stop {
+                        pos: *pos as f64 / 1000.0,
+                        rgb: rgba.bytes(),
+                        alpha: rgba.a,
+                    }
+                })
                 .collect();
             // `a:gsLst` need not be in position order; a gradient swatch's
             // stops are.
-            stops.sort_by(|a, b| a.0.total_cmp(&b.0));
+            stops.sort_by(|a, b| a.pos.total_cmp(&b.pos));
             if stops.is_empty() {
                 return Paint::None;
             }
@@ -666,10 +673,12 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
             // The engine has no per-colour alpha, so a translucent colour
             // becomes item opacity: the fill's, or the stroke's when the
             // shape has no fill (or both carry the same alpha).
-            let alpha_of = |p: &Paint| match p {
-                Paint::Solid { alpha, .. } => *alpha,
-                _ => 1.0,
-            };
+            // The engine has no per-colour alpha, so a translucent paint
+            // becomes item opacity: the fill's, or the stroke's when the
+            // shape has no fill (or both carry the same alpha). A gradient
+            // whose stops differ in alpha is written as a gradient feather
+            // instead (slide-idml).
+            let alpha_of = |p: &Paint| p.uniform_alpha().unwrap_or(1.0);
             let stroke_alpha = stroke.as_ref().map(|s| alpha_of(&s.paint));
             let opacity = if text.is_some() {
                 1.0
@@ -678,8 +687,7 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                     (Paint::None, Some(a)) => a,
                     (f, Some(a)) if (alpha_of(f) - a).abs() < 1e-3 => a,
                     (f, None) => alpha_of(f),
-                    (Paint::Solid { alpha, .. }, Some(_)) => *alpha,
-                    _ => 1.0,
+                    (f, Some(_)) => alpha_of(f),
                 }
             };
             Some(Item {

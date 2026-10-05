@@ -152,6 +152,7 @@ fn run(props: &RunProps, text: String, line_break: bool, ctx: &TextCtx) -> TextR
         rgb: rgba.bytes(),
         alpha: rgba.a,
         link: props.hyperlink.as_ref().and_then(|h| h.url.clone()),
+        field: None,
     }
 }
 
@@ -167,7 +168,10 @@ pub fn paragraph(p: &Paragraph, ctx: &TextCtx) -> Para {
         match &r.kind {
             RunKind::Text(t) => runs.push(run(&rp, t.clone(), false, ctx)),
             RunKind::Break => runs.push(run(&rp, String::new(), true, ctx)),
-            RunKind::Field { text, .. } => runs.push(run(&rp, text.clone(), false, ctx)),
+            RunKind::Field { text, kind } => runs.push(TextRun {
+                field: kind.clone(),
+                ..run(&rp, text.clone(), false, ctx)
+            }),
         }
     }
     let mut end = base_run.clone();

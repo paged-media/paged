@@ -118,15 +118,41 @@ pub enum Paint {
         theme: Option<String>,
     },
     Linear {
-        stops: Vec<(f64, Rgb)>,
+        stops: Vec<Stop>,
         angle: f64,
     },
     Radial {
-        stops: Vec<(f64, Rgb)>,
+        stops: Vec<Stop>,
     },
     Image {
         part: String,
     },
+}
+
+/// One gradient stop: position (0–100 %), colour, alpha (0–1).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Stop {
+    pub pos: f64,
+    pub rgb: Rgb,
+    pub alpha: f64,
+}
+
+impl Paint {
+    /// The paint's alpha when it is the same everywhere (a solid colour, or
+    /// a gradient whose stops share one), else `None`.
+    pub fn uniform_alpha(&self) -> Option<f64> {
+        match self {
+            Paint::Solid { alpha, .. } => Some(*alpha),
+            Paint::Linear { stops, .. } | Paint::Radial { stops } => {
+                let first = stops.first()?.alpha;
+                stops
+                    .iter()
+                    .all(|s| (s.alpha - first).abs() < 1e-3)
+                    .then_some(first)
+            }
+            Paint::None | Paint::Image { .. } => Some(1.0),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -232,6 +258,9 @@ pub struct TextRun {
     pub rgb: Rgb,
     pub alpha: f64,
     pub link: Option<String>,
+    /// `a:fld type` (`slidenum`, `datetime1`, …); `text` holds the value
+    /// PowerPoint last computed.
+    pub field: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -49,6 +49,28 @@ pub struct Written {
     pub diagnostics: Vec<String>,
 }
 
+/// Gradient feather: type, IDML angle, (location %, alpha) stops.
+type Feather = (&'static str, Option<f64>, Vec<(f64, f64)>);
+
+/// A gradient feather for a gradient whose stops differ in alpha: type,
+/// IDML angle and (location %, alpha) stops. The engine's gradient swatches
+/// carry no alpha, so the fade rides on the item instead.
+fn feather_of(p: &Paint) -> Option<Feather> {
+    if p.uniform_alpha().is_some() {
+        return None;
+    }
+    let (kind, angle, stops) = match p {
+        Paint::Linear { stops, angle } => ("Linear", Some(-angle), stops),
+        Paint::Radial { stops } => ("Radial", None, stops),
+        _ => return None,
+    };
+    Some((
+        kind,
+        angle,
+        stops.iter().map(|s| (s.pos, s.alpha)).collect(),
+    ))
+}
+
 /// Where PowerPoint puts a text frame's first baseline, in pt below the top
 /// inset, when the font does not decide it. With a percentage line spacing
 /// it is three quarters of the first line's pitch, whatever the font
@@ -183,8 +205,8 @@ impl Writer<'_> {
         }
     }
 
-    fn gradient(&mut self, kind: &'static str, stops: &[(f64, Rgb)]) -> String {
-        let refs: Vec<(f64, String)> = stops.iter().map(|(p, c)| (*p, self.color(*c))).collect();
+    fn gradient(&mut self, kind: &'static str, stops: &[Stop]) -> String {
+        let refs: Vec<(f64, String)> = stops.iter().map(|s| (s.pos, self.color(s.rgb))).collect();
         if let Some((id, _, _)) = self
             .gradients
             .iter()
@@ -237,8 +259,15 @@ impl Writer<'_> {
         }]
     }
 
-    fn transparency(out: &mut String, opacity: f64, shadow: Option<&Shadow>, this: &mut Self) {
-        if opacity >= 0.999 && shadow.is_none() {
+    fn transparency(
+        out: &mut String,
+        opacity: f64,
+        shadow: Option<&Shadow>,
+        feather: Option<&Paint>,
+        this: &mut Self,
+    ) {
+        let feather = feather.and_then(feather_of);
+        if opacity >= 0.999 && shadow.is_none() && feather.is_none() {
             return;
         }
         out.push_str("<TransparencySetting>");
@@ -260,6 +289,24 @@ impl Writer<'_> {
                 n(s.alpha * 100.0),
                 c
             );
+        }
+        if let Some((kind, angle, stops)) = feather {
+            let angle = angle
+                .map(|a| format!(r#" Angle="{}""#, n(a)))
+                .unwrap_or_default();
+            let _ = write!(
+                out,
+                r#"<GradientFeatherSetting Applied="true" Type="{kind}"{angle}>"#
+            );
+            for (pos, alpha) in stops {
+                let _ = write!(
+                    out,
+                    r#"<OpacityGradientStop Opacity="{}" Location="{}"/>"#,
+                    n(alpha * 100.0),
+                    n(pos)
+                );
+            }
+            out.push_str("</GradientFeatherSetting>");
         }
         out.push_str("</TransparencySetting>");
     }
@@ -353,7 +400,14 @@ impl Writer<'_> {
                         matrix(&it.transform)
                     );
                     Self::path_geometry(out, &paths);
-                    Self::transparency(out, it.opacity, it.shadow.as_ref(), self);
+                    // A gradient whose stops differ in alpha fades the item:
+                    // the fill's, or the stroke's on an unfilled shape.
+                    let feather = if has_fill {
+                        Some(fill)
+                    } else {
+                        stroke.as_ref().map(|s| &s.paint)
+                    };
+                    Self::transparency(out, it.opacity, it.shadow.as_ref(), feather, self);
                     out.push_str("</Polygon>");
                 }
                 if let Some(tf) = text {
@@ -385,7 +439,7 @@ impl Writer<'_> {
                     matrix(&it.transform)
                 );
                 Self::path_geometry(out, outline);
-                Self::transparency(out, it.opacity, it.shadow.as_ref(), self);
+                Self::transparency(out, it.opacity, it.shadow.as_ref(), None, self);
                 // The visible part of the image is (l, t)–(1-r, 1-b); stretch it
                 // over the frame.
                 let (l, t, r, b) = *crop;
@@ -748,6 +802,10 @@ impl Writer<'_> {
                 s.push_str("</Properties>");
                 if r.line_break {
                     s.push_str("<Content>\u{2028}</Content>");
+                } else if r.field.as_deref() == Some("slidenum") {
+                    // The page's own number, so it follows the slide when
+                    // slides move (and resolves per page on a master).
+                    s.push_str("<Content><?ACE 18?></Content>");
                 } else if !r.text.is_empty() {
                     let _ = write!(
                         s,
