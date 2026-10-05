@@ -1,9 +1,9 @@
 {
   "$comment": "Where the vendored catalog.json came from, and — when it leads the published engine — why that is allowed. `sync-catalog.mjs --check` enforces every claim in this file, in both directions: an unexplained difference fails, and so does an `aheadOfPublished` marker that the publish has since caught up with.",
   "source": "core",
-  "rev": "6f72015",
+  "rev": "fcffd2d",
   "targetsProtocol": 66,
   "publishedPackage": "@paged-media/introspect-wasm",
-  "aheadOfPublished": true,
-  "why": "LEADS the publish (2026-10-04, branch sheet/protocol-66): copied verbatim from core@6f72015 (branch sheet/protocol-66) crates/paged-introspect/catalog.json, which adds the deleteTable op (roster + paged.deleteTable host fn) on top of the 0.65.0 catalog. The image/protocol-66 core branch does not change catalog.json, so this is also the catalog the merged protocol-66 tag will carry unless it changes it. Re-sync from @paged-media/introspect-wasm@0.66.0 once v0.66.0 is tagged and set aheadOfPublished back to false. Prior record: IN SYNC as of introspect-wasm@0.65.0 (core@ffb7c87)."
+  "aheadOfPublished": false,
+  "why": "IN SYNC as of @paged-media/introspect-wasm@0.66.0 (core@fcffd2d, tag v0.66.0 — the merged draw + image + sheet protocol-66 release)."
 }
