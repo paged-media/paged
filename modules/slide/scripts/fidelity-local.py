@@ -31,12 +31,18 @@ FONT_DIRS = ["/Applications/Microsoft PowerPoint.app/Contents/Resources/DFonts",
 fonts = {}  # (family, style) -> path
 for d in FONT_DIRS:
     for p in glob.glob(d + "/**/*.[ot]t[fc]", recursive=True):
-        q = subprocess.run(["fc-query", "-f", "%{family[0]}|%{style[0]}\n", p], capture_output=True, text=True).stdout.splitlines()
-        # A variable font reports one line per named instance; each
-        # instance's style maps to the same file.
+        q = subprocess.run(["fc-query", "-f", "%{family}|%{style}\n", p], capture_output=True, text=True).stdout.splitlines()
+        # A variable font reports one line per named instance, and every
+        # face lists its typographic and its legacy names ("Work Sans" /
+        # "SemiBold" and "Work Sans SemiBold" / "Regular"); decks use
+        # either, so each pairing maps to the file.
         for line in q:
-            fam, _, style = line.partition("|")
-            fonts.setdefault((fam, style), p)
+            fams, _, styles = line.partition("|")
+            fams, styles = fams.split(","), styles.split(",")
+            fonts.setdefault((fams[0], styles[0]), p)
+            for fam in fams[1:]:
+                for style in styles[1:] or styles:
+                    fonts.setdefault((fam, style), p)
 def face(fam, style):
     return fonts.get((fam, style)) or fonts.get((fam, {"Bold": "Bold", "Italic": "Italic"}.get(style, style)))
 

@@ -39,7 +39,7 @@ use std::collections::BTreeMap;
 
 use pptx_core::{
     Background, BodyProps, ColorMap, Fill, FrameContent, Geometry, Layout, Line, ListStyle, Master,
-    Presentation, Shape, ShapeProps, ShapeStyle, Sp, Theme, Xfrm, EMU_PER_PT,
+    Placeholder, Presentation, Shape, ShapeProps, ShapeStyle, Sp, Theme, Xfrm, EMU_PER_PT,
 };
 
 pub mod color;
@@ -224,11 +224,14 @@ fn paint(fill: &Fill, ctx: &Ctx, ph: Option<Rgba>) -> Paint {
             }
         }
         Fill::Gradient(g) => {
-            let stops: Vec<(f64, Rgb)> = g
+            let mut stops: Vec<(f64, Rgb)> = g
                 .stops
                 .iter()
                 .map(|(pos, c)| (*pos as f64 / 1000.0, resolve_color(c, &colors).bytes()))
                 .collect();
+            // `a:gsLst` need not be in position order; a gradient swatch's
+            // stops are.
+            stops.sort_by(|a, b| a.0.total_cmp(&b.0));
             if stops.is_empty() {
                 return Paint::None;
             }
@@ -441,7 +444,15 @@ fn find_placeholder<'a>(
 /// master placeholders.
 fn chain<'a>(sp: &'a Sp, ctx: &Ctx<'a>) -> Vec<&'a Sp> {
     let mut out = vec![sp];
-    let Some(ph) = &sp.nv.placeholder else {
+    out.extend(ancestors(sp.nv.placeholder.as_ref(), ctx));
+    out
+}
+
+/// The layout and master placeholders a placeholder inherits from, nearest
+/// first (by `idx`, then by type).
+fn ancestors<'a>(ph: Option<&Placeholder>, ctx: &Ctx<'a>) -> Vec<&'a Sp> {
+    let mut out = Vec::new();
+    let Some(ph) = ph else {
         return out;
     };
     if ctx.level == Level::Slide {
@@ -710,9 +721,25 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                 ctx.note(format!("picture {:?} has no embedded image", p.nv.name));
                 return None;
             };
-            let x = p.props.xfrm.clone()?;
+            // A picture placeholder may leave its box, outline and line
+            // to the layout's (or master's) placeholder.
+            let up = ancestors(p.nv.placeholder.as_ref(), ctx);
+            let x = p
+                .props
+                .xfrm
+                .clone()
+                .or_else(|| up.iter().find_map(|a| a.props.xfrm.clone()))?;
             let (t, w, h) = space.place(&x);
-            let o = outline(p.props.geometry.as_ref(), w, h);
+            let geometry = p
+                .props
+                .geometry
+                .as_ref()
+                .or_else(|| up.iter().find_map(|a| a.props.geometry.as_ref()));
+            let o = outline(geometry, w, h);
+            let line_props = std::iter::once(&p.props)
+                .chain(up.iter().map(|a| &a.props))
+                .find(|pr| pr.line.is_some())
+                .unwrap_or(&p.props);
             let crop = p
                 .blip
                 .src_rect
@@ -733,7 +760,7 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                 h,
                 kind: ItemKind::Picture {
                     outline: o.subpaths,
-                    stroke: shape_stroke(&p.props, p.style.as_ref(), ctx),
+                    stroke: shape_stroke(line_props, p.style.as_ref(), ctx),
                     image_part: part,
                     crop,
                 },
