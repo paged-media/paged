@@ -1,9 +1,9 @@
 {
   "$comment": "Where the vendored catalog.json came from, and — when it leads the published engine — why that is allowed. `sync-catalog.mjs --check` enforces every claim in this file, in both directions: an unexplained difference fails, and so does an `aheadOfPublished` marker that the publish has since caught up with.",
   "source": "core",
-  "rev": "fcffd2d",
-  "targetsProtocol": 66,
+  "rev": "715e130",
+  "targetsProtocol": 67,
   "publishedPackage": "@paged-media/introspect-wasm",
   "aheadOfPublished": false,
-  "why": "IN SYNC as of @paged-media/introspect-wasm@0.66.0 (core@fcffd2d, tag v0.66.0 — the merged draw + image + sheet protocol-66 release)."
+  "why": "IN SYNC as of @paged-media/introspect-wasm@0.67.0 (core@715e130, tag v0.67.0 — snapping in the engine; the catalog itself is unchanged from 0.66.0, protocol 67 added message kinds, not operations)."
 }
