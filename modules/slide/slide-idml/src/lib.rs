@@ -403,11 +403,110 @@ impl Writer<'_> {
                     esc(&uri)
                 );
             }
-            ItemKind::Table(_) => {
-                self.diagnostics
-                    .push(format!("table {:?} not drawn yet", it.name));
+            ItemKind::Table(t) => self.table(out, it, t),
+        }
+    }
+
+    /// A table: a text frame at the table's box holding a story with one
+    /// paragraph that carries the table.
+    fn table(&mut self, out: &mut String, it: &Item, t: &Table) {
+        let story = format!("st{}", it.id);
+        let fid = format!("{}t", it.id);
+        let _ = write!(
+            out,
+            r#"<TextFrame Self="{fid}" Name="{}" ParentStory="{story}" PreviousTextFrame="n" NextTextFrame="n" ContentType="TextType" AppliedObjectStyle="ObjectStyle/$ID/[None]" ItemTransform="{}" FillColor="Swatch/None" StrokeColor="Swatch/None" StrokeWeight="0">"#,
+            esc(&it.name),
+            matrix(&it.transform)
+        );
+        Self::path_geometry(out, &Self::rect_path(0.0, 0.0, it.w, it.h));
+        out.push_str(r#"<TextFramePreference FirstBaselineOffset="AscentOffset" AutoSizingType="HeightOnly" AutoSizingReferencePoint="TopCenterPoint"><Properties><InsetSpacing type="list"><ListItem type="unit">0</ListItem><ListItem type="unit">0</ListItem><ListItem type="unit">0</ListItem><ListItem type="unit">0</ListItem></InsetSpacing></Properties></TextFramePreference></TextFrame>"#);
+        let rows = t.rows.len();
+        let cols = t.columns.len();
+        let tid = format!("{}tb", it.id);
+        let mut x = format!(
+            r#"<ParagraphStyleRange AppliedParagraphStyle="ParagraphStyle/$ID/NormalParagraphStyle"><CharacterStyleRange AppliedCharacterStyle="{NO_CHAR_STYLE}"><Table Self="{tid}" HeaderRowCount="0" FooterRowCount="0" BodyRowCount="{rows}" ColumnCount="{cols}" AppliedTableStyle="TableStyle/$ID/[No table style]">"#
+        );
+        for (r, (h, _)) in t.rows.iter().enumerate() {
+            let _ = write!(
+                x,
+                r#"<Row Self="{tid}_R{r}" Name="{r}" SingleRowHeight="{0}" MinimumHeight="{0}" AutoGrow="true"/>"#,
+                n(*h)
+            );
+        }
+        for (c, w) in t.columns.iter().enumerate() {
+            let _ = write!(
+                x,
+                r#"<Column Self="{tid}_C{c}" Name="{c}" SingleColumnWidth="{}"/>"#,
+                n(*w)
+            );
+        }
+        // IDML lists cells column by column; a spanning cell occupies the
+        // slots it covers, and PowerPoint's continuation cells are skipped.
+        let mut occupied = vec![false; rows * cols];
+        for c in 0..cols {
+            for r in 0..rows {
+                if occupied[r * cols + c] {
+                    continue;
+                }
+                let Some(cell) = t.rows[r].1.get(c) else {
+                    continue;
+                };
+                let (rs, cs) = (cell.span.0.max(1) as usize, cell.span.1.max(1) as usize);
+                for dr in 0..rs {
+                    for dc in 0..cs {
+                        if r + dr < rows && c + dc < cols {
+                            occupied[(r + dr) * cols + c + dc] = true;
+                        }
+                    }
+                }
+                let (fill, _) = self.paint(&cell.fill);
+                let _ = write!(
+                    x,
+                    r#"<Cell Self="{tid}_{c}_{r}" Name="{c}:{r}" RowSpan="{rs}" ColumnSpan="{cs}" FillColor="{fill}""#
+                );
+                for (edge, b) in ["Left", "Right", "Top", "Bottom"].iter().zip(&cell.borders) {
+                    match b {
+                        Some(s) => {
+                            let (sc, _) = self.paint(&s.paint);
+                            let _ = write!(
+                                x,
+                                r#" {edge}EdgeStrokeColor="{sc}" {edge}EdgeStrokeWeight="{}""#,
+                                n(s.width)
+                            );
+                        }
+                        None => {
+                            let _ = write!(x, r#" {edge}EdgeStrokeWeight="0""#);
+                        }
+                    }
+                }
+                let (il, it_, ir, ib) = cell
+                    .text
+                    .as_ref()
+                    .map(|t| t.inset)
+                    .unwrap_or((7.2, 3.6, 7.2, 3.6));
+                let vj = match cell.text.as_ref().map(|t| t.anchor.as_str()) {
+                    Some("middle") => "CenterAlign",
+                    Some("bottom") => "BottomAlign",
+                    _ => "TopAlign",
+                };
+                let _ = write!(
+                    x,
+                    r#" TextLeftInset="{}" TextTopInset="{}" TextRightInset="{}" TextBottomInset="{}" VerticalJustification="{vj}">"#,
+                    n(il),
+                    n(it_),
+                    n(ir),
+                    n(ib)
+                );
+                if let Some(tf) = &cell.text {
+                    let paras = self.paragraphs(&tf.paragraphs);
+                    x.push_str(&paras);
+                }
+                x.push_str("</Cell>");
             }
         }
+        x.push_str("</Table></CharacterStyleRange></ParagraphStyleRange>");
+        self.story_of.insert(it.id.clone(), story.clone());
+        self.stories.push((story, x));
     }
 
     fn text_frame(&mut self, out: &mut String, it: &Item, tf: &TextFrame) {
@@ -509,9 +608,13 @@ impl Writer<'_> {
     }
 
     fn story(&mut self, tf: &TextFrame) -> String {
+        self.paragraphs(&tf.paragraphs)
+    }
+
+    fn paragraphs(&mut self, paras: &[Para]) -> String {
         let mut s = String::new();
-        let count = tf.paragraphs.len();
-        for (i, p) in tf.paragraphs.iter().enumerate() {
+        let count = paras.len();
+        for (i, p) in paras.iter().enumerate() {
             let style = match &p.style {
                 Some(name) => {
                     self.para_styles.insert(name.clone());

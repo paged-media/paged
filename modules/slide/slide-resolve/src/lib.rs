@@ -616,9 +616,24 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
             if matches!(fill, Paint::None) && stroke.is_none() && text.is_none() {
                 return None;
             }
-            let opacity = match &fill {
-                Paint::Solid { alpha, .. } if *alpha < 1.0 && text.is_none() => *alpha,
+            // The engine has no per-colour alpha, so a translucent colour
+            // becomes item opacity: the fill's, or the stroke's when the
+            // shape has no fill (or both carry the same alpha).
+            let alpha_of = |p: &Paint| match p {
+                Paint::Solid { alpha, .. } => *alpha,
                 _ => 1.0,
+            };
+            let stroke_alpha = stroke.as_ref().map(|s| alpha_of(&s.paint));
+            let opacity = if text.is_some() {
+                1.0
+            } else {
+                match (&fill, stroke_alpha) {
+                    (Paint::None, Some(a)) => a,
+                    (f, Some(a)) if (alpha_of(f) - a).abs() < 1e-3 => a,
+                    (f, None) => alpha_of(f),
+                    (Paint::Solid { alpha, .. }, Some(_)) => *alpha,
+                    _ => 1.0,
+                }
             };
             Some(Item {
                 id: ctx.id(),
@@ -773,6 +788,11 @@ fn ordered(shapes: &[Shape], space: &Space, ctx: &Ctx) -> Vec<Item> {
 }
 
 fn table(t: &pptx_core::Table, ctx: &Ctx) -> Table {
+    if let Some(id) = &t.style_id {
+        ctx.note(format!(
+            "table style {id} not applied (explicit cell formatting only)"
+        ));
+    }
     let colors = ctx.colors(None);
     let (major, minor) = match ctx.theme {
         Some(t) => (&t.major_font, &t.minor_font),
@@ -806,6 +826,15 @@ fn table(t: &pptx_core::Table, ctx: &Ctx) -> Table {
                                 .as_ref()
                                 .map(|f| paint(f, ctx, None))
                                 .unwrap_or(Paint::None),
+                            borders: c.borders.clone().map(|b| {
+                                b.and_then(|l| {
+                                    let props = ShapeProps {
+                                        line: Some(l),
+                                        ..Default::default()
+                                    };
+                                    shape_stroke(&props, None, ctx)
+                                })
+                            }),
                             text: c.text.as_ref().map(|tb| TextFrame {
                                 inset: (
                                     c.margins.0.unwrap_or(91_440) as f64 / EMU_PER_PT,

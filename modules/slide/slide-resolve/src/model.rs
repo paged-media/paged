@@ -242,9 +242,13 @@ pub struct Table {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Cell {
+    /// (rows, columns).
     pub span: (u32, u32),
+    /// A continuation of a merged cell: drawn by the cell it merges into.
     pub merged: bool,
     pub fill: Paint,
+    /// left, right, top, bottom.
+    pub borders: [Option<Stroke>; 4],
     pub text: Option<TextFrame>,
 }
 

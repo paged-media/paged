@@ -10,3 +10,4 @@ Range 700–749.
 | [703](703-slide-data-storage.md) | Where slide-only data lives | Accepted 2026-10-05 |
 | [704](704-pptx-export-regenerates-slides.md) | PPTX export regenerates slides and carries masters, layouts and themes | Accepted 2026-10-05 |
 | [705](705-powerpoint-is-the-oracle.md) | PowerPoint is the oracle | Accepted 2026-10-05 |
+| [706](706-transitions-run-on-webgpu-with-gl-transitions.md) | Slide transitions run on WebGPU, using the gl-transitions shader collection | Accepted 2026-10-05 |
