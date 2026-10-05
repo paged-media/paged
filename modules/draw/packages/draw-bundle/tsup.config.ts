@@ -18,7 +18,13 @@ export default defineConfig({
     "src/trace-worker.ts",
   ],
   format: ["esm"],
+  // The JS inlines the workspace packages (noExternal); the types must too,
+  // or the published .d.ts imports @paged-media/draw-geometry / draw-tools,
+  // which are never published, and a consumer sees `any`. tsconfig.build.json
+  // maps both to their sources, so the declaration bundle reads them as local
+  // code and inlines them.
   dts: true,
+  tsconfig: "tsconfig.build.json",
   clean: true,
   noExternal: [/^@paged-media\/draw-/],
   external: [/\?url$/, /wasm\//],
