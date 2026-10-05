@@ -53,6 +53,8 @@
 
 import type {
   BundleHost,
+  ToolSettingValue,
+  WillSaveEvent,
   ClipboardPayload,
   CommandContribution,
   CollectionName,
@@ -88,6 +90,8 @@ import {
   type ClipboardBackend,
   type SecretStoreBackend,
   type CreateBundleHostOptions,
+  type ToolSettingsBackend,
+  type WillSaveBackend,
 } from "./host-impl";
 import { satisfiesApiVersion, API_VERSION } from "./version";
 import {
@@ -137,7 +141,51 @@ export interface HarnessOptions
       | "clipboard"
       | "secrets"
       | "bindingProviders"
+      | "willSave"
+      | "toolSettings"
     > {}
+
+/** A headless will-save registry: listeners register per plugin and
+ *  `fire()` awaits them all, the way the editor's save path does — so a
+ *  bundle's commit-before-save is assertable without an editor. */
+export function inMemoryWillSave(): WillSaveBackend & {
+  fire(): Promise<void>;
+  count(): number;
+} {
+  const listeners = new Set<(e: WillSaveEvent) => Promise<void>>();
+  return {
+    register(_pluginId, listener) {
+      listeners.add(listener);
+      return { dispose: () => void listeners.delete(listener) };
+    },
+    async fire() {
+      await Promise.all([...listeners].map((l) => l({ format: "paged" })));
+    },
+    count: () => listeners.size,
+  };
+}
+
+/** A headless tool-options store: what the editor's tool-options UI would
+ *  hold, settable from a test with `set`. */
+export function inMemoryToolSettings(): ToolSettingsBackend & {
+  set(toolId: string, key: string, value: ToolSettingValue): void;
+} {
+  const values = new Map<string, Record<string, ToolSettingValue>>();
+  const subs = new Map<string, Set<() => void>>();
+  return {
+    get: (toolId) => ({ ...(values.get(toolId) ?? {}) }),
+    subscribe(toolId, listener) {
+      const set = subs.get(toolId) ?? new Set();
+      set.add(listener);
+      subs.set(toolId, set);
+      return () => void set.delete(listener);
+    },
+    set(toolId, key, value) {
+      values.set(toolId, { ...(values.get(toolId) ?? {}), [key]: value });
+      for (const l of subs.get(toolId) ?? []) l();
+    },
+  };
+}
 
 /** A headless in-memory `BlobStore` — per-plugin byte maps, so the
  *  conformance harness exercises `host.blob` (K-4 / S-08) without OPFS.
@@ -286,6 +334,13 @@ export interface HeadlessHost {
    *  that a path it does not declare comes back as a typed refusal to
    *  fall through to core). */
   readonly bindingProviders: BindingProviderBackend;
+  /** The will-save registry this host injected: `fire()` runs every
+   *  bundle's `document.onWillSave` listener and awaits them, as a save
+   *  would. */
+  readonly willSave: ReturnType<typeof inMemoryWillSave>;
+  /** The tool-options store this host injected: `set()` stands in for the
+   *  editor's tool-options UI, and `host.tools` reads it back. */
+  readonly toolSettings: ReturnType<typeof inMemoryToolSettings>;
   /** Load an IDML package into the headless document. Resolves to the
    *  loaded page ids (or throws on a parse failure). */
   load(idml: Uint8Array): Promise<string[]>;
@@ -576,6 +631,12 @@ export async function createHeadlessHost(
   // the same reason the editor shares one: resolution is CROSS-bundle.
   const bindingProviders =
     options.bindingProviders ?? createBindingProviderRegistry();
+  // Protocol 66 batch — the save hook and the tool-options store, shared
+  // across the harness's hosts like the stores above. A test-injected
+  // backend replaces the in-memory one but loses `fire` / `set`, so the
+  // handle always exposes the in-memory pair it can drive.
+  const willSave = inMemoryWillSave();
+  const toolSettings = inMemoryToolSettings();
 
   const buildHost = (
     manifest: PluginManifest,
@@ -588,6 +649,8 @@ export async function createHeadlessHost(
       clipboard,
       secrets,
       bindingProviders,
+      willSave: options.willSave ?? willSave,
+      toolSettings: options.toolSettings ?? toolSettings,
       capabilityMode: mode,
       // W-06 — a recordable fake asset source the conformance harness
       // can pass so a bundle's `@font-face` byte path is exercisable
@@ -732,6 +795,8 @@ export async function createHeadlessHost(
       return lastPreviews;
     },
     bindingProviders,
+    willSave,
+    toolSettings,
     async load(idml: Uint8Array): Promise<string[]> {
       const raw = worker.loadDocumentDirect(seqCounter++, idml);
       const reply = JSON.parse(raw) as WorkerToMain;

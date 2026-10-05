@@ -9,14 +9,14 @@ What the plugin contract ships and what it does not, read from the code at commi
 
 - **Three npm packages**, published under the `canary` tag on a push to `main`.
 - **The contract** (`plugin-api`, types only): the manifest types and their JSON Schema
-  (exported as `./manifest.schema.json`), `PagedBundle`, `BundleHost` with 26 members, the
+  (exported as `./manifest.schema.json`), `PagedBundle`, `BundleHost` with 27 members, the
   contribution shapes, the panel schema, binding providers, and the engine's wire types.
 - **The loader.** `loadBundle` checks trust, id and `apiVersion`, builds the host, calls
   `activate` inside a guard, and returns a handle whose `dispose` removes what the bundle
   registered. `defineBundle`, `API_VERSION` and `satisfiesApiVersion` come with it.
 - **The host adapter.** `createBundleHost` implements every door in the table in
   `architecture.md`, with the namespace rule and the capability gate (`enforce` by
-  default). `supports()` knows 37 names that are always true and 23 that depend on what
+  default). `supports()` knows 38 names that are always true and 28 that depend on what
   the host wires or, for `gpu@1`, on the manifest. In groups:
   - contributions: tools, React and schema panels, commands, key bindings, menu entries,
     overlays and tool previews, edit contexts with pointer, key, commit, cancel and undo
@@ -26,7 +26,10 @@ What the plugin contract ships and what it does not, read from the code at commi
   - services that are live when the host app passes a backend: file pick and save, a byte
     store, the clipboard, network consent, the data-provider registry, workers, credentials
     by reference, font and image bytes, image tiles, text measurement and the text caret,
-    diagnostics, the journal, and a code-editor widget.
+    diagnostics, the journal, a code-editor and a colour-picker widget, the save hook,
+    programmatic entry into the bundle's own edit context, and its tools' option values;
+  - the binary lanes of protocol 66 for scene images and parts, with a JSON fallback the
+    SDK keeps for older hosts ([ADR 320](adr/320-binary-lanes-for-scene-images-and-parts.md));
 - **For bundle authors:** `DisposableStore`, the page-drag gesture helpers, and
   `createHeadlessHost`, which runs a bundle in Node against the real engine.
 - **Manifest validation.** `paged-plugin validate` checks the schema rules, the namespace

@@ -80,4 +80,22 @@ export interface WidgetSurface {
    *  editor. Always present: a plain-textarea fallback stands in when
    *  the host app injects no real widget catalog. */
   readonly CodeEditor: ComponentType<CodeEditorProps>;
+  /** The host's colour picker (the same mixer the host's own colour UI
+   *  uses). It edits a value the BUNDLE owns — it never writes the
+   *  document or adds a swatch. Always present: an
+   *  `<input type="color">` fallback stands in when the host injects
+   *  none (probe `host.supports("widgets.colorPicker@1")`). */
+  readonly ColorPicker: ComponentType<ColorPickerProps>;
+}
+
+/** Props of {@link WidgetSurface.ColorPicker}. Colours are sRGB hex. */
+export interface ColorPickerProps {
+  /** `#rrggbb`. */
+  value: string;
+  /** Every change while the user drags / types. */
+  onChange(next: string): void;
+  /** The settled value (pointer up, picker closed, Enter). */
+  onCommit?(next: string): void;
+  disabled?: boolean;
+  ariaLabel?: string;
 }

@@ -52,6 +52,12 @@ export type {
   BundleHost,
   ContributionSurface,
   SceneLayerSurface,
+  SceneImage,
+  SceneImageTile,
+  SceneImageSubmitOptions,
+  WillSaveEvent,
+  ToolsSurface,
+  ToolSettingValue,
   ImagesSurface,
   ImageResourceClaimOptions,
   TileBytes,
@@ -61,6 +67,7 @@ export type {
   SecretsSurface,
   SecretMaterial,
   DocumentSurface,
+  MutateWithBytesOptions,
   SelectionSurface,
   ViewportSurface,
   TextSurface,
@@ -108,6 +115,7 @@ export type {
   EditContextCandidate,
   EnteredEditContext,
   ContentPointerEvent,
+  ContentWheelEvent,
   EditContextDescriptor,
   ObjectTypeDescriptor,
   PluginMetadataEnvelope,
@@ -136,6 +144,7 @@ export type {
 
 export type {
   WidgetSurface,
+  ColorPickerProps,
   CodeEditorProps,
   CodeEditorDiagnostic,
   CodeEditorLanguage,
@@ -175,6 +184,10 @@ export type {
 // C-6 (I-06) — the renderer resource-provider wire shape, re-exported
 // so the editor channel + the SDK adapter share one tile type.
 export type { ProviderTileWire } from "./wire";
+
+// One element a mutation minted (`MutationOutcome.minted`): the element,
+// the `bindCreated` handle that named it, and the story minted with it.
+export type { MintedElement } from "./wire";
 
 export type {
   ClipboardSurface,

@@ -15,6 +15,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { PluginManifest, ToolContribution } from "@paged-media/plugin-api";
+import type { ElementGeometryItem, Mutation } from "@paged-media/plugin-api";
 
 import {
   createBundleHost,
@@ -148,6 +149,63 @@ describe("document surface", () => {
       createdId: { kind: "polygon", id: "u1" },
       pageIds: ["p1"],
     });
+  });
+
+  it("copies the engine's minted list onto the outcome (a batch's every creation)", async () => {
+    const h = host();
+    const minted = [
+      { handle: "f", element: { kind: "textFrame", id: "u10" }, storyId: "u11" },
+      { handle: null, element: { kind: "rectangle", id: "u12" }, storyId: null },
+    ];
+    h.fake.setNextMutateReply({
+      kind: "mutationApplied",
+      payload: { createdId: { kind: "rectangle", id: "u12" }, minted, pageIds: ["p1"] },
+    });
+    const out = await h.host.document.mutate({ op: "batch", args: { ops: [] } } as never);
+    expect(out).toEqual({
+      applied: true,
+      createdId: { kind: "rectangle", id: "u12" },
+      pageIds: ["p1"],
+      minted,
+    });
+  });
+
+  it("leaves minted absent when the engine did not send it (older engine)", async () => {
+    const h = host();
+    h.fake.setNextMutateReply({
+      kind: "mutationApplied",
+      payload: { createdId: null, pageIds: ["p1"] },
+    });
+    const out = await h.host.document.mutate({ op: "batch", args: { ops: [] } } as never);
+    expect(out.applied).toBe(true);
+    expect("minted" in out).toBe(false);
+  });
+
+  it("deleteTable is a typed wire op and reaches the engine unchanged", async () => {
+    const h = host();
+    // No cast: `deleteTable` is on the vendored `Mutation` union, so a
+    // bundle replacing its placed table types the delete directly.
+    const del: Mutation = {
+      op: "deleteTable",
+      args: { storyId: "u20", tableId: "u21" },
+    };
+    const out = await h.host.document.mutate(del);
+    expect(out.applied).toBe(true);
+    expect(h.fake.mutations.at(-1)).toEqual(del);
+  });
+
+  it("elementGeometry carries a text frame's storyId through", async () => {
+    const h = host();
+    const item: ElementGeometryItem = {
+      id: { kind: "textFrame", id: "u10" },
+      pageId: "p1",
+      bounds: [0, 0, 10, 10],
+      storyId: "u11",
+    };
+    (h.fake.editor.client as { elementGeometry: unknown }).elementGeometry =
+      async () => [item];
+    const [got] = await h.host.document.elementGeometry([item.id]);
+    expect(got?.storyId).toBe("u11");
   });
 
   it("maps mutationFailed to a non-throwing failure", async () => {

@@ -31,6 +31,7 @@
 import { describe, expect, it } from "vitest";
 
 import type {
+  ContentWheelEvent,
   EditContextCandidate,
   EditContextContribution,
   ObjectTypeContribution,
@@ -38,6 +39,7 @@ import type {
 } from "@paged-media/plugin-api";
 
 import {
+  createBindingProviderRegistry,
   createBundleHost,
   PluginCapabilityError,
 } from "../src/host-impl";
@@ -186,6 +188,64 @@ describe("contribute.editContext — registration + gates (W3.2)", () => {
     expect(recorded).toHaveLength(1);
     expect(recorded[0].type).toBe("vectorGraphic");
     expect(typeof d.dispose).toBe("function");
+  });
+});
+
+describe("contribute.editContext — onContentWheel reaches the shell", () => {
+  // The editor hands a plain wheel over the active frame to the context's
+  // `onContentWheel` and pans only when it returns false. The adapter
+  // re-builds the contribution (stamping the metadata key, wrapping the
+  // lifecycle hooks), so the hook — and its return value — must survive.
+  const wheel: ContentWheelEvent = {
+    contentPoint: [12, 30],
+    elementId: "f1",
+    delta: [0, 48],
+    modifiers: { shift: false, alt: false, cmd: false, ctrl: false },
+  };
+  const sheet = (seen: ContentWheelEvent[], take: boolean): EditContextContribution => ({
+    type: "vectorGraphic",
+    entry: "doubleClick",
+    onContentWheel: (e) => {
+      seen.push(e);
+      return take;
+    },
+  });
+
+  it("is passed through with its answer (claimed and declined)", () => {
+    const fake = makeFakeEditor();
+    const { host } = createBundleHost(() => fake.editor, MANIFEST, { console: silent });
+    const seen: ContentWheelEvent[] = [];
+    contributeEditContext(host, sheet(seen, true));
+    const reg = fake.editContexts.get("vectorGraphic") as EditContextContribution;
+    expect(reg.onContentWheel?.(wheel)).toBe(true);
+    expect(seen).toEqual([wheel]);
+
+    const fake2 = makeFakeEditor();
+    const h2 = createBundleHost(() => fake2.editor, MANIFEST, { console: silent }).host;
+    contributeEditContext(h2, sheet(seen, false));
+    const reg2 = fake2.editContexts.get("vectorGraphic") as EditContextContribution;
+    expect(reg2.onContentWheel?.(wheel)).toBe(false);
+  });
+
+  it("survives the binding-provider wrapping of onEnter/onExit", () => {
+    const fake = makeFakeEditor();
+    const { host } = createBundleHost(() => fake.editor, MANIFEST, {
+      console: silent,
+      bindingProviders: createBindingProviderRegistry(),
+    });
+    const seen: ContentWheelEvent[] = [];
+    contributeEditContext(host, sheet(seen, true));
+    const reg = fake.editContexts.get("vectorGraphic") as EditContextContribution;
+    expect(reg.onContentWheel?.(wheel)).toBe(true);
+    expect(seen).toHaveLength(1);
+  });
+
+  it("stays absent when the context does not declare it (the canvas pans)", () => {
+    const fake = makeFakeEditor();
+    const { host } = createBundleHost(() => fake.editor, MANIFEST, { console: silent });
+    contributeEditContext(host, vectorContext);
+    const reg = fake.editContexts.get("vectorGraphic") as EditContextContribution;
+    expect(reg.onContentWheel).toBeUndefined();
   });
 });
 

@@ -126,6 +126,36 @@ describe("headless document doors — real engine round-trip", () => {
     }
   });
 
+  it("a batch reports every element it minted, with handles and the frame's story", async () => {
+    live = await open();
+    const [pageId] = await live.load(minimalIdml());
+    const out = await live.host.document.mutate({
+      op: "batch",
+      args: {
+        ops: [
+          { op: "insertTextFrame", args: { pageId, bounds: [10, 10, 60, 60] } },
+          { op: "bindCreated", args: { handle: "f" } },
+          // A text child keeps the batch on the per-child lane, where the
+          // engine records each `bindCreated` name on its minted entry (a
+          // frames-only batch translates whole and reports handles null).
+          { op: "insertText", args: { storyId: "$h:f", offset: 0, text: "x" } },
+          { op: "insertFrame", args: { pageId, bounds: [70, 10, 120, 60] } },
+        ],
+      },
+    } as never);
+    expect(out.applied).toBe(true);
+    if (!out.applied) return;
+    const minted = out.minted ?? [];
+    expect(minted.map((m) => [m.handle, m.element.kind])).toEqual([
+      ["f", "textFrame"],
+      [null, "rectangle"],
+    ]);
+    expect(typeof minted[0]?.storyId).toBe("string");
+    expect(minted[1]?.storyId).toBeNull();
+    // createdId is only the LAST creation; minted is the whole list.
+    expect(out.createdId).toEqual(minted[1]?.element);
+  });
+
   it("undo reverses an applied mutation (shared engine history)", async () => {
     live = await open();
     await live.load(minimalIdml());

@@ -36,6 +36,8 @@ import type { ComponentType } from "react";
 import type {
   EditContextContribution,
   ObjectTypeContribution,
+  SceneImage,
+  SceneImageTile,
 } from "./host";
 import type {
   CollectionName,
@@ -620,7 +622,49 @@ export interface PagedEditor {
       caller?: string,
     ): Promise<void>;
     clear(elementId: string): Promise<void>;
+    /** Protocol 66 — the BINARY scene-image lane (canvas-wasm
+     *  `submitSceneImageDirect`): the bytes cross as a `Uint8Array`,
+     *  transferred when `transfer` is true. Optional: absent on an older
+     *  host, and the SDK then falls back to `submit()`. */
+    submitImage?(
+      elementId: string,
+      image: SceneImage,
+      caller?: string,
+      transfer?: boolean,
+    ): Promise<void>;
+    /** Protocol 66 — patch tiles of the image `submitImage` set
+     *  (canvas-wasm `submitSceneImageTilesDirect`). Optional with
+     *  `submitImage`; the SDK uses the lane only when both exist. */
+    submitImageTiles?(
+      elementId: string,
+      tiles: readonly SceneImageTile[],
+      caller?: string,
+      transfer?: boolean,
+    ): Promise<void>;
   };
+  /** Protocol 66 — the BINARY `.paged` parts lane (canvas-wasm
+   *  `writePagedPartDirect` / `readPagedPartDirect` + `deletePagedPart`).
+   *  FULL paths (`paged/<plugin-id>/…`); the SDK adapter scopes them.
+   *  Optional: absent on an older host, and the SDK falls back to the
+   *  JSON `client.send` messages. */
+  parts?: {
+    write(path: string, bytes: Uint8Array, caller?: string): Promise<void>;
+    read(path: string): Promise<Uint8Array | null>;
+    delete(path: string, caller?: string): Promise<boolean>;
+  };
+  /** Protocol 66 — the BINARY commit lane (canvas-wasm
+   *  `mutateWithBytesDirect`): apply `mutation` (a `batch` included) after
+   *  handing `bytes` to its FIRST `replaceImageBytes` whose `bytes` is `[]`,
+   *  depth-first through batches. The engine refuses a mutation with no such
+   *  slot. The buffer moves to the worker when `transfer` is true. Resolves
+   *  with the same reply `client.mutate` does. Optional: absent on an older
+   *  host, and the SDK then splices `Array.from(bytes)` into that slot and
+   *  calls `client.mutate`. */
+  mutateWithBytes?(
+    mutation: Mutation,
+    bytes: Uint8Array,
+    transfer?: boolean,
+  ): Promise<WorkerToMain>;
   /** C-6 (I-06) — the renderer RESOURCE-PROVIDER channel. The editor
    *  routes these to the canvas-wasm `claimImageResource` /
    *  `submitResourceTiles` / `releaseImageResource` messages (the v44

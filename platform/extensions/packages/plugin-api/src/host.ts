@@ -30,6 +30,7 @@ import type {
   ElementId,
   HitFilter,
   HitResult,
+  MintedElement,
   Mutation,
   PageId,
   ElementProperties,
@@ -205,6 +206,12 @@ export interface EditContextContribution {
   /** K-1 — a key while the context is active. The shell owns Esc (→
    *  `onCancel`) and Enter (→ `onCommit`); every other key forwards here. */
   onContentKey?(e: KeyboardEvent): void;
+  /** A plain wheel over the ACTIVE context's frame, in frame-content
+   *  points. Return `true` when the context scrolled its own content (a
+   *  sheet's in-frame grid window) — the canvas then does not pan;
+   *  `false` keeps the host's pan. Cmd/Ctrl wheel is the host's zoom and
+   *  never reaches here. Optional: absent ⇒ the canvas always pans. */
+  onContentWheel?(e: ContentWheelEvent): boolean;
   /** K-1 — unsaved-edit probe: gates the discard prompt + the §8.0
    *  seamless-undo boundary. Absent ⇒ treated as never dirty. */
   isDirty?(): boolean;
@@ -232,6 +239,11 @@ export interface EditContextContribution {
    *  always enabled. */
   onCanUndo?(): boolean;
   onCanRedo?(): boolean;
+  /** Labels for the host's Edit-menu items while this context owns undo
+   *  (e.g. "Undo Brush Stroke"). `null` or absent ⇒ the host's generic
+   *  label. Read when the menu renders, so return the current step. */
+  undoLabel?(): string | null;
+  redoLabel?(): string | null;
   /** HOST-STAMPED, not author-supplied: the `x-paged:<manifest id>`
    *  metadata key the host resolves the candidate's `metadata` from
    *  before calling `matches`. The SDK adapter fills this from the
@@ -258,6 +270,20 @@ export interface ContentPointerEvent {
   modifiers: { shift: boolean; alt: boolean; cmd: boolean; ctrl: boolean };
   /** Mouse button (0 = primary). */
   button: number;
+}
+
+/** A wheel delivered to the ACTIVE edit context (`onContentWheel`).
+ *  `delta` is the scroll in frame-content points — the screen delta
+ *  divided by the camera scale, line/page modes normalised to pixels
+ *  first — x right / y down, the same axes as `contentPoint`. */
+export interface ContentWheelEvent {
+  /** Pointer in frame-content points (origin = the content-box top-left). */
+  contentPoint: [number, number];
+  /** The frame the active context edits (the stack's scope root). */
+  elementId: string;
+  /** Scroll amount in frame-content points [x, y]. */
+  delta: [number, number];
+  modifiers: { shift: boolean; alt: boolean; cmd: boolean; ctrl: boolean };
 }
 
 /**
@@ -492,6 +518,63 @@ export interface SceneLayerSurface extends Disposable {
   /** Clear the layer for `elementId` (returns the frame to native
    *  content). */
   clear(elementId: string): Promise<void>;
+  /**
+   * Make the frame's layer ONE RGBA8 image (protocol 66). Where the host
+   * wires the binary lane (`supports("rendering.sceneLayer.binary@1")`)
+   * the bytes cross as a `Uint8Array` — no `number[]`, no JSON parse —
+   * and only the pages showing the frame repaint. On an older host the
+   * SDK falls back to `submit()` with an image item; the bundle calls
+   * the same method either way. Replaces any previous layer.
+   */
+  submitImage(
+    elementId: string,
+    image: SceneImage,
+    options?: SceneImageSubmitOptions,
+  ): Promise<void>;
+  /**
+   * Patch rectangles of the image this surface last `submitImage`d for
+   * `elementId` (a brush stroke dirties a window, not the image). Rejects
+   * when no image was submitted for the element. A tile outside the
+   * image, or a byte count that does not match `width*height*4`, rejects
+   * the whole call and changes nothing.
+   */
+  submitImageTiles(
+    elementId: string,
+    tiles: readonly SceneImageTile[],
+    options?: SceneImageSubmitOptions,
+  ): Promise<void>;
+}
+
+/** One whole RGBA8 image for {@link SceneLayerSurface.submitImage}. */
+export interface SceneImage {
+  /** Tightly packed RGBA8, row-major, `width*height*4` bytes. */
+  rgba: Uint8Array;
+  /** Pixel width of the buffer. */
+  width: number;
+  /** Pixel height of the buffer. */
+  height: number;
+  /** Destination `[x, y, w, h]` in frame-content points. */
+  dest: [number, number, number, number];
+}
+
+/** One rectangle of new pixels for
+ *  {@link SceneLayerSurface.submitImageTiles}; the origin is in IMAGE
+ *  pixels of the submitted image. */
+export interface SceneImageTile {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** Tightly packed RGBA8, `width*height*4` bytes. */
+  rgba: Uint8Array;
+}
+
+/** How the bytes of a scene-image submission are handed over. */
+export interface SceneImageSubmitOptions {
+  /** `true`: the buffers are TRANSFERRED to the host and are detached
+   *  (unusable) in the bundle afterwards — no copy. Default `false`: the
+   *  host copies, and the bundle keeps its buffers. */
+  transfer?: boolean;
 }
 
 // ------------------------------------------------------- images (C-6)
@@ -718,10 +801,38 @@ export interface SecretsSurface {
 // ------------------------------------------------------------ document
 
 /** Expected mutation failures are results, not throws — mirroring the
- *  editor's mutate-never-throws convention. */
+ *  editor's mutate-never-throws convention.
+ *
+ *  `createdId` is the engine's single-creation answer: for a `batch` it is
+ *  only the LAST element the batch minted. `minted` is the whole list, in
+ *  mint order — every element a `batch` (or a `duplicateElements`)
+ *  created, each with the `bindCreated` handle that named it (`null` when
+ *  none did) and the story minted alongside it (a text frame's
+ *  `ParentStory`, else `null`). Present whenever the engine reported it
+ *  (it is additive on the wire; an older engine omits it), so a bundle
+ *  placing a frame + table + chart in ONE mutate reads back every id here
+ *  instead of re-discovering them with a scene walk. */
 export type MutationOutcome =
-  | { applied: true; createdId: ElementId | null; pageIds: PageId[] }
+  | {
+      applied: true;
+      createdId: ElementId | null;
+      pageIds: PageId[];
+      minted?: MintedElement[];
+    }
   | { applied: false; error: unknown };
+
+/** Options of {@link DocumentSurface.mutateWithBytes}. */
+export interface MutateWithBytesOptions {
+  /** Hand the buffer to the host instead of copying it; it may be detached
+   *  afterwards. Default `false`. */
+  transfer?: boolean;
+}
+
+/** What {@link DocumentSurface.onWillSave} listeners receive. */
+export interface WillSaveEvent {
+  /** The container being written. */
+  format: "paged";
+}
 
 export interface DocumentChangeEvent {
   kind: "mutationApplied" | "undoApplied" | "redoApplied";
@@ -868,6 +979,41 @@ export interface DocumentSurface {
    *  hasn't absorbed yet (see mutations.ts). Widening an accepted
    *  input is additive: every `Mutation` still passes. */
   mutate(mutation: MutationInput): Promise<MutationOutcome>;
+  /**
+   * Protocol 66 — the same write door as {@link mutate}, with image bytes
+   * that cross as a `Uint8Array` instead of a JSON `number[]`. `bytes` goes
+   * to the FIRST `replaceImageBytes` in `mutation` whose `bytes` is `[]`
+   * (depth-first through a `batch`), so a baked image and the
+   * `setPluginMetadata` that describes it commit as one undoable step:
+   *
+   * ```ts
+   * await host.document.mutateWithBytes(
+   *   { op: "batch", args: { ops: [
+   *     { op: "replaceImageBytes", args: { elementId, bytes: [] } },
+   *     { op: "setPluginMetadata", args: { elementId, key, value } },
+   *   ] } },
+   *   png,
+   *   { transfer: true },
+   * );
+   * ```
+   *
+   * A mutation with no such slot is refused (`applied: false`) rather
+   * than applied without the bytes. Same gates and outcome as `mutate`:
+   * `capabilities.document.write`, metadata only under this plugin's own
+   * key, never a throw. `options.transfer: true` hands the buffer to the
+   * host, which may detach it; the default copies.
+   *
+   * Call it unconditionally. Where the host wires the binary lane,
+   * `supports("document.mutateBinary@1")` is true and the bytes are not
+   * converted; otherwise the SDK splices `Array.from(bytes)` into the slot
+   * and takes the `mutate` path (the size limit of the JSON channel then
+   * applies).
+   */
+  mutateWithBytes(
+    mutation: MutationInput,
+    bytes: Uint8Array,
+    options?: MutateWithBytesOptions,
+  ): Promise<MutationOutcome>;
   undo(): Promise<void>;
   redo(): Promise<void>;
   collection<T>(name: CollectionName): Promise<readonly T[]>;
@@ -962,6 +1108,14 @@ export interface DocumentSurface {
    *  throws `PluginApiNotImplemented` (a visible seam, never a fake value). */
   storyContent(storyId: string): Promise<StoryContent | null>;
   onDidChange(listener: (e: DocumentChangeEvent) => void): Disposable;
+  /**
+   * Called before the host serialises the document to a file; the save
+   * WAITS for the returned promise, so a bundle can commit pending state
+   * (write parts, bake pixels) first. An error is logged and does not
+   * stop the save. Probe `supports("document.onWillSave@1")`: without a
+   * host backend the listener is held but never called.
+   */
+  onWillSave(listener: (e: WillSaveEvent) => void | Promise<void>): Disposable;
   /**
    * Plugin-metadata carrier (protocol v33) — read this plugin's
    * metadata envelope on a leaf page item, or `null` when absent.
@@ -1179,6 +1333,16 @@ export interface ShellSurface {
    * `false`.
    */
   saveFile(options: SaveFileOptions): Promise<boolean>;
+  /**
+   * Enter one of THIS bundle's registered edit contexts on `elementId`
+   * programmatically (a panel button, an importer that just placed a
+   * frame) — the same stack push a double-click on the frame performs.
+   * Throws for a type the bundle did not register. Resolves `false` when
+   * the host could not enter (no backend — probe
+   * `supports("shell.enterEditContext@1")` — or the element does not
+   * exist / is not the context's).
+   */
+  enterEditContext(type: string, elementId: ElementId): Promise<boolean>;
 }
 
 /** What `ShellSurface.saveFile` delivers (K-10) — the inverse of
@@ -1288,6 +1452,10 @@ export interface PartsSurface {
   /** List part paths under `prefix` (relative) — this plugin's namespace only,
    *  returned as relative paths. */
   list(prefix?: string): Promise<string[]>;
+  /** Delete the part at `path` (protocol 66, `storage.parts@2`). Resolves
+   *  `true` when it existed. A part the loaded file carries is dropped
+   *  from the next save, not only hidden. Not undoable, like `write`. */
+  delete(path: string): Promise<boolean>;
 }
 
 // ------------------------------------------------------- nativeDocument
@@ -1548,6 +1716,24 @@ export interface BindingsSurface {
   onDidChange(listener: (name: string) => void): Disposable;
 }
 
+// ---------------------------------------------------------------- tools
+
+/** A tool-option value as the host's tool-options UI stores it. */
+export type ToolSettingValue = number | boolean | string;
+
+/** Read access to the values the host's tool-options UI holds for this
+ *  bundle's tools (the fields declared in `ToolContribution.options`).
+ *  `toolId` must be one of this bundle's own tool ids. Probe
+ *  `supports("tools.settings@1")`: without a host backend `settings`
+ *  answers `{}` and `onDidChangeSettings` never fires. */
+export interface ToolsSurface {
+  settings(toolId: string): Readonly<Record<string, ToolSettingValue>>;
+  onDidChangeSettings(
+    toolId: string,
+    listener: (settings: Readonly<Record<string, ToolSettingValue>>) => void,
+  ): Disposable;
+}
+
 // ----------------------------------------------------------------- host
 
 /**
@@ -1667,6 +1853,11 @@ export interface BundleHost {
    *  `capabilities.clipboard`: `"full"` grants text + tabular, `"vector"`
    *  grants text only, `"none"`/absent denies. */
   readonly clipboard: ClipboardSurface;
+  /** The tool-settings READ door: the option values the host's
+   *  tool-options UI holds for this bundle's tools, plus a change
+   *  subscription. Always present; `supports("tools.settings@1")`
+   *  reports whether a host store is wired. */
+  readonly tools: ToolsSurface;
   /** Capability detection over version sniffing: feature strings of
    *  the form `"area.member@major"` (see HOST_FEATURES in plugin-sdk). */
   supports(feature: string): boolean;

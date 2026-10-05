@@ -231,6 +231,11 @@ export function makeFakeEditor(opts?: {
         const b = pagedParts.get(m.payload.path);
         return { kind: "pagedPartRead", payload: { found: b !== undefined, bytes: b ?? [] } };
       }
+      if (msg.kind === "deletePagedPart") {
+        const m = msg as unknown as { payload: { path: string } };
+        const existed = pagedParts.delete(m.payload.path);
+        return { kind: "pagedPartDeleted", payload: { existed } };
+      }
       if (msg.kind === "listPagedParts") {
         const m = msg as unknown as { payload: { prefix: string } };
         const paths = [...pagedParts.keys()].filter((p) => p.startsWith(m.payload.prefix));
