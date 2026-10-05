@@ -1,7 +1,7 @@
 # Status
 
 What `paged.draw` ships and what it does not, read from the code at the engine pin
-`@paged-media/canvas-wasm` 0.65.0 (`@paged-media/draw` 0.1.0-canary.12, manifest version
+`@paged-media/canvas-wasm` 0.66.0 (`@paged-media/draw` 0.1.0-canary.13, manifest version
 0.5.0). Every shipped item is
 registered by `activate(host)`. How the parts fit is in [`architecture.md`](architecture.md).
 
@@ -24,7 +24,8 @@ registered by `activate(host)`. How the parts fit is in [`architecture.md`](arch
   placed anchors (6 screen px; Cmd turns it off). The geometry, `snapPoint` in
   `draw-geometry`, is exported for a host's own Pen and Direct Selection.
 - **Stroke and Fill panels.** Weight, colour, cap, arrowheads and corner radii; fill colour,
-  tint, gradient angle and length. Dash patterns (four presets) and linear or radial
+  tint, gradient angle and length. Cap and arrowheads apply to paths drawn with the Pen too,
+  and a path's gradient angle and length read back. Dash patterns (four presets) and linear or radial
   gradients are commands.
 - **Path commands.** Outline stroke, Offset (with miter, round or bevel joins and a miter
   limit), Simplify, Join, Close, Average endpoints, Reverse path direction;
@@ -44,10 +45,12 @@ registered by `activate(host)`. How the parts fit is in [`architecture.md`](arch
   objects on a path moves the selected objects and creates none.
 - **Opacity mask and type on a path.** Make and release a mask from the top selected object;
   attach an existing story to a path and detach it.
+- **Create outlines.** Type ▸ Create outlines turns a text frame's glyphs into compound
+  paths, one per fill colour, grouped when there are several, in one undo step.
 - **Image trace.** One command turns a placed raster image into grouped, filled paths. It
   runs in a host worker where the host offers one, and on the calling thread otherwise.
 - **SVG.** An importer for `.svg` files and an exporter for the selection.
-- **Menu.** 72 commands have menu entries on a host that offers the menu door.
+- **Menu.** 73 commands have menu entries on a host that offers the menu door.
 
 ## Limits of what is shipped
 
@@ -95,4 +98,3 @@ registered by `activate(host)`. How the parts fit is in [`architecture.md`](arch
   importing, exporting and organising graphic styles.
 - Trace presets, re-tracing and centreline detection.
 - Resampling two blend paths that do not match; readers for `.ai` and `.eps` files.
-- Create outlines (text to paths) needs engine protocol 66, which is not yet published.
