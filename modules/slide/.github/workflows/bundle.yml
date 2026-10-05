@@ -48,5 +48,23 @@ jobs:
         run: pnpm -r run typecheck
       - name: validate manifest
         run: npx --yes @paged-media/plugin-cli@canary validate packages/slide-bundle/manifest.json
+      # Red results still upload (the cockpit wants the failures too); the
+      # last step fails the job.
       - name: vitest (importer + conformance against the real engine)
-        run: pnpm -r run test
+        run: |
+          set -uo pipefail
+          pnpm -r --no-bail exec vitest run --reporter=default --reporter=junit --outputFile.junit=junit.xml \
+            || echo "TS_FAILED=1" >> "$GITHUB_ENV"
+          cat packages/*/junit.xml > junit-all.xml 2>/dev/null || true
+          [ -s junit-all.xml ]
+      - name: upload vitest JUnit artifact
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: vitest-junit
+          path: junit-all.xml
+          if-no-files-found: error
+          retention-days: 14
+      - name: tests failed
+        if: ${{ env.TS_FAILED == '1' }}
+        run: exit 1
