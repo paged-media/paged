@@ -119,7 +119,7 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
       // (Phase 2d), then the NINE React panels (appearance, graphic
       // styles, symbols, live paint, pattern, repeat, blend,
       // objects-on-path, path options — Layers is retired). Then the
-      // ninety-nine commands in registration order, then the W3.2 edit
+      // commands in registration order, then the W3.2 edit
       // context.
       // (Pen is a core built-in.)
       expect(harness.contributions.map((c) => c.kind)).toEqual([
@@ -235,6 +235,8 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "command",
         "command",
         // Reverse path direction.
+        "command",
+        // Type ▸ Create outlines (protocol 66, RFI C-69).
         "command",
         // Object ▸ Transform — Reflect horizontally / vertically and
         // Transform again.

@@ -36,9 +36,11 @@
 // read the envelopes this hands them, so each feature keeps its own
 // vocabulary and its own tolerance for foreign shapes.
 //
-// THE PER-LEAF READS ARE THE ENGINE GAP, NOT THE DESIGN. There is no bulk
-// metadata read on the wire (RFI C-65), so a cold index still costs one
-// round trip per leaf — in parallel windows now, instead of one awaited
+// THE PER-LEAF READS WERE THE ENGINE GAP, NOT THE DESIGN — and C-65
+// closes it: an engine whose scene tree carries each row's
+// `pluginMetadata` answers every leaf in the ONE tree read the walk makes
+// anyway (`seedFromTree`). On an older engine a cold index still costs
+// one round trip per leaf — in parallel windows, instead of one awaited
 // after the other. `readEnvelopes` below is the ONE place that loop
 // lives; when a bulk door ships it replaces that function's body and
 // nothing else in this repo changes. (The facade's `getMetadata` is a
@@ -84,6 +86,32 @@ import type {
   PluginMetadataEnvelope,
   SceneTreeNode,
 } from "@paged-media/plugin-api";
+
+import manifest from "../manifest.json";
+
+/** This plugin's Label key — the one the facade's `getMetadata` reads. */
+const OWN_KEY = `x-paged:${manifest.id}`;
+
+/** RFI C-65 — the envelope a TREE ROW carries for this plugin, read
+ *  exactly as `getMetadata` reads it (the JSON value of this plugin's
+ *  key; unparsable → none). `undefined` when the row has no
+ *  `pluginMetadata` field at all: an engine older than the field, whose
+ *  leaves still need a read each. An engine that has it lists the field
+ *  on EVERY item row, empty when there is nothing, so its absence is
+ *  never "no metadata". */
+export function treeEnvelopeOf(node: SceneTreeNode): PluginMetadataEnvelope | null | undefined {
+  const entries = (node as { pluginMetadata?: unknown }).pluginMetadata;
+  if (!Array.isArray(entries)) return undefined;
+  for (const entry of entries as { key?: unknown; value?: unknown }[]) {
+    if (entry?.key !== OWN_KEY || typeof entry.value !== "string") continue;
+    try {
+      return JSON.parse(entry.value) as PluginMetadataEnvelope;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
 
 /** One element's property table, as `document.elementProperties` answers
  *  it (the contract exports the door, not the row type). */
@@ -349,6 +377,25 @@ function createLinkIndex(host: BundleHost): LinkIndex {
     return rev.envelopes.get(key)!;
   };
 
+  const seedFromTree = (rev: Revision, roots: readonly SceneTreeNode[]): void => {
+    const walk = (nodes: readonly SceneTreeNode[]) => {
+      for (const node of nodes) {
+        const children = node.children ?? [];
+        if (children.length > 0) {
+          walk(children);
+          continue;
+        }
+        if (!node.id) continue;
+        const key = keyOf(node.id);
+        if (rev.envelopes.has(key)) continue;
+        const envelope = treeEnvelopeOf(node);
+        if (envelope === undefined) continue;
+        rev.envelopes.set(key, Promise.resolve(deepFreeze(envelope)));
+      }
+    };
+    walk(roots);
+  };
+
   /** One walk. Answers the snapshot and whether every read in it
    *  succeeded — an incomplete one is handed to its callers (they get
    *  what the old per-feature loops gave them) but not remembered. */
@@ -359,6 +406,10 @@ function createLinkIndex(host: BundleHost): LinkIndex {
     const roots = await pending;
     let complete = rev.tree === pending;
     const ids = leafIdsOf(roots);
+    // C-65: a tree that carries each row's metadata answers every leaf it
+    // lists in the one read already made — no per-leaf round trips. Rows
+    // without the field (an older engine) fall through to `load` below.
+    seedFromTree(rev, roots);
     // Only the leaves nothing has read yet at this revision: a command
     // that resolved its record from the selection's own link first does
     // not pay for that leaf twice.

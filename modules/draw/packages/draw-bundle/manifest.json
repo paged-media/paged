@@ -93,6 +93,7 @@
       "media.paged.draw.command.closePath",
       "media.paged.draw.command.averageEndpoints",
       "media.paged.draw.command.reversePathDirection",
+      "media.paged.draw.command.createOutlines",
       "media.paged.draw.command.reflectHorizontal",
       "media.paged.draw.command.reflectVertical",
       "media.paged.draw.command.transformAgain",

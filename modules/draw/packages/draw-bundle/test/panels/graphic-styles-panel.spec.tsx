@@ -35,6 +35,8 @@
 
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
+import { metadataReadsPerLeaf } from "../engine-reads";
+
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import {
@@ -72,6 +74,13 @@ import {
 
 const PANEL = "[data-draw-graphic-styles-panel]";
 const ROW = '[data-draw-graphic-style-row="gs-1"]';
+
+
+/** Per-leaf `getMetadata` one link walk costs on this engine (RFI C-65:
+ *  1 before tree rows carried metadata, 0 after), and what a walk over
+ *  this file's 45 leaves therefore reads besides the tree. */
+let perLeaf: 0 | 1 = 1;
+const leafReads = (): number => 45 * perLeaf;
 
 describe("Graphic styles panel — rendered against the engine", () => {
   describe("an EMPTY document (no page item at all)", () => {
@@ -301,6 +310,7 @@ describe("Graphic styles panel — rendered against the engine", () => {
       h = await openHost();
       await h.load(panelDocument(seedRow("s", RECORDS)));
       h.loadBundle(drawBundle);
+      perLeaf = await metadataReadsPerLeaf(h.host);
       const panel = await mountPanel(h, makeGraphicStylesPanel);
       for (let k = 0; k <= RECORDS; k++) {
         if (k > 0) {
@@ -328,7 +338,7 @@ describe("Graphic styles panel — rendered against the engine", () => {
       // counts the followers of every style at once
       // (`graphicStyleLinkCounts`). As found: 91 each — a metadata read
       // AND a property read for every leaf.
-      expect(readsByRecords).toEqual([46, 46, 46, 46, 46, 46]);
+      expect(readsByRecords).toEqual(Array(6).fill(1 + leafReads()));
     });
 
     it("ONE reload = 1 walk = 46 reads — one per leaf", async () => {
@@ -337,7 +347,7 @@ describe("Graphic styles panel — rendered against the engine", () => {
         events: 0,
         reloads: 1,
         walks: 1,
-        reads: 46,
+        reads: 1 + leafReads(),
         partReads: 1,
       });
 
@@ -352,10 +362,10 @@ describe("Graphic styles panel — rendered against the engine", () => {
         // leaf's properties were read as well, to answer "overridden"
         // for elements the panel shows no such thing for. TARGET 2 — a
         // tree and ONE bulk metadata read (RFI C-65).
-        reads: 46,
+        reads: 1 + leafReads(),
         partReads: 1,
       });
-      expect(panel.work.count("document.getMetadata")).toBe(45);
+      expect(panel.work.count("document.getMetadata")).toBe(leafReads());
       // As found: 45.
       expect(panel.work.count("document.elementProperties")).toBe(0);
     });
@@ -369,7 +379,7 @@ describe("Graphic styles panel — rendered against the engine", () => {
         // As found: 20.
         walks: 1,
         // One walk, of the revision the burst ends on. As found: 1 820.
-        reads: 46,
+        reads: 1 + leafReads(),
         // As found: 20.
         partReads: 1,
       });

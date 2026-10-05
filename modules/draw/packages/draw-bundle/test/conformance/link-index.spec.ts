@@ -37,6 +37,7 @@ import {
   linkIndex,
   BIND_RECIPE_REVISION,
 } from "../../src/link-index";
+import { metadataReadsPerLeaf } from "../engine-reads";
 import { countingHost, type WorkLog } from "../perf/counting-host";
 import {
   emptyDocument,
@@ -69,6 +70,8 @@ describe("draw conformance — the link index", () => {
   let h: HeadlessHost;
   let host: BundleHost;
   let work: WorkLog;
+  /** Per-leaf `getMetadata` one walk costs on this engine (C-65). */
+  let perLeaf: 0 | 1;
 
   const stamp = async (id: ElementId, tag: string) => {
     const out = await h.host.document.setMetadata(id, { v: 1, data: { tag } });
@@ -84,6 +87,7 @@ describe("draw conformance — the link index", () => {
     );
     h.loadBundle(drawBundle);
     await stamp(plainId(0), "p0");
+    perLeaf = await metadataReadsPerLeaf(h.host);
   });
   afterAll(() => h?.dispose());
   // A fresh view of the host per case: its own index, its own counts.
@@ -103,7 +107,7 @@ describe("draw conformance — the link index", () => {
       ["p0", "p0"],
     ]);
     expect(work.count("document.tree")).toBe(1);
-    expect(work.count("document.getMetadata")).toBe(LEAVES);
+    expect(work.count("document.getMetadata")).toBe(LEAVES * perLeaf);
 
     work.reset();
     expect(await index.snapshot()).toBe(first);
@@ -124,7 +128,8 @@ describe("draw conformance — the link index", () => {
     expect(b).toBe(a);
     expect(c).toBe(a);
     expect(work.count("document.tree")).toBe(1);
-    expect(work.count("document.getMetadata")).toBe(LEAVES);
+    // On a C-65 engine only `envelopeOf`'s own direct read is left.
+    expect(work.count("document.getMetadata")).toBe(perLeaf ? LEAVES : 1);
   });
 
   it("the envelopes it shares are FROZEN — a caller that mutates one is a bug, and a loud one", async () => {
@@ -147,7 +152,9 @@ describe("draw conformance — the link index", () => {
     expect(work.count("document.getMetadata")).toBe(2);
 
     await index.snapshot();
-    expect(work.count("document.getMetadata")).toBe(LEAVES);
+    // The two already read are not read again; on a C-65 engine the
+    // walk reads none at all (the tree answers them).
+    expect(work.count("document.getMetadata")).toBe(perLeaf ? LEAVES : 2);
   });
 
   it("A WRITE IS SEEN BY THE NEXT READ — a mutation, its undo and its redo each start a revision", async () => {
@@ -162,7 +169,7 @@ describe("draw conformance — the link index", () => {
     expect((await index.envelopeOf(plainId(1)))?.data.tag).toBe("p1");
     // The whole document again: one event says "something changed", not
     // what — and there is no door to ask.
-    expect(work.count("document.getMetadata")).toBe(LEAVES);
+    expect(work.count("document.getMetadata")).toBe(LEAVES * perLeaf);
 
     await h.host.document.undo();
     expect((await index.snapshot()).linked).toHaveLength(1);
@@ -298,14 +305,33 @@ describe("draw conformance — the link index", () => {
 
   it("an unreadable ELEMENT reads as null for its caller and is asked again", async () => {
     let failing = true;
+    // The per-leaf lane, which an engine WITHOUT tree metadata takes: the
+    // tree's rows are stripped of it, so every leaf is read by id.
+    const strip = (nodes: unknown[]): unknown[] =>
+      nodes.map((n) => {
+        const { pluginMetadata: _drop, children, ...rest } = n as {
+          pluginMetadata?: unknown;
+          children?: unknown[];
+        };
+        return { ...rest, children: strip(children ?? []) };
+      });
     const flaky = override(
       host,
       "document",
-      override(host.document, "getMetadata", (id: ElementId) =>
-        failing && id.id === "p0"
-          ? Promise.reject(new Error("no"))
-          : host.document.getMetadata(id),
-      ),
+      new Proxy(host.document, {
+        get(obj, prop, receiver) {
+          if (prop === "getMetadata") {
+            return (id: ElementId) =>
+              failing && id.id === "p0"
+                ? Promise.reject(new Error("no"))
+                : host.document.getMetadata(id);
+          }
+          if (prop === "tree") {
+            return async () => strip(await host.document.tree()) as never;
+          }
+          return Reflect.get(obj, prop, receiver) as unknown;
+        },
+      }),
     );
     const index = linkIndex(flaky);
     expect((await index.snapshot()).linked).toEqual([]);
@@ -380,14 +406,14 @@ describe("draw conformance — the link index", () => {
     wire.send({ kind: "gestureCommitted" });
     work.reset();
     expect(await index.snapshot()).not.toBe(first);
-    expect(work.count("document.getMetadata")).toBe(LEAVES);
+    expect(work.count("document.getMetadata")).toBe(LEAVES * perLeaf);
     expect(told).toBe(0);
 
     // A new document under a host that outlives it.
     wire.send({ kind: "documentLoaded" });
     work.reset();
     await index.snapshot();
-    expect(work.count("document.getMetadata")).toBe(LEAVES);
+    expect(work.count("document.getMetadata")).toBe(LEAVES * perLeaf);
     expect(told).toBe(1);
   });
 

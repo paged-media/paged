@@ -57,6 +57,17 @@ const HERE = dirname(fileURLToPath(import.meta.url));
  *  finds nothing. */
 const editorClientAnchor = (): string | undefined => {
   const repoRoot = resolve(HERE, "../../../.."); // …/plugin-draw
+  // `PAGED_ENGINE_FROM` — a directory whose `node_modules` holds a LOCAL
+  // engine build (an unpublished protocol, built from a core branch).
+  // It wins over every pinned install, so a protocol-ahead feature can be
+  // proved without a pnpm override in a committed manifest.
+  const local = process.env.PAGED_ENGINE_FROM;
+  if (local) {
+    if (!existsSync(join(local, "node_modules/@paged-media/canvas-wasm/package.json"))) {
+      throw new Error(`PAGED_ENGINE_FROM=${local} has no node_modules/@paged-media/canvas-wasm`);
+    }
+    return local;
+  }
   for (const candidate of [
     // OUR OWN package first. `@paged-media/canvas-wasm` is a
     // devDependency of draw-bundle precisely so this works with no

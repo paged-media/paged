@@ -218,6 +218,8 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.averageEndpoints",
       // Reverse path direction (framePath, one batch).
       "media.paged.draw.command.reversePathDirection",
+      // Type ▸ Create outlines (protocol 66, RFI C-69).
+      "media.paged.draw.command.createOutlines",
       // Object ▸ Transform — Reflect ×2 and Transform again.
       "media.paged.draw.command.reflectHorizontal",
       "media.paged.draw.command.reflectVertical",

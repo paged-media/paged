@@ -153,6 +153,9 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   // ── Type on a path ──
   ["Draw/Type on path/Attach", "attachTextToPath", "top"],
   ["Draw/Type on path/Detach", "detachTextFromPath", "top"],
+  // ── Type ▸ Create outlines — the frame's glyphs become compound paths
+  //    (one per colour), the frame goes; protocol 66 (RFI C-69). ──
+  ["Draw/Type/Create outlines", "createOutlines", "type-outlines"],
 
   // ── Masks ──
   ["Draw/Opacity mask/Make", "makeOpacityMask", "mask"],

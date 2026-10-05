@@ -30,6 +30,8 @@
 
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
+import { metadataReadsPerLeaf } from "../engine-reads";
+
 import type {
   ElementId,
   MutationInput,
@@ -81,9 +83,12 @@ vi.setConfig({ testTimeout: BUDGET_TIMEOUT_MS });
 
 describe("perf budgets — the tools that read as they move", () => {
   let w: Workload;
+  /** Per-leaf `getMetadata` one link walk costs on this engine (C-65). */
+  let perLeaf: 0 | 1 = 1;
 
   beforeAll(async () => {
     w = await buildGestureWorkload();
+    perLeaf = await metadataReadsPerLeaf(w.h.host);
     // Nothing was refused, so every count below is over the document
     // the workload describes — not over a shorter one. Five batches.
     expect(w.refusals).toEqual([]);
@@ -384,7 +389,8 @@ describe("perf budgets — the tools that read as they move", () => {
       // the click's walk does not read it again. As found: 518. (A
       // second click on an unchanged document would read none — but a
       // click changes it.)
-      expect(counted.count("document.getMetadata")).toBe(517);
+      // On a C-65 engine (protocol 66) the walk is its tree read: 0.
+      expect(counted.count("document.getMetadata")).toBe(517 * perLeaf);
       // The link walk's tree. What the batch created comes off the
       // engine's reply (`commands/minted.ts`). As found: 3 — one either
       // side of the insert on top. TARGET 0.

@@ -34,6 +34,8 @@
 
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
+import { metadataReadsPerLeaf } from "../engine-reads";
+
 import type { ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
@@ -82,6 +84,13 @@ const pair = (i: number): ElementId[] => [poly(`a${i}`), poly(`b${i}`)];
 
 const PANEL = "[data-draw-live-paint-panel]";
 const ROW = '[data-draw-live-paint-row="lp-1"]';
+
+
+/** Per-leaf `getMetadata` one link walk costs on this engine (RFI C-65:
+ *  1 before tree rows carried metadata, 0 after), and what a walk over
+ *  this file's 50 leaves therefore reads besides the tree. */
+let perLeaf: 0 | 1 = 1;
+const leafReads = (): number => 50 * perLeaf;
 
 describe("Live paint panel — rendered against the engine", () => {
   describe("an EMPTY document (no page item at all)", () => {
@@ -347,6 +356,7 @@ describe("Live paint panel — rendered against the engine", () => {
       h = await openHost();
       await h.load(panelDocument(overlapPairs(RECORDS)));
       h.loadBundle(drawBundle);
+      perLeaf = await metadataReadsPerLeaf(h.host);
       const panel = await mountPanel(h, makeLivePaintPanel);
       for (let k = 0; k <= RECORDS; k++) {
         if (k > 0) {
@@ -381,7 +391,7 @@ describe("Live paint panel — rendered against the engine", () => {
         events: 0,
         reloads: 1,
         walks: 1,
-        reads: 52,
+        reads: 2 + leafReads(),
         partReads: 1,
       });
 
@@ -395,7 +405,7 @@ describe("Live paint panel — rendered against the engine", () => {
         // 1 tree + 50 getMetadata (in parallel) + the swatch collection.
         // TARGET 3 — a tree, ONE bulk metadata read (RFI C-65) and the
         // collection.
-        reads: 52,
+        reads: 2 + leafReads(),
         // As found: 2 (the panel, then `selectedLivePaintGroup`).
         partReads: 1,
       });
@@ -411,7 +421,7 @@ describe("Live paint panel — rendered against the engine", () => {
         // As found: 20.
         walks: 1,
         // One walk, of the revision the burst ends on. As found: 1 040.
-        reads: 52,
+        reads: 2 + leafReads(),
         // As found: 40.
         partReads: 1,
       });

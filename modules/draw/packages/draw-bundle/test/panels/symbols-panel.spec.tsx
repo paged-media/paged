@@ -33,6 +33,8 @@
 
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
+import { metadataReadsPerLeaf } from "../engine-reads";
+
 import type { ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
@@ -69,6 +71,13 @@ import {
 
 const PANEL = "[data-draw-symbols-panel]";
 const ROW = '[data-draw-symbol-row="sym-1"]';
+
+
+/** Per-leaf `getMetadata` one link walk costs on this engine (RFI C-65:
+ *  1 before tree rows carried metadata, 0 after), and what a walk over
+ *  this file's 50 leaves therefore reads besides the tree. */
+let perLeaf: 0 | 1 = 1;
+const leafReads = (): number => 50 * perLeaf;
 
 describe("Symbols panel — rendered against the engine", () => {
   describe("an EMPTY document (no page item at all)", () => {
@@ -263,6 +272,7 @@ describe("Symbols panel — rendered against the engine", () => {
       h = await openHost();
       await h.load(panelDocument(seedRow("s", RECORDS)));
       h.loadBundle(drawBundle);
+      perLeaf = await metadataReadsPerLeaf(h.host);
       const panel = await mountPanel(h, makeSymbolsPanel);
       for (let k = 0; k <= RECORDS; k++) {
         if (k > 0) {
@@ -303,7 +313,7 @@ describe("Symbols panel — rendered against the engine", () => {
         events: 0,
         reloads: 1,
         walks: 1,
-        reads: 51,
+        reads: 1 + leafReads(),
         partReads: 1,
       });
 
@@ -316,7 +326,7 @@ describe("Symbols panel — rendered against the engine", () => {
         walks: 1,
         // 1 tree + 50 getMetadata, in parallel. TARGET 2 — a tree and
         // ONE bulk metadata read (RFI C-65).
-        reads: 51,
+        reads: 1 + leafReads(),
         partReads: 1,
       });
     });
@@ -350,7 +360,7 @@ describe("Symbols panel — rendered against the engine", () => {
         // As found: 20.
         walks: 1,
         // One walk, of the revision the burst ends on. As found: 1 020.
-        reads: 51,
+        reads: 1 + leafReads(),
         // As found: 20.
         partReads: 1,
       });
