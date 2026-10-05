@@ -1,9 +1,9 @@
 {
   "$comment": "Where the vendored catalog.json came from, and — when it leads the published engine — why that is allowed. `sync-catalog.mjs --check` enforces every claim in this file, in both directions: an unexplained difference fails, and so does an `aheadOfPublished` marker that the publish has since caught up with.",
   "source": "core",
-  "rev": "715e130",
-  "targetsProtocol": 67,
+  "rev": "6c09c43",
+  "targetsProtocol": 69,
   "publishedPackage": "@paged-media/introspect-wasm",
-  "aheadOfPublished": false,
-  "why": "IN SYNC as of @paged-media/introspect-wasm@0.67.0 (core@715e130, tag v0.67.0 — snapping in the engine; the catalog itself is unchanged from 0.66.0, protocol 67 added message kinds, not operations)."
+  "aheadOfPublished": true,
+  "why": "LEADS the publish (2026-10-06, branch data/protocol-69): copied verbatim from core@6c09c43 (branch data/protocol-69, core ADR 127) crates/paged-introspect/catalog.json, which adds the setDocumentMetadata op (roster + paged.setDocumentMetadata host fn) on top of the 0.68.0 catalog. Re-sync from @paged-media/introspect-wasm@0.69.0 once v0.69.0 is tagged and set aheadOfPublished back to false. Prior record: IN SYNC as of introspect-wasm@0.67.0 (core@715e130); 0.68.0 did not change the catalog."
 }

@@ -1176,6 +1176,27 @@ export interface DocumentSurface {
     id: ElementId,
     envelope: PluginMetadataEnvelope | null,
   ): Promise<MutationOutcome>;
+  /**
+   * Protocol 69 — read this plugin's DOCUMENT-scoped metadata envelope
+   * (the document's own Label, not a page item's), or `null` when absent
+   * or when the engine predates protocol 69. Same implicit key as
+   * {@link getMetadata}: `x-paged:<manifest id>`. Probe
+   * `supports("document.documentMetadata@1")`.
+   */
+  getDocumentMetadata(): Promise<PluginMetadataEnvelope | null>;
+  /**
+   * Protocol 69 — write (or clear, with `null`) this plugin's
+   * document-scoped metadata: state that belongs to no frame, such as a
+   * data session or the version of this plugin's container parts that is
+   * live. One undoable step through `mutate` (engine op
+   * `setDocumentMetadata`, which also composes inside a `batch`), engine-
+   * gated like {@link setMetadata}. Persisted in a `.paged` document; an
+   * `.idml` export does not carry it yet. An engine older than 69 answers
+   * `applied: false`.
+   */
+  setDocumentMetadata(
+    envelope: PluginMetadataEnvelope | null,
+  ): Promise<MutationOutcome>;
 }
 
 /**
@@ -1254,6 +1275,12 @@ export interface TextMetrics {
  * `deleteRange.start/end` — the `ContentSelection` addressing: run
  * bytes plus one synthetic `\n` per inter-paragraph boundary), so the
  * value can be passed straight to `host.document.mutate`.
+ *
+ * The field operations (`insertField.offset`, `setFieldValue`,
+ * `placeholders()`) count CHARACTERS with no paragraph separator; the two
+ * units agree only inside the first paragraph of ASCII text. To place a
+ * field at the caret, pass the caret as `insertField.contentOffset`
+ * (protocol 69): the engine converts it against the story at apply time.
  */
 export interface TextCaret {
   storyId: string;

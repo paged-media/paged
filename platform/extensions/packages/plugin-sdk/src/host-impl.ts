@@ -194,6 +194,11 @@ export const HOST_FEATURES: readonly string[] = [
   "document.onDidChange@1",
   "document.getMetadata@1",
   "document.setMetadata@1",
+  // Protocol 69 — the document-scoped label. Static like the snap door:
+  // the flag says this SDK forwards the two calls; an engine older than 69
+  // answers `null` on read (no `pluginMetadata` in its DocumentMeta) and
+  // `applied: false` on write (it does not know the op).
+  "document.documentMetadata@1",
   "selection@1",
   "viewport@1",
   "overlay.toolPreview@1",
@@ -1877,7 +1882,9 @@ export function createBundleHost(
    *  v34 batch-created-sentinel insert flow), but only for THIS
    *  plugin's derived key. Returns the offending key, or null. */
   const foreignMetadataKey = (m: MutationInput): string | null => {
-    if (m.op === "setPluginMetadata") {
+    // Protocol 69: the document-scoped label is gated exactly like the
+    // page-item one — a bundle writes only its own `x-paged:<id>` key.
+    if (m.op === "setPluginMetadata" || m.op === "setDocumentMetadata") {
       return m.args.key === metadataKey(manifest) ? null : m.args.key;
     }
     if (m.op === "batch") {
@@ -1964,7 +1971,7 @@ export function createBundleHost(
     if (denied !== null) return { applied: false, error: denied };
     const foreign = foreignMetadataKey(mutation);
     if (foreign !== null) {
-      const error = `setPluginMetadata key "${foreign}" is outside this plugin's namespace ("${metadataKey(manifest)}")`;
+      const error = `metadata key "${foreign}" is outside this plugin's namespace ("${metadataKey(manifest)}")`;
       log.warn(error);
       return { applied: false, error };
     }
@@ -2299,6 +2306,32 @@ export function createBundleHost(
         op: "setPluginMetadata",
         args: {
           elementId: id,
+          key: metadataKey(manifest),
+          value: envelope === null ? null : JSON.stringify(envelope),
+          caller: manifest.id,
+        },
+      });
+    },
+    async getDocumentMetadata() {
+      requireDocRead("document.getDocumentMetadata");
+      const key = metadataKey(manifest);
+      const meta = (await getEditor().client.documentMeta()) as {
+        pluginMetadata?: { key: string; value: string }[];
+      };
+      const entry = meta.pluginMetadata?.find((e) => e.key === key);
+      if (!entry) return null;
+      try {
+        return JSON.parse(entry.value) as PluginMetadataEnvelope;
+      } catch {
+        return null; // engine-gated on write; treat corrupt as absent
+      }
+    },
+    async setDocumentMetadata(envelope) {
+      // Same posture as setMetadata: the key is derived, never supplied,
+      // and the caller is named so the engine cross-checks it.
+      return this.mutate({
+        op: "setDocumentMetadata",
+        args: {
           key: metadataKey(manifest),
           value: envelope === null ? null : JSON.stringify(envelope),
           caller: manifest.id,

@@ -192,6 +192,8 @@ export function makeFakeEditor(opts?: {
   // engine predates the door, so `send` falls through to the generic
   // `noop` (the honest unsupported path the adapter must survive).
   let planarRegionsReply: unknown = null;
+  // v69 — scripted `documentMeta` reply (the document label rides it).
+  let documentMetaReply: unknown = { pageCount: 1 };
   // v67 — scripted `snapPoint` reply; `null` = a pre-v67 engine.
   let snapPointReply: unknown = null;
   /** Every message that crossed `client.send`, in order. */
@@ -205,7 +207,7 @@ export function makeFakeEditor(opts?: {
     undo: async () => ({ kind: "undoApplied" }),
     redo: async () => ({ kind: "redoApplied" }),
     collection: async () => [],
-    documentMeta: async () => ({ pageCount: 1 }),
+    documentMeta: async () => documentMetaReply,
     pathAnchors: async () => null,
     elementGeometry: async () => [],
     setElementSelection: async (ids: unknown[]) => ids,
@@ -337,6 +339,10 @@ export function makeFakeEditor(opts?: {
     },
     setNextMutateReply: (r: unknown) => {
       nextMutateReply = r;
+    },
+    /** v69 — script the `DocumentMeta` reply (`pluginMetadata`). */
+    setDocumentMeta: (m: unknown) => {
+      documentMetaReply = m;
     },
   };
 }

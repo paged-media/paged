@@ -195,6 +195,18 @@ describe("headless document doors — real engine round-trip", () => {
     expect(got).toEqual({ v: 1, data: { shape: "rect" } });
   });
 
+  it("protocol 69: a document label is written, read back and undone on the real engine", async () => {
+    live = await open();
+    await live.load(minimalIdml());
+    live.loadBundle(bundleFor("media.paged.data"));
+    expect(await live.host.document.getDocumentMetadata()).toBeNull();
+    const set = await live.host.document.setDocumentMetadata({ v: 1, data: { parts: "a1" } });
+    expect(set.applied).toBe(true);
+    expect(await live.host.document.getDocumentMetadata()).toEqual({ v: 1, data: { parts: "a1" } });
+    await live.host.document.undo();
+    expect(await live.host.document.getDocumentMetadata()).toBeNull();
+  });
+
   it("metadata namespace gate STILL bites headlessly (raw foreign key)", async () => {
     live = await open();
     await live.load(minimalIdml());
