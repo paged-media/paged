@@ -515,8 +515,18 @@ export interface ContributionSurface {
 /** The scene-layer surface (C-1) returned by `contribute.sceneLayer()`.
  *  `elementId` is the host `Self` id of the frame to render into. */
 export interface SceneLayerSurface extends Disposable {
-  /** Submit (replacing any previous) the vector layer for `elementId`. */
-  submit(elementId: string, layer: SceneLayer): Promise<void>;
+  /**
+   * Submit (replacing any previous) the vector layer for `elementId`.
+   *
+   * Protocol 68 — a text item draws in the face it names: `family` plus
+   * `style` (IDML `FontStyle` spelling, `"Bold Italic"`) or, when `style`
+   * is absent, `weight` (CSS `100..900`, also the `wght` of a variable
+   * face) and `italic`. The engine resolves the face through the fonts the
+   * host registered for the document; a family that does not resolve draws
+   * in the document default font and is listed in the result's
+   * `fontFallbacks`. Probe `supports("rendering.sceneLayer.faces@1")`.
+   */
+  submit(elementId: string, layer: SceneLayer): Promise<SceneLayerSubmitResult>;
   /** Clear the layer for `elementId` (returns the frame to native
    *  content). */
   clear(elementId: string): Promise<void>;
@@ -545,6 +555,16 @@ export interface SceneLayerSurface extends Disposable {
     tiles: readonly SceneImageTile[],
     options?: SceneImageSubmitOptions,
   ): Promise<void>;
+}
+
+/** What {@link SceneLayerSurface.submit} reports (protocol 68). */
+export interface SceneLayerSubmitResult {
+  /** The faces this layer's text items named that the engine could not
+   *  resolve, each drawn in the document default font instead
+   *  (`"Family Style"`, report order). Empty when every named family
+   *  resolved, when the layer names none, and on a host that does not
+   *  report (no scene channel, or an older editor). */
+  readonly fontFallbacks: readonly string[];
 }
 
 /** One whole RGBA8 image for {@link SceneLayerSurface.submitImage}. */

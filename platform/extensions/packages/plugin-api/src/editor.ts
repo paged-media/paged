@@ -616,11 +616,14 @@ export interface PagedEditor {
      * unconditional insert. The SDK adapter fills it from the manifest
      * id, so a bundle never passes it itself.
      */
+    /** Resolves with the engine's `sceneLayerApplied` report (protocol
+     *  68: `fontFallbacks`, the text faces that fell back to the default
+     *  font); an older host resolves `void`, read as "no fallbacks". */
     submit(
       elementId: string,
       layer: SceneLayer,
       caller?: string,
-    ): Promise<void>;
+    ): Promise<void | { fontFallbacks?: readonly string[] | null }>;
     clear(elementId: string): Promise<void>;
     /** Protocol 66 — the BINARY scene-image lane (canvas-wasm
      *  `submitSceneImageDirect`): the bytes cross as a `Uint8Array`,

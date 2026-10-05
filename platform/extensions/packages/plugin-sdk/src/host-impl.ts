@@ -1764,14 +1764,19 @@ export function createBundleHost(
                 `host wired no scene channel (probe ` +
                 `supports("rendering.sceneLayer@1"))`,
             );
-            return;
+            return { fontFallbacks: [] };
           }
           submitted.add(elementId);
           // C-34 — DECLARE WHO IS RENDERING. The bundle never passes
           // this; the adapter fills it from the manifest, which is the
           // only place the identity is trustworthy. An engine without
           // the gate ignores it, so this is additive.
-          await ch.submit(elementId, layer, manifest.id);
+          const reply = await ch.submit(elementId, layer, manifest.id);
+          // Protocol 68 — the faces that fell back to the default font. An
+          // older host resolves void: no report, never a guess.
+          const fontFallbacks =
+            reply && Array.isArray(reply.fontFallbacks) ? [...reply.fontFallbacks] : [];
+          return { fontFallbacks };
         },
         async clear(elementId) {
           submitted.delete(elementId);
@@ -3467,6 +3472,12 @@ export function createBundleHost(
     // exists (warns + no-ops without this); the flag tells a bundle the
     // in-frame layer will actually render.
     featureSet.add("rendering.sceneLayer@1");
+    // v68 — on that channel a text item draws in the face it names
+    // (family / style / weight / italic) and `submit` reports the faces
+    // that fell back. Tied to the channel, not the engine: the worker
+    // handshake refuses an engine older than the pinned wire, so a wired
+    // channel talks to an engine that resolves faces.
+    featureSet.add("rendering.sceneLayer.faces@1");
   }
   // `?.` although the member is non-optional in the contract: a host
   // handle is a plain object a test/adapter may build partially, and a

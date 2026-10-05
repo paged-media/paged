@@ -422,7 +422,9 @@ describe("contribution recording + dispose honesty", () => {
           },
         ],
       }),
-    ).resolves.toBeUndefined();
+      // Protocol 68 — submit reports text-face fallbacks; with no channel
+      // there is no engine to report, so the list is empty.
+    ).resolves.toEqual({ fontFallbacks: [] });
     await expect(surface.clear("media.paged.sheet.grid.f1")).resolves.toBeUndefined();
     expect(() => surface.dispose()).not.toThrow();
   });

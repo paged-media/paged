@@ -52,6 +52,7 @@ export type {
   BundleHost,
   ContributionSurface,
   SceneLayerSurface,
+  SceneLayerSubmitResult,
   SceneImage,
   SceneImageTile,
   SceneImageSubmitOptions,
