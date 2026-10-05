@@ -10,6 +10,11 @@ Read from the code on 2026-10-05.
   chart and SmartArt references), text (body properties, list styles, paragraphs, runs, fields),
   backgrounds, speaker notes, transitions (with their original XML), animation timing (verbatim),
   sections and embedded font references. All seven corpus decks read without error.
+- **The PowerPoint oracle.** Scripts drive PowerPoint 16.113.3 to export PDF and per-shape geometry
+  (`scripts/ppt-*`). The seven corpus decks are recorded in the private corpus repository; four
+  feature fixtures (geometry, text, placeholders, motion) were authored through PowerPoint and are
+  recorded under `slide-conformance/fixtures`.
+- **wasm.** `slide-js` builds the reader to a 474 KB release wasm (before optimisation).
 
 ## Not built yet
 

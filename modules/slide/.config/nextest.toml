@@ -1,0 +1,5 @@
+# CI (.github/workflows/rust.yml) runs `--profile ci` and uploads
+# `target/nextest/ci/junit.xml` as the `nextest-junit` artifact; the cockpit
+# pulls it as this plugin's test evidence.
+[profile.ci.junit]
+path = "junit.xml"
