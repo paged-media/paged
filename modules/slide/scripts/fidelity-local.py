@@ -13,14 +13,16 @@ is drawn by PowerPoint in Calibri, so the engine gets Calibri for it too.
 """
 import argparse, glob, json, os, re, subprocess, sys, tempfile, statistics
 
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ap = argparse.ArgumentParser()
-ap.add_argument("--core", default=os.path.expanduser("~/paged/core-tools"))
-ap.add_argument("--corpus", default=os.path.expanduser("~/paged/corpus"))
+# Sibling checkouts in the workspace layout (plugins/plugin-slide beside core
+# and corpus); override with --core / --corpus.
+ap.add_argument("--core", default=os.path.normpath(os.path.join(ROOT, "../../core")))
+ap.add_argument("--corpus", default=os.path.normpath(os.path.join(ROOT, "../../corpus")))
 ap.add_argument("--dpi", default="48")
 ap.add_argument("--deck", default=None)
 ap.add_argument("--out", default=None)
 a = ap.parse_args()
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 inspect = os.path.join(a.core, "target/release/paged-inspect")
 diff = os.path.join(a.core, "target/release/paged-diff")
 out = a.out or tempfile.mkdtemp(prefix="slide-fidelity-")
