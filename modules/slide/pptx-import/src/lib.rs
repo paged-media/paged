@@ -40,6 +40,7 @@ use pptx_core::{
 pub mod chart;
 pub mod paint;
 pub mod shapes;
+pub mod table_style;
 pub mod text;
 pub mod xml;
 
@@ -143,6 +144,18 @@ pub fn import_pptx(bytes: &[u8]) -> Result<Presentation, ImportError> {
         sections: sections(&pres_el),
         ..Default::default()
     };
+
+    // Table styles the deck defines.
+    if let Some(part) = ctx.target_of_type("/tableStyles") {
+        match read_part(&pkg, &part) {
+            Ok(el) => {
+                let (styles, def) = table_style::table_style_list(&el, &ctx);
+                deck.table_styles = styles;
+                deck.default_table_style = def;
+            }
+            Err(e) => diagnostics.borrow_mut().push(e.to_string()),
+        }
+    }
 
     // Masters, their themes and layouts.
     let mut theme_parts: Vec<String> = Vec::new();

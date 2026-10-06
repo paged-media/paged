@@ -109,7 +109,7 @@ pub enum ItemKind {
     Table(Table),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Paint {
     None,
     Solid {
@@ -138,6 +138,44 @@ pub struct Stop {
 }
 
 impl Paint {
+    /// The colour of a gradient at position `t` (0–1) along its axis, or of
+    /// a solid paint anywhere; stops interpolate in sRGB.
+    pub fn color_at(&self, t: f64) -> Option<(Rgb, f64)> {
+        match self {
+            Paint::Solid { rgb, alpha, .. } => Some((*rgb, *alpha)),
+            Paint::Linear { stops, .. } | Paint::Radial { stops } => {
+                let t = t.clamp(0.0, 1.0) * 100.0;
+                let first = stops.first()?;
+                if t <= first.pos {
+                    return Some((first.rgb, first.alpha));
+                }
+                for w in stops.windows(2) {
+                    let (a, b) = (w[0], w[1]);
+                    if t <= b.pos {
+                        let k = if b.pos > a.pos {
+                            (t - a.pos) / (b.pos - a.pos)
+                        } else {
+                            1.0
+                        };
+                        let mix =
+                            |x: u8, y: u8| (x as f64 + (y as f64 - x as f64) * k).round() as u8;
+                        return Some((
+                            [
+                                mix(a.rgb[0], b.rgb[0]),
+                                mix(a.rgb[1], b.rgb[1]),
+                                mix(a.rgb[2], b.rgb[2]),
+                            ],
+                            a.alpha + (b.alpha - a.alpha) * k,
+                        ));
+                    }
+                }
+                let last = stops.last()?;
+                Some((last.rgb, last.alpha))
+            }
+            Paint::None | Paint::Image { .. } => None,
+        }
+    }
+
     /// The paint's alpha when it is the same everywhere (a solid colour, or
     /// a gradient whose stops share one), else `None`.
     pub fn uniform_alpha(&self) -> Option<f64> {
@@ -267,6 +305,63 @@ pub struct TextRun {
 pub struct Table {
     pub columns: Vec<f64>,
     pub rows: Vec<(f64, Vec<Cell>)>,
+    /// The table style's background (`a:tblBg`), behind every cell.
+    pub background: Paint,
+    /// The native table style the table's look maps to, when it has one.
+    pub look: Option<TableLook>,
+}
+
+impl Table {
+    /// The background's colour at (x, y) pt in the table (a linear
+    /// gradient runs across the table's box projected on its direction, as
+    /// PowerPoint spans it).
+    pub fn backdrop_at(&self, x: f64, y: f64) -> Option<Rgb> {
+        let w: f64 = self.columns.iter().sum();
+        let h: f64 = self.rows.iter().map(|r| r.0).sum();
+        let t = match &self.background {
+            Paint::Linear { angle, .. } => {
+                let (sn, cs) = angle.to_radians().sin_cos();
+                let span = w * cs.abs() + h * sn.abs();
+                if span <= 0.0 {
+                    0.5
+                } else {
+                    ((x - w / 2.0) * cs + (y - h / 2.0) * sn) / span + 0.5
+                }
+            }
+            Paint::Radial { .. } => {
+                let (dx, dy) = (x - w / 2.0, y - h / 2.0);
+                (dx * dx + dy * dy).sqrt() / (w * w + h * h).sqrt().max(1e-9) * 2.0
+            }
+            _ => 0.0,
+        };
+        self.background.color_at(t).map(|(c, _)| c)
+    }
+}
+
+/// A table style as the engine's own table model holds it: region fills
+/// (header and footer rows, first and last column, body) and alternating
+/// row or column fills. Cells this cannot express carry their own fill.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TableLook {
+    pub name: String,
+    pub header_rows: u32,
+    pub footer_rows: u32,
+    pub header: Paint,
+    pub footer: Paint,
+    pub left: Paint,
+    pub right: Paint,
+    pub body: Paint,
+    pub alternate: Option<Alternate>,
+}
+
+/// Alternating fills: by rows (body rows) or by columns.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Alternate {
+    pub rows: bool,
+    pub start: Paint,
+    pub end: Paint,
+    pub skip_first: u32,
+    pub skip_last: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -276,7 +371,9 @@ pub struct Cell {
     /// A continuation of a merged cell: drawn by the cell it merges into.
     pub merged: bool,
     pub fill: Paint,
-    /// left, right, top, bottom.
+    /// The table's native style already paints `fill` here.
+    pub fill_from_style: bool,
+    /// left, right, top, bottom; `None` draws no line.
     pub borders: [Option<Stroke>; 4],
     pub text: Option<TextFrame>,
 }

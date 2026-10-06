@@ -64,6 +64,12 @@ pub struct Presentation {
     pub sections: Vec<Section>,
     /// Every chart a slide, layout or master shows, keyed by part name.
     pub charts: std::collections::BTreeMap<String, chart::Chart>,
+    /// The table styles the deck defines (`ppt/tableStyles.xml`). A deck
+    /// that uses only PowerPoint's built-in styles defines none: it names
+    /// them by id, and the resolver knows their definitions.
+    pub table_styles: Vec<TableStyle>,
+    /// `a:tblStyleLst def`: the style new tables get.
+    pub default_table_style: Option<String>,
     /// Things the importer met and did not model, one line each.
     pub diagnostics: Vec<String>,
 }
@@ -403,6 +409,49 @@ pub struct TableCell {
     /// Margins l, r, t, b.
     pub margins: (Option<Emu>, Option<Emu>, Option<Emu>, Option<Emu>),
     pub anchor: Option<String>,
+}
+
+/// `a:tblStyle`: a table style's parts, keyed by part name (`wholeTbl`,
+/// `band1H`, `band2H`, `band1V`, `band2V`, `firstCol`, `lastCol`,
+/// `firstRow`, `lastRow`, `seCell`, `swCell`, `neCell`, `nwCell`).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct TableStyle {
+    /// `styleId`, a GUID in braces.
+    pub id: String,
+    pub name: String,
+    /// `a:tblBg`: a fill behind the whole table, or a theme fill reference.
+    pub background: Option<Fill>,
+    pub background_ref: Option<StyleRef>,
+    pub parts: std::collections::BTreeMap<String, TableStylePart>,
+}
+
+/// One part of a table style: `a:tcTxStyle` and `a:tcStyle`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct TableStylePart {
+    pub bold: Option<bool>,
+    pub italic: Option<bool>,
+    /// Text colour.
+    pub color: Option<Color>,
+    /// `a:fontRef idx` (`major` / `minor`).
+    pub font_ref: Option<String>,
+    /// `a:latin typeface`.
+    pub font: Option<String>,
+    pub fill: Option<Fill>,
+    /// `a:fillRef`: a theme fill style.
+    pub fill_ref: Option<StyleRef>,
+    pub borders: TableBorders,
+}
+
+/// `a:tcBdr`: lines a part draws. `left`/`right`/`top`/`bottom` are the
+/// part's outer edges; `inside_h`/`inside_v` the edges between its cells.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct TableBorders {
+    pub left: Option<Line>,
+    pub right: Option<Line>,
+    pub top: Option<Line>,
+    pub bottom: Option<Line>,
+    pub inside_h: Option<Line>,
+    pub inside_v: Option<Line>,
 }
 
 // ─── paint ──────────────────────────────────────────────────────────

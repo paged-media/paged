@@ -45,6 +45,8 @@ use pptx_core::{
 mod chart;
 pub mod color;
 pub mod model;
+mod table;
+pub mod table_styles;
 pub mod text;
 
 use color::{resolve as resolve_color, ColorCtx, Rgba};
@@ -818,7 +820,7 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                     transform: t,
                     w,
                     h,
-                    kind: ItemKind::Table(table(tbl, ctx)),
+                    kind: ItemKind::Table(table::table(tbl, ctx)),
                     opacity: 1.0,
                     shadow: None,
                     meta: ItemMeta {
@@ -877,84 +879,6 @@ fn ordered(shapes: &[Shape], space: &Space, ctx: &Ctx) -> Vec<Item> {
             Some(it)
         })
         .collect()
-}
-
-fn table(t: &pptx_core::Table, ctx: &Ctx) -> Table {
-    if let Some(id) = &t.style_id {
-        ctx.note(format!(
-            "table style {id} not applied (explicit cell formatting only)"
-        ));
-    }
-    let colors = ctx.colors(None);
-    let (major, minor) = match ctx.theme {
-        Some(t) => (&t.major_font, &t.minor_font),
-        None => (&EMPTY_FONTS, &EMPTY_FONTS),
-    };
-    let lists: Vec<&ListStyle> = ctx.deck.default_text_style.iter().collect();
-    let tctx = text::TextCtx {
-        lists,
-        colors: &colors,
-        major,
-        minor,
-        font_ref: None,
-        style_prefix: None,
-        shrink: None,
-    };
-    Table {
-        columns: t.columns.iter().map(|w| *w as f64 / EMU_PER_PT).collect(),
-        rows: t
-            .rows
-            .iter()
-            .map(|r| {
-                (
-                    r.height as f64 / EMU_PER_PT,
-                    r.cells
-                        .iter()
-                        .map(|c| Cell {
-                            span: (c.row_span.max(1), c.grid_span.max(1)),
-                            merged: c.h_merge || c.v_merge,
-                            fill: c
-                                .fill
-                                .as_ref()
-                                .map(|f| paint(f, ctx, None))
-                                .unwrap_or(Paint::None),
-                            borders: c.borders.clone().map(|b| {
-                                b.and_then(|l| {
-                                    let props = ShapeProps {
-                                        line: Some(l),
-                                        ..Default::default()
-                                    };
-                                    shape_stroke(&props, None, ctx)
-                                })
-                            }),
-                            text: c.text.as_ref().map(|tb| TextFrame {
-                                inset: (
-                                    c.margins.0.unwrap_or(91_440) as f64 / EMU_PER_PT,
-                                    c.margins.2.unwrap_or(45_720) as f64 / EMU_PER_PT,
-                                    c.margins.1.unwrap_or(91_440) as f64 / EMU_PER_PT,
-                                    c.margins.3.unwrap_or(45_720) as f64 / EMU_PER_PT,
-                                ),
-                                rect: (0.0, 0.0, 0.0, 0.0),
-                                anchor: match c.anchor.as_deref() {
-                                    Some("ctr") => "middle",
-                                    Some("b") => "bottom",
-                                    _ => "top",
-                                }
-                                .to_string(),
-                                wrap: true,
-                                columns: 1,
-                                column_gap: 0.0,
-                                grow: false,
-                                shrink: None,
-                                rotation: 0.0,
-                                paragraphs: text::body(tb, &tctx),
-                            }),
-                        })
-                        .collect(),
-                )
-            })
-            .collect(),
-    }
 }
 
 fn background(bg: &Background, ctx: &Ctx, w: f64, h: f64) -> Option<Item> {

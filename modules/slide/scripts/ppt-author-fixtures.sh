@@ -15,7 +15,10 @@ STAGE="$HOME/Library/Containers/com.microsoft.Powerpoint/Data/Documents/paged-pr
 mkdir -p "$OUT" "$STAGE"
 names=("$@")
 if [ ${#names[@]} -eq 0 ]; then
-  for f in "$ROOT"/scripts/fixtures/*.applescript; do names+=("$(basename "$f" .applescript)"); done
+  for f in "$ROOT"/scripts/fixtures/*.applescript; do
+    n="$(basename "$f" .applescript)"
+    [ "$n" = resave ] || names+=("$n")
+  done
 fi
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -24,6 +27,14 @@ for name in "${names[@]}"; do
   rm -f "$STAGE/$name.pptx"
   osascript "$ROOT/scripts/fixtures/$name.applescript" "$STAGE/$name.pptx" || true
   [ -s "$STAGE/$name.pptx" ] || { echo "PowerPoint wrote no $name.pptx (judge by the artifact)" >&2; exit 1; }
+  # What PowerPoint's dictionary cannot author (tables, table styles) a seed
+  # script writes into PowerPoint's deck; PowerPoint then re-saves it.
+  if [ -f "$ROOT/scripts/fixtures/$name.seed.py" ]; then
+    python3 "$ROOT/scripts/fixtures/$name.seed.py" "$STAGE/$name.pptx" "$STAGE/$name.seed.pptx"
+    rm -f "$STAGE/$name.pptx"
+    osascript "$ROOT/scripts/fixtures/resave.applescript" "$STAGE/$name.seed.pptx" "$STAGE/$name.pptx" || true
+    [ -s "$STAGE/$name.pptx" ] || { echo "PowerPoint did not re-save $name" >&2; exit 1; }
+  fi
   cp "$STAGE/$name.pptx" "$OUT/$name.pptx"
   bash "$ROOT/scripts/ppt-export-probe.sh" "$OUT/$name.pptx" "$TMP/$name" 48 >/dev/null
   cp "$TMP/$name/$name.pdf" "$OUT/$name.ppt.pdf"

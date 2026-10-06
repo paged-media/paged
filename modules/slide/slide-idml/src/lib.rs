@@ -91,6 +91,18 @@ pub fn first_baseline(tf: &TextFrame) -> Option<f64> {
     }
 }
 
+/// A linear gradient's angle and span: PowerPoint runs it across the box
+/// projected on its direction (w·|cos| + h·|sin|), the engine across the
+/// diagonal unless told the length.
+fn gradient_span(angle: f64, w: f64, h: f64) -> String {
+    let (sn, cs) = angle.to_radians().sin_cos();
+    format!(
+        r#" GradientFillAngle="{}" GradientFillLength="{}""#,
+        n(angle),
+        n(w * cs.abs() + h * sn.abs())
+    )
+}
+
 /// The width a `wrap="none"` text frame is widened to.
 const UNWRAPPED_WIDTH_PT: f64 = 4000.0;
 
@@ -173,6 +185,10 @@ struct Writer<'a> {
     story_of: BTreeMap<String, String>,
     para_styles: BTreeSet<String>,
     elements: BTreeMap<String, (&'static str, String)>,
+    /// Native table styles (Self id, XML), deduplicated by their XML.
+    table_styles: Vec<(String, String)>,
+    /// Region cell styles (Self id, XML).
+    cell_styles: Vec<(String, String)>,
     diagnostics: Vec<String>,
     next: u32,
 }
@@ -400,7 +416,7 @@ impl Writer<'_> {
                     let (fc, angle) = self.paint(fill);
                     let sa = self.stroke_attrs(stroke.as_ref());
                     let ga = angle
-                        .map(|a| format!(r#" GradientFillAngle="{}""#, n(a)))
+                        .map(|a| gradient_span(a, it.w, it.h))
                         .unwrap_or_default();
                     // Item ids are `u` + hex, so derived ids take suffixes
                     // that are not hex digits (`p`, `s`, `t`, `i`).
@@ -517,13 +533,78 @@ impl Writer<'_> {
 
     /// A table: a text frame at the table's box holding a story with one
     /// paragraph that carries the table.
+    /// The native table style for `look` (region cell styles carrying the
+    /// fills, and alternating fills at full tint), shared by every table
+    /// that looks the same.
+    fn table_style(&mut self, look: &TableLook) -> String {
+        let mut regions = String::new();
+        for (attr, paint, tag) in [
+            ("HeaderRegionCellStyle", &look.header, "header"),
+            ("FooterRegionCellStyle", &look.footer, "footer"),
+            ("LeftColumnRegionCellStyle", &look.left, "left"),
+            ("RightColumnRegionCellStyle", &look.right, "right"),
+            ("BodyRegionCellStyle", &look.body, "body"),
+        ] {
+            let id = if matches!(paint, Paint::None) {
+                "CellStyle/$ID/[None]".to_string()
+            } else {
+                // Regions with the same fill share one cell style.
+                let fill = self.paint(paint).0;
+                let tail = format!(r#" FillColor="{fill}"/>"#);
+                match self.cell_styles.iter().find(|(_, x)| x.ends_with(&tail)) {
+                    Some((id, _)) => id.clone(),
+                    None => {
+                        let id = format!("CellStyle/{} {tag}", look.name);
+                        let id = if self.cell_styles.iter().any(|(i, _)| *i == id) {
+                            format!("{id} {}", self.cell_styles.len() + 1)
+                        } else {
+                            id
+                        };
+                        let xml = format!(
+                            r#"<CellStyle Self="{}" Name="{}"{tail}"#,
+                            esc(&id),
+                            esc(&id["CellStyle/".len()..])
+                        );
+                        self.cell_styles.push((id.clone(), xml));
+                        id
+                    }
+                }
+            };
+            let _ = write!(regions, r#" {attr}="{}""#, esc(&id));
+        }
+        let mut alternate = String::new();
+        if let Some(a) = &look.alternate {
+            let (start, end) = (self.paint(&a.start).0, self.paint(&a.end).0);
+            let axis = if a.rows { "Row" } else { "Column" };
+            let _ = write!(
+                alternate,
+                r#" AlternatingFills="Alternating{axis}s" Start{axis}FillColor="{start}" Start{axis}FillCount="1" Start{axis}FillTint="100" End{axis}FillColor="{end}" End{axis}FillCount="1" End{axis}FillTint="100" SkipFirstAlternatingFill{axis}s="{}" SkipLastAlternatingFill{axis}s="{}""#,
+                a.skip_first, a.skip_last
+            );
+        }
+        let body = format!(r#"Name="{}"{regions}{alternate}/>"#, esc(&look.name));
+        if let Some((id, _)) = self.table_styles.iter().find(|(_, x)| x.ends_with(&body)) {
+            return id.clone();
+        }
+        let id = format!("TableStyle/{} {}", look.name, self.table_styles.len() + 1);
+        let xml = format!(r#"<TableStyle Self="{}" {body}"#, esc(&id));
+        self.table_styles.push((id.clone(), xml));
+        id
+    }
+
     fn table(&mut self, out: &mut String, it: &Item, t: &Table) {
         let story = format!("st{}", it.id);
         let fid = format!("{}t", it.id);
         self.element(&it.id, "textFrame", &fid);
+        // The table style's background (a theme gradient for the themed
+        // styles) fills the frame behind the cells.
+        let (bg, bg_angle) = self.paint(&t.background);
+        let h: f64 = t.rows.iter().map(|r| r.0).sum();
+        let w: f64 = t.columns.iter().sum();
+        let bga = bg_angle.map(|a| gradient_span(a, w, h)).unwrap_or_default();
         let _ = write!(
             out,
-            r#"<TextFrame Self="{fid}" Name="{}" ParentStory="{story}" PreviousTextFrame="n" NextTextFrame="n" ContentType="TextType" AppliedObjectStyle="ObjectStyle/$ID/[None]" ItemTransform="{}" FillColor="Swatch/None" StrokeColor="Swatch/None" StrokeWeight="0">"#,
+            r#"<TextFrame Self="{fid}" Name="{}" ParentStory="{story}" PreviousTextFrame="n" NextTextFrame="n" ContentType="TextType" AppliedObjectStyle="ObjectStyle/$ID/[None]" ItemTransform="{}" FillColor="{bg}"{bga} StrokeColor="Swatch/None" StrokeWeight="0">"#,
             esc(&it.name),
             matrix(&it.transform)
         );
@@ -532,8 +613,18 @@ impl Writer<'_> {
         let rows = t.rows.len();
         let cols = t.columns.len();
         let tid = format!("{}tb", it.id);
+        let (style, header, footer) = match &t.look {
+            Some(look) => (
+                self.table_style(look),
+                look.header_rows as usize,
+                look.footer_rows as usize,
+            ),
+            None => ("TableStyle/$ID/[No table style]".to_string(), 0, 0),
+        };
+        let body = rows.saturating_sub(header + footer);
         let mut x = format!(
-            r#"<ParagraphStyleRange AppliedParagraphStyle="ParagraphStyle/$ID/NormalParagraphStyle"><CharacterStyleRange AppliedCharacterStyle="{NO_CHAR_STYLE}"><Table Self="{tid}" HeaderRowCount="0" FooterRowCount="0" BodyRowCount="{rows}" ColumnCount="{cols}" AppliedTableStyle="TableStyle/$ID/[No table style]">"#
+            r#"<ParagraphStyleRange AppliedParagraphStyle="ParagraphStyle/$ID/NormalParagraphStyle"><CharacterStyleRange AppliedCharacterStyle="{NO_CHAR_STYLE}"><Table Self="{tid}" HeaderRowCount="{header}" FooterRowCount="{footer}" BodyRowCount="{body}" ColumnCount="{cols}" AppliedTableStyle="{}">"#,
+            esc(&style)
         );
         for (r, (h, _)) in t.rows.iter().enumerate() {
             let _ = write!(
@@ -568,10 +659,16 @@ impl Writer<'_> {
                         }
                     }
                 }
-                let (fill, _) = self.paint(&cell.fill);
+                // A fill the table style already paints here is left to it, so
+                // the cell keeps following its style.
+                let fill = if cell.fill_from_style {
+                    String::new()
+                } else {
+                    format!(r#" FillColor="{}""#, self.paint(&cell.fill).0)
+                };
                 let _ = write!(
                     x,
-                    r#"<Cell Self="{tid}_{c}_{r}" Name="{c}:{r}" RowSpan="{rs}" ColumnSpan="{cs}" FillColor="{fill}""#
+                    r#"<Cell Self="{tid}_{c}_{r}" Name="{c}:{r}" RowSpan="{rs}" ColumnSpan="{cs}" AppliedCellStyle="CellStyle/$ID/[None]"{fill}"#
                 );
                 for (edge, b) in ["Left", "Right", "Top", "Bottom"].iter().zip(&cell.borders) {
                     match b {
@@ -880,6 +977,8 @@ pub fn write(
         story_of: BTreeMap::new(),
         para_styles: BTreeSet::new(),
         elements: BTreeMap::new(),
+        table_styles: Vec::new(),
+        cell_styles: Vec::new(),
         diagnostics: Vec::new(),
         next: 0,
     };
@@ -965,7 +1064,15 @@ pub fn write(
             esc(s)
         );
     }
-    styles.push_str(r#"</RootParagraphStyleGroup><RootObjectStyleGroup Self="u_rosg"><ObjectStyle Self="ObjectStyle/$ID/[None]" Name="$ID/[None]"/></RootObjectStyleGroup>"#);
+    styles.push_str(r#"</RootParagraphStyleGroup><RootCellStyleGroup Self="u_rcesg"><CellStyle Self="CellStyle/$ID/[None]" Name="$ID/[None]"/>"#);
+    for (_, xml) in &w.cell_styles {
+        styles.push_str(xml);
+    }
+    styles.push_str(r#"</RootCellStyleGroup><RootTableStyleGroup Self="u_rtsg"><TableStyle Self="TableStyle/$ID/[No table style]" Name="$ID/[No table style]"/>"#);
+    for (_, xml) in &w.table_styles {
+        styles.push_str(xml);
+    }
+    styles.push_str(r#"</RootTableStyleGroup><RootObjectStyleGroup Self="u_rosg"><ObjectStyle Self="ObjectStyle/$ID/[None]" Name="$ID/[None]"/></RootObjectStyleGroup>"#);
 
     let story_list: Vec<String> = w.stories.iter().map(|(id, _)| id.clone()).collect();
     for (id, body) in &w.stories {
