@@ -183,6 +183,12 @@ export type {
   SchemaRowAction,
   SchemaListAction,
   SchemaListSpec,
+  // Schema v1.2 — the object-model property row (ADR 323, design §4).
+  PanelSchemaWidgetRow,
+  PanelSchemaPropertyRow,
+  PropertyFieldAddress,
+  PropertyFieldStyle,
+  PropertyFieldOption,
 } from "./panel-schema";
 
 export type {
@@ -191,6 +197,9 @@ export type {
   CodeEditorProps,
   CodeEditorDiagnostic,
   CodeEditorLanguage,
+  PropertyFieldProps,
+  PropertyFrameProps,
+  PropertyFieldTarget,
 } from "./widgets";
 
 // ADR-023 phase A — BINDING PROVIDERS: one host-owned panel, and while

@@ -21,6 +21,10 @@ What the plugin contract ships and what it does not, read from the code at commi
   sub-keys, page and document label hosts (protocol 70), optional and defaulted struct
   fields, heavy rows, indexed paths, async `hostOf`, container-scoped plugin selectors,
   and core rows typed by meaning. Built on the protocol-70 wire.
+  Panel schema v1.2 (0.2.44-canary.0, branch `om/panel-property`, DESIGN.md §12.7): a
+  row may be an object-model property field (`{ field: "property", address, path }`)
+  the host renders with its `PropertyField`; `host.widgets.PropertyField` /
+  `PropertyFrame` for React panels; `validatePanelSchema` for bundle tests.
 - **Three npm packages**, published under the `canary` tag on a push to `main`.
 - **The contract** (`plugin-api`, types only): the manifest types and their JSON Schema
   (exported as `./manifest.schema.json`), `PagedBundle`, `BundleHost` with 27 members, the

@@ -3946,6 +3946,11 @@ export function createBundleHost(
     // native `<input type="color">`.
     featureSet.add("widgets.colorPicker@1");
   }
+  // ADR 323 — the host's schema-driven property field (and its frame)
+  // for React panels; optional members, so the probe is their presence.
+  if (options?.widgets?.PropertyField) {
+    featureSet.add("widgets.propertyField@1");
+  }
   if (options?.willSave) {
     featureSet.add("document.onWillSave@1");
   }
