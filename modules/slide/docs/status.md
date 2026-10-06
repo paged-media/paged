@@ -84,7 +84,10 @@ engine (0.67.0) does not draw a master's pictures yet.
   hand-authored fixture is needed before extraction is built.
 - **SmartArt layouts in fixtures.** PowerPoint draws a seeded diagram with its default layout
   only, so the fixture covers the drawing's lowering, not other layouts' shapes.
-- **Editor wiring.** The bundle is not yet loaded by the editor (needs a published canary).
+- **Editor wiring.** The editor loads the bundle on a branch, through a local link, and a
+  journey opens a PowerPoint-authored deck there (ten 960 × 540 pt pages, the title slide drawn).
+  It merges once `@paged-media/slide` is published: the first version by hand (trusted
+  publishing cannot create a package), then the publish workflow takes over.
 
 ## Not built yet
 
