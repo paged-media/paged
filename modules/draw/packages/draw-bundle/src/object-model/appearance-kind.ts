@@ -47,7 +47,6 @@ import type {
 import {
   appearanceOf,
   bakeAppearanceMutations,
-  withAppearance,
   type AppearanceStack,
   type FillLayer,
   type StrokeLayer,
@@ -62,6 +61,7 @@ import {
   readGraphicStyleLibrary,
   withGraphicStyleRef,
 } from "../commands/graphic-styles";
+import { kindBatch, plan, rejected, type Planned, type Planner, type StackStamp } from "./plan";
 import {
   BOOL,
   FILL_LAYER,
@@ -157,7 +157,7 @@ async function supportedPaths(host: BundleHost, id: ElementId): Promise<Set<stri
   return new Set((props?.entries ?? []).map((e) => e.path));
 }
 
-export function makeAppearanceKind(host: BundleHost): ObjectKindContribution {
+export function makeAppearanceKind(host: BundleHost): ObjectKindContribution & Planner {
   const elementOf = (address: string): ElementId | null => {
     const id = localIdOf(address, APPEARANCE_KIND);
     const el = id ? elementOfId(id) : null;
@@ -202,37 +202,33 @@ export function makeAppearanceKind(host: BundleHost): ObjectKindContribution {
           return refuse("unknownPath", `appearance has no "${path}"`);
       }
     },
-    async batch(ops: readonly ObjectOp[]) {
+    batch: (ops: readonly ObjectOp[]) => kindBatch(host, planOps)(ops),
+    plan: (ops: readonly ObjectOp[]) => planOps(ops),
+  };
+
+  async function planOps(ops: readonly ObjectOp[]): Promise<Planned> {
       const byElement = new Map<string, { el: ElementId; ops: ObjectOp[] }>();
       for (const op of ops) {
         if (op.op !== "set") {
-          return {
-            kind: "rejected",
-            reason: `appearance ${op.op}: an appearance belongs to its element — set its fills / strokes`,
-          };
+          return rejected(`appearance ${op.op}: an appearance belongs to its element — set its fills / strokes`);
         }
         const el = elementOf(op.address);
-        if (!el) return { kind: "rejected", reason: `${op.address} cannot carry an appearance` };
+        if (!el) return rejected(`${op.address} cannot carry an appearance`);
         const key = `${el.kind}:${String(el.id)}`;
         const entry = byElement.get(key) ?? { el, ops: [] };
         entry.ops.push(op);
         byElement.set(key, entry);
       }
       const mutations: MutationInput[] = [];
+      const stamps: StackStamp[] = [];
       for (const { el, ops: own } of byElement.values()) {
         const env: PluginMetadataEnvelope | null = await envelopeOf(el);
         if (appearanceBakeOf(env)) {
-          return {
-            kind: "rejected",
-            reason: `${coreAddressOf(el)}: the appearance is BAKED into a group of page items — release it first`,
-          };
+          return rejected(`${coreAddressOf(el)}: the appearance is BAKED into a group of page items — release it first`);
         }
         const styleOps = own.filter((o) => o.op === "set" && o.path === "graphicStyle");
         if (styleOps.length > 0 && own.length > styleOps.length) {
-          return {
-            kind: "rejected",
-            reason: "set graphicStyle in its own batch: a style replaces the whole stack",
-          };
+          return rejected("set graphicStyle in its own batch: a style replaces the whole stack");
         }
         const supported = await supportedPaths(host, el);
         if (styleOps.length > 0) {
@@ -243,7 +239,7 @@ export function makeAppearanceKind(host: BundleHost): ObjectKindContribution {
           }
           const id = bareIdOf(String(target), "graphicStyle");
           const style = findGraphicStyle(await readGraphicStyleLibrary(host), id);
-          if (!style) return { kind: "rejected", reason: `no graphic style "${id}"` };
+          if (!style) return rejected(`no graphic style "${id}"`);
           const batch = applyGraphicStyleBatchFor({ elementId: el, style, supported, prev: env });
           mutations.push(...(batch.op === "batch" ? batch.args.ops : [batch]));
           continue;
@@ -256,10 +252,13 @@ export function makeAppearanceKind(host: BundleHost): ObjectKindContribution {
           } else if (op.path === "strokes") {
             stack.strokes = (op.value as ReturnType<typeof fullStroke>[]).map(storedStroke);
           } else {
-            return { kind: "rejected", reason: `appearance has no writable "${op.path}"` };
+            return rejected(`appearance has no writable "${op.path}"`);
           }
         }
-        mutations.push(stampDrawMetadata(el, withAppearance(env, stack)));
+        // The stack itself goes to the element's label — a sub-key write
+        // the registry merges into the envelope when it is the batch's
+        // only label (plan.ts), a full-envelope stamp otherwise.
+        stamps.push({ el, prev: env, stack });
         // The bake, filtered to the element's own vocabulary: a refused
         // property would roll the WHOLE atomic batch back (a GraphicLine
         // has no fill slot).
@@ -269,7 +268,6 @@ export function makeAppearanceKind(host: BundleHost): ObjectKindContribution {
           ),
         );
       }
-      return { kind: "mutations", mutations };
-    },
-  };
+      return plan({ mutations, stamps });
+  }
 }

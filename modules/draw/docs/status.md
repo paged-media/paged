@@ -61,7 +61,7 @@ through `host.objects` (code: `packages/draw-bundle/src/object-model/`). Address
 
 | Kind | Rows | Backing | One write = |
 |---|---|---|---|
-| `path` | 6 (points, contour starts, open flags, counts, transform) | core `framePath` | 1 undo step |
+| `path` | 10 (points, one point `points[]` and its anchor and two handles, contour starts, open flags, counts, transform) | core `framePath` | 1 undo step |
 | `appearance` | 5 (fills, strokes, graphic style, overridden, baked) | element envelope + bake | 1 undo step |
 | `graphicStyle` | 10 (name, fills, strokes, 6 base paints, linked count) | library, document label | 1 undo step, followers re-applied |
 | `symbol` | 6 | library, document label | 1 undo step (delete unlinks instances) |
@@ -77,6 +77,15 @@ through `host.objects` (code: `packages/draw-bundle/src/object-model/`). Address
   in the same commit as any page change. Undo reverts the label and the library reads back as
   it was (`src/recipe-store.ts`). The parts are a cache: a library small enough also rides
   inline in the label, which InDesign keeps when it drops the parts.
+- **One write per batch.** The contribution has a plugin-level `batch`
+  (`src/object-model/plan.ts`): every draw op of a batch is planned together, so several
+  libraries in one batch become ONE `state` write hosted on `doc` under the sub-key
+  `x-paged:media.paged.draw.recipes`, which the registry merges into the document label and
+  whose parts it writes. A one-element appearance write is a `state` write under the sub-key
+  `…appearance` on that element (the envelope's other keys stay); stacks on several elements,
+  or next to a library write, are full-envelope `setPluginMetadata` mutations the registry
+  checks. Every draw object answers `hostOf`, so `page:#1 > plugin:media.paged.draw/path` and
+  `doc > plugin:media.paged.draw/repeat` select.
 - **Typed commands.** 97 of the 107 commands have a typed twin with the same id; the ten
   Path Options "…" commands, which only raise a panel, are the untyped remainder.
 - **A recipe write changes the recipe, not the artwork.** The artwork follows on the typed

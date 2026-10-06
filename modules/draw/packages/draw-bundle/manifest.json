@@ -263,6 +263,49 @@
               "summary": "Every anchor with its two direction handles, in the item's inner coordinates (pt), contour after contour. A write replaces the whole table (framePath)."
             },
             {
+              "path": "points[]",
+              "type": {
+                "kind": "struct",
+                "fields": {
+                  "anchor": {
+                    "kind": "point"
+                  },
+                  "left": {
+                    "kind": "point"
+                  },
+                  "right": {
+                    "kind": "point"
+                  }
+                }
+              },
+              "title": "Point",
+              "summary": "One anchor with its two direction handles (`points[3]`); a write replaces that point only."
+            },
+            {
+              "path": "points[].anchor",
+              "type": {
+                "kind": "point"
+              },
+              "title": "Anchor",
+              "summary": "One point's anchor (`points[3].anchor`)."
+            },
+            {
+              "path": "points[].left",
+              "type": {
+                "kind": "point"
+              },
+              "title": "Left handle",
+              "summary": "One point's incoming direction handle."
+            },
+            {
+              "path": "points[].right",
+              "type": {
+                "kind": "point"
+              },
+              "title": "Right handle",
+              "summary": "One point's outgoing direction handle."
+            },
+            {
               "path": "subpathStarts",
               "type": {
                 "kind": "list",

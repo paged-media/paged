@@ -38,7 +38,6 @@ import type {
   ObjectKindContribution,
   ObjectOp,
   ObjectValue,
-  ObjectWrite,
   PropertySchema,
 } from "@paged-media/plugin-api";
 
@@ -64,7 +63,7 @@ import {
   type GraphicStyleBase,
   type GraphicStyleLibrary,
 } from "../commands/graphic-styles";
-import { planRecipeWrite } from "../recipe-store";
+import { kindBatch, plan, rejected, type Planned, type Planner } from "./plan";
 import { fullFill, fullStroke } from "./appearance-kind";
 import {
   BLEND_MODE,
@@ -151,7 +150,7 @@ const project = (style: GraphicStyle): GraphicStyle => ({
   appearance: projectGraphicAppearance(style.appearance, GRAPHIC_STYLE_BASE_PATHS),
 });
 
-export function makeGraphicStyleKind(host: BundleHost): ObjectKindContribution {
+export function makeGraphicStyleKind(host: BundleHost): ObjectKindContribution & Planner {
   const idOf = (address: string) => localIdOf(address, GRAPHIC_STYLE_KIND);
 
   /** Re-apply `style` to every follower (Illustrator: a style edit
@@ -192,7 +191,11 @@ export function makeGraphicStyleKind(host: BundleHost): ObjectKindContribution {
       if (key) return val(style.appearance.base[key]);
       return refuse("unknownPath", `graphicStyle has no "${path}"`);
     },
-    async batch(ops: readonly ObjectOp[]): Promise<ObjectWrite> {
+    batch: (ops: readonly ObjectOp[]) => kindBatch(host, planOps)(ops),
+    plan: (ops: readonly ObjectOp[]) => planOps(ops),
+  };
+
+  async function planOps(ops: readonly ObjectOp[]): Promise<Planned> {
       let library: GraphicStyleLibrary = await readGraphicStyleLibrary(host);
       const changed = new Set<string>();
       const removed = new Set<string>();
@@ -208,7 +211,7 @@ export function makeGraphicStyleKind(host: BundleHost): ObjectKindContribution {
           };
           for (const [path, value] of Object.entries(op.props ?? {})) {
             const next = applyPath(style, path, value);
-            if (!next) return { kind: "rejected", reason: `graphicStyle has no writable "${path}"` };
+            if (!next) return rejected(`graphicStyle has no writable "${path}"`);
             style = next;
           }
           library = upsertGraphicStyle(library, project(style));
@@ -216,21 +219,19 @@ export function makeGraphicStyleKind(host: BundleHost): ObjectKindContribution {
         }
         const id = idOf(op.op === "invoke" ? "" : op.address);
         const style = id ? findGraphicStyle(library, id) : null;
-        if (!style) return { kind: "rejected", reason: `no graphic style ${op.op === "invoke" ? "" : op.address}` };
+        if (!style) return rejected(`no graphic style ${op.op === "invoke" ? "" : op.address}`);
         if (op.op === "delete") {
           library = removeGraphicStyleFrom(library, style.id);
           removed.add(style.id);
           continue;
         }
-        if (op.op !== "set") return { kind: "rejected", reason: `graphicStyle cannot ${op.op}` };
+        if (op.op !== "set") return rejected(`graphicStyle cannot ${op.op}`);
         const next = applyPath(style, op.path, op.value);
-        if (!next) return { kind: "rejected", reason: `graphicStyle has no writable "${op.path}"` };
+        if (!next) return rejected(`graphicStyle has no writable "${op.path}"`);
         library = upsertGraphicStyle(library, project(next));
         if (op.path !== "name") changed.add(style.id);
       }
-      const plan = await planRecipeWrite(host, GRAPHIC_STYLES_PART, serializeGraphicStyleLibrary(library));
-      if (typeof plan === "string") return { kind: "rejected", reason: plan };
-      const mutations: MutationInput[] = [plan.mutation];
+      const mutations: MutationInput[] = [];
       for (const id of changed) {
         if (removed.has(id)) continue;
         mutations.push(...(await propagate(findGraphicStyle(library, id)!)));
@@ -241,7 +242,9 @@ export function makeGraphicStyleKind(host: BundleHost): ObjectKindContribution {
           mutations.push(stampDrawMetadata(link.id, withGraphicStyleRef(env, null)));
         }
       }
-      return { kind: "mutations", mutations };
-    },
-  };
+      return plan({
+        mutations,
+        libraries: [{ legacyPart: GRAPHIC_STYLES_PART, bytes: serializeGraphicStyleLibrary(library) }],
+      });
+  }
 }

@@ -100,14 +100,14 @@ describe("perf budget — a 10-op object-model batch", () => {
 
     // ONE mutation reaches the engine — the whole batch.
     expect(counts.mutate).toBe(1);
-    // READS, pinned per door (measured 2026-10-06, engine 0.69.0,
-    // plugin-sdk 0.2.42-canary.0). Whose they are:
+    // READS, pinned per door (measured 2026-10-06, engine 0.70.0,
+    // plugin-sdk 0.2.43-canary.0, plugin-level batch). Whose they are:
     //   · the SDK's core seam — NOTHING: the six core paths validate and
     //     plan off its cached containment snapshot (warm here: the read
     //     above built it; cold, it is 11 `collection` + 1 scene tree, once
     //     per document revision, not per op);
-    //   · the recipe store — 1 `subscribe`, once per host: the document
-    //     event that ends a batch's planning mark (src/recipe-store.ts);
+    //   · the planning mark is gone (the plugin-level batch plans every
+    //     library of a batch at once), and with it the `subscribe`;
     //   · draw `appearance` — 2 `requestElementProperties` (the envelope
     //     and the element's vocabulary, which filters the bake);
     //   · draw `path` — 1 `pathAnchors`: both path writes fold onto ONE
@@ -115,14 +115,18 @@ describe("perf budget — a 10-op object-model batch", () => {
     //   · draw `graphicStyle` (the label-hash lane) — 3 `documentMeta`
     //     (the label: library read, origin read, plan), 2 `readPagedPart`
     //     (the fixed-name part, twice), 3 `writePagedPart` (origin, the
-    //     content-addressed state, the stamped fixed-name part).
+    //     content-addressed state, the stamped fixed-name part — written
+    //     by the REGISTRY from the `state` write's parts);
+    //   · the registry — 1 `documentMeta`: it reads the document label to
+    //     merge the `x-paged:media.paged.draw.recipes` sub-key into it.
+    //     The appearance stack shares the write with a library, so it is
+    //     a full-envelope stamp (no second label read).
     // None of it grows with the op count except per touched element.
     expect(counts).toEqual({
-      subscribe: 1,
       "send:requestElementProperties": 2,
       pathAnchors: 1,
       "send:readPagedPart": 2,
-      documentMeta: 3,
+      documentMeta: 4,
       "send:writePagedPart": 3,
       mutate: 1,
     });

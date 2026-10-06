@@ -261,14 +261,112 @@ describe("paged.draw — the object model (ADR 323) on a real engine", () => {
       expect(value(await h.objects.get(ring, "instances"))).not.toEqual([]);
     });
 
-    it("two draw LIBRARIES in one batch are refused (they share the document label)", async () => {
+    it("two draw LIBRARIES in one batch: ONE label write (sub-key on doc), ONE undo step", async () => {
       const [ring] = await h.objects.query(`plugin:${D}/repeat`);
+      const before = value(await h.objects.get(ring!, "name"));
       const out = await h.objects.batch([
         { op: "set", address: ring!, path: "name", value: "Ring 2" },
-        { op: "create", kind: `plugin:${D}/graphicStyle`, props: { name: "x" } },
+        { op: "create", kind: `plugin:${D}/graphicStyle`, props: { name: "Both" } },
       ]);
-      expect(out).toMatchObject({ applied: false });
-      expect(out.reason).toMatch(/share the document label/);
+      expect(out, out.reason).toMatchObject({ applied: true, undoSteps: 1 });
+      expect(value(await h.objects.get(ring!, "name"))).toBe("Ring 2");
+      expect(await h.objects.query(`plugin:${D}/graphicStyle[name="Both"]`)).toHaveLength(1);
+      // ONE label per plugin on the document, carrying BOTH libraries.
+      const labels = value(await h.objects.get("doc", "labels")) as Record<string, string>;
+      expect(Object.keys(labels).filter((k) => k.startsWith(`x-paged:${D}`))).toEqual([`x-paged:${D}`]);
+      const env = JSON.parse(labels[`x-paged:${D}`]!) as { v: number; data: { recipes: Record<string, unknown> } };
+      expect(Object.keys(env.data.recipes)).toEqual(expect.arrayContaining(["repeat", "graphic-styles"]));
+      // One undo takes both back.
+      await h.host.document.undo();
+      expect(value(await h.objects.get(ring!, "name"))).toBe(before);
+      expect(await h.objects.query(`plugin:${D}/graphicStyle[name="Both"]`)).toEqual([]);
+    });
+
+    it("library objects are hosted on doc: `doc > plugin:…/repeat` selects them", async () => {
+      const all = await h.objects.query(`plugin:${D}/repeat`);
+      expect(all.length).toBeGreaterThan(0);
+      expect(await h.objects.query(`doc > plugin:${D}/repeat`)).toEqual(all);
+    });
+  });
+
+  // ------------------------------------------- labels (one per host)
+
+  describe("labels — appearance is a SUB-KEY of the element's one draw label", () => {
+    const LINE_ID = { kind: "graphicLine", id: "uline" } as ElementId;
+    const strokes = [{ color: "Color/Black", weight: 2, opacity: 100, blendMode: "Normal" }];
+
+    it("a one-element stack write merges data.appearance and keeps the envelope's other keys", async () => {
+      await h.host.document.setMetadata(LINE_ID, { v: 1, data: { keep: 7 } });
+      const out = await h.objects.set(A("appearance", LINE), "strokes", strokes);
+      expect(out, out.reason).toMatchObject({ applied: true, undoSteps: 1 });
+      const env = await h.host.document.getMetadata(LINE_ID);
+      // Stored in the stack's own shape (defaults the commands never store stay absent).
+      expect(env?.data).toEqual({ keep: 7, appearance: { fills: [], strokes: [{ color: "Color/Black", weight: 2 }] } });
+      await h.host.document.undo();
+      expect((await h.host.document.getMetadata(LINE_ID))?.data).toEqual({ keep: 7 });
+      await h.host.document.undo(); // the setMetadata
+    });
+
+    it("stacks on TWO elements next to a library write still commit as ONE step", async () => {
+      const [ring] = await h.objects.query(`plugin:${D}/repeat`);
+      const name = value(await h.objects.get(ring!, "name"));
+      const out = await h.objects.batch([
+        { op: "set", address: A("appearance", LINE), path: "strokes", value: strokes },
+        { op: "set", address: A("appearance", RECT), path: "strokes", value: strokes },
+        { op: "set", address: ring!, path: "name", value: "Ring 3" },
+      ]);
+      expect(out, out.reason).toMatchObject({ applied: true, undoSteps: 1 });
+      expect(value(await h.objects.get(A("appearance", RECT), "strokes"))).toEqual(strokes);
+      expect(value(await h.objects.get(A("appearance", LINE), "strokes"))).toEqual(strokes);
+      await h.host.document.undo();
+      expect(value(await h.objects.get(A("appearance", RECT), "strokes"))).toEqual([]);
+      expect(value(await h.objects.get(ring!, "name"))).toBe(name);
+    });
+  });
+
+  // ------------------------------------------------- indexed points
+
+  describe("path — indexed rows points[] (one point, one handle)", () => {
+    it("reads points[1] and points[1].anchor", async () => {
+      const all = value(await h.objects.get(A("path", POLY), "points")) as { anchor: number[] }[];
+      expect(value(await h.objects.get(A("path", POLY), "points[1]"))).toEqual(all[1]);
+      expect(value(await h.objects.get(A("path", POLY), "points[1].anchor"))).toEqual(all[1]!.anchor);
+      expect((await h.objects.get(A("path", POLY), "points[99]")).kind).toBe("refused");
+    });
+
+    it("SET points[1].anchor moves ONE anchor in ONE undo step; the others stay", async () => {
+      const before = value(await h.objects.get(A("path", POLY), "points")) as { anchor: [number, number] }[];
+      const target: [number, number] = [before[1]!.anchor[0] + 5, before[1]!.anchor[1] + 5];
+      const out = await h.objects.batch([
+        { op: "set", address: A("path", POLY), path: "points[1].anchor", value: target },
+        { op: "set", address: A("path", POLY), path: "points[2].left", value: before[2]!.anchor },
+      ]);
+      expect(out, out.reason).toMatchObject({ applied: true, undoSteps: 1 });
+      const after = value(await h.objects.get(A("path", POLY), "points")) as typeof before;
+      expect(after[1]!.anchor).toEqual(target);
+      expect(after[0]).toEqual(before[0]);
+      await h.host.document.undo();
+      expect(value(await h.objects.get(A("path", POLY), "points"))).toEqual(before);
+    });
+
+    it("an index past the table is refused, never appended; a bad point is refused by the schema", async () => {
+      expect(await h.objects.set(A("path", POLY), "points[50].anchor", [1, 2])).toMatchObject({ applied: false });
+      expect(await h.objects.set(A("path", POLY), "points[1].anchor", [1])).toMatchObject({
+        applied: false,
+        code: "invalidValue",
+      });
+    });
+
+    it("getAll skips the indexed rows", async () => {
+      const all = await h.objects.getAll(A("path", POLY));
+      expect(Object.keys(all)).toContain("points");
+      expect(Object.keys(all).some((k) => k.includes("["))).toBe(false);
+    });
+
+    it("a PAGE scope selects paths through hostOf", async () => {
+      const onPage = await h.objects.query(`page:#1 > plugin:${D}/path`);
+      expect(onPage).toEqual(expect.arrayContaining([A("path", POLY), A("path", LINE)]));
+      expect(await h.objects.query(`page:#99 > plugin:${D}/path`)).toEqual([]);
     });
   });
 

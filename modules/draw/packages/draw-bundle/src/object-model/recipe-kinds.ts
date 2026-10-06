@@ -42,7 +42,6 @@ import type {
   ObjectKindContribution,
   ObjectOp,
   ObjectValue,
-  ObjectWrite,
   PropertySchema,
   ValueType,
 } from "@paged-media/plugin-api";
@@ -84,7 +83,7 @@ import {
   type RepeatParams,
 } from "../commands/repeat";
 import { SYMBOL_REGISTRATIONS } from "../commands/symbols";
-import { planRecipeWrite } from "../recipe-store";
+import { kindBatch, plan, rejected, type Planned, type Planner } from "./plan";
 import {
   BOOL,
   DEG,
@@ -220,7 +219,7 @@ interface RecipeSpec<L> {
   verbs: { make: string; release: string };
 }
 
-function makeRecipeKind<L>(host: BundleHost, spec: RecipeSpec<L>): ObjectKindContribution {
+function makeRecipeKind<L>(host: BundleHost, spec: RecipeSpec<L>): ObjectKindContribution & Planner {
   const writable = new Set(
     spec.schema.filter((r) => (r.access ?? "readWrite") === "readWrite").map((r) => r.path),
   );
@@ -247,7 +246,11 @@ function makeRecipeKind<L>(host: BundleHost, spec: RecipeSpec<L>): ObjectKindCon
       if (path in extra) return val(extra[path]);
       return refuse("unknownPath", `${spec.kind} has no "${path}"`);
     },
-    async batch(ops: readonly ObjectOp[]): Promise<ObjectWrite> {
+    batch: (ops: readonly ObjectOp[]) => kindBatch(host, planOps)(ops),
+    plan: (ops: readonly ObjectOp[]) => planOps(ops),
+  };
+
+  async function planOps(ops: readonly ObjectOp[]): Promise<Planned> {
       const lib = await spec.read(host);
       const records = spec.records(lib).map((r) => ({
         ...r,
@@ -255,24 +258,21 @@ function makeRecipeKind<L>(host: BundleHost, spec: RecipeSpec<L>): ObjectKindCon
       }));
       for (const op of ops) {
         if (op.op === "create") {
-          return { kind: "rejected", reason: `a ${spec.kind} is built from artwork — invoke ${spec.verbs.make}` };
+          return rejected(`a ${spec.kind} is built from artwork — invoke ${spec.verbs.make}`);
         }
         if (op.op === "delete") {
-          return { kind: "rejected", reason: `removing a ${spec.kind} removes artwork — invoke ${spec.verbs.release}` };
+          return rejected(`removing a ${spec.kind} removes artwork — invoke ${spec.verbs.release}`);
         }
-        if (op.op !== "set") return { kind: "rejected", reason: `${spec.kind} cannot ${op.op}` };
+        if (op.op !== "set") return rejected(`${spec.kind} cannot ${op.op}`);
         const id = localIdOf(op.address, spec.kind);
         const rec = records.find((r) => r.id === id);
-        if (!rec) return { kind: "rejected", reason: `no ${spec.kind} ${op.address}` };
-        if (!writable.has(op.path)) return { kind: "rejected", reason: `${spec.kind} has no writable "${op.path}"` };
+        if (!rec) return rejected(`no ${spec.kind} ${op.address}`);
+        if (!writable.has(op.path)) return rejected(`${spec.kind} has no writable "${op.path}"`);
         if (op.path === "name") rec.name = String(op.value);
         else (rec.params as Record<string, unknown>)[op.path] = op.value;
       }
-      const plan = await planRecipeWrite(host, spec.part, spec.serialize(spec.withRecords(lib, records)));
-      if (typeof plan === "string") return { kind: "rejected", reason: plan };
-      return { kind: "mutations", mutations: [plan.mutation] };
-    },
-  };
+      return plan({ libraries: [{ legacyPart: spec.part, bytes: spec.serialize(spec.withRecords(lib, records)) }] });
+  }
 }
 
 // ------------------------------------------------------ the five kinds
@@ -328,7 +328,7 @@ export const RECIPE_KINDS: readonly { kind: string; title: string; schema: reado
   { kind: "objectsOnPath", title: "Objects on a path", schema: OBJECTS_ON_PATH_SCHEMA },
 ];
 
-export function makeRecipeKinds(host: BundleHost): ObjectKindContribution[] {
+export function makeRecipeKinds(host: BundleHost): (ObjectKindContribution & Planner)[] {
   return [
     makeRecipeKind(host, {
       kind: "pattern",

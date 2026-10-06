@@ -32,13 +32,17 @@
 //     their recipe, which exist only after the artwork batch commits, so
 //     a label write would be a SECOND mutation — and break the one-undo-
 //     step make/update every flow here was built to (CLAUDE.md, C-15).
-//   · the OBJECT-MODEL lane (`planRecipeWrite`, `host.objects`) is the
+//   · the OBJECT-MODEL lane (`planRecipeWrites`, `host.objects`) is the
 //     label-hash pattern: the library bytes into a CONTENT-ADDRESSED part
 //     `recipes/<name>/<hash>.json` (never overwritten), and the DOCUMENT
 //     label `x-paged:media.paged.draw` (designmap `<Document>` label,
-//     protocol 69 `setDocumentMetadata`) naming that hash, folded into
-//     the registry's ONE commit ⇒ one undo step. Undo reverts the label,
-//     and the read follows it back.
+//     protocol 69 `setDocumentMetadata`) naming that hash. It is a
+//     `state` write hosted on `doc` under the sub-key
+//     `x-paged:media.paged.draw.recipes`: the REGISTRY writes the parts
+//     and merges `data.recipes` into the label inside its ONE commit ⇒
+//     one undo step. Undo reverts the label, and the read follows it
+//     back. Every library a batch writes is planned together (the
+//     plugin-level `objectModel.batch`), so they share one label write.
 //
 // ONE READ reconciles the two. Every write also leaves the fixed-name
 // part as the latest state, stamped `_base` = the label hash it was
@@ -64,11 +68,7 @@
 // or one only commands ever wrote, does not survive an InDesign save —
 // recorded as a gap.
 
-import type {
-  BundleHost,
-  Mutation,
-  PluginMetadataEnvelope,
-} from "@paged-media/plugin-api";
+import type { BundleHost, PluginMetadataEnvelope } from "@paged-media/plugin-api";
 
 import manifest from "../manifest.json";
 
@@ -81,8 +81,10 @@ export type RecipeHost = Pick<BundleHost, "parts" | "supports" | "log"> & {
   >;
 };
 
-/** The label key — this plugin's own, the only one the engine lets it
- *  write (`x-paged:<id>.<sub>` is REFUSED by the engine: measured). */
+/** The label key — this plugin's own, the only one core lets it write.
+ *  The object-model lane writes the SUB-KEY `x-paged:<id>.recipes`
+ *  (`RECIPE_SUBKEY`), which the registry merges into this one label's
+ *  `data` (plugin-sdk DESIGN.md §21.8) — core itself never sees a sub-key. */
 export const RECIPE_LABEL_KEY = `x-paged:${manifest.id}`;
 
 /** The feature the label lane rides. */
@@ -294,15 +296,6 @@ export function withRecipeEntry(
   };
 }
 
-/** The raw document-label mutation (for a batch: the object model folds
- *  it into the registry's ONE commit). */
-export function recipeLabelMutation(envelope: PluginMetadataEnvelope): Mutation {
-  return {
-    op: "setDocumentMetadata",
-    args: { key: RECIPE_LABEL_KEY, value: asciiJson(JSON.stringify(envelope)), caller: manifest.id },
-  };
-}
-
 /**
  * Write a library (the COMMAND lane): the fixed-name part, OFF the undo
  * stack (see the header for why). When an object-model write has stamped
@@ -330,80 +323,86 @@ export async function writeRecipeBytes(
 
 // ------------------------------------------- the object-model lane
 
-/** A planned write: the label mutation to fold into the batch. The
- *  parts are already written (content-addressed / reconcilable, so a
- *  commit that then fails leaves the read unchanged — see the header). */
-export interface RecipePlan {
-  mutation: Mutation;
-  /** The content hash the label will name. */
-  h: string;
+/** The SUB-KEY the library entries ride under (plugin-sdk DESIGN.md
+ *  §21.8): the registry reads the document label, sets `data.recipes`,
+ *  and writes ONE merged label — every other `data` key survives. */
+export const RECIPE_SUBKEY = `${RECIPE_LABEL_KEY}.recipes`;
+
+/** One library a batch writes. */
+export interface RecipeWrite {
+  legacyPart: string;
+  bytes: Uint8Array;
 }
 
-/** Libraries planned in the CURRENT registry batch, per host. The label
- *  is one key, so two libraries in one batch would each write an
- *  envelope built from the same pre-batch label and the second would
- *  silently drop the first. The registry plans every kind of a batch
- *  back to back before it commits, so a plan still marked here when
- *  another library plans IS the same batch: refused, never merged (a
- *  merge could carry a refused batch's state into a later one).
- *
- *  The mark ends at the batch's commit — the document event it raises
- *  (`onDidChange`; the headless engine is synchronous, so a timer is NOT
- *  a batch boundary — measured). A batch refused after planning raises
- *  none: its mark then outlives it until the next document change or
- *  macrotask, which can only refuse (never corrupt) a following write of
- *  a DIFFERENT library. A registry-level "batch begins / ends" hook would
- *  make this exact (contract issue, reported). */
-const planning = new WeakMap<object, string>();
-const watched = new WeakSet<object>();
-
-function markPlanning(host: RecipeHost, name: string): void {
-  planning.set(host, name);
-  if (!watched.has(host) && typeof host.document?.onDidChange === "function") {
-    watched.add(host);
-    host.document.onDidChange(() => planning.delete(host));
-  }
-  setTimeout(() => {
-    if (planning.get(host) === name) planning.delete(host);
-  }, 0);
+/** A planned library write: a `state` write hosted on the document. The
+ *  REGISTRY writes the parts (content-addressed, the origin snapshot,
+ *  the stamped fixed-name part) and folds the label into its one commit;
+ *  the store writes nothing itself. */
+export interface RecipeStatePlan {
+  host: "doc";
+  labelKey: string;
+  /** `data.recipes`, as JSON text (ASCII — non-ASCII escaped). */
+  labelValue: string;
+  parts: { path: string; bytes: Uint8Array }[];
+  /** library name → the content hash the label will name. */
+  hashes: Record<string, string>;
 }
 
 /**
- * Plan a library write for `host.objects` (the label-hash pattern). Writes
- * the parts (the content-addressed state, the origin snapshot on a
- * library's first labelled write, and the stamped fixed-name part) and
- * returns the label mutation the registry commits. A string = refused.
+ * Plan EVERY library a batch writes as ONE document-label write (the
+ * label-hash pattern). The object model's plugin-level `batch` hands all
+ * of a batch's library writes here together, so two libraries in one
+ * batch land in one label (they share it). A later write of the same
+ * library in the list wins. A string = refused.
  */
-export async function planRecipeWrite(
+export async function planRecipeWrites(
   host: RecipeHost,
-  legacyPart: string,
-  bytes: Uint8Array,
-): Promise<RecipePlan | string> {
-  const name = recipeNameOf(legacyPart);
-  const busy = planning.get(host);
-  if (busy !== undefined && busy !== name) {
-    return (
-      `draw libraries "${busy}" and "${name}" in one batch: they share the ` +
-      "document label, so write them in separate batches"
-    );
-  }
+  writes: readonly RecipeWrite[],
+): Promise<RecipeStatePlan | string> {
+  if (writes.length === 0) return "no library to write";
   if (!labelled(host)) {
+    const names = writes.map((w) => recipeNameOf(w.legacyPart)).join(", ");
     return (
-      `${name}: this host has no document label door (${RECIPE_LABEL_FEATURE}) — ` +
+      `${names}: this host has no document label door (${RECIPE_LABEL_FEATURE}) — ` +
       "a library write cannot be made undoable here"
     );
   }
-  markPlanning(host, name);
+  const last = new Map<string, RecipeWrite>();
+  for (const w of writes) last.set(w.legacyPart, w);
   const label = await readLabel(host);
-  const prior = recipeEntriesOf(label)[name];
-  if (!prior) {
-    // The state the label falls back to if this write is undone.
-    const before = await readRecipeBytes(host, legacyPart);
-    await host.parts.write(recipeOriginPath(name), before ?? new Uint8Array());
+  const prior = recipeEntriesOf(label);
+  let envelope: PluginMetadataEnvelope | null = label;
+  const parts: { path: string; bytes: Uint8Array }[] = [];
+  const hashes: Record<string, string> = {};
+  for (const { legacyPart, bytes } of last.values()) {
+    const name = recipeNameOf(legacyPart);
+    if (!prior[name]) {
+      // The state the label falls back to if this write is undone.
+      const before = await readRecipeBytes(host, legacyPart);
+      parts.push({ path: recipeOriginPath(name), bytes: before ?? new Uint8Array() });
+    }
+    const next = withRecipeEntry(envelope, name, bytes);
+    envelope = next.envelope;
+    hashes[name] = next.h;
+    parts.push({ path: recipePartPath(name, next.h), bytes });
+    parts.push({ path: legacyPart, bytes: stampBase(bytes, next.h) });
+    // The stamp lands only if the registry commits; forget the cached
+    // one so the command lane re-reads the part (never trusts a guess).
+    lastBase.get(host)?.delete(legacyPart);
   }
-  const { envelope, h } = withRecipeEntry(label, name, bytes);
-  await host.parts.write(recipePartPath(name, h), bytes);
-  await host.parts.write(legacyPart, stampBase(bytes, h));
-  rememberBase(host, legacyPart, h);
-  return { mutation: recipeLabelMutation(envelope), h };
+  const recipes = (envelope!.data as { recipes: unknown }).recipes;
+  return {
+    host: "doc",
+    labelKey: RECIPE_SUBKEY,
+    labelValue: asciiJson(JSON.stringify(recipes)),
+    parts,
+    hashes,
+  };
 }
+
+/** One library alone (the single-write form of `planRecipeWrites`). */
+export const planRecipeWrite = (
+  host: RecipeHost,
+  legacyPart: string,
+  bytes: Uint8Array,
+): Promise<RecipeStatePlan | string> => planRecipeWrites(host, [{ legacyPart, bytes }]);

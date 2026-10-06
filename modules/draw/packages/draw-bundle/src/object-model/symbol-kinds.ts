@@ -58,7 +58,7 @@ import {
   type SymbolInstance,
 } from "../commands/symbols";
 import { linkIndex } from "../link-index";
-import { planRecipeWrite } from "../recipe-store";
+import { fromWrite, kindBatch, plan, rejected, type Planned, type Planner } from "./plan";
 import {
   BOOL,
   INT,
@@ -108,9 +108,9 @@ async function unlinkOps(host: BundleHost, instance: SymbolInstance): Promise<Mu
   return out;
 }
 
-export function makeSymbolKind(host: BundleHost): ObjectKindContribution {
+export function makeSymbolKind(host: BundleHost): ObjectKindContribution & Planner {
   const idOf = (address: string) => localIdOf(address, SYMBOL_KIND);
-  return {
+  const symbolKind: ObjectKindContribution & Planner = {
     kind: SYMBOL_KIND,
     title: "Symbol",
     schema: SYMBOL_SCHEMA,
@@ -142,63 +142,56 @@ export function makeSymbolKind(host: BundleHost): ObjectKindContribution {
           return refuse("unknownPath", `symbol has no "${path}"`);
       }
     },
-    async batch(ops: readonly ObjectOp[]): Promise<ObjectWrite> {
+    batch: (ops: readonly ObjectOp[]) => kindBatch(host, (o) => symbolKind.plan(o))(ops),
+    async plan(ops: readonly ObjectOp[]): Promise<Planned> {
       let library = await readSymbolLibrary(host);
       const mutations: MutationInput[] = [];
       for (const op of ops) {
         if (op.op === "create") {
-          return {
-            kind: "rejected",
-            reason: `a symbol is captured from artwork — invoke ${"media.paged.draw.command.defineSymbol"} with its targets`,
-          };
+          return rejected(
+            `a symbol is captured from artwork — invoke ${"media.paged.draw.command.defineSymbol"} with its targets`,
+          );
         }
-        if (op.op === "invoke") return { kind: "rejected", reason: "symbol cannot invoke" };
+        if (op.op === "invoke") return rejected("symbol cannot invoke");
         const id = idOf(op.address);
         const def = id ? findSymbol(library, id) : null;
-        if (!def) return { kind: "rejected", reason: `no symbol ${op.address}` };
+        if (!def) return rejected(`no symbol ${op.address}`);
         if (op.op === "delete") {
           for (const inst of await symbolInstances(host, def.id)) mutations.push(...(await unlinkOps(host, inst)));
           library = removeSymbolFrom(library, def.id);
         } else if (op.path === "name") {
           library = renameSymbolIn(library, def.id, String(op.value));
         } else {
-          return { kind: "rejected", reason: `symbol has no writable "${op.path}"` };
+          return rejected(`symbol has no writable "${op.path}"`);
         }
       }
-      const plan = await planRecipeWrite(host, SYMBOLS_PART, serializeSymbolLibrary(library));
-      if (typeof plan === "string") return { kind: "rejected", reason: plan };
-      return { kind: "mutations", mutations: [plan.mutation, ...mutations] };
+      return plan({ mutations, libraries: [{ legacyPart: SYMBOLS_PART, bytes: serializeSymbolLibrary(library) }] });
     },
   };
+  return symbolKind;
 }
 
-export function makeSymbolInstanceKind(host: BundleHost): ObjectKindContribution {
+export function makeSymbolInstanceKind(host: BundleHost): ObjectKindContribution & Planner {
   const idOf = (address: string) => localIdOf(address, SYMBOL_INSTANCE_KIND);
-  /** instance id → its first leaf's core address, from the last read
-   *  (`hostOf` is synchronous; an instance is only ever addressed after
-   *  a list / get found it). */
-  const firstLeaf = new Map<string, string>();
-  const remember = (all: readonly SymbolInstance[]) => {
-    for (const i of all) if (i.leaves[0]) firstLeaf.set(i.instance, coreAddressOf(i.leaves[0]));
-    return all;
-  };
   const find = async (address: string): Promise<SymbolInstance | null> => {
     const id = idOf(address);
     if (!id) return null;
-    return remember(await symbolInstances(host)).find((i) => i.instance === id) ?? null;
+    return (await symbolInstances(host)).find((i) => i.instance === id) ?? null;
   };
   return {
     kind: SYMBOL_INSTANCE_KIND,
     title: "Symbol instance",
     schema: SYMBOL_INSTANCE_SCHEMA,
     // ADR 559: an instance's labels go on its first leaf (a group cannot
-    // carry metadata).
-    hostOf: (address) => {
-      const id = idOf(address);
-      return id ? (firstLeaf.get(id) ?? null) : null;
+    // carry metadata). Resolved on demand (`hostOf` may be async since
+    // plugin-sdk 0.2.43), so a page-scoped selector works on an instance
+    // no earlier list or get has seen.
+    hostOf: async (address) => {
+      const leaf = (await find(address))?.leaves[0];
+      return leaf ? coreAddressOf(leaf) : null;
     },
     async list() {
-      return remember(await symbolInstances(host)).map((i) => addressOf(SYMBOL_INSTANCE_KIND, i.instance));
+      return (await symbolInstances(host)).map((i) => addressOf(SYMBOL_INSTANCE_KIND, i.instance));
     },
     async get(address, path): Promise<ObjectValue> {
       const inst = await find(address);
@@ -216,7 +209,11 @@ export function makeSymbolInstanceKind(host: BundleHost): ObjectKindContribution
           return refuse("unknownPath", `symbolInstance has no "${path}"`);
       }
     },
-    async batch(ops: readonly ObjectOp[]): Promise<ObjectWrite> {
+    plan: async (ops) => fromWrite(await planInstances(ops)),
+    batch: kindBatch(host, async (ops) => fromWrite(await planInstances(ops))),
+  };
+
+  async function planInstances(ops: readonly ObjectOp[]): Promise<ObjectWrite> {
       const mutations: MutationInput[] = [];
       for (const op of ops) {
         if (op.op !== "set" || op.path !== "linked") {
@@ -231,6 +228,5 @@ export function makeSymbolInstanceKind(host: BundleHost): ObjectKindContribution
         mutations.push(...(await unlinkOps(host, inst)));
       }
       return { kind: "mutations", mutations };
-    },
-  };
+  }
 }

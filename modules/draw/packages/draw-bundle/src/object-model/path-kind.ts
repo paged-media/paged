@@ -28,11 +28,14 @@
 // `framePath` mutation — ONE batch, ONE undo step. Nothing is stored by
 // the plugin.
 //
-// What it deliberately does not carry: per-point paths
-// (`points[3].anchor`) — a schema row is a fixed path, so an indexed
-// path cannot be declared (contract issue, reported); and `subpathOpen`
-// is read-only because `framePath` takes no open flags (the open/close
-// doors are `pathOpenAt` / `closePath` — draw's Join / Close commands).
+// ONE POINT is an INDEXED row (plugin-sdk DESIGN.md §21.8): `points[]`
+// is one anchor triple, `points[].anchor` / `.left` / `.right` one of its
+// points, so `points[3].anchor` reads or moves one handle; a write is
+// still the whole table through `framePath` (one mutation per element,
+// however many points a batch touches). An index past the table is
+// refused, never appended. `subpathOpen` is read-only because
+// `framePath` takes no open flags (the open/close doors are `pathOpenAt`
+// / `closePath` — draw's Join / Close commands).
 
 import type {
   BundleHost,
@@ -41,14 +44,17 @@ import type {
   ObjectKindContribution,
   ObjectOp,
   ObjectValue,
+  ObjectWrite,
   PropertySchema,
 } from "@paged-media/plugin-api";
 
 import { framePathMutationFor } from "../commands/compound-path";
+import { fromWrite, kindBatch, type Planner } from "./plan";
 import {
   ANCHOR,
   BOOL,
   INT,
+  POINT,
   addressOf,
   coreAddressOf,
   derived,
@@ -73,6 +79,13 @@ export const PATH_SCHEMA: readonly PropertySchema[] = [
         "Every anchor with its two direction handles, in the item's inner coordinates (pt), contour after contour. A write replaces the whole table (framePath).",
     },
   ),
+  row("points[]", ANCHOR, {
+    title: "Point",
+    summary: "One anchor with its two direction handles (`points[3]`); a write replaces that point only.",
+  }),
+  row("points[].anchor", POINT, { title: "Anchor", summary: "One point's anchor (`points[3].anchor`)." }),
+  row("points[].left", POINT, { title: "Left handle", summary: "One point's incoming direction handle." }),
+  row("points[].right", POINT, { title: "Right handle", summary: "One point's outgoing direction handle." }),
   row(
     "subpathStarts",
     { kind: "list", of: INT },
@@ -106,6 +119,13 @@ interface Table {
 
 const pair = (p: readonly number[]): [number, number] => [p[0]!, p[1]!];
 
+/** `points[3]` → { index: 3 }, `points[3].left` → { index: 3, field: "left" }. */
+export function pointPathOf(path: string): { index: number; field?: "anchor" | "left" | "right" } | null {
+  const m = /^points\[(\d+)\](?:\.(anchor|left|right))?$/.exec(path);
+  if (!m) return null;
+  return { index: Number(m[1]), ...(m[2] ? { field: m[2] as "anchor" | "left" | "right" } : {}) };
+}
+
 async function readTable(host: BundleHost, id: ElementId): Promise<Table | null> {
   const r = await host.document.pathAnchors(id);
   if (!r) return null;
@@ -128,7 +148,7 @@ export function validSubpathStarts(starts: readonly number[], n: number): boolea
   return true;
 }
 
-export function makePathKind(host: BundleHost): ObjectKindContribution {
+export function makePathKind(host: BundleHost): ObjectKindContribution & Planner {
   const elementOf = (address: string): ElementId | null => {
     const id = localIdOf(address, PATH_KIND);
     const el = id ? elementOfId(id) : null;
@@ -151,6 +171,12 @@ export function makePathKind(host: BundleHost): ObjectKindContribution {
       if (!el) return refuse("unknownAddress", `${address} is not a path-bearing page item`);
       const t = await readTable(host, el);
       if (!t) return refuse("unknownAddress", `${address}: the engine answered no anchor table`);
+      const one = pointPathOf(path);
+      if (one) {
+        const p = t.anchors[one.index];
+        if (!p) return refuse("unknownPath", `${address} has ${t.anchors.length} points, no ${path}`);
+        return val(one.field ? p[one.field] : p);
+      }
       switch (path) {
         case "points":
         case "content":
@@ -169,7 +195,11 @@ export function makePathKind(host: BundleHost): ObjectKindContribution {
           return refuse("unknownPath", `path has no "${path}"`);
       }
     },
-    async batch(ops: readonly ObjectOp[]) {
+    plan: async (ops) => fromWrite(await planPath(ops)),
+    batch: kindBatch(host, async (ops) => fromWrite(await planPath(ops))),
+  };
+
+  async function planPath(ops: readonly ObjectOp[]): Promise<ObjectWrite> {
       // Fold every op per element onto its table, then ONE framePath each.
       const tables = new Map<string, { el: ElementId; t: Table; starts: boolean }>();
       for (const op of ops) {
@@ -197,6 +227,21 @@ export function makePathKind(host: BundleHost): ObjectKindContribution {
             left: pair(p.left),
             right: pair(p.right),
           }));
+        } else if (pointPathOf(op.path)) {
+          const one = pointPathOf(op.path)!;
+          const p = entry.t.anchors[one.index];
+          if (!p) {
+            return {
+              kind: "rejected",
+              reason: `${op.address} has ${entry.t.anchors.length} points, no ${op.path} (set points to add one)`,
+            };
+          }
+          if (one.field) {
+            p[one.field] = pair(op.value as number[]);
+          } else {
+            const v = op.value as Triple;
+            entry.t.anchors[one.index] = { anchor: pair(v.anchor), left: pair(v.left), right: pair(v.right) };
+          }
         } else if (op.path === "subpathStarts") {
           entry.t.subpathStarts = [...(op.value as number[])];
           entry.starts = true;
@@ -222,6 +267,5 @@ export function makePathKind(host: BundleHost): ObjectKindContribution {
         );
       }
       return { kind: "mutations", mutations };
-    },
-  };
+  }
 }

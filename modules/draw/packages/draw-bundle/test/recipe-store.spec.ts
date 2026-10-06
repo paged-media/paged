@@ -27,7 +27,9 @@ import type { PluginMetadataEnvelope } from "@paged-media/plugin-api";
 
 import {
   INLINE_BUDGET,
+  RECIPE_SUBKEY,
   planRecipeWrite,
+  planRecipeWrites,
   readRecipeBytes,
   recipeEntriesOf,
   withRecipeEntry,
@@ -64,10 +66,13 @@ function fakeHost() {
       },
     },
   };
-  /** Commit a planned label mutation as the registry would. */
-  const commit = (m: { args: { value?: string | null } }) => {
+  /** Commit a planned `state` write as the registry does: the parts
+   *  first, then the sub-key merged into the one document label. */
+  const commit = async (p: { parts: { path: string; bytes: Uint8Array }[]; labelKey: string; labelValue: string }) => {
+    expect(p.labelKey).toBe(RECIPE_SUBKEY);
+    for (const part of p.parts) parts.set(part.path, part.bytes);
     history.push(label);
-    label = m.args.value ? (JSON.parse(m.args.value) as PluginMetadataEnvelope) : null;
+    label = { v: label?.v ?? 1, data: { ...(label?.data ?? {}), recipes: JSON.parse(p.labelValue) } };
   };
   const undo = () => {
     label = history.pop() ?? null;
@@ -90,12 +95,11 @@ describe("recipe store — one read over two write lanes", () => {
     await writeRecipeBytes(f.host, LEGACY, enc('{"v":1,"repeats":["A"]}'));
     const p1 = await planRecipeWrite(f.host, LEGACY, enc('{"v":1,"repeats":["B"]}'));
     if (typeof p1 === "string") throw new Error(p1);
-    f.commit(p1.mutation as never);
+    await f.commit(p1);
     expect(JSON.parse(dec(await readRecipeBytes(f.host, LEGACY))!)).toEqual({ v: 1, repeats: ["B"] });
-    await new Promise((r) => setTimeout(r, 0)); // the next batch
     const p2 = await planRecipeWrite(f.host, LEGACY, enc('{"v":1,"repeats":["C"]}'));
     if (typeof p2 === "string") throw new Error(p2);
-    f.commit(p2.mutation as never);
+    await f.commit(p2);
     f.undo();
     expect(JSON.parse(dec(await readRecipeBytes(f.host, LEGACY))!)).toEqual({ v: 1, repeats: ["B"] });
     f.undo();
@@ -106,7 +110,7 @@ describe("recipe store — one read over two write lanes", () => {
     const f = fakeHost();
     const p = await planRecipeWrite(f.host, LEGACY, enc('{"v":1,"repeats":["B"]}'));
     if (typeof p === "string") throw new Error(p);
-    f.commit(p.mutation as never);
+    await f.commit(p);
     await readRecipeBytes(f.host, LEGACY);
     await writeRecipeBytes(f.host, LEGACY, enc('{"v":1,"repeats":["D"]}'));
     expect(JSON.parse(dec(await readRecipeBytes(f.host, LEGACY))!)).toEqual({ v: 1, repeats: ["D"] });
@@ -117,8 +121,8 @@ describe("recipe store — one read over two write lanes", () => {
     const p = await planRecipeWrite(f.host, LEGACY, enc('{"v":1,"repeats":["Ü"]}'));
     if (typeof p === "string") throw new Error(p);
     // The label value is ASCII (non-ASCII escaped), as InDesign keeps it.
-    expect((p.mutation as { args: { value: string } }).args.value).toMatch(/^[\x20-\x7e]*$/);
-    f.commit(p.mutation as never);
+    expect(p.labelValue).toMatch(/^[\x20-\x7e]*$/);
+    await f.commit(p);
     f.parts.clear();
     expect(JSON.parse(dec(await readRecipeBytes(f.host, LEGACY))!)).toEqual({ v: 1, repeats: ["Ü"] });
   });
@@ -132,11 +136,41 @@ describe("recipe store — one read over two write lanes", () => {
     expect(recipeEntriesOf(small.envelope).repeat!.h).toBe(recipeEntriesOf(envelope).repeat!.h);
   });
 
-  it("two libraries planned in one batch are refused", async () => {
+  it("planning writes nothing: the parts are the registry's to write", async () => {
     const f = fakeHost();
-    const a = await planRecipeWrite(f.host, "repeat.json", enc("{}"));
-    const b = await planRecipeWrite(f.host, "blend.json", enc("{}"));
-    expect(typeof a).toBe("object");
-    expect(b).toMatch(/share the document label/);
+    const p = await planRecipeWrite(f.host, LEGACY, enc('{"v":1,"repeats":["B"]}'));
+    if (typeof p === "string") throw new Error(p);
+    expect(f.parts.size).toBe(0);
+    expect(p.host).toBe("doc");
+    expect(p.parts.map((x) => x.path)).toEqual([
+      "recipes/repeat/origin.json",
+      `recipes/repeat/${p.hashes.repeat}.json`,
+      LEGACY,
+    ]);
+  });
+
+  it("two libraries in one batch are ONE label write carrying both entries", async () => {
+    const f = fakeHost();
+    const p = await planRecipeWrites(f.host, [
+      { legacyPart: "repeat.json", bytes: enc('{"v":1,"repeats":["R"]}') },
+      { legacyPart: "blend.json", bytes: enc('{"v":1,"blends":["B"]}') },
+    ]);
+    if (typeof p === "string") throw new Error(p);
+    await f.commit(p);
+    expect(Object.keys(recipeEntriesOf(f.label())).sort()).toEqual(["blend", "repeat"]);
+    expect(JSON.parse(dec(await readRecipeBytes(f.host, "repeat.json"))!)).toEqual({ v: 1, repeats: ["R"] });
+    expect(JSON.parse(dec(await readRecipeBytes(f.host, "blend.json"))!)).toEqual({ v: 1, blends: ["B"] });
+    // One undo reverts both.
+    f.undo();
+    expect(await readRecipeBytes(f.host, "repeat.json")).toBeNull();
+  });
+
+  it("the sub-key keeps every other data key of the document label", async () => {
+    const f = fakeHost();
+    await f.host.document!.setDocumentMetadata!({ v: 1, data: { other: 7 } });
+    const p = await planRecipeWrite(f.host, LEGACY, enc("{}"));
+    if (typeof p === "string") throw new Error(p);
+    await f.commit(p);
+    expect(f.label()!.data).toMatchObject({ other: 7 });
   });
 });
