@@ -2038,8 +2038,9 @@ the harness options `engineShaper` / `confirmReplace` +
 
 ## 21. The object model (ADR 323 — `contribute.objectModel`, `host.objects`)
 
-**Status:** contract + registry + core seam implemented (0.2.43-canary.0);
-the plugins contribute their models in the next wave. Records: ADR 131
+**Status:** contract + registry + core seam implemented (0.2.44-canary.0;
+the core seam speaks protocol 71, §21.9); the plugins contribute their
+models in the next wave. Records: ADR 131
 (addresses), ADR 132 (schemas, `Set`), ADR 323 (this contract), ADR 324
 (the Node CLI that injects it), all PROPOSED in the thoughts register.
 
@@ -2072,11 +2073,17 @@ plugin's own panels; commands took `payload: unknown`.
 `parseAddress` / `formatAddress` / `parseSelector` (plugin-sdk
 `object-address.ts`) mirror core's `paged_wire::Address` grammar: canonical
 `textFrame:<id>` … `storyRange:<id>@a..b`, `page:#n`, `cell:<t>/<r>,<c>`,
-`style:<family>/<rest>`, `plugin:…`, `$h:`; aliases (`frame:`,
-`story:<id>@a..b`, `rect`, …) parse and are never emitted; ids
-percent-escape only where they must stop at a delimiter. fast-check pins
-`parse(format(a)) = a` and `format(parse(s)) = s`. When core exports its
-corpus the spec runs it too.
+`style:<family>/<rest>`, `textVariable:<id>`, `plugin:…`, `$h:`; aliases
+(`story:<id>@a..b`, `rect`, `textvariable`, …) parse and are never emitted.
+Escaping follows core's protocol-71 rule exactly: a plain id runs to the
+end of the address verbatim (`story:Story/u1`, `layer:Layer/u0`), and `%`
+escapes ONLY the delimiter that would end an id — the `@` of a story id in
+`storyRange:` / `field:`, the `/` of a table id in `cell:` and of the
+plugin id and kind in `plugin:`, the `>` of a master scope — and `%`
+itself there. fast-check pins `parse(format(a)) = a` and
+`format(parse(s)) = s`, and the spec runs core's corpus: every
+`idGrammar` example of the vendored catalog parses and formats back
+byte-identically.
 
 An address is a SESSION handle: InDesign renumbers every `Self` on save.
 Nothing in this contract persists one. A plugin object's labels live on
@@ -2102,9 +2109,10 @@ mutation plus every label goes to the engine as ONE `batch` — one undo
 step, which reverts the label, which is how a plugin's state comes back
 on undo with no plugin-side history. A refusal anywhere applies nothing.
 
-### 21.4 The core seam (today's wire → core's `Set` later)
+### 21.4 The core seam below protocol 71 (the interim table)
 
-`core-objects.ts` maps each core kind through one table onto the v69 wire:
+Since 0.2.44 this is the FALLBACK (`core-objects-v70.ts`), used while the
+engine reports protocol < 71 (§21.9). `core-objects-v70.ts` maps each core kind through one table onto the v69 wire:
 frame and story-range paths → `setElementProperty` /
 `requestElementProperties`; story `content` → `deleteRange`+`insertText`;
 layers → `layerSet*`; `pageBounds` / `appliedMaster` → `resizePage` /
@@ -2119,9 +2127,12 @@ Core selectors are evaluated here over the scene tree and the collections
 `core-schema.ts`, a `Record<PropertyPath, …>` (a new wire path fails
 typecheck until classified) whose wire variants were read off the
 published engine; the rows it could not probe are marked `inferred`.
-When core's `Get`/`Set`/`Query`/`Schema` (ADR 132) publish, this file
-collapses to four wire calls and the vendored catalog's `propertySchemas`
-replace `core-schema.ts`; the registry and the contract do not change.
+Where the vendored catalog types a path, this seam serves the catalog's
+type, range and default (the wire variant is the same on the older
+engine), so only `tableRowCount` / `tableColumnCount` stay `inferred`.
+Tables and cells read and write through `TableCell` / `Table` ids once a
+table's story is known (`CoreObjects.noteTableStory`, moved here from the
+editor's object-model shim).
 
 ### 21.5 Gates
 
@@ -2169,7 +2180,12 @@ new types, a new manifest field, a new host option, new runtime exports.
 The harness also gains `objects` and `dataProviders` (shared, injected
 into every bundle host) and now hosts SEVERAL bundles at once — `host`
 is the last loaded one's; the old "one bundle per headless host" throw is
-gone. No wire change.
+gone. 0.2.44 re-vendors the protocol-71 wire and catalog (additive: `set`,
+the text-variable ops, new `Value` variants, `propertySchemas`) and adds
+`ObjectWriteResult.created`, `ValueType` struct `shape` / `open` and the
+`textVariable` address — all additive. One behaviour change: the address
+formatter no longer percent-escapes a plain id (`story:Story/u1`, not
+`story:Story%2Fu1`), because core's grammar reads the id verbatim.
 
 ### 21.8 Fix-ups from the first consumers (0.2.43-canary.0)
 
@@ -2232,4 +2248,63 @@ spec in `object-model-fixups.spec.ts` (real engine, canvas-wasm 0.70.0).
   are percentages; bevel altitude is degrees; the four `cellInset*` rows
   are lengths on the `length` wire (they were `text`). Percent rows carry
   0–100 (opacity, tint, noise, choke, spread).
+
+### 21.9 The core seam on protocol 71 (ADR 131 / 132)
+
+`createCoreObjects(getEditor, { protocol? })` feature-detects the engine:
+an explicit `protocol` (the headless harness passes its engine's), else
+ONE `requestQuery { selector: "doc" }` probe — every engine reply carries
+`protocol`, and an engine that predates the message still answers it (a
+salvaged `mutationFailed`), so the probe never hangs. At >= 71
+(`core-objects-v71.ts`):
+
+- **Reads** are `RequestGet { address, path }`; **writes** are
+  `Mutation::Set { address, path, value: { type: <row.wire>, value } }`
+  — core resolves each path (virtual or not) to the ONE op that writes
+  it, so undo is that op's; **queries** are `RequestQuery { selector }`,
+  evaluated by core (the SDK's `style:<family>` kind word becomes `style`
+  plus a prefix filter; a selector core's grammar refuses — an SDK-only
+  predicate key such as `page[index=1]` — falls back to the SDK's own
+  evaluation). The hand mapping (`setElementProperty`, `layerSet*`,
+  `resizePage`, `setDocumentDefaults` read-modify-write, `editSwatch`
+  read-modify-write, `setStyleProperty`) is gone at 71.
+- **Rows** are the vendored catalog's `propertySchemas`, normalised
+  (`core-schema.ts` `coreSchema71`): enums keep their members, `count`
+  numbers are integers, `degrees` is `deg`, a struct is `{ kind:
+  "struct", fields: {}, shape, open: true }` (the plugin-api `ValueType`
+  gains the additive `shape` / `open`; core validates the fields), a list
+  carries its item type; indexed core paths (`labels[key]`,
+  `rows[i].height`) are `[]` rows; rows the catalog lists under a Boa
+  alias are listed under the wire path the registry canonicalises to;
+  style rows are per family (`style:paragraph` …). Nothing is inferred
+  except the four wire paths core's catalog gives no row
+  (`CORE_ROWLESS_PATHS`: `nextTextFrame`, `previousTextFrame`,
+  `tableRowCount`, `tableColumnCount`), which `RequestGet` cannot read
+  either: they stay on the old element read (a table's story is found
+  through core's query), with a `summary` that says so.
+- **SDK rows on top of core's**: story `content` and its counts, the
+  `labels` map, page `index`, doc `pageCount` / `documentName` / `dirty`,
+  swatch `swatchKind`, style `name` / `basedOn`, spread and master
+  `label` / `pageCount` — served by the old seam, which the new one wraps.
+  A `story:<id>` address takes character and paragraph paths (rewritten
+  to the whole range); a swatch NAME resolves to its self id.
+- **Creates and deletes.** `ObjectOp` `create` of a CORE kind plans the
+  create op, then its remaining props as ordinary `Set`s on the new object,
+  all in the one batch: `swatch` (`Color/<name>`), `gradient`,
+  `colorGroup`, `style:<family>` (`<Family>Style/<name>`), `textVariable`
+  (`dTextVariablen<name>`), `layer` (minted: only `name` / `position`),
+  `page`, `textFrame` / `rectangle` / `oval` (`within` a page,
+  `frameBounds`). Known ids are addressed directly; minted objects get a
+  `bindCreated` handle (the op's `handle`, else a generated one), so a
+  later op of the same batch may address `$h:<handle>`. The create's own
+  props are validated against the kind's rows like sets. The result's new
+  `created` lists the new addresses in op order. `delete` maps every kind
+  with a wire delete (`core-ops.ts`; `textVariable` needs 71). A data
+  binding that mints a swatch and applies it is therefore ONE undo step.
+- **Engine refusals at commit** map to codes by their text
+  (`codeOfEngineError`: `names nothing` → `unknownAddress`, `not one of`
+  → `invalidValue`, …) instead of a bare `failed`.
+- Below 71 every one of these answers as in §21.4, and a core create is
+  `unmapped`. The object-model specs run on both engines (protocol-aware
+  where the answer differs).
 

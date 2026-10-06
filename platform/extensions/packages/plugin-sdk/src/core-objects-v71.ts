@@ -29,8 +29,10 @@
 // stays on the pre-71 seam, which this one wraps: story `content` and its
 // counts, the `labels` map, page `index`, doc `pageCount` / `documentName`
 // / `dirty`, swatch `swatchKind`, style `name` / `basedOn`, spread and
-// master `label` / `pageCount`. Labels and the commit go through it too
-// (they are the same ops at 71).
+// master `label` / `pageCount`; and the four wire paths core's catalog
+// gives no row (CORE_ROWLESS_PATHS: `nextTextFrame`, `previousTextFrame`,
+// `tableRowCount`, `tableColumnCount`), which `RequestGet` cannot read.
+// Labels and the commit go through it too (they are the same ops at 71).
 
 import type {
   MutationInput,
@@ -216,6 +218,24 @@ export function createCoreObjectsV71(getEditor: () => PagedEditor, v70: V70): Co
     return formatAddress(a);
   }
 
+  /** Tell the old seam a table's story (core's query knows containment:
+   *  story → table), so a row core's catalog lacks still reads on cells. */
+  const tableStoriesFound = new Set<string>();
+  async function noteStoryOf(a: ParsedAddress): Promise<void> {
+    const table = a.kind === "table" ? a.id : a.kind === "cell" ? a.table : null;
+    if (table === null || tableStoriesFound.has(table)) return;
+    for (const s of await collection<{ selfId: string }>("stories")) {
+      const story = formatAddress({ kind: "story", id: s.selfId });
+      const r = await send("requestQuery", { selector: `"${story}" > table` });
+      const found = r?.kind === "queryResult" && (r.payload.addresses as string[]).includes(formatAddress({ kind: "table", id: table }));
+      if (found) {
+        v70.noteTableStory!(table, s.selfId);
+        tableStoriesFound.add(table);
+        return;
+      }
+    }
+  }
+
   const self: CoreObjects = {
     async ready() {
       return 71;
@@ -241,6 +261,12 @@ export function createCoreObjectsV71(getEditor: () => PagedEditor, v70: V70): Co
       const kind = kindOf(a);
       if (extra(kind, path)) return v70.get(a, path);
       const row = findCoreRow(rowsOf(kind), path);
+      // A path core's catalog has no row for is not readable through
+      // RequestGet either: the old element read still answers it.
+      if (row?.inferred) {
+        await noteStoryOf(a);
+        return v70.get(a, path);
+      }
       const address = await target(a, row);
       if (address === null) return v70.get(a, path); // an empty story: the old range read
       const r = await send("requestGet", { address, path });
@@ -255,6 +281,10 @@ export function createCoreObjectsV71(getEditor: () => PagedEditor, v70: V70): Co
       const kind = a.kind === "handle" ? (handleKind ?? "") : kindOf(a);
       if (a.kind !== "handle" && extra(kind, path)) return v70.planSet(a, path, value);
       const row = findCoreRow(rowsOf(kind), path);
+      if (row?.inferred && a.kind !== "handle") {
+        await noteStoryOf(a);
+        return v70.planSet(a, path, value);
+      }
       let wire: unknown;
       if (isRawWire(value)) wire = value;
       else if (row) wire = { type: row.wire, value };

@@ -60,7 +60,7 @@ import type {
 
 import type { CoreObjects, CorePlan } from "./core-objects";
 import { planCoreDelete } from "./core-ops";
-import { CORE_PATHS, corePathRange, type CorePathRow, type CorePathScope } from "./core-schema";
+import { CORE_PATHS, corePathRange, coreSchema71, type CorePathRow, type CorePathScope } from "./core-schema";
 import { formatAddress, fromElementId, type SelectorStep } from "./object-address";
 
 /** One core object as the selector engine sees it. */
@@ -84,13 +84,21 @@ const ro = (path: string, type: ValueType, summary?: string, access: "readOnly" 
   ...(summary ? { summary } : {}),
 });
 
+/** The table's rows for a scope. Where core's catalog (vendored, protocol
+ *  71) types the same path, its type, range and default win — the wire
+ *  variant is the same on the older engine, and the catalog names enum
+ *  members the table cannot; the table's own type is the fallback. */
 function rowsOf(scope: CorePathScope, addressKind: string): PropertySchema[] {
   const rows: PropertySchema[] = [];
+  const typed = coreSchema71().get(scope);
   for (const [path, row] of Object.entries(CORE_PATHS)) {
     if ("op" in row || "since" in row || row.scope !== scope || !row.type) continue;
-    const r: PropertySchema = { addressKind, path, type: row.type, nullable: true };
-    const range = corePathRange(path);
+    const core = typed?.get(path);
+    const fromCore = core && !core.inferred ? core.schema : null;
+    const r: PropertySchema = { addressKind, path, type: fromCore?.type ?? row.type, nullable: true };
+    const range = fromCore ? fromCore.range : corePathRange(path);
     if (range) r.range = range;
+    if (fromCore?.default !== undefined) r.default = fromCore.default;
     if (row.readOnly) r.access = "readOnly";
     rows.push(r);
   }

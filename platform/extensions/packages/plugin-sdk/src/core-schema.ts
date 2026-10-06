@@ -34,13 +34,12 @@
 //
 // Where each row comes from: the wire `Value` variant the published engine
 // (0.69.0) answers for that path in `requestElementProperties` /
-// `requestStyleProperties` on frames, story ranges and styles, read off a
-// real document (`inferred` absent). Rows the probe could not reach (layer,
-// page, cell, table, anchored-object paths) are inferred from the name and
-// marked `inferred: true`. Semantic refinements over the wire variant
-// (`length` → `number` in deg / percent / integer; `text` → `ref`) follow
-// the path names; enum MEMBERS are not known to the SDK, so enum-like paths
-// are `text` until core's table names them.
+// `requestStyleProperties`, read off a real document. The table's own
+// `type` is now only a FALLBACK: wherever core's catalog types the same
+// path, the pre-71 seam serves the catalog's type, range and default
+// (enum members included) — the wire variant is the same on the older
+// engine. `inferred: true` is left only on the two paths core's catalog
+// gives no row and no probe reached (`tableRowCount`, `tableColumnCount`).
 //
 // `wire` is the `Value` variant a WRITE must carry. Rows without `type`
 // are structured values (gradient feather, paragraph rules, tab stops) or
@@ -74,15 +73,15 @@ export const CORE_PATHS: Record<PropertyPath, CorePathRow | typeof OP | typeof V
   frameStrokeWeight: { scope: "frame", wire: "length", type: { kind: "length" } },
   frameOpacity: { scope: "frame", wire: "length", type: PCT },
   frameTransform: { scope: "frame", wire: "transform", type: { kind: "transform" } },
-  imageContentTransform: { scope: "frame", wire: "transform", type: { kind: "transform" }, inferred: true },
+  imageContentTransform: { scope: "frame", wire: "transform", type: { kind: "transform" } },
   framePathPoint: OP,
   pathPointInsert: OP,
   pathPointRemove: OP,
   pathPointCurveType: OP,
-  layerVisible: { scope: "layer", wire: "bool", type: { kind: "bool" }, inferred: true },
-  layerLocked: { scope: "layer", wire: "bool", type: { kind: "bool" }, inferred: true },
-  layerPrintable: { scope: "layer", wire: "bool", type: { kind: "bool" }, inferred: true },
-  layerName: { scope: "layer", wire: "text", type: { kind: "text" }, inferred: true },
+  layerVisible: { scope: "layer", wire: "bool", type: { kind: "bool" } },
+  layerLocked: { scope: "layer", wire: "bool", type: { kind: "bool" } },
+  layerPrintable: { scope: "layer", wire: "bool", type: { kind: "bool" } },
+  layerName: { scope: "layer", wire: "text", type: { kind: "text" } },
   characterFontSize: { scope: "story", wire: "length", type: { kind: "length" } },
   characterLeading: { scope: "story", wire: "length", type: { kind: "length" } },
   characterTracking: { scope: "story", wire: "length", type: { kind: "number", unit: "em1000" } },
@@ -94,8 +93,8 @@ export const CORE_PATHS: Record<PropertyPath, CorePathRow | typeof OP | typeof V
   appliedCharacterStyle: { scope: "story", wire: "text", type: { kind: "ref", to: "style:character" } },
   appliedObjectStyle: { scope: "frame", wire: "text", type: { kind: "ref", to: "style:object" } },
   itemLayer: { scope: "frame", wire: "text", type: { kind: "ref", to: "layer" } },
-  appliedCellStyle: { scope: "cell", wire: "text", type: { kind: "ref", to: "style:cell" }, inferred: true },
-  appliedTableStyle: { scope: "table", wire: "text", type: { kind: "ref", to: "style:table" }, inferred: true },
+  appliedCellStyle: { scope: "cell", wire: "text", type: { kind: "ref", to: "style:cell" } },
+  appliedTableStyle: { scope: "table", wire: "text", type: { kind: "ref", to: "style:table" } },
   framePath: OP,
   frameNonprinting: { scope: "frame", wire: "bool", type: { kind: "bool" } },
   frameFillTint: { scope: "frame", wire: "length", type: PCT },
@@ -110,7 +109,7 @@ export const CORE_PATHS: Record<PropertyPath, CorePathRow | typeof OP | typeof V
   simplifyPath: OP,
   closePath: OP,
   frameGradientFeather: { scope: "frame", wire: "gradientFeather" },
-  pageBounds: { scope: "page", wire: "bounds", type: { kind: "bounds" }, inferred: true },
+  pageBounds: { scope: "page", wire: "bounds", type: { kind: "bounds" } },
   frameDropShadowMode: { scope: "frame", wire: "text", type: { kind: "text" } },
   frameDropShadowXOffset: { scope: "frame", wire: "length", type: { kind: "length" } },
   frameDropShadowYOffset: { scope: "frame", wire: "length", type: { kind: "length" } },
@@ -129,7 +128,7 @@ export const CORE_PATHS: Record<PropertyPath, CorePathRow | typeof OP | typeof V
   paragraphAppliedNumberingList: { scope: "story", wire: "text", type: { kind: "text" } },
   frameStrokeEndCap: { scope: "frame", wire: "text", type: { kind: "text" } },
   frameInsetSpacing: { scope: "frame", wire: "bounds", type: { kind: "bounds" } },
-  appliedConditions: { scope: "story", wire: "text", type: { kind: "text" }, inferred: true },
+  appliedConditions: { scope: "story", wire: "text", type: { kind: "text" } },
   characterFontFamily: { scope: "story", wire: "text", type: { kind: "text" } },
   characterFontStyle: { scope: "story", wire: "text", type: { kind: "text" } },
   characterKerningMethod: { scope: "story", wire: "text", type: { kind: "text" } },
@@ -267,38 +266,38 @@ export const CORE_PATHS: Record<PropertyPath, CorePathRow | typeof OP | typeof V
   frameBlendMode: { scope: "frame", wire: "text", type: { kind: "text" } },
   nextTextFrame: { scope: "frame", wire: "text", type: { kind: "ref", to: "frame" } },
   previousTextFrame: { scope: "frame", wire: "text", type: { kind: "ref", to: "frame" } },
-  cellFillColor: { scope: "cell", wire: "colorRef", type: { kind: "color" }, inferred: true },
-  cellFillTint: { scope: "cell", wire: "length", type: PCT, inferred: true },
-  cellInsetTop: { scope: "cell", wire: "length", type: { kind: "length" }, inferred: true },
-  cellInsetLeft: { scope: "cell", wire: "length", type: { kind: "length" }, inferred: true },
-  cellInsetBottom: { scope: "cell", wire: "length", type: { kind: "length" }, inferred: true },
-  cellInsetRight: { scope: "cell", wire: "length", type: { kind: "length" }, inferred: true },
-  cellVerticalJustification: { scope: "cell", wire: "text", type: { kind: "text" }, inferred: true },
-  cellTopEdgeStrokeColor: { scope: "cell", wire: "colorRef", type: { kind: "color" }, inferred: true },
-  cellTopEdgeStrokeWeight: { scope: "cell", wire: "length", type: { kind: "length" }, inferred: true },
-  cellTopEdgeStrokeTint: { scope: "cell", wire: "length", type: PCT, inferred: true },
-  cellBottomEdgeStrokeColor: { scope: "cell", wire: "colorRef", type: { kind: "color" }, inferred: true },
-  cellBottomEdgeStrokeWeight: { scope: "cell", wire: "length", type: { kind: "length" }, inferred: true },
-  cellBottomEdgeStrokeTint: { scope: "cell", wire: "length", type: PCT, inferred: true },
-  cellLeftEdgeStrokeColor: { scope: "cell", wire: "colorRef", type: { kind: "color" }, inferred: true },
-  cellLeftEdgeStrokeWeight: { scope: "cell", wire: "length", type: { kind: "length" }, inferred: true },
-  cellLeftEdgeStrokeTint: { scope: "cell", wire: "length", type: PCT, inferred: true },
-  cellRightEdgeStrokeColor: { scope: "cell", wire: "colorRef", type: { kind: "color" }, inferred: true },
-  cellRightEdgeStrokeWeight: { scope: "cell", wire: "length", type: { kind: "length" }, inferred: true },
-  cellRightEdgeStrokeTint: { scope: "cell", wire: "length", type: PCT, inferred: true },
+  cellFillColor: { scope: "cell", wire: "colorRef", type: { kind: "color" } },
+  cellFillTint: { scope: "cell", wire: "length", type: PCT },
+  cellInsetTop: { scope: "cell", wire: "length", type: { kind: "length" } },
+  cellInsetLeft: { scope: "cell", wire: "length", type: { kind: "length" } },
+  cellInsetBottom: { scope: "cell", wire: "length", type: { kind: "length" } },
+  cellInsetRight: { scope: "cell", wire: "length", type: { kind: "length" } },
+  cellVerticalJustification: { scope: "cell", wire: "text", type: { kind: "text" } },
+  cellTopEdgeStrokeColor: { scope: "cell", wire: "colorRef", type: { kind: "color" } },
+  cellTopEdgeStrokeWeight: { scope: "cell", wire: "length", type: { kind: "length" } },
+  cellTopEdgeStrokeTint: { scope: "cell", wire: "length", type: PCT },
+  cellBottomEdgeStrokeColor: { scope: "cell", wire: "colorRef", type: { kind: "color" } },
+  cellBottomEdgeStrokeWeight: { scope: "cell", wire: "length", type: { kind: "length" } },
+  cellBottomEdgeStrokeTint: { scope: "cell", wire: "length", type: PCT },
+  cellLeftEdgeStrokeColor: { scope: "cell", wire: "colorRef", type: { kind: "color" } },
+  cellLeftEdgeStrokeWeight: { scope: "cell", wire: "length", type: { kind: "length" } },
+  cellLeftEdgeStrokeTint: { scope: "cell", wire: "length", type: PCT },
+  cellRightEdgeStrokeColor: { scope: "cell", wire: "colorRef", type: { kind: "color" } },
+  cellRightEdgeStrokeWeight: { scope: "cell", wire: "length", type: { kind: "length" } },
+  cellRightEdgeStrokeTint: { scope: "cell", wire: "length", type: PCT },
   tableRowCount: { scope: "table", wire: "length", type: { kind: "number", integer: true }, inferred: true, readOnly: true },
   tableColumnCount: { scope: "table", wire: "length", type: { kind: "number", integer: true }, inferred: true, readOnly: true },
   pluginMetadata: OP,
-  anchoredPosition: { scope: "frame", wire: "text", type: { kind: "text" }, inferred: true },
-  anchorPoint: { scope: "frame", wire: "text", type: { kind: "text" }, inferred: true },
-  anchoredXOffset: { scope: "frame", wire: "length", type: { kind: "length" }, inferred: true },
-  anchoredYOffset: { scope: "frame", wire: "length", type: { kind: "length" }, inferred: true },
-  anchoredHorizontalReference: { scope: "frame", wire: "text", type: { kind: "text" }, inferred: true },
-  anchoredVerticalReference: { scope: "frame", wire: "text", type: { kind: "text" }, inferred: true },
-  anchoredHorizontalAlignment: { scope: "frame", wire: "text", type: { kind: "text" }, inferred: true },
-  anchoredVerticalAlignment: { scope: "frame", wire: "text", type: { kind: "text" }, inferred: true },
-  anchoredSpineRelative: { scope: "frame", wire: "bool", type: { kind: "bool" }, inferred: true },
-  anchoredLockPosition: { scope: "frame", wire: "bool", type: { kind: "bool" }, inferred: true },
+  anchoredPosition: { scope: "frame", wire: "text", type: { kind: "text" } },
+  anchorPoint: { scope: "frame", wire: "text", type: { kind: "text" } },
+  anchoredXOffset: { scope: "frame", wire: "length", type: { kind: "length" } },
+  anchoredYOffset: { scope: "frame", wire: "length", type: { kind: "length" } },
+  anchoredHorizontalReference: { scope: "frame", wire: "text", type: { kind: "text" } },
+  anchoredVerticalReference: { scope: "frame", wire: "text", type: { kind: "text" } },
+  anchoredHorizontalAlignment: { scope: "frame", wire: "text", type: { kind: "text" } },
+  anchoredVerticalAlignment: { scope: "frame", wire: "text", type: { kind: "text" } },
+  anchoredSpineRelative: { scope: "frame", wire: "bool", type: { kind: "bool" } },
+  anchoredLockPosition: { scope: "frame", wire: "bool", type: { kind: "bool" } },
   elementVisible: { scope: "frame", wire: "bool", type: { kind: "bool" } },
   elementLocked: { scope: "frame", wire: "bool", type: { kind: "bool" } },
   frameStrokeStartArrowhead: { scope: "frame", wire: "text", type: { kind: "text" } },
@@ -399,6 +398,8 @@ export interface CoreRow71 {
   schema: PropertySchema;
   wire: string;
   coreKind: string;
+  /** Not in core's catalog: typed from the interim table (CORE_ROWLESS_PATHS). */
+  inferred?: true;
 }
 
 const UNIT: Record<string, "pt" | "deg" | "percent" | "em1000" | "ppi"> = {
@@ -471,6 +472,22 @@ export const CORE_CATALOG_ROWS: readonly CoreCatalogRow[] =
 
 let schema71: Map<string, Map<string, CoreRow71>> | null = null;
 
+/** The catalog names a few rows by their Boa ALIAS (`frameInnerShadow`);
+ *  the SDK lists every core row under its WIRE path, as the registry
+ *  canonicalises input (`canonicalCorePath`). */
+const CATALOG_ALIASES: ReadonlyMap<string, string> = new Map(
+  ((catalog as unknown as { pathAliases?: { name: string; wire: string }[] }).pathAliases ?? []).map((a) => [a.name, a.wire]),
+);
+
+/** Wire PropertyPaths core's catalog gives NO row (protocol 71): still
+ *  reachable through `Set` / `RequestGet`, typed from the interim table
+ *  and marked so. The SDK infers nothing else. */
+export const CORE_ROWLESS_PATHS: readonly string[] = Object.keys(CORE_PATHS).filter((p) => {
+  const row = (CORE_PATHS as Record<string, CorePathRow | { op: true } | { since: 71 }>)[p]!;
+  if ("op" in row || "since" in row || !row.type) return false;
+  return !CORE_CATALOG_ROWS.some((r) => (CATALOG_ALIASES.get(r.path) ?? r.path) === p);
+});
+
 /** SDK kind → path → normalised row, from the vendored catalog. Indexed
  *  core paths (`labels[key]`, `rows[i].height`) become `[]` rows. */
 export function coreSchema71(): ReadonlyMap<string, ReadonlyMap<string, CoreRow71>> {
@@ -479,7 +496,7 @@ export function coreSchema71(): ReadonlyMap<string, ReadonlyMap<string, CoreRow7
   for (const row of CORE_CATALOG_ROWS) {
     const type = normalizeCoreType(row.type);
     if (!type) continue;
-    const path = row.path.replace(/\[[^\]]*\]/g, "[]");
+    const path = (CATALOG_ALIASES.get(row.path) ?? row.path).replace(/\[[^\]]*\]/g, "[]");
     for (const kind of sdkKindsOf(row)) {
       const base = kind.startsWith("style:") ? "style" : kind;
       const schema: PropertySchema = { addressKind: base, path, type };
@@ -496,6 +513,21 @@ export function coreSchema71(): ReadonlyMap<string, ReadonlyMap<string, CoreRow7
       if (!m.has(path)) m.set(path, { schema, wire: row.wire, coreKind: row.addressKind });
       out.set(kind, m);
     }
+  }
+  const coreKindOfScope: Record<CorePathScope, string> = { frame: "frame", story: "storyRange", cell: "cell", table: "table", layer: "layer", page: "page" };
+  for (const path of CORE_ROWLESS_PATHS) {
+    const row = (CORE_PATHS as Record<string, CorePathRow>)[path]!;
+    const schema: PropertySchema = {
+      addressKind: row.scope,
+      path,
+      type: row.type!,
+      nullable: true,
+      summary: "Not typed by core's catalog (protocol 71): typed from the SDK's interim table.",
+    };
+    if (row.readOnly) schema.access = "readOnly";
+    const m = out.get(row.scope) ?? new Map<string, CoreRow71>();
+    m.set(path, { schema, wire: row.wire, coreKind: coreKindOfScope[row.scope], inferred: true });
+    out.set(row.scope, m);
   }
   schema71 = out;
   return out;

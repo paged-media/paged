@@ -85,8 +85,12 @@ describe("core seam — virtual paths over today's ops", () => {
     expect(await h.objects.get("page:#1", "pageBounds")).toEqual(value([0, 0, 792, 612]));
     expect(await h.objects.get("page:#1", "index")).toEqual(value(1));
     expect(await h.objects.get("page:#9", "index")).toMatchObject({ kind: "refused", code: "unknownAddress" });
-    // Protocol 71 addresses a cell without its story; core answers.
-    expect(await h.objects.get("cell:t1/0,0", "cellFillColor")).toMatchObject({ kind: "refused", code: "unknownAddress" });
+    // Protocol 71 addresses a cell without its story, and core answers; the
+    // pre-71 seam cannot name one without the story.
+    expect(await h.objects.get("cell:t1/0,0", "cellFillColor")).toMatchObject({
+      kind: "refused",
+      code: h.protocolVersion >= 71 ? "unknownAddress" : "unmapped",
+    });
   });
 
   it("paragraph style properties through setStyleProperty", async () => {

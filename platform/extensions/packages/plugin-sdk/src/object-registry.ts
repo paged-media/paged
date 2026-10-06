@@ -317,6 +317,18 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
               if (op.handle !== undefined && (handles.has(op.handle) || !/^[A-Za-z0-9_]+$/.test(op.handle))) {
                 throw new Refusal("invalidValue", `create: handle "${op.handle}" is repeated or not [A-Za-z0-9_]+`);
               }
+              // Props the create op itself carries are validated like sets
+              // (type and range; `name` is a create argument, not a write).
+              const createKind = ["textFrame", "rectangle", "oval", "frame"].includes(op.kind)
+                ? "frame"
+                : op.kind === "style"
+                  ? `style:${String(op.props?.["family"])}`
+                  : op.kind;
+              for (const [path, v] of Object.entries(op.props ?? {})) {
+                const row = findRow(rowsOfCore(createKind), canonicalCorePath(path));
+                const why = row ? validateValue(row.type, v, row, path) : null;
+                if (why) throw new Refusal("invalidValue", why);
+              }
               const handle = op.handle ?? `om${++autoHandle}_${Date.now().toString(36)}`;
               const plan = await core.planCreate(op, handle);
               if (!plan.ok) throw new Refusal(plan.code, plan.reason);

@@ -185,10 +185,11 @@ describe("host.objects — registry over core and a plugin (ADR 323, real engine
     expect(await h.objects.query(`${NOTE}[text=third]`)).toEqual([`${NOTE}/n3`]);
     expect(await h.objects.batch([{ op: "delete", address: `${NOTE}/n3` }])).toMatchObject({ applied: true });
     expect(await h.objects.query(NOTE)).toHaveLength(2);
-    // A CORE create (protocol 71) is validated like any other op…
+    // A CORE create (protocol 71) is validated like any other op (below
+    // 71 core creates are unmapped)…
     expect(await h.objects.batch([{ op: "create", kind: "rectangle" }])).toMatchObject({
       applied: false,
-      code: "invalidValue",
+      code: h.protocolVersion >= 71 ? "invalidValue" : "unmapped",
     });
     // …and a kind nobody creates is unmapped.
     expect(await h.objects.batch([{ op: "create", kind: "spread" }])).toMatchObject({
