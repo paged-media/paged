@@ -12,7 +12,7 @@
  *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
  */
 
-// @feat: plugin-platform.documents-door
+// @feat: plugin-platform.native-document
 // @feat: plugin-platform.text-measurement
 //
 // D-26 — `host.documents` (exportPaged + the user-guarded open) and D-27 —
