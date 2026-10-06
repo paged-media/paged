@@ -79,6 +79,15 @@ export interface CoreObjects {
   planSet(a: ParsedAddress, path: string, value: unknown): Promise<CorePlan>;
   /** The wire `ElementId` of an address (labels go here). */
   elementIdOf(a: ParsedAddress): Promise<ElementId | null>;
+  /** The `x-paged:` labels on a label HOST — a page item, a story (range),
+   *  a page or the document — as key → raw value; null when the address
+   *  is not a label host or does not exist. */
+  labelsOf(a: ParsedAddress): Promise<Record<string, string> | null>;
+  /** The mutation that sets (`value`) or clears (`null`) one plugin label
+   *  on a label host: `setPluginMetadata` (item / story), `setPageMetadata`
+   *  (page, protocol 70) or `setDocumentMetadata` (doc); null when the
+   *  address is not a label host. */
+  planLabel(a: ParsedAddress, key: string, value: string | null, caller: string): Promise<MutationInput | null>;
   /** Evaluate core selector steps (no plugin steps). */
   query(steps: readonly SelectorStep[]): Promise<string[]>;
   /** Commit mutations as ONE engine mutation (a `batch` when > 1). */
@@ -118,9 +127,19 @@ function rowsOf(scope: CorePathScope, addressKind: string): PropertySchema[] {
 
 const SWATCH_SPACES = ["CMYK", "RGB", "LAB", "Gray"];
 
+/** The read-only label map every label host answers (writes go through a
+ *  plugin's `state` write, which names its caller). */
+const LABELS_ROW: PropertySchema = ro(
+  "labels",
+  { kind: "map", of: { kind: "text" }, keyPattern: "^x-paged:" },
+  "The element's x-paged: plugin labels: key → the label's JSON envelope.",
+);
+
 /** Extra (virtual) rows per kind, beyond the PropertyPath table. */
 const VIRTUAL: Record<string, PropertySchema[]> = {
+  frame: [LABELS_ROW],
   doc: [
+    LABELS_ROW,
     ro("pageCount", { kind: "number", integer: true }, "Number of pages.", "derived"),
     ro("documentName", { kind: "text" }),
     ro("dirty", { kind: "bool" }, "Unsaved edits.", "derived"),
@@ -129,6 +148,7 @@ const VIRTUAL: Record<string, PropertySchema[]> = {
     { path: "defaultStrokeWeight", type: { kind: "length" }, nullable: true, virtual: { op: "setDocumentDefaults", field: "strokeWeight" } },
   ],
   page: [
+    LABELS_ROW,
     ro("index", { kind: "number", integer: true }, "1-based page number.", "derived"),
     ro("marginTop", { kind: "length" }),
     ro("marginLeft", { kind: "length" }),
@@ -142,7 +162,7 @@ const VIRTUAL: Record<string, PropertySchema[]> = {
     ro("characterCount", { kind: "number", integer: true }, undefined, "derived"),
     ro("paragraphCount", { kind: "number", integer: true }, undefined, "derived"),
     ro("overset", { kind: "bool" }, undefined, "derived"),
-    { path: "content", type: { kind: "text", multiline: true }, summary: "The story's plain text; \\n splits paragraphs." },
+    { path: "content", type: { kind: "text", multiline: true }, heavy: true, summary: "The story's plain text; \\n splits paragraphs." },
   ],
   swatch: [
     ro("name", { kind: "text" }),
@@ -286,7 +306,7 @@ export function createCoreObjects(getEditor: () => PagedEditor): CoreObjects {
         } else if (n.kind === "Page") {
           const p = pages[pageIx++];
           const address = p ? formatAddress({ kind: "page", id: p.selfId }) : parent;
-          if (p) out.push({ address, kinds: ["page"], parent, attrs: { name: String(p.index), index: String(p.index) } });
+          if (p) out.push({ address, kinds: ["page"], parent, attrs: pageAttrs(p) });
           walk(n.children ?? [], address);
         } else {
           walk(n.children ?? [], parent);
@@ -296,7 +316,7 @@ export function createCoreObjects(getEditor: () => PagedEditor): CoreObjects {
     walk(roots, "doc");
     // Pages the tree did not reach (no spread rows) still answer `page`.
     for (const p of pages.slice(pageIx)) {
-      out.push({ address: formatAddress({ kind: "page", id: p.selfId }), kinds: ["page"], parent: "doc", attrs: { name: String(p.index), index: String(p.index) } });
+      out.push({ address: formatAddress({ kind: "page", id: p.selfId }), kinds: ["page"], parent: "doc", attrs: pageAttrs(p) });
     }
     for (const l of layers) {
       out.push({ address: formatAddress({ kind: "layer", id: l.selfId }), kinds: ["layer"], parent: "doc", attrs: { name: l.name ?? "" } });
@@ -322,6 +342,39 @@ export function createCoreObjects(getEditor: () => PagedEditor): CoreObjects {
     }
     nodesCache = { gen: generation, nodes: out, items };
     return nodesCache;
+  }
+
+  /** A page node's selector attributes, with its v70 labels. */
+  function pageAttrs(p: PageSummary): Record<string, string> {
+    const attrs: Record<string, string> = { name: String(p.index), index: String(p.index) };
+    for (const e of (p as { pluginMetadata?: { key: string; value: string }[] }).pluginMetadata ?? []) attrs[`label.${e.key}`] = e.value;
+    return attrs;
+  }
+
+  async function labelsOf(a: ParsedAddress): Promise<Record<string, string> | null> {
+    const fromEntries = (list: readonly { key: string; value: string }[] | undefined) =>
+      Object.fromEntries((list ?? []).map((e) => [e.key, e.value]));
+    if (a.kind === "doc") {
+      try {
+        return fromEntries(((await client().documentMeta()) as { pluginMetadata?: { key: string; value: string }[] }).pluginMetadata);
+      } catch {
+        return null;
+      }
+    }
+    if (a.kind === "page" || a.kind === "pageIndex") {
+      const p = await resolvePage(a);
+      return p ? fromEntries((p as { pluginMetadata?: { key: string; value: string }[] }).pluginMetadata) : null;
+    }
+    const id = await propertyTarget(a);
+    if (!id) return null;
+    const r = await send("requestElementProperties", { id });
+    if (r?.kind !== "elementProperties" || !r.payload.result) return null;
+    const out: Record<string, string> = {};
+    for (const e of r.payload.result.entries as { value?: { type: string; value: { key: string; value?: string | null } } | null }[]) {
+      const v = e.value;
+      if (v && v.type === "pluginMetadata" && typeof v.value.value === "string") out[v.value.key] = v.value.value;
+    }
+    return out;
   }
 
   /** The item ElementId behind `frame:` / `<kind>:` (null = no such item). */
@@ -425,6 +478,10 @@ export function createCoreObjects(getEditor: () => PagedEditor): CoreObjects {
               return val(a.kind === "storyRange" ? text.slice(a.start, a.end) : text);
             }
           }
+          if (kind === "frame" && path === "labels") {
+            const labels = await labelsOf(a);
+            return labels ? val(labels) : refuse("unknownAddress", `no frame ${formatAddress(a)}`);
+          }
           if (!pathRow(path, kind)) return refuse("unknownPath", `${kind} has no path "${path}"`);
           const id = await propertyTarget(a);
           if (!id) return refuse("unknownAddress", `no ${kind} ${formatAddress(a)}`);
@@ -445,6 +502,7 @@ export function createCoreObjects(getEditor: () => PagedEditor): CoreObjects {
           const p = await resolvePage(a);
           if (!p) return refuse("unknownAddress", `no page ${formatAddress(a)}`);
           const map: Record<string, unknown> = {
+            labels: Object.fromEntries(((p as { pluginMetadata?: { key: string; value: string }[] }).pluginMetadata ?? []).map((e) => [e.key, e.value])),
             pageBounds: [0, 0, p.sizePt[1], p.sizePt[0]],
             index: p.index,
             marginTop: p.marginTopPt ?? null,
@@ -463,6 +521,10 @@ export function createCoreObjects(getEditor: () => PagedEditor): CoreObjects {
             meta = (await client().documentMeta()) as unknown as Record<string, unknown>;
           } catch {
             return refuse("unknownAddress", "no document loaded");
+          }
+          if (path === "labels") {
+            const list = (meta["pluginMetadata"] ?? []) as { key: string; value: string }[];
+            return val(Object.fromEntries(list.map((e) => [e.key, e.value])));
           }
           return VIRTUAL["doc"]!.some((r) => r.path === path)
             ? val(meta[path] ?? null)
@@ -592,6 +654,18 @@ export function createCoreObjects(getEditor: () => PagedEditor): CoreObjects {
         default:
           return no("unmapped", `${formatAddress(a)}: no write on the protocol-69 wire; lands with core's Set (ADR 132)`);
       }
+    },
+
+    labelsOf,
+
+    async planLabel(a, key, value, caller) {
+      if (a.kind === "doc") return { op: "setDocumentMetadata", args: { key, value, caller } };
+      if (a.kind === "page" || a.kind === "pageIndex") {
+        const p = await resolvePage(a);
+        return p ? { op: "setPageMetadata", args: { page: p.selfId, key, value, caller } } : null;
+      }
+      const id = a.kind === "item" || a.kind === "frame" || a.kind === "story" || a.kind === "storyRange" ? await propertyTarget(a) : null;
+      return id ? { op: "setPluginMetadata", args: { elementId: id, key, value, caller } } : null;
     },
 
     async elementIdOf(a) {

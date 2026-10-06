@@ -59,6 +59,7 @@ export type {
   ParsedAddress,
   AddressKind,
   ValueType,
+  StructField,
   ValueTypeKind,
   PropertySchema,
   ContentSchema,

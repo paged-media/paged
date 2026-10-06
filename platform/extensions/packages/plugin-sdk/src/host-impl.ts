@@ -4084,9 +4084,9 @@ export function createBundleHost(
       requireDocRead("objects.get");
       return objectRegistry.get(address, path);
     },
-    getAll(address) {
+    getAll(address, opts) {
       requireDocRead("objects.getAll");
-      return objectRegistry.getAll(address);
+      return objectRegistry.getAll(address, opts);
     },
     async set(address, path, value, opts) {
       return deniedWrite("objects.set") ?? objectRegistry.set(address, path, value, opts);

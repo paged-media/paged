@@ -2136,7 +2136,9 @@ replace `core-schema.ts`; the registry and the contract do not change.
   fails.
 - **Untyped commands** are migration debt in a shrink-only baseline,
   `packages/plugin-cli/untyped-commands.baseline.json` (draw 107, image 39,
-  sheet 24, data 9, web 7, doc 1 at 2026-10-06), shipped with the CLI so
+  sheet 24, data 9, web 7, doc 1 at 2026-10-06; after the first plugin
+  wave: draw 10, image 0, sheet 8 — image keeps an EMPTY entry, so any new
+  untyped command fails), shipped with the CLI so
   each plugin repo's `validate` fails a NEW untyped command;
   `scripts/assert-untyped-shrinks.mjs` (contract guard) fails a commit
   that grows it.
@@ -2156,6 +2158,7 @@ replace `core-schema.ts`; the registry and the contract do not change.
   with `changed`), and `host.objects` gains `commands()`.
 - A kind without `batch` takes one `set` per batch (several independent
   `set` plans would each start from the same state and lose updates).
+- The contribution gains a PLUGIN-level `batch` (§21.8).
 - `invoke` cannot share a batch with writes (it runs arbitrary code; it
   cannot join an undo step).
 
@@ -2167,3 +2170,66 @@ The harness also gains `objects` and `dataProviders` (shared, injected
 into every bundle host) and now hosts SEVERAL bundles at once — `host`
 is the last loaded one's; the old "one bundle per headless host" throw is
 gone. No wire change.
+
+### 21.8 Fix-ups from the first consumers (0.2.43-canary.0)
+
+The image, sheet, draw, publish and slide branches found these; each has a
+spec in `object-model-fixups.spec.ts` (real engine, canvas-wasm 0.70.0).
+
+- **Plugin-level `batch(ops)`** on `ObjectModelContribution`: every
+  `set`/`create`/`delete` op of a batch that targets ANY kind of the
+  plugin, in batch order, in ONE call. Kinds that share state (image layers
+  + adjustments, sheet sheets + cells, draw libraries) need it: planned per
+  kind, each plan starts from the same state and the later write drops the
+  earlier one. Without it the registry still plans per kind, and two
+  per-kind `state` writes on one host with the same key are REFUSED
+  (`failed`, "conflicting state writes") instead of losing an update.
+  Writes with DISTINCT sub-keys on one host merge.
+- **Labels follow core's rule: one label per plugin per host.** Core takes
+  exactly `x-paged:<pluginId>` (caller-checked) with the envelope
+  `{v: int >= 1, data: {…}}`, ≤ 64 KiB. A `state` write's `labelKey` is
+  that key (then `labelValue` is the whole envelope, validated before
+  anything applies) or a SUB-KEY `x-paged:<pluginId>.<sub>` (`[A-Za-z0-9_-]+`):
+  the registry reads the current envelope, sets `data[<sub>]` (JSON-parsed
+  when `labelValue` is JSON text) and writes ONE merged label. Any other
+  key is `denied`. Metadata mutations a plugin RETURNS
+  (`setPluginMetadata` / `setDocumentMetadata` / `setPageMetadata`, also
+  inside a `batch`) get the same key and envelope check, and the caller is
+  filled in (a foreign caller is `denied`).
+- **Label hosts:** a page item, a story (range), a PAGE (`page:<id>`,
+  `page:#n`; protocol 70 `setPageMetadata`) or the DOCUMENT (`doc`;
+  `setDocumentMetadata`). The core seam gains a read-only `labels` row
+  (key → envelope JSON) on `frame`, `page` and `doc`, and page nodes carry
+  `label.<key>` attributes, so `page[label.x-paged:paged.slide^={]`
+  selects. On a pre-70 engine a page-hosted write answers `unmapped`.
+- **Struct fields** may be `optional: true` or carry a `default`
+  (`StructField`); the default must fit the field's type (checked at
+  registration). `invoke` (and a struct-typed `set`) fills defaults before
+  the handler runs; optional fields stay absent.
+- **Heavy rows:** `PropertySchema.heavy`; `getAll(address)` skips heavy
+  rows and `content` (core's story `content` is heavy) unless
+  `getAll(address, { content: true })`.
+- **Indexed paths:** a row path may end a segment with `[]`
+  (`points[]`, `points[].smooth`); its type is ONE item's. A concrete path
+  (`points[3]`, `cells[B4]`) resolves to the exact row first, then to its
+  indexed form (`rowPathOf`, `findRow`). Row paths are checked against one
+  grammar (`ROW_PATH`, mirrored in plugin-cli); `getAll` skips indexed
+  rows.
+- **`hostOf` may be async.**
+- **Plugin steps in selectors:** a plugin step may be scoped by core steps
+  AND by plugin steps. An item or story scope, or a plugin object, reaches
+  `list` as `within`; a CONTAINER scope (`doc`, `page:`, `spread:`,
+  `master:`) never does: the registry lists unscoped and keeps the objects
+  whose `hostOf` is the container or an item inside it. So
+  `page:#2 > plugin:media.paged.image/layer` works without the plugin
+  knowing pages. A core step AFTER a plugin step still selects nothing.
+  Layers (`layer:`) are not containers in the scene tree, so a layer scope
+  matches only objects hosted on the layer itself.
+- **Core seam rows typed by meaning, not wire variant** (audit against
+  core's `PropertyPath` doc comments): `frameStrokeMiterLimit` is a plain
+  number (a multiple of the stroke width, 1–500); inner-shadow / inner-glow /
+  feather / directional-feather chokes, outer-glow spread and bevel depth
+  are percentages; bevel altitude is degrees; the four `cellInset*` rows
+  are lengths on the `length` wire (they were `text`). Percent rows carry
+  0–100 (opacity, tint, noise, choke, spread).
+
