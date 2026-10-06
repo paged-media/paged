@@ -1,7 +1,7 @@
 // GENERATED — do not edit. Vendored verbatim from the published
 // @paged-media/canvas-wasm .d.ts (tsify output from paged-media/core,
 // MPL-2.0 OR PMEL). Sync: node scripts/sync-wire.mjs · Check: --check.
-// Synced from @paged-media/canvas-wasm@0.69.0-local
+// Synced from @paged-media/canvas-wasm@0.70.0
 /* tslint:disable */
 /* eslint-disable */
 
@@ -1634,7 +1634,7 @@ export interface HyperlinkSummary {
     source: string;
     destination: string;
     /**
-     * v69 — where the destination goes: a URL, or a page (its `Self`
+     * v70 — where the destination goes: a URL, or a page (its `Self`
      * id). Both absent for a text-anchor destination.
      */
     destinationUrl?: string | null;
@@ -1782,7 +1782,7 @@ export interface PageSummary {
     bleedBottomPt?: number;
     bleedRightPt?: number;
     /**
-     * v69 — the page\'s own `x-paged:` plugin-metadata entries
+     * v70 — the page\'s own `x-paged:` plugin-metadata entries
      * (`SetPageMetadata`): a slide\'s notes, transition, hidden flag. Empty
      * when it has none.
      */
@@ -2820,14 +2820,14 @@ export interface StyleProperties {
 }
 
 /**
- * v69 — `ClearFontRegistry`\'s optional payload.
+ * v70 — `ClearFontRegistry`\'s optional payload.
  */
 export interface ClearFontRegistryPayload {
     scope?: FontScope;
 }
 
 /**
- * v69 — which registry a `RegisterFont` / `ClearFontRegistry` addresses.
+ * v70 — which registry a `RegisterFont` / `ClearFontRegistry` addresses.
  * `document` is the registry document text lays out with (and the one
  * `FontSummary.isMissing` and substitution tracing read); `sceneLayer` is
  * consulted by plugin scene-layer text only, ahead of the document\'s.
@@ -3357,9 +3357,9 @@ export interface InitOutput {
     readonly qcms_white_point_sRGB: (a: number) => void;
     readonly lut_inverse_interp16: (a: number, b: number, c: number) => number;
     readonly lut_interp_linear16: (a: number, b: number, c: number) => number;
-    readonly wasm_bindgen__convert__closures_____invoke__h33c8fb42f3dd227b: (a: number, b: number, c: any, d: any) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__hef102964d386e826: (a: number, b: number, c: any) => [number, number];
-    readonly wasm_bindgen__convert__closures_____invoke__h475c06c5f0851f26: (a: number, b: number, c: any) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__h1697a25be679c0e2: (a: number, b: number, c: any, d: any) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__h78ff2cea7266d1aa: (a: number, b: number, c: any) => [number, number];
+    readonly wasm_bindgen__convert__closures_____invoke__h90756ddb99d2201d: (a: number, b: number, c: any) => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_exn_store: (a: number) => void;

@@ -1230,23 +1230,23 @@ export interface DocumentSurface {
     envelope: PluginMetadataEnvelope | null,
   ): Promise<MutationOutcome>;
   /**
-   * W-21 — read this plugin's metadata envelope on the DOCUMENT itself
-   * (state that belongs to no frame: a data source, document-wide
-   * values), or `null` when absent. Same key as the element carrier
-   * (`x-paged:<manifest id>`, own namespace only). Gated on
-   * `capabilities.document.read`; probe `supports("document.metadata@1")`.
-   * A host whose engine carries no document labels answers `null`.
+   * Protocol 69 — read this plugin's DOCUMENT-scoped metadata envelope
+   * (the document's own Label, not a page item's), or `null` when absent
+   * or when the engine predates protocol 69. Same implicit key as
+   * {@link getMetadata}: `x-paged:<manifest id>`. Probe
+   * `supports("document.documentMetadata@1")`.
    */
   getDocumentMetadata(): Promise<PluginMetadataEnvelope | null>;
   /**
-   * W-21 — write (or clear, with `null`) this plugin's metadata on the
-   * DOCUMENT. One ordinary mutation (`setDocumentMetadata`): undoable,
-   * and it fires `onDidChange` like any edit, so a bundle that renders
-   * from the value re-renders from the event and undo restores the old
-   * value without bundle code. Engine-gated like `setMetadata` (own
-   * namespace, 64 KiB cap, JSON envelope). Needs
-   * `capabilities.document.write`; an IDML export keeps it as a
-   * `Properties/Label` entry on the designmap's `Document`.
+   * Protocol 69 — write (or clear, with `null`) this plugin's
+   * document-scoped metadata: state that belongs to no frame, such as a
+   * data session or the version of this plugin's container parts that is
+   * live. One undoable step through `mutate` (engine op
+   * `setDocumentMetadata`, which also composes inside a `batch`), engine-
+   * gated like {@link setMetadata}. Persisted in a `.paged` document; from
+   * protocol 70 an `.idml` export keeps it as a `Properties/Label` entry
+   * on the designmap's `Document` (InDesign preserves it verbatim). An
+   * engine older than 69 answers `applied: false`.
    */
   setDocumentMetadata(
     envelope: PluginMetadataEnvelope | null,
@@ -1329,6 +1329,12 @@ export interface TextMetrics {
  * `deleteRange.start/end` — the `ContentSelection` addressing: run
  * bytes plus one synthetic `\n` per inter-paragraph boundary), so the
  * value can be passed straight to `host.document.mutate`.
+ *
+ * The field operations (`insertField.offset`, `setFieldValue`,
+ * `placeholders()`) count CHARACTERS with no paragraph separator; the two
+ * units agree only inside the first paragraph of ASCII text. To place a
+ * field at the caret, pass the caret as `insertField.contentOffset`
+ * (protocol 69): the engine converts it against the story at apply time.
  */
 export interface TextCaret {
   storyId: string;
@@ -1363,6 +1369,27 @@ export interface TextSurface {
    * would be misread as story-local body offsets.
    */
   caret(): TextCaret | null;
+  /**
+   * D-27 — measure MANY strings in one face + size in one host call: the
+   * batched {@link measureString}. Resolves one {@link TextMetrics} per
+   * input, in input order (an empty input answers `[]` without a host
+   * call). Each entry is exactly what `measureString(family, style,
+   * texts[i], sizePt)` would answer — same shaper, same fallback face —
+   * so a bundle may switch between the two freely.
+   *
+   * Probe `supports("text.measureStrings@1")`: true when the host serves
+   * the batch in ONE round-trip to its shaper. Without it the door still
+   * answers (the host fans out to `measureString`, or to the estimate
+   * when `text.measure@1` is false), only without the call saving.
+   * Measuring once per word was 133 of the 148 host calls of a 57-record
+   * paged.data merge.
+   */
+  measureStrings(
+    family: string,
+    style: string | null,
+    texts: readonly string[],
+    sizePt: number,
+  ): Promise<TextMetrics[]>;
 }
 
 // -------------------------------------------------------------- overlay
@@ -1640,6 +1667,58 @@ export interface NativeDocumentSurface {
   /** Replace the active document by loading a native/importable package
    *  (an importer plugin produces these bytes, e.g. from IDML). */
   open(bytes: Uint8Array): Promise<void>;
+}
+
+// ------------------------------------------------------------ documents
+//
+// D-26 — the capability-gated DOCUMENTS door: serialize the active document
+// and replace it with a document the PLUGIN built (paged.data's "Merge to new
+// document": clone the template, open the clone, merge into it). The editor
+// holds one document at a time, so "a second document" means "replace the
+// active one", and that is destructive: unlike `nativeDocument.open` (an
+// importer's door, reached only after the user chose File > Open and
+// confirmed there), a plugin-initiated `open` ASKS THE USER FIRST when the
+// active document has unsaved edits. Declining is an ordinary outcome, not
+// an error (`{ opened: false, reason: "declined" }`).
+//
+// Always present — when the host injects no backend both doors reject and
+// `supports("documents.open@1")` / `supports("documents.exportPaged@1")` are
+// false. Capability-gated on `capabilities.documents`: `export` gates
+// `exportPaged` (it reads the WHOLE container, other plugins' parts
+// included), `open` gates `open`.
+
+/** Options for {@link DocumentsSurface.open}. */
+export interface OpenDocumentOptions {
+  /** The opened document's display name (title bar, the Save default)
+   *  when its own metadata carries none, e.g. `"Catalog (merged)"`. The
+   *  host falls back to a generic name when omitted. */
+  name?: string;
+}
+
+/** The answer of {@link DocumentsSurface.open}. `declined` means the user
+ *  kept the active document (it had unsaved edits and they chose not to
+ *  discard them); nothing changed. */
+export type OpenDocumentResult =
+  | { opened: true; pageIds: string[] }
+  | { opened: false; reason: "declined" };
+
+export interface DocumentsSurface {
+  /** Serialize the ACTIVE document to `.paged` bytes (the same container
+   *  File > Save writes: the IDML entries plus the core model and every
+   *  plugin's `paged/<id>/` parts). Feed the bytes to `open` to work on a
+   *  copy. Gated on `capabilities.documents.export`. Rejects when no
+   *  document is loaded or the host wired no backend. */
+  exportPaged(): Promise<Uint8Array>;
+  /** Replace the active document with `bytes` (`.paged` or `.idml`).
+   *  When the active document has unsaved edits the HOST asks the user to
+   *  keep or discard them first and resolves `{ opened: false, reason:
+   *  "declined" }` if they keep them. On success the host broadcasts
+   *  `documentLoaded` (every bundle sees a document switch, the caller
+   *  included) and the opened document starts with an empty undo history
+   *  and NO unsaved edits: mutations the caller makes next are what mark
+   *  it edited. Gated on `capabilities.documents.open`. Rejects when the
+   *  bytes do not load or the host wired no backend. */
+  open(bytes: Uint8Array, options?: OpenDocumentOptions): Promise<OpenDocumentResult>;
 }
 
 // -------------------------------------------------------------- network
@@ -1935,6 +2014,14 @@ export interface BundleHost {
    *  `supports("document.readNative@1")` / `supports("document.openNative@1")`
    *  are false. */
   readonly nativeDocument: NativeDocumentSurface;
+  /** D-26 — the capability-gated DOCUMENTS door: serialize the active
+   *  document (`exportPaged`) and replace it with plugin-built bytes
+   *  (`open`), the host asking the user before unsaved edits are discarded.
+   *  Gated on `capabilities.documents` (`export` / `open`). Always present;
+   *  when the host wires no backend both doors reject and
+   *  `supports("documents.open@1")` / `supports("documents.exportPaged@1")`
+   *  are false. */
+  readonly documents: DocumentsSurface;
   /** The capability-gated NETWORK CONSENT door (D-03; base-idea §11). Always
    *  present; gated on `capabilities.network` and per-origin user consent.
    *  When the host injects no consent backend, every request is DENIED (the

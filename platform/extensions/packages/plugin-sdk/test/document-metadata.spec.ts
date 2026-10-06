@@ -12,14 +12,12 @@
  *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
  */
 
-// W-21 — document-level plugin metadata: `host.document.getDocumentMetadata`
-// / `setDocumentMetadata`, the document twin of the element carrier
-// (`getMetadata` / `setMetadata`). Same key (`x-paged:<manifest id>`),
-// same envelope, same caller namespace. Coverage: the wire op the write
-// sends; the read picks this plugin's own entry out of the document meta
-// (and nothing else); the gates; a raw `mutate` cannot reach a foreign
-// document key; the flag; and — against the real engine — the write is
-// one undoable step that fires `onDidChange`.
+// Document-scoped plugin metadata (`host.document.getDocumentMetadata` /
+// `setDocumentMetadata`, flag `document.documentMetadata@1`): what
+// `protocol-69-doors.spec.ts` does not already cover. The adapter: a
+// corrupt value reads as absent, and the capability gates. Against the
+// real engine: the write is one undoable step that fires `onDidChange`,
+// and the engine refuses a value that is not an envelope.
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -54,49 +52,9 @@ function makeHost(caps?: PluginManifest["capabilities"]) {
   return { ...handle, fake };
 }
 
-describe("host.document document metadata (W-21) — the adapter", () => {
-  it("writes this plugin's key as one setDocumentMetadata mutation, naming the caller", async () => {
+describe("host.document document metadata — the adapter", () => {
+  it("answers null when the stored value is corrupt", async () => {
     const { host, fake } = makeHost();
-    const out = await host.document.setDocumentMetadata({ v: 1, data: { a: 1 } });
-    expect(out.applied).toBe(true);
-    expect(fake.mutations).toEqual([
-      {
-        op: "setDocumentMetadata",
-        args: {
-          key: KEY,
-          value: JSON.stringify({ v: 1, data: { a: 1 } }),
-          caller: "media.paged.test",
-        },
-      },
-    ]);
-    await host.document.setDocumentMetadata(null);
-    expect(fake.mutations[1]).toEqual({
-      op: "setDocumentMetadata",
-      args: { key: KEY, value: null, caller: "media.paged.test" },
-    });
-  });
-
-  it("reads only this plugin's entry from the document meta", async () => {
-    const { host, fake } = makeHost();
-    fake.setDocumentMeta({
-      pageCount: 1,
-      pluginMetadata: [
-        { key: "x-paged:media.paged.other", value: JSON.stringify({ v: 1, data: { theirs: 1 } }) },
-        { key: KEY, value: JSON.stringify({ v: 2, data: { mine: true } }) },
-      ],
-    });
-    expect(await host.document.getDocumentMetadata()).toEqual({
-      v: 2,
-      data: { mine: true },
-    });
-  });
-
-  it("answers null when absent, when the engine carries no document labels, or when the value is corrupt", async () => {
-    const { host, fake } = makeHost();
-    fake.setDocumentMeta({ pageCount: 1, pluginMetadata: [] });
-    expect(await host.document.getDocumentMetadata()).toBeNull();
-    fake.setDocumentMeta({ pageCount: 1 }); // a pre-v69 engine
-    expect(await host.document.getDocumentMetadata()).toBeNull();
     fake.setDocumentMeta({ pageCount: 1, pluginMetadata: [{ key: KEY, value: "{nope" }] });
     expect(await host.document.getDocumentMetadata()).toBeNull();
   });
@@ -110,31 +68,9 @@ describe("host.document document metadata (W-21) — the adapter", () => {
     expect(refused.applied).toBe(false);
     expect(reader.fake.mutations).toEqual([]);
   });
-
-  it("refuses a raw mutate that names another plugin's document key", async () => {
-    const { host, fake } = makeHost();
-    const out = await host.document.mutate({
-      op: "setDocumentMetadata",
-      args: { key: "x-paged:media.paged.other", value: "{}" },
-    });
-    expect(out.applied).toBe(false);
-    expect(out.applied ? "" : out.error).toMatch(/outside this plugin's namespace/);
-    const nested = await host.document.mutate({
-      op: "batch",
-      args: {
-        ops: [{ op: "setDocumentMetadata", args: { key: "x-paged:media.paged.other" } }],
-      },
-    });
-    expect(nested.applied).toBe(false);
-    expect(fake.mutations).toEqual([]);
-  });
-
-  it("supports document.metadata@1", () => {
-    expect(makeHost().host.supports("document.metadata@1")).toBe(true);
-  });
 });
 
-describe("host.document document metadata (W-21) — against the real engine", () => {
+describe("host.document document metadata — against the real engine", () => {
   let live: HeadlessHost | null = null;
   afterEach(() => {
     live?.dispose();

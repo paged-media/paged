@@ -65,6 +65,7 @@ export {
   type JournalSink,
   type BundleAssetProvider,
   type NativeDocumentBackend,
+  type DocumentsBackend,
   type BlobStore,
   type ClipboardBackend,
   type TextCaretBackend,
