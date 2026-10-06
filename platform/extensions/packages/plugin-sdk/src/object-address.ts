@@ -337,6 +337,9 @@ export const SELECTOR_KINDS = new Set<string>([
   "hyperlink",
   "guide",
   "textVariable",
+  // Placeholder fields (`field:<story>@<offset>`): core's selector kind;
+  // without it `field` / `story > field` failed to parse and answered [].
+  "field",
 ]);
 
 /** Split a selector into step tokens and combinators, respecting brackets

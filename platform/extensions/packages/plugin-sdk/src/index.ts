@@ -115,6 +115,14 @@ export {
   type CreateObjectRegistryOptions,
 } from "./object-registry";
 export {
+  answerHostObjects,
+  runScriptWithObjects,
+  type HostObjectAnswer,
+  type HostObjectCall,
+  type ScriptRunResult,
+  type ScriptSend,
+} from "./script-bridge";
+export {
   createCoreObjects,
   FRAME_KIND_WORDS,
   OBJECT_MODEL_PROTOCOL,
