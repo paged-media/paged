@@ -52,11 +52,76 @@ registered by `activate(host)`. How the parts fit is in [`architecture.md`](arch
 - **SVG.** An importer for `.svg` files and an exporter for the selection.
 - **Menu.** 73 commands have menu entries on a host that offers the menu door.
 
+## Object model (ADR 323)
+
+`activate(host)` contributes ten object kinds through `host.contribute.objectModel`, so a data
+binding, a script, the command-line tool and a schema-driven panel field reach draw's objects
+through `host.objects` (code: `packages/draw-bundle/src/object-model/`). Addresses are
+`plugin:media.paged.draw/<kind>/<id>`.
+
+| Kind | Rows | Backing | One write = |
+|---|---|---|---|
+| `path` | 6 (points, contour starts, open flags, counts, transform) | core `framePath` | 1 undo step |
+| `appearance` | 5 (fills, strokes, graphic style, overridden, baked) | element envelope + bake | 1 undo step |
+| `graphicStyle` | 10 (name, fills, strokes, 6 base paints, linked count) | library, document label | 1 undo step, followers re-applied |
+| `symbol` | 6 | library, document label | 1 undo step (delete unlinks instances) |
+| `symbolInstance` | 4 | per-leaf links | 1 undo step |
+| `pattern` | 11 | recipe, document label | 1 undo step |
+| `repeat` | 20 | recipe, document label | 1 undo step |
+| `blend` | 15 | recipe, document label | 1 undo step |
+| `livePaint` | 4 | recipe, document label | 1 undo step |
+| `objectsOnPath` | 11 | recipe, document label | 1 undo step |
+
+- **Undoable library and recipe writes.** An object-model write stores the library in a
+  content-addressed part and names its hash in the document label `x-paged:media.paged.draw`,
+  in the same commit as any page change. Undo reverts the label and the library reads back as
+  it was (`src/recipe-store.ts`). The parts are a cache: a library small enough also rides
+  inline in the label, which InDesign keeps when it drops the parts.
+- **Typed commands.** 97 of the 107 commands have a typed twin with the same id; the ten
+  Path Options "…" commands, which only raise a panel, are the untyped remainder.
+- **A recipe write changes the recipe, not the artwork.** The artwork follows on the typed
+  update command (`updateRepeat`, `updateBlend`, `editPatternField`, `regenerateLivePaint`,
+  `updateObjectsOnPath`): two undo steps, because an update mints new ids.
+- **Two libraries in one batch are refused**: they share the one document label.
+
+### Illustrator variables
+
+| Variable | Where it maps |
+|---|---|
+| Text | core `story:<id>` `content` (or a story range) |
+| Linked file | core image placement (`placeImage`); not yet a `host.objects` path |
+| Visibility | core `elementVisible` on the page item |
+| Graph data | not built — paged.draw has no chart engine (see below) |
+
+**Graph data is a gap.** paged.draw draws no charts and will not grow a chart engine.
+paged.sheet has one (plotters into a frozen geometry IR drawn as native vector). Reuse goes
+through `host.objects`: once paged.sheet contributes its chart kinds (series, options), a
+graph-data variable is a data binding onto the sheet chart's series path, and the chart stays
+paged.sheet's object. Nothing in paged.draw is needed for that.
+
+### Panel fields for the shared PropertyField
+
+The editor builds `PropertyField`; these are the fields that map onto a row today:
+
+- Stroke panel (core rows): `frameStrokeWeight`, `frameStrokeColor`, `frameStrokeEndCap`,
+  `frameStrokeStartArrowhead`, `frameStrokeEndArrowhead`, the four `frameCornerRadius*`.
+- Fill panel (core rows): `frameFillColor`, `frameFillTint`, `frameGradientFillAngle`,
+  `frameGradientFillLength`.
+- Repeat, Blend, Pattern and Objects on Path options: every numeric, toggle and select field
+  is a parameter row of its kind (`repeat.count`, `blend.spacing`, `pattern.overlap`, …).
+- Appearance: the stack rows `appearance.fills` / `appearance.strokes` need a LIST field.
+- Graphic styles, symbols: `name` per row; the linked count and overridden flag are derived
+  rows. Live paint: `name`; faces are read-only (painted through the command).
+- Path Options: its sections are the args of the path-op and insert-shape typed commands, a
+  command form rather than property fields.
+
 ## Limits of what is shipped
 
 - **No construct updates itself.** Editing a source does not change a pattern, repeat,
   blend, symbol instance or live-paint fill; a command rebuilds it. Recipe and library
-  writes are not undoable, and they need a host with `storage.parts@1`.
+  writes made by a COMMAND are not undoable (a make or update records the ids its own batch
+  minted, so the recipe can only be written after it); writes through the object model are
+  (below). Both need a host with `storage.parts@1`.
 - **Undo steps.** Almost every command is one batch and one undo step, however many items
   it creates or rebuilds (pattern, symbols, live paint, blend, repeat, compound path, brush
   strokes, SVG import). Two take two: appearance bake and image trace, because their
@@ -94,7 +159,8 @@ registered by `activate(host)`. How the parts fit is in [`architecture.md`](arch
 - A content type or rendering of its own ([ADR 351](adr/351-shapes-are-native-page-items.md)).
 - A pattern as a paint (a swatch), and a clipping mask over a group of items. Nesting into
   a container is used only for a repeat's clipping.
-- Symbol sets and their tools, nine-slice scaling, per-instance overrides; merging,
+- Symbol sets and their tools, nine-slice scaling, per-instance override records (an
+  instance's deviations are its items' own properties); merging,
   importing, exporting and organising graphic styles.
 - Trace presets, re-tracing and centreline detection.
 - Resampling two blend paths that do not match; readers for `.ai` and `.eps` files.
