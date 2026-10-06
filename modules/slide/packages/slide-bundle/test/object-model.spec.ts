@@ -177,7 +177,10 @@ describe("[plugin-slide.object-model] slides, layouts, placeholders through host
     expect(v(await h.objects.get(out.slide, "notes"))).toBeNull();
     expect(await h.objects.batch([{ op: "delete", address: out.slide }])).toMatchObject({ applied: true, undoSteps: 1 });
     expect((await h.objects.query(`${P}/slide`)).length).toBe(n);
-    await expect(h.objects.invoke(NEW_SLIDE_COMMAND, { after: "x" })).rejects.toThrow(/invalidValue/);
+    // `after` and `layout` are optional fields: a missing one is fine, a
+    // wrong type is still refused before the handler, an unknown slide by it.
+    await expect(h.objects.invoke(NEW_SLIDE_COMMAND, { after: 3 })).rejects.toThrow(/invalidValue/);
+    await expect(h.objects.invoke(NEW_SLIDE_COMMAND, { after: "x" })).rejects.toThrow(/unknownAddress/);
   });
 
   it("labels are the persistence: a saved and reopened deck keeps its slide data", async () => {
