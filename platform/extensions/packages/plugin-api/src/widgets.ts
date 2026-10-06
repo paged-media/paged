@@ -29,7 +29,10 @@
 // degrades to a plain-textarea fallback (probe with
 // `host.supports("widgets.codeEditor@1")`).
 
-import type { ComponentType } from "react";
+import type { ComponentType, ReactNode } from "react";
+
+import type { Address, PropertyPathName, Selector } from "./object-model";
+import type { PropertyFieldOption, PropertyFieldStyle } from "./panel-schema";
 
 /** Languages the host code editor highlights. `text` = no
  *  highlighting (line numbers + gutter only). Additive: a host MAY
@@ -86,6 +89,52 @@ export interface WidgetSurface {
    *  `<input type="color">` fallback stands in when the host injects
    *  none (probe `host.supports("widgets.colorPicker@1")`). */
   readonly ColorPicker: ComponentType<ColorPickerProps>;
+  /** ADR 323 — the host's ONE schema-driven property field, for bundles
+   *  that render their own React panel: the same field a schema panel's
+   *  `{ field: "property" }` row renders (widget from the schema row,
+   *  reads/writes through `host.objects`, one undo step per commit, "Bind
+   *  to data…" and the bound badge). OPTIONAL: absent on a host without
+   *  an object-model UI — probe the member (or
+   *  `host.supports("widgets.propertyField@1")`) and keep your own control
+   *  as the fallback. */
+  readonly PropertyField?: ComponentType<PropertyFieldProps>;
+  /** ADR 323 — the field CHROME without a widget, around a control the
+   *  bundle keeps on purpose (a curve editor, a gradient strip): the
+   *  host's verdict hooks, "Bind to data…" on right-click and the badges.
+   *  The bundle's control still writes through its own door; the frame
+   *  only names the object property it edits. OPTIONAL like
+   *  `PropertyField`. */
+  readonly PropertyFrame?: ComponentType<PropertyFrameProps>;
+}
+
+/** Which object(s) a React property field edits: the selection (scoped to
+ *  `kind` when given), a selector, or explicit addresses. (A schema row
+ *  can also name a published binding; a React panel has its state at hand
+ *  and passes the addresses.) */
+export type PropertyFieldTarget = "selection" | Selector | { addresses: readonly Address[] };
+
+/** Props of {@link WidgetSurface.PropertyField}. */
+export interface PropertyFieldProps {
+  address: PropertyFieldTarget;
+  path: PropertyPathName;
+  /** Qualified kind (`plugin:<id>/<kind>`) — see `PanelSchemaPropertyRow.kind`. */
+  kind?: string;
+  label?: string;
+  style?: PropertyFieldStyle;
+  options?: readonly PropertyFieldOption[];
+  bindable?: boolean;
+  disabled?: boolean;
+  /** Leaf chrome passthrough (placeholder, prefix, suffix, icon, …). */
+  props?: Record<string, unknown>;
+}
+
+/** Props of {@link WidgetSurface.PropertyFrame}. */
+export interface PropertyFrameProps {
+  address: PropertyFieldTarget;
+  path: PropertyPathName;
+  kind?: string;
+  bindable?: boolean;
+  children: ReactNode;
 }
 
 /** Props of {@link WidgetSurface.ColorPicker}. Colours are sRGB hex. */

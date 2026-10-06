@@ -162,6 +162,22 @@ export {
 export { contributeTool } from "./tools";
 export { contributePanel, contributeSchemaPanel } from "./panels";
 export {
+  isPropertyRow,
+  propertyRow,
+  propertyRows,
+  propertyRowsOf,
+  selectorKind,
+  validatePanelSchema,
+  type PanelSchemaIssue,
+  type PropertyRowOptions,
+  type ValidatePanelSchemaOptions,
+} from "./panel-schema-check";
+export {
+  publishObjectList,
+  type ObjectListRow,
+  type PublishObjectListOptions,
+} from "./object-list";
+export {
   contributeEditContext,
   contributeObjectType,
   contributeBindingProvider,

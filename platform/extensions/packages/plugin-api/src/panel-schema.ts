@@ -65,6 +65,7 @@
 import type { ComponentType } from "react";
 
 import type { BindingsSurface } from "./host";
+import type { Address, PropertyPathName, Selector } from "./object-model";
 import type { PropertyPath, Value } from "./wire";
 
 // ---------------------------------------------------------------- value binding
@@ -211,7 +212,89 @@ export interface SchemaListSpec {
 // `value` binding. The row's `visible`/`enabled` gates are the dynamic
 // surface — driven by published plugin bindings.
 
-export interface PanelSchemaRow {
+// ------------------------------------------------------------ property rows
+//
+// THE PROPERTY ROW — the OBJECT-MODEL field (ADR 323, object-model design §4
+// "Panels"). A plugin declares WHICH property of WHICH object a row edits
+// — `{ field: "property", address, path }` — and the host renders it with
+// its ONE schema-driven `PropertyField` over `host.objects`:
+//
+//   · the widget comes from the path's schema row (`host.objects.schema`):
+//     a plugin declares fields, never widgets;
+//   · reads and writes go through `host.objects` — a commit is one
+//     `batch` = one undo step, whatever the owner (core or a plugin);
+//   · every such field gets "Bind to data…" and the bound badge for free.
+//
+// The binding CEILING still holds: the address is a LOOKUP (the selection,
+// a selector the registry resolves, or a published binding the plugin
+// computed) — never an expression.
+
+/**
+ * Which object(s) a property row edits.
+ *   · `"selection"` — the selected objects. With `kind` set, the objects of
+ *     that kind HOSTED by each selected object (`<selected> > <kind>`):
+ *     the web frame of a selected text frame, the layers of a selected
+ *     image frame.
+ *   · a selector string (ADR 131) — every address it selects, re-resolved
+ *     when the object model changes. Also the durable "Bind to data…"
+ *     target, so prefer a name/label selector over a raw session address.
+ *   · `{ bind }` — an address, or a list of addresses, the plugin publishes
+ *     through `host.bindings.publish(name, …)` (its active layer, the cell
+ *     under the cursor). Absent / empty = no target (the field disables).
+ *   · `{ addresses }` — explicit addresses, as given.
+ */
+export type PropertyFieldAddress =
+  | "selection"
+  | Selector
+  | { bind: string }
+  | { addresses: readonly Address[] };
+
+/** How a property row presents an `enum` (or a text row offering a
+ *  collection): the host picks from the schema row otherwise. */
+export type PropertyFieldStyle = "select" | "segments" | "collection";
+
+/** One option override for a `select` / `segments` presentation (labels
+ *  for enum members; the member list still comes from the schema). */
+export interface PropertyFieldOption {
+  value: string;
+  label?: string;
+  icon?: string;
+}
+
+/** The property row (the property row). Mutually exclusive with `widget`: a
+ *  row is EITHER a catalog widget OR an object-model property field. */
+export interface PanelSchemaPropertyRow {
+  field: "property";
+  /** The object(s) the field edits — see {@link PropertyFieldAddress}. */
+  address: PropertyFieldAddress;
+  /** The ADR 132 path on the target's kind (`opacity`, `blendMode`,
+   *  `points[0].anchor`). */
+  path: PropertyPathName;
+  /** The qualified kind (`plugin:<id>/<kind>`, or a core kind) whose
+   *  schema row types the field. Required with `address: "selection"`
+   *  for plugin objects (it scopes the selection to that kind); otherwise
+   *  it lets the field show its widget before any target resolves. */
+  kind?: string;
+  /** Row label (sentence case). Absent = the schema row's `title`, then
+   *  the path. */
+  label?: string;
+  style?: PropertyFieldStyle;
+  options?: readonly PropertyFieldOption[];
+  /** Offer "Bind to data…" (default: when the schema row is bindable). */
+  bindable?: boolean;
+  /** Leaf chrome passthrough (placeholder, prefix, suffix, icon, …). */
+  props?: Record<string, unknown>;
+  visible?: SchemaGate;
+  enabled?: SchemaGate;
+  /** Never set on a property row (keeps `row.widget` readable on the
+   *  union). */
+  widget?: undefined;
+  value?: undefined;
+  list?: undefined;
+}
+
+/** The catalog-widget row (schema v1 / v1.1). */
+export interface PanelSchemaWidgetRow {
   /** Catalog widget id (a curated primitive-leaf id the host
    *  registered). An unknown id renders a visible "unknown widget"
    *  placeholder, not a throw. */
@@ -233,7 +316,13 @@ export interface PanelSchemaRow {
    *  always enabled (subject to the widget's own no-write-path
    *  disable). */
   enabled?: SchemaGate;
+  /** Never set on a widget row. */
+  field?: undefined;
 }
+
+/** One panel row: a catalog widget, or an object-model property
+ *  field. Discriminate with `isPropertyRow` (plugin-sdk) or `row.field`. */
+export type PanelSchemaRow = PanelSchemaWidgetRow | PanelSchemaPropertyRow;
 
 // ---------------------------------------------------------------- sections
 //

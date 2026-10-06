@@ -111,7 +111,7 @@ only when the host wires the backend.
 |---|---|---|---|---|
 | `manifest`, `log` | the bundle's own manifest; a logger prefixed with its id | none | | §4.1 |
 | `contribute.tool`, `panel`, `command` | register a tool, a React panel, a command | id listed in `contributes.tools` / `panels` / `commands` | | §4.2 |
-| `contribute.schemaPanel`, `bindings` | a panel described as data, and the named values its rows read | id listed in `contributes.panels` | `schemaPanel.renderer@1` | §12, [ADR 312](adr/312-panels-as-data.md) |
+| `contribute.schemaPanel`, `bindings` | a panel described as data, and the named values its rows read; a row may be an object-model property field (`{ field: "property", address, path }`, ADR 323) the host renders with its `PropertyField` over `host.objects`, checked by `validatePanelSchema` | id listed in `contributes.panels` | `schemaPanel.renderer@1` | §12, [ADR 312](adr/312-panels-as-data.md) |
 | `contribute.keybinding` | register a key binding | `capabilities.keybindings: true` | | §11 |
 | `contribute.menu` | a menu entry for one of the bundle's commands, for the document or for one edit context | the command listed in `contributes.commands` | | `packages/plugin-api/src/host.ts:341` |
 | `contribute.overlay`, `overlay.setToolPreview`, `setToolPreviews`, `layer` | an overlay, the preview shapes a tool draws while dragging, and retained data-only layers of the bundle's own | `rendering` includes `overlay` | `overlay.multiPreview@1`, `overlay.layers@1` | §4.5, §4.5a, §4.5d |
@@ -132,7 +132,7 @@ only when the host wires the backend.
 | `dataProviders` | publish a dataset, or discover and read one, without the two plugins meeting | `dataProviders.publish` includes the category (to register); `dataProviders.consume` is declared (to discover or read) | `dataProviders@1` | §4.6c |
 | `diagnostics` | findings per plugin, mirrored to the console | none | `diagnostics.publish@1` | §4.7 |
 | `journal` | record a namespaced event or a timing | none | `journal@1` | `packages/plugin-api/src/host.ts:1486` |
-| `widgets` | a code editor component and a colour picker; a plain textarea and a native colour input without a host catalog | none | `widgets.codeEditor@1`, `widgets.colorPicker@1` | [ADR 321](adr/321-host-colour-picker-widget.md) |
+| `widgets` | a code editor component and a colour picker; a plain textarea and a native colour input without a host catalog. Optional: the host's schema-driven `PropertyField` and its `PropertyFrame` (ADR 323), absent without an object-model UI | none | `widgets.codeEditor@1`, `widgets.colorPicker@1`, `widgets.propertyField@1` | [ADR 321](adr/321-host-colour-picker-widget.md) |
 | `tools` | read the option values the host holds for the bundle's own tools, and observe changes | the tool id is namespaced under the manifest id | `tools.settings@1` | [ADR 322](adr/322-plugin-hooks-save-entry-tool-settings-undo-labels.md) |
 | `assets` | bytes of a document font face; original bytes of a placed image; register a face that only scene-layer text resolves (`registerFont`, the one write) | `assets` includes `fonts` / `images` | `assets.fonts@1`, `assets.registerFont@1` | §13, §13.6 |
 | `images` | serve tiles of a placed image to the renderer on request | `rendering` includes `resourceProvider` | `rendering.resourceProvider@1` | `packages/plugin-api/src/host.ts:497` |

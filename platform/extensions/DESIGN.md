@@ -1101,6 +1101,39 @@ tree, no drag-reorder, no inline rename; a layers panel that needs
 reordering still reaches for `mutate` (`layerMove`) behind a row action,
 not for a schema affordance that does not exist.
 
+### 12.7 The object-model property row (ADR 323, design §4)
+
+A panel row may name an OBJECT PROPERTY instead of a widget:
+`{ field: "property", address, path, kind? }`. The host renders it with
+its one schema-driven `PropertyField` over `host.objects`: the widget comes
+from the path's schema row, a commit is one `batch` (one undo step), and
+the field carries "Bind to data…" and the bound badge. A plugin declares
+fields, never widgets, so its rows reach the same UI, binding and
+automation surfaces as core's.
+
+- **`address`** is a lookup, never an expression (§12's ceiling holds):
+  `"selection"` (scoped to `kind` = the objects of that kind hosted by each
+  selected object), a selector (re-resolved on change; also the durable
+  "Bind to data…" target), `{ bind }` (an address or list the plugin
+  publishes through `host.bindings`), or `{ addresses }`.
+- **The row union.** `PanelSchemaRow = PanelSchemaWidgetRow |
+  PanelSchemaPropertyRow`; each side declares the other's discriminating
+  members as `undefined`, so existing `row.widget` reads still compile.
+- **React panels** get the same field through the OPTIONAL
+  `host.widgets.PropertyField` (and `PropertyFrame`, the field chrome
+  around a control the bundle keeps). Optional because a host without an
+  object-model UI has nothing honest to fall back to; the flag is
+  `widgets.propertyField@1`.
+- **Validation.** `validatePanelSchema(schema, { schemaOf, pluginId })`
+  (plugin-sdk) returns every problem as data: the address form, a kind of
+  another plugin, a path that is not a row of its kind. Bundles hold their
+  declarations to it in unit tests.
+- **Picking one object.** `publishObjectList(host, { rows, select,
+  selector })` publishes `{ selfId, name }` rows for a `list` row (items
+  `{ kind: "binding" }`, `selectionBinding: select`) and keeps `select`
+  valid, so the property rows below it address `{ bind: select }`: a
+  layer list over the selected image frame, then that layer's opacity.
+
 ## 13. The capability-gated asset store (W-06 — `host.assets`)
 
 paged.web's W1 font-parity pass (plugin-web BREAKAGE_LOG W-01·W1) proved
