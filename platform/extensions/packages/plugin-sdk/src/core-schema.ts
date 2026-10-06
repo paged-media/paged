@@ -48,7 +48,8 @@
 
 import type { PropertyPath, PropertySchema, ValueType } from "@paged-media/plugin-api";
 
-import catalog from "../../plugin-api/src/catalog.json";
+// Named imports, so the bundler keeps only these two keys of the catalog.
+import { pathAliases, propertySchemas } from "../../plugin-api/src/catalog.json";
 
 export type CorePathScope = "frame" | "story" | "cell" | "table" | "layer" | "page";
 
@@ -468,7 +469,7 @@ function sdkKindsOf(row: CoreCatalogRow): string[] {
 
 /** The raw rows of the vendored catalog (empty before protocol 71). */
 export const CORE_CATALOG_ROWS: readonly CoreCatalogRow[] =
-  ((catalog as unknown as { propertySchemas?: CoreCatalogRow[] }).propertySchemas ?? []);
+  propertySchemas as unknown as CoreCatalogRow[];
 
 let schema71: Map<string, Map<string, CoreRow71>> | null = null;
 
@@ -476,7 +477,7 @@ let schema71: Map<string, Map<string, CoreRow71>> | null = null;
  *  the SDK lists every core row under its WIRE path, as the registry
  *  canonicalises input (`canonicalCorePath`). */
 const CATALOG_ALIASES: ReadonlyMap<string, string> = new Map(
-  ((catalog as unknown as { pathAliases?: { name: string; wire: string }[] }).pathAliases ?? []).map((a) => [a.name, a.wire]),
+  (pathAliases as { name: string; wire: string }[]).map((a) => [a.name, a.wire]),
 );
 
 /** Wire PropertyPaths core's catalog gives NO row (protocol 71): still
