@@ -104,6 +104,7 @@ import {
 import { satisfiesApiVersion, API_VERSION } from "./version";
 import { createCoreObjects } from "./core-objects";
 import { createObjectRegistry, type ObjectRegistry } from "./object-registry";
+import { runScriptWithObjects, type ScriptRunResult, type ScriptSend } from "./script-bridge";
 import {
   loadHeadlessEngine,
   type HeadlessCanvasWorker,
@@ -388,6 +389,11 @@ export interface HeadlessHost {
    *  kinds). The ungated host side: what the Node CLI, a Boa bridge or a
    *  conformance test calls. */
   readonly objects: ObjectRegistry;
+  /** Run a `paged.*` Boa script against the loaded document with the
+   *  async host bridge armed (ADR 323, engine protocol 71): its `plugin:`
+   *  addresses are answered by `objects`, so core and plugin writes of one
+   *  script land as ONE undo step. */
+  runScript(source: string, options?: { budget?: unknown }): Promise<ScriptRunResult>;
   /** The SHARED data-provider registry (D-09) injected into every bundle
    *  host here, so a provider bundle and a consumer bundle rendezvous
    *  headlessly and `supports("dataProviders@1")` is true. */
@@ -989,6 +995,9 @@ export async function createHeadlessHost(
     },
     bindingProviders,
     objects,
+    runScript(source, opts) {
+      return runScriptWithObjects(editor.client.send.bind(editor.client) as unknown as ScriptSend, objects, source, opts);
+    },
     dataProviders,
     willSave,
     toolSettings,
