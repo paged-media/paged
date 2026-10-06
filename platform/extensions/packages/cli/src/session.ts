@@ -176,6 +176,7 @@ export async function openSession(docPath: string | null, options: SessionOption
       apiVersion: `^${API_VERSION.slice(0, 3)}`,
       capabilities: {
         document: { read: "broad", write: "broad" },
+        rendering: ["hitTest"],
         documents: { export: true, open: true },
       },
     },

@@ -2080,3 +2080,42 @@ The harness also gains `objects` and `dataProviders` (shared, injected
 into every bundle host) and now hosts SEVERAL bundles at once — `host`
 is the last loaded one's; the old "one bundle per headless host" throw is
 gone. No wire change.
+
+## 22. The Node CLI (ADR 324 — `@paged-media/cli`, bin `paged`)
+
+**Status:** 0.1.0-canary.0 in `packages/cli`, published by `publish.yml`
+beside the contract packages (Trusted Publisher setup for the new package
+is an owner step).
+
+- **A host, not a client.** `openSession` boots `createHeadlessHost` on the
+  published canvas-wasm (protocol read off the booted wasm), loads its own
+  driver bundle (`media.paged.cli`, broad document capabilities) and then
+  every discovered bundle (`--plugins`, else the first-party
+  `@paged-media/*` bundles resolvable from the cwd plus any dependency with a
+  `"paged"` manifest entry). The build bundles plugin-sdk in, so the bin runs
+  on plain Node ≥ 22; the engine and every bundle stay run-time resolved.
+- **Verbs** come from ONE table (`src/verbs.ts`) that also generates
+  `--help` and feeds a cli_surface spec (every `host.objects` member is
+  reached by a verb): get, set, query, schema, batch, run, export, apply,
+  merge, plugins, describe. JSON on stdout (engine logs go to stderr),
+  exits 0 / 1 (refused write, failed check) / 2 (usage, IO).
+- **Values are text until a schema row types them** (`coerceValue` →
+  `validateValue`); a failure names the path and the expected type. No
+  row: the text passes unconverted (or `--json`), and the owner decides.
+- **`run` is a JS module** with `paged` = `host.objects` + typed commands
+  (+ undo/redo/save/export) — not Boa. Boa stays in core (`paged-core
+  script`); it reaches plugin objects once core's async host bridge
+  (ADR 323) posts `objects.*` to a host — the CLI is such a host.
+- **Export door:** `HeadlessHost.exportDocument("paged"|"idml"|"pdf")` (new,
+  harness.ts) drives the engine's exportPaged / exportIdml / exportPdf loop;
+  plugin formats go through `contribute.exporter` contributions.
+- **apply / merge** run on TODAY's paged.data session (`sessionFor(host)`,
+  canary.10): DuckDB runs in-process (its own `AsyncDuckDBDispatcher` over
+  the Node blocking build — `@duckdb/duckdb-wasm` 1.29.0, an optional peer —
+  driving the bundle's shipped engine wasm), behind narrow `fetch(file:.wasm)`
+  / `Worker` / extension-XHR shims (`src/node-shims.ts`). `apply` carries an
+  INTERIM `property` binding (field → typed property, one
+  `host.objects.batch`); expressions wait for Binding::Property (Wave 5).
+- **Recorded for core:** the Rust binary `paged` is renamed `paged-core` at
+  the next core tag (`crates/paged-cli/cli.json` `"binary"`, the `[[bin]]`,
+  docs) — not done here.
