@@ -136,6 +136,7 @@ import {
 } from "./v58-wire";
 import { batchMutationFor } from "./v59-wire";
 
+import { registerCommand } from "../command-registry";
 export const TEXT_ON_PATH_COMMAND_CATEGORY = "Type";
 
 export const ATTACH_TEXT_TO_PATH_COMMAND_ID =
@@ -581,7 +582,7 @@ const payloadOf = (payload: unknown): Record<string, unknown> =>
  *  startBracket?, endBracket? }`, detach `{ elementId? }`. */
 export function contributeTextOnPathCommands(host: BundleHost): Disposable {
   const disposers = [
-    host.contribute.command({
+    registerCommand(host, {
       id: ATTACH_TEXT_TO_PATH_COMMAND_ID,
       title:
         "Type: Attach story to path (flows an EXISTING story — no story is created)",
@@ -589,7 +590,7 @@ export function contributeTextOnPathCommands(host: BundleHost): Disposable {
       handler: (_paged, payload) =>
         applyAttachTextToPath(host, payloadOf(payload)).then(() => undefined),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: DETACH_TEXT_FROM_PATH_COMMAND_ID,
       title: "Type: Detach text from path (the story survives, unflowed)",
       category: TEXT_ON_PATH_COMMAND_CATEGORY,

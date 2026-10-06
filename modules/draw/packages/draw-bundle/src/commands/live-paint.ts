@@ -183,6 +183,12 @@ import {
 import { resolveTargetPage } from "../io/svg";
 import { announceRecipeChange, linkIndex } from "../link-index";
 
+import { registerCommand } from "../command-registry";
+import {
+  readRecipeBytes,
+  writeRecipeBytes,
+  type RecipeHost,
+} from "../recipe-store";
 export const LIVE_PAINT_COMMAND_CATEGORY = "Live Paint";
 
 export const MAKE_LIVE_PAINT_GROUP_COMMAND_ID =
@@ -716,9 +722,7 @@ export function livePaintDeleteBatchFor(ids: readonly ElementId[]): Mutation {
 
 // -------------------------------------------------------- host: the part
 
-type PartsHost = Pick<BundleHost, "parts" | "supports" | "log"> & {
-  bindings?: BundleHost["bindings"];
-};
+type PartsHost = RecipeHost;
 
 /** Read the recipes out of the container part. A host with no container
  *  writer (`supports("storage.parts@1")` false — an older editor) is not
@@ -736,7 +740,7 @@ export async function readLivePaintLibrary(
     return emptyLibrary();
   }
   try {
-    return parseLivePaintLibrary(await host.parts.read(LIVE_PAINT_PART));
+    return parseLivePaintLibrary(await readRecipeBytes(host, LIVE_PAINT_PART));
   } catch (e) {
     host.log.warn(`live paint: recipe read failed (${String(e)})`);
     return emptyLibrary();
@@ -757,7 +761,7 @@ export async function writeLivePaintLibrary(
     return false;
   }
   try {
-    await host.parts.write(
+    await writeRecipeBytes(host, 
       LIVE_PAINT_PART,
       serializeLivePaintLibrary(library),
     );
@@ -1398,7 +1402,7 @@ const payloadOf = (payload: unknown): Record<string, unknown> =>
  *  faces? }`, delete `{ groupId?, face? | faces? }`. */
 export function contributeLivePaintCommands(host: BundleHost): Disposable {
   const disposers = [
-    host.contribute.command({
+    registerCommand(host, {
       id: MAKE_LIVE_PAINT_GROUP_COMMAND_ID,
       title:
         "Live Paint: Make group from selection (a REGENERABLE recipe — not a live object)",
@@ -1406,14 +1410,14 @@ export function contributeLivePaintCommands(host: BundleHost): Disposable {
       handler: (_paged, payload) =>
         applyMakeLivePaintGroup(host, payloadOf(payload)).then(() => undefined),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: FILL_LIVE_PAINT_FACE_COMMAND_ID,
       title: "Live Paint: Fill face (inserts artwork over the region)",
       category: LIVE_PAINT_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyFillLivePaintFace(host, payloadOf(payload)).then(() => undefined),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: REGENERATE_LIVE_PAINT_COMMAND_ID,
       title:
         "Live Paint: Regenerate faces (re-derive after a member edit; ids may not survive)",
@@ -1421,7 +1425,7 @@ export function contributeLivePaintCommands(host: BundleHost): Disposable {
       handler: (_paged, payload) =>
         applyRegenerateLivePaint(host, payloadOf(payload)).then(() => undefined),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: SELECT_LIVE_PAINT_FACES_COMMAND_ID,
       title: "Live Paint: Select painted faces",
       category: LIVE_PAINT_COMMAND_CATEGORY,
@@ -1430,14 +1434,14 @@ export function contributeLivePaintCommands(host: BundleHost): Disposable {
           () => undefined,
         ),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: DELETE_LIVE_PAINT_FACE_COMMAND_ID,
       title: "Live Paint: Delete painted face",
       category: LIVE_PAINT_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyDeleteLivePaintFace(host, payloadOf(payload)).then(() => undefined),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: RELEASE_LIVE_PAINT_COMMAND_ID,
       title: "Live Paint: Release group (keep the artwork, drop the recipe)",
       category: LIVE_PAINT_COMMAND_CATEGORY,

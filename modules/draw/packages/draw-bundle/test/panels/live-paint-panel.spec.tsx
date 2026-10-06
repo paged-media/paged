@@ -129,7 +129,10 @@ describe("Live paint panel — rendered against the engine", () => {
         events: 0,
         reloads: 1,
         walks: 1,
-        reads: 2,
+        // +1 since the object model (ADR 323/559): with NO library part the
+        // read asks the DOCUMENT LABEL, which carries the library after an
+        // InDesign save drops every part (src/recipe-store.ts).
+        reads: 3,
         partReads: 1,
       });
     });

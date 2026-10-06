@@ -66,6 +66,7 @@ import {
   resolveAppearanceCarrier,
 } from "./appearance-bake";
 
+import { registerCommand } from "../command-registry";
 export const APPEARANCE_COMMAND_CATEGORY = "Appearance";
 
 export const APPEARANCE_ADD_FILL_COMMAND_ID =
@@ -417,26 +418,26 @@ function layerDelta(payload: Record<string, unknown> | undefined): number {
  *  delta?: number }` — `index` addresses the BOTTOM-to-TOP stack. */
 export function contributeAppearanceCommands(host: BundleHost): Disposable {
   const disposers = [
-    host.contribute.command({
+    registerCommand(host, {
       id: APPEARANCE_ADD_FILL_COMMAND_ID,
       title: "Appearance: Add fill",
       category: APPEARANCE_COMMAND_CATEGORY,
       handler: () => applyAppearanceCommand(host, APPEARANCE_ADD_FILL_COMMAND_ID, "fill"),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: APPEARANCE_ADD_STROKE_COMMAND_ID,
       title: "Appearance: Add stroke",
       category: APPEARANCE_COMMAND_CATEGORY,
       handler: () =>
         applyAppearanceCommand(host, APPEARANCE_ADD_STROKE_COMMAND_ID, "stroke"),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: APPEARANCE_CLEAR_COMMAND_ID,
       title: "Appearance: Clear extra layers",
       category: APPEARANCE_COMMAND_CATEGORY,
       handler: () => applyAppearanceCommand(host, APPEARANCE_CLEAR_COMMAND_ID, "clear"),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: APPEARANCE_REMOVE_LAYER_COMMAND_ID,
       title: "Appearance: Remove layer",
       category: APPEARANCE_COMMAND_CATEGORY,
@@ -447,7 +448,7 @@ export function contributeAppearanceCommands(host: BundleHost): Disposable {
         );
       },
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: APPEARANCE_MOVE_LAYER_COMMAND_ID,
       title: "Appearance: Reorder layer",
       category: APPEARANCE_COMMAND_CATEGORY,

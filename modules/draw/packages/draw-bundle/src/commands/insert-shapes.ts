@@ -61,6 +61,7 @@ import {
 
 import { insertPathMutationsForShape, resolveTargetPage } from "../io/svg";
 
+import { registerCommand } from "../command-registry";
 export const INSERT_SHAPE_COMMAND_CATEGORY = "Insert";
 
 export const INSERT_ARC_COMMAND_ID = "media.paged.draw.command.insertArc";
@@ -421,28 +422,28 @@ export function contributeInsertShapeCommands(
   lastUsed: InsertShapeLastUsed = {},
 ): Disposable {
   const disposers = [
-    host.contribute.command({
+    registerCommand(host, {
       id: INSERT_ARC_COMMAND_ID,
       title: "Insert: Arc (last used values)",
       category: INSERT_SHAPE_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyInsertArc(host, (payload as Payload) ?? lastUsed.arc?.()),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: INSERT_SPIRAL_COMMAND_ID,
       title: "Insert: Spiral (last used values)",
       category: INSERT_SHAPE_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyInsertSpiral(host, (payload as Payload) ?? lastUsed.spiral?.()),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: INSERT_RECT_GRID_COMMAND_ID,
       title: "Insert: Rectangular grid (last used values)",
       category: INSERT_SHAPE_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyInsertRectGrid(host, (payload as Payload) ?? lastUsed.rectGrid?.()),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: INSERT_POLAR_GRID_COMMAND_ID,
       title: "Insert: Polar grid (last used values)",
       category: INSERT_SHAPE_COMMAND_CATEGORY,

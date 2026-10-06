@@ -153,6 +153,12 @@ import {
 } from "./symbols";
 import { repeatPageRect } from "./repeat";
 
+import { registerCommand } from "../command-registry";
+import {
+  readRecipeBytes,
+  writeRecipeBytes,
+  type RecipeHost,
+} from "../recipe-store";
 export const OBJECTS_ON_PATH_COMMAND_CATEGORY = "Objects on Path";
 
 export const MAKE_OBJECTS_ON_PATH_COMMAND_ID =
@@ -774,9 +780,7 @@ export function objectsOnPathExpandBatchFor(
 
 // -------------------------------------------------------- host: the part
 
-type PartsHost = Pick<BundleHost, "parts" | "supports" | "log"> & {
-  bindings?: BundleHost["bindings"];
-};
+type PartsHost = RecipeHost;
 
 export async function readObjectsOnPathLibrary(
   host: PartsHost,
@@ -792,7 +796,7 @@ export async function readObjectsOnPathLibrary(
     return emptyLibrary();
   }
   try {
-    return parseObjectsOnPathLibrary(await host.parts.read(OBJECTS_ON_PATH_PART));
+    return parseObjectsOnPathLibrary(await readRecipeBytes(host, OBJECTS_ON_PATH_PART));
   } catch (e) {
     host.log.warn(`objects-on-path: recipe read failed (${String(e)})`);
     return emptyLibrary();
@@ -805,7 +809,7 @@ export async function writeObjectsOnPathLibrary(
 ): Promise<boolean> {
   if (!host.supports(OBJECTS_ON_PATH_FEATURE)) return false;
   try {
-    await host.parts.write(
+    await writeRecipeBytes(host, 
       OBJECTS_ON_PATH_PART,
       serializeObjectsOnPathLibrary(library),
     );
@@ -1485,7 +1489,7 @@ export async function applyReleaseObjectsOnPath(
  *  "all" }`, expand / release `{ onPathId? }`. */
 export function contributeObjectsOnPathCommands(host: BundleHost): Disposable {
   const disposers = [
-    host.contribute.command({
+    registerCommand(host, {
       id: MAKE_OBJECTS_ON_PATH_COMMAND_ID,
       title:
         "Objects on Path: Make (the LAST selected item is the path — your objects MOVE onto it, nothing is copied)",
@@ -1493,7 +1497,7 @@ export function contributeObjectsOnPathCommands(host: BundleHost): Disposable {
       handler: (_paged, payload) =>
         applyMakeObjectsOnPath(host, payload).then(() => undefined),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: UPDATE_OBJECTS_ON_PATH_COMMAND_ID,
       title:
         "Objects on Path: Update (re-distribute — spacing, count, offset, align, pivot, order)",
@@ -1501,14 +1505,14 @@ export function contributeObjectsOnPathCommands(host: BundleHost): Disposable {
       handler: (_paged, payload) =>
         applyUpdateObjectsOnPath(host, payload).then(() => undefined),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: SELECT_OBJECTS_ON_PATH_COMMAND_ID,
       title: "Objects on Path: Select the objects",
       category: OBJECTS_ON_PATH_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applySelectObjectsOnPath(host, payload).then(() => undefined),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: EXPAND_OBJECTS_ON_PATH_COMMAND_ID,
       title:
         "Objects on Path: Expand (stop tracking, leave the objects on the path)",
@@ -1516,7 +1520,7 @@ export function contributeObjectsOnPathCommands(host: BundleHost): Disposable {
       handler: (_paged, payload) =>
         applyExpandObjectsOnPath(host, payload).then(() => undefined),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: RELEASE_OBJECTS_ON_PATH_COMMAND_ID,
       title:
         "Objects on Path: Release (put every object back exactly where it was)",

@@ -39,6 +39,7 @@ import type {
   Mutation,
 } from "@paged-media/plugin-api";
 
+import { registerCommand } from "../command-registry";
 /** The dash-array PropertyPath (already on the wire — protocol ≥ 35).
  *  A literal type so it satisfies the `PropertyPath` union in the
  *  mutation arg without a cast (the §12.3 compat alarm holds). */
@@ -189,7 +190,7 @@ export async function applyDashArray(
  *  registration (the host also tracks them for teardown). */
 export function contributeDashCommands(host: BundleHost): Disposable {
   const disposers = DASH_PRESETS.map((preset) =>
-    host.contribute.command({
+    registerCommand(host, {
       id: preset.id,
       title: preset.title,
       category: DASH_COMMAND_CATEGORY,

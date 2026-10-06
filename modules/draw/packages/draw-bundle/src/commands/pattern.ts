@@ -225,6 +225,12 @@ import {
 import { announceRecipeChange, groupHolding, linkIndex } from "../link-index";
 import { insertPathMutationFor } from "../handlers/insert-path";
 
+import { registerCommand } from "../command-registry";
+import {
+  readRecipeBytes,
+  writeRecipeBytes,
+  type RecipeHost,
+} from "../recipe-store";
 export const PATTERN_COMMAND_CATEGORY = "Pattern";
 
 export const MAKE_PATTERN_COMMAND_ID =
@@ -1055,9 +1061,7 @@ export function patternDeleteBatchFor(args: {
 
 // -------------------------------------------------------- host: the part
 
-type PartsHost = Pick<BundleHost, "parts" | "supports" | "log"> & {
-  bindings?: BundleHost["bindings"];
-};
+type PartsHost = RecipeHost;
 
 /** Read the fields out of the container part. A host with no container
  *  writer (`supports("storage.parts@1")` false — an older editor) is not
@@ -1076,7 +1080,7 @@ export async function readPatternLibrary(
     return emptyLibrary();
   }
   try {
-    return parsePatternLibrary(await host.parts.read(PATTERN_PART));
+    return parsePatternLibrary(await readRecipeBytes(host, PATTERN_PART));
   } catch (e) {
     host.log.warn(`pattern: recipe read failed (${String(e)})`);
     return emptyLibrary();
@@ -1091,7 +1095,7 @@ export async function writePatternLibrary(
 ): Promise<boolean> {
   if (!host.supports(PATTERN_FEATURE)) return false;
   try {
-    await host.parts.write(PATTERN_PART, serializePatternLibrary(library));
+    await writeRecipeBytes(host, PATTERN_PART, serializePatternLibrary(library));
     // A part write is not a document event: without this an open panel
     // misses every recipe change made AFTER a command's last mutation.
     announceRecipeChange(host);
@@ -1809,7 +1813,7 @@ export async function applyReleasePattern(
  *  release `{ patternId? }`. */
 export function contributePatternCommands(host: BundleHost): Disposable {
   const disposers = [
-    host.contribute.command({
+    registerCommand(host, {
       id: MAKE_PATTERN_COMMAND_ID,
       title:
         "Pattern: Bake a re-editable tile field from selection (artwork — NOT a pattern swatch)",
@@ -1817,7 +1821,7 @@ export function contributePatternCommands(host: BundleHost): Disposable {
       handler: (_paged, payload) =>
         applyMakePattern(host, payload).then(() => undefined),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: EDIT_PATTERN_COMMAND_ID,
       title:
         "Pattern: Re-plan the field (layout, tile size, spacing, overlap, copies, dimming)",
@@ -1825,21 +1829,21 @@ export function contributePatternCommands(host: BundleHost): Disposable {
       handler: (_paged, payload) =>
         applyEditPattern(host, payload).then(() => undefined),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: SELECT_PATTERN_TILES_COMMAND_ID,
       title: "Pattern: Select the field's tiles",
       category: PATTERN_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applySelectPatternTiles(host, payload).then(() => undefined),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: DELETE_PATTERN_TILES_COMMAND_ID,
       title: "Pattern: Delete the tiles (un-bake; the sources are kept)",
       category: PATTERN_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyDeletePatternTiles(host, payload).then(() => undefined),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: RELEASE_PATTERN_COMMAND_ID,
       title: "Pattern: Release the field (keep the artwork, drop the recipe)",
       category: PATTERN_COMMAND_CATEGORY,

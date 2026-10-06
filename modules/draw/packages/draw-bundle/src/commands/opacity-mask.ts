@@ -132,6 +132,7 @@ import {
 } from "./v58-wire";
 import { batchMutationFor } from "./v59-wire";
 
+import { registerCommand } from "../command-registry";
 export const OPACITY_MASK_COMMAND_CATEGORY = "Transparency";
 
 export const MAKE_OPACITY_MASK_COMMAND_ID =
@@ -467,7 +468,7 @@ const payloadOf = (payload: unknown): Record<string, unknown> =>
  *  surface a user reads BEFORE invoking. */
 export function contributeOpacityMaskCommands(host: BundleHost): Disposable {
   const disposers = [
-    host.contribute.command({
+    registerCommand(host, {
       id: MAKE_OPACITY_MASK_COMMAND_ID,
       title:
         "Transparency: Make opacity mask from top object (renders on canvas and in export)",
@@ -475,7 +476,7 @@ export function contributeOpacityMaskCommands(host: BundleHost): Disposable {
       handler: (_paged, payload) =>
         applyMakeOpacityMask(host, payloadOf(payload)).then(() => undefined),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: RELEASE_OPACITY_MASK_COMMAND_ID,
       title:
         "Transparency: Release opacity mask (the artwork comes back on top)",

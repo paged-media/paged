@@ -236,6 +236,12 @@ import { insertPathMutationFor } from "../handlers/insert-path";
 import { resolveTargetPage } from "../io/svg";
 import { announceRecipeChange, linkIndex } from "../link-index";
 
+import { registerCommand } from "../command-registry";
+import {
+  readRecipeBytes,
+  writeRecipeBytes,
+  type RecipeHost,
+} from "../recipe-store";
 export const SYMBOLS_COMMAND_CATEGORY = "Symbols";
 
 export const DEFINE_SYMBOL_COMMAND_ID = "media.paged.draw.command.defineSymbol";
@@ -921,9 +927,7 @@ export function symbolUnlinkBatchFor(
 
 // -------------------------------------------------------- host: the part
 
-type PartsHost = Pick<BundleHost, "parts" | "supports" | "log"> & {
-  bindings?: BundleHost["bindings"];
-};
+type PartsHost = RecipeHost;
 
 /** Read the library out of the container part. A host with no container
  *  writer (`supports("storage.parts@1")` false — an older editor) is not
@@ -941,7 +945,7 @@ export async function readSymbolLibrary(
     return emptyLibrary();
   }
   try {
-    return parseSymbolLibrary(await host.parts.read(SYMBOLS_PART));
+    return parseSymbolLibrary(await readRecipeBytes(host, SYMBOLS_PART));
   } catch (e) {
     host.log.warn(`symbols: library read failed (${String(e)})`);
     return emptyLibrary();
@@ -962,7 +966,7 @@ export async function writeSymbolLibrary(
     return false;
   }
   try {
-    await host.parts.write(SYMBOLS_PART, serializeSymbolLibrary(library));
+    await writeRecipeBytes(host, SYMBOLS_PART, serializeSymbolLibrary(library));
     // A part write is not a document event — and Define and Rename write
     // NOTHING else, so without this an open panel hears nothing at all.
     announceRecipeChange(host);
@@ -1671,14 +1675,14 @@ const payloadOf = (payload: unknown): Record<string, unknown> =>
  *  break link / reset transform — none. */
 export function contributeSymbolCommands(host: BundleHost): Disposable {
   const disposers = [
-    host.contribute.command({
+    registerCommand(host, {
       id: DEFINE_SYMBOL_COMMAND_ID,
       title: "Symbols: Define symbol from selection",
       category: SYMBOLS_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyDefineSymbol(host, payloadOf(payload)).then(() => undefined),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: PLACE_SYMBOL_COMMAND_ID,
       title: "Symbols: Place instance",
       category: SYMBOLS_COMMAND_CATEGORY,
@@ -1689,7 +1693,7 @@ export function contributeSymbolCommands(host: BundleHost): Disposable {
         );
       },
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: REDEFINE_SYMBOL_COMMAND_ID,
       title: "Symbols: Redefine from selection (rebuilds every instance)",
       category: SYMBOLS_COMMAND_CATEGORY,
@@ -1698,19 +1702,19 @@ export function contributeSymbolCommands(host: BundleHost): Disposable {
           () => undefined,
         ),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: BREAK_SYMBOL_LINK_COMMAND_ID,
       title: "Symbols: Break link (keep the artwork)",
       category: SYMBOLS_COMMAND_CATEGORY,
       handler: () => applyBreakSymbolLink(host).then(() => undefined),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: RESET_SYMBOL_TRANSFORM_COMMAND_ID,
       title: "Symbols: Reset transform (re-emit the definition in place)",
       category: SYMBOLS_COMMAND_CATEGORY,
       handler: () => applyResetSymbolTransform(host).then(() => undefined),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: RENAME_SYMBOL_COMMAND_ID,
       title: "Symbols: Rename symbol",
       category: SYMBOLS_COMMAND_CATEGORY,
@@ -1719,7 +1723,7 @@ export function contributeSymbolCommands(host: BundleHost): Disposable {
         return applyRenameSymbol(host, p.symbolId, p.name).then(() => undefined);
       },
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: DELETE_SYMBOL_COMMAND_ID,
       title: "Symbols: Delete symbol (the placed artwork stays)",
       category: SYMBOLS_COMMAND_CATEGORY,

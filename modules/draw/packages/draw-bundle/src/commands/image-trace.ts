@@ -140,6 +140,7 @@ import { groupMutationFor } from "./group";
 import { bindMinted, mintedLeaves, mutateMinting } from "./minted";
 import { insertPathMutationFor } from "../handlers/insert-path";
 
+import { registerCommand } from "../command-registry";
 export const IMAGE_TRACE_COMMAND_CATEGORY = "Image";
 
 export const IMAGE_TRACE_COMMAND_ID = "media.paged.draw.command.imageTrace";
@@ -873,7 +874,7 @@ export async function applyImageTrace(
  *  bake's recorded reason for the same choice. */
 export function contributeImageTraceCommand(host: BundleHost): Disposable {
   const disposers = [
-    host.contribute.command({
+    registerCommand(host, {
       id: IMAGE_TRACE_COMMAND_ID,
       title: IMAGE_TRACE_COMMAND_TITLE,
       category: IMAGE_TRACE_COMMAND_CATEGORY,

@@ -159,6 +159,7 @@ import {
   handleElementId,
 } from "./v59-wire";
 
+import { registerCommand } from "../command-registry";
 export const COMPOUND_PATH_COMMAND_CATEGORY = "Path";
 
 export const MAKE_COMPOUND_PATH_COMMAND_ID =
@@ -800,13 +801,13 @@ async function releaseStepwise(
 /** Register Make / Release compound path (the dash-command pattern). */
 export function contributeCompoundPathCommands(host: BundleHost): Disposable {
   const disposers = [
-    host.contribute.command({
+    registerCommand(host, {
       id: MAKE_COMPOUND_PATH_COMMAND_ID,
       title: "Path: Make compound path",
       category: COMPOUND_PATH_COMMAND_CATEGORY,
       handler: () => applyMakeCompoundPath(host).then(() => undefined),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: RELEASE_COMPOUND_PATH_COMMAND_ID,
       title: "Path: Release compound path",
       category: COMPOUND_PATH_COMMAND_CATEGORY,

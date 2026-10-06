@@ -35,6 +35,7 @@ import type {
   PathfinderKind,
 } from "@paged-media/plugin-api";
 
+import { registerCommand } from "../command-registry";
 export const PATHFINDER_COMMAND_CATEGORY = "Pathfinder";
 
 export interface PathfinderPreset {
@@ -112,7 +113,7 @@ export async function applyPathfinder(
 /** Register the four pathfinder commands. */
 export function contributePathfinderCommands(host: BundleHost): Disposable {
   const disposers = PATHFINDER_PRESETS.map((preset) =>
-    host.contribute.command({
+    registerCommand(host, {
       id: preset.id,
       title: preset.title,
       category: PATHFINDER_COMMAND_CATEGORY,

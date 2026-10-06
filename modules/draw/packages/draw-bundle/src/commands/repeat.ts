@@ -216,6 +216,12 @@ import {
   releaseFromMutationFor,
 } from "./v59-wire";
 
+import { registerCommand } from "../command-registry";
+import {
+  readRecipeBytes,
+  writeRecipeBytes,
+  type RecipeHost,
+} from "../recipe-store";
 export const REPEAT_COMMAND_CATEGORY = "Repeat";
 
 export const MAKE_RADIAL_REPEAT_COMMAND_ID =
@@ -1068,9 +1074,7 @@ export function repeatReleaseBatchFor(args: {
 
 // -------------------------------------------------------- host: the part
 
-type PartsHost = Pick<BundleHost, "parts" | "supports" | "log"> & {
-  bindings?: BundleHost["bindings"];
-};
+type PartsHost = RecipeHost;
 
 /** Read the records out of the container part. A host with no container
  *  writer is not an error: it reads as an EMPTY library and WARNS. */
@@ -1089,7 +1093,7 @@ export async function readRepeatLibrary(
     return emptyLibrary();
   }
   try {
-    return parseRepeatLibrary(await host.parts.read(REPEAT_PART));
+    return parseRepeatLibrary(await readRecipeBytes(host, REPEAT_PART));
   } catch (e) {
     host.log.warn(`repeat: recipe read failed (${String(e)})`);
     return emptyLibrary();
@@ -1104,7 +1108,7 @@ export async function writeRepeatLibrary(
 ): Promise<boolean> {
   if (!host.supports(REPEAT_FEATURE)) return false;
   try {
-    await host.parts.write(REPEAT_PART, serializeRepeatLibrary(library));
+    await writeRecipeBytes(host, REPEAT_PART, serializeRepeatLibrary(library));
     // A part write is not a document event: without this an open panel
     // misses every recipe saved AFTER a command's last mutation.
     announceRecipeChange(host);
@@ -1959,7 +1963,7 @@ export async function applyReleaseRepeat(
  *  release `{ repeatId? }`. */
 export function contributeRepeatCommands(host: BundleHost): Disposable {
   const disposers = [
-    host.contribute.command({
+    registerCommand(host, {
       id: MAKE_RADIAL_REPEAT_COMMAND_ID,
       title:
         "Repeat: Radial from selection (instances around a ring — artwork rebuilt by Update, not a live link)",
@@ -1967,7 +1971,7 @@ export function contributeRepeatCommands(host: BundleHost): Disposable {
       handler: (_paged, payload) =>
         applyMakeRepeat(host, "radial", payload).then(() => undefined),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: MAKE_GRID_REPEAT_COMMAND_ID,
       title:
         "Repeat: Grid from selection (rows × columns, spacing, flip — artwork rebuilt by Update, not a live link)",
@@ -1975,7 +1979,7 @@ export function contributeRepeatCommands(host: BundleHost): Disposable {
       handler: (_paged, payload) =>
         applyMakeRepeat(host, "grid", payload).then(() => undefined),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: MAKE_MIRROR_REPEAT_COMMAND_ID,
       title:
         "Repeat: Mirror from selection (one reflection across an axis — artwork rebuilt by Update, not a live link)",
@@ -1983,7 +1987,7 @@ export function contributeRepeatCommands(host: BundleHost): Disposable {
       handler: (_paged, payload) =>
         applyMakeRepeat(host, "mirror", payload).then(() => undefined),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: UPDATE_REPEAT_COMMAND_ID,
       title:
         "Repeat: Update (new parameters + the sources' CURRENT geometry; the instances get new ids)",
@@ -1991,21 +1995,21 @@ export function contributeRepeatCommands(host: BundleHost): Disposable {
       handler: (_paged, payload) =>
         applyUpdateRepeat(host, payload).then(() => undefined),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: SELECT_REPEAT_INSTANCES_COMMAND_ID,
       title: "Repeat: Select the instances",
       category: REPEAT_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applySelectRepeatInstances(host, payload).then(() => undefined),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: EXPAND_REPEAT_COMMAND_ID,
       title: "Repeat: Expand (keep every instance as ordinary artwork)",
       category: REPEAT_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyExpandRepeat(host, payload).then(() => undefined),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: RELEASE_REPEAT_COMMAND_ID,
       title: "Repeat: Release (remove the instances, keep the source)",
       category: REPEAT_COMMAND_CATEGORY,

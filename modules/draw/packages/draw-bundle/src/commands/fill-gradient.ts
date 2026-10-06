@@ -44,6 +44,7 @@ import type {
   Mutation,
 } from "@paged-media/plugin-api";
 
+import { registerCommand } from "../command-registry";
 /** The command category the gradient-fill presets group under. */
 export const FILL_COMMAND_CATEGORY = "Fill";
 
@@ -195,7 +196,7 @@ export async function applyFillGradientPreset(
  *  Returns a Disposable dropping both registrations. */
 export function contributeFillGradientCommands(host: BundleHost): Disposable {
   const disposers = FILL_GRADIENT_PRESETS.map((preset) =>
-    host.contribute.command({
+    registerCommand(host, {
       id: preset.id,
       title: preset.title,
       category: FILL_COMMAND_CATEGORY,

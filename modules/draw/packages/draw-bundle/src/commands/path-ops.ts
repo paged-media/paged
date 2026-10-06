@@ -52,6 +52,7 @@ import type {
   Value,
 } from "@paged-media/plugin-api";
 
+import { registerCommand } from "../command-registry";
 export const PATH_OPS_COMMAND_CATEGORY = "Path";
 
 export const OUTLINE_STROKE_COMMAND_ID =
@@ -333,14 +334,14 @@ export function contributePathOpsCommands(
   lastUsed: PathOpsLastUsed = {},
 ): Disposable {
   const disposers = [
-    host.contribute.command({
+    registerCommand(host, {
       id: OUTLINE_STROKE_COMMAND_ID,
       title: "Path: Outline stroke",
       category: PATH_OPS_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyOutlineStroke(host, payload as PathOpPayload),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: OFFSET_PATH_COMMAND_ID,
       title: "Path: Offset path (last used values)",
       category: PATH_OPS_COMMAND_CATEGORY,
@@ -350,7 +351,7 @@ export function contributePathOpsCommands(
           (payload as PathOpPayload) ?? lastUsed.offset?.(),
         ),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: SIMPLIFY_PATH_COMMAND_ID,
       title: "Path: Simplify (last used values)",
       category: PATH_OPS_COMMAND_CATEGORY,

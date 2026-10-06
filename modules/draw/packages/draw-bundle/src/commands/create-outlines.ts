@@ -66,6 +66,7 @@ import {
 } from "./v59-wire";
 import { rawTextOutlines, type TextOutlinesWire } from "../raw-wire";
 
+import { registerCommand } from "../command-registry";
 export const CREATE_OUTLINES_COMMAND_ID = "media.paged.draw.command.createOutlines";
 export const CREATE_OUTLINES_COMMAND_IDS = [CREATE_OUTLINES_COMMAND_ID];
 
@@ -243,7 +244,7 @@ export async function applyCreateOutlines(host: BundleHost): Promise<ElementId[]
 }
 
 export function contributeCreateOutlinesCommands(host: BundleHost): Disposable {
-  const sub = host.contribute.command({
+  const sub = registerCommand(host, {
     id: CREATE_OUTLINES_COMMAND_ID,
     title: "Type: Create outlines",
     category: "Type",

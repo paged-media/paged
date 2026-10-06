@@ -62,6 +62,7 @@ import type {
   SceneTreeNode,
 } from "@paged-media/plugin-api";
 
+import { registerCommand } from "../command-registry";
 export const PATHFINDER_REGION_COMMAND_CATEGORY = "Pathfinder";
 
 /** The binding a refusal (or the last success) is published on, so a
@@ -288,7 +289,7 @@ export function contributePathfinderRegionCommands(
   host: BundleHost,
 ): Disposable {
   const disposers = PATHFINDER_REGION_PRESETS.map((preset) =>
-    host.contribute.command({
+    registerCommand(host, {
       id: preset.id,
       title: preset.title,
       category: PATHFINDER_REGION_COMMAND_CATEGORY,

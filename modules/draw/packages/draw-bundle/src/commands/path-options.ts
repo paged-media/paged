@@ -112,6 +112,7 @@ import { applyDashArray, MAX_DASH_PAIRS } from "./dash";
 import { applyReflect } from "./transform";
 import { supportsPathOps } from "./path-ops";
 
+import { registerCommand } from "../command-registry";
 export const PATH_OPTIONS_PANEL_ID = "media.paged.draw.panel.pathOptions";
 
 export const PATH_OPTIONS_COMMAND_CATEGORY = "Path";
@@ -701,7 +702,7 @@ export async function openPathOptions(
 /** Register the "…" commands, one per section. */
 export function contributePathOptionsCommands(host: BundleHost): Disposable {
   const disposers = PATH_OPTION_SECTIONS.map((section) =>
-    host.contribute.command({
+    registerCommand(host, {
       id: PATH_OPTIONS_COMMANDS[section],
       title: `Path options: ${PATH_OPTION_SECTION_TITLES[section]}…`,
       category: PATH_OPTIONS_COMMAND_CATEGORY,

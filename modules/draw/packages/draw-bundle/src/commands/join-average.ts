@@ -66,6 +66,7 @@ import type {
 
 import type { AnchorTable, Vec2 } from "@paged-media/draw-geometry";
 
+import { registerCommand } from "../command-registry";
 export const JOIN_AVERAGE_COMMAND_CATEGORY = "Path";
 
 export const JOIN_COMMAND_ID = "media.paged.draw.command.joinEndpoints";
@@ -434,19 +435,19 @@ export async function applyClosePath(host: BundleHost): Promise<void> {
  *  older engines (named in this module's header + a debug log). */
 export function contributeJoinAverageCommands(host: BundleHost): Disposable {
   const disposers = [
-    host.contribute.command({
+    registerCommand(host, {
       id: JOIN_COMMAND_ID,
       title: "Path: Join",
       category: JOIN_AVERAGE_COMMAND_CATEGORY,
       handler: () => applyJoin(host),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: CLOSE_PATH_COMMAND_ID,
       title: "Path: Close path",
       category: JOIN_AVERAGE_COMMAND_CATEGORY,
       handler: () => applyClosePath(host),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: AVERAGE_COMMAND_ID,
       title: "Path: Average endpoints",
       category: JOIN_AVERAGE_COMMAND_CATEGORY,

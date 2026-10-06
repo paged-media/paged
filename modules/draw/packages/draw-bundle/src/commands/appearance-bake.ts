@@ -146,6 +146,7 @@ import { leafIdsOf } from "./select-same";
 import { parentGroupOf } from "./parentage";
 import { linkIndex } from "../link-index";
 
+import { registerCommand } from "../command-registry";
 export const APPEARANCE_BAKE_COMMAND_ID =
   "media.paged.draw.command.bakeAppearance";
 export const APPEARANCE_RELEASE_COMMAND_ID =
@@ -800,7 +801,7 @@ async function forEachSelectedCarrier(
 /** Register `Appearance: Bake to group` + `Appearance: Release`. */
 export function contributeAppearanceBakeCommands(host: BundleHost): Disposable {
   const disposers = [
-    host.contribute.command({
+    registerCommand(host, {
       id: APPEARANCE_BAKE_COMMAND_ID,
       title: "Appearance: Bake stack to a group",
       category: "Appearance",
@@ -809,7 +810,7 @@ export function contributeAppearanceBakeCommands(host: BundleHost): Disposable {
           bakeAppearance(host, carrier),
         ),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: APPEARANCE_RELEASE_COMMAND_ID,
       title: "Appearance: Release baked stack",
       category: "Appearance",

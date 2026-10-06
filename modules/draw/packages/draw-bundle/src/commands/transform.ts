@@ -79,6 +79,7 @@ import { engineOpVocabulary } from "./join-average";
 import { frameTransformMutationFor } from "./objects-on-path";
 import { batchMutationFor } from "./v59-wire";
 
+import { registerCommand } from "../command-registry";
 export const TRANSFORM_COMMAND_CATEGORY = "Transform";
 
 const C = "media.paged.draw.command";
@@ -321,7 +322,7 @@ function payloadOf(payload: unknown): { angleDeg?: number; copy: boolean } {
  *  angle overrides the command's own axis. */
 export function contributeTransformCommands(host: BundleHost): Disposable {
   const disposers = [
-    host.contribute.command({
+    registerCommand(host, {
       id: REFLECT_HORIZONTAL_COMMAND_ID,
       title: "Transform: Reflect horizontally",
       category: TRANSFORM_COMMAND_CATEGORY,
@@ -330,7 +331,7 @@ export function contributeTransformCommands(host: BundleHost): Disposable {
         return applyReflect(host, p.angleDeg ?? 90, p.copy);
       },
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: REFLECT_VERTICAL_COMMAND_ID,
       title: "Transform: Reflect vertically",
       category: TRANSFORM_COMMAND_CATEGORY,
@@ -339,7 +340,7 @@ export function contributeTransformCommands(host: BundleHost): Disposable {
         return applyReflect(host, p.angleDeg ?? 0, p.copy);
       },
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: TRANSFORM_AGAIN_COMMAND_ID,
       title: "Transform: Transform again",
       category: TRANSFORM_COMMAND_CATEGORY,

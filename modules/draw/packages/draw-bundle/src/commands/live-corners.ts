@@ -61,6 +61,7 @@ import type {
   PluginMetadataEnvelope,
 } from "@paged-media/plugin-api";
 
+import { registerCommand } from "../command-registry";
 export const LIVE_CORNERS_COMMAND_CATEGORY = "Corners";
 
 /** The IDML corner-option tokens the engine's `CornerOption::from_idml`
@@ -297,7 +298,7 @@ export async function applyLiveCornerPreset(
 /** Register the five live-corner preset commands. */
 export function contributeLiveCornerCommands(host: BundleHost): Disposable {
   const disposers = LIVE_CORNER_PRESETS.map((preset) =>
-    host.contribute.command({
+    registerCommand(host, {
       id: preset.id,
       title: preset.title,
       category: LIVE_CORNERS_COMMAND_CATEGORY,

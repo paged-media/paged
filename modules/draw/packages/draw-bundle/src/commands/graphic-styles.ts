@@ -146,6 +146,12 @@ import {
   type ElementProperties,
 } from "../link-index";
 
+import { registerCommand } from "../command-registry";
+import {
+  readRecipeBytes,
+  writeRecipeBytes,
+  type RecipeHost,
+} from "../recipe-store";
 export const GRAPHIC_STYLES_COMMAND_CATEGORY = "Graphic Styles";
 
 export const SAVE_GRAPHIC_STYLE_COMMAND_ID =
@@ -646,9 +652,7 @@ export function applyGraphicStyleBatchFor(args: {
 
 // -------------------------------------------------------- host: the part
 
-type PartsHost = Pick<BundleHost, "parts" | "supports" | "log"> & {
-  bindings?: BundleHost["bindings"];
-};
+type PartsHost = RecipeHost;
 
 /** Read the library out of the container part. A host with no container
  *  writer (`supports("storage.parts@1")` false — an older editor) is not
@@ -666,7 +670,7 @@ export async function readGraphicStyleLibrary(
     return emptyLibrary();
   }
   try {
-    return parseGraphicStyleLibrary(await host.parts.read(GRAPHIC_STYLES_PART));
+    return parseGraphicStyleLibrary(await readRecipeBytes(host, GRAPHIC_STYLES_PART));
   } catch (e) {
     host.log.warn(`graphic styles: library read failed (${String(e)})`);
     return emptyLibrary();
@@ -687,7 +691,7 @@ export async function writeGraphicStyleLibrary(
     return false;
   }
   try {
-    await host.parts.write(
+    await writeRecipeBytes(host, 
       GRAPHIC_STYLES_PART,
       serializeGraphicStyleLibrary(library),
     );
@@ -1119,21 +1123,21 @@ const payloadOf = (payload: unknown): Record<string, unknown> =>
  *  rename `{ styleId: string, name: string }`, break link — none. */
 export function contributeGraphicStyleCommands(host: BundleHost): Disposable {
   const disposers = [
-    host.contribute.command({
+    registerCommand(host, {
       id: SAVE_GRAPHIC_STYLE_COMMAND_ID,
       title: "Graphic Styles: Save style from selection",
       category: GRAPHIC_STYLES_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applySaveGraphicStyle(host, payloadOf(payload)).then(() => undefined),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: APPLY_GRAPHIC_STYLE_COMMAND_ID,
       title: "Graphic Styles: Apply style to selection",
       category: GRAPHIC_STYLES_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyGraphicStyleToSelection(host, payloadOf(payload).styleId),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: REDEFINE_GRAPHIC_STYLE_COMMAND_ID,
       title: "Graphic Styles: Redefine style from selection",
       category: GRAPHIC_STYLES_COMMAND_CATEGORY,
@@ -1142,13 +1146,13 @@ export function contributeGraphicStyleCommands(host: BundleHost): Disposable {
           () => undefined,
         ),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: BREAK_GRAPHIC_STYLE_LINK_COMMAND_ID,
       title: "Graphic Styles: Break link (keep the appearance)",
       category: GRAPHIC_STYLES_COMMAND_CATEGORY,
       handler: () => applyBreakGraphicStyleLink(host),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: RENAME_GRAPHIC_STYLE_COMMAND_ID,
       title: "Graphic Styles: Rename style",
       category: GRAPHIC_STYLES_COMMAND_CATEGORY,
@@ -1159,7 +1163,7 @@ export function contributeGraphicStyleCommands(host: BundleHost): Disposable {
         );
       },
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: DELETE_GRAPHIC_STYLE_COMMAND_ID,
       title: "Graphic Styles: Delete style",
       category: GRAPHIC_STYLES_COMMAND_CATEGORY,

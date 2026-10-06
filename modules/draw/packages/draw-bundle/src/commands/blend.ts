@@ -177,6 +177,12 @@ import {
   handleElementId,
 } from "./v59-wire";
 
+import { registerCommand } from "../command-registry";
+import {
+  readRecipeBytes,
+  writeRecipeBytes,
+  type RecipeHost,
+} from "../recipe-store";
 export const BLEND_COMMAND_CATEGORY = "Blend";
 
 /** MAKE. The id is v0's and is deliberately UNCHANGED: it is declared in
@@ -1162,9 +1168,7 @@ export function blendReleaseBatchFor(args: {
 
 // -------------------------------------------------------- host: the part
 
-type PartsHost = Pick<BundleHost, "parts" | "supports" | "log"> & {
-  bindings?: BundleHost["bindings"];
-};
+type PartsHost = RecipeHost;
 
 /** Read the records out of the container part. A host with no container
  *  writer is not an error: it reads as an EMPTY library and WARNS. */
@@ -1179,7 +1183,7 @@ export async function readBlendLibrary(host: PartsHost): Promise<BlendLibrary> {
     return emptyLibrary();
   }
   try {
-    return parseBlendLibrary(await host.parts.read(BLEND_PART));
+    return parseBlendLibrary(await readRecipeBytes(host, BLEND_PART));
   } catch (e) {
     host.log.warn(`blend: recipe read failed (${String(e)})`);
     return emptyLibrary();
@@ -1192,7 +1196,7 @@ export async function writeBlendLibrary(
 ): Promise<boolean> {
   if (!host.supports(BLEND_FEATURE)) return false;
   try {
-    await host.parts.write(BLEND_PART, serializeBlendLibrary(library));
+    await writeRecipeBytes(host, BLEND_PART, serializeBlendLibrary(library));
     // A part write is not a document event: without this an open panel
     // misses every recipe saved AFTER a command's last mutation.
     announceRecipeChange(host);
@@ -2081,7 +2085,7 @@ export async function applyReleaseBlend(
  *  release `{ blendId? }`. */
 export function contributeBlendCommands(host: BundleHost): Disposable {
   const disposers = [
-    host.contribute.command({
+    registerCommand(host, {
       id: BLEND_COMMAND_ID,
       title:
         "Blend: Make from the two selected objects (smooth colour / steps / distance — artwork rebuilt by Update, not a live link)",
@@ -2089,7 +2093,7 @@ export function contributeBlendCommands(host: BundleHost): Disposable {
       handler: (_paged, payload) =>
         applyMakeBlend(host, payload).then(() => undefined),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: UPDATE_BLEND_COMMAND_ID,
       title:
         "Blend: Update (new options + the keys' CURRENT geometry; the intermediates get new ids)",
@@ -2097,7 +2101,7 @@ export function contributeBlendCommands(host: BundleHost): Disposable {
       handler: (_paged, payload) =>
         applyUpdateBlend(host, payload).then(() => undefined),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: REPLACE_BLEND_SPINE_COMMAND_ID,
       title:
         "Blend: Replace spine with the selected path (it keeps its own paint and stays outside the blend's group)",
@@ -2105,21 +2109,21 @@ export function contributeBlendCommands(host: BundleHost): Disposable {
       handler: (_paged, payload) =>
         applyReplaceBlendSpine(host, payload).then(() => undefined),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: REVERSE_BLEND_SPINE_COMMAND_ID,
       title: "Blend: Reverse spine (the intermediates travel the other way)",
       category: BLEND_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyReverseBlendSpine(host, payload).then(() => undefined),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: REVERSE_BLEND_ORDER_COMMAND_ID,
       title: "Blend: Reverse front to back (paint order only — nothing moves)",
       category: BLEND_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyReverseBlendOrder(host, payload).then(() => undefined),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: SELECT_BLEND_OBJECTS_COMMAND_ID,
       title:
         "Blend: Select the key objects (edit them, then Update — that is how a blend follows an edit)",
@@ -2127,14 +2131,14 @@ export function contributeBlendCommands(host: BundleHost): Disposable {
       handler: (_paged, payload) =>
         applySelectBlendObjects(host, payload).then(() => undefined),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: EXPAND_BLEND_COMMAND_ID,
       title: "Blend: Expand (keep every intermediate as ordinary artwork)",
       category: BLEND_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyExpandBlend(host, payload).then(() => undefined),
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: RELEASE_BLEND_COMMAND_ID,
       title: "Blend: Release (remove the intermediates, keep the key objects)",
       category: BLEND_COMMAND_CATEGORY,

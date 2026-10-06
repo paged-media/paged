@@ -77,6 +77,7 @@ import type {
 
 import { leafIdsOf, linkIndex } from "../link-index";
 
+import { registerCommand } from "../command-registry";
 // The leaf walk lives beside the index that walks it; every other module
 // keeps importing it from here.
 export { leafIdsOf };
@@ -335,7 +336,7 @@ export function applySelectSameStrokeWeight(
  *  weight). Pure selection — no document mutation. */
 export function contributeSelectSameCommands(host: BundleHost): Disposable {
   const disposers = [
-    host.contribute.command({
+    registerCommand(host, {
       id: SELECT_SAME_FILL_COMMAND_ID,
       title: "Select same: Fill",
       category: SELECT_SAME_COMMAND_CATEGORY,
@@ -343,7 +344,7 @@ export function contributeSelectSameCommands(host: BundleHost): Disposable {
         await applySelectSame(host, SELECT_SAME_FILL_COMMAND_ID, "fill", payload);
       },
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: SELECT_SAME_STROKE_COMMAND_ID,
       title: "Select same: Stroke",
       category: SELECT_SAME_COMMAND_CATEGORY,
@@ -356,7 +357,7 @@ export function contributeSelectSameCommands(host: BundleHost): Disposable {
         );
       },
     }),
-    host.contribute.command({
+    registerCommand(host, {
       id: SELECT_SAME_STROKE_WEIGHT_COMMAND_ID,
       // Run bare it is the EXACT match it always was; a payload
       // `{ tolerance }` (pt) widens it. A remembered tolerance is NOT

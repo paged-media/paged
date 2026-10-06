@@ -64,6 +64,7 @@ import { reverseContour, type AnchorTable } from "@paged-media/draw-geometry";
 import { framePathMutationFor } from "./compound-path";
 import { supportsPathOps } from "./path-ops";
 
+import { registerCommand } from "../command-registry";
 export const REVERSE_PATH_COMMAND_ID =
   "media.paged.draw.command.reversePathDirection";
 
@@ -158,7 +159,7 @@ export async function applyReversePath(host: BundleHost): Promise<ElementId[]> {
 }
 
 export function contributeReversePathCommands(host: BundleHost): Disposable {
-  const sub = host.contribute.command({
+  const sub = registerCommand(host, {
     id: REVERSE_PATH_COMMAND_ID,
     title: "Path: Reverse path direction",
     category: REVERSE_PATH_COMMAND_CATEGORY,

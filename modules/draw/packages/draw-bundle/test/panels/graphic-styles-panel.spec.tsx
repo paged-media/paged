@@ -118,7 +118,10 @@ describe("Graphic styles panel — rendered against the engine", () => {
         events: 0,
         reloads: 1,
         walks: 1,
-        reads: 1,
+        // +1 since the object model (ADR 323/559): with NO library part the
+        // read asks the DOCUMENT LABEL, which carries the library after an
+        // InDesign save drops every part (src/recipe-store.ts).
+        reads: 2,
         partReads: 1,
       });
     });
@@ -338,7 +341,10 @@ describe("Graphic styles panel — rendered against the engine", () => {
       // counts the followers of every style at once
       // (`graphicStyleLinkCounts`). As found: 91 each — a metadata read
       // AND a property read for every leaf.
-      expect(readsByRecords).toEqual(Array(6).fill(1 + leafReads()));
+      // The one exception is ZERO styles: with no library part at all the
+      // read also asks the DOCUMENT LABEL (ADR 559 — after an InDesign
+      // save the library survives only there; src/recipe-store.ts).
+      expect(readsByRecords).toEqual([2 + leafReads(), ...Array(5).fill(1 + leafReads())]);
     });
 
     it("ONE reload = 1 walk = 46 reads — one per leaf", async () => {
