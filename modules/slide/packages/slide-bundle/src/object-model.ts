@@ -461,7 +461,14 @@ export function contributeSlideObjectModel(host: BundleHost, options: SlideObjec
     async list(query: ObjectQuery) {
       const deck = await loadDeck();
       if (!deck) return [];
-      const out = deck.pages.map((p) => slideAddress(p.id));
+      let out = deck.pages.map((p) => slideAddress(p.id));
+      // A page item scope (`<frame> > slide`, a panel's selection): the
+      // slide the item sits on.
+      const within = query.within ? parseAddress(query.within) : null;
+      if (within?.kind === "item") {
+        const pageId = (await geometry(query.within!))?.pageId ?? null;
+        out = pageId ? out.filter((a) => a === slideAddress(pageId)) : [];
+      }
       return query.limit ? out.slice(0, query.limit) : out;
     },
     async get(address, path) {
@@ -577,6 +584,9 @@ export function contributeSlideObjectModel(host: BundleHost, options: SlideObjec
       const cached = (deck.report?.slides ?? []).flatMap((s) => s.items.filter((i) => i.placeholder).map((i) => i.id));
       for (const id of cached) if (!ids.has(id) && (await itemAddress(id))) ids.add(id);
       let out = [...ids];
+      // A page item scope (`<frame> > placeholder`): that frame, if it is one.
+      const item = query.within ? parseAddress(query.within) : null;
+      if (item?.kind === "item") out = out.filter((id) => id === item.id);
       const scope = query.within ? ownId(query.within, SLIDE_KIND) ?? (parseAddress(query.within)?.kind === "page" ? slidePageId(query.within) : null) : null;
       if (scope) {
         const kept: string[] = [];

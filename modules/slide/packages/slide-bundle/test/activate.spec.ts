@@ -47,6 +47,7 @@ function recordingHost(supports: (f: string) => boolean) {
   const diagnostics = new Map<string, Diagnostic[]>();
   const mutations: MutationInput[] = [];
   const objectModels: ObjectModelContribution[] = [];
+  const schemaPanels: string[] = [];
   const noop = (): Disposable => ({ dispose() {} });
   const host = {
     log: { debug() {}, info() {}, warn() {}, error() {} },
@@ -59,6 +60,10 @@ function recordingHost(supports: (f: string) => boolean) {
       objectModel(c: ObjectModelContribution) {
         objectModels.push(c);
         return { ...noop(), changed() {} };
+      },
+      schemaPanel(c: { id: string }): Disposable {
+        schemaPanels.push(c.id);
+        return noop();
       },
     },
     document: {
@@ -83,7 +88,7 @@ function recordingHost(supports: (f: string) => boolean) {
       },
     },
   } as unknown as BundleHost;
-  return { host, importers, opened, parts, diagnostics, mutations, objectModels };
+  return { host, importers, opened, parts, diagnostics, mutations, objectModels, schemaPanels };
 }
 
 describe("paged.slide importer", () => {
@@ -97,6 +102,14 @@ describe("paged.slide importer", () => {
   it("opens the deck as a native document and keeps its source", async () => {
     const r = recordingHost(() => true);
     activate(r.host);
+    // ADR 323 — the property-row panels register next to the object model.
+    expect(r.schemaPanels).toEqual([
+      "media.paged.slide.panel.slide",
+      "media.paged.slide.panel.transition",
+      "media.paged.slide.panel.notes",
+      "media.paged.slide.panel.placeholder",
+      "media.paged.slide.panel.deck",
+    ]);
     const bytes = new Uint8Array(readFileSync(FIXTURE));
     await r.importers[0].import({ name: "placeholders.pptx", bytes, mimeType: "" });
 

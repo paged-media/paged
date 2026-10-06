@@ -24,6 +24,13 @@
   },
   "contributes": {
     "importers": ["media.paged.slide.importer.pptx"],
+    "panels": [
+      "media.paged.slide.panel.slide",
+      "media.paged.slide.panel.transition",
+      "media.paged.slide.panel.notes",
+      "media.paged.slide.panel.placeholder",
+      "media.paged.slide.panel.deck"
+    ],
     "partTypes": [
       { "type": "pptx", "role": "source", "format": "opc", "linkable": false },
       { "type": "slideImport", "role": "derived", "format": "json" }

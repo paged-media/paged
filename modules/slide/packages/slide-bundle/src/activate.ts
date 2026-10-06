@@ -29,6 +29,7 @@ import type { BundleHandle, BundleHost, Diagnostic } from "@paged-media/plugin-a
 
 import { slideEngine, type ImportReport } from "./engine.js";
 import { contributeSlideObjectModel, importLabelMutations } from "./object-model.js";
+import { SLIDE_PANELS } from "./panels.js";
 
 export const IMPORTER_ID = "media.paged.slide.importer.pptx";
 export const PPTX_MIME =
@@ -119,6 +120,22 @@ export function activate(host: BundleHost): BundleHandle {
 
   const model = contributeSlideObjectModel(host, { openDeck });
   if (model) disposers.push(() => model.dispose());
+
+  // ADR 323 — the slide, transition, notes, placeholder and deck fields as
+  // host-rendered PropertyFields (schema panels of property rows; they need
+  // the object model the rows address).
+  if (model && host.supports("contribute.schemaPanel@1")) {
+    for (const schema of SLIDE_PANELS) {
+      const d = host.contribute.schemaPanel({
+        id: schema.id,
+        title: schema.title,
+        icon: schema.icon,
+        defaultDock: schema.defaultDock,
+        schema,
+      });
+      disposers.push(() => d.dispose());
+    }
+  }
 
   if (host.supports("contribute.importer@1")) {
     disposers.push(

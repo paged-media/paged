@@ -44,3 +44,4 @@ export {
 } from "./object-model.js";
 export type { DeckLabel, PlaceholderLabel, SlideRecord, TransitionRecord } from "./object-model.js";
 export { SLIDE_PANEL_FIELDS, type PanelFieldList } from "./panel-fields.js";
+export { SLIDE_PANELS, addressFor } from "./panels.js";
