@@ -188,6 +188,19 @@ describe("run", () => {
   });
 });
 
+describe("get without a path (getAll)", () => {
+  it("skips heavy rows and content unless --content", async () => {
+    const lean = await cli(["get", fx.paged, fx.story, NP]);
+    expect(lean.code).toBe(0);
+    expect(lean.json.values).not.toHaveProperty("content");
+    expect(Object.keys(lean.json.values).length).toBeGreaterThan(0);
+    const full = await cli(["get", fx.paged, fx.story, "--content", NP]);
+    expect(full.code).toBe(0);
+    expect(full.json.values.content).toBe("Hello");
+    expect(Object.keys(full.json.values)).toEqual(expect.arrayContaining(Object.keys(lean.json.values)));
+  });
+});
+
 describe("export", () => {
   it("PDF: a complete PDF file", async () => {
     const out = join(tmp.dir, "out.pdf");

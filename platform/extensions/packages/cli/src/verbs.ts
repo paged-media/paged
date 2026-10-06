@@ -19,8 +19,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import type { ObjectOp, ObjectWriteResult } from "@paged-media/plugin-api";
-import { normalizeAddress, parseSelector } from "@paged-media/plugin-sdk";
+import type { ObjectCommandInfo, ObjectOp, ObjectWriteResult, PropertySchema } from "@paged-media/plugin-api";
+import { normalizeAddress, parseSelector, validateValue } from "@paged-media/plugin-sdk";
 
 import { flagBool, flagList, flagNumber, flagStr, type OptionSpec, type ParsedArgs } from "./args";
 import { applyBindings, dataSession, loadRecords, mergeOnce, readBindings, selectRecord, type MergeFlags } from "./data";
@@ -112,10 +112,10 @@ const kv = (rows: Array<[string, unknown]>): string =>
 const get: Verb = {
   name: "get",
   usage: "<doc> <address|selector> [path]",
-  summary: "read one property, or every property of an object (all matches of a selector)",
+  summary: "read one property, or every property of an object (all matches of a selector); heavy rows (pixels, story text) only with --content",
   min: 2,
   max: 3,
-  options: [OUTPUT_FORMAT],
+  options: [{ name: "content", help: "without [path]: also read heavy rows and content (skipped by default)" }, OUTPUT_FORMAT],
   reaches: ["get", "getAll", "query"],
   async run({ args, session }) {
     const [doc, target, path] = args.positionals as [string, string, string | undefined];
@@ -129,7 +129,7 @@ const get: Verb = {
         if (v.kind === "refused") refused = true;
         results.push({ address, path, ...(v.kind === "value" ? { value: plain(v.value) } : { result: v }) });
       } else {
-        const all = await s.h.objects.getAll(address);
+        const all = await s.h.objects.getAll(address, flagBool(args, "content") ? { content: true } : undefined);
         const values: Record<string, unknown> = {};
         const unavailable: Record<string, unknown> = {};
         for (const [p, v] of Object.entries(all)) {
@@ -341,10 +341,71 @@ const run: Verb = {
   },
 };
 
+/** The first-party typed PDF exporter (paged.publish). */
+export const PUBLISH_EXPORT_PDF = "media.paged.publish.exportPdf";
+
+/** The typed command `paged export --format pdf` routes through: `--via`,
+ *  else paged.publish's `exportPdf`, else any `<plugin>.exportPdf`; null
+ *  = core's own PDF door. */
+async function pdfCommand(s: CliSession, via: string | undefined): Promise<ObjectCommandInfo | null> {
+  const all = await s.h.objects.commands();
+  if (via) {
+    const c = all.find((x) => x.id === via);
+    if (!c) throw new CliError(EXIT.usage, `--via: no typed command "${via}" — known: ${all.map((x) => x.id).join(", ") || "none"}`);
+    return c;
+  }
+  return all.find((x) => x.id === PUBLISH_EXPORT_PDF) ?? all.find((x) => x.id.endsWith(".exportPdf")) ?? null;
+}
+
+/**
+ * The args for a typed exporter command from the flags given — ONLY those:
+ * every field the user did not name is left out, and the registry's
+ * `invoke` fills the struct's defaults (ADR 323 §21.8). Each value is text
+ * typed by its field (`coerceValue` → `validateValue`); a field the struct
+ * does not have, or a required field without a default, is a usage error
+ * naming the fields.
+ */
+export function exporterArgs(
+  command: ObjectCommandInfo,
+  given: { standard?: string; pages?: string; options: readonly string[] },
+): Record<string, unknown> {
+  const t = command.args;
+  if (t.kind !== "struct") throw new CliError(EXIT.usage, `${command.id}: args are ${t.kind}, not a record of options`);
+  const fields = t.fields;
+  const names = Object.keys(fields).join(", ");
+  const rows: PropertySchema[] = Object.entries(fields).map(([path, type]) => ({ path, type }));
+  const out: Record<string, unknown> = {};
+  const put = (key: string, raw: string, flag: string) => {
+    if (!(key in fields)) throw new CliError(EXIT.usage, `${flag}: ${command.id} has no option "${key}" — options: ${names}`);
+    const v = parseCliValue(rows, command.id, key, raw);
+    if (!v.ok) throw new CliError(EXIT.usage, `${flag}: ${v.reason}`);
+    out[key] = v.value;
+  };
+  if (given.standard !== undefined) put("standard", given.standard, "--pdf-standard");
+  if (given.pages !== undefined) {
+    if ("pages" in fields) put("pages", given.pages, "--pages");
+    else {
+      const m = /^(\d+)(?:-(\d+))?$/.exec(given.pages);
+      if (!m) throw new CliError(EXIT.usage, `--pages: "${given.pages}" is not a-b`);
+      put("pageFrom", m[1]!, "--pages");
+      put("pageTo", m[2] ?? m[1]!, "--pages");
+    }
+  }
+  for (const o of given.options) {
+    const eq = o.indexOf("=");
+    if (eq <= 0) throw new CliError(EXIT.usage, `--option: "${o}" is not key=value`);
+    put(o.slice(0, eq), o.slice(eq + 1), "--option");
+  }
+  const why = validateValue(t, out, undefined, "options");
+  if (why) throw new CliError(EXIT.usage, `${command.id}: ${why} — options: ${names}`);
+  return out;
+}
+
 const exportVerb: Verb = {
   name: "export",
   usage: "<doc>",
-  summary: "export through core (pdf, idml, paged) or a plugin exporter (its id or extension)",
+  summary:
+    "export through core (pdf, idml, paged) or a plugin exporter (its id or extension); pdf goes through a typed exportPdf command (paged.publish) when one is installed, passing only the options given",
   min: 1,
   max: 1,
   options: [
@@ -352,26 +413,49 @@ const exportVerb: Verb = {
     { ...OUT, help: "the output file (required)" },
     { name: "pdf-standard", value: "pdf17|pdfx4", help: "PDF standard (default pdf17)" },
     { name: "pages", value: "a-b", help: "PDF page range (1-based, inclusive)" },
+    { name: "option", value: "key=value", repeat: true, help: "a PDF option of the typed exporter, typed by its args (repeatable); the rest take their defaults" },
+    { name: "via", value: "command", help: "the typed PDF exporter command (default: media.paged.publish.exportPdf, else any *.exportPdf)" },
+    { name: "core", help: "use core's PDF door even when a typed exporter is installed" },
   ],
-  reaches: [],
+  reaches: ["commands", "invoke"],
   async run({ args, session, cwd }) {
     const [doc] = args.positionals as [string];
     const out = flagStr(args, "out");
     if (!out) throw new CliError(EXIT.usage, "export needs -o <file>");
     const format = flagStr(args, "format") ?? out.split(".").pop()!;
-    const pdf: Record<string, unknown> = {};
     const std = flagStr(args, "pdf-standard");
-    if (std) pdf["standard"] = std;
     const pages = flagStr(args, "pages");
+    const options = flagList(args, "option");
+    const s = await session(doc);
+    const path = resolve(cwd, out);
+
+    const typed = format.replace(/^\./, "").toLowerCase() === "pdf" && !flagBool(args, "core") ? await pdfCommand(s, flagStr(args, "via")) : null;
+    if (typed) {
+      const given = exporterArgs(typed, { ...(std !== undefined ? { standard: std } : {}), ...(pages !== undefined ? { pages } : {}), options });
+      let r: { bytes?: unknown; diagnostics?: unknown; pageCount?: unknown };
+      try {
+        r = (await s.h.objects.invoke(typed.id, given)) as typeof r;
+      } catch (err) {
+        throw new CliError(EXIT.failed, `export pdf via ${typed.id} failed: ${(err as Error).message}`);
+      }
+      if (!(r?.bytes instanceof Uint8Array)) throw new CliError(EXIT.failed, `${typed.id} answered no bytes`);
+      writeOutput(path, r.bytes);
+      return {
+        json: { path, format: "pdf", via: typed.id, options: given, bytes: r.bytes.byteLength, ...(r.pageCount !== undefined ? { pageCount: r.pageCount } : {}), diagnostics: r.diagnostics ?? [] },
+        text: `wrote ${path} (pdf via ${typed.id}, ${r.bytes.byteLength} bytes)`,
+      };
+    }
+
+    if (options.length) throw new CliError(EXIT.usage, "--option needs a typed exporter command (install @paged-media/publish, or pass --via)");
+    const pdf: Record<string, unknown> = {};
+    if (std) pdf["standard"] = std;
     if (pages) {
       const m = /^(\d+)(?:-(\d+))?$/.exec(pages);
       if (!m) throw new CliError(EXIT.usage, `--pages: "${pages}" is not a-b`);
       pdf["pageFrom"] = Number(m[1]);
       pdf["pageTo"] = Number(m[2] ?? m[1]);
     }
-    const s = await session(doc);
     const done = await s.exportBytes(format, { pdf });
-    const path = resolve(cwd, out);
     writeOutput(path, done.bytes);
     return {
       json: { path, format: done.format, bytes: done.bytes.byteLength, diagnostics: done.diagnostics, ...(done.lost ? { lost: done.lost } : {}) },

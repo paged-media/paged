@@ -21,8 +21,8 @@ importers:
   packages/cli:
     dependencies:
       '@paged-media/canvas-wasm':
-        specifier: 0.69.0
-        version: 0.69.0
+        specifier: 0.70.0
+        version: 0.70.0
     devDependencies:
       '@duckdb/duckdb-wasm':
         specifier: 1.29.0

@@ -2260,7 +2260,15 @@ is an owner step).
   (ADR 323) posts `objects.*` to a host — the CLI is such a host.
 - **Export door:** `HeadlessHost.exportDocument("paged"|"idml"|"pdf")` (new,
   harness.ts) drives the engine's exportPaged / exportIdml / exportPdf loop;
-  plugin formats go through `contribute.exporter` contributions.
+  plugin formats go through `contribute.exporter` contributions. `export
+  --format pdf` prefers a TYPED exporter (`media.paged.publish.exportPdf`,
+  else any `*.exportPdf`, or `--via <command>`; `--core` opts out): the CLI
+  sends ONLY the options named (`--pdf-standard`, `--pages`, repeatable
+  `--option key=value`, each typed by its struct field) and `invoke` fills
+  the struct defaults (§21.8); an unknown or missing-required option is a
+  usage error naming the fields.
+- **`get <addr>` without a path** is `getAll`: heavy rows and `content` are
+  skipped unless `--content` (§21.8).
 - **apply / merge** run on TODAY's paged.data session (`sessionFor(host)`,
   canary.10): DuckDB runs in-process (its own `AsyncDuckDBDispatcher` over
   the Node blocking build — `@duckdb/duckdb-wasm` 1.29.0, an optional peer —

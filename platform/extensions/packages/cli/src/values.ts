@@ -45,7 +45,7 @@ export function describeType(t: ValueType): string {
       return `map of ${describeType(t.of)} (JSON)`;
     case "struct":
       return `record { ${Object.entries(t.fields)
-        .map(([k, v]) => `${k}: ${describeType(v)}`)
+        .map(([k, v]) => `${k}${v.optional || v.default !== undefined ? "?" : ""}: ${describeType(v)}${v.default !== undefined ? ` = ${JSON.stringify(v.default)}` : ""}`)
         .join(", ")} } (JSON)`;
     case "color":
       return "color (a swatch name or reference)";
