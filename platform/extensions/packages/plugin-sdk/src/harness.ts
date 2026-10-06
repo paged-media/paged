@@ -160,6 +160,14 @@ export interface HarnessOptions
     name: string | null;
     requester: { id: string; name: string };
   }) => boolean | Promise<boolean>;
+  /** D-28 — the default font every load lays out with, the headless
+   *  stand-in for the editor's `defaultFontProvider` (the editor passes
+   *  `/fonts/Inter.ttf`). The engine lays text out, and reports a story
+   *  `overset`, only when it has a font: without one nothing is laid out and
+   *  every story reads `overset: false` (not measured). Passed to every
+   *  load, `load()` and `host.documents.open` alike. Absent: no font, as
+   *  before. */
+  defaultFont?: Uint8Array;
 }
 
 /** A headless will-save registry: listeners register per plugin and
@@ -647,7 +655,9 @@ export async function createHeadlessHost(
   /** Load bytes into the engine; the raw reply (documentLoaded or not). */
   const loadDirect = (bytes: Uint8Array): WorkerToMain => {
     const reply = JSON.parse(
-      worker.loadDocumentDirect(seqCounter++, bytes),
+      options.defaultFont
+        ? worker.loadDocumentDirect(seqCounter++, bytes, options.defaultFont)
+        : worker.loadDocumentDirect(seqCounter++, bytes),
     ) as WorkerToMain;
     if (reply.kind === "documentLoaded") {
       try {
