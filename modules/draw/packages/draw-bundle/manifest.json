@@ -233,6 +233,3025 @@
         "type": "vectorGraphic",
         "entry": "doubleClick"
       }
-    ]
+    ],
+    "objectModel": {
+      "kinds": [
+        {
+          "kind": "path",
+          "title": "Path",
+          "schema": [
+            {
+              "path": "points",
+              "type": {
+                "kind": "list",
+                "of": {
+                  "kind": "struct",
+                  "fields": {
+                    "anchor": {
+                      "kind": "point"
+                    },
+                    "left": {
+                      "kind": "point"
+                    },
+                    "right": {
+                      "kind": "point"
+                    }
+                  }
+                }
+              },
+              "title": "Points",
+              "summary": "Every anchor with its two direction handles, in the item's inner coordinates (pt), contour after contour. A write replaces the whole table (framePath)."
+            },
+            {
+              "path": "subpathStarts",
+              "type": {
+                "kind": "list",
+                "of": {
+                  "kind": "number",
+                  "integer": true
+                }
+              },
+              "title": "Contour starts",
+              "summary": "Index of each contour's first point; empty = one contour. A compound path has more than one."
+            },
+            {
+              "path": "subpathOpen",
+              "type": {
+                "kind": "list",
+                "of": {
+                  "kind": "bool"
+                }
+              },
+              "access": "readOnly",
+              "summary": "Per contour: true = open. Write through Join / Close (pathOpenAt / closePath)."
+            },
+            {
+              "path": "pointCount",
+              "type": {
+                "kind": "number",
+                "integer": true
+              },
+              "access": "derived",
+              "summary": "How many points the table holds."
+            },
+            {
+              "path": "contourCount",
+              "type": {
+                "kind": "number",
+                "integer": true
+              },
+              "access": "derived",
+              "summary": "How many contours (1 + compound holes)."
+            },
+            {
+              "path": "itemTransform",
+              "type": {
+                "kind": "transform"
+              },
+              "access": "readOnly",
+              "summary": "The item's transform [a,b,c,d,tx,ty]; written through the core frame path frameTransform."
+            }
+          ]
+        },
+        {
+          "kind": "appearance",
+          "title": "Appearance",
+          "schema": [
+            {
+              "path": "fills",
+              "type": {
+                "kind": "list",
+                "of": {
+                  "kind": "struct",
+                  "fields": {
+                    "color": {
+                      "kind": "color"
+                    },
+                    "tint": {
+                      "kind": "number",
+                      "unit": "percent"
+                    },
+                    "opacity": {
+                      "kind": "number",
+                      "unit": "percent"
+                    },
+                    "blendMode": {
+                      "kind": "enum",
+                      "members": [
+                        "Normal",
+                        "Multiply",
+                        "Screen",
+                        "Overlay",
+                        "SoftLight",
+                        "HardLight",
+                        "ColorDodge",
+                        "ColorBurn",
+                        "Darken",
+                        "Lighten",
+                        "Difference",
+                        "Exclusion",
+                        "Hue",
+                        "Saturation",
+                        "Color",
+                        "Luminosity"
+                      ]
+                    }
+                  }
+                }
+              },
+              "title": "Fills",
+              "summary": "Extra fill layers, bottom → top; the LAST one bakes to the frame's fill. Order is list order.",
+              "default": []
+            },
+            {
+              "path": "strokes",
+              "type": {
+                "kind": "list",
+                "of": {
+                  "kind": "struct",
+                  "fields": {
+                    "color": {
+                      "kind": "color"
+                    },
+                    "weight": {
+                      "kind": "length"
+                    },
+                    "opacity": {
+                      "kind": "number",
+                      "unit": "percent"
+                    },
+                    "blendMode": {
+                      "kind": "enum",
+                      "members": [
+                        "Normal",
+                        "Multiply",
+                        "Screen",
+                        "Overlay",
+                        "SoftLight",
+                        "HardLight",
+                        "ColorDodge",
+                        "ColorBurn",
+                        "Darken",
+                        "Lighten",
+                        "Difference",
+                        "Exclusion",
+                        "Hue",
+                        "Saturation",
+                        "Color",
+                        "Luminosity"
+                      ]
+                    }
+                  }
+                }
+              },
+              "title": "Strokes",
+              "summary": "Extra stroke layers, bottom → top; the LAST one bakes to the frame's stroke. Order is list order.",
+              "default": []
+            },
+            {
+              "path": "graphicStyle",
+              "type": {
+                "kind": "ref",
+                "to": "plugin:media.paged.draw/graphicStyle"
+              },
+              "title": "Graphic style",
+              "nullable": true,
+              "summary": "The linked graphic style; setting it applies the style, null breaks the link (keeps the look)."
+            },
+            {
+              "path": "graphicStyleOverridden",
+              "type": {
+                "kind": "bool"
+              },
+              "access": "derived",
+              "summary": "True when the element was edited directly since its style was applied."
+            },
+            {
+              "path": "baked",
+              "type": {
+                "kind": "bool"
+              },
+              "access": "readOnly",
+              "summary": "True when the stack is baked into a group of real page items (release it to edit here)."
+            }
+          ]
+        },
+        {
+          "kind": "graphicStyle",
+          "title": "Graphic style",
+          "schema": [
+            {
+              "path": "name",
+              "type": {
+                "kind": "text"
+              },
+              "title": "Name",
+              "summary": "The style's name — what a persisted reference selects by."
+            },
+            {
+              "path": "fills",
+              "type": {
+                "kind": "list",
+                "of": {
+                  "kind": "struct",
+                  "fields": {
+                    "color": {
+                      "kind": "color"
+                    },
+                    "tint": {
+                      "kind": "number",
+                      "unit": "percent"
+                    },
+                    "opacity": {
+                      "kind": "number",
+                      "unit": "percent"
+                    },
+                    "blendMode": {
+                      "kind": "enum",
+                      "members": [
+                        "Normal",
+                        "Multiply",
+                        "Screen",
+                        "Overlay",
+                        "SoftLight",
+                        "HardLight",
+                        "ColorDodge",
+                        "ColorBurn",
+                        "Darken",
+                        "Lighten",
+                        "Difference",
+                        "Exclusion",
+                        "Hue",
+                        "Saturation",
+                        "Color",
+                        "Luminosity"
+                      ]
+                    }
+                  }
+                }
+              },
+              "title": "Fills",
+              "summary": "Fill layers, bottom → top.",
+              "default": []
+            },
+            {
+              "path": "strokes",
+              "type": {
+                "kind": "list",
+                "of": {
+                  "kind": "struct",
+                  "fields": {
+                    "color": {
+                      "kind": "color"
+                    },
+                    "weight": {
+                      "kind": "length"
+                    },
+                    "opacity": {
+                      "kind": "number",
+                      "unit": "percent"
+                    },
+                    "blendMode": {
+                      "kind": "enum",
+                      "members": [
+                        "Normal",
+                        "Multiply",
+                        "Screen",
+                        "Overlay",
+                        "SoftLight",
+                        "HardLight",
+                        "ColorDodge",
+                        "ColorBurn",
+                        "Darken",
+                        "Lighten",
+                        "Difference",
+                        "Exclusion",
+                        "Hue",
+                        "Saturation",
+                        "Color",
+                        "Luminosity"
+                      ]
+                    }
+                  }
+                }
+              },
+              "title": "Strokes",
+              "summary": "Stroke layers, bottom → top.",
+              "default": []
+            },
+            {
+              "path": "baseFill",
+              "type": {
+                "kind": "color"
+              },
+              "nullable": true,
+              "summary": "The object-level paint; a top fill / stroke layer claims its slot (the bake rule)."
+            },
+            {
+              "path": "baseFillTint",
+              "type": {
+                "kind": "number",
+                "unit": "percent"
+              },
+              "nullable": true,
+              "summary": "The object-level paint; a top fill / stroke layer claims its slot (the bake rule)."
+            },
+            {
+              "path": "baseStroke",
+              "type": {
+                "kind": "color"
+              },
+              "nullable": true,
+              "summary": "The object-level paint; a top fill / stroke layer claims its slot (the bake rule)."
+            },
+            {
+              "path": "baseStrokeWeight",
+              "type": {
+                "kind": "length"
+              },
+              "nullable": true,
+              "summary": "The object-level paint; a top fill / stroke layer claims its slot (the bake rule)."
+            },
+            {
+              "path": "baseOpacity",
+              "type": {
+                "kind": "number",
+                "unit": "percent"
+              },
+              "nullable": true,
+              "summary": "The object-level paint; a top fill / stroke layer claims its slot (the bake rule)."
+            },
+            {
+              "path": "baseBlendMode",
+              "type": {
+                "kind": "enum",
+                "members": [
+                  "Normal",
+                  "Multiply",
+                  "Screen",
+                  "Overlay",
+                  "SoftLight",
+                  "HardLight",
+                  "ColorDodge",
+                  "ColorBurn",
+                  "Darken",
+                  "Lighten",
+                  "Difference",
+                  "Exclusion",
+                  "Hue",
+                  "Saturation",
+                  "Color",
+                  "Luminosity"
+                ]
+              },
+              "nullable": true,
+              "summary": "The object-level paint; a top fill / stroke layer claims its slot (the bake rule)."
+            },
+            {
+              "path": "linkedCount",
+              "type": {
+                "kind": "number",
+                "integer": true
+              },
+              "access": "derived",
+              "summary": "How many elements follow this style."
+            }
+          ]
+        },
+        {
+          "kind": "symbol",
+          "title": "Symbol",
+          "schema": [
+            {
+              "path": "name",
+              "type": {
+                "kind": "text"
+              },
+              "title": "Name",
+              "summary": "The symbol's name — what a persisted reference selects by."
+            },
+            {
+              "path": "registration",
+              "type": {
+                "kind": "enum",
+                "members": [
+                  "topLeft",
+                  "top",
+                  "topRight",
+                  "left",
+                  "center",
+                  "right",
+                  "bottomLeft",
+                  "bottom",
+                  "bottomRight"
+                ]
+              },
+              "access": "readOnly",
+              "summary": "The registration point on the §16.1 nine-point grid (set at define)."
+            },
+            {
+              "path": "origin",
+              "type": {
+                "kind": "point"
+              },
+              "access": "readOnly",
+              "summary": "The registration point in the definition's own coordinates (pt)."
+            },
+            {
+              "path": "pieceCount",
+              "type": {
+                "kind": "number",
+                "integer": true
+              },
+              "access": "derived",
+              "summary": "How many artwork pieces the definition holds."
+            },
+            {
+              "path": "bounds",
+              "type": {
+                "kind": "bounds"
+              },
+              "access": "derived",
+              "summary": "The definition's control-point hull [minX, minY, maxX, maxY]."
+            },
+            {
+              "path": "instanceCount",
+              "type": {
+                "kind": "number",
+                "integer": true
+              },
+              "access": "derived",
+              "summary": "How many placed instances follow this definition."
+            }
+          ]
+        },
+        {
+          "kind": "symbolInstance",
+          "title": "Symbol instance",
+          "schema": [
+            {
+              "path": "symbol",
+              "type": {
+                "kind": "ref",
+                "to": "plugin:media.paged.draw/symbol"
+              },
+              "access": "readOnly",
+              "summary": "The definition this instance follows."
+            },
+            {
+              "path": "origin",
+              "type": {
+                "kind": "point"
+              },
+              "access": "readOnly",
+              "summary": "Where the registration point was placed (page pt)."
+            },
+            {
+              "path": "leaves",
+              "type": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "access": "readOnly",
+              "summary": "The instance's page items, in piece order — each one's own core properties are its overrides."
+            },
+            {
+              "path": "linked",
+              "type": {
+                "kind": "bool"
+              },
+              "title": "Linked",
+              "summary": "false breaks the link and keeps the artwork (Break link). Re-linking is a re-place."
+            }
+          ]
+        },
+        {
+          "kind": "pattern",
+          "title": "Pattern field",
+          "schema": [
+            {
+              "path": "name",
+              "type": {
+                "kind": "text"
+              },
+              "title": "Name",
+              "summary": "The recipe's name — what a persisted reference selects by."
+            },
+            {
+              "path": "layout",
+              "type": {
+                "kind": "enum",
+                "members": [
+                  "grid",
+                  "brick",
+                  "hex"
+                ]
+              },
+              "default": "grid",
+              "summary": "Tile lattice."
+            },
+            {
+              "path": "tile",
+              "type": {
+                "kind": "point"
+              },
+              "nullable": true,
+              "default": null,
+              "summary": "Tile size [width, height] in pt; null = the source's bounds."
+            },
+            {
+              "path": "spacing",
+              "type": {
+                "kind": "point"
+              },
+              "default": [
+                6,
+                6
+              ],
+              "summary": "[horizontal, vertical] spacing in pt; negative overlaps."
+            },
+            {
+              "path": "columns",
+              "type": {
+                "kind": "number",
+                "integer": true
+              },
+              "range": {
+                "min": 1
+              },
+              "default": 3,
+              "summary": "Copies across."
+            },
+            {
+              "path": "rows",
+              "type": {
+                "kind": "number",
+                "integer": true
+              },
+              "range": {
+                "min": 1
+              },
+              "default": 3,
+              "summary": "Copies down."
+            },
+            {
+              "path": "offset",
+              "type": {
+                "kind": "number"
+              },
+              "range": {
+                "min": 0,
+                "max": 1
+              },
+              "default": 0.5,
+              "summary": "Brick / hex row offset, as a fraction of a tile."
+            },
+            {
+              "path": "dim",
+              "type": {
+                "kind": "number",
+                "unit": "percent"
+              },
+              "range": {
+                "min": 0,
+                "max": 100
+              },
+              "default": 100,
+              "summary": "Copies' opacity (a real frameOpacity)."
+            },
+            {
+              "path": "overlap",
+              "type": {
+                "kind": "struct",
+                "fields": {
+                  "horizontal": {
+                    "kind": "enum",
+                    "members": [
+                      "leftInFront",
+                      "rightInFront"
+                    ]
+                  },
+                  "vertical": {
+                    "kind": "enum",
+                    "members": [
+                      "topInFront",
+                      "bottomInFront"
+                    ]
+                  }
+                }
+              },
+              "default": {
+                "horizontal": "rightInFront",
+                "vertical": "bottomInFront"
+              },
+              "summary": "Which copy paints in front, across and down."
+            },
+            {
+              "path": "fitToArtboard",
+              "type": {
+                "kind": "bool"
+              },
+              "default": true,
+              "summary": "Only tiles that fit the page."
+            },
+            {
+              "path": "sources",
+              "type": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "access": "readOnly",
+              "summary": "The tile's source artwork."
+            }
+          ]
+        },
+        {
+          "kind": "repeat",
+          "title": "Repeat",
+          "schema": [
+            {
+              "path": "name",
+              "type": {
+                "kind": "text"
+              },
+              "title": "Name",
+              "summary": "The recipe's name — what a persisted reference selects by."
+            },
+            {
+              "path": "kind",
+              "type": {
+                "kind": "enum",
+                "members": [
+                  "radial",
+                  "grid",
+                  "mirror"
+                ]
+              },
+              "default": "radial",
+              "summary": "Which repeat: around a ring, on a grid, or mirrored."
+            },
+            {
+              "path": "count",
+              "type": {
+                "kind": "number",
+                "integer": true
+              },
+              "range": {
+                "min": 1,
+                "max": 200
+              },
+              "default": 6,
+              "summary": "Radial: instances around the ring."
+            },
+            {
+              "path": "radiusPt",
+              "type": {
+                "kind": "length"
+              },
+              "range": {
+                "min": 0
+              },
+              "default": 120,
+              "summary": "Radial: ring radius."
+            },
+            {
+              "path": "startDeg",
+              "type": {
+                "kind": "number",
+                "unit": "deg"
+              },
+              "default": -90,
+              "summary": "Radial: angle of the first instance."
+            },
+            {
+              "path": "sweepDeg",
+              "type": {
+                "kind": "number",
+                "unit": "deg"
+              },
+              "range": {
+                "min": -360,
+                "max": 360
+              },
+              "default": 360,
+              "summary": "Radial: the arc the instances span."
+            },
+            {
+              "path": "rotateInstances",
+              "type": {
+                "kind": "bool"
+              },
+              "default": true,
+              "summary": "Radial: turn each instance with the ring."
+            },
+            {
+              "path": "columns",
+              "type": {
+                "kind": "number",
+                "integer": true
+              },
+              "range": {
+                "min": 1
+              },
+              "default": 3,
+              "summary": "Grid: columns."
+            },
+            {
+              "path": "rows",
+              "type": {
+                "kind": "number",
+                "integer": true
+              },
+              "range": {
+                "min": 1
+              },
+              "default": 3,
+              "summary": "Grid: rows."
+            },
+            {
+              "path": "spacing",
+              "type": {
+                "kind": "point"
+              },
+              "default": [
+                12,
+                12
+              ],
+              "summary": "Grid: [horizontal, vertical] gap in pt."
+            },
+            {
+              "path": "flipColumns",
+              "type": {
+                "kind": "bool"
+              },
+              "default": false,
+              "summary": "Grid: mirror every other column."
+            },
+            {
+              "path": "flipRows",
+              "type": {
+                "kind": "bool"
+              },
+              "default": false,
+              "summary": "Grid: mirror every other row."
+            },
+            {
+              "path": "angleDeg",
+              "type": {
+                "kind": "number",
+                "unit": "deg"
+              },
+              "default": 90,
+              "summary": "Mirror: the axis angle."
+            },
+            {
+              "path": "offsetPt",
+              "type": {
+                "kind": "length"
+              },
+              "nullable": true,
+              "default": null,
+              "summary": "Mirror: axis offset from the source (null = touching)."
+            },
+            {
+              "path": "clip",
+              "type": {
+                "kind": "bool"
+              },
+              "default": false,
+              "summary": "Clip the instances (to clipRect, or the page)."
+            },
+            {
+              "path": "clipRect",
+              "type": {
+                "kind": "bounds"
+              },
+              "nullable": true,
+              "default": null,
+              "summary": "Clip rectangle [top, left, bottom, right]; null = the page."
+            },
+            {
+              "path": "fitToArtboard",
+              "type": {
+                "kind": "bool"
+              },
+              "default": true,
+              "summary": "Drop instances that would leave the page."
+            },
+            {
+              "path": "sources",
+              "type": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "access": "readOnly",
+              "summary": "The source artwork."
+            },
+            {
+              "path": "instances",
+              "type": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "access": "readOnly",
+              "summary": "The instances the last Make / Update built."
+            },
+            {
+              "path": "clipFrame",
+              "type": {
+                "kind": "ref",
+                "to": "frame"
+              },
+              "access": "readOnly",
+              "nullable": true,
+              "summary": "The clip frame of a clipped repeat (null = unclipped)."
+            }
+          ]
+        },
+        {
+          "kind": "blend",
+          "title": "Blend",
+          "schema": [
+            {
+              "path": "name",
+              "type": {
+                "kind": "text"
+              },
+              "title": "Name",
+              "summary": "The recipe's name — what a persisted reference selects by."
+            },
+            {
+              "path": "spacing",
+              "type": {
+                "kind": "enum",
+                "members": [
+                  "smoothColor",
+                  "steps",
+                  "distance"
+                ]
+              },
+              "default": "steps",
+              "summary": "Spacing mode: smooth colour, specified steps, specified distance."
+            },
+            {
+              "path": "steps",
+              "type": {
+                "kind": "number",
+                "integer": true
+              },
+              "range": {
+                "min": 1,
+                "max": 200
+              },
+              "default": 3,
+              "summary": "Specified steps: the intermediate count."
+            },
+            {
+              "path": "distancePt",
+              "type": {
+                "kind": "length"
+              },
+              "range": {
+                "min": 0
+              },
+              "default": 24,
+              "summary": "Specified distance: the gap along the spine."
+            },
+            {
+              "path": "orientation",
+              "type": {
+                "kind": "enum",
+                "members": [
+                  "page",
+                  "path"
+                ]
+              },
+              "default": "page",
+              "summary": "Align intermediates to the page, or turn them with the spine."
+            },
+            {
+              "path": "easing",
+              "type": {
+                "kind": "enum",
+                "members": [
+                  "linear",
+                  "easeIn",
+                  "easeOut",
+                  "easeInOut"
+                ]
+              },
+              "default": "linear",
+              "summary": "Position easing curve."
+            },
+            {
+              "path": "easingStrength",
+              "type": {
+                "kind": "number"
+              },
+              "range": {
+                "min": 0,
+                "max": 1
+              },
+              "default": 1,
+              "summary": "Position easing strength (0 = linear)."
+            },
+            {
+              "path": "colorEasing",
+              "type": {
+                "kind": "enum",
+                "members": [
+                  "linear",
+                  "easeIn",
+                  "easeOut",
+                  "easeInOut"
+                ]
+              },
+              "nullable": true,
+              "default": null,
+              "summary": "Independent colour easing; null = follow position."
+            },
+            {
+              "path": "colorEasingStrength",
+              "type": {
+                "kind": "number"
+              },
+              "range": {
+                "min": 0,
+                "max": 1
+              },
+              "default": 1,
+              "summary": "Colour easing strength."
+            },
+            {
+              "path": "reverseSpine",
+              "type": {
+                "kind": "bool"
+              },
+              "default": false,
+              "summary": "Run along the spine the other way."
+            },
+            {
+              "path": "reverseFrontToBack",
+              "type": {
+                "kind": "bool"
+              },
+              "default": false,
+              "summary": "Reverse the paint order of the intermediates."
+            },
+            {
+              "path": "fitToArtboard",
+              "type": {
+                "kind": "bool"
+              },
+              "default": true,
+              "summary": "Drop intermediates that would leave the page."
+            },
+            {
+              "path": "keys",
+              "type": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "access": "readOnly",
+              "summary": "The two key objects."
+            },
+            {
+              "path": "spine",
+              "type": {
+                "kind": "ref",
+                "to": "frame"
+              },
+              "access": "readOnly",
+              "nullable": true,
+              "summary": "The replaced spine path (null = the straight line between the keys)."
+            },
+            {
+              "path": "stepObjects",
+              "type": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "access": "readOnly",
+              "summary": "The intermediates the last Make / Update built."
+            }
+          ]
+        },
+        {
+          "kind": "livePaint",
+          "title": "Live paint group",
+          "schema": [
+            {
+              "path": "name",
+              "type": {
+                "kind": "text"
+              },
+              "title": "Name",
+              "summary": "The recipe's name — what a persisted reference selects by."
+            },
+            {
+              "path": "inputs",
+              "type": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "access": "readOnly",
+              "summary": "The ordered member paths the faces are computed from."
+            },
+            {
+              "path": "faces",
+              "type": {
+                "kind": "list",
+                "of": {
+                  "kind": "struct",
+                  "fields": {
+                    "face": {
+                      "kind": "text"
+                    },
+                    "fill": {
+                      "kind": "text"
+                    }
+                  }
+                }
+              },
+              "access": "readOnly",
+              "summary": "Each painted face id and its swatch (\"\" = unpainted). Paint through fillLivePaintFace."
+            },
+            {
+              "path": "faceCount",
+              "type": {
+                "kind": "number",
+                "integer": true
+              },
+              "access": "derived",
+              "summary": "How many faces carry a paint."
+            }
+          ]
+        },
+        {
+          "kind": "objectsOnPath",
+          "title": "Objects on a path",
+          "schema": [
+            {
+              "path": "name",
+              "type": {
+                "kind": "text"
+              },
+              "title": "Name",
+              "summary": "The recipe's name — what a persisted reference selects by."
+            },
+            {
+              "path": "distribute",
+              "type": {
+                "kind": "enum",
+                "members": [
+                  "count",
+                  "spacing"
+                ]
+              },
+              "default": "count",
+              "summary": "Spread the objects evenly, or at a fixed spacing."
+            },
+            {
+              "path": "spacingPt",
+              "type": {
+                "kind": "length"
+              },
+              "range": {
+                "min": 0
+              },
+              "default": 48,
+              "summary": "Spacing mode: the gap along the path."
+            },
+            {
+              "path": "startOffsetPt",
+              "type": {
+                "kind": "length"
+              },
+              "default": 0,
+              "summary": "Where along the path the first object sits."
+            },
+            {
+              "path": "alignToPath",
+              "type": {
+                "kind": "bool"
+              },
+              "default": true,
+              "summary": "Turn each object with the path's tangent."
+            },
+            {
+              "path": "pivot",
+              "type": {
+                "kind": "enum",
+                "members": [
+                  "topLeft",
+                  "top",
+                  "topRight",
+                  "left",
+                  "center",
+                  "right",
+                  "bottomLeft",
+                  "bottom",
+                  "bottomRight"
+                ]
+              },
+              "default": "center",
+              "summary": "The point of each object that rides the path."
+            },
+            {
+              "path": "reverseOrder",
+              "type": {
+                "kind": "bool"
+              },
+              "default": false,
+              "summary": "Place the objects in reverse order."
+            },
+            {
+              "path": "order",
+              "type": {
+                "kind": "list",
+                "of": {
+                  "kind": "number",
+                  "integer": true
+                }
+              },
+              "nullable": true,
+              "default": null,
+              "summary": "An explicit object order; null = selection order."
+            },
+            {
+              "path": "fitToArtboard",
+              "type": {
+                "kind": "bool"
+              },
+              "default": true,
+              "summary": "Skip slots that would leave the page."
+            },
+            {
+              "path": "path",
+              "type": {
+                "kind": "ref",
+                "to": "frame"
+              },
+              "access": "readOnly",
+              "nullable": true,
+              "summary": "The path the objects ride."
+            },
+            {
+              "path": "objects",
+              "type": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "access": "readOnly",
+              "summary": "The objects on the path (moved, never copied)."
+            }
+          ]
+        }
+      ],
+      "commands": [
+        {
+          "id": "media.paged.draw.command.strokeDashSolid",
+          "title": "Stroke dash solid",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.strokeDashDashed",
+          "title": "Stroke dash dashed",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.strokeDashDotted",
+          "title": "Stroke dash dotted",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.strokeDashDashDot",
+          "title": "Stroke dash dash dot",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.fillGradientLinear",
+          "title": "Fill gradient linear",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.fillGradientRadial",
+          "title": "Fill gradient radial",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.cornersRounded",
+          "title": "Corners rounded",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.cornersInverseRounded",
+          "title": "Corners inverse rounded",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.cornersBevel",
+          "title": "Corners bevel",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.cornersFancy",
+          "title": "Corners fancy",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.cornersNone",
+          "title": "Corners none",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.outlineStroke",
+          "title": "Outline stroke",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "width": {
+                "kind": "length"
+              },
+              "cap": {
+                "kind": "enum",
+                "members": [
+                  "butt",
+                  "round",
+                  "square"
+                ]
+              },
+              "join": {
+                "kind": "enum",
+                "members": [
+                  "miter",
+                  "round",
+                  "bevel"
+                ]
+              },
+              "miterLimit": {
+                "kind": "number"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.offsetPath",
+          "title": "Offset path",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "delta": {
+                "kind": "length"
+              },
+              "join": {
+                "kind": "enum",
+                "members": [
+                  "miter",
+                  "round",
+                  "bevel"
+                ]
+              },
+              "miterLimit": {
+                "kind": "number"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.simplifyPath",
+          "title": "Simplify path",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "tolerance": {
+                "kind": "length"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.joinEndpoints",
+          "title": "Join endpoints",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.closePath",
+          "title": "Close path",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.averageEndpoints",
+          "title": "Average endpoints",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.reversePathDirection",
+          "title": "Reverse path direction",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.createOutlines",
+          "title": "Create outlines",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.transformAgain",
+          "title": "Transform again",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.reflectHorizontal",
+          "title": "Reflect horizontal",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "copy": {
+                "kind": "bool"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.reflectVertical",
+          "title": "Reflect vertical",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "copy": {
+                "kind": "bool"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.pathfinderUnite",
+          "title": "Pathfinder unite",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.pathfinderSubtract",
+          "title": "Pathfinder subtract",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.pathfinderIntersect",
+          "title": "Pathfinder intersect",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.pathfinderExclude",
+          "title": "Pathfinder exclude",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.pathfinderDivide",
+          "title": "Pathfinder divide",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.pathfinderTrim",
+          "title": "Pathfinder trim",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.pathfinderMerge",
+          "title": "Pathfinder merge",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.pathfinderCrop",
+          "title": "Pathfinder crop",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.pathfinderOutline",
+          "title": "Pathfinder outline",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.pathfinderMinusBack",
+          "title": "Pathfinder minus back",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.makeCompoundPath",
+          "title": "Make compound path",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.releaseCompoundPath",
+          "title": "Release compound path",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.appearanceAddFill",
+          "title": "Appearance add fill",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.appearanceAddStroke",
+          "title": "Appearance add stroke",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.appearanceClear",
+          "title": "Appearance clear",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.bakeAppearance",
+          "title": "Bake appearance",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.releaseAppearance",
+          "title": "Release appearance",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.appearanceRemoveLayer",
+          "title": "Appearance remove layer",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "kind": {
+                "kind": "enum",
+                "members": [
+                  "fill",
+                  "stroke"
+                ]
+              },
+              "index": {
+                "kind": "number",
+                "integer": true
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.appearanceMoveLayer",
+          "title": "Appearance move layer",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "kind": {
+                "kind": "enum",
+                "members": [
+                  "fill",
+                  "stroke"
+                ]
+              },
+              "index": {
+                "kind": "number",
+                "integer": true
+              },
+              "delta": {
+                "kind": "number",
+                "integer": true
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.saveGraphicStyle",
+          "title": "Save graphic style",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "name": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.applyGraphicStyle",
+          "title": "Apply graphic style",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "style": {
+                "kind": "text"
+              },
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.redefineGraphicStyle",
+          "title": "Redefine graphic style",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "style": {
+                "kind": "text"
+              },
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.breakGraphicStyleLink",
+          "title": "Break graphic style link",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.renameGraphicStyle",
+          "title": "Rename graphic style",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "style": {
+                "kind": "text"
+              },
+              "name": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.deleteGraphicStyle",
+          "title": "Delete graphic style",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "style": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.defineSymbol",
+          "title": "Define symbol",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "name": {
+                "kind": "text"
+              },
+              "registration": {
+                "kind": "enum",
+                "members": [
+                  "topLeft",
+                  "top",
+                  "topRight",
+                  "left",
+                  "center",
+                  "right",
+                  "bottomLeft",
+                  "bottom",
+                  "bottomRight"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.placeSymbolInstance",
+          "title": "Place symbol instance",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "symbol": {
+                "kind": "text"
+              },
+              "x": {
+                "kind": "length"
+              },
+              "y": {
+                "kind": "length"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.redefineSymbol",
+          "title": "Redefine symbol",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "symbol": {
+                "kind": "text"
+              },
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.breakSymbolLink",
+          "title": "Break symbol link",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.resetSymbolTransform",
+          "title": "Reset symbol transform",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.renameSymbol",
+          "title": "Rename symbol",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "symbol": {
+                "kind": "text"
+              },
+              "name": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.deleteSymbol",
+          "title": "Delete symbol",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "symbol": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.makeLivePaintGroup",
+          "title": "Make live paint group",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "name": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.fillLivePaintFace",
+          "title": "Fill live paint face",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "group": {
+                "kind": "text"
+              },
+              "faces": {
+                "kind": "list",
+                "of": {
+                  "kind": "text"
+                }
+              },
+              "fill": {
+                "kind": "color"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.regenerateLivePaint",
+          "title": "Regenerate live paint",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "group": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.selectLivePaintFaces",
+          "title": "Select live paint faces",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "group": {
+                "kind": "text"
+              },
+              "faces": {
+                "kind": "list",
+                "of": {
+                  "kind": "text"
+                }
+              }
+            }
+          },
+          "result": {
+            "kind": "list",
+            "of": {
+              "kind": "ref",
+              "to": "frame"
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.deleteLivePaintFace",
+          "title": "Delete live paint face",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "group": {
+                "kind": "text"
+              },
+              "faces": {
+                "kind": "list",
+                "of": {
+                  "kind": "text"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.releaseLivePaint",
+          "title": "Release live paint",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "group": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.makeOpacityMask",
+          "title": "Make opacity mask",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "maskType": {
+                "kind": "enum",
+                "members": [
+                  "luminosity",
+                  "alpha"
+                ]
+              },
+              "invert": {
+                "kind": "bool"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.releaseOpacityMask",
+          "title": "Release opacity mask",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.attachTextToPath",
+          "title": "Attach text to path",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "story": {
+                "kind": "text"
+              },
+              "pathTypeAlignment": {
+                "kind": "enum",
+                "members": [
+                  "BaselinePathType",
+                  "CenterPathType",
+                  "AscenderPathType",
+                  "DescenderPathType"
+                ]
+              },
+              "flipPathEffect": {
+                "kind": "enum",
+                "members": [
+                  "NotFlipped",
+                  "Flipped"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.detachTextFromPath",
+          "title": "Detach text from path",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.selectSameFill",
+          "title": "Select same fill",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          },
+          "result": {
+            "kind": "list",
+            "of": {
+              "kind": "ref",
+              "to": "frame"
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.selectSameStroke",
+          "title": "Select same stroke",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          },
+          "result": {
+            "kind": "list",
+            "of": {
+              "kind": "ref",
+              "to": "frame"
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.selectSameStrokeWeight",
+          "title": "Select same stroke weight",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "tolerance": {
+                "kind": "length"
+              }
+            }
+          },
+          "result": {
+            "kind": "list",
+            "of": {
+              "kind": "ref",
+              "to": "frame"
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.insertArc",
+          "title": "Insert arc",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "cx": {
+                "kind": "length"
+              },
+              "cy": {
+                "kind": "length"
+              },
+              "rx": {
+                "kind": "length"
+              },
+              "ry": {
+                "kind": "length"
+              },
+              "startAngleDeg": {
+                "kind": "number",
+                "unit": "deg"
+              },
+              "sweepDeg": {
+                "kind": "number",
+                "unit": "deg"
+              },
+              "closed": {
+                "kind": "bool"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.insertSpiral",
+          "title": "Insert spiral",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "cx": {
+                "kind": "length"
+              },
+              "cy": {
+                "kind": "length"
+              },
+              "r0": {
+                "kind": "length"
+              },
+              "decay": {
+                "kind": "number"
+              },
+              "turns": {
+                "kind": "number"
+              },
+              "segmentsPerTurn": {
+                "kind": "number",
+                "integer": true
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.insertRectGrid",
+          "title": "Insert rect grid",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "x": {
+                "kind": "length"
+              },
+              "y": {
+                "kind": "length"
+              },
+              "width": {
+                "kind": "length"
+              },
+              "height": {
+                "kind": "length"
+              },
+              "rows": {
+                "kind": "number",
+                "integer": true
+              },
+              "cols": {
+                "kind": "number",
+                "integer": true
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.insertPolarGrid",
+          "title": "Insert polar grid",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "cx": {
+                "kind": "length"
+              },
+              "cy": {
+                "kind": "length"
+              },
+              "r": {
+                "kind": "length"
+              },
+              "rings": {
+                "kind": "number",
+                "integer": true
+              },
+              "radials": {
+                "kind": "number",
+                "integer": true
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.makePatternFromSelection",
+          "title": "Make pattern from selection",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "name": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.editPatternField",
+          "title": "Edit pattern field",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "pattern": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.selectPatternTiles",
+          "title": "Select pattern tiles",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "pattern": {
+                "kind": "text"
+              },
+              "includeSources": {
+                "kind": "bool"
+              }
+            }
+          },
+          "result": {
+            "kind": "list",
+            "of": {
+              "kind": "ref",
+              "to": "frame"
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.deletePatternTiles",
+          "title": "Delete pattern tiles",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "pattern": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.releasePatternField",
+          "title": "Release pattern field",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "pattern": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.makeRadialRepeat",
+          "title": "Make radial repeat",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "name": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.makeGridRepeat",
+          "title": "Make grid repeat",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "name": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.makeMirrorRepeat",
+          "title": "Make mirror repeat",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "name": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.updateRepeat",
+          "title": "Update repeat",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "repeat": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.selectRepeatInstances",
+          "title": "Select repeat instances",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "repeat": {
+                "kind": "text"
+              },
+              "includeSources": {
+                "kind": "bool"
+              }
+            }
+          },
+          "result": {
+            "kind": "list",
+            "of": {
+              "kind": "ref",
+              "to": "frame"
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.expandRepeat",
+          "title": "Expand repeat",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "repeat": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.releaseRepeat",
+          "title": "Release repeat",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "repeat": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.blendSelected",
+          "title": "Blend selected",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "name": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.updateBlend",
+          "title": "Update blend",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "blend": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.replaceBlendSpine",
+          "title": "Replace blend spine",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "blend": {
+                "kind": "text"
+              },
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.reverseBlendSpine",
+          "title": "Reverse blend spine",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "blend": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.reverseBlendFrontToBack",
+          "title": "Reverse blend front to back",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "blend": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.selectBlendObjects",
+          "title": "Select blend objects",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "blend": {
+                "kind": "text"
+              },
+              "which": {
+                "kind": "enum",
+                "members": [
+                  "keys",
+                  "steps",
+                  "spine",
+                  "all"
+                ]
+              }
+            }
+          },
+          "result": {
+            "kind": "list",
+            "of": {
+              "kind": "ref",
+              "to": "frame"
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.expandBlend",
+          "title": "Expand blend",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "blend": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.releaseBlend",
+          "title": "Release blend",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "blend": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.makeObjectsOnPath",
+          "title": "Make objects on path",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "name": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.updateObjectsOnPath",
+          "title": "Update objects on path",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "onPath": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.selectObjectsOnPath",
+          "title": "Select objects on path",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "onPath": {
+                "kind": "text"
+              },
+              "which": {
+                "kind": "enum",
+                "members": [
+                  "objects",
+                  "path",
+                  "all"
+                ]
+              }
+            }
+          },
+          "result": {
+            "kind": "list",
+            "of": {
+              "kind": "ref",
+              "to": "frame"
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.expandObjectsOnPath",
+          "title": "Expand objects on path",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "onPath": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.releaseObjectsOnPath",
+          "title": "Release objects on path",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "onPath": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.imageTrace",
+          "title": "Image trace",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "mode": {
+                "kind": "enum",
+                "members": [
+                  "color",
+                  "bw"
+                ]
+              },
+              "pathMode": {
+                "kind": "enum",
+                "members": [
+                  "spline",
+                  "polygon"
+                ]
+              },
+              "colorPrecision": {
+                "kind": "number",
+                "integer": true
+              },
+              "filterSpeckle": {
+                "kind": "number",
+                "integer": true
+              },
+              "layerDifference": {
+                "kind": "number",
+                "integer": true
+              },
+              "bwThreshold": {
+                "kind": "number",
+                "integer": true
+              },
+              "ignoreWhite": {
+                "kind": "bool"
+              },
+              "cornerThresholdDeg": {
+                "kind": "number",
+                "unit": "deg"
+              },
+              "segmentLength": {
+                "kind": "number"
+              },
+              "spliceThresholdDeg": {
+                "kind": "number",
+                "unit": "deg"
+              },
+              "maxIterations": {
+                "kind": "number",
+                "integer": true
+              },
+              "maxRegions": {
+                "kind": "number",
+                "integer": true
+              },
+              "maxTracePixels": {
+                "kind": "number",
+                "integer": true
+              },
+              "stacked": {
+                "kind": "bool"
+              }
+            }
+          }
+        }
+      ]
+    }
   }
 }

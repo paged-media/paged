@@ -194,6 +194,7 @@ import {
 import { makePathOptionsPanel } from "./panels/path-options-panel";
 import { installStrokePanelBindings, strokePanel } from "./panels/stroke-panel";
 import { contributeSvgIo } from "./io/svg";
+import { contributeDrawObjectModel } from "./object-model";
 
 export function activate(host: BundleHost): BundleHandle {
   // B-17 — the anchor-edit tools are built from a host-bound factory;
@@ -602,6 +603,12 @@ export function activate(host: BundleHost): BundleHandle {
   // F1 — the menu bar. 92 commands and, until plugin-api 0.2.33, no
   // route to a menu: every verb was Cmd+K only, shown as a raw id.
   const menuSub = contributeMenu(host);
+  // ADR 323 — the OBJECT MODEL: ten kinds (path geometry, appearance
+  // stacks, graphic styles, symbols + instances, the five generator
+  // recipes) and the typed twins of the commands above, reached by every
+  // surface — Boa, the Node CLI, data bindings, schema-driven fields —
+  // through `host.objects`. Headless by construction (src/object-model/).
+  const objectModelHandle = contributeDrawObjectModel(host);
   host.log.info(
     `activated — ${tools.length} tools + 2 schema panels + 9 React panels + ` +
       `${
@@ -644,6 +651,7 @@ export function activate(host: BundleHost): BundleHandle {
       // That separation is what makes phase D a migration with a
       // rollback point rather than a deletion.
       layersProviderHandle?.dispose();
+      objectModelHandle?.dispose();
       svgIoSub.dispose();
       menuSub.dispose();
       imageTraceCommandSub.dispose();

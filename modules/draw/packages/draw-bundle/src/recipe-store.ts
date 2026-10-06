@@ -77,7 +77,7 @@ import manifest from "../manifest.json";
 export type RecipeHost = Pick<BundleHost, "parts" | "supports" | "log"> & {
   bindings?: BundleHost["bindings"];
   document?: Partial<
-    Pick<BundleHost["document"], "getDocumentMetadata" | "setDocumentMetadata">
+    Pick<BundleHost["document"], "getDocumentMetadata" | "setDocumentMetadata" | "onDidChange">
   >;
 };
 
@@ -343,11 +343,30 @@ export interface RecipePlan {
  *  is one key, so two libraries in one batch would each write an
  *  envelope built from the same pre-batch label and the second would
  *  silently drop the first. The registry plans every kind of a batch
- *  back to back before committing, so a plan still marked here when the
- *  next kind plans IS the same batch: refused, never merged (a merge
- *  could carry a refused batch's state into a later one). The mark is
- *  cleared on the next macrotask. */
+ *  back to back before it commits, so a plan still marked here when
+ *  another library plans IS the same batch: refused, never merged (a
+ *  merge could carry a refused batch's state into a later one).
+ *
+ *  The mark ends at the batch's commit — the document event it raises
+ *  (`onDidChange`; the headless engine is synchronous, so a timer is NOT
+ *  a batch boundary — measured). A batch refused after planning raises
+ *  none: its mark then outlives it until the next document change or
+ *  macrotask, which can only refuse (never corrupt) a following write of
+ *  a DIFFERENT library. A registry-level "batch begins / ends" hook would
+ *  make this exact (contract issue, reported). */
 const planning = new WeakMap<object, string>();
+const watched = new WeakSet<object>();
+
+function markPlanning(host: RecipeHost, name: string): void {
+  planning.set(host, name);
+  if (!watched.has(host) && typeof host.document?.onDidChange === "function") {
+    watched.add(host);
+    host.document.onDidChange(() => planning.delete(host));
+  }
+  setTimeout(() => {
+    if (planning.get(host) === name) planning.delete(host);
+  }, 0);
+}
 
 /**
  * Plan a library write for `host.objects` (the label-hash pattern). Writes
@@ -374,10 +393,7 @@ export async function planRecipeWrite(
       "a library write cannot be made undoable here"
     );
   }
-  planning.set(host, name);
-  setTimeout(() => {
-    if (planning.get(host) === name) planning.delete(host);
-  }, 0);
+  markPlanning(host, name);
   const label = await readLabel(host);
   const prior = recipeEntriesOf(label)[name];
   if (!prior) {

@@ -494,6 +494,52 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
     }
   });
 
+  it("ADR 323 — the object model is live headless: set / get / batch / undo through host.objects", async () => {
+    const handle = harness.loadBundle(drawBundle);
+    try {
+      const objects = harness.host.objects;
+      const D = "media.paged.draw";
+      const appearance = `plugin:${D}/appearance/rectangle:urect`;
+      // The kinds are registered with the bundle — no edit context needed.
+      expect((await objects.kinds()).filter((k) => k.owner === D)).toHaveLength(10);
+      // A draw write (the metadata stamp + the bake) and a core write in
+      // ONE batch: one engine mutation, one undo step.
+      const before = await objects.get("rectangle:urect", "frameFillColor");
+      const out = await objects.batch([
+        {
+          op: "set",
+          address: appearance,
+          path: "fills",
+          value: [{ color: "Color/Paper", tint: 100, opacity: 100, blendMode: "Normal" }],
+        },
+        { op: "set", address: "rectangle:urect", path: "frameStrokeWeight", value: 5 },
+      ]);
+      expect(out).toMatchObject({ applied: true, undoSteps: 1 });
+      expect(await objects.get(appearance, "fills")).toEqual({
+        kind: "value",
+        value: [{ color: "Color/Paper", tint: 100, opacity: 100, blendMode: "Normal" }],
+      });
+      expect(await objects.get("rectangle:urect", "frameFillColor")).toEqual({
+        kind: "value",
+        value: "Color/Paper",
+      });
+      // A typed command through the same surface.
+      const selected = (await objects.invoke(`${D}.command.selectSameFill`, {
+        targets: ["rectangle:urect"],
+      })) as string[];
+      expect(selected).toEqual(["rectangle:urect"]);
+      // ONE undo takes both writes back.
+      await harness.host.document.undo();
+      expect(await objects.get(appearance, "fills")).toEqual({ kind: "value", value: [] });
+      expect(await objects.get("rectangle:urect", "frameFillColor")).toEqual(before);
+      await harness.host.selection.set([]);
+    } finally {
+      handle.dispose();
+    }
+    // Disposing the bundle removes its kinds from the shared registry.
+    expect((await harness.objects.kinds()).filter((k) => k.owner === "media.paged.draw")).toEqual([]);
+  });
+
   it("dispose leaves the document unchanged (honesty smoke test)", async () => {
     // Snapshot the scene-tree shape before activation.
     const treeSize = async () => {

@@ -250,7 +250,8 @@ describe("paged.draw — the object model (ADR 323) on a real engine", () => {
       expect(repeats).toHaveLength(1);
       const ring = repeats[0]!;
       const count = value(await h.objects.get(ring, "count")) as number;
-      expect(await h.objects.set(ring, "count", count + 2)).toMatchObject({
+      const setCount = await h.objects.set(ring, "count", count + 2);
+      expect(setCount, setCount.reason).toMatchObject({
         applied: true,
         undoSteps: 1,
       });
