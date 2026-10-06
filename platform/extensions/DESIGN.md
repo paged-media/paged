@@ -2341,3 +2341,61 @@ salvaged `mutationFailed`), so the probe never hangs. At >= 71
   `unmapped`. The object-model specs run on both engines (protocol-aware
   where the answer differs).
 
+## 22. The Node CLI (ADR 324 — `@paged-media/cli`, bin `paged`)
+
+**Status:** 0.1.0-canary.0 in `packages/cli`, published by `publish.yml`
+beside the contract packages (Trusted Publisher setup for the new package
+is an owner step).
+
+- **A host, not a client.** `openSession` boots `createHeadlessHost` on the
+  published canvas-wasm (protocol read off the booted wasm), loads its own
+  driver bundle (`media.paged.cli`, broad document capabilities) and then
+  every discovered bundle (`--plugins`, else the first-party
+  `@paged-media/*` bundles resolvable from the cwd plus any dependency with a
+  `"paged"` manifest entry). The build bundles plugin-sdk in, so the bin runs
+  on plain Node ≥ 22; the engine and every bundle stay run-time resolved.
+- **Verbs** come from ONE table (`src/verbs.ts`) that also generates
+  `--help` and feeds a cli_surface spec (every `host.objects` member is
+  reached by a verb): get, set, query, schema, batch, run, export, apply,
+  merge, plugins, describe. JSON on stdout (engine logs go to stderr),
+  exits 0 / 1 (refused write, failed check) / 2 (usage, IO).
+- **Values are text until a schema row types them** (`coerceValue` →
+  `validateValue`); a failure names the path and the expected type. No
+  row: the text passes unconverted (or `--json`), and the owner decides.
+- **`run` is a JS module** with `paged` = `host.objects` + typed commands
+  (+ undo/redo/save/export) — not Boa. Boa stays in core (`paged-core
+  script`); it reaches plugin objects once core's async host bridge
+  (ADR 323) posts `objects.*` to a host — the CLI is such a host.
+- **Export door:** `HeadlessHost.exportDocument("paged"|"idml"|"pdf")` (new,
+  harness.ts) drives the engine's exportPaged / exportIdml / exportPdf loop;
+  plugin formats go through `contribute.exporter` contributions. `export
+  --format pdf` prefers a TYPED exporter (`media.paged.publish.exportPdf`,
+  else any `*.exportPdf`, or `--via <command>`; `--core` opts out): the CLI
+  sends ONLY the options named (`--pdf-standard`, `--pages`, repeatable
+  `--option key=value`, each typed by its struct field) and `invoke` fills
+  the struct defaults (§21.8); an unknown or missing-required option is a
+  usage error naming the fields.
+- **Engine range:** the session pins the handshake to the canvas-wasm it
+  FINDS (protocol >= 70), not to the vendored wire stamp, because the core
+  seam is protocol-aware (§21.9): on 71 core addresses go straight to
+  `Set` / `RequestGet` / `RequestQuery`; on 70 the interim table serves.
+- **`create <doc> <kind> [props.json|{json}]`** (`--within`, `--handle`)
+  and **`delete <doc> <addr|selector>`** are one-op / one-batch
+  `host.objects.batch` calls: ONE undo step, `created[]` printed. Core
+  creates (swatch, gradient, colorGroup, `style:<family>`, textVariable,
+  layer, page, textFrame / rectangle / oval) need protocol 71; on 70 they
+  answer `unmapped` (exit 1). Plugin kinds create the same way.
+- **Indexed paths** (`rows[0].height`) are typed by their indexed row
+  (`rows[].height`) before the text is coerced.
+- **`get <addr>` without a path** is `getAll`: heavy rows and `content` are
+  skipped unless `--content` (§21.8).
+- **apply / merge** run on TODAY's paged.data session (`sessionFor(host)`,
+  canary.10): DuckDB runs in-process (its own `AsyncDuckDBDispatcher` over
+  the Node blocking build — `@duckdb/duckdb-wasm` 1.29.0, an optional peer —
+  driving the bundle's shipped engine wasm), behind narrow `fetch(file:.wasm)`
+  / `Worker` / extension-XHR shims (`src/node-shims.ts`). `apply` carries an
+  INTERIM `property` binding (field → typed property, one
+  `host.objects.batch`); expressions wait for Binding::Property (Wave 5).
+- **Recorded for core:** the Rust binary `paged` is renamed `paged-core` at
+  the next core tag (`crates/paged-cli/cli.json` `"binary"`, the `[[bin]]`,
+  docs) — not done here.
