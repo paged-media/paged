@@ -203,6 +203,26 @@ pub fn import_pptx(bytes: &[u8]) -> Result<Presentation, ImportError> {
         }
     }
 
+    // SmartArt: each diagram's own drawing (named by its data model's
+    // `dsp:dataModelExt relId`, a relationship of the part that shows it),
+    // read once per part.
+    let mut owners: Vec<(String, &mut Vec<Shape>)> = Vec::new();
+    for sl in deck.slides.iter_mut() {
+        owners.push((sl.part.clone(), &mut sl.shapes));
+    }
+    for l in deck.layouts.iter_mut() {
+        owners.push((l.part.clone(), &mut l.shapes));
+    }
+    for m in deck.masters.iter_mut() {
+        owners.push((m.part.clone(), &mut m.shapes));
+    }
+    let mut diagrams = BTreeMap::new();
+    for (part, shapes) in owners {
+        let owner = Ctx::new(&pkg, &part, &diagnostics);
+        link_diagrams(&pkg, &owner, shapes, &mut diagrams, &diagnostics);
+    }
+    deck.diagrams = diagrams;
+
     // Charts, once per part.
     let mut chart_parts = Vec::new();
     for shapes in deck
@@ -229,6 +249,67 @@ pub fn import_pptx(bytes: &[u8]) -> Result<Presentation, ImportError> {
 
     deck.diagnostics = summarise(diagnostics.into_inner());
     Ok(deck)
+}
+
+fn link_diagrams(
+    pkg: &OpcPackage,
+    owner: &Ctx,
+    shapes: &mut [Shape],
+    out: &mut BTreeMap<String, Vec<Shape>>,
+    diagnostics: &RefCell<Vec<String>>,
+) {
+    for s in shapes {
+        match s {
+            Shape::Group(g) => link_diagrams(pkg, owner, &mut g.children, out, diagnostics),
+            Shape::Frame(GraphicFrame {
+                content:
+                    FrameContent::Diagram {
+                        data_part: Some(data),
+                        drawing_part,
+                    },
+                ..
+            }) => {
+                let rel = read_part(pkg, data).ok().and_then(|el| {
+                    find_local(&el, "dataModelExt")
+                        .and_then(|e| e.attr("relId"))
+                        .map(str::to_string)
+                });
+                if let Some(target) = rel.and_then(|id| owner.target(&id)) {
+                    *drawing_part = Some(target);
+                }
+                let Some(part) = drawing_part.clone() else {
+                    owner.note("a SmartArt diagram has no drawing; not drawn".into());
+                    continue;
+                };
+                if out.contains_key(&part) {
+                    continue;
+                }
+                match read_part(pkg, &part) {
+                    Ok(el) => {
+                        let ctx = Ctx::new(pkg, &part, diagnostics);
+                        let tree = el
+                            .child(Ns::P, "spTree")
+                            .map(|t| shapes::shape_tree(t, &ctx))
+                            .unwrap_or_default();
+                        out.insert(part, tree);
+                    }
+                    Err(e) => diagnostics.borrow_mut().push(e.to_string()),
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// The first descendant with this local name.
+fn find_local<'a>(el: &'a El, local: &str) -> Option<&'a El> {
+    el.children.iter().find_map(|c| {
+        if c.local == local {
+            Some(c)
+        } else {
+            find_local(c, local)
+        }
+    })
 }
 
 fn collect_charts(shapes: &[Shape], out: &mut Vec<String>) {

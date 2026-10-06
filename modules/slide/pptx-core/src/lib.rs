@@ -62,6 +62,9 @@ pub struct Presentation {
     pub embedded_fonts: Vec<EmbeddedFont>,
     /// Sections from the `p14:sectionLst` extension.
     pub sections: Vec<Section>,
+    /// Every SmartArt drawing (the shapes PowerPoint drew for a diagram,
+    /// in the diagram frame's own coordinates), keyed by part name.
+    pub diagrams: std::collections::BTreeMap<String, Vec<Shape>>,
     /// Every chart a slide, layout or master shows, keyed by part name.
     pub charts: std::collections::BTreeMap<String, chart::Chart>,
     /// The table styles the deck defines (`ppt/tableStyles.xml`). A deck
@@ -245,6 +248,9 @@ pub struct Sp {
     pub text: Option<TextBody>,
     /// `useBgFill`.
     pub use_bg_fill: bool,
+    /// `dsp:txXfrm`: a SmartArt shape's text box, which need not be the
+    /// shape's own box (same coordinate space as the shape's `xfrm`).
+    pub text_xfrm: Option<Xfrm>,
 }
 
 /// `p:spPr` / `p:grpSpPr`.

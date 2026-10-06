@@ -391,6 +391,7 @@ pub(super) fn table(t: &pptx_core::Table, ctx: &Ctx) -> Table {
             lists.push(&style_list);
             let tctx = text::TextCtx {
                 lists,
+                inherited: 0,
                 colors: &colors,
                 major,
                 minor,

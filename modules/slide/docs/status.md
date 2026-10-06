@@ -20,6 +20,12 @@ Read from the code on 2026-10-05.
   (smoothed), areas, pies and doughnuts, gridlines, axis lines, tick and data labels, legends;
   Excel's automatic value scale; Office's default chart-style paints. Drawn as groups of native
   shapes.
+- **Tables and table styles.** All 74 built-in table styles (eleven families, plain or per
+  accent) and a deck's own styles, resolved cell by cell in PowerPoint's layer order and written
+  as native table styles (region cell styles, alternating fills) with local values only where
+  the native cascade differs. A table without a known style is drawn as No Style, Table Grid.
+- **SmartArt.** Each diagram's drawing (the shapes PowerPoint laid out) becomes a group of
+  native shapes; text boxes and style text colours as PowerPoint draws them.
 - **IDML writing** (`slide-idml`, ADR 700). A flattened master spread per used layout, a page per
   slide, every item, story and picture; tables; text frames that grow from their anchored edge;
   PowerPoint's first baseline for percentage line spacing; unwrapped text; gradient feathers for
@@ -39,6 +45,8 @@ Read from the code on 2026-10-05.
 | Shape geometry | PowerPoint's per-shape geometry, fixtures and corpus | 412 fixture and 1 504 corpus shapes within 1 pt |
 | First baseline and line pitch, percentage spacing | `baselines` fixture (5 fonts × 3 sizes × 4 spacings) | within the PDF's 0.96 pt quantum + 1 % of the size |
 | Chart bars | PowerPoint's PDF, 44 bars in 4 corpus charts | within 3 pt (label widths are not measured at import) |
+| Table styles | `tables` and `tablestyles` fixtures: 150 tables, all 74 built-in styles | every cell's fill within 4 RGB units, text weight and colour exact, every border by colour and width |
+| SmartArt | `smartart` fixture | every block within 1 pt, text colours exact |
 | Engine placement | the published canvas-wasm, headless, all five fixtures | a page per slide; every drawn item within 0.5 pt of the import |
 
 Rendering against PowerPoint's PDF (local tool `scripts/fidelity-local.py`: the engine's CPU
@@ -67,13 +75,15 @@ engine (0.67.0) does not draw a master's pictures yet.
   render off-centre. Needs the parser in the IDML adapter, a model field and the renderer; planned
   for the M2 engine batch.
 - **Engine: table cell indents.** `LeftIndent` inside table cells is ignored.
+- **Engine: double cell borders.** A cell edge's stroke type is not read, so a double line
+  (some styles' total-row top) draws as a solid line of the same weight.
 - **Fonts.** Plugins cannot register fonts with the host yet (planned SDK door, M2). Decks whose
   fonts the host lacks render with substitutes; the green deck's Antonio is missing on the oracle
   machine too, and PowerPoint breaks its long title mid-word, which the engine does not.
 - **Embedded fonts.** No corpus deck embeds fonts and PowerPoint's scripting cannot embed them; a
   hand-authored fixture is needed before extraction is built.
-- **SmartArt.** Not drawn yet (its drawing fallback is to be lowered to shapes).
-- **Table styles.** Not applied; explicit cell formatting is.
+- **SmartArt layouts in fixtures.** PowerPoint draws a seeded diagram with its default layout
+  only, so the fixture covers the drawing's lowering, not other layouts' shapes.
 - **Editor wiring.** The bundle is not yet loaded by the editor (needs a published canary).
 
 ## Not built yet

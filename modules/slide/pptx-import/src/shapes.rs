@@ -91,6 +91,7 @@ fn sp(el: &El, nv_name: &str, ctx: &Ctx) -> Sp {
         style: el.child(Ns::P, "style").map(shape_style),
         text: el.child(Ns::P, "txBody").map(|t| text_body(t, ctx)),
         use_bg_fill: el.attr_bool("useBgFill").unwrap_or(false),
+        text_xfrm: el.child(Ns::P, "txXfrm").map(xfrm),
     }
 }
 

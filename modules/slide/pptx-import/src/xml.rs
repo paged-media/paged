@@ -52,6 +52,10 @@ fn ns_of(uri: &[u8]) -> Ns {
     match uri {
         b"http://schemas.openxmlformats.org/presentationml/2006/main"
         | b"http://purl.oclc.org/ooxml/presentationml/main" => Ns::P,
+        // A SmartArt drawing (`dsp:`) repeats PresentationML's shape tree
+        // element for element (spTree, sp, nvSpPr, spPr, style, txBody,
+        // grpSp), so it reads as one.
+        b"http://schemas.microsoft.com/office/drawing/2008/diagram" => Ns::P,
         b"http://schemas.openxmlformats.org/drawingml/2006/main"
         | b"http://purl.oclc.org/ooxml/drawingml/main" => Ns::A,
         b"http://schemas.openxmlformats.org/officeDocument/2006/relationships"

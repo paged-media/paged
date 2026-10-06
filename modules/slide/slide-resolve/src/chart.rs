@@ -36,6 +36,7 @@ pub(super) fn items(chart: &Chart, t: Affine, w: f64, h: f64, ctx: &Ctx) -> Vec<
     };
     let tctx = text::TextCtx {
         lists: Vec::new(),
+        inherited: 0,
         colors: &colors,
         major,
         minor,

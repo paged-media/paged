@@ -1,0 +1,103 @@
+{
+ "slides": 8,
+ "powerpoint": "16.113.3",
+ "file": "smartart.pptx",
+ "shapes": {
+  "1": [
+   {
+    "index": 1,
+    "name": "Diagram 1",
+    "left": 100.0,
+    "top": 100.0,
+    "width": 720.0,
+    "height": 360.0,
+    "rotation": 0.0,
+    "type": "smartart graphic"
+   }
+  ],
+  "2": [
+   {
+    "index": 1,
+    "name": "Diagram 2",
+    "left": 100.0,
+    "top": 100.0,
+    "width": 720.0,
+    "height": 360.0,
+    "rotation": 0.0,
+    "type": "smartart graphic"
+   }
+  ],
+  "3": [
+   {
+    "index": 1,
+    "name": "Diagram 3",
+    "left": 100.0,
+    "top": 100.0,
+    "width": 720.0,
+    "height": 360.0,
+    "rotation": 0.0,
+    "type": "smartart graphic"
+   }
+  ],
+  "4": [
+   {
+    "index": 1,
+    "name": "Diagram 4",
+    "left": 100.0,
+    "top": 100.0,
+    "width": 720.0,
+    "height": 360.0,
+    "rotation": 0.0,
+    "type": "smartart graphic"
+   }
+  ],
+  "5": [
+   {
+    "index": 1,
+    "name": "Diagram 5",
+    "left": 100.0,
+    "top": 100.0,
+    "width": 720.0,
+    "height": 360.0,
+    "rotation": 0.0,
+    "type": "smartart graphic"
+   }
+  ],
+  "6": [
+   {
+    "index": 1,
+    "name": "Diagram 6",
+    "left": 100.0,
+    "top": 100.0,
+    "width": 720.0,
+    "height": 360.0,
+    "rotation": 0.0,
+    "type": "smartart graphic"
+   }
+  ],
+  "7": [
+   {
+    "index": 1,
+    "name": "Diagram 7",
+    "left": 100.0,
+    "top": 100.0,
+    "width": 720.0,
+    "height": 360.0,
+    "rotation": 0.0,
+    "type": "smartart graphic"
+   }
+  ],
+  "8": [
+   {
+    "index": 1,
+    "name": "Diagram 8",
+    "left": 100.0,
+    "top": 100.0,
+    "width": 720.0,
+    "height": 360.0,
+    "rotation": 0.0,
+    "type": "smartart graphic"
+   }
+  ]
+ }
+}

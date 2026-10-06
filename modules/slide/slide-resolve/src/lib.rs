@@ -582,6 +582,7 @@ fn text_frame(
     if let Some(t) = txstyle {
         lists.push(t);
     }
+    let inherited = lists.len();
     for sp in chain.iter().rev() {
         if let Some(ls) = sp.text.as_ref().and_then(|t| t.list_style.as_ref()) {
             lists.push(ls);
@@ -598,6 +599,7 @@ fn text_frame(
         .map(|(idx, c)| (idx, c.map(|c| resolve_color(&c, &colors))));
     let tctx = text::TextCtx {
         lists,
+        inherited,
         colors: &colors,
         major,
         minor,
@@ -669,7 +671,22 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                 .map(|s| &s.props)
                 .unwrap_or(&sp.props);
             let stroke = shape_stroke(line_props, style, ctx);
-            let text = text_frame(&chain, o.text_rect, w, h, ctx);
+            // A SmartArt shape's text box (`txXfrm`) is its own rectangle
+            // in the shape's coordinate space.
+            let text_rect = match (&sp.text_xfrm, &sp.props.xfrm) {
+                (Some(tx), Some(x)) => {
+                    let l = (tx.off.0 - x.off.0) as f64 / EMU_PER_PT;
+                    let t = (tx.off.1 - x.off.1) as f64 / EMU_PER_PT;
+                    (
+                        l,
+                        t,
+                        l + tx.ext.0 as f64 / EMU_PER_PT,
+                        t + tx.ext.1 as f64 / EMU_PER_PT,
+                    )
+                }
+                _ => o.text_rect,
+            };
+            let text = text_frame(&chain, text_rect, w, h, ctx);
             if matches!(fill, Paint::None) && stroke.is_none() && text.is_none() {
                 return None;
             }
@@ -852,9 +869,39 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                     },
                 })
             }
-            FrameContent::Diagram { .. } => {
-                ctx.note(format!("SmartArt {:?} not drawn yet", f.nv.name));
-                None
+            FrameContent::Diagram { drawing_part, .. } => {
+                // The shapes PowerPoint drew for the diagram, in the frame's
+                // own coordinates (its top-left is the drawing's origin).
+                let Some(shapes) = drawing_part.as_ref().and_then(|p| ctx.deck.diagrams.get(p))
+                else {
+                    ctx.note(format!(
+                        "SmartArt {:?} has no drawing; not drawn",
+                        f.nv.name
+                    ));
+                    return None;
+                };
+                let x = f.xfrm.clone()?;
+                let inner = space.child(&Xfrm {
+                    ch_off: Some((0, 0)),
+                    ch_ext: Some(x.ext),
+                    ..x.clone()
+                });
+                let children = ordered(shapes, &inner, ctx);
+                let (t, w, h) = space.place(&x);
+                Some(Item {
+                    id: ctx.id(),
+                    name: f.nv.name.clone(),
+                    transform: t,
+                    w,
+                    h,
+                    kind: ItemKind::Group { children },
+                    opacity: 1.0,
+                    shadow: None,
+                    meta: ItemMeta {
+                        shape_id: f.nv.id,
+                        ..Default::default()
+                    },
+                })
             }
             FrameContent::Other { uri } => {
                 ctx.note(format!("graphic frame {uri:?} not drawn"));

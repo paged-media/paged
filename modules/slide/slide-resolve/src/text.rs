@@ -37,6 +37,11 @@ use crate::model::{Bullet, Para, TextRun};
 pub struct TextCtx<'a> {
     /// List styles, lowest priority first.
     pub lists: Vec<&'a ListStyle>,
+    /// How many of `lists` (from the front) the shape inherits from the
+    /// presentation and its master rather than defines itself. A style
+    /// `fontRef` colour overrides their text colour (a default shape's white
+    /// text over the master's dark one), not the shape's own.
+    pub inherited: usize,
     pub colors: &'a ColorCtx<'a>,
     pub major: &'a FontSet,
     pub minor: &'a FontSet,
@@ -89,12 +94,22 @@ fn merge_run(dst: &mut RunProps, src: &RunProps) {
 /// own on top.
 fn paragraph_props(ctx: &TextCtx, lvl: usize, own: &ParagraphProps) -> ParagraphProps {
     let mut p = ParagraphProps::default();
-    for ls in &ctx.lists {
+    for (k, ls) in ctx.lists.iter().enumerate() {
+        if k == ctx.inherited && ctx.font_ref.as_ref().is_some_and(|(_, c)| c.is_some()) {
+            if let Some(run) = &mut p.default_run {
+                run.fill = None;
+            }
+        }
         if let Some(d) = &ls.default {
             merge_para(&mut p, d);
         }
         if let Some(l) = &ls.levels[lvl] {
             merge_para(&mut p, l);
+        }
+    }
+    if ctx.inherited >= ctx.lists.len() && ctx.font_ref.as_ref().is_some_and(|(_, c)| c.is_some()) {
+        if let Some(run) = &mut p.default_run {
+            run.fill = None;
         }
     }
     merge_para(&mut p, own);
