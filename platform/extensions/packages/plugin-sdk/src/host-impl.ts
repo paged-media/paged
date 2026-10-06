@@ -51,6 +51,7 @@ import type {
   JournalSurface,
   Disposable,
   DocumentChangeEvent,
+  DocumentOpenedEvent,
   FrameChainLink,
   StoryContent,
   DocumentSurface,
@@ -79,6 +80,7 @@ import type {
   MutationOutcome,
   NetworkSurface,
   ObjectTypeContribution,
+  OverlayLayer,
   OverlaySurface,
   PagedEditor,
   PanelContribution,
@@ -192,6 +194,10 @@ export const HOST_FEATURES: readonly string[] = [
   // needed — DESIGN.md §4.3d).
   "document.parentOf@1",
   "document.onDidChange@1",
+  // W-22 — the document-opened event. STATIC: it is the client's
+  // `documentLoaded` broadcast filtered, and every host posts that on
+  // every load (File ▸ Open, File ▸ New, a native-document open).
+  "document.onDidOpen@1",
   "document.getMetadata@1",
   "document.setMetadata@1",
   "selection@1",
@@ -971,6 +977,13 @@ export interface CreateBundleHostOptions {
    *  holds listeners that never run and `supports("document.onWillSave@1")`
    *  is false. */
   willSave?: WillSaveBackend;
+  /** W-19 — the host's shell fills `pageId` / `pagePoint` /
+   *  `contentPoint` on the `EnteredEditContext` of a POINTER entry (the
+   *  double-click, the Type-tool click on owned content). The SDK passes
+   *  the entered context through untouched either way; this flag only
+   *  makes `supports("editContext.enterPoint@1")` true, so it is the HOST
+   *  that vouches for delivery. */
+  editContextEnterPoint?: boolean;
   /** The host's tool-options store. When absent, `host.tools.settings`
    *  answers `{}` and `supports("tools.settings@1")` is false. */
   toolSettings?: ToolSettingsBackend;
@@ -2351,6 +2364,28 @@ export function createBundleHost(
       });
       return store.add(toDisposable(off));
     },
+    // W-22 — the raw `documentLoaded` broadcast, narrowed to a clonable
+    // snapshot (the handle's stats / ruler guides stay host-side).
+    onDidOpen(listener: (e: DocumentOpenedEvent) => void): Disposable {
+      requireDocRead("document.onDidOpen");
+      const off = getEditor().client.subscribe((msg) => {
+        if (msg.kind !== "documentLoaded") return;
+        const h = msg.payload;
+        try {
+          listener({
+            docId: h.docId,
+            pageCount: h.pageCount,
+            pageIds: [...h.pageIds],
+            pageSizesPt: h.pageSizesPt.map(
+              ([w, hgt]) => [w, hgt] as [number, number],
+            ),
+          });
+        } catch (err) {
+          log.error(`document.onDidOpen listener failed: ${String(err)}`);
+        }
+      });
+      return store.add(toDisposable(off));
+    },
     // Protocol 66 batch — the save hook. The host awaits every
     // registered listener before it serialises the document; the wrapper
     // makes a bundle's failure a logged event, never a failed save.
@@ -2449,6 +2484,9 @@ export function createBundleHost(
   // The tool-preview channel is a render-pipeline surface — gated on
   // `capabilities.rendering` including "overlay" (same surface as
   // `contribute.overlay`).
+  let overlayLayerSeq = 0;
+  let overlayLayerWarned = false;
+  const liveOverlayLayers = new Set<string>();
   const overlay: OverlaySurface = {
     setToolPreview(shape) {
       requireDeclared(
@@ -2478,6 +2516,62 @@ export function createBundleHost(
         return;
       }
       signals.setToolPreview(list ? list[0] : null);
+    },
+    // W-20 — retained per-bundle layers. Each layer is a host-wide key
+    // `<manifest id>/<layer id>`; registering it with `[]` at creation
+    // fixes its place in the stack (creation order), so a later `set`
+    // never reorders it. Without a host sink the handle is inert (warned
+    // once per bundle) — never a throw, never a write into the shared
+    // tool-preview slot, which would erase the active tool's preview.
+    layer(id?: string): OverlayLayer {
+      requireDeclared(
+        hasRendering("overlay"),
+        "overlay.layer",
+        'capabilities.rendering must include "overlay"',
+      );
+      const layerId = id ?? `layer-${++overlayLayerSeq}`;
+      if (liveOverlayLayers.has(layerId)) {
+        throw new Error(
+          `host.overlay.layer("${layerId}"): a layer with this id is already ` +
+            `live in ${manifest.id} — dispose it first or pick another id`,
+        );
+      }
+      const key = `${manifest.id}/${layerId}`;
+      const signals = getEditor().overlaySignals;
+      const sink =
+        typeof signals?.setOverlayLayer === "function" &&
+        typeof signals?.removeOverlayLayer === "function"
+          ? signals
+          : null;
+      if (!sink && !overlayLayerWarned) {
+        overlayLayerWarned = true;
+        log.warn(
+          'host.overlay.layer — this host renders no overlay layers ' +
+            '(supports("overlay.layers@1") is false); shapes are dropped',
+        );
+      }
+      liveOverlayLayers.add(layerId);
+      sink?.setOverlayLayer!(key, []);
+      let disposed = false;
+      const handle: OverlayLayer = {
+        id: layerId,
+        set(shapes) {
+          if (disposed) return;
+          sink?.setOverlayLayer!(key, [...shapes]);
+        },
+        clear() {
+          if (disposed) return;
+          sink?.setOverlayLayer!(key, []);
+        },
+        dispose() {
+          if (disposed) return;
+          disposed = true;
+          liveOverlayLayers.delete(layerId);
+          sink?.removeOverlayLayer!(key);
+        },
+      };
+      store.add(handle);
+      return handle;
     },
   };
 
@@ -3489,6 +3583,20 @@ export function createBundleHost(
     // the flag tells a bundle it may publish geometry AND a label
     // together instead of trading one for the other.
     featureSet.add("overlay.multiPreview@1");
+  }
+  if (
+    typeof getEditor().overlaySignals?.setOverlayLayer === "function" &&
+    typeof getEditor().overlaySignals?.removeOverlayLayer === "function"
+  ) {
+    // W-20 — the host renders retained per-bundle layers. Both members,
+    // or none: a host that can add a layer but not drop one would leak a
+    // disposed bundle's shapes onto the canvas.
+    featureSet.add("overlay.layers@1");
+  }
+  if (options?.editContextEnterPoint === true) {
+    // W-19 — the host shell vouches that a pointer entry carries the
+    // entering point (see the option).
+    featureSet.add("editContext.enterPoint@1");
   }
   if (getEditor().images) {
     // C-6 (I-06) — a real resource channel is wired (the editor routes the

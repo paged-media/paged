@@ -34,13 +34,16 @@
 // DOORS — implemented vs recorded vs reserved:
 //   · document.mutate / undo / redo / collection / meta / pathAnchors /
 //     hitTest / elementGeometry / tree / getMetadata / setMetadata /
-//     onDidChange — REAL (engine round-trip).
+//     onDidChange / onDidOpen — REAL (engine round-trip; `load()` fans
+//     the engine's `documentLoaded` reply out like the editor worker).
 //   · selection.get / set / onDidChange — REAL.
 //   · diagnostics, storage, log, supports, manifest — REAL (in-memory,
 //     identical to the in-process host).
 //   · contribute.* (tool/panel/command/keybinding/overlay) — RECORDED
 //     (captured in `contributions`; no host UI).
-//   · overlay.setToolPreview, viewport.camera/pxToPt — RECORDED /
+//   · overlay.setToolPreview / setToolPreviews / layer — RECORDED
+//     (`lastToolPreview()`, `lastToolPreviews()`, `overlayLayers()`);
+//     viewport.camera/pxToPt — RECORDED /
 //     synthetic (no canvas; camera is a fixed identity unless set).
 //   · contribute.editContext / objectType — RESERVED (still throw
 //     PluginApiNotImplemented via the shared host adapter).
@@ -53,6 +56,7 @@
 
 import type {
   BundleHost,
+  EnteredEditContext,
   ToolSettingValue,
   WillSaveEvent,
   ClipboardPayload,
@@ -326,6 +330,19 @@ export interface HeadlessHost {
    *  bundle's "geometry AND label at once" claim is assertable without a
    *  browser. `lastToolPreview()` tracks the list's FIRST shape. */
   lastToolPreviews(): readonly ToolPreviewShape[] | null;
+  /** W-20 — every LIVE overlay layer (`host.overlay.layer`), in stack
+   *  order (bottom-most first), keyed `<manifest id>/<layer id>`, with the
+   *  shapes it holds now (`[]` once cleared). A disposed layer is gone. */
+  overlayLayers(): ReadonlyArray<{
+    key: string;
+    shapes: readonly ToolPreviewShape[];
+  }>;
+  /** W-19 — play the SHELL's part on a pointer entry: call the registered
+   *  edit context's `onEnter` with `ctx` (which may carry `pageId` /
+   *  `pagePoint` / `contentPoint`, as the editor fills them). The harness
+   *  advertises `editContext.enterPoint@1`. Returns `false` when no
+   *  context of `ctx.type` is registered. */
+  enterEditContext(ctx: EnteredEditContext): boolean;
   /** ADR-023 phase A — the SHARED binding-provider registry this host
    *  injected. It is the HOST side of the seam, so a conformance test
    *  plays the part the editor's shared panel plays in phase C: enter
@@ -375,7 +392,8 @@ function makeEngineEditor(
   recorder: RecordedContribution[],
   onToolPreview: (value: ToolPreviewShape | null) => void,
   onToolPreviews: (value: readonly ToolPreviewShape[] | null) => void,
-): PagedEditor {
+  overlayLayers: Map<string, readonly ToolPreviewShape[]>,
+): { editor: PagedEditor; fanOut: (reply: WorkerToMain) => void } {
   const protocol = worker.protocolVersion;
   const listeners = new Set<(msg: WorkerToMain) => void>();
 
@@ -551,6 +569,15 @@ function makeEngineEditor(
         onToolPreviews(toolPreviews);
         onToolPreview(toolPreview);
       },
+      // W-20 — the retained layers. A Map keeps first-insertion order,
+      // which is the stack order the editor renders; a re-set keeps the
+      // key's place.
+      setOverlayLayer(key: string, shapes: readonly ToolPreviewShape[]) {
+        overlayLayers.set(key, shapes);
+      },
+      removeOverlayLayer(key: string) {
+        overlayLayers.delete(key);
+      },
     },
     // No tool spine + no content caret headlessly — both are inert
     // members of the narrow handle, present so the cast is total.
@@ -562,7 +589,7 @@ function makeEngineEditor(
     contentSelection: { contentSelection: null },
   };
 
-  return editor;
+  return { editor, fanOut };
 }
 
 /**
@@ -587,7 +614,8 @@ export async function createHeadlessHost(
   let lastPreview: ToolPreviewShape | null = null;
   // K-9 — the LIST a bundle pushed through `overlay.setToolPreviews`.
   let lastPreviews: readonly ToolPreviewShape[] | null = null;
-  const editor = makeEngineEditor(
+  const overlayLayerMap = new Map<string, readonly ToolPreviewShape[]>();
+  const { editor, fanOut } = makeEngineEditor(
     worker,
     contributions,
     (value) => {
@@ -596,6 +624,7 @@ export async function createHeadlessHost(
     (value) => {
       lastPreviews = value;
     },
+    overlayLayerMap,
   );
 
   // A placeholder manifest until a bundle is loaded; `loadBundle`
@@ -657,6 +686,9 @@ export async function createHeadlessHost(
       // headlessly (the editor's real adapter currently serves null;
       // DESIGN.md §13.4). Absent → the no-bytes door.
       assetSource: options.assetSource,
+      // W-19 — `enterEditContext()` below delivers the entering point the
+      // way the editor shell does, so the harness vouches for it.
+      editContextEnterPoint: true,
       // Record the SCHEMA verbatim at registration — the panel registry
       // only ever sees the synthesized React panel, so the conformance
       // log gets the schema through this adapter seam (no host renderer
@@ -794,6 +826,17 @@ export async function createHeadlessHost(
     lastToolPreviews() {
       return lastPreviews;
     },
+    overlayLayers() {
+      return [...overlayLayerMap].map(([key, shapes]) => ({ key, shapes }));
+    },
+    enterEditContext(ctx: EnteredEditContext): boolean {
+      const entry = contributions.find(
+        (c) => c.kind === "editContext" && c.id === ctx.type,
+      );
+      if (!entry) return false;
+      (entry.value as EditContextContribution).onEnter?.(ctx);
+      return true;
+    },
     bindingProviders,
     willSave,
     toolSettings,
@@ -808,6 +851,9 @@ export async function createHeadlessHost(
         } catch {
           /* resolve is best-effort */
         }
+        // The editor worker broadcasts the load reply to every subscriber
+        // (`document.onDidOpen`, the parent index); so does the harness.
+        fanOut(reply);
         return reply.payload.pageIds;
       }
       const errKind =

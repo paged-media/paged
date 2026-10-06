@@ -703,6 +703,18 @@ export interface PagedEditor {
      *  `setToolPreview` — this REPLACES the slot's content with the
      *  list; `null` clears it. */
     setToolPreviews?(value: readonly ToolPreviewShape[] | null): void;
+    /** W-20 — the retained plugin overlay LAYERS, kept apart from the
+     *  tool-preview slot. `key` is host-wide (the SDK passes
+     *  `<manifest id>/<layer id>`). The FIRST call for a key fixes the
+     *  layer's place in the stack (layers draw in first-set order, below
+     *  the tool-preview slot); later calls replace its shapes, and `[]`
+     *  empties it without giving up the place. Optional with
+     *  `removeOverlayLayer`: on a host without both the SDK's
+     *  `host.overlay.layer` draws nothing and
+     *  `supports("overlay.layers@1")` is false. */
+    setOverlayLayer?(key: string, shapes: readonly ToolPreviewShape[]): void;
+    /** W-20 — drop a layer and its place in the stack. */
+    removeOverlayLayer?(key: string): void;
   };
   tool: {
     setBaseTool(id: ToolId): void;

@@ -259,6 +259,32 @@ export interface EnteredEditContext {
   type: string;
   /** The element the context was entered on (the write-scope root). */
   id: ElementId;
+  /**
+   * W-19 — WHERE the pointer entered, when the entry was a pointer
+   * (the double-click, or the Type-tool click on plugin-owned content).
+   * All three are absent for an entry with no pointer
+   * (`host.shell.enterEditContext`) and on `onExit`.
+   *
+   * Without them a context that edits by pointer had to make the user
+   * click a SECOND time after the double-click before anything landed
+   * where they pointed (a caret in a web frame, a cell in a sheet).
+   *
+   * Probe `supports("editContext.enterPoint@1")`: true only when the host
+   * shell fills these on a pointer entry. On a host where it is false the
+   * fields are always absent and the context places its own default.
+   */
+  /** The page the pointer was on. */
+  pageId?: PageId;
+  /** The pointer in PAGE-LOCAL points (origin = the page's top-left), the
+   *  space `hitTest` and the tool-preview shapes use. */
+  pagePoint?: [number, number];
+  /** The pointer in FRAME-CONTENT points — the same mapping and origin
+   *  as `ContentPointerEvent.contentPoint` (the frame's content transform
+   *  inverted, origin = the content-box top-left), so a context hands it
+   *  straight to the code that handles `onContentPointerDown`. Absent
+   *  when the point falls outside the content box or the frame's
+   *  transform is singular. */
+  contentPoint?: [number, number];
 }
 
 /** K-1 — a pointer delivered to the ACTIVE edit context, in FRAME-CONTENT
@@ -867,6 +893,18 @@ export interface DocumentChangeEvent {
   reflow?: { frameId: string; contentBox: [number, number, number, number] };
 }
 
+/** W-22 — what `document.onDidOpen` reports: the new document's page
+ *  structure, a clonable snapshot of the engine's load reply. */
+export interface DocumentOpenedEvent {
+  /** The engine's id for the loaded document. */
+  docId: string;
+  pageCount: number;
+  /** Page ids in document order. */
+  pageIds: PageId[];
+  /** Per-page `[width, height]` in points, the same order as `pageIds`. */
+  pageSizesPt: [number, number][];
+}
+
 /** One link in a text-frame thread (protocol v38, C-2/S-05). `next` is
  *  the following frame's id (null at the tail); `overflow` marks the tail
  *  frame as overset (story content past the chain end). */
@@ -1150,6 +1188,21 @@ export interface DocumentSurface {
   storyContent(storyId: string): Promise<StoryContent | null>;
   onDidChange(listener: (e: DocumentChangeEvent) => void): Disposable;
   /**
+   * W-22 — a document became the active one: opened from a file, created
+   * with File ▸ New, or loaded by a plugin through `host.nativeDocument`.
+   * Fires AFTER the engine holds the new document, so the listener can
+   * read it (parts, metadata, collections) straight away.
+   *
+   * A bundle that keeps per-document state (a render cache, a parts
+   * index) resets it here. Before this door the only way to hear it was
+   * the raw client `documentLoaded` message through `host.editor`.
+   *
+   * Gated on `capabilities.document.read`, like `onDidChange`. Probe
+   * `supports("document.onDidOpen@1")`. A document already open when the
+   * bundle activates is NOT replayed: read it at activation.
+   */
+  onDidOpen(listener: (e: DocumentOpenedEvent) => void): Disposable;
+  /**
    * Called before the host serialises the document to a file; the save
    * WAITS for the returned promise, so a bundle can commit pending state
    * (write parts, bake pixels) first. An error is logged and does not
@@ -1325,6 +1378,42 @@ export interface OverlaySurface {
    * is precisely the pre-K-9 behaviour a bundle used to hand-code.
    */
   setToolPreviews(shapes: readonly ToolPreviewShape[] | null): void;
+  /**
+   * W-20 — a RETAINED overlay layer of this bundle's own: preview shapes
+   * that stay on the canvas until the bundle changes or clears them,
+   * independent of the tool-preview slot and of every other layer.
+   *
+   * The tool-preview slot is ONE slot for whichever tool is active, so a
+   * bundle drawing two persistent things (a text caret and an outline
+   * highlight) had them overwrite each other, and an active tool's
+   * preview wiped both. A layer is data only (the same `ToolPreviewShape`
+   * vocabulary, no React component), so it works where
+   * `contribute.overlay` cannot reach.
+   *
+   * A bundle may hold several layers. They stack in the order they were
+   * CREATED (first = bottom-most) and keep that place across `set` and
+   * `clear`; all of them draw below the tool-preview slot. `id` names the
+   * layer within the bundle (generated when omitted); asking for an id
+   * that is already live throws. Every layer is disposed with the bundle.
+   *
+   * Same `capabilities.rendering` ∋ `"overlay"` gate as `setToolPreview`.
+   * Probe `supports("overlay.layers@1")`: true only when the host renders
+   * layers. Without it the handle still works and never throws, but
+   * draws nothing.
+   */
+  layer(id?: string): OverlayLayer;
+}
+
+/** W-20 — one retained overlay layer (`host.overlay.layer`). */
+export interface OverlayLayer extends Disposable {
+  /** The layer's id within the bundle. */
+  readonly id: string;
+  /** REPLACE the layer's shapes, drawn in array order (first =
+   *  bottom-most within the layer). Shapes may address different pages.
+   *  An empty array clears the layer. */
+  set(shapes: readonly ToolPreviewShape[]): void;
+  /** Remove the layer's shapes; the layer keeps its place in the stack. */
+  clear(): void;
 }
 
 // ---------------------------------------------------------------- shell

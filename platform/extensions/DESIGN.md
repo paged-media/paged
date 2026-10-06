@@ -146,6 +146,15 @@ draw B-02). The headless harness records both
 - `onDidChange(l)` — typed `mutationApplied | undoApplied | redoApplied`
   events (every panel audit showed this exact subscribe pattern,
   hand-rolled 20+ times in `apps/canvas/src/panels`).
+- `onDidOpen(l)` [W-22] — a document became the active one (File ▸ Open,
+  File ▸ New, a native-document open): the client's `documentLoaded`
+  broadcast, narrowed to `{ docId, pageCount, pageIds, pageSizesPt }`.
+  Bundles that keep per-document state (paged.web's render cache and
+  parts index, paged.sheet's workbook) used to subscribe to the raw
+  client message through `host.editor`. Static flag
+  `document.onDidOpen@1`: every host posts the message on every load.
+  Gated on `document.read`; a document already open at activation is not
+  replayed.
 
 Capability note: this is the "read-broad / write-scoped" default. v0
 enforces namespace only; write-*scoping* (subtree restriction) attaches
@@ -442,6 +451,36 @@ its own `pageId` and the host resolves the page rect per shape. Same
 channel, one gate. The headless harness wires the sink (so the flag is
 true and `lastToolPreviews()` records the list), which is what makes
 "geometry AND label at once" conformance-assertable without a browser.
+
+### 4.5d `host.overlay.layer` — retained per-bundle layers [W-20]
+
+`layer(id?) → { id, set(shapes), clear(), dispose() }` — overlay shapes
+that STAY until the bundle changes them, in the same `ToolPreviewShape`
+vocabulary, rendered by the host's preview renderer. §4.5a argued
+against a second layer for the TOOL preview, and that still holds: a
+tool's in-progress preview is one thing at a time. A bundle's retained
+marks are not. paged.web draws an in-frame text caret and an outline
+highlight; on the single slot each write erased the other, and any
+active tool's preview erased both. `contribute.overlay` can hold them but
+needs a React component, which is no answer for a data-only (isolate-
+bound) bundle.
+
+- **Order:** layers stack in CREATION order (first = bottom-most) and
+  keep their place across `set` / `clear`; all of them draw below the
+  tool-preview slot, so a tool's feedback is never hidden by a retained
+  mark. The SDK registers the layer with `[]` at creation, which is what
+  fixes the place.
+- **Identity:** the host key is `<manifest id>/<layer id>`; a bundle
+  cannot name another bundle's layer. A live duplicate id throws; ids
+  are generated when omitted.
+- **Lifetime:** every layer is in the bundle's disposable store, so
+  deactivation removes them all.
+- **Flag:** `overlay.layers@1` is DYNAMIC — true when the handle has both
+  `overlaySignals.setOverlayLayer` and `removeOverlayLayer` (one without
+  the other would leak a disposed bundle's shapes). Without them the
+  handle is inert: never a throw, and never a fallback onto the
+  tool-preview slot, which would erase the active tool's preview.
+- Same `capabilities.rendering ∋ "overlay"` gate as `setToolPreview`.
 
 ### 4.5b `host.text` — measurement + the caret read door [S-13 · C-9]
 `measureString(family, style, text, sizePt)` (S-13 — real engine-shaper
@@ -1857,3 +1896,17 @@ this raster frame", which the plugin knows from its own ingest and not
 from a gesture. It takes double-click entry regardless, and scopes
 provider answers by DECLINING when its own state says there is nothing
 to serve — which the binding contract already models properly.
+
+### The entering point [W-19]
+
+A double-click is also a POINT. `EnteredEditContext` carries it on a
+pointer entry: `pageId`, `pagePoint` (page-local pt) and `contentPoint`
+(frame-content pt, the same mapping `ContentPointerEvent` uses), so a
+context that edits by pointer places its caret or picks its cell where
+the user double-clicked instead of asking for a second click. The
+Type-tool click on plugin-owned content is a pointer entry too;
+`host.shell.enterEditContext` is not, and passes none. The shell fills
+the fields; the SDK passes the context through untouched (including
+through the binding-provider wrapping of `onEnter`) and advertises
+`editContext.enterPoint@1` only when the host says it delivers them
+(`CreateBundleHostOptions.editContextEnterPoint`).

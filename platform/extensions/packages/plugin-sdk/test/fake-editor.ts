@@ -158,6 +158,9 @@ export function makeFakeEditor(opts?: {
   wireContextRegistries?: boolean;
   images?: ReturnType<typeof makeFakeImageChannel>["channel"];
   multiPreview?: boolean;
+  /** W-20 — wire the retained overlay-layer sink
+   *  (`setOverlayLayer` + `removeOverlayLayer`). Off = an older host. */
+  overlayLayers?: boolean;
 }) {
   const wireContextRegistries = opts?.wireContextRegistries ?? true;
   const listeners = new Set<Listener>();
@@ -175,6 +178,8 @@ export function makeFakeEditor(opts?: {
   let selectionIds: unknown[] = [];
   let toolPreview: unknown = null;
   let toolPreviews: unknown = null;
+  // W-20 — key → shapes, in first-set (stack) order.
+  const overlayLayers = new Map<string, unknown[]>();
   // C-16 — the scriptable `requestSceneTree` reply (the parentage
   // source). Empty roots by default, as before.
   let sceneTreeRoots: unknown[] = [];
@@ -290,6 +295,16 @@ export function makeFakeEditor(opts?: {
             },
           }
         : {}),
+      ...(opts?.overlayLayers
+        ? {
+            setOverlayLayer: (key: string, shapes: unknown[]) => {
+              overlayLayers.set(key, shapes);
+            },
+            removeOverlayLayer: (key: string) => {
+              overlayLayers.delete(key);
+            },
+          }
+        : {}),
     },
     ...(opts?.images ? { images: opts.images } : {}),
   };
@@ -329,6 +344,9 @@ export function makeFakeEditor(opts?: {
     /** K-9 — the last LIST written through `setToolPreviews` (only ever
      *  non-null when the fake was built with `multiPreview: true`). */
     getToolPreviews: () => toolPreviews,
+    /** W-20 — the live layers in stack order. */
+    getOverlayLayers: () =>
+      [...overlayLayers].map(([key, shapes]) => ({ key, shapes })),
     /** C-16 — script the scene tree the parentage read derives from.
      *  Counts the `requestSceneTree` sends via `sent`, which is how the
      *  memoization is asserted. */
