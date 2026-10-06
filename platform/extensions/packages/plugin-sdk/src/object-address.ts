@@ -50,65 +50,73 @@ export const PAGE_ITEM_KINDS: readonly PageItemKind[] = [
   "group",
 ];
 const FAMILIES = new Set<StyleFamily>(["paragraph", "character", "object", "cell", "table"]);
-const ID_KINDS = new Set(["page", "spread", "layer", "master", "story", "table", "guide", "section", "hyperlink"]);
+const ID_KINDS = new Set(["spread", "layer", "table", "guide", "section", "hyperlink", "textVariable"]);
 const REST_KINDS = new Set(["swatch", "gradient", "colorGroup", "numberingList", "condition", "conditionSet"]);
 
 // ------------------------------------------------------------- id escaping
 
-/** `id = 1*( %x21-7E except ":" "@" "/" "[" "]" "%" ) / pct-encoded`. */
-const ID_SAFE = /^[\x21-\x7e]$/;
-const ID_DELIMS = new Set([":", "@", "/", "[", "]", "%"]);
+// Core's protocol-71 grammar (`paged_wire::address`): `<rest>` runs to the
+// end of the address and may contain anything, so a plain `<id>` (and a
+// self id such as `Color/Red`) needs no escaping. `%` escapes ONLY where an
+// id must stop at a delimiter — the `@` ending a story id in
+// `storyRange:` / `field:`, the `/` ending a table id in `cell:` and the
+// plugin id / kind in `plugin:`, the `>` of the ` > ` ending a master in a
+// master-scoped item — and `%` itself, in exactly those places.
 
-function encodeId(id: string): string {
+/** Core's `enc`: `%` and the delimiters as `%XX` (UTF-8 bytes). */
+function enc(id: string, delims: string): string {
   let out = "";
   for (const ch of id) {
-    if (ID_SAFE.test(ch) && !ID_DELIMS.has(ch)) {
-      out += ch;
+    if (ch === "%" || delims.includes(ch)) {
+      for (const b of new TextEncoder().encode(ch)) out += "%" + b.toString(16).toUpperCase().padStart(2, "0");
     } else {
-      for (const b of new TextEncoder().encode(ch)) {
-        out += "%" + b.toString(16).toUpperCase().padStart(2, "0");
-      }
+      out += ch;
     }
   }
   return out;
 }
 
-function decodeId(text: string): string | null {
-  if (text.length === 0) return null;
-  const bytes: number[] = [];
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i]!;
-    if (ch === "%") {
-      const hex = text.slice(i + 1, i + 3);
-      if (!/^[0-9A-Fa-f]{2}$/.test(hex)) return null;
-      bytes.push(parseInt(hex, 16));
-      i += 2;
-    } else if (ID_SAFE.test(ch) && !ID_DELIMS.has(ch)) {
-      bytes.push(ch.charCodeAt(0));
-    } else {
-      return null;
+/** Core's `dec`: undo `enc`; a `%` not followed by two hex digits is kept
+ *  literally (lenient, like core). */
+function dec(text: string): string {
+  const bytes = new TextEncoder().encode(text);
+  const out: number[] = [];
+  const hex = (b: number): number | null => {
+    const c = String.fromCharCode(b);
+    return /^[0-9A-Fa-f]$/.test(c) ? parseInt(c, 16) : null;
+  };
+  for (let i = 0; i < bytes.length; i++) {
+    if (bytes[i] === 0x25 && i + 2 < bytes.length) {
+      const h = hex(bytes[i + 1]!);
+      const l = hex(bytes[i + 2]!);
+      if (h !== null && l !== null) {
+        out.push(h * 16 + l);
+        i += 2;
+        continue;
+      }
     }
+    out.push(bytes[i]!);
   }
   try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(new Uint8Array(bytes));
+    return new TextDecoder("utf-8", { fatal: true }).decode(new Uint8Array(out));
   } catch {
-    return null;
+    return text;
   }
 }
 
-const UINT = /^(0|[1-9][0-9]*)$/;
-const uint = (s: string): number | null => (UINT.test(s) ? Number(s) : null);
+const uint = (s: string): number | null => (/^[0-9]+$/.test(s) && Number(s) <= 0xffffffff ? Number(s) : null);
 
-/** `<id>@<start>..<end>` → parts, or null. */
-function parseRange(text: string): { id: string; start: number; end: number } | null {
-  const m = /^(.+)@(\d+)\.\.(\d+)$/.exec(text);
-  if (!m) return null;
-  const id = decodeId(m[1]!);
-  const start = uint(m[2]!);
-  const end = uint(m[3]!);
-  if (id === null || start === null || end === null || end <= start) return null;
-  return { id, start, end };
+/** `<a>..<b>` with `b > a` → the pair, or null. */
+function parseRange(text: string): { start: number; end: number } | null {
+  const dots = text.indexOf("..");
+  if (dots < 0) return null;
+  const start = uint(text.slice(0, dots));
+  const end = uint(text.slice(dots + 2));
+  if (start === null || end === null || end <= start) return null;
+  return { start, end };
 }
+
+const MASTER_SCOPE = " > ";
 
 // ------------------------------------------------------------- addresses
 
@@ -121,81 +129,68 @@ export function parseAddress(text: string): ParsedAddress | null {
     return name.length > 0 ? { kind: "handle", name } : null;
   }
   const colon = text.indexOf(":");
-  if (colon <= 0) return null;
+  if (colon < 0) return null;
   const head = text.slice(0, colon);
-  const body = text.slice(colon + 1);
-  if (body.length === 0) return null;
+  const rest = text.slice(colon + 1);
+  if (rest.length === 0) return null;
 
-  if (head === "plugin") {
-    const a = body.indexOf("/");
-    if (a <= 0) return null;
-    const b = body.indexOf("/", a + 1);
-    if (b < 0) return null;
-    const plugin = body.slice(0, a);
-    const objectKind = body.slice(a + 1, b);
-    const id = body.slice(b + 1);
-    if (!/^[A-Za-z][A-Za-z0-9_-]*$/.test(objectKind) || id.length === 0) return null;
-    return { kind: "plugin", plugin, objectKind, id };
-  }
-  if (head === "master") {
-    const gt = body.indexOf(" > ");
-    if (gt >= 0) {
-      const master = decodeId(body.slice(0, gt));
-      const item = parseAddress(body.slice(gt + 3));
-      if (master === null || !item || (item.kind !== "item" && item.kind !== "frame")) return null;
-      return { kind: "onMaster", master, item };
-    }
-  }
   const itemKind = ITEM_KINDS[head];
-  if (itemKind) {
-    const id = decodeId(body);
-    return id === null ? null : { kind: "item", itemKind, id };
-  }
-  if (head === "frame") {
-    const id = decodeId(body);
-    return id === null ? null : { kind: "frame", id };
-  }
-  if (head === "storyRange" || head === "storyrange") {
-    const r = parseRange(body);
-    return r ? { kind: "storyRange", story: r.id, start: r.start, end: r.end } : null;
-  }
-  if (head === "story" && /@\d+\.\.\d+$/.test(body)) {
-    const r = parseRange(body);
-    return r ? { kind: "storyRange", story: r.id, start: r.start, end: r.end } : null;
-  }
-  if (head === "page" && body.startsWith("#")) {
-    const n = uint(body.slice(1));
+  if (itemKind) return { kind: "item", itemKind, id: rest };
+  if (head === "frame") return { kind: "frame", id: rest };
+  if (REST_KINDS.has(head)) return { kind: head as "swatch", name: rest };
+  if (head === "textvariable") return { kind: "textVariable", id: rest };
+  if (head === "page") {
+    if (!rest.startsWith("#")) return { kind: "page", id: rest };
+    const n = uint(rest.slice(1));
     return n !== null && n >= 1 ? { kind: "pageIndex", index: n } : null;
   }
+  if (head === "master") {
+    const gt = rest.indexOf(MASTER_SCOPE);
+    if (gt < 0) return { kind: "master", id: rest };
+    const item = parseAddress(rest.slice(gt + MASTER_SCOPE.length));
+    if (gt === 0 || !item || (item.kind !== "item" && item.kind !== "frame")) return null;
+    return { kind: "onMaster", master: dec(rest.slice(0, gt)), item };
+  }
+  if (head === "story" || head === "storyRange" || head === "storyrange") {
+    const rangeRequired = head !== "story";
+    const at = rest.lastIndexOf("@");
+    if (at >= 0 && (rangeRequired || rest.slice(at + 1).includes(".."))) {
+      if (at === 0) return null;
+      const r = parseRange(rest.slice(at + 1));
+      return r ? { kind: "storyRange", story: dec(rest.slice(0, at)), start: r.start, end: r.end } : null;
+    }
+    return rangeRequired ? null : { kind: "story", id: rest };
+  }
   if (head === "field") {
-    const m = /^(.+)@(\d+)$/.exec(body);
-    if (!m) return null;
-    const story = decodeId(m[1]!);
-    const offset = uint(m[2]!);
-    return story !== null && offset !== null ? { kind: "field", story, offset } : null;
+    const at = rest.lastIndexOf("@");
+    if (at <= 0) return null;
+    const offset = uint(rest.slice(at + 1));
+    return offset === null ? null : { kind: "field", story: dec(rest.slice(0, at)), offset };
   }
   if (head === "cell") {
-    const m = /^(.+)\/(\d+),(\d+)$/.exec(body);
-    if (!m) return null;
-    const table = decodeId(m[1]!);
-    const row = uint(m[2]!);
-    const col = uint(m[3]!);
-    return table !== null && row !== null && col !== null ? { kind: "cell", table, row, col } : null;
+    const slash = rest.lastIndexOf("/");
+    if (slash <= 0) return null;
+    const rc = rest.slice(slash + 1);
+    const comma = rc.indexOf(",");
+    if (comma < 0) return null;
+    const row = uint(rc.slice(0, comma));
+    const col = uint(rc.slice(comma + 1));
+    return row === null || col === null ? null : { kind: "cell", table: dec(rest.slice(0, slash)), row, col };
   }
   if (head === "style") {
-    const slash = body.indexOf("/");
-    if (slash <= 0) return null;
-    const family = body.slice(0, slash) as StyleFamily;
-    const name = body.slice(slash + 1);
+    const slash = rest.indexOf("/");
+    if (slash < 0) return null;
+    const family = rest.slice(0, slash) as StyleFamily;
+    const name = rest.slice(slash + 1);
     return FAMILIES.has(family) && name.length > 0 ? { kind: "style", family, name } : null;
   }
-  if (REST_KINDS.has(head)) {
-    return { kind: head as "swatch", name: body };
+  if (head === "plugin") {
+    const a = rest.indexOf("/");
+    const b = a < 0 ? -1 : rest.indexOf("/", a + 1);
+    if (a <= 0 || b < 0 || b === a + 1 || b === rest.length - 1) return null;
+    return { kind: "plugin", plugin: dec(rest.slice(0, a)), objectKind: dec(rest.slice(a + 1, b)), id: rest.slice(b + 1) };
   }
-  if (ID_KINDS.has(head)) {
-    const id = decodeId(body);
-    return id === null ? null : ({ kind: head, id } as ParsedAddress);
-  }
+  if (ID_KINDS.has(head)) return { kind: head, id: rest } as ParsedAddress;
   return null;
 }
 
@@ -207,17 +202,15 @@ export function formatAddress(a: ParsedAddress): string {
     case "handle":
       return `$h:${a.name}`;
     case "item":
-      return `${a.itemKind}:${encodeId(a.id)}`;
-    case "frame":
-      return `frame:${encodeId(a.id)}`;
+      return `${a.itemKind}:${a.id}`;
     case "pageIndex":
       return `page:#${a.index}`;
     case "storyRange":
-      return `storyRange:${encodeId(a.story)}@${a.start}..${a.end}`;
+      return `storyRange:${enc(a.story, "@")}@${a.start}..${a.end}`;
     case "field":
-      return `field:${encodeId(a.story)}@${a.offset}`;
+      return `field:${enc(a.story, "@")}@${a.offset}`;
     case "cell":
-      return `cell:${encodeId(a.table)}/${a.row},${a.col}`;
+      return `cell:${enc(a.table, "/")}/${a.row},${a.col}`;
     case "style":
       return `style:${a.family}/${a.name}`;
     case "swatch":
@@ -228,11 +221,11 @@ export function formatAddress(a: ParsedAddress): string {
     case "conditionSet":
       return `${a.kind}:${a.name}`;
     case "onMaster":
-      return `master:${encodeId(a.master)} > ${formatAddress(a.item)}`;
+      return `master:${enc(a.master, ">")}${MASTER_SCOPE}${formatAddress(a.item)}`;
     case "plugin":
-      return `plugin:${a.plugin}/${a.objectKind}/${a.id}`;
+      return `plugin:${enc(a.plugin, "/")}/${enc(a.objectKind, "/")}/${a.id}`;
     default:
-      return `${a.kind}:${encodeId(a.id)}`;
+      return `${a.kind}:${a.id}`;
   }
 }
 
@@ -343,6 +336,7 @@ export const SELECTOR_KINDS = new Set<string>([
   "section",
   "hyperlink",
   "guide",
+  "textVariable",
 ]);
 
 /** Split a selector into step tokens and combinators, respecting brackets

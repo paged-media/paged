@@ -19,6 +19,9 @@
 // round-trip laws: parse(format(a)) = a for every well-formed parsed
 // address, and format(parse(s)) = s for every canonical string.
 
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 
@@ -60,6 +63,10 @@ describe("parseAddress — canonical forms (ADR 131)", () => {
     ["conditionSet:Set 1", { kind: "conditionSet", name: "Set 1" }],
     ["section:s1", { kind: "section", id: "s1" }],
     ["hyperlink:h1", { kind: "hyperlink", id: "h1" }],
+    ["textVariable:dTextVariablenPrice", { kind: "textVariable", id: "dTextVariablenPrice" }],
+    ["story:Story/u1", { kind: "story", id: "Story/u1" }],
+    ["storyRange:Story/u1@3..9", { kind: "storyRange", story: "Story/u1", start: 3, end: 9 }],
+    ["layer:Layer/u0", { kind: "layer", id: "Layer/u0" }],
     [
       "master:A > textFrame:u5",
       { kind: "onMaster", master: "A", item: { kind: "item", itemKind: "textFrame", id: "u5" } },
@@ -94,6 +101,7 @@ describe("parseAddress — aliases parse, never emit", () => {
     ["graphicline:u1", "graphicLine:u1"],
     ["storyrange:u1@0..2", "storyRange:u1@0..2"],
     ["story:u1@0..2", "storyRange:u1@0..2"],
+    ["textvariable:v1", "textVariable:v1"],
   ];
   for (const [alias, canonical] of aliases) {
     it(`${alias} → ${canonical}`, () => {
@@ -127,22 +135,40 @@ describe("parseAddress — refusals", () => {
     "plugin:acme/kind/",
     "plugin:/kind/1",
     "$h:",
-    "textFrame:a/b",
-    "textFrame:a[b",
+    "storyRange:u1",
+    "field:@3",
+    "master: > textFrame:u1",
+    "master:A > swatch:Red",
   ]) {
     it(JSON.stringify(bad), () => expect(parseAddress(bad)).toBeNull());
   }
 });
 
-describe("ids percent-escape only where they must stop at a delimiter", () => {
-  it("formats a delimiter inside an id as %XX and parses it back", () => {
-    const p: ParsedAddress = { kind: "item", itemKind: "rectangle", id: "a/b@c" };
-    const s = formatAddress(p);
-    expect(s).toBe("rectangle:a%2Fb%40c");
-    expect(parseAddress(s)).toEqual(p);
+describe("ids percent-escape only where they must stop at a delimiter (core protocol 71)", () => {
+  it("a plain id runs to the end and is never escaped", () => {
+    const p: ParsedAddress = { kind: "item", itemKind: "rectangle", id: "a/b@c[d]%" };
+    expect(formatAddress(p)).toBe("rectangle:a/b@c[d]%");
+    expect(parseAddress("rectangle:a/b@c[d]%")).toEqual(p);
+  });
+  it("escapes the delimiter that would end the id, and % itself, only there", () => {
+    expect(formatAddress({ kind: "storyRange", story: "odd@id%", start: 1, end: 2 })).toBe("storyRange:odd%40id%25@1..2");
+    expect(formatAddress({ kind: "cell", table: "t/1", row: 0, col: 0 })).toBe("cell:t%2F1/0,0");
+    expect(parseAddress("cell:t%2F1/0,0")).toEqual({ kind: "cell", table: "t/1", row: 0, col: 0 });
   });
   it("rest forms carry slashes and spaces raw", () => {
     expect(formatAddress({ kind: "swatch", name: "Color/My Red" })).toBe("swatch:Color/My Red");
+  });
+  it("core's corpus: every idGrammar example of the vendored catalog parses and formats back byte-identically", () => {
+    const catalog = JSON.parse(
+      readFileSync(fileURLToPath(new URL("../../plugin-api/src/catalog.json", import.meta.url)), "utf8"),
+    ) as { idGrammar: { form: string; example: string }[] };
+    expect(catalog.idGrammar.length).toBeGreaterThan(25);
+    for (const g of catalog.idGrammar) {
+      const p = parseAddress(g.example);
+      expect(p, g.example).not.toBeNull();
+      // `frame:` is core's kind-agnostic form: canonical in core, kept as is.
+      expect(formatAddress(p!), g.example).toBe(g.example);
+    }
   });
 });
 
@@ -150,6 +176,9 @@ describe("ids percent-escape only where they must stop at a delimiter", () => {
 
 const idChar = fc.constantFrom(..."abcuXYZ019_-.~!$&'()*+,;=/@:[]% ü€".split(""));
 const id = fc.string({ unit: idChar, minLength: 1, maxLength: 12 });
+/** A plain id that stays one kind on re-parse: not `#n` (a page number),
+ *  no `@` (a story range), no ` > ` (a master scope). */
+const plainId = id.filter((s) => !s.startsWith("#") && !s.includes("@") && !s.includes(" > "));
 const rest = fc
   .string({ unit: fc.constantFrom(..."abc XYZ/09-_.!äé".split("")), minLength: 1, maxLength: 16 })
   .filter((s) => s.trim() === s && !s.includes(" > "));
@@ -158,11 +187,11 @@ const itemKind = fc.constantFrom("textFrame", "rectangle", "oval", "polygon", "g
 const pluginId = fc.stringMatching(/^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*){1,3}$/);
 const kindName = fc.stringMatching(/^[A-Za-z][A-Za-z0-9_-]{0,8}$/);
 
-const itemAddr = fc.record({ kind: fc.constant("item" as const), itemKind, id });
+const itemAddr = fc.record({ kind: fc.constant("item" as const), itemKind, id: plainId });
 const parsedArb: fc.Arbitrary<ParsedAddress> = fc.oneof(
   fc.constant({ kind: "doc" as const }),
   itemAddr,
-  fc.record({ kind: fc.constantFrom("page", "spread", "layer", "master", "story", "table", "guide", "section", "hyperlink" as const), id }) as fc.Arbitrary<ParsedAddress>,
+  fc.record({ kind: fc.constantFrom("page", "spread", "layer", "master", "story", "table", "guide", "section", "hyperlink", "textVariable" as const), id: plainId }) as fc.Arbitrary<ParsedAddress>,
   fc.record({ kind: fc.constant("pageIndex" as const), index: fc.integer({ min: 1, max: 9999 }) }),
   fc
     .record({ story: id, start: uint, len: fc.integer({ min: 1, max: 1000 }) })

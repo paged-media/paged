@@ -807,7 +807,10 @@ export async function createHeadlessHost(
   const dataProviders = options.dataProviders ?? createDataProviderRegistry();
   const objects =
     options.objects ??
-    createObjectRegistry({ core: createCoreObjects(() => editor), log: options.console ?? console });
+    createObjectRegistry({
+      core: createCoreObjects(() => editor, { protocol: engine.protocolVersion }),
+      log: options.console ?? console,
+    });
   // Protocol 66 batch — the save hook and the tool-options store, shared
   // across the harness's hosts like the stores above. A test-injected
   // backend replaces the in-memory one but loses `fire` / `set`, so the
