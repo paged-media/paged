@@ -7,6 +7,16 @@ What the plugin contract ships and what it does not, read from the code at commi
 
 ## Shipped
 
+- **The object model (0.2.42-canary.0, branch `om/object-model`, not yet released;
+  DESIGN.md §21, ADR 323).** `host.contribute.objectModel` and `host.objects`: one
+  `query/get/getAll/set/batch/schema/kinds/commands/invoke/onDidChange` over core
+  addresses and every plugin's contributed kinds, a batch landing as one engine mutation
+  and one undo step. The address and selector grammar is a TypeScript mirror of core's
+  (ADR 131). Core addresses map onto the protocol-69 wire through one table per kind;
+  tables, cells, fields and core creates answer `unmapped` until core's `Set` ships.
+  `plugin-cli validate` checks `contributes.objectModel`; untyped commands are a
+  shrink-only baseline shipped with the CLI. The headless host now injects the object and
+  data-provider registries and hosts several bundles at once.
 - **Three npm packages**, published under the `canary` tag on a push to `main`.
 - **The contract** (`plugin-api`, types only): the manifest types and their JSON Schema
   (exported as `./manifest.schema.json`), `PagedBundle`, `BundleHost` with 27 members, the

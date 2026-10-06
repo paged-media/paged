@@ -1948,3 +1948,135 @@ the optional `PagedEditor.text.measureMany`, `CreateBundleHostOptions.documents`
 (+ `DocumentsBackend`), `capabilities.documents`, four feature flags, and
 the harness options `engineShaper` / `confirmReplace` +
 `openedDocuments()`. No existing member changed.
+
+## 21. The object model (ADR 323 — `contribute.objectModel`, `host.objects`)
+
+**Status:** contract + registry + core seam implemented (0.2.42-canary.0);
+the plugins contribute their models in the next wave. Records: ADR 131
+(addresses), ADR 132 (schemas, `Set`), ADR 323 (this contract), ADR 324
+(the Node CLI that injects it), all PROPOSED in the thoughts register.
+
+**The problem.** A data binding, a Boa script, a CLI and a panel field all
+need to name an object and set one of its properties the same way. Core
+had four addressing schemes and 45 dedicated property ops; plugin state
+(image layers, sheet cells, draw recipes) was reachable only through each
+plugin's own panels; commands took `payload: unknown`.
+
+### 21.1 The shape
+
+- `host.contribute.objectModel({ kinds, commands })` → `ObjectModelHandle`
+  (a `Disposable` plus `changed(addresses?)` for state the engine does
+  not see). A kind is `{ kind, title, schema: PropertySchema[], content?,
+  hostOf, list, get, set?, batch? }`; addresses are
+  `plugin:<manifest.id>/<kind>/<id>`. A typed command is `{ id, title,
+  args: ValueType, result?, handler(ctx: { objects }, args) }`.
+- `host.objects` — `query / get / getAll / set / batch / schema / kinds /
+  commands / invoke / onDidChange` over core AND every plugin. Reads
+  answer `ObjectValue` (`value | mixed | absent | refused`), writes
+  `ObjectWriteResult { applied, undoSteps, code?, reason? }` — expected
+  failures are results (tenet 5); only `invoke` rejects, because a command
+  returns arbitrary data.
+- The value types and schema rows are ADR 132's verbatim (`ValueType` with
+  `kind`, `PropertySchema` rows with `path`, `access`, `range`, …), so a
+  plugin row and a core catalog row render through one `PropertyField`.
+
+### 21.2 Addresses are a TS MIRROR, and a session handle
+
+`parseAddress` / `formatAddress` / `parseSelector` (plugin-sdk
+`object-address.ts`) mirror core's `paged_wire::Address` grammar: canonical
+`textFrame:<id>` … `storyRange:<id>@a..b`, `page:#n`, `cell:<t>/<r>,<c>`,
+`style:<family>/<rest>`, `plugin:…`, `$h:`; aliases (`frame:`,
+`story:<id>@a..b`, `rect`, …) parse and are never emitted; ids
+percent-escape only where they must stop at a delimiter. fast-check pins
+`parse(format(a)) = a` and `format(parse(s)) = s`. When core exports its
+corpus the spec runs it too.
+
+An address is a SESSION handle: InDesign renumbers every `Self` on save.
+Nothing in this contract persists one. A plugin object's labels live on
+the core element `hostOf` names (a page item or story — hosts whose
+`x-paged:` labels survive InDesign), under the plugin's own
+`x-paged:<id>` key, never `Label`; the registry escapes non-ASCII label
+values as `\uXXXX`. Persisted binding targets (ADR 558/559) are
+selectors over names and labels.
+
+### 21.3 Routing, and one undo step per batch
+
+`createObjectRegistry({ core })` is shared and host-injected like the
+data- and binding-provider registries (`CreateBundleHostOptions.objects`;
+the harness and the CLI build one). `plugin:` addresses go to the kind's
+owner; everything else to `CoreObjects`. A batch is validated against the
+schema (never coerced — `coerceValue` is the explicit door a text surface
+calls first), PLANNED in full, and only then applied: core ops become
+mutations, plugin `batch`/`set` answer an `ObjectWrite` — `mutations`,
+`state` (content-addressed parts + a label hash on the host element, the
+label-hash pattern), `both`, or `rejected`. Parts are written first
+(content-addressed, so harmless if the commit then fails), and every
+mutation plus every label goes to the engine as ONE `batch` — one undo
+step, which reverts the label, which is how a plugin's state comes back
+on undo with no plugin-side history. A refusal anywhere applies nothing.
+
+### 21.4 The core seam (today's wire → core's `Set` later)
+
+`core-objects.ts` maps each core kind through one table onto the v69 wire:
+frame and story-range paths → `setElementProperty` /
+`requestElementProperties`; story `content` → `deleteRange`+`insertText`;
+layers → `layerSet*`; `pageBounds` / `appliedMaster` → `resizePage` /
+`applyMasterToPage`; doc defaults → `setDocumentDefaults`
+(read-modify-write); swatch `space`/`value` → `editSwatch`; styles →
+`setStyleProperty`; core `delete` of items/pages/layers → `deleteFrame` /
+`deletePage` / `layerRemove`. Tables, cells, fields, gradients, items on
+masters and core `create` answer `unmapped`: the wire has no form for them.
+Core selectors are evaluated here over the scene tree and the collections
+(containment doc → spread → page → items; `label.<key>` reads an item's
+`x-paged:` labels from the same tree read). The schema rows come from
+`core-schema.ts`, a `Record<PropertyPath, …>` (a new wire path fails
+typecheck until classified) whose wire variants were read off the
+published engine; the rows it could not probe are marked `inferred`.
+When core's `Get`/`Set`/`Query`/`Schema` (ADR 132) publish, this file
+collapses to four wire calls and the vendored catalog's `propertySchemas`
+replace `core-schema.ts`; the registry and the contract do not change.
+
+### 21.5 Gates
+
+- **Runtime:** `contribute.objectModel` requires every kind in
+  `contributes.objectModel.kinds[]` and every typed command in
+  `.commands[]` (namespaced); a kind with no rows, a non-`ValueType` row
+  or a repeated path is refused; an INLINE manifest schema must name the
+  same paths as the runtime rows. `host.objects` reads need
+  `document.read`, writes `document.write` (refused as `denied`).
+- **plugin-cli `validate`:** the same rules on the manifest, with schema /
+  args files resolved bundle-relative; a typed command without `args`
+  fails.
+- **Untyped commands** are migration debt in a shrink-only baseline,
+  `packages/plugin-cli/untyped-commands.baseline.json` (draw 107, image 39,
+  sheet 24, data 9, web 7, doc 1 at 2026-10-06), shipped with the CLI so
+  each plugin repo's `validate` fails a NEW untyped command;
+  `scripts/assert-untyped-shrinks.mjs` (contract guard) fails a commit
+  that grows it.
+- **Flags:** `contribute.objectModel@1` and `objects@1` are static (core
+  addresses always route; without an injected registry a private one
+  serves core + the bundle's own kinds); `objects.shared@1` means a shared
+  registry is wired.
+
+### 21.6 Divergences from ADR 323 as written, and why
+
+- `ObjectValue` gains `{ kind: "refused", code, reason }`: an unknown
+  address or path is not `absent` ("does not apply to this object").
+- `ObjectWriteResult` gains `code`, `index` and `outcome` (minted ids).
+- `ObjectQuery` gains `predicates` (the parsed step), so a kind can apply
+  them itself; the registry post-filters regardless.
+- `contribute.objectModel` returns `ObjectModelHandle` (a `Disposable`
+  with `changed`), and `host.objects` gains `commands()`.
+- A kind without `batch` takes one `set` per batch (several independent
+  `set` plans would each start from the same state and lose updates).
+- `invoke` cannot share a batch with writes (it runs arbitrary code; it
+  cannot join an undo step).
+
+### 21.7 Additivity
+
+Wholly additive: new members `contribute.objectModel` and `host.objects`,
+new types, a new manifest field, a new host option, new runtime exports.
+The harness also gains `objects` and `dataProviders` (shared, injected
+into every bundle host) and now hosts SEVERAL bundles at once — `host`
+is the last loaded one's; the old "one bundle per headless host" throw is
+gone. No wire change.
