@@ -185,8 +185,10 @@ export function validateValue(
     case "struct": {
       if (typeof value !== "object" || Array.isArray(value)) return `${at} must be a record`;
       const rec = value as Record<string, unknown>;
-      for (const k of Object.keys(rec)) {
-        if (!(k in type.fields)) return `${at} has no field "${k}"`;
+      if (!type.open) {
+        for (const k of Object.keys(rec)) {
+          if (!(k in type.fields)) return `${at} has no field "${k}"`;
+        }
       }
       for (const [k, ft] of Object.entries(type.fields)) {
         if (!(k in rec) || rec[k] === undefined) {

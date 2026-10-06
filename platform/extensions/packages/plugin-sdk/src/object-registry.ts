@@ -20,8 +20,9 @@
 // CROSS-bundle.
 //
 // Routing (rule 5): `plugin:<id>/<kind>/…` → the plugin that registered
-// the kind; everything else → `CoreObjects` (core-objects.ts, today's wire;
-// core's `Set`/`Get` later).
+// the kind; everything else → `CoreObjects` (core-objects.ts: core's
+// `Set` / `RequestGet` / `RequestQuery` on engine protocol 71, the interim
+// table below it).
 //
 // A batch is all-or-nothing and ONE undo step:
 //   1. every op is parsed, schema-validated and PLANNED — core ops become
@@ -61,6 +62,7 @@ import type {
 } from "@paged-media/plugin-api";
 
 import type { CoreObjects } from "./core-objects";
+import { codeOfEngineError } from "./core-objects-v71";
 import { canonicalCorePath } from "./core-schema";
 import { addressKindOf, formatAddress, parseAddress, parseSelector, type SelectorStep } from "./object-address";
 import { applyDefaults, checkSchemaRows, checkValueType, findRow, validateValue } from "./object-schema";
@@ -96,6 +98,16 @@ interface KindEntry {
   model: ObjectModelContribution;
   rows: Map<string, PropertySchema>;
   parts?: PartsSurface;
+}
+
+/** A `$h:` name a core create bound earlier in the batch. */
+interface BatchHandle {
+  /** The new object's address, or `$h:<name>` until the engine mints it. */
+  address: string;
+  /** The SDK kind its rows come from. */
+  kind: string;
+  /** False when core cannot address it inside the batch (a new layer). */
+  usable: boolean;
 }
 
 class Refusal extends Error {
@@ -164,6 +176,17 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
   const commands = new Map<string, { plugin: string; c: TypedCommandContribution }>();
   const listeners = new Set<{ fn: (e: ObjectChange) => void; match: (e: ObjectChange) => boolean }>();
   const coreRows = new Map<string, Map<string, PropertySchema>>();
+  /** The protocol the core rows were read at (the seam feature-detects it;
+   *  rows are re-read when it changes). */
+  let coreProtocol: number | null = null;
+  const coreReady = async (): Promise<void> => {
+    if (!core?.ready) return;
+    const p = await core.ready();
+    if (p !== coreProtocol) {
+      coreProtocol = p;
+      coreRows.clear();
+    }
+  };
 
   const emit = (e: ObjectChange): void => {
     for (const l of [...listeners]) {
@@ -196,11 +219,26 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
     return m;
   };
 
-  /** Parse and route an address. */
-  const route = (address: string): { parsed: ParsedAddress; entry: KindEntry | null } => {
-    const parsed = parseAddress(address);
+  /** The SDK kind of a parsed core address (`style:<family>` per family). */
+  const coreKindOf = (p: ParsedAddress, handles?: ReadonlyMap<string, BatchHandle>): string =>
+    p.kind === "style" ? `style:${p.family}` : p.kind === "handle" ? (handles?.get(p.name)?.kind ?? "") : addressKindOf(p);
+
+  /** Parse and route an address. `handles` are the `$h:` names a core
+   *  `create` earlier in the same batch bound. */
+  const route = (
+    address: string,
+    handles?: ReadonlyMap<string, BatchHandle>,
+  ): { parsed: ParsedAddress; entry: KindEntry | null } => {
+    let parsed = parseAddress(address);
     if (!parsed) throw new Refusal("badAddress", `"${address}" is not an address`);
-    if (parsed.kind === "handle") throw new Refusal("unmapped", `${address}: batch handles resolve inside core batches only`);
+    if (parsed.kind === "handle") {
+      const h = handles?.get(parsed.name);
+      if (!h) throw new Refusal("unmapped", `${address}: no create earlier in this batch bound that handle`);
+      if (!h.usable) throw new Refusal("unmapped", `${address}: a new ${h.kind} is named after the commit; set its properties in a second batch`);
+      if (!h.address.startsWith("$h:")) parsed = parseAddress(h.address)!;
+      if (!core) throw new Refusal("unmapped", "no core backend wired");
+      return { parsed, entry: null };
+    }
     if (parsed.kind === "plugin") {
       const entry = kinds.get(addressKindOf(parsed));
       if (!entry) throw new Refusal("unknownAddress", `no plugin kind ${addressKindOf(parsed)}`);
@@ -210,15 +248,22 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
     return { parsed, entry: null };
   };
 
-  const rowFor = (entry: KindEntry | null, parsed: ParsedAddress, path: string): PropertySchema | null =>
-    findRow(entry ? entry.rows : rowsOfCore(addressKindOf(parsed)), path);
+  const rowFor = (
+    entry: KindEntry | null,
+    parsed: ParsedAddress,
+    path: string,
+    handles?: ReadonlyMap<string, BatchHandle>,
+  ): PropertySchema | null => findRow(entry ? entry.rows : rowsOfCore(coreKindOf(parsed, handles)), path);
 
   // ------------------------------------------------------------ reads
 
   async function get(address: Address, path: string): Promise<ObjectValue> {
     try {
       const { parsed, entry } = route(address);
-      if (!entry) return await core!.get(parsed, canonicalCorePath(path));
+      if (!entry) {
+        await coreReady();
+        return await core!.get(parsed, canonicalCorePath(path));
+      }
       if (!findRow(entry.rows, path)) return refused("unknownPath", `${entry.qualified} has no path "${path}"`);
       const canonical = formatAddress(parsed);
       return await entry.kind.get(canonical, path);
@@ -248,7 +293,13 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
       }
     }
     try {
+      await coreReady();
       const mutations: MutationInput[] = [];
+      /** `$h:` names bound by core creates of this batch. */
+      const handles = new Map<string, BatchHandle>();
+      /** One resolver per create op, in op order (the `created` list). */
+      const created: Array<(outcome: import("@paged-media/plugin-api").MutationOutcome) => Promise<string | null>> = [];
+      let autoHandle = 0;
       /** Plugin ops grouped by PLANNER: the plugin (when it contributes a
        *  plugin-level `batch`) or the kind. */
       const perKind = new Map<KindEntry | string, { entry: KindEntry; ops: ObjectOp[] }>();
@@ -259,27 +310,55 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
           if (op.op === "invoke") throw new Refusal("unmapped", "invoke cannot share a batch with writes; use objects.invoke");
           if (op.op === "create") {
             const entry = kinds.get(op.kind);
-            if (!entry) throw new Refusal("unmapped", `create "${op.kind}": core creates land with core's Set (ADR 132); no plugin kind by that name`);
+            if (!entry) {
+              // A CORE create (protocol 71): the create op, then its other
+              // props as ordinary sets on the new object.
+              if (!core?.planCreate) throw new Refusal("unmapped", `create "${op.kind}": no plugin kind by that name and no core create`);
+              if (op.handle !== undefined && (handles.has(op.handle) || !/^[A-Za-z0-9_]+$/.test(op.handle))) {
+                throw new Refusal("invalidValue", `create: handle "${op.handle}" is repeated or not [A-Za-z0-9_]+`);
+              }
+              const handle = op.handle ?? `om${++autoHandle}_${Date.now().toString(36)}`;
+              const plan = await core.planCreate(op, handle);
+              if (!plan.ok) throw new Refusal(plan.code, plan.reason);
+              mutations.push(...plan.mutations);
+              const usable = !plan.address.startsWith("$h:") || plan.kind !== "layer";
+              handles.set(handle, { address: plan.address, kind: plan.kind, usable });
+              created.push(plan.resolve ?? (async () => plan.address));
+              const at = plan.address.startsWith("$h:") ? `$h:${handle}` : plan.address;
+              for (const [path, v] of Object.entries(plan.props ?? {})) {
+                const { parsed } = route(at, handles);
+                const corePath = canonicalCorePath(path);
+                const value = validateOne(null, parsed, corePath, v, handles);
+                const sub = await core.planSet(parsed, corePath, value, plan.kind);
+                if (!sub.ok) throw new Refusal(sub.code, sub.reason);
+                mutations.push(...sub.mutations);
+              }
+              continue;
+            }
             if (op.props) {
               for (const [path, v] of Object.entries(op.props)) validateOne(entry, null, path, v);
             }
             pushOp(perKind, entry, op);
             continue;
           }
-          const { parsed, entry } = route(op.address);
+          const { parsed, entry } = route(op.address, handles);
           const canonical = formatAddress(parsed);
           touched.push(canonical);
           if (op.op === "delete") {
             if (entry) pushOp(perKind, entry, { ...op, address: canonical });
-            else mutations.push(...planCoreDelete(parsed));
+            else if (core?.planDelete) {
+              const plan = await core.planDelete(parsed);
+              if (!plan.ok) throw new Refusal(plan.code, plan.reason);
+              mutations.push(...plan.mutations);
+            } else mutations.push(...planCoreDelete(parsed));
             continue;
           }
           const path = entry ? op.path : canonicalCorePath(op.path);
-          const value = validateOne(entry, parsed, path, op.value);
+          const value = validateOne(entry, parsed, path, op.value, handles);
           if (entry) {
             pushOp(perKind, entry, { ...op, address: canonical, value });
           } else {
-            const plan = await core!.planSet(parsed, path, value);
+            const plan = await core!.planSet(parsed, path, value, coreKindOf(parsed, handles));
             if (!plan.ok) throw new Refusal(plan.code, plan.reason);
             mutations.push(...plan.mutations);
           }
@@ -390,9 +469,13 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
         if (/setPageMetadata/.test(reason) && /unknown variant/i.test(reason)) {
           return { applied: false, code: "unmapped", reason: `page labels need engine protocol >= 70: ${reason}`, undoSteps: 0, outcome };
         }
-        return { applied: false, code: "failed", reason, undoSteps: 0, outcome };
+        return { applied: false, code: codeOfEngineError(reason), reason, undoSteps: 0, outcome };
       }
       notify(touched);
+      if (created.length > 0) {
+        const names = await Promise.all(created.map((r) => r(outcome).catch(() => null)));
+        return { applied: true, undoSteps: 1, outcome, created: names.map((n) => n ?? "") };
+      }
       return { applied: true, undoSteps: 1, outcome };
     } catch (err) {
       if (err instanceof Refusal) return no(err);
@@ -442,8 +525,14 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
 
   /** Schema gate (rule 3): never coerced, refused with a reason. A core
    *  PropertyPath with no row accepts a raw wire `{ type, value }`. */
-  function validateOne(entry: KindEntry | null, parsed: ParsedAddress | null, path: string, value: unknown): unknown {
-    const row = entry ? findRow(entry.rows, path) : parsed ? rowFor(null, parsed, path) : null;
+  function validateOne(
+    entry: KindEntry | null,
+    parsed: ParsedAddress | null,
+    path: string,
+    value: unknown,
+    handles?: ReadonlyMap<string, BatchHandle>,
+  ): unknown {
+    const row = entry ? findRow(entry.rows, path) : parsed ? rowFor(null, parsed, path, handles) : null;
     if (!row) {
       if (!entry) return value; // core decides (unknownPath, or a raw structured value)
       throw new Refusal("unknownPath", `${entry.qualified} has no path "${path}"`);
@@ -460,7 +549,7 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
     if (a.kind === "item") return [{ op: "deleteFrame", args: { frameId: a.id } }];
     if (a.kind === "page") return [{ op: "deletePage", args: { pageId: a.id } }];
     if (a.kind === "layer") return [{ op: "layerRemove", args: { layerId: a.id } }];
-    throw new Refusal("unmapped", `delete ${formatAddress(a)} lands with core's Set (ADR 132)`);
+    throw new Refusal("unmapped", `delete ${formatAddress(a)}: no core delete wired`);
   }
 
   function notify(touched: readonly string[]): void {
@@ -521,7 +610,9 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
     const last = steps[steps.length - 1]!;
     if (!isPluginStep(last)) {
       if (steps.some(isPluginStep)) return [];
-      return core ? core.query(steps) : [];
+      if (!core) return [];
+      await coreReady();
+      return core.query(steps);
     }
     const kindName = last.head.type === "address" ? addressKindOf(last.head.address) : (last.head as { kind: string }).kind;
     const entry = kinds.get(kindName);
@@ -618,12 +709,15 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
     batch,
     async schema(addressOrKind) {
       const parsed = parseAddress(addressOrKind);
-      const kind = parsed && parsed.kind !== "handle" ? addressKindOf(parsed) : addressOrKind;
+      const kind = parsed && parsed.kind !== "handle" ? (parsed.kind === "plugin" ? addressKindOf(parsed) : coreKindOf(parsed)) : addressOrKind;
       const entry = kinds.get(kind);
       if (entry) return [...entry.rows.values()];
-      return core ? [...rowsOfCore(kind.startsWith("style:") ? "style" : kind).values()] : [];
+      if (!core) return [];
+      await coreReady();
+      return [...rowsOfCore(kind).values()];
     },
     async kinds() {
+      if (core) await coreReady();
       const out: ObjectKindInfo[] = core ? core.kinds() : [];
       for (const e of kinds.values()) {
         out.push({ owner: e.plugin, kind: e.qualified, title: e.kind.title, addressForm: `${e.qualified}/<id>` });

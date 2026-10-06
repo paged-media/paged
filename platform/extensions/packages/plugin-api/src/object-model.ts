@@ -48,6 +48,7 @@ import type { Disposable, MutationOutcome } from "./host";
  *   `swatch:<rest>` · `gradient:<rest>` · `colorGroup:<rest>` ·
  *   `numberingList:<rest>` · `guide:<id>` · `condition:<rest>` ·
  *   `conditionSet:<rest>` · `section:<id>` · `hyperlink:<id>` ·
+ *   `textVariable:<id>` (protocol 71) ·
  *   `master:<id> > <item address>`
  * Aliases that parse and are never emitted: `frame:<id>`,
  * `story:<id>@a..b`, `textframe`, `rect`, `graphicline`, `storyrange`.
@@ -108,7 +109,7 @@ export type ParsedAddress =
         | "conditionSet";
       name: string;
     }
-  | { kind: "guide" | "section" | "hyperlink"; id: string }
+  | { kind: "guide" | "section" | "hyperlink" | "textVariable"; id: string }
   | { kind: "onMaster"; master: string; item: ParsedAddress }
   | { kind: "plugin"; plugin: string; objectKind: string; id: string }
   | { kind: "handle"; name: string };
@@ -145,7 +146,11 @@ export type ValueType =
   | { kind: "asset" }
   | { kind: "list"; of: ValueType; maxItems?: number }
   | { kind: "map"; of: ValueType; keyPattern?: string }
-  | { kind: "struct"; fields: Readonly<Record<string, StructField>> };
+  /** `shape` names a core wire struct (`SwatchColorSpec`, `TabStopSpec`);
+   *  `open: true` accepts fields `fields` does not list — core's catalog
+   *  (protocol 71) names the shape but not its fields, and the engine
+   *  validates them. */
+  | { kind: "struct"; fields: Readonly<Record<string, StructField>>; shape?: string; open?: true };
 
 export type ValueTypeKind = ValueType["kind"];
 
@@ -387,6 +392,9 @@ export interface ObjectWriteResult {
   index?: number;
   /** The engine outcome (minted ids for `create`/`$h:`). */
   outcome?: MutationOutcome;
+  /** The address of every object a `create` op made, in op order (this
+   *  SDK's addition; a core create needs engine protocol 71). */
+  created?: readonly Address[];
 }
 
 export interface ObjectChange {

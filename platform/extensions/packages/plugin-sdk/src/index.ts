@@ -114,8 +114,27 @@ export {
   type ObjectModelRegistration,
   type CreateObjectRegistryOptions,
 } from "./object-registry";
-export { createCoreObjects, type CoreObjects, type CorePlan } from "./core-objects";
-export { CORE_PATHS, CORE_PATH_ALIASES, type CorePathRow, type CorePathScope } from "./core-schema";
+export {
+  createCoreObjects,
+  FRAME_KIND_WORDS,
+  OBJECT_MODEL_PROTOCOL,
+  type CoreCreatePlan,
+  type CoreObjects,
+  type CorePlan,
+  type CreateCoreObjectsOptions,
+} from "./core-objects";
+export { codeOfEngineError } from "./core-objects-v71";
+export {
+  CORE_CATALOG_ROWS,
+  CORE_PATHS,
+  CORE_PATH_ALIASES,
+  coreSchema71,
+  normalizeCoreType,
+  type CoreCatalogRow,
+  type CorePathRow,
+  type CorePathScope,
+  type CoreRow71,
+} from "./core-schema";
 export { FALLBACK_WIDGETS } from "./widgets-fallback";
 export {
   createRecordableAssetSource,

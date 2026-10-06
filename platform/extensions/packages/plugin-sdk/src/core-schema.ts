@@ -12,12 +12,20 @@
  *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
  */
 
-// The SEAM schema for core's property paths, until core publishes ADR 132's
-// `propertySchemas` in the catalog (core branch om/schema). One row per
-// `PropertyPath` of the vendored wire, keyed by the path — a
-// `Record<PropertyPath, …>`, so a re-vendored wire with a NEW path fails
-// typecheck here until it is classified (the totality gate ADR 132 asks of
-// core, mirrored).
+// Core's property schemas, two ways:
+//
+// * Protocol 71 and later (`CORE_SCHEMA_71`, below): core publishes ADR
+//   132's typed `propertySchemas` in the catalog, and this file only
+//   NORMALISES the vendored catalog's rows into the SDK's `PropertySchema`
+//   (enums with their members, struct shapes, list item types, ranges,
+//   defaults). Nothing is inferred.
+// * Below protocol 71 (`CORE_PATHS`): the interim table the 0.70 seam
+//   (core-objects-v70.ts) writes through, kept so an editor on a published
+//   engine below 71 still works. One row per `PropertyPath` of the vendored
+//   wire, keyed by the path — a `Record<PropertyPath, …>`, so a re-vendored
+//   wire with a NEW path fails typecheck here until it is classified (the
+//   totality gate ADR 132 asks of core, mirrored). Paths a pre-71 engine
+//   does not have are `{ since: 71 }`.
 //
 // Unit-less numbers on the `length` wire variant (a miter limit is a
 // multiple of the stroke width; chokes, spreads and bevel depth are
@@ -39,7 +47,9 @@
 // geometry ops (path points, outline/offset/simplify) — not schema rows;
 // they stay reachable by passing a raw wire `Value` (`{ type, value }`).
 
-import type { PropertyPath, ValueType } from "@paged-media/plugin-api";
+import type { PropertyPath, PropertySchema, ValueType } from "@paged-media/plugin-api";
+
+import catalog from "../../plugin-api/src/catalog.json";
 
 export type CorePathScope = "frame" | "story" | "cell" | "table" | "layer" | "page";
 
@@ -53,9 +63,11 @@ export interface CorePathRow {
 }
 
 const OP = { op: true } as const;
+/** A path the pre-71 wire does not carry: only the protocol-71 seam reaches it. */
+const V71 = { since: 71 } as const;
 const PCT: ValueType = { kind: "number", unit: "percent" };
 
-export const CORE_PATHS: Record<PropertyPath, CorePathRow | typeof OP> = {
+export const CORE_PATHS: Record<PropertyPath, CorePathRow | typeof OP | typeof V71> = {
   frameBounds: { scope: "frame", wire: "bounds", type: { kind: "bounds" } },
   frameFillColor: { scope: "frame", wire: "colorRef", type: { kind: "color" } },
   frameStrokeColor: { scope: "frame", wire: "colorRef", type: { kind: "color" } },
@@ -290,7 +302,54 @@ export const CORE_PATHS: Record<PropertyPath, CorePathRow | typeof OP> = {
   elementVisible: { scope: "frame", wire: "bool", type: { kind: "bool" } },
   elementLocked: { scope: "frame", wire: "bool", type: { kind: "bool" } },
   frameStrokeStartArrowhead: { scope: "frame", wire: "text", type: { kind: "text" } },
-  frameStrokeEndArrowhead: { scope: "frame", wire: "text", type: { kind: "text" } },};
+  frameStrokeEndArrowhead: { scope: "frame", wire: "text", type: { kind: "text" } },
+  // Protocol 71 (ADR 132): modelled fields that were unsettable before.
+  pageMarginTop: V71,
+  pageMarginBottom: V71,
+  pageMarginLeft: V71,
+  pageMarginRight: V71,
+  pageColumnCount: V71,
+  pageColumnGutter: V71,
+  documentBleedTop: V71,
+  documentBleedBottom: V71,
+  documentBleedInsideOrLeft: V71,
+  documentBleedOutsideOrRight: V71,
+  documentSlugTop: V71,
+  documentSlugBottom: V71,
+  documentSlugInsideOrLeft: V71,
+  documentSlugRightOrOutside: V71,
+  textVariableName: V71,
+  textVariableType: V71,
+  textVariableContents: V71,
+  textVariableTextBefore: V71,
+  textVariableTextAfter: V71,
+  textVariableDateFormat: V71,
+  objectStyleStrokeTint: V71,
+  objectStyleCornerRadius: V71,
+  objectStyleCornerOption: V71,
+  cellStyleRotationAngle: V71,
+  tableStyleHeaderRegionCellStyle: V71,
+  tableStyleBodyRegionCellStyle: V71,
+  tableStyleFooterRegionCellStyle: V71,
+  tableStyleLeftColumnRegionCellStyle: V71,
+  tableStyleRightColumnRegionCellStyle: V71,
+  tableStyleTopBorderStrokeColor: V71,
+  tableStyleTopBorderStrokeWeight: V71,
+  tableStyleBottomBorderStrokeColor: V71,
+  tableStyleBottomBorderStrokeWeight: V71,
+  tableStyleLeftBorderStrokeColor: V71,
+  tableStyleLeftBorderStrokeWeight: V71,
+  tableStyleRightBorderStrokeColor: V71,
+  tableStyleRightBorderStrokeWeight: V71,
+  tableStyleAlternatingFills: V71,
+  tableStyleStartRowFillColor: V71,
+  tableStyleStartRowFillCount: V71,
+  tableStyleStartRowFillTint: V71,
+  tableStyleEndRowFillColor: V71,
+  tableStyleEndRowFillCount: V71,
+  tableStyleEndRowFillTint: V71,
+  itemName: V71,
+};
 
 /** Ranges the SDK knows from core's PropertyPath docs: opacity / tint /
  *  noise / choke / spread percentages are 0–100; a miter limit is a
@@ -315,3 +374,134 @@ export const CORE_PATH_ALIASES: Readonly<Record<string, PropertyPath>> = {
 
 /** A core path name with its alias resolved. */
 export const canonicalCorePath = (path: string): string => CORE_PATH_ALIASES[path] ?? path;
+
+// ------------------------------------------------- protocol 71: the catalog
+
+/** One `propertySchemas` row as core's catalog publishes it (protocol 71). */
+export interface CoreCatalogRow {
+  addressKind: string;
+  appliesTo?: readonly string[];
+  path: string;
+  type: { kind: string; unit?: string; members?: readonly string[]; to?: string; of?: string; shape?: string };
+  wire: string;
+  nullable?: boolean;
+  range?: { min?: number; max?: number; step?: number };
+  default?: unknown;
+  access?: "readWrite" | "readOnly" | "derived";
+  virtual?: { op: string; field?: string } | null;
+  bindable?: boolean;
+}
+
+/** A normalised core row: the SDK schema row, the wire `Value` variant a
+ *  write carries, and the CORE address kind the row belongs to (the SDK
+ *  folds `storyRange` into `story` and `group` into `frame`). */
+export interface CoreRow71 {
+  schema: PropertySchema;
+  wire: string;
+  coreKind: string;
+}
+
+const UNIT: Record<string, "pt" | "deg" | "percent" | "em1000" | "ppi"> = {
+  degrees: "deg",
+  deg: "deg",
+  percent: "percent",
+  em1000: "em1000",
+  ppi: "ppi",
+};
+
+/** Core's catalog type → the SDK's `ValueType`; null for an OPERATION row
+ *  (path-point edits, outline / offset / simplify): those are geometry
+ *  ops, not values, and stay reachable as a raw wire `{ type, value }`. */
+export function normalizeCoreType(t: CoreCatalogRow["type"]): ValueType | null {
+  switch (t.kind) {
+    case "operation":
+      return null;
+    case "bool":
+    case "length":
+    case "color":
+    case "bounds":
+    case "transform":
+    case "point":
+      return { kind: t.kind } as ValueType;
+    case "number": {
+      if (t.unit === "count") return { kind: "number", integer: true };
+      const unit = t.unit ? UNIT[t.unit] : undefined;
+      return unit ? { kind: "number", unit } : { kind: "number" };
+    }
+    case "enum":
+      return { kind: "enum", members: [...(t.members ?? [])] };
+    case "text":
+      return { kind: "text" };
+    case "ref":
+      return { kind: "ref", to: t.to ?? "object" };
+    case "struct":
+      return { kind: "struct", fields: {}, ...(t.shape ? { shape: t.shape } : {}), open: true };
+    case "list": {
+      const of =
+        t.of === "struct"
+          ? t.shape === "swatch ref"
+            ? ({ kind: "ref", to: "swatch" } as ValueType)
+            : ({ kind: "struct", fields: {}, ...(t.shape ? { shape: t.shape } : {}), open: true } as ValueType)
+          : normalizeCoreType({ kind: t.of ?? "text" });
+      return { kind: "list", of: of ?? { kind: "text" } };
+    }
+    default:
+      return { kind: "text" };
+  }
+}
+
+/** The SDK kind a core catalog row serves (`style` rows split by family). */
+function sdkKindsOf(row: CoreCatalogRow): string[] {
+  switch (row.addressKind) {
+    case "storyRange":
+    case "story":
+      return ["story"];
+    case "group":
+      return ["frame"];
+    case "style":
+      return (row.appliesTo ?? ["paragraph", "character", "object", "cell", "table"]).map((f) => `style:${f}`);
+    default:
+      return [row.addressKind];
+  }
+}
+
+/** The raw rows of the vendored catalog (empty before protocol 71). */
+export const CORE_CATALOG_ROWS: readonly CoreCatalogRow[] =
+  ((catalog as unknown as { propertySchemas?: CoreCatalogRow[] }).propertySchemas ?? []);
+
+let schema71: Map<string, Map<string, CoreRow71>> | null = null;
+
+/** SDK kind → path → normalised row, from the vendored catalog. Indexed
+ *  core paths (`labels[key]`, `rows[i].height`) become `[]` rows. */
+export function coreSchema71(): ReadonlyMap<string, ReadonlyMap<string, CoreRow71>> {
+  if (schema71) return schema71;
+  const out = new Map<string, Map<string, CoreRow71>>();
+  for (const row of CORE_CATALOG_ROWS) {
+    const type = normalizeCoreType(row.type);
+    if (!type) continue;
+    const path = row.path.replace(/\[[^\]]*\]/g, "[]");
+    for (const kind of sdkKindsOf(row)) {
+      const base = kind.startsWith("style:") ? "style" : kind;
+      const schema: PropertySchema = { addressKind: base, path, type };
+      if (row.appliesTo && row.addressKind !== "style") schema.appliesTo = row.appliesTo;
+      if (row.addressKind === "group") schema.appliesTo = ["group"];
+      if (row.nullable !== undefined) schema.nullable = row.nullable;
+      if (row.range) schema.range = row.range;
+      if (row.default !== undefined) schema.default = row.default;
+      if (row.access && row.access !== "readWrite") schema.access = row.access;
+      if (row.virtual) schema.virtual = row.virtual;
+      if (row.bindable !== undefined) schema.bindable = row.bindable;
+      schema.since = 71;
+      const m = out.get(kind) ?? new Map<string, CoreRow71>();
+      if (!m.has(path)) m.set(path, { schema, wire: row.wire, coreKind: row.addressKind });
+      out.set(kind, m);
+    }
+  }
+  schema71 = out;
+  return out;
+}
+
+/** The OPERATION paths of the catalog (raw wire values only). */
+export const CORE_OPERATION_PATHS: ReadonlySet<string> = new Set(
+  CORE_CATALOG_ROWS.filter((r) => r.type.kind === "operation").map((r) => r.path),
+);
