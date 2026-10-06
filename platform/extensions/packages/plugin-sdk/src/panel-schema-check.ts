@@ -162,11 +162,9 @@ function checkPropertyRow(
     issue("kind must be a non-empty string");
     return;
   }
-  if (row.address === "selection" && !row.kind) {
-    // Legal (the selected object's own kind types it), but a plugin path
-    // never lives on a core object: say so when the path is not core's.
-    if (opts.pluginId) issue('address "selection" needs a kind (plugin:<id>/<kind>) for a plugin property');
-  }
+  // `"selection"` without a kind is a CORE row (the selected object's own
+  // kind types it — a stroke panel's frameStrokeWeight); a plugin row
+  // names its kind, which the checks below hold to the plugin.
   const m = kind ? PLUGIN_KIND.exec(kind) : null;
   if (kind && kind.startsWith("plugin:") && !m) issue(`kind "${kind}" is not plugin:<id>/<kind>`);
   if (m && opts.pluginId && m[1] !== opts.pluginId) {

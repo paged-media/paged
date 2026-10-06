@@ -61,9 +61,14 @@ export function publishObjectList(host: BundleHost, opts: PublishObjectListOptio
   let generation = 0;
   const labelPath = opts.labelPath ?? "name";
 
-  const refresh = async (): Promise<void> => {
+  // `ids`: the selection the change event carried. The event fires when
+  // the engine applied the selection, which can be BEFORE the host's
+  // `selection.get()` snapshot catches up — read the event's ids then.
+  let lastIds: readonly ElementId[] | null = null;
+  const refresh = async (ids?: readonly ElementId[]): Promise<void> => {
     const mine = ++generation;
-    const selection = host.selection.get().map((id: ElementId) => fromElementId(id));
+    if (ids) lastIds = ids;
+    const selection = (ids ?? lastIds ?? host.selection.get()).map((id: ElementId) => fromElementId(id));
     const selector = opts.selector(selection);
     let rows: ObjectListRow[] = [];
     if (selector) {
@@ -91,15 +96,27 @@ export function publishObjectList(host: BundleHost, opts: PublishObjectListOptio
     }
   };
 
+  // Coalesce bursts (a batch fans out several object changes): one
+  // re-read per macrotask, keeping the latest selection.
+  let pending: ReturnType<typeof setTimeout> | null = null;
+  const schedule = (ids?: readonly ElementId[]) => {
+    if (ids) lastIds = ids;
+    if (pending !== null) return;
+    pending = setTimeout(() => {
+      pending = null;
+      void refresh();
+    }, 0);
+  };
   const subs: Disposable[] = [
-    host.selection.onDidChange(() => void refresh()),
-    host.objects.onDidChange(() => void refresh()),
+    host.selection.onDidChange((ids) => schedule(ids)),
+    host.objects.onDidChange(() => schedule()),
   ];
   void refresh();
   return {
     refresh,
     dispose() {
       disposed = true;
+      if (pending !== null) clearTimeout(pending);
       for (const s of subs) s.dispose();
     },
   };

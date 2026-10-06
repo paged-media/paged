@@ -94,7 +94,8 @@ describe("panel property rows", () => {
     const issues = validatePanelSchema(s, { schemaOf, pluginId: "acme.img" });
     const at = (i: number) => issues.filter((x) => x.at === `sections[0].rows[${i}]`).map((x) => x.message);
     expect(at(0)).toEqual(['a row needs a widget id or field: "property"']);
-    expect(at(1)[0]).toMatch(/needs a kind/);
+    // A kind-less selection row is a core row: legal.
+    expect(at(1)).toEqual([]);
     expect(at(2)).toEqual([`path "nope" is not a row of ${LAYER}`]);
     expect(at(3)).toEqual(["address.bind must be a non-empty name"]);
     expect(at(4)[0]).toMatch(/is not a selector/);
@@ -177,6 +178,46 @@ describe("publishObjectList", () => {
     await list.refresh();
     expect(values.get("rows")).toEqual([]);
     expect(values.has("layer")).toBe(false);
+    list.dispose();
+  });
+});
+
+describe("publishObjectList — the selection event leads the snapshot", () => {
+  it("lists from the ids the change event carried, and coalesces a burst into one read", async () => {
+    const values = new Map<string, unknown>();
+    let onSel: (ids: unknown[]) => void = () => {};
+    let onObj: () => void = () => {};
+    const queries: string[] = [];
+    const host = {
+      // The snapshot lags: still empty when the event fires.
+      selection: { get: () => [], onDidChange: (l: (ids: unknown[]) => void) => ((onSel = l), { dispose() {} }) },
+      objects: {
+        query: async (s: string) => (queries.push(s), ["plugin:acme.doc/field/u1/f0"]),
+        get: async () => ({ kind: "value", value: "First" }),
+        onDidChange: (l: () => void) => ((onObj = l), { dispose() {} }),
+      },
+      bindings: {
+        publish: (n: string, v: unknown) => values.set(n, v),
+        get: (n: string) => values.get(n),
+        delete: (n: string) => values.delete(n),
+      },
+    };
+    const list = publishObjectList(host as never, {
+      rows: "rows",
+      select: "field",
+      selector: (sel) => (sel.length === 1 ? `${sel[0]} > plugin:acme.doc/field` : null),
+    });
+    await list.refresh();
+    expect(values.get("rows")).toEqual([]);
+    queries.length = 0;
+    onSel([{ kind: "textFrame", id: "u1" }]);
+    onObj();
+    onObj();
+    await new Promise((r) => setTimeout(r, 5));
+    await list.refresh();
+    expect(queries[0]).toBe("textFrame:u1 > plugin:acme.doc/field");
+    expect(queries.length).toBe(2); // one coalesced read + the explicit refresh
+    expect(values.get("field")).toBe("plugin:acme.doc/field/u1/f0");
     list.dispose();
   });
 });
