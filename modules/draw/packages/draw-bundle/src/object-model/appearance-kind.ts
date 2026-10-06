@@ -51,6 +51,7 @@ import {
   type FillLayer,
   type StrokeLayer,
 } from "../commands/appearance";
+import { formatAddress, parseAddress } from "@paged-media/plugin-sdk";
 import { appearanceBakeOf, stampDrawMetadata } from "../commands/appearance-bake";
 import {
   applyGraphicStyleBatchFor,
@@ -170,12 +171,20 @@ export function makeAppearanceKind(host: BundleHost): ObjectKindContribution & P
     title: "Appearance",
     schema: APPEARANCE_SCHEMA,
     hostOf: (address) => localIdOf(address, APPEARANCE_KIND),
-    async list() {
+    async list(query) {
       // Every element that CAN carry an appearance — an empty stack is a
       // stack (`fills` reads []), so a selector over any item resolves.
-      return treeItems(await host.document.tree())
+      const all = treeItems(await host.document.tree())
         .filter((id) => CARRIERS.has(id.kind))
         .map((id) => addressOf(APPEARANCE_KIND, coreAddressOf(id)));
+      // An item scope (`<item> > appearance`, a panel's selection): that
+      // item's own stack.
+      const within = query.within ? parseAddress(query.within) : null;
+      if (within?.kind === "item") {
+        const own = addressOf(APPEARANCE_KIND, formatAddress(within));
+        return all.filter((a) => a === own);
+      }
+      return all;
     },
     async get(address, path): Promise<ObjectValue> {
       const el = elementOf(address);

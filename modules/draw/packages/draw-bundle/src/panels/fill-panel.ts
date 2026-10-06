@@ -70,22 +70,24 @@ export const fillPanel: SchemaPanelContribution = {
       {
         rows: [
           {
-            widget: "paged.input.color-swatch",
-            props: { label: "Color" },
-            value: {
-              kind: "selectionProperty",
-              path: "frameFillColor",
-            },
+            // ADR 323 — an object-model property row: the host renders
+            // the core row with its schema-driven PropertyField over
+            // host.objects (one undo step, Bind to data…).
+            field: "property",
+            address: "selection",
+            path: "frameFillColor",
+            label: "Color",
             enabled: { bind: BIND_HAS_SELECTION },
           },
           {
-            widget: "paged.input.numeric-scrub",
-            props: { label: "Tint", suffix: "%", min: 0, max: 100 },
-            value: {
-              kind: "selectionProperty",
-              path: "frameFillTint",
-              coerce: "%",
-            },
+            // ADR 323 — an object-model property row: the host renders
+            // the core row with its schema-driven PropertyField over
+            // host.objects (one undo step, Bind to data…).
+            field: "property",
+            address: "selection",
+            path: "frameFillTint",
+            label: "Tint",
+            props: { suffix: "%", min: 0, max: 100 },
             enabled: { bind: BIND_HAS_SELECTION },
           },
         ],
@@ -99,22 +101,25 @@ export const fillPanel: SchemaPanelContribution = {
         visible: { bind: BIND_GRADIENT_CONTROLS_VISIBLE },
         rows: [
           {
-            widget: "paged.input.numeric-scrub",
-            props: { label: "Angle", suffix: "°" },
-            value: {
-              kind: "selectionProperty",
-              path: "frameGradientFillAngle",
-            },
+            // ADR 323 — an object-model property row: the host renders
+            // the core row with its schema-driven PropertyField over
+            // host.objects (one undo step, Bind to data…).
+            field: "property",
+            address: "selection",
+            path: "frameGradientFillAngle",
+            label: "Angle",
+            props: { suffix: "°" },
             enabled: { bind: BIND_HAS_SELECTION },
           },
           {
-            widget: "paged.input.numeric-scrub",
-            props: { label: "Length", suffix: "pt" },
-            value: {
-              kind: "selectionProperty",
-              path: "frameGradientFillLength",
-              coerce: "pt",
-            },
+            // ADR 323 — an object-model property row: the host renders
+            // the core row with its schema-driven PropertyField over
+            // host.objects (one undo step, Bind to data…).
+            field: "property",
+            address: "selection",
+            path: "frameGradientFillLength",
+            label: "Length",
+            props: { suffix: "pt" },
             enabled: { bind: BIND_HAS_SELECTION },
           },
         ],

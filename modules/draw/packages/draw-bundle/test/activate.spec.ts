@@ -381,6 +381,8 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.panel.blend",
       "media.paged.draw.panel.objectsOnPath",
       "media.paged.draw.panel.pathOptions",
+      // ADR 323 — the Draw properties schema panel (property rows).
+      "media.paged.draw.panel.properties",
     ]);
   });
 

@@ -43,6 +43,7 @@ import type {
   PropertySchema,
 } from "@paged-media/plugin-api";
 
+import { formatAddress, parseAddress } from "@paged-media/plugin-sdk";
 import { stampDrawMetadata } from "../commands/appearance-bake";
 import {
   SYMBOLS_PART,
@@ -190,8 +191,16 @@ export function makeSymbolInstanceKind(host: BundleHost): ObjectKindContribution
       const leaf = (await find(address))?.leaves[0];
       return leaf ? coreAddressOf(leaf) : null;
     },
-    async list() {
-      return (await symbolInstances(host)).map((i) => addressOf(SYMBOL_INSTANCE_KIND, i.instance));
+    async list(query) {
+      let all = await symbolInstances(host);
+      // An item scope (`<item> > symbolInstance`, a panel's selection):
+      // the instance that item is a leaf of.
+      const within = query.within ? parseAddress(query.within) : null;
+      if (within?.kind === "item") {
+        const item = formatAddress(within);
+        all = all.filter((i) => i.leaves.some((l) => coreAddressOf(l) === item));
+      }
+      return all.map((i) => addressOf(SYMBOL_INSTANCE_KIND, i.instance));
     },
     async get(address, path): Promise<ObjectValue> {
       const inst = await find(address);

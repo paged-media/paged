@@ -88,6 +88,13 @@ export const ARROWHEAD_OPTIONS = [
   { value: "BarArrowHead", label: "Bar" },
 ] as const;
 
+/** The same picker for the object-model property row: core's
+ *  `frameStroke*Arrowhead` row is an enum whose "no arrowhead" member is
+ *  `None` (the schema validates the write; `""` is not a member). */
+export const ARROWHEAD_PROPERTY_OPTIONS = ARROWHEAD_OPTIONS.map((o) =>
+  o.value === "" ? { value: "None", label: o.label } : { value: o.value, label: o.label },
+);
+
 export const strokePanel: SchemaPanelContribution = {
   id: STROKE_PANEL_ID,
   title: "Stroke",
@@ -103,41 +110,39 @@ export const strokePanel: SchemaPanelContribution = {
       {
         rows: [
           {
-            widget: "paged.input.numeric-scrub",
-            props: { label: "Weight", suffix: "pt" },
-            value: {
-              kind: "selectionProperty",
-              path: "frameStrokeWeight",
-              coerce: "pt",
-            },
+            // ADR 323 — an object-model property row: the host renders
+            // the core row with its schema-driven PropertyField over
+            // host.objects (one undo step, Bind to data…).
+            field: "property",
+            address: "selection",
+            path: "frameStrokeWeight",
+            label: "Weight",
+            props: { suffix: "pt" },
             // Enabled only when something is selected — the leaf's own
             // no-write-path disable agrees, but the gate makes the
             // intent explicit + demonstrates a binding-driven enable.
             enabled: { bind: BIND_HAS_SELECTION },
           },
           {
-            widget: "paged.input.color-swatch",
-            props: { label: "Color" },
-            value: {
-              kind: "selectionProperty",
-              path: "frameStrokeColor",
-            },
+            // ADR 323 — an object-model property row: the host renders
+            // the core row with its schema-driven PropertyField over
+            // host.objects (one undo step, Bind to data…).
+            field: "property",
+            address: "selection",
+            path: "frameStrokeColor",
+            label: "Color",
             enabled: { bind: BIND_HAS_SELECTION },
           },
           {
-            widget: "paged.input.toggle-group",
-            props: {
-              label: "Cap",
-              options: [
-                { value: "ButtEndCap", label: "Butt" },
-                { value: "RoundEndCap", label: "Round" },
-                { value: "ProjectingEndCap", label: "Project" },
-              ],
-            },
-            value: {
-              kind: "selectionProperty",
-              path: "frameStrokeEndCap",
-            },
+            // ADR 323 — an object-model property row: the host renders
+            // the core row with its schema-driven PropertyField over
+            // host.objects (one undo step, Bind to data…).
+            field: "property",
+            address: "selection",
+            path: "frameStrokeEndCap",
+            label: "Cap",
+            style: "segments",
+            options: [{ value: "ButtEndCap", label: "Butt" }, { value: "RoundEndCap", label: "Round" }, { value: "ProjectingEndCap", label: "Project" } ],
             enabled: { bind: BIND_HAS_SELECTION },
           },
         ],
@@ -177,21 +182,27 @@ export const strokePanel: SchemaPanelContribution = {
         visible: { bind: BIND_ARROWHEAD_CONTROLS_VISIBLE },
         rows: [
           {
-            widget: "paged.input.toggle-group",
-            props: { label: "Start", options: [...ARROWHEAD_OPTIONS] },
-            value: {
-              kind: "selectionProperty",
-              path: "frameStrokeStartArrowhead",
-            },
+            // ADR 323 — an object-model property row: the host renders
+            // the core row with its schema-driven PropertyField over
+            // host.objects (one undo step, Bind to data…).
+            field: "property",
+            address: "selection",
+            path: "frameStrokeStartArrowhead",
+            label: "Start",
+            style: "segments",
+            options: [...ARROWHEAD_PROPERTY_OPTIONS],
             enabled: { bind: BIND_HAS_SELECTION },
           },
           {
-            widget: "paged.input.toggle-group",
-            props: { label: "End", options: [...ARROWHEAD_OPTIONS] },
-            value: {
-              kind: "selectionProperty",
-              path: "frameStrokeEndArrowhead",
-            },
+            // ADR 323 — an object-model property row: the host renders
+            // the core row with its schema-driven PropertyField over
+            // host.objects (one undo step, Bind to data…).
+            field: "property",
+            address: "selection",
+            path: "frameStrokeEndArrowhead",
+            label: "End",
+            style: "segments",
+            options: [...ARROWHEAD_PROPERTY_OPTIONS],
             enabled: { bind: BIND_HAS_SELECTION },
           },
         ],
@@ -220,43 +231,47 @@ export const strokePanel: SchemaPanelContribution = {
             },
           },
           {
-            widget: "paged.input.numeric-scrub",
-            props: { label: "Radius ◰", suffix: "pt", min: 0 },
-            value: {
-              kind: "selectionProperty",
-              path: "frameCornerRadiusTopLeft",
-              coerce: "pt",
-            },
+            // ADR 323 — an object-model property row: the host renders
+            // the core row with its schema-driven PropertyField over
+            // host.objects (one undo step, Bind to data…).
+            field: "property",
+            address: "selection",
+            path: "frameCornerRadiusTopLeft",
+            label: "Radius ◰",
+            props: { suffix: "pt", min: 0 },
             enabled: { bind: BIND_HAS_SELECTION },
           },
           {
-            widget: "paged.input.numeric-scrub",
-            props: { label: "Radius ◳", suffix: "pt", min: 0 },
-            value: {
-              kind: "selectionProperty",
-              path: "frameCornerRadiusTopRight",
-              coerce: "pt",
-            },
+            // ADR 323 — an object-model property row: the host renders
+            // the core row with its schema-driven PropertyField over
+            // host.objects (one undo step, Bind to data…).
+            field: "property",
+            address: "selection",
+            path: "frameCornerRadiusTopRight",
+            label: "Radius ◳",
+            props: { suffix: "pt", min: 0 },
             enabled: { bind: BIND_HAS_SELECTION },
           },
           {
-            widget: "paged.input.numeric-scrub",
-            props: { label: "Radius ◲", suffix: "pt", min: 0 },
-            value: {
-              kind: "selectionProperty",
-              path: "frameCornerRadiusBottomRight",
-              coerce: "pt",
-            },
+            // ADR 323 — an object-model property row: the host renders
+            // the core row with its schema-driven PropertyField over
+            // host.objects (one undo step, Bind to data…).
+            field: "property",
+            address: "selection",
+            path: "frameCornerRadiusBottomRight",
+            label: "Radius ◲",
+            props: { suffix: "pt", min: 0 },
             enabled: { bind: BIND_HAS_SELECTION },
           },
           {
-            widget: "paged.input.numeric-scrub",
-            props: { label: "Radius ◱", suffix: "pt", min: 0 },
-            value: {
-              kind: "selectionProperty",
-              path: "frameCornerRadiusBottomLeft",
-              coerce: "pt",
-            },
+            // ADR 323 — an object-model property row: the host renders
+            // the core row with its schema-driven PropertyField over
+            // host.objects (one undo step, Bind to data…).
+            field: "property",
+            address: "selection",
+            path: "frameCornerRadiusBottomLeft",
+            label: "Radius ◱",
+            props: { suffix: "pt", min: 0 },
             enabled: { bind: BIND_HAS_SELECTION },
           },
         ],

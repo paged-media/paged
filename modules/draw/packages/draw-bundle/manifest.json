@@ -67,7 +67,8 @@
       "media.paged.draw.panel.repeat",
       "media.paged.draw.panel.blend",
       "media.paged.draw.panel.objectsOnPath",
-      "media.paged.draw.panel.pathOptions"
+      "media.paged.draw.panel.pathOptions",
+      "media.paged.draw.panel.properties"
     ],
     "commands": [
       "media.paged.draw.command.strokeDashSolid",

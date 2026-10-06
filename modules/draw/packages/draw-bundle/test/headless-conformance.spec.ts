@@ -368,6 +368,10 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         // the harness's recording importer/exporter registries.
         "importer",
         "exporter",
+        // ADR 323 — the Draw properties schema panel (property rows over
+        // host.objects), registered after the object model.
+        "panel",
+        "schemaPanel",
       ]);
       // The schema panels are recorded VERBATIM (the schema, not React):
       // ids, sections, and the binding-driven gates.
@@ -375,6 +379,7 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
       expect(panels.map((p) => p.id)).toEqual([
         "media.paged.draw.panel.stroke",
         "media.paged.draw.panel.fill",
+        "media.paged.draw.panel.properties",
       ]);
       const dashSection = panels[0].schema.sections[1];
       expect(dashSection.title).toBe("Dashes");

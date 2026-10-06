@@ -195,6 +195,11 @@ import { makePathOptionsPanel } from "./panels/path-options-panel";
 import { installStrokePanelBindings, strokePanel } from "./panels/stroke-panel";
 import { contributeSvgIo } from "./io/svg";
 import { contributeDrawObjectModel } from "./object-model";
+import {
+  DRAW_PROPERTIES_PANEL,
+  DRAW_PROPERTIES_PANEL_ID,
+  publishDrawPropertyLists,
+} from "./panels/properties-panel";
 
 export function activate(host: BundleHost): BundleHandle {
   // B-17 — the anchor-edit tools are built from a host-bound factory;
@@ -609,8 +614,21 @@ export function activate(host: BundleHost): BundleHandle {
   // surface — Boa, the Node CLI, data bindings, schema-driven fields —
   // through `host.objects`. Headless by construction (src/object-model/).
   const objectModelHandle = contributeDrawObjectModel(host);
+  // ADR 323 — draw's object properties as host-rendered PropertyFields (a
+  // schema panel of property rows; needs the object model + bindings).
+  const propertyListsSub = objectModelHandle
+    ? (contributeSchemaPanel(host, {
+        id: DRAW_PROPERTIES_PANEL_ID,
+        title: DRAW_PROPERTIES_PANEL.title,
+        icon: DRAW_PROPERTIES_PANEL.icon,
+        defaultDock: "right",
+        defaultGroup: "draw",
+        schema: DRAW_PROPERTIES_PANEL,
+      }),
+      publishDrawPropertyLists(host))
+    : null;
   host.log.info(
-    `activated — ${tools.length} tools + 2 schema panels + 9 React panels + ` +
+    `activated — ${tools.length} tools + 3 schema panels + 9 React panels + ` +
       `${
         DASH_COMMAND_IDS.length +
         FILL_GRADIENT_COMMAND_IDS.length +
@@ -651,6 +669,7 @@ export function activate(host: BundleHost): BundleHandle {
       // That separation is what makes phase D a migration with a
       // rollback point rather than a deletion.
       layersProviderHandle?.dispose();
+      propertyListsSub?.dispose();
       objectModelHandle?.dispose();
       svgIoSub.dispose();
       menuSub.dispose();
