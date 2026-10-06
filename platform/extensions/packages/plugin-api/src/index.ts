@@ -72,6 +72,9 @@ export type {
   MutateWithBytesOptions,
   SelectionSurface,
   ViewportSurface,
+  RenderSurface,
+  RenderSnapshotOptions,
+  RenderedPage,
   TextSurface,
   TextMetrics,
   TextCaret,
@@ -192,7 +195,7 @@ export type {
 
 // C-6 (I-06) — the renderer resource-provider wire shape, re-exported
 // so the editor channel + the SDK adapter share one tile type.
-export type { ProviderTileWire } from "./wire";
+export type { ProviderTileWire, SnapshotPng } from "./wire";
 
 // v67 (RFI C-68) — `host.document.snapPoint`'s query and answer.
 export type {

@@ -1304,6 +1304,58 @@ export interface ViewportSurface {
   /** Screen px → document pt at the current zoom (the constant-
    *  screen-tolerance idiom every tool needs). */
   pxToPt(px: number): number;
+  /** v70 — bring a page into view, fitted to the viewport (a slide
+   *  sorter's click, a link to a page). `false` when the page is unknown
+   *  or the host can't navigate: probe `supports("viewport.pages@1")`. */
+  goToPage(pageId: PageId, options?: { fit?: "page" | "width" }): Promise<boolean>;
+  /** v70 — the page the user is on: the one the viewport's centre is
+   *  over, else the nearest (the same page `host.document.meta()`
+   *  reports as `activePage`). `null` with no document or no host
+   *  backend. */
+  activePage(): PageId | null;
+  /** v70 — fires when the active page changes (scrolling, zooming,
+   *  `goToPage`, a page deleted under it). Never fires without a host
+   *  backend. */
+  onDidChangeActivePage(listener: (pageId: PageId | null) => void): Disposable;
+}
+
+// ----------------------------------------------------------------- render
+
+/** v70 — what `host.render.snapshot` renders. */
+export interface RenderSnapshotOptions {
+  /** Width of the image in device pixels, 1 to 8192; the height follows
+   *  the page's aspect. The engine renders at a resolution derived from
+   *  it, so the image can be a pixel off: `RenderedPage.widthPx` is exact. */
+  widthPx: number;
+  /** Items to leave out of this image only (a build step whose shapes
+   *  have not appeared yet). The document is not changed and no undo
+   *  step is recorded. */
+  hideItems?: ElementId[];
+}
+
+/** v70 — one rendered page. */
+export interface RenderedPage {
+  pageId: PageId;
+  /** The image's own size, within a pixel of the requested width. */
+  widthPx: number;
+  heightPx: number;
+  /** PNG bytes; `createImageBitmap(new Blob([png]))` draws them. */
+  png: Uint8Array;
+  /** The engine's layout generation the image shows: an image with an
+   *  older generation than a page's current one is stale. */
+  layoutGeneration: number;
+}
+
+/**
+ * v70 — render a page to an image with the engine's own renderer (CPU),
+ * the same pixels the canvas shows: slide thumbnails, a slideshow's
+ * frames, a build step's frames. A READ: gated on
+ * `capabilities.document.read`. `supports("render.snapshot@1")`.
+ */
+export interface RenderSurface {
+  /** The page as a PNG, or `null` when the page is unknown or the
+   *  engine refused (an invalid width). */
+  snapshot(pageId: PageId, options: RenderSnapshotOptions): Promise<RenderedPage | null>;
 }
 
 // ----------------------------------------------------------------- text
@@ -1980,6 +2032,9 @@ export interface BundleHost {
   readonly document: DocumentSurface;
   readonly selection: SelectionSurface;
   readonly viewport: ViewportSurface;
+  /** v70 — page images from the engine's renderer (thumbnails, slideshow
+   *  frames). `supports("render.snapshot@1")`; gated on document read. */
+  readonly render: RenderSurface;
   /** Font measurement against the document's fonts (S-13). A read door,
    *  no capability gate; `supports("text.measure@1")` reports whether the
    *  host wired the engine shaper (it is false under a host that injects

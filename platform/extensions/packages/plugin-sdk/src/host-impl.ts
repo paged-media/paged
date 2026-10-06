@@ -105,6 +105,8 @@ import type {
   TextCaret,
   TextSurface,
   ViewportSurface,
+  RenderSurface,
+  SnapshotPng,
   WidgetSurface,
   SnapPointQuery,
   SnapPointResult,
@@ -247,6 +249,10 @@ export const HOST_FEATURES: readonly string[] = [
   // door: the flag says this SDK forwards `snapPoint`; an engine older
   // than v67 answers the point unsnapped, never a throw.
   "document.snapPoint@1",
+  // v70 — page images from the engine's renderer (`requestSnapshot` with
+  // `hideItems`). Static like the snapper: the flag says this SDK
+  // forwards the query; an engine that refuses answers null.
+  "render.snapshot@1",
   // DOC-03 structured whole-story read (canvas-wasm v54). Static for the same
   // reason as storage.parts@1: the pinned engine is the server, and the worker
   // handshake refuses a protocol older than the pin — so a running bundle is
@@ -605,6 +611,19 @@ export interface DocumentsBackend {
       requester: { id: string; name: string };
     },
   ): Promise<OpenDocumentResult>;
+}
+
+/**
+ * v70 — the backend the editor injects to back `host.viewport`'s page
+ * members. The editor owns the camera and the page layout, so it answers
+ * which page is active and moves the camera to one. No backend →
+ * `goToPage` answers false, `activePage` null, the event never fires and
+ * `supports("viewport.pages@1")` is false.
+ */
+export interface PagesBackend {
+  goToPage(pageId: string, fit: "page" | "width"): boolean | Promise<boolean>;
+  activePage(): string | null;
+  onDidChangeActivePage(listener: (pageId: string | null) => void): () => void;
 }
 
 /** The SHARED cross-plugin data-provider registry (paged.data §7.1 / D-09). The
@@ -1135,6 +1154,10 @@ export interface CreateBundleHostOptions {
    *  `supports("documents.exportPaged@1")` / `supports("documents.open@1")`
    *  answer true. When absent, both doors reject. */
   documents?: DocumentsBackend;
+  /** v70 — page navigation for `host.viewport` (`goToPage`,
+   *  `activePage`, `onDidChangeActivePage`). When present,
+   *  `supports("viewport.pages@1")` is true. */
+  pages?: PagesBackend;
   /** Host-provided WORKER backend (K-3 / S-07 / I-02). When present,
    *  `host.workers.spawn` resolves a declared bundle-relative module +
    *  constructs a host-owned `Worker` through it (capability-gated,
@@ -2554,6 +2577,9 @@ export function createBundleHost(
   };
 
   // ------------------------------------------------------ viewport
+  // v70 — the page members are the editor's (camera + page layout); with
+  // no backend they answer the honest nothing.
+  const pagesBackend = options?.pages;
   const viewport: ViewportSurface = {
     camera() {
       const cam = getEditor().camera.camera;
@@ -2562,6 +2588,57 @@ export function createBundleHost(
     pxToPt(px: number) {
       const scale = getEditor().camera.camera.scale;
       return px / (scale > 0 ? scale : 1);
+    },
+    async goToPage(pageId, opts) {
+      if (!pagesBackend || typeof pageId !== "string" || pageId === "") {
+        return false;
+      }
+      const fit = opts?.fit === "width" ? "width" : "page";
+      return (await pagesBackend.goToPage(pageId, fit)) === true;
+    },
+    activePage() {
+      return pagesBackend ? pagesBackend.activePage() : null;
+    },
+    onDidChangeActivePage(listener) {
+      if (!pagesBackend) {
+        return toDisposable(() => {});
+      }
+      return store.add(toDisposable(pagesBackend.onDidChangeActivePage(listener)));
+    },
+  };
+
+  // -------------------------------------------------------- render
+  // v70 — a page as a PNG from the engine's renderer, optionally with
+  // items left out (`requestSnapshot.hideItems`, a query: no document
+  // change, no undo step). A read, gated like the other document reads.
+  const render: RenderSurface = {
+    async snapshot(pageId, opts) {
+      requireDocRead("render.snapshot");
+      const widthPx = Math.round(opts?.widthPx ?? 0);
+      if (!(widthPx >= 1 && widthPx <= 8192)) {
+        throw new Error("host.render.snapshot: widthPx must be 1 to 8192");
+      }
+      const hideItems = Array.isArray(opts?.hideItems) ? opts.hideItems : [];
+      let reply: { kind: string; payload?: unknown };
+      try {
+        reply = (await getEditor().client.send({
+          kind: "requestSnapshot",
+          payload: { pageId, targetWidthPx: widthPx, hideItems },
+        } as never)) as { kind: string; payload?: unknown };
+      } catch {
+        return null;
+      }
+      if (reply.kind !== "snapshotReady") {
+        return null;
+      }
+      const p = reply.payload as SnapshotPng;
+      return {
+        pageId: p.pageId,
+        widthPx: p.widthPx,
+        heightPx: p.heightPx,
+        png: Uint8Array.from(p.pngBytes),
+        layoutGeneration: p.layoutGeneration,
+      };
     },
   };
 
@@ -3973,6 +4050,10 @@ export function createBundleHost(
     featureSet.add("document.readNative@1");
     featureSet.add("document.openNative@1");
   }
+  if (options?.pages) {
+    // v70 — page navigation and the active-page event are the editor's.
+    featureSet.add("viewport.pages@1");
+  }
   if (options?.documents) {
     // D-26 — the documents doors always exist (no backend: both reject);
     // these flags mean a real DocumentsBackend is wired.
@@ -4008,6 +4089,7 @@ export function createBundleHost(
     document,
     selection,
     viewport,
+    render,
     text,
     overlay,
     shell,

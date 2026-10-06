@@ -66,6 +66,7 @@ export {
   type BundleAssetProvider,
   type NativeDocumentBackend,
   type DocumentsBackend,
+  type PagesBackend,
   type BlobStore,
   type ClipboardBackend,
   type TextCaretBackend,
