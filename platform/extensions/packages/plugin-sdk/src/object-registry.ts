@@ -63,7 +63,7 @@ import type {
 import type { CoreObjects } from "./core-objects";
 import { canonicalCorePath } from "./core-schema";
 import { addressKindOf, formatAddress, parseAddress, parseSelector, type SelectorStep } from "./object-address";
-import { checkSchemaRows, checkValueType, validateValue } from "./object-schema";
+import { applyDefaults, checkSchemaRows, checkValueType, findRow, validateValue } from "./object-schema";
 import { toDisposable } from "./disposables";
 
 /** What a plugin host hands the registry at registration. */
@@ -92,6 +92,8 @@ interface KindEntry {
   plugin: string;
   qualified: string;
   kind: ObjectKindContribution;
+  /** The whole contribution (its plugin-level `batch`, when present). */
+  model: ObjectModelContribution;
   rows: Map<string, PropertySchema>;
   parts?: PartsSurface;
 }
@@ -119,7 +121,40 @@ function contentRow(kind: ObjectKindContribution): PropertySchema | null {
   if (!kind.content) return null;
   const type: ValueType =
     kind.content.kind === "text" || kind.content.kind === "html" ? { kind: "text", multiline: true } : { kind: "bytes" };
-  return { path: "content", type };
+  return { path: "content", type, heavy: true };
+}
+
+/** Core's label rules (paged-mutate `set_plugin_metadata`): the value is
+ *  the envelope `{ v: <int >= 1>, data: {…} }`, at most 64 KiB. */
+const LABEL_MAX_BYTES = 64 * 1024;
+function envelopeProblem(text: string): string | null {
+  if (new TextEncoder().encode(text).length > LABEL_MAX_BYTES) return `the label is over ${LABEL_MAX_BYTES} bytes (assets belong in parts)`;
+  let env: unknown;
+  try {
+    env = JSON.parse(text);
+  } catch {
+    return "the label value is not JSON";
+  }
+  const o = env as { v?: unknown; data?: unknown } | null;
+  const ok =
+    typeof o === "object" && o !== null && Number.isInteger(o.v) && (o.v as number) >= 1 &&
+    typeof o.data === "object" && o.data !== null && !Array.isArray(o.data);
+  return ok ? null : 'the label must be the envelope { "v": <int >= 1>, "data": {…} }';
+}
+
+/** The metadata-writing mutations a plugin may return, and their key/caller
+ *  rule (fix-up 13: the same check the registry runs on `state` writes). */
+const LABEL_OPS = new Set(["setPluginMetadata", "setDocumentMetadata", "setPageMetadata"]);
+
+const isPluginStep = (s: SelectorStep): boolean =>
+  (s.head.type === "kind" && s.head.kind.startsWith("plugin:")) || (s.head.type === "address" && s.head.address.kind === "plugin");
+
+/** Compare hosts by element: `frame:x` and `rectangle:x` are one item. */
+function hostKey(address: string): string {
+  const p = parseAddress(address);
+  if (!p) return address;
+  if (p.kind === "item" || p.kind === "frame") return `item:${p.id}`;
+  return formatAddress(p);
 }
 
 export function createObjectRegistry(options: CreateObjectRegistryOptions = {}): ObjectRegistry {
@@ -176,7 +211,7 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
   };
 
   const rowFor = (entry: KindEntry | null, parsed: ParsedAddress, path: string): PropertySchema | null =>
-    entry ? (entry.rows.get(path) ?? null) : (rowsOfCore(addressKindOf(parsed)).get(path) ?? null);
+    findRow(entry ? entry.rows : rowsOfCore(addressKindOf(parsed)), path);
 
   // ------------------------------------------------------------ reads
 
@@ -184,7 +219,7 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
     try {
       const { parsed, entry } = route(address);
       if (!entry) return await core!.get(parsed, canonicalCorePath(path));
-      if (!entry.rows.has(path)) return refused("unknownPath", `${entry.qualified} has no path "${path}"`);
+      if (!findRow(entry.rows, path)) return refused("unknownPath", `${entry.qualified} has no path "${path}"`);
       const canonical = formatAddress(parsed);
       return await entry.kind.get(canonical, path);
     } catch (err) {
@@ -214,7 +249,9 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
     }
     try {
       const mutations: MutationInput[] = [];
-      const perKind = new Map<KindEntry, ObjectOp[]>();
+      /** Plugin ops grouped by PLANNER: the plugin (when it contributes a
+       *  plugin-level `batch`) or the kind. */
+      const perKind = new Map<KindEntry | string, { entry: KindEntry; ops: ObjectOp[] }>();
       const touched: string[] = [];
       // 1. validate + plan core ops; group plugin ops by kind.
       for (const [index, op] of ops.entries()) {
@@ -251,12 +288,17 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
           throw err;
         }
       }
-      // 2. plan plugin ops.
+      // 2. plan plugin ops: one planner call per group.
       const staged: Array<{ entry: KindEntry; parts: readonly { path: string; bytes: Uint8Array | null }[] }> = [];
-      for (const [entry, kindOps] of perKind) {
+      /** The ONE label per (plugin, host): a whole envelope, or sub-keys
+       *  merged into the current one's `data`. */
+      const labels = new Map<string, { plugin: string; host: ParsedAddress; full: string | null; subs: Map<string, unknown> }>();
+      for (const { entry, ops: kindOps } of perKind.values()) {
+        const who = entry.model.batch ? `plugin ${entry.plugin}` : entry.qualified;
         let write: ObjectWrite;
         try {
-          if (entry.kind.batch) write = await entry.kind.batch(kindOps);
+          if (entry.model.batch) write = await entry.model.batch(kindOps);
+          else if (entry.kind.batch) write = await entry.kind.batch(kindOps);
           else if (kindOps.length === 1 && kindOps[0]!.op === "set" && entry.kind.set) {
             const o = kindOps[0]!;
             write = await entry.kind.set(o.address, o.path, o.value);
@@ -265,25 +307,68 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
           }
         } catch (err) {
           if (err instanceof Refusal) throw err;
-          throw new Refusal("failed", `${entry.qualified}: ${String(err)}`);
+          throw new Refusal("failed", `${who}: ${String(err)}`);
         }
-        if (write.kind === "rejected") throw new Refusal("failed", `${entry.qualified}: ${write.reason}`);
-        if (write.kind === "mutations" || write.kind === "both") mutations.push(...write.mutations);
+        if (write.kind === "rejected") throw new Refusal("failed", `${who}: ${write.reason}`);
+        if (write.kind === "mutations" || write.kind === "both") {
+          mutations.push(...write.mutations.map((m) => checkReturnedMutation(entry.plugin, m)));
+        }
         if (write.kind === "state" || write.kind === "both") {
           const base = `x-paged:${entry.plugin}`;
-          if (write.labelKey !== base && !write.labelKey.startsWith(`${base}.`)) {
-            throw new Refusal("denied", `${entry.qualified}: label key "${write.labelKey}" is outside "${base}"`);
+          let sub: string | null = null;
+          if (write.labelKey !== base) {
+            const rest = write.labelKey.startsWith(`${base}.`) ? write.labelKey.slice(base.length + 1) : null;
+            if (rest === null || !/^[A-Za-z0-9_-]+$/.test(rest)) {
+              throw new Refusal("denied", `${who}: label key "${write.labelKey}" is neither "${base}" nor "${base}.<sub>" (core keeps ONE label per plugin per host)`);
+            }
+            sub = rest;
+          } else {
+            const why = envelopeProblem(write.labelValue);
+            if (why) throw new Refusal("invalidValue", `${who}: ${why}`);
           }
           const hostParsed = parseAddress(write.host);
-          const hostId = hostParsed && core ? await core.elementIdOf(hostParsed) : null;
-          if (!hostId) throw new Refusal("unknownAddress", `${entry.qualified}: host ${write.host} is not a page item or story`);
-          if (write.parts.length > 0 && !entry.parts) throw new Refusal("failed", `${entry.qualified}: no parts door to write state`);
+          if (!hostParsed || !core || hostParsed.kind === "plugin" || hostParsed.kind === "handle") {
+            throw new Refusal("unknownAddress", `${who}: host ${write.host} is not a page item, story, page or doc`);
+          }
+          const slot = `${entry.plugin}|${hostKey(write.host)}`;
+          const label = labels.get(slot) ?? { plugin: entry.plugin, host: hostParsed, full: null, subs: new Map<string, unknown>() };
+          const conflict = sub === null ? label.full !== null || label.subs.size > 0 : label.full !== null || label.subs.has(sub);
+          if (conflict) {
+            throw new Refusal(
+              "failed",
+              `${who}: conflicting state writes on ${write.host} (${write.labelKey}) — each kind planned from the same state; contribute a plugin-level objectModel.batch`,
+            );
+          }
+          if (sub === null) label.full = write.labelValue;
+          else {
+            let v: unknown = write.labelValue;
+            try {
+              v = JSON.parse(write.labelValue);
+            } catch {
+              /* plain text stays a string */
+            }
+            label.subs.set(sub, v);
+          }
+          labels.set(slot, label);
+          if (write.parts.length > 0 && !entry.parts) throw new Refusal("failed", `${who}: no parts door to write state`);
           staged.push({ entry, parts: write.parts });
-          mutations.push({
-            op: "setPluginMetadata",
-            args: { elementId: hostId, key: write.labelKey, value: escapeLabelValue(write.labelValue), caller: entry.plugin },
-          });
         }
+      }
+      for (const label of labels.values()) {
+        const key = `x-paged:${label.plugin}`;
+        let text = label.full;
+        if (text === null) {
+          const current = (await core!.labelsOf(label.host))?.[key];
+          let env: { v: number; data: Record<string, unknown> } = { v: 1, data: {} };
+          if (current && envelopeProblem(current) === null) env = JSON.parse(current);
+          for (const [k, v] of label.subs) env.data[k] = v;
+          text = JSON.stringify(env);
+          const why = envelopeProblem(text);
+          if (why) throw new Refusal("invalidValue", `plugin ${label.plugin}: ${why}`);
+        }
+        const m = await core!.planLabel(label.host, key, escapeLabelValue(text), label.plugin);
+        if (!m) throw new Refusal("unknownAddress", `plugin ${label.plugin}: host ${formatAddress(label.host)} is not a page item, story, page or doc`);
+        mutations.push(m);
       }
       // 3. parts first (content-addressed: harmless if the commit fails).
       for (const { entry, parts } of staged) {
@@ -300,7 +385,12 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
       if (!core) throw new Refusal("unmapped", "no core backend to commit to");
       const outcome = await core.commit(mutations);
       if (!outcome.applied) {
-        return { applied: false, code: "failed", reason: describe(outcome.error), undoSteps: 0, outcome };
+        const reason = describe(outcome.error);
+        // A pre-70 engine has no page labels.
+        if (/setPageMetadata/.test(reason) && /unknown variant/i.test(reason)) {
+          return { applied: false, code: "unmapped", reason: `page labels need engine protocol >= 70: ${reason}`, undoSteps: 0, outcome };
+        }
+        return { applied: false, code: "failed", reason, undoSteps: 0, outcome };
       }
       notify(touched);
       return { applied: true, undoSteps: 1, outcome };
@@ -319,16 +409,41 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
     }
   };
 
-  function pushOp(map: Map<KindEntry, ObjectOp[]>, entry: KindEntry, op: ObjectOp): void {
-    const list = map.get(entry) ?? [];
-    list.push(op);
-    map.set(entry, list);
+  function pushOp(map: Map<KindEntry | string, { entry: KindEntry; ops: ObjectOp[] }>, entry: KindEntry, op: ObjectOp): void {
+    const key = entry.model.batch ? entry.plugin : entry;
+    const group = map.get(key) ?? { entry, ops: [] };
+    group.ops.push(op);
+    map.set(key, group);
+  }
+
+  /** Fix-up 13: a metadata mutation a plugin RETURNS gets the same key
+   *  rule as a `state` write — exactly `x-paged:<plugin>`, a valid
+   *  envelope (or null), and the caller named (core then cross-checks). */
+  function checkReturnedMutation(plugin: string, m: MutationInput): MutationInput {
+    const any = m as { op: string; args: Record<string, unknown> };
+    if (any.op === "batch") {
+      const ops = (any.args["ops"] ?? []) as MutationInput[];
+      return { ...any, args: { ...any.args, ops: ops.map((o) => checkReturnedMutation(plugin, o)) } } as MutationInput;
+    }
+    if (!LABEL_OPS.has(any.op)) return m;
+    const base = `x-paged:${plugin}`;
+    if (any.args["key"] !== base) throw new Refusal("denied", `plugin ${plugin}: ${any.op} key "${String(any.args["key"])}" is not "${base}"`);
+    const caller = any.args["caller"];
+    if (caller !== undefined && caller !== null && caller !== plugin) {
+      throw new Refusal("denied", `plugin ${plugin}: ${any.op} names caller "${String(caller)}"`);
+    }
+    const value = any.args["value"];
+    if (value !== null && value !== undefined) {
+      const why = typeof value === "string" ? envelopeProblem(value) : "the label value must be JSON text";
+      if (why) throw new Refusal("invalidValue", `plugin ${plugin}: ${any.op}: ${why}`);
+    }
+    return { ...any, args: { ...any.args, caller: plugin } } as MutationInput;
   }
 
   /** Schema gate (rule 3): never coerced, refused with a reason. A core
    *  PropertyPath with no row accepts a raw wire `{ type, value }`. */
   function validateOne(entry: KindEntry | null, parsed: ParsedAddress | null, path: string, value: unknown): unknown {
-    const row = entry ? (entry.rows.get(path) ?? null) : parsed ? rowFor(null, parsed, path) : null;
+    const row = entry ? findRow(entry.rows, path) : parsed ? rowFor(null, parsed, path) : null;
     if (!row) {
       if (!entry) return value; // core decides (unknownPath, or a raw structured value)
       throw new Refusal("unknownPath", `${entry.qualified} has no path "${path}"`);
@@ -338,7 +453,7 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
     }
     const why = validateValue(row.type, value, row, path);
     if (why) throw new Refusal("invalidValue", why);
-    return value;
+    return applyDefaults(row.type, value);
   }
 
   function planCoreDelete(a: ParsedAddress): MutationInput[] {
@@ -396,41 +511,84 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
     return step.nth !== undefined ? out.slice(step.nth - 1, step.nth) : out;
   }
 
+  /** Evaluate selector steps. Plugin steps may be scoped by core steps
+   *  (an item or story reaches `list` as `within`; a container — doc,
+   *  page, spread, master, layer — is resolved HERE through each object's
+   *  `hostOf`) and by plugin steps (the scope object reaches `list` as
+   *  `within`). A core step after a plugin step selects nothing: plugin
+   *  objects contain no core objects. */
+  async function querySteps(steps: readonly SelectorStep[]): Promise<string[]> {
+    const last = steps[steps.length - 1]!;
+    if (!isPluginStep(last)) {
+      if (steps.some(isPluginStep)) return [];
+      return core ? core.query(steps) : [];
+    }
+    const kindName = last.head.type === "address" ? addressKindOf(last.head.address) : (last.head as { kind: string }).kind;
+    const entry = kinds.get(kindName);
+    if (!entry) return [];
+    const step = { ...last, nth: undefined };
+    const scope = steps.slice(0, -1);
+    let out: string[] = [];
+    if (scope.length === 0) {
+      out = await listPlugin(entry, step, undefined);
+    } else {
+      let unscoped: string[] | null = null;
+      const hosts = new Map<string, string | null>();
+      const hostOf = async (a: string): Promise<string | null> => {
+        if (!hosts.has(a)) {
+          let h: string | null = null;
+          try {
+            h = await entry.kind.hostOf(a);
+          } catch {
+            h = null;
+          }
+          hosts.set(a, h);
+        }
+        return hosts.get(a)!;
+      };
+      for (const w of await querySteps(scope)) {
+        const pw = parseAddress(w);
+        if (!pw) continue;
+        if (pw.kind === "plugin" || pw.kind === "item" || pw.kind === "frame" || pw.kind === "story" || pw.kind === "storyRange") {
+          out.push(...(await listPlugin(entry, step, w)));
+          continue;
+        }
+        unscoped ??= await listPlugin(entry, step, undefined);
+        if (pw.kind === "doc") {
+          out.push(...unscoped);
+          continue;
+        }
+        const inside = new Set<string>([hostKey(w)]);
+        if (core) {
+          const items = await core.query([
+            { head: { type: "address", address: pw }, predicates: [] },
+            { combinator: "descendant", head: { type: "kind", kind: "frame" }, predicates: [] },
+          ] as SelectorStep[]);
+          for (const i of items) inside.add(hostKey(i));
+        }
+        for (const a of unscoped) {
+          const h = await hostOf(a);
+          if (h && inside.has(hostKey(h))) out.push(a);
+        }
+      }
+    }
+    out = [...new Set(out)];
+    if (last.head.type === "address") {
+      const want = formatAddress(last.head.address);
+      out = out.filter((a) => a === want);
+    }
+    return last.nth !== undefined ? out.slice(last.nth - 1, last.nth) : out;
+  }
+
   async function query(selector: string, opts?: { limit?: number }): Promise<string[]> {
     const sel = parseSelector(selector);
     if (!sel) {
       log.warn(`objects.query: "${selector}" is not a selector`);
       return [];
     }
-    const last = sel.steps[sel.steps.length - 1]!;
-    const pluginStepAt = sel.steps.findIndex(
-      (s) => (s.head.type === "kind" && s.head.kind.startsWith("plugin:")) || (s.head.type === "address" && s.head.address.kind === "plugin"),
-    );
     let out: string[];
     try {
-      if (pluginStepAt < 0) {
-        out = core ? await core.query(sel.steps) : [];
-      } else if (pluginStepAt !== sel.steps.length - 1) {
-        out = []; // plugin objects contain nothing core can select
-      } else {
-        const scope = sel.steps.slice(0, -1);
-        const withins: (string | undefined)[] = scope.length > 0 && core ? await core.query(scope) : [undefined];
-        if (last.head.type === "address") {
-          const a = last.head.address as Extract<ParsedAddress, { kind: "plugin" }>;
-          const entry = kinds.get(addressKindOf(a));
-          const want = formatAddress(a);
-          out = [];
-          if (entry) {
-            for (const w of withins) {
-              if ((await listPlugin(entry, { ...last, nth: undefined }, w)).includes(want)) out = [want];
-            }
-          }
-        } else {
-          const entry = kinds.get((last.head as { kind: string }).kind);
-          out = [];
-          if (entry) for (const w of withins) out.push(...(await listPlugin(entry, last, w)));
-        }
-      }
+      out = await querySteps(sel.steps);
     } catch (err) {
       log.warn(`objects.query("${selector}") failed: ${String(err)}`);
       out = [];
@@ -444,10 +602,14 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
     core,
     query,
     get,
-    async getAll(address) {
+    async getAll(address, opts) {
       const rows = await surface.schema(address);
       const out: Record<string, ObjectValue> = {};
-      for (const r of rows) out[r.path] = await get(address, r.path);
+      for (const r of rows) {
+        if (r.path.includes("[]")) continue; // an indexed row names no single value
+        if ((r.heavy || r.path === "content") && !opts?.content) continue;
+        out[r.path] = await get(address, r.path);
+      }
       return out;
     },
     set(address, path, value) {
@@ -482,7 +644,7 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
       if (!found) throw new Error(`unknownCommand: no typed command "${command}"`);
       const why = validateValue(found.c.args, args, undefined, "args");
       if (why) throw new Error(`invalidValue: ${why}`);
-      return found.c.handler({ objects: surface }, args);
+      return found.c.handler({ objects: surface }, applyDefaults(found.c.args, args));
     },
     onDidChange(listener, filter) {
       const match = matcher(filter?.selector);
@@ -508,7 +670,7 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
           const rows = new Map<string, PropertySchema>(kind.schema.map((r) => [r.path, { ...r, addressKind: qualified }]));
           const content = contentRow(kind);
           if (content && !rows.has("content")) rows.set("content", { ...content, addressKind: qualified });
-          kinds.set(qualified, { plugin, qualified, kind, rows, ...(parts ? { parts } : {}) });
+          kinds.set(qualified, { plugin, qualified, kind, model, rows, ...(parts ? { parts } : {}) });
           added.push(qualified);
         }
         for (const c of model.commands ?? []) {

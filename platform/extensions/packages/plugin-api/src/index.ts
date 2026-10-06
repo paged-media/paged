@@ -59,6 +59,7 @@ export type {
   ParsedAddress,
   AddressKind,
   ValueType,
+  StructField,
   ValueTypeKind,
   PropertySchema,
   ContentSchema,
@@ -116,6 +117,8 @@ export type {
   ParagraphContent,
   RunContent,
   OverlaySurface,
+  // W-20 — a retained, data-only overlay layer.
+  OverlayLayer,
   ShellSurface,
   FilePickerOptions,
   PickedFile,
@@ -145,6 +148,8 @@ export type {
   BindingsSurface,
   Diagnostic,
   DocumentChangeEvent,
+  // W-22 — the document.onDidOpen payload.
+  DocumentOpenedEvent,
   MutationOutcome,
   Disposable,
   PluginLogger,

@@ -19,6 +19,11 @@
 // typecheck here until it is classified (the totality gate ADR 132 asks of
 // core, mirrored).
 //
+// Unit-less numbers on the `length` wire variant (a miter limit is a
+// multiple of the stroke width; chokes, spreads and bevel depth are
+// percentages; bevel altitude is an angle) are typed by MEANING, from core's
+// PropertyPath doc comments (audit 2026-10-06), not by the wire variant.
+//
 // Where each row comes from: the wire `Value` variant the published engine
 // (0.69.0) answers for that path in `requestElementProperties` /
 // `requestStyleProperties` on frames, story ranges and styles, read off a
@@ -169,7 +174,7 @@ export const CORE_PATHS: Record<PropertyPath, CorePathRow | typeof OP> = {
   frameAutoFit: { scope: "frame", wire: "bool", type: { kind: "bool" } },
   frameStrokeType: { scope: "frame", wire: "text", type: { kind: "text" } },
   frameStrokeJoin: { scope: "frame", wire: "text", type: { kind: "text" } },
-  frameStrokeMiterLimit: { scope: "frame", wire: "length", type: { kind: "length" } },
+  frameStrokeMiterLimit: { scope: "frame", wire: "length", type: { kind: "number" } },
   frameStrokeAlignment: { scope: "frame", wire: "text", type: { kind: "text" } },
   frameStrokeGapColor: { scope: "frame", wire: "colorRef", type: { kind: "color" } },
   frameStrokeGapTint: { scope: "frame", wire: "length", type: PCT },
@@ -196,32 +201,32 @@ export const CORE_PATHS: Record<PropertyPath, CorePathRow | typeof OP> = {
   frameInnerShadowAngle: { scope: "frame", wire: "length", type: { kind: "number", unit: "deg" } },
   frameInnerShadowDistance: { scope: "frame", wire: "length", type: { kind: "length" } },
   frameInnerShadowSize: { scope: "frame", wire: "length", type: { kind: "length" } },
-  frameInnerShadowChoke: { scope: "frame", wire: "length", type: { kind: "length" } },
+  frameInnerShadowChoke: { scope: "frame", wire: "length", type: PCT },
   frameInnerShadowNoise: { scope: "frame", wire: "length", type: PCT },
   frameOuterGlowEnabled: { scope: "frame", wire: "bool", type: { kind: "bool" } },
   frameOuterGlowBlendMode: { scope: "frame", wire: "text", type: { kind: "text" } },
   frameOuterGlowColor: { scope: "frame", wire: "colorRef", type: { kind: "color" } },
   frameOuterGlowOpacity: { scope: "frame", wire: "length", type: PCT },
-  frameOuterGlowSpread: { scope: "frame", wire: "length", type: { kind: "length" } },
+  frameOuterGlowSpread: { scope: "frame", wire: "length", type: PCT },
   frameOuterGlowSize: { scope: "frame", wire: "length", type: { kind: "length" } },
   frameOuterGlowNoise: { scope: "frame", wire: "length", type: PCT },
   frameInnerGlowEnabled: { scope: "frame", wire: "bool", type: { kind: "bool" } },
   frameInnerGlowBlendMode: { scope: "frame", wire: "text", type: { kind: "text" } },
   frameInnerGlowColor: { scope: "frame", wire: "colorRef", type: { kind: "color" } },
   frameInnerGlowOpacity: { scope: "frame", wire: "length", type: PCT },
-  frameInnerGlowChoke: { scope: "frame", wire: "length", type: { kind: "length" } },
+  frameInnerGlowChoke: { scope: "frame", wire: "length", type: PCT },
   frameInnerGlowSize: { scope: "frame", wire: "length", type: { kind: "length" } },
   frameInnerGlowSource: { scope: "frame", wire: "text", type: { kind: "text" } },
   frameInnerGlowNoise: { scope: "frame", wire: "length", type: PCT },
   frameBevelEnabled: { scope: "frame", wire: "bool", type: { kind: "bool" } },
   frameBevelStyle: { scope: "frame", wire: "text", type: { kind: "text" } },
   frameBevelTechnique: { scope: "frame", wire: "text", type: { kind: "text" } },
-  frameBevelDepth: { scope: "frame", wire: "length", type: { kind: "length" } },
+  frameBevelDepth: { scope: "frame", wire: "length", type: PCT },
   frameBevelDirection: { scope: "frame", wire: "text", type: { kind: "text" } },
   frameBevelSize: { scope: "frame", wire: "length", type: { kind: "length" } },
   frameBevelSoften: { scope: "frame", wire: "length", type: { kind: "length" } },
   frameBevelAngle: { scope: "frame", wire: "length", type: { kind: "number", unit: "deg" } },
-  frameBevelAltitude: { scope: "frame", wire: "length", type: { kind: "length" } },
+  frameBevelAltitude: { scope: "frame", wire: "length", type: { kind: "number", unit: "deg" } },
   frameBevelHighlightColor: { scope: "frame", wire: "colorRef", type: { kind: "color" } },
   frameBevelShadowColor: { scope: "frame", wire: "colorRef", type: { kind: "color" } },
   frameBevelHighlightOpacity: { scope: "frame", wire: "length", type: PCT },
@@ -238,7 +243,7 @@ export const CORE_PATHS: Record<PropertyPath, CorePathRow | typeof OP> = {
   frameFeatherWidth: { scope: "frame", wire: "length", type: { kind: "length" } },
   frameFeatherCornerType: { scope: "frame", wire: "text", type: { kind: "text" } },
   frameFeatherNoise: { scope: "frame", wire: "length", type: PCT },
-  frameFeatherChoke: { scope: "frame", wire: "length", type: { kind: "length" } },
+  frameFeatherChoke: { scope: "frame", wire: "length", type: PCT },
   frameDirectionalFeatherEnabled: { scope: "frame", wire: "bool", type: { kind: "bool" } },
   frameDirectionalFeatherLeftWidth: { scope: "frame", wire: "length", type: { kind: "length" } },
   frameDirectionalFeatherRightWidth: { scope: "frame", wire: "length", type: { kind: "length" } },
@@ -246,16 +251,16 @@ export const CORE_PATHS: Record<PropertyPath, CorePathRow | typeof OP> = {
   frameDirectionalFeatherBottomWidth: { scope: "frame", wire: "length", type: { kind: "length" } },
   frameDirectionalFeatherAngle: { scope: "frame", wire: "length", type: { kind: "number", unit: "deg" } },
   frameDirectionalFeatherNoise: { scope: "frame", wire: "length", type: PCT },
-  frameDirectionalFeatherChoke: { scope: "frame", wire: "length", type: { kind: "length" } },
+  frameDirectionalFeatherChoke: { scope: "frame", wire: "length", type: PCT },
   frameBlendMode: { scope: "frame", wire: "text", type: { kind: "text" } },
   nextTextFrame: { scope: "frame", wire: "text", type: { kind: "ref", to: "frame" } },
   previousTextFrame: { scope: "frame", wire: "text", type: { kind: "ref", to: "frame" } },
   cellFillColor: { scope: "cell", wire: "colorRef", type: { kind: "color" }, inferred: true },
   cellFillTint: { scope: "cell", wire: "length", type: PCT, inferred: true },
-  cellInsetTop: { scope: "cell", wire: "text", type: { kind: "text" }, inferred: true },
-  cellInsetLeft: { scope: "cell", wire: "text", type: { kind: "text" }, inferred: true },
-  cellInsetBottom: { scope: "cell", wire: "text", type: { kind: "text" }, inferred: true },
-  cellInsetRight: { scope: "cell", wire: "text", type: { kind: "text" }, inferred: true },
+  cellInsetTop: { scope: "cell", wire: "length", type: { kind: "length" }, inferred: true },
+  cellInsetLeft: { scope: "cell", wire: "length", type: { kind: "length" }, inferred: true },
+  cellInsetBottom: { scope: "cell", wire: "length", type: { kind: "length" }, inferred: true },
+  cellInsetRight: { scope: "cell", wire: "length", type: { kind: "length" }, inferred: true },
   cellVerticalJustification: { scope: "cell", wire: "text", type: { kind: "text" }, inferred: true },
   cellTopEdgeStrokeColor: { scope: "cell", wire: "colorRef", type: { kind: "color" }, inferred: true },
   cellTopEdgeStrokeWeight: { scope: "cell", wire: "length", type: { kind: "length" }, inferred: true },
@@ -287,9 +292,12 @@ export const CORE_PATHS: Record<PropertyPath, CorePathRow | typeof OP> = {
   frameStrokeStartArrowhead: { scope: "frame", wire: "text", type: { kind: "text" } },
   frameStrokeEndArrowhead: { scope: "frame", wire: "text", type: { kind: "text" } },};
 
-/** Opacity / tint rows carry the 0–100 range. */
+/** Ranges the SDK knows from core's PropertyPath docs: opacity / tint /
+ *  noise / choke / spread percentages are 0–100; a miter limit is a
+ *  multiple of the stroke width, 1–500 (InDesign's limits). */
 export function corePathRange(path: string): { min: number; max: number } | undefined {
-  return /Opacity|Tint$/.test(path) ? { min: 0, max: 100 } : undefined;
+  if (path === "frameStrokeMiterLimit") return { min: 1, max: 500 };
+  return /Opacity|Tint$|Noise$|Choke$|GlowSpread$/.test(path) ? { min: 0, max: 100 } : undefined;
 }
 
 /** The catalog's advertised ALIASES (Boa names) → the wire path, mirrored

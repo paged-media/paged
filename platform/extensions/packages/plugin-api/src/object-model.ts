@@ -145,9 +145,20 @@ export type ValueType =
   | { kind: "asset" }
   | { kind: "list"; of: ValueType; maxItems?: number }
   | { kind: "map"; of: ValueType; keyPattern?: string }
-  | { kind: "struct"; fields: Readonly<Record<string, ValueType>> };
+  | { kind: "struct"; fields: Readonly<Record<string, StructField>> };
 
 export type ValueTypeKind = ValueType["kind"];
+
+/**
+ * One field of a `struct`: a value type, plus whether a record may omit it.
+ *   · `optional: true` — the field may be absent; nothing is filled in.
+ *   · `default` — the field may be absent; `host.objects.invoke` (and a
+ *     struct-typed `set`) fill the default in before the handler or the
+ *     plugin sees the value. The default must satisfy the field's type
+ *     (checked at registration).
+ * A field with neither is required.
+ */
+export type StructField = ValueType & { optional?: true; default?: unknown };
 
 /** ADR 132's schema ROW (the JSON shape the core catalog publishes, and
  *  the one plugins publish). One row per (address kind, path). */
@@ -173,6 +184,10 @@ export interface PropertySchema {
   since?: number;
   summary?: string;
   title?: string;
+  /** An expensive read (pixels, a whole sheet, story text): `getAll`
+   *  skips it unless asked (`getAll(address, { content: true })`). The
+   *  `content` row is always heavy. */
+  heavy?: boolean;
 }
 
 /** What an object's CONTENT is; drives content ops and `get … --content`. */
@@ -231,9 +246,24 @@ export interface PartChange {
  *   · `mutations` — core-backed state: folded into the batch.
  *   · `state` — plugin-backed state (the label-hash pattern): the parts
  *     are written first (content-addressed, never overwritten), then the
- *     label `labelKey = labelValue` (the content hash) is set on the host
- *     element `host` INSIDE the batch. Undo reverts the label; the plugin
- *     reloads the state the label points back to.
+ *     plugin's label is set on `host` INSIDE the batch. Undo reverts the
+ *     label; the plugin reloads the state the label points back to.
+ *
+ *     `host` is a page item, a story (range), a page (`page:<id>`,
+ *     `page:#n` — protocol 70 `setPageMetadata`) or the document (`doc` —
+ *     `setDocumentMetadata`).
+ *
+ *     Core holds ONE label per plugin per host, under exactly
+ *     `x-paged:<pluginId>`, whose value is the envelope
+ *     `{"v": <int >= 1>, "data": {…}}` (≤ 64 KiB). So `labelKey` is either
+ *       - `x-paged:<pluginId>` — `labelValue` IS that whole envelope
+ *         (JSON text), and replaces the label; or
+ *       - `x-paged:<pluginId>.<sub>` — a SUB-KEY: the registry reads the
+ *         current envelope, sets `data[<sub>]` to `labelValue` (parsed
+ *         when it is JSON text, else kept as the string) and writes the
+ *         merged envelope back. Several sub-keys on one host — in one
+ *         write or across writes of one batch — merge into one label.
+ *     Any other key is refused before anything applies.
  *   · `both` — the two together.
  *   · `rejected` — a typed no.
  */
@@ -263,7 +293,12 @@ export interface ObjectQuery {
   /** The selector step that selected this kind (`plugin:x/layer[name="a"]`). */
   selector?: Selector;
   kind?: string;
-  /** The container the selector scoped the step to (`scope > kind`). */
+  /** The container the selector scoped the step to (`scope > kind`):
+   *  a page item or story (a host), or one of this plugin's own
+   *  addresses (`plugin:x/image/1 > plugin:x/layer`). Container scopes
+   *  (`doc`, `page:`, `spread:`, `master:`, `layer:`) never reach `list`:
+   *  the registry lists unscoped and keeps the objects whose `hostOf` lies
+   *  in the container. */
   within?: Address;
   limit?: number;
   /** The step's parsed predicates (this SDK's addition to ADR 323). */
@@ -288,14 +323,16 @@ export interface ObjectKindContribution {
   /** At least one row; validated at registration. */
   schema: readonly PropertySchema[];
   content?: ContentSchema;
-  /** The core element hosting an object (frame / scene layer): where its
-   *  labels live (ADR 559). */
-  hostOf(address: Address): Address | null;
+  /** The core element hosting an object (frame / scene layer / page /
+   *  `doc`): where its labels live (ADR 559), and how the registry scopes
+   *  `page:x > plugin:…` selectors. May answer asynchronously. */
+  hostOf(address: Address): Address | null | Promise<Address | null>;
   list(query: ObjectQuery): readonly Address[] | Promise<readonly Address[]>;
   get(address: Address, path: PropertyPathName): ObjectValue | Promise<ObjectValue>;
   set?(address: Address, path: PropertyPathName, value: unknown): ObjectWrite | Promise<ObjectWrite>;
   /** Preferred over repeated `set`: many ops, one write, one undo step.
-   *  Receives this kind's `set` / `create` / `delete` ops. */
+   *  Receives this kind's `set` / `create` / `delete` ops. Ignored when
+   *  the contribution has a plugin-level `batch`. */
   batch?(ops: readonly ObjectOp[]): ObjectWrite | Promise<ObjectWrite>;
 }
 
@@ -317,6 +354,18 @@ export interface TypedCommandContribution<A = unknown, R = unknown> {
 export interface ObjectModelContribution {
   kinds: readonly ObjectKindContribution[];
   commands?: readonly TypedCommandContribution[];
+  /**
+   * PLUGIN-level planner: receives every `set` / `create` / `delete` op of
+   * a batch that targets ANY of this plugin's kinds, in batch order, and
+   * answers ONE write. Use it whenever two kinds share state (an image's
+   * layers and adjustments live in one stack): planned per kind, each
+   * kind would start from the same state and the second write would drop
+   * the first one's changes. When present, the kinds' own `batch`/`set`
+   * are not used for writes. Without it, ops are planned per kind, and
+   * two per-kind `state` writes landing on the same host are refused
+   * (`failed`, "conflicting state writes") rather than silently merged.
+   */
+  batch?(ops: readonly ObjectOp[]): ObjectWrite | Promise<ObjectWrite>;
 }
 
 /** What `contribute.objectModel` returns: a `Disposable` (ADR 323) that
@@ -370,8 +419,9 @@ export interface ObjectCommandInfo {
 export interface ObjectsSurface {
   query(selector: Selector, opts?: { limit?: number }): Promise<Address[]>;
   get(address: Address, path: PropertyPathName): Promise<ObjectValue>;
-  /** Every schema path of the object, read. */
-  getAll(address: Address): Promise<Record<string, ObjectValue>>;
+  /** Every schema path of the object, read — except `heavy` rows (and
+   *  `content`), which are read only with `{ content: true }`. */
+  getAll(address: Address, opts?: { content?: boolean }): Promise<Record<string, ObjectValue>>;
   set(
     address: Address,
     path: PropertyPathName,

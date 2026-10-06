@@ -62,12 +62,40 @@ export function checkValueType(t: unknown, at = "type"): string | null {
       for (const [name, ft] of Object.entries(f)) {
         const e = checkValueType(ft, `${at}.fields.${name}`);
         if (e) return e;
+        const field = ft as { optional?: unknown; default?: unknown };
+        if (field.optional !== undefined && field.optional !== true) return `${at}.fields.${name}: optional must be true when present`;
+        if (field.default !== undefined) {
+          const why = validateValue(ft as ValueType, field.default, undefined, `${at}.fields.${name}.default`);
+          if (why) return `${at}.fields.${name}: the default does not fit its type (${why})`;
+        }
       }
       return null;
     }
     default:
       return null;
   }
+}
+
+/**
+ * Path grammar of a schema ROW: dotted identifiers, each optionally
+ * followed by bracket segments. `[]` makes an INDEXED row (`points[]`,
+ * `points[].anchor`, `ranges[][]`) that stands for every `points[3]` /
+ * `cells[B4]` a caller names; its type is the type of ONE item at that
+ * index. A concrete index (`colorize[0]`) is an ordinary row and wins
+ * over the indexed one.
+ */
+export const ROW_PATH = /^[A-Za-z_][A-Za-z0-9_-]*(\[[^\][]*\])*(\.[A-Za-z_][A-Za-z0-9_-]*(\[[^\][]*\])*)*$/;
+
+/** The row path a concrete path resolves to: every `[<index>]` becomes
+ *  `[]` (`points[3].anchor` → `points[].anchor`). Bracket contents may be
+ *  any text without `]` (a list index, a map key such as `x-paged:oid`). */
+export function rowPathOf(path: string): string {
+  return path.replace(/\[[^\]]*\]/g, "[]");
+}
+
+/** Find the row for a concrete path: exact first, then its indexed form. */
+export function findRow<R extends { path: string }>(rows: ReadonlyMap<string, R>, path: string): R | null {
+  return rows.get(path) ?? (path.includes("[") ? (rows.get(rowPathOf(path)) ?? null) : null);
 }
 
 /** Why a schema row list is unusable (empty, malformed, duplicate path). */
@@ -78,6 +106,7 @@ export function checkSchemaRows(rows: unknown): string | null {
     if (typeof row !== "object" || row === null) return `schema[${i}] is not an object`;
     const path = (row as { path?: unknown }).path;
     if (typeof path !== "string" || path.length === 0) return `schema[${i}] has no path`;
+    if (!ROW_PATH.test(path)) return `schema path "${path}" is not a row path (dotted names, an indexed segment written \`name[]\`)`;
     if (seen.has(path)) return `schema path "${path}" is repeated`;
     seen.add(path);
     const e = checkValueType((row as { type?: unknown }).type, `schema[${path}].type`);
@@ -160,12 +189,48 @@ export function validateValue(
         if (!(k in type.fields)) return `${at} has no field "${k}"`;
       }
       for (const [k, ft] of Object.entries(type.fields)) {
-        if (!(k in rec)) return `${at}.${k} is missing`;
+        if (!(k in rec) || rec[k] === undefined) {
+          if (ft.optional || ft.default !== undefined) continue;
+          return `${at}.${k} is missing`;
+        }
         const e = validateValue(ft, rec[k], undefined, `${at}.${k}`);
         if (e) return e;
       }
       return null;
     }
+  }
+}
+
+/**
+ * Fill struct DEFAULTS into a value that already validated: a missing
+ * field with a `default` gets it (recursively, also inside lists and
+ * maps); optional fields stay absent. Returns a new value; the input is
+ * not mutated.
+ */
+export function applyDefaults(type: ValueType, value: unknown): unknown {
+  if (value === null || value === undefined) return value;
+  switch (type.kind) {
+    case "struct": {
+      if (typeof value !== "object" || Array.isArray(value)) return value;
+      const rec = value as Record<string, unknown>;
+      const out: Record<string, unknown> = { ...rec };
+      for (const [k, ft] of Object.entries(type.fields)) {
+        if (out[k] === undefined) {
+          if (ft.default !== undefined) out[k] = structuredClone(ft.default);
+          else delete out[k];
+        } else {
+          out[k] = applyDefaults(ft, out[k]);
+        }
+      }
+      return out;
+    }
+    case "list":
+      return Array.isArray(value) ? value.map((v) => applyDefaults(type.of, v)) : value;
+    case "map":
+      if (typeof value !== "object" || Array.isArray(value) || value instanceof Uint8Array) return value;
+      return Object.fromEntries(Object.entries(value as object).map(([k, v]) => [k, applyDefaults(type.of, v)]));
+    default:
+      return value;
   }
 }
 

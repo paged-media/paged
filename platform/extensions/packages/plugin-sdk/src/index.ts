@@ -102,6 +102,10 @@ export {
   coerceValue,
   parseLength,
   VALUE_TYPE_KINDS,
+  applyDefaults,
+  findRow,
+  rowPathOf,
+  ROW_PATH,
 } from "./object-schema";
 export {
   createObjectRegistry,

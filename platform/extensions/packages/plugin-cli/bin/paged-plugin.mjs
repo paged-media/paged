@@ -109,6 +109,9 @@ const VALUE_TYPE_KINDS = new Set([
   "transform", "point", "bytes", "asset", "list", "map", "struct",
 ]);
 const KIND_NAME = /^[A-Za-z][A-Za-z0-9_-]*$/;
+// Mirrors the SDK's ROW_PATH (object-schema.ts): dotted names, each with
+// optional bracket segments; `[]` marks an indexed row (`points[]`).
+const ROW_PATH = /^[A-Za-z_][A-Za-z0-9_-]*(\[[^\][]*\])*(\.[A-Za-z_][A-Za-z0-9_-]*(\[[^\][]*\])*)*$/;
 
 function checkValueType(t, at) {
   if (typeof t !== "object" || t === null || Array.isArray(t)) return `${at} must be a ValueType object`;
@@ -121,6 +124,7 @@ function checkValueType(t, at) {
     for (const [name, ft] of Object.entries(t.fields)) {
       const e = checkValueType(ft, `${at}.fields.${name}`);
       if (e) return e;
+      if (ft.optional !== undefined && ft.optional !== true) return `${at}.fields.${name}: optional must be true when present`;
     }
   }
   return null;
@@ -182,6 +186,7 @@ function validateObjectModel(manifest, manifestDir, err) {
           continue;
         }
         if (paths.has(row.path)) err(`${at} schema path "${row.path}" is repeated`);
+        if (!ROW_PATH.test(row.path)) err(`${at} schema path "${row.path}" is not a row path (dotted names; an indexed segment is written name[])`);
         paths.add(row.path);
         const e = checkValueType(row.type, `${at} schema[${row.path}].type`);
         if (e) err(e);

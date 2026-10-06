@@ -246,6 +246,48 @@
       "summary": "Apply a master to a page (omit/null detaches)."
     },
     {
+      "name": "paged.movePage",
+      "params": "(pageId, afterPageId?)",
+      "returns": "bool",
+      "kind": "write",
+      "summary": "Move a page to follow another (omit/null: to the front)."
+    },
+    {
+      "name": "paged.createMaster",
+      "params": "(masterId, { name?, widthPt?, heightPt?, duplicateOf? })",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Create a master spread: one page of the given size, or a copy of another master."
+    },
+    {
+      "name": "paged.deleteMaster",
+      "params": "(masterId)",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Delete a master no page applies."
+    },
+    {
+      "name": "paged.renameMaster",
+      "params": "(masterId, name?)",
+      "returns": "bool",
+      "kind": "write",
+      "summary": "Set (omit/null: clear) a master's name."
+    },
+    {
+      "name": "paged.onMaster",
+      "params": "(masterId, mutation)",
+      "returns": "bool",
+      "kind": "write",
+      "summary": "Apply a mutation ({ op, args }) to a master spread's items."
+    },
+    {
+      "name": "paged.setPageMetadata",
+      "params": "(pageId, key, value?)",
+      "returns": "bool",
+      "kind": "write",
+      "summary": "Set or delete one plugin-metadata entry on a page (value: the JSON envelope)."
+    },
+    {
       "name": "paged.deleteElement",
       "params": "(id)",
       "returns": "bool",
@@ -912,7 +954,7 @@
     },
     {
       "name": "paged.insertHyperlink",
-      "params": "(storyId, start, end, url)",
+      "params": "(storyId, start, end, url, pageId?)",
       "returns": "bool",
       "kind": "author",
       "summary": "Make a character range a clickable link. Read the result with paged.collection(\"hyperlinks\") — paged.links() is the placed-asset list, not this."
@@ -1333,6 +1375,7 @@
     "duplicateElements",
     "setGroupTransform",
     "setPluginMetadata",
+    "setPageMetadata",
     "setDocumentMetadata",
     "pathPointCurveType",
     "pathPointSet",
@@ -1391,6 +1434,11 @@
     "activateConditionSet",
     "applyMasterToPage",
     "duplicatePage",
+    "movePage",
+    "onMaster",
+    "createMaster",
+    "deleteMaster",
+    "renameMaster",
     "insertSection",
     "editSection",
     "deleteSection",

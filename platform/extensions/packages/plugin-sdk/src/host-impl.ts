@@ -62,6 +62,7 @@ import type {
   JournalSurface,
   Disposable,
   DocumentChangeEvent,
+  DocumentOpenedEvent,
   FrameChainLink,
   StoryContent,
   DocumentSurface,
@@ -90,6 +91,7 @@ import type {
   MutationOutcome,
   NetworkSurface,
   ObjectTypeContribution,
+  OverlayLayer,
   OverlaySurface,
   PagedEditor,
   PanelContribution,
@@ -208,6 +210,10 @@ export const HOST_FEATURES: readonly string[] = [
   // needed — DESIGN.md §4.3d).
   "document.parentOf@1",
   "document.onDidChange@1",
+  // W-22 — the document-opened event. STATIC: it is the client's
+  // `documentLoaded` broadcast filtered, and every host posts that on
+  // every load (File ▸ Open, File ▸ New, a native-document open).
+  "document.onDidOpen@1",
   "document.getMetadata@1",
   "document.setMetadata@1",
   // Protocol 69 — the document-scoped label. Static like the snap door:
@@ -404,6 +410,49 @@ export interface BundleAssetProvider {
     family: string,
     style?: string,
   ): Promise<FontFaceAsset | null>;
+  /** W-15 — register a face in the engine's SCENE-LAYER face table
+   *  (`registerFont` with `scope: "sceneLayer"`): scene-layer text
+   *  resolves it, the document never sees it. The SDK calls it once per
+   *  `host.assets.registerFont` and again when it replays the live faces
+   *  after a disposal. Optional: a host without it (with
+   *  `clearSceneFonts`) leaves `supports("assets.registerFont@1")` false. */
+  registerFont?(
+    family: string,
+    bytes: Uint8Array,
+    style?: string,
+  ): Promise<void>;
+  /** W-15 — drop every scene-layer face (`clearFontRegistry` with
+   *  `scope: "sceneLayer"`), leaving the document's faces alone. The SDK
+   *  owns which faces are live, so disposing one face is "clear, then
+   *  register the rest again". */
+  clearSceneFonts?(): Promise<void>;
+}
+
+/** One live bundle face in a provider's scene table. */
+interface SceneFaceEntry {
+  family: string;
+  style?: string;
+  bytes: Uint8Array;
+}
+
+/** The live scene faces of one provider, shared by every bundle the host
+ *  loaded over it (the editor injects ONE provider for all bundles, and
+ *  the engine has ONE scene table), plus the queue that keeps register /
+ *  clear / replay in order. */
+interface SceneFaceLedger {
+  entries: SceneFaceEntry[];
+  queue: Promise<void>;
+}
+
+const sceneFaceLedgers = new WeakMap<BundleAssetProvider, SceneFaceLedger>();
+
+function sceneFaceLedger(provider: BundleAssetProvider): SceneFaceLedger {
+  let ledger = sceneFaceLedgers.get(provider);
+  if (!ledger) {
+    ledger = { entries: [], queue: Promise.resolve() };
+    sceneFaceLedgers.set(provider, ledger);
+  }
+  return ledger;
 }
 
 /** Blob-store budgets (K-4 / S-08). The default per-plugin quota when a
@@ -1021,6 +1070,13 @@ export interface CreateBundleHostOptions {
    *  holds listeners that never run and `supports("document.onWillSave@1")`
    *  is false. */
   willSave?: WillSaveBackend;
+  /** W-19 — the host's shell fills `pageId` / `pagePoint` /
+   *  `contentPoint` on the `EnteredEditContext` of a POINTER entry (the
+   *  double-click, the Type-tool click on owned content). The SDK passes
+   *  the entered context through untouched either way; this flag only
+   *  makes `supports("editContext.enterPoint@1")` true, so it is the HOST
+   *  that vouches for delivery. */
+  editContextEnterPoint?: boolean;
   /** The host's tool-options store. When absent, `host.tools.settings`
    *  answers `{}` and `supports("tools.settings@1")` is false. */
   toolSettings?: ToolSettingsBackend;
@@ -1983,8 +2039,13 @@ export function createBundleHost(
    *  plugin's derived key. Returns the offending key, or null. */
   const foreignMetadataKey = (m: MutationInput): string | null => {
     // Protocol 69: the document-scoped label is gated exactly like the
-    // page-item one — a bundle writes only its own `x-paged:<id>` key.
-    if (m.op === "setPluginMetadata" || m.op === "setDocumentMetadata") {
+    // page-item one — a bundle writes only its own `x-paged:<id>` key. A
+    // page carrier, should one land, takes the same key.
+    if (
+      m.op === "setPluginMetadata" ||
+      m.op === "setDocumentMetadata" ||
+      m.op === "setPageMetadata"
+    ) {
       return m.args.key === metadataKey(manifest) ? null : m.args.key;
     }
     if (m.op === "batch") {
@@ -2484,6 +2545,28 @@ export function createBundleHost(
       });
       return store.add(toDisposable(off));
     },
+    // W-22 — the raw `documentLoaded` broadcast, narrowed to a clonable
+    // snapshot (the handle's stats / ruler guides stay host-side).
+    onDidOpen(listener: (e: DocumentOpenedEvent) => void): Disposable {
+      requireDocRead("document.onDidOpen");
+      const off = getEditor().client.subscribe((msg) => {
+        if (msg.kind !== "documentLoaded") return;
+        const h = msg.payload;
+        try {
+          listener({
+            docId: h.docId,
+            pageCount: h.pageCount,
+            pageIds: [...h.pageIds],
+            pageSizesPt: h.pageSizesPt.map(
+              ([w, hgt]) => [w, hgt] as [number, number],
+            ),
+          });
+        } catch (err) {
+          log.error(`document.onDidOpen listener failed: ${String(err)}`);
+        }
+      });
+      return store.add(toDisposable(off));
+    },
     // Protocol 66 batch — the save hook. The host awaits every
     // registered listener before it serialises the document; the wrapper
     // makes a bundle's failure a logged event, never a failed save.
@@ -2602,6 +2685,9 @@ export function createBundleHost(
   // The tool-preview channel is a render-pipeline surface — gated on
   // `capabilities.rendering` including "overlay" (same surface as
   // `contribute.overlay`).
+  let overlayLayerSeq = 0;
+  let overlayLayerWarned = false;
+  const liveOverlayLayers = new Set<string>();
   const overlay: OverlaySurface = {
     setToolPreview(shape) {
       requireDeclared(
@@ -2631,6 +2717,62 @@ export function createBundleHost(
         return;
       }
       signals.setToolPreview(list ? list[0] : null);
+    },
+    // W-20 — retained per-bundle layers. Each layer is a host-wide key
+    // `<manifest id>/<layer id>`; registering it with `[]` at creation
+    // fixes its place in the stack (creation order), so a later `set`
+    // never reorders it. Without a host sink the handle is inert (warned
+    // once per bundle) — never a throw, never a write into the shared
+    // tool-preview slot, which would erase the active tool's preview.
+    layer(id?: string): OverlayLayer {
+      requireDeclared(
+        hasRendering("overlay"),
+        "overlay.layer",
+        'capabilities.rendering must include "overlay"',
+      );
+      const layerId = id ?? `layer-${++overlayLayerSeq}`;
+      if (liveOverlayLayers.has(layerId)) {
+        throw new Error(
+          `host.overlay.layer("${layerId}"): a layer with this id is already ` +
+            `live in ${manifest.id} — dispose it first or pick another id`,
+        );
+      }
+      const key = `${manifest.id}/${layerId}`;
+      const signals = getEditor().overlaySignals;
+      const sink =
+        typeof signals?.setOverlayLayer === "function" &&
+        typeof signals?.removeOverlayLayer === "function"
+          ? signals
+          : null;
+      if (!sink && !overlayLayerWarned) {
+        overlayLayerWarned = true;
+        log.warn(
+          'host.overlay.layer — this host renders no overlay layers ' +
+            '(supports("overlay.layers@1") is false); shapes are dropped',
+        );
+      }
+      liveOverlayLayers.add(layerId);
+      sink?.setOverlayLayer!(key, []);
+      let disposed = false;
+      const handle: OverlayLayer = {
+        id: layerId,
+        set(shapes) {
+          if (disposed) return;
+          sink?.setOverlayLayer!(key, [...shapes]);
+        },
+        clear() {
+          if (disposed) return;
+          sink?.setOverlayLayer!(key, []);
+        },
+        dispose() {
+          if (disposed) return;
+          disposed = true;
+          liveOverlayLayers.delete(layerId);
+          sink?.removeOverlayLayer!(key);
+        },
+      };
+      store.add(handle);
+      return handle;
     },
   };
 
@@ -2981,6 +3123,70 @@ export function createBundleHost(
         return null;
       }
       return face;
+    },
+    // W-15 — the one WRITE: a scene-layer face. The engine has a single
+    // scene table that `clearFontRegistry` can only empty as a whole, so
+    // the SDK keeps the list of live faces per provider (across bundles)
+    // and disposes one face by clearing and replaying the others. Every
+    // engine call goes through the ledger's queue, so a replay never
+    // interleaves with a registration.
+    async registerFont(bytes, family, style) {
+      requireDeclared(
+        hasAsset("fonts"),
+        "assets.registerFont",
+        'capabilities.assets must include "fonts"',
+      );
+      const label = `assets.registerFont("${family}"${style ? `, "${style}"` : ""})`;
+      if (bytes.byteLength > ASSET_BUDGETS.maxFontFaceBytes) {
+        throw new Error(
+          `${label}: ${bytes.byteLength} bytes is over the ` +
+            `${ASSET_BUDGETS.maxFontFaceBytes}-byte per-face cap`,
+        );
+      }
+      const provider = assetSource;
+      const register = provider?.registerFont?.bind(provider);
+      const clear = provider?.clearSceneFonts?.bind(provider);
+      if (!provider || !register || !clear) {
+        log.warn(
+          `${label} ignored — the host cannot register scene faces ` +
+            `(probe supports("assets.registerFont@1")); scene text keeps ` +
+            `its fallback face`,
+        );
+        return toDisposable(() => {});
+      }
+      const ledger = sceneFaceLedger(provider);
+      const entry: SceneFaceEntry =
+        style === undefined
+          ? { family, bytes: bytes.slice() }
+          : { family, style, bytes: bytes.slice() };
+      const run = (job: () => Promise<void>): Promise<void> => {
+        const next = ledger.queue.then(job);
+        // The queue survives a failed job; the caller still sees it fail.
+        ledger.queue = next.catch(() => {});
+        return next;
+      };
+      await run(async () => {
+        await register(entry.family, entry.bytes, entry.style);
+        ledger.entries.push(entry);
+      });
+      let disposed = false;
+      return store.add(
+        toDisposable(() => {
+          if (disposed) return;
+          disposed = true;
+          void run(async () => {
+            const i = ledger.entries.indexOf(entry);
+            if (i < 0) return;
+            ledger.entries.splice(i, 1);
+            await clear();
+            for (const live of ledger.entries) {
+              await register(live.family, live.bytes, live.style);
+            }
+          }).catch((error: unknown) => {
+            log.warn(`${label}: dropping the face failed: ${String(error)}`);
+          });
+        }),
+      );
     },
     // C-5 / I-04 (core v42): a placed DOCUMENT image's ORIGINAL bytes,
     // straight from the engine's resolver/parse cache through the
@@ -3697,6 +3903,20 @@ export function createBundleHost(
     // together instead of trading one for the other.
     featureSet.add("overlay.multiPreview@1");
   }
+  if (
+    typeof getEditor().overlaySignals?.setOverlayLayer === "function" &&
+    typeof getEditor().overlaySignals?.removeOverlayLayer === "function"
+  ) {
+    // W-20 — the host renders retained per-bundle layers. Both members,
+    // or none: a host that can add a layer but not drop one would leak a
+    // disposed bundle's shapes onto the canvas.
+    featureSet.add("overlay.layers@1");
+  }
+  if (options?.editContextEnterPoint === true) {
+    // W-19 — the host shell vouches that a pointer entry carries the
+    // entering point (see the option).
+    featureSet.add("editContext.enterPoint@1");
+  }
   if (getEditor().images) {
     // C-6 (I-06) — a real resource channel is wired (the editor routes the
     // v44 claim/submit/release + surfaces resourceTilesNeeded). The
@@ -3765,6 +3985,14 @@ export function createBundleHost(
     // source is wired" — a bundle probes it to decide whether to
     // attempt `@font-face` composition at all.
     featureSet.add("assets.fonts@1");
+  }
+  if (
+    typeof options?.assetSource?.registerFont === "function" &&
+    typeof options?.assetSource?.clearSceneFonts === "function"
+  ) {
+    // W-15 — both members, or none: a host that can add a scene face but
+    // not drop one would keep a disposed bundle's faces alive.
+    featureSet.add("assets.registerFont@1");
   }
   if (options?.consent) {
     // The network door always exists (default-deny); this flag means a real
@@ -3856,9 +4084,9 @@ export function createBundleHost(
       requireDocRead("objects.get");
       return objectRegistry.get(address, path);
     },
-    getAll(address) {
+    getAll(address, opts) {
       requireDocRead("objects.getAll");
-      return objectRegistry.getAll(address);
+      return objectRegistry.getAll(address, opts);
     },
     async set(address, path, value, opts) {
       return deniedWrite("objects.set") ?? objectRegistry.set(address, path, value, opts);

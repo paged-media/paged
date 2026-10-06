@@ -146,6 +146,26 @@ draw B-02). The headless harness records both
 - `onDidChange(l)` — typed `mutationApplied | undoApplied | redoApplied`
   events (every panel audit showed this exact subscribe pattern,
   hand-rolled 20+ times in `apps/canvas/src/panels`).
+- `onDidOpen(l)` [W-22] — a document became the active one (File ▸ Open,
+  File ▸ New, a native-document open): the client's `documentLoaded`
+  broadcast, narrowed to `{ docId, pageCount, pageIds, pageSizesPt }`.
+  Bundles that keep per-document state (paged.web's render cache and
+  parts index, paged.sheet's workbook) used to subscribe to the raw
+  client message through `host.editor`. Static flag
+  `document.onDidOpen@1`: every host posts the message on every load.
+  Gated on `document.read`; a document already open at activation is not
+  replayed.
+- `getDocumentMetadata()` / `setDocumentMetadata(envelope | null)`
+  [W-21] — the element carrier's twin on the DOCUMENT, for state that
+  belongs to no frame (paged.web's document-wide values). Same key
+  (`x-paged:<manifest id>`), same envelope, same engine gates (namespace,
+  caller, 64 KiB); the write is one `setDocumentMetadata` mutation, so it
+  is undoable and fires `onDidChange`, and the read answers from
+  `DocumentMeta.pluginMetadata` (absent on a pre-v69 engine → `null`).
+  Persisted in a `.paged` document; from protocol 70 an `.idml` export
+  keeps it as a `Properties/Label` entry on the designmap's `Document`.
+  Static flag `document.documentMetadata@1`. A raw `mutate` naming another
+  plugin's document (or page) key is refused like a foreign element key.
 
 Capability note: this is the "read-broad / write-scoped" default. v0
 enforces namespace only; write-*scoping* (subtree restriction) attaches
@@ -442,6 +462,36 @@ its own `pageId` and the host resolves the page rect per shape. Same
 channel, one gate. The headless harness wires the sink (so the flag is
 true and `lastToolPreviews()` records the list), which is what makes
 "geometry AND label at once" conformance-assertable without a browser.
+
+### 4.5d `host.overlay.layer` — retained per-bundle layers [W-20]
+
+`layer(id?) → { id, set(shapes), clear(), dispose() }` — overlay shapes
+that STAY until the bundle changes them, in the same `ToolPreviewShape`
+vocabulary, rendered by the host's preview renderer. §4.5a argued
+against a second layer for the TOOL preview, and that still holds: a
+tool's in-progress preview is one thing at a time. A bundle's retained
+marks are not. paged.web draws an in-frame text caret and an outline
+highlight; on the single slot each write erased the other, and any
+active tool's preview erased both. `contribute.overlay` can hold them but
+needs a React component, which is no answer for a data-only (isolate-
+bound) bundle.
+
+- **Order:** layers stack in CREATION order (first = bottom-most) and
+  keep their place across `set` / `clear`; all of them draw below the
+  tool-preview slot, so a tool's feedback is never hidden by a retained
+  mark. The SDK registers the layer with `[]` at creation, which is what
+  fixes the place.
+- **Identity:** the host key is `<manifest id>/<layer id>`; a bundle
+  cannot name another bundle's layer. A live duplicate id throws; ids
+  are generated when omitted.
+- **Lifetime:** every layer is in the bundle's disposable store, so
+  deactivation removes them all.
+- **Flag:** `overlay.layers@1` is DYNAMIC — true when the handle has both
+  `overlaySignals.setOverlayLayer` and `removeOverlayLayer` (one without
+  the other would leak a disposed bundle's shapes). Without them the
+  handle is inert: never a throw, and never a fallback onto the
+  tool-preview slot, which would erase the active tool's preview.
+- Same `capabilities.rendering ∋ "overlay"` gate as `setToolPreview`.
 
 ### 4.5b `host.text` — measurement + the caret read door [S-13 · C-9]
 `measureString(family, style, text, sizePt)` (S-13 — real engine-shaper
@@ -1128,6 +1178,9 @@ work on the same door shape.
   never WRITE assets. The engine's host→worker `registerFont` (document
   font ingestion) is NOT exposed: a plugin cannot inject faces into the
   document. The door only READS what the document already embeds/loads.
+  The one exception (protocol 69, §13.6): `registerFont` puts a face in a
+  SCENE-ONLY table that bundle scene-layer text reads and the document
+  never does; document-scope ingestion stays closed.
 - **Offline-forever = no network on the bundle's behalf.** The bytes come
   from what the document ALREADY has (its embedded/loaded faces). The
   host MUST NOT fetch a font from the network to satisfy a
@@ -1180,6 +1233,26 @@ Wholly additive: a new `host.assets` member + `AssetSurface` /
 `ASSET_BUDGETS` export, and one optional manifest field
 `capabilities.assets`. No existing member changed. The capability gate,
 the namespace rule, and every other door are untouched.
+
+### 13.6 The one write — scene-layer faces (W-15)
+
+`registerFont(bytes, family, style?) → Promise<Disposable>` is the
+single write on the asset door, and it does not breach §13.3's line: the
+face goes into the engine's SCENE-LAYER face table (`registerFont` with
+`scope: "sceneLayer"`, protocol 69), which only scene-layer text reads.
+Document layout, the Fonts panel's `isMissing`, preflight and
+substitution tracing never see it — a bundle shipping Inter cannot make
+a document's missing Inter look present. Gate: `capabilities.assets` ∋
+`"fonts"` (throw in 'enforce'); budget: `ASSET_BUDGETS.maxFontFaceBytes`
+(rejects). The host backs it with two optional `BundleAssetProvider`
+members, `registerFont` and `clearSceneFonts`; with both,
+`supports("assets.registerFont@1")` is true, without them the call warns
+and resolves an inert `Disposable`.
+
+Disposal: the engine can only empty the scene table as a whole, so the
+SDK keeps the live faces per provider (one provider serves every bundle
+in the editor) and drops one by clearing and registering the rest again,
+in order, on one queue. A bundle's teardown disposes its faces.
 
 ## 14. The capability-gated clipboard (K-6 / S-14 — `host.clipboard`)
 
@@ -1858,6 +1931,20 @@ from a gesture. It takes double-click entry regardless, and scopes
 provider answers by DECLINING when its own state says there is nothing
 to serve — which the binding contract already models properly.
 
+### The entering point [W-19]
+
+A double-click is also a POINT. `EnteredEditContext` carries it on a
+pointer entry: `pageId`, `pagePoint` (page-local pt) and `contentPoint`
+(frame-content pt, the same mapping `ContentPointerEvent` uses), so a
+context that edits by pointer places its caret or picks its cell where
+the user double-clicked instead of asking for a second click. The
+Type-tool click on plugin-owned content is a pointer entry too;
+`host.shell.enterEditContext` is not, and passes none. The shell fills
+the fields; the SDK passes the context through untouched (including
+through the binding-provider wrapping of `onEnter`) and advertises
+`editContext.enterPoint@1` only when the host says it delivers them
+(`CreateBundleHostOptions.editContextEnterPoint`).
+
 ## 20. Plugin-built documents and the batched measure (D-26 / D-27 — `host.documents`, `host.text.measureStrings`)
 
 paged.data's merge writer found two missing doors. "Merge to new document"
@@ -1951,7 +2038,7 @@ the harness options `engineShaper` / `confirmReplace` +
 
 ## 21. The object model (ADR 323 — `contribute.objectModel`, `host.objects`)
 
-**Status:** contract + registry + core seam implemented (0.2.42-canary.0);
+**Status:** contract + registry + core seam implemented (0.2.43-canary.0);
 the plugins contribute their models in the next wave. Records: ADR 131
 (addresses), ADR 132 (schemas, `Set`), ADR 323 (this contract), ADR 324
 (the Node CLI that injects it), all PROPOSED in the thoughts register.
@@ -2049,7 +2136,9 @@ replace `core-schema.ts`; the registry and the contract do not change.
   fails.
 - **Untyped commands** are migration debt in a shrink-only baseline,
   `packages/plugin-cli/untyped-commands.baseline.json` (draw 107, image 39,
-  sheet 24, data 9, web 7, doc 1 at 2026-10-06), shipped with the CLI so
+  sheet 24, data 9, web 7, doc 1 at 2026-10-06; after the first plugin
+  wave: draw 10, image 0, sheet 8 — image keeps an EMPTY entry, so any new
+  untyped command fails), shipped with the CLI so
   each plugin repo's `validate` fails a NEW untyped command;
   `scripts/assert-untyped-shrinks.mjs` (contract guard) fails a commit
   that grows it.
@@ -2069,6 +2158,7 @@ replace `core-schema.ts`; the registry and the contract do not change.
   with `changed`), and `host.objects` gains `commands()`.
 - A kind without `batch` takes one `set` per batch (several independent
   `set` plans would each start from the same state and lose updates).
+- The contribution gains a PLUGIN-level `batch` (§21.8).
 - `invoke` cannot share a batch with writes (it runs arbitrary code; it
   cannot join an undo step).
 
@@ -2080,6 +2170,68 @@ The harness also gains `objects` and `dataProviders` (shared, injected
 into every bundle host) and now hosts SEVERAL bundles at once — `host`
 is the last loaded one's; the old "one bundle per headless host" throw is
 gone. No wire change.
+
+### 21.8 Fix-ups from the first consumers (0.2.43-canary.0)
+
+The image, sheet, draw, publish and slide branches found these; each has a
+spec in `object-model-fixups.spec.ts` (real engine, canvas-wasm 0.70.0).
+
+- **Plugin-level `batch(ops)`** on `ObjectModelContribution`: every
+  `set`/`create`/`delete` op of a batch that targets ANY kind of the
+  plugin, in batch order, in ONE call. Kinds that share state (image layers
+  + adjustments, sheet sheets + cells, draw libraries) need it: planned per
+  kind, each plan starts from the same state and the later write drops the
+  earlier one. Without it the registry still plans per kind, and two
+  per-kind `state` writes on one host with the same key are REFUSED
+  (`failed`, "conflicting state writes") instead of losing an update.
+  Writes with DISTINCT sub-keys on one host merge.
+- **Labels follow core's rule: one label per plugin per host.** Core takes
+  exactly `x-paged:<pluginId>` (caller-checked) with the envelope
+  `{v: int >= 1, data: {…}}`, ≤ 64 KiB. A `state` write's `labelKey` is
+  that key (then `labelValue` is the whole envelope, validated before
+  anything applies) or a SUB-KEY `x-paged:<pluginId>.<sub>` (`[A-Za-z0-9_-]+`):
+  the registry reads the current envelope, sets `data[<sub>]` (JSON-parsed
+  when `labelValue` is JSON text) and writes ONE merged label. Any other
+  key is `denied`. Metadata mutations a plugin RETURNS
+  (`setPluginMetadata` / `setDocumentMetadata` / `setPageMetadata`, also
+  inside a `batch`) get the same key and envelope check, and the caller is
+  filled in (a foreign caller is `denied`).
+- **Label hosts:** a page item, a story (range), a PAGE (`page:<id>`,
+  `page:#n`; protocol 70 `setPageMetadata`) or the DOCUMENT (`doc`;
+  `setDocumentMetadata`). The core seam gains a read-only `labels` row
+  (key → envelope JSON) on `frame`, `page` and `doc`, and page nodes carry
+  `label.<key>` attributes, so `page[label.x-paged:paged.slide^={]`
+  selects. On a pre-70 engine a page-hosted write answers `unmapped`.
+- **Struct fields** may be `optional: true` or carry a `default`
+  (`StructField`); the default must fit the field's type (checked at
+  registration). `invoke` (and a struct-typed `set`) fills defaults before
+  the handler runs; optional fields stay absent.
+- **Heavy rows:** `PropertySchema.heavy`; `getAll(address)` skips heavy
+  rows and `content` (core's story `content` is heavy) unless
+  `getAll(address, { content: true })`.
+- **Indexed paths:** a row path may end a segment with `[]`
+  (`points[]`, `points[].smooth`); its type is ONE item's. A concrete path
+  (`points[3]`, `cells[B4]`) resolves to the exact row first, then to its
+  indexed form (`rowPathOf`, `findRow`). Row paths are checked against one
+  grammar (`ROW_PATH`, mirrored in plugin-cli); `getAll` skips indexed
+  rows.
+- **`hostOf` may be async.**
+- **Plugin steps in selectors:** a plugin step may be scoped by core steps
+  AND by plugin steps. An item or story scope, or a plugin object, reaches
+  `list` as `within`; a CONTAINER scope (`doc`, `page:`, `spread:`,
+  `master:`) never does: the registry lists unscoped and keeps the objects
+  whose `hostOf` is the container or an item inside it. So
+  `page:#2 > plugin:media.paged.image/layer` works without the plugin
+  knowing pages. A core step AFTER a plugin step still selects nothing.
+  Layers (`layer:`) are not containers in the scene tree, so a layer scope
+  matches only objects hosted on the layer itself.
+- **Core seam rows typed by meaning, not wire variant** (audit against
+  core's `PropertyPath` doc comments): `frameStrokeMiterLimit` is a plain
+  number (a multiple of the stroke width, 1–500); inner-shadow / inner-glow /
+  feather / directional-feather chokes, outer-glow spread and bevel depth
+  are percentages; bevel altitude is degrees; the four `cellInset*` rows
+  are lengths on the `length` wire (they were `text`). Percent rows carry
+  0–100 (opacity, tint, noise, choke, spread).
 
 ## 22. The Node CLI (ADR 324 — `@paged-media/cli`, bin `paged`)
 
