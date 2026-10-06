@@ -32,9 +32,9 @@ jobs:
           echo "$PWD/binaryen-version_119/bin" >> "$GITHUB_PATH"
       - name: build the engine wasm (100 MB app-wide budget gate)
         run: bash scripts/build-wasm.sh
+      # pnpm's version comes from package.json's packageManager field;
+      # naming it here as well fails the action (two versions specified).
       - uses: pnpm/action-setup@v4
-        with:
-          version: 10
       - uses: actions/setup-node@v4
         with:
           node-version: 22
