@@ -11,9 +11,20 @@
 // Beyond the schema, `validate` enforces the namespace rule (every
 // contributed tool/command id starts with `<manifest.id>.`) and that
 // referenced `*.panel.json` files exist relative to the manifest.
+//
+// ADR 323 — `contributes.objectModel`: a kind with no schema rows, a row
+// whose type is not a ValueType, and a typed command with no `args` FAIL.
+// Untyped commands (a `contributes.commands` id with no typed twin) are the
+// migration debt: a shrink-only baseline (`untyped-commands.baseline.json`,
+// shipped beside this file) lists them per plugin. For a plugin in the
+// baseline, a NEW untyped command fails and a baseline entry that is no
+// longer untyped warns ("shrink the baseline"); for a plugin not in it,
+// untyped commands warn. `--untyped-baseline <file>` points at another
+// baseline. `paged-plugin untyped <manifest...>` prints a baseline.
 
 import { readFileSync, existsSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import process from "node:process";
 
 const ID_PATTERN = /^[a-z][a-z0-9]*(\.[a-z][a-z0-9-]*)+$/;
@@ -80,12 +91,179 @@ function fail(msg) {
 }
 
 function usage() {
-  console.error("usage: paged-plugin validate <manifest.json>");
+  console.error("usage: paged-plugin validate <manifest.json> [--untyped-baseline <file>]\n       paged-plugin untyped <manifest.json...>");
   process.exit(2);
 }
 
 function isStringArray(v) {
   return Array.isArray(v) && v.every((x) => typeof x === "string");
+}
+
+
+// ── object model (ADR 323) ───────────────────────────────────────
+// Hand-mirrors ADR 132's ValueType (plugin-api object-model.ts) and the
+// SDK's checkValueType — plugin-sdk/test/object-model-cli.spec.ts gates
+// this list against VALUE_TYPE_KINDS.
+const VALUE_TYPE_KINDS = new Set([
+  "bool", "number", "length", "color", "enum", "text", "ref", "bounds",
+  "transform", "point", "bytes", "asset", "list", "map", "struct",
+]);
+const KIND_NAME = /^[A-Za-z][A-Za-z0-9_-]*$/;
+
+function checkValueType(t, at) {
+  if (typeof t !== "object" || t === null || Array.isArray(t)) return `${at} must be a ValueType object`;
+  if (!VALUE_TYPE_KINDS.has(t.kind)) return `${at}.kind "${t.kind}" is not a ValueType`;
+  if (t.kind === "enum" && (!isStringArray(t.members) || t.members.length === 0)) return `${at}: an enum needs a non-empty members[]`;
+  if (t.kind === "ref" && (typeof t.to !== "string" || t.to.length === 0)) return `${at}: a ref needs "to"`;
+  if (t.kind === "list" || t.kind === "map") return checkValueType(t.of, `${at}.of`);
+  if (t.kind === "struct") {
+    if (typeof t.fields !== "object" || t.fields === null) return `${at}: a struct needs fields`;
+    for (const [name, ft] of Object.entries(t.fields)) {
+      const e = checkValueType(ft, `${at}.fields.${name}`);
+      if (e) return e;
+    }
+  }
+  return null;
+}
+
+/** Inline value, or a bundle-relative JSON file. */
+function loadRef(value, manifestDir, what, err) {
+  if (typeof value !== "string") return value;
+  const path = resolve(manifestDir, value);
+  if (!existsSync(path)) {
+    err(`${what}: file not found: ${value} (resolved ${path})`);
+    return undefined;
+  }
+  try {
+    return JSON.parse(readFileSync(path, "utf8"));
+  } catch (e) {
+    err(`${what}: invalid JSON in ${value}: ${e.message}`);
+    return undefined;
+  }
+}
+
+function validateObjectModel(manifest, manifestDir, err) {
+  const om = manifest.contributes?.objectModel;
+  if (om === undefined) return;
+  if (typeof om !== "object" || om === null || Array.isArray(om)) {
+    err(`"contributes.objectModel" must be an object`);
+    return;
+  }
+  for (const key of Object.keys(om)) {
+    if (!["kinds", "commands"].includes(key)) err(`unknown objectModel key "${key}"`);
+  }
+  if (!Array.isArray(om.kinds)) {
+    err(`"contributes.objectModel.kinds" must be an array`);
+  } else {
+    const seenKinds = new Set();
+    for (const k of om.kinds) {
+      if (typeof k !== "object" || k === null || typeof k.kind !== "string" || !KIND_NAME.test(k.kind)) {
+        err(`each objectModel kind needs { kind: <name>, title, schema }`);
+        continue;
+      }
+      const at = `object kind "${k.kind}"`;
+      if (seenKinds.has(k.kind)) err(`${at} is declared twice`);
+      seenKinds.add(k.kind);
+      if (typeof k.title !== "string") err(`${at} needs a title`);
+      if (k.schema === undefined) {
+        err(`${at} has no schema`);
+        continue;
+      }
+      const rows = loadRef(k.schema, manifestDir, `${at} schema`, err);
+      if (rows === undefined) continue;
+      if (!Array.isArray(rows) || rows.length === 0) {
+        err(`${at} has no schema rows`);
+        continue;
+      }
+      const paths = new Set();
+      for (const [i, row] of rows.entries()) {
+        if (typeof row !== "object" || row === null || typeof row.path !== "string" || row.path.length === 0) {
+          err(`${at} schema[${i}] needs a path`);
+          continue;
+        }
+        if (paths.has(row.path)) err(`${at} schema path "${row.path}" is repeated`);
+        paths.add(row.path);
+        const e = checkValueType(row.type, `${at} schema[${row.path}].type`);
+        if (e) err(e);
+        if (row.access !== undefined && !["readWrite", "readOnly", "derived"].includes(row.access)) {
+          err(`${at} schema[${row.path}].access must be readWrite|readOnly|derived`);
+        }
+      }
+    }
+  }
+  if (om.commands !== undefined) {
+    if (!Array.isArray(om.commands)) {
+      err(`"contributes.objectModel.commands" must be an array`);
+      return;
+    }
+    const ns = typeof manifest.id === "string" ? `${manifest.id}.` : null;
+    for (const c of om.commands) {
+      if (typeof c !== "object" || c === null || typeof c.id !== "string") {
+        err(`each typed command needs { id, title, args }`);
+        continue;
+      }
+      const at = `typed command "${c.id}"`;
+      if (ns && !c.id.startsWith(ns)) err(`${at} must be namespaced under "${ns}"`);
+      if (typeof c.title !== "string") err(`${at} needs a title`);
+      if (c.args === undefined) {
+        err(`${at} has no args schema`);
+      } else {
+        const args = loadRef(c.args, manifestDir, `${at} args`, err);
+        if (args !== undefined) {
+          const e = checkValueType(args, `${at}.args`);
+          if (e) err(e);
+        }
+      }
+      if (c.result !== undefined) {
+        const result = loadRef(c.result, manifestDir, `${at} result`, err);
+        if (result !== undefined) {
+          const e = checkValueType(result, `${at}.result`);
+          if (e) err(e);
+        }
+      }
+    }
+  }
+}
+
+/** `contributes.commands` ids with no typed twin in objectModel.commands. */
+function untypedCommands(manifest) {
+  const all = isStringArray(manifest.contributes?.commands) ? manifest.contributes.commands : [];
+  const typed = new Set(
+    (Array.isArray(manifest.contributes?.objectModel?.commands) ? manifest.contributes.objectModel.commands : [])
+      .map((c) => c?.id),
+  );
+  return all.filter((id) => !typed.has(id)).sort();
+}
+
+const DEFAULT_BASELINE = resolve(dirname(fileURLToPath(import.meta.url)), "../untyped-commands.baseline.json");
+
+function loadBaseline(path) {
+  if (!existsSync(path)) return null;
+  try {
+    return JSON.parse(readFileSync(path, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+/** The shrink-only migration gate (ADR 323). */
+function checkUntyped(manifest, baseline, err, warn) {
+  const untyped = untypedCommands(manifest);
+  const listed = baseline?.plugins?.[manifest.id];
+  if (!Array.isArray(listed)) {
+    if (untyped.length > 0) {
+      warn(`${untyped.length} untyped command(s) with no typed twin (ADR 323): ${untyped.join(", ")}`);
+    }
+    return;
+  }
+  const allowed = new Set(listed);
+  for (const id of untyped) {
+    if (!allowed.has(id)) err(`command "${id}" is untyped and not in the baseline — contribute it typed (contributes.objectModel.commands, ADR 323)`);
+  }
+  const still = new Set(untyped);
+  for (const id of listed) {
+    if (!still.has(id)) warn(`baseline lists "${id}" as untyped, but it is typed or gone — shrink untyped-commands.baseline.json`);
+  }
 }
 
 /** Collect schema violations; returns an array of error strings. */
@@ -422,7 +600,7 @@ function validateManifest(manifest, manifestDir) {
       err(`"contributes" must be an object`);
     } else {
       for (const key of Object.keys(contributes)) {
-        if (!["tools", "panels", "commands", "editContexts", "objectTypes", "importers", "exporters", "partTypes"].includes(key)) {
+        if (!["tools", "panels", "commands", "editContexts", "objectTypes", "importers", "exporters", "partTypes", "objectModel"].includes(key)) {
           err(`unknown contribution kind "${key}"`);
         }
       }
@@ -505,24 +683,53 @@ function validateManifest(manifest, manifestDir) {
     }
   }
 
+  validateObjectModel(manifest, manifestDir, err);
   return errors;
 }
 
 // ── main ─────────────────────────────────────────────────────────
-const [command, target] = process.argv.slice(2);
-if (command !== "validate" || !target) usage();
+const argv = process.argv.slice(2);
+const command = argv[0];
 
-const manifestPath = resolve(process.cwd(), target);
-if (!existsSync(manifestPath)) fail(`no such file: ${manifestPath}`);
-
-let manifest;
-try {
-  manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-} catch (e) {
-  fail(`invalid JSON in ${manifestPath}: ${e.message}`);
+function readManifest(target) {
+  const manifestPath = resolve(process.cwd(), target);
+  if (!existsSync(manifestPath)) fail(`no such file: ${manifestPath}`);
+  try {
+    return { manifestPath, manifest: JSON.parse(readFileSync(manifestPath, "utf8")) };
+  } catch (e) {
+    fail(`invalid JSON in ${manifestPath}: ${e.message}`);
+  }
 }
 
+if (command === "untyped") {
+  // Print a baseline for the given manifests (the generator).
+  const targets = argv.slice(1);
+  if (targets.length === 0) usage();
+  const plugins = {};
+  for (const t of targets) {
+    const { manifest } = readManifest(t);
+    const list = untypedCommands(manifest);
+    if (list.length > 0) plugins[manifest.id] = list;
+  }
+  const sorted = Object.fromEntries(Object.entries(plugins).sort(([a], [b]) => a.localeCompare(b)));
+  console.log(JSON.stringify({ adr: "323", plugins: sorted }, null, 2));
+  process.exit(0);
+}
+
+let baselinePath = DEFAULT_BASELINE;
+const rest = [];
+for (let i = 1; i < argv.length; i++) {
+  if (argv[i] === "--untyped-baseline") baselinePath = resolve(process.cwd(), argv[++i] ?? "");
+  else rest.push(argv[i]);
+}
+const target = rest[0];
+if (command !== "validate" || !target) usage();
+
+const { manifestPath, manifest } = readManifest(target);
 const errors = validateManifest(manifest, dirname(manifestPath));
+const warnings = [];
+checkUntyped(manifest, loadBaseline(baselinePath), (m) => errors.push(m), (m) => warnings.push(m));
+for (const w of warnings) console.error(`warning: ${w}`);
 if (errors.length > 0) {
   console.error(`✗ ${manifestPath}`);
   for (const e of errors) console.error(`  - ${e}`);

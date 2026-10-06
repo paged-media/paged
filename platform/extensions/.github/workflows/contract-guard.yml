@@ -31,3 +31,7 @@ jobs:
           # trunk tip. The script falls back to HEAD~1 if both are empty.
           CONTRACT_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: node scripts/assert-contract-bumped.mjs
+      - name: assert the untyped-command baseline only shrinks (ADR 323)
+        env:
+          CONTRACT_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: node scripts/assert-untyped-shrinks.mjs

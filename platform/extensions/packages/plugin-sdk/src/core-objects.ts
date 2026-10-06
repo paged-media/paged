@@ -87,6 +87,8 @@ export interface CoreObjects {
   onDidChange(listener: () => void): () => void;
   /** Drop derived caches (a host that loads without a broadcast). */
   invalidate(): void;
+  /** Release the engine subscription (a private, per-host backend). */
+  dispose(): void;
 }
 
 const refuse = (code: ObjectErrorCode, reason: string): ObjectValue => ({ kind: "refused", code, reason });
@@ -213,11 +215,12 @@ export function createCoreObjects(getEditor: () => PagedEditor): CoreObjects {
   let subscribed = false;
   /** False when the host offers no change subscription: no caching. */
   let live = true;
+  let unsubscribe: (() => void) | null = null;
   const ensureSubscribed = (): void => {
     if (subscribed) return;
     subscribed = true;
     try {
-      client().subscribe((msg) => {
+      unsubscribe = client().subscribe((msg) => {
         if (
           msg.kind === "mutationApplied" ||
           msg.kind === "undoApplied" ||
@@ -656,6 +659,14 @@ export function createCoreObjects(getEditor: () => PagedEditor): CoreObjects {
       } catch (error) {
         return { applied: false, error };
       }
+    },
+
+    dispose() {
+      unsubscribe?.();
+      unsubscribe = null;
+      subscribed = false;
+      nodesCache = null;
+      listeners.clear();
     },
 
     invalidate() {

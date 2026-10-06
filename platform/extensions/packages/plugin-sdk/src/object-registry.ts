@@ -140,7 +140,17 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
       }
     }
   };
-  core?.onDidChange(() => emit({ addresses: [], origin: "core" }));
+  // Core changes are forwarded only while someone listens (no engine
+  // subscription for a registry nobody observes).
+  let coreUnsub: (() => void) | null = null;
+  const syncCoreSubscription = (): void => {
+    if (listeners.size > 0 && !coreUnsub && core) {
+      coreUnsub = core.onDidChange(() => emit({ addresses: [], origin: "core" }));
+    } else if (listeners.size === 0 && coreUnsub) {
+      coreUnsub();
+      coreUnsub = null;
+    }
+  };
 
   const rowsOfCore = (kind: string): Map<string, PropertySchema> => {
     let m = coreRows.get(kind);
@@ -478,7 +488,11 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
       const match = matcher(filter?.selector);
       const entry = { fn: listener, match };
       listeners.add(entry);
-      return toDisposable(() => listeners.delete(entry));
+      syncCoreSubscription();
+      return toDisposable(() => {
+        listeners.delete(entry);
+        syncCoreSubscription();
+      });
     },
 
     register({ plugin, model, parts, log: plog }) {

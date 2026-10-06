@@ -1016,6 +1016,7 @@ export async function createHeadlessHost(
         // the wasm so the handle is honestly released.
         contributions.length = 0;
         lastPreview = null;
+        if (!options.objects) objects.core?.dispose();
         worker.free();
       }
     },

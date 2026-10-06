@@ -1244,9 +1244,12 @@ export function createBundleHost(
 
   // ADR 323 — the shared object registry, or a private one over this
   // host's editor (core addresses + this bundle's own kinds).
-  const objectRegistry: ObjectRegistry =
-    options?.objects ??
-    createObjectRegistry({ core: createCoreObjects(getEditor), log });
+  const objectRegistry: ObjectRegistry = options?.objects ?? createPrivateObjects();
+  function createPrivateObjects(): ObjectRegistry {
+    const core = createCoreObjects(getEditor);
+    store.add({ dispose: () => core.dispose() });
+    return createObjectRegistry({ core, log });
+  }
 
   // ADR 025 — the journal door. Deliberately NOT capability-gated: the
   // capability system gates AUTHORITY (reading the document, the network,
