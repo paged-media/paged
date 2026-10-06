@@ -56,16 +56,16 @@ describe("core seam — virtual paths over today's ops", () => {
     const storyId = out.applied ? out.minted?.[0]?.storyId : null;
     expect(storyId).toBeTruthy();
     const [story] = await h.objects.query("story");
-    expect(story).toBe(`story:${storyId!.replace("/", "%2F")}`);
+    expect(story).toBe(`story:${storyId!}`);
     expect(await h.objects.get(story!, "content")).toEqual(value("hello"));
     expect(await h.objects.get(story!, "characterCount")).toEqual(value(5));
 
     expect(await h.objects.set(story!, "content", "Price: 12 €")).toMatchObject({ applied: true, undoSteps: 1 });
     expect(await h.objects.get(story!, "content")).toEqual(value("Price: 12 €"));
-    expect(await h.objects.get(`storyRange:${storyId!.replace("/", "%2F")}@0..5`, "content")).toEqual(value("Price"));
+    expect(await h.objects.get(`storyRange:${storyId!}@0..5`, "content")).toEqual(value("Price"));
 
-    expect(await h.objects.set(`storyRange:${storyId!.replace("/", "%2F")}@0..5`, "characterFontSize", 18)).toMatchObject({ applied: true });
-    expect(await h.objects.get(`storyRange:${storyId!.replace("/", "%2F")}@0..5`, "characterFontSize")).toEqual(value(18));
+    expect(await h.objects.set(`storyRange:${storyId!}@0..5`, "characterFontSize", 18)).toMatchObject({ applied: true });
+    expect(await h.objects.get(`storyRange:${storyId!}@0..5`, "characterFontSize")).toEqual(value(18));
 
     await h.host.document.undo();
     await h.host.document.undo();
@@ -85,7 +85,12 @@ describe("core seam — virtual paths over today's ops", () => {
     expect(await h.objects.get("page:#1", "pageBounds")).toEqual(value([0, 0, 792, 612]));
     expect(await h.objects.get("page:#1", "index")).toEqual(value(1));
     expect(await h.objects.get("page:#9", "index")).toMatchObject({ kind: "refused", code: "unknownAddress" });
-    expect(await h.objects.get("cell:t1/0,0", "cellFillColor")).toMatchObject({ kind: "refused", code: "unmapped" });
+    // Protocol 71 addresses a cell without its story, and core answers; the
+    // pre-71 seam cannot name one without the story.
+    expect(await h.objects.get("cell:t1/0,0", "cellFillColor")).toMatchObject({
+      kind: "refused",
+      code: h.protocolVersion >= 71 ? "unknownAddress" : "unmapped",
+    });
   });
 
   it("paragraph style properties through setStyleProperty", async () => {

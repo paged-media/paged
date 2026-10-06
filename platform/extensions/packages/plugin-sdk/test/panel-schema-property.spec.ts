@@ -12,7 +12,7 @@
  *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
  */
 
-// Schema v1.2 — the object-model property row (ADR 323, design §4).
+// The object-model property row (ADR 323, design §4).
 
 import { describe, expect, it } from "vitest";
 
@@ -26,6 +26,7 @@ import {
   propertyRow,
   propertyRows,
   propertyRowsOf,
+  publishObjectList,
   selectorKind,
   validatePanelSchema,
 } from "../src/index";
@@ -46,7 +47,7 @@ const panel = (rows: PanelSchema["sections"][number]["rows"]): PanelSchema => ({
   sections: [{ rows }],
 });
 
-describe("schema v1.2 property rows", () => {
+describe("panel property rows", () => {
   it("the builders produce discriminated rows", () => {
     const r = propertyRow("opacity", { bind: "activeLayer" }, { kind: LAYER, label: "Opacity" });
     expect(r).toEqual({ field: "property", address: { bind: "activeLayer" }, path: "opacity", kind: LAYER, label: "Opacity" });
@@ -129,5 +130,53 @@ describe("widgets.PropertyField", () => {
     expect(wired.widgets.PropertyField).toBe(Field);
     expect(wired.supports("widgets.propertyField@1")).toBe(true);
     expect(typeof wired.widgets.CodeEditor).toBe("function");
+  });
+});
+
+describe("publishObjectList", () => {
+  it("publishes the selected host's objects and keeps the choice valid", async () => {
+    const values = new Map<string, unknown>();
+    const listeners: Array<() => void> = [];
+    let selection: unknown[] = [{ kind: "rectangle", id: "f1" }];
+    let layers = ["plugin:acme.img/layer/f1/1", "plugin:acme.img/layer/f1/2"];
+    const queries: string[] = [];
+    const host = {
+      selection: { get: () => selection, onDidChange: (l: () => void) => (listeners.push(l), { dispose() {} }) },
+      objects: {
+        query: async (s: string) => (queries.push(s), layers),
+        get: async (a: string, p: string) =>
+          p === "name" ? { kind: "value", value: `L${a.slice(-1)}` } : { kind: "value", value: 50 },
+        onDidChange: (l: () => void) => (listeners.push(l), { dispose() {} }),
+      },
+      bindings: {
+        publish: (n: string, v: unknown) => values.set(n, v),
+        get: (n: string) => values.get(n),
+        delete: (n: string) => values.delete(n),
+      },
+    };
+    const list = publishObjectList(host as never, {
+      rows: "rows",
+      select: "layer",
+      selector: (sel) => (sel.length === 1 ? `${sel[0]} > plugin:acme.img/layer` : null),
+      secondaryPath: "opacity",
+    });
+    await list.refresh();
+    expect(queries.at(-1)).toBe("rectangle:f1 > plugin:acme.img/layer");
+    expect(values.get("rows")).toEqual([
+      { selfId: layers[0], name: "L1", secondary: "50" },
+      { selfId: layers[1], name: "L2", secondary: "50" },
+    ]);
+    expect(values.get("layer")).toBe(layers[0]);
+    values.set("layer", layers[1]);
+    await list.refresh();
+    expect(values.get("layer")).toBe(layers[1]);
+    layers = [layers[0]!];
+    await list.refresh();
+    expect(values.get("layer")).toBe(layers[0]);
+    selection = [];
+    await list.refresh();
+    expect(values.get("rows")).toEqual([]);
+    expect(values.has("layer")).toBe(false);
+    list.dispose();
   });
 });

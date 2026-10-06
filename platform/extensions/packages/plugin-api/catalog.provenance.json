@@ -1,9 +1,9 @@
 {
   "$comment": "Where the vendored catalog.json came from, and — when it leads the published engine — why that is allowed. `sync-catalog.mjs --check` enforces every claim in this file, in both directions: an unexplained difference fails, and so does an `aheadOfPublished` marker that the publish has since caught up with.",
   "source": "core",
-  "rev": "12ed596",
-  "targetsProtocol": 69,
+  "rev": "7532a7d",
+  "targetsProtocol": 71,
   "publishedPackage": "@paged-media/introspect-wasm",
-  "aheadOfPublished": false,
-  "why": "IN SYNC as of introspect-wasm@0.69.0 (core@12ed596, tag v0.69.0): adds setDocumentMetadata (ADR 127) and the duplicatePage text of ADR 128 to the 0.68.0 catalog. Prior record: led the publish on branch data/protocol-69 (2026-10-06) until v0.69.0 shipped."
+  "aheadOfPublished": true,
+  "why": "LEADS the publish: vendored from a local build of core branch om/protocol-71 (rev 7532a7d, protocol 71, unreleased) for the object-model SDK seam (ADR 131/132/323): Mutation::Set on address strings, RequestGet / RequestQuery, the typed propertySchemas rows and the text-variable ops. The published introspect-wasm is 0.70.0; this marker goes when v0.71.0 ships and the copy is re-synced from npm."
 }

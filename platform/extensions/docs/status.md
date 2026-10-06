@@ -7,24 +7,32 @@ What the plugin contract ships and what it does not, read from the code at commi
 
 ## Shipped
 
-- **The object model (0.2.43-canary.0, branch `om/object-model`, not yet released;
+- **The object model (0.2.44-canary.0, branch `om/object-model`, not yet released;
   DESIGN.md §21, ADR 323).** `host.contribute.objectModel` and `host.objects`: one
   `query/get/getAll/set/batch/schema/kinds/commands/invoke/onDidChange` over core
   addresses and every plugin's contributed kinds, a batch landing as one engine mutation
   and one undo step. The address and selector grammar is a TypeScript mirror of core's
-  (ADR 131). Core addresses map onto the protocol-70 wire through one table per kind;
-  tables, cells, fields and core creates answer `unmapped` until core's `Set` ships.
+  (ADR 131, the protocol-71 escaping rules). On an engine at protocol 71 the core seam
+  sends address strings straight to core's `Set` / `RequestGet` / `RequestQuery` (core
+  evaluates selectors), its rows are the vendored catalog's `propertySchemas`, and core
+  objects are created and deleted inside the same one-undo-step batch (swatch, gradient,
+  colour group, the five style families, text variable, layer, page, text frame,
+  rectangle, oval). Below 71 (feature-detected) the interim per-kind table over the
+  protocol-70 wire still answers, typed by the catalog where it can be; tables and cells
+  there need `noteTableStory`, and core creates answer `unmapped`.
   `plugin-cli validate` checks `contributes.objectModel`; untyped commands are a
   shrink-only baseline shipped with the CLI. The headless host now injects the object and
   data-provider registries and hosts several bundles at once. The first consumers' fix-ups
   (DESIGN.md §21.8): a plugin-level `batch`, one label per plugin per host with merged
   sub-keys, page and document label hosts (protocol 70), optional and defaulted struct
   fields, heavy rows, indexed paths, async `hostOf`, container-scoped plugin selectors,
-  and core rows typed by meaning. Built on the protocol-70 wire.
-  Panel schema v1.2 (0.2.44-canary.0, branch `om/panel-property`, DESIGN.md §12.7): a
+  and core rows typed by meaning. Vendored wire and catalog: a local protocol-71 build
+  (core `om/protocol-71`), recorded as leading the publish.
+  Panel property rows (0.2.45-canary.0, branch `om/panel-property`, DESIGN.md §12.7): a
   row may be an object-model property field (`{ field: "property", address, path }`)
   the host renders with its `PropertyField`; `host.widgets.PropertyField` /
-  `PropertyFrame` for React panels; `validatePanelSchema` for bundle tests.
+  `PropertyFrame` for React panels; `validatePanelSchema` for bundle tests;
+  `publishObjectList` feeds a list row from a selector.
 - **Three npm packages**, published under the `canary` tag on a push to `main`.
 - **The contract** (`plugin-api`, types only): the manifest types and their JSON Schema
   (exported as `./manifest.schema.json`), `PagedBundle`, `BundleHost` with 27 members, the

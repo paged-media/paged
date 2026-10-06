@@ -12,7 +12,7 @@
  *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
  */
 
-// Schema v1.2 — the object-model PROPERTY row (ADR 323, object-model
+// The object-model PROPERTY row (ADR 323, object-model
 // design §4 "Panels"): helpers a bundle builds its panel declarations with,
 // and the validator its unit tests (and a host, at register) hold them to.
 //
@@ -34,7 +34,7 @@ import type {
 import { parseAddress, parseSelector } from "./object-address";
 import { findRow } from "./object-schema";
 
-/** Is this row an object-model property row (schema v1.2)? */
+/** Is this row an object-model property row (the property row)? */
 export function isPropertyRow(row: PanelSchemaRow): row is PanelSchemaPropertyRow {
   return (row as { field?: unknown }).field === "property";
 }
@@ -184,7 +184,7 @@ function checkPropertyRow(
 
 /**
  * Every problem in a panel schema, as data. An empty list = it renders as
- * declared. Checks the v1.2 property rows in full (address form, kind,
+ * declared. Checks the property rows in full (address form, kind,
  * path against `schemaOf`) and the v1 rows' one structural rule (a
  * non-empty widget id).
  */

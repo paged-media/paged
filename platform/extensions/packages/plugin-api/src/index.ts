@@ -183,7 +183,7 @@ export type {
   SchemaRowAction,
   SchemaListAction,
   SchemaListSpec,
-  // Schema v1.2 — the object-model property row (ADR 323, design §4).
+  // The object-model property row (ADR 323, design §4).
   PanelSchemaWidgetRow,
   PanelSchemaPropertyRow,
   PropertyFieldAddress,

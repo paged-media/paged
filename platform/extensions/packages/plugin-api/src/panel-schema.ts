@@ -214,7 +214,7 @@ export interface SchemaListSpec {
 
 // ------------------------------------------------------------ property rows
 //
-// SCHEMA v1.2 — the OBJECT-MODEL field (ADR 323, object-model design §4
+// THE PROPERTY ROW — the OBJECT-MODEL field (ADR 323, object-model design §4
 // "Panels"). A plugin declares WHICH property of WHICH object a row edits
 // — `{ field: "property", address, path }` — and the host renders it with
 // its ONE schema-driven `PropertyField` over `host.objects`:
@@ -261,7 +261,7 @@ export interface PropertyFieldOption {
   icon?: string;
 }
 
-/** The property row (schema v1.2). Mutually exclusive with `widget`: a
+/** The property row (the property row). Mutually exclusive with `widget`: a
  *  row is EITHER a catalog widget OR an object-model property field. */
 export interface PanelSchemaPropertyRow {
   field: "property";
@@ -320,7 +320,7 @@ export interface PanelSchemaWidgetRow {
   field?: undefined;
 }
 
-/** One panel row: a catalog widget, or (v1.2) an object-model property
+/** One panel row: a catalog widget, or an object-model property
  *  field. Discriminate with `isPropertyRow` (plugin-sdk) or `row.field`. */
 export type PanelSchemaRow = PanelSchemaWidgetRow | PanelSchemaPropertyRow;
 
