@@ -34,7 +34,8 @@
 // DOORS — implemented vs recorded vs reserved:
 //   · document.mutate / undo / redo / collection / meta / pathAnchors /
 //     hitTest / elementGeometry / tree / getMetadata / setMetadata /
-//     onDidChange / onDidOpen — REAL (engine round-trip; `load()` fans
+//     getDocumentMetadata / setDocumentMetadata (undoable, fans out like
+//     any mutation) / onDidChange / onDidOpen — REAL (engine round-trip; `load()` fans
 //     the engine's `documentLoaded` reply out like the editor worker).
 //   · selection.get / set / onDidChange — REAL.
 //   · diagnostics, storage, log, supports, manifest — REAL (in-memory,

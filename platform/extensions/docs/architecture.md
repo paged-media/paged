@@ -119,8 +119,8 @@ only when the host wires the backend.
 | `contribute.bindingProvider` | answer the values of host-owned panels while one of the bundle's edit contexts is active | that edit context's declaration | `bindings.provider@1` | §18 |
 | `contribute.importer`, `exporter` | take the bytes of an opened file by extension; produce bytes for export | id listed in `contributes.importers` / `exporters` | | [ADR 017](adr/017-importer-exporter-door-shape.md) |
 | `contribute.sceneLayer()` | submit or clear vector content drawn inside a frame (text in the face each item names, with the fallbacks reported); submit one image and patch tiles of it, as bytes where the host has the binary lane | `rendering` includes `sceneLayer` | `rendering.sceneLayer@1`, `rendering.sceneLayer.binary@1`, `rendering.sceneLayer.faces@1` | [ADR 320](adr/320-binary-lanes-for-scene-images-and-parts.md) |
-| `document` reads | collections, meta, scene tree, parent, path anchors, geometry, properties, planar regions, placeholders, frame chain, story content, own metadata, change events; `onDidOpen` (a document became active, flag `document.onDidOpen@1`); `onWillSave` (awaited before a save, flag `document.onWillSave@1`, [ADR 322](adr/322-plugin-hooks-save-entry-tool-settings-undo-labels.md)) | `document.read`; `hitTest` also needs `rendering` includes `hitTest` | | §4.3, §4.3c, §4.3d |
-| `document.mutate`, `mutateWithBytes`, `setMetadata`, `undo`, `redo` | the one write path (image bytes as a `Uint8Array` where the host has the binary lane), and the shared history | `document.write` | `document.mutateBinary@1` | §4.3, [ADR 310](adr/310-one-write-door.md), [ADR 320](adr/320-binary-lanes-for-scene-images-and-parts.md) |
+| `document` reads | collections, meta, scene tree, parent, path anchors, geometry, properties, planar regions, placeholders, frame chain, story content, own metadata (on an element, and on the document: `getDocumentMetadata`, flag `document.metadata@1`), change events; `onDidOpen` (a document became active, flag `document.onDidOpen@1`); `onWillSave` (awaited before a save, flag `document.onWillSave@1`, [ADR 322](adr/322-plugin-hooks-save-entry-tool-settings-undo-labels.md)) | `document.read`; `hitTest` also needs `rendering` includes `hitTest` | | §4.3, §4.3c, §4.3d |
+| `document.mutate`, `mutateWithBytes`, `setMetadata`, `setDocumentMetadata`, `undo`, `redo` | the one write path (image bytes as a `Uint8Array` where the host has the binary lane), and the shared history | `document.write` | `document.mutateBinary@1` | §4.3, [ADR 310](adr/310-one-write-door.md), [ADR 320](adr/320-binary-lanes-for-scene-images-and-parts.md) |
 | `selection`, `viewport` | read, observe and set the selection; camera snapshot, screen px to points | none; `selection.set` needs `document.write` | | §4.4 |
 | `text` | measure a string; read the text caret | none | `text.measure@1`, `text.caret@1` | §4.5b |
 | `shell` | open or close a panel; pick files in; hand bytes out to be saved; enter one of the bundle's own edit contexts | none | `shell.openPanel@1`, `shell.pickFile@1`, `shell.saveFile@1`, `shell.enterEditContext@1` | §4.5c, [ADR 322](adr/322-plugin-hooks-save-entry-tool-settings-undo-labels.md) |
@@ -134,7 +134,7 @@ only when the host wires the backend.
 | `journal` | record a namespaced event or a timing | none | `journal@1` | `packages/plugin-api/src/host.ts:1486` |
 | `widgets` | a code editor component and a colour picker; a plain textarea and a native colour input without a host catalog | none | `widgets.codeEditor@1`, `widgets.colorPicker@1` | [ADR 321](adr/321-host-colour-picker-widget.md) |
 | `tools` | read the option values the host holds for the bundle's own tools, and observe changes | the tool id is namespaced under the manifest id | `tools.settings@1` | [ADR 322](adr/322-plugin-hooks-save-entry-tool-settings-undo-labels.md) |
-| `assets` | bytes of a document font face; original bytes of a placed image | `assets` includes `fonts` / `images` | `assets.fonts@1` | §13 |
+| `assets` | bytes of a document font face; original bytes of a placed image; register a face that only scene-layer text resolves (`registerFont`, the one write) | `assets` includes `fonts` / `images` | `assets.fonts@1`, `assets.registerFont@1` | §13, §13.6 |
 | `images` | serve tiles of a placed image to the renderer on request | `rendering` includes `resourceProvider` | `rendering.resourceProvider@1` | `packages/plugin-api/src/host.ts:497` |
 | `workers` | spawn a worker through the host; allocate shared memory under a budget | `workers` | `workers@1` | §15, [ADR 318](adr/318-host-spawned-workers.md) |
 | `secrets` | `set`, `exists`, `forget` a credential by reference; there is no `get` | `secrets.sources: true` | `secrets@1` | §16 |
@@ -158,6 +158,9 @@ gives a bundle four places, each keyed by the full manifest id
 - **Element metadata.** `document.setMetadata` sends a `setPluginMetadata` mutation with
   the key `x-paged:<manifest.id>`, through the same path as `mutate`; `getMetadata` reads
   it back from the element's properties.
+- **Document metadata.** `document.setDocumentMetadata` sends a `setDocumentMetadata`
+  mutation under the same key, for state that belongs to no frame; it is undoable and fires
+  `onDidChange`. `getDocumentMetadata` reads it from the document meta.
 - **Container parts.** `host.parts` sends part messages to the engine with every path
   prefixed `paged/<manifest.id>/`. These bytes travel with the document file.
 - **Key-value.** `host.storage` keeps JSON under `paged.plugin.<manifest.id>.` in the

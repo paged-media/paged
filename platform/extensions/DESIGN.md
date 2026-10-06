@@ -155,6 +155,15 @@ draw B-02). The headless harness records both
   `document.onDidOpen@1`: every host posts the message on every load.
   Gated on `document.read`; a document already open at activation is not
   replayed.
+- `getDocumentMetadata()` / `setDocumentMetadata(envelope | null)`
+  [W-21] — the element carrier's twin on the DOCUMENT, for state that
+  belongs to no frame (paged.web's document-wide values). Same key
+  (`x-paged:<manifest id>`), same envelope, same engine gates (namespace,
+  caller, 64 KiB); the write is one `setDocumentMetadata` mutation, so it
+  is undoable and fires `onDidChange`, and the read answers from
+  `DocumentMeta.pluginMetadata` (absent on a pre-v69 engine → `null`).
+  Static flag `document.metadata@1`. A raw `mutate` naming another
+  plugin's document (or page) key is refused like a foreign element key.
 
 Capability note: this is the "read-broad / write-scoped" default. v0
 enforces namespace only; write-*scoping* (subtree restriction) attaches
@@ -1167,6 +1176,9 @@ work on the same door shape.
   never WRITE assets. The engine's host→worker `registerFont` (document
   font ingestion) is NOT exposed: a plugin cannot inject faces into the
   document. The door only READS what the document already embeds/loads.
+  The one exception (protocol 69, §13.6): `registerFont` puts a face in a
+  SCENE-ONLY table that bundle scene-layer text reads and the document
+  never does; document-scope ingestion stays closed.
 - **Offline-forever = no network on the bundle's behalf.** The bytes come
   from what the document ALREADY has (its embedded/loaded faces). The
   host MUST NOT fetch a font from the network to satisfy a
@@ -1219,6 +1231,26 @@ Wholly additive: a new `host.assets` member + `AssetSurface` /
 `ASSET_BUDGETS` export, and one optional manifest field
 `capabilities.assets`. No existing member changed. The capability gate,
 the namespace rule, and every other door are untouched.
+
+### 13.6 The one write — scene-layer faces (W-15)
+
+`registerFont(bytes, family, style?) → Promise<Disposable>` is the
+single write on the asset door, and it does not breach §13.3's line: the
+face goes into the engine's SCENE-LAYER face table (`registerFont` with
+`scope: "sceneLayer"`, protocol 69), which only scene-layer text reads.
+Document layout, the Fonts panel's `isMissing`, preflight and
+substitution tracing never see it — a bundle shipping Inter cannot make
+a document's missing Inter look present. Gate: `capabilities.assets` ∋
+`"fonts"` (throw in 'enforce'); budget: `ASSET_BUDGETS.maxFontFaceBytes`
+(rejects). The host backs it with two optional `BundleAssetProvider`
+members, `registerFont` and `clearSceneFonts`; with both,
+`supports("assets.registerFont@1")` is true, without them the call warns
+and resolves an inert `Disposable`.
+
+Disposal: the engine can only empty the scene table as a whole, so the
+SDK keeps the live faces per provider (one provider serves every bundle
+in the editor) and drops one by clearing and registering the rest again,
+in order, on one queue. A bundle's teardown disposes its faces.
 
 ## 14. The capability-gated clipboard (K-6 / S-14 — `host.clipboard`)
 

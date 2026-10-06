@@ -57,6 +57,7 @@ import type {
   DocumentSurface,
   EditContextContribution,
   ElementId,
+  DocumentMeta,
   FontFaceAsset,
   HitFilter,
   HitResult,
@@ -200,6 +201,11 @@ export const HOST_FEATURES: readonly string[] = [
   "document.onDidOpen@1",
   "document.getMetadata@1",
   "document.setMetadata@1",
+  // W-21 — document-level plugin metadata (protocol 69). Static like the
+  // other engine-served doors: the worker handshake refuses an engine
+  // older than the pinned wire, so a running bundle talks to one that
+  // applies `setDocumentMetadata` and reports `DocumentMeta.pluginMetadata`.
+  "document.metadata@1",
   "selection@1",
   "viewport@1",
   "overlay.toolPreview@1",
@@ -389,6 +395,49 @@ export interface BundleAssetProvider {
     family: string,
     style?: string,
   ): Promise<FontFaceAsset | null>;
+  /** W-15 — register a face in the engine's SCENE-LAYER face table
+   *  (`registerFont` with `scope: "sceneLayer"`): scene-layer text
+   *  resolves it, the document never sees it. The SDK calls it once per
+   *  `host.assets.registerFont` and again when it replays the live faces
+   *  after a disposal. Optional: a host without it (with
+   *  `clearSceneFonts`) leaves `supports("assets.registerFont@1")` false. */
+  registerFont?(
+    family: string,
+    bytes: Uint8Array,
+    style?: string,
+  ): Promise<void>;
+  /** W-15 — drop every scene-layer face (`clearFontRegistry` with
+   *  `scope: "sceneLayer"`), leaving the document's faces alone. The SDK
+   *  owns which faces are live, so disposing one face is "clear, then
+   *  register the rest again". */
+  clearSceneFonts?(): Promise<void>;
+}
+
+/** One live bundle face in a provider's scene table. */
+interface SceneFaceEntry {
+  family: string;
+  style?: string;
+  bytes: Uint8Array;
+}
+
+/** The live scene faces of one provider, shared by every bundle the host
+ *  loaded over it (the editor injects ONE provider for all bundles, and
+ *  the engine has ONE scene table), plus the queue that keeps register /
+ *  clear / replay in order. */
+interface SceneFaceLedger {
+  entries: SceneFaceEntry[];
+  queue: Promise<void>;
+}
+
+const sceneFaceLedgers = new WeakMap<BundleAssetProvider, SceneFaceLedger>();
+
+function sceneFaceLedger(provider: BundleAssetProvider): SceneFaceLedger {
+  let ledger = sceneFaceLedgers.get(provider);
+  if (!ledger) {
+    ledger = { entries: [], queue: Promise.resolve() };
+    sceneFaceLedgers.set(provider, ledger);
+  }
+  return ledger;
 }
 
 /** Blob-store budgets (K-4 / S-08). The default per-plugin quota when a
@@ -1890,7 +1939,12 @@ export function createBundleHost(
    *  v34 batch-created-sentinel insert flow), but only for THIS
    *  plugin's derived key. Returns the offending key, or null. */
   const foreignMetadataKey = (m: MutationInput): string | null => {
-    if (m.op === "setPluginMetadata") {
+    if (
+      m.op === "setPluginMetadata" ||
+      // W-21 — the document (and page) carriers take the same key.
+      m.op === "setDocumentMetadata" ||
+      m.op === "setPageMetadata"
+    ) {
       return m.args.key === metadataKey(manifest) ? null : m.args.key;
     }
     if (m.op === "batch") {
@@ -1977,7 +2031,7 @@ export function createBundleHost(
     if (denied !== null) return { applied: false, error: denied };
     const foreign = foreignMetadataKey(mutation);
     if (foreign !== null) {
-      const error = `setPluginMetadata key "${foreign}" is outside this plugin's namespace ("${metadataKey(manifest)}")`;
+      const error = `plugin metadata key "${foreign}" is outside this plugin's namespace ("${metadataKey(manifest)}")`;
       log.warn(error);
       return { applied: false, error };
     }
@@ -2312,6 +2366,40 @@ export function createBundleHost(
         op: "setPluginMetadata",
         args: {
           elementId: id,
+          key: metadataKey(manifest),
+          value: envelope === null ? null : JSON.stringify(envelope),
+          caller: manifest.id,
+        },
+      });
+    },
+    async getDocumentMetadata() {
+      // W-21 — the document's own labels ride on the document meta reply
+      // (v69 `DocumentMeta.pluginMetadata`); this plugin sees its key only.
+      requireDocRead("document.getDocumentMetadata");
+      const key = metadataKey(manifest);
+      let meta: DocumentMeta;
+      try {
+        meta = await getEditor().client.documentMeta();
+      } catch {
+        return null;
+      }
+      // Absent on an engine older than v69: no document labels at all.
+      for (const entry of meta.pluginMetadata ?? []) {
+        if (entry.key !== key) continue;
+        try {
+          return JSON.parse(entry.value) as PluginMetadataEnvelope;
+        } catch {
+          return null; // engine-gated on write; treat corrupt as absent
+        }
+      }
+      return null;
+    },
+    async setDocumentMetadata(envelope) {
+      // The element carrier's twin: derived key, caller named so the
+      // engine cross-checks the namespace too, one undoable mutation.
+      return this.mutate({
+        op: "setDocumentMetadata",
+        args: {
           key: metadataKey(manifest),
           value: envelope === null ? null : JSON.stringify(envelope),
           caller: manifest.id,
@@ -2922,6 +3010,70 @@ export function createBundleHost(
         return null;
       }
       return face;
+    },
+    // W-15 — the one WRITE: a scene-layer face. The engine has a single
+    // scene table that `clearFontRegistry` can only empty as a whole, so
+    // the SDK keeps the list of live faces per provider (across bundles)
+    // and disposes one face by clearing and replaying the others. Every
+    // engine call goes through the ledger's queue, so a replay never
+    // interleaves with a registration.
+    async registerFont(bytes, family, style) {
+      requireDeclared(
+        hasAsset("fonts"),
+        "assets.registerFont",
+        'capabilities.assets must include "fonts"',
+      );
+      const label = `assets.registerFont("${family}"${style ? `, "${style}"` : ""})`;
+      if (bytes.byteLength > ASSET_BUDGETS.maxFontFaceBytes) {
+        throw new Error(
+          `${label}: ${bytes.byteLength} bytes is over the ` +
+            `${ASSET_BUDGETS.maxFontFaceBytes}-byte per-face cap`,
+        );
+      }
+      const provider = assetSource;
+      const register = provider?.registerFont?.bind(provider);
+      const clear = provider?.clearSceneFonts?.bind(provider);
+      if (!provider || !register || !clear) {
+        log.warn(
+          `${label} ignored — the host cannot register scene faces ` +
+            `(probe supports("assets.registerFont@1")); scene text keeps ` +
+            `its fallback face`,
+        );
+        return toDisposable(() => {});
+      }
+      const ledger = sceneFaceLedger(provider);
+      const entry: SceneFaceEntry =
+        style === undefined
+          ? { family, bytes: bytes.slice() }
+          : { family, style, bytes: bytes.slice() };
+      const run = (job: () => Promise<void>): Promise<void> => {
+        const next = ledger.queue.then(job);
+        // The queue survives a failed job; the caller still sees it fail.
+        ledger.queue = next.catch(() => {});
+        return next;
+      };
+      await run(async () => {
+        await register(entry.family, entry.bytes, entry.style);
+        ledger.entries.push(entry);
+      });
+      let disposed = false;
+      return store.add(
+        toDisposable(() => {
+          if (disposed) return;
+          disposed = true;
+          void run(async () => {
+            const i = ledger.entries.indexOf(entry);
+            if (i < 0) return;
+            ledger.entries.splice(i, 1);
+            await clear();
+            for (const live of ledger.entries) {
+              await register(live.family, live.bytes, live.style);
+            }
+          }).catch((error: unknown) => {
+            log.warn(`${label}: dropping the face failed: ${String(error)}`);
+          });
+        }),
+      );
     },
     // C-5 / I-04 (core v42): a placed DOCUMENT image's ORIGINAL bytes,
     // straight from the engine's resolver/parse cache through the
@@ -3666,6 +3818,14 @@ export function createBundleHost(
     // source is wired" — a bundle probes it to decide whether to
     // attempt `@font-face` composition at all.
     featureSet.add("assets.fonts@1");
+  }
+  if (
+    typeof options?.assetSource?.registerFont === "function" &&
+    typeof options?.assetSource?.clearSceneFonts === "function"
+  ) {
+    // W-15 — both members, or none: a host that can add a scene face but
+    // not drop one would keep a disposed bundle's faces alive.
+    featureSet.add("assets.registerFont@1");
   }
   if (options?.consent) {
     // The network door always exists (default-deny); this flag means a real

@@ -199,6 +199,9 @@ export function makeFakeEditor(opts?: {
   let planarRegionsReply: unknown = null;
   // v67 — scripted `snapPoint` reply; `null` = a pre-v67 engine.
   let snapPointReply: unknown = null;
+  // W-21 — the scriptable `documentMeta()` answer (document labels ride
+  // on it as `pluginMetadata`).
+  let documentMetaReply: unknown = { pageCount: 1 };
   /** Every message that crossed `client.send`, in order. */
   const sent: { kind: string; payload?: unknown }[] = [];
 
@@ -210,7 +213,7 @@ export function makeFakeEditor(opts?: {
     undo: async () => ({ kind: "undoApplied" }),
     redo: async () => ({ kind: "redoApplied" }),
     collection: async () => [],
-    documentMeta: async () => ({ pageCount: 1 }),
+    documentMeta: async () => documentMetaReply,
     pathAnchors: async () => null,
     elementGeometry: async () => [],
     setElementSelection: async (ids: unknown[]) => ids,
@@ -317,6 +320,10 @@ export function makeFakeEditor(opts?: {
      *  back to a pre-v57 engine that never answers the kind). */
     setPlanarRegionsReply(reply: unknown) {
       planarRegionsReply = reply;
+    },
+    /** W-21 — script what `client.documentMeta()` answers. */
+    setDocumentMeta(meta: unknown) {
+      documentMetaReply = meta;
     },
     /** v67 — script the `requestSnapPoint` reply. */
     setSnapPointReply(reply: unknown) {

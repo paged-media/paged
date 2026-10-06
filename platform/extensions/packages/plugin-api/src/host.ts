@@ -1229,6 +1229,28 @@ export interface DocumentSurface {
     id: ElementId,
     envelope: PluginMetadataEnvelope | null,
   ): Promise<MutationOutcome>;
+  /**
+   * W-21 — read this plugin's metadata envelope on the DOCUMENT itself
+   * (state that belongs to no frame: a data source, document-wide
+   * values), or `null` when absent. Same key as the element carrier
+   * (`x-paged:<manifest id>`, own namespace only). Gated on
+   * `capabilities.document.read`; probe `supports("document.metadata@1")`.
+   * A host whose engine carries no document labels answers `null`.
+   */
+  getDocumentMetadata(): Promise<PluginMetadataEnvelope | null>;
+  /**
+   * W-21 — write (or clear, with `null`) this plugin's metadata on the
+   * DOCUMENT. One ordinary mutation (`setDocumentMetadata`): undoable,
+   * and it fires `onDidChange` like any edit, so a bundle that renders
+   * from the value re-renders from the event and undo restores the old
+   * value without bundle code. Engine-gated like `setMetadata` (own
+   * namespace, 64 KiB cap, JSON envelope). Needs
+   * `capabilities.document.write`; an IDML export keeps it as a
+   * `Properties/Label` entry on the designmap's `Document`.
+   */
+  setDocumentMetadata(
+    envelope: PluginMetadataEnvelope | null,
+  ): Promise<MutationOutcome>;
 }
 
 /**
