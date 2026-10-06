@@ -52,51 +52,33 @@ export interface Finding {
 
 export const FINDINGS = {
   // -- the WRITE-NEW lane: page items the document did not carry -------------
-  writeNewDropsCorners: {
+  // Five defects of this lane were fixed by the 0.70.0 engine (its pinned
+  // exporter, plugin-publish 47ab9d9) and their entries deleted: live corners,
+  // dash, join + miter limit on a draw-made path, an undeclared Color/Paper,
+  // and Type on a Path (now written as a <TextPath>). Re-recorded with
+  // InDesign 20.0.1 on 2026-10-06.
+  textPathEndBracketAbsent: {
     verdict: "defect",
     owner: "exporter",
-    title: "live corners on a draw-made Polygon are not exported",
+    title: "a <TextPath> with no end bracket is exported without EndBracket; InDesign reads 0 and the story is overset",
     why:
-      "The engine holds the corner option + radius on the inserted Polygon (the " +
-      "live-corner command wrote them, the model reads them back), but the write-NEW " +
-      "lane emits no `*CornerOption` / `*CornerRadius` attribute, so InDesign draws " +
-      "square corners. The same command on a SOURCE <Rectangle> exports (live-corners-rectangle).",
+      "draw attaches the text with `startBracket: 10` and no end, which the model holds " +
+      "as `end_bracket: None` — flow to the end of the path, as the renderer draws it. " +
+      "The exporter writes `StartBracket=\"10\"` and omits `EndBracket`; InDesign takes " +
+      "the absent attribute as 0, so the window is empty, the path shows no text " +
+      "(`contents: \"\"`, `overflows: true`) and the story is reported overset. " +
+      "The exporter should write the path's length for an unset end bracket.",
   },
-  writeNewDropsDash: {
-    verdict: "defect",
-    owner: "exporter",
-    title: "a dash on a draw-made path is not exported",
+  dashImpliesDashedType: {
+    verdict: "convention",
+    owner: "engine",
+    title: "a dash is the dash array alone in the model; IDML also names the Dashed stroke type",
     why:
-      "The model holds `frameStrokeDashArray`; the write-new lane emits neither a " +
-      "`StrokeType=\"StrokeStyle/$ID/Dashed\"` nor `StrokeDashAndGap`, so InDesign " +
-      "strokes it solid.",
-  },
-  writeNewDropsJoin: {
-    verdict: "defect",
-    owner: "exporter",
-    title: "stroke join and miter limit on a draw-made path are not exported",
-    why:
-      "The engine accepts and reads back `frameStrokeJoin` / `frameStrokeMiterLimit` " +
-      "on an inserted Polygon; the write-new lane emits no `EndJoin` / `MiterLimit`, " +
-      "so InDesign answers its defaults (miter, 4).",
-  },
-  textPathNotExported: {
-    verdict: "defect",
-    owner: "exporter",
-    title: "Type on a Path is not exported, and the lost list does not say so",
-    why:
-      "The path carries no <TextPath>; the story is written as a stand-alone " +
-      "Stories/ part that nothing references, and InDesign discards it (the recording " +
-      "lists NO story at all). The export's `lost` list is empty — a silent loss.",
-  },
-  paperNotDeclared: {
-    verdict: "defect",
-    owner: "exporter",
-    title: "a fill of Color/Paper is exported without declaring the swatch",
-    why:
-      "The engine paints the appearance bake's Paper layer with its implicit " +
-      "`Color/Paper`; the exported Graphic.xml (the source's, passed through) never " +
-      "defines it, and InDesign resolves the unknown reference to NO fill.",
+      "draw's dash presets write `frameStrokeDashArray` and leave `frameStrokeType` " +
+      "unset, which reads back as InDesign's default Solid. IDML only honours " +
+      "`StrokeDashAndGap` under `StrokeType=\"StrokeStyle/$ID/Dashed\"`, so the exporter " +
+      "writes that type whenever a dash array is present, and InDesign answers Dashed. " +
+      "The same dashed stroke (the dash arrays agree) — pinned with both values.",
   },
   absentStrokeReadAsNone: {
     verdict: "defect",
@@ -200,7 +182,6 @@ const allCorners = (option: string, radius: number | null) => ({
   bottomRight: { option, radius },
   bottomLeft: { option, radius },
 });
-const SQUARE = allCorners("NONE", null);
 
 /** The five live-corner styles, in the order the cases apply them. */
 const CORNER_OPTIONS = [
@@ -237,24 +218,26 @@ export const KNOWN: Record<string, readonly Known[]> = {
       finding: "bevelSpelling",
     },
   ],
-  "live-corners-polygon": CORNER_OPTIONS.map((option, i) => ({
-    at: String(i),
-    field: "corners",
-    ours: allCorners(option, 12),
-    theirs: SQUARE,
-    finding: "writeNewDropsCorners" as const,
+  // Every corner survives since 0.70.0; the bevel is the same spelling
+  // convention as on a source <Rectangle>.
+  "live-corners-polygon": [
+    {
+      at: "2",
+      field: "corners",
+      ours: allCorners("BEVELED_CORNER", 12),
+      theirs: allCorners("BEVEL_CORNER", 12),
+      finding: "bevelSpelling",
+    },
+  ],
+  // The dash arrays survive since 0.70.0. Item 0 is the Solid preset.
+  "dash-presets": ["1", "2", "3"].map((at) => ({
+    at,
+    field: "strokeType",
+    ours: "$ID/Solid",
+    theirs: "$ID/Dashed",
+    finding: "dashImpliesDashedType" as const,
   })),
-  "dash-presets": [
-    // Item 0 is the Solid preset: nothing to lose.
-    { at: "1", field: "dash", ours: [6, 3], theirs: [], finding: "writeNewDropsDash" },
-    { at: "2", field: "dash", ours: [1, 3], theirs: [], finding: "writeNewDropsDash" },
-    { at: "3", field: "dash", ours: [6, 3, 1, 3], theirs: [], finding: "writeNewDropsDash" },
-  ],
-  "stroke-attributes": [
-    { at: "0", field: "endJoin", ours: "ROUND_END_JOIN", theirs: "MITER_END_JOIN", finding: "writeNewDropsJoin" },
-    { at: "1", field: "endJoin", ours: "BEVEL_END_JOIN", theirs: "MITER_END_JOIN", finding: "writeNewDropsJoin" },
-    { at: "2", field: "miterLimit", ours: 2, theirs: 4, finding: "writeNewDropsJoin" },
-  ],
+  // `stroke-attributes` has none since 0.70.0: join and miter limit export.
   // `gradient-linear` has none since 0.66.0: angle 30 and length 250 read
   // back, as InDesign reads them. `gradient-radial`'s unset angle is
   // compared as InDesign's default (0, INDESIGN_DEFAULTS); its length is
@@ -264,11 +247,9 @@ export const KNOWN: Record<string, readonly Known[]> = {
     // derived length for an axis the file does not state.
     { at: "0", field: "gradientLength", ours: null, theirs: 120.5, finding: "gradientLengthDerived" },
   ],
-  "appearance-bake": [
-    { at: "0/2", field: "fill", ours: "Paper", theirs: "None", finding: "paperNotDeclared" },
-  ],
+  // `appearance-bake` has none since 0.70.0: Color/Paper is declared.
   "text-on-path": [
-    { at: "0", field: "textPath", ours: "Type on a path", theirs: null, finding: "textPathNotExported" },
+    { at: "0", field: "textPath", ours: "Type on a path", theirs: "", finding: "textPathEndBracketAbsent" },
   ],
   "opacity-mask": [
     { at: "page", field: "children", ours: ["polygon"], theirs: ["polygon", "polygon"], finding: "opacityMaskLost" },
@@ -284,9 +265,16 @@ export const KNOWN_LOST: Record<string, readonly RegExp[]> = {
   "opacity-mask": [/^opacity mask on `u1` \(artwork `u2`\) is a paged-native construct — IDML has no opacity-mask element/],
 };
 
-/** The cases whose `lost` list SHOULD name something and does not. */
-export const MISSING_LOST: Record<string, { pattern: RegExp; finding: FindingId }> = {
-  "text-on-path": { pattern: /text|path|story/i, finding: "textPathNotExported" },
+/** The cases whose `lost` list SHOULD name something and does not. None
+ *  since 0.70.0: Type on a Path is exported, so nothing is silently lost. */
+export const MISSING_LOST: Record<string, { pattern: RegExp; finding: FindingId }> = {};
+
+/** The warnings InDesign raised when it opened a case's IDML, per case,
+ *  each one the symptom of a classified finding. */
+export const KNOWN_WARNINGS: Record<string, readonly { warning: unknown; finding: FindingId }[]> = {
+  "text-on-path": [
+    { warning: { source: "overset", story: "Type on a path" }, finding: "textPathEndBracketAbsent" },
+  ],
 };
 
 /** Differences between the model as authored and the same document after
@@ -322,9 +310,6 @@ export const KNOWN_REIMPORT: Record<string, readonly Known[]> = {
     { at: "0/1", field: "strokeWeight", ours: 1, theirs: null, finding: "objectStyleNotInherited" },
     { at: "0/2", field: "strokeWeight", ours: 1, theirs: null, finding: "objectStyleNotInherited" },
     { at: "0/3", field: "stroke", ours: "Black", theirs: "None", finding: "objectStyleNotInherited" },
-    // InDesign resolved the undeclared Paper to no fill when it OPENED the
-    // file, so its own export says None — the forward defect, carried home.
-    { at: "0/2", field: "fill", ours: "Paper", theirs: "None", finding: "paperNotDeclared" },
   ],
 };
 

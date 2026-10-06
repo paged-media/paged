@@ -55,7 +55,15 @@ import {
   report,
   sha256,
 } from "./classify";
-import { FINDINGS, KNOWN, KNOWN_LOST, KNOWN_REFUSALS, MISSING_LOST, REFUSAL_FINDINGS } from "./findings";
+import {
+  FINDINGS,
+  KNOWN,
+  KNOWN_LOST,
+  KNOWN_REFUSALS,
+  KNOWN_WARNINGS,
+  MISSING_LOST,
+  REFUSAL_FINDINGS,
+} from "./findings";
 import { idmlPath, loadRecording, type InDesignRecording } from "./indesign";
 import {
   INDESIGN_DEFAULTS,
@@ -138,8 +146,10 @@ for (const c of ROUNDTRIP_CASES) {
       }
     });
 
-    it("InDesign reported no unresolved font, broken link or overset story", () => {
-      expect(rec.warnings).toEqual([]);
+    it("InDesign reported no unresolved font, broken link or overset story but the classified ones", () => {
+      // A known warning is the symptom of a classified finding (its DEFECT
+      // is an `it.fails` below); one that stops occurring fails here.
+      expect(rec.warnings).toEqual((KNOWN_WARNINGS[c.id] ?? []).map((w) => w.warning));
     });
 
     it("the authoring was refused exactly where it is known to be", () => {

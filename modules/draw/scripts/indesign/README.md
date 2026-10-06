@@ -40,7 +40,12 @@ wound one way, Exclude as two pieces) and which were regenerated and
 re-recorded on 0.65.0 on 2026-10-04, all four still identical; and
 `arrowheads` and `stroke-attributes`, whose IDML the 0.66.0 engine
 exports with the cap and line ends a Pen path now takes (C-62), which
-were regenerated and re-recorded on 0.66.0 on 2026-10-05. Each
+were regenerated and re-recorded on 0.66.0 on 2026-10-05; and
+`live-corners-polygon`, `dash-presets`, `stroke-attributes`,
+`appearance-bake` and `text-on-path`, whose IDML the 0.70.0 engine exports
+with what the write-new lane used to drop (corners, dash, join + miter,
+Color/Paper, a `<TextPath>`), which were regenerated and re-recorded on
+0.70.0 on 2026-10-06 (the appearance bake's InDesign export with it). Each
 recording's `produced_by` is the authority: app, version, locale, the
 reader's sha256 and the IDML's sha256 — the replay refuses a recording
 made by another reader or from another IDML.
@@ -53,18 +58,18 @@ made by another reader or from another IDML.
 | `pathfinder-divide` | Divide | identical |
 | `offset-path`, `outline-stroke`, `simplify`, `join` | path ops | identical |
 | `live-corners-rectangle` | every corner style on a source `<Rectangle>` | corners survive; DEFECT absent StrokeColor; CONVENTION bevel spelling |
-| `live-corners-polygon` | every corner style on a draw Polygon | DEFECT: corners not exported |
-| `dash-presets` | the four dash presets | DEFECT: dash not exported |
+| `live-corners-polygon` | every corner style on a draw Polygon | corners survive since 0.70.0; CONVENTION bevel spelling |
+| `dash-presets` | the four dash presets | dash survives since 0.70.0; CONVENTION: the model holds the array alone, IDML also names the Dashed type |
 | `arrowheads` | line ends | identical — a GraphicLine's and a Pen path's (C-62, fixed in 0.66.0) |
-| `stroke-attributes` | weight / cap / join / miter | weight and cap survive; DEFECT: join + miter not exported |
+| `stroke-attributes` | weight / cap / join / miter | identical since 0.70.0 |
 | `gradient-linear` | linear gradient fill | identical — the axis reads back since 0.66.0 (C-83b) |
 | `gradient-radial` | radial gradient fill | gradient and stops survive; CONVENTION: an unset length, which InDesign derives from the item |
 | `opacity-blend` | opacity 50 + Multiply via a Graphic Style | identical |
 | `group` | a group | identical |
-| `appearance-bake` | bake: a group of stacked items | DEFECT: Color/Paper undeclared → no fill |
+| `appearance-bake` | bake: a group of stacked items | identical since 0.70.0 (Color/Paper declared) |
 | `repeat-expanded`, `blend-expanded` | expanded repeat / blend | identical (the blend's duplicate stroke swatches were fixed in draw and the case re-recorded) |
 | `svg-import` | SVG import | identical |
-| `text-on-path` | Type on a Path | DEFECT: not exported, `lost` silent |
+| `text-on-path` | Type on a Path | exported since 0.70.0; DEFECT: no `EndBracket`, InDesign reads 0 → story overset |
 | `opacity-mask` | opacity mask | EXPECTED LOSS, named in `lost` |
 
 "Identical" means every anchor and handle within 0.01 pt, every paint and

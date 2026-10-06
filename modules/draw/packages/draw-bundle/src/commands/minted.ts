@@ -78,9 +78,11 @@
 //   · an element the same batch then DELETES (an absorbed compound
 //     contour) or DISSOLVES is STILL listed: `minted` is what was made,
 //     not what is left;
-//   · `handle` is the `bindCreated` name on some batches and `null` on
-//     others (a batch the engine translates whole drops the binds before
-//     it applies). ORDER is the contract; the name is a cross-check.
+//   · `handle` is the `bindCreated` name of a bound mint and `null` for
+//     an unbound one. Before engine 0.70.0 a batch the engine translated
+//     whole answered `null` on every mint (it dropped the binds before
+//     it applied); since core c7d9ccb both lanes name them. ORDER is the
+//     contract; the name is a cross-check.
 //
 // THE ONE DIFFERENCE BETWEEN THE LANES, and why `bindMinted` exists. A
 // tree diff sees what SURVIVED: a transient contour is not in it, and a

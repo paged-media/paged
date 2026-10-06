@@ -7,13 +7,13 @@
     "script": "scripts/indesign/lib/read-document.jsx",
     "script_sha256": "4486a78fdd3b45a88c6ef6b18911bc34b94f6cf7ddc3c4d433d3d5e256f4dc08",
     "runner": "scripts/indesign/run-roundtrip.sh",
-    "recorded_at": "2026-10-03T06:04:18.635Z",
+    "recorded_at": "2026-10-06T07:43:51.833Z",
     "host_os": "macOS 26.4",
     "pdf_preset": "[Qualitativ hochwertiger Druck]"
   },
   "idml": {
     "path": "packages/draw-bundle/test/fixtures/roundtrip/text-on-path.idml",
-    "sha256": "768ec21aa8afa59b0daf665d542088cfae0b5cde51d4f481ba43743a883518f5"
+    "sha256": "fa32872dc92d34d10400a5717ae619a2365a4cfee95f0c1658bc3055de36a754"
   },
   "units": "pt",
   "coordinates": "page-local, origin top-left of the page, Y down (ruler origin PAGE, zero point 0,0, script measurement unit POINTS); bounds as [minX, minY, maxX, maxY]",
@@ -36,8 +36,21 @@
   "layers": [
     "Layer 1"
   ],
-  "warnings": [],
-  "stories": [],
+  "warnings": [
+    {
+      "source": "overset",
+      "story": "Type on a path"
+    }
+  ],
+  "stories": [
+    {
+      "contents": "Type on a path",
+      "textContainers": 1,
+      "containerKinds": [
+        "TextPath"
+      ]
+    }
+  ],
   "items": [
     {
       "kind": "Polygon",
@@ -77,7 +90,7 @@
       "strokeTransparency": {"opacity":100,"blendMode":"NORMAL"},
       "overprintFill": {"unreadable":"Diese Eigenschaft ist im aktuellen Status nicht zutreffend."},
       "overprintStroke": false,
-      "textPaths": [],
+      "textPaths": [{"contents":"","storyContents":"Type on a path","pathEffect":"#RAINBOW_PATH_EFFECT","flipPathEffect":"NOT_FLIPPED","startBracket":10,"endBracket":0,"overflows":true}],
       "z": 0,
       "paths": [
         {

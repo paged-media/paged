@@ -143,7 +143,7 @@ describe("draw conformance — the minted seam (what did my write create)", () =
       (m) => `${m.handle ?? "-"}=${m.element.kind}:${String(m.element.id)}`,
     );
 
-  describe("what the engine's `minted` contains (measured, engine 0.64.0)", () => {
+  describe("what the engine's `minted` contains (measured, engine 0.70.0)", () => {
     it("a SINGLE mutation lists nothing — its one creation is `createdId`", async () => {
       const reply = await raw(square(10, 10));
       expect(reply.kind).toBe("mutationApplied");
@@ -173,7 +173,10 @@ describe("draw conformance — the minted seam (what did my write create)", () =
           group(ref("a"), ref("b")),
         ),
       );
-      expect(listed(reply)).toEqual(["-=polygon:uc", "-=polygon:ud", "-=group:ue"]);
+      // Engine 0.70.0 (core c7d9ccb): a batch that translates whole now
+      // names each bound mint, as the mixed lane always did. The group
+      // was not bound, so it stays unnamed.
+      expect(listed(reply)).toEqual(["a=polygon:uc", "b=polygon:ud", "-=group:ue"]);
       expect(reply.payload.createdId).toEqual({ kind: "group", id: "ue" });
       expect(await treeShape(h)).toBe("ua ub ue[uc ud]");
     });
@@ -197,7 +200,7 @@ describe("draw conformance — the minted seam (what did my write create)", () =
           fill(ref("a"), "Color/minted-probe"),
         ),
       );
-      expect(listed(reply)).toEqual(["-=polygon:uc"]);
+      expect(listed(reply)).toEqual(["a=polygon:uc"]);
     });
 
     it("an element the SAME batch deletes again is STILL listed — minted is what was made, not what is left", async () => {
@@ -210,10 +213,11 @@ describe("draw conformance — the minted seam (what did my write create)", () =
           remove("$h:absorbed"),
         ),
       );
-      // …and THIS batch comes back with its handles named. The three
-      // above did not: a batch the engine translates whole drops its
-      // binds before it applies. So the NAME is a cross-check when it is
-      // there and nothing when it is not; ORDER is the contract.
+      // …and THIS batch comes back with its handles named too. Before
+      // engine 0.70.0 the translate-whole lane dropped its binds and
+      // answered `null`; since core c7d9ccb both lanes name them. The
+      // NAME stays a cross-check (older engines answer `null`); ORDER is
+      // the contract.
       expect(listed(reply)).toEqual(["keep=polygon:uc", "absorbed=polygon:ud"]);
       expect(await treeShape(h)).toBe("ua ub uc");
     });

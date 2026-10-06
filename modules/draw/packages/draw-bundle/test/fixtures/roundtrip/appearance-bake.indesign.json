@@ -7,13 +7,13 @@
     "script": "scripts/indesign/lib/read-document.jsx",
     "script_sha256": "4486a78fdd3b45a88c6ef6b18911bc34b94f6cf7ddc3c4d433d3d5e256f4dc08",
     "runner": "scripts/indesign/run-roundtrip.sh",
-    "recorded_at": "2026-10-03T06:03:12.623Z",
+    "recorded_at": "2026-10-06T07:43:57.739Z",
     "host_os": "macOS 26.4",
     "pdf_preset": "[Qualitativ hochwertiger Druck]"
   },
   "idml": {
     "path": "packages/draw-bundle/test/fixtures/roundtrip/appearance-bake.idml",
-    "sha256": "ca952c8cf09c02d6a5128f3bc15aec9b4c4ba84bffaa65e49bac11dfb65400b6"
+    "sha256": "65815280f1f62fd033ff9fc74345f9bff6c092cf932652fab2c9c01057282d0c"
   },
   "units": "pt",
   "coordinates": "page-local, origin top-left of the page, Y down (ruler origin PAGE, zero point 0,0, script measurement unit POINTS); bounds as [minX, minY, maxX, maxY]",
@@ -175,7 +175,7 @@
       "locked": false,
       "geometricBounds": [100,100,300,300],
       "visibleBounds": [100,100,300,300],
-      "fill": {"name":"None","type":"Swatch"},
+      "fill": {"name":"Paper","type":"Color","model":"PROCESS","space":"CMYK","value":[0,0,0,0]},
       "fillTint": -1,
       "gradientFillAngle": 0,
       "gradientFillLength": 0,
