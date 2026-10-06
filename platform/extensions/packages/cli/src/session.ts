@@ -24,7 +24,7 @@ import { basename, dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { BundleHost, PagedBundle } from "@paged-media/plugin-api";
-import { API_VERSION, createHeadlessHost, type HeadlessHost } from "@paged-media/plugin-sdk";
+import { API_VERSION, createHeadlessHost, protocolFromVersion, resolveCanvasWasm, type HeadlessHost } from "@paged-media/plugin-sdk";
 
 import { autoCandidates, importBundle, resolvable, type DiscoveredBundle, type DiscoveryProblem } from "./plugins";
 import { installNodeShims } from "./node-shims";
@@ -79,6 +79,27 @@ export interface ExportOptions {
 }
 
 const silent = { debug() {}, info() {}, warn() {}, error() {} };
+
+/**
+ * The oldest engine protocol the CLI runs on. The object model's core seam
+ * is protocol-aware (DESIGN.md §21.9): at >= 71 core addresses go straight
+ * to `Set` / `RequestGet` / `RequestQuery` and core objects can be created
+ * and deleted; at 70 the interim table serves (no core creates). The
+ * vendored wire may be newer than the installed engine, so the CLI pins the
+ * handshake to the engine it FOUND (not the vendored stamp), within range.
+ */
+export const MIN_ENGINE_PROTOCOL = 70;
+
+/** The protocol of the canvas-wasm `resolveFrom` resolves (no boot). */
+export async function engineProtocolOnDisk(resolveFrom: string): Promise<{ version: string; protocol: number }> {
+  const { version } = await resolveCanvasWasm(resolveFrom);
+  const protocol = protocolFromVersion(version);
+  if (protocol === null) throw new CliError(EXIT.usage, `@paged-media/canvas-wasm@${version}: not a 0.<protocol>.<patch> version`);
+  if (protocol < MIN_ENGINE_PROTOCOL) {
+    throw new CliError(EXIT.usage, `@paged-media/canvas-wasm@${version} speaks protocol ${protocol}; the CLI needs >= ${MIN_ENGINE_PROTOCOL}`);
+  }
+  return { version, protocol };
+}
 
 /** The directory of this package (the anchor canvas-wasm resolves from). */
 export function packageRoot(): string {
@@ -142,14 +163,18 @@ export async function openSession(docPath: string | null, options: SessionOption
   const font = options.font ? readInput(resolve(cwd, options.font)) : undefined;
 
   installNodeShims();
+  const resolveFrom = options.engineFrom ?? process.env["PAGED_ENGINE_FROM"] ?? packageRoot();
   let h: HeadlessHost;
   try {
+    const { protocol } = await engineProtocolOnDisk(resolveFrom);
     h = await createHeadlessHost({
       console: log,
-      resolveFrom: options.engineFrom ?? process.env["PAGED_ENGINE_FROM"] ?? packageRoot(),
+      resolveFrom,
+      expectedProtocol: protocol,
       ...(font ? { defaultFont: font, engineShaper: true } : {}),
     });
   } catch (err) {
+    if (err instanceof CliError) throw err;
     throw new CliError(EXIT.usage, `cannot boot the engine: ${(err as Error).message}`);
   }
   const fail = (err: unknown): never => {

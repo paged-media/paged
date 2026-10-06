@@ -2342,6 +2342,18 @@ is an owner step).
   `--option key=value`, each typed by its struct field) and `invoke` fills
   the struct defaults (§21.8); an unknown or missing-required option is a
   usage error naming the fields.
+- **Engine range:** the session pins the handshake to the canvas-wasm it
+  FINDS (protocol >= 70), not to the vendored wire stamp, because the core
+  seam is protocol-aware (§21.9): on 71 core addresses go straight to
+  `Set` / `RequestGet` / `RequestQuery`; on 70 the interim table serves.
+- **`create <doc> <kind> [props.json|{json}]`** (`--within`, `--handle`)
+  and **`delete <doc> <addr|selector>`** are one-op / one-batch
+  `host.objects.batch` calls: ONE undo step, `created[]` printed. Core
+  creates (swatch, gradient, colorGroup, `style:<family>`, textVariable,
+  layer, page, textFrame / rectangle / oval) need protocol 71; on 70 they
+  answer `unmapped` (exit 1). Plugin kinds create the same way.
+- **Indexed paths** (`rows[0].height`) are typed by their indexed row
+  (`rows[].height`) before the text is coerced.
 - **`get <addr>` without a path** is `getAll`: heavy rows and `content` are
   skipped unless `--content` (§21.8).
 - **apply / merge** run on TODAY's paged.data session (`sessionFor(host)`,

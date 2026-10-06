@@ -272,6 +272,85 @@ const batch: Verb = {
   },
 };
 
+/** A JSON object from a file path, or inline JSON text (`{…}`). */
+function readJsonObject(cwd: string, arg: string, what: string): Record<string, unknown> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(arg.trimStart().startsWith("{") ? arg : readFileSync(resolve(cwd, arg), "utf8"));
+  } catch (err) {
+    throw new CliError(EXIT.usage, `cannot read ${what} ${arg}: ${(err as Error).message}`);
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw new CliError(EXIT.usage, `${what} ${arg}: expected a JSON object`);
+  return parsed as Record<string, unknown>;
+}
+
+const create: Verb = {
+  name: "create",
+  usage: "<doc> <kind> [props.json|{json}]",
+  summary:
+    "create an object of a kind (core: swatch, gradient, colorGroup, style:<family>, textVariable, layer, page, textFrame/rectangle/oval — engine protocol >= 71; or a plugin kind) with its props in ONE undo step, then save",
+  min: 2,
+  max: 3,
+  options: [
+    { name: "within", value: "address", help: "the container (a page for frames, e.g. page:#1)" },
+    { name: "handle", value: "name", help: "the batch handle of the new object ($h:<name>)" },
+    OUT,
+    NO_SAVE,
+    LABEL,
+    OUTPUT_FORMAT,
+  ],
+  reaches: ["batch"],
+  async run({ args, session, cwd }) {
+    const [doc, kind, propsArg] = args.positionals as [string, string, string | undefined];
+    const props = propsArg !== undefined ? readJsonObject(cwd, propsArg, "props") : undefined;
+    const within = flagStr(args, "within");
+    if (within !== undefined && !normalizeAddress(within)) throw new CliError(EXIT.usage, `--within: "${within}" is not an address`);
+    const handle = flagStr(args, "handle");
+    const s = await session(doc);
+    const op: ObjectOp = { op: "create", kind, ...(within ? { within } : {}), ...(props ? { props } : {}), ...(handle ? { handle } : {}) };
+    const label = flagStr(args, "label");
+    const result = await s.h.objects.batch([op], label ? { label } : undefined);
+    const saved = await saveIfAsked(s, args, result.applied);
+    const created = result.created ?? [];
+    return {
+      json: { kind, created, result: plain(result), saved },
+      text: result.applied
+        ? `created ${created.join(", ") || kind} (${result.undoSteps} undo step)${saved ? `; saved ${(saved as { path: string }).path}` : ""}`
+        : `refused: ${result.code}: ${result.reason}`,
+      exit: writeExit(result),
+    };
+  },
+};
+
+const del: Verb = {
+  name: "delete",
+  usage: "<doc> <address|selector>",
+  summary: "delete an object (a selector deletes every match) in ONE undo step, then save",
+  min: 2,
+  max: 2,
+  options: [OUT, NO_SAVE, LABEL, OUTPUT_FORMAT],
+  reaches: ["batch", "query"],
+  async run({ args, session }) {
+    const [doc, target] = args.positionals as [string, string];
+    const s = await session(doc);
+    const list = await targets(s, target);
+    if (list.length === 0) throw new CliError(EXIT.failed, `"${target}" matches nothing`);
+    const label = flagStr(args, "label");
+    const result = await s.h.objects.batch(
+      list.map((address) => ({ op: "delete", address }) as ObjectOp),
+      label ? { label } : undefined,
+    );
+    const saved = await saveIfAsked(s, args, result.applied);
+    return {
+      json: { targets: list, result: plain(result), saved },
+      text: result.applied
+        ? `deleted ${list.length} object(s) (${result.undoSteps} undo step)${saved ? `; saved ${(saved as { path: string }).path}` : ""}`
+        : `refused: ${result.code}: ${result.reason}`,
+      exit: writeExit(result),
+    };
+  },
+};
+
 const run: Verb = {
   name: "run",
   usage: "<doc> <script.js> [-- args…]",
@@ -629,7 +708,7 @@ const describe: Verb = {
   },
 };
 
-export const VERBS: readonly Verb[] = [get, set, query, schema, batch, run, exportVerb, apply, merge, plugins, describe];
+export const VERBS: readonly Verb[] = [get, set, create, del, query, schema, batch, run, exportVerb, apply, merge, plugins, describe];
 
 export function sessionOptions(args: ParsedArgs, cwd: string): SessionOptions {
   const plugins = flagBool(args, "no-plugins")

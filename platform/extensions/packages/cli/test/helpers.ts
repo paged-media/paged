@@ -20,6 +20,7 @@ import { fileURLToPath } from "node:url";
 import { createHeadlessHost } from "@paged-media/plugin-sdk";
 
 import { main } from "../src/main";
+import { engineProtocolOnDisk, packageRoot } from "../src/session";
 import { minimalIdml } from "../../plugin-sdk/test/fixtures/minimal-idml";
 
 export const silent = { debug() {}, info() {}, warn() {}, error() {} };
@@ -40,6 +41,18 @@ export async function cli(argv: string[], cwd?: string): Promise<{ code: number;
   return { code, json, out: text, err: err.join("\n") };
 }
 
+/** Harness options that boot the INSTALLED engine (70 or 71 lane), the way
+ *  the CLI's session does. */
+export async function engineOptions(): Promise<{ resolveFrom: string; expectedProtocol: number }> {
+  const resolveFrom = packageRoot();
+  return { resolveFrom, expectedProtocol: (await engineProtocolOnDisk(resolveFrom)).protocol };
+}
+
+/** The installed engine's protocol (the lane this run is on). */
+export async function laneProtocol(): Promise<number> {
+  return (await engineOptions()).expectedProtocol;
+}
+
 export function tempDir(): { dir: string; done(): void } {
   const dir = mkdtempSync(join(tmpdir(), "paged-cli-"));
   return { dir, done: () => rmSync(dir, { recursive: true, force: true }) };
@@ -50,7 +63,7 @@ export function tempDir(): { dir: string; done(): void } {
 export async function writeFixture(dir: string): Promise<{ idml: string; paged: string; story: string; frame: string }> {
   const idml = join(dir, "min.idml");
   writeFileSync(idml, minimalIdml());
-  const h = await createHeadlessHost({ console: silent });
+  const h = await createHeadlessHost({ console: silent, ...(await engineOptions()) });
   try {
     const [pageId] = await h.load(minimalIdml());
     const made = await h.host.document.mutate({

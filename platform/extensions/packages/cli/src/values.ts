@@ -18,7 +18,7 @@
 // path and the type it expects.
 
 import type { PropertySchema, ValueType } from "@paged-media/plugin-api";
-import { CORE_PATH_ALIASES, coerceValue, validateValue } from "@paged-media/plugin-sdk";
+import { CORE_PATH_ALIASES, coerceValue, rowPathOf, validateValue } from "@paged-media/plugin-sdk";
 
 /** A human description of a value type (error messages, `schema --text`). */
 export function describeType(t: ValueType): string {
@@ -54,10 +54,12 @@ export function describeType(t: ValueType): string {
   }
 }
 
-/** The schema row for `path` among `rows` (core path aliases honoured). */
+/** The schema row for `path` among `rows` (core path aliases honoured; a
+ *  concrete indexed path such as `rows[0].height` falls back to its indexed
+ *  row `rows[].height`, §21.8). */
 export function rowFor(rows: readonly PropertySchema[], path: string): PropertySchema | null {
-  const canonical = CORE_PATH_ALIASES[path] ?? path;
-  return rows.find((r) => r.path === path) ?? rows.find((r) => r.path === canonical) ?? null;
+  const exact = (p: string) => rows.find((r) => r.path === p) ?? rows.find((r) => r.path === (CORE_PATH_ALIASES[p] ?? p)) ?? null;
+  return exact(path) ?? (path.includes("[") ? exact(rowPathOf(path)) : null);
 }
 
 export type Parsed = { ok: true; value: unknown; schema: PropertySchema | null } | { ok: false; reason: string };
