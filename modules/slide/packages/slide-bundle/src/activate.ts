@@ -20,16 +20,24 @@
 // engine writes the whole presentation as one IDML package (ADR 700): a
 // master spread per used layout, a page per slide, every shape, story and
 // picture with PowerPoint's inheritance already resolved. The host opens it
-// as the document; the source deck and the import report (notes,
-// transitions, hidden slides, per-item placeholder identity) are kept as
-// this plugin's container parts (ADR 703) until pages can carry plugin
-// metadata.
+// as the document. Each slide's notes, hidden flag and transition ride its
+// page as plugin metadata (written by the importer); the source deck and the
+// import report are kept as this plugin's container parts (ADR 703).
+//
+// The Slides and Notes panels work on any document's pages: a sorter with
+// engine-rendered thumbnails (reorder, duplicate, delete, hide) and the
+// active slide's speaker notes.
 
 import type { BundleHandle, BundleHost, Diagnostic } from "@paged-media/plugin-api";
 
 import { slideEngine, type ImportReport } from "./engine.js";
+import { makeNotesPanel } from "./panels/notes-panel.js";
+import { makeSlidesPanel } from "./panels/slides-panel.js";
+import { SlidesStore } from "./slides-model.js";
 
 export const IMPORTER_ID = "media.paged.slide.importer.pptx";
+export const SLIDES_PANEL_ID = "media.paged.slide.panel.slides";
+export const NOTES_PANEL_ID = "media.paged.slide.panel.notes";
 export const PPTX_MIME =
   "application/vnd.openxmlformats-officedocument.presentationml.presentation";
 /** Diagnostics key for what an import met and could not render. */
@@ -100,6 +108,42 @@ export function activate(host: BundleHost): BundleHandle {
         extensions: [".pptx", ".ppsx", ".potx"],
         mimeTypes: [PPTX_MIME],
         import: ({ name, bytes }) => openDeck(name, bytes),
+      }).dispose,
+    );
+  }
+
+  // The slide panels share one store: the pages, their state, thumbnails
+  // and the active slide. They need the v70 page doors.
+  if (
+    host.supports("contribute.panel@1") &&
+    host.supports("render.snapshot@1") &&
+    host.supports("viewport.pages@1")
+  ) {
+    const store = new SlidesStore(host);
+    disposers.push(() => store.dispose());
+    disposers.push(
+      host.contribute.panel({
+        id: SLIDES_PANEL_ID,
+        title: "Slides",
+        component: makeSlidesPanel(host, store),
+        defaultDock: "left",
+        rail: true,
+        // Three stacked slides.
+        iconSvg:
+          '<rect x="7" y="3.5" width="12" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
+          '<rect x="7" y="13.5" width="12" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
+          '<path d="M4 5v14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
+      }).dispose,
+      host.contribute.panel({
+        id: NOTES_PANEL_ID,
+        title: "Notes",
+        component: makeNotesPanel(host, store),
+        defaultDock: "bottom",
+        rail: true,
+        // A slide with lines of notes under it.
+        iconSvg:
+          '<rect x="5" y="3.5" width="14" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
+          '<path d="M5 15h14M5 18.5h10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
       }).dispose,
     );
   }

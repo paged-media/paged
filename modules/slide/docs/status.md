@@ -31,6 +31,12 @@ Read from the code on 2026-10-06.
   PowerPoint's first baseline for percentage line spacing; unwrapped text; gradient feathers for
   translucent gradients; radial gradients centred where `a:fillToRect` puts them; slide numbers as
   page-number markers.
+- **Slide state on pages.** Each slide's speaker notes, hidden flag and transition are written
+  into its page's plugin metadata at import (`x-paged:media.paged.slide`), so they move,
+  duplicate and undo with the slide (engine protocol 70).
+- **Slides and Notes panels** (M3, first part). A sorter with a thumbnail per slide from the
+  engine's renderer: click to go to the slide, drag to reorder, duplicate, delete, hide from the
+  slideshow, each one undo step. A notes panel edits the active slide's speaker notes.
 - **The importer** (`packages/slide-bundle`, `@paged-media/slide`). File ▸ Open of `.pptx`,
   `.ppsx` and `.potx`: one wasm call (`importPptx`, 1.3 MB, 373 KB gzipped) returns the package and
   a report; the host opens the package, and the source deck and the report are kept as container
@@ -84,13 +90,14 @@ placement); the published engine (0.67.0) has neither.
 - **SmartArt layouts in fixtures.** PowerPoint draws a seeded diagram with its default layout
   only, so the fixture covers the drawing's lowering, not other layouts' shapes.
 - **Editor wiring.** The editor loads the bundle on a branch, through a local link, and a
-  journey opens a PowerPoint-authored deck there (ten 960 × 540 pt pages, the title slide drawn).
+  journey opens a PowerPoint-authored deck there (ten 960 × 540 pt pages, the title slide drawn)
+  and drives the Slides and Notes panels.
   It merges once `@paged-media/slide` is published: the first version by hand (trusted
   publishing cannot create a package), then the publish workflow takes over.
 
 ## Not built yet
 
-- Engine protocol batch and the host doors (M2).
-- Native editing surfaces: slide sorter, notes, layouts (M3).
+- New slide from a layout, and editing layouts (the rest of M3).
+- Thumbnails show the editor's missing-font highlight; the slideshow needs snapshots without it.
 - PPTX export (M4).
 - Slideshow and presenter view (M5); transitions are decided (ADR 706).

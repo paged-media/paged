@@ -178,6 +178,48 @@ fn n(v: f64) -> String {
     }
 }
 
+/// The plugin-metadata key a slide's own state lives under on its page.
+pub const SLIDE_LABEL_KEY: &str = "x-paged:media.paged.slide";
+
+/// A slide's own state as its page's plugin metadata (the engine's JSON
+/// envelope): speaker notes, the hidden flag and the transition. `None`
+/// when the slide has none of them.
+pub fn slide_label(s: &SlidePage) -> Option<String> {
+    let mut data = serde_json::Map::new();
+    if let Some(n) = s.notes.as_ref().filter(|n| !n.trim().is_empty()) {
+        data.insert("notes".into(), n.clone().into());
+    }
+    if s.hidden {
+        data.insert("hidden".into(), true.into());
+    }
+    if let Some(t) = &s.transition {
+        data.insert(
+            "transition".into(),
+            serde_json::json!({
+                "kind": t.kind,
+                "dir": t.dir,
+                "speed": t.speed,
+                "durationMs": t.duration_ms,
+                "xml": t.xml,
+            }),
+        );
+    }
+    if data.is_empty() {
+        return None;
+    }
+    Some(serde_json::json!({ "v": 1, "data": data }).to_string())
+}
+
+/// [`esc`] for an attribute value that must keep its line breaks and tabs:
+/// a parser normalises a literal newline in an attribute to a space, a
+/// character reference survives.
+fn esc_attr(s: &str) -> String {
+    esc(s)
+        .replace('\n', "&#xA;")
+        .replace('\r', "&#xD;")
+        .replace('\t', "&#x9;")
+}
+
 fn esc(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for c in s.chars() {
@@ -1089,9 +1131,18 @@ pub fn write(
     for s in &deck.slides {
         let mut body = String::new();
         let master = s.master.as_deref().unwrap_or("n");
+        // The slide's notes, hidden flag and transition ride its page as
+        // plugin metadata, so they move, duplicate and undo with it.
+        let page_close = match slide_label(s) {
+            Some(v) => format!(
+                r#"><Properties><Label><KeyValuePair Key="{SLIDE_LABEL_KEY}" Value="{}"/></Label></Properties></Page>"#,
+                esc_attr(&v)
+            ),
+            None => "/>".to_string(),
+        };
         let _ = write!(
             body,
-            r#"<Spread Self="s{id}" PageCount="1" BindingLocation="0" ShowMasterItems="{show}" AllowPageShuffle="true" ItemTransform="1 0 0 1 0 0"><Page Self="{id}" Name="{num}" AppliedMaster="{master}" ItemTransform="1 0 0 1 0 0" GeometricBounds="{bounds}" MasterPageTransform="1 0 0 1 0 0"/>"#,
+            r#"<Spread Self="s{id}" PageCount="1" BindingLocation="0" ShowMasterItems="{show}" AllowPageShuffle="true" ItemTransform="1 0 0 1 0 0"><Page Self="{id}" Name="{num}" AppliedMaster="{master}" ItemTransform="1 0 0 1 0 0" GeometricBounds="{bounds}" MasterPageTransform="1 0 0 1 0 0"{page_close}"#,
             id = s.id,
             num = s.index + 1,
             show = s.show_master_items,

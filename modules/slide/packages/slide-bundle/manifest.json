@@ -22,10 +22,25 @@
     ]
   },
   "contributes": {
-    "importers": ["media.paged.slide.importer.pptx"],
+    "panels": [
+      "media.paged.slide.panel.slides",
+      "media.paged.slide.panel.notes"
+    ],
+    "importers": [
+      "media.paged.slide.importer.pptx"
+    ],
     "partTypes": [
-      { "type": "pptx", "role": "source", "format": "opc", "linkable": false },
-      { "type": "slideImport", "role": "derived", "format": "json" }
+      {
+        "type": "pptx",
+        "role": "source",
+        "format": "opc",
+        "linkable": false
+      },
+      {
+        "type": "slideImport",
+        "role": "derived",
+        "format": "json"
+      }
     ]
   }
 }

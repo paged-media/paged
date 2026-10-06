@@ -1,0 +1,160 @@
+/*
+ * This file is part of paged (https://paged.media).
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// The slides store and its mutations against the real engine (headless
+// canvas-wasm): the store lists the deck's slides with their own state,
+// reorders, writes notes and hidden state, and every one of those is a
+// single undo step; thumbnails come from the engine's renderer.
+
+import { readFileSync } from "node:fs";
+
+import { describe, expect, it } from "vitest";
+
+import type { BundleHost } from "@paged-media/plugin-api";
+import { createHeadlessHost } from "@paged-media/plugin-sdk";
+
+import { slideEngine } from "../src/engine";
+import {
+  encodeState,
+  moveMutation,
+  parseState,
+  SLIDE_KEY,
+  setStateMutation,
+  SlidesStore,
+} from "../src/slides-model";
+
+const until = async (ok: () => boolean, ms = 5000) => {
+  const end = Date.now() + ms;
+  while (!ok()) {
+    if (Date.now() > end) throw new Error("timed out");
+    await new Promise((r) => setTimeout(r, 10));
+  }
+};
+
+describe("slide state", () => {
+  it("round-trips through the envelope and drops what is empty", () => {
+    const value = encodeState({ notes: "one\ntwo", hidden: true });
+    expect(parseState([{ key: SLIDE_KEY, value: value! }])).toEqual({ notes: "one\ntwo", hidden: true });
+    expect(encodeState({ notes: "  ", hidden: false })).toBeNull();
+    expect(parseState([{ key: SLIDE_KEY, value: "not json" }])).toEqual({});
+    expect(parseState([{ key: "x-paged:other", value: value! }])).toEqual({});
+  });
+
+  it("moves a slide to a position, or not at all", () => {
+    const order = ["a", "b", "c", "d"];
+    expect(moveMutation(order, "c", 0)).toEqual({ op: "movePage", args: { page: "c", after: null } });
+    expect(moveMutation(order, "a", 3)).toEqual({ op: "movePage", args: { page: "a", after: "d" } });
+    expect(moveMutation(order, "b", 1)).toBeNull();
+    expect(moveMutation(order, "zz", 0)).toBeNull();
+  });
+});
+
+describe("the slides store on the engine", () => {
+  async function open(name: string) {
+    const bytes = new Uint8Array(
+      readFileSync(new URL(`../../../slide-conformance/fixtures/${name}.pptx`, import.meta.url)),
+    );
+    const { idml } = (await slideEngine()).importPptx(bytes, name);
+    const h = await createHeadlessHost();
+    await h.load(idml);
+    // The slide plugin's own host: a page label is written under the
+    // writer's own id, so the store runs as media.paged.slide.
+    let host!: BundleHost;
+    h.loadBundle({
+      manifest: {
+        id: "media.paged.slide",
+        name: "paged.slide",
+        version: "0.0.0",
+        apiVersion: "^0.2",
+        capabilities: { document: { read: "broad", write: "broad" } },
+      },
+      activate(x) {
+        host = x;
+        return { dispose() {} };
+      },
+    });
+    const shots: Uint8Array[] = [];
+    const store = new SlidesStore(
+      host,
+      (png) => {
+        shots.push(png);
+        return `blob:${shots.length}`;
+      },
+      () => {},
+    );
+    await store.refresh();
+    return { h, host, store, shots };
+  }
+
+  it("lists the slides with their transitions", async () => {
+    const { h, store } = await open("motion");
+    try {
+      const slides = store.list();
+      expect(slides.length).toBeGreaterThan(1);
+      expect(slides.map((s) => s.number)).toEqual(slides.map((_, i) => i + 1));
+      expect(slides.some((s) => s.state.transition?.kind)).toBe(true);
+    } finally {
+      store.dispose();
+      h.dispose();
+    }
+  }, 60_000);
+
+  it("reorders, writes notes and hides, each one undo step", async () => {
+    const { h, host, store } = await open("motion");
+    try {
+      const before = store.list().map((s) => s.pageId);
+      const last = before[before.length - 1];
+
+      await host.document.mutate(moveMutation(before, last, 0)!);
+      await store.refresh();
+      expect(store.list()[0].pageId).toBe(last);
+
+      const first = store.list()[0];
+      await host.document.mutate(
+        setStateMutation(first.pageId, { ...first.state, notes: "Say hello\nthen go", hidden: true }),
+      );
+      await store.refresh();
+      expect(store.list()[0].state).toMatchObject({ notes: "Say hello\nthen go", hidden: true });
+      // The transition the import wrote is kept beside the new notes.
+      expect(store.list()[0].state.transition).toEqual(first.state.transition);
+
+      await host.document.undo();
+      await store.refresh();
+      expect(store.list()[0].state.notes).toBeUndefined();
+      await host.document.undo();
+      await store.refresh();
+      expect(store.list().map((s) => s.pageId)).toEqual(before);
+    } finally {
+      store.dispose();
+      h.dispose();
+    }
+  }, 60_000);
+
+  it("renders a thumbnail through the engine", async () => {
+    const { h, store, shots } = await open("geometry");
+    try {
+      const id = store.list()[0].pageId;
+      expect(store.thumbnail(id)).toBeNull();
+      await until(() => store.thumbnail(id) !== null);
+      expect(Array.from(shots[0].slice(0, 4))).toEqual([0x89, 0x50, 0x4e, 0x47]);
+    } finally {
+      store.dispose();
+      h.dispose();
+    }
+  }, 60_000);
+});
