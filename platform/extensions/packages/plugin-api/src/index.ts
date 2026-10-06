@@ -43,6 +43,7 @@ export type {
   WasmPurpose,
   WorkersCapability,
   SecretsCapability,
+  DocumentsCapability,
   GpuCapability,
 } from "./manifest";
 
@@ -92,6 +93,9 @@ export type {
   BlobUsage,
   PartsSurface,
   NativeDocumentSurface,
+  DocumentsSurface,
+  OpenDocumentOptions,
+  OpenDocumentResult,
   NetworkSurface,
   ConsentResult,
   DataProvidersSurface,

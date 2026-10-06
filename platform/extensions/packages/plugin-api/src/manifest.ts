@@ -195,6 +195,14 @@ export interface PluginCapabilities {
    */
   secrets?: SecretsCapability;
   /**
+   * D-26 — the DOCUMENTS door's grant (`host.documents`). `export` gates
+   * `exportPaged` (a read of the WHOLE container, other plugins' parts
+   * included); `open` gates `open` (replacing the active document with
+   * plugin-built bytes, after the host asks the user about unsaved
+   * edits). An absent field denies that door.
+   */
+  documents?: DocumentsCapability;
+  /**
    * GPU (WebGPU) usage the bundle declares (I-07 / C-1 Stage B — the
    * buildable, realm-local half; ADR-018). DECLARE-ONLY: this does NOT hand
    * the bundle a `GPUDevice` (the bundle already has `navigator.gpu` in its
@@ -233,6 +241,14 @@ export interface GpuCapability {
  *  gates the `host.secrets` door for authenticated DB-attach / remote
  *  sources — the v1 (and only) grant. A closed vocabulary so the host can
  *  reason about it; an absent/false `sources` denies the door. */
+/** D-26 — `capabilities.documents`. Closed object vocabulary. */
+export interface DocumentsCapability {
+  /** Grant `host.documents.exportPaged` (serialize the active document). */
+  export?: boolean;
+  /** Grant `host.documents.open` (replace the active document, user-guarded). */
+  open?: boolean;
+}
+
 export interface SecretsCapability {
   /** Grant the credential store for data sources (DB-attach / remote). */
   sources: boolean;

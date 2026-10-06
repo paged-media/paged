@@ -598,6 +598,16 @@ export interface PagedEditor {
       text: string,
       sizePt: number,
     ): Promise<{ advance: number; ascender: number; descender: number }>;
+    /** D-27 — measure many strings in one face + size in ONE round-trip
+     *  to the shaper; one entry per input, in order. Optional: absent,
+     *  `host.text.measureStrings` fans out to `measure` and
+     *  `supports("text.measureStrings@1")` is false. */
+    measureMany?(
+      family: string,
+      style: string | null,
+      texts: readonly string[],
+      sizePt: number,
+    ): Promise<Array<{ advance: number; ascender: number; descender: number }>>;
   };
   /** C-1 — in-frame plugin scene layers. The editor routes these to the
    *  canvas-wasm `submitSceneLayer` / `clearSceneLayer` channel (async,

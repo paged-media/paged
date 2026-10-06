@@ -1857,3 +1857,94 @@ this raster frame", which the plugin knows from its own ingest and not
 from a gesture. It takes double-click entry regardless, and scopes
 provider answers by DECLINING when its own state says there is nothing
 to serve — which the binding contract already models properly.
+
+## 20. Plugin-built documents and the batched measure (D-26 / D-27 — `host.documents`, `host.text.measureStrings`)
+
+paged.data's merge writer found two missing doors. "Merge to new document"
+needs a SECOND document, and no door could produce one (D-26). Overset is
+decided by measuring every distinct word, and `measureString` measured one
+word per host call: 133 of the 148 host calls of a 57-record merge (D-27).
+
+### 20.1 `host.documents` — replace, do not multiply
+
+```ts
+interface DocumentsSurface {
+  exportPaged(): Promise<Uint8Array>;
+  open(bytes: Uint8Array, options?: { name?: string }): Promise<OpenDocumentResult>;
+}
+type OpenDocumentResult =
+  | { opened: true; pageIds: string[] }
+  | { opened: false; reason: "declined" };
+```
+
+The editor holds ONE document at a time; there are no tabs and no
+document handles. The smallest door that makes "a second document" possible
+is therefore "replace the active one with bytes the plugin built", plus the
+serializer that lets the plugin start from a copy of the template:
+
+1. `const template = await host.documents.exportPaged()` — the same `.paged`
+   container File > Save writes;
+2. `await host.documents.open(template, { name: "Catalog (merged)" })`;
+3. merge into the opened copy with the ordinary `host.document.mutate`.
+
+A handle-based multi-document API (create, mutate document B while A stays
+on screen) was rejected for now: the engine worker owns exactly one model,
+so every door would need a document id on the wire. Rejected too: a
+plugin-settable "dirty" flag. The engine's dirty flag means "edits since
+load"; an opened copy starts clean with an empty undo history, and the
+merge's own mutations are what mark it edited. Setting dirty with no edit
+behind it has no wire op and would be a lie the save path cannot honour.
+
+**Why not `nativeDocument.open`.** That door is an importer's: it runs
+after the user chose File > Open and confirmed discarding their edits
+there. `documents.open` is reached from a plugin's own command, so the
+HOST asks first: when the active document has unsaved edits the backend
+shows a keep/discard prompt naming the requesting plugin, and a "keep"
+answers `{ opened: false, reason: "declined" }`. Declining is an ordinary
+outcome, not an error; a load failure rejects. The requester identity
+comes from the bundle's manifest, never from the call's arguments.
+
+**What the opener must expect.** A successful open broadcasts
+`documentLoaded` like any open, so every bundle, the caller included, sees
+a document switch. The copy carries the template's `paged/<plugin-id>/`
+parts: a bundle that restores per-document state from its parts restores
+the template's state into the copy, and must finish that restore before it
+mutates (paged.data: await `whenRestored()` after `open`).
+
+**Gates.** `capabilities.documents: { export?: boolean; open?: boolean }`
+(schema + CLI validated, closed vocabulary). `export` is separate because
+`exportPaged` reads the WHOLE container, other plugins' parts included.
+Both doors throw `PluginCapabilityError` undeclared in 'enforce'. With no
+backend both reject and `supports("documents.exportPaged@1")` /
+`supports("documents.open@1")` are false. The headless host wires a
+backend (`exportPaged` through the engine, `open` = direct load + the
+`documentLoaded` fan-out) and takes `confirmReplace` as the stand-in for
+the prompt (default: discard).
+
+### 20.2 `host.text.measureStrings` — one call, same answers
+
+```ts
+measureStrings(family: string, style: string | null,
+  texts: readonly string[], sizePt: number): Promise<TextMetrics[]>;
+```
+
+One face and size, many strings, one `TextMetrics` per input in order.
+Every entry equals what `measureString` answers for that string, so a
+bundle can switch freely. The editor backs it with
+`PagedEditor.text.measureMany`, which crosses to the worker once; the
+worker loops the engine shaper there. The engine already serves one
+string per call (`CanvasWorker.measureText`), so the batch needs no new
+wire kind or protocol. `supports("text.measureStrings@1")` means "one
+round-trip"; without it the door fans out to `measureString` (or the
+estimate) and still answers. The headless host keeps the estimate by
+default (existing suites pinned it); `createHeadlessHost({ engineShaper:
+true })` backs both doors with the engine shaper.
+
+### 20.3 Additivity
+
+Wholly additive: `host.documents` + `DocumentsSurface` /
+`OpenDocumentOptions` / `OpenDocumentResult`, `TextSurface.measureStrings`,
+the optional `PagedEditor.text.measureMany`, `CreateBundleHostOptions.documents`
+(+ `DocumentsBackend`), `capabilities.documents`, four feature flags, and
+the harness options `engineShaper` / `confirmReplace` +
+`openedDocuments()`. No existing member changed.

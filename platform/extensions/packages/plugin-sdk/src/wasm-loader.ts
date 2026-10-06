@@ -91,6 +91,15 @@ export interface HeadlessCanvasWorker {
     cmykIccProfile?: Uint8Array,
   ): string;
   runResolveJson(): string | undefined;
+  /** The engine shaper (v38): `{ advance, ascender, descender }` in pt, or
+   *  null when no document is loaded / the face resolves to nothing.
+   *  Optional so a structural fake need not carry it. */
+  measureText?(
+    family: string,
+    style: string | null | undefined,
+    text: string,
+    sizePt: number,
+  ): { advance: number; ascender: number; descender: number } | null;
   free(): void;
 }
 

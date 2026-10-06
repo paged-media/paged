@@ -41,6 +41,8 @@ import type {
   PropertyPath,
   PartsSurface,
   NativeDocumentSurface,
+  DocumentsSurface,
+  OpenDocumentResult,
   BundleHost,
   ClipboardSurface,
   ClipboardPayload,
@@ -532,6 +534,28 @@ export interface NativeDocumentBackend {
   readComposition(): Promise<Uint8Array | null>;
   listParts(prefix?: string): Promise<string[]>;
   open(bytes: Uint8Array): Promise<void>;
+}
+
+/**
+ * D-26 — the backend the editor injects to back `host.documents`. The SDK
+ * owns the capability gate (`capabilities.documents.export` / `.open`); the
+ * backend owns the IO AND the unsaved-edits decision: `open` must ask the
+ * user (host UI) before discarding a dirty active document and answer
+ * `{ opened: false, reason: "declined" }` when they keep it. `requester`
+ * is filled by the SDK from the calling bundle's manifest (not from the
+ * plugin's arguments), so the prompt can name who is asking. No backend →
+ * both doors reject and `supports("documents.open@1")` /
+ * `supports("documents.exportPaged@1")` are false.
+ */
+export interface DocumentsBackend {
+  exportPaged(): Promise<Uint8Array>;
+  open(
+    bytes: Uint8Array,
+    request: {
+      name: string | null;
+      requester: { id: string; name: string };
+    },
+  ): Promise<OpenDocumentResult>;
 }
 
 /** The SHARED cross-plugin data-provider registry (paged.data §7.1 / D-09). The
@@ -1049,6 +1073,12 @@ export interface CreateBundleHostOptions {
    *  `supports("document.openNative@1")` answer true. When absent, the reads
    *  answer `null`/`[]` and `open` rejects (the honest no-backend door). */
   nativeDocument?: NativeDocumentBackend;
+  /** D-26 — host-provided DOCUMENTS backend. When present,
+   *  `host.documents.exportPaged` / `open` go through it (gated on
+   *  `capabilities.documents.export` / `.open`) and
+   *  `supports("documents.exportPaged@1")` / `supports("documents.open@1")`
+   *  answer true. When absent, both doors reject. */
+  documents?: DocumentsBackend;
   /** Host-provided WORKER backend (K-3 / S-07 / I-02). When present,
    *  `host.workers.spawn` resolves a declared bundle-relative module +
    *  constructs a host-owned `Worker` through it (capability-gated,
@@ -1282,6 +1312,10 @@ export function createBundleHost(
    *  WebGPU in its own realm via `navigator.gpu`; this flag only reflects
    *  that the usage is blessed (`supports("gpu@1")`). */
   const hasGpu = (): boolean => caps?.gpu?.realm === "bundle";
+  /** D-26 — the documents doors are DECLARED per direction:
+   *  `capabilities.documents.export` / `.open` true. */
+  const hasDocuments = (dir: "export" | "open"): boolean =>
+    caps?.documents?.[dir] === true;
   const lists = (
     arr: readonly string[] | undefined,
     id: string,
@@ -2476,6 +2510,26 @@ export function createBundleHost(
     caret(): TextCaret | null {
       return options?.textCaret?.read() ?? null;
     },
+    // D-27 — the batched measure. One round-trip when the editor wires
+    // `measureMany`; otherwise the same answers one call at a time (or
+    // the estimate), so a bundle never needs two code paths.
+    async measureStrings(family, style, texts, sizePt) {
+      if (texts.length === 0) return [];
+      const editorText = getEditor().text;
+      if (editorText?.measureMany) {
+        const out = await editorText.measureMany(family, style, texts, sizePt);
+        if (out.length !== texts.length) {
+          throw new Error(
+            `host.text.measureStrings: the host answered ${out.length} ` +
+              `metrics for ${texts.length} strings`,
+          );
+        }
+        return out;
+      }
+      return Promise.all(
+        texts.map((t) => text.measureString(family, style, t, sizePt)),
+      );
+    },
   };
 
   // ------------------------------------------------------- overlay
@@ -3203,6 +3257,55 @@ export function createBundleHost(
     },
   };
 
+  // ----------------------------------------------------- documents
+  // D-26 — serialize the active document / replace it with plugin-built
+  // bytes. Both doors THROW on an undeclared use in 'enforce' (a manifest
+  // bug) and warn+proceed in 'warn', like nativeDocument. The unsaved-edits
+  // prompt is the BACKEND's (host UI); the SDK passes the requester from the
+  // manifest so the prompt names the bundle, and copies the bytes so a
+  // host that transfers buffers cannot detach the caller's array.
+  const documentsBackend = options?.documents;
+  const documents: DocumentsSurface = {
+    async exportPaged() {
+      requireDeclared(
+        hasDocuments("export"),
+        "documents.exportPaged",
+        "capabilities.documents.export must be declared",
+      );
+      if (!documentsBackend) {
+        throw new Error(
+          "host.documents.exportPaged: the host wired no documents backend " +
+            '(supports("documents.exportPaged@1") is false)',
+        );
+      }
+      return documentsBackend.exportPaged();
+    },
+    async open(bytes, opts) {
+      requireDeclared(
+        hasDocuments("open"),
+        "documents.open",
+        "capabilities.documents.open must be declared",
+      );
+      if (!documentsBackend) {
+        throw new Error(
+          "host.documents.open: the host wired no documents backend " +
+            '(supports("documents.open@1") is false)',
+        );
+      }
+      if (!(bytes instanceof Uint8Array) || bytes.byteLength === 0) {
+        throw new Error("host.documents.open: bytes must be a non-empty Uint8Array");
+      }
+      const name =
+        typeof opts?.name === "string" && opts.name.trim() !== ""
+          ? opts.name.trim()
+          : null;
+      return documentsBackend.open(bytes.slice(), {
+        name,
+        requester: { id: manifest.id, name: manifest.name },
+      });
+    },
+  };
+
   // ----------------------------------------------------- clipboard
   // The capability-gated SYSTEM-clipboard door (K-6 / S-14). Read/write a
   // `{ text?, tabular? }` payload through the injected backend. The gate
@@ -3499,6 +3602,11 @@ export function createBundleHost(
     // decide whether to trust measured widths for cross-surface fidelity.
     featureSet.add("text.measure@1");
   }
+  if (getEditor().text?.measureMany) {
+    // D-27 — the batch door always exists (it fans out without this); the
+    // flag means the host serves a batch in ONE round-trip to its shaper.
+    featureSet.add("text.measureStrings@1");
+  }
   if (getEditor().sceneLayers) {
     // C-1 — a real scene channel is wired (the editor routes to the
     // canvas-wasm submit/clear). The contribute.sceneLayer() door always
@@ -3637,6 +3745,12 @@ export function createBundleHost(
     featureSet.add("document.readNative@1");
     featureSet.add("document.openNative@1");
   }
+  if (options?.documents) {
+    // D-26 — the documents doors always exist (no backend: both reject);
+    // these flags mean a real DocumentsBackend is wired.
+    featureSet.add("documents.exportPaged@1");
+    featureSet.add("documents.open@1");
+  }
   if (options?.workers) {
     // The workers door always exists (no-worker fallback: spawn rejects);
     // this flag means a real WorkerBackend is wired, so a bundle can
@@ -3673,6 +3787,7 @@ export function createBundleHost(
     blob,
     parts,
     nativeDocument,
+    documents,
     network,
     dataProviders,
     diagnostics,

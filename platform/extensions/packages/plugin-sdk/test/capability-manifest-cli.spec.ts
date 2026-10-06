@@ -240,6 +240,33 @@ describe("plugin-cli validate — capabilities.secrets (D-11)", () => {
   });
 });
 
+describe("plugin-cli validate — capabilities.documents (D-26)", () => {
+  it("accepts export and open, alone or together", () => {
+    for (const documents of [{ export: true }, { open: true }, { export: true, open: false }, {}]) {
+      const r = validate({ ...base, capabilities: { documents } });
+      expect(r.code, JSON.stringify(documents)).toBe(0);
+    }
+  });
+
+  it("rejects a non-object documents capability", () => {
+    const r = validate({ ...base, capabilities: { documents: true } });
+    expect(r.code).toBe(1);
+    expect(r.err).toMatch(/"capabilities\.documents" must be an object/);
+  });
+
+  it("rejects a non-boolean grant", () => {
+    const r = validate({ ...base, capabilities: { documents: { open: "yes" } } });
+    expect(r.code).toBe(1);
+    expect(r.err).toMatch(/"capabilities\.documents\.open" must be a boolean/);
+  });
+
+  it("rejects an unknown key (no silent create/close grant)", () => {
+    const r = validate({ ...base, capabilities: { documents: { open: true, close: true } } });
+    expect(r.code).toBe(1);
+    expect(r.err).toMatch(/"capabilities\.documents" unknown key/);
+  });
+});
+
 describe("plugin-cli validate — capabilities.gpu (I-07 / C-1 Stage B realm-local)", () => {
   it("accepts realm: \"bundle\" (the realm-local bless-it)", () => {
     const r = validate({ ...base, capabilities: { gpu: { realm: "bundle" } } });

@@ -129,7 +129,7 @@ function validateManifest(manifest, manifestDir) {
       err(`"capabilities" must be an object`);
     } else {
       for (const key of Object.keys(caps)) {
-        if (!["document", "rendering", "keybindings", "editContext", "assets", "storage", "network", "dataProviders", "clipboard", "wasm", "workers", "secrets", "gpu"].includes(key)) {
+        if (!["document", "rendering", "keybindings", "editContext", "assets", "storage", "network", "dataProviders", "clipboard", "wasm", "workers", "secrets", "documents", "gpu"].includes(key)) {
           err(`unknown capability "${key}"`);
         }
       }
@@ -277,6 +277,23 @@ function validateManifest(manifest, manifestDir) {
           if (extra.length) err(`"capabilities.secrets" unknown key(s): ${extra.join(", ")}`);
           if (typeof s.sources !== "boolean") {
             err(`"capabilities.secrets.sources" must be a boolean`);
+          }
+        }
+      }
+      // D-26: the documents door — { export?: boolean, open?: boolean }.
+      // Gates host.documents (exportPaged / user-guarded open). Closed object
+      // vocabulary, hand-mirrors the schema.
+      if (caps.documents !== undefined) {
+        const d = caps.documents;
+        if (typeof d !== "object" || d === null || Array.isArray(d)) {
+          err(`"capabilities.documents" must be an object`);
+        } else {
+          const extra = Object.keys(d).filter((k) => !["export", "open"].includes(k));
+          if (extra.length) err(`"capabilities.documents" unknown key(s): ${extra.join(", ")}`);
+          for (const k of ["export", "open"]) {
+            if (d[k] !== undefined && typeof d[k] !== "boolean") {
+              err(`"capabilities.documents.${k}" must be a boolean`);
+            }
           }
         }
       }

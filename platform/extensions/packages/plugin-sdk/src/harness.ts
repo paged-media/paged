@@ -88,6 +88,7 @@ import {
   type BindingProviderBackend,
   type BlobStore,
   type ClipboardBackend,
+  type DocumentsBackend,
   type SecretStoreBackend,
   type CreateBundleHostOptions,
   type ToolSettingsBackend,
@@ -143,7 +144,23 @@ export interface HarnessOptions
       | "bindingProviders"
       | "willSave"
       | "toolSettings"
-    > {}
+    > {
+  /** D-27 — back `host.text` with the ENGINE's shaper
+   *  (`CanvasWorker.measureText`, the one the editor's worker calls)
+   *  instead of the estimate, so `measureString` / `measureStrings`
+   *  answer real widths against the loaded document's fonts and
+   *  `supports("text.measure@1")` / `("text.measureStrings@1")` are true.
+   *  Off by default: existing headless suites pinned the estimate. */
+  engineShaper?: boolean;
+  /** D-26 — the headless stand-in for the editor's keep/discard prompt.
+   *  `host.documents.open` calls it ONLY when the active document has
+   *  unsaved edits; resolve `false` to keep them (the door then answers
+   *  `{ opened: false, reason: "declined" }`). Default: discard. */
+  confirmReplace?: (request: {
+    name: string | null;
+    requester: { id: string; name: string };
+  }) => boolean | Promise<boolean>;
+}
 
 /** A headless will-save registry: listeners register per plugin and
  *  `fire()` awaits them all, the way the editor's save path does — so a
@@ -344,6 +361,13 @@ export interface HeadlessHost {
   /** Load an IDML package into the headless document. Resolves to the
    *  loaded page ids (or throws on a parse failure). */
   load(idml: Uint8Array): Promise<string[]>;
+  /** D-26 — every document a bundle opened through `host.documents.open`,
+   *  in order (declined opens are not listed). */
+  openedDocuments(): ReadonlyArray<{
+    name: string | null;
+    requester: string;
+    pageIds: string[];
+  }>;
   /** Activate a bundle against this host (apiVersion-negotiated). The
    *  returned disposer runs the bundle's teardown; the host's own
    *  facade teardown runs on `dispose()`. */
@@ -375,7 +399,8 @@ function makeEngineEditor(
   recorder: RecordedContribution[],
   onToolPreview: (value: ToolPreviewShape | null) => void,
   onToolPreviews: (value: readonly ToolPreviewShape[] | null) => void,
-): PagedEditor {
+  engineShaper = false,
+): { editor: PagedEditor; fanOut: (reply: WorkerToMain) => void } {
   const protocol = worker.protocolVersion;
   const listeners = new Set<(msg: WorkerToMain) => void>();
 
@@ -562,7 +587,27 @@ function makeEngineEditor(
     contentSelection: { contentSelection: null },
   };
 
-  return editor;
+  // D-27 — the engine shaper, opt-in (HarnessOptions.engineShaper). The
+  // same `CanvasWorker.measureText` the editor's worker serves; a null
+  // answer (no document / unresolved face) is zeroed like the editor's.
+  const measureText = worker.measureText?.bind(worker);
+  if (engineShaper && measureText) {
+    const zero = { advance: 0, ascender: 0, descender: 0 };
+    const one = (family: string, style: string | null, t: string, sizePt: number) => {
+      const m = measureText(family, style, t, sizePt);
+      return m ? { advance: m.advance, ascender: m.ascender, descender: m.descender } : zero;
+    };
+    editor.text = {
+      async measure(family, style, t, sizePt) {
+        return one(family, style, t, sizePt);
+      },
+      async measureMany(family, style, texts, sizePt) {
+        return texts.map((t) => one(family, style, t, sizePt));
+      },
+    };
+  }
+
+  return { editor, fanOut };
 }
 
 /**
@@ -587,7 +632,7 @@ export async function createHeadlessHost(
   let lastPreview: ToolPreviewShape | null = null;
   // K-9 — the LIST a bundle pushed through `overlay.setToolPreviews`.
   let lastPreviews: readonly ToolPreviewShape[] | null = null;
-  const editor = makeEngineEditor(
+  const { editor, fanOut } = makeEngineEditor(
     worker,
     contributions,
     (value) => {
@@ -596,7 +641,63 @@ export async function createHeadlessHost(
     (value) => {
       lastPreviews = value;
     },
+    options.engineShaper === true,
   );
+
+  /** Load bytes into the engine; the raw reply (documentLoaded or not). */
+  const loadDirect = (bytes: Uint8Array): WorkerToMain => {
+    const reply = JSON.parse(
+      worker.loadDocumentDirect(seqCounter++, bytes),
+    ) as WorkerToMain;
+    if (reply.kind === "documentLoaded") {
+      try {
+        worker.runResolveJson();
+      } catch {
+        /* resolve is best-effort */
+      }
+    }
+    return reply;
+  };
+  const loadFailure = (reply: WorkerToMain): Error => {
+    const errKind =
+      reply.kind === "loadFailed" ? reply.payload.error.kind : reply.kind;
+    return new Error(`headless load failed (${reply.kind}: ${errKind})`);
+  };
+
+  // D-26 — the headless documents backend: exportPaged through the engine,
+  // open = the keep/discard decision (only when dirty) + a direct load whose
+  // `documentLoaded` reply is FANNED OUT to subscribers, as the editor's
+  // client broadcasts it (a bundle that resets on a document switch sees
+  // this one too).
+  const opened: Array<{ name: string | null; requester: string; pageIds: string[] }> = [];
+  const documentsBackend: DocumentsBackend = {
+    async exportPaged() {
+      const reply = await editor.client.send({ kind: "exportPaged", payload: {} });
+      if (reply.kind === "pagedExported") return Uint8Array.from(reply.payload.bytes);
+      if (reply.kind === "pagedPartFailed") throw new Error(reply.payload.error);
+      throw new Error(`unexpected reply: ${reply.kind}`);
+    },
+    async open(bytes, request) {
+      let dirty = false;
+      try {
+        dirty = (await editor.client.documentMeta()).dirty;
+      } catch {
+        dirty = false; // no document: nothing to lose
+      }
+      if (dirty && options.confirmReplace && !(await options.confirmReplace(request))) {
+        return { opened: false, reason: "declined" };
+      }
+      const reply = loadDirect(bytes);
+      if (reply.kind !== "documentLoaded") throw loadFailure(reply);
+      fanOut(reply);
+      opened.push({
+        name: request.name,
+        requester: request.requester.id,
+        pageIds: reply.payload.pageIds,
+      });
+      return { opened: true, pageIds: reply.payload.pageIds };
+    },
+  };
 
   // A placeholder manifest until a bundle is loaded; `loadBundle`
   // rebuilds the host bound to the bundle's own manifest so the
@@ -657,6 +758,7 @@ export async function createHeadlessHost(
       // headlessly (the editor's real adapter currently serves null;
       // DESIGN.md §13.4). Absent → the no-bytes door.
       assetSource: options.assetSource,
+      documents: documentsBackend,
       // Record the SCHEMA verbatim at registration — the panel registry
       // only ever sees the synthesized React panel, so the conformance
       // log gets the schema through this adapter seam (no host renderer
@@ -728,6 +830,7 @@ export async function createHeadlessHost(
       keybindings: true,
       storage: { blob: true },
       secrets: { sources: true },
+      documents: { export: true, open: true },
     },
     // Broad contribution declarations so the neutral DRIVER host (which
     // registers arbitrary contributions directly in 'warn' mode) never
@@ -798,21 +901,13 @@ export async function createHeadlessHost(
     willSave,
     toolSettings,
     async load(idml: Uint8Array): Promise<string[]> {
-      const raw = worker.loadDocumentDirect(seqCounter++, idml);
-      const reply = JSON.parse(raw) as WorkerToMain;
-      if (reply.kind === "documentLoaded") {
-        // Mirror the worker's post-load resolve step (anchors/page
-        // numbers); ignored result, but it primes the same engine state.
-        try {
-          worker.runResolveJson();
-        } catch {
-          /* resolve is best-effort */
-        }
-        return reply.payload.pageIds;
-      }
-      const errKind =
-        reply.kind === "loadFailed" ? reply.payload.error.kind : reply.kind;
-      throw new Error(`headless load failed (${reply.kind}: ${errKind})`);
+      // loadDirect mirrors the worker's post-load resolve step.
+      const reply = loadDirect(idml);
+      if (reply.kind === "documentLoaded") return reply.payload.pageIds;
+      throw loadFailure(reply);
+    },
+    openedDocuments() {
+      return opened;
     },
     loadBundle(bundle: PagedBundle): Disposable {
       if (active) {

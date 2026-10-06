@@ -180,6 +180,19 @@
             }
           }
         },
+        "documents": {
+          "type": "object",
+          "description": "Documents door (D-26; host.documents). 'export' grants exportPaged (serialize the active document, the whole container); 'open' grants open (replace the active document with plugin-built bytes; the host asks the user before discarding unsaved edits). An absent field denies that door.",
+          "additionalProperties": false,
+          "properties": {
+            "export": {
+              "type": "boolean"
+            },
+            "open": {
+              "type": "boolean"
+            }
+          }
+        },
         "gpu": {
           "type": "object",
           "description": "WebGPU usage declaration (I-07 / C-1 Stage B realm-local; ADR-018). DECLARE-ONLY: no GPUDevice is handed to the bundle — it legitimizes the realm-local WebGPU usage the bundle already does in its own JS realm (paged.image Engine-B). realm:\"bundle\" is the only value accepted today; realm:\"shared\" (future host-device-sharing) is reserved and REJECTED until the zero-copy walls lift. No requestGpuDevice surface exists.",
