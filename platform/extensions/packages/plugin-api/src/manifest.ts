@@ -34,6 +34,8 @@ import type { AssetKind } from "./assets";
 /** Reverse-DNS plugin identity, e.g. `media.paged.draw`. Doubles as
  *  the namespace prefix for every contribution id the bundle
  *  registers (`media.paged.draw.tool.pen`). */
+import type { PropertySchema, ValueType } from "./object-model";
+
 export type PluginId = string;
 
 export interface PluginManifest {
@@ -383,6 +385,14 @@ export interface PluginContributions {
    *  WITHOUT central blessing of each data type. The bytes are read/written
    *  through the `host.parts` door into the plugin's own `paged/<plugin-id>/`
    *  namespace. Purely DECLARATIVE — no runtime behaviour rides on this. */
+  /** ADR 323 — the OBJECT MODEL this bundle contributes through
+   *  `host.contribute.objectModel`. Declaring it is the capability gate: a
+   *  kind or typed command registered at runtime must be listed here. Each
+   *  `schema` / `args` is either the rows / value type INLINE or a
+   *  bundle-relative path to a JSON file holding them (plugin-cli reads
+   *  it). `plugin-cli validate` fails a kind with no schema rows, a row
+   *  whose type is not a `ValueType`, and a command with no `args`. */
+  objectModel?: ObjectModelDeclaration;
   partTypes?: Array<{
     /** A plugin-local type name (e.g. "sheet", "imageStack", "barcode"). */
     type: string;
@@ -395,5 +405,22 @@ export interface PluginContributions {
      *  URI (with a cached snapshot in the container) rather than embedded
      *  (file-format.md §6 embedded-vs-linked). */
     linkable?: boolean;
+  }>;
+}
+
+/** `contributes.objectModel` (ADR 323). */
+export interface ObjectModelDeclaration {
+  kinds: Array<{
+    kind: string;
+    title: string;
+    /** Inline schema rows, or a bundle-relative path to a JSON array. */
+    schema: string | readonly PropertySchema[];
+  }>;
+  commands?: Array<{
+    id: string;
+    title: string;
+    /** Inline value type, or a bundle-relative path to a JSON file. */
+    args: string | ValueType;
+    result?: string | ValueType;
   }>;
 }

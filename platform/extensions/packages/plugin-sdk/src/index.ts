@@ -79,6 +79,39 @@ export {
   type WillSaveBackend,
   type ToolSettingsBackend,
 } from "./host-impl";
+// ADR 323 — the object model: the address/selector grammar mirror (ADR
+// 131), the value-type checks (ADR 132), the shared registry and its core
+// seam over today's wire.
+export {
+  parseAddress,
+  formatAddress,
+  normalizeAddress,
+  addressKindOf,
+  parseSelector,
+  toElementId,
+  fromElementId,
+  type ParsedSelector,
+  type SelectorStep,
+  type SelectorHead,
+  type SelectorPredicate,
+} from "./object-address";
+export {
+  checkValueType,
+  checkSchemaRows,
+  validateValue,
+  coerceValue,
+  parseLength,
+  VALUE_TYPE_KINDS,
+} from "./object-schema";
+export {
+  createObjectRegistry,
+  escapeLabelValue,
+  type ObjectRegistry,
+  type ObjectModelRegistration,
+  type CreateObjectRegistryOptions,
+} from "./object-registry";
+export { createCoreObjects, type CoreObjects, type CorePlan } from "./core-objects";
+export { CORE_PATHS, CORE_PATH_ALIASES, type CorePathRow, type CorePathScope } from "./core-schema";
 export { FALLBACK_WIDGETS } from "./widgets-fallback";
 export {
   createRecordableAssetSource,

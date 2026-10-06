@@ -69,6 +69,9 @@ export type {
   SwatchSummary,
   GradientSummary,
   LayerSummary,
+  // ADR 323 — the object registry's core seam reads pages and stories.
+  PageSummary,
+  StorySummary,
 } from "./wire";
 
 // ------------------------------------------------- protocol-ahead ops

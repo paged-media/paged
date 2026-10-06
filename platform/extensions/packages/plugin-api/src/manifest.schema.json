@@ -327,6 +327,176 @@
             "type": "string"
           }
         },
+        "objectModel": {
+          "description": "ADR 323 — the object model contributed through host.contribute.objectModel. schema/args are inline or a bundle-relative path to a JSON file.",
+          "type": "object",
+          "required": [
+            "kinds"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kinds": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "kind",
+                  "title",
+                  "schema"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "schema": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {
+                          "type": "object",
+                          "required": [
+                            "path",
+                            "type"
+                          ],
+                          "properties": {
+                            "path": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "type": {
+                              "type": "object",
+                              "required": [
+                                "kind"
+                              ],
+                              "properties": {
+                                "kind": {
+                                  "enum": [
+                                    "bool",
+                                    "number",
+                                    "length",
+                                    "color",
+                                    "enum",
+                                    "text",
+                                    "ref",
+                                    "bounds",
+                                    "transform",
+                                    "point",
+                                    "bytes",
+                                    "asset",
+                                    "list",
+                                    "map",
+                                    "struct"
+                                  ]
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            "commands": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "id",
+                  "title",
+                  "args"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "args": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "object",
+                        "required": [
+                          "kind"
+                        ],
+                        "properties": {
+                          "kind": {
+                            "enum": [
+                              "bool",
+                              "number",
+                              "length",
+                              "color",
+                              "enum",
+                              "text",
+                              "ref",
+                              "bounds",
+                              "transform",
+                              "point",
+                              "bytes",
+                              "asset",
+                              "list",
+                              "map",
+                              "struct"
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "result": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "object",
+                        "required": [
+                          "kind"
+                        ],
+                        "properties": {
+                          "kind": {
+                            "enum": [
+                              "bool",
+                              "number",
+                              "length",
+                              "color",
+                              "enum",
+                              "text",
+                              "ref",
+                              "bounds",
+                              "transform",
+                              "point",
+                              "bytes",
+                              "asset",
+                              "list",
+                              "map",
+                              "struct"
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
         "partTypes": {
           "type": "array",
           "items": {

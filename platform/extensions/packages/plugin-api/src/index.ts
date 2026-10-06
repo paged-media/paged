@@ -45,7 +45,40 @@ export type {
   SecretsCapability,
   DocumentsCapability,
   GpuCapability,
+  ObjectModelDeclaration,
 } from "./manifest";
+
+// ADR 323 — the object model: addresses (ADR 131), schema rows (ADR 132),
+// the plugin contribution and the `host.objects` registry. DESIGN.md §21.
+export type {
+  Address,
+  Selector,
+  PropertyPathName,
+  PageItemKind,
+  StyleFamily,
+  ParsedAddress,
+  AddressKind,
+  ValueType,
+  ValueTypeKind,
+  PropertySchema,
+  ContentSchema,
+  ObjectErrorCode,
+  ObjectValue,
+  ObjectOp,
+  PartChange,
+  ObjectWrite,
+  ObjectQuery,
+  ObjectPredicate,
+  ObjectKindContribution,
+  TypedCommandContribution,
+  ObjectModelContribution,
+  ObjectModelHandle,
+  ObjectWriteResult,
+  ObjectChange,
+  ObjectKindInfo,
+  ObjectCommandInfo,
+  ObjectsSurface,
+} from "./object-model";
 
 export type { BundleHandle, PagedBundle } from "./bundle";
 

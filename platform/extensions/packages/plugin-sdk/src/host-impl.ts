@@ -24,6 +24,15 @@
 // via `getEditor()`, resolved at call time (the command registry's
 // thunk idiom, avoids stale-closure drift).
 
+import { createCoreObjects } from "./core-objects";
+import { createObjectRegistry, type ObjectRegistry } from "./object-registry";
+import { checkSchemaRows } from "./object-schema";
+import type {
+  ObjectModelContribution,
+  ObjectModelHandle,
+  ObjectsSurface,
+  ObjectWriteResult,
+} from "@paged-media/plugin-api";
 import type {
   ActiveBindingProvider,
   AssetSurface,
@@ -174,6 +183,11 @@ export const HOST_FEATURES: readonly string[] = [
   // shared registry. Same static-door / dynamic-backing split as
   // `contribute.schemaPanel@1` + `schemaPanel.renderer@1`.
   "contribute.bindingProvider@1",
+  // ADR 323 — the object model: the contribution door and `host.objects`
+  // (core addresses always route; a private registry serves core + this
+  // bundle's own kinds when the host injects no shared one).
+  "contribute.objectModel@1",
+  "objects@1",
   "contribute.importer@1",
   "contribute.exporter@1",
   "document.mutate@1",
@@ -973,6 +987,13 @@ export interface CreateBundleHostOptions {
    *  (nothing would ever consult the provider) and
    *  `supports("bindings.provider@1")` is false. */
   bindingProviders?: BindingProviderBackend;
+  /** Host-provided SHARED OBJECT REGISTRY (ADR 323): the editor / headless
+   *  host / Node CLI creates ONE (`createObjectRegistry({ core:
+   *  createCoreObjects(getEditor) })`) and injects the SAME instance into
+   *  every plugin host, so `host.objects` routes across bundles. When
+   *  absent, the host builds a PRIVATE registry (core + this bundle's own
+   *  kinds) and `supports("objects.shared@1")` is false. */
+  objects?: ObjectRegistry;
   /** Console sink override.
    *
    *  Originally a test hook, and now ALSO the production capture point: the
@@ -1220,6 +1241,12 @@ export function createBundleHost(
     warn: (m, ...a) => sink.warn(`${tag} ${m}`, ...a),
     error: (m, ...a) => sink.error(`${tag} ${m}`, ...a),
   };
+
+  // ADR 323 — the shared object registry, or a private one over this
+  // host's editor (core addresses + this bundle's own kinds).
+  const objectRegistry: ObjectRegistry =
+    options?.objects ??
+    createObjectRegistry({ core: createCoreObjects(getEditor), log });
 
   // ADR 025 — the journal door. Deliberately NOT capability-gated: the
   // capability system gates AUTHORITY (reading the document, the network,
@@ -1780,6 +1807,42 @@ export function createBundleHost(
     // no-ops (probe `supports("rendering.sceneLayer@1")`). Disposing the
     // surface clears every layer it submitted (tracked so host.dispose()
     // tears them down).
+    objectModel(model: ObjectModelContribution): ObjectModelHandle {
+      // ADR 323 — the capability gate: every kind / typed command must be
+      // declared in `contributes.objectModel`, and an INLINE manifest
+      // schema must name the same paths as the runtime rows (rule 4).
+      const decl = declared?.objectModel;
+      for (const k of model.kinds) {
+        const d = decl?.kinds.find((x) => x.kind === k.kind);
+        requireDeclared(
+          d !== undefined,
+          "contribute.objectModel",
+          `contributes.objectModel.kinds[] must include "${k.kind}"`,
+        );
+        const why = checkSchemaRows(k.schema);
+        if (why) throw new Error(`plugin-api: object kind "${k.kind}": ${why}`);
+        if (d && Array.isArray(d.schema)) {
+          const a = d.schema.map((r) => r.path).sort().join(",");
+          const b = k.schema.map((r) => r.path).sort().join(",");
+          if (a !== b) {
+            throw new Error(
+              `plugin-api: object kind "${k.kind}" registers paths [${b}] but the manifest declares [${a}]`,
+            );
+          }
+        }
+      }
+      for (const c of model.commands ?? []) {
+        assertNamespaced(c.id, "typed command");
+        requireDeclared(
+          decl?.commands?.some((x) => x.id === c.id) ?? false,
+          "contribute.objectModel",
+          `contributes.objectModel.commands[] must include "${c.id}"`,
+        );
+      }
+      const handle = objectRegistry.register({ plugin: manifest.id, model, parts, log });
+      store.add(handle);
+      return handle;
+    },
     sceneLayer() {
       requireDeclared(
         hasRendering("sceneLayer"),
@@ -3773,6 +3836,43 @@ export function createBundleHost(
     featureSet.add("gpu@1");
   }
 
+  // ------------------------------------------------- objects (ADR 323)
+  // The bundle's view of the registry: reads gated on `document.read`
+  // (throws in 'enforce', like every read door), writes on
+  // `document.write` (a refused write is a result, never a throw).
+  const deniedWrite = (door: string): ObjectWriteResult | null => {
+    const reason = denyWrite(hasDoc("write"), door, "capabilities.document.write");
+    return reason === null ? null : { applied: false, code: "denied", reason, undoSteps: 0 };
+  };
+  const objects: ObjectsSurface = {
+    query(selector, opts) {
+      requireDocRead("objects.query");
+      return objectRegistry.query(selector, opts);
+    },
+    get(address, path) {
+      requireDocRead("objects.get");
+      return objectRegistry.get(address, path);
+    },
+    getAll(address) {
+      requireDocRead("objects.getAll");
+      return objectRegistry.getAll(address);
+    },
+    async set(address, path, value, opts) {
+      return deniedWrite("objects.set") ?? objectRegistry.set(address, path, value, opts);
+    },
+    async batch(ops, opts) {
+      return deniedWrite("objects.batch") ?? objectRegistry.batch(ops, opts);
+    },
+    schema: (addressOrKind) => objectRegistry.schema(addressOrKind),
+    kinds: () => objectRegistry.kinds(),
+    commands: () => objectRegistry.commands(),
+    invoke: (command, args) => objectRegistry.invoke(command, args),
+    onDidChange(listener, filter) {
+      return store.add(objectRegistry.onDidChange(listener, filter));
+    },
+  };
+  if (options?.objects) featureSet.add("objects.shared@1");
+
   const host: BundleHost = {
     manifest,
     log,
@@ -3800,6 +3900,7 @@ export function createBundleHost(
     secrets,
     clipboard,
     tools,
+    objects,
     supports: (feature) => featureSet.has(feature),
     get editor() {
       return getEditor();

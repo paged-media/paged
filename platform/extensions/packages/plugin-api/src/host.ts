@@ -64,6 +64,11 @@ import type { MutationInput } from "./mutations";
 import type { PluginManifest } from "./manifest";
 import type { SchemaPanelContribution } from "./panel-schema";
 import type { WidgetSurface } from "./widgets";
+import type {
+  ObjectModelContribution,
+  ObjectModelHandle,
+  ObjectsSurface,
+} from "./object-model";
 
 // ---------------------------------------------------------------- core
 
@@ -510,6 +515,21 @@ export interface ContributionSurface {
    * layer it submitted.
    */
   sceneLayer(): SceneLayerSurface;
+  /**
+   * Contribute this bundle's OBJECT MODEL (ADR 323, DESIGN.md §21): its
+   * object kinds — typed schema rows plus `list` / `get` / `set` / `batch`
+   * handlers — and typed commands. Every kind becomes addressable as
+   * `plugin:<manifest.id>/<kind>/<id>` through `host.objects` (and so from
+   * bindings, Boa, the Node CLI and schema-driven panel fields), headless
+   * and outside any edit context.
+   *
+   * Capability-gated: every kind must be declared in
+   * `contributes.objectModel.kinds[]` and every command in
+   * `contributes.objectModel.commands[]`; a kind with no schema rows, a row
+   * whose type is not a `ValueType`, or a duplicate path is refused loudly.
+   * Probe `supports("contribute.objectModel@1")`.
+   */
+  objectModel(model: ObjectModelContribution): ObjectModelHandle;
 }
 
 /** The scene-layer surface (C-1) returned by `contribute.sceneLayer()`.
@@ -2007,6 +2027,13 @@ export interface BundleHost {
    *  subscription. Always present; `supports("tools.settings@1")`
    *  reports whether a host store is wired. */
   readonly tools: ToolsSurface;
+  /** The OBJECT registry (ADR 323): one `query` / `get` / `set` / `batch` /
+   *  `schema` over core addresses and every plugin's contributed kinds.
+   *  Always present. Reads are gated on `capabilities.document.read`,
+   *  writes on `capabilities.document.write` (a refused write answers
+   *  `{ applied: false }`). `supports("objects@1")`; cross-plugin routing
+   *  (a SHARED registry the host injected) is `supports("objects.shared@1")`. */
+  readonly objects: ObjectsSurface;
   /** Capability detection over version sniffing: feature strings of
    *  the form `"area.member@major"` (see HOST_FEATURES in plugin-sdk). */
   supports(feature: string): boolean;

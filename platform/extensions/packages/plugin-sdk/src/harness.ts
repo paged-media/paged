@@ -85,7 +85,9 @@ import type {
 import {
   createBundleHost,
   createBindingProviderRegistry,
+  createDataProviderRegistry,
   type BindingProviderBackend,
+  type DataProviderBackend,
   type BlobStore,
   type ClipboardBackend,
   type DocumentsBackend,
@@ -95,6 +97,8 @@ import {
   type WillSaveBackend,
 } from "./host-impl";
 import { satisfiesApiVersion, API_VERSION } from "./version";
+import { createCoreObjects } from "./core-objects";
+import { createObjectRegistry, type ObjectRegistry } from "./object-registry";
 import {
   loadHeadlessEngine,
   type HeadlessCanvasWorker,
@@ -142,6 +146,8 @@ export interface HarnessOptions
       | "clipboard"
       | "secrets"
       | "bindingProviders"
+      | "dataProviders"
+      | "objects"
       | "willSave"
       | "toolSettings"
     > {
@@ -359,6 +365,15 @@ export interface HeadlessHost {
    *  that a path it does not declare comes back as a typed refusal to
    *  fall through to core). */
   readonly bindingProviders: BindingProviderBackend;
+  /** ADR 323 — the SHARED object registry every bundle host here routes
+   *  through (core addresses over this engine + every loaded bundle's
+   *  kinds). The ungated host side: what the Node CLI, a Boa bridge or a
+   *  conformance test calls. */
+  readonly objects: ObjectRegistry;
+  /** The SHARED data-provider registry (D-09) injected into every bundle
+   *  host here, so a provider bundle and a consumer bundle rendezvous
+   *  headlessly and `supports("dataProviders@1")` is true. */
+  readonly dataProviders: DataProviderBackend;
   /** The will-save registry this host injected: `fire()` runs every
    *  bundle's `document.onWillSave` listener and awaits them, as a save
    *  would. */
@@ -376,9 +391,11 @@ export interface HeadlessHost {
     requester: string;
     pageIds: string[];
   }>;
-  /** Activate a bundle against this host (apiVersion-negotiated). The
-   *  returned disposer runs the bundle's teardown; the host's own
-   *  facade teardown runs on `dispose()`. */
+  /** Activate a bundle against this host (apiVersion-negotiated). Several
+   *  bundles may be loaded at once (each gets its own host bound to its
+   *  manifest; they meet through the shared registries — objects, data
+   *  providers, binding providers). `host` is the LAST loaded bundle's.
+   *  The returned disposer runs that bundle's teardown. */
   loadBundle(bundle: PagedBundle): Disposable;
   /** Tear down: bundle teardown + facade teardown + free the wasm. The
    *  honesty contract — after dispose the contribution log is empty and
@@ -712,7 +729,8 @@ export async function createHeadlessHost(
   // A placeholder manifest until a bundle is loaded; `loadBundle`
   // rebuilds the host bound to the bundle's own manifest so the
   // namespace rule + metadata key derive correctly.
-  let active: { dispose(): void } | null = null;
+  /** Loaded bundles, in load order (several may be live at once). */
+  const loaded: Array<{ id: string; host: BundleHost; dispose(): void }> = [];
   let currentHost: BundleHost | null = null;
   let disposed = false;
 
@@ -742,6 +760,13 @@ export async function createHeadlessHost(
   // the same reason the editor shares one: resolution is CROSS-bundle.
   const bindingProviders =
     options.bindingProviders ?? createBindingProviderRegistry();
+  // ADR 323 / D-09 — the object registry and the data-provider registry,
+  // shared across the harness's hosts for the same reason: routing and
+  // rendezvous are CROSS-bundle.
+  const dataProviders = options.dataProviders ?? createDataProviderRegistry();
+  const objects =
+    options.objects ??
+    createObjectRegistry({ core: createCoreObjects(() => editor), log: options.console ?? console });
   // Protocol 66 batch — the save hook and the tool-options store, shared
   // across the harness's hosts like the stores above. A test-injected
   // backend replaces the in-memory one but loses `fire` / `set`, so the
@@ -760,6 +785,8 @@ export async function createHeadlessHost(
       clipboard,
       secrets,
       bindingProviders,
+      dataProviders,
+      objects,
       willSave: options.willSave ?? willSave,
       toolSettings: options.toolSettings ?? toolSettings,
       capabilityMode: mode,
@@ -858,6 +885,12 @@ export async function createHeadlessHost(
   };
   let { host, dispose: disposeHostFacades } = buildHost(NEUTRAL, "warn");
   currentHost = host;
+  /** Re-arm the neutral driver host once no bundle is loaded, so the
+   *  document doors stay usable. */
+  const rearmNeutral = (): void => {
+    ({ host, dispose: disposeHostFacades } = buildHost(NEUTRAL, "warn"));
+    currentHost = host;
+  };
 
   const headless: HeadlessHost = {
     get host() {
@@ -908,24 +941,23 @@ export async function createHeadlessHost(
       return lastPreviews;
     },
     bindingProviders,
+    objects,
+    dataProviders,
     willSave,
     toolSettings,
     async load(idml: Uint8Array): Promise<string[]> {
       // loadDirect mirrors the worker's post-load resolve step.
       const reply = loadDirect(idml);
-      if (reply.kind === "documentLoaded") return reply.payload.pageIds;
+      if (reply.kind === "documentLoaded") {
+        objects.core?.invalidate();
+        return reply.payload.pageIds;
+      }
       throw loadFailure(reply);
     },
     openedDocuments() {
       return opened;
     },
     loadBundle(bundle: PagedBundle): Disposable {
-      if (active) {
-        throw new Error(
-          "headless host: a bundle is already loaded — dispose it first " +
-            "(one bundle per headless host in v1)",
-        );
-      }
       const { manifest } = bundle;
       if (!satisfiesApiVersion(manifest.apiVersion)) {
         throw new Error(
@@ -933,44 +965,52 @@ export async function createHeadlessHost(
             `plugin-api "${manifest.apiVersion}", host implements ${API_VERSION}`,
         );
       }
-      // Re-bind the host to the bundle's manifest so the namespace rule
-      // and the `x-paged:<id>` metadata key derive from the real id.
-      // The bundle is the capability subject — enforce its declarations
-      // (default), so conformance catches an undeclared-use bundle.
-      disposeHostFacades();
-      ({ host, dispose: disposeHostFacades } = buildHost(
-        manifest,
-        options.capabilityMode ?? "enforce",
-      ));
-      currentHost = host;
-      const handle = bundle.activate(host);
-      let bundleActive = true;
-      active = {
+      if (loaded.some((b) => b.id === manifest.id)) {
+        throw new Error(`headless host: ${manifest.id} is already loaded — dispose it first`);
+      }
+      // The first bundle retires the neutral driver host.
+      if (loaded.length === 0) disposeHostFacades();
+      // A host bound to the bundle's manifest, so the namespace rule and
+      // the `x-paged:<id>` metadata key derive from the real id. The bundle
+      // is the capability subject — enforce its declarations (default), so
+      // conformance catches an undeclared-use bundle.
+      const built = buildHost(manifest, options.capabilityMode ?? "enforce");
+      let handle: { dispose(): void };
+      try {
+        handle = bundle.activate(built.host);
+      } catch (err) {
+        built.dispose();
+        if (loaded.length === 0) rearmNeutral();
+        throw err;
+      }
+      const entry = {
+        id: manifest.id,
+        host: built.host,
         dispose() {
-          if (!bundleActive) return;
-          bundleActive = false;
+          const i = loaded.indexOf(entry);
+          if (i < 0) return;
+          loaded.splice(i, 1);
           try {
             handle.dispose();
           } finally {
-            disposeHostFacades();
-            // Re-arm a neutral host so the document doors stay usable.
-            ({ host, dispose: disposeHostFacades } = buildHost(
-              NEUTRAL,
-              "warn",
-            ));
-            currentHost = host;
-            active = null;
+            built.dispose();
+            if (loaded.length === 0) rearmNeutral();
+            else currentHost = loaded[loaded.length - 1]!.host;
           }
         },
       };
-      return { dispose: () => active?.dispose() };
+      loaded.push(entry);
+      currentHost = built.host;
+      return { dispose: () => entry.dispose() };
     },
     dispose() {
       if (disposed) return;
       disposed = true;
       try {
-        if (active) active.dispose();
-        else disposeHostFacades();
+        if (loaded.length > 0) {
+          for (const b of [...loaded].reverse()) b.dispose();
+        }
+        disposeHostFacades();
       } finally {
         // Contribution log emptied structurally by facade teardown; free
         // the wasm so the handle is honestly released.
