@@ -123,6 +123,10 @@ pub enum Paint {
     },
     Radial {
         stops: Vec<Stop>,
+        /// The centre, as fractions of the box: the centre of
+        /// `a:fillToRect` (the box's centre when absent). The gradient
+        /// reaches its last stop at the farthest corner.
+        center: (f64, f64),
     },
     Image {
         part: String,
@@ -143,7 +147,7 @@ impl Paint {
     pub fn color_at(&self, t: f64) -> Option<(Rgb, f64)> {
         match self {
             Paint::Solid { rgb, alpha, .. } => Some((*rgb, *alpha)),
-            Paint::Linear { stops, .. } | Paint::Radial { stops } => {
+            Paint::Linear { stops, .. } | Paint::Radial { stops, .. } => {
                 let t = t.clamp(0.0, 1.0) * 100.0;
                 let first = stops.first()?;
                 if t <= first.pos {
@@ -181,7 +185,7 @@ impl Paint {
     pub fn uniform_alpha(&self) -> Option<f64> {
         match self {
             Paint::Solid { alpha, .. } => Some(*alpha),
-            Paint::Linear { stops, .. } | Paint::Radial { stops } => {
+            Paint::Linear { stops, .. } | Paint::Radial { stops, .. } => {
                 let first = stops.first()?.alpha;
                 stops
                     .iter()
@@ -328,9 +332,10 @@ impl Table {
                     ((x - w / 2.0) * cs + (y - h / 2.0) * sn) / span + 0.5
                 }
             }
-            Paint::Radial { .. } => {
-                let (dx, dy) = (x - w / 2.0, y - h / 2.0);
-                (dx * dx + dy * dy).sqrt() / (w * w + h * h).sqrt().max(1e-9) * 2.0
+            Paint::Radial { center, .. } => {
+                let (cx, cy) = (center.0 * w, center.1 * h);
+                let (dx, dy) = (x - cx, y - cy);
+                (dx * dx + dy * dy).sqrt() / radial_reach(*center, w, h).max(1e-9)
             }
             _ => 0.0,
         };
@@ -381,4 +386,12 @@ pub struct Cell {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParagraphStyle {
     pub name: String,
+}
+
+/// How far a radial gradient centred at `center` (fractions of a `w` × `h`
+/// box) runs before its last stop: to the farthest corner.
+pub fn radial_reach(center: (f64, f64), w: f64, h: f64) -> f64 {
+    let dx = center.0.max(1.0 - center.0) * w;
+    let dy = center.1.max(1.0 - center.1) * h;
+    (dx * dx + dy * dy).sqrt()
 }

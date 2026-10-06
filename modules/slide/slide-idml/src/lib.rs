@@ -65,7 +65,7 @@ fn feather_of(p: &Paint) -> Option<Feather> {
     }
     let (kind, angle, stops) = match p {
         Paint::Linear { stops, angle } => ("Linear", Some(-angle), stops),
-        Paint::Radial { stops } => ("Radial", None, stops),
+        Paint::Radial { stops, .. } => ("Radial", None, stops),
         _ => return None,
     };
     Some((
@@ -88,6 +88,23 @@ pub fn first_baseline(tf: &TextFrame) -> Option<f64> {
             ..
         }) => Some(0.75 * lead),
         _ => None,
+    }
+}
+
+/// A fill gradient's placement on a `w` × `h` item: a linear one's angle
+/// and span, a radial one's centre and reach.
+fn gradient_attrs(p: &Paint, w: f64, h: f64) -> String {
+    match p {
+        // DrawingML angles run clockwise on a y-down page; IDML's
+        // gradient angle runs counter-clockwise.
+        Paint::Linear { angle, .. } => gradient_span(-angle, w, h),
+        Paint::Radial { center, .. } => format!(
+            r#" GradientFillStart="{} {}" GradientFillLength="{}""#,
+            n(center.0 * w),
+            n(center.1 * h),
+            n(slide_resolve::model::radial_reach(*center, w, h))
+        ),
+        _ => String::new(),
     }
 }
 
@@ -229,7 +246,7 @@ impl Writer<'_> {
                 // gradient angle runs counter-clockwise.
                 (id, Some(-angle))
             }
-            Paint::Radial { stops } => (self.gradient("Radial", stops), None),
+            Paint::Radial { stops, .. } => (self.gradient("Radial", stops), None),
         }
     }
 
@@ -413,11 +430,9 @@ impl Writer<'_> {
                     .cloned()
                     .collect();
                 if has_fill || stroke.is_some() {
-                    let (fc, angle) = self.paint(fill);
+                    let (fc, _) = self.paint(fill);
                     let sa = self.stroke_attrs(stroke.as_ref());
-                    let ga = angle
-                        .map(|a| gradient_span(a, it.w, it.h))
-                        .unwrap_or_default();
+                    let ga = gradient_attrs(fill, it.w, it.h);
                     // Item ids are `u` + hex, so derived ids take suffixes
                     // that are not hex digits (`p`, `s`, `t`, `i`).
                     let pid = if text.is_some() {
@@ -598,10 +613,10 @@ impl Writer<'_> {
         self.element(&it.id, "textFrame", &fid);
         // The table style's background (a theme gradient for the themed
         // styles) fills the frame behind the cells.
-        let (bg, bg_angle) = self.paint(&t.background);
+        let (bg, _) = self.paint(&t.background);
         let h: f64 = t.rows.iter().map(|r| r.0).sum();
         let w: f64 = t.columns.iter().sum();
-        let bga = bg_angle.map(|a| gradient_span(a, w, h)).unwrap_or_default();
+        let bga = gradient_attrs(&t.background, w, h);
         let _ = write!(
             out,
             r#"<TextFrame Self="{fid}" Name="{}" ParentStory="{story}" PreviousTextFrame="n" NextTextFrame="n" ContentType="TextType" AppliedObjectStyle="ObjectStyle/$ID/[None]" ItemTransform="{}" FillColor="{bg}"{bga} StrokeColor="Swatch/None" StrokeWeight="0">"#,

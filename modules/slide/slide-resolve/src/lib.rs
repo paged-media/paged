@@ -245,8 +245,15 @@ fn paint(fill: &Fill, ctx: &Ctx, ph: Option<Rgba>) -> Paint {
             if stops.is_empty() {
                 return Paint::None;
             }
-            if g.path.is_some() {
-                Paint::Radial { stops }
+            if let Some((_, to)) = &g.path {
+                // `a:fillToRect` insets, in 1 000ths of a percent; the
+                // gradient is centred on the rectangle they leave.
+                let (l, t, r, b) = to.unwrap_or((0, 0, 0, 0));
+                let f = |v: i32| v as f64 / 100_000.0;
+                Paint::Radial {
+                    stops,
+                    center: ((f(l) + 1.0 - f(r)) / 2.0, (f(t) + 1.0 - f(b)) / 2.0),
+                }
             } else {
                 Paint::Linear {
                     stops,

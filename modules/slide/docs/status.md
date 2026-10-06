@@ -1,6 +1,6 @@
 # paged.slide — status
 
-Read from the code on 2026-10-05.
+Read from the code on 2026-10-06.
 
 ## Built
 
@@ -29,7 +29,8 @@ Read from the code on 2026-10-05.
 - **IDML writing** (`slide-idml`, ADR 700). A flattened master spread per used layout, a page per
   slide, every item, story and picture; tables; text frames that grow from their anchored edge;
   PowerPoint's first baseline for percentage line spacing; unwrapped text; gradient feathers for
-  translucent gradients; slide numbers as page-number markers.
+  translucent gradients; radial gradients centred where `a:fillToRect` puts them; slide numbers as
+  page-number markers.
 - **The importer** (`packages/slide-bundle`, `@paged-media/slide`). File ▸ Open of `.pptx`,
   `.ppsx` and `.potx`: one wasm call (`importPptx`, 1.3 MB, 373 KB gzipped) returns the package and
   a report; the host opens the package, and the source deck and the report are kept as container
@@ -58,23 +59,21 @@ renderer with the fonts PowerPoint used, 48 dpi, SSIM per slide):
 | black-pink business proposal | 20 | 0.917 | 0.878 |
 | creative agency profile | 20 | 0.939 | 0.900 |
 | green minimalist proposal | 20 | 0.882 | 0.818 |
-| orange creative pitch deck | 20 | 0.805 | 0.649 |
+| orange creative pitch deck | 20 | 0.942 | 0.898 |
 | white company profile | 20 | 0.910 | 0.826 |
 | white-lime education | 4 | 0.995 | 0.995 |
 
-These figures use an engine build that includes the master-paint-order fix below; the published
-engine (0.67.0) does not draw a master's pictures yet.
+These figures use an engine build with the fixes below (master paint order, radial gradient
+placement); the published engine (0.67.0) has neither.
 
 ## Open in M1
 
 - **Engine: master items.** The renderer painted master items grouped by kind and never drew a
-  master's placed pictures. Fixed on a core branch (paint in stacking order, with pictures); ships
-  with the next engine release.
-- **Engine: radial gradient placement.** IDML's `GradientFillStart` is not read and a radial
-  gradient always sits at the default centre, so PowerPoint's centred radial glows (orange deck)
-  render off-centre. Needs the parser in the IDML adapter, a model field and the renderer; planned
-  for the M2 engine batch.
-- **Engine: table cell indents.** `LeftIndent` inside table cells is ignored.
+  master's placed pictures. Fixed in core (paint in stacking order, with pictures); ships with the
+  next engine release, as does the cell-indent fix (`LeftIndent` inside table cells).
+- **Engine: radial gradient placement.** The engine now reads `GradientFillStart` and centres a
+  radial gradient there, with `GradientFillLength` as its radius (the orange deck's glows: median
+  SSIM 0.805 → 0.942). On the protocol-69 branch; ships with it.
 - **Engine: double cell borders.** A cell edge's stroke type is not read, so a double line
   (some styles' total-row top) draws as a solid line of the same weight.
 - **Fonts.** Plugins cannot register fonts with the host yet (planned SDK door, M2). Decks whose
