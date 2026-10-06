@@ -202,6 +202,9 @@ pub struct Stroke {
     pub width: f64,
     pub paint: Paint,
     pub dash: Option<String>,
+    /// `cmpd` other than a single line (`dbl`, `thickThin`, …).
+    #[serde(default)]
+    pub compound: Option<String>,
     pub cap: Option<String>,
     pub join: Option<String>,
     pub head: Option<String>,

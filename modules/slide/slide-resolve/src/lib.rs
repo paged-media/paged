@@ -377,6 +377,7 @@ fn shape_stroke(props: &ShapeProps, style: Option<&ShapeStyle>, ctx: &Ctx) -> Op
         width,
         paint: p,
         dash: pick(|l| l.dash.clone()).filter(|d| d != "solid"),
+        compound: pick(|l| l.compound.clone()).filter(|c| c != "sng"),
         cap: pick(|l| l.cap.clone()),
         join: pick(|l| l.join.clone()),
         head: own

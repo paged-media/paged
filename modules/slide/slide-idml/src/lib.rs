@@ -91,6 +91,52 @@ pub fn first_baseline(tf: &TextFrame) -> Option<f64> {
     }
 }
 
+/// The width a cell border is written with. PowerPoint draws a double
+/// border wider than its width: two lines and the gap between them each
+/// 4/9 of it, centred on the edge (measured: fixture `tablestyles`, 3 pt
+/// borders drawn 4 pt across, 288 dpi).
+fn border_width(s: &Stroke) -> f64 {
+    if s.compound.as_deref() == Some("dbl") {
+        s.width * 4.0 / 3.0
+    } else {
+        s.width
+    }
+}
+
+/// How far the engine moves a table into its frame: half the widest top
+/// border of the first row, half the widest left border of the first
+/// column (InDesign's rule). PowerPoint centres borders on the cell
+/// boundary and moves nothing, so the writer pulls the frame back by this.
+fn table_border_offset(t: &Table) -> (f64, f64) {
+    let half = |b: &Option<Stroke>| b.as_ref().map_or(0.0, |s| border_width(s) / 2.0);
+    let top = t.rows.first().map_or(0.0, |(_, cells)| {
+        cells
+            .iter()
+            .map(|c| half(&c.borders[2]))
+            .fold(0.0, f64::max)
+    });
+    let left = t
+        .rows
+        .iter()
+        .filter_map(|(_, cells)| cells.first())
+        .map(|c| half(&c.borders[0]))
+        .fold(0.0, f64::max);
+    (left, top)
+}
+
+/// The engine stroke style for a compound line: PowerPoint's `dbl` is two
+/// equal lines a third of the width apart, InDesign's Thick - Thick; its
+/// thick-thin pairs are InDesign's striped pairs. Triple lines are not
+/// modelled and draw single.
+fn compound_type(s: &Stroke) -> Option<&'static str> {
+    match s.compound.as_deref()? {
+        "dbl" => Some("StrokeStyle/$ID/ThickThick"),
+        "thickThin" => Some("StrokeStyle/$ID/ThickThin"),
+        "thinThick" => Some("StrokeStyle/$ID/ThinThick"),
+        _ => None,
+    }
+}
+
 /// A fill gradient's placement on a `w` × `h` item: a linear one's angle
 /// and span, a radial one's centre and reach.
 fn gradient_attrs(p: &Paint, w: f64, h: f64) -> String {
@@ -362,6 +408,10 @@ impl Writer<'_> {
         };
         let (sw, _) = self.paint(&s.paint);
         let mut a = format!(r#" StrokeColor="{sw}" StrokeWeight="{}""#, n(s.width));
+        // One stroke style: a dashed line's dashes win over its compound.
+        if let Some(t) = compound_type(s).filter(|_| s.dash.is_none()) {
+            let _ = write!(a, r#" StrokeType="{t}""#);
+        }
         if let Some(cap) = &s.cap {
             let v = match cap.as_str() {
                 "rnd" => "RoundEndCap",
@@ -617,11 +667,21 @@ impl Writer<'_> {
         let h: f64 = t.rows.iter().map(|r| r.0).sum();
         let w: f64 = t.columns.iter().sum();
         let bga = gradient_attrs(&t.background, w, h);
+        let (dx, dy) = table_border_offset(t);
+        let m = &it.transform;
+        let shifted = [
+            m[0],
+            m[1],
+            m[2],
+            m[3],
+            m[4] - m[0] * dx - m[2] * dy,
+            m[5] - m[1] * dx - m[3] * dy,
+        ];
         let _ = write!(
             out,
             r#"<TextFrame Self="{fid}" Name="{}" ParentStory="{story}" PreviousTextFrame="n" NextTextFrame="n" ContentType="TextType" AppliedObjectStyle="ObjectStyle/$ID/[None]" ItemTransform="{}" FillColor="{bg}"{bga} StrokeColor="Swatch/None" StrokeWeight="0">"#,
             esc(&it.name),
-            matrix(&it.transform)
+            matrix(&shifted)
         );
         Self::path_geometry(out, &Self::rect_path(0.0, 0.0, it.w, it.h));
         out.push_str(r#"<TextFramePreference FirstBaselineOffset="AscentOffset" AutoSizingType="HeightOnly" AutoSizingReferencePoint="TopCenterPoint"><Properties><InsetSpacing type="list"><ListItem type="unit">0</ListItem><ListItem type="unit">0</ListItem><ListItem type="unit">0</ListItem><ListItem type="unit">0</ListItem></InsetSpacing></Properties></TextFramePreference></TextFrame>"#);
@@ -689,11 +749,16 @@ impl Writer<'_> {
                     match b {
                         Some(s) => {
                             let (sc, _) = self.paint(&s.paint);
+                            let ty = compound_type(s);
+                            let w = border_width(s);
                             let _ = write!(
                                 x,
                                 r#" {edge}EdgeStrokeColor="{sc}" {edge}EdgeStrokeWeight="{}""#,
-                                n(s.width)
+                                n(w)
                             );
+                            if let Some(t) = ty {
+                                let _ = write!(x, r#" {edge}EdgeStrokeType="{t}""#);
+                            }
                         }
                         None => {
                             let _ = write!(x, r#" {edge}EdgeStrokeWeight="0""#);
@@ -1156,4 +1221,48 @@ pub fn write(
         elements: w.elements,
         diagnostics: w.diagnostics,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn stroke(compound: Option<&str>, dash: Option<&str>) -> Stroke {
+        Stroke {
+            width: 3.0,
+            paint: Paint::None,
+            dash: dash.map(str::to_string),
+            compound: compound.map(str::to_string),
+            cap: None,
+            join: None,
+            head: None,
+            tail: None,
+        }
+    }
+
+    #[test]
+    fn compound_lines_map_to_engine_stroke_styles() {
+        let t = |c| compound_type(&stroke(Some(c), None));
+        assert_eq!(t("dbl"), Some("StrokeStyle/$ID/ThickThick"));
+        assert_eq!(t("thickThin"), Some("StrokeStyle/$ID/ThickThin"));
+        assert_eq!(t("thinThick"), Some("StrokeStyle/$ID/ThinThick"));
+        assert_eq!(t("tri"), None);
+        assert_eq!(compound_type(&stroke(None, None)), None);
+    }
+
+    #[test]
+    fn a_radial_gradient_is_placed_at_its_centre_with_the_farthest_corner_as_reach() {
+        let p = Paint::Radial {
+            stops: Vec::new(),
+            center: (0.25, 0.5),
+        };
+        // Centre (50, 50) on a 200 × 100 box; farthest corner (200, 0).
+        assert_eq!(
+            gradient_attrs(&p, 200.0, 100.0),
+            format!(
+                r#" GradientFillStart="50 50" GradientFillLength="{}""#,
+                n((150.0f64 * 150.0 + 50.0 * 50.0).sqrt())
+            )
+        );
+    }
 }
