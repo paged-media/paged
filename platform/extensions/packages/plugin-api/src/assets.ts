@@ -23,11 +23,15 @@
 // `widgets` / `diagnosticsSink`) and reaches the bundle through
 // `host.assets`. A bundle imports only the shapes from here.
 //
-// Trust line (DESIGN.md §13): this is a READ-ONLY door — bundles never
-// WRITE assets, and the host never fetches from the network on a
+// Trust line (DESIGN.md §13): this is a READ door over what the
+// document holds — the host never fetches from the network on a
 // bundle's behalf (offline-forever means the bytes come from what the
 // document already has). When the host has no bytes for a face it
-// returns `null`; that is the honest, frequent answer.
+// returns `null`; that is the honest, frequent answer. The ONE write,
+// `registerFont` (W-15), never reaches the document: a face a bundle
+// registers is seen by scene-layer text only (DESIGN.md §13.5).
+
+import type { Disposable } from "./host";
 
 /** What `host.assets` can serve. `"fonts"` gates `getFontFace` (W-06);
  *  `"images"` gates `getPlacedImage` (C-5 / I-04 — OPEN since core v42:
@@ -88,7 +92,9 @@ export interface PlacedImageAsset {
  * the document already holds, and the host answers from that or
  * `null`. Capability-gated per kind: `getFontFace` requires
  * `capabilities.assets` ∋ `"fonts"`, `getPlacedImage` ∋ `"images"`
- * (the host gate throws in `'enforce'`, warns in `'warn'`).
+ * (the host gate throws in `'enforce'`, warns in `'warn'`). One write
+ * sits beside the reads — `registerFont`, scene-layer faces only (W-15);
+ * it adds nothing the document can see.
  */
 export interface AssetSurface {
   /**
@@ -107,4 +113,26 @@ export interface AssetSurface {
    * engine door already bounds it to what the document holds.
    */
   getPlacedImage(elementId: string): Promise<PlacedImageAsset | null>;
+  /**
+   * W-15 — the ONE write on this door: hand the engine a face (the bytes
+   * the bundle ships or the user supplied) that SCENE-LAYER text — the
+   * text a bundle draws through `host.sceneLayer` — resolves by `family`
+   * (+ `style`). It never reaches the document: document layout, the
+   * Fonts panel's missing flag, preflight and substitution tracing do not
+   * see it, so a plugin face named "Inter" cannot hide that a document's
+   * own Inter is missing. Registering rebuilds the scene frames whose
+   * text names the family.
+   *
+   * Requires `capabilities.assets` ∋ `"fonts"` (throws in 'enforce').
+   * Faces over `ASSET_BUDGETS.maxFontFaceBytes` are refused (rejects).
+   * The face lives until the returned `Disposable` is disposed or the
+   * bundle is torn down. Probe `supports("assets.registerFont@1")`: on a
+   * host without the backend the call logs a warning and resolves an
+   * inert `Disposable` — scene text keeps its fallback face.
+   */
+  registerFont(
+    bytes: Uint8Array,
+    family: string,
+    style?: string,
+  ): Promise<Disposable>;
 }

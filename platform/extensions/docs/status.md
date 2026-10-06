@@ -7,7 +7,7 @@ What the plugin contract ships and what it does not, read from the code at commi
 
 ## Shipped
 
-- **The object model (0.2.42-canary.0, branch `om/object-model`, not yet released;
+- **The object model (0.2.43-canary.0, branch `om/object-model`, not yet released;
   DESIGN.md §21, ADR 323).** `host.contribute.objectModel` and `host.objects`: one
   `query/get/getAll/set/batch/schema/kinds/commands/invoke/onDidChange` over core
   addresses and every plugin's contributed kinds, a batch landing as one engine mutation
