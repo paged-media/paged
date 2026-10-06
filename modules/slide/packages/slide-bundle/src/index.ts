@@ -32,3 +32,15 @@ export const slideBundle = defineBundle({
 export default slideBundle;
 export { slideEngine, SlideEngine } from "./engine.js";
 export type { ImportReport, Imported, ItemReport, SlideReport, Transition } from "./engine.js";
+export {
+  contributeSlideObjectModel,
+  DECK_ADDRESS,
+  IMPORT_PPTX_COMMAND,
+  LABEL_KEY,
+  NEW_SLIDE_COMMAND,
+  layoutAddress,
+  placeholderAddress,
+  slideAddress,
+} from "./object-model.js";
+export type { DeckLabel, PlaceholderLabel, SlideRecord, TransitionRecord } from "./object-model.js";
+export { SLIDE_PANEL_FIELDS, type PanelFieldList } from "./panel-fields.js";

@@ -1,0 +1,5 @@
+[
+  { "path": "name", "type": { "kind": "text" }, "access": "readOnly", "title": "Name", "summary": "The master spread's label (prefix and name)." },
+  { "path": "master", "type": { "kind": "ref", "to": "master" }, "access": "readOnly", "title": "Master spread" },
+  { "path": "slideCount", "type": { "kind": "number", "integer": true }, "access": "derived", "title": "Slides", "summary": "Pages of the deck the master is applied to, as the engine reports it." }
+]

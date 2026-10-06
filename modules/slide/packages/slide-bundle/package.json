@@ -11,6 +11,7 @@
   "files": [
     "dist",
     "bin",
+    "schema",
     "manifest.json"
   ],
   "publishConfig": {
@@ -32,13 +33,13 @@
     "build": "tsup"
   },
   "peerDependencies": {
-    "@paged-media/plugin-api": ">=0.2.39-canary.0",
-    "@paged-media/plugin-sdk": ">=0.2.39-canary.0"
+    "@paged-media/plugin-api": ">=0.2.42-canary.0",
+    "@paged-media/plugin-sdk": ">=0.2.42-canary.0"
   },
   "devDependencies": {
-    "@paged-media/canvas-wasm": "0.67.0",
-    "@paged-media/plugin-api": "0.2.39-canary.0",
-    "@paged-media/plugin-sdk": "0.2.39-canary.0",
+    "@paged-media/canvas-wasm": "0.69.0",
+    "@paged-media/plugin-api": "0.2.42-canary.0",
+    "@paged-media/plugin-sdk": "0.2.42-canary.0",
     "@types/node": "^20.19.43",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",

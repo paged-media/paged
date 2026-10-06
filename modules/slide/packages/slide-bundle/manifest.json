@@ -19,13 +19,36 @@
         "purpose": "compute",
         "maxBytes": 8388608
       }
-    ]
+    ],
+    "documents": { "open": true }
   },
   "contributes": {
     "importers": ["media.paged.slide.importer.pptx"],
     "partTypes": [
       { "type": "pptx", "role": "source", "format": "opc", "linkable": false },
       { "type": "slideImport", "role": "derived", "format": "json" }
-    ]
+    ],
+    "objectModel": {
+      "kinds": [
+        { "kind": "deck", "title": "Deck", "schema": "schema/deck.json" },
+        { "kind": "slide", "title": "Slide", "schema": "schema/slide.json" },
+        { "kind": "layout", "title": "Slide layout", "schema": "schema/layout.json" },
+        { "kind": "placeholder", "title": "Placeholder", "schema": "schema/placeholder.json" }
+      ],
+      "commands": [
+        {
+          "id": "media.paged.slide.newSlide",
+          "title": "New slide",
+          "args": "schema/new-slide.args.json",
+          "result": "schema/new-slide.result.json"
+        },
+        {
+          "id": "media.paged.slide.importPptx",
+          "title": "Open a PowerPoint deck",
+          "args": "schema/import-pptx.args.json",
+          "result": "schema/import-pptx.result.json"
+        }
+      ]
+    }
   }
 }

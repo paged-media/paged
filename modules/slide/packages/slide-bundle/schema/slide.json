@@ -1,0 +1,13 @@
+[
+  { "path": "index", "type": { "kind": "number", "integer": true }, "access": "derived", "title": "Slide number", "summary": "1-based position in the deck (the page index)." },
+  { "path": "page", "type": { "kind": "ref", "to": "page" }, "access": "readOnly", "title": "Page", "summary": "The core page the slide is; its frames and page paths are addressed through it." },
+  { "path": "layout", "type": { "kind": "ref", "to": "plugin:media.paged.slide/layout" }, "nullable": true, "title": "Layout", "summary": "The slide layout (a master spread). Accepts a layout address, a master address or a master id.", "virtual": { "op": "applyMasterToPage" } },
+  { "path": "hidden", "type": { "kind": "bool" }, "default": false, "title": "Hide slide", "summary": "Skipped by the slideshow; still printed and exported." },
+  { "path": "notes", "type": { "kind": "text", "multiline": true }, "nullable": true, "title": "Speaker notes", "summary": "Plain text; \\n splits paragraphs." },
+  { "path": "transitionKind", "type": { "kind": "enum", "members": ["none", "cut", "fade", "push", "wipe", "cover", "pull", "split", "reveal", "randomBar", "shape", "uncover", "zoom", "dissolve", "checker", "blinds", "clock", "ripple", "honeycomb", "glitter", "vortex", "shred", "switch", "flip", "gallery", "cube", "doors", "box", "comb", "window", "ferris", "conveyor", "pan", "flythrough", "flash", "warp", "prism", "morph", "wheel", "wedge", "circle", "diamond", "plus", "newsflash", "strips", "random"] }, "default": "none", "title": "Transition", "summary": "The effect into this slide (PowerPoint's effect name). The slideshow plays fade, push, wipe and cut; every other effect is kept for export and played as the nearest one." },
+  { "path": "transitionDirection", "type": { "kind": "text", "maxLength": 16 }, "nullable": true, "title": "Direction", "summary": "The effect's direction as PowerPoint writes it (l, r, u, d, horz, vert, in, out, …)." },
+  { "path": "transitionSpeed", "type": { "kind": "enum", "members": ["slow", "med", "fast"] }, "nullable": true, "title": "Speed" },
+  { "path": "transitionDuration", "type": { "kind": "number", "integer": true }, "nullable": true, "range": { "min": 0, "max": 60000 }, "title": "Duration (ms)" },
+  { "path": "advanceOnClick", "type": { "kind": "bool" }, "default": true, "title": "Advance on click" },
+  { "path": "advanceAfter", "type": { "kind": "number", "integer": true }, "nullable": true, "range": { "min": 0, "max": 86400000 }, "title": "Advance after (ms)", "summary": "Automatic advance; null = never." }
+]

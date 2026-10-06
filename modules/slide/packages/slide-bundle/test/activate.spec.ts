@@ -26,7 +26,14 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
-import type { BundleHost, Diagnostic, Disposable, ImporterContribution } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  Diagnostic,
+  Disposable,
+  ImporterContribution,
+  MutationInput,
+  ObjectModelContribution,
+} from "@paged-media/plugin-api";
 
 import { activate, documentName, IMPORTER_ID, REPORT_PART, SOURCE_PART } from "../src/activate";
 import type { ImportReport } from "../src/engine";
@@ -38,6 +45,8 @@ function recordingHost(supports: (f: string) => boolean) {
   const opened: Uint8Array[] = [];
   const parts = new Map<string, Uint8Array>();
   const diagnostics = new Map<string, Diagnostic[]>();
+  const mutations: MutationInput[] = [];
+  const objectModels: ObjectModelContribution[] = [];
   const noop = (): Disposable => ({ dispose() {} });
   const host = {
     log: { debug() {}, info() {}, warn() {}, error() {} },
@@ -46,6 +55,16 @@ function recordingHost(supports: (f: string) => boolean) {
       importer(c: ImporterContribution): Disposable {
         importers.push(c);
         return noop();
+      },
+      objectModel(c: ObjectModelContribution) {
+        objectModels.push(c);
+        return { ...noop(), changed() {} };
+      },
+    },
+    document: {
+      async mutate(m: MutationInput) {
+        mutations.push(m);
+        return { applied: true, createdId: null, pageIds: [] };
       },
     },
     nativeDocument: {
@@ -64,7 +83,7 @@ function recordingHost(supports: (f: string) => boolean) {
       },
     },
   } as unknown as BundleHost;
-  return { host, importers, opened, parts, diagnostics };
+  return { host, importers, opened, parts, diagnostics, mutations, objectModels };
 }
 
 describe("paged.slide importer", () => {

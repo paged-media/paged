@@ -28,6 +28,7 @@
 import type { BundleHandle, BundleHost, Diagnostic } from "@paged-media/plugin-api";
 
 import { slideEngine, type ImportReport } from "./engine.js";
+import { contributeSlideObjectModel, importLabelMutations } from "./object-model.js";
 
 export const IMPORTER_ID = "media.paged.slide.importer.pptx";
 export const PPTX_MIME =
@@ -66,31 +67,58 @@ export function reportDiagnostics(report: ImportReport): Diagnostic[] {
 export function activate(host: BundleHost): BundleHandle {
   const disposers: Array<() => void> = [];
 
-  async function openDeck(name: string, bytes: Uint8Array): Promise<void> {
-    if (!host.supports("document.openNative@1")) {
+  /** The door that replaces the active document: the native-document door
+   *  (the editor), else the documents door (headless hosts, the Node CLI). */
+  function openDoor(): ((idml: Uint8Array, name: string) => Promise<void>) | null {
+    if (host.supports("document.openNative@1")) return (idml) => host.nativeDocument.open(idml);
+    if (host.supports("documents.open@1")) {
+      return async (idml, name) => {
+        const r = await host.documents.open(idml, { name });
+        if (!r.opened) throw new Error(`the host declined to open ${name}`);
+      };
+    }
+    return null;
+  }
+
+  async function openDeck(name: string, bytes: Uint8Array): Promise<ImportReport | null> {
+    const open = openDoor();
+    if (!open) {
       host.diagnostics.set(IMPORT_DIAGNOSTICS, [
         {
           severity: "error",
           message: "This host cannot open a native document, so a PowerPoint deck cannot be opened.",
         },
       ]);
-      return;
+      return null;
     }
     const engine = await slideEngine();
     const { idml, report } = engine.importPptx(bytes, documentName(name));
-    await host.nativeDocument.open(idml);
+    await open(idml, documentName(name));
     // The parts belong to the document just opened, so they are written
-    // after it replaced the previous one.
+    // after it replaced the previous one. They are a cache: the labels
+    // written next are what the object model reads (ADR 703).
     if (host.supports("storage.parts@1")) {
       await host.parts.write(SOURCE_PART, bytes);
       await host.parts.write(REPORT_PART, new TextEncoder().encode(JSON.stringify(report)));
     }
-    host.diagnostics.set(IMPORT_DIAGNOSTICS, reportDiagnostics(report));
+    const labels = importLabelMutations(report, documentName(name));
+    const written = await host.document.mutate({ op: "batch", args: { ops: labels.mutations as never } });
+    const diagnostics = reportDiagnostics(report);
+    if (!written.applied) {
+      diagnostics.push({ severity: "warning", message: "The slide labels could not be written; slide data is read from the import cache.", source: "pptx" });
+    } else if (labels.dropped.length > 0) {
+      diagnostics.push({ severity: "info", message: `Speaker notes of ${labels.dropped.length} slide(s) exceed the label cap and are kept in the import cache only.`, source: "pptx" });
+    }
+    host.diagnostics.set(IMPORT_DIAGNOSTICS, diagnostics);
     host.log.info(
       `paged.slide: opened ${name}: ${report.slides.length} slide(s), ` +
         `${report.diagnostics.length} diagnostic(s)`,
     );
+    return report;
   }
+
+  const model = contributeSlideObjectModel(host, { openDeck });
+  if (model) disposers.push(() => model.dispose());
 
   if (host.supports("contribute.importer@1")) {
     disposers.push(
@@ -99,7 +127,9 @@ export function activate(host: BundleHost): BundleHandle {
         title: "PowerPoint presentation (.pptx)",
         extensions: [".pptx", ".ppsx", ".potx"],
         mimeTypes: [PPTX_MIME],
-        import: ({ name, bytes }) => openDeck(name, bytes),
+        import: async ({ name, bytes }) => {
+          await openDeck(name, bytes);
+        },
       }).dispose,
     );
   }

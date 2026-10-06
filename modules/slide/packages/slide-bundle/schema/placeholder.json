@@ -1,0 +1,66 @@
+[
+  {
+    "path": "type",
+    "type": {
+      "kind": "enum",
+      "members": [
+        "title",
+        "subTitle",
+        "body",
+        "pic",
+        "chart",
+        "tbl",
+        "clipArt",
+        "dgm",
+        "media",
+        "sldImg",
+        "dt",
+        "ftr",
+        "sldNum",
+        "hdr"
+      ]
+    },
+    "access": "readOnly",
+    "title": "Placeholder type",
+    "summary": "PowerPoint's placeholder type as its layout matches it: ctrTitle reads as title, obj (or none) as body."
+  },
+  {
+    "path": "index",
+    "type": {
+      "kind": "number",
+      "integer": true
+    },
+    "nullable": true,
+    "access": "readOnly",
+    "title": "Index",
+    "summary": "PowerPoint's placeholder idx, the key a slide's placeholder matches its layout's by."
+  },
+  {
+    "path": "slide",
+    "type": {
+      "kind": "ref",
+      "to": "plugin:media.paged.slide/slide"
+    },
+    "access": "readOnly",
+    "title": "Slide"
+  },
+  {
+    "path": "target",
+    "type": {
+      "kind": "ref",
+      "to": "frame"
+    },
+    "access": "readOnly",
+    "title": "Frame",
+    "summary": "The core page item that fills the placeholder: the address frame paths and bindings target."
+  },
+  {
+    "path": "content",
+    "type": {
+      "kind": "text",
+      "multiline": true
+    },
+    "title": "Text",
+    "summary": "The placeholder's text (its story); \\n splits paragraphs. Absent on a placeholder that holds no text frame."
+  }
+]

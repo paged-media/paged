@@ -1,0 +1,724 @@
+/*
+ * This file is part of paged (https://paged.media).
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// The paged.slide OBJECT MODEL (plugin-sdk ADR 323): a deck's slides,
+// layouts, placeholders and the deck itself as addressable objects with
+// typed schemas, so a data binding, a Boa script, the Node CLI and a panel
+// field set "slide 3's notes" or "the title placeholder's text" the same way.
+//
+//   plugin:media.paged.slide/deck/deck
+//   plugin:media.paged.slide/slide/<pageId>          a slide IS a core page
+//   plugin:media.paged.slide/layout/<masterId>       a layout IS a master spread
+//   plugin:media.paged.slide/placeholder/<frameId>   a placeholder IS a frame
+//
+// Persistence (ADR 703, object-model design §7): the source of truth is
+// the document's LABELS, never a container part.
+//   · Slide-only data (hidden, notes, transition, layout) lives in the
+//     document label `x-paged:media.paged.slide` — pages carry no plugin
+//     metadata on the wire — keyed by page id, with the slide's ordinal
+//     kept beside it so a page InDesign renumbered is still found.
+//   · Placeholder identity lives in each frame's own label, which InDesign
+//     keeps on a round trip.
+//   · The import report part is a CACHE: read when a label is missing (an
+//     import whose label write was undone), never written by a model edit.
+// Every write is CORE-BACKED (`ObjectWrite.kind = "mutations"`): the label
+// change and any page op (`applyMasterToPage`, `deletePage`, text edits)
+// go to the engine as one batch, so a write is one undo step and undo
+// needs no plugin-side history.
+
+import type {
+  Address,
+  BundleHost,
+  ElementId,
+  MutationInput,
+  ObjectKindContribution,
+  ObjectModelHandle,
+  ObjectOp,
+  ObjectQuery,
+  ObjectValue,
+  ObjectWrite,
+  PropertySchema,
+  TypedCommandContribution,
+  ValueType,
+} from "@paged-media/plugin-api";
+import { formatAddress, parseAddress } from "@paged-media/plugin-sdk";
+
+import type { ImportReport, SlideReport, Transition } from "./engine.js";
+
+import deckRows from "../schema/deck.json" with { type: "json" };
+import layoutRows from "../schema/layout.json" with { type: "json" };
+import placeholderRows from "../schema/placeholder.json" with { type: "json" };
+import slideRows from "../schema/slide.json" with { type: "json" };
+import importPptxArgs from "../schema/import-pptx.args.json" with { type: "json" };
+import importPptxResult from "../schema/import-pptx.result.json" with { type: "json" };
+import newSlideArgs from "../schema/new-slide.args.json" with { type: "json" };
+import newSlideResult from "../schema/new-slide.result.json" with { type: "json" };
+
+export const PLUGIN_ID = "media.paged.slide";
+/** The label key every slide label is written under (the host derives the
+ *  same key for `document.setMetadata`). */
+export const LABEL_KEY = `x-paged:${PLUGIN_ID}`;
+/** Version of the label payloads below (plugin-owned migrations). */
+export const LABEL_VERSION = 1;
+/** The engine's cap on one label is 64 KiB; stay under it with room for
+ *  the envelope and the escaping. */
+const LABEL_BUDGET = 60_000;
+
+export const NEW_SLIDE_COMMAND = "media.paged.slide.newSlide";
+export const IMPORT_PPTX_COMMAND = "media.paged.slide.importPptx";
+
+export const SLIDE_SCHEMA = slideRows as unknown as readonly PropertySchema[];
+export const LAYOUT_SCHEMA = layoutRows as unknown as readonly PropertySchema[];
+export const PLACEHOLDER_SCHEMA = placeholderRows as unknown as readonly PropertySchema[];
+export const DECK_SCHEMA = deckRows as unknown as readonly PropertySchema[];
+
+// ------------------------------------------------------------ labels
+
+/** A slide's own data, as the document label stores it. */
+export interface SlideRecord {
+  /** 1-based position when last written: finds a renumbered page. */
+  ord: number;
+  hidden: boolean;
+  notes: string | null;
+  transition: TransitionRecord | null;
+  /** Master id applied through this model (the engine reports none yet). */
+  layout?: string | null;
+}
+
+export interface TransitionRecord {
+  kind: string | null;
+  dir: string | null;
+  speed: string | null;
+  durationMs: number | null;
+  advanceOnClick: boolean;
+  advanceAfterMs: number | null;
+}
+
+/** The document label's payload. */
+export interface DeckLabel {
+  deck: { name: string | null; width: number; height: number; fonts: string[] };
+  slides: Record<string, SlideRecord>;
+}
+
+/** A placeholder frame's label payload. */
+export interface PlaceholderLabel {
+  placeholder: { type: string; idx: number | null };
+  shapeId: number;
+}
+
+/** JSON whose non-ASCII characters are `\uXXXX` escapes: labels travel
+ *  through InDesign as XML attribute text (ADR 559). Still valid JSON. */
+export function asciiJson(value: unknown): string {
+  return JSON.stringify(value).replace(/[\u007f-￿]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`);
+}
+
+function envelope(data: unknown): string {
+  return asciiJson({ v: LABEL_VERSION, data });
+}
+
+export function transitionRecord(t: Transition | null | undefined): TransitionRecord | null {
+  if (!t) return null;
+  return {
+    kind: t.kind,
+    dir: t.dir,
+    speed: t.speed,
+    durationMs: t.duration_ms,
+    advanceOnClick: t.advance_on_click ?? true,
+    advanceAfterMs: t.advance_after_ms,
+  };
+}
+
+function recordFromReport(s: SlideReport, ord: number): SlideRecord {
+  return { ord, hidden: s.hidden, notes: s.notes, transition: transitionRecord(s.transition) };
+}
+
+/** The mutations that write an import's labels: the deck label on the
+ *  document and a placeholder label on every placeholder frame. Notes that
+ *  would push the deck label past the engine's cap stay in the report part
+ *  (listed in `dropped`). */
+export function importLabelMutations(
+  report: ImportReport,
+  name: string | null,
+): { mutations: MutationInput[]; dropped: string[] } {
+  const label: DeckLabel = {
+    deck: { name, width: report.width, height: report.height, fonts: report.fonts },
+    slides: {},
+  };
+  report.slides.forEach((s, i) => {
+    label.slides[s.pageId] = recordFromReport(s, i + 1);
+  });
+  const dropped: string[] = [];
+  for (const s of [...report.slides].reverse()) {
+    if (envelope(label).length <= LABEL_BUDGET) break;
+    if (label.slides[s.pageId]!.notes !== null) {
+      label.slides[s.pageId]!.notes = null;
+      dropped.push(s.pageId);
+    }
+  }
+  const mutations: MutationInput[] = [
+    { op: "setDocumentMetadata", args: { key: LABEL_KEY, value: envelope(label), caller: PLUGIN_ID } },
+  ];
+  for (const s of report.slides) {
+    for (const it of s.items) {
+      if (!it.placeholder) continue;
+      const data: PlaceholderLabel = {
+        placeholder: { type: it.placeholder[0], idx: it.placeholder[1] },
+        shapeId: it.shapeId,
+      };
+      mutations.push({
+        op: "setPluginMetadata",
+        args: { elementId: { kind: it.kind, id: it.id } as ElementId, key: LABEL_KEY, value: envelope(data), caller: PLUGIN_ID },
+      });
+    }
+  }
+  return { mutations, dropped };
+}
+
+// ------------------------------------------------------------ state
+
+/** Where the import report cache is read from (activate.ts writes it, as `REPORT_PART`). */
+const REPORT_PART = "import/report.json";
+
+interface PlaceholderInfo {
+  type: string;
+  idx: number | null;
+}
+
+/** One read of everything the model needs: labels first, cache second. */
+interface Deck {
+  label: DeckLabel | null;
+  report: ImportReport | null;
+  /** Current pages in document order. */
+  pages: { id: string; index: number }[];
+}
+
+const SLIDE_KIND = "slide";
+const LAYOUT_KIND = "layout";
+const PLACEHOLDER_KIND = "placeholder";
+const DECK_KIND = "deck";
+const DECK_ID = "deck";
+
+export function slideAddress(pageId: string): Address {
+  return formatAddress({ kind: "plugin", plugin: PLUGIN_ID, objectKind: SLIDE_KIND, id: pageId });
+}
+export function layoutAddress(masterId: string): Address {
+  return formatAddress({ kind: "plugin", plugin: PLUGIN_ID, objectKind: LAYOUT_KIND, id: masterId });
+}
+export function placeholderAddress(frameId: string): Address {
+  return formatAddress({ kind: "plugin", plugin: PLUGIN_ID, objectKind: PLACEHOLDER_KIND, id: frameId });
+}
+export const DECK_ADDRESS: Address = formatAddress({ kind: "plugin", plugin: PLUGIN_ID, objectKind: DECK_KIND, id: DECK_ID });
+
+function ownId(address: Address, kind: string): string | null {
+  const a = parseAddress(address);
+  return a && a.kind === "plugin" && a.plugin === PLUGIN_ID && a.objectKind === kind ? a.id : null;
+}
+
+const value = (v: unknown): ObjectValue => ({ kind: "value", value: v });
+const absent: ObjectValue = { kind: "absent" };
+const refused = (code: "unknownAddress" | "unknownPath" | "failed", reason: string): ObjectValue => ({
+  kind: "refused",
+  code,
+  reason,
+});
+const rejected = (reason: string): ObjectWrite => ({ kind: "rejected", reason });
+
+function parseLabel<T>(raw: unknown): T | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const env = raw as { v?: unknown; data?: unknown };
+  return env.v === LABEL_VERSION && typeof env.data === "object" && env.data !== null ? (env.data as T) : null;
+}
+
+/** The record a page's slide reads: its own label entry, else the entry a
+ *  renumbered page left at the same position, else the import cache. */
+function recordFor(deck: Deck, pageId: string): SlideRecord | null {
+  const page = deck.pages.find((p) => p.id === pageId);
+  if (!page) return null;
+  const own = deck.label?.slides[pageId];
+  if (own) return own;
+  if (deck.label) {
+    const live = new Set(deck.pages.map((p) => p.id));
+    for (const [id, rec] of Object.entries(deck.label.slides)) {
+      if (!live.has(id) && rec.ord === page.index) return rec;
+    }
+  }
+  const fromReport = deck.report?.slides.find((s) => s.pageId === pageId);
+  if (fromReport) return recordFromReport(fromReport, page.index);
+  return { ord: page.index, hidden: false, notes: null, transition: null };
+}
+
+const NO_TRANSITION: TransitionRecord = {
+  kind: null,
+  dir: null,
+  speed: null,
+  durationMs: null,
+  advanceOnClick: true,
+  advanceAfterMs: null,
+};
+
+/** Read a slide path off its record (`layout` and `index` are resolved by
+ *  the caller, they need the engine). */
+function slidePath(rec: SlideRecord, path: string): ObjectValue | null {
+  const t = rec.transition ?? NO_TRANSITION;
+  switch (path) {
+    case "hidden":
+      return value(rec.hidden);
+    case "notes":
+      return value(rec.notes);
+    case "transitionKind":
+      return value(t.kind ?? "none");
+    case "transitionDirection":
+      return value(t.dir);
+    case "transitionSpeed":
+      return value(t.speed);
+    case "transitionDuration":
+      return value(t.durationMs);
+    case "advanceOnClick":
+      return value(t.advanceOnClick);
+    case "advanceAfter":
+      return value(t.advanceAfterMs);
+    default:
+      return null;
+  }
+}
+
+/** Write a slide path into a (copied) record; false when it is not a
+ *  record path. */
+function setSlidePath(rec: SlideRecord, path: string, v: unknown): boolean {
+  const t = (rec.transition ??= { ...NO_TRANSITION });
+  switch (path) {
+    case "hidden":
+      rec.hidden = v as boolean;
+      return true;
+    case "notes":
+      rec.notes = (v as string | null) ?? null;
+      return true;
+    case "transitionKind":
+      t.kind = v === "none" ? null : (v as string);
+      return true;
+    case "transitionDirection":
+      t.dir = v as string | null;
+      return true;
+    case "transitionSpeed":
+      t.speed = v as string | null;
+      return true;
+    case "transitionDuration":
+      t.durationMs = v as number | null;
+      return true;
+    case "advanceOnClick":
+      t.advanceOnClick = v as boolean;
+      return true;
+    case "advanceAfter":
+      t.advanceAfterMs = v as number | null;
+      return true;
+    default:
+      return false;
+  }
+}
+
+// ------------------------------------------------------------ contribution
+
+export interface SlideObjectModelOptions {
+  /** Open a deck (the importer's path); the typed import command calls it. */
+  openDeck(name: string, bytes: Uint8Array): Promise<ImportReport | null>;
+}
+
+/** Register the slide object model on `host`. Headless: no DOM, no edit
+ *  context; every read goes to the engine (labels) or the report cache. */
+export function contributeSlideObjectModel(host: BundleHost, options: SlideObjectModelOptions): ObjectModelHandle | null {
+  if (!host.supports("contribute.objectModel@1")) return null;
+  const objects = host.objects;
+
+  async function readReport(): Promise<ImportReport | null> {
+    if (!host.supports("storage.parts@1")) return null;
+    try {
+      const bytes = await host.parts.read(REPORT_PART);
+      return bytes ? (JSON.parse(new TextDecoder().decode(bytes)) as ImportReport) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function pages(): Promise<{ id: string; index: number }[]> {
+    const out: { id: string; index: number }[] = [];
+    for (const address of await objects.query("page")) {
+      const a = parseAddress(address);
+      if (a?.kind !== "page") continue;
+      const ix = await objects.get(address, "index");
+      out.push({ id: a.id, index: ix.kind === "value" ? Number(ix.value) : out.length + 1 });
+    }
+    return out.sort((x, y) => x.index - y.index);
+  }
+
+  /** The deck, or null when the document is not one (no label, no cache). */
+  async function loadDeck(): Promise<Deck | null> {
+    let label: DeckLabel | null = null;
+    try {
+      label = parseLabel<DeckLabel>(await host.document.getDocumentMetadata());
+    } catch {
+      label = null;
+    }
+    const report = await readReport();
+    if (!label && !report) return null;
+    return { label, report, pages: await pages() };
+  }
+
+  /** A text value as a master id: a layout address, a master address or a
+   *  bare id. */
+  async function resolveMaster(ref: string): Promise<string | null> {
+    const fromLayout = ownId(ref, LAYOUT_KIND);
+    const a = parseAddress(ref);
+    const id = fromLayout ?? (a?.kind === "master" ? a.id : ref);
+    const masters = (await objects.query("master")).map((m) => parseAddress(m)).filter((m) => m?.kind === "master");
+    return masters.some((m) => m && "id" in m && m.id === id) ? id : null;
+  }
+
+  /** A text value as a page id: a slide address, a page address or a bare id. */
+  function slidePageId(ref: string): string {
+    const own = ownId(ref, SLIDE_KIND);
+    if (own) return own;
+    const a = parseAddress(ref);
+    return a?.kind === "page" ? a.id : ref;
+  }
+
+  async function layoutOf(deck: Deck, pageId: string): Promise<string | null> {
+    const core = await objects.get(formatAddress({ kind: "page", id: pageId }), "appliedMaster");
+    if (core.kind === "value" && typeof core.value === "string" && core.value.length > 0) {
+      const a = parseAddress(core.value);
+      return a?.kind === "master" ? a.id : core.value;
+    }
+    return recordFor(deck, pageId)?.layout ?? null;
+  }
+
+  /** The label write: the whole deck label, ordinals refreshed. */
+  function labelMutation(deck: Deck, label: DeckLabel): MutationInput {
+    for (const p of deck.pages) {
+      const rec = label.slides[p.id];
+      if (rec) rec.ord = p.index;
+    }
+    return { op: "setDocumentMetadata", args: { key: LABEL_KEY, value: envelope(label), caller: PLUGIN_ID } };
+  }
+
+  function baseLabel(deck: Deck): DeckLabel {
+    if (deck.label) return structuredClone(deck.label);
+    const r = deck.report;
+    return { deck: { name: null, width: r?.width ?? 0, height: r?.height ?? 0, fonts: r?.fonts ?? [] }, slides: {} };
+  }
+
+  // ------------------------------------------------------------ slide
+
+  const slideKind: ObjectKindContribution = {
+    kind: SLIDE_KIND,
+    title: "Slide",
+    schema: SLIDE_SCHEMA,
+    hostOf: () => "doc",
+    async list(query: ObjectQuery) {
+      const deck = await loadDeck();
+      if (!deck) return [];
+      const out = deck.pages.map((p) => slideAddress(p.id));
+      return query.limit ? out.slice(0, query.limit) : out;
+    },
+    async get(address, path) {
+      const id = ownId(address, SLIDE_KIND);
+      const deck = await loadDeck();
+      if (!id || !deck) return refused("unknownAddress", `${address}: not a slide of this document`);
+      const rec = recordFor(deck, id);
+      if (!rec) return refused("unknownAddress", `${address}: no such page`);
+      if (path === "index") return value(deck.pages.find((p) => p.id === id)!.index);
+      if (path === "page") return value(formatAddress({ kind: "page", id }));
+      if (path === "layout") {
+        const m = await layoutOf(deck, id);
+        return m ? value(layoutAddress(m)) : absent;
+      }
+      return slidePath(rec, path) ?? refused("unknownPath", `slide has no path "${path}"`);
+    },
+    async batch(ops: readonly ObjectOp[]) {
+      const deck = await loadDeck();
+      if (!deck) return rejected("this document is not a slide deck");
+      const label = baseLabel(deck);
+      const mutations: MutationInput[] = [];
+      for (const op of ops) {
+        if (op.op === "create") return rejected(`slides are created with ${NEW_SLIDE_COMMAND}`);
+        if (op.op === "invoke") continue;
+        const id = ownId(op.address, SLIDE_KIND);
+        if (!id || !deck.pages.some((p) => p.id === id)) return rejected(`${op.address}: no such slide`);
+        if (op.op === "delete") {
+          mutations.push({ op: "deletePage", args: { pageId: id } });
+          delete label.slides[id];
+          continue;
+        }
+        const rec = (label.slides[id] ??= structuredClone(recordFor(deck, id)!));
+        if (op.path === "layout") {
+          const master = op.value === null ? null : await resolveMaster(String(op.value));
+          if (op.value !== null && master === null) return rejected(`${String(op.value)}: no such layout`);
+          mutations.push({ op: "applyMasterToPage", args: { page: id, master } });
+          rec.layout = master;
+          continue;
+        }
+        if (!setSlidePath(rec, op.path, op.value)) return rejected(`slide path "${op.path}" is not writable`);
+      }
+      const write = labelMutation(deck, label);
+      if (((write.args as { value: string }).value?.length ?? 0) > LABEL_BUDGET) {
+        return rejected("the deck label would exceed the engine's 64 KiB label cap");
+      }
+      // Deleting the last labelled slide still rewrites the label (smaller).
+      mutations.push(write);
+      return { kind: "mutations", mutations };
+    },
+  };
+
+  // ------------------------------------------------------------ layout
+
+  async function masters(): Promise<{ id: string; address: Address }[]> {
+    return (await objects.query("master")).flatMap((address) => {
+      const a = parseAddress(address);
+      return a?.kind === "master" ? [{ id: a.id, address }] : [];
+    });
+  }
+
+  const layoutKind: ObjectKindContribution = {
+    kind: LAYOUT_KIND,
+    title: "Slide layout",
+    schema: LAYOUT_SCHEMA,
+    hostOf: (address) => {
+      const id = ownId(address, LAYOUT_KIND);
+      return id ? formatAddress({ kind: "master", id }) : null;
+    },
+    async list(query) {
+      if (!(await loadDeck())) return [];
+      const out = (await masters()).map((m) => layoutAddress(m.id));
+      return query.limit ? out.slice(0, query.limit) : out;
+    },
+    async get(address, path) {
+      const id = ownId(address, LAYOUT_KIND);
+      const m = id ? (await masters()).find((x) => x.id === id) : undefined;
+      if (!m || !(await loadDeck())) return refused("unknownAddress", `${address}: not a layout of this deck`);
+      switch (path) {
+        case "name":
+          return objects.get(m.address, "label");
+        case "master":
+          return value(m.address);
+        case "slideCount":
+          return objects.get(m.address, "pageCount");
+        default:
+          return refused("unknownPath", `layout has no path "${path}"`);
+      }
+    },
+  };
+
+  // ------------------------------------------------------------ placeholder
+
+  async function itemAddress(frameId: string): Promise<Address | null> {
+    const [hit] = await objects.query(formatAddress({ kind: "frame", id: frameId }));
+    return hit ?? null;
+  }
+
+  function elementIdOf(address: Address): ElementId | null {
+    const a = parseAddress(address);
+    return a?.kind === "item" ? ({ kind: a.itemKind, id: a.id } as ElementId) : null;
+  }
+
+  async function placeholderInfo(deck: Deck, frameId: string, address: Address): Promise<PlaceholderInfo | null> {
+    const id = elementIdOf(address);
+    if (id) {
+      try {
+        const own = parseLabel<PlaceholderLabel>(await host.document.getMetadata(id));
+        if (own) return { type: own.placeholder.type, idx: own.placeholder.idx };
+      } catch {
+        // fall through to the cache
+      }
+    }
+    for (const s of deck.report?.slides ?? []) {
+      const it = s.items.find((i) => i.id === frameId);
+      if (it?.placeholder) return { type: it.placeholder[0], idx: it.placeholder[1] };
+    }
+    return null;
+  }
+
+  async function geometry(address: Address): Promise<{ pageId: string | null; storyId: string | null } | null> {
+    const id = elementIdOf(address);
+    if (!id) return null;
+    const [g] = await host.document.elementGeometry([id]);
+    if (!g) return null;
+    const ext = g as { pageId?: string | null; storyId?: string };
+    return { pageId: ext.pageId ?? null, storyId: ext.storyId ?? null };
+  }
+
+  const placeholderKind: ObjectKindContribution = {
+    kind: PLACEHOLDER_KIND,
+    title: "Placeholder",
+    schema: PLACEHOLDER_SCHEMA,
+    content: { kind: "text" },
+    hostOf: (address) => {
+      const id = ownId(address, PLACEHOLDER_KIND);
+      return id ? formatAddress({ kind: "frame", id }) : null;
+    },
+    async list(query) {
+      const deck = await loadDeck();
+      if (!deck) return [];
+      const ids = new Set<string>();
+      for (const address of await objects.query(`frame[label.${LABEL_KEY}*="placeholder"]`)) {
+        const a = parseAddress(address);
+        if (a?.kind === "item") ids.add(a.id);
+      }
+      const cached = (deck.report?.slides ?? []).flatMap((s) => s.items.filter((i) => i.placeholder).map((i) => i.id));
+      for (const id of cached) if (!ids.has(id) && (await itemAddress(id))) ids.add(id);
+      let out = [...ids];
+      const scope = query.within ? ownId(query.within, SLIDE_KIND) ?? (parseAddress(query.within)?.kind === "page" ? slidePageId(query.within) : null) : null;
+      if (scope) {
+        const kept: string[] = [];
+        for (const id of out) {
+          const address = await itemAddress(id);
+          if (address && (await geometry(address))?.pageId === scope) kept.push(id);
+        }
+        out = kept;
+      }
+      const addresses = out.map(placeholderAddress);
+      return query.limit ? addresses.slice(0, query.limit) : addresses;
+    },
+    async get(address, path) {
+      const id = ownId(address, PLACEHOLDER_KIND);
+      const deck = await loadDeck();
+      const item = id ? await itemAddress(id) : null;
+      const info = deck && id && item ? await placeholderInfo(deck, id, item) : null;
+      if (!id || !item || !info) return refused("unknownAddress", `${address}: not a placeholder of this deck`);
+      switch (path) {
+        case "type":
+          return value(info.type);
+        case "index":
+          return value(info.idx);
+        case "target":
+          return value(item);
+        case "slide": {
+          const g = await geometry(item);
+          return g?.pageId ? value(slideAddress(g.pageId)) : absent;
+        }
+        case "content": {
+          const g = await geometry(item);
+          return g?.storyId ? objects.get(formatAddress({ kind: "story", id: g.storyId }), "content") : absent;
+        }
+        default:
+          return refused("unknownPath", `placeholder has no path "${path}"`);
+      }
+    },
+    async batch(ops) {
+      const mutations: MutationInput[] = [];
+      const seen = new Set<string>();
+      const stories = await host.document.collection<{ selfId: string; characterCount: number }>("stories");
+      for (const op of ops) {
+        if (op.op !== "set") return rejected("placeholders come from layouts; they are not created or deleted here");
+        if (op.path !== "content") return rejected(`placeholder path "${op.path}" is not writable`);
+        if (seen.has(op.address)) return rejected(`${op.address} is set twice in one batch`);
+        seen.add(op.address);
+        const id = ownId(op.address, PLACEHOLDER_KIND);
+        const item = id ? await itemAddress(id) : null;
+        const g = item ? await geometry(item) : null;
+        if (!g?.storyId) return rejected(`${op.address} holds no text`);
+        const len = stories.find((s) => s.selfId === g.storyId)?.characterCount ?? 0;
+        if (len > 0) mutations.push({ op: "deleteRange", args: { storyId: g.storyId, start: 0, end: len } });
+        const text = (op.value as string | null) ?? "";
+        if (text.length > 0) mutations.push({ op: "insertText", args: { storyId: g.storyId, offset: 0, text } });
+      }
+      return { kind: "mutations", mutations };
+    },
+  };
+
+  // ------------------------------------------------------------ deck
+
+  const deckKind: ObjectKindContribution = {
+    kind: DECK_KIND,
+    title: "Deck",
+    schema: DECK_SCHEMA,
+    hostOf: () => "doc",
+    async list() {
+      return (await loadDeck()) ? [DECK_ADDRESS] : [];
+    },
+    async get(address, path) {
+      const deck = ownId(address, DECK_KIND) === DECK_ID ? await loadDeck() : null;
+      if (!deck) return refused("unknownAddress", `${address}: this document is not a slide deck`);
+      const info = deck.label?.deck;
+      const r = deck.report;
+      switch (path) {
+        case "name":
+          return info?.name ? value(info.name) : absent;
+        case "slideWidth":
+          return value(info?.width ?? r?.width ?? null);
+        case "slideHeight":
+          return value(info?.height ?? r?.height ?? null);
+        case "slideCount":
+          return value(deck.pages.length);
+        case "fonts":
+          return value(info?.fonts ?? r?.fonts ?? []);
+        default:
+          return refused("unknownPath", `deck has no path "${path}"`);
+      }
+    },
+  };
+
+  // ------------------------------------------------------------ commands
+
+  const newSlide: TypedCommandContribution<{ after: string; layout: string }, { slide: Address }> = {
+    id: NEW_SLIDE_COMMAND,
+    title: "New slide",
+    args: newSlideArgs as ValueType,
+    result: newSlideResult as ValueType,
+    async handler(_ctx, args) {
+      const deck = await loadDeck();
+      if (!deck) throw new Error("failed: this document is not a slide deck");
+      const before = new Set(deck.pages.map((p) => p.id));
+      const afterId = args.after === "" ? (deck.pages.at(-1)?.id ?? null) : slidePageId(args.after);
+      if (afterId !== null && !before.has(afterId)) throw new Error(`unknownAddress: no slide ${args.after}`);
+      let master: string | null = null;
+      if (args.layout !== "") {
+        master = await resolveMaster(args.layout);
+        if (master === null) throw new Error(`unknownAddress: no layout ${args.layout}`);
+      } else if (afterId !== null) {
+        master = await layoutOf(deck, afterId);
+      }
+      const outcome = await host.document.mutate({ op: "insertPage", args: { afterPageId: afterId, masterId: master } });
+      if (!outcome.applied) throw new Error(`failed: insertPage was refused (${JSON.stringify(outcome.error)})`);
+      const created = (await pages()).find((p) => !before.has(p.id));
+      if (!created) throw new Error("failed: the engine reported no new page");
+      return { slide: slideAddress(created.id) };
+    },
+  };
+
+  const importPptx: TypedCommandContribution<
+    { bytes: Uint8Array; name: string },
+    { slides: Address[]; fonts: string[]; diagnostics: string[] }
+  > = {
+    id: IMPORT_PPTX_COMMAND,
+    title: "Open a PowerPoint deck",
+    args: importPptxArgs as ValueType,
+    result: importPptxResult as ValueType,
+    async handler(_ctx, args) {
+      const report = await options.openDeck(args.name, args.bytes);
+      if (!report) throw new Error("failed: this host cannot open a document");
+      return {
+        slides: report.slides.map((s) => slideAddress(s.pageId)),
+        fonts: report.fonts,
+        diagnostics: report.diagnostics,
+      };
+    },
+  };
+
+  return host.contribute.objectModel({
+    kinds: [deckKind, slideKind, layoutKind, placeholderKind],
+    commands: [newSlide, importPptx] as readonly TypedCommandContribution[],
+  });
+}

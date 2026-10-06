@@ -1,0 +1,7 @@
+{
+  "kind": "struct",
+  "fields": {
+    "after": { "kind": "text" },
+    "layout": { "kind": "text" }
+  }
+}
