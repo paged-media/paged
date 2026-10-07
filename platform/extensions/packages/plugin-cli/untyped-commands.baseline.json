@@ -1,6 +1,6 @@
 {
   "adr": "323",
-  "note": "Shrink-only: untyped commands (no typed twin in contributes.objectModel.commands) per plugin. Remove an id once it is typed; never add one. Generated with `paged-plugin untyped <manifest...>` from each plugin's origin/main on 2026-10-06 (draw 6d8722e, image 7dc9363, sheets e5fb96c, data fac47a1, web e83f412, doc 02076ec). Shrunk 2026-10-06 from the om/object-model branches: image 39→0 (be2a506), draw 107→10 (68ca93e), sheet 24→8 (08a4c4a).",
+  "note": "Shrink-only: untyped commands (no typed twin in contributes.objectModel.commands) per plugin. Remove an id once it is typed; never add one. Generated with `paged-plugin untyped <manifest...>` from each plugin's origin/main on 2026-10-06 (draw 6d8722e, image 7dc9363, sheets e5fb96c, data fac47a1, web e83f412, doc 02076ec). Shrunk 2026-10-06 from the om/object-model branches: image 39→0 (be2a506), draw 107→10 (68ca93e), sheet 24→8 (08a4c4a). Shrunk 2026-10-07 from the om/object-model branches: web 7→0 (155ddd7), doc 1→0 (509afca); verified draw 10 (99d403f), image 0 (ceb855a), sheet 8 (f3760bc), data 9 (om/universal-binding 22b08a1).",
   "plugins": {
     "media.paged.data": [
       "media.paged.data.command.applyDataSet",
@@ -13,9 +13,7 @@
       "media.paged.data.command.openDataset",
       "media.paged.data.command.resolveBindings"
     ],
-    "media.paged.doc": [
-      "media.paged.doc.command.placeDoc"
-    ],
+    "media.paged.doc": [],
     "media.paged.draw": [
       "media.paged.draw.command.insertArcOptions",
       "media.paged.draw.command.insertPolarGridOptions",
@@ -39,14 +37,6 @@
       "media.paged.sheet.command.showGridInFrame",
       "media.paged.sheet.command.styleFromCell"
     ],
-    "media.paged.web": [
-      "media.paged.web.command.bakeWebFrame",
-      "media.paged.web.command.insertWebFrame",
-      "media.paged.web.command.renderWebFlow",
-      "media.paged.web.command.renderWebFrame",
-      "media.paged.web.command.threadWebFlow",
-      "media.paged.web.command.threadWebFlowNamed",
-      "media.paged.web.command.unthreadWebFlow"
-    ]
+    "media.paged.web": []
   }
 }
