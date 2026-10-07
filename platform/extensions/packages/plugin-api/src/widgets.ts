@@ -32,7 +32,12 @@
 import type { ComponentType, ReactNode } from "react";
 
 import type { Address, PropertyPathName, Selector } from "./object-model";
-import type { PropertyFieldOption, PropertyFieldStyle } from "./panel-schema";
+import type {
+  PropertyFieldOption,
+  PropertyFieldStyle,
+  PropertyListPresentation,
+  PropertySubField,
+} from "./panel-schema";
 
 /** Languages the host code editor highlights. `text` = no
  *  highlighting (line numbers + gutter only). Additive: a host MAY
@@ -124,6 +129,14 @@ export interface PropertyFieldProps {
   options?: readonly PropertyFieldOption[];
   bindable?: boolean;
   disabled?: boolean;
+  /** A struct-typed path: the fields shown (see
+   *  `PanelSchemaPropertyRow.fields`). Needs
+   *  `host.supports("widgets.propertyField.values@1")`. */
+  fields?: readonly (string | PropertySubField)[];
+  /** A list-typed path: item presentation and the offered edits (see
+   *  `PanelSchemaPropertyRow.items`). Needs
+   *  `host.supports("widgets.propertyField.values@1")`. */
+  items?: PropertyListPresentation;
   /** Leaf chrome passthrough (placeholder, prefix, suffix, icon, …). */
   props?: Record<string, unknown>;
 }

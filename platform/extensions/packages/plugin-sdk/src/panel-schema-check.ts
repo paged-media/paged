@@ -29,10 +29,11 @@ import type {
   PanelSchemaRow,
   PropertyFieldAddress,
   PropertySchema,
+  ValueType,
 } from "@paged-media/plugin-api";
 
 import { parseAddress, parseSelector } from "./object-address";
-import { findRow } from "./object-schema";
+import { findRow, validateValue } from "./object-schema";
 
 /** Is this row an object-model property row (the property row)? */
 export function isPropertyRow(row: PanelSchemaRow): row is PanelSchemaPropertyRow {
@@ -177,7 +178,75 @@ function checkPropertyRow(
     return;
   }
   const byPath = new Map(rows.map((r) => [r.path, r]));
-  if (!findRow(byPath, row.path)) issue(`path "${row.path}" is not a row of ${kind}`);
+  const schemaRow = findRow(byPath, row.path);
+  if (!schemaRow) {
+    issue(`path "${row.path}" is not a row of ${kind}`);
+    return;
+  }
+  checkValuePresentation(row, schemaRow.type, issue);
+}
+
+/** The sub-field names of a struct type, or null (open / not a struct). */
+function structFields(type: ValueType): ReadonlyMap<string, ValueType> | null {
+  if (type.kind !== "struct" || type.open) return null;
+  return new Map(Object.entries(type.fields));
+}
+
+function checkSubFields(
+  fields: unknown,
+  type: ValueType,
+  at: string,
+  issue: (m: string) => void,
+): void {
+  if (!Array.isArray(fields)) {
+    issue(`${at} must be a list`);
+    return;
+  }
+  const known = structFields(type);
+  for (const f of fields) {
+    const name = typeof f === "string" ? f : (f as { field?: unknown } | null)?.field;
+    if (typeof name !== "string" || name === "") {
+      issue(`${at}: an entry needs a field name`);
+      continue;
+    }
+    if (known && !known.has(name)) issue(`${at}: "${name}" is not a field (${[...known.keys()].join(", ")})`);
+  }
+}
+
+/** §12.8 — `items` only on a list-typed path, `fields` only on a struct
+ *  (or on a list's struct items via `items.fields`). */
+function checkValuePresentation(row: PanelSchemaPropertyRow, type: ValueType, issue: (m: string) => void): void {
+  if (row.fields !== undefined) {
+    if (type.kind !== "struct") issue(`fields: "${row.path}" is a ${type.kind}, not a struct`);
+    else checkSubFields(row.fields, type, "fields", issue);
+  }
+  const items = row.items;
+  if (items === undefined) return;
+  if (type.kind !== "list") {
+    issue(`items: "${row.path}" is a ${type.kind}, not a list`);
+    return;
+  }
+  if (typeof items !== "object" || items === null || Array.isArray(items)) {
+    issue("items must be an object");
+    return;
+  }
+  for (const k of ["add", "remove", "reorder", "reversed"] as const) {
+    if (items[k] !== undefined && typeof items[k] !== "boolean") issue(`items.${k} must be a boolean`);
+  }
+  if (items.fields !== undefined) {
+    if (type.of.kind !== "struct") issue(`items.fields: the items are ${type.of.kind}, not structs`);
+    else checkSubFields(items.fields, type.of, "items.fields", issue);
+  }
+  if (items.itemLabel !== undefined) {
+    const known = structFields(type.of);
+    if (typeof items.itemLabel !== "string" || (known && !known.has(items.itemLabel)) || type.of.kind !== "struct") {
+      issue(`items.itemLabel "${String(items.itemLabel)}" is not a field of the items`);
+    }
+  }
+  if (items.newItem !== undefined) {
+    const why = validateValue(type.of, items.newItem, undefined, "items.newItem");
+    if (why) issue(why.startsWith("items.newItem") ? why : `items.newItem: ${why}`);
+  }
 }
 
 /**

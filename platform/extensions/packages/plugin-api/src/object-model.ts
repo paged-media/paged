@@ -239,6 +239,39 @@ export type ObjectOp =
   | { op: "delete"; address: Address }
   | { op: "invoke"; command: string; args: unknown };
 
+/**
+ * An edit of a LIST value (ADR 323 property rows; DESIGN.md §12.8): what a
+ * host's list field does when the user adds, removes, reorders or edits
+ * one item. It is not a new batch op: `planValueEdit` / `editValue`
+ * (plugin-sdk) read the current value and LOWER the edit to plain `set`
+ * ops — the whole new list on the list's own path, or, when the kind only
+ * types its items (`path[].field` rows, no `path` row), `set path[i].field`
+ * — so it lands as ONE batch = ONE undo step, through the same validation
+ * as any write, and every planner keeps receiving `set` / `create` /
+ * `delete` only.
+ *   · `add` — insert `item` (absent: the item type's default) at `index`
+ *     (absent: the end).
+ *   · `remove` — drop the item at `index`.
+ *   · `move` — move the item at `from` so it ends up at `to`.
+ *   · `itemSet` — replace the item at `index`, or with `field` one field of
+ *     a struct item.
+ * Indices are positions in the VALUE (a stack painted bottom → top is
+ * still indexed bottom-first, whatever order the UI lists it in).
+ */
+export type ListEdit =
+  | { edit: "add"; index?: number; item?: unknown }
+  | { edit: "remove"; index: number }
+  | { edit: "move"; from: number; to: number }
+  | { edit: "itemSet"; index: number; field?: string; value: unknown };
+
+/** An edit of one field of a STRUCT value (a gradient stop, an anchor
+ *  point): lowered like {@link ListEdit} to a `set` of the whole struct,
+ *  or `set path.field` when the kind types the field as its own row. */
+export type StructEdit = { edit: "fieldSet"; field: string; value: unknown };
+
+/** One edit of a list or struct value. */
+export type ValueEdit = ListEdit | StructEdit;
+
 /** A container part change, in the WRITER's own `paged/<plugin-id>/`
  *  namespace (relative path; `bytes: null` deletes). */
 export interface PartChange {
@@ -271,15 +304,26 @@ export interface PartChange {
  *     Any other key is refused before anything applies.
  *   · `both` — the two together.
  *   · `rejected` — a typed no.
+ *
+ * `created` — the address of each object the write's `create` ops make,
+ * ONE per `create` op the planner received, in the order received (the
+ * registry splices them into `ObjectWriteResult.created` at the ops'
+ * batch positions). When the engine mints the id, write the placeholder
+ * `$h:<handle>` (the `bindCreated` handle of that insert) or `$created`
+ * (the batch's `createdId`) inside the address; the registry replaces it
+ * with the minted element's id after the commit. Omitted: each of those
+ * creates answers `""`. A list of the wrong length is refused (`failed`)
+ * before anything applies.
  */
 export type ObjectWrite =
-  | { kind: "mutations"; mutations: readonly MutationInput[] }
+  | { kind: "mutations"; mutations: readonly MutationInput[]; created?: readonly Address[] }
   | {
       kind: "state";
       parts: readonly PartChange[];
       host: Address;
       labelKey: string;
       labelValue: string;
+      created?: readonly Address[];
     }
   | {
       kind: "both";
@@ -288,6 +332,7 @@ export type ObjectWrite =
       host: Address;
       labelKey: string;
       labelValue: string;
+      created?: readonly Address[];
     }
   | { kind: "rejected"; reason: string };
 

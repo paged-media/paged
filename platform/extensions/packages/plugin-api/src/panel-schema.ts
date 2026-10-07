@@ -65,7 +65,7 @@
 import type { ComponentType } from "react";
 
 import type { BindingsSurface } from "./host";
-import type { Address, PropertyPathName, Selector } from "./object-model";
+import type { Address, PropertyPathName, Selector, StructEdit } from "./object-model";
 import type { PropertyPath, Value } from "./wire";
 
 // ---------------------------------------------------------------- value binding
@@ -261,6 +261,46 @@ export interface PropertyFieldOption {
   icon?: string;
 }
 
+/** One sub-field a property row shows of a STRUCT value (or of each
+ *  struct item of a list): `field` is the struct field's name; the widget
+ *  comes from that field's value type, like a row's comes from its schema
+ *  row. A bare string is `{ field }`. */
+export interface PropertySubField {
+  field: string;
+  label?: string;
+  style?: PropertyFieldStyle;
+  options?: readonly PropertyFieldOption[];
+  /** Leaf chrome passthrough. */
+  props?: Record<string, unknown>;
+}
+
+/**
+ * How a property row presents a LIST value (`{ kind: "list", of }`): an
+ * appearance stack's fills, a gradient's stops. Every edit the host
+ * offers is a {@link ListEdit} the SDK lowers to `set` ops (one batch, one
+ * undo step) — `planValueEdit` / `editValue` in plugin-sdk.
+ */
+export interface PropertyListPresentation {
+  /** Struct items: the fields each item shows, in order. Absent = every
+   *  declared field of the item struct. Scalar items show one widget. */
+  fields?: readonly (string | PropertySubField)[];
+  /** The item field whose value titles an item (`name`, `stopColor`). */
+  itemLabel?: string;
+  /** Offer add / remove / reorder. Each defaults to `true` on a
+   *  read-write row; `add` also stops at the type's `maxItems`. */
+  add?: boolean;
+  remove?: boolean;
+  reorder?: boolean;
+  /** List the LAST item first (a stack painted bottom → top reads
+   *  top-first, like a layers panel). Indices in the edits stay value
+   *  indices. Default `false`. */
+  reversed?: boolean;
+  /** The item `add` inserts. Absent = the item type's default
+   *  (`defaultValueOf`: struct field defaults, the first enum member,
+   *  0, "", false, []). Must satisfy the item type. */
+  newItem?: unknown;
+}
+
 /** The property row (the property row). Mutually exclusive with `widget`: a
  *  row is EITHER a catalog widget OR an object-model property field. */
 export interface PanelSchemaPropertyRow {
@@ -282,6 +322,13 @@ export interface PanelSchemaPropertyRow {
   options?: readonly PropertyFieldOption[];
   /** Offer "Bind to data…" (default: when the schema row is bindable). */
   bindable?: boolean;
+  /** A STRUCT-typed path: the fields to show, in order (absent = every
+   *  declared field; an `open` struct with no `fields` shows none and
+   *  falls back to its JSON text). Edits are {@link StructEdit}s. */
+  fields?: readonly (string | PropertySubField)[];
+  /** A LIST-typed path: how its items present and which edits are
+   *  offered. Absent = the defaults of {@link PropertyListPresentation}. */
+  items?: PropertyListPresentation;
   /** Leaf chrome passthrough (placeholder, prefix, suffix, icon, …). */
   props?: Record<string, unknown>;
   visible?: SchemaGate;

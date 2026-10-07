@@ -79,6 +79,9 @@ export type {
   ObjectKindInfo,
   ObjectCommandInfo,
   ObjectsSurface,
+  ListEdit,
+  StructEdit,
+  ValueEdit,
 } from "./object-model";
 
 export type { BundleHandle, PagedBundle } from "./bundle";
@@ -189,6 +192,8 @@ export type {
   PropertyFieldAddress,
   PropertyFieldStyle,
   PropertyFieldOption,
+  PropertySubField,
+  PropertyListPresentation,
 } from "./panel-schema";
 
 export type {

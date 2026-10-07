@@ -180,6 +180,8 @@ export {
   type PropertyRowOptions,
   type ValidatePanelSchemaOptions,
 } from "./panel-schema-check";
+// §12.8 — list / struct values on property rows: edits lowered to `set`s.
+export { applyValueEdit, defaultValueOf, editValue, planValueEdit } from "./value-edit";
 export {
   publishObjectList,
   type ObjectListRow,

@@ -1134,6 +1134,41 @@ automation surfaces as core's.
   valid, so the property rows below it address `{ bind: select }`: a
   layer list over the selected image frame, then that layer's opacity.
 
+### 12.8 List and struct values on a property row (0.2.45)
+
+Draw's appearance stacks, a gradient's stops and an anchor point are ONE
+path whose value is a `list` (of structs) or a `struct`. The property row
+types them, and the host's `PropertyField` edits them item by item:
+
+- **Row presentation.** `PanelSchemaPropertyRow.items`
+  (`PropertyListPresentation`: `fields` shown per struct item, `itemLabel`,
+  `add` / `remove` / `reorder` toggles, `reversed` for stacks listed
+  top-first, `newItem`) on a list-typed path; `fields` (`PropertySubField`
+  or a bare name) on a struct-typed path. `PropertyFieldProps` carries the
+  same two members for React panels.
+- **Edits are ObjectOps, not new ops.** `ListEdit` (`add` / `remove` /
+  `move` / `itemSet` with an optional struct `field`) and `StructEdit`
+  (`fieldSet`) are lowered by `planValueEdit` / `editValue` (plugin-sdk) to
+  plain `set` ops: read the target's current value, apply, set the whole
+  new value — or `set path[i].field` when the kind types only its items'
+  fields (`path[].field` rows, no `path` row; `add`/`remove`/`move` are
+  then `unknownPath`). One batch, one undo step, the registry's usual
+  validation, and every planner still receives only `set` / `create` /
+  `delete`. Each target of a multi-selection is edited from its own value.
+  Indices are VALUE indices whatever the display order.
+- **New items** default from the item type (`defaultValueOf`: struct field
+  defaults, the first enum member, 0, "", false, [], `Color/Black`) unless
+  the row's `newItem` or the edit's `item` says otherwise; `maxItems` stops
+  `add`.
+- **Validation.** `validatePanelSchema` reports `items` on a non-list,
+  `fields` on a non-struct, unknown (non-`open`) field names, an
+  `itemLabel` that is not an item field, and a `newItem` that fails the
+  item type.
+- **Host promise.** `supports("widgets.propertyField.values@1")` — the host
+  sets `propertyFieldValues: true` alongside `widgets.PropertyField` when
+  its field renders list/struct values. Without it a bundle keeps its own
+  control (inside `PropertyFrame`) for those paths.
+
 ## 13. The capability-gated asset store (W-06 — `host.assets`)
 
 paged.web's W1 font-parity pass (plugin-web BREAKAGE_LOG W-01·W1) proved
@@ -2340,6 +2375,19 @@ salvaged `mutationFailed`), so the probe never hangs. At >= 71
 - Below 71 every one of these answers as in §21.4, and a core create is
   `unmapped`. The object-model specs run on both engines (protocol-aware
   where the answer differs).
+
+### 21.10 `created[]` for plugin creates (0.2.45)
+
+`ObjectWriteResult.created` named core creates only, so a plugin `create`
+(and `paged create plugin:…`) answered no address. A plugin's write now
+reports `ObjectWrite.created`: one address per `create` op its planner
+received, in the order received. The registry splices them into the result
+at the ops' batch positions (core and plugin creates interleave in op
+order). An engine-minted object is written with a placeholder — `$h:<handle>`
+(the `bindCreated` handle of its insert) or `$created` (the batch's
+`createdId`) — resolved after the commit. A plugin that reports nothing
+answers `""` per create; a list of the wrong length, or an entry that is
+not an address, is refused (`failed`) before anything applies.
 
 ## 22. The Node CLI (ADR 324 — `@paged-media/cli`, bin `paged`)
 

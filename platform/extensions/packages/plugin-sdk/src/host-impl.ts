@@ -1066,6 +1066,11 @@ export interface CreateBundleHostOptions {
    *  `host.widgets` is the plain-textarea fallback and
    *  `supports("widgets.codeEditor@1")` answers false. */
   widgets?: Partial<WidgetSurface>;
+  /** §12.8 — the host's `PropertyField` (and its schema-panel property
+   *  rows) render LIST and STRUCT values with `items` / `fields`, editing
+   *  through `editValue`. Makes `supports("widgets.propertyField.values@1")`
+   *  true (only together with `widgets.PropertyField`). */
+  propertyFieldValues?: boolean;
   /** The host's will-save registry. When absent, `document.onWillSave`
    *  holds listeners that never run and `supports("document.onWillSave@1")`
    *  is false. */
@@ -3950,6 +3955,7 @@ export function createBundleHost(
   // for React panels; optional members, so the probe is their presence.
   if (options?.widgets?.PropertyField) {
     featureSet.add("widgets.propertyField@1");
+    if (options.propertyFieldValues) featureSet.add("widgets.propertyField.values@1");
   }
   if (options?.willSave) {
     featureSet.add("document.onWillSave@1");

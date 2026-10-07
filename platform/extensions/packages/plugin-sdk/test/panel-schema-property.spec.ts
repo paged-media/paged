@@ -130,6 +130,17 @@ describe("widgets.PropertyField", () => {
     }).host;
     expect(wired.widgets.PropertyField).toBe(Field);
     expect(wired.supports("widgets.propertyField@1")).toBe(true);
+    // §12.8 — list / struct values are a separate host promise.
+    expect(wired.supports("widgets.propertyField.values@1")).toBe(false);
+    const withValues = createBundleHost(() => fake.editor, MANIFEST, {
+      console: silent,
+      widgets: { PropertyField: Field },
+      propertyFieldValues: true,
+    }).host;
+    expect(withValues.supports("widgets.propertyField.values@1")).toBe(true);
+    // The flag without the field promises nothing.
+    const flagOnly = createBundleHost(() => fake.editor, MANIFEST, { console: silent, propertyFieldValues: true }).host;
+    expect(flagOnly.supports("widgets.propertyField.values@1")).toBe(false);
     expect(typeof wired.widgets.CodeEditor).toBe("function");
   });
 });
