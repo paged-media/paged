@@ -2155,6 +2155,7 @@ export function createBundleHost(
         createdId: reply.payload.createdId ?? null,
         pageIds: reply.payload.pageIds,
         ...(minted !== undefined ? { minted } : {}),
+        ...(typeof reply.payload.appliedSeq === "number" ? { appliedSeq: reply.payload.appliedSeq } : {}),
       };
     }
     return {

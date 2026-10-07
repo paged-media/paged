@@ -218,6 +218,16 @@ describe("protocol 71 — schemas come from core's catalog", () => {
     expect((await h.objects.kinds()).map((k) => k.kind)).toEqual(expect.arrayContaining(["textVariable", "gradient", "guide", "section"]));
   });
 
+  it("a row core accepts but does not store is read-only here (cellFillTint: engine 71 reads null, drops the write)", async () => {
+    const h = (live = await createHeadlessHost({ console: silent }));
+    const o = await everything(h);
+    const row = (await h.objects.schema(o.cell)).find((r) => r.path === "cellFillTint")!;
+    expect(row).toMatchObject({ access: "readOnly", bindable: false });
+    expect(row.summary).toMatch(/not stored/);
+    expect(await h.objects.set(o.cell, "cellFillTint", 50)).toMatchObject({ applied: false, code: "readOnly", undoSteps: 0 });
+    expect(await h.objects.get(o.cell, "cellFillTint")).toMatchObject({ kind: expect.stringMatching(/value|absent/) });
+  });
+
   it("every PropertyPath of the wire has a catalog row (operations aside), and the catalog names no path the wire lacks", () => {
     const wire = new Set(Object.keys(CORE_PATHS));
     const catalogPaths = new Set(CORE_CATALOG_ROWS.map((r) => r.path));

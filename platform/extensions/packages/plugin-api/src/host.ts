@@ -886,6 +886,11 @@ export type MutationOutcome =
       createdId: ElementId | null;
       pageIds: PageId[];
       minted?: MintedElement[];
+      /** The engine's sequence number of this write (the wire's
+       *  `mutationApplied.appliedSeq`), when the host knows it. A script
+       *  host bridge reports it back as `HostObjectsResult.committed` so
+       *  the write folds into the script's undo step (protocol 71). */
+      appliedSeq?: number;
     }
   | { applied: false; error: unknown };
 

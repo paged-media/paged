@@ -60,7 +60,21 @@ export async function answerHostObjects(
   objects: ObjectsSurface,
   calls: readonly HostObjectCall[],
 ): Promise<HostObjectAnswer[]> {
+  return (await answerHostObjectsRound(objects, calls)).answers;
+}
+
+/** {@link answerHostObjects}, plus `committed`: the engine `appliedSeq` of
+ *  every write made ANSWERING these calls (a batch that committed). The
+ *  host sends it as `HostObjectsResult.committed` — protocol 71 folds only
+ *  a script session's own undo records, so without it a script's plugin
+ *  write would be a separate undo step; a write made by anyone else
+ *  while the script waits is never listed and stays its own step. */
+export async function answerHostObjectsRound(
+  objects: ObjectsSurface,
+  calls: readonly HostObjectCall[],
+): Promise<{ answers: HostObjectAnswer[]; committed: number[] }> {
   const out: HostObjectAnswer[] = [];
+  const committed: number[] = [];
   for (const call of calls) {
     try {
       switch (call.op) {
@@ -75,6 +89,8 @@ export async function answerHostObjects(
         }
         case "batch": {
           const r = await objects.batch(call.ops as ObjectOp[]);
+          const seq = r.applied && r.outcome?.applied ? r.outcome.appliedSeq : undefined;
+          if (typeof seq === "number") committed.push(seq);
           out.push(
             r.applied
               ? { value: r }
@@ -102,7 +118,7 @@ export async function answerHostObjects(
       out.push({ error: { code: "failed", reason: String(err) } });
     }
   }
-  return out;
+  return { answers: out, committed };
 }
 
 /** Run a script whose `plugin:` calls are answered by `objects`. */
@@ -124,8 +140,11 @@ export async function runScriptWithObjects(
   while (reply.kind === "requestHostObjects" && objects) {
     hostRounds++;
     const { session, calls } = reply.payload as { session: number; calls: HostObjectCall[] };
-    const answers = await answerHostObjects(objects, calls);
-    reply = await send({ kind: "hostObjectsResult", payload: { session, answers } });
+    const { answers, committed } = await answerHostObjectsRound(objects, calls);
+    reply = await send({
+      kind: "hostObjectsResult",
+      payload: { session, answers, ...(committed.length > 0 ? { committed } : {}) },
+    });
   }
   if (reply.kind !== "scriptResult") throw new Error(`unexpected reply: ${reply.kind}`);
   const p = reply.payload as { output: string[]; error?: string | null; budgetKind?: string | null };

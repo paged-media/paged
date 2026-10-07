@@ -473,6 +473,15 @@ export const CORE_CATALOG_ROWS: readonly CoreCatalogRow[] =
 
 let schema71: Map<string, Map<string, CoreRow71>> | null = null;
 
+/** Catalog rows core lists as read-write but does not STORE: the engine
+ *  accepts the `Set` and drops it, and `RequestGet` answers null. The SDK
+ *  marks them read-only (and unbindable) so a field or a binding cannot
+ *  claim a write that never lands. Remove an entry when core models the
+ *  value (or flips the row itself). Engine 71 (core f048938). */
+export const CORE_UNSTORED_ROWS: ReadonlyMap<string, string> = new Map([
+  ["cell|cellFillTint", "Per-cell fill tint is not stored by the engine (protocol 71): reads answer null, writes are refused here."],
+]);
+
 /** The catalog names a few rows by their Boa ALIAS (`frameInnerShadow`);
  *  the SDK lists every core row under its WIRE path, as the registry
  *  canonicalises input (`canonicalCorePath`). */
@@ -510,6 +519,12 @@ export function coreSchema71(): ReadonlyMap<string, ReadonlyMap<string, CoreRow7
       if (row.virtual) schema.virtual = row.virtual;
       if (row.bindable !== undefined) schema.bindable = row.bindable;
       schema.since = 71;
+      const unstored = CORE_UNSTORED_ROWS.get(`${row.addressKind}|${path}`);
+      if (unstored && (schema.access ?? "readWrite") === "readWrite") {
+        schema.access = "readOnly";
+        schema.bindable = false;
+        schema.summary = unstored;
+      }
       const m = out.get(kind) ?? new Map<string, CoreRow71>();
       if (!m.has(path)) m.set(path, { schema, wire: row.wire, coreKind: row.addressKind });
       out.set(kind, m);

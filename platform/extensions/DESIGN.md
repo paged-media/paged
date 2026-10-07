@@ -2389,6 +2389,23 @@ order). An engine-minted object is written with a placeholder — `$h:<handle>`
 answers `""` per create; a list of the wrong length, or an entry that is
 not an address, is refused (`failed`) before anything applies.
 
+### 21.11 The final protocol-71 engine (core f048938): `committed`, unstored rows
+
+- **The script bridge reports its own writes.** Core now folds only a
+  script session's OWN undo records into the script's step. The host's
+  answer to `RequestHostObjects` therefore sends
+  `HostObjectsResult.committed`: the `appliedSeq` of every engine write it
+  made answering that round (`answerHostObjectsRound`; the registry's
+  commit carries the seq as the new optional `MutationOutcome.appliedSeq`).
+  A write anyone else makes while the script waits is not listed and stays
+  its own undo step. Writes a typed command makes inside `invoke` are not
+  tracked (the bridge's calls are get / batch / query / schema).
+- **Rows core accepts but does not store** are marked honestly in the
+  seam (`CORE_UNSTORED_ROWS`): `cell` `cellFillTint` reads null and the
+  engine drops the write, so the SDK lists it `readOnly`, not bindable,
+  and refuses a set (`readOnly`). The entry goes when core models the
+  per-cell tint or flips the catalog row itself.
+
 ## 22. The Node CLI (ADR 324 — `@paged-media/cli`, bin `paged`)
 
 **Status:** 0.1.0-canary.0 in `packages/cli`, published by `publish.yml`

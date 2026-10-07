@@ -116,6 +116,7 @@ export {
 } from "./object-registry";
 export {
   answerHostObjects,
+  answerHostObjectsRound,
   runScriptWithObjects,
   type HostObjectAnswer,
   type HostObjectCall,

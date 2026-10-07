@@ -39,7 +39,7 @@ afterEach(() => {
   live = null;
 });
 
-async function setup(): Promise<{ h: HeadlessHost; rect: string; notes: string[] }> {
+async function setup(): Promise<{ h: HeadlessHost; rect: string; notes: string[]; pageId: string }> {
   const h = (live = await createHeadlessHost({ console: silent }));
   const [pageId] = await h.load(minimalIdml());
   const made = await h.host.document.mutate({ op: "insertFrame", args: { pageId: pageId!, bounds: [10, 10, 110, 210] } });
@@ -47,7 +47,7 @@ async function setup(): Promise<{ h: HeadlessHost; rect: string; notes: string[]
   const rect = `${created.kind}:${created.id}`;
   h.loadBundle(makeNotesBundle());
   await h.objects.invoke("acme.notes.attach", { frame: rect, count: 2 });
-  return { h, rect, notes: await h.objects.query(NOTE) };
+  return { h, rect, notes: await h.objects.query(NOTE), pageId: pageId! };
 }
 
 /** Does the loaded engine carry the bridge? (`paged.schema` ships with it.) */
@@ -105,6 +105,30 @@ describe.skipIf(!hasBridge)("Boa scripts reach plugin objects (real engine, prot
     await h.host.document.redo();
     expect(await h.objects.get(notes[0]!, "text")).toEqual(value("from a script"));
     expect(await h.objects.get(rect, "frameStrokeWeight")).toEqual(value(7));
+  });
+
+  it("the host's own writes join the script's step (committed); a foreign write during the wait stays separate", async () => {
+    const { h, notes, pageId } = await setup();
+    const framesBefore = (await h.objects.query("frame")).length;
+    // A write NOT made answering the round lands while the script waits.
+    const orig = h.objects.batch.bind(h.objects);
+    let foreign = 0;
+    (h.objects as { batch: typeof orig }).batch = async (ops, o) => {
+      if (foreign++ === 0) {
+        expect((await h.host.document.mutate({ op: "insertFrame", args: { pageId, bounds: [300, 10, 340, 50] } })).applied).toBe(true);
+      }
+      return orig(ops, o);
+    };
+    const r = await h.runScript(`paged.set(${JSON.stringify(notes[0])}, "text", "scripted");`);
+    expect(r).toMatchObject({ error: null, hostRounds: 1 });
+    expect((await h.objects.query("frame")).length).toBe(framesBefore + 1);
+    // Undo 1: the script (its plugin write folded in); the foreign frame stays.
+    await h.host.document.undo();
+    expect(await h.objects.get(notes[0]!, "text")).toEqual(value("hello"));
+    expect((await h.objects.query("frame")).length).toBe(framesBefore + 1);
+    // Undo 2: the foreign write, its own step.
+    await h.host.document.undo();
+    expect((await h.objects.query("frame")).length).toBe(framesBefore);
   });
 
   it("reads await the host; a refusal is an exception carrying the registry's code", async () => {

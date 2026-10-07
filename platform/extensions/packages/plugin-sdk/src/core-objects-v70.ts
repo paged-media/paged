@@ -763,7 +763,13 @@ export function createCoreObjectsV70(getEditor: () => PagedEditor): CoreObjects 
         const reply = await client().mutate(m as never);
         if (reply.kind === "mutationApplied") {
           const p = reply.payload;
-          return { applied: true, createdId: p.createdId ?? null, pageIds: p.pageIds, ...(p.minted ? { minted: p.minted } : {}) };
+          return {
+            applied: true,
+            createdId: p.createdId ?? null,
+            pageIds: p.pageIds,
+            ...(p.minted ? { minted: p.minted } : {}),
+            ...(typeof p.appliedSeq === "number" ? { appliedSeq: p.appliedSeq } : {}),
+          };
         }
         return { applied: false, error: reply.kind === "mutationFailed" ? reply.payload : reply };
       } catch (error) {
