@@ -48,6 +48,7 @@ import type {
   PropertySchema,
 } from "@paged-media/plugin-api";
 
+import { formatAddress, parseAddress } from "@paged-media/plugin-sdk";
 import { framePathMutationFor } from "../commands/compound-path";
 import { fromWrite, kindBatch, type Planner } from "./plan";
 import {
@@ -160,11 +161,19 @@ export function makePathKind(host: BundleHost): ObjectKindContribution & Planner
     schema: PATH_SCHEMA,
     content: { kind: "vector" },
     hostOf: (address) => localIdOf(address, PATH_KIND),
-    async list() {
+    async list(query) {
       const roots = await host.document.tree();
-      return treeItems(roots)
+      const all = treeItems(roots)
         .filter((id) => PATH_BEARING.has(id.kind))
         .map((id) => addressOf(PATH_KIND, coreAddressOf(id)));
+      // An item scope (`<item> > path`, a panel's selection): that item's
+      // own path only.
+      const within = query.within ? parseAddress(query.within) : null;
+      if (within?.kind === "item") {
+        const own = addressOf(PATH_KIND, formatAddress(within));
+        return all.filter((a) => a === own);
+      }
+      return all;
     },
     async get(address, path): Promise<ObjectValue> {
       const el = elementOf(address);

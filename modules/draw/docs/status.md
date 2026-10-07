@@ -118,7 +118,15 @@ The editor builds `PropertyField`; these are the fields that map onto a row toda
   `frameGradientFillLength`.
 - Repeat, Blend, Pattern and Objects on Path options: every numeric, toggle and select field
   is a parameter row of its kind (`repeat.count`, `blend.spacing`, `pattern.overlap`, …).
-- Appearance: the stack rows `appearance.fills` / `appearance.strokes` need a LIST field.
+- Appearance and graphic styles: the stack rows `fills` / `strokes` are list rows (items listed
+  top-first, add / remove / reorder, one undo step per edit).
+- Path: `points` is a list row of anchor / left / right items, `subpathStarts` a number list.
+  The per-point item rows (`points[]`, `points[].anchor|left|right`) have no row of their own
+  (a panel row's path is static); the panel reaches them as the points row's items
+  (`DRAW_PANEL_ITEM_ROWS`, a documented exception).
+- Pattern `tile` / `spacing` (points), `overlap` (struct fields), repeat `spacing` / `clipRect`,
+  objects-on-path `order` (number list): rows of the properties panel, like every other
+  writable row of every kind (`DRAW_PANEL_FIELDS`; a spec holds it to the manifest).
 - Graphic styles, symbols: `name` per row; the linked count and overridden flag are derived
   rows. Live paint: `name`; faces are read-only (painted through the command).
 - Path Options: its sections are the args of the path-op and insert-shape typed commands, a

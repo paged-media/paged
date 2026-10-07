@@ -31,6 +31,7 @@ import manifest from "../manifest.json";
 import { fillPanel } from "../src/panels/fill-panel";
 import {
   DRAW_PANEL_FIELDS,
+  DRAW_PANEL_ITEM_ROWS,
   DRAW_PROPERTIES_PANEL,
   DRAW_PROPERTIES_PANEL_ID,
 } from "../src/panels/properties-panel";
@@ -40,7 +41,6 @@ const PREFIX = `plugin:${manifest.id}/`;
 const kinds = manifest.contributes.objectModel.kinds as unknown as Array<{ kind: string; schema: PropertySchema[] }>;
 const schemaOf = (k: string) =>
   k.startsWith(PREFIX) ? kinds.find((x) => x.kind === k.slice(PREFIX.length))?.schema : undefined;
-const SCALAR = new Set(["bool", "number", "length", "enum", "text", "color", "ref"]);
 
 const CORE_STROKE_FILL = [
   "frameStrokeWeight", "frameStrokeColor", "frameStrokeEndCap", "frameStrokeStartArrowhead",
@@ -70,17 +70,38 @@ describe("draw panels — property rows (ADR 323)", () => {
     expect(widgets.some((r) => r.value?.kind === "selectionProperty")).toBe(false);
   });
 
-  it("DRAW_PANEL_FIELDS is every writable scalar row of each listed kind, each through a property row", () => {
-    for (const [kind, paths] of Object.entries(DRAW_PANEL_FIELDS)) {
-      const want = kinds
-        .find((k) => k.kind === kind)!
-        .schema.filter((r) => (r.access ?? "readWrite") === "readWrite" && SCALAR.has(r.type.kind))
-        .map((r) => r.path);
-      expect([...paths], kind).toEqual(want);
+  it("DRAW_PANEL_FIELDS is EVERY writable row of every kind (item rows: documented, reached through their list)", () => {
+    const writable = (k: { schema: PropertySchema[] }) =>
+      k.schema.filter((r) => (r.access ?? "readWrite") === "readWrite").map((r) => r.path);
+    for (const k of kinds) {
+      const listed = (DRAW_PANEL_FIELDS as Record<string, readonly string[]>)[k.kind] ?? [];
+      const items = writable(k).filter((p) => `${k.kind}.${p}` in DRAW_PANEL_ITEM_ROWS);
+      expect([...listed, ...items].sort(), k.kind).toEqual(writable(k).sort());
     }
     const declared = propertyRowsOf(DRAW_PROPERTIES_PANEL).map((r) => `${r.field.kind!.slice(PREFIX.length)}.${r.field.path}`);
     const expected = Object.entries(DRAW_PANEL_FIELDS).flatMap(([k, ps]) => ps.map((p) => `${k}.${p}`));
     expect(declared.sort()).toEqual(expected.sort());
+  });
+
+  it("each documented item row is an item (field) of a list row the panel declares with items", () => {
+    const rows = propertyRowsOf(DRAW_PROPERTIES_PANEL).map((r) => r.field);
+    for (const [row, { via }] of Object.entries(DRAW_PANEL_ITEM_ROWS)) {
+      const [kind, path] = [row.slice(0, row.indexOf(".")), row.slice(row.indexOf(".") + 1)];
+      const list = rows.find((r) => r.kind === `${PREFIX}${kind}` && `${kind}.${r.path}` === via)!;
+      expect(list, row).toBeDefined();
+      expect(path.startsWith(`${list.path}[]`), row).toBe(true);
+      const field = path.split("].")[1];
+      if (field) expect(list.items?.fields, row).toContain(field);
+    }
+  });
+
+  it("list and struct rows carry their presentation (stacks top-first, point items, overlap fields)", () => {
+    const row = (kind: string, path: string) =>
+      propertyRowsOf(DRAW_PROPERTIES_PANEL).find((r) => r.field.kind === `${PREFIX}${kind}` && r.field.path === path)!.field;
+    for (const k of ["appearance", "graphicStyle"]) for (const p of ["fills", "strokes"]) expect(row(k, p).items).toMatchObject({ reversed: true, itemLabel: "color" });
+    expect(row("path", "points").items?.fields).toEqual(["anchor", "left", "right"]);
+    expect(row("path", "points").address).toBe("selection");
+    expect(row("pattern", "overlap").fields?.map((f) => (typeof f === "string" ? f : f.field))).toEqual(["horizontal", "vertical"]);
   });
 
   it("every panel is declared in the manifest", () => {

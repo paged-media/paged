@@ -49,7 +49,7 @@
 
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 
-import { type HeadlessHost } from "@paged-media/plugin-sdk";
+import { editValue, type HeadlessHost } from "@paged-media/plugin-sdk";
 
 import { drawBundle } from "../src";
 import { minimalIdml } from "./fixtures/minimal-idml";
@@ -543,6 +543,46 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
     }
     // Disposing the bundle removes its kinds from the shared registry.
     expect((await harness.objects.kinds()).filter((k) => k.owner === "media.paged.draw")).toEqual([]);
+  });
+
+  it("ADR 323 §12.8 — the properties panel's list / struct rows edit through planValueEdit (one undo step each)", async () => {
+    const handle = harness.loadBundle(drawBundle);
+    try {
+      const objects = harness.host.objects;
+      const D = "media.paged.draw";
+      const path = `plugin:${D}/path/rectangle:urect`;
+      const appearance = `plugin:${D}/appearance/rectangle:urect`;
+      // The panel's "selection" rows resolve `<item> > path`: that item's path only.
+      expect(await objects.query(`rectangle:urect > plugin:${D}/path`)).toEqual([path]);
+      // points: a whole table (a plain rectangle answers none), then an item
+      // field edit (the panel's point items, anchor / left / right).
+      const corner = (x: number, y: number) => ({ anchor: [x, y], left: [x, y], right: [x, y] });
+      const square = [corner(0, 0), corner(20, 0), corner(20, 20), corner(0, 20)];
+      expect(await objects.set(path, "points", square)).toMatchObject({ applied: true, undoSteps: 1 });
+      const pts = (await objects.get(path, "points")) as { kind: "value"; value: Array<{ anchor: number[] }> };
+      expect(pts.value).toHaveLength(4);
+      const moved = [pts.value[0]!.anchor[0]! + 3, pts.value[0]!.anchor[1]! + 2];
+      expect(await editValue(objects, [path], "points", { edit: "itemSet", index: 0, field: "anchor", value: moved })).toMatchObject({
+        applied: true,
+        undoSteps: 1,
+      });
+      expect(await objects.get(path, "points[0].anchor")).toEqual({ kind: "value", value: moved });
+      expect(await objects.get(path, "points[1]")).toEqual({ kind: "value", value: pts.value[1] });
+      // An appearance stack: add (the item type's default), then a field edit, then remove.
+      expect(await editValue(objects, [appearance], "fills", { edit: "add", item: { color: "Color/Paper", tint: 100, opacity: 100, blendMode: "Normal" } })).toMatchObject({ applied: true, undoSteps: 1 });
+      expect(await editValue(objects, [appearance], "fills", { edit: "itemSet", index: 0, field: "opacity", value: 40 })).toMatchObject({ applied: true });
+      expect(await objects.get(appearance, "fills")).toEqual({
+        kind: "value",
+        value: [{ color: "Color/Paper", tint: 100, opacity: 40, blendMode: "Normal" }],
+      });
+      expect(await editValue(objects, [appearance], "fills", { edit: "remove", index: 0 })).toMatchObject({ applied: true });
+      expect(await objects.get(appearance, "fills")).toEqual({ kind: "value", value: [] });
+      // Undo walks the edits back one step at a time: the point is restored last.
+      for (let i = 0; i < 4; i++) await harness.host.document.undo();
+      expect(await objects.get(path, "points[0].anchor")).toEqual({ kind: "value", value: pts.value[0]!.anchor });
+    } finally {
+      handle.dispose();
+    }
   });
 
   it("dispose leaves the document unchanged (honesty smoke test)", async () => {
