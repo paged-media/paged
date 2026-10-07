@@ -115,7 +115,7 @@ export function makeNotesBundle(manifest: PluginManifest = notesManifest): Paged
         return bytes ? (JSON.parse(decoder.decode(bytes)) as State) : null;
       }
 
-      function commit(state: State): ObjectWrite {
+      function commit(state: State, created: readonly string[] = []): ObjectWrite {
         const text = JSON.stringify(state);
         const h = hash(text);
         const parts: PartChange[] = [{ path: `notes/${h}.json`, bytes: encoder.encode(text) }];
@@ -125,6 +125,7 @@ export function makeNotesBundle(manifest: PluginManifest = notesManifest): Paged
           host: hostFrame!,
           labelKey: LABEL_KEY,
           labelValue: JSON.stringify({ v: 1, data: { hash: h } }),
+          ...(created.length > 0 ? { created } : {}),
         };
       }
 
@@ -134,7 +135,7 @@ export function makeNotesBundle(manifest: PluginManifest = notesManifest): Paged
         return p?.kind === "plugin" ? p.id : null;
       };
 
-      function apply(state: State, ops: readonly ObjectOp[]): string | null {
+      function apply(state: State, ops: readonly ObjectOp[], created: string[] = []): string | null {
         for (const op of ops) {
           if (op.op === "set") {
             const id = idOf(op.address);
@@ -144,6 +145,7 @@ export function makeNotesBundle(manifest: PluginManifest = notesManifest): Paged
           } else if (op.op === "create") {
             const id = `n${Object.keys(state).length + 1}`;
             state[id] = { text: "", size: 12, visible: true, tone: "red", ...(op.props as Partial<Note>) };
+            created.push(addr(id));
           } else if (op.op === "delete") {
             const id = idOf(op.address);
             if (!id || !state[id]) return `no note ${op.address}`;
@@ -184,8 +186,9 @@ export function makeNotesBundle(manifest: PluginManifest = notesManifest): Paged
             },
             async batch(ops) {
               const state = (await load()) ?? {};
-              const error = apply(state, ops);
-              return error ? { kind: "rejected", reason: error } : commit(state);
+              const created: string[] = [];
+              const error = apply(state, ops, created);
+              return error ? { kind: "rejected", reason: error } : commit(state, created);
             },
           },
         ],

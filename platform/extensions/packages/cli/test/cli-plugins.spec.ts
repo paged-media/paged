@@ -85,6 +85,13 @@ describe("plugin object kinds", () => {
     await expect(verb("set", [fx.paged, NOTE, "size", "100", "--no-save"], sess)).rejects.toThrow(/size 100 is above 72/);
     await expect(verb("set", [fx.paged, NOTE, "tone", "green", "--no-save"], sess)).rejects.toThrow(/expected enum \(red \| blue\)/);
     await expect(verb("set", [fx.paged, NOTE, "length", "3", "--no-save"], sess)).rejects.toThrow(/length: is derived/);
+
+    // `create` on a PLUGIN kind answers the new address (the plugin's
+    // write reports it in ObjectWrite.created).
+    const made = await verb("create", [fx.paged, "plugin:acme.notes/note", '{"text":"made"}', "--no-save"], sess);
+    expect(made.json.created).toEqual(["plugin:acme.notes/note/n3"]);
+    expect(made.text).toMatch(/^created plugin:acme\.notes\/note\/n3 /);
+    expect((await verb("get", [fx.paged, made.json.created[0], "text"], sess)).json.value).toBe("made");
     (await sess.get()).dispose();
   });
 

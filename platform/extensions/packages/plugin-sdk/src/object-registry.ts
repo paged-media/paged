@@ -169,6 +169,27 @@ function hostKey(address: string): string {
   return formatAddress(p);
 }
 
+/** Replace a plugin-reported created address's engine placeholders:
+ *  `$h:<handle>` → the id the commit minted for that `bindCreated` handle,
+ *  `$created` → the batch's `createdId`. An unresolvable placeholder (the
+ *  handle minted nothing, or a non-string id) answers `null` (→ `""`). */
+export function resolveCreatedPlaceholders(
+  address: string,
+  outcome: import("@paged-media/plugin-api").MutationOutcome,
+): string | null {
+  if (!outcome.applied) return null;
+  let missing = false;
+  const idText = (el: { id: unknown } | null | undefined): string => {
+    if (el && typeof el.id === "string") return el.id;
+    missing = true;
+    return "";
+  };
+  const out = address
+    .replace(/\$h:([A-Za-z0-9_]+)/g, (_m, handle: string) => idText(outcome.minted?.find((m) => m.handle === handle)?.element))
+    .replace(/\$created/g, () => idText(outcome.createdId));
+  return missing ? null : out;
+}
+
 export function createObjectRegistry(options: CreateObjectRegistryOptions = {}): ObjectRegistry {
   const core = options.core ?? null;
   const log = options.log ?? console;
@@ -303,6 +324,9 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
       /** Plugin ops grouped by PLANNER: the plugin (when it contributes a
        *  plugin-level `batch`) or the kind. */
       const perKind = new Map<KindEntry | string, { entry: KindEntry; ops: ObjectOp[] }>();
+      /** Per planner group: how many `create` ops it received, and (after
+       *  planning) the addresses its write reported for them. */
+      const groupCreates = new Map<KindEntry | string, { count: number; reported: readonly string[] | null }>();
       const touched: string[] = [];
       // 1. validate + plan core ops; group plugin ops by kind.
       for (const [index, op] of ops.entries()) {
@@ -350,7 +374,14 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
             if (op.props) {
               for (const [path, v] of Object.entries(op.props)) validateOne(entry, null, path, v);
             }
-            pushOp(perKind, entry, op);
+            const key = pushOp(perKind, entry, op);
+            const g = groupCreates.get(key) ?? { count: 0, reported: null };
+            const nth = g.count++;
+            groupCreates.set(key, g);
+            created.push(async (outcome) => {
+              const a = g.reported?.[nth];
+              return a ? resolveCreatedPlaceholders(a, outcome) : null;
+            });
             continue;
           }
           const { parsed, entry } = route(op.address, handles);
@@ -384,7 +415,7 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
       /** The ONE label per (plugin, host): a whole envelope, or sub-keys
        *  merged into the current one's `data`. */
       const labels = new Map<string, { plugin: string; host: ParsedAddress; full: string | null; subs: Map<string, unknown> }>();
-      for (const { entry, ops: kindOps } of perKind.values()) {
+      for (const [groupKey, { entry, ops: kindOps }] of perKind) {
         const who = entry.model.batch ? `plugin ${entry.plugin}` : entry.qualified;
         let write: ObjectWrite;
         try {
@@ -401,6 +432,22 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
           throw new Refusal("failed", `${who}: ${String(err)}`);
         }
         if (write.kind === "rejected") throw new Refusal("failed", `${who}: ${write.reason}`);
+        const g = groupCreates.get(groupKey);
+        if (write.created !== undefined) {
+          const want = g?.count ?? 0;
+          if (!Array.isArray(write.created) || write.created.length !== want) {
+            throw new Refusal(
+              "failed",
+              `${who}: reported ${Array.isArray(write.created) ? write.created.length : "non-list"} created address(es) for ${want} create op(s)`,
+            );
+          }
+          for (const a of write.created) {
+            if (typeof a !== "string" || (a !== "" && !parseAddress(a.replace(/\$h:[A-Za-z0-9_]+|\$created/g, "x")))) {
+              throw new Refusal("failed", `${who}: created address "${String(a)}" is not an address`);
+            }
+          }
+          if (g) g.reported = write.created;
+        }
         if (write.kind === "mutations" || write.kind === "both") {
           mutations.push(...write.mutations.map((m) => checkReturnedMutation(entry.plugin, m)));
         }
@@ -471,6 +518,11 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
       // 4. ONE commit.
       if (mutations.length === 0) {
         notify(touched);
+        if (created.length > 0) {
+          const none: import("@paged-media/plugin-api").MutationOutcome = { applied: true, createdId: null, pageIds: [] };
+          const names = await Promise.all(created.map((r) => r(none).catch(() => null)));
+          return { applied: true, undoSteps: 0, created: names.map((n) => n ?? "") };
+        }
         return { applied: true, undoSteps: 0 };
       }
       if (!core) throw new Refusal("unmapped", "no core backend to commit to");
@@ -504,11 +556,12 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
     }
   };
 
-  function pushOp(map: Map<KindEntry | string, { entry: KindEntry; ops: ObjectOp[] }>, entry: KindEntry, op: ObjectOp): void {
+  function pushOp(map: Map<KindEntry | string, { entry: KindEntry; ops: ObjectOp[] }>, entry: KindEntry, op: ObjectOp): KindEntry | string {
     const key = entry.model.batch ? entry.plugin : entry;
     const group = map.get(key) ?? { entry, ops: [] };
     group.ops.push(op);
     map.set(key, group);
+    return key;
   }
 
   /** Fix-up 13: a metadata mutation a plugin RETURNS gets the same key
