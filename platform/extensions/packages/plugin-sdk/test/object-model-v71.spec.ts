@@ -29,6 +29,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { PagedEditor } from "@paged-media/plugin-api";
 
 import { createCoreObjects } from "../src/core-objects";
+import { codeOfEngineRefusal } from "../src/core-objects-v71";
 import { CORE_CATALOG_ROWS, CORE_PATHS, CORE_ROWLESS_PATHS, coreSchema71 } from "../src/core-schema";
 import { createHeadlessHost, type HeadlessHost } from "../src/harness";
 import { createObjectRegistry } from "../src/object-registry";
@@ -226,6 +227,32 @@ describe("protocol 71 — schemas come from core's catalog", () => {
     expect(row.summary).toMatch(/not stored/);
     expect(await h.objects.set(o.cell, "cellFillTint", 50)).toMatchObject({ applied: false, code: "readOnly", undoSteps: 0 });
     expect(await h.objects.get(o.cell, "cellFillTint")).toMatchObject({ kind: expect.stringMatching(/value|absent/) });
+  });
+
+  it("final 71 reads: mixed is its own result, refusals carry core's code, null clears a nullable text row", async () => {
+    const h = (live = await createHeadlessHost({ console: silent }));
+    const o = await everything(h);
+    // A range whose runs disagree: `mixed`, not a null value or an error.
+    expect(await h.objects.set(`storyRange:${o.storyId}@1..6`, "characterFontSize", 18)).toMatchObject({ applied: true });
+    expect(await h.objects.get(`storyRange:${o.storyId}@1..10`, "characterFontSize")).toEqual({ kind: "mixed" });
+    expect(await h.objects.get(`storyRange:${o.storyId}@1..6`, "characterFontSize")).toEqual(value(18));
+    // Core's refusal codes, not message matching.
+    expect(await h.objects.get("frame:nosuchframe", "frameOpacity")).toMatchObject({ kind: "refused", code: "unknownAddress" });
+    // null clears (the engine reads it as the empty string): one undo step.
+    expect(await h.objects.set(o.text, "appliedObjectStyle", "ObjectStyle/Box")).toMatchObject({ applied: true });
+    expect(await h.objects.get(o.text, "appliedObjectStyle")).toEqual(value("ObjectStyle/Box"));
+    expect(await h.objects.set(o.text, "appliedObjectStyle", null)).toMatchObject({ applied: true, undoSteps: 1 });
+    expect(await h.objects.get(o.text, "appliedObjectStyle")).not.toEqual(value("ObjectStyle/Box"));
+    await h.host.document.undo();
+    expect(await h.objects.get(o.text, "appliedObjectStyle")).toEqual(value("ObjectStyle/Box"));
+  });
+
+  it("codeOfEngineRefusal maps core's typed codes, and falls back to the text", () => {
+    expect(codeOfEngineRefusal("noSuchPath", "x")).toBe("unknownPath");
+    expect(codeOfEngineRefusal("notFound", "x")).toBe("unknownAddress");
+    expect(codeOfEngineRefusal("noDocument", "x")).toBe("unknownAddress");
+    expect(codeOfEngineRefusal("badAddress", "x")).toBe("badAddress");
+    expect(codeOfEngineRefusal(undefined, "frame:x names nothing")).toBe("unknownAddress");
   });
 
   it("every PropertyPath of the wire has a catalog row (operations aside), and the catalog names no path the wire lacks", () => {

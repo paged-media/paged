@@ -85,7 +85,18 @@ export interface ObjectRegistry extends ObjectsSurface {
   register(registration: ObjectModelRegistration): ObjectModelHandle;
   /** The core backend, when one is wired (null = plugin objects only). */
   readonly core: CoreObjects | null;
+  /** A view of this registry whose writes report each engine commit they
+   *  make (its `appliedSeq`) to `note` — including the writes a plugin
+   *  command's handler makes, since an `invoke` through the view hands the
+   *  handler the same view. Writes through any other surface (a panel, a
+   *  UI edit made meanwhile) are never reported. The script bridge answers
+   *  a round through one, so the host can send exactly the script's own
+   *  writes as `HostObjectsResult.committed` (protocol 71). */
+  tracked(note: (appliedSeq: number) => void): ObjectsSurface;
 }
+
+/** Reports one engine commit (`appliedSeq`) to a tracked view's owner. */
+type Note = ((appliedSeq: number) => void) | null;
 
 export interface CreateObjectRegistryOptions {
   core?: CoreObjects | null;
@@ -299,7 +310,8 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
 
   // ----------------------------------------------------------- writes
 
-  async function batch(ops: readonly ObjectOp[]): Promise<ObjectWriteResult> {
+  /** `note`: the commit reporter of a {@link ObjectRegistry.tracked} view. */
+  async function batch(ops: readonly ObjectOp[], note: Note = null): Promise<ObjectWriteResult> {
     const no = (e: Refusal): ObjectWriteResult => ({
       applied: false,
       code: e.code,
@@ -310,7 +322,7 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
     if (ops.length === 0) return { applied: true, undoSteps: 0 };
     if (ops.every((o) => o.op === "invoke" && !(coreCommands && isCoreCommand(o.command)))) {
       try {
-        for (const o of ops) await surface.invoke((o as { command: string }).command, (o as { args: unknown }).args);
+        for (const o of ops) await invoke((o as { command: string }).command, (o as { args: unknown }).args, note);
         return { applied: true, undoSteps: 0 };
       } catch (err) {
         return no(new Refusal("failed", String(err)));
@@ -557,6 +569,7 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
         }
         return { applied: false, code: codeOfEngineError(reason), reason, undoSteps: 0, outcome };
       }
+      if (note && typeof outcome.appliedSeq === "number") note(outcome.appliedSeq);
       notify(touched);
       const result: ObjectWriteResult & { commands?: ObjectCommandResult[] } = { applied: true, undoSteps: 1, outcome };
       if (created.length > 0) {
@@ -784,10 +797,34 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
     return opts?.limit !== undefined ? out.slice(0, opts.limit) : out;
   }
 
+  async function invoke(command: string, args: unknown, note: Note = null): Promise<unknown> {
+    if (coreCommands && isCoreCommand(command)) {
+      const r = await batch([{ op: "invoke", command, args }], note);
+      if (!r.applied) throw new Error(`${r.code ?? "failed"}: ${r.reason ?? "refused"}`);
+      return { created: r.commands?.[0]?.created ?? [], undoSteps: r.undoSteps };
+    }
+    const found = commands.get(command);
+    if (!found) throw new Error(`unknownCommand: no typed command "${command}"`);
+    const why = validateValue(found.c.args, args, undefined, "args");
+    if (why) throw new Error(`invalidValue: ${why}`);
+    // A tracked caller hands the handler its view: the handler's own
+    // writes report their commits too.
+    return found.c.handler({ objects: note ? surface.tracked(note) : surface }, applyDefaults(found.c.args, args));
+  }
+
   // ------------------------------------------------------------ surface
 
   const surface: ObjectRegistry = {
     core,
+    tracked(note) {
+      const view: ObjectsSurface = {
+        ...surface,
+        set: (address, path, value) => batch([{ op: "set", address, path, value }], note),
+        batch: (ops) => batch(ops, note),
+        invoke: (command, args) => invoke(command, args, note),
+      };
+      return view;
+    },
     query,
     get,
     async getAll(address, opts) {
@@ -803,7 +840,7 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
     set(address, path, value) {
       return batch([{ op: "set", address, path, value }]);
     },
-    batch,
+    batch: (ops) => batch(ops),
     async schema(addressOrKind) {
       const parsed = parseAddress(addressOrKind);
       const kind = parsed && parsed.kind !== "handle" ? (parsed.kind === "plugin" ? addressKindOf(parsed) : coreKindOf(parsed)) : addressOrKind;
@@ -830,18 +867,7 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
         ...(c.result ? { result: c.result } : {}),
       }))];
     },
-    async invoke(command, args) {
-      if (coreCommands && isCoreCommand(command)) {
-        const r = await batch([{ op: "invoke", command, args }]);
-        if (!r.applied) throw new Error(`${r.code ?? "failed"}: ${r.reason ?? "refused"}`);
-        return { created: r.commands?.[0]?.created ?? [], undoSteps: r.undoSteps };
-      }
-      const found = commands.get(command);
-      if (!found) throw new Error(`unknownCommand: no typed command "${command}"`);
-      const why = validateValue(found.c.args, args, undefined, "args");
-      if (why) throw new Error(`invalidValue: ${why}`);
-      return found.c.handler({ objects: surface }, applyDefaults(found.c.args, args));
-    },
+    invoke: (command, args) => invoke(command, args),
     onDidChange(listener, filter) {
       const match = matcher(filter?.selector);
       const entry = { fn: listener, match };

@@ -105,6 +105,22 @@ export function codeOfEngineError(text: string): ObjectErrorCode {
   return "failed";
 }
 
+/** A `RequestGet` refusal's typed `code` (final protocol 71) as the SDK's
+ *  code; an engine that sends no code falls back to the message text. */
+export function codeOfEngineRefusal(code: string | undefined, text: string): ObjectErrorCode {
+  switch (code) {
+    case "noSuchPath":
+      return "unknownPath";
+    case "notFound":
+    case "noDocument":
+      return "unknownAddress";
+    case "badAddress":
+      return "badAddress";
+    default:
+      return codeOfEngineError(text);
+  }
+}
+
 /** Exact row first, then its indexed form (`labels[x]` → `labels[]`). */
 function findCoreRow(rows: ReadonlyMap<string, CoreRow71>, path: string): CoreRow71 | null {
   return rows.get(path) ?? (path.includes("[") ? (rows.get(rowPathOf(path)) ?? null) : null);
@@ -271,8 +287,11 @@ export function createCoreObjectsV71(getEditor: () => PagedEditor, v70: V70): Co
       if (address === null) return v70.get(a, path); // an empty story: the old range read
       const r = await send("requestGet", { address, path });
       if (r?.kind !== "propertyValue") return refuse("failed", `${address}.${path}: no reply`);
-      const p = r.payload as { value: { type: string; value: unknown } | null; error: string | null };
-      if (p.error) return refuse(codeOfEngineError(p.error), p.error);
+      const p = r.payload as { value: { type: string; value: unknown } | null; error: string | null; code?: string; mixed?: boolean };
+      if (p.error) return refuse(codeOfEngineRefusal(p.code, p.error), p.error);
+      // Final protocol 71: a range whose runs disagree is `mixed: true` (no
+      // value, no error) — distinct from a path that reads null.
+      if (p.mixed) return { kind: "mixed" };
       return { kind: "value", value: p.value ? p.value.value : null };
     },
 

@@ -1,9 +1,9 @@
 {
   "$comment": "Where the vendored catalog.json came from, and — when it leads the published engine — why that is allowed. `sync-catalog.mjs --check` enforces every claim in this file, in both directions: an unexplained difference fails, and so does an `aheadOfPublished` marker that the publish has since caught up with.",
   "source": "core",
-  "rev": "f048938",
+  "rev": "aae3bfe",
   "targetsProtocol": 71,
   "publishedPackage": "@paged-media/introspect-wasm",
   "aheadOfPublished": true,
-  "why": "LEADS the publish: vendored from the FINAL local build of core branch om/protocol-71 (rev f048938, protocol 71, unreleased; package 0.71.0-local) for the object-model SDK seam (ADR 131/132/323): Mutation::Set on address strings, RequestGet / RequestQuery, the typed propertySchemas rows, the text-variable ops and the Boa host-object bridge (RequestHostObjects / HostObjectsResult.committed; paged.schema, paged.batch of object ops). The published introspect-wasm is 0.70.0; this marker goes when v0.71.0 ships and the copy is re-synced from npm."
+  "why": "LEADS the publish: vendored from the FINAL local build of core branch om/protocol-71 (rev aae3bfe, protocol 71, unreleased; package 0.71.0-local) for the object-model SDK seam (ADR 131/132/323): Mutation::Set on address strings, RequestGet / RequestQuery, the typed propertySchemas rows, the text-variable ops and the Boa host-object bridge (RequestHostObjects / HostObjectsResult.committed; paged.schema, paged.batch of object ops). The published introspect-wasm is 0.70.0; this marker goes when v0.71.0 ships and the copy is re-synced from npm."
 }

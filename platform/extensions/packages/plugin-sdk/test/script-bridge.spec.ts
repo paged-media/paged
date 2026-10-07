@@ -82,6 +82,20 @@ describe("answerHostObjects (registry side, no engine)", () => {
     expect(answers[2]).toEqual({ value: [] });
     expect(answers[3]).toEqual({ value: [] });
   });
+
+  it("answers invoke and commands (no longer `unmapped`); a refused invoke is a coded error", async () => {
+    const objects = createObjectRegistry({ core: null, log: silent });
+    const answers = await answerHostObjects(objects, [
+      { op: "commands" },
+      { op: "commands", owner: "nobody" },
+      { op: "invoke", id: "nobody.thing", args: {} },
+      { op: "invoke", id: "" },
+    ]);
+    expect(answers[0]).toEqual({ value: [] });
+    expect(answers[1]).toEqual({ value: [] });
+    expect(answers[2]!.error).toMatchObject({ code: "unknownCommand" });
+    expect(answers[3]!.error).toMatchObject({ code: "invalidValue" });
+  });
 });
 
 describe.skipIf(!hasBridge)("Boa scripts reach plugin objects (real engine, protocol 71 bridge)", () => {
@@ -107,26 +121,36 @@ describe.skipIf(!hasBridge)("Boa scripts reach plugin objects (real engine, prot
     expect(await h.objects.get(rect, "frameStrokeWeight")).toEqual(value(7));
   });
 
-  it("the host's own writes join the script's step (committed); a foreign write during the wait stays separate", async () => {
-    const { h, notes, pageId } = await setup();
+  it("the host's own writes join the script's step (committed); foreign writes during the wait stay separate", async () => {
+    const { h, rect, notes, pageId } = await setup();
     const framesBefore = (await h.objects.query("frame")).length;
-    // A write NOT made answering the round lands while the script waits.
-    const orig = h.objects.batch.bind(h.objects);
+    const weightBefore = await h.objects.get(rect, "frameStrokeWeight");
+    // Writes NOT made answering the round land while the script waits on a
+    // read: a raw engine write AND a write through the SAME registry (what
+    // a panel field does) — neither is the script's.
+    const orig = h.objects.get.bind(h.objects);
     let foreign = 0;
-    (h.objects as { batch: typeof orig }).batch = async (ops, o) => {
+    (h.objects as { get: typeof orig }).get = async (address, path) => {
       if (foreign++ === 0) {
         expect((await h.host.document.mutate({ op: "insertFrame", args: { pageId, bounds: [300, 10, 340, 50] } })).applied).toBe(true);
+        expect((await h.objects.set(rect, "frameStrokeWeight", 9)).applied).toBe(true);
       }
-      return orig(ops, o);
+      return orig(address, path);
     };
-    const r = await h.runScript(`paged.set(${JSON.stringify(notes[0])}, "text", "scripted");`);
-    expect(r).toMatchObject({ error: null, hostRounds: 1 });
+    const r = await h.runScript(`
+      await paged.get(${JSON.stringify(notes[0])}, "text");
+      paged.set(${JSON.stringify(notes[0])}, "text", "scripted");
+    `);
+    expect(r).toMatchObject({ error: null, hostRounds: 2 });
     expect((await h.objects.query("frame")).length).toBe(framesBefore + 1);
-    // Undo 1: the script (its plugin write folded in); the foreign frame stays.
+    // Undo 1: the script (its plugin write folded in); the foreign writes stay.
     await h.host.document.undo();
     expect(await h.objects.get(notes[0]!, "text")).toEqual(value("hello"));
     expect((await h.objects.query("frame")).length).toBe(framesBefore + 1);
-    // Undo 2: the foreign write, its own step.
+    expect(await h.objects.get(rect, "frameStrokeWeight")).toEqual(value(9));
+    // Undo 2 and 3: the foreign writes, each its own step.
+    await h.host.document.undo();
+    expect(await h.objects.get(rect, "frameStrokeWeight")).toEqual(weightBefore);
     await h.host.document.undo();
     expect((await h.objects.query("frame")).length).toBe(framesBefore);
   });
@@ -184,6 +208,63 @@ describe.skipIf(!hasBridge)("Boa scripts reach plugin objects (real engine, prot
     await h.host.document.undo();
     expect(await h.objects.get(notes[0]!, "text")).toEqual(value("hello"));
     expect(await h.objects.get(rect, "frameStrokeWeight")).not.toEqual(value(4));
+  });
+
+  it("paged.invoke runs a core command and a plugin command: committed seqs reported, ONE undo step", async () => {
+    const { h, rect, pageId } = await setup();
+    const framesBefore = (await h.objects.query("frame")).length;
+    const notesBefore = (await h.objects.query(NOTE)).length;
+    const r = await h.runScript(`
+      const made = JSON.parse(await paged.invoke("core.insertFrame", { pageId: "page:${pageId}", bounds: [200, 20, 260, 80] }));
+      console.log(made.created.length, made.undoSteps);
+      console.log(JSON.parse(await paged.invoke("acme.notes.attach", { frame: ${JSON.stringify(rect)}, count: 1 })));
+      try { await paged.invoke("acme.notes.nothing", {}); } catch (e) { console.log("refused", e.code); }
+    `);
+    expect(r.error).toBeNull();
+    expect(r.output).toEqual(["[log] 1 1", `[log] ${notesBefore + 1}`, "[log] refused unknownCommand"]);
+    expect((await h.objects.query("frame")).length).toBe(framesBefore + 1);
+    expect((await h.objects.query(NOTE)).length).toBe(notesBefore + 1);
+    // ONE undo step takes the core command AND the plugin command's write.
+    await h.host.document.undo();
+    expect((await h.objects.query("frame")).length).toBe(framesBefore);
+    expect((await h.objects.query(NOTE)).length).toBe(notesBefore);
+  });
+
+  it("paged.commands lists core commands first and filters by owner", async () => {
+    const { h } = await setup();
+    const r = await h.runScript(`
+      const all = JSON.parse(await paged.commands());
+      const mine = JSON.parse(await paged.commands("acme.notes"));
+      console.log(all[0].owner, all.some(c => c.id === "core.insertFrame"), all.some(c => c.id === "acme.notes.attach"));
+      console.log(mine.map(c => c.id).join());
+    `);
+    expect(r.error).toBeNull();
+    expect(r.output).toEqual(["[log] core true true", "[log] acme.notes.attach"]);
+  });
+
+  it("an invoke op inside paged.batch shares the batch's ONE undo step (handle binds what it made)", async () => {
+    const { h, rect, notes, pageId } = await setup();
+    const before = await h.objects.query("frame");
+    const framesBefore = before.length;
+    const r = await h.runScript(`
+      console.log(await paged.batch([
+        { op: "set", address: ${JSON.stringify(notes[0])}, path: "text", value: "with a command" },
+        { op: "invoke", id: "core.insertFrame", args: { pageId: "page:${pageId}", bounds: [200, 20, 260, 80] }, handle: "box" },
+        { op: "set", address: "$h:box", path: "frameStrokeWeight", value: 5 },
+        { op: "set", address: ${JSON.stringify(rect)}, path: "frameStrokeWeight", value: 6 },
+      ]));
+    `);
+    expect(r).toMatchObject({ error: null, hostRounds: 1 });
+    expect(JSON.parse(r.output[0]!.replace("[log] ", ""))).toEqual([{ ok: true }, { ok: true }, { ok: true }, { ok: true }]);
+    const frames = await h.objects.query("frame");
+    expect(frames.length).toBe(framesBefore + 1);
+    const box = frames.find((f) => !before.includes(f))!;
+    expect(await h.objects.get(box, "frameStrokeWeight")).toEqual(value(5));
+    expect(await h.objects.get(notes[0]!, "text")).toEqual(value("with a command"));
+    await h.host.document.undo();
+    expect((await h.objects.query("frame")).length).toBe(framesBefore);
+    expect(await h.objects.get(notes[0]!, "text")).toEqual(value("hello"));
+    expect(await h.objects.get(rect, "frameStrokeWeight")).not.toEqual(value(6));
   });
 
   it("a script with no plugin address never suspends", async () => {

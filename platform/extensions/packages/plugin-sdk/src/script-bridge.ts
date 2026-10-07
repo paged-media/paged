@@ -34,7 +34,11 @@ export type HostObjectCall =
   | { op: "get"; address: string; path: string }
   | { op: "batch"; ops: unknown[] }
   | { op: "query"; selector: string }
-  | { op: "schema"; target: string };
+  | { op: "schema"; target: string }
+  /** A typed command (`paged.invoke`): `core.<op>` or a plugin's. */
+  | { op: "invoke"; id: string; args?: unknown }
+  /** The typed commands on offer (`paged.commands`), optionally one owner's. */
+  | { op: "commands"; owner?: string };
 
 /** The answer to one call (core `HostObjectAnswer`). */
 export interface HostObjectAnswer {
@@ -75,11 +79,20 @@ export async function answerHostObjectsRound(
 ): Promise<{ answers: HostObjectAnswer[]; committed: number[] }> {
   const out: HostObjectAnswer[] = [];
   const committed: number[] = [];
+  const commit = (seq: number): void => {
+    if (!committed.includes(seq)) committed.push(seq);
+  };
+  // The SDK registry's tracked view reports the commits made THROUGH it —
+  // a batch, a core command, and the writes a plugin command's handler
+  // makes — and nothing written elsewhere meanwhile (a UI edit while the
+  // script waits stays its own undo step).
+  const tracker = (objects as Partial<{ tracked(note: (seq: number) => void): ObjectsSurface }>).tracked;
+  const via = typeof tracker === "function" ? tracker.call(objects, commit) : objects;
   for (const call of calls) {
     try {
       switch (call.op) {
         case "get": {
-          const v = await objects.get(call.address, call.path);
+          const v = await via.get(call.address, call.path);
           out.push(
             v.kind === "refused"
               ? { error: { code: v.code, reason: v.reason } }
@@ -88,9 +101,9 @@ export async function answerHostObjectsRound(
           break;
         }
         case "batch": {
-          const r = await objects.batch(call.ops as ObjectOp[]);
+          const r = await via.batch((call.ops as unknown[]).map(sdkOp));
           const seq = r.applied && r.outcome?.applied ? r.outcome.appliedSeq : undefined;
-          if (typeof seq === "number") committed.push(seq);
+          if (typeof seq === "number") commit(seq);
           out.push(
             r.applied
               ? { value: r }
@@ -106,19 +119,64 @@ export async function answerHostObjectsRound(
           break;
         }
         case "query":
-          out.push({ value: await objects.query(call.selector) });
+          out.push({ value: await via.query(call.selector) });
           break;
         case "schema":
-          out.push({ value: await objects.schema(call.target) });
+          out.push({ value: await via.schema(call.target) });
           break;
+        case "invoke": {
+          if (typeof call.id !== "string" || call.id === "") {
+            out.push({ error: { code: "invalidValue", reason: "invoke: the command id must be a non-empty string" } });
+            break;
+          }
+          if (call.id.startsWith("core.")) {
+            // A core command is ONE batch: its seq comes from the outcome
+            // even when the registry cannot report commits.
+            const r = await via.batch([{ op: "invoke", command: call.id, args: call.args ?? {} }]);
+            const seq = r.applied && r.outcome?.applied ? r.outcome.appliedSeq : undefined;
+            if (typeof seq === "number") commit(seq);
+            out.push(
+              r.applied
+                ? { value: { created: r.commands?.[0]?.created ?? [], undoSteps: r.undoSteps } }
+                : { error: { code: r.code ?? "failed", reason: r.reason ?? "the command was not applied" } },
+            );
+            break;
+          }
+          out.push({ value: (await via.invoke(call.id, call.args ?? {})) ?? null });
+          break;
+        }
+        case "commands": {
+          const all = await via.commands();
+          out.push({ value: call.owner === undefined || call.owner === null ? all : all.filter((c) => c.owner === call.owner) });
+          break;
+        }
         default:
           out.push({ error: { code: "unmapped", reason: `unknown host call ${JSON.stringify(call)}` } });
       }
     } catch (err) {
-      out.push({ error: { code: "failed", reason: String(err) } });
+      out.push({ error: refusalOf(err) });
     }
   }
   return { answers: out, committed };
+}
+
+/** A thrown `host.objects` refusal (`"<code>: <reason>"`, the shape
+ *  `invoke` rejects with) as the answer's coded error. */
+function refusalOf(err: unknown): { code: string; reason: string } {
+  const text = err instanceof Error ? err.message : String(err);
+  const m = /^([A-Za-z]+): ([\s\S]*)$/.exec(text);
+  return m ? { code: m[1]!, reason: m[2]! } : { code: "failed", reason: text };
+}
+
+/** A script's batch op → the SDK op. Core's `{ op: "invoke", id, args,
+ *  handle? }` becomes `{ op: "invoke", command, args }` (a core command
+ *  takes its handle as an argument); every other op passes through. */
+function sdkOp(op: unknown): ObjectOp {
+  const o = op as { op?: unknown; id?: unknown; command?: unknown; args?: unknown; handle?: unknown };
+  if (o?.op !== "invoke" || typeof o.command === "string") return op as ObjectOp;
+  const args = (typeof o.args === "object" && o.args !== null ? { ...(o.args as Record<string, unknown>) } : {}) as Record<string, unknown>;
+  if (typeof o.handle === "string") args["handle"] = o.handle;
+  return { op: "invoke", command: String(o.id ?? ""), args };
 }
 
 /** Run a script whose `plugin:` calls are answered by `objects`. */

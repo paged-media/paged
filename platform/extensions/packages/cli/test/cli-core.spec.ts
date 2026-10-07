@@ -265,7 +265,10 @@ describe("cli_surface — every host.objects member is reached by a verb", () =>
   it("mirrors core's cli_surface gate", async () => {
     const s = await openSession(null, { plugins: [] });
     try {
-      const members = Object.keys(s.h.objects).filter((k) => typeof (s.h.objects as unknown as Record<string, unknown>)[k] === "function" && k !== "register");
+      // `register` and `tracked` are the registry's host-side members
+      // (not `ObjectsSurface`): plugins register, the script bridge listens.
+      const internal = new Set(["register", "tracked"]);
+      const members = Object.keys(s.h.objects).filter((k) => typeof (s.h.objects as unknown as Record<string, unknown>)[k] === "function" && !internal.has(k));
       const reached = new Set(VERBS.flatMap((v) => v.reaches));
       expect(members.filter((m) => !reached.has(m))).toEqual([]);
       expect([...reached].filter((m) => !members.includes(m))).toEqual([]);
