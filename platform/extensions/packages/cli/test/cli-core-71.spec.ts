@@ -227,6 +227,37 @@ describe("paged get / set — every core address kind on the protocol-71 seam", 
   });
 });
 
+describe("paged get / set — the closure rows (core 15f51e3)", () => {
+  it("imageBytes (asset), a thread link, an opacity mask and indexed path points survive the file", async () => {
+    if (lane < 71) return;
+    const o = await writeEverything(tmp.dir);
+    const png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+    const id = (a: string) => a.slice(a.indexOf(":") + 1);
+    const cases: Array<[address: string, path: string, text: string, read: unknown]> = [
+      ["rectangle:urect", "imageBytes", png, png],
+      ["rectangle:urect", "opacityMask", o.oval, id(o.oval)],
+      [o.polygon, "points[1].anchor", "[345, 305]", [345, 305]],
+      [o.polygon, "points[2].curveType", "Smooth", "Smooth"],
+    ];
+    const failures: string[] = [];
+    for (const [address, path, text, want] of cases) {
+      const set = await cli(["set", o.file, address, path, text, NP]);
+      if (set.code !== 0 || set.json.result.undoSteps !== 1) {
+        failures.push(`set ${address} ${path}: ${JSON.stringify(set.json?.result ?? set.json?.error ?? set.err)}`);
+        continue;
+      }
+      const got = await cli(["get", o.file, address, path, NP]);
+      if (JSON.stringify(got.json?.value) !== JSON.stringify(want)) failures.push(`get ${address} ${path}: read ${JSON.stringify(got.json?.value ?? got.json)}`);
+    }
+    expect(failures).toEqual([]);
+    // null clears through the row's clearOp; a bad asset is refused before the engine (exit 1)
+    expect((await cli(["set", o.file, "rectangle:urect", "opacityMask", "null", NP])).code).toBe(0);
+    expect((await cli(["get", o.file, "rectangle:urect", "opacityMask", NP])).json.value).toBeNull();
+    const bad = await cli(["set", o.file, "rectangle:urect", "imageBytes", "data:image/png;base64,***", NP]);
+    expect(bad.code).not.toBe(0);
+  });
+});
+
 describe("the engine lane", () => {
   it("the session boots the INSTALLED engine (70 or 71) and reports its protocol", async () => {
     const r = await cli(["plugins", NP]);

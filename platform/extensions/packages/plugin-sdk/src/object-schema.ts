@@ -144,12 +144,13 @@ export function validateValue(
       return isNum(value) ? range(value) : `${at} must be a length in pt`;
     case "color":
     case "text":
-    case "asset":
       if (typeof value !== "string") return `${at} must be a string`;
       if (type.kind === "text" && type.maxLength !== undefined && value.length > type.maxLength) {
         return `${at} is longer than ${type.maxLength}`;
       }
       return null;
+    case "asset":
+      return assetProblem(value, at);
     case "enum":
       return typeof value === "string" && type.members.includes(value)
         ? null
@@ -203,15 +204,67 @@ export function validateValue(
   }
 }
 
+const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
+
+/** Why `value` is not an `asset` value, or null. An asset is a
+ *  `data:<mime>;base64,<payload>` URI or bare base64 (the forms core's
+ *  `imageBytes` row decodes), or bytes (`Uint8Array` / `ArrayBuffer`),
+ *  which `applyDefaults` encodes. Empty content is refused: `null` clears. */
+function assetProblem(value: unknown, at: string): string | null {
+  if (value instanceof Uint8Array || value instanceof ArrayBuffer) {
+    return value.byteLength > 0 ? null : `${at} has no bytes (clear the content with null)`;
+  }
+  if (typeof value !== "string") return `${at} must be a data: URI, base64 text or bytes`;
+  let payload = value;
+  if (value.startsWith("data:")) {
+    const comma = value.indexOf(",");
+    if (comma < 0) return `${at}: a data: URI needs a comma before its payload`;
+    if (!value.slice(5, comma).endsWith(";base64")) return `${at}: a data: URI must carry its bytes as base64 (\`;base64,\`)`;
+    payload = value.slice(comma + 1);
+  }
+  payload = payload.trim();
+  if (payload.length === 0) return `${at} has no bytes (clear the content with null)`;
+  return BASE64.test(payload) && payload.length % 4 === 0 ? null : `${at} is not base64`;
+}
+
+/** Bytes → the `data:` URI core reads an asset back as (the MIME typed by
+ *  the bytes' magic, the same table core uses; otherwise
+ *  `application/octet-stream`). */
+export function assetFromBytes(bytes: Uint8Array | ArrayBuffer): string {
+  const b = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  const at = (i: number, ...v: number[]) => v.every((x, k) => b[i + k] === x);
+  const mime = at(0, 0x89, 0x50, 0x4e, 0x47)
+    ? "image/png"
+    : at(0, 0xff, 0xd8, 0xff)
+      ? "image/jpeg"
+      : at(0, 0x47, 0x49, 0x46, 0x38)
+        ? "image/gif"
+        : at(0, 0x52, 0x49, 0x46, 0x46) && at(8, 0x57, 0x45, 0x42, 0x50)
+          ? "image/webp"
+          : at(0, 0x49, 0x49, 42, 0) || at(0, 0x4d, 0x4d, 0, 42)
+            ? "image/tiff"
+            : at(0, 0x42, 0x4d)
+              ? "image/bmp"
+              : "application/octet-stream";
+  let bin = "";
+  for (let i = 0; i < b.length; i += 0x8000) bin += String.fromCharCode(...b.subarray(i, i + 0x8000));
+  return `data:${mime};base64,${btoa(bin)}`;
+}
+
 /**
  * Fill struct DEFAULTS into a value that already validated: a missing
  * field with a `default` gets it (recursively, also inside lists and
- * maps); optional fields stay absent. Returns a new value; the input is
+ * maps); optional fields stay absent. An `asset` given as bytes is
+ * encoded to its `data:` URI. Returns a new value; the input is
  * not mutated.
  */
 export function applyDefaults(type: ValueType, value: unknown): unknown {
   if (value === null || value === undefined) return value;
   switch (type.kind) {
+    // Bytes become the text form core takes (a lossless re-encoding, not
+    // a coercion: the content is the same).
+    case "asset":
+      return value instanceof Uint8Array || value instanceof ArrayBuffer ? assetFromBytes(value) : value;
     case "struct": {
       if (typeof value !== "object" || Array.isArray(value)) return value;
       const rec = value as Record<string, unknown>;

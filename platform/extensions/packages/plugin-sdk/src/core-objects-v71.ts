@@ -29,9 +29,11 @@
 // stays on the pre-71 seam, which this one wraps: story `content` and its
 // counts, the `labels` map, page `index`, doc `pageCount` / `documentName`
 // / `dirty`, swatch `swatchKind`, style `name` / `basedOn`, spread and
-// master `label` / `pageCount`; and the four wire paths core's catalog
-// gives no row (CORE_ROWLESS_PATHS: `nextTextFrame`, `previousTextFrame`,
-// `tableRowCount`, `tableColumnCount`), which `RequestGet` cannot read.
+// master `label` / `pageCount`; and the two wire paths core's catalog
+// gives no row (CORE_ROWLESS_PATHS: `tableRowCount`, `tableColumnCount`),
+// which `RequestGet` cannot read. (`nextTextFrame` / `previousTextFrame`
+// became catalog rows in core 15f51e3, with `imageBytes`, `opacityMask`
+// and the indexed `points[i].*` rows.)
 // Labels and the commit go through it too (they are the same ops at 71).
 
 import type {
@@ -292,7 +294,11 @@ export function createCoreObjectsV71(getEditor: () => PagedEditor, v70: V70): Co
       // Final protocol 71: a range whose runs disagree is `mixed: true` (no
       // value, no error) — distinct from a path that reads null.
       if (p.mixed) return { kind: "mixed" };
-      return { kind: "value", value: p.value ? p.value.value : null };
+      const v = p.value ? p.value.value : null;
+      // Core reads a cleared content / link row as "" (no content, no
+      // thread, no mask): the SDK answers the null that cleared it.
+      if (v === "" && row && (row.schema.type.kind === "asset" || row.schema.virtual?.clearOp)) return { kind: "value", value: null };
+      return { kind: "value", value: v };
     },
 
     async planSet(a, path, value, handleKind) {

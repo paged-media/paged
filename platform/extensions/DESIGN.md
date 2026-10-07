@@ -2346,9 +2346,9 @@ salvaged `mutationFailed`), so the probe never hangs. At >= 71
   `rows[i].height`) are `[]` rows; rows the catalog lists under a Boa
   alias are listed under the wire path the registry canonicalises to;
   style rows are per family (`style:paragraph` …). Nothing is inferred
-  except the four wire paths core's catalog gives no row
-  (`CORE_ROWLESS_PATHS`: `nextTextFrame`, `previousTextFrame`,
-  `tableRowCount`, `tableColumnCount`), which `RequestGet` cannot read
+  except the wire paths core's catalog gives no row
+  (`CORE_ROWLESS_PATHS`: `tableRowCount`, `tableColumnCount`; the thread
+  links became rows in core 15f51e3, §21.13), which `RequestGet` cannot read
   either: they stay on the old element read (a table's story is found
   through core's query), with a `summary` that says so.
 - **SDK rows on top of core's**: story `content` and its counts, the
@@ -2469,6 +2469,32 @@ They are now TYPED COMMANDS beside the plugins' own:
   `object_ops` to accept `{op:"invoke"}` and route it to the host (today
   it recognises set / create / delete only) — a core change, not made
   here.
+
+### 21.13 The closure rows (core 15f51e3): `asset`, `clearOp`, indexed points
+
+Core made the last bindable gaps catalog rows on frames: `imageBytes`
+(new value type `asset`), `nextTextFrame` / `previousTextFrame` (ref to a
+`textFrame`), `opacityMask` (ref to a `pageItem`) and
+`points[i].anchor` / `.left` / `.right` (`[x, y]`) and
+`points[i].curveType` (`Corner` | `Smooth`). The SDK side:
+
+- **`asset`.** plugin-api `ValueType` `{ kind: "asset"; shape? }`
+  (additive). `validateValue` accepts a `data:<mime>;base64,` URI, bare
+  base64, or bytes (`Uint8Array` / `ArrayBuffer`), and refuses empty
+  content (`null` clears) and non-base64 text before the engine;
+  `applyDefaults` encodes bytes to the `data:` URI core reads back
+  (`assetFromBytes`, MIME by magic, the same table as core). Encoding is
+  lossless, so rule 3 (never coerce silently) holds.
+- **`virtual.clearOp`** (optional) names the op a `null` write resolves
+  to when clearing is a different op (`unlinkFrames`,
+  `releaseOpacityMask`). Core reads such a cleared row (and a cleared
+  asset) as `""`; `host.objects.get` answers `null`, the value that
+  cleared it. Refs read back as the bare self id, like every core ref row.
+- **Indexed rows** need nothing new: `points[3].anchor` finds the
+  `points[].anchor` row and the concrete path goes to core. Core reads
+  `curveType` as `Corner` only while both handles sit on the anchor, so
+  moving a handle reads `Smooth`.
+- `CORE_ROWLESS_PATHS` shrinks to `tableRowCount` / `tableColumnCount`.
 
 ## 22. The Node CLI (ADR 324 — `@paged-media/cli`, bin `paged`)
 

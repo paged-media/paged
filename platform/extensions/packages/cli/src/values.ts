@@ -49,6 +49,8 @@ export function describeType(t: ValueType): string {
         .join(", ")} } (JSON)`;
     case "color":
       return "color (a swatch name or reference)";
+    case "asset":
+      return "asset (a data:<mime>;base64,… URI or bare base64)";
     default:
       return t.kind;
   }

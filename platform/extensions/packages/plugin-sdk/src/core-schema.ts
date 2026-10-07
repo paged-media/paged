@@ -388,7 +388,7 @@ export interface CoreCatalogRow {
   range?: { min?: number; max?: number; step?: number };
   default?: unknown;
   access?: "readWrite" | "readOnly" | "derived";
-  virtual?: { op: string; field?: string } | null;
+  virtual?: { op: string; field?: string; clearOp?: string } | null;
   bindable?: boolean;
 }
 
@@ -434,6 +434,8 @@ export function normalizeCoreType(t: CoreCatalogRow["type"]): ValueType | null {
       return { kind: "enum", members: [...(t.members ?? [])] };
     case "text":
       return { kind: "text" };
+    case "asset":
+      return t.shape ? { kind: "asset", shape: t.shape } : { kind: "asset" };
     case "ref":
       return { kind: "ref", to: t.to ?? "object" };
     case "struct":

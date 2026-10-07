@@ -31,6 +31,7 @@ import type { PagedEditor } from "@paged-media/plugin-api";
 import { createCoreObjects } from "../src/core-objects";
 import { codeOfEngineRefusal } from "../src/core-objects-v71";
 import { CORE_CATALOG_ROWS, CORE_PATHS, CORE_ROWLESS_PATHS, coreSchema71 } from "../src/core-schema";
+import { assetFromBytes, validateValue } from "../src/object-schema";
 import { createHeadlessHost, type HeadlessHost } from "../src/harness";
 import { createObjectRegistry } from "../src/object-registry";
 import { minimalIdml } from "./fixtures/minimal-idml";
@@ -184,7 +185,7 @@ describe("protocol 71 — every core address kind round-trips Set / Get", () => 
     expect(await h.objects.query("style:paragraph")).toContain("style:paragraph/ParagraphStyle/Body");
     expect((await h.objects.query("style:paragraph")).every((a) => a.startsWith("style:paragraph/"))).toBe(true);
     expect(o.cell).toMatch(/^cell:[^/]+\/0,0$/);
-    // the four paths core's catalog has no row for still read (the old
+    // the paths core's catalog has no row for still read (the old
     // element read; a table's story is found through core's query)
     expect(await h.objects.get(o.table, "tableRowCount")).toEqual({ kind: "value", value: 2 });
     expect(await h.objects.get(o.text, "nextTextFrame")).toMatchObject({ kind: expect.stringMatching(/value|absent/) });
@@ -271,7 +272,8 @@ describe("protocol 71 — schemas come from core's catalog", () => {
     const ops = new Set(Object.entries(CORE_PATHS).filter(([, r]) => "op" in r).map(([p]) => p));
     const unexplained = rowless.filter((p) => !ops.has(p) && !catalogPaths.has(aliases.get(p) ?? ""));
     expect(unexplained.sort()).toEqual([...CORE_ROWLESS_PATHS].sort());
-    expect([...CORE_ROWLESS_PATHS].sort()).toEqual(["nextTextFrame", "previousTextFrame", "tableColumnCount", "tableRowCount"]);
+    // (`nextTextFrame` / `previousTextFrame` became catalog rows in core 15f51e3)
+    expect([...CORE_ROWLESS_PATHS].sort()).toEqual(["tableColumnCount", "tableRowCount"]);
     const catalog = JSON.parse(
       readFileSync(fileURLToPath(new URL("../../plugin-api/src/catalog.json", import.meta.url)), "utf8"),
     ) as { settablePaths: string[] };
@@ -280,6 +282,110 @@ describe("protocol 71 — schemas come from core's catalog", () => {
     expect([...coreSchema71().keys()]).toEqual(
       expect.arrayContaining(["frame", "story", "page", "doc", "swatch", "style:paragraph", "style:table", "textVariable", "cell", "table", "layer", "field"]),
     );
+  });
+});
+
+/** A 1×1 PNG: bytes, and the `data:` URI core reads them back as. */
+const PNG_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+const PNG_URI = `data:image/png;base64,${PNG_B64}`;
+const PNG_BYTES = Uint8Array.from(atob(PNG_B64), (c) => c.charCodeAt(0));
+
+describe("protocol 71 closure — the bindable gaps are rows (core 15f51e3)", () => {
+  it("the 8 rows are typed from the catalog: asset, textFrame / pageItem refs with clearOp, indexed points", async () => {
+    const rows = coreSchema71().get("frame")!;
+    expect(rows.get("imageBytes")!.schema).toMatchObject({ type: { kind: "asset", shape: "data:<mime>;base64,<payload>" }, nullable: true, bindable: true });
+    expect(rows.get("nextTextFrame")!.schema).toMatchObject({ type: { kind: "ref", to: "textFrame" }, virtual: { op: "linkFrames", clearOp: "unlinkFrames" } });
+    expect(rows.get("previousTextFrame")!.inferred).toBeUndefined();
+    expect(rows.get("opacityMask")!.schema).toMatchObject({ type: { kind: "ref", to: "pageItem" }, virtual: { clearOp: "releaseOpacityMask" } });
+    expect(rows.get("points[].anchor")!.schema.type).toMatchObject({ kind: "list", of: { kind: "length" } });
+    expect(rows.get("points[].curveType")!.schema.type).toEqual({ kind: "enum", members: ["Corner", "Smooth"] });
+    expect(assetFromBytes(PNG_BYTES)).toBe(PNG_URI);
+    expect(validateValue({ kind: "asset" }, "data:image/png;base64,***")).toMatch(/not base64/);
+    expect(validateValue({ kind: "asset" }, "data:image/png,abc")).toMatch(/base64/);
+    expect(validateValue({ kind: "asset" }, new Uint8Array())).toMatch(/no bytes/);
+    expect(validateValue({ kind: "asset" }, PNG_B64)).toBeNull();
+  });
+
+  it("imageBytes: set from bytes / data URI / bare base64, null clears, one undo step each", async () => {
+    const h = (live = await createHeadlessHost({ console: silent }));
+    await h.load(minimalIdml());
+    const fromBytes = await h.objects.set("rectangle:urect", "imageBytes", PNG_BYTES);
+    expect(fromBytes).toMatchObject({ applied: true, undoSteps: 1 });
+    expect(await h.objects.get("rectangle:urect", "imageBytes")).toEqual(value(PNG_URI));
+    expect(await h.objects.set("rectangle:urect", "imageBytes", null)).toMatchObject({ applied: true, undoSteps: 1 });
+    expect(await h.objects.get("rectangle:urect", "imageBytes")).toEqual(value(null));
+    await h.host.document.undo();
+    expect(await h.objects.get("rectangle:urect", "imageBytes")).toEqual(value(PNG_URI));
+    expect(await h.objects.set("rectangle:urect", "imageBytes", PNG_B64)).toMatchObject({ applied: true, undoSteps: 1 });
+    expect(await h.objects.set("rectangle:urect", "imageBytes", PNG_BYTES.buffer)).toMatchObject({ applied: true, undoSteps: 1 });
+    // refused before the engine: nothing applied
+    expect(await h.objects.set("rectangle:urect", "imageBytes", "data:image/png;base64,***")).toMatchObject({ applied: false, code: "invalidValue", undoSteps: 0 });
+    expect(await h.objects.set("rectangle:urect", "imageBytes", 42)).toMatchObject({ applied: false, code: "invalidValue", undoSteps: 0 });
+    // a batch: bytes and another write are ONE step
+    const b = await h.objects.batch([
+      { op: "set", address: "rectangle:urect", path: "imageBytes", value: null },
+      { op: "set", address: "rectangle:urect", path: "frameOpacity", value: 40 },
+    ]);
+    expect(b).toMatchObject({ applied: true, undoSteps: 1 });
+    await h.host.document.undo();
+    expect(await h.objects.get("rectangle:urect", "imageBytes")).toEqual(value(PNG_URI));
+  });
+
+  it("nextTextFrame / previousTextFrame: link by address, unlink with null, undo restores", async () => {
+    const h = (live = await createHeadlessHost({ console: silent }));
+    const o = await everything(h);
+    const made = await h.objects.batch([{ op: "create", kind: "textFrame", within: "page:#1", props: { frameBounds: [200, 10, 260, 200] } }]);
+    expect(made).toMatchObject({ applied: true });
+    const tail = made.created![0]!;
+    const id = (a: string) => a.slice(a.indexOf(":") + 1);
+    expect(await h.objects.get(o.text, "nextTextFrame")).toEqual(value(null));
+    expect(await h.objects.set(o.text, "nextTextFrame", tail)).toMatchObject({ applied: true, undoSteps: 1 });
+    expect(await h.objects.get(o.text, "nextTextFrame")).toEqual(value(id(tail)));
+    expect(await h.objects.get(tail, "previousTextFrame")).toEqual(value(id(o.text)));
+    // unlink from the other end (clearOp unlinkFrames)
+    expect(await h.objects.set(tail, "previousTextFrame", null)).toMatchObject({ applied: true, undoSteps: 1 });
+    expect(await h.objects.get(o.text, "nextTextFrame")).toEqual(value(null));
+    await h.host.document.undo();
+    expect(await h.objects.get(o.text, "nextTextFrame")).toEqual(value(id(tail)));
+    await h.host.document.undo();
+    expect(await h.objects.get(o.text, "nextTextFrame")).toEqual(value(null));
+    // a thread target must be a text frame (core refuses; nothing applied)
+    expect(await h.objects.set(o.text, "nextTextFrame", o.oval)).toMatchObject({ applied: false, undoSteps: 0 });
+  });
+
+  it("opacityMask: set to another item, null releases (clearOp), undo restores", async () => {
+    const h = (live = await createHeadlessHost({ console: silent }));
+    const o = await everything(h);
+    const id = (a: string) => a.slice(a.indexOf(":") + 1);
+    expect(await h.objects.get("rectangle:urect", "opacityMask")).toEqual(value(null));
+    expect(await h.objects.set("rectangle:urect", "opacityMask", o.oval)).toMatchObject({ applied: true, undoSteps: 1 });
+    expect(await h.objects.get("rectangle:urect", "opacityMask")).toEqual(value(id(o.oval)));
+    expect(await h.objects.set("rectangle:urect", "opacityMask", null)).toMatchObject({ applied: true, undoSteps: 1 });
+    expect(await h.objects.get("rectangle:urect", "opacityMask")).toEqual(value(null));
+    await h.host.document.undo();
+    expect(await h.objects.get("rectangle:urect", "opacityMask")).toEqual(value(id(o.oval)));
+  });
+
+  it("points[i].anchor / left / right / curveType: indexed rows get and set", async () => {
+    const h = (live = await createHeadlessHost({ console: silent }));
+    const o = await everything(h);
+    const p = o.polygon;
+    expect(await h.objects.get(p, "points[1].anchor")).toEqual(value([340, 300]));
+    expect(await h.objects.set(p, "points[1].anchor", [345, 305])).toMatchObject({ applied: true, undoSteps: 1 });
+    expect(await h.objects.get(p, "points[1].anchor")).toEqual(value([345, 305]));
+    // core reads Corner while both handles sit on the anchor
+    expect(await h.objects.get(p, "points[1].curveType")).toEqual(value("Corner"));
+    expect(await h.objects.set(p, "points[1].curveType", "Smooth")).toMatchObject({ applied: true, undoSteps: 1 });
+    expect(await h.objects.get(p, "points[1].curveType")).toEqual(value("Smooth"));
+    await h.host.document.undo();
+    expect(await h.objects.get(p, "points[1].curveType")).toEqual(value("Corner"));
+    expect(await h.objects.set(p, "points[1].left", [335, 305])).toMatchObject({ applied: true, undoSteps: 1 });
+    expect(await h.objects.get(p, "points[1].left")).toEqual(value([335, 305]));
+    expect(await h.objects.get(p, "points[1].curveType")).toEqual(value("Smooth"));
+    // the enum is checked here; the index and the arity by core
+    expect(await h.objects.set(p, "points[1].curveType", "Symmetric")).toMatchObject({ applied: false, code: "invalidValue", undoSteps: 0 });
+    expect(await h.objects.get(p, "points[99].anchor")).toMatchObject({ kind: "refused" });
+    expect(await h.objects.set(p, "points[0].anchor", [1, 2, 3])).toMatchObject({ applied: false, undoSteps: 0 });
   });
 });
 

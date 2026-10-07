@@ -103,6 +103,7 @@ export {
   parseLength,
   VALUE_TYPE_KINDS,
   applyDefaults,
+  assetFromBytes,
   findRow,
   rowPathOf,
   ROW_PATH,

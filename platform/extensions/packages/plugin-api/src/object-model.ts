@@ -125,8 +125,11 @@ export type AddressKind = ParsedAddress["kind"];
  *   unit strings like "3mm" coerce) · color → a swatch ref (`Color/Red`)
  *   · enum → one of `members` · text → string · ref → an address or the
  *   target's self id · bounds → [top,left,bottom,right] · transform →
- *   [a,b,c,d,tx,ty] · point → [x,y] · bytes/asset → Uint8Array / asset ref
- *   · list → array · map → record keyed by string · struct → record. */
+ *   [a,b,c,d,tx,ty] · point → [x,y] · bytes → Uint8Array · asset → a
+ *   `data:<mime>;base64,<payload>` URI or bare base64 (core reads it back
+ *   as a `data:` URI typed by the bytes' magic; `host.objects` also takes
+ *   a `Uint8Array` / `ArrayBuffer` and encodes it) · list → array · map →
+ *   record keyed by string · struct → record. */
 export type ValueType =
   | { kind: "bool" }
   | {
@@ -143,7 +146,8 @@ export type ValueType =
   | { kind: "transform" }
   | { kind: "point" }
   | { kind: "bytes"; mime?: readonly string[] }
-  | { kind: "asset" }
+  /** `shape` names the encoding core expects (`data:<mime>;base64,<payload>`). */
+  | { kind: "asset"; shape?: string }
   | { kind: "list"; of: ValueType; maxItems?: number }
   | { kind: "map"; of: ValueType; keyPattern?: string }
   /** `shape` names a core wire struct (`SwatchColorSpec`, `TabStopSpec`);
@@ -181,8 +185,11 @@ export interface PropertySchema {
   default?: unknown;
   /** Default `readWrite`. `derived` is computed from other paths. */
   access?: "readWrite" | "readOnly" | "derived";
-  /** Core only: the dedicated op a virtual path resolves to. */
-  virtual?: { op: string; field?: string } | null;
+  /** Core only: the dedicated op a virtual path resolves to; `clearOp`
+   *  names the op a `null` write resolves to when clearing is a DIFFERENT
+   *  op (`nextTextFrame` → `unlinkFrames`, `opacityMask` →
+   *  `releaseOpacityMask`). */
+  virtual?: { op: string; field?: string; clearOp?: string } | null;
   idml?: { element: string; attribute: string } | null;
   /** Default: `access === "readWrite"`. */
   bindable?: boolean;
