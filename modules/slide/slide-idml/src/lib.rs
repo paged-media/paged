@@ -182,10 +182,15 @@ fn n(v: f64) -> String {
 pub const SLIDE_LABEL_KEY: &str = "x-paged:media.paged.slide";
 
 /// A slide's own state as its page's plugin metadata (the engine's JSON
-/// envelope): speaker notes, the hidden flag and the transition. `None`
-/// when the slide has none of them.
+/// envelope): its layout, speaker notes, the hidden flag and the
+/// transition. `None` when the slide has none of them.
 pub fn slide_label(s: &SlidePage) -> Option<String> {
     let mut data = serde_json::Map::new();
+    // The layout the slide was made from: its master spread's id. A new
+    // slide "from this layout" copies a slide that has it.
+    if let Some(m) = &s.master {
+        data.insert("layout".into(), m.clone().into());
+    }
     if let Some(n) = s.notes.as_ref().filter(|n| !n.trim().is_empty()) {
         data.insert("notes".into(), n.clone().into());
     }
@@ -208,6 +213,21 @@ pub fn slide_label(s: &SlidePage) -> Option<String> {
         return None;
     }
     Some(serde_json::json!({ "v": 1, "data": data }).to_string())
+}
+
+/// A placeholder item's metadata: its PowerPoint type and index.
+pub fn placeholder_label(it: &Item) -> Option<String> {
+    if matches!(it.kind, ItemKind::Group { .. }) {
+        return None;
+    }
+    let (kind, idx) = it.meta.placeholder.as_ref()?;
+    Some(
+        serde_json::json!({
+            "v": 1,
+            "data": { "placeholder": { "type": kind, "idx": idx } },
+        })
+        .to_string(),
+    )
 }
 
 /// [`esc`] for an attribute value that must keep its line breaks and tabs:
@@ -491,6 +511,25 @@ impl Writer<'_> {
     }
 
     fn item(&mut self, out: &mut String, it: &Item) {
+        // A placeholder carries its PowerPoint identity as item metadata, on
+        // every element it is written as (outline and text frame): a copied
+        // slide knows which of its frames are placeholders.
+        if let Some(label) = placeholder_label(it) {
+            let mut buf = String::new();
+            self.item_body(&mut buf, it);
+            out.push_str(&buf.replace(
+                "</PathGeometry></Properties>",
+                &format!(
+                    r#"</PathGeometry><Label><KeyValuePair Key="{SLIDE_LABEL_KEY}" Value="{}"/></Label></Properties>"#,
+                    esc_attr(&label)
+                ),
+            ));
+            return;
+        }
+        self.item_body(out, it);
+    }
+
+    fn item_body(&mut self, out: &mut String, it: &Item) {
         match &it.kind {
             ItemKind::Group { children } => {
                 self.element(&it.id, "group", &it.id);

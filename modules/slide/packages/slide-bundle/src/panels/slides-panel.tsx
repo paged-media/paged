@@ -28,8 +28,11 @@ import * as React from "react";
 import {
   deleteMutation,
   duplicateMutation,
+  layouts,
   moveMutation,
+  newSlide,
   setStateMutation,
+  type Layout,
   type Slide,
   type SlidesStore,
 } from "../slides-model.js";
@@ -63,6 +66,56 @@ export function makeSlidesPanel(
     );
   };
 
+  /** New slide: a layout picker and the button, above the list. */
+  const NewSlide: React.FC<{ slides: readonly Slide[] }> = ({ slides }) => {
+    const [options, setOptions] = React.useState<Layout[]>([]);
+    const [chosen, setChosen] = React.useState<string>("");
+    const [busy, setBusy] = React.useState(false);
+    const key = slides.map((s) => `${s.pageId}:${s.state.layout ?? ""}`).join(",");
+    React.useEffect(() => {
+      let live = true;
+      void layouts(host, slides).then((ls) => {
+        if (!live) return;
+        setOptions(ls);
+        setChosen((c) => (ls.some((l) => l.masterId === c) ? c : (ls[0]?.masterId ?? "")));
+      });
+      return () => {
+        live = false;
+      };
+    }, [key]);
+    if (options.length === 0) return null;
+    const layout = options.find((l) => l.masterId === chosen) ?? options[0];
+    return (
+      <div style={{ display: "flex", gap: 6, alignItems: "center" }} data-new-slide>
+        <select
+          aria-label="Layout"
+          value={layout.masterId}
+          onChange={(e) => setChosen(e.target.value)}
+          style={{ flex: 1, minWidth: 0 }}
+        >
+          {options.map((l) => (
+            <option key={l.masterId} value={l.masterId}>
+              {l.name}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => {
+            setBusy(true);
+            void newSlide(host, layout, store.activePage())
+              .then((id) => (id ? host.viewport.goToPage(id) : false))
+              .catch((e) => host.log.warn(`paged.slide: ${String(e)}`))
+              .finally(() => setBusy(false));
+          }}
+        >
+          New slide
+        </button>
+      </div>
+    );
+  };
+
   const Component: React.FC<PanelProps> = () => {
     const [, force] = React.useReducer((n: number) => n + 1, 0);
     React.useEffect(() => store.subscribe(force), []);
@@ -82,6 +135,7 @@ export function makeSlidesPanel(
 
     return (
       <div style={list} data-slides-panel="ready">
+        <NewSlide slides={slides} />
         {slides.map((slide, i) => (
           <div
             key={slide.pageId}

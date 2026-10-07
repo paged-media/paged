@@ -34,6 +34,12 @@ Read from the code on 2026-10-06.
 - **Slide state on pages.** Each slide's speaker notes, hidden flag and transition are written
   into its page's plugin metadata at import (`x-paged:media.paged.slide`), so they move,
   duplicate and undo with the slide (engine protocol 70).
+- **New slide from a layout.** The Slides panel offers the deck's layouts (every layout a slide
+  uses); a new slide is a copy of one such slide with only its placeholders kept and emptied, so
+  it has the layout's master and PowerPoint's placeholder formatting. Placeholders carry their
+  PowerPoint type and index as item metadata. Typing into an emptied placeholder keeps its
+  formatting once the engine keeps a cleared paragraph's character attributes (core, next
+  release).
 - **Slides and Notes panels** (M3, first part). A sorter with a thumbnail per slide from the
   engine's renderer: click to go to the slide, drag to reorder, duplicate, delete, hide from the
   slideshow, each one undo step. A notes panel edits the active slide's speaker notes.
@@ -97,7 +103,8 @@ placement); the published engine (0.67.0) has neither.
 
 ## Not built yet
 
-- New slide from a layout, and editing layouts (the rest of M3).
+- Editing layouts (master spreads) from the plugin, and layouts no slide uses (they are not
+  imported).
 - Thumbnails show the editor's missing-font highlight; the slideshow needs snapshots without it.
 - PPTX export (M4).
 - Slideshow and presenter view (M5); transitions are decided (ADR 706).

@@ -46,6 +46,8 @@ export interface Transition {
 
 /** A slide's own state; absent fields mean "none". */
 export interface SlideState {
+  /** The master spread of the layout the slide was made from. */
+  layout?: string;
   notes?: string;
   hidden?: boolean;
   transition?: Transition;
@@ -69,6 +71,7 @@ export function parseState(meta: readonly PluginMetadataEntry[] | undefined): Sl
     if (typeof env.data !== "object" || env.data === null) return {};
     const d = env.data as Record<string, unknown>;
     const out: SlideState = {};
+    if (typeof d.layout === "string" && d.layout !== "") out.layout = d.layout;
     if (typeof d.notes === "string" && d.notes !== "") out.notes = d.notes;
     if (d.hidden === true) out.hidden = true;
     if (typeof d.transition === "object" && d.transition !== null) {
@@ -83,6 +86,7 @@ export function parseState(meta: readonly PluginMetadataEntry[] | undefined): Sl
 /** The envelope for `state`, or null when there is nothing to keep. */
 export function encodeState(state: SlideState): string | null {
   const data: Record<string, unknown> = {};
+  if (state.layout) data.layout = state.layout;
   if (state.notes && state.notes.trim() !== "") data.notes = state.notes;
   if (state.hidden) data.hidden = true;
   if (state.transition) data.transition = state.transition;
@@ -251,4 +255,121 @@ function defaultUrl(png: Uint8Array): string {
 
 function defaultRevoke(url: string): void {
   URL.revokeObjectURL(url);
+}
+
+/** A layout a new slide can be made from: a master spread some slide uses. */
+export interface Layout {
+  masterId: string;
+  name: string;
+  /** A slide made from it, copied to make the new one. */
+  templatePageId: string;
+}
+
+/** The layouts new slides can be made from: every master spread a slide
+ *  records as its layout, named as the deck named it. */
+export async function layouts(host: BundleHost, slides: readonly Slide[]): Promise<Layout[]> {
+  let masters: readonly { selfId: string; label: string }[] = [];
+  try {
+    masters = await host.document.collection<{ selfId: string; label: string }>("masterPages");
+  } catch {
+    masters = [];
+  }
+  const out: Layout[] = [];
+  for (const m of masters) {
+    const template = slides.find((s) => s.state.layout === m.selfId);
+    if (template) out.push({ masterId: m.selfId, name: m.label, templatePageId: template.pageId });
+  }
+  return out;
+}
+
+/** Whether a scene-tree item is one of a layout's placeholders. */
+function isPlaceholder(meta: readonly PluginMetadataEntry[] | undefined): boolean {
+  const entry = meta?.find((m) => m.key === SLIDE_KEY);
+  if (!entry) return false;
+  try {
+    const env = JSON.parse(entry.value) as { data?: { placeholder?: unknown } };
+    return typeof env.data?.placeholder === "object" && env.data.placeholder !== null;
+  } catch {
+    return false;
+  }
+}
+
+/** The length of a story in the text-editing unit: UTF-8 bytes, plus one
+ *  per paragraph break. */
+function storyLength(content: { paragraphs: { runs: { text: string }[] }[] }): number {
+  const enc = new TextEncoder();
+  return content.paragraphs.reduce(
+    (n, p, i) => n + (i > 0 ? 1 : 0) + p.runs.reduce((m, r) => m + enc.encode(r.text).length, 0),
+    0,
+  );
+}
+
+type TreeNode = {
+  id?: { kind: string; id: string } | null;
+  kind: string;
+  children?: TreeNode[];
+  pluginMetadata?: PluginMetadataEntry[];
+};
+
+/**
+ * A new slide from `layout`, after `afterPageId` (or last): a copy of a
+ * slide made from that layout, keeping only its placeholders, emptied. The
+ * copy brings the layout's master and its placeholders with PowerPoint's
+ * own formatting, which the engine keeps on an emptied paragraph. Answers
+ * the new page's id, or null when the host refused a step.
+ */
+export async function newSlide(
+  host: BundleHost,
+  layout: Layout,
+  afterPageId: string | null,
+): Promise<string | null> {
+  const doc = host.document;
+  const storiesBefore = new Set(
+    (await doc.collection<{ selfId: string }>("stories")).map((s) => s.selfId),
+  );
+  const pagesBefore = new Set((await doc.collection<{ selfId: string }>("pages")).map((p) => p.selfId));
+  const dup = await doc.mutate(duplicateMutation(layout.templatePageId));
+  if (!dup.applied) return null;
+
+  const pages = await doc.collection<{ selfId: string }>("pages");
+  const index = pages.findIndex((p) => !pagesBefore.has(p.selfId));
+  if (index < 0) return null;
+  const pageId = pages[index].selfId;
+
+  // The copy's items: the tree lists spreads in page order, one page each.
+  const tree = (await doc.tree()) as TreeNode[];
+  const items = tree[index]?.children?.[0]?.children ?? [];
+  const placeholders = new Set(
+    items.filter((n) => n.id && isPlaceholder(n.pluginMetadata)).map((n) => n.id!.id),
+  );
+
+  // The copy's stories and the frames they flow in.
+  const storyOf = new Map<string, string>();
+  for (const s of await doc.collection<{ selfId: string }>("stories")) {
+    if (storiesBefore.has(s.selfId)) continue;
+    for (const link of await doc.frameChain(s.selfId)) storyOf.set(link.frameId, s.selfId);
+  }
+
+  const ops: MutationInput[] = [];
+  for (const n of items) {
+    if (!n.id) continue;
+    if (!placeholders.has(n.id.id)) {
+      ops.push({ op: "deleteFrame", args: { frameId: n.id.id } });
+      continue;
+    }
+    const story = storyOf.get(n.id.id);
+    if (!story) continue;
+    const content = await doc.storyContent(story);
+    const end = content ? storyLength(content) : 0;
+    if (end > 0) ops.push({ op: "deleteRange", args: { storyId: story, start: 0, end } });
+  }
+  // A new slide has no notes and is shown; it keeps its layout.
+  ops.push(setStateMutation(pageId, { layout: layout.masterId }));
+  const order = pages.map((p) => p.selfId);
+  const target = afterPageId ? order.filter((p) => p !== pageId).indexOf(afterPageId) + 1 : order.length - 1;
+  const move = moveMutation(order, pageId, target);
+  if (move) ops.push(move);
+
+  const out = await doc.mutate({ op: "batch", args: { ops } } as MutationInput);
+  return out.applied ? pageId : null;
 }
