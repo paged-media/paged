@@ -61,6 +61,14 @@ function recordingHost(supports: (f: string) => boolean) {
         opened.push(bytes);
       },
     },
+    // An empty document: the fingerprints the importer keeps are read here.
+    document: {
+      tree: async () => [],
+      elementGeometry: async () => [],
+      collection: async () => [],
+      frameChain: async () => [],
+      storyContent: async () => null,
+    },
     parts: {
       async write(path: string, bytes: Uint8Array) {
         parts.set(path, bytes);

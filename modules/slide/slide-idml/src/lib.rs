@@ -188,6 +188,11 @@ pub fn slide_label(s: &SlidePage) -> Option<String> {
     let mut data = serde_json::Map::new();
     // The layout the slide was made from: its master spread's id. A new
     // slide "from this layout" copies a slide that has it.
+    // The slide part of the deck it came from: export writes the page back
+    // as that slide (a duplicate as a copy of it).
+    if !s.part.is_empty() {
+        data.insert("part".into(), s.part.clone().into());
+    }
     if let Some(m) = &s.master {
         data.insert("layout".into(), m.clone().into());
     }

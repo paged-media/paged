@@ -30,6 +30,7 @@
 
 import type { BundleHandle, BundleHost, Diagnostic } from "@paged-media/plugin-api";
 
+import { exportPlan, pageFingerprints } from "./deck-export.js";
 import { slideEngine, type ImportReport } from "./engine.js";
 import { makeNotesPanel } from "./panels/notes-panel.js";
 import { makeSlidesPanel } from "./panels/slides-panel.js";
@@ -45,6 +46,11 @@ export const IMPORT_DIAGNOSTICS = "media.paged.slide/import";
 /** Container parts (this plugin's namespace). */
 export const SOURCE_PART = "source/original.pptx";
 export const REPORT_PART = "import/report.json";
+/** Each imported slide's content fingerprint, by slide part (export
+ *  compares a page against it to tell an edited slide). */
+export const FINGERPRINTS_PART = "import/fingerprints.json";
+export const EXPORTER_ID = "media.paged.slide.exporter.pptx";
+export const EXPORT_DIAGNOSTICS = "media.paged.slide/export";
 
 /** The file name without its extension: the document's name. */
 export function documentName(fileName: string): string {
@@ -71,6 +77,25 @@ export function reportDiagnostics(report: ImportReport): Diagnostic[] {
   return out;
 }
 
+/**
+ * What the importer keeps once the deck is the open document, as container
+ * parts (they belong to that document, so they are written after it
+ * replaced the previous one): the source deck, the import report and each
+ * slide's content fingerprint, which export compares pages against.
+ */
+export async function keepSource(host: BundleHost, bytes: Uint8Array, report: ImportReport): Promise<void> {
+  if (!host.supports("storage.parts@1")) return;
+  await host.parts.write(SOURCE_PART, bytes);
+  await host.parts.write(REPORT_PART, new TextEncoder().encode(JSON.stringify(report)));
+  // Page i is slide i of the deck right after the open.
+  const prints = await pageFingerprints(host);
+  const byPart: Record<string, string> = {};
+  report.slides.forEach((s, i) => {
+    if (prints[i]) byPart[s.part] = prints[i];
+  });
+  await host.parts.write(FINGERPRINTS_PART, new TextEncoder().encode(JSON.stringify(byPart)));
+}
+
 export function activate(host: BundleHost): BundleHandle {
   const disposers: Array<() => void> = [];
 
@@ -87,12 +112,7 @@ export function activate(host: BundleHost): BundleHandle {
     const engine = await slideEngine();
     const { idml, report } = engine.importPptx(bytes, documentName(name));
     await host.nativeDocument.open(idml);
-    // The parts belong to the document just opened, so they are written
-    // after it replaced the previous one.
-    if (host.supports("storage.parts@1")) {
-      await host.parts.write(SOURCE_PART, bytes);
-      await host.parts.write(REPORT_PART, new TextEncoder().encode(JSON.stringify(report)));
-    }
+    await keepSource(host, bytes, report);
     host.diagnostics.set(IMPORT_DIAGNOSTICS, reportDiagnostics(report));
     host.log.info(
       `paged.slide: opened ${name}: ${report.slides.length} slide(s), ` +
@@ -108,6 +128,47 @@ export function activate(host: BundleHost): BundleHandle {
         extensions: [".pptx", ".ppsx", ".potx"],
         mimeTypes: [PPTX_MIME],
         import: ({ name, bytes }) => openDeck(name, bytes),
+      }).dispose,
+    );
+  }
+
+  // PPTX export: the deck the document was imported from, rewritten for
+  // the document's slides (order, duplicates, deletions, hidden, notes).
+  async function exportDeck() {
+    const original = await host.parts.read(SOURCE_PART);
+    if (!original) {
+      host.diagnostics.set(EXPORT_DIAGNOSTICS, [
+        {
+          severity: "error",
+          message: "This document was not opened from a PowerPoint deck, so it cannot be exported as one yet.",
+        },
+      ]);
+      return null;
+    }
+    const printsBytes = await host.parts.read(FINGERPRINTS_PART);
+    const prints = printsBytes
+      ? (JSON.parse(new TextDecoder().decode(printsBytes)) as Record<string, string>)
+      : {};
+    const plan = await exportPlan(host, prints);
+    const engine = await slideEngine();
+    const out = engine.exportPptx(original, plan);
+    host.diagnostics.set(
+      EXPORT_DIAGNOSTICS,
+      out.diagnostics.map((message) => ({ severity: "warning" as const, message, source: "pptx" })),
+    );
+    const meta = await host.document.meta();
+    const name = (meta as { documentName?: string }).documentName?.trim() || "presentation";
+    return { bytes: out.bytes, fileName: `${name}.pptx` };
+  }
+
+  if (host.supports("contribute.exporter@1") && host.supports("storage.parts@1")) {
+    disposers.push(
+      host.contribute.exporter({
+        id: EXPORTER_ID,
+        title: "PowerPoint presentation (.pptx)",
+        extension: ".pptx",
+        mimeType: PPTX_MIME,
+        export: exportDeck,
       }).dispose,
     );
   }

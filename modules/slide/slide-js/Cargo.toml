@@ -20,5 +20,6 @@ pptx-import.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 slide-idml.workspace = true
+pptx-export.workspace = true
 slide-resolve.workspace = true
 wasm-bindgen.workspace = true

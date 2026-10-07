@@ -48,6 +48,9 @@ export interface Transition {
 export interface SlideState {
   /** The master spread of the layout the slide was made from. */
   layout?: string;
+  /** The slide part of the deck the page came from (export writes it back
+   *  as that slide). */
+  part?: string;
   notes?: string;
   hidden?: boolean;
   transition?: Transition;
@@ -72,6 +75,7 @@ export function parseState(meta: readonly PluginMetadataEntry[] | undefined): Sl
     const d = env.data as Record<string, unknown>;
     const out: SlideState = {};
     if (typeof d.layout === "string" && d.layout !== "") out.layout = d.layout;
+    if (typeof d.part === "string" && d.part !== "") out.part = d.part;
     if (typeof d.notes === "string" && d.notes !== "") out.notes = d.notes;
     if (d.hidden === true) out.hidden = true;
     if (typeof d.transition === "object" && d.transition !== null) {
@@ -87,6 +91,7 @@ export function parseState(meta: readonly PluginMetadataEntry[] | undefined): Sl
 export function encodeState(state: SlideState): string | null {
   const data: Record<string, unknown> = {};
   if (state.layout) data.layout = state.layout;
+  if (state.part) data.part = state.part;
   if (state.notes && state.notes.trim() !== "") data.notes = state.notes;
   if (state.hidden) data.hidden = true;
   if (state.transition) data.transition = state.transition;

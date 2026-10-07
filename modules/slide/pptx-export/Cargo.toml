@@ -1,0 +1,22 @@
+[package]
+name = "pptx-export"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "paged.slide: write a .pptx back from the original package and the document's slide plan."
+
+[lints]
+workspace = true
+
+[dependencies]
+paged-ooxml.workspace = true
+pptx-core.workspace = true
+pptx-import.workspace = true
+slide-resolve.workspace = true
+quick-xml.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

@@ -47,6 +47,14 @@ Read from the code on 2026-10-06.
   `.ppsx` and `.potx`: one wasm call (`importPptx`, 1.3 MB, 373 KB gzipped) returns the package and
   a report; the host opens the package, and the source deck and the report are kept as container
   parts.
+- **PPTX export, first part** (M4; `pptx-export`, ADR 704). File ▸ Export as PowerPoint writes
+  the deck back from the original the importer kept: the document's slides in page order, a
+  duplicated slide as a slide part of its own, deleted slides dropped with their relationships
+  and notes, each slide's hidden flag and speaker notes (a notes slide is created from the notes
+  master when a slide gains notes), sections kept contiguous. An unedited document exports the
+  original bytes. What is on a slide is written as the deck had it: a page whose content differs
+  from its slide's at import (a content fingerprint kept as a part) is reported, as is a slide
+  made in the editor, which is not written yet.
 - **The PowerPoint oracle** (ADR 705). Scripts drive PowerPoint 16.113.3 to export PDF, per-shape
   geometry, first baselines and chart bars (`scripts/ppt-*`). Fixtures authored through PowerPoint:
   geometry, text, placeholders, motion, baselines.
@@ -61,6 +69,8 @@ Read from the code on 2026-10-06.
 | Table styles | `tables` and `tablestyles` fixtures: 150 tables, all 74 built-in styles | every cell's fill within 4 RGB units, text weight and colour exact, every border by colour and width |
 | SmartArt | `smartart` fixture | every block within 1 pt, text colours exact |
 | Engine placement | the published canvas-wasm, headless, all five fixtures | a page per slide; every drawn item within 0.5 pt of the import |
+| Export of slide order, duplicates, deletions, hidden slides, notes | PowerPoint 16.113.3 opening the written decks (a fixture and a corpus deck) | opens without a repair prompt; every page pixel-identical to the expected original slide, in the planned order; notes read back by PowerPoint, line breaks kept |
+| Export of an unedited deck | four fixtures (Rust), the importer→exporter path headless and in the editor | byte-identical to the original |
 
 Rendering against PowerPoint's PDF (local tool `scripts/fidelity-local.py`: the engine's CPU
 renderer with the fonts PowerPoint used, 48 dpi, SSIM per slide):
@@ -75,19 +85,11 @@ renderer with the fonts PowerPoint used, 48 dpi, SSIM per slide):
 | white company profile | 20 | 0.910 | 0.826 |
 | white-lime education | 4 | 0.995 | 0.995 |
 
-These figures use an engine build with the fixes below (master paint order, radial gradient
-placement); the published engine (0.67.0) has neither.
+These figures use an engine with master items painted in stacking order and radial gradients
+placed by `GradientFillStart`; both ship in canvas-wasm 0.70.0.
 
 ## Open in M1
 
-- **Engine: master items.** The renderer painted master items grouped by kind and never drew a
-  master's placed pictures. Fixed in core (paint in stacking order, with pictures); ships with the
-  next engine release, as does the cell-indent fix (`LeftIndent` inside table cells).
-- **Engine: radial gradient placement.** The engine now reads `GradientFillStart` and centres a
-  radial gradient there, with `GradientFillLength` as its radius (the orange deck's glows: median
-  SSIM 0.805 → 0.942). On the protocol-69 branch; ships with it.
-- **Engine: double cell borders.** A cell edge's stroke type is not read, so a double line
-  (some styles' total-row top) draws as a solid line of the same weight.
 - **Fonts.** Plugins cannot register fonts with the host yet (planned SDK door, M2). Decks whose
   fonts the host lacks render with substitutes; the green deck's Antonio is missing on the oracle
   machine too, and PowerPoint breaks its long title mid-word, which the engine does not.
@@ -106,5 +108,7 @@ placement); the published engine (0.67.0) has neither.
 - Editing layouts (master spreads) from the plugin, and layouts no slide uses (they are not
   imported).
 - Thumbnails show the editor's missing-font highlight; the slideshow needs snapshots without it.
-- PPTX export (M4).
+- PPTX export of slide content: shapes, text, pictures and tables regenerated from the
+  document for an edited slide or one made in the editor (M4, second part). A notes master for a
+  deck that has none.
 - Slideshow and presenter view (M5); transitions are decided (ADR 706).

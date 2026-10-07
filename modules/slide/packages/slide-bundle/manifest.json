@@ -41,6 +41,9 @@
         "role": "derived",
         "format": "json"
       }
+    ],
+    "exporters": [
+      "media.paged.slide.exporter.pptx"
     ]
   }
 }
