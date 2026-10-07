@@ -237,7 +237,7 @@ const schema: Verb = {
 const batch: Verb = {
   name: "batch",
   usage: "<doc> <ops.json>",
-  summary: "apply a list of ObjectOps ({op:set|create|delete, …}) as ONE undo step, then save",
+  summary: "apply a list of ObjectOps ({op:set|create|delete|invoke, …}; invoke a core.<op> command beside them) as ONE undo step, then save",
   min: 2,
   max: 2,
   options: [OUT, NO_SAVE, LABEL, OUTPUT_FORMAT],
@@ -654,6 +654,66 @@ const merge: Verb = {
   },
 };
 
+/** One line per argument: `name?: type`. */
+function describeArgs(t: ObjectCommandInfo["args"]): string {
+  if (t.kind !== "struct") return describeType(t);
+  const fields = Object.entries(t.fields);
+  if (fields.length === 0) return t.shape ? `${t.shape} (JSON, checked by core)` : "{}";
+  return fields
+    .map(([k, f]) => `${k}${f.optional || f.default !== undefined ? "?" : ""}: ${f.kind === "struct" && Object.keys(f.fields).length === 0 ? `${f.shape ?? "struct"} (JSON)` : describeType(f)}`)
+    .join(", ");
+}
+
+const commands: Verb = {
+  name: "commands",
+  usage: "[doc]",
+  summary: "the typed commands (core content / structure ops `core.<op>` and every plugin's) with their argument schemas",
+  min: 0,
+  max: 1,
+  options: [{ name: "owner", value: "core|<pluginId>", help: "only this owner's commands" }, OUTPUT_FORMAT],
+  reaches: ["commands"],
+  async run({ args, session }) {
+    const s = await session(args.positionals[0] ?? null);
+    const owner = flagStr(args, "owner");
+    const list = (await s.h.objects.commands()).filter((c) => owner === undefined || c.owner === owner);
+    return {
+      json: { commands: list },
+      text: list.map((c) => `${c.id.padEnd(30)} ${c.owner.padEnd(16)} ${describeArgs(c.args)}`).join("\n"),
+    };
+  },
+};
+
+const invoke: Verb = {
+  name: "invoke",
+  usage: "<doc> <commandId> [args.json|{json}]",
+  summary:
+    "run one typed command (`paged commands` lists them; a core command is ONE undo step and answers created[]: what it made), then save",
+  min: 2,
+  max: 3,
+  options: [OUT, NO_SAVE, OUTPUT_FORMAT],
+  reaches: ["commands", "invoke"],
+  async run({ args, session, cwd }) {
+    const [doc, id, argsArg] = args.positionals as [string, string, string | undefined];
+    const given = argsArg !== undefined ? readJsonObject(cwd, argsArg, "args") : {};
+    const s = await session(doc);
+    const known = (await s.h.objects.commands()).find((c) => c.id === id);
+    if (!known) throw new CliError(EXIT.usage, `no typed command "${id}" (see \`paged commands ${doc}\`)`);
+    let result: unknown;
+    try {
+      result = await s.h.objects.invoke(id, given);
+    } catch (err) {
+      const message = (err as Error).message ?? String(err);
+      return { json: { command: id, applied: false, error: message, saved: null }, text: `refused: ${message}`, exit: EXIT.failed };
+    }
+    const saved = await saveIfAsked(s, args, true);
+    const created = (result as { created?: string[] } | null)?.created;
+    return {
+      json: { command: id, applied: true, result: plain(result), saved },
+      text: `ran ${id}${created?.length ? `; created ${created.join(", ")}` : ""}${saved ? `; saved ${(saved as { path: string }).path}` : ""}`,
+    };
+  },
+};
+
 const plugins: Verb = {
   name: "plugins",
   usage: "[doc]",
@@ -708,7 +768,7 @@ const describe: Verb = {
   },
 };
 
-export const VERBS: readonly Verb[] = [get, set, create, del, query, schema, batch, run, exportVerb, apply, merge, plugins, describe];
+export const VERBS: readonly Verb[] = [get, set, create, del, query, schema, batch, commands, invoke, run, exportVerb, apply, merge, plugins, describe];
 
 export function sessionOptions(args: ParsedArgs, cwd: string): SessionOptions {
   const plugins = flagBool(args, "no-plugins")

@@ -440,6 +440,17 @@ export interface ObjectWriteResult {
   /** The address of every object a `create` op made, in op order (this
    *  SDK's addition; a core create needs engine protocol 71). */
   created?: readonly Address[];
+  /** One entry per typed CORE command (`invoke` of `core.<op>`) the batch
+   *  ran, in op order: its op index and the addresses of what it created
+   *  (this SDK's addition, DESIGN.md §21.12). */
+  commands?: readonly ObjectCommandResult[];
+}
+
+/** What one typed core command of a batch made. */
+export interface ObjectCommandResult {
+  index: number;
+  command: string;
+  created: readonly Address[];
 }
 
 export interface ObjectChange {
@@ -491,7 +502,11 @@ export interface ObjectsSurface {
   /** Typed commands contributed through `contribute.objectModel`. */
   commands(): Promise<readonly ObjectCommandInfo[]>;
   /** Run a typed command. Rejects with an `Error` whose message starts
-   *  with the refusal code (`unknownCommand: …`, `invalidValue: …`). */
+   *  with the refusal code (`unknownCommand: …`, `invalidValue: …`).
+   *  A CORE command (`core.<op>`, listed by `commands()` with owner
+   *  `"core"`) runs as ONE batch and answers `{ created, undoSteps }`;
+   *  it also joins `batch` as an `invoke` op (one undo step with the
+   *  batch's sets / creates / deletes). */
   invoke(command: string, args: unknown): Promise<unknown>;
   onDidChange(
     listener: (e: ObjectChange) => void,

@@ -26,6 +26,7 @@
 
 import { createCoreObjects } from "./core-objects";
 import { createObjectRegistry, type ObjectRegistry } from "./object-registry";
+import { isCoreCommand } from "./core-commands";
 import { checkSchemaRows } from "./object-schema";
 import type {
   ObjectModelContribution,
@@ -4109,7 +4110,14 @@ export function createBundleHost(
     schema: (addressOrKind) => objectRegistry.schema(addressOrKind),
     kinds: () => objectRegistry.kinds(),
     commands: () => objectRegistry.commands(),
-    invoke: (command, args) => objectRegistry.invoke(command, args),
+    async invoke(command, args) {
+      // A typed CORE command writes the document: the write gate applies.
+      if (isCoreCommand(command)) {
+        const denied = deniedWrite(`objects.invoke(${command})`);
+        if (denied) throw new Error(`denied: ${denied.reason}`);
+      }
+      return objectRegistry.invoke(command, args);
+    },
     onDidChange(listener, filter) {
       return store.add(objectRegistry.onDidChange(listener, filter));
     },

@@ -61,7 +61,8 @@ describe("plugin object kinds", () => {
     const listed = await cli(["plugins", NOTES]);
     expect(listed.json.plugins).toEqual([expect.objectContaining({ id: "acme.notes", kinds: ["plugin:acme.notes/note"] })]);
     const kinds = await cli(["schema", fx.paged, NOTES]);
-    expect(kinds.json.commands.map((c: { id: string }) => c.id)).toEqual(["acme.notes.attach"]);
+    // core's typed commands (owner "core") are listed beside the plugin's
+    expect(kinds.json.commands.filter((c: { owner: string }) => c.owner !== "core").map((c: { id: string }) => c.id)).toEqual(["acme.notes.attach"]);
     expect((await cli(["schema", fx.paged, "plugin:acme.notes/note", NOTES])).json.rows.map((r: { path: string }) => r.path)).toEqual(
       expect.arrayContaining(["text", "size", "visible", "tone", "length"]),
     );

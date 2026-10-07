@@ -75,6 +75,7 @@ export type {
   ObjectModelContribution,
   ObjectModelHandle,
   ObjectWriteResult,
+  ObjectCommandResult,
   ObjectChange,
   ObjectKindInfo,
   ObjectCommandInfo,

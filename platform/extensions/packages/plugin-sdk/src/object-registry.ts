@@ -43,6 +43,7 @@ import type {
   MutationInput,
   ObjectChange,
   ObjectCommandInfo,
+  ObjectCommandResult,
   ObjectErrorCode,
   ObjectKindContribution,
   ObjectKindInfo,
@@ -62,6 +63,7 @@ import type {
 } from "@paged-media/plugin-api";
 
 import type { CoreObjects } from "./core-objects";
+import { CommandRefusal, createCoreCommands, isCoreCommand, type CoreCommandPlan } from "./core-commands";
 import { codeOfEngineError } from "./core-objects-v71";
 import { canonicalCorePath } from "./core-schema";
 import { addressKindOf, formatAddress, parseAddress, parseSelector, type SelectorStep } from "./object-address";
@@ -192,6 +194,7 @@ export function resolveCreatedPlaceholders(
 
 export function createObjectRegistry(options: CreateObjectRegistryOptions = {}): ObjectRegistry {
   const core = options.core ?? null;
+  const coreCommands = core ? createCoreCommands(core) : null;
   const log = options.log ?? console;
   const kinds = new Map<string, KindEntry>();
   const commands = new Map<string, { plugin: string; c: TypedCommandContribution }>();
@@ -305,7 +308,7 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
       ...(e.index !== undefined ? { index: e.index } : {}),
     });
     if (ops.length === 0) return { applied: true, undoSteps: 0 };
-    if (ops.every((o) => o.op === "invoke")) {
+    if (ops.every((o) => o.op === "invoke" && !(coreCommands && isCoreCommand(o.command)))) {
       try {
         for (const o of ops) await surface.invoke((o as { command: string }).command, (o as { args: unknown }).args);
         return { applied: true, undoSteps: 0 };
@@ -328,10 +331,28 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
        *  planning) the addresses its write reported for them. */
       const groupCreates = new Map<KindEntry | string, { count: number; reported: readonly string[] | null }>();
       const touched: string[] = [];
+      /** Typed core commands of this batch, in op order. */
+      const commandPlans: Array<{ index: number; command: string; plan: CoreCommandPlan }> = [];
       // 1. validate + plan core ops; group plugin ops by kind.
       for (const [index, op] of ops.entries()) {
         try {
-          if (op.op === "invoke") throw new Refusal("unmapped", "invoke cannot share a batch with writes; use objects.invoke");
+          if (op.op === "invoke") {
+            // A typed CORE command plans to mutations like any core op.
+            if (!coreCommands || !isCoreCommand(op.command)) {
+              throw new Refusal("unmapped", "a plugin command (invoke) cannot share a batch with writes; use objects.invoke");
+            }
+            let plan: CoreCommandPlan;
+            try {
+              plan = await coreCommands.plan(op.command, op.args, new Set(handles.keys()), () => `om${++autoHandle}_${Date.now().toString(36)}`);
+            } catch (err) {
+              if (err instanceof CommandRefusal) throw new Refusal(err.code, err.message);
+              throw err;
+            }
+            mutations.push(...plan.mutations);
+            if (plan.handle) handles.set(plan.handle.name, { address: `$h:${plan.handle.name}`, kind: plan.handle.kind, usable: true });
+            commandPlans.push({ index, command: op.command, plan });
+            continue;
+          }
           if (op.op === "create") {
             const entry = kinds.get(op.kind);
             if (!entry) {
@@ -526,6 +547,7 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
         return { applied: true, undoSteps: 0 };
       }
       if (!core) throw new Refusal("unmapped", "no core backend to commit to");
+      const fresh = commandPlans.length > 0 ? await coreCommands!.snapshot(commandPlans.map((c) => c.plan)) : null;
       const outcome = await core.commit(mutations);
       if (!outcome.applied) {
         const reason = describe(outcome.error);
@@ -536,11 +558,21 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
         return { applied: false, code: codeOfEngineError(reason), reason, undoSteps: 0, outcome };
       }
       notify(touched);
+      const result: ObjectWriteResult & { commands?: ObjectCommandResult[] } = { applied: true, undoSteps: 1, outcome };
       if (created.length > 0) {
         const names = await Promise.all(created.map((r) => r(outcome).catch(() => null)));
-        return { applied: true, undoSteps: 1, outcome, created: names.map((n) => n ?? "") };
+        result.created = names.map((n) => n ?? "");
       }
-      return { applied: true, undoSteps: 1, outcome };
+      if (fresh) {
+        const take = await fresh();
+        const minted = (outcome.applied ? outcome.minted : undefined) ?? [];
+        result.commands = [];
+        for (const c of commandPlans) {
+          const made = await c.plan.resolve(outcome, { minted, take }).catch(() => []);
+          result.commands.push({ index: c.index, command: c.command, created: made });
+        }
+      }
+      return result;
     } catch (err) {
       if (err instanceof Refusal) return no(err);
       return no(new Refusal("failed", String(err)));
@@ -790,15 +822,20 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
       return out;
     },
     async commands() {
-      return [...commands.values()].map(({ plugin, c }): ObjectCommandInfo => ({
+      return [...(coreCommands?.list() ?? []), ...[...commands.values()].map(({ plugin, c }): ObjectCommandInfo => ({
         id: c.id,
         title: c.title,
         owner: plugin,
         args: c.args,
         ...(c.result ? { result: c.result } : {}),
-      }));
+      }))];
     },
     async invoke(command, args) {
+      if (coreCommands && isCoreCommand(command)) {
+        const r = await batch([{ op: "invoke", command, args }]);
+        if (!r.applied) throw new Error(`${r.code ?? "failed"}: ${r.reason ?? "refused"}`);
+        return { created: r.commands?.[0]?.created ?? [], undoSteps: r.undoSteps };
+      }
       const found = commands.get(command);
       if (!found) throw new Error(`unknownCommand: no typed command "${command}"`);
       const why = validateValue(found.c.args, args, undefined, "args");
@@ -833,6 +870,7 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
           added.push(qualified);
         }
         for (const c of model.commands ?? []) {
+          if (c.id.startsWith("core.")) throw new Error(`typed command ${c.id}: the "core." prefix names engine commands`);
           if (commands.has(c.id)) throw new Error(`typed command ${c.id} is already registered`);
           const why = checkValueType(c.args, `${c.id}.args`) ?? (c.result ? checkValueType(c.result, `${c.id}.result`) : null);
           if (why) throw new Error(why);

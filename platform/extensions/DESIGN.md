@@ -2238,8 +2238,9 @@ editor's object-model shim).
 - A kind without `batch` takes one `set` per batch (several independent
   `set` plans would each start from the same state and lose updates).
 - The contribution gains a PLUGIN-level `batch` (§21.8).
-- `invoke` cannot share a batch with writes (it runs arbitrary code; it
-  cannot join an undo step).
+- A PLUGIN command's `invoke` cannot share a batch with writes (it runs
+  arbitrary code; it cannot join an undo step). A typed CORE command can
+  (§21.12).
 
 ### 21.7 Additivity
 
@@ -2406,6 +2407,69 @@ not an address, is refused (`failed`) before anything applies.
   and refuses a set (`readOnly`). The entry goes when core models the
   per-cell tint or flips the catalog row itself.
 
+### 21.12 Typed core commands (`core.<op>`, 0.2.45)
+
+Core's content and structure ops (insert text, tables and their rows /
+columns / spans, fields, hyperlinks, anchored frames, place / replace
+image, duplicate / move / insert pages, groups, z-order, layers, paths,
+pathfinder, styles, swatches, sections, guides …) were reachable from
+`host.objects` and the Node CLI only as raw wire (`host.document.mutate`).
+They are now TYPED COMMANDS beside the plugins' own:
+
+- **Generated, not hand-listed.** `scripts/gen-core-commands.mjs` reads the
+  vendored `wire.d.ts` with the TypeScript compiler API and writes
+  `core-commands.generated.ts`: one row per `Mutation` arm, its args as a
+  `ValueType` struct (`string` → `text`, `number`, `boolean` → `bool`,
+  `[n,n]` / 4-tuple / 6-tuple → `point` / `bounds` / `transform`, `T[]` →
+  `list`, a string-literal union → `enum`, an interface → an open struct
+  with `shape`, `ElementId` → `ref` to `item`, any other union
+  (`FieldKind`, `ZOrderTarget`, `Value`) → an OPAQUE struct core
+  validates; `?` → optional; a required `X | null` → optional, sent as
+  null). Id positions (`storyId`, `tableId`, `page`, `frameId`, …) are
+  `ref`s whose `to` names the ADR 131 kind. `--check` and a spec fail when
+  the file drifts from the wire.
+- **The guard.** `object-model-commands.spec.ts` fails a catalog
+  `operations` entry that is neither a command nor in
+  `CORE_COMMAND_EXCLUSIONS` with a reason. Excluded (8): `batch` (that is
+  `host.objects.batch`), `bindCreated` (a command's `handle`), `set`
+  (`host.objects.set`), `setElementProperty` (superseded by Set),
+  `setPluginMetadata` / `setPageMetadata` / `setDocumentMetadata` (labels
+  go through the registry's caller-checked label-hash pattern), `onMaster`
+  (wraps a raw Mutation). 122 ops are commands.
+- **Addresses in, addresses out.** An id position takes the raw wire id OR
+  an address (`story:u1`, `table:<id>`, `page:#2`, `rectangle:u12`,
+  `frame:u12`, `$h:<name>`); an `ElementId` position takes an address and
+  gets the wire's `{kind, id}`. Nested struct fields stay wire-shaped.
+  Args are validated (an unknown argument is `invalidValue`), never
+  coerced. The result is `{ created, undoSteps }`: `created[]` names what
+  the command made — minted elements (`minted[]`, attributed by the
+  command's handle; `duplicateElements` gets one per source), new pages /
+  layers (diffed around the commit), and named creates whose id is in the
+  args (style / swatch / gradient / colorGroup / numberingList `selfId`,
+  `createMaster`, `createTextVariable`). `CORE_COMMAND_CREATES` is that
+  table (the Rust side is paged-canvas `created_element_id`); pathfinder
+  and the other ops answer `[]`.
+- **One batch, composable.** `objects.invoke("core.<op>", args)` runs
+  `batch([{ op: "invoke", … }])`. In a batch a core command plans to its
+  mutation (plus `bindCreated` when it creates), so it shares the ONE
+  engine batch — one undo step — with sets, creates, deletes and plugin
+  writes; a creating command's `handle` arg binds what it made for the
+  batch's later ops (`cell:$h:t/0,1`, `$h:p`, `pageId: "$h:p"`). The
+  write result gains `commands[]` (`{ index, command, created }` per core
+  command). A PLUGIN command still cannot share a batch (it runs arbitrary
+  code). §21.6's "invoke cannot share a batch" now reads: a plugin's.
+- **Gates.** A bundle's `invoke` of a core command needs
+  `document.write` (refused `denied`); a plugin cannot register a
+  `core.`-prefixed command. `commands()` lists core's first (owner
+  `"core"`, static: the vendored wire's).
+- **Surfaces.** Node CLI: `paged commands [doc] [--owner core|<id>]` and
+  `paged invoke <doc> <commandId> [args.json|{json}]` (saves like every
+  write verb); `paged batch` takes `invoke` ops. Boa: every op is already a
+  native `paged.*` fn; a typed command through the BRIDGE needs core's
+  `object_ops` to accept `{op:"invoke"}` and route it to the host (today
+  it recognises set / create / delete only) — a core change, not made
+  here.
+
 ## 22. The Node CLI (ADR 324 — `@paged-media/cli`, bin `paged`)
 
 **Status:** 0.1.0-canary.0 in `packages/cli`, published by `publish.yml`
@@ -2421,8 +2485,9 @@ is an owner step).
   on plain Node ≥ 22; the engine and every bundle stay run-time resolved.
 - **Verbs** come from ONE table (`src/verbs.ts`) that also generates
   `--help` and feeds a cli_surface spec (every `host.objects` member is
-  reached by a verb): get, set, query, schema, batch, run, export, apply,
-  merge, plugins, describe. JSON on stdout (engine logs go to stderr),
+  reached by a verb): get, set, query, schema, batch, commands, invoke,
+  run, export, apply, merge, plugins, describe (`commands` / `invoke`:
+  §21.12). JSON on stdout (engine logs go to stderr),
   exits 0 / 1 (refused write, failed check) / 2 (usage, IO).
 - **Values are text until a schema row types them** (`coerceValue` →
   `validateValue`); a failure names the path and the expected type. No

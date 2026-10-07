@@ -200,7 +200,8 @@ describe("host.objects — registry over core and a plugin (ADR 323, real engine
 
   it("typed commands: listed with schemas, args validated before the handler", async () => {
     const { h } = await setup();
-    expect(await h.objects.commands()).toEqual([
+    // Core's typed commands (§21.12) are listed too, owner "core".
+    expect((await h.objects.commands()).filter((c) => c.owner !== "core")).toEqual([
       expect.objectContaining({ id: "acme.notes.attach", owner: NOTES_ID }),
     ]);
     await expect(h.objects.invoke("acme.notes.attach", { frame: "x", count: "two" })).rejects.toThrow(/^invalidValue/);
@@ -236,6 +237,12 @@ describe("host.objects — registry over core and a plugin (ADR 323, real engine
     });
     expect(await surface!.get("doc", "pageCount")).toEqual(value(1));
     expect(await surface!.set("doc", "defaultStrokeWeight", 2)).toMatchObject({ applied: false, code: "denied" });
+    // A typed CORE command writes the document: the same gate (§21.12).
+    await expect(surface!.invoke("core.layerInsert", { position: 0, name: "x" })).rejects.toThrow(/^denied/);
+    expect(await surface!.batch([{ op: "invoke", command: "core.layerInsert", args: { position: 0, name: "x" } }])).toMatchObject({
+      applied: false,
+      code: "denied",
+    });
   });
 
   it("contribute.objectModel refuses an undeclared kind and an empty schema", async () => {

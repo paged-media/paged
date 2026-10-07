@@ -134,6 +134,15 @@ export {
 } from "./core-objects";
 export { codeOfEngineError } from "./core-objects-v71";
 export {
+  CORE_COMMAND_CREATES,
+  CORE_COMMAND_EXCLUSIONS,
+  CORE_COMMAND_OPS,
+  CORE_COMMAND_PREFIX,
+  coreCommandInfos,
+  isCoreCommand,
+} from "./core-commands";
+export { CORE_WIRE_OPS, type CoreWireOpRow } from "./core-commands.generated";
+export {
   CORE_CATALOG_ROWS,
   CORE_PATHS,
   CORE_PATH_ALIASES,
