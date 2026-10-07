@@ -38,11 +38,9 @@ const DECK = "plugin:media.paged.slide/deck";
 
 export const SLIDE_PANEL_FIELDS: readonly PanelFieldList[] = [
   { panel: "media.paged.slide.panel.slide", kind: SLIDE, fields: ["index", "layout", "hidden"] },
-  {
-    panel: "media.paged.slide.panel.transition",
-    kind: SLIDE,
-    fields: ["transitionKind", "transitionDirection", "transitionSpeed", "transitionDuration", "advanceOnClick", "advanceAfter"],
-  },
+  // One line per entry: the cockpit object matrix reads `kind: K, fields: [...]` as written.
+  // prettier-ignore
+  { panel: "media.paged.slide.panel.transition", kind: SLIDE, fields: ["transitionKind", "transitionDirection", "transitionSpeed", "transitionDuration", "advanceOnClick", "advanceAfter"] },
   { panel: "media.paged.slide.panel.notes", kind: SLIDE, fields: ["notes"] },
   { panel: "media.paged.slide.panel.placeholder", kind: PLACEHOLDER, fields: ["type", "index", "content"] },
   { panel: "media.paged.slide.panel.deck", kind: DECK, fields: ["name", "slideWidth", "slideHeight", "slideCount", "fonts"] },

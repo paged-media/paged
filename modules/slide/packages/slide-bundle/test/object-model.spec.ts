@@ -76,7 +76,8 @@ describe("[plugin-slide.object-model] slides, layouts, placeholders through host
   it("declares four kinds and two typed commands", async () => {
     const kinds = (await h.objects.kinds()).filter((k) => k.owner === "media.paged.slide").map((k) => k.kind);
     expect(kinds.sort()).toEqual([`${P}/deck`, `${P}/layout`, `${P}/placeholder`, `${P}/slide`]);
-    const commands = (await h.objects.commands()).map((c) => c.id).sort();
+    // The registry also lists the typed core commands (`core.<op>`): only the bundle's own here.
+    const commands = (await h.objects.commands()).filter((c) => c.owner === "media.paged.slide").map((c) => c.id).sort();
     expect(commands).toEqual([IMPORT_PPTX_COMMAND, NEW_SLIDE_COMMAND]);
   });
 

@@ -63,6 +63,15 @@ describe("[plugin-slide.object-model] slide panels are property rows", () => {
     }
   });
 
+  it("covers EVERY writable row of every kind (read-only and derived rows are readouts)", () => {
+    const declared = new Set(SLIDE_PANEL_FIELDS.flatMap((l) => l.fields.map((f) => `${l.kind}.${f}`)));
+    const writable = Object.entries(byKind).flatMap(([kind, rows]) =>
+      rows.filter((r) => (r.access ?? "readWrite") === "readWrite").map((r) => `${kind}.${r.path}`),
+    );
+    expect(writable.length).toBeGreaterThan(0);
+    expect(writable.filter((w) => !declared.has(w))).toEqual([]);
+  });
+
   it("the manifest declares every panel", () => {
     expect([...manifest.contributes.panels].sort()).toEqual(SLIDE_PANELS.map((s) => s.id).sort());
   });
