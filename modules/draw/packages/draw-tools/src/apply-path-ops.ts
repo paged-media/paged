@@ -40,10 +40,11 @@
 //                      tangent is the unit vector from the PREVIOUS to the
 //                      NEXT anchor of the same contour, each handle a
 //                      third of the distance to its neighbour along it.
-//                      The neighbours do NOT wrap round a closed contour
-//                      (core reads `index − 1` / `index + 1` inside the
-//                      subpath only), so a contour's first or last anchor
-//                      — or a degenerate tangent — falls back to a corner.
+//                      On a CLOSED contour of ≥ 3 anchors the neighbours
+//                      wrap (first and last are each other's neighbours,
+//                      as core does since protocol 71); an OPEN contour's
+//                      first or last anchor — or a degenerate tangent —
+//                      falls back to a corner.
 //   closePath          the named contour stops being open; endpoints that
 //                      coincide (a contour of ≥ 3) merge into one anchor.
 //
@@ -164,8 +165,23 @@ export function applyPathOps(
           break;
         }
         const [from, to] = contourRangeOf(t, op.index);
-        const prev = op.index > from ? t.anchors[op.index - 1].anchor : null;
-        const next = op.index + 1 < to ? t.anchors[op.index + 1].anchor : null;
+        // A CLOSED contour of >= 3 anchors wraps: its first and last
+        // anchors are each other's neighbours (core, since protocol 71).
+        // A contour with no open flag reads as closed, as in core.
+        const contour = Math.max(0, t.subpathStarts.indexOf(from));
+        const closed = !(t.subpathOpen[contour] ?? false) && to - from >= 3;
+        const prev =
+          op.index > from
+            ? t.anchors[op.index - 1].anchor
+            : closed
+              ? t.anchors[to - 1].anchor
+              : null;
+        const next =
+          op.index + 1 < to
+            ? t.anchors[op.index + 1].anchor
+            : closed
+              ? t.anchors[from].anchor
+              : null;
         if (!prev || !next) {
           corner();
           break;

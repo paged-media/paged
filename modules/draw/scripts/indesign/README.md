@@ -69,7 +69,7 @@ made by another reader or from another IDML.
 | `appearance-bake` | bake: a group of stacked items | identical since 0.70.0 (Color/Paper declared) |
 | `repeat-expanded`, `blend-expanded` | expanded repeat / blend | identical (the blend's duplicate stroke swatches were fixed in draw and the case re-recorded) |
 | `svg-import` | SVG import | identical |
-| `text-on-path` | Type on a Path | exported since 0.70.0; DEFECT: no `EndBracket`, InDesign reads 0 → story overset |
+| `text-on-path` | Type on a Path | identical since 0.71.1 (`EndBracket` exported; re-recorded 2026-10-11) |
 | `opacity-mask` | opacity mask | EXPECTED LOSS, named in `lost` |
 
 "Identical" means every anchor and handle within 0.01 pt, every paint and

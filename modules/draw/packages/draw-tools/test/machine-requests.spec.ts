@@ -444,11 +444,22 @@ describe("5 — apply(ops): an insert or a convert previewed on the machine's ow
     expect(back.table.anchors[1]).toEqual(corner(50, 50));
   });
 
-  it("a convert at a contour's END (no neighbour on one side — no wrap, even when closed) stays a corner", () => {
+  it("a convert at an OPEN contour's end stays a corner; a CLOSED contour wraps (first and last are neighbours)", () => {
     const open = ds(ARCH).apply([{ op: "pathPointCurveType", index: 0, smooth: true }]);
     expect(open.table.anchors[0]).toEqual(corner(0, 0));
     const closed = ds(QUAD).apply([{ op: "pathPointCurveType", index: 0, smooth: true }]);
-    expect(closed.table.anchors[0]).toEqual(corner(0, 0));
+    // prev = (0, 100), next = (100, 0): tangent (1, -1)/√2, each handle a
+    // third of 100 along it.
+    const h = 100 / 3 / Math.SQRT2;
+    const a = closed.table.anchors[0];
+    expect(a.anchor).toEqual([0, 0]);
+    expect(a.left[0]).toBeCloseTo(-h, 9);
+    expect(a.left[1]).toBeCloseTo(h, 9);
+    expect(a.right[0]).toBeCloseTo(h, 9);
+    expect(a.right[1]).toBeCloseTo(-h, 9);
+    // …and the last anchor wraps the other way.
+    const last = ds(QUAD).apply([{ op: "pathPointCurveType", index: 3, smooth: true }]);
+    expect(last.table.anchors[3].left).not.toEqual(last.table.anchors[3].anchor);
   });
 
   it("ops are INNER space: through a transform the preview lands where the pointer sees it", () => {

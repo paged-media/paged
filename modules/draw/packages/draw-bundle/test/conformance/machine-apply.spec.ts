@@ -29,7 +29,8 @@
 //
 // The convert rule is the one most likely to drift: the applier models
 // core's `smooth_handles_from_neighbours` (tangent from the previous to
-// the next anchor of the SAME contour, no wrap round a closed one), and
+// the next anchor of the SAME contour, wrapping round a closed one since
+// protocol 71), and
 // these cases include the edge it falls back on.
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -134,11 +135,11 @@ describe("draw conformance — DirectSelectMachine.apply against the real engine
     );
   });
 
-  it("CONVERT a closed contour's FIRST anchor to smooth — no wrap, so the engine (and the model) keep a corner", async () => {
+  it("CONVERT a closed contour's FIRST anchor to smooth — the neighbours wrap, so the engine (and the model) smooth it", async () => {
     const { after } = await agree(F2_CLOSED_QUAD.bytes(), polygon("uquad"), () => [
       { op: "pathPointCurveType", index: 0, smooth: true },
     ]);
-    expect(after.anchors[0].left).toEqual(after.anchors[0].anchor);
+    expect(after.anchors[0].left).not.toEqual(after.anchors[0].anchor);
   });
 
   it("through an ITEM TRANSFORM — the ops are inner space, the preview pointer space", async () => {

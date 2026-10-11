@@ -56,19 +56,10 @@ export const FINDINGS = {
   // exporter, plugin-publish 47ab9d9) and their entries deleted: live corners,
   // dash, join + miter limit on a draw-made path, an undeclared Color/Paper,
   // and Type on a Path (now written as a <TextPath>). Re-recorded with
-  // InDesign 20.0.1 on 2026-10-06.
-  textPathEndBracketAbsent: {
-    verdict: "defect",
-    owner: "exporter",
-    title: "a <TextPath> with no end bracket is exported without EndBracket; InDesign reads 0 and the story is overset",
-    why:
-      "draw attaches the text with `startBracket: 10` and no end, which the model holds " +
-      "as `end_bracket: None` — flow to the end of the path, as the renderer draws it. " +
-      "The exporter writes `StartBracket=\"10\"` and omits `EndBracket`; InDesign takes " +
-      "the absent attribute as 0, so the window is empty, the path shows no text " +
-      "(`contents: \"\"`, `overflows: true`) and the story is reported overset. " +
-      "The exporter should write the path's length for an unset end bracket.",
-  },
+  // InDesign 20.0.1 on 2026-10-06. The sixth, a <TextPath> exported without
+  // EndBracket (InDesign read 0 and set the story overset), was fixed by the
+  // 0.71.1 engine (plugin-publish 5589ab8 writes the path length); text-on-path
+  // re-recorded on 2026-10-11, no warnings.
   dashImpliesDashedType: {
     verdict: "convention",
     owner: "engine",
@@ -248,9 +239,7 @@ export const KNOWN: Record<string, readonly Known[]> = {
     { at: "0", field: "gradientLength", ours: null, theirs: 120.5, finding: "gradientLengthDerived" },
   ],
   // `appearance-bake` has none since 0.70.0: Color/Paper is declared.
-  "text-on-path": [
-    { at: "0", field: "textPath", ours: "Type on a path", theirs: "", finding: "textPathEndBracketAbsent" },
-  ],
+  // `text-on-path` has none since 0.71.1: EndBracket is exported.
   "opacity-mask": [
     { at: "page", field: "children", ours: ["polygon"], theirs: ["polygon", "polygon"], finding: "opacityMaskLost" },
   ],
@@ -271,11 +260,7 @@ export const MISSING_LOST: Record<string, { pattern: RegExp; finding: FindingId 
 
 /** The warnings InDesign raised when it opened a case's IDML, per case,
  *  each one the symptom of a classified finding. */
-export const KNOWN_WARNINGS: Record<string, readonly { warning: unknown; finding: FindingId }[]> = {
-  "text-on-path": [
-    { warning: { source: "overset", story: "Type on a path" }, finding: "textPathEndBracketAbsent" },
-  ],
-};
+export const KNOWN_WARNINGS: Record<string, readonly { warning: unknown; finding: FindingId }[]> = {};
 
 /** Differences between the model as authored and the same document after
  *  InDesign opened it, re-exported it as IDML, and the ENGINE re-imported
