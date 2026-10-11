@@ -1,6 +1,6 @@
 # paged.slide — status
 
-Read from the code on 2026-10-05.
+Read from the code on 2026-10-06.
 
 ## Built
 
@@ -29,11 +29,32 @@ Read from the code on 2026-10-05.
 - **IDML writing** (`slide-idml`, ADR 700). A flattened master spread per used layout, a page per
   slide, every item, story and picture; tables; text frames that grow from their anchored edge;
   PowerPoint's first baseline for percentage line spacing; unwrapped text; gradient feathers for
-  translucent gradients; slide numbers as page-number markers.
+  translucent gradients; radial gradients centred where `a:fillToRect` puts them; slide numbers as
+  page-number markers.
+- **Slide state on pages.** Each slide's speaker notes, hidden flag and transition are written
+  into its page's plugin metadata at import (`x-paged:media.paged.slide`), so they move,
+  duplicate and undo with the slide (engine protocol 70).
+- **New slide from a layout.** The Slides panel offers the deck's layouts (every layout a slide
+  uses); a new slide is a copy of one such slide with only its placeholders kept and emptied, so
+  it has the layout's master and PowerPoint's placeholder formatting. Placeholders carry their
+  PowerPoint type and index as item metadata. Typing into an emptied placeholder keeps its
+  formatting once the engine keeps a cleared paragraph's character attributes (core, next
+  release).
+- **Slides and Notes panels** (M3, first part). A sorter with a thumbnail per slide from the
+  engine's renderer: click to go to the slide, drag to reorder, duplicate, delete, hide from the
+  slideshow, each one undo step. A notes panel edits the active slide's speaker notes.
 - **The importer** (`packages/slide-bundle`, `@paged-media/slide`). File ▸ Open of `.pptx`,
   `.ppsx` and `.potx`: one wasm call (`importPptx`, 1.3 MB, 373 KB gzipped) returns the package and
   a report; the host opens the package, and the source deck and the report are kept as container
   parts.
+- **PPTX export, first part** (M4; `pptx-export`, ADR 704). File ▸ Export as PowerPoint writes
+  the deck back from the original the importer kept: the document's slides in page order, a
+  duplicated slide as a slide part of its own, deleted slides dropped with their relationships
+  and notes, each slide's hidden flag and speaker notes (a notes slide is created from the notes
+  master when a slide gains notes), sections kept contiguous. An unedited document exports the
+  original bytes. What is on a slide is written as the deck had it: a page whose content differs
+  from its slide's at import (a content fingerprint kept as a part) is reported, as is a slide
+  made in the editor, which is not written yet.
 - **The PowerPoint oracle** (ADR 705). Scripts drive PowerPoint 16.113.3 to export PDF, per-shape
   geometry, first baselines and chart bars (`scripts/ppt-*`). Fixtures authored through PowerPoint:
   geometry, text, placeholders, motion, baselines.
@@ -48,6 +69,8 @@ Read from the code on 2026-10-05.
 | Table styles | `tables` and `tablestyles` fixtures: 150 tables, all 74 built-in styles | every cell's fill within 4 RGB units, text weight and colour exact, every border by colour and width |
 | SmartArt | `smartart` fixture | every block within 1 pt, text colours exact |
 | Engine placement | the published canvas-wasm, headless, all five fixtures | a page per slide; every drawn item within 0.5 pt of the import |
+| Export of slide order, duplicates, deletions, hidden slides, notes | PowerPoint 16.113.3 opening the written decks (a fixture and a corpus deck) | opens without a repair prompt; every page pixel-identical to the expected original slide, in the planned order; notes read back by PowerPoint, line breaks kept |
+| Export of an unedited deck | four fixtures (Rust), the importer→exporter path headless and in the editor | byte-identical to the original |
 
 Rendering against PowerPoint's PDF (local tool `scripts/fidelity-local.py`: the engine's CPU
 renderer with the fonts PowerPoint used, 48 dpi, SSIM per slide):
@@ -58,25 +81,15 @@ renderer with the fonts PowerPoint used, 48 dpi, SSIM per slide):
 | black-pink business proposal | 20 | 0.917 | 0.878 |
 | creative agency profile | 20 | 0.939 | 0.900 |
 | green minimalist proposal | 20 | 0.882 | 0.818 |
-| orange creative pitch deck | 20 | 0.805 | 0.649 |
+| orange creative pitch deck | 20 | 0.942 | 0.898 |
 | white company profile | 20 | 0.910 | 0.826 |
 | white-lime education | 4 | 0.995 | 0.995 |
 
-These figures use an engine build that includes the master-paint-order fix below; the published
-engine (0.67.0) does not draw a master's pictures yet.
+These figures use an engine with master items painted in stacking order and radial gradients
+placed by `GradientFillStart`; both ship in canvas-wasm 0.70.0.
 
 ## Open in M1
 
-- **Engine: master items.** The renderer painted master items grouped by kind and never drew a
-  master's placed pictures. Fixed on a core branch (paint in stacking order, with pictures); ships
-  with the next engine release.
-- **Engine: radial gradient placement.** IDML's `GradientFillStart` is not read and a radial
-  gradient always sits at the default centre, so PowerPoint's centred radial glows (orange deck)
-  render off-centre. Needs the parser in the IDML adapter, a model field and the renderer; planned
-  for the M2 engine batch.
-- **Engine: table cell indents.** `LeftIndent` inside table cells is ignored.
-- **Engine: double cell borders.** A cell edge's stroke type is not read, so a double line
-  (some styles' total-row top) draws as a solid line of the same weight.
 - **Fonts.** Plugins cannot register fonts with the host yet (planned SDK door, M2). Decks whose
   fonts the host lacks render with substitutes; the green deck's Antonio is missing on the oracle
   machine too, and PowerPoint breaks its long title mid-word, which the engine does not.
@@ -85,13 +98,17 @@ engine (0.67.0) does not draw a master's pictures yet.
 - **SmartArt layouts in fixtures.** PowerPoint draws a seeded diagram with its default layout
   only, so the fixture covers the drawing's lowering, not other layouts' shapes.
 - **Editor wiring.** The editor loads the bundle on a branch, through a local link, and a
-  journey opens a PowerPoint-authored deck there (ten 960 × 540 pt pages, the title slide drawn).
+  journey opens a PowerPoint-authored deck there (ten 960 × 540 pt pages, the title slide drawn)
+  and drives the Slides and Notes panels.
   It merges once `@paged-media/slide` is published: the first version by hand (trusted
   publishing cannot create a package), then the publish workflow takes over.
 
 ## Not built yet
 
-- Engine protocol batch and the host doors (M2).
-- Native editing surfaces: slide sorter, notes, layouts (M3).
-- PPTX export (M4).
+- Editing layouts (master spreads) from the plugin, and layouts no slide uses (they are not
+  imported).
+- Thumbnails show the editor's missing-font highlight; the slideshow needs snapshots without it.
+- PPTX export of slide content: shapes, text, pictures and tables regenerated from the
+  document for an edited slide or one made in the editor (M4, second part). A notes master for a
+  deck that has none.
 - Slideshow and presenter view (M5); transitions are decided (ADR 706).

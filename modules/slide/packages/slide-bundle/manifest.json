@@ -24,10 +24,12 @@
   },
   "contributes": {
     "importers": ["media.paged.slide.importer.pptx"],
+    "exporters": ["media.paged.slide.exporter.pptx"],
     "panels": [
+      "media.paged.slide.panel.slides",
+      "media.paged.slide.panel.notes",
       "media.paged.slide.panel.slide",
       "media.paged.slide.panel.transition",
-      "media.paged.slide.panel.notes",
       "media.paged.slide.panel.placeholder",
       "media.paged.slide.panel.deck"
     ],

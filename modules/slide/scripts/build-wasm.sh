@@ -28,7 +28,7 @@ if [ "$LOCKED" != "$CLI" ]; then
   exit 1
 fi
 
-"$WB" target/wasm32-unknown-unknown/release/slide_js.wasm --target web --out-dir "$OUT"
+"$WB" "${CARGO_TARGET_DIR:-target}/wasm32-unknown-unknown/release/slide_js.wasm" --target web --out-dir "$OUT"
 
 if command -v wasm-opt >/dev/null 2>&1; then
   wasm-opt -Oz "$OUT/slide_js_bg.wasm" -o "$OUT/slide_js_bg.wasm"

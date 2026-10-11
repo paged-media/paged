@@ -20,18 +20,31 @@
 // engine writes the whole presentation as one IDML package (ADR 700): a
 // master spread per used layout, a page per slide, every shape, story and
 // picture with PowerPoint's inheritance already resolved. The host opens it
-// as the document; the source deck and the import report (notes,
-// transitions, hidden slides, per-item placeholder identity) are kept as
-// this plugin's container parts (ADR 703) until pages can carry plugin
-// metadata.
+// as the document. Each slide's notes, hidden flag and transition ride its
+// page as plugin metadata (written by the importer); the source deck and the
+// import report are kept as this plugin's container parts (ADR 703).
+//
+// The Slides and Notes panels work on any document's pages: a sorter with
+// engine-rendered thumbnails (reorder, duplicate, delete, hide) and the
+// active slide's speaker notes.
+//
+// The object model (ADR 323) addresses the deck, its slides, layouts and
+// placeholders through host.objects; the slide, transition, notes,
+// placeholder and deck fields are host-rendered property rows over it.
 
 import type { BundleHandle, BundleHost, Diagnostic } from "@paged-media/plugin-api";
 
+import { exportPlan, pageFingerprints } from "./deck-export.js";
 import { slideEngine, type ImportReport } from "./engine.js";
 import { contributeSlideObjectModel, importLabelMutations } from "./object-model.js";
 import { SLIDE_PANELS } from "./panels.js";
+import { makeNotesPanel } from "./panels/notes-panel.js";
+import { makeSlidesPanel } from "./panels/slides-panel.js";
+import { SlidesStore } from "./slides-model.js";
 
 export const IMPORTER_ID = "media.paged.slide.importer.pptx";
+export const SLIDES_PANEL_ID = "media.paged.slide.panel.slides";
+export const NOTES_PANEL_ID = "media.paged.slide.panel.notes";
 export const PPTX_MIME =
   "application/vnd.openxmlformats-officedocument.presentationml.presentation";
 /** Diagnostics key for what an import met and could not render. */
@@ -39,6 +52,11 @@ export const IMPORT_DIAGNOSTICS = "media.paged.slide/import";
 /** Container parts (this plugin's namespace). */
 export const SOURCE_PART = "source/original.pptx";
 export const REPORT_PART = "import/report.json";
+/** Each imported slide's content fingerprint, by slide part (export
+ *  compares a page against it to tell an edited slide). */
+export const FINGERPRINTS_PART = "import/fingerprints.json";
+export const EXPORTER_ID = "media.paged.slide.exporter.pptx";
+export const EXPORT_DIAGNOSTICS = "media.paged.slide/export";
 
 /** The file name without its extension: the document's name. */
 export function documentName(fileName: string): string {
@@ -63,6 +81,25 @@ export function reportDiagnostics(report: ImportReport): Diagnostic[] {
     });
   }
   return out;
+}
+
+/**
+ * What the importer keeps once the deck is the open document, as container
+ * parts (they belong to that document, so they are written after it
+ * replaced the previous one): the source deck, the import report and each
+ * slide's content fingerprint, which export compares pages against.
+ */
+export async function keepSource(host: BundleHost, bytes: Uint8Array, report: ImportReport): Promise<void> {
+  if (!host.supports("storage.parts@1")) return;
+  await host.parts.write(SOURCE_PART, bytes);
+  await host.parts.write(REPORT_PART, new TextEncoder().encode(JSON.stringify(report)));
+  // Page i is slide i of the deck right after the open.
+  const prints = await pageFingerprints(host);
+  const byPart: Record<string, string> = {};
+  report.slides.forEach((s, i) => {
+    if (prints[i]) byPart[s.part] = prints[i];
+  });
+  await host.parts.write(FINGERPRINTS_PART, new TextEncoder().encode(JSON.stringify(byPart)));
 }
 
 export function activate(host: BundleHost): BundleHandle {
@@ -95,20 +132,15 @@ export function activate(host: BundleHost): BundleHandle {
     const engine = await slideEngine();
     const { idml, report } = engine.importPptx(bytes, documentName(name));
     await open(idml, documentName(name));
-    // The parts belong to the document just opened, so they are written
-    // after it replaced the previous one. They are a cache: the labels
-    // written next are what the object model reads (ADR 703).
-    if (host.supports("storage.parts@1")) {
-      await host.parts.write(SOURCE_PART, bytes);
-      await host.parts.write(REPORT_PART, new TextEncoder().encode(JSON.stringify(report)));
-    }
+    await keepSource(host, bytes, report);
+    // The importer already wrote each slide's page label and every
+    // placeholder's label into the package; the deck label goes on the
+    // document the object model reads (ADR 703).
     const labels = importLabelMutations(report, documentName(name));
     const written = await host.document.mutate({ op: "batch", args: { ops: labels.mutations as never } });
     const diagnostics = reportDiagnostics(report);
     if (!written.applied) {
-      diagnostics.push({ severity: "warning", message: "The slide labels could not be written; slide data is read from the import cache.", source: "pptx" });
-    } else if (labels.dropped.length > 0) {
-      diagnostics.push({ severity: "info", message: `Speaker notes of ${labels.dropped.length} slide(s) exceed the label cap and are kept in the import cache only.`, source: "pptx" });
+      diagnostics.push({ severity: "warning", message: "The deck label could not be written; deck data is read from the import cache.", source: "pptx" });
     }
     host.diagnostics.set(IMPORT_DIAGNOSTICS, diagnostics);
     host.log.info(
@@ -120,22 +152,6 @@ export function activate(host: BundleHost): BundleHandle {
 
   const model = contributeSlideObjectModel(host, { openDeck });
   if (model) disposers.push(() => model.dispose());
-
-  // ADR 323 — the slide, transition, notes, placeholder and deck fields as
-  // host-rendered PropertyFields (schema panels of property rows; they need
-  // the object model the rows address).
-  if (model && host.supports("contribute.schemaPanel@1")) {
-    for (const schema of SLIDE_PANELS) {
-      const d = host.contribute.schemaPanel({
-        id: schema.id,
-        title: schema.title,
-        icon: schema.icon,
-        defaultDock: schema.defaultDock,
-        schema,
-      });
-      disposers.push(() => d.dispose());
-    }
-  }
 
   if (host.supports("contribute.importer@1")) {
     disposers.push(
@@ -149,6 +165,102 @@ export function activate(host: BundleHost): BundleHandle {
         },
       }).dispose,
     );
+  }
+
+  // PPTX export: the deck the document was imported from, rewritten for
+  // the document's slides (order, duplicates, deletions, hidden, notes).
+  async function exportDeck() {
+    const original = await host.parts.read(SOURCE_PART);
+    if (!original) {
+      host.diagnostics.set(EXPORT_DIAGNOSTICS, [
+        {
+          severity: "error",
+          message: "This document was not opened from a PowerPoint deck, so it cannot be exported as one yet.",
+        },
+      ]);
+      return null;
+    }
+    const printsBytes = await host.parts.read(FINGERPRINTS_PART);
+    const prints = printsBytes
+      ? (JSON.parse(new TextDecoder().decode(printsBytes)) as Record<string, string>)
+      : {};
+    const plan = await exportPlan(host, prints);
+    const engine = await slideEngine();
+    const out = engine.exportPptx(original, plan);
+    host.diagnostics.set(
+      EXPORT_DIAGNOSTICS,
+      out.diagnostics.map((message) => ({ severity: "warning" as const, message, source: "pptx" })),
+    );
+    const meta = await host.document.meta();
+    const name = (meta as { documentName?: string }).documentName?.trim() || "presentation";
+    return { bytes: out.bytes, fileName: `${name}.pptx` };
+  }
+
+  if (host.supports("contribute.exporter@1") && host.supports("storage.parts@1")) {
+    disposers.push(
+      host.contribute.exporter({
+        id: EXPORTER_ID,
+        title: "PowerPoint presentation (.pptx)",
+        extension: ".pptx",
+        mimeType: PPTX_MIME,
+        export: exportDeck,
+      }).dispose,
+    );
+  }
+
+  // The slide panels share one store: the pages, their state, thumbnails
+  // and the active slide. They need the v70 page doors.
+  const richPanels =
+    host.supports("contribute.panel@1") &&
+    host.supports("render.snapshot@1") &&
+    host.supports("viewport.pages@1");
+  if (richPanels) {
+    const store = new SlidesStore(host);
+    disposers.push(() => store.dispose());
+    disposers.push(
+      host.contribute.panel({
+        id: SLIDES_PANEL_ID,
+        title: "Slides",
+        component: makeSlidesPanel(host, store),
+        defaultDock: "left",
+        rail: true,
+        // Three stacked slides.
+        iconSvg:
+          '<rect x="7" y="3.5" width="12" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
+          '<rect x="7" y="13.5" width="12" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
+          '<path d="M4 5v14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
+      }).dispose,
+      host.contribute.panel({
+        id: NOTES_PANEL_ID,
+        title: "Notes",
+        component: makeNotesPanel(host, store),
+        defaultDock: "bottom",
+        rail: true,
+        // A slide with lines of notes under it.
+        iconSvg:
+          '<rect x="5" y="3.5" width="14" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
+          '<path d="M5 15h14M5 18.5h10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
+      }).dispose,
+    );
+  }
+
+  // ADR 323 — the slide, transition, notes, placeholder and deck fields as
+  // host-rendered PropertyFields (schema panels of property rows; they need
+  // the object model the rows address). The Notes panel above owns the
+  // notes panel id where it is contributed; the notes property row is the
+  // fallback for hosts without the page doors.
+  if (model && host.supports("contribute.schemaPanel@1")) {
+    for (const schema of SLIDE_PANELS) {
+      if (richPanels && schema.id === NOTES_PANEL_ID) continue;
+      const d = host.contribute.schemaPanel({
+        id: schema.id,
+        title: schema.title,
+        icon: schema.icon,
+        defaultDock: schema.defaultDock,
+        schema,
+      });
+      disposers.push(() => d.dispose());
+    }
   }
 
   return {

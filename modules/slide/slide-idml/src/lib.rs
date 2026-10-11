@@ -65,7 +65,7 @@ fn feather_of(p: &Paint) -> Option<Feather> {
     }
     let (kind, angle, stops) = match p {
         Paint::Linear { stops, angle } => ("Linear", Some(-angle), stops),
-        Paint::Radial { stops } => ("Radial", None, stops),
+        Paint::Radial { stops, .. } => ("Radial", None, stops),
         _ => return None,
     };
     Some((
@@ -91,6 +91,69 @@ pub fn first_baseline(tf: &TextFrame) -> Option<f64> {
     }
 }
 
+/// The width a cell border is written with. PowerPoint draws a double
+/// border wider than its width: two lines and the gap between them each
+/// 4/9 of it, centred on the edge (measured: fixture `tablestyles`, 3 pt
+/// borders drawn 4 pt across, 288 dpi).
+fn border_width(s: &Stroke) -> f64 {
+    if s.compound.as_deref() == Some("dbl") {
+        s.width * 4.0 / 3.0
+    } else {
+        s.width
+    }
+}
+
+/// How far the engine moves a table into its frame: half the widest top
+/// border of the first row, half the widest left border of the first
+/// column (InDesign's rule). PowerPoint centres borders on the cell
+/// boundary and moves nothing, so the writer pulls the frame back by this.
+fn table_border_offset(t: &Table) -> (f64, f64) {
+    let half = |b: &Option<Stroke>| b.as_ref().map_or(0.0, |s| border_width(s) / 2.0);
+    let top = t.rows.first().map_or(0.0, |(_, cells)| {
+        cells
+            .iter()
+            .map(|c| half(&c.borders[2]))
+            .fold(0.0, f64::max)
+    });
+    let left = t
+        .rows
+        .iter()
+        .filter_map(|(_, cells)| cells.first())
+        .map(|c| half(&c.borders[0]))
+        .fold(0.0, f64::max);
+    (left, top)
+}
+
+/// The engine stroke style for a compound line: PowerPoint's `dbl` is two
+/// equal lines a third of the width apart, InDesign's Thick - Thick; its
+/// thick-thin pairs are InDesign's striped pairs. Triple lines are not
+/// modelled and draw single.
+fn compound_type(s: &Stroke) -> Option<&'static str> {
+    match s.compound.as_deref()? {
+        "dbl" => Some("StrokeStyle/$ID/ThickThick"),
+        "thickThin" => Some("StrokeStyle/$ID/ThickThin"),
+        "thinThick" => Some("StrokeStyle/$ID/ThinThick"),
+        _ => None,
+    }
+}
+
+/// A fill gradient's placement on a `w` × `h` item: a linear one's angle
+/// and span, a radial one's centre and reach.
+fn gradient_attrs(p: &Paint, w: f64, h: f64) -> String {
+    match p {
+        // DrawingML angles run clockwise on a y-down page; IDML's
+        // gradient angle runs counter-clockwise.
+        Paint::Linear { angle, .. } => gradient_span(-angle, w, h),
+        Paint::Radial { center, .. } => format!(
+            r#" GradientFillStart="{} {}" GradientFillLength="{}""#,
+            n(center.0 * w),
+            n(center.1 * h),
+            n(slide_resolve::model::radial_reach(*center, w, h))
+        ),
+        _ => String::new(),
+    }
+}
+
 /// A linear gradient's angle and span: PowerPoint runs it across the box
 /// projected on its direction (w·|cos| + h·|sin|), the engine across the
 /// diagonal unless told the length.
@@ -113,6 +176,73 @@ fn n(v: f64) -> String {
     } else {
         format!("{r}")
     }
+}
+
+/// The plugin-metadata key a slide's own state lives under on its page.
+pub const SLIDE_LABEL_KEY: &str = "x-paged:media.paged.slide";
+
+/// A slide's own state as its page's plugin metadata (the engine's JSON
+/// envelope): its layout, speaker notes, the hidden flag and the
+/// transition. `None` when the slide has none of them.
+pub fn slide_label(s: &SlidePage) -> Option<String> {
+    let mut data = serde_json::Map::new();
+    // The layout the slide was made from: its master spread's id. A new
+    // slide "from this layout" copies a slide that has it.
+    // The slide part of the deck it came from: export writes the page back
+    // as that slide (a duplicate as a copy of it).
+    if !s.part.is_empty() {
+        data.insert("part".into(), s.part.clone().into());
+    }
+    if let Some(m) = &s.master {
+        data.insert("layout".into(), m.clone().into());
+    }
+    if let Some(n) = s.notes.as_ref().filter(|n| !n.trim().is_empty()) {
+        data.insert("notes".into(), n.clone().into());
+    }
+    if s.hidden {
+        data.insert("hidden".into(), true.into());
+    }
+    if let Some(t) = &s.transition {
+        data.insert(
+            "transition".into(),
+            serde_json::json!({
+                "kind": t.kind,
+                "dir": t.dir,
+                "speed": t.speed,
+                "durationMs": t.duration_ms,
+                "xml": t.xml,
+            }),
+        );
+    }
+    if data.is_empty() {
+        return None;
+    }
+    Some(serde_json::json!({ "v": 1, "data": data }).to_string())
+}
+
+/// A placeholder item's metadata: its PowerPoint type and index.
+pub fn placeholder_label(it: &Item) -> Option<String> {
+    if matches!(it.kind, ItemKind::Group { .. }) {
+        return None;
+    }
+    let (kind, idx) = it.meta.placeholder.as_ref()?;
+    Some(
+        serde_json::json!({
+            "v": 1,
+            "data": { "placeholder": { "type": kind, "idx": idx } },
+        })
+        .to_string(),
+    )
+}
+
+/// [`esc`] for an attribute value that must keep its line breaks and tabs:
+/// a parser normalises a literal newline in an attribute to a space, a
+/// character reference survives.
+fn esc_attr(s: &str) -> String {
+    esc(s)
+        .replace('\n', "&#xA;")
+        .replace('\r', "&#xD;")
+        .replace('\t', "&#x9;")
 }
 
 fn esc(s: &str) -> String {
@@ -229,7 +359,7 @@ impl Writer<'_> {
                 // gradient angle runs counter-clockwise.
                 (id, Some(-angle))
             }
-            Paint::Radial { stops } => (self.gradient("Radial", stops), None),
+            Paint::Radial { stops, .. } => (self.gradient("Radial", stops), None),
         }
     }
 
@@ -345,6 +475,10 @@ impl Writer<'_> {
         };
         let (sw, _) = self.paint(&s.paint);
         let mut a = format!(r#" StrokeColor="{sw}" StrokeWeight="{}""#, n(s.width));
+        // One stroke style: a dashed line's dashes win over its compound.
+        if let Some(t) = compound_type(s).filter(|_| s.dash.is_none()) {
+            let _ = write!(a, r#" StrokeType="{t}""#);
+        }
         if let Some(cap) = &s.cap {
             let v = match cap.as_str() {
                 "rnd" => "RoundEndCap",
@@ -382,6 +516,25 @@ impl Writer<'_> {
     }
 
     fn item(&mut self, out: &mut String, it: &Item) {
+        // A placeholder carries its PowerPoint identity as item metadata, on
+        // every element it is written as (outline and text frame): a copied
+        // slide knows which of its frames are placeholders.
+        if let Some(label) = placeholder_label(it) {
+            let mut buf = String::new();
+            self.item_body(&mut buf, it);
+            out.push_str(&buf.replace(
+                "</PathGeometry></Properties>",
+                &format!(
+                    r#"</PathGeometry><Label><KeyValuePair Key="{SLIDE_LABEL_KEY}" Value="{}"/></Label></Properties>"#,
+                    esc_attr(&label)
+                ),
+            ));
+            return;
+        }
+        self.item_body(out, it);
+    }
+
+    fn item_body(&mut self, out: &mut String, it: &Item) {
         match &it.kind {
             ItemKind::Group { children } => {
                 self.element(&it.id, "group", &it.id);
@@ -413,11 +566,9 @@ impl Writer<'_> {
                     .cloned()
                     .collect();
                 if has_fill || stroke.is_some() {
-                    let (fc, angle) = self.paint(fill);
+                    let (fc, _) = self.paint(fill);
                     let sa = self.stroke_attrs(stroke.as_ref());
-                    let ga = angle
-                        .map(|a| gradient_span(a, it.w, it.h))
-                        .unwrap_or_default();
+                    let ga = gradient_attrs(fill, it.w, it.h);
                     // Item ids are `u` + hex, so derived ids take suffixes
                     // that are not hex digits (`p`, `s`, `t`, `i`).
                     let pid = if text.is_some() {
@@ -598,15 +749,25 @@ impl Writer<'_> {
         self.element(&it.id, "textFrame", &fid);
         // The table style's background (a theme gradient for the themed
         // styles) fills the frame behind the cells.
-        let (bg, bg_angle) = self.paint(&t.background);
+        let (bg, _) = self.paint(&t.background);
         let h: f64 = t.rows.iter().map(|r| r.0).sum();
         let w: f64 = t.columns.iter().sum();
-        let bga = bg_angle.map(|a| gradient_span(a, w, h)).unwrap_or_default();
+        let bga = gradient_attrs(&t.background, w, h);
+        let (dx, dy) = table_border_offset(t);
+        let m = &it.transform;
+        let shifted = [
+            m[0],
+            m[1],
+            m[2],
+            m[3],
+            m[4] - m[0] * dx - m[2] * dy,
+            m[5] - m[1] * dx - m[3] * dy,
+        ];
         let _ = write!(
             out,
             r#"<TextFrame Self="{fid}" Name="{}" ParentStory="{story}" PreviousTextFrame="n" NextTextFrame="n" ContentType="TextType" AppliedObjectStyle="ObjectStyle/$ID/[None]" ItemTransform="{}" FillColor="{bg}"{bga} StrokeColor="Swatch/None" StrokeWeight="0">"#,
             esc(&it.name),
-            matrix(&it.transform)
+            matrix(&shifted)
         );
         Self::path_geometry(out, &Self::rect_path(0.0, 0.0, it.w, it.h));
         out.push_str(r#"<TextFramePreference FirstBaselineOffset="AscentOffset" AutoSizingType="HeightOnly" AutoSizingReferencePoint="TopCenterPoint"><Properties><InsetSpacing type="list"><ListItem type="unit">0</ListItem><ListItem type="unit">0</ListItem><ListItem type="unit">0</ListItem><ListItem type="unit">0</ListItem></InsetSpacing></Properties></TextFramePreference></TextFrame>"#);
@@ -674,11 +835,16 @@ impl Writer<'_> {
                     match b {
                         Some(s) => {
                             let (sc, _) = self.paint(&s.paint);
+                            let ty = compound_type(s);
+                            let w = border_width(s);
                             let _ = write!(
                                 x,
                                 r#" {edge}EdgeStrokeColor="{sc}" {edge}EdgeStrokeWeight="{}""#,
-                                n(s.width)
+                                n(w)
                             );
+                            if let Some(t) = ty {
+                                let _ = write!(x, r#" {edge}EdgeStrokeType="{t}""#);
+                            }
                         }
                         None => {
                             let _ = write!(x, r#" {edge}EdgeStrokeWeight="0""#);
@@ -1009,9 +1175,18 @@ pub fn write(
     for s in &deck.slides {
         let mut body = String::new();
         let master = s.master.as_deref().unwrap_or("n");
+        // The slide's notes, hidden flag and transition ride its page as
+        // plugin metadata, so they move, duplicate and undo with it.
+        let page_close = match slide_label(s) {
+            Some(v) => format!(
+                r#"><Properties><Label><KeyValuePair Key="{SLIDE_LABEL_KEY}" Value="{}"/></Label></Properties></Page>"#,
+                esc_attr(&v)
+            ),
+            None => "/>".to_string(),
+        };
         let _ = write!(
             body,
-            r#"<Spread Self="s{id}" PageCount="1" BindingLocation="0" ShowMasterItems="{show}" AllowPageShuffle="true" ItemTransform="1 0 0 1 0 0"><Page Self="{id}" Name="{num}" AppliedMaster="{master}" ItemTransform="1 0 0 1 0 0" GeometricBounds="{bounds}" MasterPageTransform="1 0 0 1 0 0"/>"#,
+            r#"<Spread Self="s{id}" PageCount="1" BindingLocation="0" ShowMasterItems="{show}" AllowPageShuffle="true" ItemTransform="1 0 0 1 0 0"><Page Self="{id}" Name="{num}" AppliedMaster="{master}" ItemTransform="1 0 0 1 0 0" GeometricBounds="{bounds}" MasterPageTransform="1 0 0 1 0 0"{page_close}"#,
             id = s.id,
             num = s.index + 1,
             show = s.show_master_items,
@@ -1141,4 +1316,48 @@ pub fn write(
         elements: w.elements,
         diagnostics: w.diagnostics,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn stroke(compound: Option<&str>, dash: Option<&str>) -> Stroke {
+        Stroke {
+            width: 3.0,
+            paint: Paint::None,
+            dash: dash.map(str::to_string),
+            compound: compound.map(str::to_string),
+            cap: None,
+            join: None,
+            head: None,
+            tail: None,
+        }
+    }
+
+    #[test]
+    fn compound_lines_map_to_engine_stroke_styles() {
+        let t = |c| compound_type(&stroke(Some(c), None));
+        assert_eq!(t("dbl"), Some("StrokeStyle/$ID/ThickThick"));
+        assert_eq!(t("thickThin"), Some("StrokeStyle/$ID/ThickThin"));
+        assert_eq!(t("thinThick"), Some("StrokeStyle/$ID/ThinThick"));
+        assert_eq!(t("tri"), None);
+        assert_eq!(compound_type(&stroke(None, None)), None);
+    }
+
+    #[test]
+    fn a_radial_gradient_is_placed_at_its_centre_with_the_farthest_corner_as_reach() {
+        let p = Paint::Radial {
+            stops: Vec::new(),
+            center: (0.25, 0.5),
+        };
+        // Centre (50, 50) on a 200 × 100 box; farthest corner (200, 0).
+        assert_eq!(
+            gradient_attrs(&p, 200.0, 100.0),
+            format!(
+                r#" GradientFillStart="50 50" GradientFillLength="{}""#,
+                n((150.0f64 * 150.0 + 50.0 * 50.0).sqrt())
+            )
+        );
+    }
 }

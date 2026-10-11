@@ -5,6 +5,10 @@ PDF (ADR 705), scored with the engine's paged-diff (SSIM, mean ΔE2000).
 
   python3 scripts/fidelity-local.py [--core <core checkout with release
       paged-inspect + paged-diff>] [--dpi 48] [--deck <name>] [--out <dir>]
+      [--fixtures]
+
+--fixtures scores the PowerPoint-authored fixtures in slide-conformance/
+(each <name>.pptx against its <name>.ppt.pdf) instead of the corpus decks.
 
 Fonts: the families each deck names are registered from the same files
 PowerPoint draws with on this Mac (its bundled fonts, Office's cloud-font
@@ -22,6 +26,7 @@ ap.add_argument("--corpus", default=os.path.normpath(os.path.join(ROOT, "../../c
 ap.add_argument("--dpi", default="48")
 ap.add_argument("--deck", default=None)
 ap.add_argument("--out", default=None)
+ap.add_argument("--fixtures", action="store_true")
 a = ap.parse_args()
 inspect = os.path.join(a.core, "target/release/paged-inspect")
 diff = os.path.join(a.core, "target/release/paged-diff")
@@ -51,11 +56,16 @@ def face(fam, style):
 subprocess.run(["cargo", "build", "-q", "-p", "slide-idml", "--example", "pptx2idml"], cwd=ROOT, check=True)
 conv = os.path.join(ROOT, "target/debug/examples/pptx2idml")
 summary = {}
-for deck in sorted(glob.glob(a.corpus + "/pptx/packs/*/primary.pptx")):
-    pack = os.path.basename(os.path.dirname(deck))
+if a.fixtures:
+    decks = [(os.path.basename(f)[:-5], f, f[:-5] + ".ppt.pdf")
+             for f in sorted(glob.glob(os.path.join(ROOT, "slide-conformance/fixtures/*.pptx")))]
+else:
+    decks = [(os.path.basename(os.path.dirname(f)), f,
+              os.path.join(os.path.dirname(f), "oracle/primary.ppt.pdf"))
+             for f in sorted(glob.glob(a.corpus + "/pptx/packs/*/primary.pptx"))]
+for pack, deck, oracle in decks:
     if a.deck and a.deck not in pack:
         continue
-    oracle = os.path.join(os.path.dirname(deck), "oracle/primary.ppt.pdf")
     if not os.path.exists(oracle):
         continue
     d = os.path.join(out, pack)

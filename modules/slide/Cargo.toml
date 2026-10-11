@@ -13,6 +13,7 @@ members = [
     "slide-chart",
     "slide-resolve",
     "slide-idml",
+    "pptx-export",
     "slide-js",
 ]
 
@@ -38,6 +39,7 @@ wasm-bindgen = "0.2"
 
 # Intra-workspace crates.
 paged-ooxml = { path = "vendor/paged-ooxml" }
+pptx-export = { path = "pptx-export" }
 pptx-core = { path = "pptx-core" }
 pptx-import = { path = "pptx-import" }
 slide-geom = { path = "slide-geom" }

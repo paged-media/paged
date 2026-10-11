@@ -7,5 +7,5 @@ export default defineConfig({
   format: ["esm"],
   dts: true,
   clean: true,
-  external: [/\?url$/, /\.\.\/bin\//],
+  external: [/\?url$/, /\.\.\/bin\//, "react", "react/jsx-runtime"],
 });

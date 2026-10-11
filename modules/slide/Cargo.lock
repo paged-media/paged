@@ -241,6 +241,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "pptx-export"
+version = "0.0.0"
+dependencies = [
+ "paged-ooxml",
+ "pptx-core",
+ "pptx-import",
+ "quick-xml",
+ "serde",
+ "serde_json",
+ "slide-resolve",
+]
+
+[[package]]
 name = "pptx-import"
 version = "0.0.0"
 dependencies = [
@@ -375,6 +388,7 @@ version = "0.0.0"
 dependencies = [
  "paged-ooxml",
  "pptx-core",
+ "pptx-export",
  "pptx-import",
  "serde",
  "serde_json",

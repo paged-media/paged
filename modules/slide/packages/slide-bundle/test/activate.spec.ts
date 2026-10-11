@@ -35,7 +35,15 @@ import type {
   ObjectModelContribution,
 } from "@paged-media/plugin-api";
 
-import { activate, documentName, IMPORTER_ID, REPORT_PART, SOURCE_PART } from "../src/activate";
+import {
+  activate,
+  documentName,
+  IMPORTER_ID,
+  NOTES_PANEL_ID,
+  REPORT_PART,
+  SLIDES_PANEL_ID,
+  SOURCE_PART,
+} from "../src/activate";
 import type { ImportReport } from "../src/engine";
 
 const FIXTURE = new URL("../../../slide-conformance/fixtures/placeholders.pptx", import.meta.url);
@@ -77,6 +85,14 @@ function recordingHost(supports: (f: string) => boolean) {
         opened.push(bytes);
       },
     },
+    // An empty document: the fingerprints the importer keeps are read here.
+    document: {
+      tree: async () => [],
+      elementGeometry: async () => [],
+      collection: async () => [],
+      frameChain: async () => [],
+      storyContent: async () => null,
+    },
     parts: {
       async write(path: string, bytes: Uint8Array) {
         parts.set(path, bytes);
@@ -100,7 +116,9 @@ describe("paged.slide importer", () => {
   });
 
   it("opens the deck as a native document and keeps its source", async () => {
-    const r = recordingHost(() => true);
+    const r = recordingHost((f) =>
+      ["contribute.importer@1", "document.openNative@1", "storage.parts@1"].includes(f),
+    );
     activate(r.host);
     // ADR 323 — the property-row panels register next to the object model.
     expect(r.schemaPanels).toEqual([
@@ -133,6 +151,40 @@ describe("paged.slide importer", () => {
     await r.importers[0].import({ name: "placeholders.pptx", bytes, mimeType: "" });
     expect(r.opened).toHaveLength(0);
     expect(r.diagnostics.get("media.paged.slide/import")?.[0]?.severity).toBe("error");
+  });
+
+  it("contributes the Slides and Notes panels where the page doors exist", () => {
+    const panels: { id: string }[] = [];
+    const noop = { dispose() {} };
+    const host = {
+      log: { debug() {}, info() {}, warn() {}, error() {} },
+      supports: (f: string) =>
+        ["contribute.panel@1", "render.snapshot@1", "viewport.pages@1"].includes(f),
+      contribute: {
+        panel(c: { id: string }) {
+          panels.push(c);
+          return noop;
+        },
+      },
+      viewport: { activePage: () => null, onDidChangeActivePage: () => noop },
+      document: {
+        collection: async () => [],
+        onDidChange: () => noop,
+        onDidOpen: () => noop,
+      },
+    } as unknown as BundleHost;
+    const handle = activate(host);
+    expect(panels.map((p) => p.id)).toEqual([SLIDES_PANEL_ID, NOTES_PANEL_ID]);
+    handle.dispose();
+
+    // Without the v70 doors the panels stay out.
+    const without: { id: string }[] = [];
+    activate({
+      ...host,
+      supports: (f: string) => f === "contribute.panel@1",
+      contribute: { panel: (c: { id: string }) => (without.push(c), noop) },
+    } as unknown as BundleHost);
+    expect(without).toEqual([]);
   });
 
   it("names the document after the file", () => {

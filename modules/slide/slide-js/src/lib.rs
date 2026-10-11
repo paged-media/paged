@@ -203,3 +203,37 @@ fn bounds(it: &slide_resolve::model::Item) -> [f64; 4] {
     }
     b
 }
+
+/// The result of [`export_pptx`]: the deck and what it could not carry.
+#[wasm_bindgen]
+pub struct ExportedDeck {
+    bytes: Vec<u8>,
+    diagnostics: Vec<String>,
+}
+
+#[wasm_bindgen]
+impl ExportedDeck {
+    #[wasm_bindgen(getter)]
+    pub fn bytes(&self) -> Vec<u8> {
+        self.bytes.clone()
+    }
+
+    /// One message per thing the export could not carry, as JSON.
+    #[wasm_bindgen(getter)]
+    pub fn diagnostics(&self) -> String {
+        serde_json::to_string(&self.diagnostics).unwrap_or_else(|_| "[]".into())
+    }
+}
+
+/// Write a `.pptx` from the deck the document was imported from and the
+/// document's slide plan (`pptx_export::ExportPlan` as JSON).
+#[wasm_bindgen(js_name = exportPptx)]
+pub fn export_pptx(original: &[u8], plan: &str) -> Result<ExportedDeck, JsError> {
+    let plan: pptx_export::ExportPlan =
+        serde_json::from_str(plan).map_err(|e| JsError::new(&format!("plan: {e}")))?;
+    let out = pptx_export::export(original, &plan).map_err(|e| JsError::new(&e))?;
+    Ok(ExportedDeck {
+        bytes: out.bytes,
+        diagnostics: out.diagnostics,
+    })
+}

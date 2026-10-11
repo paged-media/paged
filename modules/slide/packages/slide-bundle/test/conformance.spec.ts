@@ -88,3 +88,46 @@ describe.each(FIXTURES)("fixture %s in the engine", (name) => {
     }
   }, 60_000);
 });
+
+/** Read the slide's own state off its page, as the panels do. */
+function slideState(meta: { key: string; value: string }[] | undefined) {
+  const entry = meta?.find((m) => m.key === "x-paged:media.paged.slide");
+  return entry ? (JSON.parse(entry.value) as { v: number; data: Record<string, unknown> }) : null;
+}
+
+describe("slide state rides the pages", () => {
+  it.each([
+    ["text", "notes"],
+    ["motion", "transition"],
+  ])("%s: each slide's %s is its page's plugin metadata", async (name, field) => {
+    const bytes = new Uint8Array(
+      readFileSync(new URL(`../../../slide-conformance/fixtures/${name}.pptx`, import.meta.url)),
+    );
+    const { idml, report } = (await slideEngine()).importPptx(bytes, name);
+    const h = await createHeadlessHost();
+    try {
+      await h.load(idml);
+      const pages = await h.host.document.collection<{
+        selfId: string;
+        pluginMetadata?: { key: string; value: string }[];
+      }>("pages");
+      const expected = report.slides.filter((s) =>
+        field === "notes" ? !!s.notes?.trim() : !!(s as { transition?: unknown }).transition,
+      );
+      expect(expected.length, `the fixture has slides with ${field}`).toBeGreaterThan(0);
+      for (const s of expected) {
+        const page = pages.find((p) => p.selfId === s.pageId);
+        const state = slideState(page?.pluginMetadata);
+        expect(state?.v).toBe(1);
+        if (field === "notes") {
+          // Line breaks survive the attribute.
+          expect(state?.data.notes).toBe(s.notes);
+        } else {
+          expect((state?.data.transition as { kind?: string })?.kind).toBeTruthy();
+        }
+      }
+    } finally {
+      h.dispose();
+    }
+  }, 60_000);
+});

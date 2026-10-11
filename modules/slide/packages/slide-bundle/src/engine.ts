@@ -82,10 +82,31 @@ interface WasmImported {
   free(): void;
 }
 
+interface WasmExported {
+  readonly bytes: Uint8Array;
+  readonly diagnostics: string;
+  free(): void;
+}
+
+/** A written deck and what it could not carry (slide-js `ExportedDeck`). */
+export interface ExportedDeck {
+  bytes: Uint8Array;
+  diagnostics: string[];
+}
+
+/** One page of the document, as export sees it (pptx-export `SlidePlan`). */
+export interface SlidePlan {
+  sourcePart: string;
+  hidden: boolean;
+  notes: string | null;
+  contentEdited: boolean;
+}
+
 interface SlideWasmModule {
   default(init: { module_or_path: string | URL | BufferSource | WebAssembly.Module }): Promise<unknown>;
   initSync(module: { module: BufferSource | WebAssembly.Module }): unknown;
   importPptx(bytes: Uint8Array, name: string): WasmImported;
+  exportPptx(original: Uint8Array, plan: string): WasmExported;
 }
 
 let booted: Promise<SlideWasmModule> | null = null;
@@ -110,6 +131,17 @@ export class SlideEngine {
     const out = this.mod.importPptx(bytes, name);
     try {
       return { idml: out.idml, report: JSON.parse(out.report) as ImportReport };
+    } finally {
+      out.free();
+    }
+  }
+
+  /** Write a `.pptx` from the deck the document was imported from and its
+   *  slides in page order. */
+  exportPptx(original: Uint8Array, slides: readonly SlidePlan[]): ExportedDeck {
+    const out = this.mod.exportPptx(original, JSON.stringify({ slides }));
+    try {
+      return { bytes: out.bytes, diagnostics: JSON.parse(out.diagnostics) as string[] };
     } finally {
       out.free();
     }
