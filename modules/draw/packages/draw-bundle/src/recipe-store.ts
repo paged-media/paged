@@ -363,7 +363,7 @@ export async function planRecipeWrites(
   if (!labelled(host)) {
     const names = writes.map((w) => recipeNameOf(w.legacyPart)).join(", ");
     return (
-      `${names}: this host has no document label door (${RECIPE_LABEL_FEATURE}) — ` +
+      `${names}: this editor version cannot store document labels (${RECIPE_LABEL_FEATURE}) — ` +
       "a library write cannot be made undoable here"
     );
   }

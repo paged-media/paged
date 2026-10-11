@@ -128,8 +128,8 @@ export function registerBindingProvider(
   if (!supportsBindingProviders(host)) {
     host.log.info(
       `binding provider for "${contextType}" not registered — this host ` +
-        `has no ADR-023 binding-provider registry (the shared Layers panel ` +
-        `will read core, which is the pre-ADR behaviour)`,
+        `cannot take binding providers (the shared Layers panel shows the ` +
+        `document's own layers instead)`,
     );
     return null;
   }

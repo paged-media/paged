@@ -203,7 +203,7 @@ export function createLivePaintHandler(
       host.log.warn(
         `${label}: face(s) ${missing.join(", ")} carry no paint, so there is ` +
           "NOTHING TO SELECT — a face only becomes an element once it is " +
-          "filled (v0 has no face object; RFI C-30)",
+          "filled",
       );
     }
     await host.selection.set(chosen.map((f) => f.id));

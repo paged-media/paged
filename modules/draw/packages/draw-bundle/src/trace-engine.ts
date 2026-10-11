@@ -584,8 +584,8 @@ async function workerSession(
     close();
     return why(
       `the worker module "${TRACE_WORKER_MODULE}" did not answer within ` +
-        `${bootMs} ms (it failed to load, and the worker door has no error ` +
-        `channel to say so)`,
+        `${bootMs} ms (it probably failed to load; the editor reports no error ` +
+        `for that case)`,
     );
   }
   if (!first.ok || first.kind !== "limits") {

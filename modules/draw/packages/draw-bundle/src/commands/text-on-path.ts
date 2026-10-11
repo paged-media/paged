@@ -475,8 +475,8 @@ export async function applyAttachTextToPath(
   const label = ATTACH_TEXT_TO_PATH_COMMAND_ID;
   if (!(await supportsTextOnPath(host))) {
     host.log.warn(
-      `${label}: this host's engine carries no attachTextToPath op (it predates ` +
-        "protocol 58) — type on a path is unavailable here",
+      `${label}: this editor version cannot attach type to a path — ` +
+        "type on a path is unavailable here",
     );
     return null;
   }
@@ -540,8 +540,8 @@ export async function applyDetachTextFromPath(
   const label = DETACH_TEXT_FROM_PATH_COMMAND_ID;
   if (!(await supportsTextOnPath(host))) {
     host.log.warn(
-      `${label}: this host's engine carries no detachTextFromPath op (it ` +
-        "predates protocol 58) — type on a path is unavailable here",
+      `${label}: this editor version cannot detach type from a path — ` +
+        "type on a path is unavailable here",
     );
     return false;
   }

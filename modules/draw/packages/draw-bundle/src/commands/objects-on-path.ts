@@ -212,7 +212,7 @@ export const OBJECTS_ON_PATH_NOTE =
   "remembered on the object's own link, so it works even on a host with " +
   "no .paged container writer. One thing it will NOT do: move an object " +
   "off the artboard. An element moved far enough past the page rect " +
-  "stops answering for its geometry and its anchors (RFI C-23) — it " +
+  "stops answering for its geometry and its anchors — it " +
   "keeps its metadata and its place in the scene tree, so it is not " +
   "lost, but nothing can measure it to place it again. The artboard fit " +
   "applies a STRICTER rule than the engine's, keeping objects fully " +
@@ -969,8 +969,8 @@ export async function objectsOnPathPlanFor(
       // strand it permanently.
       host.log.warn(
         `${label}: ${entry.id.kind} ${String(entry.id.id)} answers no ` +
-          "geometry — it sits far enough off the page rect that the " +
-          "geometry doors go silent (RFI C-23; its metadata and its place " +
+          "geometry — it sits far enough off the page that its " +
+          "geometry cannot be read (its metadata and its place " +
           "in the tree survive, so it is not lost, it is just not " +
           "measurable). It keeps its seat in the association and its way " +
           "home, but it cannot be placed until it is back on the page",
@@ -1003,7 +1003,7 @@ export async function objectsOnPathPlanFor(
       `${label}: the page rect for "${spine.pageId}" is not readable, so ` +
         "objects could not be kept on the artboard — placing every one. An " +
         "object moved off the page answers NOTHING, not even its own " +
-        "metadata (RFI C-23)",
+        "metadata",
     );
   }
   const placements = placeObjectsOnPath({
@@ -1030,7 +1030,7 @@ export async function objectsOnPathPlanFor(
     host.log.info(
       `${label}: ${dropped} of ${placements.length} object(s) were LEFT WHERE ` +
         `THEY ARE — ${offPage} would have landed off the page (an off-page ` +
-        "element answers no geometry, no anchors and no metadata, RFI C-23; " +
+        "element answers no geometry, no anchors and no metadata; " +
         `pass fitToArtboard: false to move them anyway), ${noSlot} ran past ` +
         `the end of the path at this spacing, and ${blind} are already off ` +
         "the page and cannot be measured. They are all still part of the " +

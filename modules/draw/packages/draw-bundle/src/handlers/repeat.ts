@@ -174,7 +174,7 @@ export function createRepeatHandler(host: BundleHost): GestureHandler {
         if (!bounds) {
           host.log.debug(
             `repeat tool: "${repeat}"'s sources have no measurable bounds ` +
-              "(off-page reads answer nothing — RFI C-23)",
+              "(an item off the page cannot be measured)",
           );
           return;
         }

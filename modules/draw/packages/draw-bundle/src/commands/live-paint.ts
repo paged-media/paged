@@ -955,7 +955,7 @@ export async function emitLivePaintFills(
         `against the current members (${unresolved.join(", ")}). A face id is ` +
         "the signature of the ORDERED member list plus a component index, so " +
         "editing a member can retire or renumber one — this is regenerable " +
-        "paint, not a live face object (RFI C-30). Their artwork is removed " +
+        "paint, not a live face object. Their artwork is removed " +
         "rather than left bounded by geometry that no longer exists",
     );
   }
@@ -1283,8 +1283,8 @@ export async function applySelectLivePaintFaces(
   if (missing.length > 0) {
     host.log.warn(
       `${label}: face(s) ${missing.join(", ")} carry no paint, so there is ` +
-        "NOTHING TO SELECT — v0 materialises a painted face as artwork and has " +
-        "no face object for an unpainted one (RFI C-30). Fill it first",
+        "NOTHING TO SELECT — a painted face becomes artwork, and an unpainted " +
+        "face has nothing to select yet. Fill it first",
     );
   }
   const ids = chosen.map((f) => f.id);

@@ -1299,8 +1299,8 @@ function warnUnmeasurable(
 ): void {
   host.log.warn(
     `${label}: the instance was created at [${origin.join(", ")}] but ` +
-      "no page claims it — `elementGeometry` / `pathAnchors` are PAGE-KEYED " +
-      "and answer nothing for an element outside every page (RFI C-23). The " +
+      "no page claims it, and an element outside every page cannot be " +
+      "measured. The " +
       "artwork is real; a later Reset falls back to the recorded origin " +
       "instead of measuring one",
   );
@@ -1457,8 +1457,8 @@ async function rebuildPlanFor(
   if (!live.origin) {
     host.log.warn(
       `${label}: instance ${instance.instance} cannot be measured — its ` +
-        "artwork is outside every page's bounds and the geometry doors are " +
-        `PAGE-KEYED (RFI C-23). Rebuilding at its RECORDED origin ` +
+        "artwork is outside every page's bounds, where it cannot be measured. " +
+        `Rebuilding at its RECORDED origin ` +
         `[${instance.origin.join(", ")}] instead`,
     );
   }

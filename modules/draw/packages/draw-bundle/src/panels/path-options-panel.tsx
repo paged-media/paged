@@ -143,8 +143,8 @@ export const SELECT_SAME_TOLERANCE_NOTE =
   "Matches every object whose stroke weight is within this many points " +
   "of the first selected object's, the reference included; 0 is an exact " +
   "match. Colours take no tolerance: an object's fill and stroke are read " +
-  "as swatch references, and no door gives this plugin a swatch's colour " +
-  "values to compare.";
+  "as swatch references, and this plugin cannot read a swatch's colour " +
+  "values to compare them yet.";
 
 const rowStyle: React.CSSProperties = {
   display: "flex",
