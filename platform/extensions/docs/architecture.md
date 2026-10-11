@@ -137,16 +137,18 @@ only when the host wires the backend.
 | `assets` | bytes of a document font face; original bytes of a placed image; register a face that only scene-layer text resolves (`registerFont`, the one write) | `assets` includes `fonts` / `images` | `assets.fonts@1`, `assets.registerFont@1` | §13, §13.6 |
 | `images` | serve tiles of a placed image to the renderer on request | `rendering` includes `resourceProvider` | `rendering.resourceProvider@1` | `packages/plugin-api/src/host.ts:497` |
 | `workers` | spawn a worker through the host; allocate shared memory under a budget | `workers` | `workers@1` | §15, [ADR 318](adr/318-host-spawned-workers.md) |
+| `modules` | resolve a declared wasm artifact to a URL the host serves, with Subresource Integrity; `fetch` it with that integrity | the name is in `capabilities.wasm` | `modules@1` | §23, [ADR 326](adr/326-wasm-resolved-through-the-host.md) |
 | `secrets` | `set`, `exists`, `forget` a credential by reference; there is no `get` | `secrets.sources: true` | `secrets@1` | §16 |
 | `clipboard` | read and write text and a cell grid | `clipboard: "full"`, or `"vector"` for text only | `clipboard@1` | §14 |
 | `supports`, `editor` | the feature probe; the raw editor handle, kept as an escape hatch | none | | §4.8, §4.9 |
 
-Three manifest capabilities have no door. `capabilities.wasm` lists the wasm modules a
-bundle ships; it is checked by the CLI and by `loadBundleWasm`, a plain export of
-`plugin-sdk` ([ADR 308](adr/308-plugin-wasm.md),
-[`reference/wasm-packaging.md`](reference/wasm-packaging.md)). `capabilities.gpu` declares
-that the bundle uses WebGPU in its own realm; `supports("gpu@1")` reflects it (§17).
-`capabilities.editContext` is accepted by the schema and the CLI and read by nothing in the
+`capabilities.wasm` lists the wasm modules a bundle ships. It is checked by the CLI and by
+`loadBundleWasm`, a plain export of `plugin-sdk` ([ADR 308](adr/308-plugin-wasm.md),
+[`reference/wasm-packaging.md`](reference/wasm-packaging.md)), and it is the set of names
+`host.modules` resolves ([ADR 326](adr/326-wasm-resolved-through-the-host.md)). Two manifest
+capabilities have no door. `capabilities.gpu` declares that the bundle uses WebGPU in its
+own realm; `supports("gpu@1")` reflects it (§17). `capabilities.editContext` is accepted by
+the schema and the CLI and read by nothing in the
 adapter; the gate uses `contributes.editContexts`.
 
 ## Where a plugin's data is kept

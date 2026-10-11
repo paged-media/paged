@@ -36,7 +36,8 @@ vocabulary the host reasons about and (eventually) grants.
         "name": "layout",            // logical handle for the loader
         "path": "engine/layout.wasm", // bundle-relative; no "/", no ".."
         "purpose": "layout",         // closed vocabulary (gates the grant)
-        "maxBytes": 4194304          // optional self-imposed ceiling (≤ host hard cap)
+        "maxBytes": 4194304,         // optional self-imposed ceiling (≤ host hard cap)
+        "integrity": "sha384-…"      // optional; stamped at build time (§7)
       }
     ]
   }
@@ -168,7 +169,8 @@ size/compute concern, not a privilege-escalation one.
   separately-budgeted* host import — not an implicit grant.
 - **No threads / SharedArrayBuffer.** Non-shared memory only.
 - **No host-served fetch path the bundle didn't declare.** The loader
-  resolves strictly the declared `path` through the injected asset base.
+  resolves strictly the declared `path` through the injected asset base,
+  and the module door (§7) resolves strictly a declared `name`.
 
 ---
 
@@ -195,13 +197,16 @@ size/compute concern, not a privilege-escalation one.
   **grant** (probably auto-grant first-party, prompt third-party), and
   (c) use `instantiateStreaming` over the bundle URL in the browser path.
   `loadBundleWasm` is the door; the editor wiring is the open work.
-- **Packager checksums.** The `paged-plugin package` step (future) should
-  hash each declared artifact into the bundle manifest; validation today
-  checks size/shape, not integrity.
+- **Packager checksums.** DONE 2026-10-11 (§7): `paged-plugin integrity`
+  stamps sha384 into each declared artifact and `validate` fails a stamp
+  that does not match the file. There is still no single `package` step;
+  each plugin's publish workflow runs `integrity` before it packs.
 - **Real-engine budget calibration.** The v1 numbers are pre-measurement;
   the W0 Blitz/wasm spike re-tunes them.
-- **`wasm.load@1` supports() probe** — add when a host needs to advertise
-  "I serve wasm" without inspecting the manifest.
+- **`wasm.load@1` supports() probe** — superseded for the "where do I
+  load it from" question by `modules@1` (§7); `loadBundleWasm`'s
+  `assetSource` does not consult the module door yet (no caller loads
+  through `loadBundleWasm` today).
 
 ---
 
@@ -233,3 +238,89 @@ one applies is decided by the module's *shape*, not by preference:
    host *wants* to own wasm-bindgen instantiation — e.g. to share a
    `GPUDevice` import — that is the separate I-01/I-07 GPU-surface RFC,
    not this door.)
+
+---
+
+## 7. Resolved through the host: the module door (ADR 326, 2026-10-11)
+
+A bundle used to load its wasm from a URL next to its own code (Vite
+`?url`, `new URL("../bin/x.wasm", import.meta.url)`). The editor's deploy
+then had to carry every module (Cloudflare Pages refuses files over
+25 MiB) and every site cached its own copy. Editor ADR 220 moved the
+modules to a first-party **module host**,
+`https://modules.paged.media/<package>/<version>/<path in package>` —
+immutable per version, `Content-Encoding: br`, `application/wasm`, a
+year's immutable cache, CORS `*` — and redirected the old URLs to it.
+This section is the contract that lets a bundle ask for the module
+directly, like a shared library resolved by the loader.
+
+**The door.** `host.modules.resolve(name)` answers a DECLARED
+`capabilities.wasm` artifact with `{ url, integrity, artifact }`, or
+`null` when the host does not serve it; `url(name)` and `fetch(name)`
+are the two shorthands (`fetch` passes `{ integrity }`). An undeclared
+name is refused (the capability gate; in `warn` mode it logs and answers
+`null`). `supports("modules@1")` is true when the host wired a
+`ModulesBackend`; without one every answer is `null`.
+
+**The backend** (`CreateBundleHostOptions.modules`) is
+`{ url(pluginId, artifact) → { url, integrity? } | null }`. It receives
+the manifest's artifact, never a path the bundle typed. The editor answers
+from a build-time module manifest (the declared artifacts of every
+installed `@paged-media/*` bundle, hashed) and, in a deployed build,
+points at the module host; in dev it answers `null`.
+
+**Integrity.** The manifest's own `integrity` wins: the bundle vouches
+for its bytes, wherever they are served. A host answer with a different
+digest of the same algorithm is refused (logged, `null`), so a stale host
+manifest cannot swap bytes silently; the bundle loads its own copy. SRI
+is checked over the DECODED body, so brotli on the wire is fine. Stamp at
+build time, after the wasm is built and before the bundle is packed:
+
+```sh
+paged-plugin integrity packages/<bundle>        # writes "integrity": "sha384-…"
+paged-plugin integrity packages/<bundle> --check  # CI: fail on a missing/stale stamp
+```
+
+Stamp the PUBLISHED manifest only (in the publish job); a committed stamp
+goes stale with every wasm rebuild, and `validate` fails a stale stamp.
+Note that `plugin-cli` ≤ 0.1.5 rejects the `integrity` key as unknown;
+validate a stamped manifest with 0.1.6 or later. The runtime (any
+plugin-sdk) ignores keys it does not know.
+
+**Bundle side.** `resolveWasm(host, name, fallbackUrl)` →
+`{ url, integrity, source: "host" | "bundle" }`, `resolveWasmUrl(...)`,
+and `fetchWasm(...)` → `Response` (fetched with the integrity when
+known). They never reject on the host path: no door, an undeclared name
+or a throwing backend all fall back to `fallbackUrl` — the URL the bundle
+used before — with the manifest's stamp. A bundle whose plugin-sdk PEER
+floor predates these exports inlines the same probe instead of importing
+them (they would be a missing export on an older host):
+
+```ts
+const door = (host as { modules?: { resolve?(n: string): Promise<{ url: string; integrity: string | null } | null> } }).modules;
+const hosted = host.supports("modules@1") && typeof door?.resolve === "function"
+  ? await door.resolve(name).catch(() => null)
+  : null;
+const url = hosted?.url ?? bundleRelativeUrl;
+```
+
+Two shapes of consumer:
+
+- **wasm-bindgen glue** takes a `Response`: `await init({ module_or_path:
+  fetchWasm(host, "engine", new URL("../bin/x_bg.wasm", import.meta.url)) })`
+  — streaming compile, with SRI.
+- **An engine that fetches inside its own worker** (DuckDB-WASM's
+  `instantiate(url)`) takes the URL only, so the integrity cannot reach
+  that fetch. The worker SCRIPT stays same-origin (a cross-origin `Worker`
+  is a SecurityError); only the wasm URL comes from the host.
+
+**Uploading.** `paged-plugin modules-upload <bundle-dir>` puts each
+declared artifact at `paged-modules/<package>/<version>/<path in package>`
+(R2, via `npx wrangler@3 r2 object put`), brotli quality 10, with the
+headers above. It HEADs first and skips what is hosted; without
+`CLOUDFLARE_API_TOKEN` (and `CLOUDFLARE_ACCOUNT_ID`) it reports what is
+missing and exits 0, so a publish workflow can carry the step before the
+repo has the secret. `--dry-run` uploads nothing. `PAGED_MODULE_HOST` /
+`PAGED_MODULE_BUCKET` override the host and bucket. A version is
+immutable: upload after `npm publish` succeeded, never for a version that
+is not on npm.

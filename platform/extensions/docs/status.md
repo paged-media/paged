@@ -59,7 +59,14 @@ What the plugin contract ships and what it does not, read from the code at commi
 - **For bundle authors:** `DisposableStore`, the page-drag gesture helpers, and
   `createHeadlessHost`, which runs a bundle in Node against the real engine.
 - **Manifest validation.** `paged-plugin validate` checks the schema rules, the namespace
-  rule, that `*.panel.json` files exist, and wasm names, paths and sizes.
+  rule, that `*.panel.json` files exist, and wasm names, paths, sizes and integrity stamps.
+  `paged-plugin integrity` stamps sha384 into the declared wasm artifacts;
+  `paged-plugin modules-upload` puts them on the module host
+  ([ADR 326](adr/326-wasm-resolved-through-the-host.md)).
+- **The module door.** `host.modules` resolves a declared wasm artifact to a URL the host
+  serves, with Subresource Integrity; `resolveWasm` / `fetchWasm` fall back to the
+  bundle-relative URL on a host without it (`modules@1`,
+  [ADR 326](adr/326-wasm-resolved-through-the-host.md)).
 - **Guards in CI:** the vendored wire types and catalog must match the published engine; a
   source change in `plugin-api` or `plugin-sdk` must carry a version bump; the schema, the
   TypeScript unions and the CLI must agree on the closed vocabularies; the built
@@ -114,6 +121,8 @@ What the plugin contract ships and what it does not, read from the code at commi
 - A way for a bundle to enter an edit context itself (`entry` is only `"doubleClick"`), and
   a GPU device door (`capabilities.gpu.realm: "shared"` is rejected). `DESIGN.md` §19, §17.
 - `secrets.get` and a host-side fetch, both absent on purpose (`DESIGN.md` §16, §4.6b).
-- CLI commands other than `validate`: no packaging step and no artifact checksums.
+- A packaging step in the CLI: `integrity` stamps checksums and `modules-upload` hosts the
+  wasm, but `validate` / `integrity` / `modules-upload` are run by each plugin's own publish
+  workflow, not by a `paged-plugin package`.
 - A host-side loader for wasm-bindgen modules, and a `wasm.load@1` feature name.
 - A release lane other than `canary`: `publish.yml` publishes with `--tag canary` only.

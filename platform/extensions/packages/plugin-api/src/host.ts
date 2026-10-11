@@ -61,7 +61,7 @@ import type {
 } from "./binding-provider";
 import type { ClipboardSurface } from "./clipboard";
 import type { MutationInput } from "./mutations";
-import type { PluginManifest } from "./manifest";
+import type { PluginManifest, WasmArtifact } from "./manifest";
 import type { SchemaPanelContribution } from "./panel-schema";
 import type { WidgetSurface } from "./widgets";
 import type {
@@ -807,6 +807,54 @@ export interface WorkersSurface {
    *  8)`, or 0 when undeclared / no backend) — a bundle sizes its pool to
    *  this rather than guessing. */
   concurrency(): number;
+}
+
+// ------------------------------------------------------------- modules
+//
+// The MODULE door (ADR 326): a bundle resolves one of its DECLARED
+// `capabilities.wasm` artifacts through the HOST, which may serve the bytes
+// from somewhere better than the bundle's own directory — a first-party
+// module host (`https://modules.paged.media/<package>/<version>/<path>`,
+// immutable per version, brotli-compressed, shared across sites), like a
+// shared library resolved by the loader instead of copied next to every
+// program. Declared-only: a name the manifest does not list is refused (a
+// bundle cannot ask the host for an arbitrary URL). `null` is the ordinary
+// answer of a host that does not serve that artifact: the bundle then loads
+// its bundle-relative copy, as it always did. Probe `supports("modules@1")`
+// — false when the host wires no `ModulesBackend` (every answer is `null`).
+
+/** Where the host serves one declared wasm artifact (`host.modules.resolve`). */
+export interface HostedModule {
+  /** Absolute URL of the artifact's bytes. */
+  url: string;
+  /** Subresource Integrity for the bytes (`sha384-…`), or `null` when
+   *  neither the manifest nor the host vouches for them. The manifest's own
+   *  `integrity` wins; a host answer that contradicts it is refused. */
+  integrity: string | null;
+  /** The declared artifact the answer is for (straight off the manifest). */
+  artifact: WasmArtifact;
+}
+
+/**
+ * The MODULE door (ADR 326). Resolves a DECLARED `capabilities.wasm`
+ * artifact by `name` to a URL the host serves, with Subresource Integrity.
+ * Always present — with no host backend every answer is `null` and
+ * `supports("modules@1")` is false; the bundle falls back to its
+ * bundle-relative URL (plugin-sdk's `resolveWasm` / `fetchWasm` do the
+ * fallback). An undeclared name rejects (capability gate).
+ */
+export interface ModulesSurface {
+  /** The host's answer for `name`: URL + integrity, or `null` when the host
+   *  does not serve it. */
+  resolve(name: string): Promise<HostedModule | null>;
+  /** `resolve(name)`'s URL alone, or `null`. */
+  url(name: string): Promise<string | null>;
+  /** Fetch the hosted artifact — `fetch(url, { integrity })` when an
+   *  integrity is known, so a byte that differs fails the fetch instead of
+   *  reaching `WebAssembly`. `null` when the host does not serve it. Hand
+   *  the response to `WebAssembly.instantiateStreaming` or to a
+   *  wasm-bindgen `init({ module_or_path })`. */
+  fetch(name: string): Promise<Response | null>;
 }
 
 // ------------------------------------------------------------- secrets
@@ -2170,6 +2218,12 @@ export interface BundleHost {
    *  Capability-gated on `capabilities.workers`. The host facade tracks
    *  every spawned worker for automatic teardown on bundle dispose. */
   readonly workers: WorkersSurface;
+  /** The MODULE door (ADR 326): resolve a DECLARED `capabilities.wasm`
+   *  artifact through the host — a URL it serves (a first-party module host,
+   *  immutable per version) plus Subresource Integrity. Always present; with
+   *  no host backend every answer is `null` (load the bundle-relative copy)
+   *  and `supports("modules@1")` is false. An undeclared name rejects. */
+  readonly modules: ModulesSurface;
   /** The capability-gated, REFERENCE-ONLY CREDENTIAL STORE (D-11;
    *  rfc-credential-store): `set` (host-UI-prompted) / `exists` / `forget`
    *  a `credentialRef` — and DELIBERATELY NO `get` (secret bytes never

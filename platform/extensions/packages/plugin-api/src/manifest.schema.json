@@ -240,6 +240,11 @@
                 "minimum": 1,
                 "maximum": 100000000,
                 "description": "Per-artifact byte ceiling (tightens, never widens, the host cap). Host cap: 100 MB, the app-wide envelope (whole editor + every plugin, 2026-08-19). Enforced as a SUM by the editor's scripts/wasm-budget.mjs; this per-artifact value is a hard upper stop a manifest may only tighten."
+              },
+              "integrity": {
+                "type": "string",
+                "pattern": "^sha(256|384|512)-[A-Za-z0-9+/]+={0,2}$",
+                "description": "Subresource Integrity of the shipped bytes (sha384- recommended). Stamped by `paged-plugin integrity`; the CLI fails a stamp that does not match the file. host.modules passes it to fetch (ADR 326)."
               }
             }
           }
