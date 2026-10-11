@@ -121,7 +121,8 @@ export type AddressKind = ParsedAddress["kind"];
 // ------------------------------------------------------------- schemas
 
 /** ADR 132's value types, mirrored verbatim. Value shapes:
- *   bool → boolean · number → number (in `unit`) · length → number (pt;
+ *   bool → boolean · number → number (in `unit`), or one of its
+ *   `keywords` (a span count's `"All"`) · length → number (pt;
  *   unit strings like "3mm" coerce) · color → a swatch ref (`Color/Red`)
  *   · enum → one of `members` · text → string · ref → an address or the
  *   target's self id · bounds → [top,left,bottom,right] · transform →
@@ -136,6 +137,9 @@ export type ValueType =
       kind: "number";
       integer?: boolean;
       unit?: "pt" | "deg" | "percent" | "em1000" | "ppi";
+      /** Words the row also takes in place of a number (core's catalog
+       *  `members` on a number row: a span count's `"All"`). */
+      keywords?: readonly string[];
     }
   | { kind: "length" }
   | { kind: "color" }

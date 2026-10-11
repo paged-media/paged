@@ -426,9 +426,12 @@ export function normalizeCoreType(t: CoreCatalogRow["type"]): ValueType | null {
     case "point":
       return { kind: t.kind } as ValueType;
     case "number": {
-      if (t.unit === "count") return { kind: "number", integer: true };
+      // A number row's `members` are words it takes in place of a number
+      // (a span count's "All"); dropping them made the row refuse them.
+      const keywords = t.members?.length ? { keywords: [...t.members] } : {};
+      if (t.unit === "count") return { kind: "number", integer: true, ...keywords };
       const unit = t.unit ? UNIT[t.unit] : undefined;
-      return unit ? { kind: "number", unit } : { kind: "number" };
+      return unit ? { kind: "number", unit, ...keywords } : { kind: "number", ...keywords };
     }
     case "enum":
       return { kind: "enum", members: [...(t.members ?? [])] };

@@ -51,6 +51,13 @@ export function checkValueType(t: unknown, at = "type"): string | null {
         return `${at}: an enum needs a non-empty members[]`;
       }
       return null;
+    case "number": {
+      const kw = v["keywords"];
+      if (kw !== undefined && (!Array.isArray(kw) || !kw.every((m) => typeof m === "string"))) {
+        return `${at}: a number's keywords must be strings`;
+      }
+      return null;
+    }
     case "ref":
       return typeof v["to"] === "string" && v["to"].length > 0 ? null : `${at}: a ref needs "to"`;
     case "list":
@@ -137,7 +144,12 @@ export function validateValue(
     case "bool":
       return typeof value === "boolean" ? null : `${at} must be a boolean`;
     case "number":
-      if (!isNum(value)) return `${at} must be a number`;
+      if (typeof value === "string" && type.keywords?.includes(value)) return null;
+      if (!isNum(value)) {
+        return type.keywords?.length
+          ? `${at} must be a number or one of ${type.keywords.join(" | ")}`
+          : `${at} must be a number`;
+      }
       if (type.integer && !Number.isInteger(value)) return `${at} must be an integer`;
       return range(value);
     case "length":
@@ -327,6 +339,7 @@ export function coerceValue(
       if (/^(false|no|0|off)$/i.test(text)) return ok(false);
       return { ok: false, reason: `"${input}" is not a boolean` };
     case "number": {
+      if (type.keywords?.includes(text)) return ok(text);
       const n = Number(text.replace(/%$/, ""));
       return text !== "" && Number.isFinite(n) ? ok(n) : { ok: false, reason: `"${input}" is not a number` };
     }
