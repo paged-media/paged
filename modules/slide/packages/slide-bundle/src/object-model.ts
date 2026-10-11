@@ -30,17 +30,21 @@
 // the source of truth is LABELS, never a container part. Core keeps ONE
 // label per plugin per host, `x-paged:media.paged.slide`, as the envelope
 // `{"v": 1, "data": {…}}` (≤ 64 KiB).
-//   · Slide-only data (hidden, notes, transition, layout) lives in the
-//     slide's own PAGE label (`data.slide`; engine protocol 70
-//     `setPageMetadata`), so it travels with the page and no deck is bound
-//     by one shared 64 KiB label.
+//   · Slide-only data (hidden, notes, transition, layout, the source slide
+//     part) lives in the slide's own PAGE label, flat in `data` — the shape
+//     the importer writes into the package and the Slides and Notes panels
+//     read (slides-model.ts) — so it travels with the page and no deck is
+//     bound by one shared 64 KiB label (engine protocol 70
+//     `setPageMetadata`). A model write keeps the keys it does not own
+//     (`part`, the transition's `xml`). A page label in the branch-only
+//     `data.slide` layout still reads.
 //   · The deck (name, size, fonts) lives in the DOCUMENT label (`data.deck`).
 //   · The earlier layout — every slide in the document label (`data.slides`,
 //     keyed by page id with the ordinal beside it) — still READS; the first
 //     model write moves those slides onto their pages and drops
 //     `data.slides`, in the same undo step.
-//   · Placeholder identity lives in each frame's own label, which InDesign
-//     keeps on a round trip.
+//   · Placeholder identity lives in each frame's own label (written by the
+//     importer), which InDesign keeps on a round trip.
 //   · The import report part is a CACHE: read when a label is missing (an
 //     import whose label write was undone), never written by a model edit.
 // Every write is CORE-BACKED (`ObjectWrite.kind = "mutations"`), planned by
@@ -127,8 +131,28 @@ export interface DeckLabel {
   slides?: Record<string, SlideRecord>;
 }
 
-/** A page label's payload. Other sub-keys a later version adds are kept. */
+/** A transition as a page label stores it (the importer's shape plus the
+ *  advance fields the model edits). */
+export interface PageTransition {
+  kind?: string | null;
+  dir?: string | null;
+  speed?: string | null;
+  durationMs?: number | null;
+  advanceOnClick?: boolean;
+  advanceAfterMs?: number | null;
+  /** The deck's own element, kept for export while the fields match it. */
+  xml?: string;
+}
+
+/** A page label's payload, flat (slides-model.ts `SlideState`). Other keys
+ *  (the source `part`, a later version's) are kept on a write. */
 export interface PageLabel {
+  layout?: string;
+  part?: string;
+  notes?: string;
+  hidden?: boolean;
+  transition?: PageTransition;
+  /** The branch-only earlier layout: read, never written. */
   slide?: SlideData;
   [sub: string]: unknown;
 }
@@ -136,7 +160,6 @@ export interface PageLabel {
 /** A placeholder frame's label payload. */
 export interface PlaceholderLabel {
   placeholder: { type: string; idx: number | null };
-  shapeId: number;
 }
 
 /** JSON whose non-ASCII characters are `\uXXXX` escapes: labels travel
@@ -169,42 +192,76 @@ function pageLabelMutation(pageId: string, data: PageLabel): MutationInput {
   return { op: "setPageMetadata", args: { page: pageId, key: LABEL_KEY, value: envelope(data), caller: PLUGIN_ID } };
 }
 
-/** The mutations that write an import's labels: the deck label on the
- *  document, each slide's label on its page and a placeholder label on
- *  every placeholder frame. A slide whose notes alone would push its page
- *  label past the engine's cap keeps them in the report part (listed in
- *  `dropped`). */
-export function importLabelMutations(
-  report: ImportReport,
-  name: string | null,
-): { mutations: MutationInput[]; dropped: string[] } {
+const FLAT_KEYS = ["layout", "part", "notes", "hidden", "transition"] as const;
+
+/** Whether a page label carries slide data in the flat layout. */
+function isFlat(label: PageLabel): boolean {
+  return FLAT_KEYS.some((k) => label[k] !== undefined);
+}
+
+/** A flat page label as the model's slide data; the advance fields the
+ *  importer does not write come from the report's slide, when known. */
+function dataFromFlat(label: PageLabel, fromReport: SlideReport | undefined): SlideData {
+  const t = label.transition;
+  const rt = fromReport?.transition;
+  return {
+    hidden: label.hidden === true,
+    notes: typeof label.notes === "string" && label.notes !== "" ? label.notes : null,
+    transition: t
+      ? {
+          kind: t.kind ?? null,
+          dir: t.dir ?? null,
+          speed: t.speed ?? null,
+          durationMs: t.durationMs ?? null,
+          advanceOnClick: t.advanceOnClick ?? rt?.advance_on_click ?? true,
+          advanceAfterMs: t.advanceAfterMs !== undefined ? t.advanceAfterMs : (rt?.advance_after_ms ?? null),
+        }
+      : null,
+    ...(typeof label.layout === "string" && label.layout !== "" ? { layout: label.layout } : {}),
+  };
+}
+
+/** `label` rewritten for `rec`: flat, the keys the model does not own kept,
+ *  empty fields left out (as the importer and the Notes panel write them). */
+export function flatLabel(label: PageLabel | null, rec: SlideData): PageLabel {
+  const { slide: _earlier, notes: _n, hidden: _h, transition: prev, layout: _l, ...out } = label ?? {};
+  const keepLayout = rec.layout !== undefined ? rec.layout : (label?.layout ?? label?.slide?.layout ?? null);
+  const next: PageLabel = { ...out };
+  if (keepLayout) next.layout = keepLayout;
+  if (rec.notes !== null && rec.notes.trim() !== "") next.notes = rec.notes;
+  if (rec.hidden) next.hidden = true;
+  const t = rec.transition;
+  if (t && (t.kind !== null || t.dir !== null || t.speed !== null || t.durationMs !== null || !t.advanceOnClick || t.advanceAfterMs !== null)) {
+    const tr: PageTransition = {
+      kind: t.kind,
+      dir: t.dir,
+      speed: t.speed,
+      durationMs: t.durationMs,
+      advanceOnClick: t.advanceOnClick,
+      advanceAfterMs: t.advanceAfterMs,
+    };
+    // The deck's element describes the transition only while its fields
+    // are the ones it was read with.
+    const same =
+      prev !== undefined &&
+      (prev.kind ?? null) === t.kind &&
+      (prev.dir ?? null) === t.dir &&
+      (prev.speed ?? null) === t.speed &&
+      (prev.durationMs ?? null) === t.durationMs;
+    if (same && prev?.xml !== undefined) tr.xml = prev.xml;
+    next.transition = tr;
+  }
+  return next;
+}
+
+/** The mutations that write an import's labels. The importer already wrote
+ *  each slide's page label and every placeholder's label into the package;
+ *  what is left is the deck label on the document. */
+export function importLabelMutations(report: ImportReport, name: string | null): { mutations: MutationInput[] } {
   const deck: DeckLabel = { deck: { name, width: report.width, height: report.height, fonts: report.fonts } };
-  const dropped: string[] = [];
-  const mutations: MutationInput[] = [
-    { op: "setDocumentMetadata", args: { key: LABEL_KEY, value: envelope(deck), caller: PLUGIN_ID } },
-  ];
-  for (const s of report.slides) {
-    const slide = dataFromReport(s);
-    if (envelope({ slide }).length > LABEL_BUDGET && slide.notes !== null) {
-      slide.notes = null;
-      dropped.push(s.pageId);
-    }
-    mutations.push(pageLabelMutation(s.pageId, { slide }));
-  }
-  for (const s of report.slides) {
-    for (const it of s.items) {
-      if (!it.placeholder) continue;
-      const data: PlaceholderLabel = {
-        placeholder: { type: it.placeholder[0], idx: it.placeholder[1] },
-        shapeId: it.shapeId,
-      };
-      mutations.push({
-        op: "setPluginMetadata",
-        args: { elementId: { kind: it.kind, id: it.id } as ElementId, key: LABEL_KEY, value: envelope(data), caller: PLUGIN_ID },
-      });
-    }
-  }
-  return { mutations, dropped };
+  return {
+    mutations: [{ op: "setDocumentMetadata", args: { key: LABEL_KEY, value: envelope(deck), caller: PLUGIN_ID } }],
+  };
 }
 
 // ------------------------------------------------------------ state
@@ -285,6 +342,8 @@ const dataOf = ({ ord: _ord, ...data }: SlideRecord): SlideData => data;
 function recordFor(deck: Deck, pageId: string): SlideData | null {
   const page = deck.pages.find((p) => p.id === pageId);
   if (!page) return null;
+  const fromReport = deck.report?.slides.find((s) => s.pageId === pageId);
+  if (page.label && isFlat(page.label)) return dataFromFlat(page.label, fromReport);
   if (page.label?.slide) return page.label.slide;
   const legacy = deck.label?.slides;
   if (legacy) {
@@ -295,7 +354,6 @@ function recordFor(deck: Deck, pageId: string): SlideData | null {
       if (!live.has(id) && rec.ord === page.index) return dataOf(rec);
     }
   }
-  const fromReport = deck.report?.slides.find((s) => s.pageId === pageId);
   if (fromReport) return dataFromReport(fromReport);
   return { hidden: false, notes: null, transition: null };
 }
@@ -415,7 +473,7 @@ export function contributeSlideObjectModel(host: BundleHost, options: SlideObjec
     }
     const report = await readReport();
     const all = await pages();
-    if (!label && !report && !all.some((p) => p.label?.slide)) return null;
+    if (!label && !report && !all.some((p) => p.label && (isFlat(p.label) || p.label.slide))) return null;
     return { label, report, pages: all };
   }
 
@@ -732,7 +790,7 @@ export function contributeSlideObjectModel(host: BundleHost, options: SlideObjec
     }
     for (const [id, slide] of touched) {
       const page = deck.pages.find((p) => p.id === id)!;
-      const m = pageLabelMutation(id, { ...(page.label ?? {}), slide });
+      const m = pageLabelMutation(id, flatLabel(page.label, slide));
       if (((m.args as { value: string }).value.length ?? 0) > LABEL_BUDGET) {
         return rejected(`slide ${id}: its page label would exceed the engine's 64 KiB label cap`);
       }

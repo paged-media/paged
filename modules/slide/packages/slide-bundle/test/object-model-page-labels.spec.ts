@@ -33,6 +33,7 @@ import { createHeadlessHost, type HeadlessHost } from "@paged-media/plugin-sdk";
 import type { MutationInput, ObjectValue } from "@paged-media/plugin-api";
 
 import slideBundle from "../src/index";
+import { parseState } from "../src/slides-model";
 import { slideEngine, type ImportReport } from "../src/engine";
 import { DECK_ADDRESS, IMPORT_PPTX_COMMAND, LABEL_KEY, NEW_SLIDE_COMMAND, PLUGIN_ID, transitionRecord } from "../src/object-model";
 
@@ -78,7 +79,12 @@ describe("[plugin-slide.object-model] slide data on page labels (protocol 70)", 
     for (const s of report.slides) {
       const label = await labelOf(pageOf(s.pageId));
       expect(label?.v).toBe(1);
-      expect(label?.data["slide"]).toMatchObject({ hidden: s.hidden, notes: s.notes });
+      // The importer's flat shape, the one the Slides and Notes panels read.
+      expect(label?.data["slide"]).toBeUndefined();
+      expect(label?.data["part"]).toBe(s.part);
+      expect(label?.data["notes"]).toBe(s.notes && s.notes.trim() !== "" ? s.notes : undefined);
+      expect(label?.data["hidden"]).toBe(s.hidden ? true : undefined);
+      expect(v(await h.objects.get(slides[report.slides.indexOf(s)]!, "notes"))).toBe(s.notes && s.notes.trim() !== "" ? s.notes : null);
     }
     const doc = await labelOf("doc");
     expect(doc?.data["deck"]).toMatchObject({ name: "placeholders", width: report.width });
@@ -97,12 +103,44 @@ describe("[plugin-slide.object-model] slide data on page labels (protocol 70)", 
     const out = await h.objects.set(slides[0]!, "notes", "Page-hosted — ü");
     expect(out).toMatchObject({ applied: true, undoSteps: 1 });
     expect(mutateCalls).toBe(1);
-    expect((await labelOf(pageOf(report.slides[0]!.pageId)))?.data["slide"]).toMatchObject({ notes: "Page-hosted — ü" });
+    const own = await labelOf(pageOf(report.slides[0]!.pageId));
+    expect(own?.data).toMatchObject({ notes: "Page-hosted — ü", part: report.slides[0]!.part });
+    expect(parseState([{ key: LABEL_KEY, value: JSON.stringify(own) }]).notes).toBe("Page-hosted — ü");
     expect(await labelOf("doc")).toEqual(docBefore);
     expect(await labelOf(pageOf(report.slides[1]!.pageId))).toEqual(otherBefore);
     await h.host.document.undo();
     expect(v(await h.objects.get(slides[0]!, "notes"))).toBe(report.slides[0]!.notes);
   });
+
+  it("a model write keeps what it does not own: the source part, and the deck's transition element while it still describes it", async () => {
+    const m = await createHeadlessHost();
+    try {
+      m.loadBundle(slideBundle);
+      const bytes = new Uint8Array(readFileSync(new URL("../../../slide-conformance/fixtures/motion.pptx", import.meta.url)));
+      const motion = (await slideEngine()).importPptx(bytes, "motion").report;
+      const ms = ((await m.objects.invoke(IMPORT_PPTX_COMMAND, { bytes, name: "motion.pptx" })) as { slides: string[] }).slides;
+      const i = motion.slides.findIndex((s) => s.transition);
+      expect(i).toBeGreaterThanOrEqual(0);
+      const label = async () => {
+        const raw = (v(await m.objects.get(pageOf(motion.slides[i]!.pageId), "labels")) as Record<string, string>)[LABEL_KEY];
+        return JSON.parse(raw!) as { data: Record<string, unknown> };
+      };
+      const xml = ((await label()).data["transition"] as { xml?: string }).xml;
+      expect(xml).toBeTruthy();
+      expect(await m.objects.set(ms[i]!, "hidden", true)).toMatchObject({ applied: true });
+      let now = await label();
+      expect(now.data).toMatchObject({ part: motion.slides[i]!.part, hidden: true });
+      expect((now.data["transition"] as { xml?: string }).xml).toBe(xml);
+      const other = motion.slides[i]!.transition!.kind === "push" ? "wipe" : "push";
+      expect(await m.objects.set(ms[i]!, "transitionKind", other)).toMatchObject({ applied: true });
+      now = await label();
+      expect(now.data["transition"]).toMatchObject({ kind: other });
+      expect((now.data["transition"] as { xml?: string }).xml).toBeUndefined();
+      expect(now.data["part"]).toBe(motion.slides[i]!.part);
+    } finally {
+      m.dispose();
+    }
+  }, 60_000);
 
   it("a long note per slide is no longer bound by one shared document label", async () => {
     const long = "x".repeat(40_000);
@@ -177,9 +215,9 @@ describe("[plugin-slide.object-model] the earlier document-label layout still re
     const doc = await labelOf("doc");
     expect(doc?.data["slides"]).toBeUndefined();
     expect(doc?.data["deck"]).toMatchObject({ name: "legacy" });
-    expect((await labelOf(pageOf(report.slides[0]!.pageId)))?.data["slide"]).toMatchObject({ notes: "legacy notes" });
-    expect((await labelOf(pageOf(report.slides[1]!.pageId)))?.data["slide"]).toMatchObject({ hidden: true });
-    expect((await labelOf(pageOf(report.slides[2]!.pageId)))?.data["slide"]).toMatchObject({ notes: "after migration" });
+    expect((await labelOf(pageOf(report.slides[0]!.pageId)))?.data).toMatchObject({ notes: "legacy notes" });
+    expect((await labelOf(pageOf(report.slides[1]!.pageId)))?.data).toMatchObject({ hidden: true });
+    expect((await labelOf(pageOf(report.slides[2]!.pageId)))?.data).toMatchObject({ notes: "after migration" });
     // Reads are unchanged by the move.
     expect(v(await h.objects.get(slides[0]!, "notes"))).toBe("legacy notes");
     expect(v(await h.objects.get(slides[1]!, "hidden"))).toBe(true);
