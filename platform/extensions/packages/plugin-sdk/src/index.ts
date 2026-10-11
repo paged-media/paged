@@ -73,6 +73,8 @@ export {
   type TextCaretBackend,
   type WorkerBackend,
   type SpawnedWorker,
+  type ModulesBackend,
+  type ModuleLocation,
   type SecretStoreBackend,
   // K-10 — what a host app injects as `shell` (saveFile optional).
   type ShellBackend,
@@ -172,6 +174,14 @@ export {
   type LoadBundleWasmOptions,
   type BundleAssetSource,
 } from "./wasm-bundle-loader";
+// ADR 326 — resolve a declared wasm artifact through the host's module door,
+// falling back to the bundle-relative URL on a host without it.
+export {
+  resolveWasm,
+  resolveWasmUrl,
+  fetchWasm,
+  type ResolvedWasm,
+} from "./modules";
 export {
   beginPageDrag,
   endLocalFor,

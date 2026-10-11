@@ -335,6 +335,13 @@ export interface WasmArtifact {
    *  be ≤ the host's hard per-artifact ceiling; the loader enforces the
    *  stricter of the two. */
   maxBytes?: number;
+  /** Optional Subresource Integrity of the shipped bytes
+   *  (`sha384-<base64>`; `sha256-` / `sha512-` are accepted). Stamped at
+   *  build time by `paged-plugin integrity <bundle-dir>`; the CLI fails a
+   *  manifest whose stamp does not match the file next to it. When present
+   *  it is what `host.modules` hands `fetch(url, { integrity })` — the
+   *  bundle vouches for its own bytes, wherever the host serves them. */
+  integrity?: string;
 }
 
 export interface PluginContributions {

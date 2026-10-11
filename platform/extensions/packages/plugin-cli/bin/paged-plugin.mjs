@@ -21,10 +21,23 @@
 // longer untyped warns ("shrink the baseline"); for a plugin not in it,
 // untyped commands warn. `--untyped-baseline <file>` points at another
 // baseline. `paged-plugin untyped <manifest...>` prints a baseline.
+//
+// ADR 326 — the module door. A wasm artifact may carry `integrity`
+// (`sha384-…`); `validate` fails a stamp that does not match the file next
+// to the manifest. `paged-plugin integrity <bundle-dir>` stamps (or, with
+// `--check`, verifies) every declared artifact. `paged-plugin modules-upload
+// <bundle-dir>` puts the declared artifacts on the module host
+// (`https://modules.paged.media/<package>/<version>/<path in package>`,
+// R2 bucket `paged-modules`), brotli-compressed and immutable, skipping what
+// is already there and skipping cleanly without CLOUDFLARE_API_TOKEN.
 
-import { readFileSync, existsSync, statSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { readFileSync, existsSync, statSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { brotliCompressSync, constants as zlibConstants } from "node:zlib";
 import process from "node:process";
 
 const ID_PATTERN = /^[a-z][a-z0-9]*(\.[a-z][a-z0-9-]*)+$/;
@@ -79,6 +92,13 @@ const WASM_MAX_TOTAL_BYTES = 100 * 1000 * 1000; // declared total, one bundle
 
 // Bundle-relative wasm path: no leading slash, no `..` segment, .wasm.
 const WASM_PATH_OK = /^(?!\/)(?!.*\.\.).+\.wasm$/;
+// Subresource Integrity (ADR 326): one `<alg>-<base64 digest>` token.
+const SRI_OK = /^sha(256|384|512)-[A-Za-z0-9+/]+={0,2}$/;
+
+/** The SRI token of `bytes` under `alg` (`sha256` | `sha384` | `sha512`). */
+function sri(alg, bytes) {
+  return `${alg}-${createHash(alg).update(bytes).digest("base64")}`;
+}
 
 // Worker budgets (K-3 / S-07). Keep in sync with WORKER_BUDGETS in
 // plugin-sdk/src/host-impl.ts and the schema — the CLI hand-mirrors them.
@@ -91,7 +111,12 @@ function fail(msg) {
 }
 
 function usage() {
-  console.error("usage: paged-plugin validate <manifest.json> [--untyped-baseline <file>]\n       paged-plugin untyped <manifest.json...>");
+  console.error(
+    "usage: paged-plugin validate <manifest.json> [--untyped-baseline <file>]\n" +
+      "       paged-plugin untyped <manifest.json...>\n" +
+      "       paged-plugin integrity <bundle-dir|manifest.json> [--check]\n" +
+      "       paged-plugin modules-upload <bundle-dir|manifest.json> [--dry-run]",
+  );
   process.exit(2);
 }
 
@@ -524,7 +549,7 @@ function validateManifest(manifest, manifestDir) {
               continue;
             }
             for (const k of Object.keys(a)) {
-              if (!["name", "path", "purpose", "maxBytes"].includes(k)) {
+              if (!["name", "path", "purpose", "maxBytes", "integrity"].includes(k)) {
                 err(`${at} has unknown key "${k}"`);
               }
             }
@@ -559,6 +584,16 @@ function validateManifest(manifest, manifestDir) {
                   );
                 }
                 declaredTotal += size;
+                if (typeof a.integrity === "string" && SRI_OK.test(a.integrity)) {
+                  const alg = a.integrity.split("-", 1)[0];
+                  const actual = sri(alg, readFileSync(resolved));
+                  if (actual !== a.integrity) {
+                    err(
+                      `${at}.integrity does not match "${a.path}" (the file is ` +
+                        `${actual}) — re-stamp with \`paged-plugin integrity\``,
+                    );
+                  }
+                }
               } else {
                 // File not present at validate time (the bundle may not
                 // be built yet); count the declared budget toward the
@@ -566,6 +601,12 @@ function validateManifest(manifest, manifestDir) {
                 declaredTotal +=
                   typeof a.maxBytes === "number" ? a.maxBytes : 0;
               }
+            }
+            if (a.integrity !== undefined && (typeof a.integrity !== "string" || !SRI_OK.test(a.integrity))) {
+              err(
+                `${at}.integrity must be a Subresource Integrity token ` +
+                  `("sha384-<base64>"; sha256/sha512 accepted)`,
+              );
             }
             if (a.purpose === undefined || !WASM_PURPOSES.has(a.purpose)) {
               err(`${at}.purpose must be layout|codec|compute|engine`);
@@ -704,6 +745,171 @@ function readManifest(target) {
   } catch (e) {
     fail(`invalid JSON in ${manifestPath}: ${e.message}`);
   }
+}
+
+/** `<bundle-dir>` or a manifest path → the manifest path. */
+function manifestPathOf(target) {
+  const p = resolve(process.cwd(), target);
+  if (existsSync(p) && statSync(p).isDirectory()) return join(p, "manifest.json");
+  return p;
+}
+
+/** The declared wasm artifacts of a manifest, each with its file path. */
+function wasmArtifacts(manifest, manifestDir) {
+  const list = manifest?.capabilities?.wasm;
+  if (!Array.isArray(list)) return [];
+  return list
+    .filter((a) => a && typeof a.path === "string" && WASM_PATH_OK.test(a.path))
+    .map((a) => ({ artifact: a, file: resolve(manifestDir, a.path) }));
+}
+
+if (command === "integrity") {
+  // Stamp `integrity` (sha384) into every declared wasm artifact — at build
+  // time, before the bundle is packed — or verify the stamps with --check.
+  const check = argv.includes("--check");
+  const target = argv.slice(1).find((a) => !a.startsWith("--"));
+  if (!target) usage();
+  const manifestPath = manifestPathOf(target);
+  const { manifest } = readManifest(manifestPath);
+  const raw = readFileSync(manifestPath, "utf8");
+  const items = wasmArtifacts(manifest, dirname(manifestPath));
+  const problems = [];
+  let changed = 0;
+  for (const { artifact, file } of items) {
+    if (!existsSync(file)) {
+      problems.push(`${artifact.name}: "${artifact.path}" is not built — nothing to stamp`);
+      continue;
+    }
+    const alg = typeof artifact.integrity === "string" && SRI_OK.test(artifact.integrity)
+      ? artifact.integrity.split("-", 1)[0]
+      : "sha384";
+    const actual = sri(check ? alg : "sha384", readFileSync(file));
+    if (artifact.integrity === actual) continue;
+    if (check) {
+      problems.push(
+        `${artifact.name}: ${artifact.integrity ? `stamp ${artifact.integrity} is stale` : "no stamp"} (the file is ${actual})`,
+      );
+    } else {
+      artifact.integrity = actual;
+      changed++;
+    }
+  }
+  if (problems.length > 0) {
+    console.error(`✗ ${manifestPath}`);
+    for (const p of problems) console.error(`  - ${p}`);
+    process.exit(1);
+  }
+  if (check) {
+    console.log(`✓ ${manifest.id}: ${items.length} wasm artifact(s), integrity matches`);
+    process.exit(0);
+  }
+  if (changed > 0) {
+    const indent = /^\{\n(\s+)"/.exec(raw)?.[1] ?? "  ";
+    writeFileSync(manifestPath, JSON.stringify(manifest, null, indent) + (raw.endsWith("\n") ? "\n" : ""));
+  }
+  console.log(`✓ ${manifest.id}: stamped ${changed} of ${items.length} wasm artifact(s)`);
+  process.exit(0);
+}
+
+if (command === "modules-upload") {
+  // Put a package's declared wasm on the module host (ADR 326), so a host can
+  // resolve it as `<host>/<package>/<version>/<path in package>`: brotli
+  // (`Content-Encoding: br`), `application/wasm`, immutable for a year.
+  // Idempotent (HEAD first). Without CLOUDFLARE_API_TOKEN it reports what is
+  // missing and exits 0, so a publish workflow can run it before the repo
+  // has the secret.
+  const dry = argv.includes("--dry-run");
+  const target = argv.slice(1).find((a) => !a.startsWith("--"));
+  if (!target) usage();
+  const host = (process.env.PAGED_MODULE_HOST ?? "https://modules.paged.media").replace(/\/+$/, "");
+  const bucket = process.env.PAGED_MODULE_BUCKET ?? "paged-modules";
+  const manifestPath = manifestPathOf(target);
+  const { manifest } = readManifest(manifestPath);
+  // The package the bundle ships in: the nearest package.json at or above
+  // the manifest. Its name + version name the immutable home.
+  let pkgRoot = dirname(manifestPath);
+  while (!existsSync(join(pkgRoot, "package.json"))) {
+    const up = dirname(pkgRoot);
+    if (up === pkgRoot) fail(`no package.json at or above ${manifestPath}`);
+    pkgRoot = up;
+  }
+  const pkg = JSON.parse(readFileSync(join(pkgRoot, "package.json"), "utf8"));
+  if (typeof pkg.name !== "string" || typeof pkg.version !== "string") {
+    fail(`${join(pkgRoot, "package.json")} needs a name and a version`);
+  }
+  const token = process.env.CLOUDFLARE_API_TOKEN;
+  const items = wasmArtifacts(manifest, dirname(manifestPath));
+  let missing = 0;
+  let failed = false;
+  for (const { artifact, file } of items) {
+    if (!existsSync(file)) {
+      console.error(`::error::${artifact.name}: "${artifact.path}" is not built`);
+      failed = true;
+      continue;
+    }
+    const inPkg = relative(pkgRoot, file).split(sep).join("/");
+    const key = `${pkg.name}/${pkg.version}/${inPkg}`;
+    const url = `${host}/${key}`;
+    let present = false;
+    try {
+      present = (await fetch(url, { method: "HEAD" })).ok;
+    } catch {
+      present = false;
+    }
+    if (present) {
+      console.log(`${url} · already hosted`);
+      continue;
+    }
+    if (dry) {
+      console.log(`${url} · would upload`);
+      missing++;
+      continue;
+    }
+    if (!token) {
+      console.log(`${url} · not hosted (skipped: CLOUDFLARE_API_TOKEN is not set)`);
+      missing++;
+      continue;
+    }
+    const bytes = readFileSync(file);
+    const br = brotliCompressSync(bytes, {
+      params: {
+        [zlibConstants.BROTLI_PARAM_QUALITY]: 10,
+        [zlibConstants.BROTLI_PARAM_SIZE_HINT]: bytes.length,
+      },
+    });
+    const dir = mkdtempSync(join(tmpdir(), "paged-modules-"));
+    const tmp = join(dir, "module.wasm.br");
+    writeFileSync(tmp, br);
+    try {
+      execFileSync(
+        "npx",
+        [
+          "-y", "wrangler@3", "r2", "object", "put", `${bucket}/${key}`,
+          "--file", tmp,
+          "--content-type", "application/wasm",
+          "--content-encoding", "br",
+          "--cache-control", "public, max-age=31536000, immutable",
+        ],
+        { stdio: ["ignore", "inherit", "inherit"] },
+      );
+    } catch (e) {
+      console.error(`::error::${artifact.name}: upload to ${bucket}/${key} failed: ${e.message}`);
+      failed = true;
+      continue;
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+    console.log(
+      `${url} · uploaded (${(bytes.length / 1048576).toFixed(1)} MiB, ` +
+        `${(br.length / 1048576).toFixed(1)} MiB brotli, ${sri("sha384", bytes)})`,
+    );
+  }
+  if (failed) process.exit(1);
+  console.log(
+    `modules: ${items.length} declared` +
+      (missing > 0 ? `, ${missing} not hosted${dry ? "" : " (no token)"}` : ", all hosted"),
+  );
+  process.exit(0);
 }
 
 if (command === "untyped") {

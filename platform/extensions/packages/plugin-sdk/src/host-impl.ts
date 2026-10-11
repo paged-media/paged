@@ -77,6 +77,9 @@ import type {
   MainToWorkerKind,
   PlanarRegionsResult,
   WorkersSurface,
+  ModulesSurface,
+  HostedModule,
+  WasmArtifact,
   BundleWorker,
   SpawnWorkerOptions,
   SecretsSurface,
@@ -526,6 +529,36 @@ export interface SpawnedWorker {
  */
 export interface WorkerBackend {
   spawn(pluginId: string, module: string, name?: string): Promise<SpawnedWorker>;
+}
+
+/**
+ * What a `ModulesBackend` answers for one declared artifact: the URL the
+ * host serves its bytes at and, when the host knows it, the bytes'
+ * Subresource Integrity (`sha384-…`).
+ */
+export interface ModuleLocation {
+  url: string;
+  integrity?: string | null;
+}
+
+/**
+ * The backend the editor injects to back `host.modules` (ADR 326). The SDK
+ * adapter owns the capability gate (only a name declared in
+ * `capabilities.wasm` reaches the backend, and the backend receives the
+ * DECLARED artifact, never a bundle-supplied path) and the integrity rule
+ * (the manifest's own `integrity` wins; a contradicting host answer is
+ * refused). The backend maps `(pluginId, artifact)` to where the host serves
+ * those bytes — the editor answers from its build-time module manifest
+ * (`https://modules.paged.media/<package>/<version>/<path>` in a deployed
+ * build). `null` = "not served here": the bundle loads its own copy. A
+ * headless host injects none → every answer is `null` and
+ * `supports("modules@1")` is false.
+ */
+export interface ModulesBackend {
+  url(
+    pluginId: string,
+    artifact: WasmArtifact,
+  ): ModuleLocation | null | Promise<ModuleLocation | null>;
 }
 
 /**
@@ -1210,6 +1243,12 @@ export interface CreateBundleHostOptions {
    *  honestly, `concurrency()` is 0, and the feature flag is false (the
    *  honest no-worker door). */
   workers?: WorkerBackend;
+  /** Host-provided MODULE backend (ADR 326). When present,
+   *  `host.modules.resolve/url/fetch` answer a declared `capabilities.wasm`
+   *  artifact with the URL the host serves it at (+ integrity) and
+   *  `supports("modules@1")` answers true. When absent every answer is
+   *  `null` and the bundle loads its bundle-relative copy. */
+  modules?: ModulesBackend;
   /** Host-provided CREDENTIAL-STORE backend (D-11; rfc-credential-store).
    *  When present, `host.secrets.set/exists/forget` go through it
    *  (capability-gated on `capabilities.secrets`; `set` prompts the user —
@@ -3924,6 +3963,72 @@ export function createBundleHost(
     concurrency: () => workerCap,
   };
 
+  // ----------------------------------------------------- modules
+  // The MODULE door (ADR 326). resolve() answers a DECLARED capabilities.wasm
+  // artifact with the URL the host serves it at. Declared-only: the backend
+  // receives the manifest's artifact, never a bundle-supplied path, and an
+  // undeclared name is refused (throws in 'enforce'). Integrity: the
+  // manifest's own stamp wins (the bundle vouches for its bytes wherever
+  // they are served); a host answer with a DIFFERENT digest of the same
+  // algorithm is refused, so a stale module manifest cannot silently swap
+  // bytes — the bundle then loads its own copy. No backend → null.
+  const modulesBackend = options?.modules;
+  const declaredWasm = (name: string): WasmArtifact | undefined =>
+    caps?.wasm?.find((a) => a.name === name);
+  const sriAlgorithm = (sri: string): string => sri.split("-", 1)[0] ?? "";
+  const modules: ModulesSurface = {
+    async resolve(name: string): Promise<HostedModule | null> {
+      const artifact = declaredWasm(name);
+      requireDeclared(
+        artifact !== undefined,
+        `modules.resolve("${name}")`,
+        `capabilities.wasm must declare an artifact named "${name}"`,
+      );
+      if (!artifact || !modulesBackend) return null;
+      let answer: ModuleLocation | null;
+      try {
+        answer = await modulesBackend.url(manifest.id, { ...artifact });
+      } catch (err) {
+        log.warn(`modules.resolve("${name}"): the host backend threw`, err);
+        return null;
+      }
+      if (!answer || typeof answer.url !== "string") return null;
+      let url: string;
+      try {
+        url = new URL(answer.url).href;
+      } catch {
+        log.warn(`modules.resolve("${name}"): the host answered a non-absolute URL "${answer.url}"`);
+        return null;
+      }
+      const declaredSri = artifact.integrity ?? null;
+      const hostSri = answer.integrity ?? null;
+      if (
+        declaredSri &&
+        hostSri &&
+        sriAlgorithm(declaredSri) === sriAlgorithm(hostSri) &&
+        declaredSri !== hostSri
+      ) {
+        log.warn(
+          `modules.resolve("${name}"): the host serves bytes whose integrity ` +
+            `(${hostSri}) differs from the manifest's (${declaredSri}) — ` +
+            `refused; load the bundle's own copy`,
+        );
+        return null;
+      }
+      return { url, integrity: declaredSri ?? hostSri, artifact };
+    },
+    async url(name: string): Promise<string | null> {
+      return (await modules.resolve(name))?.url ?? null;
+    },
+    async fetch(name: string): Promise<Response | null> {
+      const hosted = await modules.resolve(name);
+      if (!hosted) return null;
+      return hosted.integrity
+        ? globalThis.fetch(hosted.url, { integrity: hosted.integrity })
+        : globalThis.fetch(hosted.url);
+    },
+  };
+
   // ----------------------------------------------------- secrets
   // The capability-gated, REFERENCE-ONLY credential store (D-11;
   // rfc-credential-store). set/exists/forget take a credentialRef + (for
@@ -4183,6 +4288,12 @@ export function createBundleHost(
     // actually spawn off-main-thread workers (K-3 / S-07 / I-02).
     featureSet.add("workers@1");
   }
+  if (options?.modules) {
+    // The modules door always exists (no backend: every answer is null and
+    // the bundle loads its own copy); this flag means the host serves
+    // declared wasm artifacts itself (ADR 326).
+    featureSet.add("modules@1");
+  }
   if (options?.secrets) {
     // The secrets door always exists (no-store fallback: set/forget reject,
     // exists false); this flag means a real SecretStoreBackend is wired, so
@@ -4268,6 +4379,7 @@ export function createBundleHost(
     assets,
     images,
     workers,
+    modules,
     secrets,
     clipboard,
     tools,

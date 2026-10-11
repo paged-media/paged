@@ -104,6 +104,8 @@ export type {
   WorkersSurface,
   BundleWorker,
   SpawnWorkerOptions,
+  ModulesSurface,
+  HostedModule,
   SecretsSurface,
   SecretMaterial,
   DocumentSurface,

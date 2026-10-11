@@ -2555,3 +2555,44 @@ is an owner step).
 - **Recorded for core:** the Rust binary `paged` is renamed `paged-core` at
   the next core tag (`crates/paged-cli/cli.json` `"binary"`, the `[[bin]]`,
   docs) — not done here.
+
+## 23. The module door (ADR 326 — `host.modules`, `modules@1`)
+
+Wasm modules are hosted like shared libraries (editor ADR 220):
+`https://modules.paged.media/<package>/<version>/<path in package>`,
+immutable per version, brotli, cached a year, shared across sites. The
+door lets a bundle resolve its DECLARED `capabilities.wasm` artifacts
+through the host instead of a bundle-relative URL, with Subresource
+Integrity. The deliberation and the bundle-side recipe are in
+[`docs/reference/wasm-packaging.md`](docs/reference/wasm-packaging.md) §7.
+
+- **Shape.** `host.modules.resolve(name)` → `{ url, integrity, artifact } |
+  null`; `url(name)`, `fetch(name)` (with `{ integrity }`). `null` is the
+  ordinary "load your own copy". Always present (ADR 305).
+- **Gate.** The name must be declared in `capabilities.wasm`; the backend
+  receives the manifest's artifact, never a bundle-typed path. Undeclared →
+  `PluginCapabilityError` in `enforce`, logged + `null` in `warn`.
+- **Backend.** `CreateBundleHostOptions.modules: ModulesBackend`
+  (`url(pluginId, artifact) → { url, integrity? } | null`). Present →
+  `supports("modules@1")`. A backend that throws or answers a non-absolute
+  URL is logged and answered `null`.
+- **Integrity rule.** `WasmArtifact.integrity` (schema + CLI validated,
+  `sha256|384|512-<base64>`) wins over the host's; a host digest of the
+  same algorithm that differs is refused. `paged-plugin integrity` stamps
+  it at build time; `validate` fails a stale stamp.
+- **Fallback is the bundle's job, made one call:** `resolveWasm` /
+  `resolveWasmUrl` / `fetchWasm` (plugin-sdk) take the old bundle-relative
+  URL and use it whenever the host path yields nothing. A bundle whose peer
+  floor predates them inlines the probe (`supports("modules@1")` + the
+  member's presence).
+- **Uploading** is `paged-plugin modules-upload <bundle-dir>` in the
+  plugin's publish workflow, after `npm publish`; it skips cleanly without
+  `CLOUDFLARE_API_TOKEN`.
+- **Not in this door:** `loadBundleWasm`'s `assetSource` does not consult
+  it; the editor's same-origin 302s (ADR 220) remain the path for bundles
+  that do not adopt it; lazy loading of bundle JavaScript is separate.
+- **Additivity.** A new `host.modules` member + `ModulesSurface` /
+  `HostedModule` types, an optional `WasmArtifact.integrity`, a `modules`
+  host option (+ `ModulesBackend` / `ModuleLocation`), the `modules@1`
+  flag, three helpers, two CLI commands. `loadBundle` ignores unknown
+  options, so an editor can pass `modules` to an older SDK harmlessly.
