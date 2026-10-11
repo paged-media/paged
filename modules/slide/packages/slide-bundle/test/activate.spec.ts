@@ -74,12 +74,6 @@ function recordingHost(supports: (f: string) => boolean) {
         return noop();
       },
     },
-    document: {
-      async mutate(m: MutationInput) {
-        mutations.push(m);
-        return { applied: true, createdId: null, pageIds: [] };
-      },
-    },
     nativeDocument: {
       async open(bytes: Uint8Array) {
         opened.push(bytes);
@@ -87,6 +81,10 @@ function recordingHost(supports: (f: string) => boolean) {
     },
     // An empty document: the fingerprints the importer keeps are read here.
     document: {
+      async mutate(m: MutationInput) {
+        mutations.push(m);
+        return { applied: true, createdId: null, pageIds: [] };
+      },
       tree: async () => [],
       elementGeometry: async () => [],
       collection: async () => [],
@@ -117,7 +115,13 @@ describe("paged.slide importer", () => {
 
   it("opens the deck as a native document and keeps its source", async () => {
     const r = recordingHost((f) =>
-      ["contribute.importer@1", "document.openNative@1", "storage.parts@1"].includes(f),
+      [
+        "contribute.importer@1",
+        "document.openNative@1",
+        "storage.parts@1",
+        "contribute.objectModel@1",
+        "contribute.schemaPanel@1",
+      ].includes(f),
     );
     activate(r.host);
     // ADR 323 — the property-row panels register next to the object model.
