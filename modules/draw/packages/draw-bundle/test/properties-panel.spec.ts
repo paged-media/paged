@@ -104,9 +104,12 @@ describe("draw panels — property rows (ADR 323)", () => {
     expect(row("pattern", "overlap").fields?.map((f) => (typeof f === "string" ? f : f.field))).toEqual(["horizontal", "vertical"]);
   });
 
-  it("every panel is declared in the manifest", () => {
-    for (const id of [strokePanel.id, fillPanel.id, DRAW_PROPERTIES_PANEL_ID]) {
-      expect(manifest.contributes.panels).toContain(id);
+  it("every contributed schema panel is declared in the manifest, the retired ones are not", () => {
+    expect(manifest.contributes.panels).toContain(DRAW_PROPERTIES_PANEL_ID);
+    // Vector stroke / Vector fill: merged into the host's Stroke, Object
+    // Options and Gradients panels; their schemas stay exported only.
+    for (const id of [strokePanel.id, fillPanel.id]) {
+      expect(manifest.contributes.panels).not.toContain(id);
     }
   });
 });

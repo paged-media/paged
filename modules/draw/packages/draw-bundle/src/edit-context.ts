@@ -35,7 +35,7 @@
 import type { EditContextContribution } from "@paged-media/plugin-api";
 
 import { DRAW_TOOL_IDS } from "./tools";
-import { STROKE_PANEL_ID } from "./panels/stroke-panel";
+import { DRAW_PROPERTIES_PANEL_ID } from "./panels/properties-panel";
 
 export const VECTOR_GRAPHIC_CONTEXT = "vectorGraphic";
 
@@ -55,6 +55,9 @@ export const vectorGraphicEditContext: EditContextContribution = {
   // The anchor-editing tool-set the context focuses (Add is first → the
   // host focuses it on enter).
   toolIds: [...DRAW_TOOL_IDS],
-  // The stroke panel the cockpit raises on enter.
-  panelIds: [STROKE_PANEL_ID],
+  // The panel the cockpit raises on enter, and the one the host's
+  // Properties panel shows inline for draw-owned artwork: the selected
+  // object's draw settings (its path points first). It was the Vector
+  // stroke panel, now merged into the host's Stroke panel.
+  panelIds: [DRAW_PROPERTIES_PANEL_ID],
 };

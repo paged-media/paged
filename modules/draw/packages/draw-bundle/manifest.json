@@ -57,8 +57,6 @@
       "media.paged.draw.tool.scissorsAnyPoint"
     ],
     "panels": [
-      "media.paged.draw.panel.stroke",
-      "media.paged.draw.panel.fill",
       "media.paged.draw.panel.appearance",
       "media.paged.draw.panel.graphicStyles",
       "media.paged.draw.panel.symbols",

@@ -41,6 +41,7 @@ import {
   drawBundle,
   ARROWHEAD_OPTIONS,
   BIND_ARROWHEAD_CONTROLS_VISIBLE,
+  installStrokePanelBindings,
 } from "../../src";
 import { F1_MULTI_SHAPE } from "../fixtures/corpus";
 import { openHost } from "./host";
@@ -83,6 +84,10 @@ describe("draw conformance — GraphicLine arrowheads (v43, Phase 4c)", () => {
     h = await openHost();
     await h.load(F1_MULTI_SHAPE.bytes());
     h.loadBundle(drawBundle);
+    // The panel these bindings gated is no longer contributed (its rows
+    // live in the host's own panels); the exported driver is installed
+    // directly to keep it proven.
+    installStrokePanelBindings(h.host);
   });
   afterAll(() => h?.dispose());
 

@@ -369,9 +369,9 @@ describe("drawBundle.activate", () => {
     // (`binding-provider/layers-provider.ts`, whose behaviour is pinned
     // in `conformance/layers-provider.spec.ts`). A Layers panel
     // reappearing here would be the duplication coming back.
+    // Vector stroke / Vector fill are not contributed any more: their
+    // rows live in the host's Stroke, Object Options and Gradients panels.
     expect(fake.panels.ids()).toEqual([
-      "media.paged.draw.panel.stroke",
-      "media.paged.draw.panel.fill",
       "media.paged.draw.panel.appearance",
       "media.paged.draw.panel.graphicStyles",
       "media.paged.draw.panel.symbols",
@@ -421,8 +421,9 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.tool.deleteAnchor",
       "media.paged.draw.tool.convertAnchor",
     ]);
-    // The stroke panel the cockpit raises on enter.
-    expect(ec.panelIds).toEqual(["media.paged.draw.panel.stroke"]);
+    // The panel the cockpit raises on enter (and the host's Properties
+    // shows inline for draw-owned artwork): the object's draw settings.
+    expect(ec.panelIds).toEqual(["media.paged.draw.panel.properties"]);
     // The host stamped the own-namespace metadata key.
     expect(ec.metadataKey).toBe("x-paged:media.paged.draw");
     // Kind-claimed: a polygon matches, an oval (no path) does not.

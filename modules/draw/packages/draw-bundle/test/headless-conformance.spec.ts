@@ -51,7 +51,7 @@ import { describe, expect, it, beforeAll, afterAll } from "vitest";
 
 import { editValue, type HeadlessHost } from "@paged-media/plugin-sdk";
 
-import { drawBundle } from "../src";
+import { drawBundle, installStrokePanelBindings } from "../src";
 import { minimalIdml } from "./fixtures/minimal-idml";
 // The shared engine boot (it probes the editor-checkout layouts for the
 // wasm — see conformance/host.ts).
@@ -152,12 +152,8 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "tool",
         "tool",
         "tool",
-        // W3.1 — the stroke schema panel.
-        "panel",
-        "schemaPanel",
-        // Phase 2d — the fill schema panel (B-03).
-        "panel",
-        "schemaPanel",
+        // (The stroke and fill schema panels were here; their rows moved
+        // to the host's own panels.)
         // NO Layers panel — ADR 023 phase D retired it behind the
         // binding-provider seam. Its absence from this log IS the
         // assertion; the replacement's behaviour is pinned in
@@ -377,32 +373,8 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
       // ids, sections, and the binding-driven gates.
       const panels = harness.schemaPanelsContributed();
       expect(panels.map((p) => p.id)).toEqual([
-        "media.paged.draw.panel.stroke",
-        "media.paged.draw.panel.fill",
         "media.paged.draw.panel.properties",
       ]);
-      const dashSection = panels[0].schema.sections[1];
-      expect(dashSection.title).toBe("Dashes");
-      // The dash section's visibility is a binding REF — a derived bound
-      // value the bundle publishes, NOT a visibleWhen conditional (B-01).
-      expect(dashSection.visible).toEqual({
-        bind: "media.paged.draw.dashControlsVisible",
-      });
-      // Phase 4c — the Line ends (arrowheads) section is likewise a
-      // binding REF, gated on the selection's KIND (GraphicLine-only,
-      // the engine's own v43 gate).
-      const arrowSection = panels[0].schema.sections[2];
-      expect(arrowSection.title).toBe("Line ends");
-      expect(arrowSection.visible).toEqual({
-        bind: "media.paged.draw.arrowheadControlsVisible",
-      });
-      // The fill panel's gradient section is likewise a binding REF
-      // (Phase 2d — gated on the selection's fill being a gradient).
-      const gradientSection = panels[1].schema.sections[1];
-      expect(gradientSection.title).toBe("Gradient");
-      expect(gradientSection.visible).toEqual({
-        bind: "media.paged.draw.gradientControlsVisible",
-      });
       // The captured tool contributions are the real objects too.
       const add = harness.toolsContributed()[0];
       expect(add.shortcut).toBe("=");
@@ -444,8 +416,11 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
     }
   });
 
-  it("the schema panel's bindings react to real selection (B-01 derived value)", async () => {
+  it("the stroke bindings react to real selection (B-01 derived value)", async () => {
+    // The Vector stroke panel is no longer contributed; its exported
+    // binding driver still works when a host installs it.
     const handle = harness.loadBundle(drawBundle);
+    const sub = installStrokePanelBindings(harness.host);
     try {
       // On activation the binding driver primes from the (empty)
       // selection: nothing selected → hasSelection false.
@@ -469,6 +444,7 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         false,
       );
     } finally {
+      sub.dispose();
       handle.dispose();
     }
   });

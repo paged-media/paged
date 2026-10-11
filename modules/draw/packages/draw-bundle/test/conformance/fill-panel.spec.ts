@@ -41,6 +41,7 @@ import type { HeadlessHost } from "@paged-media/plugin-sdk";
 import { drawBundle } from "../../src";
 import {
   BIND_GRADIENT_CONTROLS_VISIBLE,
+  installFillPanelBindings,
   FILL_GRADIENT_PRESETS,
   fillGradientMutationsFor,
   mintFillGradientIds,
@@ -137,6 +138,10 @@ describe("draw conformance — fill panel + gradient-fill commands (B-03)", () =
       h = await openHost();
       await h.load(F1_MULTI_SHAPE.bytes());
       h.loadBundle(drawBundle);
+      // The Vector fill panel is no longer contributed (its rows live in
+      // the host's Gradients panel); the exported driver is installed
+      // directly to keep it proven.
+      installFillPanelBindings(h.host);
     });
     afterAll(() => h?.dispose());
 

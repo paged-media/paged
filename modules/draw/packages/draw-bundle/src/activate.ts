@@ -168,7 +168,6 @@ import {
   PATHFINDER_REGION_COMMAND_IDS,
 } from "./commands/pathfinder-region";
 import { vectorGraphicEditContext } from "./edit-context";
-import { fillPanel, installFillPanelBindings } from "./panels/fill-panel";
 import { makeLayersBindingProvider } from "./binding-provider/layers-provider";
 import { registerBindingProvider } from "./binding-provider/adr023-seam";
 import {
@@ -192,7 +191,6 @@ import {
   OBJECTS_ON_PATH_PANEL_ID,
 } from "./panels/objects-on-path-panel";
 import { makePathOptionsPanel } from "./panels/path-options-panel";
-import { installStrokePanelBindings, strokePanel } from "./panels/stroke-panel";
 import { contributeSvgIo } from "./io/svg";
 import { contributeDrawObjectModel } from "./object-model";
 import {
@@ -209,13 +207,12 @@ export function activate(host: BundleHost): BundleHandle {
   for (const tool of tools) {
     contributeTool(host, tool);
   }
-  // The v1 schema panels + their binding drivers (the dynamic gate
-  // sources): STROKE (W3.1, B-01) then FILL (Phase 2d, B-03 — gradient
-  // section gated by the published gradientControlsVisible binding).
-  contributeSchemaPanel(host, strokePanel);
-  const strokeBindingSub = installStrokePanelBindings(host);
-  contributeSchemaPanel(host, fillPanel);
-  const fillBindingSub = installFillPanelBindings(host);
+  // The Vector stroke and Vector fill panels are no longer contributed:
+  // every row they carried is a core frame property, and the host's
+  // Stroke panel (weight, colour, cap, dashes, arrowheads), Object
+  // Options (corners) and Gradients panel (angle, length) now carry them.
+  // Two panels for one stroke read as two different things. The modules
+  // stay exported for compatibility.
   // The LAYERS panel is GONE — ADR 023 phase D, the first retirement
   // behind the binding-provider seam.
   //
@@ -672,8 +669,6 @@ export function activate(host: BundleHost): BundleHandle {
       pathOpsCommandsSub.dispose();
       fillGradientCommandsSub.dispose();
       dashCommandsSub.dispose();
-      fillBindingSub.dispose();
-      strokeBindingSub.dispose();
     },
   };
 }

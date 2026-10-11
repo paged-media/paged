@@ -186,10 +186,10 @@ export const DRAW_PROPERTIES_INTRO =
 
 export const DRAW_PROPERTIES_PANEL: PanelSchema = {
   id: DRAW_PROPERTIES_PANEL_ID,
-  // "All draw settings", not "properties": the host has a Properties panel,
+  // "Draw settings", not "properties": the host has a Properties panel,
   // and the recipe panels (Blend options, Repeat options…) edit the same
   // settings one feature at a time.
-  title: "All draw settings",
+  title: "Draw settings",
   // Its own glyph: `panel-stroke` belongs to the host Stroke panel.
   icon: "tool-pen",
   defaultDock: "right",
