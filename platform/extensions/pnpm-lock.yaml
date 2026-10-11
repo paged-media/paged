@@ -21,8 +21,8 @@ importers:
   packages/cli:
     dependencies:
       '@paged-media/canvas-wasm':
-        specifier: 0.70.0
-        version: 0.70.0
+        specifier: 0.71.1
+        version: 0.71.1
     devDependencies:
       '@duckdb/duckdb-wasm':
         specifier: 1.29.0
@@ -71,8 +71,8 @@ importers:
         version: link:../plugin-api
     devDependencies:
       '@paged-media/canvas-wasm':
-        specifier: 0.70.0
-        version: 0.70.0
+        specifier: 0.71.1
+        version: 0.71.1
       '@types/node':
         specifier: 20.19.39
         version: 20.19.39
@@ -410,8 +410,8 @@ packages:
     cpu: [x64]
     os: [linux]
 
-  '@paged-media/canvas-wasm@0.70.0':
-    resolution: {integrity: sha512-Hj+WBYzUxYg2Z5NwVOdXSrVTLteyYqA7FmCtLGk8Lb+I5TFPgg7Dc8j62p9PWC3uGPgfVdPCW3WIUNpU87jbKA==}
+  '@paged-media/canvas-wasm@0.71.1':
+    resolution: {integrity: sha512-k3n07uKe+tAPh/sfRMdqKqxFjlIvC7uqOR/X+99cpnv6PPqppSO8HJky+SJmV1atn9sN9bCNR2X0lPisW2jKvQ==}
 
   '@paged-media/data@0.1.0-canary.10':
     resolution: {integrity: sha512-2x44Du+NHkPaQmLZ11Fe+r0dl1A/y63aXI9Pg/84FMAASwiJQrQQs1xJDOXmbDq33t7ajbMUNGvFoY62MGsq0Q==}
@@ -1269,7 +1269,7 @@ snapshots:
   '@napi-rs/lzma-linux-x64-gnu@1.5.1':
     optional: true
 
-  '@paged-media/canvas-wasm@0.70.0': {}
+  '@paged-media/canvas-wasm@0.71.1': {}
 
   '@paged-media/data@0.1.0-canary.10(@paged-media/plugin-api@packages+plugin-api)(@paged-media/plugin-sdk@packages+plugin-sdk)(react@18.3.1)':
     dependencies:
