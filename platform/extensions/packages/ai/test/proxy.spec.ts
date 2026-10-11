@@ -94,6 +94,15 @@ describe("handleAiProxy", () => {
     expect(sent.body).toEqual({ ...expected, stream: true });
   });
 
+  it("sends anthropic-workspace-id when a workspace is configured", async () => {
+    const up = upstream();
+    await viaProxy(up, { workspaceId: "wrkspc_123" }).turn({ mode: "complete", messages: [{ role: "user", content: "x" }] });
+    expect(up.calls[0]!.headers.get("anthropic-workspace-id")).toBe("wrkspc_123");
+    const plain = upstream();
+    await viaProxy(plain).turn({ mode: "complete", messages: [{ role: "user", content: "x" }] });
+    expect(plain.calls[0]!.headers.get("anthropic-workspace-id")).toBeNull();
+  });
+
   it("ignores everything the client sends but the conversation", async () => {
     const up = upstream();
     const res = await handleAiProxy(
