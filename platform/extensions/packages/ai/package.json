@@ -1,6 +1,6 @@
 {
   "name": "@paged-media/ai",
-  "version": "0.1.0-canary.0",
+  "version": "0.1.0-canary.1",
   "description": "Claude for paged: the authoring prompt, the script tools, the generate \u2192 run \u2192 verify \u2192 correct loop, and the transports (direct key or the same-origin proxy).",
   "license": "MPL-2.0 OR LicenseRef-PMEL",
   "type": "module",
