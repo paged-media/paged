@@ -876,27 +876,19 @@ describe("draw conformance — GRAPHIC STYLES (Illustrator Phase 2)", () => {
     });
 
     it("the inline note NAMES the link semantics and every honest limit", () => {
-      // The feature's substance: link, redefine, break.
-      expect(GRAPHIC_STYLES_NOTE).toContain("COMPLETE appearance");
-      expect(GRAPHIC_STYLES_NOTE).toContain("LINKS the object to it");
-      expect(GRAPHIC_STYLES_NOTE).toContain(
-        "propagates to every linked object",
-      );
+      // The feature's substance, in plain words: link, redefine, break.
+      expect(GRAPHIC_STYLES_NOTE).toContain("stacked fills and strokes plus the object's");
+      expect(GRAPHIC_STYLES_NOTE).toContain("Redefine updates every linked object");
+      expect(GRAPHIC_STYLES_NOTE).toContain("Break link keeps the look and drops the link");
       // The OVERRIDE decision, stated where the author can read it.
-      expect(GRAPHIC_STYLES_NOTE).toContain("does NOT break the link");
-      expect(GRAPHIC_STYLES_NOTE).toContain("OVERRIDDEN");
-      expect(GRAPHIC_STYLES_NOTE).toContain("Redefine overwrites that override");
+      expect(GRAPHIC_STYLES_NOTE).toContain("keeps the link and marks the object overridden");
+      expect(GRAPHIC_STYLES_NOTE).toContain("the next Redefine replaces that change");
       // Where the library lives — and that it is outside the undo stack.
-      expect(GRAPHIC_STYLES_NOTE).toContain(
-        "paged/media.paged.draw/graphic-styles.json",
-      );
-      expect(GRAPHIC_STYLES_NOTE).toContain("NOT UNDOABLE");
+      expect(GRAPHIC_STYLES_NOTE).toContain("The library is saved in the document");
+      expect(GRAPHIC_STYLES_NOTE).toContain("cannot be undone");
       // The limits that are real and must not quietly disappear.
-      expect(GRAPHIC_STYLES_NOTE).toContain("graphic line has no");
-      expect(GRAPHIC_STYLES_NOTE).toContain("BAKED appearance is refused");
-      expect(GRAPHIC_STYLES_NOTE).toContain(
-        "merge, import, export, preview and folder organisation are not built",
-      );
+      expect(GRAPHIC_STYLES_NOTE).toContain("Lines have no fill");
+      expect(GRAPHIC_STYLES_NOTE).toContain("a baked appearance has to be released");
     });
   });
 });

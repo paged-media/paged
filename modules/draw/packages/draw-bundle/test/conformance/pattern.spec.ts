@@ -271,19 +271,17 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
       );
       expect(PATTERN_SWATCH_NOTE).toContain("would render nothing and lie on save");
       expect(PATTERN_SWATCH_NOTE).toContain("RFI C-31");
-      // The panel repeats it AND adds the two limits its own form cannot
-      // hide.
-      expect(PATTERN_PANEL_NOTE).toContain("THIS IS NOT A PATTERN SWATCH");
-      expect(PATTERN_PANEL_NOTE).toContain("always paint ABOVE the source");
-      expect(PATTERN_PANEL_NOTE).toContain("real frameOpacity");
+      // The panel says it in plain words AND adds the two limits its own
+      // form cannot hide.
+      expect(PATTERN_PANEL_NOTE).toContain("It is not a fill you can apply to other objects");
+      expect(PATTERN_PANEL_NOTE).toContain("The copies always sit above the original");
+      expect(PATTERN_PANEL_NOTE).toContain("Dimming sets the copies' opacity");
       // Baking and re-planning are ONE undo step each (measured below);
-      // the note said TWO until it was corrected to match, and the
-      // stepwise fallback's two is named as the older engine's.
+      // the note said TWO until it was corrected to match.
       expect(PATTERN_PANEL_NOTE).toContain(
-        "Baking, re-planning, releasing and deleting the tiles are ONE undo step each",
+        "Making, re-planning, releasing and deleting the copies are one undo step each",
       );
-      expect(PATTERN_PANEL_NOTE).toContain("an older engine that refuses the one batch");
-      expect(PATTERN_PANEL_NOTE).not.toContain("TWO undo steps");
+      expect(PATTERN_PANEL_NOTE).not.toContain("two undo steps");
     });
 
     it("every command TITLE carries what the contract has no field to say", () => {
@@ -1319,14 +1317,14 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
         sources: [],
       };
       expect(patternRowLabel(field, 1)).toBe(
-        "hex · 3 × 3 (8 copies requested, 1 placed)",
+        "Hex · 3 × 3 (8 copies requested, 1 placed)",
       );
       expect(
         patternRowLabel(
           { ...field, params: patternParamsFrom({ columns: 2, rows: 1 }) },
           1,
         ),
-      ).toBe("grid · 2 × 1 (1 copy requested, 1 placed)");
+      ).toBe("Grid · 2 × 1 (1 copy requested, 1 placed)");
     });
 
     it("the RECORDED commands drive the same lane and the selection", async () => {

@@ -57,18 +57,32 @@ export const FILL_PANEL_ID = "media.paged.draw.panel.fill";
 export const BIND_GRADIENT_CONTROLS_VISIBLE =
   "media.paged.draw.gradientControlsVisible";
 
+/** The panel's title: "Fill" alone reads as a twin of the host's colour
+ *  panels; this one is the vector shape's fill, gradient axis included. */
+export const FILL_PANEL_TITLE = "Vector fill";
+
+/** The intro line: what this panel is for and where the rest lives. */
+export const FILL_PANEL_INTRO =
+  "Fill color and tint of the selected shape, plus the angle and length " +
+  "of a gradient fill. Run Fill: Linear gradient or Fill: Radial gradient " +
+  "from the command palette to give a shape a gradient; edit swatches in " +
+  "the Swatches panel.";
+
 export const fillPanel: SchemaPanelContribution = {
   id: FILL_PANEL_ID,
-  title: "Fill",
-  icon: "ui-swatch-fill",
+  title: FILL_PANEL_TITLE,
+  // Its own glyph (the gradient tool's): `ui-swatch-fill` is also the
+  // host Separations panel's tab icon.
+  icon: "tool-gradient",
   defaultDock: "right",
   defaultGroup: "draw",
   schema: {
     id: FILL_PANEL_ID,
-    title: "Fill",
+    title: FILL_PANEL_TITLE,
     sections: [
       {
         rows: [
+          { widget: "paged.label", props: { text: FILL_PANEL_INTRO } },
           {
             // ADR 323 — an object-model property row: the host renders
             // the core row with its schema-driven PropertyField over

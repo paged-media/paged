@@ -111,13 +111,16 @@ describe("Objects on path panel — rendered against the engine", () => {
       const panel = await mountContributed(h, OBJECTS_ON_PATH_PANEL_ID);
       expect(panel.attr(PANEL, "data-draw-onpath-panel")).toBe("0");
       expect(panel.attr(PANEL, "data-draw-onpath-portable")).toBe("true");
-      expect(panel.text()).toContain("Objects on Path (0)");
+      expect(panel.text()).toContain("Objects on path (0)");
       expect(panel.text()).toContain(
-        "Nothing on a path yet — select some objects, then the path.",
+        "Nothing on a path yet. Select some objects, then the path, and choose + On path.",
       );
       expect(panel.count("[data-draw-onpath-row]")).toBe(0);
       // Fewer than two selected items: there is no object AND path.
       expect(panel.disabled("[data-draw-onpath-make]")).toBe(true);
+      expect(panel.get("[data-draw-onpath-target]").textContent).toBe(
+        "The last object you select is used as the path.",
+      );
       expect(panel.get("[data-draw-onpath-note]").textContent).toBe(
         OBJECTS_ON_PATH_PANEL_NOTE,
       );
@@ -171,6 +174,10 @@ describe("Objects on path panel — rendered against the engine", () => {
     it("+ On path MOVES the selected objects onto the path, through the engine", async () => {
       const panel = await mountPanel(h, makeObjectsOnPathPanel);
       await drive(() => h.host.selection.set(trio(0)), panel.work);
+      // The panel names which selected object is the path: the last one.
+      expect(panel.get("[data-draw-onpath-target]").textContent).toContain(
+        "you selected last. 2 objects will move onto it.",
+      );
 
       panel.reset();
       await panel.click("[data-draw-onpath-make]");

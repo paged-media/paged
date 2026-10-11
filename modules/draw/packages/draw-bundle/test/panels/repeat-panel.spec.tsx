@@ -95,7 +95,7 @@ describe("Repeat options panel — rendered against the engine", () => {
       expect(panel.attr(PANEL, "data-draw-repeat-portable")).toBe("true");
       expect(panel.text()).toContain("Repeats (0)");
       expect(panel.text()).toContain(
-        "No repeats yet — select artwork and build one.",
+        "No repeats yet. Select artwork and choose + Radial, + Grid or + Mirror.",
       );
       expect(panel.count("[data-draw-repeat-row]")).toBe(0);
       // Three make verbs, all waiting for a selection.
@@ -191,7 +191,7 @@ describe("Repeat options panel — rendered against the engine", () => {
       expect(panel.attr(PANEL, "data-draw-repeat-panel")).toBe("1");
       expect(panel.attr(PANEL, "data-draw-repeat-active")).toBe("rep-1");
       expect(panel.text()).toContain("Grid repeat 1");
-      expect(panel.text()).toContain("grid · 2 × 1 (1 instance placed)");
+      expect(panel.text()).toContain("Grid · 2 × 1 (1 copy placed)");
     });
 
     it("Update rebuilds the record with the options above it", async () => {
@@ -203,7 +203,7 @@ describe("Repeat options panel — rendered against the engine", () => {
       expect(library.repeats[0]!.params.columns).toBe(3);
       expect(library.repeats[0]!.instances).toHaveLength(2);
       expect(await leafIds(h)).toHaveLength(PRISTINE + 2);
-      expect(panel.text()).toContain("grid · 3 × 1 (2 instances placed)");
+      expect(panel.text()).toContain("Grid · 3 × 1 (2 copies placed)");
     });
 
     // WAS A BUG (measured, then fixed) — the same one blend-panel.spec.tsx

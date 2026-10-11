@@ -1382,10 +1382,12 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
       expect(REPEAT_CLIP_NOTE).toContain("deleteFrame REFUSES");
       expect(REPEAT_CLIP_NOTE).toContain("orphaned");
       // The panel repeats both AND states the undo arithmetic.
-      expect(REPEAT_PANEL_NOTE).toContain(REPEAT_LIVE_NOTE);
-      expect(REPEAT_PANEL_NOTE).toContain(REPEAT_CLIP_NOTE);
-      expect(REPEAT_PANEL_NOTE).toContain("ONE undo step");
-      expect(REPEAT_PANEL_NOTE).toContain("CLIPPED one costs");
+      // The panel's About text says the same things in plain words.
+      expect(REPEAT_PANEL_NOTE).toContain(
+        "Editing the original does not move the copies until you choose Update",
+      );
+      expect(REPEAT_PANEL_NOTE).toContain("a clipped repeat cannot be grouped");
+      expect(REPEAT_PANEL_NOTE).toContain("one undo step, or two when it is clipped");
     });
 
     it("registers the Repeat Options panel", () => {
@@ -1408,7 +1410,7 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
           },
           5,
         ),
-      ).toBe("grid · 3 × 2 (5 instances placed)");
+      ).toBe("Grid · 3 × 2 (5 copies placed)");
     });
 
     it("INV-REG-1: the Repeat tool ships with NO shortcut, and every other key stays unique", () => {

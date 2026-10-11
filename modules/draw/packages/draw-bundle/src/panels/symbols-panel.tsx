@@ -56,33 +56,31 @@ import {
   type SymbolDefinition,
 } from "../commands/symbols";
 import { usePanelReload } from "./use-panel-reload";
+import {
+  ConfirmButton,
+  humanize,
+  PanelAbout,
+  PanelIntro,
+  Refusal,
+  useActionFeedback,
+} from "./panel-kit";
 
 export const SYMBOLS_PANEL_ID = "media.paged.draw.panel.symbols";
 
-/** The limitation the panel renders inline. Exported so the conformance
- *  spec pins the WORDING — an honesty note that can be edited away
- *  silently is not a guarantee. */
+/** What the panel is for, in one sentence (shown at the top). */
+export const SYMBOLS_SUMMARY =
+  "Save artwork as a named symbol and place linked copies of it; " +
+  "Redefine updates every copy.";
+
+/** The "About" text. Exported so the conformance spec pins the wording. */
 export const SYMBOLS_NOTE =
-  "A symbol stores artwork as a named DEFINITION; placing one re-emits " +
-  "that artwork as an INSTANCE linked back to it. Redefine rebuilds every " +
-  "instance in the document, Reset transform re-emits the selected " +
-  "instance in place (discarding whatever scaling or editing its artwork " +
-  "picked up, keeping its position), and Break link keeps the artwork and " +
-  "drops the reference. Instances are STATIC in v0: there are no " +
-  "per-instance overrides, so a redefine overwrites every local change. " +
-  "The library lives in the document, as the container part " +
-  "paged/media.paged.draw/symbols.json, so it travels with the file — but " +
-  "a container write is not an engine mutation, so DEFINE, RENAME and " +
-  "DELETE are NOT UNDOABLE (only the per-object writes they perform are). " +
-  "What a symbol cannot hold is named rather than implied: the engine and " +
-  "IDML have no symbol primitive and no element-duplicate op, so an " +
-  "instance is re-emitted geometry and flat paint — TEXT IS REFUSED (a " +
-  "story cannot be copied), and live corners, placed images, gradients " +
-  "and the appearance stack do not ride along. A rebuild mints new " +
-  "element ids. And this row builds define / place / redefine / break / " +
-  "reset / rename / delete only — the eight symbol-SET tools (Sprayer, " +
-  "Shifter, Scruncher, Sizer, Spinner, Stainer, Screener, Styler), " +
-  "nine-slice scaling and 3D mapping are NOT built.";
+  "Placing a symbol adds an instance linked to its definition. Redefine " +
+  "rebuilds every instance, so changes made to an instance are lost. " +
+  "Reset transform rebuilds the selected instance where it is, undoing " +
+  "any scaling or edits. Break link keeps the artwork and drops the link. " +
+  "The library is saved in the document. Defining, renaming and deleting " +
+  "a symbol cannot be undone. Text cannot go into a symbol, and live " +
+  "corners, placed images, gradients and appearance stacks are not kept.";
 
 const rowStyle: React.CSSProperties = {
   display: "flex",
@@ -105,14 +103,6 @@ const sectionStyle: React.CSSProperties = {
   letterSpacing: "0.04em",
   opacity: 0.65,
   paddingTop: 8,
-};
-const noteStyle: React.CSSProperties = {
-  marginTop: 10,
-  padding: "6px 8px",
-  border: "1px solid var(--pg-border, rgba(127,127,127,0.4))",
-  borderRadius: 3,
-  font: "11px/1.45 var(--font-sans, sans-serif)",
-  opacity: 0.8,
 };
 const tagStyle: React.CSSProperties = {
   font: "10px var(--font-sans, sans-serif)",
@@ -138,7 +128,7 @@ export function symbolRowLabel(
   const pieces = symbol.pieces.length;
   return (
     `${pieces} piece${pieces === 1 ? "" : "s"} · ` +
-    `${symbol.registration} registration · ` +
+    `${humanize(symbol.registration).toLowerCase()} registration · ` +
     `${instances} instance${instances === 1 ? "" : "s"}`
   );
 }
@@ -182,14 +172,7 @@ export function makeSymbolsPanel(host: BundleHost): {
       setSelected(touched);
     });
 
-    const run = async (work: Promise<unknown>) => {
-      try {
-        await work;
-      } catch (e) {
-        host.log.warn(`symbols panel: ${String(e)}`);
-      }
-      reload();
-    };
+    const { refusal, run } = useActionFeedback(host, reload);
 
     const isInstance = selected.length > 0;
 
@@ -200,6 +183,7 @@ export function makeSymbolsPanel(host: BundleHost): {
         data-draw-symbols-portable={portable ? "true" : "false"}
         data-draw-symbol-selected={selected[0] ?? ""}
       >
+        <PanelIntro summary={SYMBOLS_SUMMARY} attr="data-draw-symbols-intro" />
         <div style={{ ...rowStyle, justifyContent: "space-between" }}>
           <span style={{ ...sectionStyle, paddingTop: 0 }}>
             Symbols ({symbols.length})
@@ -208,40 +192,54 @@ export function makeSymbolsPanel(host: BundleHost): {
             <button
               type="button"
               style={iconBtn}
-              title="Capture the selection as a new symbol definition (the selection itself is not changed)"
+              title={
+                hasSelection
+                  ? "Save the selection as a new symbol (the selection itself is not changed)"
+                  : "Select artwork first"
+              }
               data-draw-symbol-define
               disabled={!hasSelection}
-              onClick={() => void run(applyDefineSymbol(host))}
+              onClick={() => void run(() => applyDefineSymbol(host))}
             >
               + From selection
             </button>
             <button
               type="button"
               style={iconBtn}
-              title="Re-emit the selected instance from its definition, in place — discards any scaling or editing of its artwork"
+              title={
+                isInstance
+                  ? "Rebuild the selected instance where it is, undoing any scaling or edits"
+                  : "Select a symbol instance first"
+              }
               data-draw-symbol-reset
               disabled={!isInstance}
-              onClick={() => void run(applyResetSymbolTransform(host))}
+              onClick={() => void run(() => applyResetSymbolTransform(host))}
             >
               Reset transform
             </button>
             <button
               type="button"
               style={iconBtn}
-              title="Drop the selected instance's reference and keep its artwork"
+              title={
+                isInstance
+                  ? "Keep the selected instance's artwork and drop its link"
+                  : "Select a symbol instance first"
+              }
               data-draw-symbol-break
               disabled={!isInstance}
-              onClick={() => void run(applyBreakSymbolLink(host))}
+              onClick={() => void run(() => applyBreakSymbolLink(host))}
             >
               Break link
             </button>
           </span>
         </div>
 
+        <Refusal text={refusal} />
+
         {!portable && (
           <div style={mutedStyle} data-draw-symbols-degraded>
-            This host wires no .paged container writer, so the symbol library
-            cannot be read or saved here — nothing would travel with the file.
+            This editor cannot save data into the document, so symbols are not
+            available here.
           </div>
         )}
 
@@ -287,7 +285,7 @@ export function makeSymbolsPanel(host: BundleHost): {
                   title="Place an instance at the definition's capture point"
                   data-draw-symbol-place
                   onClick={() =>
-                    void run(applyPlaceSymbolInstance(host, symbol.id))
+                    void run(() => applyPlaceSymbolInstance(host, symbol.id))
                   }
                 >
                   Place
@@ -295,30 +293,30 @@ export function makeSymbolsPanel(host: BundleHost): {
                 <button
                   type="button"
                   style={iconBtn}
-                  title={`Redefine from the selection — ${instances} instance(s) are REBUILT, local edits included`}
+                  title={
+                    hasSelection
+                      ? `Redefine from the selection: ${instances} instance${instances === 1 ? " is" : "s are"} rebuilt and lose their own edits`
+                      : "Select artwork first"
+                  }
                   data-draw-symbol-redefine
                   disabled={!hasSelection}
-                  onClick={() => void run(applyRedefineSymbol(host, symbol.id))}
+                  onClick={() => void run(() => applyRedefineSymbol(host, symbol.id))}
                 >
                   Redefine
                 </button>
-                <button
-                  type="button"
+                <ConfirmButton
                   style={iconBtn}
-                  title="Delete the definition and unlink every instance (the placed artwork stays)"
+                  label="Delete"
+                  title="Delete the symbol and unlink its instances (the placed artwork stays). Cannot be undone."
                   data-draw-symbol-delete
-                  onClick={() => void run(applyDeleteSymbol(host, symbol.id))}
-                >
-                  Delete
-                </button>
+                  onConfirm={() => void run(() => applyDeleteSymbol(host, symbol.id))}
+                />
               </div>
             );
           })
         )}
 
-        <div style={noteStyle} data-draw-symbols-note>
-          {SYMBOLS_NOTE}
-        </div>
+        <PanelAbout text={SYMBOLS_NOTE} attr="data-draw-symbols-note" />
       </div>
     );
   };

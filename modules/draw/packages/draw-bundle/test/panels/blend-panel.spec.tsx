@@ -111,11 +111,15 @@ describe("Blend options panel — rendered against the engine", () => {
       expect(panel.attr(PANEL, "data-draw-blend-active")).toBe("");
       expect(panel.text()).toContain("Blends (0)");
       expect(panel.text()).toContain(
-        "No blends yet — select two matching paths and build one.",
+        "No blends yet. Select two objects and choose + Blend.",
       );
       expect(panel.count("[data-draw-blend-row]")).toBe(0);
-      // Nothing is selected, so there is nothing to blend.
+      // Nothing is selected, so there is nothing to blend — and the panel
+      // says what the button needs.
       expect(panel.disabled("[data-draw-blend-make]")).toBe(true);
+      expect(panel.get("[data-draw-blend-make-hint]").textContent).toBe(
+        "Select two objects to blend.",
+      );
       // The honesty note is on screen, verbatim.
       expect(panel.get("[data-draw-blend-note]").textContent).toBe(
         BLEND_PANEL_NOTE,

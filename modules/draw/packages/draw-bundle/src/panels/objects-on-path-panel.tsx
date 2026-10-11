@@ -26,7 +26,7 @@
 // if you switch the artboard fit off. Its wording is pinned by a
 // conformance test.
 
-import type { BundleHost, PanelProps } from "@paged-media/plugin-api";
+import type { BundleHost, ElementId, PanelProps } from "@paged-media/plugin-api";
 import * as React from "react";
 
 import {
@@ -40,7 +40,6 @@ import {
   resolveObjectsOnPath,
   OBJECTS_ON_PATH_DEFAULTS,
   OBJECTS_ON_PATH_FEATURE,
-  OBJECTS_ON_PATH_NOTE,
   ON_PATH_DISTRIBUTIONS,
   ON_PATH_PIVOTS,
   type ObjectsOnPathParams,
@@ -49,15 +48,50 @@ import {
   type OnPathPivot,
 } from "../commands/objects-on-path";
 import { useFollowedDraft, usePanelReload } from "./use-panel-reload";
+import {
+  elementKindLabel,
+  humanize,
+  PanelAbout,
+  PanelIntro,
+  Refusal,
+  useActionFeedback,
+} from "./panel-kit";
 
 export const OBJECTS_ON_PATH_PANEL_ID = "media.paged.draw.panel.objectsOnPath";
 
-/** What the panel says under the form, verbatim. Pinned by a test. */
+/** What the panel is for, in one sentence (shown at the top). */
+export const OBJECTS_ON_PATH_SUMMARY =
+  "Move the selected objects onto a path, spaced evenly or at a set " +
+  "distance; the path is the object you select last.";
+
+/** The "About" text. Pinned by a test. */
 export const OBJECTS_ON_PATH_PANEL_NOTE =
-  `${OBJECTS_ON_PATH_NOTE} The undo arithmetic: make, update, expand and ` +
-  "release are ONE undo step each — this lane never creates anything, so " +
-  "there is no second batch anywhere on it and no bindCreated in sight. " +
-  "The recipe itself is a container write and is not on the undo stack.";
+  "This moves the objects you selected; it does not copy them (for " +
+  "copies, use a repeat). Text frames work too. Release puts every object " +
+  "back exactly where it was. Objects are kept on the page: an object " +
+  "moved far off the page could not be measured to place it again. " +
+  "Making, updating, expanding and releasing are one undo step each; the " +
+  "saved settings are kept outside undo.";
+
+/** Why "+ On path" is unavailable, or null when it is available. */
+export function onPathMakeBlocker(selected: number): string | null {
+  if (selected >= 2) return null;
+  return selected === 0
+    ? "Select the objects, then the path last"
+    : "Select at least one object and then the path";
+}
+
+/** The line that names which selected object is the path. */
+export function onPathTargetLine(last: ElementId | null, selected: number): string {
+  if (last === null || selected < 2) {
+    return "The last object you select is used as the path.";
+  }
+  const others = selected - 1;
+  return (
+    `Path: the ${elementKindLabel(last)} you selected last. ` +
+    `${others} object${others === 1 ? "" : "s"} will move onto it.`
+  );
+}
 
 const rowStyle: React.CSSProperties = {
   display: "flex",
@@ -81,14 +115,6 @@ const sectionStyle: React.CSSProperties = {
   opacity: 0.65,
   paddingTop: 8,
 };
-const noteStyle: React.CSSProperties = {
-  marginTop: 10,
-  padding: "6px 8px",
-  border: "1px solid var(--pg-border, rgba(127,127,127,0.4))",
-  borderRadius: 3,
-  font: "11px/1.45 var(--font-sans, sans-serif)",
-  opacity: 0.8,
-};
 const mutedStyle: React.CSSProperties = {
   opacity: 0.6,
   font: "12px var(--font-sans, sans-serif)",
@@ -110,7 +136,7 @@ export function objectsOnPathRowLabel(
       ? `${record.objects.length} even`
       : `every ${p.spacingPt} pt`;
   return (
-    `${how}${p.alignToPath ? " · aligned" : ""} · pivot ${p.pivot}` +
+    `${how}${p.alignToPath ? " · aligned" : ""} · pivot ${humanize(p.pivot).toLowerCase()}` +
     `${p.startOffsetPt !== 0 ? ` · offset ${p.startOffsetPt} pt` : ""}` +
     `${p.reverseOrder ? " · reversed" : ""} ` +
     `(${placed} object${placed === 1 ? "" : "s"} on the path)`
@@ -127,6 +153,7 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
     const [active, setActive] = React.useState<string | null>(null);
     const [placed, setPlaced] = React.useState<Record<string, number>>({});
     const [selected, setSelected] = React.useState(0);
+    const [lastSelected, setLastSelected] = React.useState<ElementId | null>(null);
     const [portable, setPortable] = React.useState(true);
     const [draft, setDraft, followDraft] =
       useFollowedDraft<ObjectsOnPathParams>(OBJECTS_ON_PATH_DEFAULTS);
@@ -153,6 +180,7 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
         setPortable(host.supports(OBJECTS_ON_PATH_FEATURE));
         setRecords(library.associations);
         setSelected(selection.length);
+        setLastSelected(selection[selection.length - 1] ?? null);
         setActive(id);
         setPlaced(tally);
         const saved = library.associations.find((r) => r.id === id);
@@ -160,14 +188,7 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
       },
     );
 
-    const run = async (work: Promise<unknown>) => {
-      try {
-        await work;
-      } catch (e) {
-        host.log.warn(`objects-on-path panel: ${String(e)}`);
-      }
-      reload();
-    };
+    const { refusal, run } = useActionFeedback(host, reload);
 
     const numberRow = (
       label: string,
@@ -216,31 +237,36 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
         data-draw-onpath-portable={portable ? "true" : "false"}
         data-draw-onpath-active={active ?? ""}
       >
+        <PanelIntro summary={OBJECTS_ON_PATH_SUMMARY} attr="data-draw-onpath-intro" />
         <div style={{ ...rowStyle, justifyContent: "space-between" }}>
           <span style={{ ...sectionStyle, paddingTop: 0 }}>
-            Objects on Path ({records.length})
+            Objects on path ({records.length})
           </span>
           <button
             type="button"
             style={iconBtn}
-            title="Put the selected objects on the LAST selected item — they MOVE onto it; nothing is copied"
+            title={
+              onPathMakeBlocker(selected) ??
+              "Move the selected objects onto the object you selected last"
+            }
             data-draw-onpath-make
-            disabled={selected < 2}
-            onClick={() => void run(applyMakeObjectsOnPath(host, { ...draft }))}
+            disabled={onPathMakeBlocker(selected) !== null}
+            onClick={() => void run(() => applyMakeObjectsOnPath(host, { ...draft }))}
           >
             + On path
           </button>
         </div>
 
-        <div style={mutedStyle}>
-          Select the objects, then the PATH last — or pass a pathId.
+        <div style={mutedStyle} data-draw-onpath-target>
+          {onPathTargetLine(lastSelected, selected)}
         </div>
+
+        <Refusal text={refusal} />
 
         {!portable && (
           <div style={mutedStyle} data-draw-onpath-degraded>
-            This host wires no .paged container writer, so only the
-            PARAMETERS are lost — each object remembers its own way home on
-            its own link, so release and update still work.
+            This editor cannot save data into the document, so the
+            distribution settings are not kept. Release and update still work.
           </div>
         )}
 
@@ -267,8 +293,8 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
         </div>
         {draft.distribute === "count" ? (
           <div style={mutedStyle}>
-            The count IS the number of associated objects — nothing here
-            duplicates artwork. For more copies, use a Repeat.
+            One position per selected object; nothing is copied. For more
+            copies, use a repeat.
           </div>
         ) : (
           numberRow(
@@ -304,7 +330,7 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
           >
             {ON_PATH_PIVOTS.map((k) => (
               <option key={k} value={k}>
-                {k}
+                {humanize(k)}
               </option>
             ))}
           </select>
@@ -324,7 +350,8 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
 
         {records.length === 0 ? (
           <div style={mutedStyle}>
-            Nothing on a path yet — select some objects, then the path.
+            Nothing on a path yet. Select some objects, then the path, and
+            choose + On path.
           </div>
         ) : (
           records.map((record) => (
@@ -345,11 +372,10 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
                 <button
                   type="button"
                   style={iconBtn}
-                  title="Re-distribute with the parameters above (every object is placed from its HOME transform, so this is idempotent)"
+                  title="Place the objects again with the settings above"
                   data-draw-onpath-update
                   onClick={() =>
-                    void run(
-                      applyUpdateObjectsOnPath(host, {
+                    void run(() => applyUpdateObjectsOnPath(host, {
                         onPathId: record.id,
                         ...draft,
                       }),
@@ -364,8 +390,7 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
                   title="Select the objects on this path"
                   data-draw-onpath-select
                   onClick={() =>
-                    void run(
-                      applySelectObjectsOnPath(host, { onPathId: record.id }),
+                    void run(() => applySelectObjectsOnPath(host, { onPathId: record.id }),
                     )
                   }
                 >
@@ -377,8 +402,7 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
                   title="Stop tracking and leave the objects on the path"
                   data-draw-onpath-expand
                   onClick={() =>
-                    void run(
-                      applyExpandObjectsOnPath(host, { onPathId: record.id }),
+                    void run(() => applyExpandObjectsOnPath(host, { onPathId: record.id }),
                     )
                   }
                 >
@@ -390,8 +414,7 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
                   title="Put every object back exactly where it was"
                   data-draw-onpath-release
                   onClick={() =>
-                    void run(
-                      applyReleaseObjectsOnPath(host, { onPathId: record.id }),
+                    void run(() => applyReleaseObjectsOnPath(host, { onPathId: record.id }),
                     )
                   }
                 >
@@ -405,9 +428,7 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
           ))
         )}
 
-        <div style={noteStyle} data-draw-onpath-note>
-          {OBJECTS_ON_PATH_PANEL_NOTE}
-        </div>
+        <PanelAbout text={OBJECTS_ON_PATH_PANEL_NOTE} attr="data-draw-onpath-note" />
       </div>
     );
   };

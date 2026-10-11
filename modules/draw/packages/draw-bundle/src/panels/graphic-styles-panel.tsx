@@ -61,30 +61,33 @@ import {
 } from "../commands/graphic-styles";
 import { resolveAppearanceCarrier } from "../commands/appearance-bake";
 import { usePanelReload } from "./use-panel-reload";
+import {
+  ConfirmButton,
+  PanelAbout,
+  PanelIntro,
+  Refusal,
+  useActionFeedback,
+} from "./panel-kit";
 
 export const GRAPHIC_STYLES_PANEL_ID = "media.paged.draw.panel.graphicStyles";
 
-/** The limitation the panel renders inline. Exported so the conformance
- *  spec pins the WORDING — an honesty note that can be edited away
- *  silently is not a guarantee. */
+/** What the panel is for, in one sentence (shown at the top). */
+export const GRAPHIC_STYLES_SUMMARY =
+  "Save the selected object's complete look as a named style and apply " +
+  "it to other objects, which stay linked to it.";
+
+/** The "About" text. Exported so the conformance spec pins the wording. */
 export const GRAPHIC_STYLES_NOTE =
-  "A graphic style stores a COMPLETE appearance — the stacked fills and " +
-  "strokes plus the object's own fill, tint, stroke, weight, opacity and " +
-  "blend mode — and applying one LINKS the object to it: Redefine " +
-  "propagates to every linked object, Break link keeps the appearance and " +
-  "drops the reference. Editing a linked object's appearance directly does " +
-  "NOT break the link; the object stays linked and is marked OVERRIDDEN, " +
-  "and a Redefine overwrites that override (break the link first to keep a " +
-  "local deviation). The library lives in the document, as the container " +
-  "part paged/media.paged.draw/graphic-styles.json, so it travels with the " +
-  "file — but a container write is not an engine mutation, so SAVE, RENAME " +
-  "and DELETE are NOT UNDOABLE (only the per-object writes they perform " +
-  "are). What a style cannot reach is named rather than implied: an " +
-  "element kind with no slot for a property drops it (a graphic line has no " +
-  "fill, tint, opacity or blend mode at all), a BAKED appearance is refused " +
-  "until it is released, and this row builds save / apply / redefine / " +
-  "break / rename / delete only — the catalog's merge, import, export, " +
-  "preview and folder organisation are not built.";
+  "A graphic style holds the stacked fills and strokes plus the object's " +
+  "own fill, tint, stroke, weight, opacity and blend mode. Redefine " +
+  "updates every linked object. Editing a linked object directly keeps " +
+  "the link and marks the object overridden; the next Redefine replaces " +
+  "that change, so break the link first to keep it. Break link keeps the " +
+  "look and drops the link. The library is saved in the document. Saving, " +
+  "renaming and deleting a style cannot be undone. Lines have no fill, " +
+  "tint, opacity or blend mode, so those parts of a style are skipped on " +
+  "lines, and a baked appearance has to be released before a style can " +
+  "be saved from it or applied to it.";
 
 const rowStyle: React.CSSProperties = {
   display: "flex",
@@ -107,14 +110,6 @@ const sectionStyle: React.CSSProperties = {
   letterSpacing: "0.04em",
   opacity: 0.65,
   paddingTop: 8,
-};
-const noteStyle: React.CSSProperties = {
-  marginTop: 10,
-  padding: "6px 8px",
-  border: "1px solid var(--pg-border, rgba(127,127,127,0.4))",
-  borderRadius: 3,
-  font: "11px/1.45 var(--font-sans, sans-serif)",
-  opacity: 0.8,
 };
 const tagStyle: React.CSSProperties = {
   font: "10px var(--font-sans, sans-serif)",
@@ -218,20 +213,13 @@ export function makeGraphicStylesPanel(host: BundleHost): {
       },
     );
 
-    const run = async (work: Promise<unknown>) => {
-      try {
-        await work;
-      } catch (e) {
-        host.log.warn(`graphic styles panel: ${String(e)}`);
-      }
-      reload();
-    };
+    const { refusal, run } = useActionFeedback(host, reload);
 
     const linkedName =
       link.ref === null
         ? null
         : (styles.find((s) => s.id === link.ref!.id)?.name ??
-          `${link.ref.id} (missing)`);
+          "a deleted style");
 
     return (
       <div
@@ -241,6 +229,7 @@ export function makeGraphicStylesPanel(host: BundleHost): {
         data-draw-graphic-style-linked={link.ref?.id ?? ""}
         data-draw-graphic-style-overridden={link.overridden ? "true" : "false"}
       >
+        <PanelIntro summary={GRAPHIC_STYLES_SUMMARY} attr="data-draw-graphic-styles-intro" />
         <div style={{ ...rowStyle, justifyContent: "space-between" }}>
           <span style={{ ...sectionStyle, paddingTop: 0 }}>
             Graphic styles ({styles.length})
@@ -249,37 +238,49 @@ export function makeGraphicStylesPanel(host: BundleHost): {
             <button
               type="button"
               style={iconBtn}
-              title="Save the selection's complete appearance as a new style (and link the selection to it)"
+              title={
+                !link.target
+                  ? "Select an object first"
+                  : link.baked
+                    ? "Release the baked appearance first"
+                    : "Save the selection's look as a new style and link the selection to it"
+              }
               data-draw-graphic-style-save
               disabled={!link.target || link.baked}
-              onClick={() => void run(applySaveGraphicStyle(host))}
+              onClick={() => void run(() => applySaveGraphicStyle(host))}
             >
               + From selection
             </button>
             <button
               type="button"
               style={iconBtn}
-              title="Drop the selection's style reference and keep its appearance"
+              title={
+                link.ref
+                  ? "Keep the selection's look and drop its link to the style"
+                  : "The selection is not linked to a style"
+              }
               data-draw-graphic-style-break
               disabled={!link.ref}
-              onClick={() => void run(applyBreakGraphicStyleLink(host))}
+              onClick={() => void run(() => applyBreakGraphicStyleLink(host))}
             >
               Break link
             </button>
           </span>
         </div>
 
+        <Refusal text={refusal} />
+
         {!portable && (
           <div style={mutedStyle} data-draw-graphic-styles-degraded>
-            This host wires no .paged container writer, so the style library
-            cannot be read or saved here — nothing would travel with the file.
+            This editor cannot save data into the document, so graphic styles
+            are not available here.
           </div>
         )}
 
         {link.baked && (
           <div style={mutedStyle}>
-            The selection's appearance is BAKED into a group of derived paths.
-            Release it before saving or applying a graphic style.
+            The selection's appearance is baked. Release it in the Appearance
+            panel before saving or applying a graphic style.
           </div>
         )}
 
@@ -338,11 +339,17 @@ export function makeGraphicStylesPanel(host: BundleHost): {
                 <button
                   type="button"
                   style={iconBtn}
-                  title="Apply this style to the selection (links it)"
+                  title={
+                    !link.target
+                      ? "Select an object first"
+                      : link.baked
+                        ? "Release the baked appearance first"
+                        : "Apply this style to the selection and link it"
+                  }
                   data-draw-graphic-style-apply
                   disabled={!link.target || link.baked}
                   onClick={() =>
-                    void run(applyGraphicStyleToSelection(host, style.id))
+                    void run(() => applyGraphicStyleToSelection(host, style.id))
                   }
                 >
                   Apply
@@ -350,34 +357,36 @@ export function makeGraphicStylesPanel(host: BundleHost): {
                 <button
                   type="button"
                   style={iconBtn}
-                  title={`Redefine from the selection — ${linked} linked object(s) will follow, overrides included`}
+                  title={
+                    !link.target
+                      ? "Select an object first"
+                      : link.baked
+                        ? "Release the baked appearance first"
+                        : `Redefine from the selection: ${linked} linked object${linked === 1 ? "" : "s"} will change, overrides included`
+                  }
                   data-draw-graphic-style-redefine
                   disabled={!link.target || link.baked}
                   onClick={() =>
-                    void run(applyRedefineGraphicStyle(host, style.id))
+                    void run(() => applyRedefineGraphicStyle(host, style.id))
                   }
                 >
                   Redefine
                 </button>
-                <button
-                  type="button"
+                <ConfirmButton
                   style={iconBtn}
-                  title="Delete the style and unlink every object that followed it"
+                  label="Delete"
+                  title="Delete the style and unlink the objects that used it (their look stays). Cannot be undone."
                   data-draw-graphic-style-delete
-                  onClick={() =>
-                    void run(applyDeleteGraphicStyle(host, style.id))
+                  onConfirm={() =>
+                    void run(() => applyDeleteGraphicStyle(host, style.id))
                   }
-                >
-                  Delete
-                </button>
+                />
               </div>
             );
           })
         )}
 
-        <div style={noteStyle} data-draw-graphic-styles-note>
-          {GRAPHIC_STYLES_NOTE}
-        </div>
+        <PanelAbout text={GRAPHIC_STYLES_NOTE} attr="data-draw-graphic-styles-note" />
       </div>
     );
   };

@@ -119,43 +119,34 @@ describe("draw conformance — Appearance panel", () => {
 
   it("the row label carries the numeric the model actually has", () => {
     expect(appearanceRowLabel("fill", { color: "Color/Black", tint: 40 })).toBe(
-      "Color/Black · 40%",
+      "Black · 40%",
     );
-    expect(appearanceRowLabel("fill", { color: "Color/Black" })).toBe(
-      "Color/Black",
-    );
+    expect(appearanceRowLabel("fill", { color: "Color/Black" })).toBe("Black");
     expect(
       appearanceRowLabel("stroke", { color: "Color/Paper", weight: 1.5 }),
-    ).toBe("Color/Paper · 1.5 pt");
+    ).toBe("Paper · 1.5 pt");
   });
 
   it("the inline note NAMES both states and what the bake costs (gap B-24)", () => {
-    // UNBAKED — the one-slot reality that makes the stack metadata.
-    expect(APPEARANCE_BAKE_NOTE).toContain("front-most");
-    expect(APPEARANCE_BAKE_NOTE).toContain("one fill slot and one stroke slot");
-    expect(APPEARANCE_BAKE_NOTE).toContain("metadata");
-    // BAKED — real stacked page items that render, reach a PDF and now
-    // (C-19 + C-20) survive an IDML save-back with their modifiers.
-    expect(APPEARANCE_BAKE_NOTE).toContain("one derived path per layer");
+    // UNBAKED — the one-slot reality: only the front-most layer renders.
+    expect(APPEARANCE_BAKE_NOTE).toContain("only the front-most fill and stroke render");
+    expect(APPEARANCE_BAKE_NOTE).toContain("one fill and one stroke of its own");
+    expect(APPEARANCE_BAKE_NOTE).toContain("saved with the file but not drawn");
+    // BAKED — real stacked page items that render, reach a PDF and
+    // survive an IDML save with their modifiers.
+    expect(APPEARANCE_BAKE_NOTE).toContain("one per layer");
     expect(APPEARANCE_BAKE_NOTE).toContain("PDF export");
-    expect(APPEARANCE_BAKE_NOTE).toContain("IDML save-back");
-    expect(APPEARANCE_BAKE_NOTE).toContain(
-      "tint, opacity and blend mode included",
-    );
+    expect(APPEARANCE_BAKE_NOTE).toContain("IDML save");
+    expect(APPEARANCE_BAKE_NOTE).toContain("tint, opacity and blend mode");
     // …and the costs that are STILL real, none of them hidden.
-    expect(APPEARANCE_BAKE_NOTE).toContain("GROUP of derived paths");
-    expect(APPEARANCE_BAKE_NOTE).toContain("replaced, not patched");
-    expect(APPEARANCE_BAKE_NOTE).toContain(
-      "writes the group at the end of the spread",
-    );
+    expect(APPEARANCE_BAKE_NOTE).toContain("The object then becomes a group");
+    expect(APPEARANCE_BAKE_NOTE).toContain("editing the stack rebuilds the group's paths");
+    expect(APPEARANCE_BAKE_NOTE).toContain("places the group above the page's other items");
     // …and the claim the engine fix RETIRED: Release is no longer a
     // prerequisite for saving. Pinned as a NEGATIVE so the old wording
     // cannot creep back in.
     expect(APPEARANCE_BAKE_NOTE).not.toContain("does not save back to IDML");
-    expect(APPEARANCE_BAKE_NOTE).toContain(
-      "Release is a choice, not a prerequisite for saving",
-    );
-    expect(APPEARANCE_BAKE_NOTE).toContain("B-24");
+    expect(APPEARANCE_BAKE_NOTE).toContain("You do not need to release before saving");
   });
 
   describe("against the real engine (F1 rectangle)", () => {

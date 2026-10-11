@@ -53,29 +53,59 @@ import {
   readBlendLibrary,
   resolveBlend,
   BLEND_DEFAULTS,
+  BLEND_MAX_STEPS,
   BLEND_FEATURE,
-  BLEND_LIVE_NOTE,
   BLEND_ORIENTATIONS,
   BLEND_SPACINGS,
-  BLEND_SPINE_NOTE,
   type BlendOrientation,
   type BlendParams,
   type BlendRecord,
   type BlendSpacing,
 } from "../commands/blend";
 import { useFollowedDraft, usePanelReload } from "./use-panel-reload";
+import {
+  humanize,
+  PanelAbout,
+  PanelIntro,
+  Refusal,
+  useActionFeedback,
+} from "./panel-kit";
 
 export const BLEND_PANEL_ID = "media.paged.draw.panel.blend";
 
-/** What the panel says under the form, verbatim. Exported so the
- *  conformance spec pins the WORDING. */
+/** What the panel is for, in one sentence (shown at the top). */
+export const BLEND_SUMMARY =
+  "Fill the space between two selected objects with intermediate shapes " +
+  "that change step by step in shape and colour.";
+
+/** The "About" text. Exported so the conformance spec pins the wording. */
 export const BLEND_PANEL_NOTE =
-  `${BLEND_LIVE_NOTE} ${BLEND_SPINE_NOTE} The undo arithmetic this form ` +
-  "cannot hide: a blend builds, updates, expands and releases in ONE undo " +
-  "step each — the C-15 bindCreated op names the ids a batch mints, so the " +
-  "inserts, the swatches, the paint, the links and the group all ride one " +
-  "batch. The recipe itself is a container write and is not on the undo " +
-  "stack at all.";
+  "A blend makes real intermediate shapes and remembers how it built " +
+  "them. Editing a key object does not change the intermediates until " +
+  "you choose Update. The step count shown under Spacing is worked out " +
+  "from the settings; the artwork is only rebuilt when you build or " +
+  "update. The intermediates follow a straight line between the two " +
+  "objects unless you replace it with a path of your own (Spine): that " +
+  "path keeps its own colour and stays outside the blend's group, so you " +
+  "can still edit it. Reverse spine swaps which end each shape travels " +
+  "to; reverse front to back only changes which shapes paint on top. " +
+  "Building, updating, reversing, expanding and releasing are one undo " +
+  "step each; the saved settings are kept outside undo.";
+
+/** Why "+ Blend" is unavailable, or null when it is available. */
+export function blendMakeBlocker(selected: number): string | null {
+  if (selected === 2) return null;
+  return selected === 0
+    ? "Select two objects to blend"
+    : `Select exactly two objects to blend (${selected} selected)`;
+}
+
+/** Human labels for the spacing modes. */
+const SPACING_LABELS: Readonly<Record<BlendSpacing, string>> = {
+  smoothColor: "Smooth colour",
+  steps: "Specified steps",
+  distance: "Specified distance",
+};
 
 const rowStyle: React.CSSProperties = {
   display: "flex",
@@ -98,14 +128,6 @@ const sectionStyle: React.CSSProperties = {
   letterSpacing: "0.04em",
   opacity: 0.65,
   paddingTop: 8,
-};
-const noteStyle: React.CSSProperties = {
-  marginTop: 10,
-  padding: "6px 8px",
-  border: "1px solid var(--pg-border, rgba(127,127,127,0.4))",
-  borderRadius: 3,
-  font: "11px/1.45 var(--font-sans, sans-serif)",
-  opacity: 0.8,
 };
 const mutedStyle: React.CSSProperties = {
   opacity: 0.6,
@@ -176,14 +198,7 @@ export function makeBlendPanel(host: BundleHost): {
       if (saved) followDraft(saved.id, saved.params);
     });
 
-    const run = async (work: Promise<unknown>) => {
-      try {
-        await work;
-      } catch (e) {
-        host.log.warn(`blend panel: ${String(e)}`);
-      }
-      reload();
-    };
+    const { refusal, run } = useActionFeedback(host, reload);
 
     // The PLAN preview: the resolved count, its derivation, and the
     // spine length — the same pure function the commit uses, so what is
@@ -245,6 +260,7 @@ export function makeBlendPanel(host: BundleHost): {
         data-draw-blend-portable={portable ? "true" : "false"}
         data-draw-blend-active={active ?? ""}
       >
+        <PanelIntro summary={BLEND_SUMMARY} attr="data-draw-blend-intro" />
         <div style={{ ...rowStyle, justifyContent: "space-between" }}>
           <span style={{ ...sectionStyle, paddingTop: 0 }}>
             Blends ({records.length})
@@ -252,20 +268,27 @@ export function makeBlendPanel(host: BundleHost): {
           <button
             type="button"
             style={iconBtn}
-            title="Blend the two selected objects"
+            title={blendMakeBlocker(selected) ?? "Blend the two selected objects"}
             data-draw-blend-make
-            disabled={selected !== 2}
-            onClick={() => void run(applyMakeBlend(host, { ...draft }))}
+            disabled={blendMakeBlocker(selected) !== null}
+            onClick={() => void run(() => applyMakeBlend(host, { ...draft }))}
           >
             + Blend
           </button>
         </div>
 
+        {blendMakeBlocker(selected) !== null && (
+          <div style={mutedStyle} data-draw-blend-make-hint>
+            {blendMakeBlocker(selected)}.
+          </div>
+        )}
+
+        <Refusal text={refusal} />
+
         {!portable && (
           <div style={mutedStyle} data-draw-blend-degraded>
-            This host wires no .paged container writer, so a blend&apos;s
-            options cannot be saved — it can still be expanded or released
-            through its links, but an update must name them again.
+            This editor cannot save data into the document, so blend settings
+            are not kept. A blend can still be expanded or released.
           </div>
         )}
 
@@ -282,11 +305,7 @@ export function makeBlendPanel(host: BundleHost): {
           >
             {BLEND_SPACINGS.map((s) => (
               <option key={s} value={s}>
-                {s === "smoothColor"
-                  ? "Smooth Color"
-                  : s === "steps"
-                    ? "Specified Steps"
-                    : "Specified Distance"}
+                {SPACING_LABELS[s]}
               </option>
             ))}
           </select>
@@ -307,10 +326,12 @@ export function makeBlendPanel(host: BundleHost): {
           )}
         <div style={mutedStyle} data-draw-blend-preview={preview.steps}>
           {draft.spacing === "steps"
-            ? preview.why
-            : `${preview.why} — measured against the real spine and the real ` +
-              "key fills when you build; this line previews the derivation, " +
-              "not the artwork."}
+            ? preview.steps > 0
+              ? `${preview.steps} intermediate step${preview.steps === 1 ? "" : "s"}.`
+              : `Too many steps: at most ${BLEND_MAX_STEPS}.`
+            : draft.spacing === "distance"
+              ? "The step count is measured along the spine when you build."
+              : "The step count comes from the colour difference between the two objects when you build."}
         </div>
 
         <div style={sectionStyle}>Orientation</div>
@@ -348,7 +369,7 @@ export function makeBlendPanel(host: BundleHost): {
           >
             {EASE_KINDS.map((k) => (
               <option key={k} value={k}>
-                {k}
+                {humanize(k)}
               </option>
             ))}
           </select>
@@ -380,7 +401,7 @@ export function makeBlendPanel(host: BundleHost): {
               >
                 {EASE_KINDS.map((k) => (
                   <option key={k} value={k}>
-                    {k}
+                    {humanize(k)}
                   </option>
                 ))}
               </select>
@@ -417,7 +438,7 @@ export function makeBlendPanel(host: BundleHost): {
 
         {records.length === 0 ? (
           <div style={mutedStyle}>
-            No blends yet — select two matching paths and build one.
+            No blends yet. Select two objects and choose + Blend.
           </div>
         ) : (
           records.map((record) => (
@@ -438,11 +459,10 @@ export function makeBlendPanel(host: BundleHost): {
                 <button
                   type="button"
                   style={iconBtn}
-                  title="Rebuild with the options above and the keys' CURRENT geometry"
+                  title="Rebuild with the settings above and the key objects' current shapes"
                   data-draw-blend-update
                   onClick={() =>
-                    void run(
-                      applyUpdateBlend(host, { blendId: record.id, ...draft }),
+                    void run(() => applyUpdateBlend(host, { blendId: record.id, ...draft }),
                     )
                   }
                 >
@@ -451,11 +471,10 @@ export function makeBlendPanel(host: BundleHost): {
                 <button
                   type="button"
                   style={iconBtn}
-                  title="Make the one selected path that is not part of this blend its spine"
+                  title="Use the selected path (not part of this blend) as the spine"
                   data-draw-blend-spine
                   onClick={() =>
-                    void run(
-                      applyReplaceBlendSpine(host, { blendId: record.id }),
+                    void run(() => applyReplaceBlendSpine(host, { blendId: record.id }),
                     )
                   }
                 >
@@ -467,8 +486,7 @@ export function makeBlendPanel(host: BundleHost): {
                   title="Travel the spine the other way (geometry moves)"
                   data-draw-blend-reverse-spine
                   onClick={() =>
-                    void run(
-                      applyReverseBlendSpine(host, { blendId: record.id }),
+                    void run(() => applyReverseBlendSpine(host, { blendId: record.id }),
                     )
                   }
                 >
@@ -480,8 +498,7 @@ export function makeBlendPanel(host: BundleHost): {
                   title="Flip paint order (nothing moves)"
                   data-draw-blend-reverse-order
                   onClick={() =>
-                    void run(
-                      applyReverseBlendOrder(host, { blendId: record.id }),
+                    void run(() => applyReverseBlendOrder(host, { blendId: record.id }),
                     )
                   }
                 >
@@ -493,8 +510,7 @@ export function makeBlendPanel(host: BundleHost): {
                   title="Select the key objects — edit them, then Update"
                   data-draw-blend-select
                   onClick={() =>
-                    void run(
-                      applySelectBlendObjects(host, { blendId: record.id }),
+                    void run(() => applySelectBlendObjects(host, { blendId: record.id }),
                     )
                   }
                 >
@@ -506,7 +522,7 @@ export function makeBlendPanel(host: BundleHost): {
                   title="Stop tracking and keep every intermediate as ordinary artwork"
                   data-draw-blend-expand
                   onClick={() =>
-                    void run(applyExpandBlend(host, { blendId: record.id }))
+                    void run(() => applyExpandBlend(host, { blendId: record.id }))
                   }
                 >
                   Expand
@@ -517,7 +533,7 @@ export function makeBlendPanel(host: BundleHost): {
                   title="Remove the intermediates and keep the key objects"
                   data-draw-blend-release
                   onClick={() =>
-                    void run(applyReleaseBlend(host, { blendId: record.id }))
+                    void run(() => applyReleaseBlend(host, { blendId: record.id }))
                   }
                 >
                   Release
@@ -530,9 +546,7 @@ export function makeBlendPanel(host: BundleHost): {
           ))
         )}
 
-        <div style={noteStyle} data-draw-blend-note>
-          {BLEND_PANEL_NOTE}
-        </div>
+        <PanelAbout text={BLEND_PANEL_NOTE} attr="data-draw-blend-note" />
       </div>
     );
   };

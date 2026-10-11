@@ -188,10 +188,10 @@ describe("Appearance panel — rendered against the engine", () => {
           .map((r) => r.getAttribute("data-draw-appearance-bakes")),
       ).toEqual(["true", "false", "false", "true", "false"]);
       expect(panel.get('[data-draw-appearance-row="fill:2"]').textContent).toContain(
-        "Color/Black · 100%",
+        "Black · 100%",
       );
       expect(panel.get('[data-draw-appearance-row="stroke:1"]').textContent).toContain(
-        "Color/Black · 3 pt",
+        "Black · 3 pt",
       );
       // The front-most row cannot go further up, the bottom one further down.
       const front = '[data-draw-appearance-row="fill:2"]';
@@ -217,7 +217,7 @@ describe("Appearance panel — rendered against the engine", () => {
         value: 60,
       });
       expect(panel.get('[data-draw-appearance-row="fill:2"]').textContent).toContain(
-        "Color/Black · 60%",
+        "Black · 60%",
       );
     });
 

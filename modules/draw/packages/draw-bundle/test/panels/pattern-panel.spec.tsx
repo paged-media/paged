@@ -95,9 +95,9 @@ describe("Pattern options panel — rendered against the engine", () => {
       const panel = await mountContributed(h, PATTERN_PANEL_ID);
       expect(panel.attr(PANEL, "data-draw-pattern-panel")).toBe("0");
       expect(panel.attr(PANEL, "data-draw-pattern-portable")).toBe("true");
-      expect(panel.text()).toContain("Pattern fields (0)");
+      expect(panel.text()).toContain("Patterns (0)");
       expect(panel.text()).toContain(
-        "No pattern fields yet — select artwork and bake one.",
+        "No patterns yet. Select artwork and choose + From selection.",
       );
       expect(panel.count("[data-draw-pattern-row]")).toBe(0);
       expect(panel.disabled("[data-draw-pattern-make]")).toBe(true);
@@ -172,15 +172,15 @@ describe("Pattern options panel — rendered against the engine", () => {
       expect(panel.work.mutations.map((m) => m.op)).toEqual(["batch"]);
       expect(panel.work.count("log.warn")).toBe(0);
       expect(PATTERN_PANEL_NOTE).toContain(
-        "Baking, re-planning, releasing and deleting the tiles are ONE undo step each",
+        "Making, re-planning, releasing and deleting the copies are one undo step each",
       );
-      expect(PATTERN_PANEL_NOTE).not.toContain("TWO undo steps");
+      expect(PATTERN_PANEL_NOTE).not.toContain("two undo steps");
 
       // THE PANEL followed.
       expect(panel.attr(PANEL, "data-draw-pattern-panel")).toBe("1");
       expect(panel.attr(PANEL, "data-draw-pattern-active")).toBe("pat-1");
       expect(panel.text()).toContain("Pattern 1");
-      expect(panel.text()).toContain("grid · 2 × 1 (1 copy requested, 1 placed)");
+      expect(panel.text()).toContain("Grid · 2 × 1 (1 copy requested, 1 placed)");
     });
 
     it("Re-plan rebuilds the field with the options above it", async () => {
@@ -190,7 +190,7 @@ describe("Pattern options panel — rendered against the engine", () => {
 
       expect((await readPatternLibrary(h.host)).fields[0]!.params.columns).toBe(3);
       expect(await leafIds(h)).toHaveLength(PRISTINE + 2);
-      expect(panel.text()).toContain("grid · 3 × 1 (2 copies requested, 2 placed)");
+      expect(panel.text()).toContain("Grid · 3 × 1 (2 copies requested, 2 placed)");
     });
 
     // WAS A BUG (measured, then fixed) — the same one blend-panel.spec.tsx

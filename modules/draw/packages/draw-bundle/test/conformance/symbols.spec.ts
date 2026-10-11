@@ -1486,31 +1486,24 @@ describe("draw conformance — SYMBOLS (Illustrator Phase 2, §16.1)", () => {
           },
           1,
         ),
-      ).toBe("2 pieces · topLeft registration · 1 instance");
+      ).toBe("2 pieces · top left registration · 1 instance");
     });
 
     it("the inline note NAMES the semantics and every honest limit", () => {
-      // The feature's substance.
-      expect(SYMBOLS_NOTE).toContain("named DEFINITION");
-      expect(SYMBOLS_NOTE).toContain("INSTANCE linked back to it");
+      // The feature's substance, in plain words (the panel's About text;
+      // the full account of what is and is not built lives in the docs).
+      expect(SYMBOLS_NOTE).toContain("adds an instance linked to its definition");
       expect(SYMBOLS_NOTE).toContain("Redefine rebuilds every instance");
-      expect(SYMBOLS_NOTE).toContain("Reset transform re-emits");
+      expect(SYMBOLS_NOTE).toContain("Reset transform rebuilds the selected instance");
       expect(SYMBOLS_NOTE).toContain("Break link keeps the artwork");
-      // The static-instance decision, stated where the author can read it.
-      expect(SYMBOLS_NOTE).toContain("Instances are STATIC in v0");
-      // Where the library lives — and that it is outside the undo stack.
-      expect(SYMBOLS_NOTE).toContain("paged/media.paged.draw/symbols.json");
-      expect(SYMBOLS_NOTE).toContain("NOT UNDOABLE");
+      // The static-instance decision: a redefine loses local changes.
+      expect(SYMBOLS_NOTE).toContain("changes made to an instance are lost");
+      // The library lives in the document, outside the undo stack.
+      expect(SYMBOLS_NOTE).toContain("The library is saved in the document");
+      expect(SYMBOLS_NOTE).toContain("cannot be undone");
       // The limits that are real and must not quietly disappear.
-      expect(SYMBOLS_NOTE).toContain("no symbol primitive");
-      expect(SYMBOLS_NOTE).toContain("no element-duplicate op");
-      expect(SYMBOLS_NOTE).toContain("TEXT IS REFUSED");
-      expect(SYMBOLS_NOTE).toContain("A rebuild mints new element ids");
-      // The catalog rows this v0 explicitly does NOT build.
-      expect(SYMBOLS_NOTE).toContain(
-        "Sprayer, Shifter, Scruncher, Sizer, Spinner, Stainer, Screener, Styler",
-      );
-      expect(SYMBOLS_NOTE).toContain("nine-slice scaling and 3D mapping are NOT built");
+      expect(SYMBOLS_NOTE).toContain("Text cannot go into a symbol");
+      expect(SYMBOLS_NOTE).toContain("placed images, gradients and appearance stacks are not kept");
     });
   });
 });

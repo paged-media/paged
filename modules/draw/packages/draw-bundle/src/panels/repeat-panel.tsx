@@ -45,30 +45,40 @@ import {
   readRepeatLibrary,
   repeatInstanceCounts,
   resolveRepeat,
-  REPEAT_CLIP_NOTE,
   REPEAT_DEFAULTS,
   REPEAT_FEATURE,
   REPEAT_KINDS,
-  REPEAT_LIVE_NOTE,
   type RepeatParams,
   type RepeatRecord,
 } from "../commands/repeat";
 import { useFollowedDraft, usePanelReload } from "./use-panel-reload";
+import {
+  humanize,
+  PanelAbout,
+  PanelIntro,
+  Refusal,
+  useActionFeedback,
+} from "./panel-kit";
 
 export const REPEAT_PANEL_ID = "media.paged.draw.panel.repeat";
 
-/** What the panel says under the form, verbatim. Exported so the
- *  conformance spec pins the WORDING — an honesty note that can be
- *  edited away silently is not a guarantee. */
+/** What the panel is for, in one sentence (shown at the top). */
+export const REPEAT_SUMMARY =
+  "Repeat the selected artwork around a circle, in a grid or as a mirror " +
+  "image; Update rebuilds the copies after you edit the original.";
+
+/** The "About" text. Exported so the conformance spec pins the wording. */
 export const REPEAT_PANEL_NOTE =
-  `${REPEAT_LIVE_NOTE} ${REPEAT_CLIP_NOTE} One more thing this form cannot ` +
-  "hide: an UNCLIPPED repeat builds and updates in ONE undo step (the C-15 " +
-  "bindCreated op names the ids a batch mints, so the inserts, the paint, " +
-  "the links and the group all ride one batch), and a CLIPPED one costs " +
-  "TWO — the pasteInto that clips is also what hides the instances from " +
-  "the scene tree, so what was created has to be read back before it runs. " +
-  "The recipe itself is a container write and is not on the undo stack at " +
-  "all.";
+  "A repeat makes real copies of the artwork and remembers how it built " +
+  "them. Editing the original does not move the copies until you choose " +
+  "Update. Dragging the on-canvas handle changes one setting and shows a " +
+  "guide; the copies are rebuilt when you let go, as one undo step. " +
+  "Clipping puts the copies inside a frame that crops them; a clipped " +
+  "repeat cannot be grouped, and the original stays outside the frame so " +
+  "you can keep editing it. Building or updating a repeat is one undo " +
+  "step, or two when it is clipped. Expand keeps the copies as ordinary " +
+  "artwork; Release removes them and keeps the original. The saved " +
+  "settings are kept outside undo.";
 
 const rowStyle: React.CSSProperties = {
   display: "flex",
@@ -92,14 +102,6 @@ const sectionStyle: React.CSSProperties = {
   opacity: 0.65,
   paddingTop: 8,
 };
-const noteStyle: React.CSSProperties = {
-  marginTop: 10,
-  padding: "6px 8px",
-  border: "1px solid var(--pg-border, rgba(127,127,127,0.4))",
-  borderRadius: 3,
-  font: "11px/1.45 var(--font-sans, sans-serif)",
-  opacity: 0.8,
-};
 const mutedStyle: React.CSSProperties = {
   opacity: 0.6,
   font: "12px var(--font-sans, sans-serif)",
@@ -121,8 +123,8 @@ export function repeatRowLabel(record: RepeatRecord, placed: number): string {
         ? `${p.columns} × ${p.rows}`
         : `axis ${Math.round(p.angleDeg)}°`;
   return (
-    `${p.kind} · ${asked}${p.clip ? " · clipped" : ""} ` +
-    `(${placed} instance${placed === 1 ? "" : "s"} placed)`
+    `${humanize(p.kind)} · ${asked}${p.clip ? " · clipped" : ""} ` +
+    `(${placed} cop${placed === 1 ? "y" : "ies"} placed)`
   );
 }
 
@@ -161,14 +163,7 @@ export function makeRepeatPanel(host: BundleHost): {
       if (saved) followDraft(saved.id, saved.params);
     });
 
-    const run = async (work: Promise<unknown>) => {
-      try {
-        await work;
-      } catch (e) {
-        host.log.warn(`repeat panel: ${String(e)}`);
-      }
-      reload();
-    };
+    const { refusal, run } = useActionFeedback(host, reload);
 
     const numberRow = (
       label: string,
@@ -217,6 +212,7 @@ export function makeRepeatPanel(host: BundleHost): {
         data-draw-repeat-portable={portable ? "true" : "false"}
         data-draw-repeat-active={active ?? ""}
       >
+        <PanelIntro summary={REPEAT_SUMMARY} attr="data-draw-repeat-intro" />
         <div style={{ ...rowStyle, justifyContent: "space-between" }}>
           <span style={{ ...sectionStyle, paddingTop: 0 }}>
             Repeats ({records.length})
@@ -228,24 +224,28 @@ export function makeRepeatPanel(host: BundleHost): {
               key={kind}
               type="button"
               style={iconBtn}
-              title={`Build a ${kind} repeat from the selection`}
+              title={
+                hasSelection
+                  ? `Build a ${kind} repeat from the selection`
+                  : "Select artwork first"
+              }
               data-draw-repeat-make={kind}
               disabled={!hasSelection}
               onClick={() =>
-                void run(applyMakeRepeat(host, kind, { ...draft, kind }))
+                void run(() => applyMakeRepeat(host, kind, { ...draft, kind }))
               }
             >
-              + {kind}
+              + {humanize(kind)}
             </button>
           ))}
         </div>
 
+        <Refusal text={refusal} />
+
         {!portable && (
           <div style={mutedStyle} data-draw-repeat-degraded>
-            This host wires no .paged container writer, so a repeat&apos;s
-            parameters cannot be saved and CLIPPING is refused — a clipped
-            instance is invisible to the scene tree, and the recipe is the only
-            index that could find it again.
+            This editor cannot save data into the document, so repeat settings
+            are not kept and clipping is not available.
           </div>
         )}
 
@@ -262,7 +262,7 @@ export function makeRepeatPanel(host: BundleHost): {
           >
             {REPEAT_KINDS.map((k) => (
               <option key={k} value={k}>
-                {k}
+                {humanize(k)}
               </option>
             ))}
           </select>
@@ -272,7 +272,7 @@ export function makeRepeatPanel(host: BundleHost): {
           <>
             <div style={sectionStyle}>Radial</div>
             {numberRow(
-              "Instances (incl. the original)",
+              "Copies (including the original)",
               draft.count,
               (n) => setDraft({ ...draft, count: n }),
               "count",
@@ -296,7 +296,7 @@ export function makeRepeatPanel(host: BundleHost): {
               "sweepDeg",
             )}
             {checkRow(
-              "Rotate instances to the arc",
+              "Rotate copies to follow the arc",
               draft.rotateInstances,
               (b) => setDraft({ ...draft, rotateInstances: b }),
               "rotateInstances",
@@ -320,13 +320,13 @@ export function makeRepeatPanel(host: BundleHost): {
               "rows",
             )}
             {numberRow(
-              "H spacing (pt, negative overlaps)",
+              "Horizontal spacing (pt, negative overlaps)",
               draft.spacing[0],
               (n) => setDraft({ ...draft, spacing: [n, draft.spacing[1]] }),
               "spacingX",
             )}
             {numberRow(
-              "V spacing (pt, negative overlaps)",
+              "Vertical spacing (pt, negative overlaps)",
               draft.spacing[1],
               (n) => setDraft({ ...draft, spacing: [draft.spacing[0], n] }),
               "spacingY",
@@ -366,13 +366,13 @@ export function makeRepeatPanel(host: BundleHost): {
 
         <div style={sectionStyle}>Frame</div>
         {checkRow(
-          "Clip the instances to a frame",
+          "Clip the copies to a frame",
           draft.clip,
           (b) => setDraft({ ...draft, clip: b }),
           "clip",
         )}
         {checkRow(
-          "Keep instances on the page",
+          "Keep copies on the page",
           draft.fitToArtboard,
           (b) => setDraft({ ...draft, fitToArtboard: b }),
           "fitToArtboard",
@@ -380,7 +380,8 @@ export function makeRepeatPanel(host: BundleHost): {
 
         {records.length === 0 ? (
           <div style={mutedStyle}>
-            No repeats yet — select artwork and build one.
+            No repeats yet. Select artwork and choose + Radial, + Grid or
+            + Mirror.
           </div>
         ) : (
           records.map((record) => (
@@ -401,11 +402,10 @@ export function makeRepeatPanel(host: BundleHost): {
                 <button
                   type="button"
                   style={iconBtn}
-                  title="Rebuild this repeat with the parameters above and the sources' CURRENT geometry — every instance gets a new element id"
+                  title="Rebuild the copies with the settings above and the original's current shape"
                   data-draw-repeat-update
                   onClick={() =>
-                    void run(
-                      applyUpdateRepeat(host, { repeatId: record.id, ...draft }),
+                    void run(() => applyUpdateRepeat(host, { repeatId: record.id, ...draft }),
                     )
                   }
                 >
@@ -414,11 +414,10 @@ export function makeRepeatPanel(host: BundleHost): {
                 <button
                   type="button"
                   style={iconBtn}
-                  title="Select this repeat's instances"
+                  title="Select this repeat's copies"
                   data-draw-repeat-select
                   onClick={() =>
-                    void run(
-                      applySelectRepeatInstances(host, { repeatId: record.id }),
+                    void run(() => applySelectRepeatInstances(host, { repeatId: record.id }),
                     )
                   }
                 >
@@ -427,10 +426,10 @@ export function makeRepeatPanel(host: BundleHost): {
                 <button
                   type="button"
                   style={iconBtn}
-                  title="Stop tracking and keep every instance as ordinary artwork"
+                  title="Stop tracking and keep every copy as ordinary artwork"
                   data-draw-repeat-expand
                   onClick={() =>
-                    void run(applyExpandRepeat(host, { repeatId: record.id }))
+                    void run(() => applyExpandRepeat(host, { repeatId: record.id }))
                   }
                 >
                   Expand
@@ -438,10 +437,10 @@ export function makeRepeatPanel(host: BundleHost): {
                 <button
                   type="button"
                   style={iconBtn}
-                  title="Remove every instance and keep the source exactly as it is"
+                  title="Remove every copy and keep the original"
                   data-draw-repeat-release
                   onClick={() =>
-                    void run(applyReleaseRepeat(host, { repeatId: record.id }))
+                    void run(() => applyReleaseRepeat(host, { repeatId: record.id }))
                   }
                 >
                   Release
@@ -454,9 +453,7 @@ export function makeRepeatPanel(host: BundleHost): {
           ))
         )}
 
-        <div style={noteStyle} data-draw-repeat-note>
-          {REPEAT_PANEL_NOTE}
-        </div>
+        <PanelAbout text={REPEAT_PANEL_NOTE} attr="data-draw-repeat-note" />
       </div>
     );
   };

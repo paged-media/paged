@@ -242,12 +242,14 @@ export function activate(host: BundleHost): BundleHandle {
   // stated inline instead of hidden behind a convincing stack. React
   // for the same reason Layers is (a reorderable list is above the v1
   // schema panel's scalar ceiling).
-  // (`panel-effects` is a REAL glyph in the host's kebab-case map — the
-  // dock tab renders iconless on an invented token, the stroke panel's
-  // recorded lesson.)
+  // PANEL ICONS. Every draw panel has a glyph of its own, and none is a
+  // host panel's: two dock tabs with one icon read as one panel (the
+  // 2026-10 panel review found `panel-stroke` three times and the host's
+  // Effects / Object styles glyphs on draw panels). Each name must exist
+  // in the host's glyph map, or the tab renders the dashed fallback.
   host.contribute.panel({
     id: APPEARANCE_PANEL_ID,
-    icon: "panel-effects",
+    icon: "ui-sparkle",
     ...makeAppearancePanel(host),
   });
   // Illustrator Phase 2 — GRAPHIC STYLES: the named, LINKED complete
@@ -257,25 +259,18 @@ export function activate(host: BundleHost): BundleHandle {
   // the element's own envelope. A React panel for the Layers/Appearance
   // reason: a list of named records with per-row actions is above the v1
   // schema panel's scalar ceiling.
-  // (`panel-object-styles` is a REAL glyph in the host's kebab-case map;
-  // there is no `panel-graphic-styles`, and an invented token renders the
-  // dock tab ICONLESS — the stroke panel's recorded lesson.)
   host.contribute.panel({
     id: GRAPHIC_STYLES_PANEL_ID,
-    icon: "panel-object-styles",
+    icon: "ui-wand",
     ...makeGraphicStylesPanel(host),
   });
   // Illustrator Phase 2 (§16.1) — SYMBOLS v0: a named artwork DEFINITION
   // in a second `.paged` container part, plus INSTANCES re-emitted from
   // it. Same React reason as the rows above (a list of named records with
   // per-row actions is above the v1 schema panel's scalar ceiling).
-  // (`panel-links` is a REAL glyph in the host's kebab-case map — there is
-  // no `panel-symbols`, and an invented token renders the dock tab
-  // ICONLESS, the stroke panel's recorded lesson. It is also the honest
-  // metaphor: an instance is a LINK to a definition.)
   host.contribute.panel({
     id: SYMBOLS_PANEL_ID,
-    icon: "panel-links",
+    icon: "tool-contentPlacer",
     ...makeSymbolsPanel(host),
   });
   // Illustrator Phase 2 (the last unbuilt row) — LIVE PAINT v0. The
@@ -289,12 +284,9 @@ export function activate(host: BundleHost): BundleHandle {
   // arrangement door takes no tolerance and the kernel names gap
   // detection as out of scope) and edge stroking (there are no edge ids
   // on the wire at all).
-  // (`panel-swatches` is a REAL glyph in the host's kebab-case map;
-  // there is no `panel-live-paint`, and an invented token renders the
-  // dock tab ICONLESS — the stroke panel's recorded lesson.)
   host.contribute.panel({
     id: LIVE_PAINT_PANEL_ID,
-    icon: "panel-swatches",
+    icon: "tool-gradientSwatch",
     ...makeLivePaintPanel(host),
   });
   // Illustrator Phase 2 — PATTERN EDITING v1: the Pattern Options form.
@@ -304,15 +296,9 @@ export function activate(host: BundleHost): BundleHandle {
   // IDML, in `paged_model::Graphic` or on the wire (RFI C-31). So the
   // panel carries the boundary verbatim (`PATTERN_PANEL_NOTE`, pinned by
   // a conformance test) next to the knobs that ARE real.
-  // (There is no `panel-pattern` glyph in the host's kebab-case map, and
-  // an invented token renders the dock tab ICONLESS — the stroke panel's
-  // recorded lesson. So this REUSES `panel-object-styles`, which the
-  // graphic-styles panel also carries; a shared glyph is honest, an
-  // invented one is not. Deliberately NOT `panel-swatches`: a swatch
-  // icon is exactly the promise this feature cannot keep.)
   host.contribute.panel({
     id: PATTERN_PANEL_ID,
-    icon: "panel-object-styles",
+    icon: "ui-grid",
     ...makePatternPanel(host),
   });
   // Illustrator Phase 3 (§12.4) — REPEATS: the Repeat Options form. A
@@ -322,13 +308,9 @@ export function activate(host: BundleHost): BundleHandle {
   // expand/release. The panel carries both honesty notes verbatim
   // (`REPEAT_PANEL_NOTE`, pinned by a conformance test): what "live"
   // does and does not mean here, and what clipping costs.
-  // (`panel-object-transform` is a REAL glyph in the host's kebab-case
-  // map and is the honest metaphor — a repeat IS an object transform.
-  // An invented token renders the dock tab ICONLESS, the stroke panel's
-  // recorded lesson.)
   host.contribute.panel({
     id: REPEAT_PANEL_ID,
-    icon: "panel-object-transform",
+    icon: "ui-cols-3",
     ...makeRepeatPanel(host),
   });
   // Illustrator Phase 3 (§16.2) — BLENDS v1: the Blend Options form. The
@@ -340,13 +322,9 @@ export function activate(host: BundleHost): BundleHandle {
   // the resolved count and where it came from — not of the artwork,
   // because re-rendering per keystroke would be an undo step per
   // keystroke. `BLEND_PANEL_NOTE` carries that verbatim.
-  // (`panel-object-transform` is a REAL glyph in the host's kebab-case
-  // map and is shared with the repeat panel — a shared glyph is honest,
-  // an invented one renders the dock tab ICONLESS, the stroke panel's
-  // recorded lesson.)
   host.contribute.panel({
     id: BLEND_PANEL_ID,
-    icon: "panel-object-transform",
+    icon: "tool-gradientFeather",
     ...makeBlendPanel(host),
   });
   // Illustrator Phase 3 (§16.3) — OBJECTS ON A PATH: the distribution
@@ -355,11 +333,9 @@ export function activate(host: BundleHost): BundleHandle {
   // opposite of every other arranging feature in this bundle, and that
   // an object moved off the page rect answers NOTHING at all, not even
   // its own metadata (RFI C-23, measured on transforms).
-  // (`panel-align` is a REAL glyph in the host's kebab-case map and is
-  // the honest metaphor — this is a distribution.)
   host.contribute.panel({
     id: OBJECTS_ON_PATH_PANEL_ID,
-    icon: "panel-align",
+    icon: "ui-dots",
     ...makeObjectsOnPathPanel(host),
   });
   // PATH OPTIONS — the parameters behind the menu's "…". Offset path,
@@ -370,12 +346,9 @@ export function activate(host: BundleHost): BundleHandle {
   // command with those values, and the menu rows now RAISE it at their
   // section instead of applying fixed defaults
   // (commands/path-options.ts).
-  // (`panel-pathfinder` is a REAL glyph in the host's kebab-case map and
-  // the honest metaphor — these are path operations. An invented token
-  // renders the dock tab ICONLESS, the stroke panel's recorded lesson.)
   host.contribute.panel({
     id: PATH_OPTIONS_PANEL_ID,
-    icon: "panel-pathfinder",
+    icon: "tool-smooth",
     ...makePathOptionsPanel(host),
   });
   // B-12 — the stroke DASH presets as commands (the schema binding

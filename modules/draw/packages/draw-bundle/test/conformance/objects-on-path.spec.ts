@@ -1033,7 +1033,12 @@ describe("draw conformance — OBJECTS ON A PATH (§16.3)", () => {
     });
 
     it("the panel note carries the two facts the form cannot show", () => {
-      expect(OBJECTS_ON_PATH_PANEL_NOTE).toContain(OBJECTS_ON_PATH_NOTE);
+      // The panel's About text says both facts in plain words.
+      expect(OBJECTS_ON_PATH_PANEL_NOTE).toContain(
+        "This moves the objects you selected; it does not copy them",
+      );
+      expect(OBJECTS_ON_PATH_PANEL_NOTE).toContain("Text frames work too");
+      expect(OBJECTS_ON_PATH_PANEL_NOTE).toContain("Objects are kept on the page");
       // (1) It MOVES rather than copies — the opposite of every other row.
       expect(OBJECTS_ON_PATH_NOTE).toContain("THIS MOVES YOUR OBJECTS");
       expect(OBJECTS_ON_PATH_NOTE).toContain("IT CREATES NONE");
@@ -1044,7 +1049,7 @@ describe("draw conformance — OBJECTS ON A PATH (§16.3)", () => {
       expect(OBJECTS_ON_PATH_NOTE).toContain("RFI C-23");
       expect(OBJECTS_ON_PATH_NOTE).toContain("STRICTER rule");
       // …and the undo arithmetic.
-      expect(OBJECTS_ON_PATH_PANEL_NOTE).toContain("ONE undo step each");
+      expect(OBJECTS_ON_PATH_PANEL_NOTE).toContain("one undo step each");
     });
 
     it("objectsOnPathRowLabel says what was asked for and what is on the path", () => {

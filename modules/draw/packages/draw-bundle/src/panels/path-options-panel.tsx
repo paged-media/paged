@@ -56,7 +56,6 @@ import { dashArrayFrom, MAX_DASH_PAIRS } from "../commands/dash";
 import {
   supportsDuplicate,
   DUPLICATE_ENGINE,
-  DUPLICATE_OP,
 } from "../commands/transform";
 import { MAX_STROKE_WEIGHT_TOLERANCE } from "../commands/select-same";
 import {
@@ -83,22 +82,30 @@ import {
   type PathOptions,
 } from "../commands/path-options";
 import { useFollowedDraft, usePanelReload } from "./use-panel-reload";
+import {
+  humanize,
+  PanelAbout,
+  PanelIntro,
+  Refusal,
+  useActionFeedback,
+} from "./panel-kit";
 
 export { PATH_OPTIONS_PANEL_ID };
 
-/** What the panel says under the form, verbatim. Pinned by a test. */
+/** What the panel is for, in one sentence (shown at the top). */
+export const PATH_OPTIONS_SUMMARY =
+  "Set the values for the path commands in the Draw menu, then apply " +
+  "them to the selected paths or insert a new shape.";
+
+/** The "About" text. Pinned by a test. */
 export const PATH_OPTIONS_PANEL_NOTE =
-  "Apply runs the operation with the values above and remembers them: " +
-  "the same command run from the command palette, with no parameters, " +
-  "repeats the values last APPLIED here. Outline stroke is the exception " +
-  "— run bare it always outlines the element's own stroke. The undo " +
-  "arithmetic: Offset, Simplify and Outline stroke are one undo step per " +
-  "selected path; each Insert is ONE undo step however many paths it " +
-  "adds; Stroke dashes is ONE undo step for every selected path, and " +
-  "so is Reflect for the whole selection; " +
-  "Select same changes only the selection. Image Trace has no " +
-  "options here yet — its menu row still runs " +
-  "fixed settings.";
+  "Apply runs the operation with these values and remembers them: the " +
+  "same command run from the menu or the command palette repeats the " +
+  "values last applied here, except Outline stroke, which then uses each " +
+  "path's own stroke. Offset, Simplify and Outline stroke are one undo " +
+  "step per selected path; each Insert, Stroke dashes and Reflect are " +
+  "one undo step; Select same only changes the selection. Image Trace " +
+  "has no options here yet.";
 
 /** What the Stroke dashes section says, verbatim (pinned by a test). */
 export const DASH_SECTION_NOTE =
@@ -128,8 +135,7 @@ export const REFLECT_SECTION_NOTE =
 
 /** What the Reflect section says when the engine cannot copy. */
 export const REFLECT_COPY_UNAVAILABLE_NOTE =
-  `Copy needs the engine's ${DUPLICATE_OP} op (engine ${DUPLICATE_ENGINE}), ` +
-  "which this engine does not have.";
+  `Copy needs a newer engine (version ${DUPLICATE_ENGINE} or later).`;
 
 /** What the Select same stroke weight section says, verbatim (pinned by
  *  a test) — the colour half of the request, and why it is not here. */
@@ -168,14 +174,6 @@ const applyStyle: React.CSSProperties = {
   cursor: "pointer",
   font: "12px var(--font-sans, sans-serif)",
 };
-const noteStyle: React.CSSProperties = {
-  marginTop: 10,
-  padding: "6px 8px",
-  border: "1px solid var(--pg-border, rgba(127,127,127,0.4))",
-  borderRadius: 3,
-  font: "11px/1.45 var(--font-sans, sans-serif)",
-  opacity: 0.8,
-};
 const mutedStyle: React.CSSProperties = {
   opacity: 0.6,
   font: "12px var(--font-sans, sans-serif)",
@@ -192,7 +190,10 @@ const selectStyle: React.CSSProperties = {
  *  stroke says, i.e. what an untouched Outline stroke section applies.
  *  Pure; exported so the spec pins the wording without a DOM. */
 export function ownStrokeLabel(own: OutlineStrokeParams): string {
-  return `${own.width} pt · ${own.cap} · ${own.join} · limit ${own.miterLimit}`;
+  return (
+    `${own.width} pt · ${own.cap} cap · ${own.join} join · ` +
+    `miter limit ${own.miterLimit}`
+  );
 }
 
 export function makePathOptionsPanel(host: BundleHost): {
@@ -353,14 +354,7 @@ export function makePathOptionsPanel(host: BundleHost): {
       },
     );
 
-    const run = async (work: Promise<unknown>) => {
-      try {
-        await work;
-      } catch (e) {
-        host.log.warn(`path options panel: ${String(e)}`);
-      }
-      reload();
-    };
+    const { refusal, run } = useActionFeedback(host, reload);
 
     const numberRow = <S extends PathOptionSection>(
       section: S,
@@ -441,9 +435,9 @@ export function makePathOptionsPanel(host: BundleHost): {
     );
 
     const tokens = (list: readonly string[]) =>
-      list.map((value) => ({ value, label: value }));
+      list.map((value) => ({ value, label: humanize(value) }));
     const withElement = (list: readonly string[]) => [
-      { value: FROM_ELEMENT, label: "From the element" },
+      { value: FROM_ELEMENT, label: "From the path" },
       ...tokens(list),
     ];
 
@@ -478,7 +472,7 @@ export function makePathOptionsPanel(host: BundleHost): {
             <>
               <div style={mutedStyle} data-draw-pathopts-own>
                 {own
-                  ? `The element's own stroke: ${ownStrokeLabel(own)}.`
+                  ? `The path's own stroke: ${ownStrokeLabel(own)}.`
                   : "Each path is outlined at its own stroke unless overridden."}
               </div>
               {checkRow("outlineStroke", "overrideWidth", "Override the width")}
@@ -634,6 +628,8 @@ export function makePathOptionsPanel(host: BundleHost): {
         data-draw-pathopts-panel={open}
         data-draw-pathopts-targets={targets}
       >
+        <PanelIntro summary={PATH_OPTIONS_SUMMARY} attr="data-draw-pathopts-intro" />
+        <Refusal text={refusal} />
         {PATH_OPTION_SECTIONS.map((section) => {
           const isOpen = section === open;
           const needsSelection = SELECTION_SECTIONS.has(section);
@@ -678,7 +674,7 @@ export function makePathOptionsPanel(host: BundleHost): {
                     data-draw-pathopts-apply={section}
                     disabled={needsSelection && have === 0}
                     onClick={() =>
-                      void run(applyPathOptions(host, section, draft[section]))
+                      void run(() => applyPathOptions(host, section, draft[section]))
                     }
                   >
                     {selects
@@ -695,9 +691,7 @@ export function makePathOptionsPanel(host: BundleHost): {
           );
         })}
 
-        <div style={noteStyle} data-draw-pathopts-note>
-          {PATH_OPTIONS_PANEL_NOTE}
-        </div>
+        <PanelAbout text={PATH_OPTIONS_PANEL_NOTE} attr="data-draw-pathopts-note" />
       </div>
     );
   };

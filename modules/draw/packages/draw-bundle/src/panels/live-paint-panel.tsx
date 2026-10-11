@@ -58,39 +58,27 @@ import {
 } from "../handlers/live-paint";
 import { linkIndex } from "../link-index";
 import { usePanelReload } from "./use-panel-reload";
+import { PanelAbout, PanelIntro, Refusal, useActionFeedback } from "./panel-kit";
 
 export const LIVE_PAINT_PANEL_ID = "media.paged.draw.panel.livePaint";
 
-/** The limitation the panel renders inline. Exported so the conformance
- *  spec pins the WORDING — an honesty note that can be edited away
- *  silently is not a guarantee. */
+/** What the panel is for, in one sentence (shown at the top). */
+export const LIVE_PAINT_SUMMARY =
+  "Fill the areas where the selected paths overlap; after you edit the " +
+  "paths, choose Regenerate to update the fills.";
+
+/** The "About" text. Exported so the conformance spec pins the wording. */
 export const LIVE_PAINT_NOTE =
-  "REGENERABLE, NOT LIVE. Illustrator's Live Paint is a document-resident " +
-  "object with a persistent face/edge graph; this engine has no such node " +
-  "kind, only a per-call query that re-runs the planar arrangement and " +
-  "returns face ids of the form <signature>#<component> — indices into the " +
-  "ORDERED member list plus a component number assigned by position. So a " +
-  "group here is a RECIPE (the member order plus a paint per face id) saved " +
-  "as the container part paged/media.paged.draw/live-paint.json, and a " +
-  "filled face is REAL ARTWORK inserted over the region. Editing a member " +
-  "does NOT repaint anything: run Regenerate, which re-derives the " +
-  "arrangement, rebuilds every face id that still resolves, and reports the " +
-  "ones that do not (their artwork is removed rather than left bounded by " +
-  "geometry that is gone). Three limits are named rather than implied. " +
-  "GAPS ARE NOT HANDLED: the engine's arrangement door takes elementIds and " +
-  "an optional point and NO tolerance, its kernel lists gap detection as out " +
-  "of scope, and every input subpath is implicitly CLOSED — so two paths " +
-  "that do not meet simply do not bound a face. EDGES ARE NOT BUILT: the " +
-  "wire exposes face outlines and no edge ids at all, so the catalog's " +
-  "\"or stroke edges\" half has nothing to address. And the engine REFUSES " +
-  "past 12 member paths or 256 faces — it never truncates, and the refusal " +
-  "is shown with the engine's own words instead of an empty result. Two " +
-  "smaller facts: a filled face lands at the TOP of the z-order (`insertPath` " +
-  "carries no position argument, and Live Paint v0 does not restack), so it " +
-  "paints over the inner half " +
-  "of the strokes that bound it; and the recipe is a container write, not a " +
-  "mutation, so Make, Regenerate's bookkeeping, Delete face and Release " +
-  "change it OUTSIDE the undo stack.";
+  "A live paint group remembers its paths and a colour for each area, and " +
+  "each filled area is a real shape placed over that region. Editing a " +
+  "path does not repaint anything until you choose Regenerate, which " +
+  "rebuilds every area that still exists and removes the fills of areas " +
+  "that are gone. Paths must actually touch to enclose an area (gaps are " +
+  "not closed for you), and edges cannot be painted. A group can have at " +
+  "most 12 paths and 256 areas. Filled areas are placed on top of the " +
+  "other objects, over the inner half of the strokes around them. Making " +
+  "and releasing a group and deleting a fill change the group's record " +
+  "outside undo.";
 
 const rowStyle: React.CSSProperties = {
   display: "flex",
@@ -113,18 +101,6 @@ const sectionStyle: React.CSSProperties = {
   letterSpacing: "0.04em",
   opacity: 0.65,
   paddingTop: 8,
-};
-const noteStyle: React.CSSProperties = {
-  marginTop: 10,
-  padding: "6px 8px",
-  border: "1px solid var(--pg-border, rgba(127,127,127,0.4))",
-  borderRadius: 3,
-  font: "11px/1.45 var(--font-sans, sans-serif)",
-  opacity: 0.8,
-};
-const monoStyle: React.CSSProperties = {
-  font: "11px var(--font-mono, ui-monospace, monospace)",
-  opacity: 0.85,
 };
 const mutedStyle: React.CSSProperties = {
   opacity: 0.6,
@@ -191,14 +167,7 @@ export function makeLivePaintPanel(host: BundleHost): {
       },
     );
 
-    const run = async (work: Promise<unknown>) => {
-      try {
-        await work;
-      } catch (e) {
-        host.log.warn(`live paint panel: ${String(e)}`);
-      }
-      reload();
-    };
+    const { refusal, run } = useActionFeedback(host, reload);
 
     return (
       <div
@@ -207,26 +176,33 @@ export function makeLivePaintPanel(host: BundleHost): {
         data-draw-live-paint-portable={portable ? "true" : "false"}
         data-draw-live-paint-active={active ?? ""}
       >
+        <PanelIntro summary={LIVE_PAINT_SUMMARY} attr="data-draw-live-paint-intro" />
         <div style={{ ...rowStyle, justifyContent: "space-between" }}>
           <span style={{ ...sectionStyle, paddingTop: 0 }}>
-            Live Paint ({groups.length})
+            Live paint ({groups.length})
           </span>
           <button
             type="button"
             style={iconBtn}
-            title="Record the selected paths as a Live Paint recipe — the engine refuses past 12 paths, and the refusal is shown verbatim"
+            title={
+              hasSelection
+                ? "Make a live paint group from the selected paths (up to 12)"
+                : "Select two or more overlapping paths first"
+            }
             data-draw-live-paint-make
             disabled={!hasSelection}
-            onClick={() => void run(applyMakeLivePaintGroup(host))}
+            onClick={() => void run(() => applyMakeLivePaintGroup(host))}
           >
             + From selection
           </button>
         </div>
 
+        <Refusal text={refusal} />
+
         {!portable && (
           <div style={mutedStyle} data-draw-live-paint-degraded>
-            This host wires no .paged container writer, so a recipe cannot be
-            saved — the fills would be artwork nothing can regenerate.
+            This editor cannot save data into the document, so a live paint
+            group could not be regenerated later.
           </div>
         )}
 
@@ -242,7 +218,7 @@ export function makeLivePaintPanel(host: BundleHost): {
               setLivePaintFill(next);
             }}
           >
-            <option value="">(none)</option>
+            <option value="">None</option>
             {swatches.map((s) => (
               <option key={s.selfId} value={s.selfId}>
                 {s.name}
@@ -253,8 +229,8 @@ export function makeLivePaintPanel(host: BundleHost): {
 
         {groups.length === 0 ? (
           <div style={mutedStyle}>
-            No Live Paint groups yet — select two or more overlapping paths and
-            record them.
+            No live paint groups yet. Select two or more overlapping paths and
+            choose + From selection.
           </div>
         ) : (
           groups.map((group) => (
@@ -275,11 +251,10 @@ export function makeLivePaintPanel(host: BundleHost): {
                 <button
                   type="button"
                   style={iconBtn}
-                  title="Re-derive the arrangement and rebuild every face that still resolves — face ids may not survive a member edit"
+                  title="Rebuild the fills from the paths' current shapes; areas that no longer exist lose their fill"
                   data-draw-live-paint-regenerate
                   onClick={() =>
-                    void run(
-                      applyRegenerateLivePaint(host, { groupId: group.id }),
+                    void run(() => applyRegenerateLivePaint(host, { groupId: group.id }),
                     )
                   }
                 >
@@ -288,11 +263,10 @@ export function makeLivePaintPanel(host: BundleHost): {
                 <button
                   type="button"
                   style={iconBtn}
-                  title="Select every painted face of this group"
+                  title="Select every filled area of this group"
                   data-draw-live-paint-select
                   onClick={() =>
-                    void run(
-                      applySelectLivePaintFaces(host, { groupId: group.id }),
+                    void run(() => applySelectLivePaintFaces(host, { groupId: group.id }),
                     )
                   }
                 >
@@ -301,17 +275,17 @@ export function makeLivePaintPanel(host: BundleHost): {
                 <button
                   type="button"
                   style={iconBtn}
-                  title="Drop the recipe and every link — the members and the painted faces keep their artwork"
+                  title="Stop tracking this group; the paths and the filled areas stay as ordinary artwork"
                   data-draw-live-paint-release
                   onClick={() =>
-                    void run(applyReleaseLivePaint(host, { groupId: group.id }))
+                    void run(() => applyReleaseLivePaint(host, { groupId: group.id }))
                   }
                 >
                   Release
                 </button>
               </div>
               <div style={mutedStyle}>{livePaintRowLabel(group)}</div>
-              {group.faces.map((face) => {
+              {group.faces.map((face, faceIndex) => {
                 const materialised = (painted[group.id] ?? []).includes(
                   face.face,
                 );
@@ -324,16 +298,22 @@ export function makeLivePaintPanel(host: BundleHost): {
                       materialised ? "true" : "false"
                     }
                   >
-                    <span style={{ ...monoStyle, flex: 1 }}>{face.face}</span>
-                    <span style={mutedStyle}>{face.fill ?? "(none)"}</span>
+                    <span style={{ flex: 1 }} title={face.face}>
+                      Area {faceIndex + 1}
+                    </span>
+                    <span style={mutedStyle}>
+                      {face.fill === null
+                        ? "No fill"
+                        : (swatches.find((s) => s.selfId === face.fill)?.name ??
+                          face.fill)}
+                    </span>
                     <button
                       type="button"
                       style={iconBtn}
-                      title="Select this face's artwork"
+                      title="Select this area's fill"
                       data-draw-live-paint-face-select
                       onClick={() =>
-                        void run(
-                          applySelectLivePaintFaces(host, {
+                        void run(() => applySelectLivePaintFaces(host, {
                             groupId: group.id,
                             face: face.face,
                           }),
@@ -345,11 +325,10 @@ export function makeLivePaintPanel(host: BundleHost): {
                     <button
                       type="button"
                       style={iconBtn}
-                      title="Delete this face's artwork and forget its paint"
+                      title="Delete this area's fill"
                       data-draw-live-paint-face-delete
                       onClick={() =>
-                        void run(
-                          applyDeleteLivePaintFace(host, {
+                        void run(() => applyDeleteLivePaintFace(host, {
                             groupId: group.id,
                             face: face.face,
                           }),
@@ -365,9 +344,7 @@ export function makeLivePaintPanel(host: BundleHost): {
           ))
         )}
 
-        <div style={noteStyle} data-draw-live-paint-note>
-          {LIVE_PAINT_NOTE}
-        </div>
+        <PanelAbout text={LIVE_PAINT_NOTE} attr="data-draw-live-paint-note" />
       </div>
     );
   };

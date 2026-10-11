@@ -78,28 +78,28 @@ import {
 } from "../commands/appearance-bake";
 import { linkIndex } from "../link-index";
 import { usePanelReload } from "./use-panel-reload";
+import { PanelAbout, PanelIntro, Refusal, useActionFeedback } from "./panel-kit";
 
 export const APPEARANCE_PANEL_ID = "media.paged.draw.panel.appearance";
 
-/** The limitation the panel renders inline. Exported so the conformance
- *  spec pins the WORDING (an honesty note that can be edited away
- *  silently is not a guarantee). */
+/** What the panel is for, in one sentence (shown at the top). */
+export const APPEARANCE_SUMMARY =
+  "Stack extra fills and strokes on the selected object, then bake the " +
+  "stack so every layer renders.";
+
+/** The "About" text. Exported so the conformance spec pins the wording
+ *  (a limit that can be edited away silently is not a guarantee). */
 export const APPEARANCE_BAKE_NOTE =
-  "Unbaked, this stack is metadata only: the engine gives each frame one " +
-  "fill slot and one stroke slot, so only the front-most fill and stroke " +
-  "are in the document's own paint — the layers below travel in the .paged " +
-  "file and reopen here, but they are not what renders. Bake makes the " +
-  "stack real: one derived path per layer, sharing this shape's geometry, " +
-  "stacked back-to-front in a group, which is ordinary IDML — so every " +
-  "layer renders on the canvas, in a PDF export and through an IDML " +
-  "save-back, per-layer tint, opacity and blend mode included. What the " +
-  "bake costs: the object becomes a GROUP of derived paths (direct-" +
-  "selecting inside it edits one derived layer, and every edit re-bakes — " +
-  "the derived paths are replaced, not patched), and an IDML save writes " +
-  "the group at the end of the spread, so it reopens above the page items " +
-  "the file already carried. Release is a choice, not a prerequisite for " +
-  "saving: it restores the single frame with the front-most layer on its " +
-  "own attributes (gap B-24).";
+  "Until you bake, only the front-most fill and stroke render: an object " +
+  "has one fill and one stroke of its own, and the layers below are saved " +
+  "with the file but not drawn. Bake turns the stack into a group of " +
+  "paths, one per layer, so every layer renders on the canvas, in a PDF " +
+  "export and in an IDML save, each with its own tint, opacity and blend " +
+  "mode. The object then becomes a group; editing the stack rebuilds the " +
+  "group's paths, and an IDML save places the group above the page's " +
+  "other items. You do not need to release before saving. Release turns " +
+  "the group back into a single object that keeps the front-most layer " +
+  "as its own fill and stroke.";
 
 const EMPTY: AppearanceStack = { fills: [], strokes: [] };
 
@@ -125,14 +125,6 @@ const sectionStyle: React.CSSProperties = {
   opacity: 0.65,
   paddingTop: 8,
 };
-const noteStyle: React.CSSProperties = {
-  marginTop: 10,
-  padding: "6px 8px",
-  border: "1px solid var(--pg-border, rgba(127,127,127,0.4))",
-  borderRadius: 3,
-  font: "11px/1.45 var(--font-sans, sans-serif)",
-  opacity: 0.8,
-};
 const bakeTagStyle: React.CSSProperties = {
   font: "10px var(--font-sans, sans-serif)",
   textTransform: "uppercase",
@@ -153,7 +145,13 @@ const swatchChip = (color: string): React.CSSProperties => ({
   background: color === "Color/Paper" ? "#fff" : "transparent",
 });
 
-/** The label one stack row shows: the swatch ref plus the numeric the
+/** A swatch reference as a name: "Color/Black" → "Black". */
+export function swatchRefLabel(ref: string): string {
+  const slash = ref.lastIndexOf("/");
+  return slash >= 0 && slash < ref.length - 1 ? ref.slice(slash + 1) : ref;
+}
+
+/** The label one stack row shows: the swatch name plus the numeric the
  *  model actually carries (fills: tint %, strokes: weight pt). */
 export function appearanceRowLabel(
   kind: "fill" | "stroke",
@@ -162,11 +160,11 @@ export function appearanceRowLabel(
   if (kind === "fill") {
     const fill = layer as FillLayer;
     return typeof fill.tint === "number"
-      ? `${fill.color} · ${fill.tint}%`
-      : fill.color;
+      ? `${swatchRefLabel(fill.color)} · ${fill.tint}%`
+      : swatchRefLabel(fill.color);
   }
   const stroke = layer as StrokeLayer;
-  return `${stroke.color} · ${stroke.weight} pt`;
+  return `${swatchRefLabel(stroke.color)} · ${stroke.weight} pt`;
 }
 
 export function makeAppearancePanel(host: BundleHost): {
@@ -225,19 +223,12 @@ export function makeAppearancePanel(host: BundleHost): {
       },
     );
 
-    const run = async (work: Promise<void>) => {
-      try {
-        await work;
-      } catch (e) {
-        host.log.warn(`appearance panel: ${String(e)}`);
-      }
-      reload();
-    };
+    const { refusal, run } = useActionFeedback(host, reload);
 
     const edit = (
       commandId: string,
       transform: (s: AppearanceStack) => AppearanceStack,
-    ) => void run(applyAppearanceEdit(host, commandId, transform));
+    ) => void run(() => applyAppearanceEdit(host, commandId, transform));
 
     // Rows render FRONT-MOST FIRST (the bake order the note explains):
     // the model list is bottom-to-top, so the view reverses it and maps
@@ -272,10 +263,10 @@ export function makeAppearancePanel(host: BundleHost): {
                 }}
                 title={
                   baked
-                    ? "Baked — this layer is a real derived path in the group"
+                    ? "Baked: this layer is a path in the group and renders"
                     : top
-                      ? "Front-most layer — this one bakes into the document"
-                      : "Metadata only — this layer does not reach the document paint"
+                      ? "Front-most layer: this one renders"
+                      : "Saved with the file but not drawn until you bake"
                 }
               >
                 {appearanceRowLabel(kind, layer)}
@@ -337,6 +328,7 @@ export function makeAppearancePanel(host: BundleHost): {
         data-draw-appearance-panel={total}
         data-draw-appearance-baked={baked ? "true" : "false"}
       >
+        <PanelIntro summary={APPEARANCE_SUMMARY} attr="data-draw-appearance-intro" />
         <div style={{ ...rowStyle, justifyContent: "space-between" }}>
           <span style={{ ...sectionStyle, paddingTop: 0 }}>
             Appearance ({total})
@@ -345,12 +337,15 @@ export function makeAppearancePanel(host: BundleHost): {
             <button
               type="button"
               style={iconBtn}
-              title="Add a fill layer (seeded from the frame's fill)"
+              title={
+                target
+                  ? "Add a fill layer (starts from the object's own fill)"
+                  : "Select an object first"
+              }
               data-draw-appearance-add-fill
               disabled={!target}
               onClick={() =>
-                void run(
-                  applyAppearanceCommand(
+                void run(() => applyAppearanceCommand(
                     host,
                     APPEARANCE_ADD_FILL_COMMAND_ID,
                     "fill",
@@ -363,12 +358,15 @@ export function makeAppearancePanel(host: BundleHost): {
             <button
               type="button"
               style={iconBtn}
-              title="Add a stroke layer (seeded from the frame's stroke)"
+              title={
+                target
+                  ? "Add a stroke layer (starts from the object's own stroke)"
+                  : "Select an object first"
+              }
               data-draw-appearance-add-stroke
               disabled={!target}
               onClick={() =>
-                void run(
-                  applyAppearanceCommand(
+                void run(() => applyAppearanceCommand(
                     host,
                     APPEARANCE_ADD_STROKE_COMMAND_ID,
                     "stroke",
@@ -381,12 +379,17 @@ export function makeAppearancePanel(host: BundleHost): {
             <button
               type="button"
               style={iconBtn}
-              title="Clear every extra layer"
+              title={
+                !target
+                  ? "Select an object first"
+                  : total === 0
+                    ? "There are no extra layers to clear"
+                    : "Clear every extra layer"
+              }
               data-draw-appearance-clear
               disabled={!target || total === 0}
               onClick={() =>
-                void run(
-                  applyAppearanceCommand(
+                void run(() => applyAppearanceCommand(
                     host,
                     APPEARANCE_CLEAR_COMMAND_ID,
                     "clear",
@@ -403,12 +406,19 @@ export function makeAppearancePanel(host: BundleHost): {
           <button
             type="button"
             style={iconBtn}
-            title="Bake the stack into real stacked page items (a group of derived paths)"
+            title={
+              !target
+                ? "Select an object first"
+                : baked
+                  ? "Already baked"
+                  : total === 0
+                    ? "Add a fill or stroke layer first"
+                    : "Turn the stack into a group of paths, one per layer, so every layer renders"
+            }
             data-draw-appearance-bake
             disabled={!target || baked || total === 0}
             onClick={() =>
-              void run(
-                bakeAppearance(host, target!).then(() => undefined),
+              void run(() => bakeAppearance(host, target!).then(() => undefined),
               )
             }
           >
@@ -417,18 +427,25 @@ export function makeAppearancePanel(host: BundleHost): {
           <button
             type="button"
             style={iconBtn}
-            title="Release the baked group back to a single frame carrying the stack"
+            title={
+              !target
+                ? "Select an object first"
+                : !baked
+                  ? "Only a baked stack can be released"
+                  : "Turn the baked group back into a single object"
+            }
             data-draw-appearance-release
             disabled={!target || !baked}
             onClick={() =>
-              void run(
-                releaseAppearance(host, target!).then(() => undefined),
+              void run(() => releaseAppearance(host, target!).then(() => undefined),
               )
             }
           >
             Release
           </button>
         </div>
+
+        <Refusal text={refusal} />
 
         {!target && (
           <div style={{ opacity: 0.6, font: "12px var(--font-sans, sans-serif)" }}>
@@ -463,9 +480,7 @@ export function makeAppearancePanel(host: BundleHost): {
           </>
         )}
 
-        <div style={noteStyle} data-draw-appearance-note>
-          {APPEARANCE_BAKE_NOTE}
-        </div>
+        <PanelAbout text={APPEARANCE_BAKE_NOTE} attr="data-draw-appearance-note" />
       </div>
     );
   };

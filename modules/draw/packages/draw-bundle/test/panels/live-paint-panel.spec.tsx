@@ -108,9 +108,9 @@ describe("Live paint panel — rendered against the engine", () => {
       const panel = await mountContributed(h, LIVE_PAINT_PANEL_ID);
       expect(panel.attr(PANEL, "data-draw-live-paint-panel")).toBe("0");
       expect(panel.attr(PANEL, "data-draw-live-paint-portable")).toBe("true");
-      expect(panel.text()).toContain("Live Paint (0)");
+      expect(panel.text()).toContain("Live paint (0)");
       expect(panel.text()).toContain(
-        "No Live Paint groups yet — select two or more overlapping paths and record them.",
+        "No live paint groups yet. Select two or more overlapping paths and choose + From selection.",
       );
       expect(panel.count("[data-draw-live-paint-row]")).toBe(0);
       expect(panel.disabled("[data-draw-live-paint-make]")).toBe(true);
@@ -235,7 +235,11 @@ describe("Live paint panel — rendered against the engine", () => {
       expect(rows[0]!.getAttribute("data-draw-live-paint-face-materialised")).toBe(
         "true",
       );
-      expect(rows[0]!.textContent).toContain("Color/Black");
+      // A face reads as "Area n" with its swatch's NAME (the face id and
+      // the swatch self-id are not for people).
+      expect(rows[0]!.textContent).toContain("Area 1");
+      expect(rows[0]!.textContent).toContain("Black");
+      expect(rows[0]!.textContent).not.toContain("Color/Black");
       expect(panel.get(ROW).textContent).toContain("2 members · 1 painted face");
     });
 

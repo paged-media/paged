@@ -46,6 +46,7 @@ import type {
 import { propertyRows, publishObjectList } from "@paged-media/plugin-sdk";
 
 import { DRAW_ID } from "../object-model/shared";
+import { humanize } from "./panel-kit";
 
 export const DRAW_PROPERTIES_PANEL_ID = "media.paged.draw.panel.properties";
 
@@ -86,6 +87,14 @@ export const DRAW_PANEL_ITEM_ROWS: Readonly<Record<string, { via: string; why: s
   "path.points[].right": { via: "path.points", why: "the item field right of the points list row" },
 };
 
+/** Enum rows show human labels ("easeIn" → "Ease in"), never the token. */
+const choices = (values: readonly string[], labels: Record<string, string> = {}) =>
+  values.map((value) => ({ value, label: labels[value] ?? humanize(value) }));
+const EASES = choices(["linear", "easeIn", "easeOut", "easeInOut"]);
+const PIVOTS = choices([
+  "topLeft", "top", "topRight", "left", "center", "right", "bottomLeft", "bottom", "bottomRight",
+]);
+
 /** List / struct presentation per (kind.path). */
 const STACK = { reversed: true, itemLabel: "color" } as const;
 const ROW_OPTIONS: Readonly<Record<string, Omit<PanelSchemaPropertyRow, "field" | "path" | "address">>> = {
@@ -96,10 +105,36 @@ const ROW_OPTIONS: Readonly<Record<string, Omit<PanelSchemaPropertyRow, "field" 
   "graphicStyle.strokes": { items: STACK },
   "pattern.overlap": {
     fields: [
-      { field: "horizontal", label: "Across", style: "segments" },
-      { field: "vertical", label: "Down", style: "segments" },
+      {
+        field: "horizontal",
+        label: "Across",
+        style: "segments",
+        options: choices(["rightInFront", "leftInFront"]),
+      },
+      {
+        field: "vertical",
+        label: "Down",
+        style: "segments",
+        options: choices(["bottomInFront", "topInFront"]),
+      },
     ],
   },
+  "pattern.layout": { options: choices(["grid", "brick", "hex"]) },
+  "repeat.kind": { options: choices(["radial", "grid", "mirror"]) },
+  "blend.spacing": {
+    options: choices(["smoothColor", "steps", "distance"], {
+      smoothColor: "Smooth colour",
+      steps: "Specified steps",
+      distance: "Specified distance",
+    }),
+  },
+  "blend.orientation": { options: choices(["page", "path"]) },
+  "blend.easing": { options: EASES },
+  "blend.colorEasing": { options: EASES },
+  "objectsOnPath.distribute": {
+    options: choices(["count", "spacing"], { count: "Count (evenly)" }),
+  },
+  "objectsOnPath.pivot": { options: PIVOTS },
 };
 
 const LABELS: Readonly<Record<string, string>> = {
@@ -141,16 +176,29 @@ const listRow = (kind: DocKind): PanelSchemaRow => ({
   },
 });
 
+/** The intro line: how this panel differs from the feature panels. */
+export const DRAW_PROPERTIES_INTRO =
+  "Edit the saved settings of the selected vector object and of every " +
+  "repeat, blend, pattern, objects-on-path set, graphic style, symbol and " +
+  "live paint group in the document, in place. To make new ones or " +
+  "rebuild their artwork, use " +
+  "the panel for each feature.";
+
 export const DRAW_PROPERTIES_PANEL: PanelSchema = {
   id: DRAW_PROPERTIES_PANEL_ID,
-  title: "Draw properties",
-  icon: "panel-stroke",
+  // "All draw settings", not "properties": the host has a Properties panel,
+  // and the recipe panels (Blend options, Repeat options…) edit the same
+  // settings one feature at a time.
+  title: "All draw settings",
+  // Its own glyph: `panel-stroke` belongs to the host Stroke panel.
+  icon: "tool-pen",
   defaultDock: "right",
   defaultGroup: "draw",
   sections: [
     {
       title: "Selected object",
       rows: [
+        { widget: "paged.label", props: { text: DRAW_PROPERTIES_INTRO } },
         ...rowsOf("appearance", "selection"),
         ...rowsOf("symbolInstance", "selection"),
       ],

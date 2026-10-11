@@ -552,12 +552,13 @@ describe("draw conformance — LIVE PAINT v0 (the recipe, pure)", () => {
 
   describe("the honest wording is pinned (it cannot be edited away silently)", () => {
     it("the panel note states regenerable-not-live, the missing gaps and edges, the caps and the z-order", () => {
-      expect(LIVE_PAINT_NOTE).toContain("REGENERABLE, NOT LIVE");
-      expect(LIVE_PAINT_NOTE).toContain("GAPS ARE NOT HANDLED");
-      expect(LIVE_PAINT_NOTE).toContain("EDGES ARE NOT BUILT");
-      expect(LIVE_PAINT_NOTE).toContain("12 member paths or 256 faces");
-      expect(LIVE_PAINT_NOTE).toContain("TOP of the z-order");
-      expect(LIVE_PAINT_NOTE).toContain("OUTSIDE the undo stack");
+      // Plain words for each fact (the panel's About text).
+      expect(LIVE_PAINT_NOTE).toContain("does not repaint anything until you choose Regenerate");
+      expect(LIVE_PAINT_NOTE).toContain("gaps are not closed for you");
+      expect(LIVE_PAINT_NOTE).toContain("edges cannot be painted");
+      expect(LIVE_PAINT_NOTE).toContain("at most 12 paths and 256 areas");
+      expect(LIVE_PAINT_NOTE).toContain("placed on top of the other objects");
+      expect(LIVE_PAINT_NOTE).toContain("outside undo");
     });
 
     it("the command titles carry the honest verbs", () => {

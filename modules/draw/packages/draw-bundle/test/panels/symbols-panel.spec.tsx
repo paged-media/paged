@@ -219,6 +219,12 @@ describe("Symbols panel — rendered against the engine", () => {
 
     it("Delete drops the definition", async () => {
       const panel = await mountPanel(h, makeSymbolsPanel);
+      // The first click only arms the button (deleting cannot be undone).
+      await panel.click(`${ROW} [data-draw-symbol-delete]`);
+      expect(panel.get(`${ROW} [data-draw-symbol-delete]`).textContent).toBe(
+        "Confirm delete",
+      );
+      expect((await readSymbolLibrary(h.host)).symbols).toHaveLength(1);
       await panel.click(`${ROW} [data-draw-symbol-delete]`);
 
       expect((await readSymbolLibrary(h.host)).symbols).toEqual([]);

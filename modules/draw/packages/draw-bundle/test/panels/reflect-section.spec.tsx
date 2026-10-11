@@ -101,7 +101,8 @@ describe("the Reflect section — rendered against the engine", () => {
       .poll(() => panel.get<HTMLInputElement>(`[data-draw-pathopts-toggle="reflect.copy"]`).disabled)
       .toBe(false);
     expect(panel.count("[data-draw-pathopts-reflect-copy-note]")).toBe(0);
-    // The note's wording is still the one an older engine is shown.
-    expect(REFLECT_COPY_UNAVAILABLE_NOTE).toMatch(/duplicateElements/);
+    // The note an older engine is shown names the version, not an op.
+    expect(REFLECT_COPY_UNAVAILABLE_NOTE).toMatch(/0\.65/);
+    expect(REFLECT_COPY_UNAVAILABLE_NOTE).not.toMatch(/duplicateElements/);
   });
 });

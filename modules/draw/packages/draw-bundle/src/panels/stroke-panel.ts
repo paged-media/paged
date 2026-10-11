@@ -95,20 +95,32 @@ export const ARROWHEAD_PROPERTY_OPTIONS = ARROWHEAD_OPTIONS.map((o) =>
   o.value === "" ? { value: "None", label: o.label } : { value: o.value, label: o.label },
 );
 
+/** The panel's title: the host has its own "Stroke" panel, and this one
+ *  is the vector half of stroking. */
+export const STROKE_PANEL_TITLE = "Vector stroke";
+
+/** The intro line: what this panel adds to the host's Stroke panel. */
+export const STROKE_PANEL_INTRO =
+  "Arrowheads, corner radii and dashes for vector shapes. Weight, color " +
+  "and cap are repeated here; join, miter, alignment and stroke type are " +
+  "in the Stroke panel.";
+
 export const strokePanel: SchemaPanelContribution = {
   id: STROKE_PANEL_ID,
-  title: "Stroke",
-  // A real host glyph name — the earlier "tool-convertAnchor" wasn't in the
-  // editor's (kebab-case) glyph map, so the dock tab rendered iconless.
-  icon: "panel-stroke",
+  title: STROKE_PANEL_TITLE,
+  // Its own glyph (the Width tool's stroke silhouette): `panel-stroke` is
+  // the host Stroke panel's, and two tabs with one icon read as one panel.
+  // Every name must exist in the host's glyph map, or the tab is iconless.
+  icon: "tool-width",
   defaultDock: "right",
   defaultGroup: "draw",
   schema: {
     id: STROKE_PANEL_ID,
-    title: "Stroke",
+    title: STROKE_PANEL_TITLE,
     sections: [
       {
         rows: [
+          { widget: "paged.label", props: { text: STROKE_PANEL_INTRO } },
           {
             // ADR 323 — an object-model property row: the host renders
             // the core row with its schema-driven PropertyField over
@@ -163,10 +175,9 @@ export const strokePanel: SchemaPanelContribution = {
         visible: { bind: BIND_DASH_CONTROLS_VISIBLE },
         rows: [
           {
-            widget: "paged.readout",
+            widget: "paged.label",
             props: {
-              label: "Pattern",
-              text: "Dash pattern: Draw ▸ Stroke ▸ Dashes… (up to three dash/gap pairs, read back for the selection), or the Stroke presets (Solid / Dashed / Dotted / Dash-dot).",
+              text: "Set the dash pattern in Draw ▸ Stroke ▸ Dashes… (up to three dash and gap pairs).",
             },
           },
         ],
@@ -224,10 +235,9 @@ export const strokePanel: SchemaPanelContribution = {
         visible: { bind: BIND_CORNER_CONTROLS_VISIBLE },
         rows: [
           {
-            widget: "paged.readout",
+            widget: "paged.label",
             props: {
-              label: "Style",
-              text: "Corner styles: see the Corners commands (Rounded / Inverse rounded / Bevel / Fancy / None).",
+              text: "Pick the corner style in Draw ▸ Corners (rounded, inverse rounded, bevel, fancy or none).",
             },
           },
           {
@@ -237,7 +247,7 @@ export const strokePanel: SchemaPanelContribution = {
             field: "property",
             address: "selection",
             path: "frameCornerRadiusTopLeft",
-            label: "Radius ◰",
+            label: "Top left radius",
             props: { suffix: "pt", min: 0 },
             enabled: { bind: BIND_HAS_SELECTION },
           },
@@ -248,7 +258,7 @@ export const strokePanel: SchemaPanelContribution = {
             field: "property",
             address: "selection",
             path: "frameCornerRadiusTopRight",
-            label: "Radius ◳",
+            label: "Top right radius",
             props: { suffix: "pt", min: 0 },
             enabled: { bind: BIND_HAS_SELECTION },
           },
@@ -259,7 +269,7 @@ export const strokePanel: SchemaPanelContribution = {
             field: "property",
             address: "selection",
             path: "frameCornerRadiusBottomRight",
-            label: "Radius ◲",
+            label: "Bottom right radius",
             props: { suffix: "pt", min: 0 },
             enabled: { bind: BIND_HAS_SELECTION },
           },
@@ -270,7 +280,7 @@ export const strokePanel: SchemaPanelContribution = {
             field: "property",
             address: "selection",
             path: "frameCornerRadiusBottomLeft",
-            label: "Radius ◱",
+            label: "Bottom left radius",
             props: { suffix: "pt", min: 0 },
             enabled: { bind: BIND_HAS_SELECTION },
           },
@@ -287,10 +297,9 @@ export const strokePanel: SchemaPanelContribution = {
         visible: { bind: BIND_APPEARANCE_CONTROLS_VISIBLE },
         rows: [
           {
-            widget: "paged.readout",
+            widget: "paged.label",
             props: {
-              label: "Layers",
-              text: "Stacked fills/strokes: see the Appearance commands (Add fill / Add stroke / Clear). The top layer bakes to the frame.",
+              text: "To stack several fills and strokes on one object, use the Appearance panel.",
             },
           },
         ],

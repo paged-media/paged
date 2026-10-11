@@ -1081,9 +1081,12 @@ describe("draw conformance — BLENDS v1 (§16.2)", () => {
       ).toContain("blendRecipe");
     });
 
-    it("the panel note carries the two honesty facts VERBATIM", () => {
-      expect(BLEND_PANEL_NOTE).toContain(BLEND_LIVE_NOTE);
-      expect(BLEND_PANEL_NOTE).toContain(BLEND_SPINE_NOTE);
+    it("the panel note carries the two honesty facts in plain words", () => {
+      // The panel's About text says the same two things as the module's
+      // notes, without their internal terms.
+      expect(BLEND_PANEL_NOTE).toContain("does not change the intermediates until");
+      expect(BLEND_PANEL_NOTE).toContain("the artwork is only rebuilt when you build or update");
+      expect(BLEND_PANEL_NOTE).toContain("keeps its own colour and stays outside the blend's group");
       // What "live" means: a preview of the PLAN, not of the artwork.
       expect(BLEND_LIVE_NOTE).toContain("preview of the");
       expect(BLEND_LIVE_NOTE).toContain("PLAN");
@@ -1092,7 +1095,7 @@ describe("draw conformance — BLENDS v1 (§16.2)", () => {
       expect(BLEND_SPINE_NOTE).toContain("KEEPS ITS OWN PAINT");
       expect(BLEND_SPINE_NOTE).toContain("NOT put inside the blend's group");
       // And the undo arithmetic.
-      expect(BLEND_PANEL_NOTE).toContain("ONE undo step");
+      expect(BLEND_PANEL_NOTE).toContain("one undo step each");
     });
 
     it("blendRowLabel says what was asked for and what is on the page", () => {

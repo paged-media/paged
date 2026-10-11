@@ -222,6 +222,13 @@ describe("Graphic styles panel — rendered against the engine", () => {
 
     it("Delete unlinks every follower, then drops the style", async () => {
       const panel = await mountPanel(h, makeGraphicStylesPanel);
+      // The first click only arms the button: deleting a style cannot be
+      // undone, so it asks for a second click.
+      await panel.click(`${ROW} [data-draw-graphic-style-delete]`);
+      expect(panel.get(`${ROW} [data-draw-graphic-style-delete]`).textContent).toBe(
+        "Confirm delete",
+      );
+      expect((await readGraphicStyleLibrary(h.host)).styles).toHaveLength(1);
       await panel.click(`${ROW} [data-draw-graphic-style-delete]`);
 
       expect((await readGraphicStyleLibrary(h.host)).styles).toEqual([]);

@@ -446,7 +446,7 @@ describe("Path options panel — rendered against the engine", () => {
       await panel.click(header("outlineStroke"));
       // The section says what "from the element" will mean for THIS path.
       expect(panel.get("[data-draw-pathopts-own]").textContent).toBe(
-        `The element's own stroke: ${ownStrokeLabel({
+        `The path's own stroke: ${ownStrokeLabel({
           width: 4,
           cap: "butt",
           join: "miter",
