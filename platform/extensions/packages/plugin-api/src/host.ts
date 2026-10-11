@@ -1342,6 +1342,22 @@ export interface ViewportSurface {
    *  `goToPage`, a page deleted under it). Never fires without a host
    *  backend. */
   onDidChangeActivePage(listener: (pageId: PageId | null) => void): Disposable;
+  /** Bring a range of a story's text into view: the camera moves to the
+   *  page and position where the range is laid out, and with
+   *  `select: true` (the default) the range becomes the text selection.
+   *  The door an outline, a find result or a diagnostic needs to take the
+   *  user TO a piece of text. Offsets are story-relative UTF-16 indices,
+   *  `start <= end`; an empty range places the caret. `false` when the
+   *  story is unknown, the range is not laid out (overset) or the host
+   *  can't navigate: probe `supports("viewport.revealText@1")`. */
+  revealText(range: TextRange, options?: { select?: boolean }): Promise<boolean>;
+}
+
+/** A range of a story's text, by story id and story-relative offsets. */
+export interface TextRange {
+  storyId: string;
+  start: number;
+  end: number;
 }
 
 // ----------------------------------------------------------------- render

@@ -641,6 +641,20 @@ export interface PagesBackend {
   onDidChangeActivePage(listener: (pageId: string | null) => void): () => void;
 }
 
+/**
+ * The backend the editor injects to back `host.viewport.revealText`. The
+ * editor owns the camera, the page layout and the text selection, so it
+ * locates the range on the page, moves there and (optionally) selects it.
+ * No backend → `revealText` answers false and
+ * `supports("viewport.revealText@1")` is false.
+ */
+export interface TextRevealBackend {
+  revealText(
+    range: { storyId: string; start: number; end: number },
+    select: boolean,
+  ): boolean | Promise<boolean>;
+}
+
 /** The SHARED cross-plugin data-provider registry (paged.data §7.1 / D-09). The
  *  editor creates ONE (`createDataProviderRegistry`) and injects the SAME
  *  instance into every plugin host, so a provider plugin and a consumer plugin
@@ -1185,6 +1199,9 @@ export interface CreateBundleHostOptions {
    *  `activePage`, `onDidChangeActivePage`). When present,
    *  `supports("viewport.pages@1")` is true. */
   pages?: PagesBackend;
+  /** Text navigation for `host.viewport.revealText`. When present,
+   *  `supports("viewport.revealText@1")` is true. */
+  text?: TextRevealBackend;
   /** Host-provided WORKER backend (K-3 / S-07 / I-02). When present,
    *  `host.workers.spawn` resolves a declared bundle-relative module +
    *  constructs a host-owned `Worker` through it (capability-gated,
@@ -2678,6 +2695,23 @@ export function createBundleHost(
       }
       return store.add(toDisposable(pagesBackend.onDidChangeActivePage(listener)));
     },
+    async revealText(range, opts) {
+      const textBackend = options?.text;
+      if (!textBackend || !range || typeof range.storyId !== "string" || range.storyId === "") {
+        return false;
+      }
+      const start = Math.trunc(Number(range.start));
+      const end = Math.trunc(Number(range.end));
+      if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end < start) {
+        return false;
+      }
+      const select = opts?.select !== false;
+      try {
+        return (await textBackend.revealText({ storyId: range.storyId, start, end }, select)) === true;
+      } catch {
+        return false;
+      }
+    },
   };
 
   // -------------------------------------------------------- render
@@ -4132,6 +4166,10 @@ export function createBundleHost(
   if (options?.pages) {
     // v70 — page navigation and the active-page event are the editor's.
     featureSet.add("viewport.pages@1");
+  }
+  if (options?.text) {
+    // Taking the user to a piece of text (an outline entry, a find hit).
+    featureSet.add("viewport.revealText@1");
   }
   if (options?.documents) {
     // D-26 — the documents doors always exist (no backend: both reject);

@@ -110,6 +110,7 @@ export type {
   MutateWithBytesOptions,
   SelectionSurface,
   ViewportSurface,
+  TextRange,
   RenderSurface,
   RenderSnapshotOptions,
   RenderedPage,

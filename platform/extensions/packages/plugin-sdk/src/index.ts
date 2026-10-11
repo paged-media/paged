@@ -67,6 +67,7 @@ export {
   type NativeDocumentBackend,
   type DocumentsBackend,
   type PagesBackend,
+  type TextRevealBackend,
   type BlobStore,
   type ClipboardBackend,
   type TextCaretBackend,
