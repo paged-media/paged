@@ -112,7 +112,9 @@ function parseRange(text: string): { start: number; end: number } | null {
   if (dots < 0) return null;
   const start = uint(text.slice(0, dots));
   const end = uint(text.slice(dots + 2));
-  if (start === null || end === null || end <= start) return null;
+  // A zero-length range is a caret: the paragraph it stands in (core's
+  // grammar, v0.71.2). A reversed range is refused.
+  if (start === null || end === null || end < start) return null;
   return { start, end };
 }
 

@@ -340,6 +340,14 @@ describe("protocol 71 closure — the bindable gaps are rows (core 15f51e3)", ()
     expect(await h.objects.set(at, "paragraphSpanSplitColumnCount", "Some")).toMatchObject({ applied: false, code: "invalidValue", undoSteps: 0 });
   });
 
+  it("a caret is an address: storyRange@n..n reads and writes the paragraph it stands in (core v0.71.2)", async () => {
+    const h = (live = await createHeadlessHost({ console: silent }));
+    const o = await everything(h);
+    const caret = `storyRange:${o.storyId}@0..0`;
+    expect(await h.objects.set(caret, "paragraphSpaceBefore", 7)).toMatchObject({ applied: true, undoSteps: 1 });
+    expect(await h.objects.get(caret, "paragraphSpaceBefore")).toEqual(value(7));
+  });
+
   it("nextTextFrame / previousTextFrame: link by address, unlink with null, undo restores", async () => {
     const h = (live = await createHeadlessHost({ console: silent }));
     const o = await everything(h);

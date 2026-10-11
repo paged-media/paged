@@ -66,6 +66,8 @@ describe("parseAddress — canonical forms (ADR 131)", () => {
     ["textVariable:dTextVariablenPrice", { kind: "textVariable", id: "dTextVariablenPrice" }],
     ["story:Story/u1", { kind: "story", id: "Story/u1" }],
     ["storyRange:Story/u1@3..9", { kind: "storyRange", story: "Story/u1", start: 3, end: 9 }],
+    // a caret: the paragraph it stands in (core v0.71.2)
+    ["storyRange:Story/u1@5..5", { kind: "storyRange", story: "Story/u1", start: 5, end: 5 }],
     ["layer:Layer/u0", { kind: "layer", id: "Layer/u0" }],
     [
       "master:A > textFrame:u5",
@@ -123,7 +125,6 @@ describe("parseAddress — refusals", () => {
     "textFrame:",
     "page:#0",
     "page:#x",
-    "storyRange:u1@5..5",
     "storyRange:u1@6..2",
     "storyRange:u1@a..b",
     "cell:t7/1",
