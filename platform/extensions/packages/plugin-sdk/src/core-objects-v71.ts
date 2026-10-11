@@ -46,6 +46,7 @@ import type {
   PagedEditor,
   ParsedAddress,
   StyleFamily,
+  ValueType,
 } from "@paged-media/plugin-api";
 
 import type { CoreCreatePlan, CoreObjects, CorePlan } from "./core-objects";
@@ -171,6 +172,14 @@ function formatSelector(steps: readonly SelectorStep[]): { text: string; family:
     if (step.nth !== undefined) text += `:nth(${step.nth})`;
   }
   return { text, family };
+}
+
+/** A number row's keyword (a span count's "All") travels as the typed
+ *  `Enum` variant: the row's numeric wire variant cannot carry a word, and
+ *  core's Set normalises an `Enum` through the row's members to the text
+ *  form its setter takes (a bare `Text` on a length row is refused). */
+function keywordOf(type: ValueType, value: unknown): boolean {
+  return type.kind === "number" && typeof value === "string" && (type.keywords ?? []).includes(value);
 }
 
 export function createCoreObjectsV71(getEditor: () => PagedEditor, v70: V70): CoreObjects {
@@ -312,7 +321,7 @@ export function createCoreObjectsV71(getEditor: () => PagedEditor, v70: V70): Co
       }
       let wire: unknown;
       if (isRawWire(value)) wire = value;
-      else if (row) wire = { type: row.wire, value };
+      else if (row) wire = { type: keywordOf(row.schema.type, value) ? "enum" : row.wire, value };
       else if (CORE_OPERATION_PATHS.has(path)) return no("invalidValue", `${path} is a geometry operation: pass its raw wire value { type, value }`);
       else return no("unknownPath", `${kind || formatAddress(a)} has no path "${path}"`);
       const address = a.kind === "handle" ? formatAddress(a) : await target(a, row);

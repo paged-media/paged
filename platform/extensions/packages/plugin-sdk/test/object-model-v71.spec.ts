@@ -331,6 +331,15 @@ describe("protocol 71 closure — the bindable gaps are rows (core 15f51e3)", ()
     expect(await h.objects.get("rectangle:urect", "imageBytes")).toEqual(value(PNG_URI));
   });
 
+  it("a span count takes its keyword: \"All\" goes to the engine as a typed Enum and reads back", async () => {
+    const h = (live = await createHeadlessHost({ console: silent }));
+    const o = await everything(h);
+    const at = `storyRange:${o.storyId}@0..1`;
+    expect(await h.objects.set(at, "paragraphSpanSplitColumnCount", "All")).toMatchObject({ applied: true, undoSteps: 1 });
+    expect(await h.objects.get(at, "paragraphSpanSplitColumnCount")).toEqual(value("All"));
+    expect(await h.objects.set(at, "paragraphSpanSplitColumnCount", "Some")).toMatchObject({ applied: false, code: "invalidValue", undoSteps: 0 });
+  });
+
   it("nextTextFrame / previousTextFrame: link by address, unlink with null, undo restores", async () => {
     const h = (live = await createHeadlessHost({ console: silent }));
     const o = await everything(h);
