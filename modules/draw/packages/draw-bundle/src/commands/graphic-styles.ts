@@ -844,7 +844,7 @@ export function graphicStyleRefusalOf(
 }
 
 const BAKED_REFUSAL =
-  "the element's appearance is BAKED (a B-24 group of derived paths) — " +
+  "the element's appearance is BAKED (a group of derived paths) — " +
   "its own paint is deliberately empty and its layers are real page " +
   "items, so a graphic style cannot be read from or written to it. " +
   "Release the baked stack first";

@@ -151,7 +151,7 @@ export function reportPlanarRefusal(
   const reason =
     result?.reason ??
     (result === null
-      ? "this host did not answer requestPlanarRegions — its engine predates the region read door"
+      ? "this editor version cannot find the regions between paths"
       : "the engine refused the region query (no reason given)");
   host.log.warn(`${label}: ${reason}`);
   host.bindings.publish(BIND_PATHFINDER_STATUS, reason);

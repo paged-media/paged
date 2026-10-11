@@ -205,8 +205,8 @@ export async function applyCreateOutlines(host: BundleHost): Promise<ElementId[]
     const result = await rawTextOutlines(host, frame);
     if (!result) {
       host.log.warn(
-        `${CREATE_OUTLINES_COMMAND_ID}: the engine did not answer requestTextOutlines for ` +
-          `${String(frame.id)} (protocol 66 or later is needed) — the frame is left as text`,
+        `${CREATE_OUTLINES_COMMAND_ID}: could not get outlines for the text of ` +
+          `${String(frame.id)} (an older editor version cannot convert text to outlines) — the frame is left as text`,
       );
       continue;
     }

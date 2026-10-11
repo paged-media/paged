@@ -1046,7 +1046,8 @@ describe("draw conformance — OBJECTS ON A PATH (§16.3)", () => {
       // (2) The C-23 wording, which must stay the MEASURED one: the
       // geometry doors go silent, the metadata and the tree do not.
       expect(OBJECTS_ON_PATH_NOTE).toContain("keeps its metadata");
-      expect(OBJECTS_ON_PATH_NOTE).toContain("RFI C-23");
+      expect(OBJECTS_ON_PATH_NOTE).toContain("stops answering for its geometry");
+      expect(OBJECTS_ON_PATH_NOTE).not.toMatch(/RFI|\b[A-Z]-\d+\b/);
       expect(OBJECTS_ON_PATH_NOTE).toContain("STRICTER rule");
       // …and the undo arithmetic.
       expect(OBJECTS_ON_PATH_PANEL_NOTE).toContain("one undo step each");

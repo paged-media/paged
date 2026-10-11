@@ -293,13 +293,13 @@ export const PATTERN_SWATCH_NOTE =
   "THIS IS NOT A PATTERN SWATCH, and one cannot be built on this engine. " +
   "IDML gives a page item a FillColor that resolves to a Color, Gradient or " +
   "Mixed-Ink swatch; there is no pattern paint type in the format, none in " +
-  "the engine's Graphic model, and none on the wire — SwatchSpec and " +
-  "GradientSpec are the only two shapes createSwatch/createGradient accept. " +
+  "the engine's Graphic model, and none the editor can create — colour " +
+  "and gradient swatches are the only two kinds it accepts. " +
   "Inventing a third kind would render nothing and lie on save. So what a " +
   "field here produces is ARTWORK: real page items you can re-plan, release " +
   "or delete, but NOT a fill you can apply to another object. Closing that " +
   "gap needs a new paint kind in the engine, renderer support for it and an " +
-  "IDML representation decision — filed as RFI C-31.";
+  "IDML representation decision, so it is not supported yet.";
 
 // ---------------------------------------------------------------- model
 
@@ -1336,8 +1336,8 @@ export async function patternPlanFor(
       host.log.warn(
         `${label}: the page rect for "${pageId}" is not readable, so the tile ` +
           "count could not be fitted to the artboard — placing every " +
-          "requested tile. A tile past the page edge IS created, but " +
-          "pathAnchors/elementGeometry answer nothing for it (RFI C-23)",
+          "requested tile. A tile past the page edge IS created, but it " +
+          "cannot be measured on the page",
       );
     }
   }
@@ -1346,8 +1346,8 @@ export async function patternPlanFor(
     host.log.info(
       `${label}: ${fit.dropped.length} of ${requested.length} tile(s) would ` +
         `land outside the ${page!.width} × ${page!.height} pt page and were ` +
-        "dropped — an off-page item is real but page-keyed reads answer " +
-        "nothing for it (RFI C-23). Pass fitToArtboard: false to place them " +
+        "dropped — an off-page item is real but cannot be measured on the " +
+        "page. Pass fitToArtboard: false to place them " +
         "anyway",
     );
   }
@@ -1550,8 +1550,8 @@ export async function applyMakePattern(
         ? "The parameters are saved, so the field can be re-planned."
         : "The parameters were NOT saved (no container writer) — the field " +
           "can be released or un-baked, but a re-plan must name them again.") +
-      " This is ARTWORK, not a pattern swatch — the engine has no pattern " +
-      "paint type (RFI C-31).",
+      " This is ARTWORK, not a pattern swatch — pattern fills are not " +
+      "supported yet.",
   );
   return tiles;
 }

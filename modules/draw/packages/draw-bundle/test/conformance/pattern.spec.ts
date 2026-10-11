@@ -267,10 +267,11 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
       expect(PATTERN_SWATCH_NOTE).toContain("no pattern paint type in the format");
       expect(PATTERN_SWATCH_NOTE).toContain("Graphic model");
       expect(PATTERN_SWATCH_NOTE).toContain(
-        "SwatchSpec and GradientSpec are the only two shapes",
+        "colour and gradient swatches are the only two kinds",
       );
       expect(PATTERN_SWATCH_NOTE).toContain("would render nothing and lie on save");
-      expect(PATTERN_SWATCH_NOTE).toContain("RFI C-31");
+      expect(PATTERN_SWATCH_NOTE).toContain("not supported yet");
+      expect(PATTERN_SWATCH_NOTE).not.toMatch(/RFI|\b[A-Z]-\d+\b/);
       // The panel says it in plain words AND adds the two limits its own
       // form cannot hide.
       expect(PATTERN_PANEL_NOTE).toContain("It is not a fill you can apply to other objects");

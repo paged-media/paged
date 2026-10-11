@@ -700,8 +700,8 @@ async function traceSourceOf(host: BundleHost): Promise<TraceSource | null> {
     host.log.warn(
       `${label}: no placed-image bytes for ${elementId} — the element is ` +
         `not an image frame, its link does not resolve, or the image has ` +
-        `not rendered yet (the C-5 door serves what the engine's build ` +
-        `already cached) — no-op`,
+        `not rendered yet (only an image the editor has already loaded can be ` +
+        `traced) — no-op`,
     );
     return null;
   }

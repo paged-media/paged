@@ -284,8 +284,8 @@ export const REPEAT_LIVE_NOTE =
 
 /** What clipping is, and the four things it costs. Pinned by a test. */
 export const REPEAT_CLIP_NOTE =
-  "CLIPPING nests every instance inside a clip FRAME through the B-18 " +
-  "pasteInto door, so the repeat renders clipped by that frame's " +
+  "CLIPPING nests every instance inside a clip FRAME through Paste " +
+  "Into, so the repeat renders clipped by that frame's " +
   "outline. Four measured consequences: a clipped repeat has NO GROUP " +
   "(pasteInto refuses a grouped child); a clipped instance is INVISIBLE " +
   "to the scene tree, though it still answers geometry and metadata by " +
@@ -1457,8 +1457,8 @@ export async function repeatPlanFor(
       host.log.warn(
         `${label}: the page rect for "${pageId}" is not readable, so the ` +
           "instance count could not be fitted to the artboard — placing every " +
-          "one. An off-page instance IS created, but pathAnchors/" +
-          "elementGeometry answer nothing for it (RFI C-23)",
+          "one. An off-page instance IS created, but it cannot be measured " +
+          "on the page",
       );
     }
   }
@@ -1471,8 +1471,8 @@ export async function repeatPlanFor(
     host.log.info(
       `${label}: ${fit.dropped.length} of ${requested.length} instance(s) ` +
         `would land outside the ${page!.width} × ${page!.height} pt page and ` +
-        "were dropped — an off-page item is real but page-keyed reads answer " +
-        "nothing for it (RFI C-23). Pass fitToArtboard: false to place them " +
+        "were dropped — an off-page item is real but cannot be measured on " +
+        "the page. Pass fitToArtboard: false to place them " +
         "anyway",
     );
   }

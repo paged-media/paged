@@ -364,8 +364,8 @@ export async function applyMakeOpacityMask(
   const label = MAKE_OPACITY_MASK_COMMAND_ID;
   if (!(await supportsOpacityMask(host))) {
     host.log.warn(
-      `${label}: this host's engine carries no applyOpacityMask op (it predates ` +
-        "protocol 58) — opacity masks are unavailable here",
+      `${label}: this editor version cannot apply opacity masks — ` +
+        "opacity masks are unavailable here",
     );
     return null;
   }
@@ -379,8 +379,8 @@ export async function applyMakeOpacityMask(
     if (ordered.length !== 2) {
       host.log.warn(
         `${label}: needs exactly 2 selected items (have ${ordered.length}) — the ` +
-          "TOPMOST becomes the mask and the one below it is masked. Core takes " +
-          "one mask and one target; there is no group-the-rest step on the wire",
+          "TOPMOST becomes the mask and the one below it is masked. A mask " +
+          "applies to one object; masking several at once is not supported yet",
       );
       return null;
     }
@@ -425,8 +425,8 @@ export async function applyReleaseOpacityMask(
   const label = RELEASE_OPACITY_MASK_COMMAND_ID;
   if (!(await supportsOpacityMask(host))) {
     host.log.warn(
-      `${label}: this host's engine carries no releaseOpacityMask op (it ` +
-        "predates protocol 58) — opacity masks are unavailable here",
+      `${label}: this editor version cannot release opacity masks — ` +
+        "opacity masks are unavailable here",
     );
     return false;
   }

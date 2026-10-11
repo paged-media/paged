@@ -1509,8 +1509,8 @@ export async function blendPlanFor(
       host.log.warn(
         `${label}: the page rect for "${pageId}" is not readable, so the ` +
           "intermediates could not be fitted to the artboard — placing every " +
-          "one. An off-page intermediate IS created, but pathAnchors/" +
-          "elementGeometry answer nothing for it (RFI C-23)",
+          "one. An off-page intermediate IS created, but it cannot be " +
+          "measured on the page",
       );
     } else {
       placed = steps.filter((step) => {
@@ -1524,8 +1524,8 @@ export async function blendPlanFor(
         host.log.info(
           `${label}: ${dropped} of ${steps.length} intermediate(s) would land ` +
             `outside the ${page.width} × ${page.height} pt page and were ` +
-            "dropped — an off-page item is real but page-keyed reads answer " +
-            "nothing for it (RFI C-23). Pass fitToArtboard: false to place " +
+            "dropped — an off-page item is real but cannot be measured on " +
+            "the page. Pass fitToArtboard: false to place " +
             "them anyway. (Only a REPLACED spine can produce one: the default " +
             "spine runs between two on-page keys.)",
         );
