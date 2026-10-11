@@ -408,6 +408,10 @@ export interface HeadlessHost {
   /** Load an IDML package into the headless document. Resolves to the
    *  loaded page ids (or throws on a parse failure). */
   load(idml: Uint8Array): Promise<string[]>;
+  /** Start a new blank document: one page of the given size in points,
+   *  laid out with `defaultFont` when one was given. Resolves to its page
+   *  ids, fanned out to subscribers like `load`. */
+  newBlank(widthPt: number, heightPt: number): Promise<string[]>;
   /** ADR 324 — the core EXPORT door the Node CLI (and a conformance test)
    *  calls: the active document as `.paged` (`exportPaged`), `.idml`
    *  (`exportIdml`, `linkBase` for relative links) or PDF (the
@@ -1017,6 +1021,18 @@ export async function createHeadlessHost(
       // worker broadcasts the load reply to every subscriber
       // (`document.onDidOpen`, the parent index); so does the harness.
       const reply = loadDirect(idml);
+      if (reply.kind === "documentLoaded") {
+        objects.core?.invalidate();
+        fanOut(reply);
+        return reply.payload.pageIds;
+      }
+      throw loadFailure(reply);
+    },
+    async newBlank(widthPt: number, heightPt: number): Promise<string[]> {
+      const reply = (await editor.client.send({
+        kind: "newBlankDocument",
+        payload: { widthPt, heightPt, font: options.defaultFont ? Array.from(options.defaultFont) : null },
+      } as MainToWorkerKind)) as WorkerToMain;
       if (reply.kind === "documentLoaded") {
         objects.core?.invalidate();
         fanOut(reply);

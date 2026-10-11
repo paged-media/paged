@@ -42,6 +42,7 @@ that follow it and those that do not.
 | [321](321-host-colour-picker-widget.md) | The host lends its colour picker as a widget; it never writes the document | Accepted 2026-10-04 |
 | [322](322-plugin-hooks-save-entry-tool-settings-undo-labels.md) | Four host hooks for stateful content plugins: will-save, context entry, tool settings, undo labels | Accepted 2026-10-04 |
 | [323](323-page-navigation-and-page-images.md) | Page navigation and page images: go to a page, the active page, a page as a PNG | Accepted 2026-10-06 |
+| [325](325-claude-agent-package.md) | Claude for paged is one package: prompt, tools, loop and proxy | Accepted 2026-10-11 |
 
 Decisions made in other repositories that this repository's code rests on are listed in
 [`../README.md`](../README.md).

@@ -26,6 +26,9 @@ import { fileURLToPath } from "node:url";
 import type { BundleHost, PagedBundle } from "@paged-media/plugin-api";
 import { API_VERSION, createHeadlessHost, protocolFromVersion, resolveCanvasWasm, type HeadlessHost } from "@paged-media/plugin-sdk";
 
+import { aiObjectModel, complete, createDirectTransport, type AiTransport } from "@paged-media/ai";
+import ENGINE_CATALOG from "@paged-media/ai/catalog";
+
 import { autoCandidates, importBundle, resolvable, type DiscoveredBundle, type DiscoveryProblem } from "./plugins";
 import { installNodeShims } from "./node-shims";
 import { CliError, EXIT } from "./errors";
@@ -182,6 +185,11 @@ export async function openSession(docPath: string | null, options: SessionOption
     throw err;
   };
 
+  // Scripts may ask Claude (`await paged.invoke("paged.ai.complete", …)`),
+  // answered with the caller's own credential. The client is built on the
+  // first call, so a run that never asks needs no key.
+  h.objects.register({ plugin: "paged.ai", model: aiObjectModel(cliComplete) });
+
   if (docBytes) {
     try {
       await h.load(docBytes);
@@ -304,3 +312,12 @@ export function engineVersionOnDisk(from = packageRoot()): string | null {
 }
 
 export const baseName = (path: string): string => basename(path, extname(path));
+
+let cliTransport: AiTransport | null = null;
+
+/** `paged.ai.complete` for CLI scripts: straight to Anthropic with
+ *  ANTHROPIC_API_KEY or an `ant auth login` profile. */
+function cliComplete(prompt: string) {
+  cliTransport ??= createDirectTransport({ catalog: ENGINE_CATALOG });
+  return complete(cliTransport, prompt);
+}

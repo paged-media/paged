@@ -1,0 +1,67 @@
+{
+  "name": "@paged-media/ai",
+  "version": "0.1.0-canary.0",
+  "description": "Claude for paged: the authoring prompt, the script tools, the generate \u2192 run \u2192 verify \u2192 correct loop, and the transports (direct key or the same-origin proxy).",
+  "license": "MPL-2.0 OR LicenseRef-PMEL",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./proxy": "./src/proxy.ts",
+    "./catalog": "./src/engine-catalog.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "build": "tsup src/index.ts src/proxy.ts src/engine-catalog.ts --format esm --target es2020 --dts --out-dir dist --clean",
+    "prepublishOnly": "pnpm run build"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "0.128.0"
+  },
+  "devDependencies": {
+    "@paged-media/plugin-api": "workspace:*",
+    "@types/node": "20.19.39",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.9"
+  },
+  "files": [
+    "dist",
+    "assets"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/paged-media/plugin-sdk.git",
+    "directory": "packages/ai"
+  },
+  "publishConfig": {
+    "access": "public",
+    "tag": "canary",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./proxy": {
+        "types": "./dist/proxy.d.ts",
+        "default": "./dist/proxy.js"
+      },
+      "./catalog": {
+        "types": "./dist/engine-catalog.d.ts",
+        "default": "./dist/engine-catalog.js"
+      }
+    }
+  },
+  "peerDependencies": {
+    "@paged-media/plugin-api": ">=0.2.48-canary.0"
+  },
+  "peerDependenciesMeta": {
+    "@paged-media/plugin-api": {
+      "optional": true
+    }
+  }
+}

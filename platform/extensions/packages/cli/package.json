@@ -26,6 +26,7 @@
     "prepublishOnly": "pnpm run build"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "0.128.0",
     "@paged-media/canvas-wasm": "0.71.2"
   },
   "peerDependencies": {
@@ -38,6 +39,7 @@
   },
   "devDependencies": {
     "@duckdb/duckdb-wasm": "1.29.0",
+    "@paged-media/ai": "workspace:*",
     "@paged-media/data": "0.1.0-canary.10",
     "@paged-media/plugin-api": "workspace:*",
     "@paged-media/plugin-sdk": "workspace:*",

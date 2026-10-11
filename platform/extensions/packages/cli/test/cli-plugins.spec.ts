@@ -62,7 +62,8 @@ describe("plugin object kinds", () => {
     expect(listed.json.plugins).toEqual([expect.objectContaining({ id: "acme.notes", kinds: ["plugin:acme.notes/note"] })]);
     const kinds = await cli(["schema", fx.paged, NOTES]);
     // core's typed commands (owner "core") are listed beside the plugin's
-    expect(kinds.json.commands.filter((c: { owner: string }) => c.owner !== "core").map((c: { id: string }) => c.id)).toEqual(["acme.notes.attach"]);
+    // Besides core's, the plugin's command and the CLI's own paged.ai.complete.
+    expect(kinds.json.commands.filter((c: { owner: string }) => c.owner !== "core").map((c: { id: string }) => c.id).sort()).toEqual(["acme.notes.attach", "paged.ai.complete"]);
     expect((await cli(["schema", fx.paged, "plugin:acme.notes/note", NOTES])).json.rows.map((r: { path: string }) => r.path)).toEqual(
       expect.arrayContaining(["text", "size", "visible", "tone", "length"]),
     );

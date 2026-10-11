@@ -78,7 +78,7 @@ jobs:
       - name: publish changed versions via OIDC (canary)
         run: |
           set -e
-          for dir in packages/plugin-api packages/plugin-sdk packages/plugin-cli packages/cli; do
+          for dir in packages/plugin-api packages/plugin-sdk packages/plugin-cli packages/ai packages/cli; do
             name=$(node -p "require('./$dir/package.json').name")
             version=$(node -p "require('./$dir/package.json').version")
             if npm view "$name@$version" version >/dev/null 2>&1; then

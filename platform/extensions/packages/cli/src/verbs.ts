@@ -22,6 +22,7 @@ import { pathToFileURL } from "node:url";
 import type { ObjectCommandInfo, ObjectOp, ObjectWriteResult, PropertySchema } from "@paged-media/plugin-api";
 import { normalizeAddress, parseSelector, validateValue } from "@paged-media/plugin-sdk";
 
+import { AI_OPTIONS, parsePageSize, runAiVerb } from "./ai";
 import { flagBool, flagList, flagNumber, flagStr, type OptionSpec, type ParsedArgs } from "./args";
 import { applyBindings, dataSession, loadRecords, mergeOnce, readBindings, selectRecord, type MergeFlags } from "./data";
 import { CliError, EXIT } from "./errors";
@@ -742,6 +743,29 @@ const plugins: Verb = {
   },
 };
 
+const ai: Verb = {
+  name: "ai",
+  usage: "<doc> <brief> | --new <size> <brief>",
+  summary: "Claude (claude-haiku-5-5) writes and runs paged.* scripts until the brief is done; saves when it wrote. Needs ANTHROPIC_API_KEY or `ant auth login`",
+  min: 1,
+  max: 2,
+  options: [OUT, NO_SAVE, OUTPUT_FORMAT, ...AI_OPTIONS],
+  reaches: [],
+  async run({ args, session }) {
+    const size = flagStr(args, "new");
+    const [doc, brief] = size !== undefined ? [null, args.positionals[0]] : (args.positionals as [string, string | undefined]);
+    if (size !== undefined && args.positionals.length !== 1) throw new CliError(EXIT.usage, "with --new, pass only the brief");
+    if (!brief?.trim()) throw new CliError(EXIT.usage, "the brief is empty");
+    if (size !== undefined && !flagBool(args, "no-save") && flagStr(args, "out") === undefined) throw new CliError(EXIT.usage, "with --new, say where to save with -o");
+    const pageSize = size !== undefined ? parsePageSize(size) : null;
+    const s = await session(doc);
+    if (pageSize) await s.h.newBlank(pageSize[0], pageSize[1]);
+    const done = await runAiVerb(s, brief, args);
+    const saved = await saveIfAsked(s, args, done.scripts > 0 || flagStr(args, "out") !== undefined);
+    return { json: { ...(done.json as object), saved }, text: done.text };
+  },
+};
+
 const describe: Verb = {
   name: "describe",
   usage: "[doc]",
@@ -768,7 +792,7 @@ const describe: Verb = {
   },
 };
 
-export const VERBS: readonly Verb[] = [get, set, create, del, query, schema, batch, commands, invoke, run, exportVerb, apply, merge, plugins, describe];
+export const VERBS: readonly Verb[] = [get, set, create, del, query, schema, batch, commands, invoke, run, ai, exportVerb, apply, merge, plugins, describe];
 
 export function sessionOptions(args: ParsedArgs, cwd: string): SessionOptions {
   const plugins = flagBool(args, "no-plugins")

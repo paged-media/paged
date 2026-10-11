@@ -71,6 +71,11 @@ jobs:
             --outputFile=junit.xml || echo "VITEST_FAILED=1" >> "$GITHUB_ENV"
           test -s packages/plugin-sdk/junit.xml
 
+      # @paged-media/ai: the agent loop and the proxy against the real
+      # engine, with the model replaced by canned turns (no key, no network).
+      - name: ai package suite
+        run: pnpm --filter @paged-media/ai exec vitest run || echo "VITEST_FAILED=1" >> "$GITHUB_ENV"
+
       - name: upload vitest results artifact
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
