@@ -114,8 +114,12 @@ Width tool applies a variable-width outline to an existing open path. The Shape 
 Live Paint tools read the planar arrangement of the inputs through
 `host.document.planarRegions`; `handlers/planar-regions.ts` is the one place that calls it,
 caches the answer per gesture, and maps between page space and the raw path space the
-engine works in. TypeScript geometry is used for what a gesture needs synchronously and for
-re-winding nested contours so that the engine's non-zero fill cuts holes. See
+engine works in. The Shape Builder builds its result from those faces, the way the Knife builds
+its pieces: `planShapeBuild` (draw-tools) decides which faces merge, which an input keeps in
+place and which become new pieces, and `commands/shape-build.ts` sends it as one batch, with
+the merged faces united by the engine's `pathfinderFaces`. TypeScript geometry is used for
+what a gesture needs synchronously and for re-winding nested contours so that the engine's
+non-zero fill cuts holes. See
 [ADR 353](adr/353-path-algebra-runs-in-the-engine.md).
 
 **Appearance.** Extra fills and strokes are a stack in the element's metadata; the front

@@ -154,6 +154,11 @@ The editor builds `PropertyField`; these are the fields that map onto a row toda
   12 inputs or 256 faces. A fill is inserted above the paths that bound it.
 - **Region tools** work in raw path space: results are exact only when the inputs share one
   item transform. An element moved far enough off its page cannot be measured.
+- **Shape Builder.** A drag merges the faces it crosses into one path and an Alt-drag deletes
+  them; every other face of a shape the gesture touched stays, as a piece in the paint of the
+  shape on top of it there (an input keeps one piece in place, further pieces are new paths
+  carrying fill, stroke colour and stroke weight only, at the top of the page and outside any
+  group, as the Knife's are).
 - **Tools.** Width replaces the path with its outline. Eyedropper samples properties, not
   pixels. Measure's snap and the gradient annotator's stops use raw engine requests outside
   the host doors. Only Curvature snaps among this bundle's own tools.

@@ -213,6 +213,10 @@ export interface RegionCache {
    *  enumeration when warm, plus any single faces the point lane
    *  resolved while it was not. */
   faces(): readonly RegionFace[];
+  /** The full enumeration as the ENGINE answered it — raw path space,
+   *  with each face's signature — or `[]` while cold. What a commit that
+   *  builds its result from the faces reads. */
+  rawFaces(): readonly PlanarFaceWire[];
   /** The frontmost input's itemTransform (null = identity / unread). */
   matrix(): Affine | null;
   /** True when the FULL enumeration for `ids` is installed. */
@@ -237,6 +241,8 @@ export function createRegionCache(
   hooks: RegionCacheHooks,
 ): RegionCache {
   let cached: RegionFace[] = [];
+  /** The full enumeration as answered (raw space, signatures). */
+  let raw: PlanarFaceWire[] = [];
   /** `planarInputKey(ids)` the full enumeration was built for; null = cold. */
   let key: string | null = null;
   let transform: Affine | null = null;
@@ -312,6 +318,7 @@ export function createRegionCache(
           );
         }
         transform = matrix;
+        raw = [...result.faces];
         cached = result.faces.map((f) => faceToPageSpace(f, transform));
         key = next;
         hooks.onFaces(cached);
@@ -411,6 +418,7 @@ export function createRegionCache(
 
   return {
     faces: () => cached,
+    rawFaces: () => (key === null ? [] : raw),
     matrix: () => transform,
     warm: isWarm,
     sample(ids, point, need = "every") {
@@ -425,6 +433,7 @@ export function createRegionCache(
       transform = null;
       frontmost = null;
       cached = [];
+      raw = [];
       pointQueryOnly = false;
       warnedPointOnly = false;
       pendingLatest = null;
