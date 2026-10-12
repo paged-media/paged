@@ -108,7 +108,7 @@ function fates(plan: ShapeBuildPlan, faces: readonly PlanarFaceRef[], swept: rea
   return out;
 }
 
-describe("Shape Builder on a cross-shaped overlap", () => {
+describe("Shape Builder on a cross-shaped overlap [plugin-draw.shape-builder]", () => {
   it("dragging from the left arm into the top arm crosses exactly those two faces", () => {
     const s = drag(CROSS, [150, 385], [220, 320]);
     expect(s.collected).toEqual([LEFT, TOP]);
@@ -192,7 +192,7 @@ describe("Shape Builder on a cross-shaped overlap", () => {
 // the engine reads it as its bounding box — the second film bug); the plan
 // never rewrites one in place: its pieces are inserted, the oval deleted, and
 // a merge it owns is carried by a fresh piece.
-describe("Shape Builder over ovals", () => {
+describe("Shape Builder over ovals [plugin-draw.shape-builder]", () => {
   // Inputs top-to-bottom: 0 = the left oval (in front), 1 = the right one.
   const OVALS: PlanarFaceRef[] = [
     { id: "0#0", signature: [0] }, // the left crescent
