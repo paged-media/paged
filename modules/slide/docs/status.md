@@ -93,8 +93,14 @@ placed by `GradientFillStart`; both ship in canvas-wasm 0.70.0.
 - **Fonts.** Plugins cannot register fonts with the host yet (planned SDK door, M2). Decks whose
   fonts the host lacks render with substitutes; the green deck's Antonio is missing on the oracle
   machine too, and PowerPoint breaks its long title mid-word, which the engine does not.
-- **Embedded fonts.** No corpus deck embeds fonts and PowerPoint's scripting cannot embed them; a
-  hand-authored fixture is needed before extraction is built.
+- **Embedded fonts.** The importer reads the deck's embedded-font list but no embedded face reaches
+  the document, and the import says so: one diagnostic per font, naming it, with text in it drawn
+  in a substitute. Every face PowerPoint embeds is Embedded OpenType compressed with MicroType
+  Express (EOT flags 0x4 or 0x5 on all 266 embedded parts in the decks examined, from PowerPoint
+  for Windows and Mac), so using them needs a MicroType Express decoder, and putting them in the
+  document needs a door for document faces (the SDK's `assets.registerFont` reaches scene-layer
+  text only). No corpus deck embeds fonts and PowerPoint's scripting cannot embed them; the
+  diagnostic is tested on a fixture with an embedded-font entry added.
 - **SmartArt layouts in fixtures.** PowerPoint draws a seeded diagram with its default layout
   only, so the fixture covers the drawing's lowering, not other layouts' shapes.
 - **Editor wiring.** The editor loads the bundle on a branch, through a local link, and a
