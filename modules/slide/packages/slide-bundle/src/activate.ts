@@ -217,30 +217,49 @@ export function activate(host: BundleHost): BundleHandle {
   if (richPanels) {
     const store = new SlidesStore(host);
     disposers.push(() => store.dispose());
+    // In the panel rail only while a deck is open: in any other document
+    // the Slides and Notes launchers would sit beside the host's panels
+    // with nothing to show. The rail reads `rail` at registration, so a
+    // change of document re-registers both panels with the new flag.
+    let railed: boolean | null = null;
+    const panelDisposers: Array<() => void> = [];
+    const registerPanels = (rail: boolean) => {
+      for (const d of panelDisposers.splice(0)) d();
+      railed = rail;
+      panelDisposers.push(
+        host.contribute.panel({
+          id: SLIDES_PANEL_ID,
+          title: "Slides",
+          component: makeSlidesPanel(host, store),
+          defaultDock: "left",
+          rail,
+          // Three stacked slides.
+          iconSvg:
+            '<rect x="7" y="3.5" width="12" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
+            '<rect x="7" y="13.5" width="12" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
+            '<path d="M4 5v14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
+        }).dispose,
+        host.contribute.panel({
+          id: NOTES_PANEL_ID,
+          title: "Notes",
+          component: makeNotesPanel(host, store),
+          defaultDock: "bottom",
+          rail,
+          // A slide with lines of notes under it.
+          iconSvg:
+            '<rect x="5" y="3.5" width="14" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
+            '<path d="M5 15h14M5 18.5h10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
+        }).dispose,
+      );
+    };
+    registerPanels(store.isDeck());
     disposers.push(
-      host.contribute.panel({
-        id: SLIDES_PANEL_ID,
-        title: "Slides",
-        component: makeSlidesPanel(host, store),
-        defaultDock: "left",
-        rail: true,
-        // Three stacked slides.
-        iconSvg:
-          '<rect x="7" y="3.5" width="12" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
-          '<rect x="7" y="13.5" width="12" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
-          '<path d="M4 5v14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
-      }).dispose,
-      host.contribute.panel({
-        id: NOTES_PANEL_ID,
-        title: "Notes",
-        component: makeNotesPanel(host, store),
-        defaultDock: "bottom",
-        rail: true,
-        // A slide with lines of notes under it.
-        iconSvg:
-          '<rect x="5" y="3.5" width="14" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
-          '<path d="M5 15h14M5 18.5h10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
-      }).dispose,
+      store.subscribe(() => {
+        if (store.isDeck() !== railed) registerPanels(store.isDeck());
+      }),
+      () => {
+        for (const d of panelDisposers.splice(0)) d();
+      },
     );
   }
 

@@ -140,6 +140,7 @@ export const THUMB_WIDTH = 320;
  */
 export class SlidesStore {
   private slides: Slide[] = [];
+  private deck = false;
   private active: string | null = null;
   private readonly thumbs = new Map<string, string>();
   private readonly pending = new Map<string, Promise<void>>();
@@ -176,6 +177,12 @@ export class SlidesStore {
 
   list(): readonly Slide[] {
     return this.slides;
+  }
+
+  /** Whether the open document is a deck: some page carries the slide
+   *  state the importer writes. False until the first read lands. */
+  isDeck(): boolean {
+    return this.deck;
   }
 
   activePage(): string | null {
@@ -219,6 +226,7 @@ export class SlidesStore {
     } catch {
       pages = [];
     }
+    this.deck = pages.some((p) => p.pluginMetadata?.some((m) => m.key === SLIDE_KEY));
     this.slides = pages.map((p, i) => ({
       pageId: p.selfId,
       number: i + 1,

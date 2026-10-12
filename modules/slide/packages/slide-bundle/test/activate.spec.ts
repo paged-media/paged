@@ -24,7 +24,7 @@
 
 import { readFileSync } from "node:fs";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type {
   BundleHost,
@@ -45,6 +45,7 @@ import {
   SOURCE_PART,
 } from "../src/activate";
 import type { ImportReport } from "../src/engine";
+import { SLIDE_KEY } from "../src/slides-model";
 
 const FIXTURE = new URL("../../../slide-conformance/fixtures/placeholders.pptx", import.meta.url);
 
@@ -179,6 +180,8 @@ describe("paged.slide importer", () => {
     } as unknown as BundleHost;
     const handle = activate(host);
     expect(panels.map((p) => p.id)).toEqual([SLIDES_PANEL_ID, NOTES_PANEL_ID]);
+    // A document that is not a deck keeps them out of the panel rail.
+    expect(panels.map((p) => (p as { rail?: boolean }).rail)).toEqual([false, false]);
     handle.dispose();
 
     // Without the v70 doors the panels stay out.
@@ -189,6 +192,39 @@ describe("paged.slide importer", () => {
       contribute: { panel: (c: { id: string }) => (without.push(c), noop) },
     } as unknown as BundleHost);
     expect(without).toEqual([]);
+  });
+
+  it("puts the panels in the rail once the open document is a deck", async () => {
+    const live = new Map<string, { rail?: boolean }>();
+    const host = {
+      log: { debug() {}, info() {}, warn() {}, error() {} },
+      supports: (f: string) =>
+        ["contribute.panel@1", "render.snapshot@1", "viewport.pages@1"].includes(f),
+      contribute: {
+        panel(c: { id: string; rail?: boolean }) {
+          if (live.has(c.id)) throw new Error(`${c.id} registered twice`);
+          live.set(c.id, c);
+          return { dispose: () => live.delete(c.id) };
+        },
+      },
+      viewport: { activePage: () => null, onDidChangeActivePage: () => ({ dispose() {} }) },
+      document: {
+        collection: async () => [
+          {
+            selfId: "p1",
+            sizePt: [720, 405],
+            pluginMetadata: [{ key: SLIDE_KEY, value: '{"v":1,"data":{"layout":"m1"}}' }],
+          },
+        ],
+        onDidChange: () => ({ dispose() {} }),
+        onDidOpen: () => ({ dispose() {} }),
+      },
+    } as unknown as BundleHost;
+    const handle = activate(host);
+    await vi.waitFor(() => expect(live.get(SLIDES_PANEL_ID)?.rail).toBe(true));
+    expect(live.get(NOTES_PANEL_ID)?.rail).toBe(true);
+    handle.dispose();
+    expect(live.size).toBe(0);
   });
 
   it("names the document after the file", () => {
