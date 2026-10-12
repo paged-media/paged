@@ -158,7 +158,9 @@ The editor builds `PropertyField`; these are the fields that map onto a row toda
   them; every other face of a shape the gesture touched stays, as a piece in the paint of the
   shape on top of it there (an input keeps one piece in place, further pieces are new paths
   carrying fill, stroke colour and stroke weight only, at the top of the page and outside any
-  group, as the Knife's are).
+  group, as the Knife's are). The engine reads an oval as its bounding
+  box, so over a selection with an oval no face is highlighted while hovering; the faces are
+  resolved at release against the oval's real curve, and the oval is replaced by its pieces.
 - **Tools.** Width replaces the path with its outline. Eyedropper samples properties, not
   pixels. Measure's snap and the gradient annotator's stops use raw engine requests outside
   the host doors. Only Curvature snaps among this bundle's own tools.

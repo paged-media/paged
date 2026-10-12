@@ -190,6 +190,12 @@ export interface RegionCacheHooks {
   onFaces(faces: readonly RegionFace[]): void;
   /** A POINT query answered: the face under the sampled point, or null. */
   onPointFace(id: string | null): void;
+  /** An input set the engine cannot answer TRUTHFULLY — an OVAL, which
+   *  the arrangement reads as its bounding box. Such a set is never asked
+   *  here (no enumeration, no point query: either would answer for the box);
+   *  its owner resolves it at commit through stand-ins of the real curve
+   *  (`oval-stand-ins.ts`). Absent: every set is asked (Live Paint). */
+  unanswerable?(ids: readonly ElementId[]): boolean;
 }
 
 /** What a sample's answer is FOR — which decides whether a point query
@@ -423,6 +429,8 @@ export function createRegionCache(
     warm: isWarm,
     sample(ids, point, need = "every") {
       if (ids.length === 0) return;
+      // A set the engine would answer for the wrong shape is not asked.
+      if (hooks.unanswerable?.(ids)) return;
       if (isWarm(ids)) return;
       ensure(ids);
       if (need === "latest") pointQueryLatest(ids, point);

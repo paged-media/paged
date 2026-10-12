@@ -16,8 +16,8 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The Shape Builder over the overlap the editor film found broken — driven
-// through the live handler against the REAL engine.
+// The Shape Builder over the two overlaps the editor film found broken —
+// driven through the live handler against the REAL engine.
 //
 // THE CROSS. A horizontal bar 100..340 × 355..415 pt crossed by a vertical
 // bar 190..250 × 290..470 pt drawn over it; drag from the left arm into the
@@ -25,6 +25,11 @@
 // the centre and the two other arms vanished. Expected: the crossed arms
 // merge into one path, everything else stays where it was, in the paint of
 // the shape that was on top there.
+//
+// TWO OVALS. The engine reads an oval as its BOUNDING BOX (`pathAnchors`
+// answers no geometry for one, and the planar arrangement falls back to the
+// box), so the builder merged rectangles. Expected: the merged region is the
+// ovals' own curve.
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
@@ -244,5 +249,56 @@ describe("Shape Builder on a cross-shaped overlap — the regions it does not cr
     const right = await elementsAt(h, RIGHT);
     expect(right.map((x) => key(x.id))).toEqual([key(H)]);
     expect(await fillOf(h, H)).toBe(swatch("red"));
+  });
+});
+
+describe("Shape Builder over ovals — merges the curve, not the bounding box [plugin-draw.shape-builder]", () => {
+  // Back to front: B (centre 300,200), then A (centre 200,200) over it; r = 100.
+  const A: ElementId = { kind: "oval", id: "uoa" };
+  const B: ElementId = { kind: "oval", id: "uob" };
+  const OVALS = packageWithSpread(
+    `<Oval Self="uob" GeometricBounds="100 200 300 400" ItemTransform="1 0 0 1 0 0" FillColor="Color/Black"/>` +
+      `<Oval Self="uoa" GeometricBounds="100 100 300 300" ItemTransform="1 0 0 1 0 0" FillColor="Color/Black"/>`,
+  );
+
+  let h: HeadlessHost;
+  beforeEach(async () => {
+    h = await openHost();
+    await h.load(OVALS);
+    h.loadBundle(drawBundle);
+    await paint(h, [
+      [B, "red"],
+      [A, "blue"],
+    ]);
+  });
+  afterEach(() => h?.dispose());
+
+  it("merging A's crescent and the lens gives A's circle — not its box", async () => {
+    // From A's crescent (120,200) through the lens (250,200).
+    await build(h, [A, B], [120, 200], [250, 200]);
+    const merged = await elementsAt(h, [150, 200]);
+    expect(merged, "the merged region").toHaveLength(1);
+    expect(await fillOf(h, merged[0].id)).toBe(swatch("blue"));
+    // A's box corner is NOT in the result: the curve was merged.
+    expect(await elementsAt(h, [110, 110]), "a bounding-box corner was merged").toHaveLength(0);
+    // The lens is part of it, and so is the curve's widest point.
+    expect((await elementsAt(h, [250, 200])).map((x) => key(x.id))).toEqual([key(merged[0].id)]);
+    expect((await elementsAt(h, [105, 200])).map((x) => key(x.id))).toEqual([key(merged[0].id)]);
+  });
+
+  it("B's own crescent stays — a curve in B's paint, its box corner empty", async () => {
+    await build(h, [A, B], [120, 200], [250, 200]);
+    const rest = await elementsAt(h, [370, 200]);
+    expect(rest, "B's crescent").toHaveLength(1);
+    expect(await fillOf(h, rest[0].id)).toBe(swatch("red"));
+    expect(await elementsAt(h, [390, 110]), "B's box corner").toHaveLength(0);
+    expect(await elementsAt(h, [390, 290]), "B's box corner").toHaveLength(0);
+  });
+
+  it("is ONE undo step: one undo brings both ovals back", async () => {
+    const before = (await leaves(h)).map(key).sort();
+    await build(h, [A, B], [120, 200], [250, 200]);
+    await h.host.document.undo();
+    expect((await leaves(h)).map(key).sort()).toEqual(before);
   });
 });

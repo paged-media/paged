@@ -163,6 +163,46 @@ export function ellipseToPath(
   return tableFrom(anchors, false);
 }
 
+/** An OVAL frame's outline: the four-arc κ ellipse inscribed in its frame
+ *  box `[top, left, bottom, right]` (the IDML `GeometricBounds` order, the
+ *  order `elementGeometry` answers), in the oval's OWN space — map it
+ *  through the oval's item transform for page space (`mapTable`; an affine
+ *  map moves a Bézier's control points exactly).
+ *
+ *  Why a path needs to be DERIVED for an oval: the engine stores none.
+ *  `pathAnchors` answers no geometry for an oval and the planar
+ *  arrangement reads one as its bounding box, so a tool that needs the
+ *  curve builds it from the box — the same κ ellipse the renderer draws. A
+ *  degenerate box yields an empty table. */
+export function ovalToPath(
+  bounds: readonly [number, number, number, number],
+): AnchorTable {
+  const [top, left, bottom, right] = bounds;
+  return ellipseToPath(
+    (left + right) / 2,
+    (top + bottom) / 2,
+    (right - left) / 2,
+    (bottom - top) / 2,
+  );
+}
+
+/** `table` with every anchor AND both handles mapped through the affine
+ *  `m` (`[a, b, c, d, tx, ty]`; null = identity, the table itself). Exact
+ *  for a cubic Bézier: an affine map of the control points is the affine
+ *  map of the curve. */
+export function mapTable(
+  table: AnchorTable,
+  m: readonly [number, number, number, number, number, number] | null,
+): AnchorTable {
+  if (!m) return table;
+  const at = (p: Vec2): Vec2Mut => [m[0] * p[0] + m[2] * p[1] + m[4], m[1] * p[0] + m[3] * p[1] + m[5]];
+  return {
+    anchors: table.anchors.map((a) => ({ anchor: at(a.anchor), left: at(a.left), right: at(a.right) })),
+    subpathStarts: [...table.subpathStarts],
+    ...(table.subpathOpen ? { subpathOpen: [...table.subpathOpen] } : {}),
+  };
+}
+
 /** `<circle cx cy r>` → ellipse with rx = ry = r. */
 export function circleToPath(cx: number, cy: number, r: number): AnchorTable {
   return ellipseToPath(cx, cy, r, r);

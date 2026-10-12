@@ -29,6 +29,8 @@ import {
   circleToPath,
   ellipseToPath,
   lineToPath,
+  mapTable,
+  ovalToPath,
   polyToPath,
   evalCubic,
   type AnchorTable,
@@ -144,5 +146,52 @@ describe("lineToPath / polyToPath", () => {
 
   it("fewer than 2 points → empty", () => {
     expect(polyToPath([[0, 0]], false).anchors).toHaveLength(0);
+  });
+});
+
+// An OVAL frame has no path in the engine (`pathAnchors` answers nothing for
+// one, and the planar arrangement reads it as its box — the Shape Builder
+// merged ovals as rectangles). The plugin derives the outline from the box.
+describe("ovalToPath — the curve of an oval frame, from its box [plugin-draw.shape-builder]", () => {
+  it("is the ellipse inscribed in [top, left, bottom, right], through its four extremes", () => {
+    const t = ovalToPath([100, 200, 300, 400]); // centre (300, 200), rx 100, ry 100
+    expect(t.anchors).toHaveLength(4);
+    expect(t.subpathOpen).toEqual([false]);
+    expect(t.anchors.map((a) => a.anchor)).toEqual([
+      [400, 200],
+      [300, 300],
+      [200, 200],
+      [300, 100],
+    ]);
+    // On the true circle everywhere (κ's error is < 0.03 % of the radius)...
+    for (const p of outline(t)) {
+      expect(Math.hypot(p[0] - 300, p[1] - 200)).toBeCloseTo(100, 1);
+    }
+    // ...so the box's corner is outside it — what a bounding-box merge kept.
+    const corner = outline(t).some((p) => p[0] < 220 && p[1] < 120);
+    expect(corner).toBe(false);
+  });
+
+  it("an unequal box is an ellipse with those radii", () => {
+    const t = ovalToPath([0, 0, 50, 200]); // rx 100, ry 25
+    for (const p of outline(t)) {
+      const e = ((p[0] - 100) / 100) ** 2 + ((p[1] - 25) / 25) ** 2;
+      expect(e).toBeCloseTo(1, 2);
+    }
+  });
+
+  it("a degenerate box has no outline", () => {
+    expect(ovalToPath([10, 10, 10, 50]).anchors).toHaveLength(0);
+  });
+
+  it("mapTable carries the outline through an item transform, handles included", () => {
+    const t = ovalToPath([0, 0, 100, 100]);
+    const moved = mapTable(t, [1, 0, 0, 1, 50, 20]);
+    expect(moved.anchors[0].anchor).toEqual([150, 70]);
+    expect(moved.anchors[0].left).toEqual([t.anchors[0].left[0] + 50, t.anchors[0].left[1] + 20]);
+    const turned = mapTable(t, [0, 1, -1, 0, 0, 0]); // 90°
+    expect(turned.anchors[0].anchor[0]).toBeCloseTo(-50, 9);
+    expect(turned.anchors[0].anchor[1]).toBeCloseTo(100, 9);
+    expect(mapTable(t, null)).toBe(t);
   });
 });

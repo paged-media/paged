@@ -117,9 +117,11 @@ caches the answer per gesture, and maps between page space and the raw path spac
 engine works in. The Shape Builder builds its result from those faces, the way the Knife builds
 its pieces: `planShapeBuild` (draw-tools) decides which faces merge, which an input keeps in
 place and which become new pieces, and `commands/shape-build.ts` sends it as one batch, with
-the merged faces united by the engine's `pathfinderFaces`. TypeScript geometry is used for
-what a gesture needs synchronously and for re-winding nested contours so that the engine's
-non-zero fill cuts holes. See
+the merged faces united by the engine's `pathfinderFaces`. An oval has no path in the engine
+(the arrangement reads its bounding box), so at release an oval set is read through stand-in
+paths of its curve (`handlers/oval-stand-ins.ts`, the Knife's probe-and-undo). TypeScript
+geometry is used for what a gesture needs synchronously, for an oval's κ ellipse, and for
+re-winding nested contours so that the engine's non-zero fill cuts holes. See
 [ADR 353](adr/353-path-algebra-runs-in-the-engine.md).
 
 **Appearance.** Extra fills and strokes are a stack in the element's metadata; the front
