@@ -504,9 +504,10 @@ describe("draw conformance — the minted seam (what did my write create)", () =
   // The rules a flow that replaces what it built has to keep. The first
   // two were known (CLAUDE.md, "Two batch-ORDERING rules"); they are
   // re-measured here with their exact sentences because the one-batch
-  // flows now put inserts, deletes and groups in the SAME batch. The
-  // rest is what decides how many REBUILDS one batch may carry — and it
-  // is the engine's, not this bundle's.
+  // flows now put inserts, deletes and groups in the SAME batch — and
+  // both changed under 0.71.7/0.71.8, which the first two cases record.
+  // The rest is what decides how many REBUILDS one batch may carry — and
+  // it is the engine's, not this bundle's.
   describe("the batch rules a build-replace-group flow keeps (measured)", () => {
     /** A grouped pair at `x`, built the way a flow builds one. */
     const pair = async (x: number): Promise<[ElementId, ElementId, ElementId]> => {
@@ -525,30 +526,61 @@ describe("draw conformance — the minted seam (what did my write create)", () =
     const refusal = (reply: RawApplied): string =>
       reply.kind === "mutationFailed" ? JSON.stringify(reply.payload.error) : "";
 
-    it("a batch that DELETES then INSERTS is refused — inserts go first", async () => {
+    // FIXED in 0.71.8 (core d98e439). Up to 0.71.7 this batch was REFUSED
+    // — "batch failed at index 1: position 3 out of range for parent
+    // Spread(\"us\") (len 2)" — because the insert's z-position was
+    // resolved against the spread as the batch FOUND it, one item longer
+    // than it is by the time the insert lands. The engine now pulls the
+    // slot back to the list's length. The flows still put every insert
+    // first: that order is right on every engine, and this bundle runs
+    // against whatever wasm the host booted.
+    it("a batch that DELETES then INSERTS applies (0.71.8; it was refused) — and one undo restores it", async () => {
       const one = await raw(square(10, 200));
+      expect(await treeShape(h)).toBe("ua ub uc");
       const reply = await raw(batch(remove(one.payload.createdId!), square(40, 200), bind("x")));
-      // The insert's z-position was resolved against the spread as the
-      // batch FOUND it — one item longer than it is by the time it lands.
-      expect(refusal(reply)).toMatch(
-        /frame mutation failed: batch failed at index 1: position 3 out of range for parent Spread\(\\"us\\"\) \(len 2\)/,
-      );
+      expect(refusal(reply)).toBe("");
+      expect(reply.kind).toBe("mutationApplied");
+      expect(listed(reply)).toEqual(["x=polygon:ud"]);
+      expect(await treeShape(h)).toBe("ua ub ud");
+      await h.host.document.undo();
+      expect(await treeShape(h)).toBe("ua ub uc");
+      await h.host.document.redo();
+      expect(await treeShape(h)).toBe("ua ub ud");
     });
 
-    // ENGINE DEFECT (0.65.0), pinned so it fails when fixed. On 0.64.0 this
-    // batch was REFUSED ("group has an id-less member that cannot
-    // round-trip"). On 0.65.0 it APPLIES — and its ONE undo step does not
-    // bring the group or its members back. So the rule stands, for a new
-    // reason: dissolve BEFORE deleting members, which every flow here does.
-    it("ENGINE DEFECT — deleting a group's members BEFORE dissolving it applies, and its undo does not restore them", async () => {
+    // FIXED in 0.71.7 (RFI C-84, core ecad085). On 0.64.0 this batch was
+    // REFUSED ("group has an id-less member that cannot round-trip"); on
+    // 0.65.0–0.71.6 it APPLIED, and its ONE undo step did not bring the
+    // group or its members back. The engine now does what InDesign does: a
+    // group goes with its LAST member. So the dissolve names a group that
+    // is already gone and the batch is refused whole, while deleting the
+    // members alone takes the group with them — and one undo puts all
+    // three back. The rule stands on every engine: dissolve BEFORE deleting
+    // members, which every flow here does.
+    it("FIXED (C-84) — a group goes with its last member: delete-then-dissolve is refused whole, and the members alone undo exactly", async () => {
       const [a, b, g] = await pair(40);
       const before = await treeShape(h);
       expect(before).toBe("ua ub ue[uc ud]");
       const reply = await raw(batch(remove(a), remove(b), dissolve(g)));
-      expect(reply.kind).toBe("mutationApplied");
+      expect(refusal(reply)).toMatch(
+        /frame mutation failed: batch failed at index 2: node not found: Group\(\\"ue\\"\)/,
+      );
+      expect(await treeShape(h)).toBe(before);
+
+      // One member: the group stays, as a group of one…
+      expect((await raw(remove(a))).kind).toBe("mutationApplied");
+      expect(await treeShape(h)).toBe("ua ub ue[ud]");
+      await h.host.document.undo();
+      expect(await treeShape(h)).toBe(before);
+
+      // …the last member: the group goes with it, and ONE undo restores
+      // the group AND both members.
+      expect((await raw(batch(remove(a), remove(b)))).kind).toBe("mutationApplied");
       expect(await treeShape(h)).toBe("ua ub");
       await h.host.document.undo();
-      expect(await treeShape(h)).toBe("ua ub"); // not `before`
+      expect(await treeShape(h)).toBe(before);
+      await h.host.document.redo();
+      expect(await treeShape(h)).toBe("ua ub");
     });
 
     it("ONE rebuild in one batch: insert, dissolve, delete, group — one undo, exactly restored", async () => {

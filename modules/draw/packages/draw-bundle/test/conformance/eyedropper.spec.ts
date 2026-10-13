@@ -18,8 +18,8 @@
 
 // Wave 2 conformance — the Eyedropper: (1) the exact batch wire shape
 // the apply emits (per-target supported-path intersection — the
-// probed engine truth: a GraphicLine rejects FrameFillColor/Tint/
-// Opacity writes), (2) the LIVE click handler sampling a real element
+// probed engine truth: a GraphicLine rejects FrameFillColor/Tint writes,
+// and Opacity before core 0.71.7's R-10), (2) the LIVE click handler sampling a real element
 // through hitTest + the B-19 typed-property door and re-styling the
 // selection in ONE batch (one undo round-trip), (3) Alt+click
 // sampling WITHOUT applying, (4) a plain click on empty canvas as a

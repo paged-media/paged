@@ -625,17 +625,19 @@ describe("draw conformance — SVG import/export (Phase 8, K-2)", () => {
     expect(await leafCount(h)).toBe(before);
   });
 
-  // THE ENGINE EDGE THE BATCH IS SHAPED AROUND. Styling through the
-  // creation defaults inside the batch lands the same paint in fewer
-  // children — and is not used, because of what this measures: a batch
-  // carrying a `setDocumentDefaults` child takes the engine's per-child
-  // lane, where the undo log's 10 000-entry cap applies MID-batch.
+  // THE ENGINE EDGE THE BATCH WAS SHAPED AROUND — FIXED in 0.71.7 (RFI
+  // C-79, core 0b57092). Styling through the creation defaults inside the
+  // batch lands the same paint in fewer children, and was not used
+  // because of what this measured: a batch carrying a `setDocumentDefaults`
+  // child takes the engine's per-child lane, where the undo log's
+  // 10 000-entry cap applied MID-batch — one undo of 10 501 children left
+  // the first 500 inserts in the document for good. The mixed-batch lane
+  // now holds the cap while its children log and applies it once to the
+  // collapsed entry, so the batch is ONE undo step at any size.
   //
-  // WHEN THIS FAILS the engine has fixed it (the cap must apply to the
-  // collapsed batch, not to its children). Nothing here has to change —
-  // the handle lane stays correct — but `io/svg.ts`'s header, which
-  // cites this, should say so.
-  it("ENGINE EDGE: a batch with a setDocumentDefaults child, over the undo-log cap, is not one undo step", async () => {
+  // Nothing in the importer changes: the handle lane is still right, and
+  // still right on the engines before the fix. `io/svg.ts`'s header says so.
+  it("FIXED (C-79): a batch with a setDocumentDefaults child, over the undo-log cap, is ONE undo step", async () => {
     // Its own host: what this strands, undo can never reach again.
     const own = await openHost();
     try {
@@ -668,14 +670,14 @@ describe("draw conformance — SVG import/export (Phase 8, K-2)", () => {
       expect(outcome.applied).toBe(true);
       expect(await leafCount(own)).toBe(base + INSERTS);
 
+      // ONE undo removes every insert — up to 0.71.6 it left 500 behind
+      // (the defaults write and the first 500 inserts had fallen off the
+      // front of the log), out of undo's reach for good.
       await own.host.document.undo();
-      // 501 children fell off the front of the 10 000-entry log: the
-      // defaults write and the first 500 inserts.
-      expect((await leafCount(own)) - base).toBe(500);
-      // …and they are out of undo's reach for good.
-      await own.host.document.undo();
-      await own.host.document.undo();
-      expect((await leafCount(own)) - base).toBe(500);
+      expect(await leafCount(own)).toBe(base);
+      // …and one redo puts them all back.
+      await own.host.document.redo();
+      expect(await leafCount(own)).toBe(base + INSERTS);
     } finally {
       own.dispose();
     }

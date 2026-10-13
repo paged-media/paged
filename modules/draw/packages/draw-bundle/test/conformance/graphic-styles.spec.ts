@@ -113,9 +113,11 @@ const RECT_PATHS = [
   "frameOpacity",
   "frameBlendMode",
 ];
-/** A GraphicLine's — stroke-side only (probed: the engine answers
- *  `notImplemented` for FrameFillColor / FrameFillTint / FrameOpacity /
- *  FrameBlendMode on a GraphicLine). */
+/** A GraphicLine's — stroke-side only, as an engine before 0.71.7
+ *  answers it (`notImplemented` for FrameFillColor / FrameFillTint /
+ *  FrameOpacity / FrameBlendMode). Since core's R-10 (0.71.7) a line's
+ *  vocabulary ALSO lists `frameOpacity` / `frameBlendMode`; the
+ *  projection is vocabulary-driven, so it follows either. */
 const LINE_PATHS = ["frameStrokeColor", "frameStrokeWeight"];
 
 const STACK: AppearanceStack = {
@@ -785,9 +787,12 @@ describe("draw conformance — GRAPHIC STYLES (Illustrator Phase 2)", () => {
         type: "length",
         value: 2,
       });
-      // …the fill half is not even addressable on this kind…
+      // …the fill half is not even addressable on this kind (the object's
+      // opacity and blend are, since core 0.71.7's R-10)…
       const read = await readGraphicAppearance(h.host, LINE);
       expect(read.supported).not.toContain("frameFillColor");
+      expect(read.supported).not.toContain("frameFillTint");
+      expect(read.supported).toEqual(expect.arrayContaining(["frameOpacity", "frameBlendMode"]));
       // …the metadata stack travelled whole regardless…
       expect(read.appearance.stack).toEqual(STACK);
       // …and the link records what was WRITTEN, so the line is linked and
