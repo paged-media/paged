@@ -46,9 +46,15 @@
 //
 // SPACE. Faces come back in the arrangement's RAW space — the inputs' own,
 // assumed shared (the seam's named limit: the frontmost input's transform
-// maps it to the page). A piece is inserted at its raw coordinates and given
-// that transform, so it lands in the same space as the inputs it is united
-// with; a rewrite writes raw coordinates onto an input that already has it.
+// maps it to the page). A piece STORES its raw coordinates and the frontmost
+// input's STORED transform, so it lands in the same space as the inputs it
+// is united with (the union reads raw anchors); a rewrite writes raw
+// coordinates onto an input that already has it. Two things stand between a
+// raw table and a stored one (`../page-origin.ts`): `insertPath` adds the
+// page's origin to what it is given, so the raw table is pinned afterwards
+// with `framePath` and `frameBounds` (the Knife strip's trick, right on any
+// page and any engine); and the transform the geometry door reads is in
+// PAGE space, so the page's origin goes back onto it before it is written.
 //
 // WHEN THE ENGINE'S ONE OP IS THE ANSWER. A gesture that crosses EVERY face
 // of every input it touches, over inputs that are all paths and all touched,
@@ -76,6 +82,7 @@ import {
   type CompoundPaint,
 } from "./compound-path";
 import { MAX_PLANAR_INPUTS } from "../handlers/planar-regions";
+import { SPREAD_ORIGIN, storedTransformOf, type PageOrigin } from "../page-origin";
 import { faceTable } from "./knife";
 import { pathfinderFacesMutationFor } from "./pathfinder-region";
 import {
@@ -119,17 +126,22 @@ function paintOps(id: ElementId, paint: CompoundPaint): MutationInput[] {
   return ops;
 }
 
-/** Insert `table` (raw space) as a new path named `handle`, in the
- *  arrangement's space: first contour by `insertPath`, the whole table by
- *  `framePath` when there are holes / more contours, the transform last. */
-function insertPieceOps(
+/** Insert `table` (RAW space) as a new path named `handle` that STORES
+ *  exactly `table` and the transform `stored` (spread space — what
+ *  `frameTransform` writes; null = identity): the first contour by
+ *  `insertPath`, then the whole table pinned by `framePath` and its box by
+ *  `frameBounds` (`insertPath` adds the page's origin, which a raw table
+ *  must not carry — module header), the transform last. Right whatever page
+ *  `pageId` names. */
+export function insertRawPathOps(
   pageId: string,
   table: AnchorTable,
   handle: string,
-  matrix: Affine | null,
+  stored: Affine | null,
 ): MutationInput[] {
   const ranges = contourRanges(table.anchors.length, table.subpathStarts);
   const [from, to] = ranges[0] ?? [0, table.anchors.length];
+  const id = handleElementId(handle);
   const ops: MutationInput[] = [
     {
       op: "insertPath",
@@ -144,15 +156,22 @@ function insertPieceOps(
       },
     },
     bindCreatedMutationFor(handle),
+    framePathMutationFor(id, table),
   ];
-  if (ranges.length > 1) ops.push(framePathMutationFor(handleElementId(handle), table));
-  if (!isIdentity(matrix)) {
+  const box = tableBounds(table);
+  if (box) {
+    ops.push({
+      op: "setElementProperty",
+      args: { elementId: id, path: "frameBounds", value: { type: "bounds", value: box } },
+    });
+  }
+  if (!isIdentity(stored)) {
     ops.push({
       op: "setElementProperty",
       args: {
-        elementId: handleElementId(handle),
+        elementId: id,
         path: "frameTransform",
-        value: { type: "transform", value: [...matrix!] as [number, number, number, number, number, number] },
+        value: { type: "transform", value: [...stored!] as [number, number, number, number, number, number] },
       },
     });
   }
@@ -179,7 +198,13 @@ export interface ShapeBuildContext {
   /** The request's inputs, TOP-TO-BOTTOM (the arrangement's index order). */
   inputs: readonly ElementId[];
   faces: ReadonlyMap<string, Pick<PlanarFace, "anchors" | "subpathStarts">>;
+  /** The frontmost input's transform as the geometry door reads it (PAGE
+   *  space): raw → page. */
   matrix: Affine | null;
+  /** That input's page origin in its spread, from the same read (`[0, 0]`
+   *  when absent). With `matrix` it makes the STORED transform a piece
+   *  is written with. */
+  pageOrigin?: PageOrigin;
   pageId: string;
   /** Paint per input index — read for every input a piece is painted from. */
   paints: ReadonlyMap<number, CompoundPaint>;
@@ -222,6 +247,7 @@ export function shapeBuildBatchFor(
   const union: MutationInput[] = [];
   const deletes: MutationInput[] = [];
   const noPaint: CompoundPaint = { fill: null, stroke: null, weight: null };
+  const stored = storedTransformOf(ctx.matrix, ctx.pageOrigin ?? SPREAD_ORIGIN);
 
   // Every piece that stays, painted like its owner.
   for (const [k, ins] of plan.inserts.entries()) {
@@ -229,7 +255,7 @@ export function shapeBuildBatchFor(
     if (!t) return null;
     const handle = shapeBuildPieceHandle(k);
     inserts.push(
-      ...insertPieceOps(ctx.pageId, t, handle, ctx.matrix),
+      ...insertRawPathOps(ctx.pageId, t, handle, stored),
       ...paintOps(handleElementId(handle), ctx.paints.get(ins.paintFrom) ?? noPaint),
     );
   }
@@ -257,7 +283,7 @@ export function shapeBuildBatchFor(
       const handle = shapeBuildMergeHandle(0);
       carrierId = handleElementId(handle);
       inserts.push(
-        ...insertPieceOps(ctx.pageId, tables[0]!, handle, ctx.matrix),
+        ...insertRawPathOps(ctx.pageId, tables[0]!, handle, stored),
         ...paintOps(carrierId, ctx.paints.get(owner) ?? noPaint),
       );
       first = 1;
@@ -265,7 +291,7 @@ export function shapeBuildBatchFor(
     const rest: ElementId[] = [];
     for (let k = first; k < tables.length; k++) {
       const handle = shapeBuildMergeHandle(k);
-      inserts.push(...insertPieceOps(ctx.pageId, tables[k]!, handle, ctx.matrix));
+      inserts.push(...insertRawPathOps(ctx.pageId, tables[k]!, handle, stored));
       rest.push(handleElementId(handle));
     }
     // The engine's arrangement takes at most 12 inputs: unite in runs of

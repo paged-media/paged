@@ -207,6 +207,7 @@ import {
 } from "./compound-path";
 import { bindMinted, mutateMinting } from "./minted";
 import { insertPathMutationFor } from "../handlers/insert-path";
+import { SPREAD_ORIGIN, spreadTableOf, type PageOrigin } from "../page-origin";
 import { announceRecipeChange, groupHolding, linkIndex } from "../link-index";
 import {
   batchMutationFor,
@@ -500,6 +501,9 @@ export interface RepeatSource {
  *  conformance spec builds one by hand. */
 export interface RepeatPlan {
   pageId: string;
+  /** That page's origin in its spread (absent = `[0, 0]`): a compound
+   *  copy's `framePath` table is moved by it (`../page-origin.ts`). */
+  pageOrigin?: PageOrigin;
   repeat: string;
   params: RepeatParams;
   /** The union of the sources' page bounds, `[top, left, bottom, right]`. */
@@ -897,8 +901,10 @@ export function repeatBatchFor(args: {
     if (contours.length > 1) {
       // A compound copy came in as N separate paths; put the contours
       // back on the first one and drop the rest — the very same door
-      // Make Compound Path uses, now reachable in the SAME batch.
-      ops.push(framePathMutationFor(keep, moved));
+      // Make Compound Path uses, now reachable in the SAME batch. It
+      // stores the table as given, where `insertPath` added the page's
+      // origin: so the page-space table gets that origin too.
+      ops.push(framePathMutationFor(keep, spreadTableOf(moved, plan.pageOrigin ?? SPREAD_ORIGIN)));
       for (let c = 1; c < contours.length; c++) {
         ops.push({
           op: "deleteFrame",
@@ -1406,6 +1412,7 @@ export async function repeatPlanFor(
   }
   const sources: RepeatSource[] = [];
   let pageId: string | null = null;
+  let pageOrigin: PageOrigin = SPREAD_ORIGIN;
   for (const id of ids) {
     const source = await compoundSourceOf(host, id);
     if (!source) {
@@ -1414,7 +1421,10 @@ export async function repeatPlanFor(
       );
       continue;
     }
-    pageId ??= source.pageId;
+    if (pageId === null) {
+      pageId = source.pageId;
+      pageOrigin = source.pageOrigin;
+    }
     sources.push({
       id,
       table: source.table,
@@ -1492,6 +1502,7 @@ export async function repeatPlanFor(
 
   return {
     pageId,
+    pageOrigin,
     repeat: args.repeat,
     params,
     bounds,

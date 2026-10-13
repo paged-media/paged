@@ -173,6 +173,7 @@ import {
   handleElementId,
 } from "./v59-wire";
 import { insertPathMutationFor } from "../handlers/insert-path";
+import { pageOriginOf, SPREAD_ORIGIN, spreadTableOf, type PageOrigin } from "../page-origin";
 import {
   faceToPageSpace,
   readPlanarRegions,
@@ -485,6 +486,9 @@ export interface LivePaintFacePlan {
  *  conformance spec builds one by hand. */
 export interface LivePaintFillPlan {
   pageId: string;
+  /** That page's origin in its spread (absent = `[0, 0]`): a holed face's
+   *  `framePath` table is moved by it (`../page-origin.ts`). */
+  pageOrigin?: PageOrigin;
   groupId: string;
   /** The faces to (re)materialise, in paint order. */
   faces: LivePaintFacePlan[];
@@ -595,8 +599,12 @@ export function livePaintFinishBatchFor(args: {
     if (!face) continue;
     if (binding.absorb.length > 0) {
       // A holed face came in as N separate paths; put the contours back
-      // on the first one and drop the rest.
-      ops.push(framePathMutationFor(binding.keep, face.table));
+      // on the first one and drop the rest. `framePath` stores the table
+      // as given, where `insertPath` added the page's origin: so the
+      // page-space table gets that origin too.
+      ops.push(
+        framePathMutationFor(binding.keep, spreadTableOf(face.table, args.plan.pageOrigin ?? SPREAD_ORIGIN)),
+      );
       for (const id of binding.absorb) {
         ops.push({ op: "deleteFrame", args: { frameId: id.id as string } });
       }
@@ -852,7 +860,7 @@ export async function livePaintArrangement(
   host: BundleHost,
   group: LivePaintRecipe,
   label: string,
-): Promise<{ faces: RegionFace[]; pageId: string; complete: boolean } | null> {
+): Promise<{ faces: RegionFace[]; pageId: string; pageOrigin: PageOrigin; complete: boolean } | null> {
   const inputs = livePaintInputs(group);
   if (inputs.length < 2) {
     host.log.warn(
@@ -884,6 +892,7 @@ export async function livePaintArrangement(
   return {
     faces: result.faces.map((f) => faceToPageSpace(f, matrix)),
     pageId,
+    pageOrigin: pageOriginOf(read),
     complete: result.complete,
   };
 }
@@ -962,6 +971,7 @@ export async function emitLivePaintFills(
 
   const plan: LivePaintFillPlan = {
     pageId: arrangement.pageId,
+    pageOrigin: arrangement.pageOrigin,
     groupId: group.id,
     faces,
     stale: [...args.stale],

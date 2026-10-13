@@ -19,7 +19,7 @@
 // REFLECT and TRANSFORM AGAIN — Illustrator's Object ▸ Transform pair.
 //
 // REFLECT mirrors the selection across an axis through the centre of the
-// SELECTION's page box: horizontally (left ↔ right — the axis is
+// SELECTION's box: horizontally (left ↔ right — the axis is
 // vertical, 90°), vertically (top ↔ bottom — the axis is horizontal,
 // 0°), or across a TYPED angle (the Path Options panel's Reflect
 // section, or a `{ angleDeg }` payload).
@@ -28,14 +28,23 @@
 // REPLACES an element's item transform — it does not compose (measured,
 // CLAUDE.md, writing the same rotation twice leaves 30°, not 60°). So a
 // reflection R is written as `R ∘ M`, M being the element's CURRENT
-// transform as `elementGeometry` reports it; writing R alone would throw
-// away whatever rotation or scale the element already had. A GROUP is
-// not reachable through `elementGeometry` at all (measured: the door
-// omits it) and moves through its own op: `setGroupTransform` — which
-// also REPLACES (the group's own transform; the engine rebases every
-// member by the delta) — so a group is written `R ∘ G`, G read from the
-// group's `frameTransform` property. Every write of one reflect rides
-// ONE batch: one undo step for the whole selection.
+// transform; writing R alone would throw away whatever rotation or scale
+// the element already had. A GROUP is not reachable through
+// `elementGeometry` at all (measured: the door omits it) and moves
+// through its own op: `setGroupTransform` — which also REPLACES (the
+// group's own transform; the engine rebases every member by the delta) —
+// so a group is written `R ∘ G`, G read from the group's `frameTransform`
+// property. Every write of one reflect rides ONE batch: one undo step for
+// the whole selection.
+//
+// THE SPACE IS THE SPREAD'S. `frameTransform` stores M in spread space,
+// and a group's `frameTransform` and `frameBounds` are spread space too;
+// `elementGeometry` answers M in the space of the item's PAGE. So an
+// item's M is taken back to spread space first (`storedTransformOf`,
+// `../page-origin.ts`) and the centre is found among spread-space boxes
+// only. Mixing the two puts the pivot off by the page's origin on any page
+// that does not start at its spread's origin, and writes every item there
+// shifted by it.
 //
 // TRANSFORM AGAIN repeats the last transform applied THROUGH THIS MODULE
 // (`applySelectionTransform` is the one place), re-centred on the
@@ -75,6 +84,7 @@ import {
   type Vec2,
 } from "@paged-media/draw-geometry";
 
+import { pageOriginOf, storedTransformOf } from "../page-origin";
 import { engineOpVocabulary } from "./join-average";
 import { frameTransformMutationFor } from "./objects-on-path";
 import { batchMutationFor } from "./v59-wire";
@@ -117,9 +127,10 @@ export interface TransformRecord {
 /** One element of the selection, resolved for a write. */
 export interface TransformTarget {
   id: ElementId;
-  /** The element's current item transform (null = identity). */
+  /** The element's current STORED item transform — spread space, what
+   *  `frameTransform` writes (null = identity). */
   matrix: Affine | null;
-  /** Its page-space box `[top, left, bottom, right]`. */
+  /** Its spread-space box `[top, left, bottom, right]`. */
   box: readonly [number, number, number, number];
   /** Groups move through `setGroupTransform`. */
   group: boolean;
@@ -167,7 +178,7 @@ export function selectionCentre(
   return [(l + r) / 2, (t + b) / 2];
 }
 
-/** The page-space matrix of `record` about `centre`. */
+/** The spread-space matrix of `record` about `centre`. */
 export function transformMatrixOf(record: TransformRecord, centre: Vec2): Affine {
   return affineReflect(record.angleDeg, centre);
 }
@@ -208,9 +219,11 @@ export function transformBatchFor(
 
 // ------------------------------------------------------- the reads
 
-/** Resolve the selection: page items through ONE `elementGeometry`
- *  call, groups through their own properties (the geometry door omits
- *  them). An element neither answers is dropped (logged). */
+/** Resolve the selection, in SPREAD space: page items through ONE
+ *  `elementGeometry` call (its page-space transform taken back to the
+ *  stored one), groups through their own properties (the geometry door
+ *  omits them; their `frameTransform` and `frameBounds` are spread space
+ *  already). An element neither answers is dropped (logged). */
 export async function transformTargetsOf(
   host: BundleHost,
   selection: readonly ElementId[],
@@ -220,7 +233,7 @@ export async function transformTargetsOf(
   const out: TransformTarget[] = [];
   const geoms = items.length > 0 ? await host.document.elementGeometry([...items]).catch(() => []) : [];
   for (const g of geoms) {
-    const m = (g.itemTransform ?? null) as Affine | null;
+    const m = storedTransformOf((g.itemTransform ?? null) as Affine | null, pageOriginOf(g));
     out.push({ id: g.id, matrix: m, box: m ? transformBounds(g.bounds, m) : g.bounds, group: false });
   }
   for (const id of groups) {

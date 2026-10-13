@@ -224,6 +224,7 @@ import {
 } from "./v59-wire";
 import { announceRecipeChange, groupHolding, linkIndex } from "../link-index";
 import { insertPathMutationFor } from "../handlers/insert-path";
+import { SPREAD_ORIGIN, spreadTableOf, type PageOrigin } from "../page-origin";
 
 import { registerCommand } from "../command-registry";
 import {
@@ -489,6 +490,9 @@ export interface PatternSource {
  *  conformance spec builds one by hand. */
 export interface PatternPlan {
   pageId: string;
+  /** That page's origin in its spread (absent = `[0, 0]`): a compound
+   *  copy's `framePath` table is moved by it (`../page-origin.ts`). */
+  pageOrigin?: PageOrigin;
   field: string;
   params: PatternParams;
   step: [number, number];
@@ -890,14 +894,19 @@ export function patternFinishBatchFor(args: {
     const source = plan.sources[binding.copy.sourceIndex];
     if (binding.absorb.length > 0) {
       // A compound copy came in as N separate paths; put the contours
-      // back on the first one and drop the rest.
+      // back on the first one and drop the rest. `framePath` stores the
+      // table as given, where `insertPath` added the page's origin: so the
+      // page-space table gets that origin too.
       ops.push(
         framePathMutationFor(
           binding.keep,
-          offsetTable(
-            source.table,
-            binding.copy.tile.offset[0],
-            binding.copy.tile.offset[1],
+          spreadTableOf(
+            offsetTable(
+              source.table,
+              binding.copy.tile.offset[0],
+              binding.copy.tile.offset[1],
+            ),
+            plan.pageOrigin ?? SPREAD_ORIGIN,
           ),
         ),
       );
@@ -1294,6 +1303,7 @@ export async function patternPlanFor(
   }
   const sources: PatternSource[] = [];
   let pageId: string | null = null;
+  let pageOrigin: PageOrigin = SPREAD_ORIGIN;
   for (const id of ids) {
     const source = await compoundSourceOf(host, id);
     if (!source) {
@@ -1302,7 +1312,10 @@ export async function patternPlanFor(
       );
       continue;
     }
-    pageId ??= source.pageId;
+    if (pageId === null) {
+      pageId = source.pageId;
+      pageOrigin = source.pageOrigin;
+    }
     sources.push({
       id,
       table: source.table,
@@ -1353,6 +1366,7 @@ export async function patternPlanFor(
   }
   return {
     pageId,
+    pageOrigin,
     field: args.field,
     params: args.params,
     step,

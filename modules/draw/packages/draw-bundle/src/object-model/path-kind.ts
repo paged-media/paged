@@ -102,7 +102,7 @@ export const PATH_SCHEMA: readonly PropertySchema[] = [
   ro(
     "itemTransform",
     { kind: "transform" },
-    "The item's transform [a,b,c,d,tx,ty]; written through the core frame path frameTransform.",
+    "The item's transform [a,b,c,d,tx,ty] as the geometry door reads it: points through it land in the coordinates of the page the item sits on. Read-only here; core's frameTransform stores it in spread space, which adds the page's origin in its spread.",
   ),
 ];
 

@@ -115,6 +115,7 @@ import {
   shapeBuildBatchFor,
   shapeBuildPaints,
 } from "../commands/shape-build";
+import { pageOriginOf, SPREAD_ORIGIN, type PageOrigin } from "../page-origin";
 import { hasOval, ovalStandIns } from "./oval-stand-ins";
 import {
   createRegionCache,
@@ -348,19 +349,27 @@ export function createShapeBuilderHandler(host: BundleHost): GestureHandler {
     operands: ElementId[],
     snap: ShapeBuilderSnapshot,
     alt: boolean,
-  ): Promise<{ faces: PlanarFaceWire[]; matrix: Affine | null; crossed: string[] } | null> => {
+  ): Promise<{
+    faces: PlanarFaceWire[];
+    matrix: Affine | null;
+    pageOrigin: PageOrigin;
+    crossed: string[];
+  } | null> => {
+    // The frontmost input's PAGE-space transform (raw → page, what the
+    // gesture was drawn in) and its page's origin from the same read (the
+    // pieces are written with the STORED transform — `../page-origin.ts`).
     const transformOf = (id: ElementId) =>
       host.document.pathAnchors(id).then(
-        (t) => (t?.itemTransform ?? null) as Affine | null,
-        () => null,
+        (t) => ({ matrix: (t?.itemTransform ?? null) as Affine | null, pageOrigin: pageOriginOf(t) }),
+        () => ({ matrix: null, pageOrigin: SPREAD_ORIGIN }),
       );
     if (hasOval(operands)) {
       const probe = await ovalStandIns(host, operands, "shapeBuilder");
       if (!probe) return null;
-      let matrix: Affine | null = null;
+      let front: Awaited<ReturnType<typeof transformOf>> = { matrix: null, pageOrigin: SPREAD_ORIGIN };
       let regions: Awaited<ReturnType<typeof readPlanarRegions>> = null;
       try {
-        matrix = await transformOf(probe.ids[0]!);
+        front = await transformOf(probe.ids[0]!);
         regions = await readPlanarRegions(host, probe.ids);
       } finally {
         await probe.release();
@@ -369,23 +378,28 @@ export function createShapeBuilderHandler(host: BundleHost): GestureHandler {
         reportPlanarRefusal(host, "shapeBuilder", regions);
         return null;
       }
-      const page = regions.faces.map((f) => faceToPageSpace(f, matrix));
+      const page = regions.faces.map((f) => faceToPageSpace(f, front.matrix));
       return {
         faces: [...regions.faces],
-        matrix,
+        ...front,
         crossed: facesCrossedBy(page, snap.path ?? [], alt),
       };
     }
     if (cache.warm(operands)) {
-      return { faces: [...cache.rawFaces()], matrix: cache.matrix(), crossed: [...snap.collected] };
+      return {
+        faces: [...cache.rawFaces()],
+        matrix: cache.matrix(),
+        pageOrigin: cache.pageOrigin(),
+        crossed: [...snap.collected],
+      };
     }
-    const matrix = await transformOf(operands[0]!);
+    const front = await transformOf(operands[0]!);
     const regions = await readPlanarRegions(host, operands);
     if (!regions || !regions.found) {
       reportPlanarRefusal(host, "shapeBuilder", regions);
       return null;
     }
-    return { faces: [...regions.faces], matrix, crossed: [...snap.collected] };
+    return { faces: [...regions.faces], ...front, crossed: [...snap.collected] };
   };
 
   /** The REGION-lane release: plan the result from the arrangement
@@ -418,6 +432,7 @@ export function createShapeBuilderHandler(host: BundleHost): GestureHandler {
         inputs: operands,
         faces: new Map(arrangement.faces.map((f) => [f.id, f])),
         matrix: arrangement.matrix,
+        pageOrigin: arrangement.pageOrigin,
         pageId: page,
         paints: await shapeBuildPaints(host, plan, operands),
       });

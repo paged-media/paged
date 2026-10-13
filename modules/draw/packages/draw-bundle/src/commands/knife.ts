@@ -117,6 +117,7 @@ import {
   type CompoundPaint,
 } from "./compound-path";
 import { bindMinted, mutateMinting } from "./minted";
+import { pageOriginOf, SPREAD_ORIGIN, spreadTableOf, type PageOrigin } from "../page-origin";
 import {
   batchMutationFor,
   bindCreatedMutationFor,
@@ -147,8 +148,12 @@ export interface KnifeTarget {
   id: ElementId;
   pageId: string;
   inner: AnchorTable;
+  /** The transform as the geometry door reads it — PAGE space. */
   transform: Affine | null;
   cutInner: Vec2[];
+  /** The page's origin in its spread, from the same read (absent =
+   *  `[0, 0]`): what a piece's `framePath` adds (`knifeBatchFor`). */
+  pageOrigin?: PageOrigin;
 }
 
 /** One target the cut divides: piece 0 is rewritten onto the target,
@@ -305,7 +310,11 @@ function paintOpsFor(id: ElementId, paint: CompoundPaint): MutationInput[] {
  * THE CUT — ONE batch for every divided target: per target, every extra
  * piece inserted (page space), named, re-tabled when it has holes and
  * painted like the target; then the target rewritten to piece 0 with its
- * frame box following. `deletes` are appended LAST (the engine refuses a
+ * frame box following. The re-table is in SPREAD space: `framePath` stores
+ * a fresh path's anchors as given while `insertPath` adds the page's
+ * origin, so a holed piece's table gets that origin too
+ * (`../page-origin.ts`) — without it the piece lands off by the origin on a
+ * page that does not start at its spread's. `deletes` are appended LAST (the engine refuses a
  * batch that deletes and then inserts) — only the guarded fallback of
  * the probe passes any.
  */
@@ -334,7 +343,12 @@ export function knifeBatchFor(
         bindCreatedMutationFor(handle),
       );
       if (ranges.length > 1) {
-        ops.push(framePathMutationFor(handleElementId(handle), page));
+        ops.push(
+          framePathMutationFor(
+            handleElementId(handle),
+            spreadTableOf(page, plan.target.pageOrigin ?? SPREAD_ORIGIN),
+          ),
+        );
       }
       ops.push(...paintOpsFor(handleElementId(handle), plan.paint));
     });
@@ -427,6 +441,7 @@ export async function knifeTargetOf(
   let inner: AnchorTable;
   let transform: Affine | null;
   let page: string | null | undefined;
+  let pageOrigin: PageOrigin;
   if (read && read.anchors.length >= 2) {
     if ((read.subpathOpen ?? []).some((open) => open)) {
       return { skip: "an open path is cut with Scissors, not the Knife — not cut" };
@@ -438,6 +453,7 @@ export async function knifeTargetOf(
     };
     transform = (read.itemTransform ?? null) as Affine | null;
     page = read.pageId;
+    pageOrigin = pageOriginOf(read);
   } else {
     // A bounds-only rectangle — the arrangement uses its four corners,
     // and so do we.
@@ -456,6 +472,7 @@ export async function knifeTargetOf(
     };
     transform = (g.itemTransform ?? null) as Affine | null;
     page = g.pageId;
+    pageOrigin = pageOriginOf(g);
   }
   if (page !== pageId) return { skip: null };
   const cutInner: Vec2[] = [];
@@ -466,7 +483,7 @@ export async function knifeTargetOf(
   }
   const own = tableBounds(inner);
   if (!own || !boundsOverlap(own, boxOf(cutInner))) return { skip: null };
-  return { id, pageId, inner, transform, cutInner };
+  return { id, pageId, inner, transform, cutInner, pageOrigin };
 }
 
 // ------------------------------------------------------------- the verb

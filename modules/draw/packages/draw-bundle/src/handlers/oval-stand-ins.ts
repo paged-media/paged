@@ -44,6 +44,16 @@
 // and the stand-ins are deleted by a mutation of their own (logged: an extra
 // undo step the user did not ask for, rather than a lost edit).
 //
+// THE STAND-IN STORES WHAT THE OVAL STORES: its curve in the oval's own
+// (inner) space and the oval's STORED transform, which is spread space
+// (`../page-origin.ts`). `insertPath` adds the page's origin to the anchors
+// it is given, so the curve is pinned afterwards with `framePath` and
+// `frameBounds` (`insertRawPathOps`, the Shape Builder's own piece insert);
+// `elementGeometry` answers the transform in the oval's PAGE space, so the
+// page's origin goes back onto it before it is written. Inserted as read,
+// the stand-in sits beside the oval on any page that does not start at its
+// spread's origin.
+//
 // The cost, named: over a selection with an oval in it the Shape Builder
 // cannot ask the engine about faces while the pointer HOVERS (it would answer
 // for the box), so no face is highlighted there — the gesture's own line is
@@ -61,7 +71,9 @@ import type { BundleHost, ElementId, MutationInput } from "@paged-media/plugin-a
 import { ovalToPath, type Affine } from "@paged-media/draw-geometry";
 
 import { bindMinted, mutateMinting } from "../commands/minted";
-import { batchMutationFor, bindCreatedMutationFor, handleElementId } from "../commands/v59-wire";
+import { insertRawPathOps } from "../commands/shape-build";
+import { batchMutationFor, handleElementId } from "../commands/v59-wire";
+import { pageOriginOf, SPREAD_ORIGIN, storedTransformOf, type PageOrigin } from "../page-origin";
 
 /** A live stand-in probe: the ids to ask the arrangement about (the
  *  caller's order, each oval replaced by its stand-in), and the withdrawal
@@ -76,17 +88,17 @@ export const hasOval = (ids: readonly ElementId[]): boolean => ids.some((id) => 
 
 const standInHandle = (k: number): string => `sb-oval-${k}`;
 
-const isIdentity = (m: Affine | null | undefined): boolean =>
-  !m || (m[0] === 1 && m[1] === 0 && m[2] === 0 && m[3] === 1 && m[4] === 0 && m[5] === 0);
-
 /** The probe batch: one unpainted stand-in path per oval, in the oval's own
- *  space and transform. Null when an oval's geometry cannot be read (off the
- *  page, or a degenerate box). PURE over what `elementGeometry` answered. */
+ *  space and STORED transform (module header). Null when an oval's geometry
+ *  cannot be read (off the page, or a degenerate box). PURE over what
+ *  `elementGeometry` answered: `itemTransform` in the oval's page space,
+ *  `pageOrigin` that page's origin in its spread (absent = `[0, 0]`). */
 export function ovalStandInBatchFor(
   ovals: readonly {
     pageId: string | null | undefined;
     bounds: readonly [number, number, number, number];
     itemTransform?: Affine | null;
+    pageOrigin?: PageOrigin | null;
   }[],
 ): MutationInput | null {
   const ops: MutationInput[] = [];
@@ -94,21 +106,10 @@ export function ovalStandInBatchFor(
     if (!g.pageId) return null;
     const table = ovalToPath(g.bounds);
     if (table.anchors.length === 0) return null;
+    const stored = storedTransformOf(g.itemTransform, g.pageOrigin ?? SPREAD_ORIGIN);
     const handle = standInHandle(k);
     ops.push(
-      {
-        op: "insertPath",
-        args: {
-          pageId: g.pageId,
-          anchors: table.anchors.map((a) => ({
-            anchor: [a.anchor[0], a.anchor[1]] as [number, number],
-            left: [a.left[0], a.left[1]] as [number, number],
-            right: [a.right[0], a.right[1]] as [number, number],
-          })),
-          open: false,
-        },
-      },
-      bindCreatedMutationFor(handle),
+      ...insertRawPathOps(g.pageId, table, handle, stored),
       // Unpainted: a probe that is on the page for one round trip must not
       // flash a 1 pt black outline (`insertPath`'s default stroke).
       {
@@ -120,16 +121,6 @@ export function ovalStandInBatchFor(
         args: { elementId: handleElementId(handle), path: "frameFillColor", value: { type: "colorRef", value: null } },
       },
     );
-    if (!isIdentity(g.itemTransform)) {
-      ops.push({
-        op: "setElementProperty",
-        args: {
-          elementId: handleElementId(handle),
-          path: "frameTransform",
-          value: { type: "transform", value: [...g.itemTransform!] as [number, number, number, number, number, number] },
-        },
-      });
-    }
   }
   return ops.length > 0 ? batchMutationFor(ops) : null;
 }
@@ -157,6 +148,7 @@ export async function ovalStandIns(
       pageId: g.pageId,
       bounds: g.bounds as [number, number, number, number],
       itemTransform: (g.itemTransform ?? null) as Affine | null,
+      pageOrigin: pageOriginOf(g),
     })),
   );
   if (!probe) return null;
