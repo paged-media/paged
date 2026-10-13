@@ -27,21 +27,32 @@
 // ItemTransform `1 0 0 1 -612 -396` on its spread, and it OMITS every
 // attribute equal to the object style it applies (`[Normal Graphics
 // Frame]`). Both are where the differences below come from.
+//
+// The first one is an ENGINE defect with a fix on the way (core's
+// page-space geometry, paged-media/core#70): an engine that reads geometry
+// in page space says so by reporting `pageOrigin`, and on it the geometry
+// differences must be GONE — so this spec asserts the defect on the engine
+// that has it and its absence on the one that does not, and stays true on
+// both while the pinned engine moves.
 
 import { readFileSync } from "node:fs";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import type { ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import { drawBundle } from "../../src";
 import { openHost } from "../conformance/host";
 import { caseById, authorCase, type AuthoredCase } from "./author";
 import { bothValues, classify, defectsOf, expand, report } from "./classify";
-import { FINDINGS, KNOWN_REIMPORT, REIMPORT_CASES } from "./findings";
+import { FINDINGS, KNOWN_REIMPORT, REIMPORT_CASES, type FindingId } from "./findings";
 import { reexportPath } from "./indesign";
 import { unzip } from "./package";
 import { compareViews, engineView, type Difference, type ViewNode } from "./view";
+
+/** The defect an engine that reads geometry in page space no longer has. */
+const FIXED_BY_PAGE_SPACE: FindingId = "itemTransformIsSpreadRelative";
 
 for (const id of REIMPORT_CASES) {
   const c = caseById(id);
@@ -50,6 +61,8 @@ for (const id of REIMPORT_CASES) {
     let back: HeadlessHost;
     let diffs: Difference[];
     let labels: [unknown[], unknown[]];
+    /** Does the engine read geometry in page space (`pageOrigin`)? */
+    let pageSpace = false;
     const known = expand(KNOWN_REIMPORT[id]);
 
     beforeAll(async () => {
@@ -63,6 +76,18 @@ for (const id of REIMPORT_CASES) {
       const metadataOf = (nodes: readonly ViewNode[]): unknown[] =>
         nodes.flatMap((n) => (n.children ? metadataOf(n.children) : n.metadata ? [n.metadata] : []));
       labels = [metadataOf(ours), metadataOf(theirs)];
+      // An engine that reads page space reports the page's origin beside it.
+      type Node = { id?: ElementId | null; children?: readonly Node[] | null };
+      const firstLeaf = (nodes: readonly Node[]): ElementId | null => {
+        for (const n of nodes) {
+          const hit = n.children?.length ? firstLeaf(n.children) : (n.id ?? null);
+          if (hit) return hit;
+        }
+        return null;
+      };
+      const leaf = firstLeaf((await back.host.document.tree()) as readonly Node[]);
+      const [g] = leaf ? await back.host.document.elementGeometry([leaf]) : [];
+      pageSpace = (g as { pageOrigin?: unknown } | undefined)?.pageOrigin !== undefined;
     }, 60_000);
     afterAll(() => {
       authored?.h.dispose();
@@ -88,11 +113,22 @@ for (const id of REIMPORT_CASES) {
     });
 
     it("every difference from the authored model is classified, with both values", () => {
-      expect(report(classify(diffs, known))).toBe("");
+      const now = pageSpace ? known.filter((k) => k.finding !== FIXED_BY_PAGE_SPACE) : known;
+      expect(report(classify(diffs, now))).toBe("");
     });
 
     for (const [finding, entries] of defectsOf(known)) {
       const f = FINDINGS[finding];
+      if (finding === FIXED_BY_PAGE_SPACE) {
+        it(`DEFECT (${f.owner}) — ${f.title}, GONE on an engine that reads page space: ${bothValues(entries, "re-imported")}`, () => {
+          for (const k of entries) {
+            const d = diffs.find((x) => x.at === k.at && x.field === k.field);
+            if (pageSpace) expect(d).toBeUndefined();
+            else expect(d).toBeDefined();
+          }
+        });
+        continue;
+      }
       it.fails(`DEFECT (${f.owner}) — ${f.title}: ${bothValues(entries, "re-imported")}`, () => {
         for (const k of entries) {
           expect(diffs.find((d) => d.at === k.at && d.field === k.field)).toBeUndefined();
