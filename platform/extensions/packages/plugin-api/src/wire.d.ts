@@ -1,7 +1,7 @@
 // GENERATED — do not edit. Vendored verbatim from the published
 // @paged-media/canvas-wasm .d.ts (tsify output from paged-media/core,
 // MPL-2.0 OR PMEL). Sync: node scripts/sync-wire.mjs · Check: --check.
-// Synced from @paged-media/canvas-wasm@0.71.7
+// Synced from @paged-media/canvas-wasm@0.71.8
 /* tslint:disable */
 /* eslint-disable */
 
@@ -763,7 +763,9 @@ export interface HitResult {
     bounds?: [number, number, number, number] | null;
     /**
      * Phase A — composed affine `[a, b, c, d, tx, ty]` on the hit
-     * element. `None` for items with no `ItemTransform`.
+     * element, into the hit page\'s space like `frame_bounds` (the
+     * page\'s origin inside its spread folded in). `None` for an item
+     * with no `ItemTransform` on a page at its spread\'s origin.
      */
     itemTransform?: [number, number, number, number, number, number] | null;
     /**
@@ -1139,8 +1141,9 @@ export type GestureHandle = number;
 /**
  * Oriented geometry for one selected element. `bounds` is the raw
  * `GeometricBounds` (content-box space); `item_transform` is the
- * composed affine. The overlay layer multiplies bounds corners by
- * the transform to draw the oriented selection chrome.
+ * composed affine into the PAGE the element sits on (see
+ * [`Self::item_transform`]). The overlay layer multiplies bounds
+ * corners by the transform to draw the oriented selection chrome.
  */
 export interface ElementGeometryItem {
     id: ElementId;
@@ -1155,7 +1158,8 @@ export interface ElementGeometryItem {
      * grouped something it then could not read back.
      *
      * **The convention `None` carries:** `bounds` + `item_transform`
-     * compose against the SPREAD origin rather than a page origin.
+     * compose against the SPREAD origin rather than a page origin (a
+     * page-owned item composes against its page\'s).
      * `spread_id` names which spread, because without it the answer is
      * unusable the moment a document has two.
      *
@@ -1174,9 +1178,23 @@ export interface ElementGeometryItem {
      */
     bounds: [number, number, number, number];
     /**
-     * `[a, b, c, d, tx, ty]`.
+     * `[a, b, c, d, tx, ty]`: `bounds` through it lands in the
+     * coordinates of `page_id`\'s page, `(0, 0)` at its top-left — the
+     * space of the hit test\'s `frameBounds`, carets, selection rects and
+     * the inserts. It is the stored `ItemTransform` with the page\'s
+     * origin inside its spread folded in ([`Self::page_origin`]); the two
+     * differ wherever a page does not start at its spread\'s origin (a
+     * verso, every page of an InDesign document). `moveFrame` takes it
+     * back in the same space. A pageless item answers in spread space.
      */
     itemTransform?: [number, number, number, number, number, number] | null;
+    /**
+     * The page\'s origin inside its spread, `[x, y]` in spread
+     * coordinates; `None` for a pageless item and a table cell. The
+     * stored `ItemTransform` (what the `frameTransform` property reads
+     * and writes) is `translate(page_origin) ∘ item_transform`. Additive.
+     */
+    pageOrigin?: [number, number];
     /**
      * Phase F — `true` when this element hosts a placed image
      * (`Rectangle` with `<Image>` / `<EPSImage>` / `<PDF>` /
@@ -1796,6 +1814,13 @@ export interface PageSummary {
      */
     index: number;
     /**
+     * The page\'s name as InDesign gives it: its folio, the label a
+     * page-number marker on it prints (`\"3\"`, `\"iv\"`, `\"A-2\"`) — the
+     * baked `Name` of a page InDesign wrote, else the number the section
+     * rules give it where it stands. Never the page\'s id. Additive.
+     */
+    name?: string;
+    /**
      * `[width, height]` in points.
      */
     sizePt: [number, number];
@@ -1898,8 +1923,10 @@ export interface LinkSummary {
 /**
  * SDK Phase 5 (v1 sweep) — one spread summary. Backs
  * `documentCollection:spreads`. `pageCount` is the number of
- * `<Page>` children in the spread; `label` is the spread\'s
- * `Self` id (or filename when missing).
+ * `<Page>` children in the spread; `label` is what InDesign\'s Pages
+ * panel shows for it, its pages\' folios (`\"3\"`, `\"2–3\"`, see
+ * [`PageSummary::name`]) — the spread\'s `Self` id (or filename) only
+ * when it has no built page.
  */
 export interface SpreadSummary {
     selfId: string;
@@ -2019,9 +2046,15 @@ export interface PathAnchorsResult {
      */
     subpathOpen?: boolean[];
     /**
-     * `[a, b, c, d, tx, ty]`. None ⇒ identity.
+     * `[a, b, c, d, tx, ty]`. None ⇒ identity. Into the PAGE the path
+     * sits on, the page\'s origin folded in, exactly as
+     * [`ElementGeometryItem::item_transform`].
      */
     itemTransform?: [number, number, number, number, number, number] | null;
+    /**
+     * See [`ElementGeometryItem::page_origin`]. Additive.
+     */
+    pageOrigin?: [number, number];
 }
 
 /**
