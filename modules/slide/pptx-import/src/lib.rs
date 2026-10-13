@@ -140,7 +140,7 @@ pub fn import_pptx(bytes: &[u8]) -> Result<Presentation, ImportError> {
         default_text_style: pres_el
             .child(Ns::P, "defaultTextStyle")
             .map(|d| text::list_style(d, &ctx)),
-        embedded_fonts: embedded_fonts(&pres_el, &ctx),
+        embedded_fonts: embedded_fonts(&pkg, &pres_el, &ctx),
         sections: sections(&pres_el),
         ..Default::default()
     };
@@ -603,11 +603,12 @@ fn theme(el: &El, ctx: &Ctx) -> Theme {
     }
 }
 
-fn embedded_fonts(pres: &El, ctx: &Ctx) -> Vec<EmbeddedFont> {
+fn embedded_fonts(pkg: &OpcPackage, pres: &El, ctx: &Ctx) -> Vec<EmbeddedFont> {
     let Some(list) = pres.child(Ns::P, "embeddedFontLst") else {
         return Vec::new();
     };
-    list.children_named(Ns::P, "embeddedFont")
+    let fonts: Vec<EmbeddedFont> = list
+        .children_named(Ns::P, "embeddedFont")
         .map(|f| {
             let face = |n: &str| {
                 f.child(Ns::P, n)
@@ -626,7 +627,41 @@ fn embedded_fonts(pres: &El, ctx: &Ctx) -> Vec<EmbeddedFont> {
                 bold_italic: face("boldItalic"),
             }
         })
-        .collect()
+        .collect();
+    // No embedded face reaches the document yet: the host has no door for a
+    // document face, and PowerPoint compresses every face it embeds. Say so,
+    // rather than let the deck's text fall back silently.
+    for font in &fonts {
+        let parts = [&font.regular, &font.bold, &font.italic, &font.bold_italic];
+        let compressed = parts
+            .iter()
+            .filter_map(|p| p.as_deref())
+            .filter_map(|p| pkg.part(p))
+            .any(is_mtx_compressed_eot);
+        let why = if compressed {
+            "its faces are Embedded OpenType compressed with MicroType Express, which the importer cannot read yet"
+        } else {
+            "embedded fonts are not loaded into the document yet"
+        };
+        ctx.note(format!(
+            "embedded font \u{201c}{}\u{201d} is not used: {why}; text set in it is drawn in a substitute",
+            font.typeface
+        ));
+    }
+    fonts
+}
+
+/// Whether `bytes` is an Embedded OpenType file whose font data is
+/// MicroType Express compressed (`TTEMBED_TTCOMPRESSED`, flag 0x4): the form
+/// PowerPoint writes embedded faces in.
+fn is_mtx_compressed_eot(bytes: &[u8]) -> bool {
+    const MAGIC: [u8; 2] = [0x4C, 0x50]; // MagicNumber 0x504C, little-endian
+    const TTEMBED_TTCOMPRESSED: u32 = 0x4;
+    if bytes.len() < 36 || bytes[34..36] != MAGIC {
+        return false;
+    }
+    let flags = u32::from_le_bytes([bytes[12], bytes[13], bytes[14], bytes[15]]);
+    flags & TTEMBED_TTCOMPRESSED != 0
 }
 
 fn sections(pres: &El) -> Vec<Section> {
