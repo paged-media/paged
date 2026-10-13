@@ -203,6 +203,11 @@ export function makeFakeEditor(opts?: {
   let snapPointReply: unknown = null;
   /** Every message that crossed `client.send`, in order. */
   const sent: { kind: string; payload?: unknown }[] = [];
+  // The geometry mirror the host's selection box is drawn from: every
+  // write in order, and the engine's `elementGeometry` answer (none by
+  // default, which is also what the engine says for a group).
+  const geometryWrites: unknown[][] = [];
+  let elementGeometryReply: (ids: unknown[]) => unknown[] = () => [];
 
   const client = {
     mutate: async (m: unknown) => {
@@ -214,7 +219,7 @@ export function makeFakeEditor(opts?: {
     collection: async () => [],
     documentMeta: async () => documentMetaReply,
     pathAnchors: async () => null,
-    elementGeometry: async () => [],
+    elementGeometry: async (ids: unknown[]) => elementGeometryReply(ids),
     setElementSelection: async (ids: unknown[]) => ids,
     send: async (msg: { kind: string; payload?: unknown }) => {
       sent.push({ kind: msg.kind, payload: msg.payload });
@@ -278,7 +283,9 @@ export function makeFakeEditor(opts?: {
         selectionIds = ids;
         editor.selection.elementSelection = ids;
       },
-      setElementGeometry: () => {},
+      setElementGeometry: (items: unknown[]) => {
+        geometryWrites.push(items);
+      },
     },
     camera: { camera: { scale: 2, tx: 10, ty: 20 } },
     overlaySignals: {
@@ -326,6 +333,12 @@ export function makeFakeEditor(opts?: {
     },
     /** Every `client.send` message, in order (kind + payload). */
     sent,
+    /** Every write to the selection-geometry mirror, in order. */
+    geometryWrites,
+    /** Script the engine's `elementGeometry` answer for the ids asked. */
+    setElementGeometryReply: (reply: (ids: unknown[]) => unknown[]) => {
+      elementGeometryReply = reply;
+    },
     /** The menu registry, so a test can count what `contribute.menu`
      *  registered and inspect the `when` the SDK derived from `scope`. */
     menus,
