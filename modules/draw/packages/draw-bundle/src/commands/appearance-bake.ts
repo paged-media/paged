@@ -87,10 +87,11 @@
 //     C-19 taught that lane to write. So a tinted / multiplied layer
 //     bakes, renders AND survives a save-back. The KIND boundary that
 //     remains is deliberate, not a gap: `paged_model::GraphicLine` has
-//     no `fill_tint` / `blend_mode` / `opacity` field at all (a line's
-//     paint is entirely stroke-side), so a GraphicLine still refuses
-//     both. The bake never mints one — its layers are Polygons — so
-//     that boundary does not bite here.
+//     no `fill_tint` field (a line's paint is entirely stroke-side), so
+//     a GraphicLine still refuses the tint; core 0.71.7's R-10 gave it
+//     an object `opacity` / `blend_mode`, so it takes the blend now. The
+//     bake never mints one — its layers are Polygons — so that boundary
+//     does not bite here.
 //   ✔ per-layer OPACITY: `FrameOpacity` always had a Polygon arm, and
 //     since C-19 the write-new lane emits the `<TransparencySetting>`
 //     that carries it, so opacity is canvas + PDF + IDML truth now.

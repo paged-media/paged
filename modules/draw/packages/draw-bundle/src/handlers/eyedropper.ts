@@ -34,7 +34,8 @@
 // ENGINE NOTES (probed against the published wasm, asserted in
 // conformance):
 //   · Property support is KIND-dependent — a GraphicLine rejects
-//     FrameFillColor/Tint/Opacity writes. The apply therefore
+//     FrameFillColor/Tint writes (and Opacity/BlendMode before core
+//     0.71.7's R-10). The apply therefore
 //     intersects the sample with the paths each TARGET's OWN
 //     property snapshot exposes (one read per target), so a mixed
 //     selection doesn't poison the batch.
@@ -50,7 +51,7 @@
 //     direct frame-property writes now (the same probe), so the old
 //     Phase 8 finding no longer applies here either; the
 //     `supports`-intersection stays because KIND-dependence itself has
-//     not gone away (a GraphicLine still refuses fill, tint and blend).
+//     not gone away (a GraphicLine still refuses fill and tint).
 
 import type {
   BundleHost,
