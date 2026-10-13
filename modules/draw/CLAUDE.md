@@ -441,7 +441,18 @@ batch it sent and answers handle → id, the same in every lane.
   `framePath` write. The transform comes back beside it, so page space is
   `transformBounds(bounds, itemTransform)`. Anything reading `bounds` as
   if it were page space is wrong on any transformed element;
-- N writes in ONE batch is ONE undo step.
+- N writes in ONE batch is ONE undo step;
+- it is SPREAD space, while the geometry reads are PAGE space on an
+  engine with core's page-space fix (paged-media/core#70, which adds
+  `pageOrigin`) and spread space on the ones before it. Convert through
+  `src/page-origin.ts` — stored = translate(`pageOrigin ?? [0, 0]`) ∘
+  `itemTransform`, right on both — and never write a geometry read's
+  transform as it came. The same holds for `framePath` on a path
+  `insertPath` just made: `insertPath` adds the page origin, `framePath`
+  does not. `test/page-space/` runs every writer against a fake engine in
+  both shapes; `test/conformance/page-space.spec.ts` does it through the
+  real one on InDesign's page placement (`PAGED_ENGINE_FROM` for a local
+  build of the other).
 
 **RFI C-23 IS NARROWER THAN "PAGE-KEYED" SUGGESTS, and two plausible
 readings of it are FALSE.** Both were written into `objects-on-path.ts`

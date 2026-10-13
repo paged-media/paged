@@ -124,6 +124,20 @@ geometry is used for what a gesture needs synchronously, for an oval's κ ellips
 re-winding nested contours so that the engine's non-zero fill cuts holes. See
 [ADR 353](adr/353-path-algebra-runs-in-the-engine.md).
 
+**Page space and the stored transform.** The geometry reads answer an item's transform in
+the space of the page it sits on, with the page's origin in its spread beside it
+(`pageOrigin`, from core's page-space geometry; an older engine answers in spread space and
+reports none). The document stores the transform in spread space, and two writes speak it:
+the `frameTransform` property, and `framePath` on a path `insertPath` has just made
+(`insertPath` adds the page's origin, `framePath` stores its table as given).
+`src/page-origin.ts` holds the one conversion, stored = translate(`pageOrigin`) ∘
+`itemTransform`, with an absent origin read as `[0, 0]` — exact on both engines. Reflect,
+Transform Again and Objects on a Path plan in spread space and write the stored matrix (an
+object's remembered home is that matrix too); a new path that `framePath` re-tables gets the
+origin added; the Shape Builder's pieces and oval stand-ins store their raw table and the
+stored transform of the input they came from. The two spaces differ only on a page that does
+not start at its spread's origin: a verso, and every page of an InDesign document.
+
 **Appearance.** Extra fills and strokes are a stack in the element's metadata; the front
 fill and stroke are written to the frame's own paint. "Bake" lowers the stack to a group:
 the source frame stays as the carrier of the metadata, with its own paint cleared, and one

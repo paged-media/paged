@@ -161,6 +161,14 @@ The editor builds `PropertyField`; these are the fields that map onto a row toda
   group, as the Knife's are). The engine reads an oval as its bounding
   box, so over a selection with an oval no face is highlighted while hovering; the faces are
   resolved at release against the oval's real curve, and the oval is replaced by its pieces.
+- **Pages away from their spread's origin** (a verso, every page of an InDesign document).
+  On an engine that reads geometry in spread space, tools that map the pointer through an
+  item's transform or insert artwork from its geometry land off by the page's origin there;
+  core's page-space geometry corrects that. Transforms and re-tabled paths are written in
+  spread space on either engine. Objects on a Path keeps objects on the page only on an
+  engine that reports the page's origin. A symbol PLACED on such a page puts a piece with
+  holes off by the page's origin, because nothing the placement reads reports it; reset and
+  redefine read it from the instance.
 - **Tools.** Width replaces the path with its outline. Eyedropper samples properties, not
   pixels. Measure's snap and the gradient annotator's stops use raw engine requests outside
   the host doors. Only Curvature snaps among this bundle's own tools.
