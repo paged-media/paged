@@ -1,9 +1,9 @@
 {
   "$comment": "Where the vendored catalog.json came from, and — when it leads the published engine — why that is allowed. `sync-catalog.mjs --check` enforces every claim in this file, in both directions: an unexplained difference fails, and so does an `aheadOfPublished` marker that the publish has since caught up with.",
   "source": "core",
-  "rev": "7cad959",
+  "rev": "ad571c7",
   "targetsProtocol": 71,
   "publishedPackage": "@paged-media/introspect-wasm",
   "aheadOfPublished": false,
-  "why": "IN SYNC as of introspect-wasm@0.71.2 (core@7cad959, tag v0.71.2): v0.71.2 adds no catalog change over v0.71.1 (a caret is an address: grammar and range read only). v0.71.1 (core@6adb3b7): the object model — Mutation::Set on address strings, RequestGet / RequestQuery, typed propertySchemas rows, the text-variable ops, the Boa host-object bridge and the closure rows. Prior record: led the publish on branch om/protocol-71 (2026-10-06..07) until v0.71.0/v0.71.1 shipped."
+  "why": "IN SYNC as of introspect-wasm@0.71.7 (core@ad571c7, tag v0.71.7): the core parity campaign's first release. Its catalog change is additive: the fill, stroke and content transparency targets' opacity and blend mode, a group's isolate and knockout, and the drop shadow's blend mode, spread, noise, knocked-out and global-light flag (core ADR 135); the document's global light as doc schema rows; each typed schema row's IDML mapping. No protocol change (71). Prior: in sync as of introspect-wasm@0.71.2 (core@7cad959)."
 }
