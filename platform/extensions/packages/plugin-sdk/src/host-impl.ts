@@ -2693,6 +2693,18 @@ export function createBundleHost(
       const editor = getEditor();
       const applied = await editor.client.setElementSelection(ids, mode);
       editor.selection.setElementSelection(applied);
+      // The selection box is drawn from the host's geometry mirror, which
+      // a selection alone does not move: without this read the box stayed
+      // on the previous selection. The ids asked are the applied ones, as
+      // the host's click path asks; a group, for which the engine answers
+      // no geometry, clears the box just as clicking it does.
+      try {
+        editor.selection.setElementGeometry(
+          await editor.client.elementGeometry(applied),
+        );
+      } catch {
+        // Geometry is selection chrome; the selection itself is set.
+      }
       return applied;
     },
     onDidChange(listener) {

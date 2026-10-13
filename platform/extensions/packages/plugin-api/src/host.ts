@@ -1367,6 +1367,8 @@ export interface BakeContext {
 
 export interface SelectionSurface {
   get(): ElementId[];
+  /** Select as a click does: the host's selection AND the selection box
+   *  drawn around it follow. Resolves the ids the engine applied. */
   set(ids: ElementId[], mode?: SelectionMode): Promise<ElementId[]>;
   onDidChange(listener: (ids: ElementId[]) => void): Disposable;
 }
