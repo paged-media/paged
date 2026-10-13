@@ -351,7 +351,37 @@ describe("draw conformance — Shape Builder REGION lane (B-22)", () => {
       handler.onDeactivate("switch");
     });
 
-    it("a drag across the overlap commits pathfinderFaces KEEP; one undo restores both inputs", async () => {
+    /** Every leaf now in the document. */
+    const leafIds = async (): Promise<ElementId[]> => {
+      const out: ElementId[] = [];
+      const walk = (nodes: { id?: unknown; children?: unknown[] }[]) => {
+        for (const n of nodes) {
+          if (n.id) out.push(n.id as ElementId);
+          if (n.children) walk(n.children as never);
+        }
+      };
+      walk((await h.host.document.tree()) as never);
+      return out;
+    };
+    /** An element's outline as `{ anchors, xs: [min, max] }` (raw = page
+     *  here: F4 is untransformed). */
+    const outline = async (id: ElementId) => {
+      const t = await h.host.document.pathAnchors(id);
+      const xs = t!.anchors.map((a) => a.anchor[0]);
+      return {
+        anchors: t!.anchors.length,
+        xs: [Math.round(Math.min(...xs)), Math.round(Math.max(...xs))],
+      };
+    };
+    const sameId = (a: ElementId, b: ElementId) => a.kind === b.kind && String(a.id) === String(b.id);
+
+    // F4's arrangement, inputs top-to-bottom [ub, ua]: "0#0" = ub alone,
+    // "0-1#0" = the overlap, "1#0" = ua alone.
+    //
+    // The engine's `pathfinderFaces { keep }` alone used to be the commit:
+    // ONE survivor, the overlap square — ua's and ub's own areas were simply
+    // dropped. A Shape Builder merges what it crosses and LEAVES the rest.
+    it("a drag across the overlap separates it; the rest of both inputs stays; one undo restores both", async () => {
       const handler = await arm();
       const before = await leafCount(h);
 
@@ -361,36 +391,30 @@ describe("draw conformance — Shape Builder REGION lane (B-22)", () => {
       handler.onPointerUp(pointer(F4_OVERLAP.pageId, [270, 270]));
 
       await until2(
-        async () => (await leafCount(h)) === before - 1,
+        async () => (await leafCount(h)) === before + 1,
         "the keep commit",
       );
-      // One survivor, clipped to the overlap — the region result, not a
-      // whole-element union.
-      const roots = await h.host.document.tree();
-      const survivors: ElementId[] = [];
-      const walk = (nodes: { id?: unknown; children?: unknown[] }[]) => {
-        for (const n of nodes) {
-          if (n.id) survivors.push(n.id as ElementId);
-          if (n.children) walk(n.children as never);
-        }
-      };
-      walk(roots as never);
-      expect(survivors).toHaveLength(1);
-      const table = await h.host.document.pathAnchors(survivors[0]);
-      const xs = table!.anchors.map((a) => a.anchor[0]);
-      expect([
-        Math.round(Math.min(...xs)),
-        Math.round(Math.max(...xs)),
-      ]).toEqual([200, 300]);
+      // ub (the topmost input over the overlap) IS the overlap now — the
+      // region result, not a whole-element union...
+      expect(await outline(B)).toEqual({ anchors: 4, xs: [200, 300] });
+      // ...ua keeps its own L-shaped remainder, in place...
+      expect(await outline(A)).toEqual({ anchors: 6, xs: [100, 300] });
+      // ...and ub's remainder stays too, as a piece of its own.
+      const pieces = (await leafIds()).filter((id) => !sameId(id, A) && !sameId(id, B));
+      expect(pieces).toHaveLength(1);
+      expect(await outline(pieces[0])).toEqual({ anchors: 6, xs: [200, 400] });
 
       await h.host.document.undo();
       expect(await leafCount(h)).toBe(before);
-      expect(await h.host.document.pathAnchors(A)).not.toBeNull();
-      expect(await h.host.document.pathAnchors(B)).not.toBeNull();
+      expect(await outline(A)).toEqual({ anchors: 4, xs: [100, 300] });
+      expect(await outline(B)).toEqual({ anchors: 4, xs: [200, 400] });
       handler.onDeactivate("switch");
     });
 
-    it("an Alt-drag across the overlap commits REMOVE — everything but that face", async () => {
+    // The engine's `remove` alone united everything that was left into ONE
+    // shape (a 12-anchor outline). An Alt-drag deletes what it crosses;
+    // each input keeps the rest of itself.
+    it("an Alt-drag across the overlap deletes just that face — each input keeps the rest of itself", async () => {
       const handler = await arm();
       const before = await leafCount(h);
 
@@ -400,27 +424,19 @@ describe("draw conformance — Shape Builder REGION lane (B-22)", () => {
       handler.onPointerUp(pointer(F4_OVERLAP.pageId, [270, 270], true));
 
       await until2(
-        async () => (await leafCount(h)) === before - 1,
+        async () => (await outline(B)).anchors === 6,
         "the remove commit",
       );
-      const roots = await h.host.document.tree();
-      const survivors: ElementId[] = [];
-      const walk = (nodes: { id?: unknown; children?: unknown[] }[]) => {
-        for (const n of nodes) {
-          if (n.id) survivors.push(n.id as ElementId);
-          if (n.children) walk(n.children as never);
-        }
-      };
-      walk(roots as never);
-      const table = await h.host.document.pathAnchors(survivors[0]);
-      // The union minus the overlap: twelve vertices spanning both.
-      expect(table!.anchors).toHaveLength(12);
+      expect(await leafCount(h)).toBe(before);
+      expect(await outline(B)).toEqual({ anchors: 6, xs: [200, 400] });
+      expect(await outline(A)).toEqual({ anchors: 6, xs: [100, 300] });
       await h.host.document.undo();
       expect(await leafCount(h)).toBe(before);
+      expect(await outline(A)).toEqual({ anchors: 4, xs: [100, 300] });
       handler.onDeactivate("switch");
     });
 
-    it("a drag over the two DISJOINT faces keeps both (one compound result)", async () => {
+    it("a drag over the two outer faces merges them into one path; the overlap it skipped stays", async () => {
       const handler = await arm();
       const before = await leafCount(h);
 
@@ -432,27 +448,23 @@ describe("draw conformance — Shape Builder REGION lane (B-22)", () => {
       handler.onPointerUp(pointer(F4_OVERLAP.pageId, [370, 370]));
 
       await until2(
-        async () => (await leafCount(h)) === before - 1,
+        async () => (await h.host.document.pathAnchors(A)) === null,
         "the two-face commit",
       );
       // The REGION result, not an element union: the two L-shaped
-      // remainders unite into a 12-vertex outline. An element-lane
-      // pathfinderBoolean over the same drag would have produced the
-      // 8-vertex FULL union (overlap included).
-      const roots2 = await h.host.document.tree();
-      const left: ElementId[] = [];
-      const walk2 = (nodes: { id?: unknown; children?: unknown[] }[]) => {
-        for (const n of nodes) {
-          if (n.id) left.push(n.id as ElementId);
-          if (n.children) walk2(n.children as never);
-        }
-      };
-      walk2(roots2 as never);
-      expect(
-        (await h.host.document.pathAnchors(left[0]))!.anchors,
-      ).toHaveLength(12);
+      // remainders unite into a 12-vertex outline on ub (the topmost input
+      // the drag crossed). An element-lane pathfinderBoolean over the same
+      // drag would have produced the 8-vertex FULL union (overlap included).
+      expect(await outline(B)).toEqual({ anchors: 12, xs: [100, 400] });
+      // The overlap was not crossed: it stays, a square of its own (it was
+      // ua's area, but ub was on top of it there).
+      const pieces = (await leafIds()).filter((id) => !sameId(id, B));
+      expect(pieces).toHaveLength(1);
+      expect(await outline(pieces[0])).toEqual({ anchors: 4, xs: [200, 300] });
+      expect(await leafCount(h)).toBe(before);
       await h.host.document.undo();
       expect(await leafCount(h)).toBe(before);
+      expect(await outline(A)).toEqual({ anchors: 4, xs: [100, 300] });
       handler.onDeactivate("switch");
     });
 

@@ -69,7 +69,10 @@
 //
 // That matrix is read ONCE per gesture scope and dropped with the cache
 // (`frontmostTransform` below) — it costs the frontmost input's whole
-// anchor table, and the point lane used to pay that per query.
+// anchor table, and the point lane used to pay that per query. It is the
+// PAGE-space transform, the one the pointer and `insertPath` speak; the
+// same read's `pageOrigin` comes with it (`pageOrigin()`), for a commit
+// that writes the STORED transform (`../page-origin.ts`).
 
 import type {
   BundleHost,
@@ -85,6 +88,7 @@ import {
 import type { RegionFace } from "@paged-media/draw-tools";
 
 import { BIND_PATHFINDER_STATUS } from "../commands/pathfinder-region";
+import { pageOriginOf, SPREAD_ORIGIN, type PageOrigin } from "../page-origin";
 
 /** The engine's input cap (`paged_mutate::planar::MAX_PLANAR_INPUTS`).
  *  Mirrored here ONLY so a caller can say "12" before spending a round
@@ -190,6 +194,12 @@ export interface RegionCacheHooks {
   onFaces(faces: readonly RegionFace[]): void;
   /** A POINT query answered: the face under the sampled point, or null. */
   onPointFace(id: string | null): void;
+  /** An input set the engine cannot answer TRUTHFULLY — an OVAL, which
+   *  the arrangement reads as its bounding box. Such a set is never asked
+   *  here (no enumeration, no point query: either would answer for the box);
+   *  its owner resolves it at commit through stand-ins of the real curve
+   *  (`oval-stand-ins.ts`). Absent: every set is asked (Live Paint). */
+  unanswerable?(ids: readonly ElementId[]): boolean;
 }
 
 /** What a sample's answer is FOR — which decides whether a point query
@@ -213,8 +223,16 @@ export interface RegionCache {
    *  enumeration when warm, plus any single faces the point lane
    *  resolved while it was not. */
   faces(): readonly RegionFace[];
+  /** The full enumeration as the ENGINE answered it — raw path space,
+   *  with each face's signature — or `[]` while cold. What a commit that
+   *  builds its result from the faces reads. */
+  rawFaces(): readonly PlanarFaceWire[];
   /** The frontmost input's itemTransform (null = identity / unread). */
   matrix(): Affine | null;
+  /** The origin of the frontmost input's page in its spread, from the
+   *  same read as `matrix()` (`[0, 0]` while cold, or on an engine that
+   *  reports none). */
+  pageOrigin(): PageOrigin;
   /** True when the FULL enumeration for `ids` is installed. */
   warm(ids: readonly ElementId[]): boolean;
   /** One pointer sample: a no-op while warm, an enumeration + a
@@ -237,9 +255,13 @@ export function createRegionCache(
   hooks: RegionCacheHooks,
 ): RegionCache {
   let cached: RegionFace[] = [];
+  /** The full enumeration as answered (raw space, signatures). */
+  let raw: PlanarFaceWire[] = [];
   /** `planarInputKey(ids)` the full enumeration was built for; null = cold. */
   let key: string | null = null;
   let transform: Affine | null = null;
+  /** The page origin read beside `transform`. */
+  let origin: PageOrigin = SPREAD_ORIGIN;
   /** In flight, so a burst of pointermoves issues ONE enumeration. */
   let enumerating = false;
   /** The full enumeration refused (face cap): stay on point queries. */
@@ -264,26 +286,31 @@ export function createRegionCache(
    *  It cannot go stale inside a scope: `drop()` clears it, and the
    *  owners call `drop()` on every document change and every change of
    *  the input set — the only two things that can move the matrix. */
-  let frontmost: { key: string; matrix: Promise<Affine | null> } | null = null;
+  let frontmost: {
+    key: string;
+    read: Promise<{ matrix: Affine | null; origin: PageOrigin }>;
+  } | null = null;
 
-  const frontmostTransform = (id: ElementId): Promise<Affine | null> => {
+  const frontmostRead = (id: ElementId): Promise<{ matrix: Affine | null; origin: PageOrigin }> => {
     const forKey = planarInputKey([id]);
-    if (frontmost?.key === forKey) return frontmost.matrix;
-    const read: { key: string; matrix: Promise<Affine | null> } = {
+    if (frontmost?.key === forKey) return frontmost.read;
+    const read: NonNullable<typeof frontmost> = {
       key: forKey,
-      matrix: host.document.pathAnchors(id).then(
-        (table) => table?.itemTransform ?? null,
+      read: host.document.pathAnchors(id).then(
+        (table) => ({ matrix: table?.itemTransform ?? null, origin: pageOriginOf(table) }),
         () => {
           // A read that FAILED answers "unknown" this once and is not
           // kept: the next sample asks again, as every sample used to.
           if (frontmost === read) frontmost = null;
-          return null;
+          return { matrix: null, origin: SPREAD_ORIGIN };
         },
       ),
     };
     frontmost = read;
-    return read.matrix;
+    return read.read;
   };
+  const frontmostTransform = async (id: ElementId): Promise<Affine | null> =>
+    (await frontmostRead(id)).matrix;
 
   /** Fill the cache for `ids` (ONE full enumeration). */
   const ensure = (ids: readonly ElementId[]): void => {
@@ -294,7 +321,7 @@ export function createRegionCache(
       try {
         // The frontmost input's transform maps raw ↔ page space (module
         // header). Read it with the arrangement so both land together.
-        const matrix = await frontmostTransform(ids[0]);
+        const front = await frontmostRead(ids[0]);
         const result = await readPlanarRegions(host, ids);
         if (!result) return;
         if (!result.found) {
@@ -311,7 +338,9 @@ export function createRegionCache(
               `face(s) listed are real, but they do not tile the union (a sliver was missed)`,
           );
         }
-        transform = matrix;
+        transform = front.matrix;
+        origin = front.origin;
+        raw = [...result.faces];
         cached = result.faces.map((f) => faceToPageSpace(f, transform));
         key = next;
         hooks.onFaces(cached);
@@ -411,10 +440,14 @@ export function createRegionCache(
 
   return {
     faces: () => cached,
+    rawFaces: () => (key === null ? [] : raw),
     matrix: () => transform,
+    pageOrigin: () => origin,
     warm: isWarm,
     sample(ids, point, need = "every") {
       if (ids.length === 0) return;
+      // A set the engine would answer for the wrong shape is not asked.
+      if (hooks.unanswerable?.(ids)) return;
       if (isWarm(ids)) return;
       ensure(ids);
       if (need === "latest") pointQueryLatest(ids, point);
@@ -423,8 +456,10 @@ export function createRegionCache(
     drop() {
       key = null;
       transform = null;
+      origin = SPREAD_ORIGIN;
       frontmost = null;
       cached = [];
+      raw = [];
       pointQueryOnly = false;
       warnedPointOnly = false;
       pendingLatest = null;

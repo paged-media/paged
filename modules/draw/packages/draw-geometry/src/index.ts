@@ -74,6 +74,8 @@ export {
   ellipseToPath,
   circleToPath,
   lineToPath,
+  mapTable,
+  ovalToPath,
   polyToPath,
 } from "./svg-shapes";
 export {

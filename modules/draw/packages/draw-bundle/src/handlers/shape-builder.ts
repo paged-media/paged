@@ -25,9 +25,25 @@
 //            outline, closed);
 //   collect  a drag appends every distinct face it crosses, in
 //            first-cross order (the pure machine owns that set);
-//   commit   pointer-up sends ONE `pathfinderFaces { elementIds, faces,
-//            mode }` — `keep` for a plain drag, `remove` for an
-//            Alt-drag (Illustrator's erase). One undo step.
+//   commit   pointer-up builds the result from the arrangement —
+//            `planShapeBuild` (draw-tools): a plain drag MERGES the
+//            faces it crossed into one path, an Alt-drag deletes them,
+//            and every other face of a shape the gesture touched STAYS,
+//            in the paint of the shape on top of it there — and sends it
+//            as ONE batch (`commands/shape-build.ts`). One undo step.
+//            The engine's `pathfinderFaces { keep | remove }` alone
+//            drops every face it was not given (keep) or unites all the
+//            rest into one shape (remove): on a cross-shaped overlap a
+//            drag over two arms left only those two arms. It is still
+//            what is sent when it IS the result — a gesture that crossed
+//            every face of every shape it touched.
+//
+// OVALS: the engine reads an oval as its bounding box (no path geometry
+// for one at `pathAnchors`, the box in the arrangement), so a set with an
+// oval in it is never asked while the pointer hovers; at release its
+// faces are read through stand-ins of the real curve and the gesture is
+// replayed over them (`handlers/oval-stand-ins.ts`). No face highlight
+// over such a set until the engine answers for the curve.
 //
 // CACHING, THE DOOR AND THE COORDINATE SPACE all live in
 // `handlers/planar-regions.ts` now — the shared arrangement seam, which
@@ -73,12 +89,16 @@ import type {
   ElementId,
   GestureHandler,
   Mutation,
+  MutationInput,
   PathfinderKind,
 } from "@paged-media/plugin-api";
+import type { Affine } from "@paged-media/draw-geometry";
 
 import {
   ShapeBuilderMachine,
+  planShapeBuild,
   type FaceMode,
+  type RegionFace,
   type ShapeBuilderMode,
   type ShapeBuilderSnapshot,
 } from "@paged-media/draw-tools";
@@ -91,8 +111,19 @@ import {
   selectionTopToBottom,
 } from "../commands/pathfinder-region";
 import {
+  planIsEngineKeep,
+  shapeBuildBatchFor,
+  shapeBuildPaints,
+} from "../commands/shape-build";
+import { pageOriginOf, SPREAD_ORIGIN, type PageOrigin } from "../page-origin";
+import { hasOval, ovalStandIns } from "./oval-stand-ins";
+import {
   createRegionCache,
+  faceToPageSpace,
   planarInputKey,
+  readPlanarRegions,
+  reportPlanarRefusal,
+  type PlanarFaceWire,
   type RegionCache,
 } from "./planar-regions";
 
@@ -146,6 +177,24 @@ export function shapeBuilderFacesMutationFor(
   return pathfinderFacesMutationFor(inputs, [...faces], mode);
 }
 
+/** The faces a recorded gesture crosses over an arrangement (page space):
+ *  the gesture REPLAYED through the same pure machine that collected it live
+ *  — for the case where the faces were not known while it ran (an oval in
+ *  the set, resolved at release). Same rule, same order. */
+export function facesCrossedBy(
+  faces: readonly RegionFace[],
+  path: readonly (readonly [number, number])[],
+  alt: boolean,
+): string[] {
+  if (path.length === 0) return [];
+  const m = new ShapeBuilderMachine();
+  m.setRegions(faces);
+  m.handle({ type: "down", point: [path[0][0], path[0][1]], modifiers: { alt } });
+  for (const p of path.slice(1, -1)) m.handle({ type: "move", point: [p[0], p[1]] });
+  const last = path[path.length - 1];
+  return [...m.handle({ type: "up", point: [last[0], last[1]] }).collected];
+}
+
 /** Build the Shape Builder gesture handler bound to `host` (the B-17
  *  factory shape — every engine touch is a `host.*` facade). */
 export function createShapeBuilderHandler(host: BundleHost): GestureHandler {
@@ -178,6 +227,9 @@ export function createShapeBuilderHandler(host: BundleHost): GestureHandler {
     onPointFace: (id) => {
       if (machine) render(machine.handle({ type: "region", id }));
     },
+    // The engine reads an oval as its bounding box: such a set is resolved
+    // at release, through stand-ins of the real curve (oval-stand-ins.ts).
+    unanswerable: hasOval,
   });
 
   const dropCache = () => {
@@ -287,6 +339,125 @@ export function createShapeBuilderHandler(host: BundleHost): GestureHandler {
     return regionLane;
   };
 
+  /** The arrangement a release builds from, and the faces the gesture
+   *  crossed in it: the cache's when it is warm for `operands`; read now
+   *  when it is not (the crossed ids came from point queries, which name
+   *  the same faces); and — for a set holding an OVAL — read through
+   *  stand-ins of the real curve, the crossed faces resolved by replaying
+   *  the gesture over them. Null after a refusal (reported). */
+  const releaseArrangement = async (
+    operands: ElementId[],
+    snap: ShapeBuilderSnapshot,
+    alt: boolean,
+  ): Promise<{
+    faces: PlanarFaceWire[];
+    matrix: Affine | null;
+    pageOrigin: PageOrigin;
+    crossed: string[];
+  } | null> => {
+    // The frontmost input's PAGE-space transform (raw → page, what the
+    // gesture was drawn in) and its page's origin from the same read (the
+    // pieces are written with the STORED transform — `../page-origin.ts`).
+    const transformOf = (id: ElementId) =>
+      host.document.pathAnchors(id).then(
+        (t) => ({ matrix: (t?.itemTransform ?? null) as Affine | null, pageOrigin: pageOriginOf(t) }),
+        () => ({ matrix: null, pageOrigin: SPREAD_ORIGIN }),
+      );
+    if (hasOval(operands)) {
+      const probe = await ovalStandIns(host, operands, "shapeBuilder");
+      if (!probe) return null;
+      let front: Awaited<ReturnType<typeof transformOf>> = { matrix: null, pageOrigin: SPREAD_ORIGIN };
+      let regions: Awaited<ReturnType<typeof readPlanarRegions>> = null;
+      try {
+        front = await transformOf(probe.ids[0]!);
+        regions = await readPlanarRegions(host, probe.ids);
+      } finally {
+        await probe.release();
+      }
+      if (!regions || !regions.found) {
+        reportPlanarRefusal(host, "shapeBuilder", regions);
+        return null;
+      }
+      const page = regions.faces.map((f) => faceToPageSpace(f, front.matrix));
+      return {
+        faces: [...regions.faces],
+        ...front,
+        crossed: facesCrossedBy(page, snap.path ?? [], alt),
+      };
+    }
+    if (cache.warm(operands)) {
+      return {
+        faces: [...cache.rawFaces()],
+        matrix: cache.matrix(),
+        pageOrigin: cache.pageOrigin(),
+        crossed: [...snap.collected],
+      };
+    }
+    const front = await transformOf(operands[0]!);
+    const regions = await readPlanarRegions(host, operands);
+    if (!regions || !regions.found) {
+      reportPlanarRefusal(host, "shapeBuilder", regions);
+      return null;
+    }
+    return { faces: [...regions.faces], ...front, crossed: [...snap.collected] };
+  };
+
+  /** The REGION-lane release: plan the result from the arrangement
+   *  (`planShapeBuild` — the crossed faces merged or deleted, every other
+   *  face of a touched shape kept) and send it as ONE batch
+   *  (`commands/shape-build.ts`). A gesture that crossed everything of what
+   *  it touched is the engine's own `pathfinderFaces { keep }`, sent as it
+   *  always was. */
+  const commitRegions = async (
+    operands: ElementId[],
+    snap: ShapeBuilderSnapshot,
+    page: string,
+  ): Promise<"done" | "nothing" | "refused" | "unknownOp"> => {
+    const alt = snap.faceMode === "remove";
+    const arrangement = await releaseArrangement(operands, snap, alt);
+    if (!arrangement) return "refused";
+    const plan = planShapeBuild(
+      operands.length,
+      arrangement.faces,
+      arrangement.crossed,
+      snap.faceMode,
+      (i) => operands[i]?.kind !== "oval",
+    );
+    if (!plan) return "nothing";
+    let mutation: MutationInput | null;
+    if (planIsEngineKeep(plan) && !hasOval(operands)) {
+      mutation = shapeBuilderFacesMutationFor(operands, arrangement.crossed, "keep");
+    } else {
+      mutation = shapeBuildBatchFor(plan, {
+        inputs: operands,
+        faces: new Map(arrangement.faces.map((f) => [f.id, f])),
+        matrix: arrangement.matrix,
+        pageOrigin: arrangement.pageOrigin,
+        pageId: page,
+        paints: await shapeBuildPaints(host, plan, operands),
+      });
+    }
+    if (!mutation) {
+      host.log.warn("shapeBuilder: the arrangement no longer holds a face the gesture crossed");
+      return "refused";
+    }
+    const outcome = await host.document.mutate(mutation);
+    if (outcome.applied) return "done";
+    const text = (() => {
+      try {
+        return JSON.stringify(outcome.error) ?? "";
+      } catch {
+        return "";
+      }
+    })();
+    if (text.includes("unknown variant")) return "unknownOp";
+    const reason =
+      regionRefusalReason(outcome.error) ?? "the engine refused the shape-builder commit";
+    host.log.warn(`shapeBuilder refused: ${reason}`);
+    host.bindings.publish(BIND_PATHFINDER_STATUS, reason);
+    return "refused";
+  };
+
   /** Refresh the ordered input set from the live selection. Costs one
    *  scene-tree read, so it runs on ACTIVATE and on selection change —
    *  never per pointermove. */
@@ -350,40 +521,30 @@ export function createShapeBuilderHandler(host: BundleHost): GestureHandler {
       const snap = machine.handle({ type: "up", point: e.pagePoint });
       host.overlay.setToolPreview(null);
       const operands = [...inputs];
+      const page = pageId;
       void (async () => {
         // REGION lane first — the real interaction.
         if (await supportsRegions()) {
-          const mutation = shapeBuilderFacesMutationFor(
-            operands,
-            snap.collected,
-            snap.faceMode,
-          );
-          if (mutation) {
-            const outcome = await host.document.mutate(mutation);
-            if (outcome.applied) {
+          // An oval set collected nothing live (its faces are resolved at
+          // release), so it goes to the region commit on its gesture alone.
+          if (operands.length >= 2 && page && (snap.collected.length > 0 || hasOval(operands))) {
+            const result = await commitRegions(operands, snap, page);
+            if (result === "done") {
               host.bindings.publish(BIND_PATHFINDER_STATUS, null);
               dropCache();
               await host.selection.set([]);
               return;
             }
-            const text = (() => {
-              try {
-                return JSON.stringify(outcome.error) ?? "";
-              } catch {
-                return "";
-              }
-            })();
-            if (!text.includes("unknown variant")) {
-              const reason =
-                regionRefusalReason(outcome.error) ??
-                "the engine refused the shape-builder commit";
-              host.log.warn(`shapeBuilder refused: ${reason}`);
-              host.bindings.publish(BIND_PATHFINDER_STATUS, reason);
-              return;
+            if (result === "refused") return;
+            if (result === "unknownOp") {
+              // An unknown op means the probe was optimistic — fall
+              // through to the element lane, once and for this handler.
+              regionLane = false;
+            } else {
+              host.log.debug(
+                "shapeBuilder: the gesture crossed no face — trying the element lane",
+              );
             }
-            // An unknown op means the probe was optimistic — fall
-            // through to the element lane, once and for this handler.
-            regionLane = false;
           } else if (operands.length >= 2 && snap.collected.length === 0) {
             host.log.debug(
               "shapeBuilder: the gesture crossed no face — trying the element lane",

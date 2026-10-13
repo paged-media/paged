@@ -124,7 +124,9 @@ export const FINDINGS = {
       "path 612 pt left and 396 pt up — against the contract's own convention " +
       "(\"`bounds` + `item_transform` compose against the SPREAD origin\" ONLY for a " +
       "pageless item). Every draw tool that maps anchors through it is off on an " +
-      "InDesign-authored file.",
+      "InDesign-authored file. Core's page-space geometry (paged-media/core#70) " +
+      "fixes it and reports `pageOrigin`; `reimport.spec.ts` asserts the defect " +
+      "GONE on an engine that does.",
   },
   objectStyleNotInherited: {
     verdict: "defect",

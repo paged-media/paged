@@ -47,10 +47,27 @@
 //   · `elementGeometry.bounds` is the frame box in the element's OWN
 //     space and is NOT recomputed by a transform (nor, separately, by a
 //     `framePath` write). The transform comes back beside it, so the
-//     PAGE-space box is `transformBounds(bounds, itemTransform)` — this
-//     module never reads `bounds` as if it were page space;
+//     placed box is `transformBounds(bounds, transform)` — this module
+//     never reads `bounds` as if it were page space;
 //   · N writes in ONE batch is ONE undo step. Nothing here needs C-15's
 //     `bindCreated` at all, because nothing is created.
+//
+// ------------------------------------------------- THE SPACE: THE SPREAD
+// `frameTransform` writes the STORED transform, which is spread space;
+// `elementGeometry` and `pathAnchors` answer in the space of the item's
+// PAGE (`../page-origin.ts`). So this module plans in SPREAD space: every
+// object's transform, the path and the page rect are taken there
+// (`translate(pageOrigin) ∘ itemTransform`), and what it writes and what
+// it remembers is the stored matrix. A HOME is therefore always the
+// stored matrix — and that is also what every home remembered before this
+// was, because the engines that wrote them read spread space (the
+// page-space read arrived with core's page-origin fix, which reports
+// `pageOrigin` beside it). So a remembered home needs no conversion and
+// no version mark: Release writes it back verbatim on either engine.
+// Planning in page space instead would put every object on a page that
+// does not start at its spread's origin (a verso, any page of an InDesign
+// document) off by that origin, and would read every home saved before
+// the fix as if it were page space.
 //
 // ------------------------------------------------ RFI C-23, MEASURED HERE
 // C-23 says `pathAnchors` / `elementGeometry` are PAGE-KEYED, and on a
@@ -143,6 +160,7 @@ import {
   type RepeatBounds,
 } from "@paged-media/draw-geometry";
 
+import { pageOriginOf, storedTransformOf, type PageOrigin } from "../page-origin";
 import { stampDrawMetadata } from "./appearance-bake";
 import { blendSourceFrom } from "./blend";
 import { announceRecipeChange, linkIndex } from "../link-index";
@@ -275,7 +293,8 @@ export const OBJECTS_ON_PATH_DEFAULTS: ObjectsOnPathParams = {
 export interface OnPathObjectRecord {
   kind: string;
   id: string;
-  /** The transform the object had BEFORE it was put on the path. */
+  /** The transform the object had BEFORE it was put on the path — the
+   *  STORED (spread-space) matrix, what `frameTransform` writes. */
   home: Affine;
 }
 
@@ -388,7 +407,8 @@ export interface OnPathObject {
   /** The frame box in the element's OWN space, `[top, left, bottom,
    *  right]` — NOT page space (see the module header). */
   innerBounds: RepeatBounds;
-  /** The transform it goes home to. */
+  /** The transform it goes home to: the STORED, spread-space matrix
+   *  (see the module header). */
   home: Affine;
 }
 
@@ -421,9 +441,9 @@ export interface ObjectsOnPathPlan {
   dropped: number;
 }
 
-/** The PAGE-space hull of an object under a transform, as
- *  `[minX, minY, maxX, maxY]` — the convention §16.1's registration grid
- *  reads. Pure. */
+/** The hull of an object under a transform, as `[minX, minY, maxX,
+ *  maxY]` in the space `m` maps into (the spread, for a stored matrix) —
+ *  the convention §16.1's registration grid reads. Pure. */
 export function onPathHullOf(
   object: OnPathObject,
   m: Affine,
@@ -443,11 +463,13 @@ export function onPathHullOf(
  *     M = D · home,   D = T(Q − P₀) · R(θ, P₀)
  *
  * where `home` is the transform the object had before any of this, P₀ is
- * its PIVOT in page space under `home`, Q is the slot point and θ the
- * turn. `D` maps the object's original page-space appearance: it rotates
- * about the pivot, then slides the pivot onto the slot. Because `home`
- * is the input every time (never the object's CURRENT transform), Update
- * is idempotent and Release is `home` written back verbatim.
+ * its PIVOT under `home`, Q is the slot point and θ the turn — all in
+ * SPREAD space, the space `home` maps into (the metric and `page.origin`
+ * must be given there too; see the module header). `D` maps the
+ * object's original appearance: it rotates about the pivot, then slides
+ * the pivot onto the slot. Because `home` is the input every time (never
+ * the object's CURRENT transform), Update is idempotent and Release is
+ * `home` written back verbatim.
  *
  * The SHARED kernel supplies the slots (both modes, with their tangents)
  * — see `draw-geometry/src/along-path.ts` for why that much is shared
@@ -457,7 +479,9 @@ export function placeObjectsOnPath(args: {
   objects: readonly OnPathObject[];
   metric: PathMetric;
   params: ObjectsOnPathParams;
-  page: { width: number; height: number } | null;
+  /** The artboard: its size, and its top-left in the space the plan runs
+   *  in (the page's origin inside its spread; `[0, 0]` when omitted). */
+  page: { width: number; height: number; origin?: readonly [number, number] } | null;
 }): OnPathPlacement[] {
   const { params } = args;
   const slots: PathSlot[] =
@@ -496,11 +520,12 @@ export function placeObjectsOnPath(args: {
     if (params.fitToArtboard && args.page) {
       const homeTlbr = transformBounds(object.innerBounds, object.home);
       const [top, left, bottom, right] = transformBounds(homeTlbr, d);
+      const [ox, oy] = args.page.origin ?? [0, 0];
       const fits =
-        left >= 0 &&
-        top >= 0 &&
-        right <= args.page.width &&
-        bottom <= args.page.height;
+        left >= ox &&
+        top >= oy &&
+        right <= ox + args.page.width &&
+        bottom <= oy + args.page.height;
       if (!fits) {
         return {
           object,
@@ -826,8 +851,10 @@ export async function writeObjectsOnPathLibrary(
 // -------------------------------------------------- host: document reads
 
 /** Read one object's frame box (in its OWN space) and its current
- *  transform. Null = not readable — which, on this lane, most often
- *  means it is already off the page (RFI C-23). */
+ *  STORED transform — the page-space read taken back to spread space, so
+ *  it is the matrix `frameTransform` writes and a home remembers. Null =
+ *  not readable — which, on this lane, most often means it is already off
+ *  the page (RFI C-23). */
 export async function readOnPathObject(
   host: BundleHost,
   id: ElementId,
@@ -843,26 +870,36 @@ export async function readOnPathObject(
     object: {
       id,
       innerBounds: item.bounds as RepeatBounds,
-      home: home ?? ((item.itemTransform as Affine | null) ?? IDENTITY_AFFINE),
+      home:
+        home ??
+        storedTransformOf(item.itemTransform as Affine | null, pageOriginOf(item)) ??
+        IDENTITY_AFFINE,
     },
   };
 }
 
-/** Measure the path in PAGE space. Null = it exposes no usable run. */
+/** Measure the path in SPREAD space (the stored transform — see the
+ *  module header), with its page and that page's origin in the spread.
+ *  Null = it exposes no usable run. */
 export async function readOnPathSpine(
   host: BundleHost,
   id: ElementId,
-): Promise<{ metric: PathMetric; pageId: string } | null> {
+): Promise<{ metric: PathMetric; pageId: string; pageOrigin: PageOrigin } | null> {
   const table = await host.document.pathAnchors(id).catch(() => null);
   if (!table || table.anchors.length < 2) return null;
-  const source = blendSourceFrom(table);
+  const pageOrigin = pageOriginOf(table);
+  const stored = storedTransformOf(table.itemTransform as Affine | null, pageOrigin);
+  const source = blendSourceFrom({
+    ...table,
+    itemTransform: stored ? ([...stored] as [number, number, number, number, number, number]) : null,
+  });
   const run = source.subpaths[0];
   if (!run || run.length < 2) return null;
   const metric = measureAnchorRun(run, { close: !(source.open[0] ?? false) });
   if (!(metric.length > 0)) return null;
   // C-23 — the spine's page is what callers place objects onto.
   if (!table.pageId) return null;
-  return { metric, pageId: table.pageId };
+  return { metric, pageId: table.pageId, pageOrigin };
 }
 
 /** Every leaf carrying an on-path link, split by which one — a parse of
@@ -995,9 +1032,11 @@ export async function objectsOnPathPlanFor(
   const ordered = orderedIndices(resolved.length, args.params).map(
     (i) => resolved[i],
   );
-  const page = args.params.fitToArtboard
+  // The page rect in the plan's (spread) space: its size, at its origin.
+  const rect = args.params.fitToArtboard
     ? await repeatPageRect(host, spine.pageId)
     : null;
+  const page = rect ? { ...rect, origin: spine.pageOrigin } : null;
   if (args.params.fitToArtboard && !page) {
     host.log.warn(
       `${label}: the page rect for "${spine.pageId}" is not readable, so ` +

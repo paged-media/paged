@@ -195,6 +195,17 @@ export {
   type RegionFace,
 } from "./shape-builder-machine";
 
+// What a finished Shape Builder gesture does to the document — the merge
+// of the crossed faces, and every other face of a touched shape kept as a
+// piece (the engine's `pathfinderFaces` alone drops them).
+export {
+  faceOwner,
+  planShapeBuild,
+  type PlanarFaceRef,
+  type ShapeBuildFaceMode,
+  type ShapeBuildPlan,
+} from "./shape-builder-plan";
+
 // LIVE PAINT v0 — the Shape Builder machine's sibling over the SAME
 // `RegionFace` arrangement: hover resolves a face, a click paints it, a
 // drag paints every face it crosses. Drives both the bucket and the

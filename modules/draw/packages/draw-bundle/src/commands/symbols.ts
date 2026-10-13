@@ -234,6 +234,7 @@ import {
 } from "./v59-wire";
 import { insertPathMutationFor } from "../handlers/insert-path";
 import { resolveTargetPage } from "../io/svg";
+import { SPREAD_ORIGIN, spreadTableOf, type PageOrigin } from "../page-origin";
 import { announceRecipeChange, linkIndex } from "../link-index";
 
 import { registerCommand } from "../command-registry";
@@ -656,6 +657,10 @@ export function withSymbolInstance(
  *  data — the conformance spec builds one by hand. */
 export interface SymbolPlacePlan {
   pageId: string;
+  /** That page's origin in its spread when a geometry read on it supplied
+   *  one (a rebuild); absent = `[0, 0]`. A compound piece's `framePath`
+   *  table is moved by it (`../page-origin.ts`). */
+  pageOrigin?: PageOrigin;
   symbolId: string;
   instanceId: string;
   /** The page-space registration point the instance is anchored at. */
@@ -668,11 +673,13 @@ export interface SymbolPlacePlan {
 export function symbolPlacePlanFor(args: {
   symbol: SymbolDefinition;
   pageId: string;
+  pageOrigin?: PageOrigin;
   instanceId: string;
   origin: readonly [number, number];
 }): SymbolPlacePlan {
   return {
     pageId: args.pageId,
+    ...(args.pageOrigin ? { pageOrigin: args.pageOrigin } : {}),
     symbolId: args.symbol.id,
     instanceId: args.instanceId,
     origin: [args.origin[0], args.origin[1]],
@@ -792,8 +799,12 @@ export function symbolFinishBatchFor(args: {
     if (!piece) continue;
     if (binding.absorb.length > 0) {
       // A compound piece came in as N separate paths; put the contours
-      // back on the first one and drop the rest.
-      ops.push(framePathMutationFor(binding.keep, piece.table));
+      // back on the first one and drop the rest. `framePath` stores the
+      // table as given, where `insertPath` added the page's origin: so the
+      // page-space table gets that origin too.
+      ops.push(
+        framePathMutationFor(binding.keep, spreadTableOf(piece.table, args.plan.pageOrigin ?? SPREAD_ORIGIN)),
+      );
       for (const id of binding.absorb) {
         ops.push({ op: "deleteFrame", args: { frameId: id.id as string } });
       }
@@ -1122,18 +1133,23 @@ async function liveInstanceSources(
   host: BundleHost,
   instance: SymbolInstance,
   registration: SymbolRegistration,
-): Promise<{ origin: [number, number] | null; pageId: string | null }> {
+): Promise<{ origin: [number, number] | null; pageId: string | null; pageOrigin: PageOrigin | null }> {
   const tables: AnchorTable[] = [];
   let pageId: string | null = null;
+  let pageOrigin: PageOrigin | null = null;
   for (const [i, leaf] of instance.leaves.entries()) {
     const source = await compoundSourceOf(host, leaf);
-    if (i === 0) pageId = source?.pageId ?? null;
+    if (i === 0) {
+      pageId = source?.pageId ?? null;
+      pageOrigin = source?.pageOrigin ?? null;
+    }
     if (source) tables.push(source.table);
   }
   const bounds = symbolBoundsOf(tables);
   return {
     origin: bounds === null ? null : registrationPointOf(bounds, registration),
     pageId,
+    pageOrigin,
   };
 }
 
@@ -1190,6 +1206,9 @@ export async function captureSymbolSources(
 export interface SymbolEmit {
   symbol: SymbolDefinition;
   pageId: string;
+  /** `pageId`'s origin in its spread, when a geometry read on it supplied
+   *  one (see {@link SymbolPlacePlan.pageOrigin}). */
+  pageOrigin?: PageOrigin;
   instanceId: string;
   origin: readonly [number, number];
   replace?: SymbolReplacement;
@@ -1232,6 +1251,7 @@ export async function emitSymbolInstances(
         plan: symbolPlacePlanFor({
           symbol: emit.symbol,
           pageId: emit.pageId,
+          ...(emit.pageOrigin ? { pageOrigin: emit.pageOrigin } : {}),
           instanceId: emit.instanceId,
           origin: emit.origin,
         }),
@@ -1465,6 +1485,8 @@ async function rebuildPlanFor(
   return {
     symbol,
     pageId,
+    // The origin pairs with the page the live read found, not a fallback.
+    ...(live.pageId !== null && live.pageOrigin ? { pageOrigin: live.pageOrigin } : {}),
     instanceId: instance.instance,
     origin: live.origin ?? instance.origin,
     replace: { group, stale: instance.leaves },

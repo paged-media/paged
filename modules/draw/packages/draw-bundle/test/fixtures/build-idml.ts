@@ -187,13 +187,19 @@ const STYLES_MINIMAL =
  *  everything else is the shared minimal scaffold. */
 export function packageWithSpread(
   spreadBody: string,
-  opts: { styles?: string; fonts?: string } = {},
+  opts: {
+    styles?: string;
+    fonts?: string;
+    /** The page's `ItemTransform` in its spread — `"1 0 0 1 -612 -396"`
+     *  is where InDesign puts a single page (centred on the spread). */
+    pageTransform?: string;
+  } = {},
 ): Uint8Array {
   const spread =
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n` +
     `<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="20.0">\n` +
     `<Spread Self="us" PageCount="1" ItemTransform="1 0 0 1 0 0">\n` +
-    `<Page Self="usp" Name="1" GeometricBounds="0 0 792 612" ItemTransform="1 0 0 1 0 0" AppliedMaster="um"/>\n` +
+    `<Page Self="usp" Name="1" GeometricBounds="0 0 792 612" ItemTransform="${opts.pageTransform ?? "1 0 0 1 0 0"}" AppliedMaster="um"/>\n` +
     spreadBody +
     `\n</Spread>\n</idPkg:Spread>`;
   return buildIdml([

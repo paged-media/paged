@@ -136,6 +136,7 @@ import { decodeRasterBytes, rasterDecoderAvailable } from "../io/raster-decode";
 
 import { DRAW_METADATA_KEY } from "./appearance-bake";
 import { framePathMutationFor } from "./compound-path";
+import { pageOriginOf, SPREAD_ORIGIN, spreadTableOf, type PageOrigin } from "../page-origin";
 import { groupMutationFor } from "./group";
 import { bindMinted, mintedLeaves, mutateMinting } from "./minted";
 import { insertPathMutationFor } from "../handlers/insert-path";
@@ -248,6 +249,9 @@ export interface TracePlanRegion {
  *  engine with it. */
 export interface TracePlan {
   pageId: string;
+  /** That page's origin in its spread (absent = `[0, 0]`): a holed
+   *  region's `framePath` table is moved by it (`../page-origin.ts`). */
+  pageOrigin?: PageOrigin;
   source: ElementId;
   sourceUri: string;
   regions: TracePlanRegion[];
@@ -338,6 +342,7 @@ export function regionTableFor(
  *  Regions that lower to nothing are dropped. */
 export function tracePlanFor(args: {
   pageId: string;
+  pageOrigin?: PageOrigin;
   source: ElementId;
   sourceUri: string;
   result: TraceResult;
@@ -369,6 +374,7 @@ export function tracePlanFor(args: {
   }
   return {
     pageId: args.pageId,
+    ...(args.pageOrigin ? { pageOrigin: args.pageOrigin } : {}),
     source: args.source,
     sourceUri: args.sourceUri,
     regions,
@@ -500,7 +506,14 @@ export function traceFinishBatchFor(args: {
   const ops: Mutation[] = [];
   for (const binding of args.bindings) {
     if (binding.absorb.length > 0) {
-      ops.push(framePathMutationFor(binding.keep, binding.region.table));
+      // `framePath` stores the table as given, where `insertPath` added
+      // the page's origin: so the page-space table gets that origin too.
+      ops.push(
+        framePathMutationFor(
+          binding.keep,
+          spreadTableOf(binding.region.table, args.plan.pageOrigin ?? SPREAD_ORIGIN),
+        ),
+      );
       for (const id of binding.absorb) {
         ops.push({ op: "deleteFrame", args: { frameId: id.id as string } });
       }
@@ -654,6 +667,8 @@ export const TRACE_SLOW_PIXELS = 700_000;
 interface TraceSource {
   id: ElementId;
   pageId: string;
+  /** From the same read as `itemTransform` (page space). */
+  pageOrigin: PageOrigin;
   bounds: [number, number, number, number];
   itemTransform: Affine | null;
   uri: string;
@@ -710,6 +725,7 @@ async function traceSourceOf(host: BundleHost): Promise<TraceSource | null> {
   return {
     id,
     pageId: item.pageId,
+    pageOrigin: pageOriginOf(item),
     bounds: item.bounds,
     itemTransform: (item.itemTransform ?? null) as Affine | null,
     uri: asset.uri,
@@ -858,6 +874,7 @@ export async function applyImageTrace(
     host,
     tracePlanFor({
       pageId: source.pageId,
+      pageOrigin: source.pageOrigin,
       source: source.id,
       sourceUri: source.uri,
       result: traced.result,

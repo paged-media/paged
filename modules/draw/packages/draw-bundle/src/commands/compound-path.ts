@@ -149,6 +149,7 @@ import {
   type AnchorTriple,
 } from "@paged-media/draw-geometry";
 
+import { pageOriginOf, type PageOrigin } from "../page-origin";
 import { closePathMutationFor } from "./join-average";
 import { bindMinted, mintedLeaves, mutateMinting } from "./minted";
 import { supportsPathOps } from "./path-ops";
@@ -373,9 +374,14 @@ export interface CompoundSource {
   pageId: string;
   /** PAGE-space contours. */
   table: AnchorTable;
-  /** The element's own transform (null = identity) — the survivor's is
-   *  what page space is mapped BACK through on the write. */
+  /** The element's own transform as the geometry door reads it, page
+   *  space (null = identity) — the survivor's is what page space is
+   *  mapped BACK through on the write. */
   itemTransform: Affine | null;
+  /** The page's origin in its spread, from the same read (`[0, 0]` on an
+   *  engine that reports none). A NEW path that `framePath` re-tables
+   *  needs its page-space table moved by it (`../page-origin.ts`). */
+  pageOrigin: PageOrigin;
 }
 
 const toPage = (
@@ -429,6 +435,7 @@ export async function compoundSourceOf(
       id,
       pageId: read.pageId,
       itemTransform: m,
+      pageOrigin: pageOriginOf(read),
       table: {
         anchors: read.anchors.map((a) => ({
           anchor: toPage(m, a.anchor),
@@ -457,6 +464,7 @@ export async function compoundSourceOf(
     id,
     pageId: item.pageId,
     itemTransform: m,
+    pageOrigin: pageOriginOf(item),
     table: {
       anchors: corners.map((c) => {
         const p = toPage(m, c);
