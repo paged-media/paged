@@ -116,6 +116,9 @@ export const RECTO: FakePage = { id: "pr", origin: [0, -396], size: [612, 792] }
 export class FakeEngine {
   readonly items = new Map<string, Item>();
   readonly groups = new Map<string, Group>();
+  /** What `requestTextOutlines` answers per frame id (PAGE space, as
+   *  core's door does), when a spec sets it. */
+  readonly textOutlines = new Map<string, unknown>();
   /** What `planarRegions` answers (RAW space), when a spec sets it. */
   planarFaces: { id: string; signature: number[]; anchors: Triple[]; subpathStarts: number[] }[] | null = null;
   private seq = 0;
@@ -403,6 +406,15 @@ export function fakeHost(engine: FakeEngine, selection: ElementId[] = []): Bundl
     log,
     supports: () => false,
     bindings: { publish: () => {} },
+    // The raw read hatch, for the one door these specs need through it.
+    editor: {
+      client: {
+        send: async (req: { kind: string; payload?: { id?: ElementId } }) => {
+          const hit = req.kind === "requestTextOutlines" ? engine.textOutlines.get(String(req.payload?.id?.id)) : undefined;
+          return hit ? { kind: "textOutlines", payload: { result: hit } } : { kind: "error", payload: null };
+        },
+      },
+    },
     selection: {
       get: () => [...sel],
       set: async (ids: ElementId[]) => {

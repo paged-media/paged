@@ -26,6 +26,10 @@
 // either engine. CI runs the pinned one; `PAGED_ENGINE_FROM` points it at a
 // local build of the other (`./host.ts`).
 
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import type { ElementId } from "@paged-media/plugin-api";
@@ -41,8 +45,9 @@ import {
 import { REPEAT_DEFAULTS, repeatBatchFor, repeatHandle, repeatPlanFor } from "../../src/commands/repeat";
 import { bindMinted, mutateMinting } from "../../src/commands/minted";
 import { ovalStandIns } from "../../src/handlers/oval-stand-ins";
+import { applyCreateOutlines } from "../../src/commands/create-outlines";
 import { pageOriginOf, storedTransformOf } from "../../src/page-origin";
-import { packageWithSpread } from "../fixtures/build-idml";
+import { buildIdml, packageWithSpread } from "../fixtures/build-idml";
 import { openHost } from "./host";
 
 type Vec = [number, number];
@@ -280,3 +285,95 @@ describe("draw conformance — page space on a page that does not start at its s
     near(await spreadOutline(copy), source.map((c) => c.map(([x, y]) => [x + dx, y + dy] as Vec)));
   });
 });
+
+/** "Ho" in Lora on the same page placement (`create-outlines.spec.ts`'s
+ *  document, moved): the frame's box is page (40, 300)–(400, 380). */
+const LORA = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../fixtures/fonts/Lora.ttf"));
+const TEXT_DOC = () =>
+  buildIdml([
+    { name: "mimetype", data: "application/vnd.adobe.indesign-idml-package", store: true },
+    {
+      name: "designmap.xml",
+      data: `<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="20.0" Self="d">
+<idPkg:Graphic src="Resources/Graphic.xml"/>
+<idPkg:Spread src="Spreads/Spread_s.xml"/>
+<idPkg:Story src="Stories/Story_st.xml"/>
+</Document>`,
+    },
+    {
+      name: "Resources/Graphic.xml",
+      data: `<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Graphic xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="20.0">
+<Color Self="Color/Black" Model="Process" Space="CMYK" ColorValue="0 0 0 100" Name="Black"/>
+</idPkg:Graphic>`,
+    },
+    {
+      name: "Spreads/Spread_s.xml",
+      data: `<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="20.0">
+<Spread Self="s" PageCount="1" ItemTransform="1 0 0 1 0 0">
+<Page Self="p" Name="1" GeometricBounds="0 0 792 612" ItemTransform="${PAGE_TRANSFORM}"/>
+<TextFrame Self="tf" ParentStory="st" GeometricBounds="300 40 380 400" ItemTransform="${PAGE_TRANSFORM}" StrokeWeight="0"/>
+</Spread>
+</idPkg:Spread>`,
+    },
+    {
+      name: "Stories/Story_st.xml",
+      data: `<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Story xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="20.0">
+<Story Self="st"><ParagraphStyleRange>
+<CharacterStyleRange AppliedFont="Lora" PointSize="36" FillColor="Color/Black"><Content>Ho</Content></CharacterStyleRange>
+</ParagraphStyleRange></Story>
+</idPkg:Story>`,
+    },
+  ]);
+
+describe("draw conformance — Create Outlines on a page that does not start at its spread's origin", () => {
+  let h: HeadlessHost;
+  beforeAll(async () => {
+    h = await openHost();
+    h.loadBundle(drawBundle);
+    await h.host.editor.client.send({
+      kind: "registerFont",
+      payload: { family: "Lora", style: null, bytes: Array.from(LORA) },
+    } as never);
+    await h.load(TEXT_DOC());
+  });
+  afterAll(() => h?.dispose());
+
+  it("the outlines, holes and all, land inside the frame's box on its page (an engine that reports the origin)", async (ctx) => {
+    // The outlines door answers page space on every engine; only an engine
+    // that reports the page origin lets the re-merged runs get it back.
+    const frame = { kind: "textFrame", id: "tf" } as ElementId;
+    const [g] = await h.host.document.elementGeometry([frame]);
+    if ((g as { pageOrigin?: unknown } | undefined)?.pageOrigin === undefined) ctx.skip();
+    const before = new Set(((await h.host.document.tree()) as { id?: ElementId }[]).map((n) => String(n.id?.id)));
+    await h.host.selection.set([frame]);
+    expect(await applyCreateOutlines(h.host)).toEqual([frame]);
+    const leaves: ElementId[] = [];
+    const walk = (nodes: readonly { id?: ElementId | null; children?: readonly unknown[] | null }[]) => {
+      for (const n of nodes) {
+        if (n.children?.length) walk(n.children as never);
+        else if (n.id && !before.has(String(n.id.id))) leaves.push(n.id);
+      }
+    };
+    walk((await h.host.document.tree()) as never);
+    expect(leaves.length).toBeGreaterThanOrEqual(1);
+    let holed = 0;
+    for (const id of leaves) {
+      const t = (await h.host.document.pathAnchors(id))!;
+      if (t.subpathStarts.length > 1) holed++;
+      const m = storedTransformOf((t.itemTransform ?? null) as Affine | null, pageOriginOf(t)) ?? [1, 0, 0, 1, 0, 0];
+      for (const a of t.anchors) {
+        const [x, y] = apply(m, a.anchor);
+        expect(x - ORIGIN[0]).toBeGreaterThan(39);
+        expect(x - ORIGIN[0]).toBeLessThan(401);
+        expect(y - ORIGIN[1]).toBeGreaterThan(299);
+        expect(y - ORIGIN[1]).toBeLessThan(381);
+      }
+    }
+    expect(holed).toBeGreaterThanOrEqual(1);
+  });
+});
+

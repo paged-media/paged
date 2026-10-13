@@ -168,7 +168,8 @@ The editor builds `PropertyField`; these are the fields that map onto a row toda
   spread space on either engine. Objects on a Path keeps objects on the page only on an
   engine that reports the page's origin. A symbol PLACED on such a page puts a piece with
   holes off by the page's origin, because nothing the placement reads reports it; reset and
-  redefine read it from the instance.
+  redefine read it from the instance. Create Outlines reads it from the text frame, so on an
+  engine that reports no origin its glyphs with holes land off by it there.
 - **Tools.** Width replaces the path with its outline. Eyedropper samples properties, not
   pixels. Measure's snap and the gradient annotator's stops use raw engine requests outside
   the host doors. Only Curvature snaps among this bundle's own tools.

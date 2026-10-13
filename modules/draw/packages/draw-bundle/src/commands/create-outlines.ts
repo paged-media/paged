@@ -34,6 +34,13 @@
 // engine's non-zero fill, because the glyph outlines arrive wound the
 // way the font wound them and the renderer filled them that way.
 //
+// The outlines are PAGE space and `framePath` stores a fresh path's table
+// as given while `insertPath` adds the page's origin, so the table the
+// re-merge writes gets that origin (`../page-origin.ts`). It comes from
+// the frame's own geometry read, which reports it on an engine with core's
+// page-space geometry; an older engine reports none, and on a page that
+// does not start at its spread's origin a run with holes lands off by it.
+//
 // ONE BATCH, ONE UNDO: swatches, inserts, bind, framePath, paint, group,
 // then the frame's `deleteFrame` — insert-then-delete is the order the
 // engine accepts in one batch (minted.spec.ts).
@@ -65,6 +72,7 @@ import {
   handleElementId,
 } from "./v59-wire";
 import { rawTextOutlines, type TextOutlinesWire } from "../raw-wire";
+import { pageOriginOf, SPREAD_ORIGIN, spreadTableOf, type PageOrigin } from "../page-origin";
 
 import { registerCommand } from "../command-registry";
 export const CREATE_OUTLINES_COMMAND_ID = "media.paged.draw.command.createOutlines";
@@ -133,6 +141,8 @@ export function createOutlinesBatchFor(args: {
   existing: ReadonlyMap<string, string>;
   /** This frame's index within a multi-frame batch (handle namespace). */
   frameIndex?: number;
+  /** The outlines' page origin in its spread (absent = `[0, 0]`). */
+  pageOrigin?: PageOrigin;
 }): MutationInput | null {
   const f = args.frameIndex ?? 0;
   const runs = args.result.runs.filter((r) => r.anchors.length > 0 && r.subpathStarts.length > 0);
@@ -158,7 +168,9 @@ export function createOutlinesBatchFor(args: {
     ops.push(bindCreatedMutationFor(outlineHandle(f, i)));
     const id = handleElementId(outlineHandle(f, i));
     handles.push(id);
-    if (table.subpathStarts.length > 1) ops.push(framePathMutationFor(id, table));
+    if (table.subpathStarts.length > 1) {
+      ops.push(framePathMutationFor(id, spreadTableOf(table, args.pageOrigin ?? SPREAD_ORIGIN)));
+    }
     ops.push({
       op: "setElementProperty",
       args: { elementId: id, path: "frameFillColor", value: { type: "colorRef", value: ref } },
@@ -199,6 +211,11 @@ export async function applyCreateOutlines(host: BundleHost): Promise<ElementId[]
     return [];
   }
   const existing = await existingSwatches(host);
+  // Each frame's page origin, from ONE geometry read (see the header).
+  const origins = new Map<string, { pageId: string | null | undefined; origin: PageOrigin }>();
+  for (const g of await host.document.elementGeometry([...frames]).catch(() => [])) {
+    origins.set(String(g.id.id), { pageId: g.pageId, origin: pageOriginOf(g) });
+  }
   const ops: MutationInput[] = [];
   const done: ElementId[] = [];
   for (const frame of frames) {
@@ -216,7 +233,14 @@ export async function applyCreateOutlines(host: BundleHost): Promise<ElementId[]
           "are stroked or gradient-filled and were not outlined",
       );
     }
-    const batch = createOutlinesBatchFor({ frame, result, existing, frameIndex: done.length });
+    const read = origins.get(String(frame.id));
+    const batch = createOutlinesBatchFor({
+      frame,
+      result,
+      existing,
+      frameIndex: done.length,
+      ...(read && read.pageId === result.pageId ? { pageOrigin: read.origin } : {}),
+    });
     if (!batch) {
       host.log.debug(`${CREATE_OUTLINES_COMMAND_ID}: ${String(frame.id)} shows no glyphs — left alone`);
       continue;

@@ -61,6 +61,7 @@ import {
   tracePlanFor,
 } from "../../src/commands/image-trace";
 import { TRACE_DEFAULTS } from "../../src/trace-engine";
+import { applyCreateOutlines } from "../../src/commands/create-outlines";
 import {
   pageOriginOf,
   spreadTableOf,
@@ -561,6 +562,33 @@ describe.each(SHAPES)("page space on the %s-space engine", (shape) => {
       );
       expect(finish.applied).toBe(true);
       near(engine.spreadOutline(String(bindings[0]!.keep.id)), outlineOf(truth.regions[0]!.table));
+    });
+
+    it.runIf(shape === "page")("Create Outlines: a glyph run with a hole lands where the text was", async () => {
+      // The text frame on the verso, and the outlines core answers for it:
+      // PAGE space (its door's contract on either engine), one run, a ring.
+      engine.addPath("tf", VERSO, square(200), T(250, 250));
+      const ring = RING.map((c) => c.map(([x, y]) => [x + 300, y + 300] as Vec));
+      engine.textOutlines.set("tf", {
+        id: { kind: "textFrame", id: "tf" },
+        pageId: VERSO.id,
+        runs: [
+          {
+            rgb: [0, 0, 0],
+            cmyk: null,
+            anchors: ring.flat().map((p) => ({ anchor: p, left: p, right: p })),
+            subpathStarts: [0, 4],
+            glyphs: 1,
+          },
+        ],
+        skippedGlyphs: 0,
+      });
+      const before = new Set(engine.items.keys());
+      const frame = { kind: "textFrame", id: "tf" } as ElementId;
+      expect(await applyCreateOutlines(fakeHost(engine, [frame]))).toEqual([frame]);
+      const made = [...engine.items.keys()].filter((id) => !before.has(id));
+      expect(made).toHaveLength(1);
+      near(engine.pageOutline(made[0]!, VERSO), ring);
     });
 
     it.runIf(shape === "page")("Symbols: a compound piece rebuilt on a verso keeps its hole and its place", () => {
