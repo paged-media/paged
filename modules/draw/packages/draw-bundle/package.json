@@ -21,11 +21,11 @@
     "bench": "vitest bench --run"
   },
   "devDependencies": {
-    "@paged-media/canvas-wasm": "0.71.1",
+    "@paged-media/canvas-wasm": "0.71.8",
     "@paged-media/draw-geometry": "workspace:*",
     "@paged-media/draw-tools": "workspace:*",
-    "@paged-media/plugin-api": "0.2.45-canary.0",
-    "@paged-media/plugin-sdk": "0.2.45-canary.0",
+    "@paged-media/plugin-api": "0.2.53-canary.0",
+    "@paged-media/plugin-sdk": "0.2.53-canary.0",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/react": "^16.3.3",
     "@types/node": "20.19.39",

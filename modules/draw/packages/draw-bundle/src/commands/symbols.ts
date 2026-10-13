@@ -139,12 +139,15 @@
 // THE ORDER INSIDE THE BATCH is the only one the engine accepts, and it
 // is why ANY number of rebuilds fits in one (each rule measured; the
 // sentences are pinned in `test/conformance/minted.spec.ts`):
-//   1. EVERY insert first. A batch that DELETES and then INSERTS is
-//      refused ("position N out of range for parent Spread"): the
-//      insert's z-position resolves against the spread length the batch
-//      STARTED with.
+//   1. EVERY insert first. Up to core 0.71.7 a batch that DELETES and
+//      then INSERTS is refused ("position N out of range for parent
+//      Spread"): the insert's z-position resolves against the spread
+//      length the batch STARTED with. 0.71.8 applies it; this order is
+//      right on both, and a host may boot either.
 //   2. EVERY old group dissolved, before any of its members is deleted
-//      ("group has an id-less member that cannot round-trip" otherwise).
+//      (otherwise: refused on 0.64, a broken undo on 0.65–0.71.6, and
+//      since 0.71.7 the group goes with its last member, so the dissolve
+//      names a gone group and the batch is refused).
 //   3. EVERY delete — the old leaves and the absorbed contours of a
 //      compound piece.
 //   4. the paint, the re-merge and the link of every piece.
@@ -774,10 +777,10 @@ const colorRef = (
  *  and (for a multi-piece symbol only) wrap the leaves in one group.
  *
  *  In the STEPWISE lane this is batch 2, the bindings are real ids, and
- *  the teardown leads it because a batch that DELETES and then INSERTS
- *  is refused (the insert's z-position resolves against the spread
- *  length the batch STARTED with: "position N out of range for parent
- *  Spread"). In the one-batch lane {@link symbolBatchFor} takes these
+ *  the teardown leads it because, up to core 0.71.7, a batch that
+ *  DELETES and then INSERTS is refused (the insert's z-position resolves
+ *  against the spread length the batch STARTED with: "position N out of
+ *  range for parent Spread"). In the one-batch lane {@link symbolBatchFor} takes these
  *  SAME ops over handle bindings and sorts them behind every insert —
  *  one builder, so the two lanes cannot drift. */
 export function symbolFinishBatchFor(args: {

@@ -968,38 +968,52 @@ describe("draw conformance — the appearance GROUP BAKE (gap B-24)", () => {
       await releaseAppearance(h.host, RECT);
     });
 
-    it("a GraphicLine still REFUSES tint + blend — named, not papered over", async () => {
+    it("a GraphicLine REFUSES tint (it has no fill) and, since 0.71.7, TAKES a blend mode", async () => {
       // C-20 gave Polygon and Oval the `FrameFillTint` / `FrameBlendMode`
-      // arms; `paged_model::GraphicLine` has no `fill_tint` /
-      // `blend_mode` / `opacity` field at all (its paint is entirely
-      // stroke-side), so the refusal is a MODEL fact, not a missing arm.
-      // The bake never mints a GraphicLine, so this bites nothing — it is
-      // pinned so the boundary stays honest.
+      // arms. `paged_model::GraphicLine` has no `fill_tint` — a line's
+      // paint is entirely stroke-side — so the tint refusal is a MODEL
+      // fact, not a missing arm, and it stands. Up to 0.71.6 the line had
+      // no `blend_mode` / `opacity` either and refused the blend too;
+      // core's R-10 (0.71.7) gave it the object's `<TransparencySetting>`
+      // (InDesign has one on a line), so the blend now applies, reads
+      // back, and undoes. The bake never mints a GraphicLine, so neither
+      // bites here — it is pinned so the boundary stays honest.
       const line = {
         kind: "graphicLine",
         id: F1_MULTI_SHAPE.ids.graphicLine!,
       } as ElementId;
-      for (const op of [
-        {
-          op: "setElementProperty",
-          args: {
-            elementId: line,
-            path: "frameFillTint",
-            value: { type: "length", value: 40 },
-          },
+      const tint = await h.host.document.mutate({
+        op: "setElementProperty",
+        args: {
+          elementId: line,
+          path: "frameFillTint",
+          value: { type: "length", value: 40 },
         },
-        {
-          op: "setElementProperty",
-          args: {
-            elementId: line,
-            path: "frameBlendMode",
-            value: { type: "text", value: "Multiply" },
-          },
+      } as Mutation);
+      expect(tint.applied).toBe(false);
+      expect(JSON.stringify(tint)).toContain(
+        "property FrameFillTint is not supported on GraphicLine",
+      );
+      expect(await readProp(h, line, "frameFillTint")).toBeUndefined();
+
+      const blend = await h.host.document.mutate({
+        op: "setElementProperty",
+        args: {
+          elementId: line,
+          path: "frameBlendMode",
+          value: { type: "text", value: "Multiply" },
         },
-      ] as Mutation[]) {
-        const outcome = await h.host.document.mutate(op);
-        expect(outcome.applied).toBe(false);
-      }
+      } as Mutation);
+      expect(blend.applied).toBe(true);
+      expect(await readProp(h, line, "frameBlendMode")).toEqual({
+        type: "text",
+        value: "Multiply",
+      });
+      await h.host.document.undo();
+      expect(await readProp(h, line, "frameBlendMode")).toEqual({
+        type: "text",
+        value: "",
+      });
     });
   });
 });

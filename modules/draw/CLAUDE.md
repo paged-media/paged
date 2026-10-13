@@ -58,8 +58,9 @@ where the not-a-swatch boundary is put in front of the user, and its
 wording is pinned by a test. A v0 `patternTile` stamp
 reads as the legacy field `""`: releasable and un-bakeable, not
 re-plannable. Two batch-ORDERING rules are measured and load-bearing —
-a batch that deletes then inserts is refused, and a group must be
-DISSOLVED before its members are deleted), IMAGE TRACE v0,
+inserts go before deletes (a batch that deletes then inserts is refused
+up to core 0.71.7), and a group must be DISSOLVED before its members are
+deleted), IMAGE TRACE v0,
 GRAPHIC STYLES (a named, LINKED complete appearance — the library is a
 document-resident `.paged` container part written through `host.parts`
 and declared in `contributes.partTypes`; the link is a reference on the
@@ -154,10 +155,12 @@ stroke panel raised, Esc pops out). The bundle drives end-to-end through the rea
 the draw-plugin e2e (`editor` `apps/canvas/tests/e2e/draw-plugin.spec.ts`)
 and a DTP journey (`tests/journey/plugins/draw.journey.spec.ts`) author a
 path with the built-in Pen, then refine its anchors (add/delete/convert)
-and stroke through the bundle. The three TS packages carry 2 502 passing
-vitest (geometry 671, tools 327, bundle 1 504; 31 skipped — 27 of them the
-InDesign round-trip generator, which runs only with `PAGED_ROUNDTRIP_WRITE`) and
-typecheck clean; the two crates carry 26 `cargo test` (draw-trace 22,
+and stroke through the bundle. The three TS packages carry 2 633 passing
+vitest against engine 0.71.8 (geometry 675, tools 337, bundle 1 621; 34
+skipped — 27 of them the InDesign round-trip generator, which runs only
+with `PAGED_ROUNDTRIP_WRITE`, 3 the opt-in real SVG corpus, 3 the
+page-only cases of the spread-space fake engine, 1 the older-engine
+Create Outlines refusal) and typecheck clean; the two crates carry 26 `cargo test` (draw-trace 22,
 trace-js 4).
 
 **ONE SHARED KERNEL, AND ONLY ONE.** §16.2 (blend spines) and §16.3
@@ -476,16 +479,24 @@ as fact and then deleted when they were measured:
 
 **The batch-ORDERING rules the engine enforces**, all measured
 (`minted.spec.ts` pins each with its sentence) and all load-bearing for
-any flow that builds, replaces and groups in ONE batch:
-- A batch that DELETES and then INSERTS is refused — "position N out of
-  range for parent Spread" — because the insert's z-position resolves
-  against the spread length the batch STARTED with. So the inserts go
-  FIRST. (Insert-then-delete in one batch is fine.)
+any flow that builds, replaces and groups in ONE batch — the bundle runs
+against whatever wasm the host booted, so the flows keep the order that
+is right on EVERY engine:
+- Inserts go FIRST. Up to core 0.71.7 a batch that DELETES and then
+  INSERTS is refused — "position N out of range for parent Spread" —
+  because the insert's z-position resolves against the spread length the
+  batch STARTED with. 0.71.8 FIXED it (core `d98e439`: the slot is pulled
+  back to the list's length); `minted.spec.ts` / `pattern.spec.ts` now
+  pin that it applies and one undo restores it. (Insert-then-delete was
+  always fine.)
 - A group must be DISSOLVED BEFORE its members are deleted. On 0.64
   deleting first was refused ("group has an id-less member that cannot
-  round-trip"); on 0.65 it APPLIES — and its undo does not bring the
-  group or its members back (a NEW engine defect, pinned in
-  `minted.spec.ts`). Either way: dissolve first.
+  round-trip"); on 0.65–0.71.6 it APPLIED and its undo did not bring the
+  group or its members back. 0.71.7 FIXED that (RFI C-84, core
+  `ecad085`) the way InDesign behaves: a group goes with its LAST member,
+  and one undo brings all of them back — so delete-then-dissolve is now
+  REFUSED whole ("node not found: Group(…)"), the dissolve naming a group
+  that is already gone. Either way: dissolve first.
 - SEVERAL rebuilds in one batch: every insert, then every dissolve, then
   every delete, then every `createGroup`. That order is right on every
   engine. Rebuild by rebuild (dissolve, delete, group, …) was a trap on

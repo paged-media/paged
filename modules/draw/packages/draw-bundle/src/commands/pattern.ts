@@ -152,14 +152,16 @@
 // THE ORDER INSIDE THE ONE BATCH is the only one the engine accepts, and
 // each rule is measured (`test/conformance/minted.spec.ts` pins the
 // sentences):
-//   · INSERTS FIRST. A batch that DELETES and then INSERTS is REFUSED
-//     ("position N out of range for parent Spread"): the insert's
-//     z-position resolves against the spread length the batch STARTED
-//     with. Insert-then-delete in one batch is fine.
+//   · INSERTS FIRST. Up to core 0.71.7 a batch that DELETES and then
+//     INSERTS is REFUSED ("position N out of range for parent Spread"):
+//     the insert's z-position resolves against the spread length the
+//     batch STARTED with. 0.71.8 applies it; inserts-first is right on
+//     both, and a host may boot either. Insert-then-delete is fine.
 //   · the old group is DISSOLVED BEFORE its members are deleted.
-//     Deleting first leaves the group holding a hole and the dissolve is
-//     refused with the engine's own sentence: "group has an id-less
-//     member that cannot round-trip".
+//     Deleting first was refused on 0.64 ("group has an id-less member
+//     that cannot round-trip"), applied with a broken undo on 0.65–0.71.6,
+//     and since 0.71.7 takes the group with its last member, so a later
+//     dissolve names a gone group and the batch is refused.
 //   · the new group is created LAST, after every delete.
 //
 // WHAT THE BATCH CREATED is read off the engine's reply, not off two

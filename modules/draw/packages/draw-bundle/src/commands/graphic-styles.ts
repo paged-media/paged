@@ -95,8 +95,9 @@
 // ATOMIC — one refused op rolls the WHOLE batch back (probed: a
 // `frameFillColor` write on a `GraphicLine` answers `notImplemented`,
 // and a two-op batch containing it leaves the other element untouched).
-// A `GraphicLine` exposes no `frameFillColor` / `frameFillTint` /
-// `frameOpacity` / `frameBlendMode` at all. So the apply is KIND-AWARE
+// A `GraphicLine` exposes no `frameFillColor` / `frameFillTint` at all
+// (and, before core 0.71.7's R-10, no `frameOpacity` / `frameBlendMode`
+// either; it takes both now). So the apply is KIND-AWARE
 // by construction: it reads the target's own property vocabulary from
 // `elementProperties` and emits only the ops that vocabulary contains,
 // warning about what it dropped. `projectGraphicAppearance` computes,

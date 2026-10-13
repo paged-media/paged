@@ -63,6 +63,11 @@
 // history depth (measured at 140 000 children, and against a full log).
 // So the importer no longer touches the creation defaults at all — which
 // also means there is nothing to restore.
+// FIXED in core 0.71.7 (RFI C-79): the mixed-batch lane now holds the cap
+// while its children log and applies it once to the collapsed entry, so a
+// batch WITH a defaults child is one undo step too (`svg-io.spec.ts` pins
+// the fixed behaviour). The handle lane stays: it is right on every
+// engine, including the ones before the fix that a host may still boot.
 //
 // NO CHUNKING, and that is measured too. One batch of 20 000 contours
 // (140 000 children) applies in 5.2 s; the same file as 40 batches of 500

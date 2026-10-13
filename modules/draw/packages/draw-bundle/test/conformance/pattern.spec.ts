@@ -968,7 +968,13 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
       expect(await sortedLeafIds(h)).toEqual(PRISTINE);
     });
 
-    it("a batch that DELETES then INSERTS is refused — so the inserts go FIRST", async () => {
+    // FIXED in 0.71.8 (core d98e439). Up to 0.71.7 this batch was REFUSED
+    // ("… out of range for parent Spread"): the insert's z-position
+    // resolved against the spread length the batch STARTED with. It
+    // applies now, and one undo restores the source. The pattern batches
+    // still put the inserts FIRST — right on every engine, and this
+    // bundle runs against whatever wasm the host booted.
+    it("a batch that DELETES then INSERTS applies (0.71.8; it was refused) — one undo restores it", async () => {
       const out = await h.host.document.mutate({
         op: "batch",
         args: {
@@ -985,10 +991,13 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
           ],
         },
       });
-      expect(out.applied).toBe(false);
-      // The engine's own words: the insert's z-position resolves against
-      // the spread length the batch STARTED with.
-      expect(JSON.stringify(out)).toContain("out of range for parent");
+      expect(out.applied).toBe(true);
+      expect(JSON.stringify(out)).not.toContain("out of range for parent");
+      // The source is gone and the insert landed in its place.
+      const inserted = out.applied ? String(out.createdId?.id) : "";
+      expect(inserted).not.toBe(String(F6_RING_PAIR.innerId));
+      expect(await sortedLeafIds(h)).toEqual([inserted, "uopen", "uouter"].sort());
+      await undoTo(h, 1);
       expect(await sortedLeafIds(h)).toEqual(PRISTINE);
     });
 

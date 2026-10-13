@@ -45,7 +45,12 @@ were regenerated and re-recorded on 0.66.0 on 2026-10-05; and
 `appearance-bake` and `text-on-path`, whose IDML the 0.70.0 engine exports
 with what the write-new lane used to drop (corners, dash, join + miter,
 Color/Paper, a `<TextPath>`), which were regenerated and re-recorded on
-0.70.0 on 2026-10-06 (the appearance bake's InDesign export with it). Each
+0.70.0 on 2026-10-06 (the appearance bake's InDesign export with it); and
+`text-on-path` once more, whose IDML the 0.71.8 engine exports with the
+`<TextPath>` alignment in InDesign's spelling (`TextAlignment=
+"BaselineTextAlignment"`, where it wrote `PathTypeAlignment=
+"BaselinePathType"`), regenerated and re-recorded on 0.71.8 on 2026-10-13,
+still identical. Each
 recording's `produced_by` is the authority: app, version, locale, the
 reader's sha256 and the IDML's sha256 — the replay refuses a recording
 made by another reader or from another IDML.
@@ -69,7 +74,7 @@ made by another reader or from another IDML.
 | `appearance-bake` | bake: a group of stacked items | identical since 0.70.0 (Color/Paper declared) |
 | `repeat-expanded`, `blend-expanded` | expanded repeat / blend | identical (the blend's duplicate stroke swatches were fixed in draw and the case re-recorded) |
 | `svg-import` | SVG import | identical |
-| `text-on-path` | Type on a Path | identical since 0.71.1 (`EndBracket` exported; re-recorded 2026-10-11) |
+| `text-on-path` | Type on a Path | identical since 0.71.1 (`EndBracket` exported; re-recorded 2026-10-11, and on 0.71.8 for the `TextAlignment` spelling 2026-10-13) |
 | `opacity-mask` | opacity mask | EXPECTED LOSS, named in `lost` |
 
 "Identical" means every anchor and handle within 0.01 pt, every paint and

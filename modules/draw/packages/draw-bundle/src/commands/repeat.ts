@@ -842,10 +842,11 @@ export interface RepeatGeneration {
  *      addressing the freshly minted ids by handle;
  *   3. the PREVIOUS generation (Update only) — dissolve its group, then
  *      release-and-delete its instances, then delete its clip frame.
- *      INSERTS RIDE BEFORE DELETES because a batch that deletes and then
- *      inserts is refused ("position N out of range for parent Spread":
- *      the insert's z-position resolves against the spread length the
- *      batch STARTED with);
+ *      INSERTS RIDE BEFORE DELETES because, up to core 0.71.7, a batch
+ *      that deletes and then inserts is refused ("position N out of
+ *      range for parent Spread": the insert's z-position resolves against
+ *      the spread length the batch STARTED with; 0.71.8 applies it, and a
+ *      host may boot either);
  *   4. the SOURCE links;
  *   5. the GROUP — only when NOT clipping, because `pasteInto` refuses a
  *      grouped child.

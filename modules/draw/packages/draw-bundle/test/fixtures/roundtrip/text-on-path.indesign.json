@@ -7,13 +7,13 @@
     "script": "scripts/indesign/lib/read-document.jsx",
     "script_sha256": "4486a78fdd3b45a88c6ef6b18911bc34b94f6cf7ddc3c4d433d3d5e256f4dc08",
     "runner": "scripts/indesign/run-roundtrip.sh",
-    "recorded_at": "2026-10-11T05:57:05.341Z",
+    "recorded_at": "2026-10-13T14:51:33.223Z",
     "host_os": "macOS 26.4",
     "pdf_preset": "[Qualitativ hochwertiger Druck]"
   },
   "idml": {
     "path": "packages/draw-bundle/test/fixtures/roundtrip/text-on-path.idml",
-    "sha256": "f8f39ec28c1a17e3e39aceedd8a35b08b8cea338266ca1d4ef9ca8a8988854ce"
+    "sha256": "0def043cc70983b1ddcad18300911af809704dd3029c98fcc2660ced7b3fbd29"
   },
   "units": "pt",
   "coordinates": "page-local, origin top-left of the page, Y down (ruler origin PAGE, zero point 0,0, script measurement unit POINTS); bounds as [minX, minY, maxX, maxY]",

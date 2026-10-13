@@ -553,10 +553,11 @@ export function bindLivePaintFaces(
 // live commands emit (no second copy to drift from).
 
 /** STEPWISE LANE, BATCH 1 — one `insertPath` per face per contour, in
- *  the order `livePaintContourCounts` reports. Inserts ONLY: a batch that
- *  DELETES and then INSERTS is refused by the engine (the insert's
+ *  the order `livePaintContourCounts` reports. Inserts ONLY: up to core
+ *  0.71.7 a batch that DELETES and then INSERTS is refused (the insert's
  *  z-position resolves against the spread length the batch STARTED
- *  with), so a rebuild's tear-down rides batch 2. The shipped lane is
+ *  with; 0.71.8 applies it, and a host may boot either), so a rebuild's
+ *  tear-down rides batch 2. The shipped lane is
  *  {@link livePaintBatchFor}. */
 export function livePaintInsertBatchFor(plan: LivePaintFillPlan): Mutation {
   const ops: Mutation[] = [];
