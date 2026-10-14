@@ -155,8 +155,8 @@ stroke panel raised, Esc pops out). The bundle drives end-to-end through the rea
 the draw-plugin e2e (`editor` `apps/canvas/tests/e2e/draw-plugin.spec.ts`)
 and a DTP journey (`tests/journey/plugins/draw.journey.spec.ts`) author a
 path with the built-in Pen, then refine its anchors (add/delete/convert)
-and stroke through the bundle. The three TS packages carry 2 633 passing
-vitest against engine 0.71.8 (geometry 675, tools 337, bundle 1 621; 34
+and stroke through the bundle. The three TS packages carry 2 652 passing
+vitest against engine 0.71.8 (geometry 681, tools 337, bundle 1 634; 34
 skipped — 27 of them the InDesign round-trip generator, which runs only
 with `PAGED_ROUNDTRIP_WRITE`, 3 the opt-in real SVG corpus, 3 the
 page-only cases of the spread-space fake engine, 1 the older-engine
