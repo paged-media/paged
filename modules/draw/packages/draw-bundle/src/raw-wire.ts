@@ -29,7 +29,11 @@
 //     `document.gradientDetail` facade; `collection("gradients")` lists
 //     a swatch's id, name and kind and nothing about its stops);
 //   · `requestTextOutlines` — a text frame's glyphs as outlines, for
-//     Create Outlines (protocol 66, RFI C-69; no facade yet).
+//     Create Outlines (protocol 66, RFI C-69; no facade yet);
+//   · `requestStyleProperties` — an object style's settable properties,
+//     which the drawing tools read `[Normal Graphics Frame]`'s paint from
+//     (`handlers/graphic-default.ts`; no `document.styleProperties`
+//     facade).
 //
 // GUARDED, so a gap never becomes a crash: a host whose handle has no
 // `send` (an isolate, a stub), a send that throws or rejects, and a reply
@@ -43,13 +47,18 @@ import type { BundleHost, ElementId } from "@paged-media/plugin-api";
 export type RawRequest =
   | { kind: "requestNearestPathPoint"; payload: { id: ElementId; point: [number, number] } }
   | { kind: "requestGradientDetail"; payload: { gradientId: string } }
-  | { kind: "requestTextOutlines"; payload: { id: ElementId } };
+  | { kind: "requestTextOutlines"; payload: { id: ElementId } }
+  | {
+      kind: "requestStyleProperties";
+      payload: { collection: StyleCollectionWire; styleId: string };
+    };
 
 /** The reply kind each request expects. */
 const REPLY_KIND: Record<RawRequest["kind"], string> = {
   requestNearestPathPoint: "nearestPathPoint",
   requestGradientDetail: "gradientDetailReply",
   requestTextOutlines: "textOutlines",
+  requestStyleProperties: "styleProperties",
 };
 
 /** Does this host carry the hatch at all? */
@@ -166,4 +175,32 @@ export async function rawTextOutlines(
     payload: { id },
   })) as { result?: TextOutlinesWire | null } | null;
   return payload?.result ?? null;
+}
+
+/** The style families `requestStyleProperties` addresses. */
+export type StyleCollectionWire = "paragraph" | "character" | "object" | "cell" | "table";
+
+/** `requestStyleProperties`' answer — typed HERE because the curated wire
+ *  subset does not carry `StyleProperties`. `entries` has the inspector's
+ *  row shape; a swatch of None reads as a `colorRef` whose value is null. */
+export interface StylePropertiesWire {
+  collection: StyleCollectionWire;
+  styleId: string;
+  name?: string | null;
+  entries: { path: string; value?: { type: string; value?: unknown } | null }[];
+}
+
+/** One style definition's properties, or null (no such style — a document
+ *  made with File ▸ New has no object styles at all — or no hatch). */
+export async function rawStyleProperties(
+  host: BundleHost,
+  collection: StyleCollectionWire,
+  styleId: string,
+): Promise<StylePropertiesWire | null> {
+  const payload = (await rawRead(host, {
+    kind: "requestStyleProperties",
+    payload: { collection, styleId },
+  })) as { result?: StylePropertiesWire | null } | null;
+  const result = payload?.result ?? null;
+  return result && Array.isArray(result.entries) ? result : null;
 }

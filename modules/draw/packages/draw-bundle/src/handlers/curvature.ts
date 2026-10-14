@@ -21,7 +21,8 @@
 // pointer/key events feed the machine, the snapshot's rubber curve goes
 // out through `host.overlay.setToolPreview` as the cubic
 // `ToolPreviewPath` (B-07), and the commit becomes ONE `insertPath`
-// through `host.document.mutate` (facade-only — B-17).
+// through `host.document.mutate` (facade-only — B-17), painted with the
+// graphic default in the same batch (`./graphic-default.ts`).
 
 import type {
   BundleHost,
@@ -35,6 +36,7 @@ import {
   type CurvatureSnapshot,
 } from "@paged-media/draw-tools";
 
+import { graphicPaintFor, withGraphicPaint } from "./graphic-default";
 import { insertPathMutationFor } from "./insert-path";
 import { createSnapper } from "./snapping";
 
@@ -56,8 +58,13 @@ export function createCurvatureHandler(host: BundleHost): GestureHandler {
     const page = pageId;
     reset();
     if (!c || !page) return;
-    void host.document
-      .mutate(insertPathMutationFor(page, c.anchors, c.open))
+    void graphicPaintFor(host)
+      .catch(() => null)
+      .then((paint) =>
+        host.document.mutate(
+          withGraphicPaint(insertPathMutationFor(page, c.anchors, c.open), paint),
+        ),
+      )
       .then(async (outcome) => {
         if (!outcome.applied) {
           host.log.warn(
