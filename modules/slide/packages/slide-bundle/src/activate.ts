@@ -31,11 +31,16 @@
 // The object model (ADR 323) addresses the deck, its slides, layouts and
 // placeholders through host.objects; the slide, transition, notes,
 // placeholder and deck fields are host-rendered property rows over it.
+//
+// The fonts the deck embeds are decoded by the engine and given to the
+// document before it opens, within their licences (ADR 707); a document
+// reopened later gets them again from the source deck it keeps.
 
 import type { BundleHandle, BundleHost, Diagnostic } from "@paged-media/plugin-api";
 
 import { exportPlan, pageFingerprints } from "./deck-export.js";
 import { slideEngine, type ImportReport } from "./engine.js";
+import { giveDocumentEmbeddedFonts } from "./fonts.js";
 import { contributeSlideObjectModel, importLabelMutations } from "./object-model.js";
 import { SLIDE_PANELS } from "./panels.js";
 import { makeNotesPanel } from "./panels/notes-panel.js";
@@ -49,6 +54,8 @@ export const PPTX_MIME =
   "application/vnd.openxmlformats-officedocument.presentationml.presentation";
 /** Diagnostics key for what an import met and could not render. */
 export const IMPORT_DIAGNOSTICS = "media.paged.slide/import";
+/** Diagnostics key for the embedded fonts of a reopened deck. */
+export const FONT_DIAGNOSTICS = "media.paged.slide/fonts";
 /** Container parts (this plugin's namespace). */
 export const SOURCE_PART = "source/original.pptx";
 export const REPORT_PART = "import/report.json";
@@ -102,8 +109,34 @@ export async function keepSource(host: BundleHost, bytes: Uint8Array, report: Im
   await host.parts.write(FINGERPRINTS_PART, new TextEncoder().encode(JSON.stringify(byPart)));
 }
 
+/**
+ * Give a reopened deck document its embedded fonts again: the faces live
+ * for an editing session, and the source deck kept as a container part
+ * still holds them. Does nothing for a document that is not a deck.
+ */
+export async function reloadEmbeddedFonts(host: BundleHost): Promise<void> {
+  if (!host.supports("storage.parts@1")) return;
+  let source: Uint8Array | null;
+  try {
+    source = await host.parts.read(SOURCE_PART);
+  } catch {
+    return; // no document open
+  }
+  if (!source) return;
+  const engine = await slideEngine();
+  const { faces, diagnostics, data } = engine.embeddedFonts(source);
+  if (faces.length === 0) return;
+  const refused = await giveDocumentEmbeddedFonts(host, faces, data);
+  host.diagnostics.set(FONT_DIAGNOSTICS, [
+    ...diagnostics.map((message) => ({ severity: "warning" as const, message, source: "pptx" })),
+    ...refused,
+  ]);
+}
+
 export function activate(host: BundleHost): BundleHandle {
   const disposers: Array<() => void> = [];
+  /** An import is opening its own document (which gets its fonts there). */
+  let importing = false;
 
   /** The door that replaces the active document: the native-document door
    *  (the editor), else the documents door (headless hosts, the Node CLI). */
@@ -130,15 +163,23 @@ export function activate(host: BundleHost): BundleHandle {
       return null;
     }
     const engine = await slideEngine();
-    const { idml, report } = engine.importPptx(bytes, documentName(name));
-    await open(idml, documentName(name));
-    await keepSource(host, bytes, report);
+    const { idml, report, fonts } = engine.importPptx(bytes, documentName(name));
+    importing = true;
+    let fontDiagnostics: Diagnostic[] = [];
+    try {
+      // The faces first, so the deck lays out in them from the start.
+      fontDiagnostics = await giveDocumentEmbeddedFonts(host, report.embeddedFonts, fonts);
+      await open(idml, documentName(name));
+      await keepSource(host, bytes, report);
+    } finally {
+      importing = false;
+    }
     // The importer already wrote each slide's page label and every
     // placeholder's label into the package; the deck label goes on the
     // document the object model reads (ADR 703).
     const labels = importLabelMutations(report, documentName(name));
     const written = await host.document.mutate({ op: "batch", args: { ops: labels.mutations as never } });
-    const diagnostics = reportDiagnostics(report);
+    const diagnostics = [...reportDiagnostics(report), ...fontDiagnostics];
     if (!written.applied) {
       diagnostics.push({ severity: "warning", message: "The deck label could not be written; deck data is read from the import cache.", source: "pptx" });
     }
@@ -152,6 +193,20 @@ export function activate(host: BundleHost): BundleHandle {
 
   const model = contributeSlideObjectModel(host, { openDeck });
   if (model) disposers.push(() => model.dispose());
+
+  // A deck document opened another way (File ▸ Open of a saved document,
+  // or already open when the bundle activates) gets its embedded fonts
+  // from the source deck it keeps.
+  const reload = () => {
+    if (importing) return;
+    reloadEmbeddedFonts(host).catch((err: unknown) =>
+      host.log.warn(`paged.slide: embedded fonts of the open deck: ${String(err)}`),
+    );
+  };
+  if (host.supports("document.onDidOpen@1")) {
+    disposers.push(host.document.onDidOpen(reload).dispose);
+  }
+  reload();
 
   if (host.supports("contribute.importer@1")) {
     disposers.push(

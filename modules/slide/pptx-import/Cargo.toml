@@ -12,6 +12,7 @@ workspace = true
 
 [dependencies]
 pptx-core.workspace = true
+pptx-fonts.workspace = true
 paged-ooxml.workspace = true
 quick-xml.workspace = true
 thiserror.workspace = true

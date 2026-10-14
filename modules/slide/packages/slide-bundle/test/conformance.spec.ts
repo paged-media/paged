@@ -29,7 +29,10 @@ import { describe, expect, it } from "vitest";
 import { createHeadlessHost } from "@paged-media/plugin-sdk";
 import type { ElementId } from "@paged-media/plugin-api";
 
+import { IMPORTER_ID } from "../src/activate";
 import { slideEngine } from "../src/engine";
+import { giveDocumentEmbeddedFonts } from "../src/fonts";
+import { slideBundle } from "../src/index";
 
 const FIXTURES = ["geometry", "placeholders", "text", "motion", "baselines"];
 
@@ -126,6 +129,90 @@ describe("slide state rides the pages", () => {
           expect((state?.data.transition as { kind?: string })?.kind).toBeTruthy();
         }
       }
+    } finally {
+      h.dispose();
+    }
+  }, 60_000);
+});
+
+/** A row of the document's `fonts` collection (wire `FontSummary`). */
+type FontSummary = { family: string; isMissing?: boolean };
+
+/** The engine behind a headless host, through the editor facade (read
+ *  only here: which face a family and style resolve to). */
+type EngineClient = { send(m: unknown): Promise<{ kind: string; payload: Record<string, unknown> }> };
+
+describe("a deck's embedded fonts", () => {
+  it.each([
+    ["fonts-full", 5],
+    ["fonts", 7],
+  ])("%s: its text is set in the faces it embeds, not substitutes", async (name, count) => {
+    const bytes = new Uint8Array(
+      readFileSync(new URL(`../../../slide-conformance/fixtures/${name}.pptx`, import.meta.url)),
+    );
+    const { idml, report, fonts } = (await slideEngine()).importPptx(bytes, name);
+    expect(report.embeddedFonts).toHaveLength(count);
+    expect(report.embeddedFonts.every((f) => f.use === "editable" && f.length > 0)).toBe(true);
+    expect(report.diagnostics.filter((d) => d.includes("embedded font"))).toEqual([]);
+
+    const h = await createHeadlessHost();
+    try {
+      // The bundle's own host: its manifest declares the fonts asset.
+      h.loadBundle(slideBundle);
+      const client = (h.host as unknown as { editor: { client: EngineClient } }).editor.client;
+      const [page] = await h.load(idml);
+      const families = [...new Set(report.embeddedFonts.map((f) => f.family))].sort();
+      const missing = async () =>
+        (await h.host.document.collection<FontSummary>("fonts"))
+          .filter((f) => families.includes(f.family) && f.isMissing)
+          .map((f) => f.family)
+          .sort();
+      // Before: every embedded family is missing; the text has no face.
+      expect(await missing()).toEqual(families);
+      const before = await h.host.render.snapshot(page, { widthPx: 960 });
+
+      // Through the host's own document-font door (plugin-sdk ADR 328).
+      expect(h.host.supports("assets.documentFont@1")).toBe(true);
+      const refused = await giveDocumentEmbeddedFonts(h.host, report.embeddedFonts, fonts);
+      expect(refused).toEqual([]);
+
+      // After: none is missing, and each style resolves to its own face.
+      expect(await missing()).toEqual([]);
+      for (const f of report.embeddedFonts) {
+        const r = await client.send({ kind: "requestFontFaceBytes", payload: { family: f.family, style: f.style } });
+        expect(r.payload.found, `${f.family} ${f.style}`).toBe(true);
+        expect(r.payload.style).toBe(f.style);
+        // The engine serves the very face the deck embedded.
+        expect((r.payload.bytes as number[]).length).toBe(f.length);
+      }
+      const after = await h.host.render.snapshot(page, { widthPx: 960 });
+      expect(Buffer.from(after!.png).equals(Buffer.from(before!.png))).toBe(false);
+
+      // A second time, every face is already the document's.
+      const again = await giveDocumentEmbeddedFonts(h.host, report.embeddedFonts, fonts);
+      expect(again).toEqual([]);
+    } finally {
+      h.dispose();
+    }
+  }, 60_000);
+});
+
+describe("File \u25b8 Open of a deck with embedded fonts", () => {
+  it("opens the document with the deck's faces", async () => {
+    const bytes = new Uint8Array(
+      readFileSync(new URL("../../../slide-conformance/fixtures/fonts-full.pptx", import.meta.url)),
+    );
+    const h = await createHeadlessHost();
+    try {
+      h.loadBundle(slideBundle);
+      const importer = h.importersContributed().find((i) => i.id === IMPORTER_ID)!;
+      await importer.import({ name: "fonts-full.pptx", bytes, mimeType: "" });
+      expect(h.openedDocuments().map((d) => d.name)).toEqual(["fonts-full"]);
+      const missing = (await h.host.document.collection<FontSummary>("fonts"))
+        .filter((f) => f.isMissing)
+        .map((f) => f.family);
+      // The importer gave the document every face before it opened.
+      expect(missing).toEqual([]);
     } finally {
       h.dispose();
     }

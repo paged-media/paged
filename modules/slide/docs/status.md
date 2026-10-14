@@ -1,6 +1,6 @@
 # paged.slide — status
 
-Read from the code on 2026-10-06.
+Read from the code on 2026-10-14.
 
 ## Built
 
@@ -47,6 +47,14 @@ Read from the code on 2026-10-06.
   `.ppsx` and `.potx`: one wasm call (`importPptx`, 1.3 MB, 373 KB gzipped) returns the package and
   a report; the host opens the package, and the source deck and the report are kept as container
   parts.
+- **Embedded fonts** (ADR 707). `pptx-fonts` decodes the faces PowerPoint embeds: Embedded
+  OpenType (all three header versions, XOR obfuscation) and MicroType Express (LZCOMP and the
+  Compact Table Format: `glyf` with its glyph programs, `loca`, `cvt `, `hdmx`, `VDMX`), or a
+  bare OpenType part. The licence decides first: installable and editable faces are decoded and
+  given to the document through the host's document-font door before it opens (a font the machine
+  has wins); preview-and-print, restricted and bitmap-only faces are not used, and the import
+  names each with the reason. A deck document opened again gets its faces back from the source
+  deck it keeps.
 - **PPTX export, first part** (M4; `pptx-export`, ADR 704). File ▸ Export as PowerPoint writes
   the deck back from the original the importer kept: the document's slides in page order, a
   duplicated slide as a slide part of its own, deleted slides dropped with their relationships
@@ -70,6 +78,10 @@ Read from the code on 2026-10-06.
 | SmartArt | `smartart` fixture | every block within 1 pt, text colours exact |
 | Engine placement | the published canvas-wasm, headless, all five fixtures | a page per slide; every drawn item within 0.5 pt of the import |
 | Export of slide order, duplicates, deletions, hidden slides, notes | PowerPoint 16.113.3 opening the written decks (a fixture and a corpus deck) | opens without a repair prompt; every page pixel-identical to the expected original slide, in the planned order; notes read back by PowerPoint, line breaks kept |
+| Embedded fonts, whole faces | `fonts-full` fixture: PowerPoint embedding Lato (4 styles) and Gloria Hallelujah | every glyph's outline and program, every advance and every other table identical to the source fonts |
+| Embedded fonts, subsets | `fonts` fixture: PowerPoint's default subsets, Caveat added | every glyph a subset holds is the source's; each holds every character of the deck's text |
+| Embedded fonts in the wild | 350 faces from 29 real-world decks (PowerPoint for Windows and Mac; TrueType and CFF; subsets and whole) | all decode and parse back; 12 faces matched to installed originals: 17 761 glyphs identical, `cvt `/`fpgm`/`prep`/`VDMX` identical, `hdmx` identical for every glyph a subset holds |
+| Embedded fonts in the engine | the published canvas-wasm and SDK 0.2.55-canary.0, headless | before: every embedded family missing; after the faces go through the document-font door: none, each style served as the deck's face; File ▸ Open of the deck opens it with nothing missing |
 | Export of an unedited deck | four fixtures (Rust), the importer→exporter path headless and in the editor | byte-identical to the original |
 
 Rendering against PowerPoint's PDF (local tool `scripts/fidelity-local.py`: the engine's CPU
@@ -90,17 +102,16 @@ placed by `GradientFillStart`; both ship in canvas-wasm 0.70.0.
 
 ## Open in M1
 
-- **Fonts.** Plugins cannot register fonts with the host yet (planned SDK door, M2). Decks whose
-  fonts the host lacks render with substitutes; the green deck's Antonio is missing on the oracle
-  machine too, and PowerPoint breaks its long title mid-word, which the engine does not.
-- **Embedded fonts.** The importer reads the deck's embedded-font list but no embedded face reaches
-  the document, and the import says so: one diagnostic per font, naming it, with text in it drawn
-  in a substitute. Every face PowerPoint embeds is Embedded OpenType compressed with MicroType
-  Express (EOT flags 0x4 or 0x5 on all 266 embedded parts in the decks examined, from PowerPoint
-  for Windows and Mac), so using them needs a MicroType Express decoder, and putting them in the
-  document needs a door for document faces (the SDK's `assets.registerFont` reaches scene-layer
-  text only). No corpus deck embeds fonts and PowerPoint's scripting cannot embed them; the
-  diagnostic is tested on a fixture with an embedded-font entry added.
+- **Fonts.** A deck's own fonts reach the document only when it embeds them. Fonts it names but
+  does not embed must be on the machine; otherwise they render with substitutes. The green deck's
+  Antonio is missing on the oracle machine too, and PowerPoint breaks its long title mid-word,
+  which the engine does not.
+- **Embedded fonts.** The bundle needs the document-font door (plugin-sdk ADR 328, published in
+  0.2.55-canary.0); an editor pinned to an older SDK has no backend for it, and the import says
+  the host cannot give the document the deck's fonts. A face lives for the editing session, so
+  another document opened later in that session can resolve it (editable embedding asks for it to
+  go with its document): a per-document face lifetime in the door is an open SDK follow-up.
+  Preview-and-print faces wait for a read-only view (the slideshow).
 - **SmartArt layouts in fixtures.** PowerPoint draws a seeded diagram with its default layout
   only, so the fixture covers the drawing's lowering, not other layouts' shapes.
 - **Editor wiring.** The editor loads the bundle on a branch, through a local link, and a

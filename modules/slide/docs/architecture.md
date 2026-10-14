@@ -3,6 +3,7 @@
 ```
 .pptx bytes
   │  pptx-import      OPC + PresentationML/DrawingML → pptx-core IR (as authored)
+  │  pptx-fonts       embedded faces: EOT + MicroType Express → TrueType (ADR 707)
   ▼
 pptx-core IR
   │  slide-resolve    theme / master / layout / placeholder inheritance, colours, fonts
@@ -11,6 +12,7 @@ pptx-core IR
 resolved deck
   │  slide-idml       → complete IDML package (+ parts and metadata for the host)
   ▼
+host.assets.registerDocumentFont (embedded faces), then
 host.nativeDocument.open  →  native slides in the editor
 
 native document ── slide-host-model (read model) ── pptx-export ──► .pptx
@@ -21,6 +23,7 @@ native document ── slide-host-model (read model) ── pptx-export ──�
 | `vendor/paged-ooxml` | OPC container, relationships, content types (vendored, ADR 701) | in place |
 | `pptx-core` | format-level IR | in place |
 | `pptx-import` | `.pptx` → IR | in place: reads every corpus deck |
+| `pptx-fonts` | embedded faces: Embedded OpenType, MicroType Express, embedding permissions (ADR 707) | in place |
 | `slide-resolve` | inheritance resolution | M1 |
 | `slide-geom` | preset geometry evaluator | M1 |
 | `slide-chart` | chart lowering from cached values | M1 |

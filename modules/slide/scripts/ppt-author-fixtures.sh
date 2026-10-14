@@ -17,7 +17,7 @@ names=("$@")
 if [ ${#names[@]} -eq 0 ]; then
   for f in "$ROOT"/scripts/fixtures/*.applescript; do
     n="$(basename "$f" .applescript)"
-    [ "$n" = resave ] || names+=("$n")
+    case "$n" in resave | embed-resave) ;; *) names+=("$n") ;; esac
   done
 fi
 TMP="$(mktemp -d)"
@@ -32,7 +32,11 @@ for name in "${names[@]}"; do
   if [ -f "$ROOT/scripts/fixtures/$name.seed.py" ]; then
     python3 "$ROOT/scripts/fixtures/$name.seed.py" "$STAGE/$name.pptx" "$STAGE/$name.seed.pptx"
     rm -f "$STAGE/$name.pptx"
-    osascript "$ROOT/scripts/fixtures/resave.applescript" "$STAGE/$name.seed.pptx" "$STAGE/$name.pptx" || true
+    # A deck that asks for embedded fonts must be saved in place (see
+    # embed-resave.applescript); the others are saved under a new name.
+    RESAVE=resave
+    case "$name" in fonts | fonts-full) RESAVE=embed-resave ;; esac
+    osascript "$ROOT/scripts/fixtures/$RESAVE.applescript" "$STAGE/$name.seed.pptx" "$STAGE/$name.pptx" || true
     [ -s "$STAGE/$name.pptx" ] || { echo "PowerPoint did not re-save $name" >&2; exit 1; }
   fi
   cp "$STAGE/$name.pptx" "$OUT/$name.pptx"

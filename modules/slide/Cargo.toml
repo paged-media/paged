@@ -9,6 +9,7 @@ members = [
     "vendor/paged-ooxml",
     "pptx-core",
     "pptx-import",
+    "pptx-fonts",
     "slide-geom",
     "slide-chart",
     "slide-resolve",
@@ -42,6 +43,7 @@ paged-ooxml = { path = "vendor/paged-ooxml" }
 pptx-export = { path = "pptx-export" }
 pptx-core = { path = "pptx-core" }
 pptx-import = { path = "pptx-import" }
+pptx-fonts = { path = "pptx-fonts" }
 slide-geom = { path = "slide-geom" }
 slide-chart = { path = "slide-chart" }
 slide-resolve = { path = "slide-resolve" }
