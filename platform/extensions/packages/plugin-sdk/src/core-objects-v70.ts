@@ -60,6 +60,7 @@ import type {
 
 import type { CoreObjects, CorePlan } from "./core-objects";
 import { planCoreDelete } from "./core-ops";
+import { documentChangeOf } from "./document-change";
 import { CORE_PATHS, corePathRange, coreSchema71, type CorePathRow, type CorePathScope } from "./core-schema";
 import { formatAddress, fromElementId, type SelectorStep } from "./object-address";
 
@@ -224,12 +225,9 @@ export function createCoreObjectsV70(getEditor: () => PagedEditor): CoreObjects 
     subscribed = true;
     try {
       unsubscribe = client().subscribe((msg) => {
-        if (
-          msg.kind === "mutationApplied" ||
-          msg.kind === "undoApplied" ||
-          msg.kind === "redoApplied" ||
-          msg.kind === "documentLoaded"
-        ) {
+        // Every committed change (a gesture's commit and a script run
+        // included: document-change.ts), and a newly opened document.
+        if (documentChangeOf(msg) !== null || msg.kind === "documentLoaded") {
           generation++;
           for (const l of listeners) l();
         }

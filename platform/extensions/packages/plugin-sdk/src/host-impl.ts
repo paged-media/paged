@@ -63,6 +63,7 @@ import type {
   JournalSurface,
   Disposable,
   DocumentChangeEvent,
+  DocumentFontOutcome,
   DocumentOpenedEvent,
   FrameChainLink,
   StoryContent,
@@ -126,6 +127,7 @@ import type {
 } from "@paged-media/plugin-api";
 
 import { DisposableStore, toDisposable } from "./disposables";
+import { documentChangeOf } from "./document-change";
 import { FALLBACK_WIDGETS } from "./widgets-fallback";
 import { makeSchemaPanelComponent } from "./schema-panel";
 
@@ -216,6 +218,12 @@ export const HOST_FEATURES: readonly string[] = [
   // needed — DESIGN.md §4.3d).
   "document.parentOf@1",
   "document.onDidChange@1",
+  // ADR 327 — `onDidChange` reports EVERY committed change: a canvas
+  // gesture's commit (`gestureCommitted`) and a script run (`scriptResult`,
+  // `pagesUnknown`) as well as mutations, undos and redos. STATIC: the
+  // editor's client hands every reply to its subscribers, and the headless
+  // harness does the same for these.
+  "document.onDidChange@2",
   // W-22 — the document-opened event. STATIC: it is the client's
   // `documentLoaded` broadcast filtered, and every host posts that on
   // every load (File ▸ Open, File ▸ New, a native-document open).
@@ -239,6 +247,11 @@ export const HOST_FEATURES: readonly string[] = [
   // like the channel's own `overlay.toolPreview@1`. The headless harness
   // records the shape verbatim.
   "overlay.text@1",
+  // ADR 328 — the document-face door. STATIC like `assets.images@1`: the
+  // engine's document registry answers it (protocol 70's `scope`), no
+  // injected source is involved, and the worker handshake refuses an engine
+  // older than the pin. Fill-only; a refusal comes back as an outcome.
+  "assets.documentFont@1",
   // C-5 / I-04 (core v42): the placed-image bytes read is engine-served
   // through the wire (no injected source), so it is unconditionally
   // implemented at the pinned canvas-wasm — unlike assets.fonts@1, which
@@ -463,6 +476,24 @@ function sceneFaceLedger(provider: BundleAssetProvider): SceneFaceLedger {
     sceneFaceLedgers.set(provider, ledger);
   }
   return ledger;
+}
+
+/** ADR 328 — one queue per engine client for document-face registrations,
+ *  so two calls for the same face (from one bundle or two) check and
+ *  register one after the other and the second finds the face held. */
+const documentFaceQueues = new WeakMap<object, Promise<unknown>>();
+
+/** The container a face's first bytes announce, as the engine sniffs it:
+ *  the sfnt magics the canvas reads (TrueType, OpenType/CFF, a collection),
+ *  the WOFF pair it does not, or `null` for bytes that are not a face. */
+function faceContainer(bytes: Uint8Array): "sfnt" | "woff" | null {
+  if (bytes.byteLength < 4) return null;
+  const magic = String.fromCharCode(bytes[0]!, bytes[1]!, bytes[2]!, bytes[3]!);
+  if (magic === "\u0000\u0001\u0000\u0000" || magic === "true" || magic === "OTTO" || magic === "ttcf") {
+    return "sfnt";
+  }
+  if (magic === "wOFF" || magic === "wOF2") return "woff";
+  return null;
 }
 
 /** Blob-store budgets (K-4 / S-08). The default per-plugin quota when a
@@ -2478,14 +2509,13 @@ export function createBundleHost(
       if (!parentIndexWired) {
         // Wired LAZILY on first use so a bundle that never asks for
         // parentage pays for no subscription. The index is dropped on
-        // every applied change (mutation / undo / redo) — the next read
-        // rebuilds it from one fresh tree.
+        // every committed change (the set `document.onDidChange` reports:
+        // a script can group and ungroup) — the next read rebuilds it from
+        // one fresh tree.
         parentIndexWired = true;
         const off = getEditor().client.subscribe((msg) => {
           if (
-            msg.kind === "mutationApplied" ||
-            msg.kind === "undoApplied" ||
-            msg.kind === "redoApplied" ||
+            documentChangeOf(msg) !== null ||
             // A newly opened document invalidates everything; the kind
             // is matched defensively (not every host posts it).
             msg.kind === "documentLoaded"
@@ -2609,25 +2639,12 @@ export function createBundleHost(
     },
     onDidChange(listener: (e: DocumentChangeEvent) => void): Disposable {
       requireDocRead("document.onDidChange");
+      // Every committed change, whatever committed it (ADR 327): a
+      // mutation, an undo/redo, a canvas gesture's commit, a script run.
+      // document-change.ts is the one place that decides what counts.
       const off = getEditor().client.subscribe((msg) => {
-        if (
-          msg.kind === "mutationApplied" ||
-          msg.kind === "undoApplied" ||
-          msg.kind === "redoApplied"
-        ) {
-          // Reflow (v38, C-2): only `mutationApplied` carries it, and only
-          // when a resizeFrame changed a content box (§8.5). Pass it through
-          // so a pagination consumer re-splits on resize, not on transform.
-          const reflow =
-            msg.kind === "mutationApplied" ? msg.payload.reflow : undefined;
-          listener({
-            kind: msg.kind,
-            pageIds: msg.payload.pageIds,
-            ...(reflow
-              ? { reflow: { frameId: reflow.frameId, contentBox: reflow.contentBox } }
-              : {}),
-          });
-        }
+        const change = documentChangeOf(msg);
+        if (change) listener(change);
       });
       return store.add(toDisposable(off));
     },
@@ -3356,6 +3373,79 @@ export function createBundleHost(
           });
         }),
       );
+    },
+    // ADR 328 — a face for the DOCUMENT where it holds none. Engine-served
+    // like `getPlacedImage` (no injected provider): the document registry
+    // is the engine's. Fill-only — the engine is asked first whether it
+    // holds the face, and a held face is never sent again — so a bundle
+    // cannot change how text that already resolves is drawn.
+    async registerDocumentFont(bytes, family, style) {
+      requireDeclared(
+        hasAsset("fonts"),
+        "assets.registerDocumentFont",
+        'capabilities.assets must include "fonts"',
+      );
+      const label = `assets.registerDocumentFont("${family}"${style ? `, "${style}"` : ""})`;
+      const refuse = (reason: string): DocumentFontOutcome => {
+        log.warn(`${label} refused: ${reason}`);
+        return { status: "refused", reason };
+      };
+      // It changes how the document lays out: a document write.
+      const denied = denyWrite(hasDoc("write"), "assets.registerDocumentFont", "capabilities.document.write");
+      if (denied !== null) return refuse(denied);
+      if (family.trim() === "") return refuse("the family is empty");
+      if (bytes.byteLength > ASSET_BUDGETS.maxFontFaceBytes) {
+        return refuse(
+          `${bytes.byteLength} bytes is over the ${ASSET_BUDGETS.maxFontFaceBytes}-byte per-face cap`,
+        );
+      }
+      const container = faceContainer(bytes);
+      if (container !== "sfnt") {
+        return refuse(
+          container === "woff"
+            ? "a WOFF or WOFF2 face — the canvas reads TrueType and OpenType only"
+            : "the bytes are not a TrueType or OpenType face",
+        );
+      }
+      // Copied before the first await: the caller may reuse its buffer.
+      const face = Array.from(bytes);
+      let client: PagedEditor["client"];
+      try {
+        client = getEditor().client;
+      } catch (err) {
+        return refuse(`no engine to give the face to (${String(err)})`);
+      }
+      const run = async (): Promise<DocumentFontOutcome> => {
+        try {
+          const held = await client.send({
+            kind: "requestFontFaceBytes",
+            payload: { family, style: style ?? null },
+          });
+          // The engine answers a style it lacks with the family's regular
+          // face; only the style asked for (or, for a style-less ask, any
+          // face of the family) counts as held.
+          if (
+            held.kind === "fontFaceBytes" &&
+            held.payload.found &&
+            (style === undefined || held.payload.style === style)
+          ) {
+            return { status: "held" };
+          }
+          const reply = await client.send({
+            kind: "registerFont",
+            payload: { family, style: style ?? null, bytes: face, scope: "document" },
+          });
+          if (reply.kind !== "fontRegistered") {
+            return refuse(`the engine answered ${reply.kind}`);
+          }
+          return { status: "registered", pageIds: [...(reply.payload.pageIds ?? [])] };
+        } catch (err) {
+          return refuse(`the engine could not be reached (${String(err)})`);
+        }
+      };
+      const queued = (documentFaceQueues.get(client) ?? Promise.resolve()).then(run, run);
+      documentFaceQueues.set(client, queued);
+      return queued;
     },
     // C-5 / I-04 (core v42): a placed DOCUMENT image's ORIGINAL bytes,
     // straight from the engine's resolver/parse cache through the

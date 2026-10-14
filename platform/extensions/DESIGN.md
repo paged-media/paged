@@ -143,9 +143,15 @@ draw B-02). The headless harness records both
   `elementGeometry(ids)`, `tree()`,
   `planarRegions(elementIds, point?)` (§4.3c).
 - `undo()` / `redo()` — shared history, no plugin-local stacks.
-- `onDidChange(l)` — typed `mutationApplied | undoApplied | redoApplied`
-  events (every panel audit showed this exact subscribe pattern,
-  hand-rolled 20+ times in `apps/canvas/src/panels`).
+- `onDidChange(l)` — typed events for every committed change (every panel
+  audit showed this exact subscribe pattern, hand-rolled 20+ times in
+  `apps/canvas/src/panels`): `mutationApplied | undoApplied | redoApplied`,
+  and since 0.2.55 a canvas gesture's commit (`gestureCommitted`) and a
+  script run (`scriptResult`, `pagesUnknown`: the engine names no pages).
+  `document-change.ts` is the one definition; the parent index and the core
+  object model follow the same set, and the headless client broadcasts
+  these replies as the editor's does. Flag `document.onDidChange@2`;
+  ADR 327.
 - `onDidOpen(l)` [W-22] — a document became the active one (File ▸ Open,
   File ▸ New, a native-document open): the client's `documentLoaded`
   broadcast, narrowed to `{ docId, pageCount, pageIds, pageSizesPt }`.
@@ -1248,7 +1254,9 @@ work on the same door shape.
   document. The door only READS what the document already embeds/loads.
   The one exception (protocol 69, §13.6): `registerFont` puts a face in a
   SCENE-ONLY table that bundle scene-layer text reads and the document
-  never does; document-scope ingestion stays closed.
+  never does. Document-scope ingestion opened in 0.2.55 for one case only
+  (§13.7, ADR 328): a face the document holds NONE for, so it can never
+  replace how text that already resolves is drawn.
 - **Offline-forever = no network on the bundle's behalf.** The bytes come
   from what the document ALREADY has (its embedded/loaded faces). The
   host MUST NOT fetch a font from the network to satisfy a
@@ -1321,6 +1329,33 @@ Disposal: the engine can only empty the scene table as a whole, so the
 SDK keeps the live faces per provider (one provider serves every bundle
 in the editor) and drops one by clearing and registering the rest again,
 in order, on one queue. A bundle's teardown disposes its faces.
+
+### 13.7 A face for the document where it has none (ADR 328)
+
+`registerDocumentFont(bytes, family, style?) → Promise<DocumentFontOutcome>`
+gives the DOCUMENT registry a face (`registerFont` with `scope:
+"document"`), for a bundle that writes native text in a face the
+document lacks — paged.web's bake names the face each run was shaped in.
+The text it wrote is then laid out and drawn in that face, and the Fonts
+collection is right to call the family present. §13.6's rule still holds
+where it applies: a face that does not draw the document's text never
+clears its missing flag.
+
+- **Fill, never replace.** The SDK asks the engine (`requestFontFaceBytes`)
+  first; a face held for the family in that style (any face of the family
+  for a style-less call) answers `held` and nothing is sent.
+- **Gates.** `capabilities.assets` ∋ `"fonts"` (throw in 'enforce') and
+  `capabilities.document.write` (a refusal: it changes layout).
+- **Refused before sending:** over `maxFontFaceBytes`, WOFF/WOFF2 (the
+  canvas reads neither), bytes without a TrueType/OpenType magic, an
+  empty family.
+- **Outcome, never a throw:** `registered` (+ the pages laid out again),
+  `held`, `refused` (+ reason).
+- Calls for one face at the same time queue per engine client, so it is
+  registered once. Engine-served like `getPlacedImage`; the flag
+  `assets.documentFont@1` is static.
+- No disposal and no undo; the face is not written into a saved file (a
+  document names its fonts). The engine keeps it for the session.
 
 ## 14. The capability-gated clipboard (K-6 / S-14 — `host.clipboard`)
 

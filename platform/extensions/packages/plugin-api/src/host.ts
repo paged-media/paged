@@ -955,14 +955,42 @@ export interface WillSaveEvent {
   format: "paged";
 }
 
+/**
+ * One committed change to the document's content — one step in its history.
+ * `kind` names what committed it (the engine's own reply kind):
+ *
+ * - `mutationApplied` — a `mutate`: a bundle's write, a panel field, a command;
+ * - `undoApplied` / `redoApplied` — an undo or a redo;
+ * - `gestureCommitted` — a canvas gesture (a frame dragged, resized or
+ *   rotated by its handles) committed on the engine (0.2.55);
+ * - `scriptResult` — a `paged.*` script finished (0.2.55). The engine names
+ *   neither its pages nor whether it wrote, so `pageIds` is empty and
+ *   `pagesUnknown` is set: treat every page as changed.
+ *
+ * A host from before 0.2.55 reports the first three only; probe
+ * `supports("document.onDidChange@2")` for the full set.
+ */
 export interface DocumentChangeEvent {
-  kind: "mutationApplied" | "undoApplied" | "redoApplied";
+  kind:
+    | "mutationApplied"
+    | "undoApplied"
+    | "redoApplied"
+    | "gestureCommitted"
+    | "scriptResult";
+  /** The pages whose content the change touched (empty: none, unless
+   *  `pagesUnknown`). */
   pageIds: PageId[];
+  /** Set when the host cannot say which pages changed (a script run):
+   *  `pageIds` is then empty and any page may have changed. */
+  pagesUnknown?: true;
   /** Content-box reflow (protocol v38, C-2/S-05): present ONLY when the
    *  change RESIZED a frame's content box (a `resizeFrame`) — never on a
    *  pure transform (move/scale/rotate is display-only, §8.5). A
    *  pagination consumer re-splits on this and ignores transform-only
-   *  changes (where it is absent). */
+   *  changes (where it is absent). The engine reports it for a
+   *  `resizeFrame` mutation only: a `gestureCommitted` never carries it,
+   *  even for a resize by the handles, so a consumer that follows frame
+   *  sizes re-reads geometry on a gesture commit. */
   reflow?: { frameId: string; contentBox: [number, number, number, number] };
 }
 
@@ -1259,6 +1287,15 @@ export interface DocumentSurface {
    *  `supports("document.readStory@1")`; a host without the v54 read backend
    *  throws `PluginApiNotImplemented` (a visible seam, never a fake value). */
   storyContent(storyId: string): Promise<StoryContent | null>;
+  /**
+   * Every committed change to the document, whatever committed it: a
+   * mutation, an undo or redo, a canvas gesture's commit, a script run
+   * (see {@link DocumentChangeEvent} for the kinds). A gesture still in
+   * flight, a cancelled one and a script suspended on the host's objects
+   * are not changes. Gated on `capabilities.document.read`. Probe
+   * `supports("document.onDidChange@2")`: a host without it reports
+   * mutations, undos and redos only.
+   */
   onDidChange(listener: (e: DocumentChangeEvent) => void): Disposable;
   /**
    * W-22 — a document became the active one: opened from a file, created

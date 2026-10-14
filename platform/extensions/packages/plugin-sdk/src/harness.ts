@@ -103,6 +103,7 @@ import {
 } from "./host-impl";
 import { satisfiesApiVersion, API_VERSION } from "./version";
 import { createCoreObjects } from "./core-objects";
+import { documentChangeOf } from "./document-change";
 import { createObjectRegistry, type ObjectRegistry } from "./object-registry";
 import { runScriptWithObjects, type ScriptRunResult, type ScriptSend } from "./script-bridge";
 import {
@@ -453,8 +454,9 @@ let seqCounter = 1;
  * the client contract is async, so each call wraps the synchronous reply
  * in a resolved promise. Subscriptions: the headless engine has no
  * unsolicited push channel, so `subscribe` listeners are driven by the
- * adapter itself — it fans out the reply of every `mutate/undo/redo` and
- * `setElementSelection` to subscribers (the same envelopes the editor
+ * adapter itself — it fans out the reply of every `mutate/undo/redo`,
+ * every `send` that committed a change (a gesture's commit, a script run)
+ * and `setElementSelection` to subscribers (the same envelopes the editor
  * worker would post back), which is what `document.onDidChange` /
  * `selection.onDidChange` consume.
  */
@@ -589,8 +591,11 @@ function makeEngineEditor(
     async send(message: MainToWorkerKind): Promise<WorkerToMain> {
       const m = message as { kind: string; payload?: unknown };
       const reply = dispatch(m.kind, m.payload);
-      // hitTest / requestSceneTree / requestElementProperties are pure
-      // reads; no fan-out (they aren't change events).
+      // A reply that committed a change (a gesture's `gestureCommitted`, a
+      // script's `scriptResult`, a raw `mutate`/`undo`/`redo`) reaches the
+      // subscribers, as the editor's client hands every reply to them
+      // (ADR 327). Pure reads (hitTest, requestSceneTree, …) do not.
+      if (documentChangeOf(reply) !== null) fanOut(reply);
       return reply;
     },
     subscribe(listener) {

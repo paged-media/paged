@@ -201,6 +201,9 @@ export function makeFakeEditor(opts?: {
   let documentMetaReply: unknown = { pageCount: 1 };
   // v67 — scripted `snapPoint` reply; `null` = a pre-v67 engine.
   let snapPointReply: unknown = null;
+  // Scripted replies for any other `client.send` kind (e.g. the font
+  // registry pair): the handler gets the payload, its answer is the reply.
+  const sendHandlers = new Map<string, (payload: unknown) => unknown>();
   /** Every message that crossed `client.send`, in order. */
   const sent: { kind: string; payload?: unknown }[] = [];
   // The geometry mirror the host's selection box is drawn from: every
@@ -229,6 +232,8 @@ export function makeFakeEditor(opts?: {
       if (msg.kind === "requestSnapPoint" && snapPointReply !== null) {
         return snapPointReply;
       }
+      const handler = sendHandlers.get(msg.kind);
+      if (handler) return handler(msg.payload);
       if (msg.kind === "hitTest") {
         return { kind: "hitResult", payload: { element: null } };
       }
@@ -330,6 +335,12 @@ export function makeFakeEditor(opts?: {
     /** v67 — script the `requestSnapPoint` reply. */
     setSnapPointReply(reply: unknown) {
       snapPointReply = reply;
+    },
+    /** Script the reply to one `client.send` kind (`null` removes it). A
+     *  handler may throw (a dead channel) or return a promise. */
+    onSend(kind: string, handler: ((payload: unknown) => unknown) | null) {
+      if (handler) sendHandlers.set(kind, handler);
+      else sendHandlers.delete(kind);
     },
     /** Every `client.send` message, in order (kind + payload). */
     sent,

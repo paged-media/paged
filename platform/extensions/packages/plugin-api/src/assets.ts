@@ -27,11 +27,16 @@
 // document holds — the host never fetches from the network on a
 // bundle's behalf (offline-forever means the bytes come from what the
 // document already has). When the host has no bytes for a face it
-// returns `null`; that is the honest, frequent answer. The ONE write,
-// `registerFont` (W-15), never reaches the document: a face a bundle
-// registers is seen by scene-layer text only (DESIGN.md §13.5).
+// returns `null`; that is the honest, frequent answer. Two writes sit
+// beside the reads: `registerFont` (W-15) never reaches the document — a
+// face a bundle registers there is seen by scene-layer text only
+// (DESIGN.md §13.6) — and `registerDocumentFont` (ADR 328) gives the
+// DOCUMENT a face it holds none for, so native text a bundle wrote in that
+// face is laid out and drawn in it. It fills a gap and never replaces a
+// face the document has (DESIGN.md §13.7).
 
 import type { Disposable } from "./host";
+import type { PageId } from "./wire";
 
 /** What `host.assets` can serve. `"fonts"` gates `getFontFace` (W-06);
  *  `"images"` gates `getPlacedImage` (C-5 / I-04 — OPEN since core v42:
@@ -85,6 +90,23 @@ export interface PlacedImageAsset {
 }
 
 /**
+ * What {@link AssetSurface.registerDocumentFont} did. Never a throw (the
+ * undeclared-`fonts` gate aside, as on every asset door):
+ *
+ * - `registered` — the document holds the face now; `pageIds` are the pages
+ *   the engine laid out again because text there resolves to it;
+ * - `held` — the document already held a face for the family (and style),
+ *   so nothing was sent: the door fills a gap, it never replaces a face;
+ * - `refused` — nothing was registered; `reason` says why (the
+ *   `document.write` gate, the per-face budget, bytes the canvas cannot
+ *   draw, the engine's own refusal or a dead channel).
+ */
+export type DocumentFontOutcome =
+  | { status: "registered"; pageIds: PageId[] }
+  | { status: "held" }
+  | { status: "refused"; reason: string };
+
+/**
  * The asset accessor a bundle reaches through `host.assets`. Two reads:
  * DOCUMENT-registered font face bytes by family (+ optional style), and
  * a placed DOCUMENT image's original bytes by element id. It is NOT an
@@ -92,9 +114,10 @@ export interface PlacedImageAsset {
  * the document already holds, and the host answers from that or
  * `null`. Capability-gated per kind: `getFontFace` requires
  * `capabilities.assets` ∋ `"fonts"`, `getPlacedImage` ∋ `"images"`
- * (the host gate throws in `'enforce'`, warns in `'warn'`). One write
- * sits beside the reads — `registerFont`, scene-layer faces only (W-15);
- * it adds nothing the document can see.
+ * (the host gate throws in `'enforce'`, warns in `'warn'`). Two writes
+ * sit beside the reads — `registerFont`, scene-layer faces only (W-15),
+ * which adds nothing the document can see, and `registerDocumentFont`,
+ * a face for the document where it has none (ADR 328).
  */
 export interface AssetSurface {
   /**
@@ -135,4 +158,37 @@ export interface AssetSurface {
     family: string,
     style?: string,
   ): Promise<Disposable>;
+  /**
+   * ADR 328 — give the DOCUMENT a face for `family` (+ `style`) when it
+   * holds none: the engine's document registry takes the bytes
+   * (`registerFont` with `scope: "document"`), the text that names the
+   * family is laid out and drawn in them, and the Fonts collection no
+   * longer flags the family missing. For a bundle that writes NATIVE text
+   * in a face the document lacks — paged.web's bake names the face each
+   * run was shaped in — so the text it wrote is drawn as it was shaped.
+   *
+   * It fills a gap and never replaces: when the document already holds a
+   * face for the family in that style (any face of the family when
+   * `style` is omitted), nothing is sent and the outcome is `held`. So a
+   * bundle cannot change how text that already resolves is drawn.
+   *
+   * The face is not undoable and is not written into a saved file (a
+   * document names its fonts; it carries no face bytes): the engine keeps
+   * it for the session, for every document opened after too. A bundle
+   * whose text needs it in a later session provides it again (at
+   * `document.onDidOpen`, or when it writes the text).
+   *
+   * Gates: `capabilities.assets` ∋ `"fonts"` (throws in 'enforce', as on
+   * every asset door) and `capabilities.document.write` (it changes how
+   * the document lays out; refused in 'enforce'). Refused, too: a face
+   * over `ASSET_BUDGETS.maxFontFaceBytes`, bytes that are not a TrueType
+   * or OpenType face (WOFF and WOFF2 included — the canvas reads neither),
+   * an empty family. Never throws otherwise. Calls for one face at the
+   * same time register it once. Probe `supports("assets.documentFont@1")`.
+   */
+  registerDocumentFont(
+    bytes: Uint8Array,
+    family: string,
+    style?: string,
+  ): Promise<DocumentFontOutcome>;
 }
