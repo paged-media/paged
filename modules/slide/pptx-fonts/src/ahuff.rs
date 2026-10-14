@@ -120,20 +120,39 @@ impl AdaptiveHuffman {
     fn update(&mut self, mut a: usize) {
         while a != ROOT {
             let w = self.tree[a].weight;
-            let mut b = a - 1;
-            if self.tree[b].weight == w {
-                while b > ROOT && self.tree[b - 1].weight == w {
-                    b -= 1;
+            if self.tree[a - 1].weight == w {
+                // The first node of `a`'s weight: weights never grow with the
+                // index, so the nodes of one weight are a run, found by
+                // bisection (the specification walks it down one by one).
+                let (mut lo, mut hi) = (ROOT, a - 1);
+                while lo < hi {
+                    let mid = (lo + hi) / 2;
+                    if self.tree[mid].weight > w {
+                        lo = mid + 1;
+                    } else {
+                        hi = mid;
+                    }
                 }
-                if b > ROOT {
-                    self.swap(a, b);
-                    a = b;
+                debug_assert_eq!(lo, self.run_start(a, w));
+                if lo > ROOT {
+                    self.swap(a, lo);
+                    a = lo;
                 }
             }
             self.tree[a].weight = w + 1;
             a = self.tree[a].up as usize;
         }
         self.tree[ROOT].weight += 1;
+    }
+
+    /// The first node of the run of weight `w` ending just before `a`, by
+    /// the specification's walk (checks the bisection in debug builds).
+    fn run_start(&self, a: usize, w: u64) -> usize {
+        let mut b = a - 1;
+        while b > ROOT && self.tree[b - 1].weight == w {
+            b -= 1;
+        }
+        b
     }
 
     /// Trade the subtrees at `a` and `b` (each keeps its place's parent).
