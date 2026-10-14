@@ -83,6 +83,7 @@ const NOT_A_READ = new Set([
   "document.undo",
   "document.redo",
   "document.onDidChange",
+  "document.onDidOpen",
 ]);
 
 const isPlainObject = (v: unknown): v is Record<string, unknown> => {
