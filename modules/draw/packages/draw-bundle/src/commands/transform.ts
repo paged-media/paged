@@ -29,16 +29,25 @@
 // CLAUDE.md, writing the same rotation twice leaves 30°, not 60°). So a
 // reflection R is written as `R ∘ M`, M being the element's CURRENT
 // transform; writing R alone would throw away whatever rotation or scale
-// the element already had. A GROUP is not reachable through
-// `elementGeometry` at all (measured: the door omits it) and moves
-// through its own op: `setGroupTransform` — which also REPLACES (the
-// group's own transform; the engine rebases every member by the delta) —
-// so a group is written `R ∘ G`, G read from the group's `frameTransform`
-// property. Every write of one reflect rides ONE batch: one undo step for
+// the element already had. A GROUP moves through its own op:
+// `setGroupTransform` — which also REPLACES the group's STORED transform
+// G, read from its `frameTransform` property (the engine rebases every
+// member by the change). G is relative to the group's PARENT group (the
+// spread for a top-level one), while R is a page-space matrix, so a
+// group is written `F⁻¹ ∘ R ∘ F ∘ G`, F being its parent frame: what
+// lands on the page is then `R ∘ F ∘ G`, the composed transform
+// reflected. F is `E ∘ G⁻¹`, E the group's COMPOSED transform as
+// `elementGeometry` answers it. Older engines answer nothing for a group
+// there; newer ones answer the composed transform. With no answer the
+// write stays `R ∘ G`: those engines rebase a group's members by
+// `new ∘ old⁻¹` in spread space, nested or not, so R reaches the page as
+// it is. A top-level group has `F = I`, so its write is `R ∘ G` on every
+// engine. Every write of one reflect rides ONE batch: one undo step for
 // the whole selection.
 //
 // THE SPACE IS THE SPREAD'S. `frameTransform` stores M in spread space,
-// and a group's `frameTransform` and `frameBounds` are spread space too;
+// a group's `frameBounds` is spread space too, and so is a top-level
+// group's `frameTransform` (a nested one's is its parent's frame, above);
 // `elementGeometry` answers M in the space of the item's PAGE. So an
 // item's M is taken back to spread space first (`storedTransformOf`,
 // `../page-origin.ts`) and the centre is found among spread-space boxes
@@ -79,6 +88,7 @@ import type {
 import {
   affineReflect,
   composeAffine,
+  invertAffine,
   transformBounds,
   type Affine,
   type Vec2,
@@ -127,13 +137,17 @@ export interface TransformRecord {
 /** One element of the selection, resolved for a write. */
 export interface TransformTarget {
   id: ElementId;
-  /** The element's current STORED item transform — spread space, what
-   *  `frameTransform` writes (null = identity). */
+  /** The element's current STORED item transform — what `frameTransform`
+   *  writes (null = identity): spread space, except for a nested group,
+   *  whose transform is relative to its parent group. */
   matrix: Affine | null;
   /** Its spread-space box `[top, left, bottom, right]`. */
   box: readonly [number, number, number, number];
   /** Groups move through `setGroupTransform`. */
   group: boolean;
+  /** A nested group's PARENT FRAME F — the spread-space transform its
+   *  stored one sits in (`groupFrameOf`). Absent or null: the spread. */
+  frame?: Affine | null;
 }
 
 export interface TransformResult {
@@ -185,11 +199,52 @@ export function transformMatrixOf(record: TransformRecord, centre: Vec2): Affine
 
 const IDENTITY: Affine = [1, 0, 0, 1, 0, 0];
 
+/** How far a parent frame may sit from the identity and still be the
+ *  spread: the linear part (unitless) and the translation (pt). The engine
+ *  keeps transforms in single precision and answers a page-space one with
+ *  the page origin subtracted, so a top-level group's `E ∘ G⁻¹` comes back
+ *  a few 1e-5 pt off the identity on a large spread. Treating that as no
+ *  frame keeps its write exactly `R ∘ G`; a real frame this close moves
+ *  the result by at most twice the tolerance. */
+const FRAME_EPSILON = 1e-6;
+const FRAME_EPSILON_PT = 1e-2;
+
+/**
+ * A group's PARENT FRAME, `F = E ∘ G⁻¹`, from its composed transform E
+ * (spread space — `elementGeometry`'s answer through `storedTransformOf`)
+ * and its stored one G (null = identity on both). Null when the frame is
+ * the spread (a top-level group, where E = G to within the engine's
+ * rounding) or when G cannot be inverted — both mean the write is
+ * `R ∘ G`.
+ */
+export function groupFrameOf(composed: Affine | null, stored: Affine | null): Affine | null {
+  const inverse = invertAffine(stored ?? IDENTITY);
+  if (!inverse) return null;
+  const frame = composeAffine(composed ?? IDENTITY, inverse);
+  const spread = frame.every((v, i) =>
+    Math.abs(v - IDENTITY[i]!) <= (i < 4 ? FRAME_EPSILON : FRAME_EPSILON_PT),
+  );
+  return spread ? null : frame;
+}
+
+/** The transform written for `t` under the spread-space `matrix` R:
+ *  `R ∘ M` for a page item or a group in the spread, `F⁻¹ ∘ R ∘ F ∘ G`
+ *  for a group in a parent frame F — R seen from inside that frame. A
+ *  frame that cannot be inverted falls back to `R ∘ G`. */
+export function writtenTransformOf(t: TransformTarget, matrix: Affine): Affine {
+  const current = t.matrix ?? IDENTITY;
+  const frame = t.group ? (t.frame ?? null) : null;
+  const inverse = frame ? invertAffine(frame) : null;
+  if (!frame || !inverse) return composeAffine(matrix, current);
+  return composeAffine(inverse, composeAffine(matrix, composeAffine(frame, current)));
+}
+
 /**
  * THE BATCH — every target written `R ∘ current` (a page item through
- * `frameTransform`, a group through `setGroupTransform`), preceded by the
- * `duplicateElements` of every target when `copy`. One batch, one undo
- * step. Pure; exported so the spec asserts the exact wire.
+ * `frameTransform`, a group through `setGroupTransform`; a nested group
+ * with R moved into its parent frame, `writtenTransformOf`), preceded by
+ * the `duplicateElements` of every target when `copy`. One batch, one
+ * undo step. Pure; exported so the spec asserts the exact wire.
  */
 export function transformBatchFor(
   targets: readonly TransformTarget[],
@@ -204,7 +259,7 @@ export function transformBatchFor(
     } as unknown as MutationInput);
   }
   for (const t of targets) {
-    const next = composeAffine(matrix, t.matrix ?? IDENTITY);
+    const next = writtenTransformOf(t, matrix);
     if (t.group) {
       ops.push({
         op: "setGroupTransform",
@@ -221,9 +276,12 @@ export function transformBatchFor(
 
 /** Resolve the selection, in SPREAD space: page items through ONE
  *  `elementGeometry` call (its page-space transform taken back to the
- *  stored one), groups through their own properties (the geometry door
- *  omits them; their `frameTransform` and `frameBounds` are spread space
- *  already). An element neither answers is dropped (logged). */
+ *  stored one), groups through their own properties (`frameTransform` is
+ *  the stored G, `frameBounds` the spread-space box) plus a SECOND
+ *  `elementGeometry` call for the groups' composed transforms, which
+ *  give a nested group its parent frame (older engines answer nothing
+ *  for a group there: no frame, today's write). An element neither
+ *  answers is dropped (logged). */
 export async function transformTargetsOf(
   host: BundleHost,
   selection: readonly ElementId[],
@@ -236,6 +294,14 @@ export async function transformTargetsOf(
     const m = storedTransformOf((g.itemTransform ?? null) as Affine | null, pageOriginOf(g));
     out.push({ id: g.id, matrix: m, box: m ? transformBounds(g.bounds, m) : g.bounds, group: false });
   }
+  // Its own call, so an engine that refuses a group id there costs the
+  // page items nothing. Answered groups map to their composed transform,
+  // in spread space (null = identity).
+  const composed = new Map<string, Affine | null>();
+  const groupGeoms = groups.length > 0 ? await host.document.elementGeometry([...groups]).catch(() => []) : [];
+  for (const g of groupGeoms) {
+    composed.set(String(g.id.id), storedTransformOf((g.itemTransform ?? null) as Affine | null, pageOriginOf(g)));
+  }
   for (const id of groups) {
     const props = await host.document.elementProperties(id).catch(() => null);
     let matrix: Affine | null = null;
@@ -246,7 +312,10 @@ export async function transformTargetsOf(
       if (e.path === "frameTransform" && v.type === "transform") matrix = (v.value ?? null) as Affine | null;
       if (e.path === "frameBounds" && v.type === "bounds") box = v.value;
     }
-    if (box) out.push({ id, matrix, box, group: true });
+    if (!box) continue;
+    const key = String(id.id);
+    const frame = composed.has(key) ? groupFrameOf(composed.get(key) ?? null, matrix) : null;
+    out.push({ id, matrix, box, group: true, ...(frame ? { frame } : {}) });
   }
   const answered = new Set(out.map((t) => `${t.id.kind}:${String(t.id.id)}`));
   for (const id of selection) {

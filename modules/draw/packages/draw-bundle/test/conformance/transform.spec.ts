@@ -36,7 +36,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import type { CommandContribution, ElementId, PathAnchorsResult } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
-import { affineReflect, affineRotate, composeAffine } from "@paged-media/draw-geometry";
+import { affineReflect, affineRotate, composeAffine, type Affine } from "@paged-media/draw-geometry";
 
 import {
   applyReflect,
@@ -231,11 +231,22 @@ describe("draw conformance — Reflect and Transform again", () => {
         return Reflect.get(target, prop, receiver) as unknown;
       },
     });
+    // This engine answers NO geometry for a group, so there is no parent
+    // frame to read and the write is R ∘ G — what it was before frames
+    // were read at all (a newer engine answers the composed transform;
+    // for a top-level group like this one the write is the same).
+    expect(await h.host.document.elementGeometry([group])).toEqual([]);
+    const stored = (await h.host.document.elementProperties(group))?.entries.find(
+      (e) => e.path === "frameTransform",
+    )?.value;
+    const G = (stored?.type === "transform" ? (stored.value ?? null) : null) as Affine | null;
     const done = await applyReflect(spy, 90);
     expect(done.applied).toBe(true);
-    const ops = (sent[0] as { args: { ops: { op: string; args: { groupId?: string } }[] } }).args.ops;
+    const ops = (sent[0] as { args: { ops: { op: string; args: { groupId?: string; transform?: number[] } }[] } })
+      .args.ops;
     expect(ops.map((o) => o.op)).toEqual(["setGroupTransform"]);
     expect(ops[0]!.args.groupId).toBe(String(group.id));
+    expect(ops[0]!.args.transform).toEqual([...composeAffine(affineReflect(90, [220, 130]), G ?? [1, 0, 0, 1, 0, 0])]);
     // Group spans x 100..340: centre 220, x → 440 − x.
     near((await pageAnchors(h, SQ)).slice(0, 1), [[140, 100]]);
     near((await pageAnchors(h, TRI)).slice(0, 1), [[340, 100]]);
