@@ -126,6 +126,7 @@ import type {
 } from "@paged-media/plugin-api";
 
 import { DisposableStore, toDisposable } from "./disposables";
+import { documentChangeOf } from "./document-change";
 import { FALLBACK_WIDGETS } from "./widgets-fallback";
 import { makeSchemaPanelComponent } from "./schema-panel";
 
@@ -216,6 +217,12 @@ export const HOST_FEATURES: readonly string[] = [
   // needed — DESIGN.md §4.3d).
   "document.parentOf@1",
   "document.onDidChange@1",
+  // ADR 327 — `onDidChange` reports EVERY committed change: a canvas
+  // gesture's commit (`gestureCommitted`) and a script run (`scriptResult`,
+  // `pagesUnknown`) as well as mutations, undos and redos. STATIC: the
+  // editor's client hands every reply to its subscribers, and the headless
+  // harness does the same for these.
+  "document.onDidChange@2",
   // W-22 — the document-opened event. STATIC: it is the client's
   // `documentLoaded` broadcast filtered, and every host posts that on
   // every load (File ▸ Open, File ▸ New, a native-document open).
@@ -2478,14 +2485,13 @@ export function createBundleHost(
       if (!parentIndexWired) {
         // Wired LAZILY on first use so a bundle that never asks for
         // parentage pays for no subscription. The index is dropped on
-        // every applied change (mutation / undo / redo) — the next read
-        // rebuilds it from one fresh tree.
+        // every committed change (the set `document.onDidChange` reports:
+        // a script can group and ungroup) — the next read rebuilds it from
+        // one fresh tree.
         parentIndexWired = true;
         const off = getEditor().client.subscribe((msg) => {
           if (
-            msg.kind === "mutationApplied" ||
-            msg.kind === "undoApplied" ||
-            msg.kind === "redoApplied" ||
+            documentChangeOf(msg) !== null ||
             // A newly opened document invalidates everything; the kind
             // is matched defensively (not every host posts it).
             msg.kind === "documentLoaded"
@@ -2609,25 +2615,12 @@ export function createBundleHost(
     },
     onDidChange(listener: (e: DocumentChangeEvent) => void): Disposable {
       requireDocRead("document.onDidChange");
+      // Every committed change, whatever committed it (ADR 327): a
+      // mutation, an undo/redo, a canvas gesture's commit, a script run.
+      // document-change.ts is the one place that decides what counts.
       const off = getEditor().client.subscribe((msg) => {
-        if (
-          msg.kind === "mutationApplied" ||
-          msg.kind === "undoApplied" ||
-          msg.kind === "redoApplied"
-        ) {
-          // Reflow (v38, C-2): only `mutationApplied` carries it, and only
-          // when a resizeFrame changed a content box (§8.5). Pass it through
-          // so a pagination consumer re-splits on resize, not on transform.
-          const reflow =
-            msg.kind === "mutationApplied" ? msg.payload.reflow : undefined;
-          listener({
-            kind: msg.kind,
-            pageIds: msg.payload.pageIds,
-            ...(reflow
-              ? { reflow: { frameId: reflow.frameId, contentBox: reflow.contentBox } }
-              : {}),
-          });
-        }
+        const change = documentChangeOf(msg);
+        if (change) listener(change);
       });
       return store.add(toDisposable(off));
     },

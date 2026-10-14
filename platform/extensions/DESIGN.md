@@ -143,9 +143,15 @@ draw B-02). The headless harness records both
   `elementGeometry(ids)`, `tree()`,
   `planarRegions(elementIds, point?)` (§4.3c).
 - `undo()` / `redo()` — shared history, no plugin-local stacks.
-- `onDidChange(l)` — typed `mutationApplied | undoApplied | redoApplied`
-  events (every panel audit showed this exact subscribe pattern,
-  hand-rolled 20+ times in `apps/canvas/src/panels`).
+- `onDidChange(l)` — typed events for every committed change (every panel
+  audit showed this exact subscribe pattern, hand-rolled 20+ times in
+  `apps/canvas/src/panels`): `mutationApplied | undoApplied | redoApplied`,
+  and since 0.2.55 a canvas gesture's commit (`gestureCommitted`) and a
+  script run (`scriptResult`, `pagesUnknown`: the engine names no pages).
+  `document-change.ts` is the one definition; the parent index and the core
+  object model follow the same set, and the headless client broadcasts
+  these replies as the editor's does. Flag `document.onDidChange@2`;
+  ADR 327.
 - `onDidOpen(l)` [W-22] — a document became the active one (File ▸ Open,
   File ▸ New, a native-document open): the client's `documentLoaded`
   broadcast, narrowed to `{ docId, pageCount, pageIds, pageSizesPt }`.
