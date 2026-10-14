@@ -27,9 +27,12 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { createHeadlessHost } from "@paged-media/plugin-sdk";
-import type { ElementId } from "@paged-media/plugin-api";
+import type { BundleHost, ElementId } from "@paged-media/plugin-api";
 
+import { IMPORTER_ID } from "../src/activate";
 import { slideEngine } from "../src/engine";
+import { documentFontDoor, giveDocumentEmbeddedFonts, type DocumentFontOutcome } from "../src/fonts";
+import { slideBundle } from "../src/index";
 
 const FIXTURES = ["geometry", "placeholders", "text", "motion", "baselines"];
 
@@ -126,6 +129,116 @@ describe("slide state rides the pages", () => {
           expect((state?.data.transition as { kind?: string })?.kind).toBeTruthy();
         }
       }
+    } finally {
+      h.dispose();
+    }
+  }, 60_000);
+});
+
+/** A row of the document's `fonts` collection (wire `FontSummary`). */
+type FontSummary = { family: string; isMissing?: boolean };
+
+/** The engine behind a headless host, through the editor facade. */
+type EngineClient = { send(m: unknown): Promise<{ kind: string; payload: Record<string, unknown> }> };
+
+/**
+ * `host` with the document-font door: the host's own where its SDK has it,
+ * else the messages that door sends (plugin-sdk ADR 328: is the face held,
+ * else register it in the document's registry).
+ */
+function withDocumentFontDoor(host: BundleHost, client: EngineClient): BundleHost {
+  if (documentFontDoor(host)) return host;
+  const registerDocumentFont = async (bytes: Uint8Array, family: string, style?: string): Promise<DocumentFontOutcome> => {
+    const held = await client.send({ kind: "requestFontFaceBytes", payload: { family, style: style ?? null } });
+    if (held.payload.found && held.payload.style === style) return { status: "held" };
+    const reply = await client.send({
+      kind: "registerFont",
+      payload: { family, style: style ?? null, bytes: Array.from(bytes), scope: "document" },
+    });
+    return reply.kind === "fontRegistered"
+      ? { status: "registered", pageIds: (reply.payload.pageIds as string[]) ?? [] }
+      : { status: "refused", reason: reply.kind };
+  };
+  return {
+    ...host,
+    supports: (f: string) => f === "assets.documentFont@1" || host.supports(f),
+    assets: { ...host.assets, registerDocumentFont },
+  } as BundleHost;
+}
+
+describe("a deck's embedded fonts", () => {
+  it.each([
+    ["fonts-full", 5],
+    ["fonts", 7],
+  ])("%s: its text is set in the faces it embeds, not substitutes", async (name, count) => {
+    const bytes = new Uint8Array(
+      readFileSync(new URL(`../../../slide-conformance/fixtures/${name}.pptx`, import.meta.url)),
+    );
+    const { idml, report, fonts } = (await slideEngine()).importPptx(bytes, name);
+    expect(report.embeddedFonts).toHaveLength(count);
+    expect(report.embeddedFonts.every((f) => f.use === "editable" && f.length > 0)).toBe(true);
+    expect(report.diagnostics.filter((d) => d.includes("embedded font"))).toEqual([]);
+
+    const h = await createHeadlessHost();
+    try {
+      // The bundle's own host: its manifest declares the fonts asset.
+      h.loadBundle(slideBundle);
+      const client = (h.host as unknown as { editor: { client: EngineClient } }).editor.client;
+      const [page] = await h.load(idml);
+      const families = [...new Set(report.embeddedFonts.map((f) => f.family))].sort();
+      const missing = async () =>
+        (await h.host.document.collection<FontSummary>("fonts"))
+          .filter((f) => families.includes(f.family) && f.isMissing)
+          .map((f) => f.family)
+          .sort();
+      // Before: every embedded family is missing; the text has no face.
+      expect(await missing()).toEqual(families);
+      const before = await h.host.render.snapshot(page, { widthPx: 960 });
+
+      const refused = await giveDocumentEmbeddedFonts(withDocumentFontDoor(h.host, client), report.embeddedFonts, fonts);
+      expect(refused).toEqual([]);
+
+      // After: none is missing, and each style resolves to its own face.
+      expect(await missing()).toEqual([]);
+      for (const f of report.embeddedFonts) {
+        const r = await client.send({ kind: "requestFontFaceBytes", payload: { family: f.family, style: f.style } });
+        expect(r.payload.found, `${f.family} ${f.style}`).toBe(true);
+        expect(r.payload.style).toBe(f.style);
+        // The engine serves the very face the deck embedded.
+        expect((r.payload.bytes as number[]).length).toBe(f.length);
+      }
+      const after = await h.host.render.snapshot(page, { widthPx: 960 });
+      expect(Buffer.from(after!.png).equals(Buffer.from(before!.png))).toBe(false);
+
+      // A second time, every face is already the document's.
+      const again = await giveDocumentEmbeddedFonts(withDocumentFontDoor(h.host, client), report.embeddedFonts, fonts);
+      expect(again).toEqual([]);
+    } finally {
+      h.dispose();
+    }
+  }, 60_000);
+});
+
+describe("File \u25b8 Open of a deck with embedded fonts", () => {
+  it("opens the document with the deck's faces where the host has the door", async () => {
+    const bytes = new Uint8Array(
+      readFileSync(new URL("../../../slide-conformance/fixtures/fonts-full.pptx", import.meta.url)),
+    );
+    const h = await createHeadlessHost();
+    try {
+      h.loadBundle(slideBundle);
+      const importer = h.importersContributed().find((i) => i.id === IMPORTER_ID)!;
+      await importer.import({ name: "fonts-full.pptx", bytes, mimeType: "" });
+      expect(h.openedDocuments().map((d) => d.name)).toEqual(["fonts-full"]);
+      const missing = (await h.host.document.collection<FontSummary>("fonts"))
+        .filter((f) => f.isMissing)
+        .map((f) => f.family);
+      // The bundle's own host (its manifest declares the fonts asset).
+      // Before the SDK has the document-font door, the faces cannot reach
+      // the document and the import says so; with it, nothing is missing.
+      expect(missing).toEqual(
+        h.host.supports("assets.documentFont@1") ? [] : ["Gloria Hallelujah", "Lato"],
+      );
     } finally {
       h.dispose();
     }

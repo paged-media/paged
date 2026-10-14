@@ -12,6 +12,7 @@
       "openNative": true
     },
     "clipboard": "none",
+    "assets": ["fonts"],
     "wasm": [
       {
         "name": "slide-engine",

@@ -62,23 +62,59 @@ export interface SlideReport {
   items: ItemReport[];
 }
 
+/** A face the deck embeds (slide-js `FaceReport`): a style of one of its
+ *  typefaces, and whether the document may use it (`editable`) or why not. */
+export interface EmbeddedFaceReport {
+  /** The typeface the deck's text names. */
+  family: string;
+  /** `Regular`, `Bold`, `Italic` or `Bold Italic` (a run's FontStyle). */
+  style: string;
+  part: string;
+  use: "editable" | "previewAndPrint" | "restricted" | "bitmapOnly" | "sitesOnly" | "unreadable" | "missing";
+  /** OS/2 fsType (the embedding permissions), when the part was read. */
+  fsType: number | null;
+  /** The face holds only the glyphs the deck uses. */
+  subset: boolean;
+  /** Where the decoded face sits in the fonts bytes (length 0: not used). */
+  offset: number;
+  length: number;
+}
+
 /** What an import produced beside the package (slide-js `Report`). */
 export interface ImportReport {
   width: number;
   height: number;
   slides: SlideReport[];
   fonts: string[];
+  embeddedFonts: EmbeddedFaceReport[];
   diagnostics: string[];
 }
 
 export interface Imported {
   idml: Uint8Array;
   report: ImportReport;
+  /** The decoded embedded faces, one after the other (see
+   *  `EmbeddedFaceReport.offset`). */
+  fonts: Uint8Array;
+}
+
+/** A deck's embedded faces, decoded without importing it. */
+export interface DeckFonts {
+  faces: EmbeddedFaceReport[];
+  diagnostics: string[];
+  data: Uint8Array;
 }
 
 interface WasmImported {
   readonly idml: Uint8Array;
   readonly report: string;
+  readonly fonts: Uint8Array;
+  free(): void;
+}
+
+interface WasmDeckFonts {
+  readonly report: string;
+  readonly data: Uint8Array;
   free(): void;
 }
 
@@ -106,6 +142,7 @@ interface SlideWasmModule {
   default(init: { module_or_path: string | URL | BufferSource | WebAssembly.Module }): Promise<unknown>;
   initSync(module: { module: BufferSource | WebAssembly.Module }): unknown;
   importPptx(bytes: Uint8Array, name: string): WasmImported;
+  embeddedFonts(bytes: Uint8Array): WasmDeckFonts;
   exportPptx(original: Uint8Array, plan: string): WasmExported;
 }
 
@@ -130,7 +167,19 @@ export class SlideEngine {
   importPptx(bytes: Uint8Array, name: string): Imported {
     const out = this.mod.importPptx(bytes, name);
     try {
-      return { idml: out.idml, report: JSON.parse(out.report) as ImportReport };
+      return { idml: out.idml, report: JSON.parse(out.report) as ImportReport, fonts: out.fonts };
+    } finally {
+      out.free();
+    }
+  }
+
+  /** Decode a deck's embedded faces without importing it (a document
+   *  reopened from the source deck it keeps). */
+  embeddedFonts(bytes: Uint8Array): DeckFonts {
+    const out = this.mod.embeddedFonts(bytes);
+    try {
+      const { faces, diagnostics } = JSON.parse(out.report) as Omit<DeckFonts, "data">;
+      return { faces, diagnostics, data: out.data };
     } finally {
       out.free();
     }

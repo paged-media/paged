@@ -35,11 +35,13 @@ pub fn read_pptx(bytes: &[u8]) -> Result<String, JsError> {
     serde_json::to_string(&deck).map_err(|e| JsError::new(&e.to_string()))
 }
 
-/// The result of [`import_pptx`]: the package and its report.
+/// The result of [`import_pptx`]: the package, its report and the deck's
+/// embedded faces.
 #[wasm_bindgen]
 pub struct Imported {
     idml: Vec<u8>,
     report: String,
+    fonts: Vec<u8>,
 }
 
 #[wasm_bindgen]
@@ -55,6 +57,13 @@ impl Imported {
     pub fn report(&self) -> String {
         self.report.clone()
     }
+
+    /// The decoded embedded faces, one after the other; each
+    /// [`FaceReport`] in the report says where its bytes are.
+    #[wasm_bindgen(getter)]
+    pub fn fonts(&self) -> Vec<u8> {
+        self.fonts.clone()
+    }
 }
 
 /// What an import produced beside the package.
@@ -67,7 +76,100 @@ pub struct Report {
     pub slides: Vec<SlideReport>,
     /// Font families the deck's text uses (the host must have them).
     pub fonts: Vec<String>,
+    /// The faces the deck embeds, and which of them the document may use.
+    pub embedded_fonts: Vec<FaceReport>,
     pub diagnostics: Vec<String>,
+}
+
+/// One embedded face: a style of a typeface the deck embeds.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FaceReport {
+    /// The typeface the deck's text names.
+    pub family: String,
+    /// `Regular`, `Bold`, `Italic` or `Bold Italic` (a run's `FontStyle`).
+    pub style: String,
+    pub part: String,
+    /// `editable` (the document uses it), or why it is not used:
+    /// `previewAndPrint`, `restricted`, `bitmapOnly`, `sitesOnly`,
+    /// `unreadable`, `missing`.
+    #[serde(rename = "use")]
+    pub use_: &'static str,
+    /// OS/2 `fsType` (the embedding permissions), when the part was read.
+    pub fs_type: Option<u16>,
+    /// The face holds only the glyphs the deck uses.
+    pub subset: bool,
+    /// Where the decoded face sits in the fonts bytes (`length` 0 when it
+    /// is not used).
+    pub offset: usize,
+    pub length: usize,
+}
+
+/// A deck's embedded faces as the report lists them, with their bytes.
+fn face_reports(
+    faces: pptx_import::fonts::EmbeddedFaces,
+) -> (Vec<FaceReport>, Vec<u8>, Vec<String>) {
+    let mut data = Vec::new();
+    let reports = faces
+        .faces
+        .into_iter()
+        .map(|f| {
+            let offset = data.len();
+            if let Some(sfnt) = &f.sfnt {
+                data.extend_from_slice(sfnt);
+            }
+            FaceReport {
+                family: f.typeface,
+                style: f.style.to_string(),
+                part: f.part,
+                use_: f.use_.name(),
+                fs_type: f.fs_type,
+                subset: f.subset,
+                offset,
+                length: data.len() - offset,
+            }
+        })
+        .collect();
+    (reports, data, faces.diagnostics)
+}
+
+/// A deck's embedded faces: their report as JSON (`{ faces, diagnostics }`)
+/// and their bytes.
+#[wasm_bindgen]
+pub struct DeckFonts {
+    report: String,
+    data: Vec<u8>,
+}
+
+#[wasm_bindgen]
+impl DeckFonts {
+    #[wasm_bindgen(getter)]
+    pub fn report(&self) -> String {
+        self.report.clone()
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn data(&self) -> Vec<u8> {
+        self.data.clone()
+    }
+}
+
+/// Decode the embedded faces of a `.pptx` without importing the deck: for a
+/// document reopened from the source deck it keeps.
+#[wasm_bindgen(js_name = embeddedFonts)]
+pub fn embedded_fonts(bytes: &[u8]) -> Result<DeckFonts, JsError> {
+    let faces = pptx_import::embedded_faces(bytes).map_err(|e| JsError::new(&e.to_string()))?;
+    let (faces, data, diagnostics) = face_reports(faces);
+    #[derive(Serialize)]
+    struct Out {
+        faces: Vec<FaceReport>,
+        diagnostics: Vec<String>,
+    }
+    Ok(DeckFonts {
+        report: serde_json::to_string(&Out { faces, diagnostics })
+            .map_err(|e| JsError::new(&e.to_string()))?,
+        data,
+    })
 }
 
 /// One slide, addressed by the page id it opens as.
@@ -106,18 +208,22 @@ pub struct ItemReport {
 /// Read a `.pptx` into the IDML package of its native slides.
 #[wasm_bindgen(js_name = importPptx)]
 pub fn import_pptx(bytes: &[u8], name: &str) -> Result<Imported, JsError> {
-    let (idml, report) = import(bytes, name).map_err(|e| JsError::new(&e))?;
+    let (idml, report, fonts) = import(bytes, name).map_err(|e| JsError::new(&e))?;
     Ok(Imported {
         idml,
         report: serde_json::to_string(&report).map_err(|e| JsError::new(&e.to_string()))?,
+        fonts,
     })
 }
 
-/// [`import_pptx`] without the wasm types (native tests use this).
-pub fn import(bytes: &[u8], name: &str) -> Result<(Vec<u8>, Report), String> {
+/// [`import_pptx`] without the wasm types (native tests use this): the
+/// package, the report and the embedded faces' bytes.
+pub fn import(bytes: &[u8], name: &str) -> Result<(Vec<u8>, Report, Vec<u8>), String> {
     let deck = pptx_import::import_pptx(bytes).map_err(|e| e.to_string())?;
     let resolved = slide_resolve::resolve(&deck);
     let pkg = paged_ooxml::OpcPackage::read(bytes).map_err(|e| e.to_string())?;
+    let (embedded_fonts, fonts, font_diagnostics) =
+        face_reports(pptx_import::fonts::faces(&pkg, &deck.embedded_fonts));
     let images = |part: &str| pkg.part(part).map(|b| b.to_vec());
     let written = slide_idml::write(&resolved, &images, name)?;
     let report = Report {
@@ -151,15 +257,17 @@ pub fn import(bytes: &[u8], name: &str) -> Result<(Vec<u8>, Report), String> {
             })
             .collect(),
         fonts: resolved.fonts.clone(),
+        embedded_fonts,
         diagnostics: deck
             .diagnostics
             .iter()
+            .chain(&font_diagnostics)
             .chain(&resolved.diagnostics)
             .chain(&written.diagnostics)
             .cloned()
             .collect(),
     };
-    Ok((written.idml, report))
+    Ok((written.idml, report, fonts))
 }
 
 /// Page-space bounds of an item's drawn outline (a group: its members').
