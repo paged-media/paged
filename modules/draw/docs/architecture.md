@@ -136,7 +136,11 @@ Transform Again and Objects on a Path plan in spread space and write the stored 
 object's remembered home is that matrix too); a new path that `framePath` re-tables gets the
 origin added; the Shape Builder's pieces and oval stand-ins store their raw table and the
 stored transform of the input they came from. The two spaces differ only on a page that does
-not start at its spread's origin: a verso, and every page of an InDesign document.
+not start at its spread's origin: a verso, and every page of an InDesign document. A GROUP's
+stored transform is relative to the group holding it (spread space only at the top level), so
+Reflect writes a nested group's in its parent's frame: `F⁻¹ ∘ R ∘ F ∘ G`, with
+`F = E ∘ G⁻¹` and `E` the composed transform an engine that answers group geometry reports.
+An engine that answers none for a group gets `R ∘ G`, which is what it needs.
 
 **Appearance.** Extra fills and strokes are a stack in the element's metadata; the front
 fill and stroke are written to the frame's own paint. "Bake" lowers the stack to a group:

@@ -57,6 +57,7 @@ export { isCornerAnchor, isSmoothAnchor } from "./classify";
 export {
   applyAffine,
   inverseApplyAffine,
+  invertAffine,
   affineScale,
   composeAffine,
   IDENTITY_AFFINE,

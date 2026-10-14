@@ -28,7 +28,7 @@
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import type { BundleHost, ElementId, Mutation } from "@paged-media/plugin-api";
+import type { BundleHost, DocumentOpenedEvent, ElementId, Mutation } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import { drawBundle, pasteIntoMutationFor } from "../../src";
@@ -372,49 +372,51 @@ describe("draw conformance — the link index", () => {
     expect(seen).toEqual([2, 2]);
   });
 
-  it("the two changes the FACADE does not report are read off the raw client", async () => {
-    // The headless client never sends either message, so they are sent
-    // by hand through the door the index subscribed at.
-    const wire: { send: (message: { kind: string }) => void } = {
-      send: () => {
-        throw new Error("the index did not subscribe to the raw client");
-      },
-    };
-    const wired = override(host, "editor", {
-      client: {
-        subscribe(listener: (message: { kind: string }) => void) {
-          wire.send = listener;
+  it("it listens to NO raw client message: every change it follows arrives through the facade", async () => {
+    // One listener per kind of change, so a change is never handled twice
+    // (a raw `gestureCommitted` beside an `onDidChange` that reports it
+    // too would invalidate twice and, for a script, tell panels twice).
+    let raw = 0;
+    const counted = override(
+      host,
+      "editor",
+      override(host.editor, "client", {
+        subscribe: () => {
+          raw += 1;
           return () => {};
         },
-      },
-    });
+      }),
+    );
+    const index = linkIndex(counted);
+    await index.snapshot();
+    expect(raw).toBe(0);
+  });
+
+  it("a NEW DOCUMENT is heard through document.onDidOpen: the next read is fresh, and listeners are told", async () => {
+    let opened: ((e: DocumentOpenedEvent) => void) | null = null;
+    const wired = override(
+      host,
+      "document",
+      override(host.document, "onDidOpen", (listener: (e: DocumentOpenedEvent) => void) => {
+        opened = listener;
+        return { dispose() {} };
+      }),
+    );
     const index = linkIndex(wired);
     let told = 0;
     index.onDidChange(() => {
       told += 1;
     });
     const first = await index.snapshot();
+    expect(opened).not.toBeNull();
 
-    // A reply to somebody's read is not a change.
-    wire.send({ kind: "elementProperties" });
-    wire.send({ kind: "stats" });
-    expect(await index.snapshot()).toBe(first);
-    expect(told).toBe(0);
-
-    // A committed drag: its own undo step, no `mutationApplied`. The
-    // links are read again — and no panel is reloaded for it.
-    wire.send({ kind: "gestureCommitted" });
+    // A host that outlives its document opens another one.
+    opened!({ docId: "next", pageCount: 1, pageIds: [], pageSizesPt: [] });
+    expect(told).toBe(1);
     work.reset();
     expect(await index.snapshot()).not.toBe(first);
+    expect(work.count("document.tree")).toBe(1);
     expect(work.count("document.getMetadata")).toBe(LEAVES * perLeaf);
-    expect(told).toBe(0);
-
-    // A new document under a host that outlives it.
-    wire.send({ kind: "documentLoaded" });
-    work.reset();
-    await index.snapshot();
-    expect(work.count("document.getMetadata")).toBe(LEAVES * perLeaf);
-    expect(told).toBe(1);
   });
 
   it("a host that cannot report a change at all is given NO memory", async () => {
@@ -442,5 +444,91 @@ describe("draw conformance — the link index", () => {
     await h.load(emptyDocument());
     expect((await index.snapshot()).leaves).toEqual([]);
     expect(await index.envelopeOf(plainId(0))).toBeNull();
+  });
+});
+
+// The two committed changes that are NOT a `mutationApplied`, driven for
+// real: a canvas gesture (the editor's drag, through the engine's gesture
+// session) and a `paged.*` script. `document.onDidChange` reports both
+// (plugin-sdk 0.2.55, ADR 327), and the index follows them through it —
+// a document of its own, because a script's write is not this spec's to
+// undo.
+describe("draw conformance — the link index follows a drag and a script", () => {
+  let h: HeadlessHost;
+  let host: BundleHost;
+  let work: WorkLog;
+  let pageId: string;
+  let perLeaf: 0 | 1;
+
+  type Reply = { kind: string; payload?: { handle?: number } };
+  /** The host's own client: how the editor drives a canvas gesture. */
+  const send = (message: { kind: string; payload?: unknown }): Promise<Reply> =>
+    (h.host.editor.client as unknown as { send: (m: unknown) => Promise<Reply> }).send(message);
+
+  beforeAll(async () => {
+    h = await openHost();
+    h.loadBundle(drawBundle);
+  });
+  afterAll(() => h?.dispose());
+  beforeEach(async () => {
+    [pageId] = (await h.load(
+      panelDocument(rectItem("r0", 40, 40, 200) + rectItem("r1", 300, 40) + seedRow("s", 2, { x: 60, y: 60 })),
+    )) as [string];
+    const out = await h.host.document.setMetadata(plainId(0), { v: 1, data: { tag: "p0" } });
+    expect(out.applied).toBe(true);
+    perLeaf = await metadataReadsPerLeaf(h.host);
+    ({ host, work } = countingHost(h.host));
+  });
+
+  it("a committed DRAG: the next read is fresh — and no panel is reloaded for it", async () => {
+    const index = linkIndex(host);
+    let told = 0;
+    index.onDidChange(() => {
+      told += 1;
+    });
+    const first = await index.snapshot();
+
+    const begun = await send({
+      kind: "beginGesture",
+      payload: { nodes: [RECT], gesture: { kind: "translate" }, anchor: null },
+    });
+    expect(begun.kind).toBe("gestureBegun");
+    const handle = begun.payload!.handle!;
+    await send({
+      kind: "updateGesture",
+      payload: { handle, delta: [20, 0], modifiers: { shift: false, alt: false, disableSnap: true } },
+    });
+    expect(await index.snapshot()).toBe(first); // in flight: nothing committed
+    const done = await send({ kind: "commitGesture", payload: { handle } });
+    expect(done.kind).toBe("gestureCommitted");
+
+    work.reset();
+    const after = await index.snapshot();
+    expect(after).not.toBe(first);
+    expect(after.leaves).toHaveLength(LEAVES);
+    expect(work.count("document.tree")).toBe(1);
+    expect(work.count("document.getMetadata")).toBe(LEAVES * perLeaf);
+    // A drag moves geometry, not links: listeners are not told.
+    expect(told).toBe(0);
+  });
+
+  it("a SCRIPT run: the next read is fresh, and listeners are told ONCE", async () => {
+    const index = linkIndex(host);
+    let told = 0;
+    index.onDidChange(() => {
+      told += 1;
+    });
+    const first = await index.snapshot();
+    expect(first.leaves).toHaveLength(LEAVES);
+
+    const run = await h.runScript(`paged.insertTextFrame(${JSON.stringify(pageId)}, [500, 500, 560, 560]);`);
+    expect(run.error).toBeNull();
+    expect(told).toBe(1);
+
+    work.reset();
+    const after = await index.snapshot();
+    expect(after).not.toBe(first);
+    expect(after.leaves).toHaveLength(LEAVES + 1);
+    expect(work.count("document.tree")).toBe(1);
   });
 });

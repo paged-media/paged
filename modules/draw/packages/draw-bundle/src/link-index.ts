@@ -48,18 +48,22 @@
 // door could answer Select Same's property reads too.)
 //
 // INVALIDATION, and why it is an event and not a guess:
-//   · every `mutationApplied` / `undoApplied` / `redoApplied` the host
-//     reports (`document.onDidChange`) starts a new revision. The event
-//     is delivered inside the reply that resolves `mutate`, so a command
-//     that writes and then reads links in the same flow sees its own
-//     write — the conformance specs' make → update → release chains are
-//     what hold this to account;
-//   · two engine messages the facade does not forward also start one,
-//     read off the raw client because nothing else reports them:
-//     `documentLoaded` (a host that outlives its document would
-//     otherwise serve the previous document's links) and
-//     `gestureCommitted` (a committed drag has an undo step of its own
-//     and no `mutationApplied`);
+//   · every committed change the host reports (`document.onDidChange`)
+//     starts a new revision: a mutation, an undo or redo, a canvas
+//     gesture's commit and a script run — plugin-sdk 0.2.55 reports the
+//     last two (ADR 327), which is why it is this bundle's peer minimum.
+//     The event is delivered inside the reply that resolves `mutate`, so
+//     a command that writes and then reads links in the same flow sees
+//     its own write — the conformance specs' make → update → release
+//     chains are what hold this to account. Listeners are told of every
+//     kind but one: after a committed DRAG (`gestureCommitted`) the next
+//     read is fresh, but no panel asked to hear about a drag, so nothing
+//     is reloaded for it;
+//   · a newly opened document (`document.onDidOpen`) starts one too — a
+//     host that outlives its document would otherwise serve the previous
+//     document's links;
+//   · nothing is read off the raw client: one listener per kind of
+//     change, so no change is handled twice;
 //   · `invalidate()` is there for a caller that knows better, and
 //     `forgetAllLinks()` for whoever swaps a document without the engine
 //     saying so — the headless test harness does (see that function).
@@ -290,10 +294,11 @@ let epoch = 0;
  * Every index, on every host, forgets what it read.
  *
  * For whoever replaces a document WITHOUT the engine saying so. The
- * editor's client broadcasts `documentLoaded` and the index hears it; the
- * plugin-sdk HEADLESS harness's `load()` calls the worker directly and
- * broadcasts nothing (the SDK's own `parentOf` index has the same blind
- * spot), so the conformance harness calls this from its `load`
+ * editor's client broadcasts `documentLoaded` and the index hears it
+ * through `document.onDidOpen`; the plugin-sdk HEADLESS harness's
+ * `load()` calls the worker directly and broadcasts nothing (the SDK's
+ * own `parentOf` index has the same blind spot), so the conformance
+ * harness calls this from its `load`
  * (`test/conformance/host.ts`). There is no door to ASK whether the
  * document is still the same one — no revision on `document.meta()`, and
  * a reloaded fixture has the same ids — so it has to be told.
@@ -301,10 +306,6 @@ let epoch = 0;
 export function forgetAllLinks(): void {
   epoch += 1;
 }
-
-/** The engine messages that change the document without reaching
- *  `document.onDidChange` (see the module header). */
-const SILENT_CHANGES = new Set<string>(["gestureCommitted"]);
 
 function createLinkIndex(host: BundleHost): LinkIndex {
   let current = freshRevision();
@@ -496,9 +497,11 @@ function createLinkIndex(host: BundleHost): LinkIndex {
   // caching at all (`revision()` above). The host tracks all three
   // subscriptions too, so bundle teardown drops them.
   try {
-    host.document.onDidChange(() => {
+    host.document.onDidChange((change) => {
       invalidate();
-      emit();
+      // After a drag the next read is fresh, but no panel asked to hear
+      // about one: nothing is reloaded for it.
+      if (change.kind !== "gestureCommitted") emit();
     });
     subscribed = true;
   } catch {
@@ -512,18 +515,13 @@ function createLinkIndex(host: BundleHost): LinkIndex {
     /* no binding store: a recipe write reaches no listener here */
   }
   try {
-    host.editor.client.subscribe((message) => {
-      if (message.kind === "documentLoaded") {
-        invalidate();
-        emit();
-      } else if (SILENT_CHANGES.has(message.kind)) {
-        // The links may have moved, but no panel asked to hear about a
-        // drag: the next read is fresh, and nothing is reloaded for it.
-        invalidate();
-      }
+    host.document.onDidOpen(() => {
+      invalidate();
+      emit();
     });
   } catch {
-    /* a host with no raw client reports its changes through the facade */
+    /* no open event: a new document reaches the index only through
+       `forgetAllLinks` */
   }
 
   return {
