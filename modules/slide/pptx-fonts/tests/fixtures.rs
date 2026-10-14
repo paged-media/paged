@@ -35,6 +35,11 @@ use std::collections::BTreeMap;
 use std::io::Read;
 use std::path::PathBuf;
 
+use skrifa::instance::{LocationRef, Size};
+use skrifa::outline::{DrawSettings, OutlinePen};
+use skrifa::raw::TableProvider;
+use skrifa::{FontRef, GlyphId, MetadataProvider};
+
 fn fixtures() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../slide-conformance/fixtures")
 }
@@ -63,28 +68,26 @@ fn fnv(bytes: &[u8]) -> u64 {
 }
 
 struct Pen(Vec<u8>);
-impl ttf_parser::OutlineBuilder for Pen {
+impl Pen {
+    fn put(&mut self, op: u8, values: &[f32]) {
+        self.0.push(op);
+        for v in values {
+            self.0.extend_from_slice(&v.to_le_bytes());
+        }
+    }
+}
+impl OutlinePen for Pen {
     fn move_to(&mut self, x: f32, y: f32) {
-        self.0.push(b'M');
-        self.0.extend_from_slice(&x.to_le_bytes());
-        self.0.extend_from_slice(&y.to_le_bytes());
+        self.put(b'M', &[x, y]);
     }
     fn line_to(&mut self, x: f32, y: f32) {
-        self.0.push(b'L');
-        self.0.extend_from_slice(&x.to_le_bytes());
-        self.0.extend_from_slice(&y.to_le_bytes());
+        self.put(b'L', &[x, y]);
     }
-    fn quad_to(&mut self, x1: f32, y1: f32, x: f32, y: f32) {
-        self.0.push(b'Q');
-        for v in [x1, y1, x, y] {
-            self.0.extend_from_slice(&v.to_le_bytes());
-        }
+    fn quad_to(&mut self, cx0: f32, cy0: f32, x: f32, y: f32) {
+        self.put(b'Q', &[cx0, cy0, x, y]);
     }
-    fn curve_to(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x: f32, y: f32) {
-        self.0.push(b'C');
-        for v in [x1, y1, x2, y2, x, y] {
-            self.0.extend_from_slice(&v.to_le_bytes());
-        }
+    fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
+        self.put(b'C', &[cx0, cy0, cx1, cy1, x, y]);
     }
     fn close(&mut self) {
         self.0.push(b'Z');
@@ -204,14 +207,26 @@ struct Answers {
 }
 
 fn answers(font: &[u8]) -> Answers {
-    let face = ttf_parser::Face::parse(font, 0).unwrap();
-    let n = face.number_of_glyphs();
+    let face = FontRef::new(font).unwrap();
+    let n = face.maxp().unwrap().num_glyphs() as u32;
+    let glyphs = face.outline_glyphs();
     let outlines = (0..n)
         .map(|g| {
+            let Some(outline) = glyphs.get(GlyphId::new(g)) else {
+                return 0;
+            };
             let mut pen = Pen(Vec::new());
-            face.outline_glyph(ttf_parser::GlyphId(g), &mut pen)
-                .map(|_| fnv(&pen.0))
-                .unwrap_or(0)
+            outline
+                .draw(
+                    DrawSettings::unhinted(Size::unscaled(), LocationRef::default()),
+                    &mut pen,
+                )
+                .unwrap();
+            if pen.0.is_empty() {
+                0
+            } else {
+                fnv(&pen.0)
+            }
         })
         .collect();
     let programs = programs(font)
@@ -223,8 +238,9 @@ fn answers(font: &[u8]) -> Answers {
             fnv(&b)
         })
         .collect();
+    let metrics = face.glyph_metrics(Size::unscaled(), LocationRef::default());
     let advances = (0..n)
-        .map(|g| face.glyph_hor_advance(ttf_parser::GlyphId(g)).unwrap_or(0))
+        .map(|g| metrics.advance_width(GlyphId::new(g)).unwrap_or(0.0) as u16)
         .collect();
     let tables = tags(font)
         .into_iter()
@@ -436,13 +452,13 @@ fn subset_faces_hold_their_source_glyphs_for_the_decks_text() {
         if key == "Caveat Bold" {
             continue;
         }
-        let sfnt = ttf_parser::Face::parse(&face.sfnt, 0).unwrap();
+        let charmap = FontRef::new(&face.sfnt).unwrap().charmap();
         for c in text.chars().filter(|c| !c.is_whitespace()) {
-            let g = sfnt
-                .glyph_index(c)
+            let g = charmap
+                .map(c)
                 .unwrap_or_else(|| panic!("{key}: no glyph for {c:?}"));
             assert!(
-                held.contains(&(g.0 as usize)),
+                held.contains(&(g.to_u32() as usize)),
                 "{key}: {c:?} is not in the subset"
             );
         }

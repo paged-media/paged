@@ -15,5 +15,5 @@ thiserror.workspace = true
 
 [dev-dependencies]
 # Parses the decoded faces back in tests (never in the wasm).
-ttf-parser = { version = "0.25", default-features = false, features = ["std"] }
+skrifa = "0.42"
 zip.workspace = true
