@@ -59,6 +59,19 @@ export function composeAffine(outer: Affine, inner: Affine): Affine {
   ];
 }
 
+/** The inverse matrix (`composeAffine(invertAffine(m), m)` is the
+ *  identity); null when `m` is singular or not finite — the same rule as
+ *  `inverseApplyAffine`. */
+export function invertAffine(m: Affine): Affine | null {
+  const det = m[0] * m[3] - m[1] * m[2];
+  if (!Number.isFinite(det) || Math.abs(det) < 1e-12) return null;
+  const a = m[3] / det;
+  const b = -m[1] / det;
+  const c = -m[2] / det;
+  const d = m[0] / det;
+  return [a, b, c, d, -(a * m[4] + c * m[5]), -(b * m[4] + d * m[5])];
+}
+
 /** The identity affine. */
 export const IDENTITY_AFFINE: Affine = [1, 0, 0, 1, 0, 0];
 

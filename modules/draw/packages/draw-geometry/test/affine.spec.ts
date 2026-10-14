@@ -23,6 +23,7 @@ import {
   affineScale,
   applyAffine,
   composeAffine,
+  invertAffine,
   inverseApplyAffine,
   type Affine,
 } from "../src";
@@ -113,6 +114,38 @@ describe("composeAffine", () => {
     const parent: Affine = [1, 0, 0, 1, 10, 0];
     const child: Affine = [2, 0, 0, 2, 0, 0];
     expect(applyAffine(composeAffine(parent, child), 5, 5)).toEqual([20, 10]);
+  });
+});
+
+describe("invertAffine", () => {
+  /** Entry-wise closeness (`toEqual` tells +0 from −0, and an inverse
+   *  makes both). */
+  const expectAffine = (got: Affine | null, want: Affine) => {
+    expect(got).not.toBeNull();
+    got!.forEach((v, i) => expect(v).toBeCloseTo(want[i]!, 12));
+  };
+
+  it("inverts a translation, a scale and a quarter turn", () => {
+    expectAffine(invertAffine(TRANSLATE), [1, 0, 0, 1, -30, 20]);
+    expectAffine(invertAffine(SCALE), [0.5, 0, 0, 1 / 3, 0, 0]);
+    // A quarter turn back: +y goes to +x again.
+    expectAffine(invertAffine(QUARTER), [0, -1, 1, 0, 0, 0]);
+  });
+
+  it("composes with the matrix to the identity, on either side", () => {
+    const m: Affine = [0, 2, -2, 0, 100, 50]; // quarter turn, ×2, moved
+    const inv = invertAffine(m)!;
+    expectAffine(composeAffine(inv, m), IDENTITY_AFFINE);
+    expectAffine(composeAffine(m, inv), IDENTITY_AFFINE);
+    // …and it is the point-wise inverse the anchor editors already use.
+    expect(applyAffine(inv, 92, 56)).toEqual(inverseApplyAffine(m, 92, 56));
+  });
+
+  it("answers null for a singular matrix instead of dividing by zero", () => {
+    expect(invertAffine([1, 2, 2, 4, 0, 0])).toBeNull(); // rank 1
+    expect(invertAffine([0, 0, 0, 0, 5, 5])).toBeNull(); // rank 0
+    expect(invertAffine([3, 0, 0, 0, 0, 0])).toBeNull(); // flattened in y
+    expect(invertAffine([Number.NaN, 0, 0, 1, 0, 0])).toBeNull(); // not a matrix
   });
 });
 

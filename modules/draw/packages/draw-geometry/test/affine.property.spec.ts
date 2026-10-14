@@ -16,10 +16,10 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Property tests for affine.ts — the itemTransform algebra. The module
-// offers no matrix inverse; "invert" here is `inverseApplyAffine`, the
-// point-wise inverse the anchor editors use to bring a page-space click
-// into a path's local frame.
+// Property tests for affine.ts — the itemTransform algebra. Two inverses:
+// `inverseApplyAffine`, the point-wise one the anchor editors use to bring
+// a page-space click into a path's local frame, and `invertAffine`, the
+// matrix itself (a nested group's parent frame is conjugated with it).
 
 import { describe, expect, it } from "vitest";
 
@@ -28,6 +28,7 @@ import {
   affineScale,
   applyAffine,
   composeAffine,
+  invertAffine,
   inverseApplyAffine,
   type Affine,
 } from "../src";
@@ -270,6 +271,48 @@ describe("affine — composeAffine (properties)", () => {
           expected,
           1e-6 * Math.max(1, Math.abs(expected[0]), Math.abs(expected[1]), Math.abs(a[4]), Math.abs(a[5])),
         );
+      }),
+    );
+  });
+});
+
+describe("affine — invertAffine (properties)", () => {
+  it("composes with its matrix to the identity, on either side", () => {
+    fc.assert(
+      fc.property(invertible, (m) => {
+        const inv = invertAffine(m);
+        assertTrue(inv !== null, "an invertible transform answered null");
+        const s = Math.max(1, Math.abs(m[4]), Math.abs(m[5]));
+        for (const product of [composeAffine(inv!, m), composeAffine(m, inv!)]) {
+          for (let i = 0; i < 6; i++) {
+            assertClose(product[i], IDENTITY_AFFINE[i]!, i < 4 ? 1e-9 : 1e-9 * s, `entry ${i}`);
+          }
+        }
+      }),
+    );
+  });
+
+  it("applying it IS inverseApplyAffine", () => {
+    fc.assert(
+      fc.property(invertible, vec2, (m, [x, y]) => {
+        const inv = invertAffine(m);
+        const back = inverseApplyAffine(m, x, y);
+        assertTrue(inv !== null && back !== null, "answered null");
+        assertVecClose(
+          applyAffine(inv!, x, y),
+          back!,
+          1e-7 * Math.max(1, Math.abs(x), Math.abs(y), Math.abs(m[4]), Math.abs(m[5])),
+        );
+      }),
+    );
+  });
+
+  it("answers null exactly where inverseApplyAffine does (a singular matrix)", () => {
+    const small = fc.integer({ min: -9, max: 9 });
+    fc.assert(
+      fc.property(small, small, small, small, coord, coord, (u0, u1, v0, v1, tx, ty) => {
+        const m: Affine = [u0 * v0, u1 * v0, u0 * v1, u1 * v1, tx, ty];
+        expect(invertAffine(m)).toBeNull();
       }),
     );
   });
