@@ -1,0 +1,13 @@
+{
+ "oracle": "Microsoft PowerPoint 16.113.4",
+ "recorded": "2026-10-14",
+ "authored_by": "scripts/fixtures/fonts-full.applescript",
+ "slides": 1,
+ "fonts_in_pdf": [
+  "GloriaHallelujah",
+  "Lato-Bold",
+  "Lato-BoldItalic",
+  "Lato-Italic",
+  "Lato-Regular"
+ ]
+}
