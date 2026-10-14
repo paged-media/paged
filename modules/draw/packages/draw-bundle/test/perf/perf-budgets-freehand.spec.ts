@@ -585,6 +585,15 @@ describe("perf budgets — the freehand tools", () => {
   //             paintbrush               1            1          1
   //             blob, same-fill target   1            1          2
   //             eraser, 12 selected      1            1          0
+  //   graphic   pencil, mouse            1            1          1 (+1)
+  //   default   pencil, pressure         1            1          1 (+1)
+  //
+  // The last two rows went UP, on purpose: a pencil path now wears the
+  // graphic default (`handlers/graphic-default.ts`), which costs a
+  // `document.meta` read (the user's defaults win) and one raw
+  // `requestStyleProperties` read (the document's `[Normal Graphics
+  // Frame]` — the `(+1)`, through the hatch, so not in `reads()`). The
+  // paint rides the insert's batch: still one mutation, one undo step.
   //
   // As found, each chain was awaited mutations in sequence, each a
   // rebuild. (And `brush.ts` called that "several undo steps", one per
@@ -662,14 +671,19 @@ describe("perf budgets — the freehand tools", () => {
         };
       };
 
-    /** A host whose engine refuses every batch (what one predating
-     *  `bindCreated` does) and passes everything else through. */
+    /** A host whose engine refuses every batch that binds a handle (what
+     *  one predating `bindCreated` does) and passes everything else
+     *  through — a plain batch, like the pencil fallback's painted insert
+     *  addressing `$created` (protocol 34), still applies there. */
     const refusingBatches = (host: BundleHost): BundleHost => {
+      const bindsAHandle = (mutation: MutationInput): boolean =>
+        mutation.op === "batch" &&
+        (mutation.args.ops as readonly MutationInput[]).some((op) => op.op === "bindCreated");
       const document = new Proxy(host.document, {
         get(target, prop, receiver) {
           if (prop !== "mutate") return Reflect.get(target, prop, receiver);
           return (mutation: MutationInput) =>
-            mutation.op === "batch"
+            bindsAHandle(mutation)
               ? Promise.resolve({
                   applied: false,
                   error: "batch refused — the spec standing in for an engine without bindCreated",
@@ -689,10 +703,15 @@ describe("perf budgets — the freehand tools", () => {
       expect(await leafIds(w.h)).toHaveLength(518);
     };
 
-    it("pencil, mouse: one insert, one step", async () => {
+    it("pencil, mouse: one insert and its paint, one step", async () => {
       const { work, undoSteps } = await lift("pencil lift mouse", createPencilHandler, spiral(500), []);
-      expect(work.mutations.map((m) => m.op)).toEqual(["insertPath"]);
-      expect(work.reads()).toBe(0);
+      // insert + the graphic default's stroke colour and weight (the
+      // workload has no `[Normal Graphics Frame]`, so InDesign's). As
+      // found: a bare `insertPath`, 0 reads.
+      expect(work.mutations).toEqual([{ op: "batch", ops: 3 }]);
+      expect(work.count("document.meta")).toBe(1);
+      expect(work.reads()).toBe(1);
+      expect(work.count("editor.client.send:requestStyleProperties")).toBe(1);
       expect(undoSteps).toBe(1);
     });
 
@@ -701,10 +720,13 @@ describe("perf budgets — the freehand tools", () => {
       const batched = await lift("pencil lift pen", createPencilHandler, stroke, [], landedOver([]));
       const stepwise = await lift("pencil lift pen, stepwise", createPencilHandler, stroke, [], landedOver([]), refusingBatches);
 
-      // insert + bind + outline. As found: 2 mutations, 2 undo steps.
-      expect(batched.work.mutations).toEqual([{ op: "batch", ops: 3 }]);
+      // insert + its paint (stroke colour, weight) + bind + outline. As
+      // found: 2 mutations, 2 undo steps.
+      expect(batched.work.mutations).toEqual([{ op: "batch", ops: 5 }]);
       expect(batched.undoSteps).toBe(1);
-      expect(batched.work.reads()).toBe(0);
+      expect(batched.work.count("document.meta")).toBe(1);
+      expect(batched.work.reads()).toBe(1);
+      expect(batched.work.count("editor.client.send:requestStyleProperties")).toBe(1);
 
       // One new element, selected, and it is the OUTLINE — a closed
       // contour — not the open centerline the stroke was drawn as.
@@ -715,11 +737,13 @@ describe("perf budgets — the freehand tools", () => {
       // …and exactly the element the two-step chain leaves.
       expect(batched.seen.created).toEqual(stepwise.seen.created);
 
-      // The fallback is the chain as found, after the one refused batch.
-      expect(stepwise.work.mutations.map((m) => m.op)).toEqual([
-        "batch",
-        "insertPath",
-        "setElementProperty",
+      // The fallback is the chain as found, after the one refused batch —
+      // its insert carrying the same paint, so the centerline it leaves
+      // on a refused outline wears what the batch's outline would have.
+      expect(stepwise.work.mutations).toEqual([
+        { op: "batch", ops: 5 },
+        { op: "batch", ops: 3 },
+        { op: "setElementProperty", ops: 1 },
       ]);
       expect(stepwise.undoSteps).toBe(2);
       await expectPutBack();

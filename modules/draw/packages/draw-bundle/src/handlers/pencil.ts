@@ -23,7 +23,9 @@
 // actually drawn), and the pointer-up commit (RDP-simplified +
 // Catmull-Rom-fitted anchors) becomes ONE mutation through
 // `host.document.mutate`: an `insertPath`, or — for a pressure stroke —
-// one batch that inserts the path and outlines it.
+// one batch that inserts the path and outlines it. Either way the path is
+// painted with the graphic default right after its insert, in the same
+// batch (`./graphic-default.ts`).
 //
 // The preview is APPENDED TO, not re-mapped: `./stroke-preview.ts` owns
 // the one array a stroke hands the overlay, and says what the overlay
@@ -43,6 +45,7 @@ import {
 } from "@paged-media/draw-tools";
 
 import { outlineStrokeVariableMutationFor } from "./brush";
+import { graphicPaintFor, withGraphicPaint } from "./graphic-default";
 import { insertPathMutationFor } from "./insert-path";
 import { createStrokePreview } from "./stroke-preview";
 import {
@@ -91,7 +94,8 @@ export function createPencilHandler(host: BundleHost): GestureHandler {
     preview.clear();
   };
 
-  /** The lift, as one promise. A mouse stroke is ONE `insertPath`. A
+  /** The lift, as one promise. A mouse stroke is ONE mutation (the
+   *  `insertPath` and its paint, batched). A
    *  PRESSURE stroke used to be two mutations and two undo steps (the
    *  insert, then the variable-width outline, each its own rebuild); it
    *  is ONE batch now — `bindCreated` names the path the batch just
@@ -99,9 +103,14 @@ export function createPencilHandler(host: BundleHost): GestureHandler {
    *
    *  A refused batch falls back to the two steps as they shipped, which
    *  keeps the degrade they always had: an outline the kernel rejects
-   *  leaves the plain centerline standing rather than nothing at all. */
+   *  leaves the plain centerline standing rather than nothing at all.
+   *
+   *  Every lane's insert carries the graphic default (read once per
+   *  lift), so the fallback's centerline wears what the batch's outline
+   *  would have. */
   const commit = async (page: string, c: PencilCommit): Promise<void> => {
     const insert = insertPathMutationFor(page, c.anchors, c.open);
+    const paint = await graphicPaintFor(host).catch(() => null);
     // B-08 — pressure → variable-width stroke. When a pressure device
     // drove the stroke (the sample pressures actually VARY — a mouse's
     // constant NEUTRAL never triggers this) and the contour is OPEN (the
@@ -116,15 +125,21 @@ export function createPencilHandler(host: BundleHost): GestureHandler {
         : null;
 
     if (widths) {
+      // The paint lands between the insert and the bind: `$created` names
+      // the insert, and `bindCreated` still binds it (a property write
+      // creates nothing).
       const outlined = await host.document.mutate(
-        batchMutationFor([
-          insert,
-          bindCreatedMutationFor(STROKE_HANDLE),
-          outlineStrokeVariableMutationFor(
-            handleElementId(STROKE_HANDLE),
-            widths,
-          ),
-        ]),
+        withGraphicPaint(
+          batchMutationFor([
+            insert,
+            bindCreatedMutationFor(STROKE_HANDLE),
+            outlineStrokeVariableMutationFor(
+              handleElementId(STROKE_HANDLE),
+              widths,
+            ),
+          ]),
+          paint,
+        ),
       );
       if (outlined.applied) {
         if (outlined.createdId) await host.selection.set([outlined.createdId]);
@@ -136,7 +151,7 @@ export function createPencilHandler(host: BundleHost): GestureHandler {
       );
     }
 
-    const outcome = await host.document.mutate(insert);
+    const outcome = await host.document.mutate(withGraphicPaint(insert, paint));
     if (!outcome.applied) {
       host.log.warn(
         `pencil insertPath rejected by engine: ${JSON.stringify(outcome.error)}`,
