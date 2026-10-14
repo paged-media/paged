@@ -45,6 +45,7 @@ that follow it and those that do not.
 | [325](325-claude-agent-package.md) | Claude for paged is one package: prompt, tools, loop and proxy | Accepted 2026-10-11 |
 | [326](326-wasm-resolved-through-the-host.md) | A bundle resolves its wasm through the host, with integrity | Accepted 2026-10-11 |
 | [327](327-every-committed-change-is-reported.md) | Every committed change to the document is reported: gestures and script runs too | Accepted 2026-10-14 |
+| [328](328-a-face-for-the-document-where-it-has-none.md) | A bundle may give the document a face where it has none | Accepted 2026-10-14 |
 
 Decisions made in other repositories that this repository's code rests on are listed in
 [`../README.md`](../README.md).

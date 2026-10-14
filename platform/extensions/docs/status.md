@@ -37,6 +37,9 @@ What the plugin contract ships and what it does not, read from the code at commi
   reports a canvas gesture's commit (`gestureCommitted`) and a script run (`scriptResult`,
   pages unknown) as well as mutations, undos and redos; the parent index, the core object
   model and the headless client follow the same set (`document.onDidChange@2`).
+- **A face for the document where it has none (0.2.55-canary.0, ADR 328).**
+  `host.assets.registerDocumentFont` puts a face in the document registry when the document
+  holds none for the family and style; it never replaces one (`assets.documentFont@1`).
 - **Three npm packages**, published under the `canary` tag on a push to `main`.
 - **The contract** (`plugin-api`, types only): the manifest types and their JSON Schema
   (exported as `./manifest.schema.json`), `PagedBundle`, `BundleHost` with 27 members, the

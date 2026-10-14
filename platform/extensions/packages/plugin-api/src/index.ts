@@ -241,6 +241,7 @@ export type {
 export type {
   AssetSurface,
   AssetKind,
+  DocumentFontOutcome,
   FontFaceAsset,
   FontFaceFormat,
 } from "./assets";
