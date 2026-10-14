@@ -53,8 +53,9 @@ MicroType Express decoder and a door through which a plugin gives the document a
    out in them from the start. The door fills a gap and never replaces a face: a font the machine
    or the document already has wins over the deck's copy, as in PowerPoint. A face the host
    refuses (its per-face budget) and a host without the door are reported in the import's
-   diagnostics. The bundle declares the `fonts` asset; it reaches the door structurally and probes
-   `supports("assets.documentFont@1")`, so it runs on hosts from before the door.
+   diagnostics. The bundle declares the `fonts` asset, needs the contract that has the door
+   (plugin-api and plugin-sdk 0.2.55-canary.0 or later) and probes
+   `supports("assets.documentFont@1")` for a host without its backend.
 
 5. **The faces are not copied into the document.** A face lives for the editing session (the
    door's lifetime). The source deck the importer keeps as a container part still holds them, so a
@@ -66,7 +67,8 @@ MicroType Express decoder and a door through which a plugin gives the document a
 - The engine wasm grows by 55 KB (1 508 621 → 1 563 787 bytes; gzipped 455 961 → 479 063).
 - Editable embedding asks that a face be dropped when its document closes. The door keeps faces
   for the session, so a document opened later in the same session could resolve a family only an
-  earlier deck embedded. Dropping them needs a per-document lifetime in the door.
+  earlier deck embedded. Dropping them needs a per-document face lifetime in the door, an open
+  follow-up in the SDK.
 - A subset face holds only the characters the deck used: a character typed later is missing from
   it, as in PowerPoint.
 - Fonts are authored into fixtures through PowerPoint (ADR 705): `embed-resave.applescript` saves a

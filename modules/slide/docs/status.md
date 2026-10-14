@@ -81,7 +81,7 @@ Read from the code on 2026-10-14.
 | Embedded fonts, whole faces | `fonts-full` fixture: PowerPoint embedding Lato (4 styles) and Gloria Hallelujah | every glyph's outline and program, every advance and every other table identical to the source fonts |
 | Embedded fonts, subsets | `fonts` fixture: PowerPoint's default subsets, Caveat added | every glyph a subset holds is the source's; each holds every character of the deck's text |
 | Embedded fonts in the wild | 350 faces from 29 real-world decks (PowerPoint for Windows and Mac; TrueType and CFF; subsets and whole) | all decode and parse back; 12 faces matched to installed originals: 17 761 glyphs identical, `cvt `/`fpgm`/`prep`/`VDMX` identical, `hdmx` identical for every glyph a subset holds |
-| Embedded fonts in the engine | the published canvas-wasm, headless | before: every embedded family missing; after: none, each style served as the deck's face |
+| Embedded fonts in the engine | the published canvas-wasm and SDK 0.2.55-canary.0, headless | before: every embedded family missing; after the faces go through the document-font door: none, each style served as the deck's face; File ▸ Open of the deck opens it with nothing missing |
 | Export of an unedited deck | four fixtures (Rust), the importer→exporter path headless and in the editor | byte-identical to the original |
 
 Rendering against PowerPoint's PDF (local tool `scripts/fidelity-local.py`: the engine's CPU
@@ -106,11 +106,12 @@ placed by `GradientFillStart`; both ship in canvas-wasm 0.70.0.
   does not embed must be on the machine; otherwise they render with substitutes. The green deck's
   Antonio is missing on the oracle machine too, and PowerPoint breaks its long title mid-word,
   which the engine does not.
-- **Embedded fonts.** The document-font door (plugin-sdk ADR 328) is not in a published SDK yet:
-  until the editor pins one with it, the import says the host cannot give the document the deck's
-  fonts. A face lives for the editing session, so another document opened later in that session
-  can resolve it (editable embedding asks for it to go with its document). Preview-and-print faces
-  wait for a read-only view (the slideshow).
+- **Embedded fonts.** The bundle needs the document-font door (plugin-sdk ADR 328, published in
+  0.2.55-canary.0); an editor pinned to an older SDK has no backend for it, and the import says
+  the host cannot give the document the deck's fonts. A face lives for the editing session, so
+  another document opened later in that session can resolve it (editable embedding asks for it to
+  go with its document): a per-document face lifetime in the door is an open SDK follow-up.
+  Preview-and-print faces wait for a read-only view (the slideshow).
 - **SmartArt layouts in fixtures.** PowerPoint draws a seeded diagram with its default layout
   only, so the fixture covers the drawing's lowering, not other layouts' shapes.
 - **Editor wiring.** The editor loads the bundle on a branch, through a local link, and a

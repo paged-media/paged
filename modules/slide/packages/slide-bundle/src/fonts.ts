@@ -27,26 +27,16 @@
 // A face lives for the editing session; the source deck the importer keeps
 // as a container part brings the faces back when the document is reopened.
 
-import type { BundleHost, Diagnostic } from "@paged-media/plugin-api";
+import type { AssetSurface, BundleHost, Diagnostic, DocumentFontOutcome } from "@paged-media/plugin-api";
 
 import type { EmbeddedFaceReport } from "./engine.js";
 
-/** What the document-font door answers (plugin-api `DocumentFontOutcome`). */
-export type DocumentFontOutcome =
-  | { status: "registered"; pageIds: string[] }
-  | { status: "held" }
-  | { status: "refused"; reason: string };
+export type { DocumentFontOutcome };
 
-interface DocumentFontDoor {
-  registerDocumentFont(bytes: Uint8Array, family: string, style?: string): Promise<DocumentFontOutcome>;
-}
-
-/** The host's document-font door, or null where it has none. Typed
- *  structurally so the bundle runs on contracts from before the door. */
-export function documentFontDoor(host: BundleHost): DocumentFontDoor | null {
-  if (!host.supports("assets.documentFont@1")) return null;
-  const assets = host.assets as unknown as Partial<DocumentFontDoor> | undefined;
-  return typeof assets?.registerDocumentFont === "function" ? (assets as DocumentFontDoor) : null;
+/** The host's document-font door, or null where the host has no backend for
+ *  it (`supports("assets.documentFont@1")` false). */
+export function documentFontDoor(host: BundleHost): Pick<AssetSurface, "registerDocumentFont"> | null {
+  return host.supports("assets.documentFont@1") ? host.assets : null;
 }
 
 /** The faces the document may use, in the report's order. */
