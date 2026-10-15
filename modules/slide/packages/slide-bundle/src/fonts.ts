@@ -24,8 +24,10 @@
 // The door (`host.assets.registerDocumentFont`, ADR 328 in plugin-sdk)
 // fills a gap and never replaces a face the document already has, so a font
 // installed on the machine wins over the copy in the deck, as in PowerPoint.
-// A face lives for the editing session; the source deck the importer keeps
-// as a container part brings the faces back when the document is reopened.
+// A face lives as long as the document it was given to (plugin-sdk ADR 330;
+// for the editing session on a host without `assets.documentFont@2`), so it
+// is given after the deck's document opens; the source deck the importer
+// keeps as a container part brings the faces back each time it is reopened.
 
 import type { AssetSurface, BundleHost, Diagnostic, DocumentFontOutcome } from "@paged-media/plugin-api";
 

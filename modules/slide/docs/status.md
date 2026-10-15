@@ -51,10 +51,10 @@ Read from the code on 2026-10-14.
   OpenType (all three header versions, XOR obfuscation) and MicroType Express (LZCOMP and the
   Compact Table Format: `glyf` with its glyph programs, `loca`, `cvt `, `hdmx`, `VDMX`), or a
   bare OpenType part. The licence decides first: installable and editable faces are decoded and
-  given to the document through the host's document-font door before it opens (a font the machine
-  has wins); preview-and-print, restricted and bitmap-only faces are not used, and the import
-  names each with the reason. A deck document opened again gets its faces back from the source
-  deck it keeps.
+  given to the deck's document through the host's document-font door once it is open (a font the
+  machine has wins); preview-and-print, restricted and bitmap-only faces are not used, and the
+  import names each with the reason. A deck document opened again gets its faces back from the
+  source deck it keeps.
 - **PPTX export, first part** (M4; `pptx-export`, ADR 704). File ▸ Export as PowerPoint writes
   the deck back from the original the importer kept: the document's slides in page order, a
   duplicated slide as a slide part of its own, deleted slides dropped with their relationships
@@ -108,9 +108,10 @@ placed by `GradientFillStart`; both ship in canvas-wasm 0.70.0.
   which the engine does not.
 - **Embedded fonts.** The bundle needs the document-font door (plugin-sdk ADR 328, published in
   0.2.55-canary.0); an editor pinned to an older SDK has no backend for it, and the import says
-  the host cannot give the document the deck's fonts. A face lives for the editing session, so
-  another document opened later in that session can resolve it (editable embedding asks for it to
-  go with its document): a per-document face lifetime in the door is an open SDK follow-up.
+  the host cannot give the document the deck's fonts. On a host with `assets.documentFont@2`
+  (plugin-sdk ADR 330) a face goes with its document, as editable embedding asks; on an older
+  host it lives for the editing session, so another document opened later in that session can
+  resolve it.
   Preview-and-print faces wait for a read-only view (the slideshow).
 - **SmartArt layouts in fixtures.** PowerPoint draws a seeded diagram with its default layout
   only, so the fixture covers the drawing's lowering, not other layouts' shapes.

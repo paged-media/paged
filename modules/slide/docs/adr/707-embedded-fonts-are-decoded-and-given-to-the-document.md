@@ -1,6 +1,8 @@
 # ADR 707 — A deck's embedded fonts are decoded here and given to the document within their licences
 
-- **Status:** Accepted 2026-10-14.
+- **Status:** Accepted 2026-10-14. Amended 2026-10-15: the faces are given once the deck's
+  document is open, and live as long as that document (plugin-sdk ADR 330); see the amendment
+  at the end.
 - **Scope:** `pptx-fonts`, `pptx-import` (`fonts`), `slide-js`, `packages/slide-bundle` (`fonts.ts`)
 
 ## Context
@@ -73,3 +75,19 @@ MicroType Express decoder and a door through which a plugin gives the document a
   it, as in PowerPoint.
 - Fonts are authored into fixtures through PowerPoint (ADR 705): `embed-resave.applescript` saves a
   deck in place, which keeps its "embed fonts" setting (a save under a new name drops it).
+
+## Amendment 2026-10-15 — a face lives as long as its document
+
+plugin-sdk ADR 330 closed the follow-up named above: on a host with `assets.documentFont@2` a
+face given through the door belongs to the document open when it is given, and is dropped
+before the next document loads. A face given before the deck opened would therefore belong to
+the document the deck replaces and leave with it. Point 4 changes accordingly:
+
+- The import gives the faces right after the deck's document opens (and before it keeps the
+  source deck), not before. The deck is laid out once in substitutes and again, for the stories
+  set in an embedded face, when the faces arrive; the engine names those pages and the host
+  repaints them.
+- Point 5 stands, with the face's lifetime now the document's: the source deck kept as a
+  container part gives the faces back at `document.onDidOpen`, each time the document opens.
+- On a host with only `assets.documentFont@1` the faces still live for the session; giving them
+  after the open changes nothing there but the extra layout.
