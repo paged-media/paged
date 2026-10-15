@@ -3378,7 +3378,9 @@ export function createBundleHost(
     // like `getPlacedImage` (no injected provider): the document registry
     // is the engine's. Fill-only — the engine is asked first whether it
     // holds the face, and a held face is never sent again — so a bundle
-    // cannot change how text that already resolves is drawn.
+    // cannot change how text that already resolves is drawn. ADR 330 — its
+    // lifetime is the client's: one with `registerDocumentFont` scopes the
+    // face to the open document (`@2`).
     async registerDocumentFont(bytes, family, style) {
       requireDeclared(
         hasAsset("fonts"),
@@ -3408,7 +3410,7 @@ export function createBundleHost(
         );
       }
       // Copied before the first await: the caller may reuse its buffer.
-      const face = Array.from(bytes);
+      const face = bytes.slice();
       let client: PagedEditor["client"];
       try {
         client = getEditor().client;
@@ -3431,10 +3433,23 @@ export function createBundleHost(
           ) {
             return { status: "held" };
           }
-          const reply = await client.send({
-            kind: "registerFont",
-            payload: { family, style: style ?? null, bytes: face, scope: "document" },
-          });
+          // ADR 330 — a client that scopes the face to the open document
+          // registers it; without one the face lives for the engine
+          // session (`assets.documentFont@1` only).
+          const scoped = client.registerDocumentFont;
+          let reply: Awaited<ReturnType<typeof client.send>>;
+          if (typeof scoped === "function") {
+            try {
+              reply = await scoped.call(client, family, face, style ?? null);
+            } catch (err) {
+              return refuse(err instanceof Error ? err.message : String(err));
+            }
+          } else {
+            reply = await client.send({
+              kind: "registerFont",
+              payload: { family, style: style ?? null, bytes: Array.from(face), scope: "document" },
+            });
+          }
           if (reply.kind !== "fontRegistered") {
             return refuse(`the engine answered ${reply.kind}`);
           }
@@ -4297,6 +4312,12 @@ export function createBundleHost(
     ) {
       featureSet.add("rendering.sceneLayer.binary@1");
     }
+  }
+  if (typeof getEditor().client?.registerDocumentFont === "function") {
+    // ADR 330 — the client scopes a document face to the open document: it
+    // is dropped before the next document loads. Without it the face lives
+    // for the engine session (ADR 328, `@1` only).
+    featureSet.add("assets.documentFont@2");
   }
   if (typeof getEditor().mutateWithBytes === "function") {
     // Protocol 66 — the binary commit lane. `document.mutateWithBytes`

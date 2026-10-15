@@ -1355,7 +1355,17 @@ clears its missing flag.
   registered once. Engine-served like `getPlacedImage`; the flag
   `assets.documentFont@1` is static.
 - No disposal and no undo; the face is not written into a saved file (a
-  document names its fonts). The engine keeps it for the session.
+  document names its fonts). The engine keeps it for the session — unless
+  the host's client scopes it (ADR 330, `assets.documentFont@2`): then the
+  face belongs to the document open when it was given and is dropped
+  before the next document loads (File ▸ Open, File ▸ New, a plugin's
+  open, the same file again), so no later document lays out with it. The
+  engine has one document registry per session and empties it only whole,
+  so the client keeps every face it registered with its owner (a document,
+  or the session) and rebuilds the registry without the outgoing
+  document's faces before posting the load; a failed load gives them back.
+  A bundle gives its faces again from `document.onDidOpen`, after the
+  open; with no document open the call is refused.
 
 ## 14. The capability-gated clipboard (K-6 / S-14 — `host.clipboard`)
 

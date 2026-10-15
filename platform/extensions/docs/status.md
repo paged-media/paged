@@ -40,6 +40,10 @@ What the plugin contract ships and what it does not, read from the code at commi
 - **A face for the document where it has none (0.2.55-canary.0, ADR 328).**
   `host.assets.registerDocumentFont` puts a face in the document registry when the document
   holds none for the family and style; it never replaces one (`assets.documentFont@1`).
+- **A document face lives as long as its document (0.2.56-canary.0, ADR 330).** The face is
+  dropped before the next document loads and no other document lays out with it; the bundle
+  gives it again on open. The client owns the lifetime (`PagedClient.registerDocumentFont`,
+  implemented by the editor's client and the headless one; `assets.documentFont@2`).
 - **Three npm packages**, published under the `canary` tag on a push to `main`.
 - **The contract** (`plugin-api`, types only): the manifest types and their JSON Schema
   (exported as `./manifest.schema.json`), `PagedBundle`, `BundleHost` with 27 members, the

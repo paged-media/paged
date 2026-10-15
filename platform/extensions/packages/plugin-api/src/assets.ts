@@ -99,7 +99,8 @@ export interface PlacedImageAsset {
  *   so nothing was sent: the door fills a gap, it never replaces a face;
  * - `refused` — nothing was registered; `reason` says why (the
  *   `document.write` gate, the per-face budget, bytes the canvas cannot
- *   draw, the engine's own refusal or a dead channel).
+ *   draw, no open document, the document closing before the face was
+ *   registered, the engine's own refusal or a dead channel).
  */
 export type DocumentFontOutcome =
   | { status: "registered"; pageIds: PageId[] }
@@ -172,11 +173,17 @@ export interface AssetSurface {
    * `style` is omitted), nothing is sent and the outcome is `held`. So a
    * bundle cannot change how text that already resolves is drawn.
    *
-   * The face is not undoable and is not written into a saved file (a
-   * document names its fonts; it carries no face bytes): the engine keeps
-   * it for the session, for every document opened after too. A bundle
-   * whose text needs it in a later session provides it again (at
-   * `document.onDidOpen`, or when it writes the text).
+   * The face belongs to the document open when the call is made (ADR
+   * 330, `supports("assets.documentFont@2")`): the host drops it when that
+   * document closes — when the next document opens, File ▸ New and a
+   * reopen of the same file included — and no other document lays out
+   * with it. With no document open the call is refused. It is not undoable
+   * and is not written into a saved file (a document names its fonts; it
+   * carries no face bytes), so a bundle whose text needs it gives it again
+   * each time the document opens (`document.onDidOpen`, from what the
+   * document keeps) — register AFTER the open, never before it. A host
+   * with only `@1` keeps the face for the engine session instead, for
+   * every document opened after; giving it again there answers `held`.
    *
    * Gates: `capabilities.assets` ∋ `"fonts"` (throws in 'enforce', as on
    * every asset door) and `capabilities.document.write` (it changes how
@@ -184,7 +191,8 @@ export interface AssetSurface {
    * over `ASSET_BUDGETS.maxFontFaceBytes`, bytes that are not a TrueType
    * or OpenType face (WOFF and WOFF2 included — the canvas reads neither),
    * an empty family. Never throws otherwise. Calls for one face at the
-   * same time register it once. Probe `supports("assets.documentFont@1")`.
+   * same time register it once. Probe `supports("assets.documentFont@1")`
+   * for the door and `@2` for the per-document lifetime.
    */
   registerDocumentFont(
     bytes: Uint8Array,

@@ -38,6 +38,9 @@
 //     any mutation) / onDidChange / onDidOpen — REAL (engine round-trip; `load()` fans
 //     the engine's `documentLoaded` reply out like the editor worker).
 //   · selection.get / set / onDidChange — REAL.
+//   · assets.registerDocumentFont — REAL, and scoped like the editor's:
+//     the face belongs to the open document and is gone before the next
+//     load (`load()`, `newBlank()`, `documents.open`; ADR 330).
 //   · diagnostics, storage, log, supports, manifest — REAL (in-memory,
 //     identical to the in-process host).
 //   · contribute.* (tool/panel/command/keybinding/overlay) — RECORDED
@@ -448,6 +451,23 @@ export type HeadlessHostHandle = HeadlessHost;
 
 let seqCounter = 1;
 
+/** One face in the engine's document font registry, as the harness client
+ *  sent it: `owner` is the document it was given for, `null` the session. */
+interface RegistryFace {
+  family: string;
+  style: string | null;
+  bytes: number[];
+  owner: string | null;
+}
+
+/** ADR 330 — the two halves of every document load: `begin` drops the
+ *  open document's faces (and answers them), `end` takes the load's reply
+ *  and gives them back when the load failed. */
+interface DocumentLoads {
+  begin(): RegistryFace[];
+  end(reply: WorkerToMain, dropped: RegistryFace[]): void;
+}
+
 /**
  * Build a `PagedEditor` over the wasm `CanvasWorker`. The engine
  * `handleMessage` is SYNCHRONOUS (JSON in, JSON reply out, seq-matched);
@@ -467,7 +487,7 @@ function makeEngineEditor(
   onToolPreviews: (value: readonly ToolPreviewShape[] | null) => void,
   overlayLayers: Map<string, readonly ToolPreviewShape[]>,
   engineShaper = false,
-): { editor: PagedEditor; fanOut: (reply: WorkerToMain) => void } {
+): { editor: PagedEditor; fanOut: (reply: WorkerToMain) => void; loads: DocumentLoads } {
   const protocol = worker.protocolVersion;
   const listeners = new Set<(msg: WorkerToMain) => void>();
 
@@ -484,6 +504,57 @@ function makeEngineEditor(
     );
     const raw = worker.handleMessage(envelope);
     return JSON.parse(raw) as WorkerToMain;
+  };
+
+  // ADR 330 — a document face lives as long as its document. The engine
+  // keeps ONE document font registry, seeds every later load from it and
+  // can only empty it whole, so this client keeps what is in it: each face
+  // with the document it belongs to (`null`: the session's, every face not
+  // given through `registerDocumentFont`). Before a load the registry is
+  // rebuilt without the open document's faces, so the next document never
+  // lays out with them; a load that fails gives them back.
+  const registry: RegistryFace[] = [];
+  let openDocId: string | null = null;
+  const documentScope = (payload: unknown): boolean =>
+    ((payload as { scope?: string } | null | undefined)?.scope ?? "document") === "document";
+  const registerFace = (face: RegistryFace): boolean => {
+    const reply = dispatch("registerFont", {
+      family: face.family,
+      style: face.style,
+      bytes: face.bytes,
+      scope: "document",
+    });
+    if (reply.kind !== "fontRegistered") return false;
+    registry.push(face);
+    return true;
+  };
+  /** Keep the ledger in step with a message the engine answered. */
+  const note = (kind: string, payload: unknown, reply: WorkerToMain): void => {
+    if (kind === "registerFont" && reply.kind === "fontRegistered" && documentScope(payload)) {
+      const p = payload as { family: string; style?: string | null; bytes: number[] };
+      registry.push({ family: p.family, style: p.style ?? null, bytes: p.bytes, owner: null });
+    } else if (kind === "clearFontRegistry" && reply.kind === "fontRegistryCleared" && documentScope(payload)) {
+      registry.length = 0;
+    }
+  };
+  const loads: DocumentLoads = {
+    begin() {
+      const dropped = registry.filter((f) => f.owner !== null);
+      if (dropped.length === 0) return dropped;
+      const keep = registry.filter((f) => f.owner === null);
+      registry.length = 0;
+      dispatch("clearFontRegistry");
+      for (const face of keep) registerFace(face);
+      return dropped;
+    },
+    end(reply, dropped) {
+      if (reply.kind === "documentLoaded") {
+        openDocId = reply.payload.docId;
+        return;
+      }
+      // The open document is still open: its faces come back.
+      for (const face of dropped) registerFace(face);
+    },
   };
 
   const recordingRegistry = <
@@ -590,7 +661,14 @@ function makeEngineEditor(
     },
     async send(message: MainToWorkerKind): Promise<WorkerToMain> {
       const m = message as { kind: string; payload?: unknown };
+      if (m.kind === "loadDocument" || m.kind === "newBlankDocument") {
+        const dropped = loads.begin();
+        const loaded = dispatch(m.kind, m.payload);
+        loads.end(loaded, dropped);
+        return loaded;
+      }
       const reply = dispatch(m.kind, m.payload);
+      note(m.kind, m.payload, reply);
       // A reply that committed a change (a gesture's `gestureCommitted`, a
       // script's `scriptResult`, a raw `mutate`/`undo`/`redo`) reaches the
       // subscribers, as the editor's client hands every reply to them
@@ -601,6 +679,13 @@ function makeEngineEditor(
     subscribe(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);
+    },
+    async registerDocumentFont(family, bytes, style) {
+      if (openDocId === null) throw new Error("no document is open to give the face to");
+      const face: RegistryFace = { family, style, bytes: Array.from(bytes), owner: openDocId };
+      const reply = dispatch("registerFont", { family, style, bytes: face.bytes, scope: "document" });
+      if (reply.kind === "fontRegistered") registry.push(face);
+      return reply;
     },
   };
 
@@ -686,7 +771,7 @@ function makeEngineEditor(
     };
   }
 
-  return { editor, fanOut };
+  return { editor, fanOut, loads };
 }
 
 /**
@@ -712,7 +797,7 @@ export async function createHeadlessHost(
   // K-9 — the LIST a bundle pushed through `overlay.setToolPreviews`.
   let lastPreviews: readonly ToolPreviewShape[] | null = null;
   const overlayLayerMap = new Map<string, readonly ToolPreviewShape[]>();
-  const { editor, fanOut } = makeEngineEditor(
+  const { editor, fanOut, loads } = makeEngineEditor(
     worker,
     contributions,
     (value) => {
@@ -727,11 +812,13 @@ export async function createHeadlessHost(
 
   /** Load bytes into the engine; the raw reply (documentLoaded or not). */
   const loadDirect = (bytes: Uint8Array): WorkerToMain => {
+    const dropped = loads.begin();
     const reply = JSON.parse(
       options.defaultFont
         ? worker.loadDocumentDirect(seqCounter++, bytes, options.defaultFont)
         : worker.loadDocumentDirect(seqCounter++, bytes),
     ) as WorkerToMain;
+    loads.end(reply, dropped);
     if (reply.kind === "documentLoaded") {
       try {
         worker.runResolveJson();
