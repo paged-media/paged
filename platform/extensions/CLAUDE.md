@@ -7,12 +7,16 @@ carry any license.
 
 ## What this is
 
-pnpm workspace with three packages (see README for the tier table):
+pnpm workspace with five packages (see README for the tier table):
 `packages/plugin-api` (the contract, **type-only**), `packages/plugin-sdk`
-(the runtime: in-process `BundleHost` adapter, loader, gesture kit),
-`packages/plugin-cli` (zero-dep ESM CLI, no build step). **`DESIGN.md` is
-the deliberation record** — when code and DESIGN.md disagree, fix one of
-them in the same change.
+(the runtime: in-process `BundleHost` adapter, loader, gesture kit,
+object registry, headless host), `packages/plugin-cli` (zero-dep ESM CLI,
+no build step), `packages/cli` (`@paged-media/cli`, bin `paged`: the Node
+CLI over the headless host, ADR 324) and `packages/ai` (`@paged-media/ai`,
+ADR 325). **`DESIGN.md` is the deliberation record** — when code and
+DESIGN.md disagree, fix one of them in the same change. Decision records
+are in `docs/adr/`; the object model is ADR 329, though the code still
+cites its proposal number, "ADR 323".
 
 ## Hard rules
 

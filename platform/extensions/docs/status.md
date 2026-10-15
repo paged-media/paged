@@ -43,7 +43,8 @@ patches since, with the same protocol. How the parts fit is in
     exporting the document and opening one the bundle built, and the module door;
   - the binary lanes of protocol 66 for scene images and parts, with a JSON fallback the
     SDK keeps for older hosts ([ADR 320](adr/320-binary-lanes-for-scene-images-and-parts.md)).
-- **The object model** (DESIGN.md §21; on npm since 0.2.45-canary.0).
+- **The object model** ([ADR 329](adr/329-plugins-contribute-a-typed-object-model.md),
+  DESIGN.md §21; on npm since 0.2.45-canary.0).
   `host.contribute.objectModel` and `host.objects`: one
   `query/get/getAll/set/batch/schema/kinds/commands/invoke/onDidChange` over core
   addresses and every plugin's contributed kinds, a batch landing as one engine mutation
@@ -110,7 +111,8 @@ patches since, with the same protocol. How the parts fit is in
   serves, with Subresource Integrity; `resolveWasm` / `fetchWasm` fall back to the
   bundle-relative URL on a host without it (`modules@1`,
   [ADR 326](adr/326-wasm-resolved-through-the-host.md)).
-- **The Node CLI** (`packages/cli`, bin `paged`, DESIGN.md §22). A host over
+- **The Node CLI** (`packages/cli`, bin `paged`,
+  [ADR 324](adr/324-node-cli-over-the-headless-host.md), DESIGN.md §22). A host over
   `createHeadlessHost` on the canvas-wasm it finds (protocol 70 or later), with its own
   driver bundle and every discovered plugin bundle. Verbs from one table: `get`, `set`,
   `query`, `schema`, `batch`, `create`, `delete`, `commands`, `invoke`, `run`, `export`,
@@ -171,19 +173,16 @@ patches since, with the same protocol. How the parts fit is in
   in the published `plugin-api`; the `plugin-sdk` build inlines its `propertySchemas` and
   `pathAliases`.
 - **Text in this repo that lags the code.**
-  - `README.md` says nothing is published and that a sibling editor checkout is required.
-  - `CLAUDE.md`, `docs/concept.md`, `docs/architecture.md` and `docs/README.md` describe
-    three packages; the workspace has five. `docs/README.md` lists the decision records as 010,
-    012, 017 and 300–319, and its row for core ADR 006 gives the canvas-wasm pin and the
-    wire stamp as 0.64.0; both are 0.71.8.
-  - The code, `DESIGN.md`, the CLI's untyped baseline and a `contract-guard` step cite the
-    object model as "ADR 323" and the Node CLI as "ADR 324". In `docs/adr/`, 323 is page
-    navigation and page images, and there is no 324; the object model's contract is
-    `DESIGN.md` §21.
-  - `DESIGN.md` §21 opens with a status saying the plugins contribute their models "in the
-    next wave"; every first-party manifest contributes one. §21.12 says the script bridge
-    recognises set, create and delete only; `script-bridge.ts` also answers `invoke` and
-    `commands`.
+  - The code under `packages/*/src`, the tests, the CLI's untyped baseline (`"adr": "323"`),
+    `packages/plugin-cli/bin/paged-plugin.mjs`, two scripts and a `contract-guard` step name
+    cite the object model as "ADR 323", its proposal number. The record is
+    [ADR 329](adr/329-plugins-contribute-a-typed-object-model.md); 323 is page navigation
+    and page images. A comment change under `packages/*/src` needs a version bump, so these
+    change with the next contract release. Their "ADR 324" citations already name the CLI's
+    record.
+  - `docs/architecture.md` describes the code at `d90f727` apart from its package list and
+    its decision-record citations: its door table counts 27 `BundleHost` members (31 now),
+    and it counts 35 spec files in `packages/plugin-sdk/test` (66 now).
   - `DESIGN.md` §4 and `CLAUDE.md` say reserved members throw `PluginApiNotImplemented`,
     and the header of `packages/plugin-sdk/src/harness.ts` says so of edit contexts and
     object types; both doors register.
