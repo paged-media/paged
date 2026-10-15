@@ -27,7 +27,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.128.0",
-    "@paged-media/canvas-wasm": "0.71.8"
+    "@paged-media/canvas-wasm": "0.71.12"
   },
   "peerDependencies": {
     "@duckdb/duckdb-wasm": "1.29.0"

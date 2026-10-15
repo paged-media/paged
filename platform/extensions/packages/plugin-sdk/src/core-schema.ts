@@ -143,6 +143,7 @@ export const CORE_PATHS: Record<PropertyPath, CorePathRow | typeof OP | typeof V
   characterUnderline: { scope: "story", wire: "bool", type: { kind: "bool" } },
   characterStrikethru: { scope: "story", wire: "bool", type: { kind: "bool" } },
   characterLigatures: { scope: "story", wire: "bool", type: { kind: "bool" } },
+  characterNoBreak: { scope: "story", wire: "bool", type: { kind: "bool" } },
   characterOtfFeatures: { scope: "story", wire: "text", type: { kind: "text" } },
   paragraphLeftIndent: { scope: "story", wire: "length", type: { kind: "length" } },
   paragraphRightIndent: { scope: "story", wire: "length", type: { kind: "length" } },
@@ -175,6 +176,15 @@ export const CORE_PATHS: Record<PropertyPath, CorePathRow | typeof OP | typeof V
   paragraphBulletsCharacterStyle: { scope: "story", wire: "text", type: { kind: "ref", to: "style:character" } },
   paragraphNumberingCharacterStyle: { scope: "story", wire: "text", type: { kind: "ref", to: "style:character" } },
   paragraphComposer: { scope: "story", wire: "text", type: { kind: "text" } },
+  // core ADR 153 — a paragraph's line setting.
+  paragraphAutoLeading: { scope: "story", wire: "length", type: PCT },
+  paragraphSingleWordJustification: { scope: "story", wire: "text", type: { kind: "text" } },
+  paragraphLastLineIndent: { scope: "story", wire: "length", type: { kind: "length" } },
+  paragraphBalanceRaggedLines: { scope: "story", wire: "text", type: { kind: "text" } },
+  // core ADR 158 — a paragraph's level in a multi-level list; the restart
+  // flag is tristate like NumberingContinue (Text("") clears).
+  paragraphNumberingLevel: { scope: "story", wire: "length", type: { kind: "number", integer: true } },
+  paragraphNumberingApplyRestartPolicy: { scope: "story", wire: "text", type: { kind: "text" } },
   textFrameColumnCount: { scope: "frame", wire: "length", type: { kind: "number", integer: true } },
   textFrameColumnGutter: { scope: "frame", wire: "length", type: { kind: "length" } },
   textFrameColumnBalance: { scope: "frame", wire: "bool", type: { kind: "bool" } },
