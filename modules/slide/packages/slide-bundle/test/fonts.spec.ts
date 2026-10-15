@@ -128,14 +128,17 @@ const STYLES = [
 ];
 
 describe("a deck's embedded fonts", () => {
-  it("are given to the document before it opens, each style as a TrueType face", async () => {
+  it("are given to the deck's document once it is open, each style as a TrueType face", async () => {
     const r = fontHost({});
     activate(r.host);
     await r.importers[0].import({ name: "fonts.pptx", bytes: FONTS, mimeType: "" });
     expect(r.calls.map((c) => `${c.family} ${c.style}`).sort()).toEqual([...STYLES].sort());
     expect(r.calls.every((c) => c.magic === "0,1,0,0")).toBe(true);
-    // Every face before the document: it lays out in them from the start.
-    expect(r.events.indexOf("open")).toBe(STYLES.length);
+    // Every face after the open: a face belongs to the document open when it
+    // is given and goes with it (plugin-sdk ADR 330), so a face given before
+    // the open would leave with the document the deck replaces.
+    expect(r.events.indexOf("open")).toBe(0);
+    expect(r.calls.every((c) => c.at > 0)).toBe(true);
     const messages = (r.diagnostics.get(IMPORT_DIAGNOSTICS) ?? []).map((d) => d.message);
     expect(messages.filter((m) => /embedded font|cannot give/i.test(m))).toEqual([]);
   });
