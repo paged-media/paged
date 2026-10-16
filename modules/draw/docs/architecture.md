@@ -78,13 +78,20 @@ SVG doors and Layers provider.
 
 - **Tools.** Each entry in `tools.ts` is data (id, title, icon, shortcut, rail group) plus a
   factory returning a gesture handler closed over `host`.
-- **Panels.** Stroke and Fill are schema panels: pure data, with sections shown or enabled
-  by booleans the bundle computes and publishes through `host.bindings.publish`. The other
-  eight are React components (Appearance, Graphic Styles, Symbols, Live Paint, Pattern,
-  Repeat, Blend, Objects on Path).
+- **Panels.** Draw settings (`panels/properties-panel.ts`) is a schema panel of property
+  rows: the host renders each row with its schema-driven `PropertyField` over `host.objects`,
+  so a commit is one undo step and every field offers "Bind to data…". Element-anchored kinds
+  follow the selection; library and recipe kinds are picked from a list the bundle publishes.
+  The other nine are React components (Appearance, Graphic Styles, Symbols, Live Paint,
+  Pattern, Repeat, Blend, Objects on Path, Path Options). Draw contributes no Stroke or Fill
+  panel: every row those carried is a core frame property, which the host's Stroke, Object
+  Options and Gradients panels edit. `panels/stroke-panel.ts` and `panels/fill-panel.ts`
+  stay exported, and their binding drivers stay tested, but `activate` does not register
+  them.
 - **Edit context.** `vectorGraphic` is entered by double-click on a polygon, graphic line,
-  rectangle or text frame. It names the three anchor tools as its tool set and the Stroke
-  panel as its panel set. While it is active, a binding provider answers the host's Layers
+  rectangle or text frame. It names the three anchor tools as its tool set and Draw
+  settings as its panel set; the host's Properties panel shows Draw settings inline for
+  draw-owned artwork. While it is active, a binding provider answers the host's Layers
   panel with the entered object and its siblings instead of the document's layers; with more
   than 200 siblings it declines, and the panel shows the document's layers.
 - **Menu.** 72 of the commands get a menu path (`menu.ts`), under a Draw menu and inside
@@ -195,7 +202,7 @@ wasm glue fetches `wasm/trace_js_bg.wasm` by URL.
 
 | Door | What the plugin uses it for |
 |---|---|
-| `contributeTool`, `contributeSchemaPanel`, `contributeEditContext` (plugin-sdk) | tools with their activation commands and shortcuts; the Stroke and Fill panels; the `vectorGraphic` context |
+| `contributeTool`, `contributeSchemaPanel`, `contributeEditContext` (plugin-sdk) | tools with their activation commands and shortcuts; the Draw settings panel; the `vectorGraphic` context |
 | `host.contribute.command`, `.panel`, `.menu`, `.importer`, `.exporter`, `.bindingProvider` | commands, React panels, menu entries, SVG in and out, the Layers provider |
 | `host.document.mutate` | every document change |
 | `host.document.pathAnchors`, `elementGeometry`, `elementProperties`, `tree`, `hitTest`, `collection`, `meta`, `frameChain` | reads: anchors, bounds and transforms, typed properties, the scene tree, hit tests, pages, swatches and stories, the active page and creation defaults |
