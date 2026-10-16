@@ -48,8 +48,9 @@ and each one names the plugins that follow it and those that do not.
 | [325](325-claude-agent-package.md) | Claude for paged is one package: prompt, tools, loop and proxy | Accepted 2026-10-11 |
 | [326](326-wasm-resolved-through-the-host.md) | A bundle resolves its wasm through the host, with integrity | Accepted 2026-10-11 |
 | [327](327-every-committed-change-is-reported.md) | Every committed change to the document is reported: gestures and script runs too | Accepted 2026-10-14 |
-| [328](328-a-face-for-the-document-where-it-has-none.md) | A bundle may give the document a face where it has none | Accepted 2026-10-14 |
+| [328](328-a-face-for-the-document-where-it-has-none.md) | A bundle may give the document a face where it has none | Accepted 2026-10-14; amended by 330 |
 | [329](329-plugins-contribute-a-typed-object-model.md) | Plugins contribute a typed object model; `host.objects` is the one registry | Accepted, recorded retroactively 2026-10-15 |
+| [330](330-a-document-face-lives-as-long-as-its-document.md) | A face given to a document lives as long as that document | Accepted 2026-10-15 |
 
 Decisions made in other repositories that this repository's code rests on are listed in
 [`../README.md`](../README.md).

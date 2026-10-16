@@ -1,12 +1,11 @@
 # Status
 
-What the plugin contract ships and what it does not, read from the code at commit `0dab296`
-(`main`, 2026-10-14): `@paged-media/plugin-api` and `@paged-media/plugin-sdk`
-0.2.55-canary.0, `@paged-media/plugin-cli` 0.1.6, `@paged-media/ai` 0.1.0-canary.4,
-`@paged-media/cli` 0.1.0-canary.0, API version 0.2.0. The engine wire types and the
-capability catalog are vendored from `@paged-media/canvas-wasm` and
-`@paged-media/introspect-wasm` 0.71.8 (protocol 71); the engine has published later 0.71
-patches since, with the same protocol. How the parts fit is in
+What the plugin contract ships and what it does not, read from the code on `main`
+(2026-10-16): `@paged-media/plugin-api` and `@paged-media/plugin-sdk` 0.2.57-canary.0,
+`@paged-media/plugin-cli` 0.1.6, `@paged-media/ai` 0.1.0-canary.4, `@paged-media/cli`
+0.1.0-canary.0, API version 0.2.0. The engine wire types and the capability catalog are
+vendored from `@paged-media/canvas-wasm` and `@paged-media/introspect-wasm` 0.71.12
+(protocol 71). How the parts fit is in
 [`architecture.md`](architecture.md).
 
 ## Shipped
@@ -82,6 +81,11 @@ patches since, with the same protocol. How the parts fit is in
   [ADR 328](adr/328-a-face-for-the-document-where-it-has-none.md)).**
   `host.assets.registerDocumentFont` puts a face in the document registry when the document
   holds none for the family and style; it never replaces one (`assets.documentFont@1`).
+- **A document face lives as long as its document (0.2.57-canary.0,
+  [ADR 330](adr/330-a-document-face-lives-as-long-as-its-document.md)).** The face is
+  dropped before the next document loads and no other document lays out with it; the bundle
+  gives it again on open. The client owns the lifetime (`PagedClient.registerDocumentFont`,
+  implemented by the editor's client and the headless one; `assets.documentFont@2`).
 - **Page navigation and page images (0.2.43-canary.0,
   [ADR 323](adr/323-page-navigation-and-page-images.md)).** `host.viewport.goToPage`,
   `activePage` and `onDidChangeActivePage` over a host `pages` backend (`viewport.pages@1`);

@@ -1,6 +1,8 @@
 # ADR 328 — A bundle may give the document a face where it has none
 
-- **Status:** Accepted, 2026-10-14.
+- **Status:** Accepted, 2026-10-14. Amended 2026-10-15 by
+  [ADR 330](330-a-document-face-lives-as-long-as-its-document.md): the face lives as long as the
+  document it was given to, not the engine session.
 - **Scope:** `AssetSurface.registerDocumentFont` and `DocumentFontOutcome` in
   `packages/plugin-api/src/assets.ts`; its implementation in
   `packages/plugin-sdk/src/host-impl.ts`; the flag `assets.documentFont@1`. Amends DESIGN.md
@@ -54,6 +56,10 @@ call it present.
 - The face is not undoable and is not written into a saved file; a document names its fonts and
   carries no face bytes. The engine keeps the face for the session, for documents opened later
   too. A bundle whose text needs the face in a later session provides it again.
+  **Amended 2026-10-15 ([ADR 330](330-a-document-face-lives-as-long-as-its-document.md)):** a
+  host whose client scopes the face (`assets.documentFont@2`) drops it before the next document
+  loads, so no later document lays out with it; the bundle gives it again each time the document
+  opens.
 - The editor's canvas repaints the pages the registration laid out again only if it marks the
   pages named in the engine's `fontRegistered` reply dirty. That is the editor's render loop, not
   this door.

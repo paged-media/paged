@@ -569,6 +569,22 @@ export interface PagedClient {
   ): Promise<ElementId[]>;
   send(message: MainToWorkerKind): Promise<WorkerToMain>;
   subscribe(listener: (msg: WorkerToMain) => void): () => void;
+  /**
+   * ADR 330 — put a face in the engine's DOCUMENT font registry for the
+   * document open now: the client drops it before the next document loads
+   * (whatever loads it), so no other document lays out with it. Resolves
+   * with the engine's reply (`fontRegistered`, with the pages laid out
+   * again). Rejects when no document is open, or when the document closed
+   * before the face could be registered. Optional: without it
+   * `host.assets.registerDocumentFont` sends `registerFont` itself, the
+   * face lives for the engine session, and
+   * `supports("assets.documentFont@2")` is false.
+   */
+  registerDocumentFont?(
+    family: string,
+    bytes: Uint8Array,
+    style: string | null,
+  ): Promise<WorkerToMain>;
 }
 
 // -------------------------------------------------------- PagedEditor
