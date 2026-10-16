@@ -33,8 +33,8 @@
 // placeholder and deck fields are host-rendered property rows over it.
 //
 // The fonts the deck embeds are decoded by the engine and given to the
-// document before it opens, within their licences (ADR 707); a document
-// reopened later gets them again from the source deck it keeps.
+// deck's document once it is open, within their licences (ADR 707); a
+// document reopened later gets them again from the source deck it keeps.
 
 import type { BundleHandle, BundleHost, Diagnostic } from "@paged-media/plugin-api";
 
@@ -110,8 +110,9 @@ export async function keepSource(host: BundleHost, bytes: Uint8Array, report: Im
 }
 
 /**
- * Give a reopened deck document its embedded fonts again: the faces live
- * for an editing session, and the source deck kept as a container part
+ * Give a reopened deck document its embedded fonts again: a face lives as
+ * long as the document it was given to (plugin-sdk ADR 330; for the editing
+ * session on an older host), and the source deck kept as a container part
  * still holds them. Does nothing for a document that is not a deck.
  */
 export async function reloadEmbeddedFonts(host: BundleHost): Promise<void> {
@@ -167,9 +168,13 @@ export function activate(host: BundleHost): BundleHandle {
     importing = true;
     let fontDiagnostics: Diagnostic[] = [];
     try {
-      // The faces first, so the deck lays out in them from the start.
-      fontDiagnostics = await giveDocumentEmbeddedFonts(host, report.embeddedFonts, fonts);
       await open(idml, documentName(name));
+      // The faces once the deck's document is open: a face belongs to the
+      // document open when it is given and is dropped when that document
+      // closes (plugin-sdk ADR 330), so one given before the open would go
+      // with the document the deck replaces. Before the source is kept, so
+      // the fingerprints are read from the deck as it is drawn.
+      fontDiagnostics = await giveDocumentEmbeddedFonts(host, report.embeddedFonts, fonts);
       await keepSource(host, bytes, report);
     } finally {
       importing = false;
