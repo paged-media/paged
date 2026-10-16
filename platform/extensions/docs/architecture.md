@@ -1,7 +1,7 @@
 # Architecture
 
-How the plugin contract and its tooling are built, at commit `d90f727`. This page is an
-orientation. The long description of the contract, door by door, is
+How the plugin contract and its tooling are built, at commit `d90f727`; the package list and
+the decision-record citations are current at `0dab296`. This page is an orientation. The long description of the contract, door by door, is
 [`../DESIGN.md`](../DESIGN.md), cited below by section (§); the reason behind each choice is
 in an ADR under [`adr/`](adr/README.md). Where `DESIGN.md` and the code differ, this page
 follows the code, and [`status.md`](status.md) lists the differences.
@@ -12,7 +12,9 @@ one member of that object. Within a package's paragraph, `src/…` is relative t
 
 ## Packages
 
-A pnpm workspace with three packages under `packages/`: two in TypeScript and a plain-JavaScript CLI. No wasm is built here.
+A pnpm workspace with five packages under `packages/`: the contract, the runtime and the
+manifest CLI described below, and two packages built on them, the Node CLI and the model
+package. No wasm is built here.
 
 **`packages/plugin-api`** — published as `@paged-media/plugin-api`. The contract, as types
 only: every hand-written file exports only `type` and `interface` declarations, and the
@@ -37,7 +39,18 @@ imported at run time in one module, `src/react-optional.ts`, and the package loa
 it ([ADR 313](adr/313-no-react-at-load.md)).
 
 **`packages/plugin-cli`** — published as `@paged-media/plugin-cli`. One file,
-`bin/paged-plugin.mjs`, one command (`validate`), no dependencies and no build step.
+`bin/paged-plugin.mjs`, no dependencies and no build step. Its commands are `validate`,
+`untyped` (prints the untyped-commands baseline), `integrity` and `modules-upload`
+([ADR 326](adr/326-wasm-resolved-through-the-host.md)).
+
+**`packages/cli`** — `@paged-media/cli`, bin `paged`, not on npm yet. A host over
+`createHeadlessHost` that loads the installed bundles and reads and writes any object through
+`host.objects` ([ADR 324](adr/324-node-cli-over-the-headless-host.md),
+[ADR 329](adr/329-plugins-contribute-a-typed-object-model.md)).
+
+**`packages/ai`** — `@paged-media/ai`, not on npm yet. The model, the system prompt, the tools
+and the loop behind `paged ai` and the editor's Claude integration
+([ADR 325](adr/325-claude-agent-package.md)).
 
 `plugin-sdk` depends on `plugin-api` and takes React as an optional peer; `plugin-api`
 depends only on `@types/react`. `plugin-cli` imports nothing from the other two: it repeats
@@ -111,7 +124,7 @@ only when the host wires the backend.
 |---|---|---|---|---|
 | `manifest`, `log` | the bundle's own manifest; a logger prefixed with its id | none | | §4.1 |
 | `contribute.tool`, `panel`, `command` | register a tool, a React panel, a command | id listed in `contributes.tools` / `panels` / `commands` | | §4.2 |
-| `contribute.schemaPanel`, `bindings` | a panel described as data, and the named values its rows read; a row may be an object-model property field (`{ field: "property", address, path }`, ADR 323) the host renders with its `PropertyField` over `host.objects`, checked by `validatePanelSchema` | id listed in `contributes.panels` | `schemaPanel.renderer@1` | §12, [ADR 312](adr/312-panels-as-data.md) |
+| `contribute.schemaPanel`, `bindings` | a panel described as data, and the named values its rows read; a row may be an object-model property field (`{ field: "property", address, path }`, [ADR 329](adr/329-plugins-contribute-a-typed-object-model.md)) the host renders with its `PropertyField` over `host.objects`, checked by `validatePanelSchema` | id listed in `contributes.panels` | `schemaPanel.renderer@1` | §12, [ADR 312](adr/312-panels-as-data.md) |
 | `contribute.keybinding` | register a key binding | `capabilities.keybindings: true` | | §11 |
 | `contribute.menu` | a menu entry for one of the bundle's commands, for the document or for one edit context | the command listed in `contributes.commands` | | `packages/plugin-api/src/host.ts:341` |
 | `contribute.overlay`, `overlay.setToolPreview`, `setToolPreviews`, `layer` | an overlay, the preview shapes a tool draws while dragging, and retained data-only layers of the bundle's own | `rendering` includes `overlay` | `overlay.multiPreview@1`, `overlay.layers@1` | §4.5, §4.5a, §4.5d |
@@ -132,7 +145,7 @@ only when the host wires the backend.
 | `dataProviders` | publish a dataset, or discover and read one, without the two plugins meeting | `dataProviders.publish` includes the category (to register); `dataProviders.consume` is declared (to discover or read) | `dataProviders@1` | §4.6c |
 | `diagnostics` | findings per plugin, mirrored to the console | none | `diagnostics.publish@1` | §4.7 |
 | `journal` | record a namespaced event or a timing | none | `journal@1` | `packages/plugin-api/src/host.ts:1486` |
-| `widgets` | a code editor component and a colour picker; a plain textarea and a native colour input without a host catalog. Optional: the host's schema-driven `PropertyField` and its `PropertyFrame` (ADR 323), absent without an object-model UI | none | `widgets.codeEditor@1`, `widgets.colorPicker@1`, `widgets.propertyField@1` | [ADR 321](adr/321-host-colour-picker-widget.md) |
+| `widgets` | a code editor component and a colour picker; a plain textarea and a native colour input without a host catalog. Optional: the host's schema-driven `PropertyField` and its `PropertyFrame` ([ADR 329](adr/329-plugins-contribute-a-typed-object-model.md)), absent without an object-model UI | none | `widgets.codeEditor@1`, `widgets.colorPicker@1`, `widgets.propertyField@1` | [ADR 321](adr/321-host-colour-picker-widget.md) |
 | `tools` | read the option values the host holds for the bundle's own tools, and observe changes | the tool id is namespaced under the manifest id | `tools.settings@1` | [ADR 322](adr/322-plugin-hooks-save-entry-tool-settings-undo-labels.md) |
 | `assets` | bytes of a document font face; original bytes of a placed image; register a face that only scene-layer text resolves (`registerFont`); give the document a face it has none for (`registerDocumentFont`, never a replacement, for as long as that document is open) | `assets` includes `fonts` / `images`; `registerDocumentFont` also `document.write` | `assets.fonts@1`, `assets.registerFont@1`, `assets.documentFont@1`, `assets.documentFont@2` | §13, §13.6, §13.7, [ADR 328](adr/328-a-face-for-the-document-where-it-has-none.md), [ADR 330](adr/330-a-document-face-lives-as-long-as-its-document.md) |
 | `images` | serve tiles of a placed image to the renderer on request | `rendering` includes `resourceProvider` | `rendering.resourceProvider@1` | `packages/plugin-api/src/host.ts:497` |

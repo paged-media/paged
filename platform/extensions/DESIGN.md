@@ -1107,7 +1107,7 @@ tree, no drag-reorder, no inline rename; a layers panel that needs
 reordering still reaches for `mutate` (`layerMove`) behind a row action,
 not for a schema affordance that does not exist.
 
-### 12.7 The object-model property row (ADR 323, design §4)
+### 12.7 The object-model property row (ADR 329)
 
 A panel row may name an OBJECT PROPERTY instead of a widget:
 `{ field: "property", address, path, kind? }`. The host renders it with
@@ -2149,13 +2149,18 @@ the optional `PagedEditor.text.measureMany`, `CreateBundleHostOptions.documents`
 the harness options `engineShaper` / `confirmReplace` +
 `openedDocuments()`. No existing member changed.
 
-## 21. The object model (ADR 323 — `contribute.objectModel`, `host.objects`)
+## 21. The object model (ADR 329 — `contribute.objectModel`, `host.objects`)
 
-**Status:** contract + registry + core seam implemented (0.2.44-canary.0;
-the core seam speaks protocol 71, §21.9); the plugins contribute their
-models in the next wave. Records: ADR 131
-(addresses), ADR 132 (schemas, `Set`), ADR 323 (this contract), ADR 324
-(the Node CLI that injects it), all PROPOSED in the thoughts register.
+**Status:** contract, registry and core seam published since
+0.2.45-canary.0 (the core seam speaks protocol 71, §21.9); every
+first-party bundle contributes a model. Records: core ADR 131 (addresses)
+and ADR 132 (schemas, `Set`); [ADR 329](docs/adr/329-plugins-contribute-a-typed-object-model.md)
+(this contract) and [ADR 324](docs/adr/324-node-cli-over-the-headless-host.md)
+(the Node CLI that injects it). The proposal for this contract was numbered
+323, and the code still cites it as "ADR 323"; that number belongs to page
+navigation (ADR 329 records the history). The versions 0.2.43 and 0.2.44
+named below were development versions: the published 0.2.43-canary.0
+carries page navigation and no object model, and 0.2.44 was never published.
 
 **The problem.** A data binding, a Boa script, a CLI and a panel field all
 need to name an object and set one of its properties the same way. Core
@@ -2271,7 +2276,7 @@ editor's object-model shim).
   serves core + the bundle's own kinds); `objects.shared@1` means a shared
   registry is wired.
 
-### 21.6 Divergences from ADR 323 as written, and why
+### 21.6 Divergences from the proposal as written, and why
 
 - `ObjectValue` gains `{ kind: "refused", code, reason }`: an unknown
   address or path is not `absent` ("does not apply to this object").
@@ -2510,10 +2515,10 @@ They are now TYPED COMMANDS beside the plugins' own:
 - **Surfaces.** Node CLI: `paged commands [doc] [--owner core|<id>]` and
   `paged invoke <doc> <commandId> [args.json|{json}]` (saves like every
   write verb); `paged batch` takes `invoke` ops. Boa: every op is already a
-  native `paged.*` fn; a typed command through the BRIDGE needs core's
-  `object_ops` to accept `{op:"invoke"}` and route it to the host (today
-  it recognises set / create / delete only) — a core change, not made
-  here.
+  native `paged.*` fn, and a script's `invoke` and `commands` calls reach
+  the host through the bridge: `answerHostObjectsRound` answers `invoke`
+  (one batch) and `commands`, and maps a script batch's
+  `{ op: "invoke", id, args }` to the SDK op (`script-bridge.ts`).
 
 ### 21.13 The closure rows (core 15f51e3): `asset`, `clearOp`, indexed points
 
@@ -2529,7 +2534,7 @@ Core made the last bindable gaps catalog rows on frames: `imageBytes`
   content (`null` clears) and non-base64 text before the engine;
   `applyDefaults` encodes bytes to the `data:` URI core reads back
   (`assetFromBytes`, MIME by magic, the same table as core). Encoding is
-  lossless, so rule 3 (never coerce silently) holds.
+  lossless, so the rule that a value is never coerced silently holds.
 - **`virtual.clearOp`** (optional) names the op a `null` write resolves
   to when clearing is a different op (`unlinkFrames`,
   `releaseOpacityMask`). Core reads such a cleared row (and a cleared
@@ -2543,9 +2548,10 @@ Core made the last bindable gaps catalog rows on frames: `imageBytes`
 
 ## 22. The Node CLI (ADR 324 — `@paged-media/cli`, bin `paged`)
 
-**Status:** 0.1.0-canary.0 in `packages/cli`, published by `publish.yml`
-beside the contract packages (Trusted Publisher setup for the new package
-is an owner step).
+**Status:** 0.1.0-canary.0 in `packages/cli`, in `publish.yml`'s loop
+beside the contract packages, and not on npm yet: a first publish cannot
+go through trusted publishing, and the loop stops earlier, at the first
+publish of `@paged-media/ai`. Record: [ADR 324](docs/adr/324-node-cli-over-the-headless-host.md).
 
 - **A host, not a client.** `openSession` boots `createHeadlessHost` on the
   published canvas-wasm (protocol read off the booted wasm), loads its own
@@ -2564,9 +2570,10 @@ is an owner step).
   `validateValue`); a failure names the path and the expected type. No
   row: the text passes unconverted (or `--json`), and the owner decides.
 - **`run` is a JS module** with `paged` = `host.objects` + typed commands
-  (+ undo/redo/save/export) — not Boa. Boa stays in core (`paged-core
-  script`); it reaches plugin objects once core's async host bridge
-  (ADR 323) posts `objects.*` to a host — the CLI is such a host.
+  (+ undo/redo/save/export) — not Boa. Boa stays in core (the Rust
+  `paged script`). A Boa script reaches plugin objects through core's
+  protocol-71 host bridge (§21.11, ADR 329); the headless host answers it
+  (`HeadlessHost.runScript`), and `paged ai` runs its scripts that way.
 - **Export door:** `HeadlessHost.exportDocument("paged"|"idml"|"pdf")` (new,
   harness.ts) drives the engine's exportPaged / exportIdml / exportPdf loop;
   plugin formats go through `contribute.exporter` contributions. `export
