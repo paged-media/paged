@@ -9,9 +9,11 @@ ADR numbers are unique across the paged-media repositories, so a number names th
 record wherever it is cited. New records in this repository use 300–349. Records 010, 012
 and 017 predate that scheme and keep their numbers. Records 300–319 were written on
 2026-10-02 from the code as it stood, for decisions made earlier; their status says so.
-Records 314–319 describe decisions that several plugin repositories share. They are kept
-here because this is the repository every plugin depends on, and each one names the plugins
-that follow it and those that do not.
+Records 324 and 329 were written on 2026-10-15 from the code, for decisions made on
+2026-10-06. 329 records the object model, which the code still cites by its proposal number,
+"ADR 323" (see its Numbering section). Records 314–319 describe decisions that several plugin
+repositories share. They are kept here because this is the repository every plugin depends on,
+and each one names the plugins that follow it and those that do not.
 
 | ADR | Title | Status |
 |---|---|---|
@@ -42,10 +44,12 @@ that follow it and those that do not.
 | [321](321-host-colour-picker-widget.md) | The host lends its colour picker as a widget; it never writes the document | Accepted 2026-10-04 |
 | [322](322-plugin-hooks-save-entry-tool-settings-undo-labels.md) | Four host hooks for stateful content plugins: will-save, context entry, tool settings, undo labels | Accepted 2026-10-04 |
 | [323](323-page-navigation-and-page-images.md) | Page navigation and page images: go to a page, the active page, a page as a PNG | Accepted 2026-10-06 |
+| [324](324-node-cli-over-the-headless-host.md) | A Node CLI, `@paged-media/cli`, over the headless host | Accepted, recorded retroactively 2026-10-15 |
 | [325](325-claude-agent-package.md) | Claude for paged is one package: prompt, tools, loop and proxy | Accepted 2026-10-11 |
 | [326](326-wasm-resolved-through-the-host.md) | A bundle resolves its wasm through the host, with integrity | Accepted 2026-10-11 |
 | [327](327-every-committed-change-is-reported.md) | Every committed change to the document is reported: gestures and script runs too | Accepted 2026-10-14 |
 | [328](328-a-face-for-the-document-where-it-has-none.md) | A bundle may give the document a face where it has none | Accepted 2026-10-14 |
+| [329](329-plugins-contribute-a-typed-object-model.md) | Plugins contribute a typed object model; `host.objects` is the one registry | Accepted, recorded retroactively 2026-10-15 |
 
 Decisions made in other repositories that this repository's code rests on are listed in
 [`../README.md`](../README.md).

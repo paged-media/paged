@@ -17,10 +17,15 @@ editor's repository. Everything else is left out on purpose.
 
 ## What it is for
 
-Three packages that change at three different rates. `@paged-media/plugin-api` is the
-contract itself: the manifest, the bundle lifecycle and the host surface, as types only, to
-be frozen at version 1. `@paged-media/plugin-sdk` is the runtime: the host adapter, the
-loader, version negotiation and helpers; it moves faster. `plugin-cli` validates a manifest.
+Five packages. Three of them are the contract and its tooling, and they change at three
+different rates. `@paged-media/plugin-api` is the contract itself: the manifest, the bundle
+lifecycle and the host surface, as types only, to be frozen at version 1.
+`@paged-media/plugin-sdk` is the runtime: the host adapter, the loader, version negotiation
+and helpers; it moves faster. `plugin-cli` validates a manifest. The other two are built on
+them: `@paged-media/cli`, a command line that hosts bundles headlessly and reads and writes
+any object through `host.objects` ([ADR 324](adr/324-node-cli-over-the-headless-host.md),
+[ADR 329](adr/329-plugins-contribute-a-typed-object-model.md)), and `@paged-media/ai`, the
+model package behind `paged ai` ([ADR 325](adr/325-claude-agent-package.md)).
 <!-- source: README.md:7-11; DESIGN.md:79-85 -->
 
 The contract follows a small set of rules:
