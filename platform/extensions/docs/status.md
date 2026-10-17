@@ -1,11 +1,11 @@
 # Status
 
 What the plugin contract ships and what it does not, read from the code on `main`
-(2026-10-17): `@paged-media/plugin-api` and `@paged-media/plugin-sdk` 0.2.58-canary.0,
+(2026-10-17): `@paged-media/plugin-api` and `@paged-media/plugin-sdk` 0.2.59-canary.0,
 `@paged-media/plugin-cli` 0.1.6, `@paged-media/ai` 0.1.0-canary.4, `@paged-media/cli`
 0.1.0-canary.0, API version 0.2.0. The engine wire types and the capability catalog are
-vendored from `@paged-media/canvas-wasm` and `@paged-media/introspect-wasm` 0.71.13
-(protocol 71). How the parts fit is in
+vendored from `@paged-media/canvas-wasm` and `@paged-media/introspect-wasm` 0.72.0
+(protocol 72). How the parts fit is in
 [`architecture.md`](architecture.md).
 
 ## Shipped
@@ -57,7 +57,7 @@ vendored from `@paged-media/canvas-wasm` and `@paged-media/introspect-wasm` 0.71
   interim per-kind table over the protocol-70 wire still answers; there tables and cells
   need `noteTableStory`, and core creates answer `unmapped`. Creates report their new
   addresses in `created[]`, plugin creates included. Core's content and structure
-  operations are 127 typed commands (`core.<op>`), generated from the vendored wire, that
+  operations are 137 typed commands (`core.<op>`), generated from the vendored wire, that
   share a batch's single undo step; eight wire operations are excluded, each with a reason.
   The fix-ups from the first consumers (DESIGN.md §21.8) are in: a plugin-level `batch`,
   one label per plugin per host with merged sub-keys, page and document label hosts,
@@ -83,6 +83,12 @@ vendored from `@paged-media/canvas-wasm` and `@paged-media/introspect-wasm` 0.71
   read (`writes: 0`) is no change; a script that wrote reports the reply's `pageIds`.
   Keyed off presence: a reply without the fields (an older engine) keeps `pagesUnknown`
   (`document.onDidChange@3`, ADR 327 amended).
+- **The 0.72.0 re-sync (0.2.59-canary.0, protocol 72).** The vendored wire and catalog follow
+  engine 0.72.0: ten operations are typed commands — `generateIndex`, `updateCrossReferences`,
+  the editorial-note ops (`insertNote`, `editNote`, `deleteNote`, `convertNoteToText`) and the
+  bookmark ops (`createBookmark`, `renameBookmark`, `moveBookmark`, `deleteBookmark`); the
+  `notes` collection reads, a bookmark summary carries its `parent`, and a PDF export can
+  write the document's bookmarks (`ExportPdfWireOptions.bookmarks`). No new property paths.
 - **The 0.71.13 re-sync (0.2.58-canary.0).** The vendored wire and catalog follow engine
   0.71.13: five operations (footnotes inserted and deleted, hyperlinks edited and deleted,
   the table of contents updated) are typed commands; the twelve document footnote options
