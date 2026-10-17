@@ -413,6 +413,19 @@ pub(crate) fn write_package(
     // The layer new guides bind to (`ItemLayer`): the document's first.
     let default_layer: Option<&str> = doc.designmap.layers.first().map(|l| l.self_id.as_str());
 
+    // A source spread the model no longer holds (its page was removed)
+    // goes, with its designmap reference.
+    let dropped_spread_srcs: Vec<String> = {
+        let model_srcs: std::collections::HashSet<&str> =
+            doc.spreads.iter().map(|s| s.src.as_str()).collect();
+        src.file_names()
+            .map(|n| n.map(|n| n.into_owned()))
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .filter(|n| n.starts_with("Spreads/") && !model_srcs.contains(n.as_str()))
+            .collect()
+    };
+
     for (i, spread) in doc.spreads.iter().enumerate() {
         if let Some(orig) = entry_bytes(&mut src, &spread.src)? {
             // Auto-sizing prefs and guides first (their own passes), then
@@ -591,6 +604,15 @@ pub(crate) fn write_package(
                     source,
                 }
             })?;
+            // A master item's opacity, blend and effects, as a page
+            // item's (179 corpus documents carry transparency on masters).
+            let new =
+                transparency::rewrite_transparency(&new, &master.spread).map_err(|source| {
+                    WriteError::Rewrite {
+                        entry: master.src.clone(),
+                        source,
+                    }
+                })?;
             let new =
                 masters::rewrite_master_name(&new, master.name.as_deref()).map_err(|source| {
                     WriteError::Rewrite {
@@ -926,8 +948,13 @@ pub(crate) fn write_package(
                 entry: DESIGNMAP_SRC.to_string(),
                 source,
             })?;
-        if !dropped_story_srcs.is_empty() {
-            new = emit::patch_designmap(&new, &[], &[], &dropped_story_srcs).map_err(|source| {
+        if !(dropped_story_srcs.is_empty() && dropped_spread_srcs.is_empty()) {
+            let dropped: Vec<String> = dropped_story_srcs
+                .iter()
+                .chain(&dropped_spread_srcs)
+                .cloned()
+                .collect();
+            new = emit::patch_designmap(&new, &[], &[], &dropped).map_err(|source| {
                 WriteError::Rewrite {
                     entry: DESIGNMAP_SRC.to_string(),
                     source,
@@ -1096,7 +1123,10 @@ pub(crate) fn write_package(
             // `write_package`'s doc. `write_paged` keeps them.
             continue;
         }
-        if dropped_story_srcs.contains(&name) || dropped_master_srcs.contains(&name) {
+        if dropped_story_srcs.contains(&name)
+            || dropped_master_srcs.contains(&name)
+            || dropped_spread_srcs.contains(&name)
+        {
             // An orphan story's part (see the stories loop above).
             continue;
         }
