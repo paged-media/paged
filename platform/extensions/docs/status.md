@@ -1,10 +1,10 @@
 # Status
 
 What the plugin contract ships and what it does not, read from the code on `main`
-(2026-10-17): `@paged-media/plugin-api` and `@paged-media/plugin-sdk` 0.2.60-canary.0,
+(2026-10-17): `@paged-media/plugin-api` and `@paged-media/plugin-sdk` 0.2.61-canary.0,
 `@paged-media/plugin-cli` 0.1.6, `@paged-media/ai` 0.1.0-canary.4, `@paged-media/cli`
 0.1.0-canary.0, API version 0.2.0. The engine wire types and the capability catalog are
-vendored from `@paged-media/canvas-wasm` and `@paged-media/introspect-wasm` 0.73.0
+vendored from `@paged-media/canvas-wasm` and `@paged-media/introspect-wasm` 0.73.1
 (protocol 73). How the parts fit is in
 [`architecture.md`](architecture.md).
 
@@ -83,6 +83,9 @@ vendored from `@paged-media/canvas-wasm` and `@paged-media/introspect-wasm` 0.73
   read (`writes: 0`) is no change; a script that wrote reports the reply's `pageIds`.
   Keyed off presence: a reply without the fields (an older engine) keeps `pagesUnknown`
   (`document.onDidChange@3`, ADR 327 amended).
+- **The 0.73.1 re-sync (0.2.61-canary.0, protocol 73).** Two property paths reach a table row
+  through any cell of it: `rowStartRow` (where the row starts, the IDML spelling of
+  `StartParagraph`) and `rowKeepWithNext`. No new operations.
 - **The 0.73.0 re-sync (0.2.60-canary.0, protocol 73).** The vendored wire and catalog follow
   engine 0.73.0: the endnote ops are typed commands — `insertEndnote` (the first endnote also
   makes the endnote story on a page of its own), `deleteEndnote` and
