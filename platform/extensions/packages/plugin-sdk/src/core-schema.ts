@@ -297,6 +297,10 @@ export const CORE_PATHS: Record<PropertyPath, CorePathRow | typeof OP | typeof V
   cellRightEdgeStrokeColor: { scope: "cell", wire: "colorRef", type: { kind: "color" } },
   cellRightEdgeStrokeWeight: { scope: "cell", wire: "length", type: { kind: "length" } },
   cellRightEdgeStrokeTint: { scope: "cell", wire: "length", type: PCT },
+  // A table row's own options, written through any cell of it (core
+  // ADR 175); the catalog types rowStartRow's members.
+  rowStartRow: { scope: "cell", wire: "text", type: { kind: "text" } },
+  rowKeepWithNext: { scope: "cell", wire: "bool", type: { kind: "bool" } },
   tableRowCount: { scope: "table", wire: "length", type: { kind: "number", integer: true }, inferred: true, readOnly: true },
   tableColumnCount: { scope: "table", wire: "length", type: { kind: "number", integer: true }, inferred: true, readOnly: true },
   // Core v0.71.13 (ADR 159): a table's header and footer bands, read-only and
