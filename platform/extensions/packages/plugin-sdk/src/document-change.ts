@@ -23,8 +23,14 @@
 //   gestureCommitted  a canvas gesture (a frame dragged, resized, rotated by
 //                     its handles) committed on the engine — not a mutation
 //   scriptResult      a `paged.*` script finished; it wrote through the model
-//                     without a `mutationApplied`, and the reply does not say
-//                     which pages (or whether anything) changed
+//                     without a `mutationApplied`
+//
+// Since engine 0.71.13 (core ADR 159) two of those replies say more, and
+// this file keys off PRESENCE, never off a version: a gesture that resized
+// one frame carries its `reflow`; a script reply counts its own committed
+// `writes` (0: it only read, so it is no change) and names the `pageIds`
+// those writes changed. A reply without them is an older engine: the script
+// is then a change on pages it does not name (`pagesUnknown`).
 //
 // `document.onDidChange`, the parent index and the core object model all
 // follow the same set, so nothing the host derives from the document can be
@@ -40,26 +46,41 @@ export type ClientMessage = Parameters<Parameters<PagedEditor["client"]["subscri
  *  document, or `null` for every other message. */
 export function documentChangeOf(msg: ClientMessage): DocumentChangeEvent | null {
   switch (msg.kind) {
-    case "mutationApplied": {
-      // Reflow (v38, C-2): only a `resizeFrame` carries it — a content-box
-      // change, never a pure transform (§8.5) — so a pagination consumer
-      // re-splits on a resize and ignores a move.
-      const reflow = msg.payload.reflow;
+    case "mutationApplied":
+    case "gestureCommitted":
+      // Reflow (v38, C-2): a `resizeFrame`, and since 0.71.13 a gesture that
+      // resized ONE frame by its handles, carry it — a content-box change,
+      // never a pure transform (§8.5) — so a pagination consumer re-splits
+      // on a resize and ignores a move.
       return {
         kind: msg.kind,
         pageIds: [...(msg.payload.pageIds ?? [])],
-        ...(reflow ? { reflow: { frameId: reflow.frameId, contentBox: reflow.contentBox } } : {}),
+        ...reflowOf(msg.payload.reflow),
       };
-    }
     case "undoApplied":
     case "redoApplied":
-    case "gestureCommitted":
       return { kind: msg.kind, pageIds: [...(msg.payload.pageIds ?? [])] };
-    case "scriptResult":
-      // The engine reports neither the pages a script touched nor whether it
-      // wrote at all: every page may have changed.
+    case "scriptResult": {
+      const { writes, pageIds } = msg.payload;
+      // The script committed nothing of its own: it only read. (Writes the
+      // host made answering it were `mutationApplied`s of their own.)
+      if (writes === 0) return null;
+      // The pages its writes changed; empty is a write no page draws (a
+      // label), which still changed the document.
+      if (typeof writes === "number" && Array.isArray(pageIds)) {
+        return { kind: msg.kind, pageIds: [...pageIds] };
+      }
+      // An older engine (or no document): neither the pages nor whether it
+      // wrote is known, so every page may have changed.
       return { kind: msg.kind, pageIds: [], pagesUnknown: true };
+    }
     default:
       return null;
   }
+}
+
+function reflowOf(
+  reflow: { frameId: string; contentBox: [number, number, number, number] } | null | undefined,
+): Pick<DocumentChangeEvent, "reflow"> {
+  return reflow ? { reflow: { frameId: reflow.frameId, contentBox: reflow.contentBox } } : {};
 }

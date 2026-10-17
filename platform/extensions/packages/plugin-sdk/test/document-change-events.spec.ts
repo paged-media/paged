@@ -78,7 +78,7 @@ describe("document.onDidChange reports every committed change", () => {
     expect(seen).toEqual([{ kind: "gestureCommitted", pageIds: ["p1", "p2"] }]);
   });
 
-  it("a script run is a change on pages the engine does not name", () => {
+  it("an older engine's script reply (no writes, no pageIds) is a change on pages it does not name", () => {
     const { fake, host } = fakeHost();
     const seen: DocumentChangeEvent[] = [];
     host.document.onDidChange((e) => seen.push(e));
@@ -86,6 +86,67 @@ describe("document.onDidChange reports every committed change", () => {
     fake.emit({ kind: "requestHostObjects", payload: { session: 1, calls: [] } });
     expect(seen).toEqual([]);
     fake.emit({ kind: "scriptResult", payload: { output: [], error: null } });
+    expect(seen).toEqual([{ kind: "scriptResult", pageIds: [], pagesUnknown: true }]);
+  });
+
+  // Core ADR 159 (engine 0.71.13): the gesture reply carries a one-frame
+  // resize's reflow, and the script reply counts its own writes and names
+  // the pages they changed. Keyed off presence: an absent field is an
+  // older engine, which keeps the fallback above.
+  it("a gesture that resized one frame passes its reflow through", () => {
+    const { fake, host } = fakeHost();
+    const seen: DocumentChangeEvent[] = [];
+    host.document.onDidChange((e) => seen.push(e));
+    fake.emit({
+      kind: "gestureCommitted",
+      payload: {
+        handle: 3,
+        appliedSeq: 8,
+        pageIds: ["p1"],
+        cacheStats: {},
+        reflow: { frameId: "f1", contentBox: [10, 10, 110, 250] },
+      },
+    });
+    expect(seen).toEqual([
+      { kind: "gestureCommitted", pageIds: ["p1"], reflow: { frameId: "f1", contentBox: [10, 10, 110, 250] } },
+    ]);
+  });
+
+  it("a script that wrote nothing (writes: 0) is no change", async () => {
+    const { fake, host } = fakeHost();
+    const seen: DocumentChangeEvent[] = [];
+    host.document.onDidChange((e) => seen.push(e));
+    // The parent index follows the same definition: a read-only script
+    // does not drop it.
+    const r1 = { kind: "rectangle", id: "r1" } as ElementId;
+    fake.setSceneTree([{ id: r1, kind: "rectangle", label: "R" }]);
+    const reads = () => fake.sent.filter((m) => m.kind === "requestSceneTree").length;
+    await host.document.parentOf(r1);
+    expect(reads()).toBe(1);
+    fake.emit({ kind: "scriptResult", payload: { output: ["42"], error: null, writes: 0, pageIds: [] } });
+    expect(seen).toEqual([]);
+    await host.document.parentOf(r1);
+    expect(reads()).toBe(1);
+  });
+
+  it("a script that wrote takes its pages from the reply", () => {
+    const { fake, host } = fakeHost();
+    const seen: DocumentChangeEvent[] = [];
+    host.document.onDidChange((e) => seen.push(e));
+    fake.emit({ kind: "scriptResult", payload: { output: [], error: null, writes: 2, pageIds: ["p2"] } });
+    // A write that changes nothing a page draws still changed the document.
+    fake.emit({ kind: "scriptResult", payload: { output: [], error: null, writes: 1, pageIds: [] } });
+    expect(seen).toEqual([
+      { kind: "scriptResult", pageIds: ["p2"] },
+      { kind: "scriptResult", pageIds: [] },
+    ]);
+  });
+
+  it("a script that wrote on a reply without pageIds keeps pagesUnknown", () => {
+    const { fake, host } = fakeHost();
+    const seen: DocumentChangeEvent[] = [];
+    host.document.onDidChange((e) => seen.push(e));
+    fake.emit({ kind: "scriptResult", payload: { output: [], error: null, writes: 1 } });
     expect(seen).toEqual([{ kind: "scriptResult", pageIds: [], pagesUnknown: true }]);
   });
 
@@ -117,6 +178,11 @@ describe("document.onDidChange reports every committed change", () => {
     const { host } = fakeHost();
     expect(host.supports("document.onDidChange@1")).toBe(true);
     expect(host.supports("document.onDidChange@2")).toBe(true);
+  });
+
+  it("advertises the reply-keyed event (gesture reflow, script writes and pages) as document.onDidChange@3", () => {
+    const { host } = fakeHost();
+    expect(host.supports("document.onDidChange@3")).toBe(true);
   });
 
   it("a gesture's commit and a script run drop the parent index", async () => {
@@ -183,9 +249,25 @@ describe("document.onDidChange on the real engine (headless harness)", () => {
 
     expect(seen.map((e) => e.kind)).toEqual(["gestureCommitted"]);
     expect(seen[0].pageIds).toEqual(done.payload.pageIds);
+    // Engine 0.71.13 (core ADR 159): a resize of one frame by its handles
+    // reports the frame's committed content box, as a `resizeFrame` does.
+    expect(done.payload.reflow).toMatchObject({ frameId: "urect" });
+    expect(seen[0].reflow).toEqual(done.payload.reflow);
+    expect(seen[0].reflow!.contentBox[2] - seen[0].reflow!.contentBox[0]).toBeCloseTo(after.bounds[2] - after.bounds[0], 6);
     expect(objectChanges).toBe(1);
     await h.host.document.undo();
     expect(seen.map((e) => e.kind)).toEqual(["gestureCommitted", "undoApplied"]);
+
+    // A move by the handles is display geometry only: no reflow.
+    const moved = await send({ kind: "beginGesture", payload: { nodes: [rect], gesture: { kind: "translate" }, anchor: null } });
+    const moveHandle = moved.payload.handle as number;
+    await send({
+      kind: "updateGesture",
+      payload: { handle: moveHandle, delta: [15, 15], modifiers: { shift: false, alt: false, disableSnap: true } },
+    });
+    await send({ kind: "commitGesture", payload: { handle: moveHandle } });
+    expect(seen.map((e) => e.kind)).toEqual(["gestureCommitted", "undoApplied", "gestureCommitted"]);
+    expect(seen[2].reflow).toBeUndefined();
   });
 
   it("a script that writes is a change, to the document and the object model", async () => {
@@ -198,8 +280,24 @@ describe("document.onDidChange on the real engine (headless harness)", () => {
     const framesBefore = (await h.objects.query("frame")).length;
     const run = await h.runScript(`paged.insertTextFrame(${JSON.stringify(pageId)}, [300, 300, 400, 400]);`);
     expect(run.error).toBeNull();
-    expect(seen).toEqual([{ kind: "scriptResult", pageIds: [], pagesUnknown: true }]);
+    // Engine 0.71.13 names the pages the script's writes changed (a frame
+    // write: every page), so the event is no longer `pagesUnknown`.
+    expect(seen).toEqual([{ kind: "scriptResult", pageIds: [pageId] }]);
     expect(objectChanges).toBe(1);
     expect((await h.objects.query("frame")).length).toBe(framesBefore + 1);
+  });
+
+  it("a script that only reads is no change (engine writes: 0)", async () => {
+    h = await createHeadlessHost({ console: silent });
+    await h.load(minimalIdml());
+    const seen: DocumentChangeEvent[] = [];
+    h.host.document.onDidChange((e) => seen.push(e));
+    let objectChanges = 0;
+    h.objects.onDidChange(() => objectChanges++);
+    const run = await h.runScript("paged.pages();");
+    expect(run.error).toBeNull();
+    expect(run.output.length).toBe(1);
+    expect(seen).toEqual([]);
+    expect(objectChanges).toBe(0);
   });
 });

@@ -38,8 +38,9 @@
 // `type` is now only a FALLBACK: wherever core's catalog types the same
 // path, the pre-71 seam serves the catalog's type, range and default
 // (enum members included) — the wire variant is the same on the older
-// engine. `inferred: true` is left only on the two paths core's catalog
-// gives no row and no probe reached (`tableRowCount`, `tableColumnCount`).
+// engine. `inferred: true` is left only on the four paths core's catalog
+// gives no row (`tableRowCount`, `tableColumnCount`, and since 0.71.13
+// `tableHeaderRowCount`, `tableFooterRowCount`): read-only counts.
 //
 // `wire` is the `Value` variant a WRITE must carry. Rows without `type`
 // are structured values (gradient feather, paragraph rules, tab stops) or
@@ -298,6 +299,12 @@ export const CORE_PATHS: Record<PropertyPath, CorePathRow | typeof OP | typeof V
   cellRightEdgeStrokeTint: { scope: "cell", wire: "length", type: PCT },
   tableRowCount: { scope: "table", wire: "length", type: { kind: "number", integer: true }, inferred: true, readOnly: true },
   tableColumnCount: { scope: "table", wire: "length", type: { kind: "number", integer: true }, inferred: true, readOnly: true },
+  // Core v0.71.13 (ADR 159): a table's header and footer bands, read-only and
+  // unadvertised like the two counts above (the bands change through
+  // insertHeaderRow / removeHeaderRow and their footer twins). An older
+  // engine answers "no such readable path".
+  tableHeaderRowCount: { scope: "table", wire: "length", type: { kind: "number", integer: true }, inferred: true, readOnly: true },
+  tableFooterRowCount: { scope: "table", wire: "length", type: { kind: "number", integer: true }, inferred: true, readOnly: true },
   pluginMetadata: OP,
   anchoredPosition: { scope: "frame", wire: "text", type: { kind: "text" } },
   anchorPoint: { scope: "frame", wire: "text", type: { kind: "text" } },
@@ -375,6 +382,20 @@ export const CORE_PATHS: Record<PropertyPath, CorePathRow | typeof OP | typeof V
   tableStyleEndRowFillCount: V71,
   tableStyleEndRowFillTint: V71,
   itemName: V71,
+  // Core v0.71.13 (ADR 162): the document's footnote options, on the `doc`
+  // address; the catalog types them.
+  documentFootnoteNumberingStyle: V71,
+  documentFootnoteStartAt: V71,
+  documentFootnoteRestartNumbering: V71,
+  documentFootnotePrefix: V71,
+  documentFootnoteSuffix: V71,
+  documentFootnoteShowPrefixSuffix: V71,
+  documentFootnoteEnableStraddling: V71,
+  documentFootnoteNoSplitting: V71,
+  documentFootnoteSpaceBetween: V71,
+  documentFootnoteSpacer: V71,
+  documentFootnoteRuleOn: V71,
+  documentFootnoteContinuingRuleOn: V71,
 };
 
 /** Ranges the SDK knows from core's PropertyPath docs: opacity / tint /
@@ -508,10 +529,9 @@ let schema71: Map<string, Map<string, CoreRow71>> | null = null;
  *  accepts the `Set` and drops it, and `RequestGet` answers null. The SDK
  *  marks them read-only (and unbindable) so a field or a binding cannot
  *  claim a write that never lands. Remove an entry when core models the
- *  value (or flips the row itself). Engine 71 (core f048938). */
-export const CORE_UNSTORED_ROWS: ReadonlyMap<string, string> = new Map([
-  ["cell|cellFillTint", "Per-cell fill tint is not stored by the engine (protocol 71): reads answer null, writes are refused here."],
-]);
+ *  value (or flips the row itself). Empty since engine 0.71.11, which
+ *  stores a cell's fill tint (`cell|cellFillTint`, the only entry it had). */
+export const CORE_UNSTORED_ROWS: ReadonlyMap<string, string> = new Map<string, string>([]);
 
 /** The catalog names a few rows by their Boa ALIAS (`frameInnerShadow`);
  *  the SDK lists every core row under its WIRE path, as the registry

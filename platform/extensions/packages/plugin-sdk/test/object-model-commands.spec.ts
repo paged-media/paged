@@ -147,6 +147,13 @@ describe("core commands on the real engine", () => {
     expect(await h.objects.get(`cell:${tableId}/0,0`, "columnSpan")).toEqual(value(2));
     await run("core.deleteTableRow", { at: 2 });
     expect(await h.objects.get(table, "tableRowCount")).toEqual(value(2));
+    // The bands (core 0.71.13): a header row the host added is counted as one,
+    // and the band counts are read-only (they change through the commands).
+    expect(await h.objects.get(table, "tableHeaderRowCount")).toEqual(value(0));
+    await run("core.insertHeaderRow", {});
+    expect(await h.objects.get(table, "tableHeaderRowCount")).toEqual(value(1));
+    expect(await h.objects.get(table, "tableFooterRowCount")).toEqual(value(0));
+    expect(await h.objects.set(table, "tableHeaderRowCount", 2)).toMatchObject({ applied: false, undoSteps: 0 });
   });
 
   it("structure: duplicate page, move page, insert page by handle — created pages", async () => {

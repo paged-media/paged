@@ -151,7 +151,12 @@ draw B-02). The headless harness records both
   `document-change.ts` is the one definition; the parent index and the core
   object model follow the same set, and the headless client broadcasts
   these replies as the editor's does. Flag `document.onDidChange@2`;
-  ADR 327.
+  ADR 327. Since 0.2.58 (engine 0.71.13, core ADR 159) the event follows
+  what the reply says, keyed off presence: a gesture that resized one frame
+  carries its `reflow`; a script with `writes: 0` only read and is no
+  change; a script that wrote reports the reply's `pageIds`. A reply
+  without those fields (an older engine) keeps the fallback. Flag
+  `document.onDidChange@3`.
 - `onDidOpen(l)` [W-22] — a document became the active one (File ▸ Open,
   File ▸ New, a native-document open): the client's `documentLoaded`
   broadcast, narrowed to `{ docId, pageCount, pageIds, pageSizesPt }`.
@@ -2397,7 +2402,8 @@ salvaged `mutationFailed`), so the probe never hangs. At >= 71
   alias are listed under the wire path the registry canonicalises to;
   style rows are per family (`style:paragraph` …). Nothing is inferred
   except the wire paths core's catalog gives no row
-  (`CORE_ROWLESS_PATHS`: `tableRowCount`, `tableColumnCount`; the thread
+  (`CORE_ROWLESS_PATHS`: `tableRowCount`, `tableColumnCount`, and since
+  engine 0.71.13 `tableHeaderRowCount`, `tableFooterRowCount`; the thread
   links became rows in core 15f51e3, §21.13), which `RequestGet` cannot read
   either: they stay on the old element read (a table's story is found
   through core's query), with a `summary` that says so.
@@ -2455,7 +2461,8 @@ not an address, is refused (`failed`) before anything applies.
   seam (`CORE_UNSTORED_ROWS`): `cell` `cellFillTint` reads null and the
   engine drops the write, so the SDK lists it `readOnly`, not bindable,
   and refuses a set (`readOnly`). The entry goes when core models the
-  per-cell tint or flips the catalog row itself.
+  per-cell tint or flips the catalog row itself. Gone in 0.2.58: engine
+  0.71.11 stores the per-cell tint, and the seam is empty.
 
 ### 21.12 Typed core commands (`core.<op>`, 0.2.45)
 
@@ -2485,7 +2492,9 @@ They are now TYPED COMMANDS beside the plugins' own:
   (`host.objects.set`), `setElementProperty` (superseded by Set),
   `setPluginMetadata` / `setPageMetadata` / `setDocumentMetadata` (labels
   go through the registry's caller-checked label-hash pattern), `onMaster`
-  (wraps a raw Mutation). 122 ops are commands.
+  (wraps a raw Mutation). 127 ops are commands (engine 0.71.13 added
+  insertFootnote, deleteFootnote, editHyperlink, deleteHyperlink and
+  updateTableOfContents).
 - **Addresses in, addresses out.** An id position takes the raw wire id OR
   an address (`story:u1`, `table:<id>`, `page:#2`, `rectangle:u12`,
   `frame:u12`, `$h:<name>`); an `ElementId` position takes an address and
@@ -2544,7 +2553,9 @@ Core made the last bindable gaps catalog rows on frames: `imageBytes`
   `points[].anchor` row and the concrete path goes to core. Core reads
   `curveType` as `Corner` only while both handles sit on the anchor, so
   moving a handle reads `Smooth`.
-- `CORE_ROWLESS_PATHS` shrinks to `tableRowCount` / `tableColumnCount`.
+- `CORE_ROWLESS_PATHS` shrinks to `tableRowCount` / `tableColumnCount`
+  (engine 0.71.13 adds the read-only band counts `tableHeaderRowCount` /
+  `tableFooterRowCount` beside them, core ADR 159).
 
 ## 22. The Node CLI (ADR 324 — `@paged-media/cli`, bin `paged`)
 

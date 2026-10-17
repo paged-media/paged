@@ -188,6 +188,9 @@ describe("protocol 71 — every core address kind round-trips Set / Get", () => 
     // the paths core's catalog has no row for still read (the old
     // element read; a table's story is found through core's query)
     expect(await h.objects.get(o.table, "tableRowCount")).toEqual({ kind: "value", value: 2 });
+    // core 0.71.13 (ADR 159): the header and footer bands read beside it
+    expect(await h.objects.get(o.table, "tableHeaderRowCount")).toEqual({ kind: "value", value: 0 });
+    expect(await h.objects.get(o.table, "tableFooterRowCount")).toEqual({ kind: "value", value: 0 });
     expect(await h.objects.get(o.text, "nextTextFrame")).toMatchObject({ kind: expect.stringMatching(/value|absent/) });
     // a predicate key core's grammar does not know is still answered (SDK evaluation)
     expect(await h.objects.query("page[index=1]")).toEqual(["page:usp"]);
@@ -220,14 +223,14 @@ describe("protocol 71 — schemas come from core's catalog", () => {
     expect((await h.objects.kinds()).map((k) => k.kind)).toEqual(expect.arrayContaining(["textVariable", "gradient", "guide", "section"]));
   });
 
-  it("a row core accepts but does not store is read-only here (cellFillTint: engine 71 reads null, drops the write)", async () => {
+  it("a cell's fill tint is stored (engine 0.71.11): it reads back what was set", async () => {
     const h = (live = await createHeadlessHost({ console: silent }));
     const o = await everything(h);
     const row = (await h.objects.schema(o.cell)).find((r) => r.path === "cellFillTint")!;
-    expect(row).toMatchObject({ access: "readOnly", bindable: false });
-    expect(row.summary).toMatch(/not stored/);
-    expect(await h.objects.set(o.cell, "cellFillTint", 50)).toMatchObject({ applied: false, code: "readOnly", undoSteps: 0 });
-    expect(await h.objects.get(o.cell, "cellFillTint")).toMatchObject({ kind: expect.stringMatching(/value|absent/) });
+    expect(row.access ?? "readWrite").toBe("readWrite");
+    expect(row.summary ?? "").not.toMatch(/not stored/);
+    expect(await h.objects.set(o.cell, "cellFillTint", 50)).toMatchObject({ applied: true, undoSteps: 1 });
+    expect(await h.objects.get(o.cell, "cellFillTint")).toEqual(value(50));
   });
 
   it("final 71 reads: mixed is its own result, refusals carry core's code, null clears a nullable text row", async () => {
@@ -272,8 +275,9 @@ describe("protocol 71 — schemas come from core's catalog", () => {
     const ops = new Set(Object.entries(CORE_PATHS).filter(([, r]) => "op" in r).map(([p]) => p));
     const unexplained = rowless.filter((p) => !ops.has(p) && !catalogPaths.has(aliases.get(p) ?? ""));
     expect(unexplained.sort()).toEqual([...CORE_ROWLESS_PATHS].sort());
-    // (`nextTextFrame` / `previousTextFrame` became catalog rows in core 15f51e3)
-    expect([...CORE_ROWLESS_PATHS].sort()).toEqual(["tableColumnCount", "tableRowCount"]);
+    // (`nextTextFrame` / `previousTextFrame` became catalog rows in core 15f51e3;
+    // the band counts joined the read-only, unadvertised counts in 0.71.13)
+    expect([...CORE_ROWLESS_PATHS].sort()).toEqual(["tableColumnCount", "tableFooterRowCount", "tableHeaderRowCount", "tableRowCount"]);
     const catalog = JSON.parse(
       readFileSync(fileURLToPath(new URL("../../plugin-api/src/catalog.json", import.meta.url)), "utf8"),
     ) as { settablePaths: string[] };

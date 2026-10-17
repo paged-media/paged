@@ -1,9 +1,9 @@
 {
   "$comment": "Where the vendored catalog.json came from, and \u2014 when it leads the published engine \u2014 why that is allowed. `sync-catalog.mjs --check` enforces every claim in this file, in both directions: an unexplained difference fails, and so does an `aheadOfPublished` marker that the publish has since caught up with.",
   "source": "core",
-  "rev": "ee5d9bf",
+  "rev": "c6f329e",
   "targetsProtocol": 71,
   "publishedPackage": "@paged-media/introspect-wasm",
   "aheadOfPublished": false,
-  "why": "IN SYNC as of introspect-wasm@0.71.12 (core@ee5d9bf, tag v0.71.12). Its catalog change: settable paths 234 -> 241 (ADR 153 paragraphAutoLeading, paragraphSingleWordJustification, paragraphLastLineIndent, paragraphBalanceRaggedLines, characterNoBreak; ADR 158 paragraphNumberingLevel, paragraphNumberingApplyRestartPolicy) and the thirteen page-number styles InDesign offers in the section schema (ADR 157). No protocol change (71). Prior: in sync as of introspect-wasm@0.71.8 (core@216de5e)."
+  "why": "IN SYNC as of introspect-wasm@0.71.13 (core@c6f329e, tag v0.71.13). Its catalog change: host functions 161 -> 166 and operations 130 -> 135 (ADR 163 insertFootnote, deleteFootnote; ADR 164 editHyperlink, deleteHyperlink; ADR 165 updateTableOfContents); property schemas 433 -> 445, the twelve document footnote options on the doc address (ADR 162). Settable paths stay 241. The wire also gains the read-only, unadvertised tableHeaderRowCount / tableFooterRowCount (no catalog row, like tableRowCount) and the committed-change fields of ADR 159 (gestureCommitted.reflow, scriptResult.writes / pageIds, PageSummary.pageOrigin / spreadId). No protocol change (71). Prior: in sync as of introspect-wasm@0.71.12 (core@ee5d9bf)."
 }
