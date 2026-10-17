@@ -1,10 +1,10 @@
 # Status
 
 What the plugin contract ships and what it does not, read from the code on `main`
-(2026-10-16): `@paged-media/plugin-api` and `@paged-media/plugin-sdk` 0.2.57-canary.0,
+(2026-10-17): `@paged-media/plugin-api` and `@paged-media/plugin-sdk` 0.2.58-canary.0,
 `@paged-media/plugin-cli` 0.1.6, `@paged-media/ai` 0.1.0-canary.4, `@paged-media/cli`
 0.1.0-canary.0, API version 0.2.0. The engine wire types and the capability catalog are
-vendored from `@paged-media/canvas-wasm` and `@paged-media/introspect-wasm` 0.71.12
+vendored from `@paged-media/canvas-wasm` and `@paged-media/introspect-wasm` 0.71.13
 (protocol 71). How the parts fit is in
 [`architecture.md`](architecture.md).
 
@@ -22,7 +22,7 @@ vendored from `@paged-media/canvas-wasm` and `@paged-media/introspect-wasm` 0.71
   registered. `defineBundle`, `API_VERSION` and `satisfiesApiVersion` come with it.
 - **The host adapter.** `createBundleHost` implements every door in the table in
   `architecture.md`, with the namespace rule and the capability gate (`enforce` by
-  default). `supports()` knows 46 names that are always true and 42 that depend on what
+  default). `supports()` knows 47 names that are always true and 42 that depend on what
   the host wires or, for `gpu@1`, on the manifest. In groups:
   - contributions: tools, React and schema panels, commands, key bindings, menu entries,
     overlays and tool previews, edit contexts with enter, exit, pointer, key, wheel, commit,
@@ -57,7 +57,7 @@ vendored from `@paged-media/canvas-wasm` and `@paged-media/introspect-wasm` 0.71
   interim per-kind table over the protocol-70 wire still answers; there tables and cells
   need `noteTableStory`, and core creates answer `unmapped`. Creates report their new
   addresses in `created[]`, plugin creates included. Core's content and structure
-  operations are 122 typed commands (`core.<op>`), generated from the vendored wire, that
+  operations are 127 typed commands (`core.<op>`), generated from the vendored wire, that
   share a batch's single undo step; eight wire operations are excluded, each with a reason.
   The fix-ups from the first consumers (DESIGN.md §21.8) are in: a plugin-level `batch`,
   one label per plugin per host with merged sub-keys, page and document label hosts,
@@ -77,6 +77,19 @@ vendored from `@paged-media/canvas-wasm` and `@paged-media/introspect-wasm` 0.71
   reports a canvas gesture's commit (`gestureCommitted`) and a script run (`scriptResult`,
   pages unknown) as well as mutations, undos and redos; the parent index, the core object
   model and the headless client follow the same set (`document.onDidChange@2`).
+- **The event follows what the reply says (0.2.58-canary.0, engine 0.71.13, core
+  [ADR 159](https://github.com/paged-media/core/blob/main/docs/adr/159-what-a-committed-change-reports.md)).**
+  A gesture that resized one frame by its handles carries its `reflow`; a script that only
+  read (`writes: 0`) is no change; a script that wrote reports the reply's `pageIds`.
+  Keyed off presence: a reply without the fields (an older engine) keeps `pagesUnknown`
+  (`document.onDidChange@3`, ADR 327 amended).
+- **The 0.71.13 re-sync (0.2.58-canary.0).** The vendored wire and catalog follow engine
+  0.71.13: five operations (footnotes inserted and deleted, hyperlinks edited and deleted,
+  the table of contents updated) are typed commands; the twelve document footnote options
+  are rows on the `doc` address; a table's `tableHeaderRowCount` and `tableFooterRowCount`
+  read beside `tableRowCount` (read-only, typed by the SDK); a page summary may carry its
+  `pageOrigin` and `spreadId`. A cell's fill tint is a writable row again: the engine stores
+  it since 0.71.11, so the SDK no longer marks it read-only (`CORE_UNSTORED_ROWS` is empty).
 - **A face for the document where it has none (0.2.55-canary.0,
   [ADR 328](adr/328-a-face-for-the-document-where-it-has-none.md)).**
   `host.assets.registerDocumentFont` puts a face in the document registry when the document
@@ -115,19 +128,20 @@ vendored from `@paged-media/canvas-wasm` and `@paged-media/introspect-wasm` 0.71
   serves, with Subresource Integrity; `resolveWasm` / `fetchWasm` fall back to the
   bundle-relative URL on a host without it (`modules@1`,
   [ADR 326](adr/326-wasm-resolved-through-the-host.md)).
-- **The Node CLI** (`packages/cli`, bin `paged`,
+- **The Node CLI** (`packages/cli`, bin `paged-node`,
   [ADR 324](adr/324-node-cli-over-the-headless-host.md), DESIGN.md §22). A host over
   `createHeadlessHost` on the canvas-wasm it finds (protocol 70 or later), with its own
   driver bundle and every discovered plugin bundle. Verbs from one table: `get`, `set`,
   `query`, `schema`, `batch`, `create`, `delete`, `commands`, `invoke`, `run`, `export`,
   `apply`, `merge`, `plugins`, `ai` and `describe`. Values are typed by their schema row
-  before they are sent; `export --format pdf` prefers a typed exporter command.
+  before they are sent; `export --format pdf` prefers a typed exporter command. The bin is
+  `paged-node`, not `paged`, which core's Rust CLI installs (ADR 324, amended 2026-10-16).
 - **The model package** (`packages/ai`,
   [ADR 325](adr/325-claude-agent-package.md)): the model and a per-mode table, the system
   prompt (an authoring guide and the engine catalog), the tools `run_script`, `lookup_api`
   and `render_page`, the loop, a direct and a proxy transport, the proxy's server half, the
   catalog as `./catalog`, and `paged.ai.complete`, a typed command a host registers so
-  scripts can ask for text through the script bridge. The CLI's `paged ai` uses it.
+  scripts can ask for text through the script bridge. The CLI's `paged-node ai` uses it.
 - **Guards in CI:** the vendored wire types and catalog must match the published engine at
   the stamped version; a source change in `plugin-api` or `plugin-sdk` must carry a version
   bump; the untyped-command baseline may only shrink; the schema, the TypeScript unions
@@ -190,7 +204,7 @@ vendored from `@paged-media/canvas-wasm` and `@paged-media/introspect-wasm` 0.71
   - `DESIGN.md` §4 and `CLAUDE.md` say reserved members throw `PluginApiNotImplemented`,
     and the header of `packages/plugin-sdk/src/harness.ts` says so of edit contexts and
     object types; both doors register.
-  - `DESIGN.md` §4.3a and §4.3c describe a wire stamped 0.51; it is 0.71.8 and has every
+  - `DESIGN.md` §4.3a and §4.3c describe a wire stamped 0.51; it is 0.71.13 and has every
     operation listed there.
   - `DESIGN.md` §13.4 says the editor serves no font bytes; it answers from the engine
     (`editor: apps/canvas/src/plugin-asset-source.ts`).
