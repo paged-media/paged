@@ -5,5 +5,5 @@
 # CI (scripts/sync-ooxml.sh --check) fails if this tree drifts from the
 # recorded tree hash.
 source = paged-media/plugin-doc
-commit = 77874f94bf890ddeb4df5cb173344433016c924a
-tree = c1f4a5d3bc2038bbba9a6fbdbf3c49d0fe79feaffdce88b4702e06b4a84d892b
+commit = eb5bb5c88d41abeae46d61bdfb89d8b27f13e49d
+tree = e5f29f81423878d5365aa235090d978d39580dd76756bfec399aead4ececde5e
