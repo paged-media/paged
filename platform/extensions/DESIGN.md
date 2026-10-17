@@ -2436,7 +2436,7 @@ salvaged `mutationFailed`), so the probe never hangs. At >= 71
 ### 21.10 `created[]` for plugin creates (0.2.45)
 
 `ObjectWriteResult.created` named core creates only, so a plugin `create`
-(and `paged create plugin:…`) answered no address. A plugin's write now
+(and `paged-node create plugin:…`) answered no address. A plugin's write now
 reports `ObjectWrite.created`: one address per `create` op its planner
 received, in the order received. The registry splices them into the result
 at the ops' batch positions (core and plugin creates interleave in op
@@ -2521,9 +2521,9 @@ They are now TYPED COMMANDS beside the plugins' own:
   `document.write` (refused `denied`); a plugin cannot register a
   `core.`-prefixed command. `commands()` lists core's first (owner
   `"core"`, static: the vendored wire's).
-- **Surfaces.** Node CLI: `paged commands [doc] [--owner core|<id>]` and
-  `paged invoke <doc> <commandId> [args.json|{json}]` (saves like every
-  write verb); `paged batch` takes `invoke` ops. Boa: every op is already a
+- **Surfaces.** Node CLI: `paged-node commands [doc] [--owner core|<id>]` and
+  `paged-node invoke <doc> <commandId> [args.json|{json}]` (saves like every
+  write verb); `paged-node batch` takes `invoke` ops. Boa: every op is already a
   native `paged.*` fn, and a script's `invoke` and `commands` calls reach
   the host through the bridge: `answerHostObjectsRound` answers `invoke`
   (one batch) and `commands`, and maps a script batch's
@@ -2557,7 +2557,7 @@ Core made the last bindable gaps catalog rows on frames: `imageBytes`
   (engine 0.71.13 adds the read-only band counts `tableHeaderRowCount` /
   `tableFooterRowCount` beside them, core ADR 159).
 
-## 22. The Node CLI (ADR 324 — `@paged-media/cli`, bin `paged`)
+## 22. The Node CLI (ADR 324 — `@paged-media/cli`, bin `paged-node`)
 
 **Status:** 0.1.0-canary.0 in `packages/cli`, in `publish.yml`'s loop
 beside the contract packages, and not on npm yet: a first publish cannot
@@ -2584,7 +2584,7 @@ publish of `@paged-media/ai`. Record: [ADR 324](docs/adr/324-node-cli-over-the-h
   (+ undo/redo/save/export) — not Boa. Boa stays in core (the Rust
   `paged script`). A Boa script reaches plugin objects through core's
   protocol-71 host bridge (§21.11, ADR 329); the headless host answers it
-  (`HeadlessHost.runScript`), and `paged ai` runs its scripts that way.
+  (`HeadlessHost.runScript`), and `paged-node ai` runs its scripts that way.
 - **Export door:** `HeadlessHost.exportDocument("paged"|"idml"|"pdf")` (new,
   harness.ts) drives the engine's exportPaged / exportIdml / exportPdf loop;
   plugin formats go through `contribute.exporter` contributions. `export
@@ -2615,9 +2615,12 @@ publish of `@paged-media/ai`. Record: [ADR 324](docs/adr/324-node-cli-over-the-h
   / `Worker` / extension-XHR shims (`src/node-shims.ts`). `apply` carries an
   INTERIM `property` binding (field → typed property, one
   `host.objects.batch`); expressions wait for Binding::Property (Wave 5).
-- **Recorded for core:** the Rust binary `paged` is renamed `paged-core` at
-  the next core tag (`crates/paged-cli/cli.json` `"binary"`, the `[[bin]]`,
-  docs) — not done here.
+- **The bin is `paged-node` (2026-10-16).** Core's Rust CLI installs a
+  `paged` too, and one `PATH` holding both would run whichever comes first.
+  The Node command takes the new name (`BIN` in `src/errors.ts` spells it
+  for the help, usage and error lines); the Rust binary keeps `paged`, and
+  the `paged-core` rename once recorded here for core is withdrawn. ADR 324,
+  amendment of 2026-10-16.
 
 ## 23. The module door (ADR 326 — `host.modules`, `modules@1`)
 

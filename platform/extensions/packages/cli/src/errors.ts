@@ -12,6 +12,10 @@
  *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
  */
 
+/** The command's name: the npm bin and the prefix of every usage and error
+ *  line. Not `paged`, which core's Rust CLI installs (ADR 324 §5). */
+export const BIN = "paged-node";
+
 /** Exit codes (ADR 324 §3): 0 ok, 1 a rejected write or failed check,
  *  2 usage or IO. */
 export const EXIT = { ok: 0, failed: 1, usage: 2 } as const;

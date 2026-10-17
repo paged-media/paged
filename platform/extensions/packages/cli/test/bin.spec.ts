@@ -19,7 +19,7 @@
 // process's. Skips when dist is absent (CI builds before the suite).
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -48,6 +48,19 @@ describe.skipIf(!existsSync(BIN))("dist/bin.js", () => {
     expect(refused.status).toBe(1);
     expect(JSON.parse(refused.stdout).error.exit).toBe(1);
     expect(spawnSync(process.execPath, [BIN, "nope"], { encoding: "utf8" }).status).toBe(2);
+  });
+
+  it("introduces itself as paged-node, the name package.json installs it under", () => {
+    const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+    expect(Object.keys(pkg.bin)).toEqual(["paged-node"]);
+    expect(join(fileURLToPath(new URL("..", import.meta.url)), pkg.bin["paged-node"])).toBe(BIN);
+    const help = spawnSync(process.execPath, [BIN, "--help"], { encoding: "utf8" });
+    expect(help.status).toBe(0);
+    expect(help.stdout).toMatch(/^paged-node \S+ — the paged Node CLI/);
+    expect(help.stdout).toContain("usage: paged-node <verb> [args] [options]");
+    const refused = spawnSync(process.execPath, [BIN, "set", fx.paged, "swatch:Black", "space", "X", "--text", "--no-save", "--no-plugins"], { encoding: "utf8" });
+    expect(refused.status).toBe(1);
+    expect(refused.stderr).toMatch(/^paged-node: swatch:Black space/m);
   });
 
   it("exports a PDF", () => {

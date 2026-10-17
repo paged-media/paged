@@ -12,7 +12,7 @@
  *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
  */
 
-// `paged ai <doc> <brief>` — Claude writes and runs paged.* scripts against
+// `paged-node ai <doc> <brief>` — Claude writes and runs paged.* scripts against
 // the document until the brief is done, then the result is saved. The
 // model call goes straight to Anthropic with the caller's credential
 // (ANTHROPIC_API_KEY, or an `ant auth login` profile); the scripts run here,

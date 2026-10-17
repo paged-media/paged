@@ -25,6 +25,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { parseArgs } from "../src/args";
+import { BIN } from "../src/errors";
 import { openSession, type CliSession } from "../src/session";
 import { GLOBAL_OPTIONS, VERBS } from "../src/verbs";
 import { cli, tempDir, writeFixture } from "./helpers";
@@ -257,7 +258,26 @@ describe("usage, help and exit codes", () => {
     const e = await cli(["set", fx.paged, "swatch:Black", "space", "X", "--text", "--no-save", NP]);
     expect(e.code).toBe(1);
     expect(e.out).toBe("");
-    expect(e.err).toMatch(/^paged: swatch:Black space/);
+    expect(e.err).toMatch(/^paged-node: swatch:Black space/);
+  });
+
+  // The command is `paged-node`: core's Rust CLI installs `paged`, and the
+  // two would shadow each other on one PATH (ADR 324 §5).
+  it("the command is named paged-node: bin, help, usage and error lines", async () => {
+    const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+    expect(pkg.bin).toEqual({ "paged-node": "./dist/bin.js" });
+    expect(BIN).toBe("paged-node");
+    const help = await cli(["--help"]);
+    expect(help.out.split("\n")[0]).toMatch(/^paged-node \S+ — the paged Node CLI/);
+    expect(help.out).toContain("usage: paged-node <verb> [args] [options]");
+    expect(help.out).toContain("Run `paged-node <verb> --help`");
+    expect(help.out).toContain("(`paged-node commands` lists them;");
+    // No line names the command `paged` on its own.
+    expect(help.out).not.toMatch(/(^|[\s`])paged (<verb>|commands|[a-z]+ --help)/m);
+    expect((await cli(["get", "--help"])).out.split("\n")[0]).toBe(`paged-node get ${VERBS.find((v) => v.name === "get")!.usage}`);
+    const usage = await cli(["get", fx.paged]);
+    expect(usage.code).toBe(2);
+    expect(usage.json.error.message).toMatch(/^usage: paged-node get /);
   });
 });
 

@@ -43,13 +43,13 @@ it ([ADR 313](adr/313-no-react-at-load.md)).
 `untyped` (prints the untyped-commands baseline), `integrity` and `modules-upload`
 ([ADR 326](adr/326-wasm-resolved-through-the-host.md)).
 
-**`packages/cli`** — `@paged-media/cli`, bin `paged`, not on npm yet. A host over
+**`packages/cli`** — `@paged-media/cli`, bin `paged-node`, not on npm yet. A host over
 `createHeadlessHost` that loads the installed bundles and reads and writes any object through
 `host.objects` ([ADR 324](adr/324-node-cli-over-the-headless-host.md),
 [ADR 329](adr/329-plugins-contribute-a-typed-object-model.md)).
 
 **`packages/ai`** — `@paged-media/ai`, not on npm yet. The model, the system prompt, the tools
-and the loop behind `paged ai` and the editor's Claude integration
+and the loop behind `paged-node ai` and the editor's Claude integration
 ([ADR 325](adr/325-claude-agent-package.md)).
 
 `plugin-sdk` depends on `plugin-api` and takes React as an optional peer; `plugin-api`

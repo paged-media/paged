@@ -1,6 +1,7 @@
 # ADR 325 — Claude for paged is one package: prompt, tools, loop and proxy
 
-- **Status:** Accepted, 2026-10-11.
+- **Status:** Accepted, 2026-10-11. Amended 2026-10-16: the CLI command is `paged-node ai`
+  (see the amendment below).
 - **Scope:** `packages/ai` (`@paged-media/ai`, entries `.`, `./proxy`, `./catalog`); the `ai` verb
   and the `paged.ai.complete` registration in `packages/cli`; `HeadlessHost.newBlank` in
   `packages/plugin-sdk/src/harness.ts`.
@@ -61,3 +62,12 @@ no protocol bump.
   rewrites the cache for every user.
 - Tests replace the model with canned turns and run everything else for real, the engine
   included. A live run needs a credential and is a manual smoke test.
+
+## Amendment — 2026-10-16: the command is `paged-node ai`
+
+The Node CLI's bin is renamed from `paged` to `paged-node`, because core's Rust CLI also installs
+a `paged` ([ADR 324](324-node-cli-over-the-headless-host.md), amendment of the same date). The
+verb is unchanged: `paged ai <doc> <brief>` above is now `paged-node ai <doc> <brief>`, and
+`paged ai --new <size> <brief> -o out.paged` is `paged-node ai --new <size> <brief> -o
+out.paged`. `paged.ai.complete` is a typed command inside a script, not a command line, and
+keeps its name.

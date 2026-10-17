@@ -15,10 +15,10 @@
 // The entry point: `main(argv)` parses against the verb table, runs the
 // verb over a session, prints JSON (or --text / --format text), and answers
 // an exit code. In-process callable (the tests drive it), and what the
-// `paged` bin runs.
+// `paged-node` bin runs.
 
 import { parseArgs, flagBool, flagStr, type OptionSpec, type ParsedArgs } from "./args";
-import { CliError, EXIT } from "./errors";
+import { BIN, CliError, EXIT } from "./errors";
 import { cliVersion, engineVersionOnDisk, openSession, type CliSession } from "./session";
 import { GLOBAL_OPTIONS, sessionOptions, VERBS, type Verb } from "./verbs";
 
@@ -36,13 +36,13 @@ const processIO: MainIO = {
 const optionLine = (o: OptionSpec): string =>
   `  ${[o.short ? `-${o.short}` : null, `--${o.name}${o.value ? ` <${o.value}>` : ""}`].filter(Boolean).join(", ").padEnd(34)} ${o.help}${o.repeat ? " (repeatable)" : ""}`;
 
-/** `paged --help`, generated from the verb table. */
+/** `paged-node --help`, generated from the verb table. */
 export function helpText(): string {
   const width = Math.max(...VERBS.map((v) => v.name.length + v.usage.length + 1));
   return [
-    `paged ${cliVersion()} — the paged Node CLI over core and every installed plugin (ADR 324)`,
+    `${BIN} ${cliVersion()} — the paged Node CLI over core and every installed plugin (ADR 324)`,
     "",
-    "usage: paged <verb> [args] [options]",
+    `usage: ${BIN} <verb> [args] [options]`,
     "",
     "verbs:",
     ...VERBS.map((v) => `  ${`${v.name} ${v.usage}`.padEnd(width + 2)} ${v.summary}`),
@@ -54,13 +54,13 @@ export function helpText(): string {
     "Exit codes: 0 ok · 1 rejected write or failed check · 2 usage or IO error.",
     "Addresses: doc, page:#1, textFrame:<id>, story:<id>, storyRange:<id>@a..b, swatch:<name>, style:<family>/<name>,",
     "  layer:<id>, plugin:<pluginId>/<kind>/<id>. Selectors: swatch[name=Black], frame[label.<key>=v], page:#1 > frame.",
-    "Run `paged <verb> --help` for a verb's options.",
+    `Run \`${BIN} <verb> --help\` for a verb's options.`,
   ].join("\n");
 }
 
 export function verbHelp(v: Verb): string {
   return [
-    `paged ${v.name} ${v.usage}`,
+    `${BIN} ${v.name} ${v.usage}`,
     "",
     v.summary,
     "",
@@ -104,7 +104,7 @@ export async function main(argv: readonly string[], io: MainIO = processIO): Pro
     }
     text = textMode(args, verb);
     if (args.positionals.length < verb.min || args.positionals.length > verb.max) {
-      throw new CliError(EXIT.usage, `usage: paged ${verb.name} ${verb.usage}`);
+      throw new CliError(EXIT.usage, `usage: ${BIN} ${verb.name} ${verb.usage}`);
     }
     const options = sessionOptions(args, cwd);
     const result = await verb.run({
@@ -120,7 +120,7 @@ export async function main(argv: readonly string[], io: MainIO = processIO): Pro
     return result.exit ?? EXIT.ok;
   } catch (err) {
     const e = err instanceof CliError ? err : new CliError(EXIT.failed, err instanceof Error ? (err.stack ?? err.message) : String(err));
-    if (text) io.stderr(`paged: ${e.message}`);
+    if (text) io.stderr(`${BIN}: ${e.message}`);
     else io.stdout(JSON.stringify({ error: { message: e.message, exit: e.exit, ...(e.detail ?? {}) } }, null, 2));
     return e.exit;
   } finally {
