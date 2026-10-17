@@ -122,7 +122,7 @@ async function everything(h: HeadlessHost) {
 describe("protocol 71 — every core address kind round-trips Set / Get", () => {
   it("one representative writable path per kind, read back through RequestGet", async () => {
     const h = (live = await createHeadlessHost({ console: silent }));
-    expect(h.protocolVersion).toBe(72);
+    expect(h.protocolVersion).toBe(73);
     const o = await everything(h);
     const cases: Array<[address: string, path: string, value: unknown]> = [
       ["doc", "documentBleedTop", 9],

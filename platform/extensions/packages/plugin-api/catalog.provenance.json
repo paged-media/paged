@@ -1,9 +1,9 @@
 {
   "$comment": "Where the vendored catalog.json came from, and \u2014 when it leads the published engine \u2014 why that is allowed. `sync-catalog.mjs --check` enforces every claim in this file, in both directions: an unexplained difference fails, and so does an `aheadOfPublished` marker that the publish has since caught up with.",
   "source": "core",
-  "rev": "9d5d184",
-  "targetsProtocol": 72,
+  "rev": "4114445",
+  "targetsProtocol": 73,
   "publishedPackage": "@paged-media/introspect-wasm",
   "aheadOfPublished": false,
-  "why": "IN SYNC as of introspect-wasm@0.72.0 (core@9d5d184, tag v0.72.0; protocol 72). Its catalog change: host functions 166 -> 176 and operations 135 -> 145 (ADR 168 generateIndex; ADR 169 updateCrossReferences; ADR 172 insertNote, editNote, deleteNote, convertNoteToText; ADR 173 createBookmark, deleteBookmark, renameBookmark, moveBookmark). Property schemas stay 445 and settable paths 241. The wire also gains the notes collection (NoteSummary), BookmarkSummary.parent and ExportPdfWireOptions.bookmarks (ADR 171). Prior: in sync as of introspect-wasm@0.71.13 (core@c6f329e)."
+  "why": "IN SYNC as of introspect-wasm@0.73.0 (core@4114445, tag v0.73.0; protocol 73). Its catalog change: host functions 176 -> 179 and operations 145 -> 148 (ADR 174 insertEndnote, deleteEndnote, convertFootnoteToEndnote). Property schemas stay 445 and settable paths 241. The wire also gains the endnotes collection (EndnoteSummary). Prior: in sync as of introspect-wasm@0.72.0 (core@9d5d184)."
 }

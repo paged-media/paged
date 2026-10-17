@@ -94,7 +94,7 @@ describe("guard — every catalog operation is a typed command or excluded with 
 
 async function boot() {
   const h = (live = await createHeadlessHost({ console: silent }));
-  expect(h.protocolVersion).toBe(72);
+  expect(h.protocolVersion).toBe(73);
   await h.load(minimalIdml());
   const made = await h.objects.batch([
     { op: "create", kind: "textFrame", within: "page:#1", props: { frameBounds: [10, 10, 100, 200] }, handle: "t" },
