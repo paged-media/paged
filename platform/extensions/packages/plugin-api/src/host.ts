@@ -963,9 +963,11 @@ export interface WillSaveEvent {
  * - `undoApplied` / `redoApplied` — an undo or a redo;
  * - `gestureCommitted` — a canvas gesture (a frame dragged, resized or
  *   rotated by its handles) committed on the engine (0.2.55);
- * - `scriptResult` — a `paged.*` script finished (0.2.55). The engine names
- *   neither its pages nor whether it wrote, so `pageIds` is empty and
- *   `pagesUnknown` is set: treat every page as changed.
+ * - `scriptResult` — a `paged.*` script that wrote finished (0.2.55). On an
+ *   engine from 0.71.13 (0.2.58, `document.onDidChange@3`) a script that only
+ *   read is no change, and `pageIds` are the pages its writes changed. On an
+ *   older engine the reply names neither, so every script run is a change,
+ *   `pageIds` is empty and `pagesUnknown` is set: treat every page as changed.
  *
  * A host from before 0.2.55 reports the first three only; probe
  * `supports("document.onDidChange@2")` for the full set.
@@ -980,17 +982,20 @@ export interface DocumentChangeEvent {
   /** The pages whose content the change touched (empty: none, unless
    *  `pagesUnknown`). */
   pageIds: PageId[];
-  /** Set when the host cannot say which pages changed (a script run):
-   *  `pageIds` is then empty and any page may have changed. */
+  /** Set when the host cannot say which pages changed (a script run on an
+   *  engine older than 0.71.13): `pageIds` is then empty and any page may
+   *  have changed. */
   pagesUnknown?: true;
   /** Content-box reflow (protocol v38, C-2/S-05): present ONLY when the
-   *  change RESIZED a frame's content box (a `resizeFrame`) — never on a
-   *  pure transform (move/scale/rotate is display-only, §8.5). A
-   *  pagination consumer re-splits on this and ignores transform-only
-   *  changes (where it is absent). The engine reports it for a
-   *  `resizeFrame` mutation only: a `gestureCommitted` never carries it,
-   *  even for a resize by the handles, so a consumer that follows frame
-   *  sizes re-reads geometry on a gesture commit. */
+   *  change RESIZED a frame's content box — never on a pure transform
+   *  (move/scale/rotate is display-only, §8.5). A pagination consumer
+   *  re-splits on this and ignores transform-only changes (where it is
+   *  absent). The engine reports it for a `resizeFrame` mutation and, from
+   *  0.71.13 (`document.onDidChange@3`), for a `gestureCommitted` that
+   *  resized ONE frame by its handles. A resize of several frames at once
+   *  carries none, as a batch of `resizeFrame`s does not; nor does a
+   *  gesture commit on an older engine, so a consumer that follows frame
+   *  sizes there re-reads geometry on a gesture commit. */
   reflow?: { frameId: string; contentBox: [number, number, number, number] };
 }
 
@@ -1292,9 +1297,12 @@ export interface DocumentSurface {
    * mutation, an undo or redo, a canvas gesture's commit, a script run
    * (see {@link DocumentChangeEvent} for the kinds). A gesture still in
    * flight, a cancelled one and a script suspended on the host's objects
-   * are not changes. Gated on `capabilities.document.read`. Probe
+   * are not changes, nor (from engine 0.71.13) a script that only read.
+   * Gated on `capabilities.document.read`. Probe
    * `supports("document.onDidChange@2")`: a host without it reports
-   * mutations, undos and redos only.
+   * mutations, undos and redos only. `document.onDidChange@3`: the host
+   * passes a gesture's `reflow` and a script's pages through when the
+   * engine sends them.
    */
   onDidChange(listener: (e: DocumentChangeEvent) => void): Disposable;
   /**

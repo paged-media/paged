@@ -2,7 +2,8 @@
 
 - **Status:** Accepted. Recorded retroactively on 2026-10-15 from the code at `0dab296`. The
   package is `packages/cli` at 0.1.0-canary.0; it is not on npm yet (see Consequences). The
-  design notes are [`DESIGN.md`](../../DESIGN.md) §22.
+  design notes are [`DESIGN.md`](../../DESIGN.md) §22. Amended 2026-10-16: the bin is
+  `paged-node` (see the amendment below; it supersedes §5).
 - **Scope:** `packages/cli` (`src/session.ts`, `src/plugins.ts`, `src/verbs.ts`,
   `src/values.ts`, `src/errors.ts`, `src/data.ts`, `src/node-shims.ts`, `src/main.ts`,
   `src/bin.ts`), `HeadlessHost.exportDocument` in `packages/plugin-sdk/src/harness.ts`, and the
@@ -111,6 +112,26 @@ The npm bin is `paged`. The Rust binary is also named `paged`; the proposal rena
   ([ADR 306](306-canary-releases.md)), so a change to the CLI without a version bump publishes
   nothing.
 - The Rust CLI stays for core-only work and CI.
+
+## Amendment — 2026-10-16: the bin is `paged-node`
+
+§5 is superseded. The npm bin is `paged-node`, and core's Rust CLI keeps the name `paged`; the
+`paged-core` rename §5 recorded for core is withdrawn. Both commands install a binary, and one
+`PATH` that holds both would run whichever comes first under the name `paged`. Renaming the Node
+command touches one package that has never been published; renaming the Rust one would break
+the scripts and CI that already call it.
+
+- `packages/cli/package.json` — `"bin": { "paged-node": "./dist/bin.js" }`.
+- `packages/cli/src/errors.ts` — `BIN`, the one place the name is spelled. The help text, a
+  verb's help, the usage and error lines and the hints that name another verb read it.
+- `packages/cli/test/cli-core.spec.ts` and `test/bin.spec.ts` — the bin key, the help text,
+  the usage line and the error prefix, in-process and through the built `dist/bin.js`.
+
+Every verb, option, output and exit code is unchanged: `paged get …` is now `paged-node get …`,
+and `paged ai …` is `paged-node ai …` ([ADR 325](325-claude-agent-package.md)). The package is
+still `@paged-media/cli` at 0.1.0-canary.0, and the `media.paged.cli` driver bundle keeps its
+id. Text that names the Rust CLI keeps `paged`: `paged script`, and `paged describe` for the
+engine's catalog (the Node CLI's own `describe` verb is `paged-node describe`).
 
 ## Related
 

@@ -5,7 +5,7 @@
   "license": "MPL-2.0 OR LicenseRef-PMEL",
   "type": "module",
   "bin": {
-    "paged": "./dist/bin.js"
+    "paged-node": "./dist/bin.js"
   },
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -27,7 +27,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.128.0",
-    "@paged-media/canvas-wasm": "0.71.12"
+    "@paged-media/canvas-wasm": "0.71.13"
   },
   "peerDependencies": {
     "@duckdb/duckdb-wasm": "1.29.0"

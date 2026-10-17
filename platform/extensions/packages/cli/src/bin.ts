@@ -13,6 +13,7 @@
  *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
  */
 
+import { BIN } from "./errors";
 import { main } from "./main";
 
 // stdout carries the verb's JSON only: the engine and the bundles log through
@@ -28,7 +29,7 @@ main(process.argv.slice(2)).then(
     process.exitCode = code;
   },
   (err) => {
-    process.stderr.write(`paged: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`);
+    process.stderr.write(`${BIN}: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`);
     process.exitCode = 2;
   },
 );

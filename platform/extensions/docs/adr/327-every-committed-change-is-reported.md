@@ -4,7 +4,8 @@
 - **Scope:** `DocumentChangeEvent` and `DocumentSurface.onDidChange` in
   `packages/plugin-api/src/host.ts`; `packages/plugin-sdk/src/document-change.ts`; the parent
   index in `host-impl.ts`, the core object model's cache in `core-objects-v70.ts`, the headless
-  client's `send` in `harness.ts`; the flag `document.onDidChange@2`.
+  client's `send` in `harness.ts`; the flag `document.onDidChange@2` (and `@3`, amended
+  2026-10-16 under Consequences).
 
 ## Context
 
@@ -57,6 +58,16 @@ as edits. The headless harness handed only `mutate`, `undo` and `redo` replies t
 - A resize by the handles still carries no `reflow`. A pagination consumer that re-splits only
   on `reflow` does not re-split after it; reporting the content box on the gesture commit is a
   change in the engine.
+- **2026-10-16 (0.2.58-canary.0, engine 0.71.13):** the engine made that change, and the two
+  consequences above hold only on an older engine. Core
+  [ADR 159](https://github.com/paged-media/core/blob/main/docs/adr/159-what-a-committed-change-reports.md)
+  adds `reflow` to `gestureCommitted` (a resize of one frame by its handles) and `writes` and
+  `pageIds` to `scriptResult`. `document-change.ts` keys off their presence: a gesture passes
+  its `reflow` through; a script with `writes: 0` only read and is no change, so it reaches
+  neither `onDidChange` nor the parent index nor the core object model; a script that wrote
+  reports the reply's `pageIds`. `pageIds: []` with `pagesUnknown: true` remains for a reply
+  without those fields (an engine older than 0.71.13). The flag `document.onDidChange@3` says
+  the host reads them.
 
 ## Related
 

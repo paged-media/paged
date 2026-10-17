@@ -670,9 +670,10 @@ function makeEngineEditor(
       const reply = dispatch(m.kind, m.payload);
       note(m.kind, m.payload, reply);
       // A reply that committed a change (a gesture's `gestureCommitted`, a
-      // script's `scriptResult`, a raw `mutate`/`undo`/`redo`) reaches the
-      // subscribers, as the editor's client hands every reply to them
-      // (ADR 327). Pure reads (hitTest, requestSceneTree, …) do not.
+      // script's `scriptResult` unless it only read, a raw
+      // `mutate`/`undo`/`redo`) reaches the subscribers, as the editor's
+      // client hands every reply to them (ADR 327). Pure reads (hitTest,
+      // requestSceneTree, a read-only script, …) do not.
       if (documentChangeOf(reply) !== null) fanOut(reply);
       return reply;
     },

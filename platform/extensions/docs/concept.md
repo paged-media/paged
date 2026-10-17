@@ -25,7 +25,7 @@ and helpers; it moves faster. `plugin-cli` validates a manifest. The other two a
 them: `@paged-media/cli`, a command line that hosts bundles headlessly and reads and writes
 any object through `host.objects` ([ADR 324](adr/324-node-cli-over-the-headless-host.md),
 [ADR 329](adr/329-plugins-contribute-a-typed-object-model.md)), and `@paged-media/ai`, the
-model package behind `paged ai` ([ADR 325](adr/325-claude-agent-package.md)).
+model package behind `paged-node ai` ([ADR 325](adr/325-claude-agent-package.md)).
 <!-- source: README.md:7-11; DESIGN.md:79-85 -->
 
 The contract follows a small set of rules:

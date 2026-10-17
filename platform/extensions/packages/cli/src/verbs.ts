@@ -25,7 +25,7 @@ import { normalizeAddress, parseSelector, validateValue } from "@paged-media/plu
 import { AI_OPTIONS, parsePageSize, runAiVerb } from "./ai";
 import { flagBool, flagList, flagNumber, flagStr, type OptionSpec, type ParsedArgs } from "./args";
 import { applyBindings, dataSession, loadRecords, mergeOnce, readBindings, selectRecord, type MergeFlags } from "./data";
-import { CliError, EXIT } from "./errors";
+import { BIN, CliError, EXIT } from "./errors";
 import { baseName, openSession, writeOutput, type CliSession, type SessionOptions } from "./session";
 import { describeType, parseCliValue } from "./values";
 
@@ -227,7 +227,7 @@ const schema: Verb = {
       };
     }
     const rows = await s.h.objects.schema(what);
-    if (rows.length === 0) throw new CliError(EXIT.failed, `no kind or object "${what}" (see \`paged schema <doc>\`)`);
+    if (rows.length === 0) throw new CliError(EXIT.failed, `no kind or object "${what}" (see \`${BIN} schema <doc>\`)`);
     return {
       json: { of: what, rows },
       text: rows.map((r) => `${r.path.padEnd(32)} ${describeType(r.type)}${r.access && r.access !== "readWrite" ? ` [${r.access}]` : ""}`).join("\n"),
@@ -424,7 +424,7 @@ const run: Verb = {
 /** The first-party typed PDF exporter (paged.publish). */
 export const PUBLISH_EXPORT_PDF = "media.paged.publish.exportPdf";
 
-/** The typed command `paged export --format pdf` routes through: `--via`,
+/** The typed command `paged-node export --format pdf` routes through: `--via`,
  *  else paged.publish's `exportPdf`, else any `<plugin>.exportPdf`; null
  *  = core's own PDF door. */
 async function pdfCommand(s: CliSession, via: string | undefined): Promise<ObjectCommandInfo | null> {
@@ -688,7 +688,7 @@ const invoke: Verb = {
   name: "invoke",
   usage: "<doc> <commandId> [args.json|{json}]",
   summary:
-    "run one typed command (`paged commands` lists them; a core command is ONE undo step and answers created[]: what it made), then save",
+    `run one typed command (\`${BIN} commands\` lists them; a core command is ONE undo step and answers created[]: what it made), then save`,
   min: 2,
   max: 3,
   options: [OUT, NO_SAVE, OUTPUT_FORMAT],
@@ -698,7 +698,7 @@ const invoke: Verb = {
     const given = argsArg !== undefined ? readJsonObject(cwd, argsArg, "args") : {};
     const s = await session(doc);
     const known = (await s.h.objects.commands()).find((c) => c.id === id);
-    if (!known) throw new CliError(EXIT.usage, `no typed command "${id}" (see \`paged commands ${doc}\`)`);
+    if (!known) throw new CliError(EXIT.usage, `no typed command "${id}" (see \`${BIN} commands ${doc}\`)`);
     let result: unknown;
     try {
       result = await s.h.objects.invoke(id, given);

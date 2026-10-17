@@ -224,6 +224,13 @@ export const HOST_FEATURES: readonly string[] = [
   // editor's client hands every reply to its subscribers, and the headless
   // harness does the same for these.
   "document.onDidChange@2",
+  // Core ADR 159 — the event follows what the reply says: a gesture that
+  // resized one frame carries its `reflow`, a script that only read is no
+  // change (`writes: 0`), and a script's `pageIds` come from the reply.
+  // STATIC like @2: the flag says this SDK reads the fields; an engine older
+  // than 0.71.13 does not send them, and the event then falls back to @2's
+  // (no gesture reflow; every script a change with `pagesUnknown`).
+  "document.onDidChange@3",
   // W-22 — the document-opened event. STATIC: it is the client's
   // `documentLoaded` broadcast filtered, and every host posts that on
   // every load (File ▸ Open, File ▸ New, a native-document open).
