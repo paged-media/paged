@@ -185,7 +185,10 @@ impl LinkCollector {
 /// `CODE 1.jpg`). Shared with the loss ledger so both sides name the
 /// same file.
 pub fn link_file_name(uri: &str) -> String {
-    let tail = uri.rsplit(['/', '\\']).next().unwrap_or(uri);
+    // A relative `file:` URI (`file:photo.png`) has no slash before
+    // its name; the scheme is not part of it.
+    let path = uri.strip_prefix("file:").unwrap_or(uri);
+    let tail = path.rsplit(['/', '\\']).next().unwrap_or(path);
     percent_decode(tail)
 }
 
@@ -1121,6 +1124,7 @@ mod tests {
         );
         assert_eq!(link_file_name("assets/photos/apples.jpg"), "apples.jpg");
         assert_eq!(link_file_name("apples.jpg"), "apples.jpg");
+        assert_eq!(link_file_name("file:checker-128.png"), "checker-128.png");
     }
 
     #[test]
