@@ -51,10 +51,11 @@ fn parts(name: &str) -> BTreeMap<String, Vec<u8>> {
     let mut out = BTreeMap::new();
     for i in 0..zip.len() {
         let mut f = zip.by_index(i).unwrap();
-        if f.name().ends_with(".fntdata") {
+        let name = f.name().unwrap().into_owned();
+        if name.ends_with(".fntdata") {
             let mut b = Vec::new();
             f.read_to_end(&mut b).unwrap();
-            out.insert(f.name().to_string(), b);
+            out.insert(name, b);
         }
     }
     out

@@ -37,10 +37,11 @@ fn main() {
             let mut zip = zip::ZipArchive::new(std::io::Cursor::new(&bytes)).expect("zip");
             for i in 0..zip.len() {
                 let mut f = zip.by_index(i).expect("entry");
-                if f.name().ends_with(".fntdata") {
+                let name = f.name().expect("entry name").into_owned();
+                if name.ends_with(".fntdata") {
                     let mut b = Vec::new();
                     f.read_to_end(&mut b).expect("entry bytes");
-                    parts.push((f.name().to_string(), b));
+                    parts.push((name, b));
                 }
             }
         } else {

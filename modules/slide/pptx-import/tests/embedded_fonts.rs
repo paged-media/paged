@@ -56,7 +56,7 @@ fn rewrite(
     let opts = zip::write::SimpleFileOptions::default();
     for i in 0..zin.len() {
         let mut f = zin.by_index(i).unwrap();
-        let name = f.name().to_string();
+        let name = f.name().unwrap().into_owned();
         let mut s = Vec::new();
         f.read_to_end(&mut s).unwrap();
         out.start_file(name.as_str(), opts).unwrap();
