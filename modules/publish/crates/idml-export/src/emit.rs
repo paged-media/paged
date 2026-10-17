@@ -1598,12 +1598,13 @@ fn spread_like_part(
 ///
 /// Anything left unplaced (no existing refs of that kind, an anchor
 /// that vanished) is flushed just before `</Document>` — a reference is
-/// never silently dropped.
+/// never silently dropped. The references `dropped` names (an orphan
+/// story's part, a removed page's spread part) are left out.
 pub(crate) fn patch_designmap(
     original: &[u8],
     new_spreads: &[(Option<String>, String)],
     new_stories: &[String],
-    dropped_stories: &[String],
+    dropped: &[String],
 ) -> Result<Vec<u8>, quick_xml::Error> {
     // Pass 1 — count the existing story refs so "after the last one" is
     // recognisable in the single forward pass below.
@@ -1660,7 +1661,12 @@ pub(crate) fn patch_designmap(
                     }
                 }
                 let this_src = attr_value(&e, b"src");
-                writer.write_event(Event::Empty(e.into_owned()))?;
+                // A removed page's spread part is not written; its
+                // reference goes with it (new spreads anchored after it
+                // still land here).
+                if !this_src.as_ref().is_some_and(|s| dropped.contains(s)) {
+                    writer.write_event(Event::Empty(e.into_owned()))?;
+                }
                 if let Some(this_src) = this_src {
                     for (i, (anchor, src)) in new_spreads.iter().enumerate() {
                         if !spread_placed[i] && anchor.as_deref() == Some(this_src.as_str()) {
@@ -1675,7 +1681,7 @@ pub(crate) fn patch_designmap(
                 // An orphan story's part is not written (see
                 // `write_package`); its reference goes with it.
                 let dropped = attr_value(&e, b"src")
-                    .map(|src| dropped_stories.contains(&src))
+                    .map(|src| dropped.contains(&src))
                     .unwrap_or(false);
                 if !dropped {
                     writer.write_event(Event::Empty(e.into_owned()))?;
