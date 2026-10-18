@@ -137,8 +137,9 @@ fn fixtures_land_where_powerpoint_puts_them() {
     assert!(all_bad.is_empty(), "{} shapes misplaced", all_bad.len());
 }
 
-/// The corpus decks against their recordings (private corpus beside this
-/// repo, or `PAGED_CORPUS`; skips without it unless `PAGED_REQUIRE_CORPUS=1`).
+/// The corpus decks against their recordings (the private corpus at
+/// `<repo root>/corpus`, or `PAGED_CORPUS`; skips without it unless
+/// `PAGED_REQUIRE_CORPUS=1`).
 #[test]
 fn corpus_decks_land_where_powerpoint_puts_them() {
     let base = std::env::var_os("PAGED_CORPUS")

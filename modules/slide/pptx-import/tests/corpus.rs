@@ -18,8 +18,9 @@
 
 //! Every corpus deck reads into the IR (M0 acceptance).
 //!
-//! The corpus is the private `paged-media/corpus` checkout beside this repo
-//! (`../../corpus/pptx/packs/*/primary.pptx`) or `PAGED_CORPUS`. Without it
+//! The corpus is the private corpus at the repository root (`<repo
+//! root>/corpus/pptx/packs/*/primary.pptx`, i.e. `../../corpus` from this
+//! module; gitignored, a local symlink) or `PAGED_CORPUS`. Without it
 //! the test skips and says so; `PAGED_REQUIRE_CORPUS=1` turns the skip into a
 //! failure, so a CI lane that is meant to read the corpus cannot pass by not
 //! looking.
