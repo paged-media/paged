@@ -20,18 +20,22 @@
 //
 // Until this pass, these types were re-exports from the private
 // editor's @paged-media/shell — unpublishable. Now plugin-api OWNS
-// them; the EDITOR asserts compatibility against this file
-// (apps/canvas/src/plugin-api-compat.ts) through the dev link, so
-// drift fails the editor's typecheck, not a third party's build.
+// them, and drift fails the editor's typecheck, not a third party's
+// build.
 //
 // Two kinds of types live here, with different fidelity rules:
 //  · CONTRIBUTION shapes (ToolContribution, PanelContribution, …)
-//    mirror the editor 1:1 — bundles author them, the host consumes
-//    them, so assignability must hold in BOTH directions.
+//    have ONE definition, this one: the editor's shell registries use
+//    them as is or extend them with editor-only optional fields
+//    (editor ADR 226), and assert next to each extension that a
+//    contract-authored contribution still registers unchanged. Nothing
+//    flows back: an editor-only field joins this file only with API
+//    review.
 //  · HANDLE shapes (PagedEditor, PagedClient, registries) are
 //    deliberately NARROW — the contract names only what the SDK and
 //    real bundles use; the editor's richer reality stays assignable
-//    TO the contract (extra members are invisible, not promised).
+//    TO the contract (extra members are invisible, not promised),
+//    asserted in the editor's apps/canvas/src/plugin-api-compat.ts.
 //    Widening a handle type here is an API addition and gets the
 //    same review as any other surface change.
 

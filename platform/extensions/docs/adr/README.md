@@ -29,7 +29,7 @@ and each one names the plugins that follow it and those that do not.
 | [306](306-canary-releases.md) | Releases: a canary on every push, version-gated, published without tokens | Accepted, recorded retroactively 2026-10-02 |
 | [307](307-contract-as-peer-dependency.md) | Bundles take the contract packages as peer dependencies | Accepted, recorded retroactively 2026-10-02 |
 | [308](308-plugin-wasm.md) | Plugin wasm is a declared capability, loaded by the bundle, under one app-wide size budget | Accepted, recorded retroactively 2026-10-02 |
-| [309](309-conformance-against-real-engine.md) | Conformance runs against the real published engine | Accepted, recorded retroactively 2026-10-02 |
+| [309](309-conformance-against-real-engine.md) | Conformance runs against the real published engine | Accepted, recorded retroactively 2026-10-02 (amended 2026-10-18) |
 | [310](310-one-write-door.md) | One write door: `document.mutate`, engine-owned history, failures as outcomes | Accepted, recorded retroactively 2026-10-02 |
 | [311](311-plugin-state-under-own-id.md) | Plugin state lives only under the plugin's own id | Accepted, recorded retroactively 2026-10-02 |
 | [312](312-panels-as-data.md) | Panels cross the boundary as data: a schema plus bindings, no expression language | Accepted, recorded retroactively 2026-10-02 |

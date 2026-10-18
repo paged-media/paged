@@ -3,7 +3,10 @@
 - **Status:** Accepted 2026-10-18.
 - **Scope:** `packages/shell/src/registries/` (every contribution and registry type),
   `packages/shell/src/tools/{cursor,gesture-handler,tool-options}.ts`,
-  `packages/shell/package.json`, `apps/canvas/src/plugin-api-compat.ts`.
+  `packages/shell/package.json`, `apps/canvas/src/plugin-api-compat.ts`; the two-way check in
+  plugin-sdk (`platform/extensions/packages/plugin-sdk/src/harness.ts`,
+  `checkManifestConformance`) and its run over the editor's bundles
+  (`apps/canvas/test/contracts/bundle-registrations.test.ts`).
 
 ## Context
 
@@ -62,12 +65,35 @@ fell behind the contract, as `entry` and `onContentWheel` did.
    the contract type, or moved next to the shell types. So did the gesture-event assertion.
    The shell declares `@paged-media/plugin-api` (`workspace:*`) in `dependencies`, as
    `packages/tools` and `apps/canvas` do. It is a type-only package.
+7. **The manifest is checked both ways.** The SDK adapter refuses to register what a manifest
+   does not declare. plugin-sdk's harness now also catches the opposite case, a declared id
+   that is never registered. `checkManifestConformance(bundle, options)` activates the bundle
+   against the recording headless host, in `'warn'` mode so that every undeclared
+   registration is seen rather than only the first. It then plays an optional `drive` step
+   and compares.
+   - **Categories:** tools, panels (React and schema), commands, `capabilities.keybindings`,
+     edit contexts, object types, importers, exporters, object-model kinds and typed
+     commands.
+   - **Report:** `{ declaredNotRegistered, registeredNotDeclared }` per category.
+   - **Allowances:** an excused gap needs a per-bundle allowance with a reason. An allowance
+     that no longer matches anything fails the check.
+
+   `apps/canvas/test/contracts/` runs the check over every entry of the editor's bundle
+   table. It names each `supports()` probe a bundle gates a registration on, and drives the
+   one trigger no headless host has, slide's page doors, through a pages backend.
+   `bun run test:bundle-contracts` runs it in the editor's `checks` job. It lives in the
+   canvas app because that is the only package depending on all nine bundles, plugin-sdk and
+   the engine. The lint zones keep modules and `platform/extensions` from importing bundles,
+   and the root `tests/contracts/` has no package or CI task yet.
+
 ## Consequences
 
 - The table above is now enforced by the compiler. The only fields left outside the contract
   are the shell-only optional ones listed in its first column. Every other field is the
   contract's.
 - A contract change reaches the shell's own typecheck directly.
+- All nine bundles pass the two-way check with no allowances. Their conditional registrations
+  are listed in the spec, each next to the feature it waits on.
 
 ## Follow-ups
 

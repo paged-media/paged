@@ -17,6 +17,7 @@
     "test:object-model": "node --experimental-strip-types scripts/object-model.test.mjs",
     "test:wasm-budget": "node scripts/wasm-budget.mjs",
     "test:surface-coverage": "node scripts/surface-coverage.mjs",
+    "test:bundle-contracts": "bun run --filter ./apps/canvas test:contracts",
     "test:seam-guard": "node scripts/seam-guard.mjs",
     "test:applicability": "node scripts/applicability-guard.mjs",
     "test:feat-vocabulary": "node scripts/feat-vocabulary-guard.mjs",

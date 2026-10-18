@@ -8,8 +8,9 @@
     "build": "bun check && vite build",
     "build:demo": "bun check && vite build --mode demo --outDir dist-demo",
     "preview": "vite preview",
-    "typecheck": "bun check -p tsconfig.json && bun check -p functions/tsconfig.json",
+    "typecheck": "bun check -p tsconfig.json && bun check -p functions/tsconfig.json && bun check -p test/tsconfig.json",
     "typecheck:tests": "bun check -p tsconfig.tests.json",
+    "test:contracts": "bun test --preload ../../../../tooling/js/bun-test-setup.ts ./test/contracts",
     "test:fidelity": "playwright test --config=playwright.config.ts",
     "test:journeys": "playwright test --project=journeys",
     "test:journeys:gpu": "playwright test --project=journeys-gpu",
@@ -50,6 +51,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
+    "@types/bun": "catalog:",
     "@types/node": "catalog:node25",
     "@types/pngjs": "^6.0.5",
     "@types/react": "catalog:",

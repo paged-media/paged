@@ -39,6 +39,7 @@
       },
       "devDependencies": {
         "@playwright/test": "^1.63.0",
+        "@types/bun": "catalog:",
         "@types/node": "catalog:node25",
         "@types/pngjs": "^6.0.5",
         "@types/react": "catalog:",
@@ -626,7 +627,7 @@
     },
     "platform/extensions/packages/plugin-api": {
       "name": "@paged-media/plugin-api",
-      "version": "0.2.69-canary.0",
+      "version": "0.2.70-canary.0",
       "dependencies": {
         "@types/react": "catalog:",
       },
@@ -643,7 +644,7 @@
     },
     "platform/extensions/packages/plugin-sdk": {
       "name": "@paged-media/plugin-sdk",
-      "version": "0.2.69-canary.0",
+      "version": "0.2.70-canary.0",
       "dependencies": {
         "@paged-media/plugin-api": "workspace:*",
       },
