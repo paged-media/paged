@@ -514,7 +514,9 @@
         "@paged-media/canvas-wasm": "workspace:*",
         "@paged-media/plugin-api": "workspace:*",
         "@paged-media/plugin-sdk": "workspace:*",
+        "@paged-media/test-kit": "workspace:*",
         "@paged-media/web-model": "workspace:*",
+        "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "@types/react": "catalog:",
         "@types/react-test-renderer": "18.3.1",
@@ -522,7 +524,6 @@
         "react": "catalog:",
         "react-test-renderer": "18.3.1",
         "typescript": "catalog:",
-        "vitest": "catalog:",
       },
       "peerDependencies": {
         "@paged-media/plugin-api": "workspace:*",
@@ -534,19 +535,19 @@
       "name": "@paged-media/web-conformance",
       "version": "0.0.0",
       "devDependencies": {
+        "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "playwright": "1.63.0",
         "typescript": "catalog:",
-        "vitest": "catalog:",
       },
     },
     "modules/web/packages/web-model": {
       "name": "@paged-media/web-model",
       "version": "0.1.0-canary.0",
       "devDependencies": {
+        "@types/bun": "catalog:",
         "fast-check": "4.10.2",
         "typescript": "catalog:",
-        "vitest": "catalog:",
       },
     },
     "platform/extensions": {

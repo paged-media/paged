@@ -25,7 +25,7 @@
 // unsaved. Rendered with react-test-renderer against a minimal host.
 
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { BundleHost, ElementId } from "@paged-media/plugin-api";
 import { DEFAULT_SOURCE, envelopeFor } from "@paged-media/web-model";

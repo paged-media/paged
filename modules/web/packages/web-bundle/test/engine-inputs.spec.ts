@@ -21,7 +21,7 @@
 // container's `resources/` parts, placed images — once per engine, and what
 // did not load or fell back is said.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { ASSET_BUDGETS } from "@paged-media/plugin-sdk";
 

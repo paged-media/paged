@@ -22,7 +22,7 @@
 // undo step, read back through the same door, and undone by one
 // `document.undo()`.
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import type { BundleHost, DataProviderSnapshot } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";

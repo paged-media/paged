@@ -22,7 +22,7 @@
 // model matches the engine. The bundle is loaded first so the host speaks
 // for its namespace (`x-paged:media.paged.web`, `paged/media.paged.web/`).
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 import type { BundleHost, ElementId } from "@paged-media/plugin-api";

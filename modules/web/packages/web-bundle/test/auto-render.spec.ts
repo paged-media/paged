@@ -22,7 +22,7 @@
 // document renders nothing; a layer nobody keeps is cleared; without an
 // engine nothing is cleared.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { BundleHost, ElementId } from "@paged-media/plugin-api";
 import { DEFAULT_SOURCE, envelopeFor } from "@paged-media/web-model";

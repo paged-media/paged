@@ -27,7 +27,8 @@
 // its source — the only thing that says which face its text was set in — is
 // gone, and the face still comes back.
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "bun:test";
+import { waitFor } from "@paged-media/test-kit";
 
 import type { BundleHost, ElementId } from "@paged-media/plugin-api";
 import { createHeadlessHost, type HeadlessHost } from "@paged-media/plugin-sdk";
@@ -166,7 +167,7 @@ describe.skipIf(!blitzPresent)("web conformance — the faces a bake gave the do
     const saved = await bakeAndSave(MAILER);
     const { row, sent } = await reopen(saved);
     expect(await row(BUNDLED_FAMILY), "the baked text names the bundled face").toBeTruthy();
-    await vi.waitFor(async () => expect((await row(BUNDLED_FAMILY))?.isMissing).toBe(false), { timeout: 3_000 });
+    await waitFor(async () => expect((await row(BUNDLED_FAMILY))?.isMissing).toBe(false), { timeout: 3_000 });
     expect(sent.map((m) => m.payload.family)).toEqual([BUNDLED_FAMILY]);
   });
 
@@ -174,7 +175,7 @@ describe.skipIf(!blitzPresent)("web conformance — the faces a bake gave the do
     const saved = await bakeAndSave(BRANDED, { deleteFrame: true });
     const { row } = await reopen(saved);
     expect((await row("Brand"))?.isMissing === undefined, "the baked text still names Brand").toBe(false);
-    await vi.waitFor(async () => expect((await row("Brand"))?.isMissing).toBe(false), { timeout: 3_000 });
+    await waitFor(async () => expect((await row("Brand"))?.isMissing).toBe(false), { timeout: 3_000 });
   });
 
   it("a face no text names any more is not given back, and its record is dropped on the next save", async () => {

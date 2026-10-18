@@ -36,8 +36,23 @@ const decode = (s) =>
   s.replace(/&(#x[0-9a-fA-F]+|#\d+|\w+);/g, (m, e) =>
     e[0] === "#" ? String.fromCodePoint(e[1] === "x" ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10)) : ENTITIES[e] ?? m,
   );
+// vitest's escapeXML: the five entities, then the characters XML 1.0 forbids
+// (and the ones it discourages) are dropped, not escaped. bun writes them
+// raw, which no XML parser accepts. Newlines stay raw, as vitest left them.
+const INVALID = /([\0-\x08\v\f\x0E-\x1F\uFFFD\uFFFE\uFFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:[^\uD800-\uDBFF]|^)[\uDC00-\uDFFF])/g;
+const DISCOURAGED = new RegExp(
+  "([\\x7F-\\x84]|[\\x86-\\x9F]|[\\uFDD0-\\uFDEF]|\\uD83F[\\uDFFE\\uDFFF]|(?:\\uD87F[\\uDFFE\\uDFFF])|\\uD8BF[\\uDFFE\\uDFFF]|\\uD8FF[\\uDFFE\\uDFFF]|(?:\\uD93F[\\uDFFE\\uDFFF])|\\uD97F[\\uDFFE\\uDFFF]|\\uD9BF[\\uDFFE\\uDFFF]|\\uD9FF[\\uDFFE\\uDFFF]|\\uDA3F[\\uDFFE\\uDFFF]|\\uDA7F[\\uDFFE\\uDFFF]|\\uDABF[\\uDFFE\\uDFFF]|(?:\\uDAFF[\\uDFFE\\uDFFF])|\\uDB3F[\\uDFFE\\uDFFF]|\\uDB7F[\\uDFFE\\uDFFF]|(?:\\uDBBF[\\uDFFE\\uDFFF])|\\uDBFF[\\uDFFE\\uDFFF](?:[\\0-\\t\\v\\f\\x0E-\\u2027\\u202A-\\uD7FF\\uE000-\\uFFFF]|[\\uD800-\\uDBFF][\\uDC00-\\uDFFF]|[\\uD800-\\uDBFF](?![\\uDC00-\\uDFFF])|(?:[^\\uD800-\\uDBFF]|^)[\\uDC00-\\uDFFF]))",
+  "g",
+);
 const encode = (s) =>
-  String(s).replace(/[&<>"\n\r\t]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "\n": "&#10;", "\r": "&#13;", "\t": "&#9;" })[c]);
+  String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(INVALID, "")
+    .replace(DISCOURAGED, "");
 const attrs = (tag) => {
   const a = {};
   for (const m of tag.matchAll(/([\w:-]+)="([^"]*)"/g)) a[m[1]] = decode(m[2]);
@@ -61,7 +76,7 @@ function parse(xml) {
         chain: stack.slice(1).map((s) => s.name),
         name: a.name ?? "",
         time: a.time ?? "0",
-        body: (m[5] ?? "").trim(),
+        body: (m[5] ?? "").trim().replace(INVALID, "").replace(DISCOURAGED, ""),
       });
     }
   }
