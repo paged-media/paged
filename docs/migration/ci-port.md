@@ -50,6 +50,9 @@ pushed, so nothing here is evidence that a workflow is green.
   reference until wave D." `core-publish-wasm.yml` keeps `push: tags: v*`
   (tags stay `v0.<P>.<n>` at the root). `extensions-publish.yml` is
   dispatch-only until npm Trusted Publishers are re-registered.
+  _Wave D (2026-10-18): all of these, and `editor-playground.yml`, are deleted;
+  `release.yml` publishes the four public packages from a tag and deploys the
+  editor ([npm-release-runbook.md](npm-release-runbook.md))._
 
 ## File map
 
