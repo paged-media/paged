@@ -1,21 +1,21 @@
-$schema: '../../../.moon/cache/schemas/project.json'
+$schema: "../../../.moon/cache/schemas/project.json"
 
 # paged.server: the Cargo workspace of the optional remote (paged-server,
 # a Cloudflare Worker; paged-sync, its client and integration tests).
-language: 'rust'
-layer: 'application'
-stack: 'backend'
-tags: ['rust', 'app']
+language: "rust"
+layer: "application"
+stack: "backend"
+tags: ["rust", "app"]
 
 project:
-  title: 'apps/server/server'
-  description: 'paged.server, the optional remote for repository-backed documents.'
+  title: "apps/server/server"
+  description: "paged.server, the optional remote for repository-backed documents."
 
 # Path dependencies on the engine's crates (paged-repo, paged-mcp); the
 # engine image (engine/Dockerfile) builds engine/core.
 dependsOn:
-  - id: 'core'
-    scope: 'production'
+  - id: "core"
+    scope: "production"
 
 # Path dependencies into the engine: its crates are inputs here too, so
 # `moon ci` re-runs this project when an engine crate it builds changes.
@@ -23,23 +23,22 @@ dependsOn:
 # restated.)
 fileGroups:
   rust-sources:
-    - '**/*.rs'
-    - '**/Cargo.toml'
-    - 'Cargo.lock'
-    - 'rust-toolchain*'
-    - '/.cargo/*.toml'
-    - '/engine/core/Cargo.toml'
-    - '/engine/core/crates/**/*.rs'
-    - '/engine/core/crates/**/Cargo.toml'
+    - "**/*.rs"
+    - "**/Cargo.toml"
+    - "Cargo.lock"
+    - "rust-toolchain*"
+    - "/.cargo/*.toml"
+    - "/engine/core/Cargo.toml"
+    - "/engine/core/crates/**/*.rs"
+    - "/engine/core/crates/**/Cargo.toml"
   rust-tests:
-    - '**/*'
-    - '!docs/**'
-    - '!**/*.md'
-    - '/.cargo/*.toml'
-    - '/engine/core/Cargo.toml'
-    - '/engine/core/crates/**/*.rs'
-    - '/engine/core/crates/**/Cargo.toml'
-
+    - "**/*"
+    - "!docs/**"
+    - "!**/*.md"
+    - "/.cargo/*.toml"
+    - "/engine/core/Cargo.toml"
+    - "/engine/core/crates/**/*.rs"
+    - "/engine/core/crates/**/Cargo.toml"
 
 tasks:
   rust-check:
@@ -59,7 +58,7 @@ tasks:
     # default nextest run has nothing to run. Run the lane instead: without
     # PAGED_SERVER_URL (README.md) each test reports `unavailable: running
     # server`, and PAGED_REQUIRE_SERVER=1 turns that into a failure.
-    script: 'cargo nextest run --profile server --run-ignored only'
+    script: "cargo nextest run --profile server --run-ignored only"
     options:
       # There is no CI lane for them.
       runInCI: false
