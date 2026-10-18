@@ -278,6 +278,17 @@ cancelled or held back. The cost is that a burst of pushes queues every run
 at once; the path filters, one Linux core test run and the cache hits are
 what keep that short.
 
+**Amended 2026-10-18 (commits go straight to `main`, no pull requests).** With
+several streams of work pushing to `main` directly, a group per run queued every
+run of every push: two full sets were waiting at once on the 20-job plan. `main`
+now shares one group per workflow and event type
+(`format('{0}-{1}', github.ref, github.event_name)`), still with
+`cancel-in-progress: false`. A running `main` run always finishes and records its
+evidence; a newer push replaces the run still waiting, so a burst costs at most
+one running and one waiting run per workflow, and the waiting one tests the
+newest tree. Scheduled and dispatched runs keep groups of their own (the event
+type is in the group). Pull requests are unchanged.
+
 ## Lever 3: Rust caching
 
 **What the numbers say.** Restore time is not the problem: a hit costs 1–24 s
