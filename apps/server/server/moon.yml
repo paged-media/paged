@@ -1,0 +1,31 @@
+$schema: '../../../.moon/cache/schemas/project.json'
+
+# paged.server: the Cargo workspace of the optional remote (paged-server,
+# a Cloudflare Worker; paged-sync, its client and integration tests).
+language: 'rust'
+layer: 'application'
+stack: 'backend'
+tags: ['rust', 'app']
+
+project:
+  title: 'apps/server/server'
+  description: 'paged.server, the optional remote for repository-backed documents.'
+
+# Cargo git dependencies on paged-media/core (paged-repo, paged-mcp) at a
+# pinned rev today, path dependencies after the Cargo git-to-path step; the
+# engine image (engine/Dockerfile) builds engine/core.
+dependsOn:
+  - id: 'core'
+    scope: 'production'
+
+tasks:
+  rust-lint:
+    options:
+      # No CI baseline yet: apps/server has no workflow.
+      runInCI: false
+
+  rust-test:
+    options:
+      # The paged-sync tests talk to a running local worker
+      # (PAGED_SERVER_URL, see README.md); there is no CI lane for them.
+      runInCI: false

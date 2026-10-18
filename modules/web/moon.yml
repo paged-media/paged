@@ -1,0 +1,76 @@
+$schema: '../../.moon/cache/schemas/project.json'
+
+# paged.web: the pnpm workspace (web-model, web-bundle, web-conformance).
+# packages/web-render is a separate Cargo workspace and its own project
+# (web-render); the engine wasm this workspace ships is built from it.
+language: 'typescript'
+layer: 'library'
+stack: 'frontend'
+tags: ['node', 'module', 'wasm']
+
+project:
+  title: 'modules/web'
+  description: 'HTML/CSS module: model, bundle and the Blitz engine wasm.'
+
+dependsOn:
+  - id: 'web-render'
+    scope: 'build'
+
+fileGroups:
+  js-sources:
+    - '**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}'
+    - '**/*.{json,css,html,svg}'
+    - '**/pnpm-workspace.yaml'
+    - '**/pnpm-lock.yaml'
+    - '!docs/**'
+    - '!packages/web-render/**'
+  js-tests:
+    - '**/*'
+    - '!docs/**'
+    - '!**/*.md'
+    - '!packages/web-render/**'
+  web-render-sources:
+    - 'packages/web-render/**/*.rs'
+    - 'packages/web-render/Cargo.toml'
+    - 'packages/web-render/Cargo.lock'
+    - 'packages/web-render/assets/**/*'
+    - '/.cargo/*.toml'
+
+tasks:
+  js-lint:
+    description: 'The contract-import guard (scripts/check-contract-imports.mjs).'
+    command: 'pnpm run lint:contract'
+    inputs:
+      - '@group(js-sources)'
+
+  js-test:
+    # web-vitest builds the engine wasm before vitest.
+    deps: ['~:wasm']
+
+  wasm:
+    description: 'The Blitz engine wasm (web-render, `blitz` feature) into packages/web-bundle/bin/ (scripts/build-wasm.sh --engine).'
+    toolchains: ['rust']
+    command: 'bash scripts/build-wasm.sh --engine'
+    inputs:
+      - '@group(web-render-sources)'
+      - 'scripts/build-wasm.sh'
+      - 'scripts/source-hash.mjs'
+      - 'packages/web-bundle/manifest.json'
+    outputs:
+      - 'packages/web-bundle/bin/blitz_web*'
+      - 'packages/web-bundle/bin/SOURCE_HASH'
+    options:
+      # Needs wasm-bindgen-cli at web-render's Cargo.lock version; web-vitest
+      # builds it in CI.
+      runInCI: 'skip'
+
+  wasm-perf:
+    description: 'The counting engine wasm (perf-counters) into packages/web-render/target/perf-wasm/.'
+    toolchains: ['rust']
+    command: 'bash scripts/build-wasm-perf.sh'
+    inputs:
+      - '@group(web-render-sources)'
+      - 'scripts/build-wasm-perf.sh'
+    options:
+      cache: false
+      runInCI: false
