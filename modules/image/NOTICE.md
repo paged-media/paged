@@ -1,6 +1,6 @@
 # NOTICE — third-party attributions
 
-paged.image itself is dual-licensed **MPL-2.0 OR PMEL** (Rust crates; see
+paged.image itself is dual-licensed **AGPL-3.0-only OR PMEL** (see
 `LICENSE` / `LICENSE.md`). This file records attributions that third-party
 dependencies require us to reproduce when we distribute the compiled
 artifact (`image-js` → the plugin's `.wasm`).

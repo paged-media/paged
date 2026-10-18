@@ -16,20 +16,6 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-/*
- * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at https://mozilla.org/MPL/2.0/.
- *
- * This file is part of paged (https://paged.media) and is additionally
- * available under the Paged Media Enterprise License (PMEL). Full
- * copyright and license information is available in LICENSE.md which is
- * distributed with this source code.
- *
- *  @copyright  Copyright (c) And The Next GmbH
- *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
- */
-
 //! adjust family (T2, spec §11 T2) — the editor-bearing tone/color point
 //! kernels. Every kernel operates on UNpremultiplied rgb (the per-color
 //! math is meaningless on premultiplied samples) and PRESERVES alpha; the
@@ -125,7 +111,7 @@ macro_rules! adjust_wgsl {
     ($params:literal, $body:literal) => {
         concat!(
             "// paged.image adjust kernel — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 ",
             $params,
@@ -2006,7 +1992,7 @@ pub static ADJUST_SELECTIVE_COLOR: KernelDef = KernelDef {
 
 const ADJUST_SELECTIVE_COLOR_WGSL: &str = "\
 // paged.image kernel `adjust.selective_color` — handwritten, ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     range: u32,

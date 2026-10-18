@@ -157,8 +157,9 @@
   #     pure-Rust requirement. NOT USABLE as a crate dep today.
   #   - rav1d-safe (imazen, safe-SIMD fork with a real Rust decode API) →
   #     dual-licensed AGPL-3.0 OR commercial. REJECTED: AGPL-3.0 is NOT in
-  #     deny.toml's allow-list and is incompatible with the MPL-2.0/PMEL
-  #     distribution posture (would fail `cargo deny check licenses`).
+  #     deny.toml's allow-list: third-party AGPL code cannot ship under
+  #     the PMEL side of our AGPL-3.0/PMEL distribution posture (would fail
+  #     `cargo deny check licenses`).
   # RE-AUDIT (Phase 9 Tier-B sweep, 2026-06-13): the DECODE verdict STANDS
   # but the ENCODE side has changed — recording the split honestly.
   #
@@ -220,10 +221,11 @@
   # ENCODE — BLOCKED ON ECOSYSTEM (no permissive pure-Rust encoder).
   #   The only pure-Rust JPEG XL *encoder* (`jxl-encoder` / the jxl_encoder
   #   crate, imazen, 0.3.x) is licensed AGPL-3.0-only OR a commercial
-  #   Imazen license. AGPL-3.0 is NOT on deny.toml's allow-list and is
-  #   incompatible with the MPL-2.0/PMEL distribution posture — it would
-  #   fail `cargo deny check licenses`. There is no BSD/MIT/Apache pure-Rust
-  #   JXL encoder as of 2026-06-13 (libjxl itself is C++ — rejected by the
+  #   Imazen license. AGPL-3.0 is NOT on deny.toml's allow-list: third-party
+  #   AGPL code cannot ship under the PMEL side of our AGPL-3.0/PMEL
+  #   distribution posture — it would fail `cargo deny check licenses`.
+  #   There is no BSD/MIT/Apache pure-Rust JXL encoder as of 2026-06-13
+  #   (libjxl itself is C++ — rejected by the
   #   no-C-in-default-build rule). JXL encode is therefore a genuine
   #   blocked-on-ecosystem item, exactly the honest state.
   #

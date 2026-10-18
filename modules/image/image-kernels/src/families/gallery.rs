@@ -16,20 +16,6 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-/*
- * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at https://mozilla.org/MPL/2.0/.
- *
- * This file is part of paged (https://paged.media) and is additionally
- * available under the Paged Media Enterprise License (PMEL). Full
- * copyright and license information is available in LICENSE.md which is
- * distributed with this source code.
- *
- *  @copyright  Copyright (c) And The Next GmbH
- *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
- */
-
 //! Gallery family (T1) — the PRIMITIVES behind Photoshop's Filter
 //! Gallery (Artistic, Brush Strokes, Sketch, Texture, plus the gallery's
 //! Distort and Stylize entries).
@@ -170,7 +156,7 @@ pub static GALLERY_KUWAHARA: KernelDef = KernelDef {
 // in the output.
 const GALLERY_KUWAHARA_WGSL: &str = "\
 // paged.image kernel `gallery.kuwahara` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     radius_px: f32,
@@ -339,7 +325,7 @@ pub static GALLERY_POSTERIZE_EDGES: KernelDef = KernelDef {
 
 const GALLERY_POSTERIZE_EDGES_WGSL: &str = "\
 // paged.image kernel `gallery.posterize_edges` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     levels: f32,
@@ -485,7 +471,7 @@ pub static GALLERY_GLOWING_EDGES: KernelDef = KernelDef {
 
 const GALLERY_GLOWING_EDGES_WGSL: &str = "\
 // paged.image kernel `gallery.glowing_edges` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     intensity: f32,
@@ -642,7 +628,7 @@ pub static GALLERY_HALFTONE: KernelDef = KernelDef {
 
 const GALLERY_HALFTONE_WGSL: &str = "\
 // paged.image kernel `gallery.halftone` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     ox: i32,
@@ -801,7 +787,7 @@ pub static GALLERY_GRAIN: KernelDef = KernelDef {
 
 const GALLERY_GRAIN_WGSL: &str = "\
 // paged.image kernel `gallery.grain` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     ox: i32,
@@ -977,7 +963,7 @@ pub static GALLERY_DIFFUSE: KernelDef = KernelDef {
 
 const GALLERY_DIFFUSE_WGSL: &str = "\
 // paged.image kernel `gallery.diffuse` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     ox: i32,
@@ -1164,7 +1150,7 @@ pub static GALLERY_CROSSHATCH: KernelDef = KernelDef {
 
 const GALLERY_CROSSHATCH_WGSL: &str = "\
 // paged.image kernel `gallery.crosshatch` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     ox: i32,
@@ -1318,7 +1304,7 @@ pub static GALLERY_BAS_RELIEF: KernelDef = KernelDef {
 
 const GALLERY_BAS_RELIEF_WGSL: &str = "\
 // paged.image kernel `gallery.bas_relief` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     angle_deg: f32,
@@ -1459,7 +1445,7 @@ pub static GALLERY_THRESHOLD_INK: KernelDef = KernelDef {
 
 const GALLERY_THRESHOLD_INK_WGSL: &str = "\
 // paged.image kernel `gallery.threshold_ink` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     threshold: f32,
@@ -1599,7 +1585,7 @@ pub static GALLERY_STAINED_GLASS: KernelDef = KernelDef {
 
 const GALLERY_STAINED_GLASS_WGSL: &str = "\
 // paged.image kernel `gallery.stained_glass` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     ox: i32,
@@ -1793,7 +1779,7 @@ pub static GALLERY_GLASS: KernelDef = KernelDef {
 
 const GALLERY_GLASS_WGSL: &str = "\
 // paged.image kernel `gallery.glass` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     ox: i32,
@@ -2000,7 +1986,7 @@ pub static GALLERY_TEXTURIZER: KernelDef = KernelDef {
 
 const GALLERY_TEXTURIZER_WGSL: &str = "\
 // paged.image kernel `gallery.texturizer` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     ox: i32,

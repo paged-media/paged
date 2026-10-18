@@ -16,20 +16,6 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-/*
- * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at https://mozilla.org/MPL/2.0/.
- *
- * This file is part of paged (https://paged.media) and is additionally
- * available under the Paged Media Enterprise License (PMEL). Full
- * copyright and license information is available in LICENSE.md which is
- * distributed with this source code.
- *
- *  @copyright  Copyright (c) And The Next GmbH
- *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
- */
-
 //! Convolution family (T1, spec §11) — handwritten WGSL modules under
 //! the ABI v1.1 contract (`abi::assemble` docs). `conv.box` is the
 //! amendment proof: the first windowed kernel through the module lane
@@ -93,7 +79,7 @@ pub static CONV_BOX: KernelDef = KernelDef {
 // exactly (§6.3 fixed reduction order).
 const CONV_BOX_WGSL: &str = "\
 // paged.image kernel `conv.box` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     _abi_pad: u32,
@@ -225,7 +211,7 @@ pub static CONV_GAUSSIAN_V: KernelDef = KernelDef {
 // ascending; weights divide by S.
 const CONV_GAUSSIAN_H_WGSL: &str = "\
 // paged.image kernel `conv.gaussian_h` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     sigma: f32,
@@ -269,7 +255,7 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
 // in0 = out + 2·(0, 24); output (x, y) ↔ window center (x, y + 24).
 const CONV_GAUSSIAN_V_WGSL: &str = "\
 // paged.image kernel `conv.gaussian_v` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     sigma: f32,
@@ -379,7 +365,7 @@ pub static CONV_UNSHARP: KernelDef = KernelDef {
 // is componentwise (vec4<bool> selector). Mask-mixed against `a`.
 const CONV_UNSHARP_WGSL: &str = "\
 // paged.image kernel `conv.unsharp` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     amount: f32,
@@ -474,7 +460,7 @@ pub static CONV_EMBOSS: KernelDef = KernelDef {
 
 const CONV_EMBOSS_WGSL: &str = "\
 // paged.image kernel `conv.emboss` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     angle_deg: f32,
@@ -570,7 +556,7 @@ pub static CONV_FIND_EDGES: KernelDef = KernelDef {
 
 const CONV_FIND_EDGES_WGSL: &str = "\
 // paged.image kernel `conv.find_edges` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     strength: f32,
@@ -699,7 +685,7 @@ pub static CONV_MOTION: KernelDef = KernelDef {
 
 const CONV_MOTION_WGSL: &str = "\
 // paged.image kernel `conv.motion` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     angle_deg: f32,
@@ -816,7 +802,7 @@ pub static CONV_RADIAL: KernelDef = KernelDef {
 
 const CONV_RADIAL_WGSL: &str = "\
 // paged.image kernel `conv.radial` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     cx: f32,
@@ -958,7 +944,7 @@ pub static CONV_LENS: KernelDef = KernelDef {
 
 const CONV_LENS_WGSL: &str = "\
 // paged.image kernel `conv.lens` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     radius_px: f32,
@@ -1105,7 +1091,7 @@ pub static CONV_BILATERAL: KernelDef = KernelDef {
 
 const CONV_BILATERAL_WGSL: &str = "\
 // paged.image kernel `conv.bilateral` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     radius_px: f32,
@@ -1243,7 +1229,7 @@ impl ConvSmartSharpenParams {
 
 const CONV_SMART_SHARPEN_WGSL: &str = "\
 // paged.image kernel `conv.smart_sharpen` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     radius_px: f32,
@@ -1469,7 +1455,7 @@ pub static CONV_SHAPE: KernelDef = KernelDef {
 
 const CONV_SHAPE_WGSL: &str = "\
 // paged.image kernel `conv.shape` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     radius_px: f32,
