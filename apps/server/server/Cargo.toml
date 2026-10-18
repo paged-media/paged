@@ -1,0 +1,23 @@
+[workspace]
+resolver = "2"
+members = ["crates/paged-server", "crates/paged-sync"]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2021"
+license = "AGPL-3.0-only OR LicenseRef-PMEL"
+publish = false
+
+[workspace.dependencies]
+# The repository format and its governance, the same code the browser and the
+# CLI run (core ADR 180). A path into a sibling core checkout until core's
+# `feat/paged-repo` is on origin; then a git rev, like core's own pins.
+paged-repo = { path = "../../core-repo/crates/paged-repo" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1

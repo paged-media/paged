@@ -1,0 +1,18 @@
+[package]
+name = "paged-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "paged.server: an optional remote for paged repositories on Cloudflare (Worker + Durable Objects + R2)."
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+paged-repo = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+worker = "0.8.7"
+wasm-bindgen = "0.2"
