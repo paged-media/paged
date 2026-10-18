@@ -99,6 +99,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: mold (the Rust linker on Linux, .cargo/config.toml)
+        if: runner.os == 'Linux'
+        uses: rui314/setup-mold@v1
       # `toolchain:` is REQUIRED — dtolnay/rust-toolchain does NOT read
       # rust-toolchain.toml, and @master exits 1 with "'toolchain' is a
       # required input" when it is omitted (that, not the tests, is why

@@ -65,6 +65,9 @@ jobs:
           toolchain: ${{ needs.toolchain.outputs.channel }}
           components: rustfmt, clippy
           targets: wasm32-unknown-unknown
+      - name: mold (the Rust linker on Linux, .cargo/config.toml)
+        if: runner.os == 'Linux'
+        uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: engine/core -> target
@@ -145,6 +148,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ needs.toolchain.outputs.channel }}
+      - name: mold (the Rust linker on Linux, .cargo/config.toml)
+        if: runner.os == 'Linux'
+        uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: engine/core -> target
@@ -202,6 +208,15 @@ jobs:
   # Makefile `test-wasm` target, which calls scripts/test-wasm.sh. That
   # script is a STUB exiting 0 (pending W0.8) until the sibling replaces
   # it with the real headless wasm-test runner.
+      # A silent fallback to the default linker fails here: mold stamps
+      # the .comment section of what it links.
+      - name: mold linked the test binaries
+        if: runner.os == 'Linux'
+        run: |
+          bin=$(find "${CARGO_TARGET_DIR:-target}/debug/deps" -maxdepth 1 -type f -perm -u+x ! -name '*.so' | head -1)
+          test -n "$bin" || { echo "::error::no test binary in target/debug/deps"; exit 1; }
+          readelf -p .comment "$bin" | grep -q mold || { echo "::error::$bin was not linked by mold"; exit 1; }
+          echo "mold linked $bin"
   test-wasm:
     name: wasm test lane (stub, pending W0.8)
     needs: toolchain
@@ -213,6 +228,9 @@ jobs:
           toolchain: ${{ needs.toolchain.outputs.channel }}
           components: clippy
           targets: wasm32-unknown-unknown
+      - name: mold (the Rust linker on Linux, .cargo/config.toml)
+        if: runner.os == 'Linux'
+        uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: engine/core -> target

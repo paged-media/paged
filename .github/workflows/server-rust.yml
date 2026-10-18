@@ -48,6 +48,9 @@ jobs:
         with:
           toolchain: ${{ steps.pin.outputs.channel }}
           targets: wasm32-unknown-unknown
+      - name: mold (the Rust linker on Linux, .cargo/config.toml)
+        if: runner.os == 'Linux'
+        uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: apps/server/server -> target

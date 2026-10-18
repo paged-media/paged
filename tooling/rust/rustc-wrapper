@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Cargo's rustc wrapper (.cargo/config.toml): compiles through sccache when it
+# is installed, with plain rustc otherwise. Cargo calls it as
+# `rustc-wrapper <rustc> <args>…`. PAGED_SCCACHE=0 bypasses sccache.
+# bash, not sh: dash (Ubuntu's sh) drops environment variables whose names
+# are not identifiers, such as CARGO_BIN_EXE_paged-run, before rustc sees them.
+if [ "${PAGED_SCCACHE:-1}" != 0 ] && command -v sccache >/dev/null 2>&1; then
+  exec sccache "$@"
+fi
+exec "$@"

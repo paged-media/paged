@@ -46,6 +46,9 @@ jobs:
           toolchain: "1.94.1"
           components: rustfmt, clippy
           targets: wasm32-unknown-unknown
+      - name: mold (the Rust linker on Linux, .cargo/config.toml)
+        if: runner.os == 'Linux'
+        uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: modules/publish -> target
@@ -133,6 +136,9 @@ jobs:
           # Mirrors rust-toolchain.toml — dtolnay's action does NOT read that
           # file and hard-fails without an explicit toolchain.
           toolchain: stable
+      - name: mold (the Rust linker on Linux, .cargo/config.toml)
+        if: runner.os == 'Linux'
+        uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: modules/publish -> target
@@ -215,3 +221,12 @@ jobs:
       - name: tests failed
         if: ${{ env.RUST_FAILED == '1' || env.TS_FAILED == '1' }}
         run: exit 1
+      # A silent fallback to the default linker fails here: mold stamps
+      # the .comment section of what it links.
+      - name: mold linked the test binaries
+        if: runner.os == 'Linux'
+        run: |
+          bin=$(find "${CARGO_TARGET_DIR:-target}/debug/deps" -maxdepth 1 -type f -perm -u+x ! -name '*.so' | head -1)
+          test -n "$bin" || { echo "::error::no test binary in target/debug/deps"; exit 1; }
+          readelf -p .comment "$bin" | grep -q mold || { echo "::error::$bin was not linked by mold"; exit 1; }
+          echo "mold linked $bin"
