@@ -1,15 +1,19 @@
 /*
- * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ * This file is part of paged (https://paged.media).
  *
- * This file is part of paged (https://paged.media) and is additionally
- * available under the Paged Media Enterprise License (PMEL). Full
- * copyright and license information is available in LICENSE.md which is
- * distributed with this source code.
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
  *
  *  @copyright  Copyright (c) And The Next GmbH
- *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
 // CMYK plane splat / overprint compute shader.
@@ -171,7 +175,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
     // Recover bottom-side CMYK on virgin pixels by inverting the
     // vello_target RGB through the same `rgb_to_naive_cmyk_8bit` the
-    // CPU rasterizer uses (cpu.rs:331-356). Pixels that were paper-
+    // CPU rasterizer uses (cpu.rs:335-360). Pixels that were paper-
     // white come back as (0, 0, 0, 0); pixels painted by a prior
     // Paint::Cmyk swatch round-trip back to their original CMYK with
     // bit stability so the per-channel max composite stays correct.
