@@ -52,9 +52,11 @@ runs:
         BY=$(sed -n 's/^BINARYEN=//p' tooling/bootstrap.sh)
         test -n "$WB" && test -n "$BY" \
           || { echo "::error::cannot read the wasm-bindgen/binaryen pins from tooling/bootstrap.sh"; exit 1; }
-        echo "wasm-bindgen=$WB" >> "$GITHUB_OUTPUT"
-        echo "binaryen=$BY" >> "$GITHUB_OUTPUT"
-        echo "channel=$(bash engine/core/scripts/rust-channel.sh)" >> "$GITHUB_OUTPUT"
+        {
+          echo "wasm-bindgen=$WB"
+          echo "binaryen=$BY"
+          echo "channel=$(bash engine/core/scripts/rust-channel.sh)"
+        } >> "$GITHUB_OUTPUT"
 
     - name: engine wasm — restore
       id: restore
@@ -92,28 +94,9 @@ runs:
         prefix-key: v0-rust-core-wasm
         shared-key: engine-wasm
 
-    # Prebuilt releases at the bootstrap.sh pins. Not apt's binaryen: an old
-    # one miscompiles wasm-bindgen's externref table grow ("Table.grow failed").
     - name: engine wasm — wasm-bindgen-cli and binaryen (pinned)
       if: steps.restore.outputs.cache-hit != 'true'
-      shell: bash
-      env:
-        WB: ${{ steps.pins.outputs.wasm-bindgen }}
-        BY: ${{ steps.pins.outputs.binaryen }}
-      run: |
-        set -euo pipefail
-        case "${{ runner.os }}-${{ runner.arch }}" in
-          Linux-X64)   WBT=x86_64-unknown-linux-musl; BYT=x86_64-linux ;;
-          macOS-ARM64) WBT=aarch64-apple-darwin;      BYT=arm64-macos ;;
-          macOS-X64)   WBT=x86_64-apple-darwin;       BYT=x86_64-macos ;;
-          *) echo "::error::no prebuilt wasm-bindgen/binaryen for ${{ runner.os }}-${{ runner.arch }}"; exit 1 ;;
-        esac
-        DEST="$RUNNER_TEMP/engine-wasm-tools"
-        mkdir -p "$DEST"
-        curl -fsSL "https://github.com/wasm-bindgen/wasm-bindgen/releases/download/$WB/wasm-bindgen-$WB-$WBT.tar.gz" | tar xz -C "$DEST"
-        curl -fsSL "https://github.com/WebAssembly/binaryen/releases/download/version_$BY/binaryen-version_$BY-$BYT.tar.gz" | tar xz -C "$DEST"
-        echo "$DEST/wasm-bindgen-$WB-$WBT" >> "$GITHUB_PATH"
-        echo "$DEST/binaryen-version_$BY/bin" >> "$GITHUB_PATH"
+      uses: ./.github/actions/wasm-tools
 
     # Checks the CLI against Cargo.lock, and under CI refuses to run without
     # wasm-opt. Writes only the generated files; the committed ones stay.

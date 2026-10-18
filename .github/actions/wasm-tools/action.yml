@@ -1,0 +1,40 @@
+name: wasm-bindgen-cli and binaryen
+description: >-
+  Puts the wasm-bindgen CLI and binaryen's wasm-opt on PATH, at the versions
+  tooling/bootstrap.sh pins, from their prebuilt releases. Does nothing when
+  both are already there at those versions (an earlier use in the same job).
+
+# Every Cargo workspace's Cargo.lock pins the same wasm-bindgen (B0), and the
+# build scripts refuse a CLI that differs from it. Not apt's binaryen: an old
+# one miscompiles wasm-bindgen's externref table grow ("Table.grow failed").
+
+runs:
+  using: composite
+  steps:
+    - name: wasm-bindgen-cli and binaryen (pinned)
+      shell: bash
+      run: |
+        set -euo pipefail
+        WB=$(sed -n 's/^WASM_BINDGEN=//p' tooling/bootstrap.sh)
+        BY=$(sed -n 's/^BINARYEN=//p' tooling/bootstrap.sh)
+        test -n "$WB" && test -n "$BY" \
+          || { echo "::error::cannot read the wasm-bindgen/binaryen pins from tooling/bootstrap.sh"; exit 1; }
+        if [ "$(wasm-bindgen --version 2>/dev/null | awk '{print $2}')" = "$WB" ] \
+          && [ "$(wasm-opt --version 2>/dev/null | awk '{print $3}')" = "$BY" ]; then
+          echo "wasm-bindgen $WB and wasm-opt $BY already on PATH"
+          exit 0
+        fi
+        case "${{ runner.os }}-${{ runner.arch }}" in
+          Linux-X64)   WBT=x86_64-unknown-linux-musl; BYT=x86_64-linux ;;
+          macOS-ARM64) WBT=aarch64-apple-darwin;      BYT=arm64-macos ;;
+          macOS-X64)   WBT=x86_64-apple-darwin;       BYT=x86_64-macos ;;
+          *) echo "::error::no prebuilt wasm-bindgen/binaryen for ${{ runner.os }}-${{ runner.arch }}"; exit 1 ;;
+        esac
+        DEST="$RUNNER_TEMP/wasm-tools"
+        mkdir -p "$DEST"
+        curl -fsSL "https://github.com/wasm-bindgen/wasm-bindgen/releases/download/$WB/wasm-bindgen-$WB-$WBT.tar.gz" | tar xz -C "$DEST"
+        curl -fsSL "https://github.com/WebAssembly/binaryen/releases/download/version_$BY/binaryen-version_$BY-$BYT.tar.gz" | tar xz -C "$DEST"
+        echo "$DEST/wasm-bindgen-$WB-$WBT" >> "$GITHUB_PATH"
+        echo "$DEST/binaryen-version_$BY/bin" >> "$GITHUB_PATH"
+        "$DEST/wasm-bindgen-$WB-$WBT/wasm-bindgen" --version
+        "$DEST/binaryen-version_$BY/bin/wasm-opt" --version

@@ -37,6 +37,7 @@ on:
       - ".cargo/config.toml"
       - "tooling/bootstrap.sh"
       - ".github/actions/engine-wasm/**"
+      - ".github/actions/wasm-tools/**"
   pull_request:
     paths:
       - "platform/extensions/**"
@@ -54,6 +55,7 @@ on:
       - ".cargo/config.toml"
       - "tooling/bootstrap.sh"
       - ".github/actions/engine-wasm/**"
+      - ".github/actions/wasm-tools/**"
   workflow_dispatch:
 
 permissions:
@@ -94,6 +96,16 @@ jobs:
       - name: bun install (root workspace)
         working-directory: .
         run: bun install --frozen-lockfile
+
+      # plugin-api vendors the engine's wire types and capability catalog.
+      # Both sources are in this checkout now: the wire is the .d.ts of the
+      # canvas-wasm workspace package built above, the catalog is
+      # engine/core's catalog.json. A wire or catalog change in the engine
+      # without a resync fails here.
+      - name: vendored wire and catalog match the engine
+        run: |
+          node scripts/sync-wire.mjs --check
+          node scripts/sync-catalog.mjs --check
 
       # Build BEFORE the suite: react-free-import.spec.ts asserts on the
       # SHIPPED artifact (no static react import, no AWAITED react import),
