@@ -20,7 +20,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-// @paged-media/introspect-wasm is a workspace package (linked, so never
+// @paged-media/canvas-wasm is a workspace package (linked, so never
 // pre-bundled): its dynamic import and `?url` wasm asset resolve through the
 // module graph without an optimizeDeps exclude.
 export default defineConfig({

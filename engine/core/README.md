@@ -62,24 +62,24 @@ let (built, image) = pipeline::render(&document, &opts, 144.0, Color::WHITE)?; /
 Cargo workspace, 16 crates + spikes. Internal crates stay descriptively
 named; the published artifact is the SDK.
 
-| crate                                        | role                                                                                                                                  |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `idml-import`                                | ZIP + XML → typed AST (container, designmap, spreads, stories, graphic, styles + cascade, paths)                                      |
-| `paged-scene`                                | `Document::open`; cascade resolution, frame-for-story, frame chaining                                                                 |
-| `paged-text`                                 | shaping (rustybuzz), Knuth–Plass compose, multi-font layout, hyphenation, tabs                                                        |
-| `paged-color`                                | ICC transforms (lcms2 native; naive fallback on wasm32)                                                                               |
-| `paged-compose`                              | display list, transforms, glyph cache, gradient/image pools                                                                           |
-| `paged-gpu`                                  | `PathRasterizer` trait; CPU (tiny-skia) + Vello backends                                                                              |
-| `paged-renderer`                             | top-level `pipeline::build` / `render`; the `paged-inspect` CLI                                                                       |
-| `paged-fidelity`                             | ΔE2000 + SSIM diff library; the `paged-diff` CLI                                                                                      |
-| `paged-mutate`                               | document mutation operations (undoable)                                                                                               |
-| `paged-introspect`                           | scene-graph + property descriptors for inspection                                                                                     |
-| `paged-canvas`                               | interactive canvas model over the renderer + mutate                                                                                   |
-| `paged-script`                               | embedded scripting (Boa); the `paged.*` global API                                                                                    |
-| `paged-canvas-wasm`, `paged-introspect-wasm` | wasm-bindgen surfaces for the editor                                                                                                  |
-| `paged-gen`                                  | IDML fixture generator (the `paged-gen` bin)                                                                                          |
-| `paged-cli`                                  | the `paged` binary — the whole engine on the command line                                                                             |
-| `paged-sdk`                                  | the published SDK wasm surface — a WebGPU `ViewerSession` (load → present to canvas → headless RGBA readback); npm `@paged-media/sdk` |
+| crate                                        | role                                                                                                                                                  |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `idml-import`                                | ZIP + XML → typed AST (container, designmap, spreads, stories, graphic, styles + cascade, paths)                                                      |
+| `paged-scene`                                | `Document::open`; cascade resolution, frame-for-story, frame chaining                                                                                 |
+| `paged-text`                                 | shaping (rustybuzz), Knuth–Plass compose, multi-font layout, hyphenation, tabs                                                                        |
+| `paged-color`                                | ICC transforms (lcms2 native; naive fallback on wasm32)                                                                                               |
+| `paged-compose`                              | display list, transforms, glyph cache, gradient/image pools                                                                                           |
+| `paged-gpu`                                  | `PathRasterizer` trait; CPU (tiny-skia) + Vello backends                                                                                              |
+| `paged-renderer`                             | top-level `pipeline::build` / `render`; the `paged-inspect` CLI                                                                                       |
+| `paged-fidelity`                             | ΔE2000 + SSIM diff library; the `paged-diff` CLI                                                                                                      |
+| `paged-mutate`                               | document mutation operations (undoable)                                                                                                               |
+| `paged-introspect`                           | scene-graph + property descriptors for inspection                                                                                                     |
+| `paged-canvas`                               | interactive canvas model over the renderer + mutate                                                                                                   |
+| `paged-script`                               | embedded scripting (Boa); the `paged.*` global API                                                                                                    |
+| `paged-canvas-wasm`, `paged-introspect-wasm` | wasm-bindgen surfaces for the editor                                                                                                                  |
+| `paged-gen`                                  | IDML fixture generator (the `paged-gen` bin)                                                                                                          |
+| `paged-cli`                                  | the `paged` binary — the whole engine on the command line                                                                                             |
+| `paged-sdk`                                  | the published SDK wasm surface — a WebGPU `ViewerSession` (load → present to canvas → headless RGBA readback); npm `@paged-media/idml-viewer/session` |
 
 `spikes/` — Vello eval, composer calibration, WASM size.
 `tools/indesign-export/` — drives InDesign to export reference PDFs for the
