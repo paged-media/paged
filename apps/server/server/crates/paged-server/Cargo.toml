@@ -15,11 +15,11 @@ paged-mcp = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
-aes-gcm = "0.10"
+aes-gcm = "0.11"
 base64 = "0.22"
 futures-channel = "0.3"
 futures-util = { version = "0.3", default-features = false }
-getrandom = { version = "0.2", features = ["js"] }
-hmac = "0.12"
+getrandom = { version = "0.4", features = ["wasm_js"] }
+hmac = "0.13"
 worker = "0.8.7"
 wasm-bindgen = "0.2"

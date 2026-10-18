@@ -24,7 +24,7 @@ idml-import = { path = "../idml-import" }
 paged-scene = { path = "../paged-scene" }
 paged-renderer = { path = "../paged-renderer" }
 paged-compose = { path = "../paged-compose" }
-sha2 = "0.10"
+sha2 = "0.11"
 
 [[bin]]
 name = "paged-gen"
