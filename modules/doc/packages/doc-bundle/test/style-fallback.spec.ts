@@ -11,12 +11,14 @@ type Op = { op: string; args: Record<string, unknown> };
 function fakeHost(refusedPath: string) {
   const applied: Op[] = [];
   const diagnostics = new Map<string, unknown[]>();
-  const refuses = (o: Op) => o.op === "setStyleProperty" && o.args.path === refusedPath;
+  const refuses = (o: Op) =>
+    o.op === "setStyleProperty" && o.args.path === refusedPath;
   const host = {
     document: {
       async mutate(m: Op) {
         const ops = m.op === "batch" ? (m.args.ops as Op[]) : [m];
-        if (ops.some(refuses)) return { applied: false, error: { kind: "notImplemented" } };
+        if (ops.some(refuses))
+          return { applied: false, error: { kind: "notImplemented" } };
         applied.push(...ops);
         return { applied: true };
       },
@@ -28,8 +30,14 @@ function fakeHost(refusedPath: string) {
 
 const ops: Op[] = [
   { op: "createParagraphStyle", args: { selfId: "ParagraphStyle/a" } },
-  { op: "setStyleProperty", args: { styleId: "ParagraphStyle/a", path: "characterLeading" } },
-  { op: "setStyleProperty", args: { styleId: "ParagraphStyle/a", path: "paragraphStartParagraph" } },
+  {
+    op: "setStyleProperty",
+    args: { styleId: "ParagraphStyle/a", path: "characterLeading" },
+  },
+  {
+    op: "setStyleProperty",
+    args: { styleId: "ParagraphStyle/a", path: "paragraphStartParagraph" },
+  },
 ];
 
 describe("applyStyleOps", () => {
@@ -43,7 +51,10 @@ describe("applyStyleOps", () => {
   it("keeps every other style when the engine refuses one property", async () => {
     const { host, applied, diagnostics } = fakeHost("paragraphStartParagraph");
     const refused = await applyStyleOps(host as never, ops as never);
-    expect(applied.map((o) => o.args.path ?? o.op)).toEqual(["createParagraphStyle", "characterLeading"]);
+    expect(applied.map((o) => o.args.path ?? o.op)).toEqual([
+      "createParagraphStyle",
+      "characterLeading",
+    ]);
     expect(refused).toHaveLength(1);
     expect(refused[0]).toContain("paragraphStartParagraph on ParagraphStyle/a");
     expect(diagnostics.get(STYLE_DIAGNOSTICS_KEY)).toHaveLength(1);

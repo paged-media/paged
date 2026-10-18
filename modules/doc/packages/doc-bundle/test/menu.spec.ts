@@ -46,7 +46,9 @@ describe("doc menu entries", () => {
     const stray = MENU_ENTRIES.map(([p]) => p.split("/")[0]).filter(
       (t) => !ALLOWED.includes(t),
     );
-    expect(stray, `unexpected top-level menus: ${stray.join(", ")}`).toEqual([]);
+    expect(stray, `unexpected top-level menus: ${stray.join(", ")}`).toEqual(
+      [],
+    );
   });
 
   it("is not empty", () => {

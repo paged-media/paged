@@ -28,7 +28,10 @@ type Op = { op: string; args: Record<string, unknown> };
 function fakeHost(knowsGrow: boolean) {
   const applied: Op[] = [];
   const calls: string[] = [];
-  const diagnostics = new Map<string, { severity: string; message: string }[]>();
+  const diagnostics = new Map<
+    string,
+    { severity: string; message: string }[]
+  >();
   const host = {
     document: {
       async mutate(m: Op) {
@@ -41,7 +44,10 @@ function fakeHost(knowsGrow: boolean) {
         return { applied: true, createdId: null, pageIds: [] };
       },
     },
-    diagnostics: { set: (k: string, v: { severity: string; message: string }[]) => diagnostics.set(k, v) },
+    diagnostics: {
+      set: (k: string, v: { severity: string; message: string }[]) =>
+        diagnostics.set(k, v),
+    },
   };
   return { host, applied, calls, diagnostics };
 }
@@ -50,13 +56,20 @@ describe("setGrowRules", () => {
   it("speaks the protocol-64 wire shape (camelCase, Word's copyFrameOptions)", () => {
     expect(growRuleOp("docx_s1")).toEqual({
       op: "setFlowGrowRule",
-      args: { storyId: "docx_s1", grow: true, maxPages: null, copyFrameOptions: true },
+      args: {
+        storyId: "docx_s1",
+        grow: true,
+        maxPages: null,
+        copyFrameOptions: true,
+      },
     });
   });
 
   it("sets every section story's rule in one batch", async () => {
     const { host, applied, calls, diagnostics } = fakeHost(true);
-    expect(await setGrowRules(host as never, ["docx_s0", "docx_s1"])).toEqual([]);
+    expect(await setGrowRules(host as never, ["docx_s0", "docx_s1"])).toEqual(
+      [],
+    );
     expect(calls).toEqual(["batch"]);
     expect(applied.map((o) => o.args.storyId)).toEqual(["docx_s0", "docx_s1"]);
     expect(diagnostics.get(OPEN_DIAGNOSTICS_KEY)).toEqual([]);
