@@ -69,6 +69,8 @@ function fakeDocument(opts: { willSave?: boolean } = {}) {
       f === "storage.blob@1" ||
       (opts.willSave === true && f === "document.onWillSave@1"),
     document: {
+      onDidChange: () => ({ dispose() {} }),
+      onDidOpen: () => ({ dispose() {} }),
       onWillSave: (l: (e: { format: "paged" }) => void | Promise<void>) => {
         willSaveRegistrations();
         willSave.add(l);

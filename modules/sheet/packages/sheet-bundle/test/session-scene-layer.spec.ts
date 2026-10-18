@@ -136,6 +136,8 @@ function fakeHost() {
       }),
     },
     document: {
+      onDidChange: () => ({ dispose() {} }),
+      onDidOpen: () => ({ dispose() {} }),
       // bounds = [top, left, bottom, right] → an 80×40 content box.
       elementGeometry: async () => [{ bounds: [0, 0, 40, 80] }],
     },

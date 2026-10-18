@@ -86,6 +86,8 @@ function fakeHost() {
   const writes: ClipboardPayload[] = [];
   const host = {
     log: { debug() {}, info() {}, warn() {}, error() {} },
+    // The document doors every host has; nothing here fires them.
+    document: { onDidChange: () => ({ dispose() {} }), onDidOpen: () => ({ dispose() {} }) },
     supports: (f: string) => f === "clipboard@1",
     clipboard: {
       async read() {

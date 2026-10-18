@@ -144,6 +144,9 @@ function fakeEngine() {
 function fakeHost(): BundleHost {
   return {
     log: { debug() {}, info() {}, warn() {}, error() {} },
+    supports: () => false,
+    // The document doors every host has; nothing here fires them.
+    document: { onDidChange: () => ({ dispose() {} }), onDidOpen: () => ({ dispose() {} }) },
   } as unknown as BundleHost;
 }
 
