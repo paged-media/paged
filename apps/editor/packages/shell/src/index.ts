@@ -300,7 +300,6 @@ export {
 export {
   buildNewDocumentCommand,
   buildNewFromBriefCommand,
-  confirmDiscard,
   PAGED_FILE_NEW_FROM_BRIEF,
   buildOpenIdmlCommand,
   PAGED_FILE_NEW,
@@ -715,16 +714,6 @@ export {
   writeToOpenFile,
   type WritableFileHandle,
 } from "./state/open-file-handle";
-
-export {
-  commitSave,
-  currentLibraryDocument,
-  getLibrary,
-  libraryVersion,
-  setCurrentLibraryDocument,
-  setLibrary,
-  subscribeLibrary,
-} from "./state/library-document";
 
 export {
   getViewToggle,

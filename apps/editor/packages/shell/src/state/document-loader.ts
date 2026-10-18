@@ -33,10 +33,7 @@ import type {
   PageId,
 } from "@paged-media/client";
 
-import type { DocumentEntry } from "@paged-media/repository";
-
 import type { LoadingState } from "./document-context";
-import { rememberOpenedFile, setCurrentLibraryDocument } from "./library-document";
 
 const SNAPSHOT_WIDTH_PX = 256;
 
@@ -53,10 +50,6 @@ export interface DocumentLoaderCallbacks {
    * to it when the document meta carries no `documentName`. Optional:
    * callers that don't surface a title may omit it. */
   setSourceName?: (name: string | null) => void;
-  /** ADR 180 — the file is a projection of this library document (opened
-   *  from the library), so it is not imported again. Absent: the file is
-   *  new to the library and becomes a document in it. */
-  libraryDocument?: DocumentEntry;
 }
 
 /**
@@ -88,8 +81,6 @@ export async function loadDocumentFile(
   const fontBytes = await fetchDefaultFont();
   if (!fontBytes) warnDefaultFontUnavailable(cb);
 
-  // loadDocument TRANSFERS the buffer to the worker; the library keeps a copy.
-  const forLibrary = cb.libraryDocument ? null : bytes.slice();
   let handle: DocumentHandle;
   try {
     handle = await client.loadDocument(bytes, fontBytes);
@@ -99,8 +90,6 @@ export async function loadDocumentFile(
     return;
   }
 
-  if (cb.libraryDocument) setCurrentLibraryDocument(cb.libraryDocument);
-  else if (forLibrary) rememberOpenedFile(forLibrary, file.name);
   cb.setHandle(handle);
   cb.setLoading(null);
   cb.setStatus(
@@ -133,8 +122,6 @@ export async function createBlankDocument(
   // U14 — a blank document has no source file; the title bar's
   // "Untitled document" fallback is the honest name.
   cb.setSourceName?.(null);
-  // A blank document is no library document until its first save.
-  setCurrentLibraryDocument(null);
 
   const fontBytes = await fetchDefaultFont();
   if (!fontBytes) warnDefaultFontUnavailable(cb);
