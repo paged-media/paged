@@ -109,6 +109,14 @@ tasks:
       - 'crates/paged-canvas/src/channel.rs'
       - 'packages/*/package.json'
 
+  wire-schema:
+    description: 'The wire JSON Schema (ADR 187): crates/paged-wire/schema/mutation.schema.json is current and declares what tsify declares (paged-wire --features schema; core-ci runs it).'
+    toolchains: ['rust']
+    command: 'cargo test -p paged-wire --features schema'
+    inputs:
+      - '@group(rust-sources)'
+      - 'crates/paged-wire/schema/mutation.schema.json'
+
   check:
     deps: ['~:wasm-pkg-version']
 

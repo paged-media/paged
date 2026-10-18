@@ -150,6 +150,18 @@ jobs:
         # FAILS on a failing test instead of `|| true` reporting green.
         run: cargo nextest run --workspace --profile ci --no-fail-fast
 
+      # The wire's JSON Schema (ADR 187) exists only under paged-wire's
+      # `schema` feature, which no workspace build turns on, so the steps
+      # above never compile it. Its tests: the committed
+      # crates/paged-wire/schema/mutation.schema.json is current, it declares
+      # the ops and fields tsify declares, and its unit enums keep declaration
+      # order. Once, on Linux; the schema does not depend on the host.
+      - name: wire schema (paged-wire --features schema)
+        if: ${{ !cancelled() && steps.nextest.outcome != 'skipped' && runner.os == 'Linux' }}
+        run: |
+          cargo clippy -p paged-wire --features schema --all-targets -- -D warnings
+          cargo nextest run -p paged-wire --features schema --no-fail-fast
+
       # After a red nextest too, so a run reports both; not after a red lint.
       - name: doctests
         if: ${{ !cancelled() && steps.nextest.outcome != 'skipped' && runner.os == 'Linux' }}
