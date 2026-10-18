@@ -86,7 +86,8 @@ Rules for every code change in this repo:
 ## Commands
 
 ```bash
-# Rust (the engine)
+moon run doc:test     # Rust (nextest + doctests) and the bundle glue, from anywhere
+# Rust (the engine) without Moon
 cargo build --workspace && cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all --check

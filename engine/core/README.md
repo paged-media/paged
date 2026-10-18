@@ -193,8 +193,9 @@ The single-purpose binaries remain:
 Toolchain pinned in `rust-toolchain.toml`.
 
 ```bash
+moon run core:test                # fixtures, nextest, doctests
 cargo build --workspace
-cargo test --workspace
+cargo test --workspace            # the tests without Moon
 cargo clippy --workspace --all-targets -- -D warnings
 cargo check --target wasm32-unknown-unknown -p paged-sdk
 

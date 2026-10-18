@@ -592,7 +592,8 @@ pnpm install && pnpm test && pnpm -r typecheck
 node ../../platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs validate packages/draw-bundle/manifest.json
 
 # The Rust half (only needed when crates/ changes — the artifact is committed)
+moon run draw:test        # Rust (nextest + doctests) and the TS tests, from anywhere
 cargo fmt --all && cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
+cargo test --workspace     # the Rust tests without Moon
 ./scripts/build-wasm.sh   # → packages/draw-bundle/wasm/, enforces the size budget
 ```

@@ -1,0 +1,71 @@
+# The shared task vocabulary, inherited by every project:
+#
+#   moon run <project>:fmt | check | lint | test | build
+#   moon run :test                      # every project
+#
+# Each one runs the project's Rust half (rust.yml) and/or JS half
+# (node.yml); a half the project does not have is skipped (`optional`).
+# `wasm` is defined per project, next to its build script.
+#
+# These aggregates do not run under `moon ci`: CI runs the underlying tasks,
+# each selected by its own inputs.
+$schema: '../cache/schemas/tasks.json'
+
+tasks:
+  fmt:
+    description: 'Formatting checks (rust-fmt).'
+    toolchains: ['system']
+    deps:
+      - target: '~:rust-fmt'
+        optional: true
+    inputs: []
+    options:
+      runInCI: false
+
+  check:
+    description: 'Type checks (rust-check, js-check).'
+    toolchains: ['system']
+    deps:
+      - target: '~:rust-check'
+        optional: true
+      - target: '~:js-check'
+        optional: true
+    inputs: []
+    options:
+      runInCI: false
+
+  lint:
+    description: 'Lints (rust-lint, js-lint).'
+    toolchains: ['system']
+    deps:
+      - target: '~:rust-lint'
+        optional: true
+      - target: '~:js-lint'
+        optional: true
+    inputs: []
+    options:
+      runInCI: false
+
+  test:
+    description: 'Tests (rust-test, js-test).'
+    toolchains: ['system']
+    deps:
+      - target: '~:rust-test'
+        optional: true
+      - target: '~:js-test'
+        optional: true
+    inputs: []
+    options:
+      runInCI: false
+
+  build:
+    description: 'Builds (rust-build, js-build).'
+    toolchains: ['system']
+    deps:
+      - target: '~:rust-build'
+        optional: true
+      - target: '~:js-build'
+        optional: true
+    inputs: []
+    options:
+      runInCI: false

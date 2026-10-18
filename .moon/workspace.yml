@@ -1,0 +1,48 @@
+# Moon workspace (moon v2; version pinned in /.prototools).
+#
+# One project per Cargo workspace and per JS workspace root that has tasks
+# of its own. A module directory that holds both a Cargo workspace and a
+# pnpm workspace is ONE project with both toolchains (tags `rust` + `node`).
+# The packages inside a pnpm workspace are not projects: their scripts run
+# through the workspace root (`pnpm -r ...`), as the component CI does.
+# See docs/adr/PM-0006-proto-moon-mcp.md.
+$schema: './cache/schemas/workspace.json'
+
+projects:
+  # Engine
+  core: 'engine/core'
+  core-idml-viewer: 'engine/core/web/idml-viewer'
+  # Built-in modules
+  publish: 'modules/publish'
+  image: 'modules/image'
+  draw: 'modules/draw'
+  sheet: 'modules/sheet'
+  data: 'modules/data'
+  doc: 'modules/doc'
+  slide: 'modules/slide'
+  web: 'modules/web'
+  web-render: 'modules/web/packages/web-render'
+  # Extension contract and SDK
+  extensions: 'platform/extensions'
+  # Applications
+  editor: 'apps/editor'
+  server: 'apps/server/server'
+
+vcs:
+  client: 'git'
+  provider: 'github'
+  defaultBranch: 'main'
+  remoteCandidates: ['origin']
+  # Moon must not write git hooks.
+  sync: false
+
+codeowners:
+  # .github/CODEOWNERS is maintained by hand; Moon must not regenerate it.
+  sync: false
+
+constraints:
+  # An application may depend on libraries; a library may not depend on an
+  # application.
+  enforceLayerRelationships: true
+
+telemetry: false

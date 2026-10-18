@@ -63,7 +63,8 @@ Components of the monorepo; install order matters (`link:` chain):
 ```
 
 ```bash
-# Rust engine
+moon run sheet:test               # engine and bundle tests, building the wasm first
+# Rust engine without Moon
 cargo build --workspace && cargo test --workspace
 bash scripts/build-wasm.sh        # → packages/sheet-bundle/bin/ (100 MB app wasm budget)
 
