@@ -62,8 +62,8 @@ import {
   afterAll,
   afterEach,
   beforeEach,
-  vi,
-} from "vitest";
+} from "bun:test";
+import { stubGlobal, unstubAllGlobals, waitFor } from "@paged-media/test-kit";
 
 import type {
   BundleHost,
@@ -1058,7 +1058,7 @@ describe("draw conformance — IMAGE TRACE off the calling thread", () => {
     h.loadBundle(drawBundle);
   }, 60_000);
   afterAll(() => h?.dispose());
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => unstubAllGlobals());
 
   const RING = { width: 48, height: 48, options: { mode: "bw", pathMode: "polygon" } as const };
   const ringOnThisThread = (): TraceResult =>
@@ -1129,7 +1129,7 @@ describe("draw conformance — IMAGE TRACE off the calling thread", () => {
         } satisfies TraceWorkerRequest,
       });
       scope.onmessage!({ data: { id: 2, kind: "limits" } satisfies TraceWorkerRequest });
-      await vi.waitFor(() => expect(replies).toHaveLength(2));
+      await waitFor(() => expect(replies).toHaveLength(2));
       expect(replies.map((r) => [r.id, r.ok])).toEqual([
         [1, true],
         [2, true],
@@ -1289,12 +1289,12 @@ describe("draw conformance — IMAGE TRACE off the calling thread", () => {
      *  own pixels — the one thing Node cannot do for the command. */
     const stubDecoder = (): void => {
       const size = 48;
-      vi.stubGlobal("createImageBitmap", async () => ({
+      stubGlobal("createImageBitmap", async () => ({
         width: size,
         height: size,
         close() {},
       }));
-      vi.stubGlobal(
+      stubGlobal(
         "OffscreenCanvas",
         class {
           constructor(

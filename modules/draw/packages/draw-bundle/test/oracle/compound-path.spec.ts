@@ -58,7 +58,7 @@
 //   re-wind by nesting depth, alternating (draw-geometry's
 //   `makeCompoundTable`), which reproduces EVEN-ODD: its four-deep
 //   compound painted 31200 pt² where Illustrator's paints 31600 pt² — the
-//   20 x 20 core a hole here and solid there. This case was `it.fails`.
+//   20 x 20 core a hole here and solid there. This case was `it.failing`.
 //   Make now re-winds by paint order (`orientByPaintOrder`) and paints
 //   31600; the even-odd region it used to paint is pinned below as the
 //   record, and it differs from what Make paints now in exactly this
@@ -75,7 +75,7 @@
 //   first, then the others in selection order (back to front here);
 //   Illustrator lists front to back.
 
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 import type { CommandContribution } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";

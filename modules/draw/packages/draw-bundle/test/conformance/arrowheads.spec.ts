@@ -32,7 +32,7 @@
 //   · the published `arrowheadControlsVisible` binding flips with the
 //     selection's kind (the live gate of the panel section).
 
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 import type { ElementId, Mutation } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";

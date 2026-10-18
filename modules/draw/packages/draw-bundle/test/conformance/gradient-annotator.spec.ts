@@ -25,7 +25,7 @@
 // readable back through the typed property door, and ONE undo
 // restoring both scalars.
 
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 import type { ElementId, Mutation } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";

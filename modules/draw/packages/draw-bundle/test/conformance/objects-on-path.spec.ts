@@ -38,7 +38,7 @@
 //   (4) The two distribution modes, align, pivot, offset and order.
 //   (5) EXPAND ≠ RELEASE on the same document.
 
-import { describe, expect, it, beforeAll, afterAll, beforeEach } from "vitest";
+import { describe, expect, it, beforeAll, afterAll, beforeEach } from "bun:test";
 
 import type {
   CommandContribution,

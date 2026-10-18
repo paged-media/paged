@@ -136,7 +136,7 @@ export function makePatternPanel(host: BundleHost): {
     const [draft, setDraft, followDraft] =
       useFollowedDraft<PatternParams>(PATTERN_DEFAULTS);
 
-    // WHAT A RELOAD COSTS (`test/panels/pattern-panel.spec.tsx`, and it
+    // WHAT A RELOAD COSTS (`test/panels/pattern-panel.dom.test.tsx`, and it
     // may only go down): the recipe part once, and the document's links
     // once per document REVISION, out of the walk every panel shares. It
     // used to walk the document twice per reload (the resolve, then the

@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   flattenAnchorPath,
@@ -249,7 +249,9 @@ describe("flattenAnchorPath + pointInFlatPath", () => {
    *  off it, clearly off it. */
   const NUDGES = [0, 1e-13, -1e-13, 1e-10, -1e-10, 1e-7, -1e-7, 1e-3, -1e-3, 5, -5];
 
-  it.each(SHAPES)("$name: the flat form answers exactly what the anchor form answers", ({ anchors, starts }) => {
+  // vitest's `$name` quoted a string ('a circle'); bun's inserts it bare, so
+  // the quotes are in the title to keep the test's id.
+  it.each(SHAPES)("'$name': the flat form answers exactly what the anchor form answers", ({ anchors, starts }) => {
     const flat = flattenAnchorPath(anchors, starts);
     const xs = [flat.minX, flat.maxX, (flat.minX + flat.maxX) / 2];
     const ys = [flat.minY, flat.maxY, (flat.minY + flat.maxY) / 2];

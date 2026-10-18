@@ -19,7 +19,7 @@
 // Property tests for along-path.ts — the ONE arc-length kernel under the
 // blend spine and objects-on-a-path.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   EASE_KINDS,

@@ -34,7 +34,7 @@
 //       its two undo steps;
 //   (8) the live tool: a freehand drag and an Alt straight drag both cut.
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
 
 import type {
   BundleHost,

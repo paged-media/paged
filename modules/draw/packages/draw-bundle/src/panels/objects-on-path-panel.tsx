@@ -158,7 +158,7 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
     const [draft, setDraft, followDraft] =
       useFollowedDraft<ObjectsOnPathParams>(OBJECTS_ON_PATH_DEFAULTS);
 
-    // WHAT A RELOAD COSTS (`test/panels/objects-on-path-panel.spec.tsx`,
+    // WHAT A RELOAD COSTS (`test/panels/objects-on-path-panel.dom.test.tsx`,
     // and it may only go down): the recipe part once, and the document's
     // links once per document REVISION — one unfiltered
     // `objectsOnPathLinks`, tallied for every record at once. It used to

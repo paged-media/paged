@@ -30,7 +30,7 @@
 //       landed on the page;
 //   (6) the live tool: a click cuts, a drag does not.
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
 
 import type { ElementId, PathAnchorsResult } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
