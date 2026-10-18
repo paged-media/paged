@@ -6,7 +6,7 @@
 // generates from the installed @paged-media packages (the same index
 // modules-sync.mjs hosts modules by, ADR 220).
 //
-// Run: `node --experimental-strip-types scripts/modules.test.mjs`
+// Run: `bun test ./scripts/modules.test.mjs`
 //   (root script `bun run test:modules`).
 
 import { test } from "node:test";
