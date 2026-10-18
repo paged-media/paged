@@ -71,14 +71,17 @@
 //! keeps them apart in the `licence` string, and so should you. See each
 //! `PROVENANCE.md`.
 //!
-//! OPT-IN — the assets live in the private corpus checkout:
+//! OPT-IN — the assets live in the private corpus (`corpus: xlsx`,
+//! docs/development/testing.md):
 //!
 //! ```text
-//! PAGED_XLSX_CORPUS=1 cargo test -p sheet-conformance --test real_xlsx_corpus -- --ignored --nocapture
+//! PAGED_CORPUS_DIR=<corpus root> PAGED_REQUIRE_CORPUS=1 \
+//!     cargo nextest run --profile corpus --run-ignored only
 //! ```
 
 use std::path::{Path, PathBuf};
 
+use paged_test_resources::{unavailable, Resource};
 use sheet_xlsx::XlsxDocument;
 
 const EXTS: &[&str] = &["xlsx", "xlsm", "xlsb", "xltx", "xltm", "xls"];
@@ -111,27 +114,10 @@ fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
-/// The corpus `xlsx/` root, or `None` with a printed reason.
+/// The corpus `xlsx/` root, or `None` after reporting the corpus
+/// unavailable (`PAGED_REQUIRE_CORPUS=1` makes that a failure).
 fn xlsx_root() -> Option<PathBuf> {
-    let Some(switch) = std::env::var_os("PAGED_XLSX_CORPUS") else {
-        eprintln!(
-            "SKIP real xlsx lane: PAGED_XLSX_CORPUS unset \
-             (set it to 1, or to a corpus root, and run with --ignored)"
-        );
-        return None;
-    };
-    let switch = switch.to_string_lossy().into_owned();
-    let root = if switch == "1" || switch.is_empty() {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../corpus")
-    } else {
-        PathBuf::from(switch)
-    };
-    let dir = root.join("xlsx");
-    if !dir.is_dir() {
-        eprintln!("SKIP real xlsx lane: {} not readable", dir.display());
-        return None;
-    }
-    Some(dir)
+    paged_test_resources::corpus("xlsx", &["PAGED_XLSX_CORPUS"])
 }
 
 /// Every spreadsheet under `corpus/xlsx/`, recursively.
@@ -141,9 +127,9 @@ fn corpus_files() -> Option<Vec<PathBuf>> {
     walk(&root, &mut out);
     out.sort();
     if out.is_empty() {
-        eprintln!(
-            "SKIP real xlsx lane: no spreadsheets under {}",
-            root.display()
+        unavailable(
+            Resource::Corpus,
+            format_args!("no spreadsheets under {}", root.display()),
         );
         return None;
     }
@@ -158,7 +144,10 @@ fn source_files(source: &str) -> Option<Vec<PathBuf>> {
     walk(&dir, &mut out);
     out.sort();
     if out.is_empty() {
-        eprintln!("SKIP: no spreadsheets under {}", dir.display());
+        unavailable(
+            Resource::Corpus,
+            format_args!("no spreadsheets under {}", dir.display()),
+        );
         return None;
     }
     Some(out)
@@ -186,9 +175,12 @@ fn source_of(root: &Path, p: &Path) -> String {
 }
 
 #[test]
-#[ignore = "real xlsx lane: opt-in (PAGED_XLSX_CORPUS=1 + the private corpus mount)"]
+#[ignore = "corpus: xlsx"]
 fn no_spreadsheet_in_the_corpus_panics_the_parser() {
-    let (Some(root), Some(files)) = (xlsx_root(), corpus_files()) else {
+    let Some(root) = xlsx_root() else {
+        return;
+    };
+    let Some(files) = corpus_files() else {
         return;
     };
     println!("real xlsx corpus: {} file(s)", files.len());
@@ -240,7 +232,7 @@ fn no_spreadsheet_in_the_corpus_panics_the_parser() {
 }
 
 #[test]
-#[ignore = "real xlsx lane: opt-in (PAGED_XLSX_CORPUS=1 + the private corpus mount)"]
+#[ignore = "corpus: xlsx"]
 fn every_authored_workbook_opens() {
     let Some(files) = source_files("authored") else {
         return;
@@ -279,7 +271,7 @@ fn every_authored_workbook_opens() {
 }
 
 #[test]
-#[ignore = "real xlsx lane: opt-in (PAGED_XLSX_CORPUS=1 + the private corpus mount)"]
+#[ignore = "corpus: xlsx"]
 fn every_converted_workbook_opens() {
     let Some(files) = source_files("poi-converted") else {
         return;
@@ -320,15 +312,14 @@ fn every_converted_workbook_opens() {
 }
 
 #[test]
-#[ignore = "real xlsx lane: opt-in (PAGED_XLSX_CORPUS=1 + the private corpus mount)"]
+#[ignore = "corpus: xlsx"]
 fn legacy_xls_is_refused_rather_than_half_read() {
     let Some(files) = corpus_files() else {
         return;
     };
     let xls: Vec<_> = files.iter().filter(|p| ext_of(p) == "xls").collect();
     if xls.is_empty() {
-        eprintln!("SKIP: no .xls in the corpus");
-        return;
+        paged_test_resources::skip!(Resource::Corpus, "no .xls in the corpus");
     }
 
     // `sheet-*` reads OOXML only. A legacy BIFF workbook is a CFB/OLE
