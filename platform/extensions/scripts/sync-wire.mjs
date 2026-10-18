@@ -120,34 +120,35 @@ export function buildHeader(version) {
   );
 }
 
-// wasm-bindgen names the closure trampolines it exports in `InitOutput` after
-// their rustc symbols (`wasm_bindgen__convert__closures_____invoke__h<16 hex>`),
-// whose hashes depend on the host the engine was built on: a macOS and a Linux
-// build of the same revision differ in exactly these names, and in their
-// order. They are the wasm module's internal ABI, not wire types, so the check
-// compares them by signature: each run of trampoline lines has its hashes
-// blanked and is sorted. Any other difference, a trampoline signature
-// included, is still drift.
-const TRAMPOLINE = /(wasm_bindgen__convert__closures_____invoke__h)[0-9a-f]{16}/;
+// `export interface InitOutput { … }` lists the wasm module's raw exports: its
+// internal ABI, not wire types. Two things in it depend on the build rather
+// than on the source: the closure trampolines are named after rustc symbols
+// (`wasm_bindgen__convert__closures_____invoke__h<hash>` before Rust 1.99,
+// `wasm_bindgen_<crate hash>___convert__closures_____invoke___<types>` since),
+// which differ between hosts and toolchains, and the order of the exports
+// follows the link order. So the check compares that block by signature: every
+// trampoline name is blanked and the block's lines are sorted. Any other
+// difference, a trampoline signature or an export added or dropped included,
+// is still drift, and everything outside the block compares byte for byte.
+const TRAMPOLINE = /wasm_bindgen(?:_[0-9a-f]+_)?__convert__closures_____invoke\w*(?=\s*:)/;
+const INIT_OUTPUT_START = /^export interface InitOutput \{\s*$/;
 
-/** `content` with the host-dependent trampoline names blanked and their runs
- *  sorted (see TRAMPOLINE). */
+/** `content` with InitOutput's build-dependent parts normalized (see above). */
 export function normalizeWire(content) {
   const out = [];
-  let run = [];
-  const flush = () => {
-    out.push(...run.sort());
-    run = [];
-  };
+  let block = null;
   for (const line of content.split("\n")) {
-    if (TRAMPOLINE.test(line)) {
-      run.push(line.replace(TRAMPOLINE, "$1…"));
-    } else {
-      flush();
+    if (block === null) {
       out.push(line);
+      if (INIT_OUTPUT_START.test(line)) block = [];
+    } else if (line === "}") {
+      out.push(...block.sort(), line);
+      block = null;
+    } else {
+      block.push(line.replace(TRAMPOLINE, "wasm_bindgen__convert__closures_____invoke…"));
     }
   }
-  flush();
+  if (block !== null) out.push(...block);
   return out.join("\n");
 }
 
