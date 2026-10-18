@@ -36,7 +36,8 @@ cargo build --workspace
 cargo check --workspace --all-targets
 
 # Tests
-cargo test --workspace                    # everything
+moon run core:test                        # everything: fixtures, nextest, doctests
+cargo test --workspace                    # the same without Moon (after scripts/regen-fixtures.sh)
 cargo test -p paged-fidelity              # diff-harness unit + CLI
 
 # Render a sample

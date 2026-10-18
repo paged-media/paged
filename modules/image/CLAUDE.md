@@ -129,7 +129,8 @@ references/          READ-ONLY clean-room mounts (gitignored; see §3.1)
 ## Commands
 
 ```bash
-# Rust (the engine)
+moon run image:test     # Rust (nextest + doctests) and the glue tests, from anywhere
+# Rust (the engine) without Moon
 cargo build --workspace && cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 

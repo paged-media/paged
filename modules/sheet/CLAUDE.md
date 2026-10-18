@@ -199,7 +199,8 @@ Rules for every code change in this repo:
 ## Commands
 
 ```bash
-# Rust (the engine)
+moon run sheet:test     # Rust (nextest + doctests), then wasm + vitest, from anywhere
+# Rust (the engine) without Moon
 cargo build --workspace && cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo run -p sheet-conformance --bin coverage-gate    # the §12.2 gate

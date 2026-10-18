@@ -197,7 +197,9 @@ Rules for every code change in this repo:
 ## Commands
 
 ```bash
-# Rust (the engine). CARGO_INCREMENTAL=0 keeps target/ small.
+# Everything (Rust nextest + doctests, then wasm + DuckDB + vitest), from anywhere:
+moon run data:test
+# Rust (the engine) without Moon. CARGO_INCREMENTAL=0 keeps target/ small.
 cargo build --workspace
 cargo nextest run --workspace --profile ci --no-fail-fast   # writes target/nextest/ci/junit.xml
 cargo clippy --workspace --all-targets -- -D warnings

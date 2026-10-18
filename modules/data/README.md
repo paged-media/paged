@@ -45,7 +45,8 @@ has the full picture.
 ## Quick commands
 
 ```bash
-# Rust (the engine)
+moon run data:test             # Rust and JS tests, building the wasm first
+# Rust (the engine) without Moon
 cargo build --workspace
 cargo nextest run --workspace --profile ci --no-fail-fast
 cargo clippy --workspace --all-targets -- -D warnings

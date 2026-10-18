@@ -63,7 +63,10 @@ matters for the `link:` chain (from the repository root):
 (cd platform/extensions && pnpm install)
 cd modules/image && pnpm install
 
-# Engine
+# Engine and bundle tests, from anywhere in the repository
+moon run image:test
+
+# Engine without Moon
 cargo build --workspace && cargo test --workspace
 
 # Bundle

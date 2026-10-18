@@ -24,6 +24,13 @@ verbatim from the top of any existing `crates/**/*.rs`.
 The toolchain is pinned in `rust-toolchain.toml`.
 
 ```bash
+moon run core:test     # fixtures, nextest, doctests (from anywhere in the repository)
+moon run core:lint     # clippy as CI runs it, native and wasm32
+```
+
+Without Moon:
+
+```bash
 cargo build --workspace
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
