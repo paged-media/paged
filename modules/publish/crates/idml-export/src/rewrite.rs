@@ -2760,6 +2760,13 @@ struct SourceItems {
     groups: std::collections::HashSet<String>,
 }
 
+/// A button or a multi-state object: the parser reads one as a group of
+/// its states (D-04), so the pre-pass counts it as a group — its `Self` is
+/// the model group's, already placed.
+fn is_state_group_name(name: &[u8]) -> bool {
+    matches!(name, b"Button" | b"MultiStateObject")
+}
+
 fn scan_source_items(original: &[u8]) -> Result<SourceItems, quick_xml::Error> {
     let mut reader = Reader::from_reader(original);
     let config = reader.config_mut();
@@ -2777,7 +2784,7 @@ fn scan_source_items(original: &[u8]) -> Result<SourceItems, quick_xml::Error> {
             Event::Start(e) => (Some(e), true),
             Event::Empty(e) => (Some(e), false),
             Event::End(e) => {
-                if is_page_item_name(e.name().as_ref()) {
+                if is_page_item_name(e.name().as_ref()) || is_state_group_name(e.name().as_ref()) {
                     item_depth = item_depth.saturating_sub(1);
                 }
                 (None, false)
@@ -2786,14 +2793,14 @@ fn scan_source_items(original: &[u8]) -> Result<SourceItems, quick_xml::Error> {
         };
         if let Some(e) = e {
             let name = e.name().as_ref().to_vec();
-            if is_page_item_name(&name) {
+            if is_page_item_name(&name) || is_state_group_name(&name) {
                 let id = attr_value(&e, b"Self");
                 if item_depth == 0 {
                     if let Some(id) = id.clone() {
                         out.top_level.push(id);
                     }
                 }
-                if name == b"Group" {
+                if name == b"Group" || is_state_group_name(&name) {
                     if let Some(id) = id {
                         out.groups.insert(id);
                     }
@@ -3627,9 +3634,24 @@ pub fn rewrite_spread(original: &[u8], spread: &Spread) -> Result<Vec<u8>, quick
                 }
                 // A button or a multi-state object is a group of its
                 // states to the parser: what a group inside one is
-                // relative to.
+                // relative to, and the transform its states' items are
+                // written under (left out, a moved item elsewhere on the
+                // spread rewrote a state's rectangle in spread space). It
+                // is the source of the model's group of the same `Self`,
+                // so the insert lane must not write that group again
+                // (D-04). Its membership is the parser's active state only,
+                // so it takes no part in the C-19 triage.
                 if matches!(name_owned.as_slice(), b"Button" | b"MultiStateObject") {
                     source_group_ids.push(attr_value(&e, b"Self"));
+                    group_depth += 1;
+                    group_xforms.push(written_group_transform(
+                        attr_value(&e, b"ItemTransform").as_deref(),
+                        None,
+                    ));
+                    group_ids.push(None);
+                    if let Some(id) = attr_value(&e, b"Self") {
+                        seen_ids.insert(id);
+                    }
                 }
                 if ITEM_KINDS.contains(&name_owned.as_slice()) {
                     let self_id = attr_value(&e, b"Self");
@@ -4054,6 +4076,9 @@ pub fn rewrite_spread(original: &[u8], spread: &Spread) -> Result<Vec<u8>, quick
                 }
                 if matches!(name_owned.as_slice(), b"Button" | b"MultiStateObject") {
                     source_group_ids.pop();
+                    group_depth = group_depth.saturating_sub(1);
+                    group_xforms.pop();
+                    group_ids.pop();
                 }
                 if name_owned == b"Group" {
                     group_depth = group_depth.saturating_sub(1);
