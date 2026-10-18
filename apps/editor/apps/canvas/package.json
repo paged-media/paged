@@ -49,7 +49,7 @@
     "react-dom": "catalog:"
   },
   "devDependencies": {
-    "@playwright/test": "^1.63.0",
+    "@playwright/test": "^1.64.1",
     "@types/bun": "catalog:",
     "@types/node": "catalog:node25",
     "@types/pngjs": "^6.0.5",
