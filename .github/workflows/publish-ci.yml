@@ -139,6 +139,11 @@ jobs:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
           restore-keys: bun-${{ runner.os }}-
+      # pdf-bundle's build bundles the pdf-import mapper's glue
+      # (packages/pdf-bundle/bin/pdf_import.js), a build output since B3b.
+      - name: module wasm (publish)
+        uses: ./.github/actions/module-wasm
+        with: { module: publish }
       # One install for the whole root workspace (bun.lock).
       - name: bun install (root workspace)
         working-directory: .
