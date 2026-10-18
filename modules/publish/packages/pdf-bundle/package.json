@@ -13,7 +13,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "build": "tsup",
-    "test": "bun test --parallel"
+    "test": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts"
   },
   "dependencies": {
     "jszip": "^3.10.1"
