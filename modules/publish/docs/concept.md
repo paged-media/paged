@@ -73,6 +73,7 @@ host: `@paged-media/publish` for `.idml` and `@paged-media/pdf` for `.pdf`.
   engine, which parses and writes with the crates above.
 - **Fabricate a document, or throw past the host.** A mapper that cannot load resolves to
   `null`, and a failed import is logged.
+
 <!-- source, in list order: CONTRIBUTING.md:43-48; crates/idml-export/src/lib.rs:26-31;
      crates/idml-import/src/story.rs:162-165, crates/idml-import/src/spread.rs:538-542;
      crates/idml-import/src/lib.rs:93-110; crates/idml-export/src/paged.rs:58-65;
