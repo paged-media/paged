@@ -2,12 +2,12 @@
 # paged.sheet — classify the full recalc lane's disagreements.
 #
 # Usage:
-#   PAGED_XLSX_CORPUS=1 PAGED_RECALC_REPORT=/tmp/r.tsv \
+#   PAGED_CORPUS_DIR=<corpus root> PAGED_RECALC_REPORT=/tmp/r.tsv \
 #     cargo test -p sheet-conformance --test it -- --ignored --nocapture xlsx_recalc_corpus::
 #   python3 classify.py /tmp/r.tsv [<corpus root>/xlsx]
 #
-# The corpus root defaults to <repo root>/corpus (gitignored; a local symlink
-# to the private corpus), as PAGED_XLSX_CORPUS=1 does for the cargo lane.
+# The corpus root defaults to $PAGED_CORPUS_DIR, else <repo root>/corpus
+# (gitignored; a local symlink to the private corpus), as for the cargo lane.
 #
 # Files each differing/unparsed cell under one cause, reading the workbook
 # XML for what the engine's model does not keep (is the cell a shared-formula

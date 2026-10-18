@@ -10,8 +10,9 @@ See [docs/](docs/README.md).
 
 ```bash
 moon run slide:test                          # Rust and bundle tests (or, without Moon:)
-cargo test --workspace                       # unit tests + corpus (skips without the corpus)
-PAGED_REQUIRE_CORPUS=1 cargo test -p pptx-import --test it -- --nocapture corpus::
+cargo test --workspace                       # unit tests (the corpus lane is ignored)
+PAGED_CORPUS_DIR=<corpus root> PAGED_REQUIRE_CORPUS=1 \
+  cargo nextest run --profile corpus --run-ignored only   # the corpus lane
 cargo run -p pptx-import --example pptx-dump -- deck.pptx
 scripts/sync-ooxml.sh --check                # vendored paged-ooxml has not drifted
 ```

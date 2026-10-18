@@ -36,6 +36,8 @@ on:
       # The root Cargo config and its linker/wrapper scripts apply to every build.
       - ".cargo/config.toml"
       - "tooling/rust/**"
+      # The test-resources dev-dependency (the skip convention).
+      - "platform/shared/test-resources/**"
       # Prose under docs/ builds and tests nothing (test inputs are not .md there).
       - "!modules/image/docs/**/*.md"
 
@@ -104,8 +106,13 @@ jobs:
   # Rust unit evidence: cargo-nextest under the [profile.ci] in
   # .config/nextest.toml (fail-fast off, junit.path = junit.xml →
   # target/nextest/ci/junit.xml).
+  #
+  # This runner has no GPU adapter, so it is not GPU evidence: the device
+  # tests report `unavailable: GPU adapter`, and the lane report marks them
+  # <skipped> in the JUnit before the upload (they used to read as ~230
+  # passes). The GPU evidence is image-ci.yml's lavapipe and Metal lanes.
   nextest:
-    name: nextest evidence
+    name: nextest evidence (no GPU; device tests reported skipped)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -130,7 +137,16 @@ jobs:
         # Red results must still publish (the state matrix wants the ✗), so
         # don't let a test failure abort before the junit emits. nextest
         # writes target/nextest/ci/junit.xml from [profile.ci.junit].
-        run: cargo nextest run --workspace --profile ci || true
+        run: |
+          echo "PAGED_SKIP_LOG=$RUNNER_TEMP/paged-skips.tsv" >> "$GITHUB_ENV"
+          PAGED_SKIP_LOG="$RUNNER_TEMP/paged-skips.tsv" \
+            cargo nextest run --workspace --profile ci --no-tests=fail || true
+
+      # Unavailable tests become <skipped> rows in the JUnit, and a run that
+      # executed nothing fails here (the red result above still uploads).
+      - name: lane report
+        if: ${{ !cancelled() }}
+        run: python3 ../../tooling/rust/skip-report.py --lane "image nextest evidence (no GPU)" --junit target/nextest/ci/junit.xml
 
       # Evidence hand-off, INVERTED (2026-07-25). This step used to call
       # paged-media/state/actions/publish-results@main, but that action lives in the

@@ -16,50 +16,31 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! Shared plumbing for the OPT-IN corpus lanes.
+//! Shared plumbing for the OPT-IN corpus lanes (`#[ignore = "corpus: idml"]`).
 //!
-//! The corpus is a private checkout at `<repo root>/corpus` (gitignored; Git
-//! LFS, and a 4.4 GB payload that is not even in the repo). Nothing here
-//! may hard-fail on a machine that has no copy — CI has none. Every
-//! caller is `#[ignore]`d as well, so the corpus lanes run only when
-//! asked for:
+//! The corpus is private: `PAGED_CORPUS_DIR` names its root, else
+//! `<repo root>/corpus` (gitignored; a local link) is used. CI has none, so
+//! every caller is `#[ignore]`d and the lanes run only when asked for:
 //!
 //! ```text
-//! PAGED_IDML_CORPUS=1 cargo test -p idml-export -- --ignored --nocapture
+//! PAGED_CORPUS_DIR=<corpus root> cargo nextest run --profile corpus --run-ignored only
 //! ```
 //!
-//! `PAGED_IDML_CORPUS` may also name the corpus root directly, which is
-//! how a checkout somewhere other than the default path is used.
-//! Mirrors plugin-image's `PAGED_PSD_ORACLE` lane in shape and posture.
+//! Without the corpus a lane reports `unavailable: private corpus` and
+//! returns; `PAGED_REQUIRE_CORPUS=1` makes that a failure. The old
+//! `PAGED_IDML_CORPUS` is still read for one deprecation period.
 
 #![allow(dead_code)]
 
 use std::io::Read;
 use std::path::PathBuf;
 
-/// The corpus root, or `None` (with a printed reason) when this machine
-/// has no usable copy. Callers `return` on `None`.
+/// The corpus root (callers address `idml/...` below it), or `None` after
+/// `unavailable: private corpus` when it has no `idml` lane. Callers
+/// `return` on `None`.
 pub fn root() -> Option<PathBuf> {
-    let Some(switch) = std::env::var_os("PAGED_IDML_CORPUS") else {
-        eprintln!(
-            "SKIP corpus lane: PAGED_IDML_CORPUS unset \
-             (set it to 1, or to a corpus root, and run with --ignored)"
-        );
-        return None;
-    };
-    let switch = switch.to_string_lossy().into_owned();
-    let path = if switch == "1" || switch.is_empty() {
-        // The default: the monorepo's <repo root>/corpus (gitignored; a
-        // local symlink to the private corpus), four levels above this crate.
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../corpus")
-    } else {
-        PathBuf::from(switch)
-    };
-    if !path.is_dir() {
-        eprintln!("SKIP corpus lane: {} is not a directory", path.display());
-        return None;
-    }
-    Some(path)
+    let idml = paged_test_resources::corpus("idml", &["PAGED_IDML_CORPUS"])?;
+    idml.parent().map(std::path::Path::to_path_buf)
 }
 
 /// A package this lane addresses BY NAME, or a hard failure.

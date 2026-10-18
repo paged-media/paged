@@ -738,10 +738,16 @@ fn a_long_docx_story_stays_equal_to_a_cold_build() {
     g.finish();
 }
 
+/// The annual document (not in this repository; `PAGED_DIGEST_GATE_ANNUAL`
+/// names it): the `lane: annual` lane,
+/// `PAGED_DIGEST_GATE_ANNUAL=<file> cargo nextest run --profile lanes --run-ignored only`.
 #[test]
+#[ignore = "lane: annual (PAGED_DIGEST_GATE_ANNUAL)"]
 fn the_annual_stays_equal_to_a_cold_build() {
-    let Ok(path) = std::env::var("PAGED_DIGEST_GATE_ANNUAL") else {
-        eprintln!("PAGED_DIGEST_GATE_ANNUAL unset: the annual lane is skipped");
+    let Some(path) = paged_test_resources::env_var(
+        paged_test_resources::Resource::Corpus,
+        "PAGED_DIGEST_GATE_ANNUAL",
+    ) else {
         return;
     };
     let bytes = std::fs::read(&path).expect("read the annual");

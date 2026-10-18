@@ -50,6 +50,8 @@ docx-import = { path = "docx-import" }
 docx-lower = { path = "docx-lower" }
 docx-export = { path = "docx-export" }
 docx-js = { path = "docx-js" }
+# Optional test resources (docs/development/testing.md): dev-dependency only.
+paged-test-resources = { path = "../../platform/shared/test-resources" }
 docx-skeleton = { path = "docx-skeleton" }
 
 

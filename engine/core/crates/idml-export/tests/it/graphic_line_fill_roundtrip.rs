@@ -213,11 +213,11 @@ fn a_modelled_fill_still_patches() {
 /// with a deleted line fill). Opt-in.
 ///
 /// ```text
-/// PAGED_IDML_CORPUS=1 cargo test -p idml-export --test graphic_line_fill_roundtrip \
-///     -- --ignored --nocapture
+/// PAGED_CORPUS_DIR=<corpus root> cargo test -p idml-export --test it -- \
+///     --ignored --nocapture graphic_line_fill_roundtrip::
 /// ```
 #[test]
-#[ignore = "private corpus: opt-in (PAGED_IDML_CORPUS=1 + the corpus mount)"]
+#[ignore = "corpus: idml"]
 fn corpus_graphic_line_fills_survive_an_unmutated_save() {
     let Some(root) = corpus::root() else { return };
     let package = corpus::package(&root, "idml/packs/catalog-brochure-template/template.idml");

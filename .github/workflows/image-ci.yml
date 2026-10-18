@@ -43,6 +43,8 @@ on:
       # The root Cargo config and its linker/wrapper scripts apply to every build.
       - ".cargo/config.toml"
       - "tooling/rust/**"
+      # The test-resources dev-dependency (the skip convention).
+      - "platform/shared/test-resources/**"
       # Prose under docs/ builds and tests nothing (test inputs are not .md there).
       - "!modules/image/docs/**/*.md"
   pull_request:
@@ -71,6 +73,8 @@ on:
       # The root Cargo config and its linker/wrapper scripts apply to every build.
       - ".cargo/config.toml"
       - "tooling/rust/**"
+      # The test-resources dev-dependency (the skip convention).
+      - "platform/shared/test-resources/**"
       # Prose under docs/ builds and tests nothing (test inputs are not .md there).
       - "!modules/image/docs/**/*.md"
   workflow_dispatch:
@@ -126,13 +130,23 @@ jobs:
       - name: clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
-      # GPU device tests self-skip here (no adapter on ubuntu-latest): on
-      # 2026-10-04, 224 of 1,034 tests reported "passed" this way without
-      # running. This step covers the CPU logic and the scalar reference
-      # twins; the gpu-sw and gpu-metal jobs below run the device tests
-      # with REQUIRE_GPU=1, where a skip is a failure.
-      - name: test
-        run: cargo test --workspace
+      # There is no adapter on ubuntu-latest, so this lane does NOT test the
+      # GPU: its device tests print `unavailable: GPU adapter` and return,
+      # and the lane report lists them as skipped instead of counting them
+      # as passed (on 2026-10-04, 224 of 1,034 tests "passed" this way).
+      # This step covers the CPU logic and the scalar reference twins; the
+      # gpu-sw and gpu-metal jobs below run the device tests with
+      # PAGED_REQUIRE_GPU=1, where an unavailable adapter is a failure.
+      - name: test (CPU only; device tests are unavailable here)
+        id: cargo_test
+        run: |
+          set -o pipefail
+          echo "PAGED_SKIP_LOG=$RUNNER_TEMP/paged-skips.tsv" >> "$GITHUB_ENV"
+          PAGED_SKIP_LOG="$RUNNER_TEMP/paged-skips.tsv" \
+            cargo test --workspace 2>&1 | tee "$RUNNER_TEMP/cargo-test.log"
+      - name: lane report
+        if: ${{ !cancelled() && steps.cargo_test.outcome != 'skipped' }}
+        run: python3 ../../tooling/rust/skip-report.py --lane "image rust engine (no GPU)" --cargo-log "$RUNNER_TEMP/cargo-test.log"
 
       # --- Isolation-contract dependency guards (spec §2.1 / §4) ---------
       # Each guard asserts an EMPTY match: grep exits 1 on no-match, which
@@ -223,9 +237,10 @@ jobs:
 
   # The GPU device tests on a SOFTWARE Vulkan adapter (Mesa lavapipe),
   # on every PR. WGPU_FALLBACK=1 selects the CPU-type adapter, which is
-  # lavapipe; REQUIRE_GPU=1 makes a missing adapter fail every device test
-  # instead of skipping it (image-gpu/src/test_support.rs). The first test
-  # step prints the adapter, so the log says what the tests ran on.
+  # lavapipe; PAGED_REQUIRE_GPU=1 makes a missing adapter fail every device
+  # test instead of skipping it (image-gpu/src/test_support.rs,
+  # paged-test-resources). The first test step prints the adapter, so the
+  # log says what the tests ran on.
       # A silent fallback to the default linker fails here: mold stamps
       # the .comment section of what it links.
       - name: mold linked the test binaries
@@ -242,7 +257,7 @@ jobs:
     env:
       WGPU_BACKEND: vulkan
       WGPU_FALLBACK: "1"
-      REQUIRE_GPU: "1"
+      PAGED_REQUIRE_GPU: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
@@ -271,8 +286,15 @@ jobs:
           sudo apt-get install -y --no-install-recommends mesa-vulkan-drivers libvulkan1
       - name: adapter
         run: cargo test -p image-gpu --features test-support --lib test_support -- --nocapture
-      - name: test (REQUIRE_GPU=1)
-        run: cargo test --workspace --no-fail-fast
+      - name: test (PAGED_REQUIRE_GPU=1)
+        id: cargo_test
+        run: |
+          set -o pipefail
+          cargo test --workspace --no-fail-fast 2>&1 | tee "$RUNNER_TEMP/cargo-test.log"
+      # A lane that executed nothing fails.
+      - name: lane report
+        if: ${{ !cancelled() && steps.cargo_test.outcome != 'skipped' }}
+        run: python3 ../../tooling/rust/skip-report.py --lane "${{ github.job }}" --cargo-log "$RUNNER_TEMP/cargo-test.log"
 
   # The same tests on real hardware (Apple silicon, Metal) after every
   # merge to main and on demand: lavapipe is a conformant Vulkan driver,
@@ -284,7 +306,7 @@ jobs:
     timeout-minutes: 60
     env:
       WGPU_BACKEND: metal
-      REQUIRE_GPU: "1"
+      PAGED_REQUIRE_GPU: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
@@ -299,8 +321,15 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: adapter
         run: cargo test -p image-gpu --features test-support --lib test_support -- --nocapture
-      - name: test (REQUIRE_GPU=1)
-        run: cargo test --workspace --no-fail-fast
+      - name: test (PAGED_REQUIRE_GPU=1)
+        id: cargo_test
+        run: |
+          set -o pipefail
+          cargo test --workspace --no-fail-fast 2>&1 | tee "$RUNNER_TEMP/cargo-test.log"
+      # A lane that executed nothing fails.
+      - name: lane report
+        if: ${{ !cancelled() && steps.cargo_test.outcome != 'skipped' }}
+        run: python3 ../../tooling/rust/skip-report.py --lane "${{ github.job }}" --cargo-log "$RUNNER_TEMP/cargo-test.log"
 
   # The TS bundle: the contract-import lint (isolation §2.1), typecheck,
   # bun test, and manifest validation. Pre-monorepo this nested two checkouts

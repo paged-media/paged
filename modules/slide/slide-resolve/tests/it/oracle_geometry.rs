@@ -137,22 +137,23 @@ fn fixtures_land_where_powerpoint_puts_them() {
     assert!(all_bad.is_empty(), "{} shapes misplaced", all_bad.len());
 }
 
-/// The corpus decks against their recordings (the private corpus at
-/// `<repo root>/corpus`, or `PAGED_CORPUS`; skips without it unless
-/// `PAGED_REQUIRE_CORPUS=1`).
+/// The corpus decks against their recordings (the private corpus,
+/// `corpus: pptx`: `PAGED_CORPUS_DIR`, or the `<repo root>/corpus` link;
+/// reports `unavailable` without it, fails instead under
+/// `PAGED_REQUIRE_CORPUS=1`; docs/development/testing.md).
 #[test]
+#[ignore = "corpus: pptx"]
 fn corpus_decks_land_where_powerpoint_puts_them() {
-    let base = std::env::var_os("PAGED_CORPUS")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../corpus"));
-    let packs = base.join("pptx/packs");
-    if !packs.is_dir() {
-        assert!(
-            std::env::var("PAGED_REQUIRE_CORPUS").as_deref() != Ok("1"),
-            "PAGED_REQUIRE_CORPUS=1 but no corpus"
-        );
-        eprintln!("SKIP: no pptx corpus");
+    let Some(pptx) = paged_test_resources::corpus("pptx", &["PAGED_CORPUS"]) else {
         return;
+    };
+    let packs = pptx.join("packs");
+    if !packs.is_dir() {
+        paged_test_resources::skip!(
+            paged_test_resources::Resource::Corpus,
+            "{} is not a directory",
+            packs.display()
+        );
     }
     let (mut total, mut bad_total) = (0, 0);
     let mut dirs: Vec<_> = std::fs::read_dir(&packs)

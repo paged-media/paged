@@ -22,6 +22,7 @@
 //! profile guard, `RequestColorCompute`'s gamut verdict, and the
 //! default-path-unchanged invariant.
 
+use paged_test_resources::{skip, Resource};
 use std::io::Write;
 
 use paged_canvas::{channel::Mutation, CanvasModel, CanvasOptions, ColorProfileEntry};
@@ -90,8 +91,11 @@ fn find_profile() -> Option<Vec<u8>> {
 #[test]
 fn set_color_settings_switches_the_working_space_and_back() {
     let Some(profile) = find_profile() else {
-        eprintln!("color_settings: no CMYK profile available — skipping");
-        return;
+        skip!(
+            Resource::Icc,
+            "{}",
+            paged_color::test_profiles::NO_PROFILE_HINT
+        );
     };
     let opts = CanvasOptions {
         color_profiles: vec![ColorProfileEntry {
@@ -135,8 +139,11 @@ fn set_color_settings_switches_the_working_space_and_back() {
 #[test]
 fn designmap_profile_name_activates_a_matching_registered_profile() {
     let Some(profile) = find_profile() else {
-        eprintln!("color_settings: no CMYK profile available — skipping");
-        return;
+        skip!(
+            Resource::Icc,
+            "{}",
+            paged_color::test_profiles::NO_PROFILE_HINT
+        );
     };
     // The fixture's designmap declares CMYKProfile="Test CMYK
     // Profile"; registering bytes under exactly that name activates
@@ -178,8 +185,11 @@ fn unknown_profile_name_fails_the_mutation() {
 #[test]
 fn color_compute_resolves_and_flags_gamut() {
     let Some(profile) = find_profile() else {
-        eprintln!("color_settings: no CMYK profile available — skipping");
-        return;
+        skip!(
+            Resource::Icc,
+            "{}",
+            paged_color::test_profiles::NO_PROFILE_HINT
+        );
     };
     let mut model =
         CanvasModel::load("doc1", &small_idml(), CanvasOptions::default()).expect("load");
@@ -231,8 +241,11 @@ fn swatch_tint_folds_into_compute() {
 #[test]
 fn proof_setup_swaps_the_display_condition_and_back() {
     let Some(profile) = find_profile() else {
-        eprintln!("color_settings: no CMYK profile available — skipping");
-        return;
+        skip!(
+            Resource::Icc,
+            "{}",
+            paged_color::test_profiles::NO_PROFILE_HINT
+        );
     };
     let mut model =
         CanvasModel::load("doc1", &small_idml(), CanvasOptions::default()).expect("load");
@@ -300,8 +313,11 @@ fn gradient_detail_resolves_stops_with_refs_and_midpoints() {
 fn the_kept_cmyk_transform_follows_the_colour_settings() {
     use paged_renderer::pipeline::{self, PipelineOptions};
     let Some(profile) = find_profile() else {
-        eprintln!("color_settings: no CMYK profile available — skipping");
-        return;
+        skip!(
+            Resource::Icc,
+            "{}",
+            paged_color::test_profiles::NO_PROFILE_HINT
+        );
     };
     let cold = |intent: paged_color::Intent, bpc: bool| -> Vec<u64> {
         let doc = idml_import::import_idml_doc(&small_idml()).expect("import");

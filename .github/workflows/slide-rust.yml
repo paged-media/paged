@@ -17,6 +17,8 @@ on:
       # The root Cargo config and its linker/wrapper scripts apply to every build.
       - ".cargo/config.toml"
       - "tooling/rust/**"
+      # The test-resources dev-dependency (the skip convention).
+      - "platform/shared/test-resources/**"
       # Prose under docs/ builds and tests nothing (test inputs are not .md there).
       - "!modules/slide/docs/**/*.md"
   pull_request:
@@ -26,6 +28,8 @@ on:
       # The root Cargo config and its linker/wrapper scripts apply to every build.
       - ".cargo/config.toml"
       - "tooling/rust/**"
+      # The test-resources dev-dependency (the skip convention).
+      - "platform/shared/test-resources/**"
       # Prose under docs/ builds and tests nothing (test inputs are not .md there).
       - "!modules/slide/docs/**/*.md"
   workflow_dispatch:
@@ -86,9 +90,15 @@ jobs:
       - name: nextest (junit; red results still upload)
         run: |
           set -uo pipefail
-          cargo nextest run --workspace --profile ci \
+          # Tests that miss a resource append `unavailable: …` here; the
+          # lane report marks them <skipped> in the JUnit and fails a run
+          # that executed nothing (docs/development/testing.md).
+          export PAGED_SKIP_LOG="$RUNNER_TEMP/paged-skips.tsv"
+          cargo nextest run --workspace --profile ci --no-tests=fail \
             || echo "RUST_FAILED=1" >> "$GITHUB_ENV"
           test -s target/nextest/ci/junit.xml
+          python3 ../../tooling/rust/skip-report.py --lane "slide nextest" --junit target/nextest/ci/junit.xml \
+            || echo "RUST_FAILED=1" >> "$GITHUB_ENV"
       - name: upload nextest JUnit artifact
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4

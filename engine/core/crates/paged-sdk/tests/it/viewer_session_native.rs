@@ -39,6 +39,7 @@
 //! stability / viewer-vs-stock equivalence lives in
 //! `tests/it/digest_equivalence.rs`.
 
+use paged_test_resources::{skip, Resource};
 use std::path::PathBuf;
 
 use paged_renderer::BytesResolver;
@@ -67,8 +68,10 @@ fn fixture(name: &str) -> Option<Vec<u8>> {
 #[test]
 fn viewer_session_load_opens_container_and_builds_pages() {
     let Some(bytes) = fixture("geometry-groups.idml") else {
-        eprintln!("fixture geometry-groups.idml absent — skipped");
-        return;
+        skip!(
+            Resource::Fixtures,
+            "corpus/generated/geometry-groups.idml is absent: run scripts/regen-fixtures.sh"
+        );
     };
     let document = idml_import::import_idml_doc(&bytes).expect("open IDML container");
     let built =
@@ -132,8 +135,10 @@ fn viewer_session_imports_full_package_across_feature_fixtures() {
 #[test]
 fn viewer_session_pipeline_produces_renderable_display_list() {
     let Some(bytes) = fixture("geometry-groups.idml") else {
-        eprintln!("fixture absent — skipped");
-        return;
+        skip!(
+            Resource::Fixtures,
+            "corpus/generated/geometry-groups.idml is absent: run scripts/regen-fixtures.sh"
+        );
     };
     let document = idml_import::import_idml_doc(&bytes).expect("open fixture");
     let built =
@@ -155,8 +160,10 @@ fn viewer_session_pipeline_produces_renderable_display_list() {
 #[test]
 fn viewer_session_page_layout_stacks_pages_with_constant_gap() {
     let Some(bytes) = fixture("geometry-groups.idml") else {
-        eprintln!("fixture absent — skipped");
-        return;
+        skip!(
+            Resource::Fixtures,
+            "corpus/generated/geometry-groups.idml is absent: run scripts/regen-fixtures.sh"
+        );
     };
     let document = idml_import::import_idml_doc(&bytes).expect("open fixture");
     let built =

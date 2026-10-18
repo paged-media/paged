@@ -41,10 +41,12 @@
 //! `every_legacy_doc_is_refused_by_name`. This is the raster case, and
 //! it is by some distance the largest sample any of them has.
 //!
-//! OPT-IN — the assets live in the private corpus checkout:
+//! OPT-IN — the assets live in the private corpus checkout, under
+//! `raster/` (`#[ignore]`d). Without them the tests report `unavailable`,
+//! and `PAGED_REQUIRE_CORPUS=1` makes that a failure:
 //!
 //! ```text
-//! PAGED_RASTER_CORPUS=1 cargo test -p image-conformance --test real_raster_corpus -- --ignored --nocapture
+//! PAGED_CORPUS_DIR=<corpus root> cargo nextest run --profile corpus --run-ignored only real_raster_corpus::
 //! ```
 
 use std::path::{Path, PathBuf};
@@ -93,24 +95,9 @@ fn sniff(path: &Path) -> &'static str {
 }
 
 fn raster_files() -> Option<Vec<PathBuf>> {
-    let Some(switch) = std::env::var_os("PAGED_RASTER_CORPUS") else {
-        eprintln!(
-            "SKIP raster corpus lane: PAGED_RASTER_CORPUS unset \
-             (set it to 1, or to a corpus root, and run with --ignored)"
-        );
-        return None;
-    };
-    let switch = switch.to_string_lossy().into_owned();
-    let root = if switch == "1" || switch.is_empty() {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../corpus")
-    } else {
-        PathBuf::from(switch)
-    };
-    let dir = root.join("raster");
-    if !dir.is_dir() {
-        eprintln!("SKIP raster corpus lane: {} not readable", dir.display());
-        return None;
-    }
+    // `<corpus root>/raster`, or `None` after reporting it unavailable.
+    // PAGED_RASTER_CORPUS, the lane's old switch, is still read.
+    let dir = paged_test_resources::corpus("raster", &["PAGED_RASTER_CORPUS"])?;
     fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
         let Ok(entries) = std::fs::read_dir(dir) else {
             return;
@@ -143,9 +130,9 @@ fn raster_files() -> Option<Vec<PathBuf>> {
     walk(&dir, &mut out);
     out.sort();
     if out.is_empty() {
-        eprintln!(
-            "SKIP raster corpus lane: no fixtures under {}",
-            dir.display()
+        image_conformance::corpus::missing(
+            "raster",
+            format_args!("no fixtures under {}", dir.display()),
         );
         return None;
     }
@@ -159,7 +146,7 @@ fn name_of(p: &Path) -> String {
 }
 
 #[test]
-#[ignore = "raster corpus lane: opt-in (PAGED_RASTER_CORPUS=1 + the private corpus mount)"]
+#[ignore = "corpus: raster"]
 fn a_format_we_cannot_read_is_refused_by_both_decoders() {
     let Some(files) = raster_files() else {
         return;
@@ -217,7 +204,7 @@ fn a_format_we_cannot_read_is_refused_by_both_decoders() {
 }
 
 #[test]
-#[ignore = "raster corpus lane: opt-in (PAGED_RASTER_CORPUS=1 + the private corpus mount)"]
+#[ignore = "corpus: raster"]
 fn the_suite_actually_spans_the_formats_it_claims_to() {
     let Some(files) = raster_files() else {
         return;

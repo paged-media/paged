@@ -24,6 +24,7 @@ lcms2 = "6"
 qcms = { version = "0.3", default-features = false, features = ["cmyk", "iccv4-enabled"] }
 
 [dev-dependencies]
+paged-test-resources.workspace = true
 # Concept 2 (C3 bake-off evidence) — qcms compiled NATIVELY so
 # tests/parity.rs can run lcms2 and qcms side-by-side on the same
 # profile + patch set and bound their dE. Runtime wasm32 builds keep

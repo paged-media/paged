@@ -699,10 +699,8 @@ fn text_overset_round_trips_through_parser() {
 /// (page 1) and the threaded chain (page 2).
 #[test]
 fn text_overset_fires_overset_diagnostic() {
-    let Some(font) = inter_font() else {
-        eprintln!("skip: Inter.ttf not present");
-        return;
-    };
+    let font = inter_font()
+        .expect("Inter.ttf is committed at engine/core/corpus/fonts; a partial checkout?");
     let bytes = paged_gen::write_idml(&paged_gen::samples::text_overset::build()).unwrap();
     let doc = idml_import::import_idml_doc(&bytes).expect("Document::open");
     let opts = paged_renderer::pipeline::PipelineOptions {
@@ -776,10 +774,8 @@ fn text_autosize_round_trips_through_parser() {
 /// rect). Both are layout-time effects, hence a full build.
 #[test]
 fn text_autosize_grows_box_and_excludes_neighbour() {
-    let Some(font) = inter_font() else {
-        eprintln!("skip: Inter.ttf not present");
-        return;
-    };
+    let font = inter_font()
+        .expect("Inter.ttf is committed at engine/core/corpus/fonts; a partial checkout?");
     let bytes = paged_gen::write_idml(&paged_gen::samples::text_autosize::build()).unwrap();
     let doc = idml_import::import_idml_doc(&bytes).expect("Document::open");
     let opts = paged_renderer::pipeline::PipelineOptions {
@@ -2350,10 +2346,8 @@ fn annual_base_round_trips_named_entities() {
 fn annual_base_renders_furniture_override_and_facing_sides() {
     use paged_gen::samples::annual_base as ab;
 
-    let Some(font) = inter_font() else {
-        eprintln!("skip: Inter.ttf not present");
-        return;
-    };
+    let font = inter_font()
+        .expect("Inter.ttf is committed at engine/core/corpus/fonts; a partial checkout?");
     let bytes = paged_gen::write_idml(&ab::build()).unwrap();
     let doc = idml_import::import_idml_doc(&bytes).expect("Document::open");
     let opts = paged_renderer::pipeline::PipelineOptions {

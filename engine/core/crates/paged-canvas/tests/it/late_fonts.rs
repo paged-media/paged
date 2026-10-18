@@ -297,10 +297,15 @@ fn a_late_font_reaches_a_family_an_edit_introduced() {
 /// names its `.paged`): load it with every corpus face except JetBrains
 /// Mono, register JetBrains Mono afterwards, and report what that costs and
 /// how many stories it re-lays out. Run release: the numbers are the point.
+/// The `lane: annual` lane:
+/// `PAGED_LATE_FONTS_ANNUAL=<file> cargo nextest run --release --profile lanes --run-ignored only`.
 #[test]
+#[ignore = "lane: annual (PAGED_LATE_FONTS_ANNUAL)"]
 fn the_annual_late_registration_cost() {
-    let Ok(path) = std::env::var("PAGED_LATE_FONTS_ANNUAL") else {
-        eprintln!("PAGED_LATE_FONTS_ANNUAL unset: the annual measurement is skipped");
+    let Some(path) = paged_test_resources::env_var(
+        paged_test_resources::Resource::Corpus,
+        "PAGED_LATE_FONTS_ANNUAL",
+    ) else {
         return;
     };
     let bytes = std::fs::read(&path).expect("read the annual");

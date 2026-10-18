@@ -296,11 +296,11 @@ fn a_mutated_nonprinting_is_still_written() {
 /// The corpus entries the defect was measured on. Opt-in.
 ///
 /// ```text
-/// PAGED_IDML_CORPUS=1 cargo test -p idml-export --test tint_sentinel_roundtrip \
-///     -- --ignored --nocapture
+/// PAGED_CORPUS_DIR=<corpus root> cargo test -p idml-export --test it -- \
+///     --ignored --nocapture tint_sentinel_roundtrip::
 /// ```
 #[test]
-#[ignore = "private corpus: opt-in (PAGED_IDML_CORPUS=1 + the corpus mount)"]
+#[ignore = "corpus: idml"]
 fn corpus_sentinel_tints_survive_an_unmutated_save() {
     let Some(root) = corpus::root() else { return };
     // One package per lane: the stories carrying `FillTint="-1"`, and

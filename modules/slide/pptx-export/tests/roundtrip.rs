@@ -19,6 +19,10 @@
 //! A written deck read back: the slides the plan named, in its order, with
 //! its hidden flags and notes; duplicates are their own parts; an
 //! unchanged plan returns the original bytes.
+//!
+//! The notes tests on a real deck need the private corpus (`corpus: pptx`,
+//! opt-in: `cargo nextest run --profile corpus --run-ignored only`, see
+//! docs/development/testing.md).
 
 use std::path::PathBuf;
 
@@ -30,10 +34,17 @@ fn fixture(name: &str) -> Vec<u8> {
     std::fs::read(p).unwrap()
 }
 
+/// A corpus pack's deck, or `None` after reporting the corpus unavailable.
+/// A pack the mounted corpus does not have is a stale name, not a skip.
 fn corpus(pack: &str) -> Option<Vec<u8>> {
-    let p = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join(format!("../../../corpus/pptx/packs/{pack}/primary.pptx"));
-    std::fs::read(p).ok()
+    let pptx = paged_test_resources::corpus("pptx", &["PAGED_CORPUS"])?;
+    let p = pptx.join(format!("packs/{pack}/primary.pptx"));
+    Some(std::fs::read(&p).unwrap_or_else(|e| {
+        panic!(
+            "{}: {e} — the corpus is mounted but has no such pack; fix the name",
+            p.display()
+        )
+    }))
 }
 
 fn notes_of(s: &pptx_core::Slide) -> Option<String> {
@@ -125,6 +136,7 @@ fn reorder_duplicate_delete_hide_and_notes_read_back() {
 }
 
 #[test]
+#[ignore = "corpus: pptx"]
 fn notes_are_rewritten_where_a_deck_has_them_and_created_where_it_does_not() {
     let Some(bytes) = corpus("creative-agency-profile-powerpoint") else {
         return;
@@ -159,6 +171,7 @@ fn notes_on_a_deck_without_a_notes_master_are_reported_not_lost_silently() {
 }
 
 #[test]
+#[ignore = "corpus: pptx"]
 fn notes_with_markup_characters_and_lines_round_trip() {
     let Some(bytes) = corpus("creative-agency-profile-powerpoint") else {
         return;

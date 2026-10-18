@@ -31,49 +31,28 @@
 //! mishandles one axis shows up as a whole row or column failing, not a
 //! scatter.
 //!
-//! OPT-IN — the assets live in the private corpus checkout
-//! (`<repo root>/corpus`, gitignored; a local symlink — or name the root
-//! in `PAGED_GRID_CORPUS`):
+//! OPT-IN — the assets live in the private corpus (`PAGED_CORPUS_DIR`, else
+//! `<repo root>/corpus`, gitignored; a local link). The `corpus: idml` lane:
 //!
 //! ```text
-//! PAGED_GRID_CORPUS=1 cargo test -p paged-scene --test grid_matrix_corpus -- --ignored --nocapture
+//! PAGED_CORPUS_DIR=<corpus root> cargo nextest run --profile corpus --run-ignored only
 //! ```
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-/// Every extracted gridtastic IDML, or `None` with a printed reason.
+/// Every extracted gridtastic IDML, or `None` after `unavailable: private
+/// corpus` (a failure under `PAGED_REQUIRE_CORPUS=1`).
 fn matrix_files() -> Option<Vec<PathBuf>> {
-    let Some(switch) = std::env::var_os("PAGED_GRID_CORPUS") else {
-        eprintln!(
-            "SKIP grid matrix: PAGED_GRID_CORPUS unset \
-             (set it to 1, or to a corpus root, and run with --ignored)"
-        );
-        return None;
-    };
-    let switch = switch.to_string_lossy().into_owned();
-    let root = if switch == "1" || switch.is_empty() {
-        // <repo root>/corpus: engine/core/crates/paged-scene is four
-        // levels below the monorepo root.
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../corpus")
-    } else {
-        PathBuf::from(switch)
-    };
-    // A corpus that is not mounted is the only honest reason to skip. The
-    // switch was set, so the caller asked for this lane.
-    if !root.is_dir() {
-        eprintln!(
-            "SKIP grid matrix: no corpus at {} (private checkout)",
-            root.display()
-        );
-        return None;
-    }
+    // A corpus that is not mounted is the only honest reason to skip.
+    // `PAGED_GRID_CORPUS` is still read for one deprecation period.
+    let idml = paged_test_resources::corpus("idml", &["PAGED_GRID_CORPUS"])?;
     // `assets/doc`, not `assets/idml`. The corpus files companions by
     // ROLE — "doc" is every layout/authoring document, IDML and DOCX and
     // Affinity alike — and the 2026-08 extraction rework renamed the old
     // `assets/idml` accordingly. This lane kept the old name and had been
     // skipping all 179 layouts ever since, while reporting ok.
-    let dir = root.join("idml/packs/gridtastic-grid-kit/assets/doc");
+    let dir = idml.join("packs/gridtastic-grid-kit/assets/doc");
     let entries = std::fs::read_dir(&dir).unwrap_or_else(|e| {
         panic!(
             "grid matrix addresses {}, which this corpus does not have ({e}). \
@@ -117,7 +96,7 @@ fn axes(path: &std::path::Path) -> (String, String) {
 }
 
 #[test]
-#[ignore = "grid matrix: opt-in (PAGED_GRID_CORPUS=1 + the private corpus mount)"]
+#[ignore = "corpus: idml"]
 fn every_grid_layout_parses_at_every_page_size() {
     let Some(files) = matrix_files() else {
         return;

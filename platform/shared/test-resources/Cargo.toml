@@ -1,0 +1,20 @@
+[package]
+name = "paged-test-resources"
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.99"
+license = "AGPL-3.0-only OR LicenseRef-PMEL"
+publish = false
+description = "Optional test resources (GPU, corpus, profiles, fonts, fixtures, tools, servers): one skip convention for every Cargo workspace."
+
+# Standard library only, so adding it as a dev-dependency adds one line to
+# a workspace's Cargo.lock and nothing else. It is a dev-dependency of every
+# Cargo workspace that has optional-resource tests, through a path
+# dependency (docs/adr/PM-0005); it is never a normal dependency, so it
+# cannot reach shipped code or wasm.
+[dependencies]
+
+# A workspace of its own: this directory is not inside any other Cargo
+# workspace, and the consumers ignore this table (cargo reads only the
+# root workspace's).
+[workspace]

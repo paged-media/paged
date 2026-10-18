@@ -16,7 +16,7 @@
 //! The headless lane end to end: no editor tab, the engine is `paged
 //! engine-serve` (the server's PAGED_ENGINE_URL; locally on 127.0.0.1:8793).
 //! Needs PAGED_SERVER_URL and PAGED_BIN (the core `paged` binary, to make the
-//! document); skipped without them.
+//! document); without them it reports `unavailable` (see tests/it/sync.rs).
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -65,11 +65,14 @@ impl Mcp {
 }
 
 #[test]
+#[ignore = "server: a running paged.server (PAGED_SERVER_URL)"]
 fn a_model_scripts_renders_and_saves_with_no_tab_open() {
-    let (Ok(url), Ok(bin)) = (
-        std::env::var("PAGED_SERVER_URL"),
-        std::env::var("PAGED_BIN"),
-    ) else {
+    use paged_test_resources::{env_var, Resource};
+    let Some(url) = env_var(Resource::Server, "PAGED_SERVER_URL") else {
+        return;
+    };
+    // The core `paged` binary is build output (cargo build -p paged-cli).
+    let Some(bin) = env_var(Resource::Fixtures, "PAGED_BIN") else {
         return;
     };
     let dir = std::env::temp_dir().join(format!("paged-headless-{}", std::process::id()));

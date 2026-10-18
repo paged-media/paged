@@ -24,8 +24,10 @@ use paged_repo::{import, Ctx, MemoryStore, Policy, Repo};
 use paged_sync::{Error, Remote, Workspace};
 use serde_json::json;
 
+/// `PAGED_SERVER_URL`, or `None` after reporting the server unavailable
+/// (`PAGED_REQUIRE_SERVER=1` makes that a failure).
 fn server() -> Option<String> {
-    std::env::var("PAGED_SERVER_URL").ok()
+    paged_test_resources::env_var(paged_test_resources::Resource::Server, "PAGED_SERVER_URL")
 }
 
 fn fresh(name: &str) -> String {
@@ -68,6 +70,7 @@ fn status(r: Result<serde_json::Value, Error>) -> u16 {
 }
 
 #[test]
+#[ignore = "server: a running paged.server (PAGED_SERVER_URL)"]
 fn the_policy_is_governed_data() {
     let Some(url) = server() else { return };
     let ws = fresh("ws");
@@ -113,6 +116,7 @@ fn the_policy_is_governed_data() {
 }
 
 #[test]
+#[ignore = "server: a running paged.server (PAGED_SERVER_URL)"]
 fn a_change_reaches_merge_only_main_through_review() {
     let Some(url) = server() else { return };
     let ws = fresh("team");
@@ -196,6 +200,7 @@ fn a_change_reaches_merge_only_main_through_review() {
 }
 
 #[test]
+#[ignore = "server: a running paged.server (PAGED_SERVER_URL)"]
 fn a_workspace_repository_without_a_workspace_refuses_everything() {
     let Some(url) = server() else { return };
     let remote = Remote::in_workspace(&url, &fresh("nowhere"), "doc", "dev-token");

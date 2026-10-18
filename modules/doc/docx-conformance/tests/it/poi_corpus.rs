@@ -64,39 +64,25 @@
 //! `corpus/docx/poi/PROVENANCE.md`. The conversions inherit that licence
 //! from their inputs.
 //!
-//! OPT-IN — the assets live in the private corpus checkout:
+//! OPT-IN — the assets live in the private corpus (`corpus: docx`,
+//! docs/development/testing.md):
 //!
 //! ```text
-//! PAGED_DOCX_CORPUS=1 cargo test -p docx-conformance --test poi_corpus -- --ignored --nocapture
+//! PAGED_CORPUS_DIR=<corpus root> PAGED_REQUIRE_CORPUS=1 \
+//!     cargo nextest run --profile corpus --run-ignored only
 //! ```
 
 use std::path::{Path, PathBuf};
 
 use docx_import::import_docx;
+use paged_test_resources::{unavailable, Resource};
 
 const EXTS: &[&str] = &["docx", "dotx", "docm", "doc"];
 
-/// The corpus `docx/` root, or `None` with a printed reason.
+/// The corpus `docx/` root, or `None` after reporting the corpus
+/// unavailable (`PAGED_REQUIRE_CORPUS=1` makes that a failure).
 fn docx_root() -> Option<PathBuf> {
-    let Some(switch) = std::env::var_os("PAGED_DOCX_CORPUS") else {
-        eprintln!(
-            "SKIP poi docx lane: PAGED_DOCX_CORPUS unset \
-             (set it to 1, or to a corpus root, and run with --ignored)"
-        );
-        return None;
-    };
-    let switch = switch.to_string_lossy().into_owned();
-    let root = if switch == "1" || switch.is_empty() {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../corpus")
-    } else {
-        PathBuf::from(switch)
-    };
-    let dir = root.join("docx");
-    if !dir.is_dir() {
-        eprintln!("SKIP poi docx lane: {} not readable", dir.display());
-        return None;
-    }
-    Some(dir)
+    paged_test_resources::corpus("docx", &["PAGED_DOCX_CORPUS"])
 }
 
 /// Recursive walk — `docx-conformance` has no `walkdir`, and pulling a
@@ -140,7 +126,10 @@ fn source_files(source: &str) -> Option<Vec<PathBuf>> {
     walk(&dir, &mut out);
     out.sort();
     if out.is_empty() {
-        eprintln!("SKIP: no documents under {}", dir.display());
+        unavailable(
+            Resource::Corpus,
+            format_args!("no documents under {}", dir.display()),
+        );
         return None;
     }
     Some(out)
@@ -150,7 +139,10 @@ fn poi_files() -> Option<Vec<PathBuf>> {
     let root = docx_root()?;
     let dir = root.join("poi");
     let Ok(entries) = std::fs::read_dir(&dir) else {
-        eprintln!("SKIP poi docx lane: {} not readable", dir.display());
+        unavailable(
+            Resource::Corpus,
+            format_args!("{} not readable", dir.display()),
+        );
         return None;
     };
     let mut out: Vec<PathBuf> = entries
@@ -168,7 +160,10 @@ fn poi_files() -> Option<Vec<PathBuf>> {
         .collect();
     out.sort();
     if out.is_empty() {
-        eprintln!("SKIP poi docx lane: no documents under {}", dir.display());
+        unavailable(
+            Resource::Corpus,
+            format_args!("no documents under {}", dir.display()),
+        );
         return None;
     }
     Some(out)
@@ -181,7 +176,7 @@ fn ext_of(p: &Path) -> String {
 }
 
 #[test]
-#[ignore = "poi docx lane: opt-in (PAGED_DOCX_CORPUS=1 + the private corpus mount)"]
+#[ignore = "corpus: docx"]
 fn no_document_in_the_poi_corpus_panics_the_importer() {
     let Some(files) = poi_files() else {
         return;
@@ -218,15 +213,14 @@ fn no_document_in_the_poi_corpus_panics_the_importer() {
 }
 
 #[test]
-#[ignore = "poi docx lane: opt-in (PAGED_DOCX_CORPUS=1 + the private corpus mount)"]
+#[ignore = "corpus: docx"]
 fn every_legacy_doc_is_refused_by_name() {
     let Some(files) = poi_files() else {
         return;
     };
     let legacy: Vec<_> = files.iter().filter(|p| ext_of(p) == "doc").collect();
     if legacy.is_empty() {
-        eprintln!("SKIP: no .doc in the corpus");
-        return;
+        paged_test_resources::skip!(Resource::Corpus, "no .doc in the corpus");
     }
 
     // ADR-007, at scale. Some legacy .doc files EMBED a complete OPC
@@ -276,7 +270,7 @@ fn every_legacy_doc_is_refused_by_name() {
 }
 
 #[test]
-#[ignore = "poi docx lane: opt-in (PAGED_DOCX_CORPUS=1 + the private corpus mount)"]
+#[ignore = "corpus: docx"]
 fn every_converted_document_imports() {
     let Some(files) = source_files("poi-converted") else {
         return;

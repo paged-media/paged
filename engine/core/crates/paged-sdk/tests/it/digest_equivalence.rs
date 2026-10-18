@@ -26,6 +26,7 @@
 //! (browser wasm digest vs native digest) is the recorded V2
 //! follow-up.
 
+use paged_test_resources::{skip, Resource};
 use std::path::PathBuf;
 
 use paged_renderer::{pipeline, BytesResolver, PipelineOptions};
@@ -88,8 +89,10 @@ fn viewer_build_matches_stock_build_document_for_every_page() {
 #[test]
 fn digest_is_order_and_content_sensitive() {
     let Some(bytes) = fixture("geometry-groups.idml") else {
-        eprintln!("fixture absent — skipped");
-        return;
+        skip!(
+            Resource::Fixtures,
+            "corpus/generated/geometry-groups.idml is absent: run scripts/regen-fixtures.sh"
+        );
     };
     let document = idml_import::import_idml_doc(&bytes).expect("open fixture");
     let built =

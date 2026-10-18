@@ -104,6 +104,11 @@ Three statements above no longer match the code.
   skipping it (`.github/workflows/ci.yml`, `image-gpu/src/test_support.rs:64-71`). This
   supersedes the paragraph beginning "CI does not run the comparison". The `rust` job still
   runs without an adapter, where the device tests skip.
+- Note (2026-10-18): the switch is now `PAGED_REQUIRE_GPU=1`, part of the repository-wide
+  convention for optional test resources (`docs/development/testing.md`,
+  `platform/shared/test-resources`). `REQUIRE_GPU=1` is still read for one deprecation period,
+  with a warning, and a skipped device test prints `unavailable: GPU adapter: …` instead of
+  passing silently.
 - The four per-crate device helpers became one, `image_gpu::test_support::device_or_skip`,
   and `WGPU_FALLBACK` forces the fallback adapter only when set to `1`
   (`image-gpu/src/device.rs:49-54`).
