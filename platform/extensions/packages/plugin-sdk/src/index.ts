@@ -23,7 +23,7 @@
 // rule applies: helpers earn their place when a real bundle needs
 // them.
 
-export { defineBundle } from "./define-bundle";
+export { defineBundle } from "./define-bundle.js";
 export {
   createHeadlessHost,
   inMemoryWillSave,
@@ -41,7 +41,7 @@ export {
   type ManifestConformanceOptions,
   type ManifestConformanceReport,
   type RegisteredContributions,
-} from "./harness";
+} from "./harness.js";
 export {
   loadHeadlessEngine,
   resolveCanvasWasm,
@@ -51,9 +51,9 @@ export {
   type HeadlessCanvasWorker,
   type LoadedEngine,
   type LoadHeadlessEngineOptions,
-} from "./wasm-loader";
-export { DisposableStore, toDisposable } from "./disposables";
-export { API_VERSION, satisfiesApiVersion } from "./version";
+} from "./wasm-loader.js";
+export { DisposableStore, toDisposable } from "./disposables.js";
+export { API_VERSION, satisfiesApiVersion } from "./version.js";
 export {
   createBundleHost,
   createDataProviderRegistry,
@@ -95,7 +95,7 @@ export {
   // Protocol 66 batch — the save hook and tool-options store a host injects.
   type WillSaveBackend,
   type ToolSettingsBackend,
-} from "./host-impl";
+} from "./host-impl.js";
 // ADR 323 — the object model: the address/selector grammar mirror (ADR
 // 131), the value-type checks (ADR 132), the shared registry and its core
 // seam over today's wire.
@@ -111,7 +111,7 @@ export {
   type SelectorStep,
   type SelectorHead,
   type SelectorPredicate,
-} from "./object-address";
+} from "./object-address.js";
 export {
   checkValueType,
   checkSchemaRows,
@@ -124,14 +124,14 @@ export {
   findRow,
   rowPathOf,
   ROW_PATH,
-} from "./object-schema";
+} from "./object-schema.js";
 export {
   createObjectRegistry,
   escapeLabelValue,
   type ObjectRegistry,
   type ObjectModelRegistration,
   type CreateObjectRegistryOptions,
-} from "./object-registry";
+} from "./object-registry.js";
 export {
   answerHostObjects,
   answerHostObjectsRound,
@@ -140,7 +140,7 @@ export {
   type HostObjectCall,
   type ScriptRunResult,
   type ScriptSend,
-} from "./script-bridge";
+} from "./script-bridge.js";
 export {
   createCoreObjects,
   FRAME_KIND_WORDS,
@@ -149,8 +149,8 @@ export {
   type CoreObjects,
   type CorePlan,
   type CreateCoreObjectsOptions,
-} from "./core-objects";
-export { codeOfEngineError } from "./core-objects-v71";
+} from "./core-objects.js";
+export { codeOfEngineError } from "./core-objects-v71.js";
 export {
   CORE_COMMAND_CREATES,
   CORE_COMMAND_EXCLUSIONS,
@@ -158,8 +158,8 @@ export {
   CORE_COMMAND_PREFIX,
   coreCommandInfos,
   isCoreCommand,
-} from "./core-commands";
-export { CORE_WIRE_OPS, type CoreWireOpRow } from "./core-commands.generated";
+} from "./core-commands.js";
+export { CORE_WIRE_OPS, type CoreWireOpRow } from "./core-commands.generated.js";
 export {
   CORE_CATALOG_ROWS,
   CORE_PATHS,
@@ -170,23 +170,23 @@ export {
   type CorePathRow,
   type CorePathScope,
   type CoreRow71,
-} from "./core-schema";
-export { FALLBACK_WIDGETS } from "./widgets-fallback";
+} from "./core-schema.js";
+export { FALLBACK_WIDGETS } from "./widgets-fallback.js";
 export {
   createRecordableAssetSource,
   type RecordableAssetSource,
   type RecordedFontFaceRequest,
   type SeededFace,
-} from "./asset-source-fake";
-export { makeSchemaPanelComponent, resolveGate } from "./schema-panel";
-export { loadBundle, type LoadedBundle } from "./load";
+} from "./asset-source-fake.js";
+export { makeSchemaPanelComponent, resolveGate } from "./schema-panel.js";
+export { loadBundle, type LoadedBundle } from "./load.js";
 export {
   loadBundleWasm,
   WASM_BUDGETS,
   type LoadedBundleWasm,
   type LoadBundleWasmOptions,
   type BundleAssetSource,
-} from "./wasm-bundle-loader";
+} from "./wasm-bundle-loader.js";
 // ADR 326 — resolve a declared wasm artifact through the host's module door,
 // falling back to the bundle-relative URL on a host without it.
 export {
@@ -194,7 +194,7 @@ export {
   resolveWasmUrl,
   fetchWasm,
   type ResolvedWasm,
-} from "./modules";
+} from "./modules.js";
 export {
   beginPageDrag,
   endLocalFor,
@@ -202,9 +202,9 @@ export {
   commitAndSelect,
   CLICK_DRAG_THRESHOLD_PX,
   type PageDrag,
-} from "./gestures";
-export { contributeTool } from "./tools";
-export { contributePanel, contributeSchemaPanel } from "./panels";
+} from "./gestures.js";
+export { contributeTool } from "./tools.js";
+export { contributePanel, contributeSchemaPanel } from "./panels.js";
 export {
   isPropertyRow,
   propertyRow,
@@ -215,16 +215,16 @@ export {
   type PanelSchemaIssue,
   type PropertyRowOptions,
   type ValidatePanelSchemaOptions,
-} from "./panel-schema-check";
+} from "./panel-schema-check.js";
 // §12.8 — list / struct values on property rows: edits lowered to `set`s.
-export { applyValueEdit, defaultValueOf, editValue, planValueEdit } from "./value-edit";
+export { applyValueEdit, defaultValueOf, editValue, planValueEdit } from "./value-edit.js";
 export {
   publishObjectList,
   type ObjectListRow,
   type PublishObjectListOptions,
-} from "./object-list";
+} from "./object-list.js";
 export {
   contributeEditContext,
   contributeObjectType,
   contributeBindingProvider,
-} from "./edit-context";
+} from "./edit-context.js";

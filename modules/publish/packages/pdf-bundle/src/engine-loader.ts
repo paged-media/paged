@@ -30,8 +30,8 @@
 // native model, so a load failure loses editable text, never correctness.
 //
 // The import mechanics mirror plugin-web's engine-loader (relative `import()`
-// so tsup bundles the glue as a sibling dist chunk whose `import.meta.url`
-// survives Vite dep-optimization, plus the `_bg.wasm?url` asset hand-off — the
+// so the glue stays its own module with its own `import.meta.url` when Vite
+// builds the editor, plus the `_bg.wasm?url` asset hand-off — the
 // bare-relative wasm-bindgen fetch 404s under the editor's Vite SPA fallback).
 
 import type { BundleHost } from "@paged-media/plugin-api";
@@ -75,8 +75,8 @@ function isNode(): boolean {
  *  the wasm bytes read beside the glue. */
 async function importBundledGlue(): Promise<PdfMapperGlue> {
   // @ts-ignore — bin/pdf_import.js is the wasm-bindgen glue (build output of
-  // scripts/build-wasm.sh from crates/pdf-import); tsup bundles it as a
-  // sibling dist chunk. tsc doesn't typecheck the JS — typed via PdfMapperGlue.
+  // scripts/build-wasm.sh from crates/pdf-import), its own module in the
+  // editor's build. The type checker doesn't check the JS — typed via PdfMapperGlue.
   const glue = (await import("../bin/pdf_import.js")) as unknown as PdfMapperGlue;
   if (isNode()) {
     // NODE (the headless host, the Node CLI): instantiate from the bytes
@@ -87,8 +87,8 @@ async function importBundledGlue(): Promise<PdfMapperGlue> {
     await glue.default({ module_or_path: new Uint8Array(b.buffer, b.byteOffset, b.byteLength) });
     return glue;
   }
-  // @ts-ignore — `?url` is a bundler affordance (untyped), kept external by
-  // tsup so Vite resolves it to a served asset URL.
+  // @ts-ignore — `?url` is a bundler affordance (untyped); Vite resolves it
+  // to a served asset URL.
   const wasmUrl = (await import("../bin/pdf_import_bg.wasm?url")) as {
     default: string;
   };

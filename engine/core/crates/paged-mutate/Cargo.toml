@@ -10,6 +10,11 @@ description = "Operation-based mutation channel for the Paged scene graph. Typed
 [lints]
 workspace = true
 
+[features]
+# ADR 187 — `schemars::JsonSchema` next to the `Tsify` derive of each type the
+# wire's `Mutation` carries; `paged-wire`'s `schema` feature turns it on.
+schema = ["dep:schemars"]
+
 [dependencies]
 paged-model = { path = "../paged-model" }
 paged-scene = { path = "../paged-scene" }
@@ -20,6 +25,7 @@ serde_json = "1"
 thiserror = { workspace = true }
 tsify-next = { workspace = true }
 wasm-bindgen = { workspace = true }
+schemars = { workspace = true, optional = true }
 # Curve-preserving Bezier CSG for Pathfinder ops + foundation for
 # future curve-based features (offset / outline-stroke / curve
 # simplification). See path_math::bezier_conv for the
