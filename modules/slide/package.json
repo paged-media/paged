@@ -4,16 +4,15 @@
   "version": "0.0.0",
   "license": "AGPL-3.0-only OR LicenseRef-PMEL",
   "type": "module",
-  "packageManager": "pnpm@10.28.0",
   "scripts": {
-    "typecheck": "pnpm -r run typecheck",
+    "typecheck": "bun run --filter './packages/*' typecheck",
     "lint:contract": "node scripts/check-contract-imports.mjs",
-    "test": "node scripts/check-contract-imports.mjs && pnpm -r run test",
+    "test": "node scripts/check-contract-imports.mjs && bun run --filter './packages/*' test",
     "build:wasm": "bash scripts/build-wasm.sh",
     "validate:manifest": "node ../../platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs validate packages/slide-bundle/manifest.json"
   },
   "devDependencies": {
     "tsup": "^8.5.1",
-    "typescript": "^5.9.3"
+    "typescript": "catalog:"
   }
 }

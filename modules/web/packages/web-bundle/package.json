@@ -14,7 +14,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "build": "tsup",
-    "prepublishOnly": "pnpm run build"
+    "prepublishOnly": "bun run build"
   },
   "peerDependencies": {
     "@paged-media/plugin-api": ">=0.2.55-canary.0",
@@ -26,14 +26,14 @@
     "@paged-media/plugin-api": "0.2.55-canary.0",
     "@paged-media/plugin-sdk": "0.2.55-canary.0",
     "@paged-media/web-model": "workspace:*",
-    "@types/node": "20.19.39",
-    "@types/react": "^18.3.31",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
     "@types/react-test-renderer": "18.3.1",
     "fast-check": "4.10.2",
-    "react": "^18.3.1",
+    "react": "catalog:",
     "react-test-renderer": "18.3.1",
-    "typescript": "^5.9.3",
-    "vitest": "^2.1.9"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   },
   "files": [
     "bin",
