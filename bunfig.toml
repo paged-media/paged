@@ -1,6 +1,30 @@
 # Bun configuration for the root workspace (see package.json `workspaces`).
 # Bun's version is pinned in /.prototools and in package.json `packageManager`.
 
+[fmt]
+# `bun fmt` (tooling/js/fmt.sh; the pinned Bun canary until a stable Bun
+# ships it). Prettier 3's defaults, written out so that a later change of a
+# default cannot reformat the repository silently. Measured on this code
+# (docs/migration/bun-fmt.md): each default rewrites fewer existing lines
+# than its alternative (printWidth 80: 34.5k lines; 100: 41.4k; 120: 54.9k).
+# What is not formatted, and why: /.prettierignore.
+printWidth = 80
+tabWidth = 2
+useTabs = false
+semi = true
+singleQuote = false
+jsxSingleQuote = false
+quoteProps = "as-needed"
+trailingComma = "all"
+bracketSpacing = true
+bracketSameLine = false
+objectWrap = "preserve"
+arrowParens = "always"
+proseWrap = "preserve"
+htmlWhitespaceSensitivity = "css"
+embeddedLanguageFormatting = "auto"
+endOfLine = "lf"
+
 [install]
 # Every package gets its own node_modules with exactly what it declares
 # (like pnpm): an undeclared import fails instead of resolving through a
