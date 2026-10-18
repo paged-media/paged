@@ -10,12 +10,10 @@ modify, and distribute it under the terms of **either**:
 
 `SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-PMEL`
 
-This matches the paged **editor**, which is also AGPL-3.0 OR PMEL — a plugin is
-part of the editor application. The render **engine** (`paged-media/core`) and
-the **plugin SDK** (`paged-media/plugin-sdk`) this builds on are instead
-**MPL-2.0 OR PMEL**, deliberately more permissive so they can be embedded
-broadly. (That's why your *own* plugins, built on the MPL SDK, can carry
-whatever license you choose — only paged's first-party plugins are AGPL.)
+This matches the rest of the paged repository: the **editor**, the render
+**engine** and the **extension SDK** this builds on are all AGPL-3.0-only OR PMEL
+(ADR PM-0001; the engine and the SDK were MPL-2.0 OR PMEL before, and versions
+published then remain available under those terms).
 
 Source files carry the license notice in their header; new files must include
 it (copy it from any existing source file, or see [`CONTRIBUTING.md`](./CONTRIBUTING.md)).

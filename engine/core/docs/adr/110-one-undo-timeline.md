@@ -11,12 +11,12 @@ operation and its inverse. Text insertion and deletion go through `TextOp`, a se
 vocabulary that lives in `paged-canvas`. The module doc says why it sits there: so that
 work then in flight on `paged-mutate::Operation` could "land without conflicts", with the
 text variants to be folded into `paged_mutate::Operation` afterwards
-(`crates/paged-canvas/src/mutate.rs:27-31`). That folding has not happened: text edits
-"have no `Operation` form" (`crates/paged-canvas/src/model.rs:2310-2311`).
+(`crates/paged-canvas/src/mutate.rs:31-35`). That folding has not happened: text edits
+"have no `Operation` form" (`crates/paged-canvas/src/model.rs:2314-2315`).
 
 A user has one undo command. The log entry type was "generalized to hold both text edits
 (legacy `TextOp` path) and frame mutations (canonical `paged_mutate::AppliedOperation`) so
-a single Cmd-Z timeline covers both" (`crates/paged-canvas/src/model.rs:1422-1424`).
+a single Cmd-Z timeline covers both" (`crates/paged-canvas/src/model.rs:1426-1428`).
 
 Undo is a log of inverses, not of document snapshots. The repository does not record why.
 
@@ -46,40 +46,40 @@ the forward operation and the inverse that was captured when it was applied.
 
 ## Evidence
 
-- `crates/paged-canvas/src/model.rs:1244-1250` — `applied_log` and `redo_log`
-- `crates/paged-canvas/src/model.rs:1395-1418` — the cap, its reasoning, and what the log is not
-- `crates/paged-canvas/src/model.rs:1476-1507` — `LoggedMutation` and its four variants
-- `crates/paged-canvas/src/model.rs:4156-4273` — `undo` and `redo`
-- `crates/paged-canvas/src/model.rs:9199-9219` — `push_applied`, the one place the cap is enforced
-- `crates/paged-canvas/src/model.rs:1898-1903`, `:1928-1932` — defaults and colour settings bypass the log
-- `crates/paged-canvas/src/gesture.rs:591-598` — a gesture commits as one canonical entry
-- `crates/paged-mutate/src/invert.rs:15-29` — the inverse of each operation shape
+- `crates/paged-canvas/src/model.rs:1248-1254` — `applied_log` and `redo_log`
+- `crates/paged-canvas/src/model.rs:1399-1422` — the cap, its reasoning, and what the log is not
+- `crates/paged-canvas/src/model.rs:1480-1511` — `LoggedMutation` and its four variants
+- `crates/paged-canvas/src/model.rs:4160-4277` — `undo` and `redo`
+- `crates/paged-canvas/src/model.rs:9203-9223` — `push_applied`, the one place the cap is enforced
+- `crates/paged-canvas/src/model.rs:1902-1907`, `:1932-1936` — defaults and colour settings bypass the log
+- `crates/paged-canvas/src/gesture.rs:595-602` — a gesture commits as one canonical entry
+- `crates/paged-mutate/src/invert.rs:19-33` — the inverse of each operation shape
 
 ## Alternatives considered
 
 - Folding `TextOp` into `paged_mutate::Operation`: stated as the plan in
-  `crates/paged-canvas/src/mutate.rs:29-31` and marked "**out of scope**" at
-  `crates/paged-canvas/src/model.rs:1424-1426`. Not done.
+  `crates/paged-canvas/src/mutate.rs:33-35` and marked "**out of scope**" at
+  `crates/paged-canvas/src/model.rs:1428-1430`. Not done.
 - A byte-accounted cap: rejected for a count, because "the per-entry size is bounded in
   practice and a count is O(1) to enforce without walking the payloads"
-  (`crates/paged-canvas/src/model.rs:1415-1417`).
+  (`crates/paged-canvas/src/model.rs:1419-1421`).
 
 ## Consequences
 
 A batch has to be applied across both lanes, which is why the mixed-batch executor exists
 ([ADR 107](107-whole-document-build.md)). Scripts call the model's undo directly
-(`paged.undo`, `crates/paged-script/src/lib.rs:3687-3691`); the CLI has no undo verb
-(`crates/paged-cli/tests/cli_surface.rs:98-101`). Undo past 10,000 steps is not possible;
+(`paged.undo`, `crates/paged-script/src/lib.rs:3691-3695`); the CLI has no undo verb
+(`crates/paged-cli/tests/cli_surface.rs:102-105`). Undo past 10,000 steps is not possible;
 the comment calls this "a deliberate, documented trade most editors make".
 
 There is a second undo implementation in the repository. `paged_mutate::Project` owns a
 `History` with a default capacity of 1,000 entries
-(`crates/paged-mutate/src/history.rs:15-26`, `crates/paged-mutate/src/lib.rs:73-83`). The
-inspector wasm (`crates/paged-introspect-wasm/src/lib.rs:47-81`), the `paged-inspect`
+(`crates/paged-mutate/src/history.rs:19-30`, `crates/paged-mutate/src/lib.rs:77-87`). The
+inspector wasm (`crates/paged-introspect-wasm/src/lib.rs:51-85`), the `paged-inspect`
 binary and tests use it. The canvas model, the dispatcher, the script bridge and the CLI do
 not, so the two histories never meet.
 
-The module doc at `crates/paged-canvas/src/mutate.rs:19-20` lists three text mutations
+The module doc at `crates/paged-canvas/src/mutate.rs:23-24` lists three text mutations
 including `ApplyTextStyle`; the `TextOp` enum has two, `InsertText` and `DeleteRange`.
 
 ## Related

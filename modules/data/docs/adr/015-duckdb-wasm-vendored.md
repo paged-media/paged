@@ -150,13 +150,13 @@ The host does not load the DuckDB module and does not spawn its worker. The mani
 no `workers` capability (`packages/data-bundle/manifest.json:7-39`), and the comment at
 `packages/data-bundle/src/query/duckdb.ts:21-22` gives the reason as "no host worker capability
 yet". plugin-sdk now has a `workers` capability and a `host.workers` door
-(`plugin-sdk: packages/plugin-api/src/manifest.ts:161-180`, plugin-sdk at `d90f727`;
+(`plugin-sdk: packages/plugin-api/src/manifest.ts:165-184`, plugin-sdk at `d90f727`;
 [ADR 318](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/318-host-spawned-workers.md));
 this bundle does not use it. This supersedes "loaded as a managed module" in the third reason.
 
 **4. The published npm package does not contain DuckDB.**
 
-- `.github/workflows/publish.yml:41-42`, `:52`, `:63-65` — the publish job runs
+- `.github/workflows/publish.yml:41-42`, `:56`, `:67-69` — the publish job runs
   `scripts/build-wasm.sh` and `pnpm -r build`, then packs and publishes `packages/data-bundle`.
   No workflow under `.github/workflows/` runs `scripts/vendor-duckdb.sh`.
 - `packages/data-bundle/package.json:36-40` — the package ships `dist`, `bin` and

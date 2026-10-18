@@ -40,15 +40,15 @@ name up and evaluates nothing.
 
 ## Evidence
 
-- `packages/plugin-api/src/panel-schema.ts:80-115`, `:214-289` — value binding, binding
+- `packages/plugin-api/src/panel-schema.ts:84-119`, `:218-293` — value binding, binding
   reference, gate; rows, sections, the schema and the contribution
-- `packages/plugin-api/src/panel-schema.ts:149-203` — list items, row actions, the list spec
-- `packages/plugin-sdk/src/schema-panel.tsx:70-78`, `:81-116` — `resolveGate`; the component
+- `packages/plugin-api/src/panel-schema.ts:153-207` — list items, row actions, the list spec
+- `packages/plugin-sdk/src/schema-panel.tsx:74-82`, `:85-120` — `resolveGate`; the component
   and the placeholder
-- `packages/plugin-sdk/src/host-impl.ts:1265-1306`, `:2337-2357`, `:3105-3107` — the door;
+- `packages/plugin-sdk/src/host-impl.ts:1269-1310`, `:2341-2361`, `:3109-3111` — the door;
   the bindings store; the renderer flag
-- `packages/plugin-api/src/host.ts:1535-1549` — `BindingsSurface`
-- `DESIGN.md:682-695`, `:855-862`, `:927-952` — the clonability table; the rejection; the limits
+- `packages/plugin-api/src/host.ts:1539-1553` — `BindingsSurface`
+- `DESIGN.md:682-695`, `:859-866`, `:931-956` — the clonability table; the rejection; the limits
 - `editor: apps/canvas/src/main.tsx:1266` — the editor injects its renderer
 - `plugin-draw: packages/draw-bundle/src/activate.ts:193-195` — two schema panels registered
 
@@ -61,18 +61,18 @@ because the present rule "keeps every WRITE on the typed property door".
 ## Consequences
 
 Conditional logic lives in the plugin. A gate cannot say `x && !y`; the bundle computes the
-boolean and publishes it under a name (`packages/plugin-api/src/panel-schema.ts:56-59`). A
+boolean and publishes it under a name (`packages/plugin-api/src/panel-schema.ts:60-63`). A
 schema and its bindings are plain data, which the file header calls "the panel/overlay
-ISOLATE EXIT the trust line needs" (`packages/plugin-api/src/panel-schema.ts:42-48`).
+ISOLATE EXIT the trust line needs" (`packages/plugin-api/src/panel-schema.ts:46-52`).
 `DESIGN.md:949-952` describes an isolated host as "a SECOND `SchemaPanelRenderer`
 implementation, not a contract change"; this repository declares the `SchemaPanelRenderer`
-type (`packages/plugin-api/src/panel-schema.ts:317`) and contains no implementation of it;
+type (`packages/plugin-api/src/panel-schema.ts:321`) and contains no implementation of it;
 the one the editor injects is in-process React.
 
 The widget ids of the editor's catalog become part of what a bundle depends on. An unknown
-id renders a placeholder (`packages/plugin-api/src/panel-schema.ts:215-217`). The value
+id renders a placeholder (`packages/plugin-api/src/panel-schema.ts:219-221`). The value
 binding type is a hand-written mirror of the editor's catalog binding
-(`packages/plugin-api/src/panel-schema.ts:72-78`); the editor asserts at compile time that
+(`packages/plugin-api/src/panel-schema.ts:76-82`); the editor asserts at compile time that
 its renderer fits the contract type (`editor: apps/canvas/src/main.tsx:130-136`).
 
 React panels remain and are the common case. Of the shipped bundles only plugin-draw
@@ -80,7 +80,7 @@ registers schema panels, for two of its ten panels; its other eight and every pa
 plugin-web, plugin-image, plugin-sheets, plugin-data and plugin-doc are React components
 registered through `contribute.panel`.
 
-A comment contradicts the code: `packages/plugin-api/src/panel-schema.ts:258-262` says a
+A comment contradicts the code: `packages/plugin-api/src/panel-schema.ts:262-266` says a
 schema is registered "through `contribute.panel` exactly like a React `PanelContribution`";
 the door is the separate `contribute.schemaPanel`.
 

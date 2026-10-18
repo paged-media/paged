@@ -22,11 +22,11 @@ cannot express that today. Verified on core `main` (2026-10-01):
 - **No page generation.** Text flows only through the frame chain the document authored.
   Overflow becomes overset, and `paged-flow` says so in its own docs: "today's IDML story
   emitter … discards overflow and only emits an `OversetTextDropped` diagnostic"
-  (`crates/paged-flow/src/lib.rs:29-31`). No smart-text-reflow logic exists. The only way to
+  (`crates/paged-flow/src/lib.rs:33-35`). No smart-text-reflow logic exists. The only way to
   add a page is the explicit `insertPage` mutation.
 - **The seam exists but is unused.** `run_flow` returns `Overset::Remains(cursor)`. Its doc
   comment says that is where the composition "can grow the chain, report the overset honestly,
-  or continue the flow" (`crates/paged-flow/src/lib.rs:209-216`). Nothing grows it yet.
+  or continue the flow" (`crates/paged-flow/src/lib.rs:213-220`). Nothing grows it yet.
 - **The consumer is blocked.** plugin-doc pours a whole DOCX into **one** text frame on the
   current page (`plugin-doc: packages/doc-bundle/src/place.ts:70-120`). Standalone open is
   explicitly deferred (`plugin-doc: packages/doc-bundle/src/activate.ts:70-75`). The plugin's own design promises "an
@@ -74,10 +74,10 @@ cannot express that today. Verified on core `main` (2026-10-01):
 - **The page count becomes an output of layout.** Everything that read "page N" as a stable
   input now depends on layout: page-number variables, running headers, cross-references, the
   pages collection, and the editor's page strip. The first three already re-emit after layout
-  (`crates/paged-renderer/src/pipeline/links.rs:45-53`). The editor must treat a page-set change as
+  (`crates/paged-renderer/src/pipeline/links.rs:49-57`). The editor must treat a page-set change as
   ordinary output, not as a structural event.
 - **The cache key must stop using absolute page indices.** The body-story emit signature
-  hashes the absolute page index (`crates/paged-renderer/src/pipeline/deltas.rs:55`). With growth,
+  hashes the absolute page index (`crates/paged-renderer/src/pipeline/deltas.rs:59`). With growth,
   one added page would miss every cache entry after it. Fixed in [027](027-incremental-flow-invalidation.md).
 - **Growth can loop.** A grown page brings master content: wrap shapes, and running headers
   that change the text. A bounded loop (re-flow until the page set stops changing, capped,
@@ -154,17 +154,17 @@ section mapping, which belongs to plugin-doc. It also supersedes, in "The proble
 generation" and "The consumer is blocked"; "The seam exists but is unused" still describes
 `run_flow` (item 3).
 
-- The wire setter: `crates/paged-wire/src/lib.rs:1493-1507` (`SetFlowGrowRule { story_id, grow,
-  max_pages, copy_frame_options }`), `crates/paged-canvas/src/channel.rs:503-510` (protocol 64),
-  `crates/paged-canvas/src/model.rs:3780-3790` (lowered to the operation),
-  `crates/paged-mutate/src/apply/flow.rs:24-56` (the inverse is the prior rule).
+- The wire setter: `crates/paged-wire/src/lib.rs:1497-1511` (`SetFlowGrowRule { story_id, grow,
+  max_pages, copy_frame_options }`), `crates/paged-canvas/src/channel.rs:507-514` (protocol 64),
+  `crates/paged-canvas/src/model.rs:3784-3794` (lowered to the operation),
+  `crates/paged-mutate/src/apply/flow.rs:28-60` (the inverse is the prior rule).
 - The canvas model carries the counts between builds:
-  `crates/paged-canvas/src/model.rs:1269-1272`, `:8548`.
+  `crates/paged-canvas/src/model.rs:1273-1276`, `:8552`.
 - An IDML export writes generated pages as real pages:
-  `crates/paged-canvas/src/model.rs:4436-4443`; test
-  `crates/paged-renderer/tests/reflow_pipeline.rs:223`.
-- Scripts: `paged.setFlowGrowRule` (`crates/paged-script/src/lib.rs:3130-3156`), listed in the
-  catalog (`crates/paged-introspect/catalog.json:634`, `:1366`).
+  `crates/paged-canvas/src/model.rs:4440-4447`; test
+  `crates/paged-renderer/tests/reflow_pipeline.rs:227`.
+- Scripts: `paged.setFlowGrowRule` (`crates/paged-script/src/lib.rs:3134-3160`), listed in the
+  catalog (`crates/paged-introspect/catalog.json:634`, `:1370`).
 - The consumer sends the rule when it opens a document:
   `plugin-doc: packages/doc-bundle/src/open.ts:73-74` (plugin-doc at `76e1d06`).
 
@@ -172,17 +172,17 @@ generation" and "The consumer is blocked"; "The seam exists but is unused" still
 master (template) a new page is cloned from, which region on it continues the flow, where
 pages are inserted (end of the chain's section), and whether empty generated pages are
 removed (default yes)". `FlowGrowRule` holds `max_pages` and `copy_frame_options`
-(`crates/paged-model/src/lib.rs:5929-5943`). Master, frame geometry, insertion point and the
+(`crates/paged-model/src/lib.rs:5933-5947`). Master, frame geometry, insertion point and the
 removal of empty pages are fixed behaviour, taken from the InDesign measurement in the
-addendum (`crates/paged-scene/src/grow.rs:17-29`).
+addendum (`crates/paged-scene/src/grow.rs:21-33`).
 
 **3. Growth runs on the scene document and in the renderer's build, not in the composition
 model.** This supersedes, in decision 4, "It lands on the composition model, not the IDML
 scene" and "Growth is a composition-level step around `run_flow`".
 
-- `crates/paged-scene/src/grow.rs:88` — `Document::with_generated_pages` returns a copy of the
-  document with the pages added; `:49-72` — the id functions.
-- `crates/paged-renderer/src/pipeline/mod.rs:1189-1303` — `build_document` loops over
+- `crates/paged-scene/src/grow.rs:92` — `Document::with_generated_pages` returns a copy of the
+  document with the pages added; `:53-76` — the id functions.
+- `crates/paged-renderer/src/pipeline/mod.rs:1193-1307` — `build_document` loops over
   `build_document_fixed`, reading the `OversetTextDropped` diagnostic of each pass.
 - `crates/paged-composition/src` and `crates/paged-flow/src` contain no growth code, and
   `run_flow` is called only from tests.
@@ -190,23 +190,23 @@ scene" and "Growth is a composition-level step around `run_flow`".
 **4. The loop grows by estimate first.** This supersedes, in the addendum, "it doubles a
 story's count while it oversets". A story that oversets grows by the number of frames its
 dropped lines need, and doubles only when a pass gives no estimate or after four estimated
-passes (`crates/paged-renderer/src/pipeline/mod.rs:1262-1270`, `:1305-1315`).
+passes (`crates/paged-renderer/src/pipeline/mod.rs:1266-1274`, `:1309-1319`).
 
 **5. The loop is capped; no diagnostic names the cap.** Consequences asks for a loop "capped,
 with a diagnostic at the cap". The caps are `MAX_GROW_PASSES = 24` build passes and, per story,
 the rule's `max_pages` or `DEFAULT_MAX_GENERATED_PAGES = 2000`
-(`crates/paged-renderer/src/pipeline/mod.rs:1182-1187`, `:1296`). No diagnostic code refers to
+(`crates/paged-renderer/src/pipeline/mod.rs:1186-1191`, `:1300`). No diagnostic code refers to
 growth (`crates/paged-renderer/src/diagnostics.rs`); the build returned at a cap is the last
 pass, with whatever overset diagnostic that pass reported.
 
 **6. Decisions 5 and 6, as built.** No property path was added for the rule; the catalog's
 settable paths contain none, and the rule is set only through the operation. In
 `crates/paged-cli/src` no command names the rule. The viewer SDK builds through the same
-`pipeline::build_document` (`crates/paged-sdk/src/build.rs:37`).
+`pipeline::build_document` (`crates/paged-sdk/src/build.rs:41`).
 
 **7. The cache key still uses the absolute page index.** Consequences says of the body-story
 emit signature "Fixed in 027". The page index is still hashed into it
-(`crates/paged-renderer/src/pipeline/deltas.rs:84-91`); see the amendment to
+(`crates/paged-renderer/src/pipeline/deltas.rs:88-95`); see the amendment to
 [ADR 027](027-incremental-flow-invalidation.md).
 
 **8. The timing in option A.** The "~14 s in wasm" predates the measurements in the

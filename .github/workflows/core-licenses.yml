@@ -1,7 +1,8 @@
 name: core / licenses
 
-# Dependency-license + supply-chain audit. The engine is MPL-2.0, so every
-# transitive dependency must be permissively licensed (see deny.toml).
+# Dependency-license + supply-chain audit. paged is AGPL-3.0-only OR PMEL
+# (ADR PM-0001); the commercial PMEL side means every transitive dependency
+# must be permissively licensed (see deny.toml).
 #
 # Ported from paged-media/core .github/workflows/licenses.yml (step A3). The
 # action is a `uses:` step (no working-directory), so it is pointed at the

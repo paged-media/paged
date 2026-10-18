@@ -149,30 +149,30 @@ ordinary dependencies of the engine's crates and are compiled into the published
 - `core: crates/paged-canvas/Cargo.toml:22`, `:35` — both adapter crates are unconditional
   dependencies of the canvas crate; the comment at `:31-34` says the export path compiles into
   the wasm worker.
-- `core: crates/paged-canvas/src/model.rs:1529`, `:1550`, `:1556` — `CanvasModel::load` opens
+- `core: crates/paged-canvas/src/model.rs:1533`, `:1554`, `:1560` — `CanvasModel::load` opens
   every package with `idml_import::open_source_archive` and, when the package carries no native
   model part that decodes, builds the model with `idml_import::import_idml_archive`.
-- `core: crates/paged-canvas/src/model.rs:4402`, `:4676` — IDML export calls
+- `core: crates/paged-canvas/src/model.rs:4406`, `:4680` — IDML export calls
   `idml_export::write_idml_with`; `.paged` export calls `idml_export::write_paged`.
 - `core: crates/paged-canvas-wasm/Cargo.toml:24`, `core: .github/workflows/publish-wasm.yml:220`,
-  `:228` — the editor's wasm, `@paged-media/canvas-wasm`, is `paged-canvas-wasm`, which depends
+  `:232` — the editor's wasm, `@paged-media/canvas-wasm`, is `paged-canvas-wasm`, which depends
   on `paged-canvas`.
-- `core: crates/paged-sdk/Cargo.toml:26`, `core: crates/paged-sdk/src/lib.rs:203` — the viewer
+- `core: crates/paged-sdk/Cargo.toml:26`, `core: crates/paged-sdk/src/lib.rs:207` — the viewer
   SDK's `load` calls `idml_import::import_idml_doc`; it is published as `@paged-media/sdk`
-  (`core: .github/workflows/publish-wasm.yml:276`, `:288`).
+  (`core: .github/workflows/publish-wasm.yml:276`, `:292`).
 - `idml-import` is also an unconditional dependency of `core: crates/paged-renderer/Cargo.toml:45`
-  (with `idml-export` at `:55`; the `paged-inspect` binary calls both,
-  `core: crates/paged-renderer/src/bin/inspect.rs:286`, `:946`),
-  `core: crates/paged-cli/Cargo.toml:38` (`core: crates/paged-cli/src/options.rs:272`),
+  (with `idml-export` at `:59`; the `paged-inspect` binary calls both,
+  `core: crates/paged-renderer/src/bin/inspect.rs:290`, `:950`),
+  `core: crates/paged-cli/Cargo.toml:38` (`core: crates/paged-cli/src/options.rs:276`),
   `core: crates/paged-export-pdf/Cargo.toml:14` and
-  `core: crates/paged-introspect-wasm/Cargo.toml:24` (`core: crates/paged-introspect-wasm/src/lib.rs:78`).
+  `core: crates/paged-introspect-wasm/Cargo.toml:24` (`core: crates/paged-introspect-wasm/src/lib.rs:82`).
 - `.github/workflows/ci.yml:37-40` — for that reason this repository's CI builds the adapter
   crates for `wasm32-unknown-unknown`.
-- `packages/publish-bundle/src/io/idml.ts:63`, `:84` — the `paged.publish` bundle contains no
+- `packages/publish-bundle/src/io/idml.ts:67`, `:88` — the `paged.publish` bundle contains no
   IDML code and no wasm. Import hands the file's bytes to `host.nativeDocument.open`; export
   sends `exportIdml` to the engine through `host.editor`
-  (`core: crates/paged-canvas/src/channel.rs:1206`). The comment at
-  `packages/publish-bundle/src/io/idml.ts:74-82` calls that a transitional bridge. The manifest
+  (`core: crates/paged-canvas/src/channel.rs:1210`). The comment at
+  `packages/publish-bundle/src/io/idml.ts:78-86` calls that a transitional bridge. The manifest
   declares no wasm (`packages/publish-bundle/manifest.json:7-9`).
 
 This supersedes, in "The decision", "The core ENGINE becomes zero-IDML." What the code shows is
@@ -181,15 +181,15 @@ the writer are out of the engine's repository and in the engine's dependency gra
 table it supersedes two phrases. Row 3's "the open viewer AND the publish plugin both consume
 it" holds for the viewer; the plugin bundle does not consume the adapter, the engine does. Row
 1's "load reconstructs with no IDML parse" holds for the model when a native part decodes
-(`core: crates/paged-canvas/src/model.rs:1539-1547`), but that load still opens the package with
-the adapter's reader (`:1529`) and parses `Resources/Styles.xml` with
+(`core: crates/paged-canvas/src/model.rs:1543-1551`), but that load still opens the package with
+the adapter's reader (`:1533`) and parses `Resources/Styles.xml` with
 `idml_import::styles::parse_stylesheet` to fill style leading that an older native part lacks
-(`:1546`, `:9912-9929`). `README.md:14-15` in this repository ("the shipped engine carries no
+(`:1550`, `:9916-9933`). `README.md:14-15` in this repository ("the shipped engine carries no
 IDML of its own") is true only in that the parser and the writer crates are no longer in the
 engine's source tree.
 
 The engine repository also still writes IDML packages itself, not through `idml-export`: the
-blank document behind File ▸ New (`core: crates/paged-canvas/src/blank.rs:17-27`), the one-page
+blank document behind File ▸ New (`core: crates/paged-canvas/src/blank.rs:21-31`), the one-page
 fallback skeleton inside a natively produced `.paged`
-(`core: crates/paged-store/src/package.rs:15-23`), and the generator of IDML test packages
-(`core: crates/paged-gen/src/lib.rs:15-21`).
+(`core: crates/paged-store/src/package.rs:19-27`), and the generator of IDML test packages
+(`core: crates/paged-gen/src/lib.rs:19-25`).

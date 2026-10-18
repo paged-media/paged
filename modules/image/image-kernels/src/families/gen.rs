@@ -16,20 +16,6 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-/*
- * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at https://mozilla.org/MPL/2.0/.
- *
- * This file is part of paged (https://paged.media) and is additionally
- * available under the Paged Media Enterprise License (PMEL). Full
- * copyright and license information is available in LICENSE.md which is
- * distributed with this source code.
- *
- *  @copyright  Copyright (c) And The Next GmbH
- *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
- */
-
 //! Generator family (T2, spec §11) — `gen.solid`, `gen.checker`,
 //! `gen.linear_gradient`. Procedural pixel sources with NO meaningful
 //! input: output depends only on the texel's GLOBAL coordinate and the
@@ -181,7 +167,7 @@ pub static GEN_SOLID: KernelDef = KernelDef {
 
 const GEN_SOLID_WGSL: &str = "\
 // paged.image kernel `gen.solid` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     ox: i32,
@@ -325,7 +311,7 @@ pub static GEN_CHECKER: KernelDef = KernelDef {
 // reference's i32 floor-division exactly. cell parity = (cx + cy) & 1.
 const GEN_CHECKER_WGSL: &str = "\
 // paged.image kernel `gen.checker` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     ox: i32,
@@ -524,7 +510,7 @@ pub static GEN_LINEAR_GRADIENT: KernelDef = KernelDef {
 // divide / clamp / mix; the scalar reference mirrors it term-for-term.
 const GEN_LINEAR_GRADIENT_WGSL: &str = "\
 // paged.image kernel `gen.linear_gradient` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     ox: i32,
@@ -724,7 +710,7 @@ pub static GEN_RADIAL_GRADIENT: KernelDef = KernelDef {
 // reference mirrors it. Degenerate guard: radius <= 0 → t = 0.
 const GEN_RADIAL_GRADIENT_WGSL: &str = "\
 // paged.image kernel `gen.radial_gradient` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     ox: i32,
@@ -925,7 +911,7 @@ pub static GEN_ANGULAR_GRADIENT: KernelDef = KernelDef {
 // branch and coefficient.
 const GEN_ANGULAR_GRADIENT_WGSL: &str = "\
 // paged.image kernel `gen.angular_gradient` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     ox: i32,
@@ -1143,7 +1129,7 @@ pub static GEN_REFLECTED_GRADIENT: KernelDef = KernelDef {
 
 const GEN_REFLECTED_GRADIENT_WGSL: &str = "\
 // paged.image kernel `gen.reflected_gradient` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     ox: i32,
@@ -1344,7 +1330,7 @@ pub static GEN_DIAMOND_GRADIENT: KernelDef = KernelDef {
 
 const GEN_DIAMOND_GRADIENT_WGSL: &str = "\
 // paged.image kernel `gen.diamond_gradient` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     ox: i32,
@@ -1492,7 +1478,7 @@ pub static GEN_NOISE: KernelDef = KernelDef {
 
 const GEN_NOISE_WGSL: &str = "\
 // paged.image kernel `gen.noise` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     ox: i32,
@@ -1785,7 +1771,7 @@ pub static GEN_PATTERN: KernelDef = KernelDef {
 
 const GEN_PATTERN_WGSL: &str = "\
 // paged.image kernel `gen.pattern` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     ox: i32,

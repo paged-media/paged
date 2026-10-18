@@ -12,7 +12,7 @@ stay byte-identical, unknown subtrees in known parts are retained, and untouched
 understood parts are written back as their original bytes.
 
 A writer that builds a worksheet from the model loses what the model does not hold.
-`sheet-xlsx/src/preserve.rs:43-48` says so for the one place where that happens: when a
+`sheet-xlsx/src/preserve.rs:29-34` says so for the one place where that happens: when a
 worksheet is encoded again, "the cell grid is rebuilt, so any unknown *child element of
 `<worksheet>`* would be lost", so those children are captured at parse time.
 
@@ -41,16 +41,16 @@ that holds an edited cell is encoded again from the model, and the calc chain is
 
 ## Evidence
 
-- `sheet-xlsx/src/opc.rs:35-41`, `:53-82`, `:221-234` — order kept, per-part identity
+- `sheet-xlsx/src/opc.rs:21-27`, `:39-68`, `:207-220` — order kept, per-part identity
   only; the two part variants and the six kinds; the container sniff
-- `sheet-xlsx/src/write.rs:88-143`, `:217-306` — the save loop (stored bytes unless the
+- `sheet-xlsx/src/write.rs:74-129`, `:203-292` — the save loop (stored bytes unless the
   part is a dirty worksheet or references the calc chain); `encode_worksheet`
-- `sheet-xlsx/src/parts/worksheet.rs:83`, `:122-130` — the four modelled worksheet children;
+- `sheet-xlsx/src/parts/worksheet.rs:69`, `:108-116` — the four modelled worksheet children;
   every other child is captured with a before/after anchor
-- `sheet-js/src/core.rs:496-527` — edited cells printed back, their sheets marked dirty
-- `sheet-xlsx/src/lib.rs:118-176` — the read-only models and why they are never re-emitted
-- `sheet-conformance/tests/xlsx_roundtrip.rs:236-253`, `:261-304`, `:351-395` — unknown
-  parts, a pivot cache, and zero-edit identity over six fixtures (`:48-55`)
+- `sheet-js/src/core.rs:482-513` — edited cells printed back, their sheets marked dirty
+- `sheet-xlsx/src/lib.rs:104-162` — the read-only models and why they are never re-emitted
+- `sheet-conformance/tests/xlsx_roundtrip.rs:222-239`, `:247-290`, `:337-381` — unknown
+  parts, a pivot cache, and zero-edit identity over six fixtures (`:34-41`)
 
 ## Alternatives considered
 
@@ -61,25 +61,25 @@ alternative is recorded in the repository.
 
 An untouched sheet and every unknown part survive a save byte for byte. An edited sheet keeps cell values and formula text,
 merges, column widths, the custom heights of rows that hold a cell, and the captured worksheet children. It loses unknown
-attributes on `<worksheet>`, `<row>` and `<c>` and unknown elements inside `<sheetData>` (`sheet-xlsx/src/preserve.rs:50-58`),
-and a row that has a custom height and no cell is not written back (`sheet-xlsx/src/write.rs:265-285`). A cell's style index
-is not kept as read: the writer emits the model's `StyleId` (`sheet-xlsx/src/write.rs:319-323`), the id of an interned
-`CellStyle` (`sheet-xlsx/src/parts/styles.rs:299-318`, `sheet-core/src/intern.rs:57-65`), while `styles.xml` is written back
+attributes on `<worksheet>`, `<row>` and `<c>` and unknown elements inside `<sheetData>` (`sheet-xlsx/src/preserve.rs:36-44`),
+and a row that has a custom height and no cell is not written back (`sheet-xlsx/src/write.rs:251-271`). A cell's style index
+is not kept as read: the writer emits the model's `StyleId` (`sheet-xlsx/src/write.rs:305-309`), the id of an interned
+`CellStyle` (`sheet-xlsx/src/parts/styles.rs:285-304`, `sheet-core/src/intern.rs:43-51`), while `styles.xml` is written back
 unchanged. The two numbers agree only when entry 0 of `cellXfs` equals the default style and no two entries intern to the same
-`CellStyle`. The round-trip test compares cells by value only (`sheet-conformance/tests/xlsx_roundtrip.rs:486-492`).
+`CellStyle`. The round-trip test compares cells by value only (`sheet-conformance/tests/xlsx_roundtrip.rs:472-478`).
 
 Never written from the model, so they leave the file as they came in: styles, the workbook part and shared strings
-(`sheet-xlsx/src/write.rs:134-136`), conditional formats, data validations and comments. Every literal text cell of an edited sheet, loaded or new,
-is written as an inline string (`:339-349`). A chart authored in the editor is not written to the workbook (`sheet-js/src/core.rs:1453-1455`). The
+(`sheet-xlsx/src/write.rs:120-122`), conditional formats, data validations and comments. Every literal text cell of an edited sheet, loaded or new,
+is written as an inline string (`:325-335`). A chart authored in the editor is not written to the workbook (`sheet-js/src/core.rs:1439-1441`). The
 six fixtures of the identity test are written by the repository's own generator, `corpus/xlsx-corpus/generate.py`.
 
 Comments that the code contradicts:
 
-- `sheet-xlsx/src/write.rs:50-51` says shared strings are rebuilt when strings were added;
-  `:77-80` says they are not, and the code never rebuilds them.
-- `sheet-xlsx/src/parts/worksheet.rs:346-350` says a shared-formula member receives the master's text unchanged
-  and that `sheet-js` re-derives the references. The member is given the master's text (`:358-369`), `load_xlsx`
-  parses that text as it stands (`sheet-js/src/core.rs:446-453`), and no other code handles shared formulas.
+- `sheet-xlsx/src/write.rs:36-37` says shared strings are rebuilt when strings were added;
+  `:63-66` says they are not, and the code never rebuilds them.
+- `sheet-xlsx/src/parts/worksheet.rs:332-336` says a shared-formula member receives the master's text unchanged
+  and that `sheet-js` re-derives the references. The member is given the master's text (`:344-355`), `load_xlsx`
+  parses that text as it stands (`sheet-js/src/core.rs:432-439`), and no other code handles shared formulas.
 
 ## Related
 

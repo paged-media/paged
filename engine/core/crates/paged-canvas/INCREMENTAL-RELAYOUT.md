@@ -1,6 +1,6 @@
 <!--
   Design spike for the renderer roadmap. Part of paged (https://paged.media),
-  dual-licensed MPL-2.0 OR PMEL like the rest of this crate. This is a DESIGN
+  dual-licensed AGPL-3.0 OR PMEL like the rest of this crate. This is a DESIGN
   DOCUMENT, not an implementation — W1.24 (audit B17–B19) is the perf lane;
   the incremental-relayout work it scopes is deliberately NOT built here.
 -->
@@ -169,4 +169,4 @@ instead of a guess.
 
 *W1.24 (Full-Green campaign, audit B17–B19). Companion to the bench lane
 (`crates/paged-canvas/benches/pipeline.rs`) and the `RebuildStats`
-instrumentation (`model.rs`). MPL-2.0 OR PMEL.*
+instrumentation (`model.rs`). AGPL-3.0 OR PMEL.*

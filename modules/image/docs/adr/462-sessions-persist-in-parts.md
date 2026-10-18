@@ -34,8 +34,8 @@ one layer, with the reason stated.
 - `glue/src/session.ts:982-1013` — reopen: the hash check, then `layersImport`
 - `glue/src/session-store.ts:56-85` — content-addressed buffers and the revision record
 - `glue/src/session-store.ts:90-119` — every buffer verified against its hash on read
-- `image-js/src/layers_persist.rs:134-200` — the stack as a manifest plus buffers
-- `image-js/src/layers_persist.rs:204-337` — the inverse, refusing damaged input
+- `image-js/src/layers_persist.rs:120-186` — the stack as a manifest plus buffers
+- `image-js/src/layers_persist.rs:190-323` — the inverse, refusing damaged input
 - `glue/src/session.ts` (`MAX_BAKED_BYTES`) — the bake is capped at 8 MB only on the JSON lane
 - `glue/src/host66.ts` — the binary mutation lane, part deletion and the will-save hook, each probed
 
@@ -43,7 +43,7 @@ one layer, with the reason stated.
 
 Keeping ADR 460 and offering only file save-back: rejected because a document that loses
 its layers on close is not an editor. Storing the layers as a layered PSD part: the PSD
-writer refuses adjustment layers (`image-js/src/saveback.rs:985`), and the plugin's own
+writer refuses adjustment layers (`image-js/src/saveback.rs:971`), and the plugin's own
 manifest round-trips every layer kind byte for byte.
 
 ## Consequences

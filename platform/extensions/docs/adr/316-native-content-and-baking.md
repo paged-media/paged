@@ -13,10 +13,10 @@ plugin is absent, in another application that opens the interchange format and i
 engine's own export. The contract gives a plugin two things for this. The metadata carrier
 stores a plugin's envelope on a page item, and its doc comment says "IDML round-trips it as a
 `Properties/Label` `KeyValuePair`, which InDesign preserves verbatim"
-(`packages/plugin-api/src/host.ts:974-979`). An object type marks an element by that
+(`packages/plugin-api/src/host.ts:978-983`). An object type marks an element by that
 metadata (the comment's example, a web frame, is "an ordinary rectangle") and declares a
 `bakedFallback`: "What the baked IDML form degrades to without the plugin"
-(`packages/plugin-api/src/host.ts:264-266`, `:286-290`).
+(`packages/plugin-api/src/host.ts:268-270`, `:290-294`).
 
 The plugins give their reasons. Bound data is compiled to native content "so frame ops
 (scale/rotate/skew/crop/reposition) are honored for free" (`plugin-data: CLAUDE.md:13-16`).
@@ -53,10 +53,10 @@ manifests declare it (plugin-web and plugin-sheets `rectangle`, plugin-doc `grou
 
 ## Evidence
 
-- `packages/plugin-api/src/host.ts:264-296`, `:966-996` — the object type and its
+- `packages/plugin-api/src/host.ts:268-300`, `:970-1000` — the object type and its
   `bakedFallback`; the metadata carrier and envelope
-- `packages/plugin-api/src/host.ts:998-1021` — `ObjectTypeBaker`, with the note that it
-  "ships ahead of the host loop"; `packages/plugin-sdk/src/host-impl.ts:1459-1474` — the
+- `packages/plugin-api/src/host.ts:1002-1025` — `ObjectTypeBaker`, with the note that it
+  "ships ahead of the host loop"; `packages/plugin-sdk/src/host-impl.ts:1463-1478` — the
   adapter registers an object type and never reads `bakedFallback`
 - `packages/plugin-api/src/manifest.schema.json:282-302`,
   `packages/plugin-cli/bin/paged-plugin.mjs:39`, `:465` — the closed vocabulary
@@ -80,7 +80,7 @@ manifests declare it (plugin-web and plugin-sheets `rectangle`, plugin-doc `grou
 
 The contract describes a baker driven by the host, which would apply the mutations
 "atomically (one undo step) on metadata change (debounced) and before save/export"
-(`packages/plugin-api/src/host.ts:999-1005`); it is not built. plugin-draw rejected a
+(`packages/plugin-api/src/host.ts:1003-1009`); it is not built. plugin-draw rejected a
 multi-paint frame in the engine (see Context). plugin-data rejects a raster barcode because
 inline image bytes cannot be placed (`plugin-data: packages/data-host-model/src/barcode.ts:27-29`).
 
@@ -97,10 +97,10 @@ only after a render command in the session, and reaches an IDML export only thro
 explicit bake, whose coverage is partial (ADR 407, under Related). An edited image leaves
 plugin-image only as file bytes (ADR 460, under Related).
 
-Comments disagree with the code in two places. `packages/plugin-api/src/host.ts:1007` says
+Comments disagree with the code in two places. `packages/plugin-api/src/host.ts:1011` says
 "`contribute.objectType` is still reserved at runtime"; the adapter implements it
-(`packages/plugin-sdk/src/host-impl.ts:1459`), and only the bake loop is missing.
-`packages/plugin-api/src/manifest.ts:345` still calls `objectTypes` "Reserved".
+(`packages/plugin-sdk/src/host-impl.ts:1463`), and only the bake loop is missing.
+`packages/plugin-api/src/manifest.ts:349` still calls `objectTypes` "Reserved".
 
 ## Related
 

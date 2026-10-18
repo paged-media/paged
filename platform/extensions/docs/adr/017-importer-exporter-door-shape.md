@@ -70,9 +70,9 @@ consumers:
 ## Amendment — 2026-10-02
 
 Checked against the code at `d90f727`. The door shape stands: `contribute.importer` and
-`contribute.exporter` are declared at `packages/plugin-api/src/host.ts:422-439`, their
-contribution types at `packages/plugin-api/src/editor.ts:339-376`, the adapter at
-`packages/plugin-sdk/src/host-impl.ts:1560-1581`, and the two feature flags at `:126-127`. Two
+`contribute.exporter` are declared at `packages/plugin-api/src/host.ts:426-443`, their
+contribution types at `packages/plugin-api/src/editor.ts:343-380`, the adapter at
+`packages/plugin-sdk/src/host-impl.ts:1564-1585`, and the two feature flags at `:130-131`. Two
 statements in Consequences no longer match the code.
 
 **1. The open-document door exists.** The first Consequences bullet says a clean open into a
@@ -80,14 +80,14 @@ fresh document "still needs a `host.document.open(bytes)` door" that is "out of 
 sequenced separately". The door has been built, under a different name:
 `host.nativeDocument.open(bytes)`.
 
-- `packages/plugin-api/src/host.ts:1320-1322` — `open(bytes: Uint8Array): Promise<void>` on
-  `NativeDocumentSurface` (`:1310-1323`), which replaces the active document by loading "a
-  native/importable package"; `:1599` puts the surface on `BundleHost`.
-- `packages/plugin-api/src/manifest.ts:69-73` — the call requires
+- `packages/plugin-api/src/host.ts:1324-1326` — `open(bytes: Uint8Array): Promise<void>` on
+  `NativeDocumentSurface` (`:1314-1327`), which replaces the active document by loading "a
+  native/importable package"; `:1603` puts the surface on `BundleHost`.
+- `packages/plugin-api/src/manifest.ts:73-77` — the call requires
   `capabilities.document.openNative`.
-- `packages/plugin-sdk/src/host-impl.ts:1667-1672`, `:2755-2764` — the adapter checks the
+- `packages/plugin-sdk/src/host-impl.ts:1671-1676`, `:2759-2768` — the adapter checks the
   capability and forwards to a backend injected by the host app; with no backend the call
-  rejects. `:3154-3161` adds the feature flag `document.openNative@1` only when a backend is
+  rejects. `:3158-3165` adds the feature flag `document.openNative@1` only when a backend is
   injected.
 - `editor: apps/canvas/src/plugin-native-document.ts` — the editor's backend.
 
@@ -96,9 +96,9 @@ load:
 
 - `plugin-doc: packages/doc-bundle/src/open.ts:137` — the Word importer opens a skeleton
   package, then fills it through mutations.
-- `plugin-publish: packages/pdf-bundle/src/io/pdf.ts:70`, `:79` — the PDF importer opens its
+- `plugin-publish: packages/pdf-bundle/src/io/pdf.ts:74`, `:83` — the PDF importer opens its
   reconstructed document, or an image-per-page fallback.
-- `plugin-publish: packages/publish-bundle/src/io/idml.ts:63` — the IDML importer passes the
+- `plugin-publish: packages/publish-bundle/src/io/idml.ts:67` — the IDML importer passes the
   file's bytes straight through.
 
 plugin-image, the consumer the bullet names, does not call the door (at `f7d21e5`).
@@ -106,12 +106,12 @@ plugin-image, the consumer the bullet names, does not call the door (at `f7d21e5
 **2. The contract is published.** The second Consequences bullet says K-2 shipped "via `link:`
 with **no npm publish**" and that "The contract HEAD is therefore ahead of the published
 canary". This repo now publishes its packages under the `canary` dist-tag on every push to
-`main` (`.github/workflows/publish.yml:15-17`, `:78-90`; see
+`main` (`.github/workflows/publish.yml:15-17`, `:82-94`; see
 [ADR 306](306-canary-releases.md)), and the editor pins `@paged-media/plugin-api` and
 `@paged-media/plugin-sdk` by version number, not by `link:`
 (`editor: apps/canvas/package.json:36-37`, the version in `packages/plugin-api/package.json:3`).
 
 **Added since, superseding nothing above.** `host.shell.saveFile` sits beside `pickFile`: a
 bundle hands bytes to the host to save, outside the exporter registry
-(`packages/plugin-api/src/host.ts:1160-1181`, `packages/plugin-sdk/src/host-impl.ts:2397-2406`).
+(`packages/plugin-api/src/host.ts:1164-1185`, `packages/plugin-sdk/src/host-impl.ts:2401-2410`).
 The bytes still leave through the host, as the third reason requires.

@@ -9,10 +9,10 @@ A caret, a selection and a text edit each need an address that both sides of the
 channel agree on. The engine made that address a position in the content, not on the
 page: a selection "references characters in a story, not pixels on a page — so it survives
 re-layout, zoom changes, frame moves, and pagination shifts"
-(`crates/paged-canvas/src/selection.rs:19-23`).
+(`crates/paged-canvas/src/selection.rs:23-27`).
 
 Table-cell text is stored apart from the story's own paragraphs, so an address also has
-to say which paragraph stream it indexes (`crates/paged-wire/src/lib.rs:538-540`).
+to say which paragraph stream it indexes (`crates/paged-wire/src/lib.rs:542-544`).
 
 Why the unit is the UTF-8 byte, and not the character or the UTF-16 code unit:
 The repository does not record why.
@@ -39,24 +39,24 @@ The range operations do not use this contract. `ApplyStyle`, `InsertHyperlink`,
 `InsertAnchoredFrame`, `SetFieldValue` and an `ElementId::StoryRange` address count
 characters over run text only, with no break character between paragraphs. For
 `StoryRange` the comment calls this "IDML's native convention"
-(`crates/paged-mutate/src/operation.rs:93-95`).
+(`crates/paged-mutate/src/operation.rs:97-99`).
 
 ## Evidence
 
-- `crates/paged-canvas/src/selection.rs:27-34` — the story-offset contract; `:36-48` affinity
-- `crates/paged-wire/src/lib.rs:536-554` — the two paragraph streams and the cell qualifier; `:557-569` why not one flat offset
-- `crates/paged-canvas/src/mutate.rs:745-760` — `locate` walks byte lengths; `:102-115`, `:208-221` the two refusals; `crates/paged-canvas/tests/utf8_offsets.rs:15-19` the test's statement of the rule
-- `crates/paged-canvas/src/channel.rs:873-875`, `:891-895` — the queries share one byte address space with `HitResult.offset_within_story`
-- `crates/paged-mutate/src/operation.rs:88-97` — `StoryRange`: "Offsets are character indices in the story"; `crates/paged-mutate/src/apply/paragraph.rs:83-84` "the paragraph break is not a character here"
-- `crates/paged-wire/src/lib.rs:688-690` — `InsertHyperlink`: "contiguous char offsets, the `ApplyStyle` address space"; `crates/paged-mutate/src/apply/anchored_frame.rs:37-42` "deliberately NOT" the byte space
-- `crates/paged-canvas/src/model.rs:472-490`, `:3690-3708` — `StoryRange` and `ApplyStyle` offsets pass to the operation unconverted
-- `crates/paged-canvas/tests/apply_style_caret.rs:21-23` — a test written in the character space
+- `crates/paged-canvas/src/selection.rs:31-38` — the story-offset contract; `:40-52` affinity
+- `crates/paged-wire/src/lib.rs:540-558` — the two paragraph streams and the cell qualifier; `:561-573` why not one flat offset
+- `crates/paged-canvas/src/mutate.rs:749-764` — `locate` walks byte lengths; `:106-119`, `:212-225` the two refusals; `crates/paged-canvas/tests/utf8_offsets.rs:19-23` the test's statement of the rule
+- `crates/paged-canvas/src/channel.rs:877-879`, `:895-899` — the queries share one byte address space with `HitResult.offset_within_story`
+- `crates/paged-mutate/src/operation.rs:92-101` — `StoryRange`: "Offsets are character indices in the story"; `crates/paged-mutate/src/apply/paragraph.rs:87-88` "the paragraph break is not a character here"
+- `crates/paged-wire/src/lib.rs:692-694` — `InsertHyperlink`: "contiguous char offsets, the `ApplyStyle` address space"; `crates/paged-mutate/src/apply/anchored_frame.rs:41-46` "deliberately NOT" the byte space
+- `crates/paged-canvas/src/model.rs:476-494`, `:3694-3712` — `StoryRange` and `ApplyStyle` offsets pass to the operation unconverted
+- `crates/paged-canvas/tests/apply_style_caret.rs:25-27` — a test written in the character space
 
 ## Alternatives considered
 
 One flat story-offset space with a reserved region for cells "was rejected": every
 consumer of body offsets would have to learn the encoding, "and a single arithmetic slip
-silently routes an edit into the wrong cell" (`crates/paged-wire/src/lib.rs:559-565`).
+silently routes an edit into the wrong cell" (`crates/paged-wire/src/lib.rs:563-569`).
 
 ## Consequences
 
@@ -71,15 +71,15 @@ message channel has no conversion request, and no code in `paged-canvas`, `paged
 string indices itself.
 
 Inside the model, the anchor of an anchored frame is a character offset within its
-paragraph (`crates/paged-model/src/lib.rs:4894-4903`).
+paragraph (`crates/paged-model/src/lib.rs:4898-4907`).
 
 Places where the code or its descriptions disagree with the contract:
 
 - After `InsertText`, the model shifts its stored selection by the inserted text's
-  character count, not its byte length (`crates/paged-canvas/src/model.rs:2272`).
+  character count, not its byte length (`crates/paged-canvas/src/model.rs:2276`).
 - The capability catalogue describes a story as "Edited by character offset, not by
-  frame" (`crates/paged-introspect/src/catalog.rs:972`).
-- `crates/paged-canvas/src/selection.rs:33` names `paged_mutate::text_index` as a consumer;
+  frame" (`crates/paged-introspect/src/catalog.rs:976`).
+- `crates/paged-canvas/src/selection.rs:37` names `paged_mutate::text_index` as a consumer;
   no such module exists.
 
 ## Related

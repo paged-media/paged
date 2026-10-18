@@ -64,7 +64,7 @@ manifest's path `wasm/image_js_bg.wasm` resolves from `manifest/`.
 The engine is one module, `glue/wasm/image_js_bg.wasm` (2,743,131 bytes), built from
 `image-js` with `wasm-bindgen --target web`. `glue/src/engine.ts` imports the generated
 JavaScript and instantiates the module itself, in the bundle's own realm, because the
-engine creates its WebGPU device from `navigator.gpu` (`image-js/src/lib.rs:36-40`). The
+engine creates its WebGPU device from `navigator.gpu` (`image-js/src/lib.rs:22-26`). The
 manifest declares `gpu: { realm: "bundle" }` and one `wasm` entry
 ([plugin-sdk ADR 308](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/308-plugin-wasm.md)).
 
@@ -162,7 +162,7 @@ dispatch per pixel layer, and the adjustment chain over the accumulator for an a
 layer. A stack of one plain layer returns that layer's pixels without a dispatch. The
 result is written back into the image handle the stack is bound to, so every other lane
 keeps addressing one image. Pixel edits to the active layer are recorded in the tile
-journal, at most 32 entries and 256 MiB (`image-graph/src/journal.rs:101-106`). Undo and
+journal, at most 32 entries and 256 MiB (`image-graph/src/journal.rs:87-92`). Undo and
 redo are the plugin's own commands and act on this journal, not on the host's history.
 
 The active layer has an edit target, its pixels or its mask (`LayerStack::set_edit_target`).
@@ -183,7 +183,7 @@ qcms (`image-js/src/display.rs`), an embedded CMYK profile with moxcms (`image-j
 ([ADR 457](adr/457-colour-management.md)). Held pixels are straight (not premultiplied) RGBA at
 8 or 16 bits per sample in the `Pixels` type (`image-js/src/pixels.rs`), and are uploaded as
 encoded values: ingest applies no premultiply and no transfer to linear
-(`image-js/src/ingest.rs:43-47`; [ADR 455](adr/455-pixel-model.md)). `image-psd` re-encodes
+(`image-js/src/ingest.rs:29-33`; [ADR 455](adr/455-pixel-model.md)). `image-psd` re-encodes
 fixed-width scalar structures, keeps the source bytes of every other block it parses, and
 writes unmodified blocks back byte for byte ([ADR 458](adr/458-psd-preservation.md)).
 

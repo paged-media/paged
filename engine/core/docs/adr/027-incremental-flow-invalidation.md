@@ -13,17 +13,17 @@
 ## The problem
 
 An edit costs a whole-document rebuild: ~16 ms native, ~14 s in wasm on the 134-page annual
-(`crates/paged-canvas/src/model.rs:1316` comment). Most of that cost is waste:
+(`crates/paged-canvas/src/model.rs:1320` comment). Most of that cost is waste:
 
 - A **per-paragraph layout cache** already persists across rebuilds (`layout_cache`,
-  `crates/paged-canvas/src/model.rs:1255`). Unchanged paragraphs skip line breaking.
+  `crates/paged-canvas/src/model.rs:1259`). Unchanged paragraphs skip line breaking.
 - A **per-story emit cache** exists (`body_story_emit_cache`,
-  `crates/paged-canvas/src/model.rs:1297`). Its key
-  (`crates/paged-renderer/src/pipeline/deltas.rs:55`) hashes the chain's frame geometry, the wrap
+  `crates/paged-canvas/src/model.rs:1301`). Its key
+  (`crates/paged-renderer/src/pipeline/deltas.rs:59`) hashes the chain's frame geometry, the wrap
   shapes on its pages and the **absolute page index**. It does **not** include the story's
   content, styles or the variables it reads.
 - That key would return stale output for any text edit, so every mutation entry point clears
-  the whole cache: `crates/paged-canvas/src/model.rs:2181, 4050, 4110, 4162`. Correct, but a
+  the whole cache: `crates/paged-canvas/src/model.rs:2185, 4050, 4110, 4162`. Correct, but a
   one-character edit re-emits every story on every page.
 
 Flow raises the real question: can an edit change the whole document? Today, through core's
@@ -35,10 +35,10 @@ verified dependencies:
   frame geometry (already in the key), post-layout values (running headers, page-number
   cross-references, re-emitted by `crates/paged-renderer/src/pipeline/links.rs`), cross-story
   list numbering (already disables
-  the cache document-wide, `crates/paged-renderer/src/pipeline/build_engine.rs:2391`), and
+  the cache document-wide, `crates/paged-renderer/src/pipeline/build_engine.rs:2395`), and
   structural ops.
 - **Wrap shapes are collected from frame geometry before any story is laid out**
-  (`collect_wrap_rects_per_page`, `crates/paged-renderer/src/pipeline/build_engine.rs:2008`).
+  (`collect_wrap_rects_per_page`, `crates/paged-renderer/src/pipeline/build_engine.rs:2012`).
   So one story's layout never feeds
   another's, and one pass is enough. [026](026-auto-growing-region-chains.md) ends this: a
   grown page brings master content.
@@ -79,7 +79,7 @@ story, so the edited story *is* the document.
    frames, changing a master, applying a master to a page, and loading a document keep the
    full rebuild. Correctness first; this ADR only narrows the common case.
 7. **Dirty pages drive redraw.** The set of pages whose emission changed replaces the
-   coarse `story_pages` hint (`crates/paged-canvas/src/model.rs:1260`) for GPU tile invalidation.
+   coarse `story_pages` hint (`crates/paged-canvas/src/model.rs:1264`) for GPU tile invalidation.
    Visible pages are
    composed and presented first.
 
@@ -117,14 +117,14 @@ away from other stories' cache entries by the commit path instead.
 
 **Decision 4, the digest gate: built.**
 
-- `crates/paged-canvas/src/model.rs:8917-8938` — `digest_gate_check` builds the scene cold and
-  compares; `set_digest_gate` turns the per-rebuild check on for one model. `:1744` — the
-  environment variable `PAGED_DIGEST_GATE=1` turns it on for every model. `:8909-8912` — a
+- `crates/paged-canvas/src/model.rs:8921-8942` — `digest_gate_check` builds the scene cold and
+  compares; `set_digest_gate` turns the per-rebuild check on for one model. `:1748` — the
+  environment variable `PAGED_DIGEST_GATE=1` turns it on for every model. `:8913-8916` — a
   difference panics.
-- `crates/paged-canvas/src/model.rs:9687-9726` — `compare_builds` compares the page ids, each
+- `crates/paged-canvas/src/model.rs:9691-9730` — `compare_builds` compares the page ids, each
   page's `DisplayList::digest()`, each page's `story_layout` and the diagnostics. The decision
   names only the digest.
-- `crates/paged-canvas/tests/digest_gate.rs:15-28` — the test that scripts edits and checks
+- `crates/paged-canvas/tests/digest_gate.rs:19-32` — the test that scripts edits and checks
   after every operation.
 
 In this repository the gate is that integration test; no file under `.github/workflows` names
@@ -136,28 +136,28 @@ repository.
 
 **Decision 5, one commit path: built.**
 
-- `crates/paged-canvas/src/model.rs:8681-8777` — `commit_and_rebuild(invalidation)`;
-  `:9661-9675` — `Invalidation` is `Everything` or `Text { story, edit }`.
-- `crates/paged-canvas/src/model.rs:8527` — `pipeline_options`; `:9677-9685` —
+- `crates/paged-canvas/src/model.rs:8685-8781` — `commit_and_rebuild(invalidation)`;
+  `:9665-9679` — `Invalidation` is `Everything` or `Text { story, edit }`.
+- `crates/paged-canvas/src/model.rs:8531` — `pipeline_options`; `:9681-9689` —
   `PipelinePurpose` is `Live` or `Export`.
 
 This supersedes, in "The problem", "every mutation entry point clears the whole cache:
-`crates/paged-canvas/src/model.rs:2181, 4050, 4110, 4162`".
+`crates/paged-canvas/src/model.rs:2185, 4050, 4110, 4162`".
 
 **Decisions 1 and 2, the key: not built as written.**
 
-- `crates/paged-renderer/src/pipeline/deltas.rs:55-110` — the body-story key is still
+- `crates/paged-renderer/src/pipeline/deltas.rs:59-114` — the body-story key is still
   hand-written: the story id and `body_story_signature` over the chain's frames, the wrap
-  shapes on its pages and the absolute page index (`:84-91`), mixed at the call site with the
+  shapes on its pages and the absolute page index (`:88-95`), mixed at the call site with the
   list-numbering ledger and, for a story that prints page numbers or variables, a
-  page-numbering key (`crates/paged-renderer/src/pipeline/build_engine.rs:2751-2797`). No part
+  page-numbering key (`crates/paged-renderer/src/pipeline/build_engine.rs:2755-2801`). No part
   of it is recorded from what the emission read.
 - No revision counter exists: the word "revision" does not occur in `crates/paged-mutate/src`.
-- `crates/paged-canvas/src/model.rs:8720-8745` — what a text edit does instead: it drops the
+- `crates/paged-canvas/src/model.rs:8724-8749` — what a text edit does instead: it drops the
   body-story entries of the edited story only (both emit caches whole, when the story has no
-  frame chain of its own or its frame is anchored in another story). `:2254`, `:4162-4170`, `:4217-4226` — text operations and their undo and redo
+  frame chain of its own or its frame is anchored in another story). `:2258`, `:4166-4174`, `:4221-4230` — text operations and their undo and redo
   take this path.
-- `crates/paged-canvas/src/model.rs:4137`, `:8712-8719` — every other operation drops the
+- `crates/paged-canvas/src/model.rs:4141`, `:8716-8723` — every other operation drops the
   master-text and body-story caches whole.
 
 This supersedes, in Consequences, "Style edits invalidate only the stories that read the
@@ -168,30 +168,30 @@ caches" holds for the text operations.
 frame starts **and** ends at the same text position as in the previous build": the test is
 made at paragraph boundaries and compares the emitter's flow state.
 
-- `crates/paged-renderer/src/pipeline/resume.rs:15-39` — an edited story resumes at the first
+- `crates/paged-renderer/src/pipeline/resume.rs:19-43` — an edited story resumes at the first
   changed paragraph and stops at the first later paragraph boundary whose flow state equals
   the previous emission's; the output before and after is spliced from the previous emission.
-- `crates/paged-renderer/src/pipeline/resume.rs:140-145` — only stories whose emission is "a
+- `crates/paged-renderer/src/pipeline/resume.rs:144-149` — only stories whose emission is "a
   pure function of the flow state" are recorded; the others re-emit from their first
   paragraph.
 
 **Decision 6, structural operations: holds.** They go through `Invalidation::Everything`, and
 only a build whose commits were text edits of one story narrows anything
-(`crates/paged-canvas/src/model.rs:1379-1392`).
+(`crates/paged-canvas/src/model.rs:1383-1396`).
 
 **Decision 7, dirty pages: built for text edits of one story.**
 
-- `crates/paged-canvas/src/model.rs:8867-8904` — after such a build the changed pages are the
+- `crates/paged-canvas/src/model.rs:8871-8908` — after such a build the changed pages are the
   pages laid out afresh, the new pages, and the pages of the story's auto-sizing frames; after
   any other build every page is reported.
-- `crates/paged-canvas/src/model.rs:8795-8812`, `crates/paged-renderer/src/pipeline/mod.rs:417-424`
+- `crates/paged-canvas/src/model.rs:8799-8816`, `crates/paged-renderer/src/pipeline/mod.rs:421-428`
   — in that case the previous build's pages are lent to the pipeline, and a page nothing was
   laid out on afresh is moved in instead of being finished again.
-- `crates/paged-canvas-wasm/src/dispatch.rs:135-153` — the GPU scene cache invalidates the
+- `crates/paged-canvas-wasm/src/dispatch.rs:139-157` — the GPU scene cache invalidates the
   narrowed pages when the model has them and otherwise falls back to the pages of the story.
   The `story_pages` hint is therefore not replaced; it is the fallback.
 
 **The timing in "The problem".** The plan's §0 measured one typed character on the 134-page
 document at 149 ms native and 178 ms in wasm at `6dea692`, before its steps. The "~14 s in
-wasm" above, and the comment it cites (now at `crates/paged-canvas/src/model.rs:1330`), predate
+wasm" above, and the comment it cites (now at `crates/paged-canvas/src/model.rs:1334`), predate
 that measurement.

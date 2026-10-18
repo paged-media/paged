@@ -102,7 +102,7 @@ _after an existing page_ panics:
 
 ```
 index out of bounds: the len is N but the index is N
-  at paged-renderer/src/pipeline/mod.rs:1890
+  at paged-renderer/src/pipeline/mod.rs:1894
 ```
 
 `mutate()` then never resolves (the panic is inside the synchronous

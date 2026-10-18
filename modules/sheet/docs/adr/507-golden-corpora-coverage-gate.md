@@ -9,12 +9,12 @@ The engine is written in this repository from public specifications
 ([ADR 500](500-own-calculation-engine.md)). Function dispatch is generated from `registry/`,
 where a function without a row cannot be called
 ([ADR 317](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/317-registry-driven-dispatch.md)).
-`sheet-conformance/src/bin/coverage_gate.rs:33-36` names the other half that was wanted:
+`sheet-conformance/src/bin/coverage_gate.rs:19-22` names the other half that was wanted:
 every row marked `implemented` must point at tests that exist.
 
 Two further rules are stated in the repo. `CLAUDE.md:114-118`: behaviour copied from Excel,
 including its defects, is adopted as an explicit ruling with provenance, never by accident.
-`sheet-conformance/src/lib.rs:61-62`: the engine is bit-stable, so goldens are compared as
+`sheet-conformance/src/lib.rs:47-48`: the engine is bit-stable, so goldens are compared as
 bytes and there is no tolerance machinery.
 
 ## Decision
@@ -45,17 +45,17 @@ binds every implemented registry row to tests that exist.
 ## Evidence
 
 - `sheet-conformance/Cargo.toml:8`; `.github/workflows/rust.yml:33` — test-only by description; CI fails if the wasm dependency tree contains `sheet-conformance` or `proptest`
-- `sheet-conformance/src/lib.rs:42-62` — the golden format and the byte comparison; `sheet-conformance/tests/corpus_runner.rs:180-226`, `:274-362` — one case, and the 17 family tests
-- `sheet-conformance/src/bin/coverage_gate.rs:121-139`, `:169-208`, `:240-246` — status filter, lanes checked, the `fn <prefix>` match; `.github/workflows/rust.yml:49-52` — nextest, then the gate
+- `sheet-conformance/src/lib.rs:28-48` — the golden format and the byte comparison; `sheet-conformance/tests/corpus_runner.rs:166-212`, `:260-348` — one case, and the 17 family tests
+- `sheet-conformance/src/bin/coverage_gate.rs:107-125`, `:155-194`, `:226-232` — status filter, lanes checked, the `fn <prefix>` match; `.github/workflows/rust.yml:49-52` — nextest, then the gate
 - `registry/features/format.yaml:61-67` — a ruling row: `sheet.format.date.leap1900`, "Adopted bug-for-bug", with provenance and a test pointer
 - `corpus/xlsx-corpus/generate.py:2-12` — standard library only, fixed timestamp
 - `sheet-conformance/tests/real_xlsx_corpus.rs:26-42`, `:188-364` — the reason for the different bars; the four tests, each calling only `XlsxDocument::open`
-- `sheet-conformance/tests/excel_oracle.rs:36-72` — the Excel differential oracle that replaced the LibreOffice skeleton
+- `sheet-conformance/tests/excel_oracle.rs:22-58` — the Excel differential oracle that replaced the LibreOffice skeleton
 
 ## Alternatives considered
 
 A differential oracle against headless LibreOffice was drafted as a skeleton and never
-built. It was replaced by an Excel oracle (`sheet-conformance/tests/excel_oracle.rs:36-55`):
+built. It was replaced by an Excel oracle (`sheet-conformance/tests/excel_oracle.rs:22-41`):
 values recorded once by desktop Excel and committed, compared with a 15-significant-digit
 tolerance in their own lane, so the bit-stable golden gate above is unchanged.
 

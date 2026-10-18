@@ -97,8 +97,8 @@ landed. How the parts fit is in
   rendering-intent control. Kernels receive encoded values.
 - **Depth.** A 16-bit RGB or RGBA PNG decoded on the main thread is held at 16 bits. The
   decode worker returns RGBA8, a 16-bit PSD is reduced to 8 bits, and a 16-bit greyscale
-  PNG is refused (`image-js/src/ingest.rs:599-620`). `layers_open` (`image-js/src/lib.rs:2564`)
-  and the panel's chain (`image-js/src/ingest.rs:1123`) take the held buffer as four bytes
+  PNG is refused (`image-js/src/ingest.rs:585-606`). `layers_open` (`image-js/src/lib.rs:2550`)
+  and the panel's chain (`image-js/src/ingest.rs:1109`) take the held buffer as four bytes
   per pixel; `LayerStack::from_image_px`, which keeps the depth, is called only by tests.
   The scene-layer item, tiles and PSD save-back are 8-bit. A curve is a 256-entry table.
 - **PSD.** The composite decode takes 8- and 16-bit RGB, greyscale or CMYK, raw or RLE (not

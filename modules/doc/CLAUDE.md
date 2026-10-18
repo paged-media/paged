@@ -2,7 +2,7 @@
 
 Orientation for Claude sessions in **paged-media/plugin-doc** — the paged.doc
 Word/DOCX subsystem, delivered as a Paged plugin (dual-licensed AGPL-3.0-only OR
-PMEL, And The Next GmbH; the shared `paged-ooxml` crate is MPL-2.0 OR PMEL).
+PMEL, And The Next GmbH; the shared `paged-ooxml` crate included).
 
 ## What this is
 
@@ -76,9 +76,9 @@ Rules for every code change in this repo:
   byte-identical (decompressed).
 - **HONEST DEGRADATION (ADR-007).** Constructs past the current tier are surfaced
   as diagnostics on open, never silently dropped or faked.
-- **LICENSE ASYMMETRY.** `paged-ooxml/**/*.rs` carry the MPL/PMEL header (crate
-  `license = "MPL-2.0 OR LicenseRef-PMEL"`); `docx-*/**/*.rs` carry the AGPL/PMEL
-  header (the workspace default). TS files carry the AGPL header block, no MPL.
+- **LICENSE.** Every crate, `paged-ooxml` included, is AGPL-3.0-only OR PMEL
+  (the workspace default; ADR PM-0001) and every `.rs` and TS file carries the
+  AGPL/PMEL header block. `paged-ooxml` was MPL-2.0 OR PMEL before the relicense.
 - **ooxmlsdk is vendored + pinned** (the DuckDB-WASM / Blitz posture): treat
   upstream as a starting point; be ready to carry patches. OPC/carry-through is
   ALWAYS our own `zip`+`quick-xml` — never trust `ooxmlsdk` for byte-exact fidelity.

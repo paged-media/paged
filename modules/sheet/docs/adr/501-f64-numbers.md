@@ -38,18 +38,18 @@ an explicit opt-in flag" (`DECIMAL-SPIKE.md:19`).
 
 ## Evidence
 
-- `sheet-core/src/value.rs:43-50` — `CellValue::Number(f64)`
-- `sheet-fn/src/num.rs:33-45`, `:52-64`, `:70-101` — the purpose of the seam, the trait,
+- `sheet-core/src/value.rs:29-36` — `CellValue::Number(f64)`
+- `sheet-fn/src/num.rs:19-31`, `:38-50`, `:56-87` — the purpose of the seam, the trait,
   and `F64`
-- `sheet-fn/Cargo.toml:13-21`, `:35-38`, `sheet-fn/src/lib.rs:77-78`,
-  `sheet-fn/src/num_decimal.rs:95-144` — the feature, the optional dependency, the `cfg`
+- `sheet-fn/Cargo.toml:13-21`, `:21-24`, `sheet-fn/src/lib.rs:63-64`,
+  `sheet-fn/src/num_decimal.rs:81-130` — the feature, the optional dependency, the `cfg`
   gate on the module, and `impl Numeric for Decimal`
 - `sheet-js/Cargo.toml:1-41`, `scripts/build-wasm.sh:22` — no feature is declared for the
   wasm crate or passed to its build
-- `sheet-fn/src/families/agg.rs:114-118`, `sheet-calc/src/eval.rs:426-449` — a kernel
+- `sheet-fn/src/families/agg.rs:100-104`, `sheet-calc/src/eval.rs:412-435` — a kernel
   calling the trait's methods on `F64`; the formula operators on plain `f64`
-- `sheet-format/src/general.rs:85-86` — `round_sig(x, 15)`
-- `sheet-conformance/tests/decimal_spike.rs:148`, `:201-215`, `:222-255` — the generic
+- `sheet-format/src/general.rs:71-72` — `round_sig(x, 15)`
+- `sheet-conformance/tests/decimal_spike.rs:134`, `:187-201`, `:208-241` — the generic
   `replay`, the f64 half that always runs, and the decimal half behind the feature
 
 ## Alternatives considered
@@ -72,14 +72,14 @@ modules in `sheet-fn/src/families/` import `Numeric` (`agg`, `database`, `math`,
 `stat`, `t2misc`) and call its methods on the concrete type `F64`. No kernel is generic
 over the trait; the only generic code is the `replay` function of the spike test. Other
 arithmetic is plain `f64`: the evaluator's `+ - * / ^`, and expressions inside those
-modules such as `v - m` at `sheet-fn/src/families/stat.rs:292`. The registry note "Kernels
+modules such as `v - m` at `sheet-fn/src/families/stat.rs:278`. The registry note "Kernels
 route arithmetic through the trait, so a `Decimal` impl is a type substitution, not a
 rewrite" (`registry/features/decimal.yaml:19-20`) holds for the accumulation loops, not
 for the engine as a whole.
 
 The decimal backend is not exercised by CI: no workflow under `.github/` enables
 `exact-decimal`. There is no precision setting either; `CalcSettings` has no such field
-(`sheet-core/src/calc_settings.rs:41-53`). Two comments are stale:
+(`sheet-core/src/calc_settings.rs:27-39`). Two comments are stale:
 `sheet-fn/Cargo.toml:16` and `registry/features/decimal.yaml:9` still call `num_decimal`
 a stub.
 

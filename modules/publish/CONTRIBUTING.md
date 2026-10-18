@@ -5,22 +5,22 @@ bundles** for [paged](https://paged.media) and the `pdf-import` mapper. The
 IDML adapter it used to hold (`idml-import` / `idml-export`, ADR-022, and the
 `idml-coverage` tool) is now part of the engine workspace,
 `engine/core/crates/`. It is **open**
-(MPL-2.0 OR PMEL); the engine (`paged-media/core`) is also MPL-2.0 OR PMEL,
-and the editor (`paged-media/editor`) is AGPL-3.0 OR PMEL.
+(AGPL-3.0-only OR PMEL), like the engine, the editor and the rest of the
+repository (ADR PM-0001).
 
 ## License of contributions
 
-`plugin-publish` is dual-licensed — **MPL-2.0 OR the Paged Media Enterprise
-License (PMEL)**. By contributing you agree to the **Contributor License
-Agreement** ([`CLA.md`](./CLA.md)), which allows And The Next GmbH to
-distribute your contribution under **both** the open-source license
-(MPL-2.0) **and** the commercial license (PMEL). You retain copyright to
+`plugin-publish` is dual-licensed — **AGPL-3.0-only OR the Paged Media
+Enterprise License (PMEL)**. By contributing you agree to the **Contributor
+License Agreement** ([`CLA.md`](./CLA.md)), which allows And The Next GmbH
+to distribute your contribution under **both** the open-source license
+(AGPL-3.0) **and** the commercial license (PMEL). You retain copyright to
 your contribution.
 
 A CLA bot will ask you to sign on your first pull request.
 
-New source files must carry the standard MPL-2.0 header — copy it verbatim
-from the top of any existing `crates/**/*.rs`.
+New source files must carry the standard AGPL-3.0 OR PMEL header — copy it
+verbatim from the top of any existing `crates/**/*.rs`.
 
 ## Building & testing
 

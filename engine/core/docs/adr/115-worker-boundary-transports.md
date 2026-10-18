@@ -11,12 +11,12 @@ order; values that change on every input event; and payloads of many megabytes.
 
 The code records a reason for each lane. The message handler returns a string because that
 "keeps the boundary simple — no nested serde-wasm-bindgen conversions, just text in and text
-out" (`crates/paged-canvas-wasm/src/lib.rs:639-642`). The camera is kept out of the message
+out" (`crates/paged-canvas-wasm/src/lib.rs:643-646`). The camera is kept out of the message
 channel to "avoid the `postMessage` round-trip (which serialises through the message queue
-and costs at least a frame)" (`crates/paged-canvas/src/camera.rs:19-22`). Document bytes get
+and costs at least a frame)" (`crates/paged-canvas/src/camera.rs:23-26`). Document bytes get
 their own entry point because a byte array inside JSON is "8×-inflated" and documents of
 100 MB and more failed with "capacity overflow" on that path
-(`crates/paged-canvas-wasm/src/lib.rs:251-256`).
+(`crates/paged-canvas-wasm/src/lib.rs:255-260`).
 
 ## Decision
 
@@ -44,13 +44,13 @@ with `Ready {protocol}` and exposes a `protocolVersion` getter.
 
 ## Evidence
 
-- `crates/paged-canvas/src/channel.rs:18-28` — envelopes, `seq`, and "Camera updates are NOT in this channel"; `:45-60` why `Tsify` is off the outer envelopes, and the hand-written types
-- `crates/paged-canvas/src/channel.rs:708-730`, `:1407-1427` — the envelope structs and the `kind`/`payload` tagging
-- `crates/paged-canvas-wasm/src/lib.rs:637-653` — `handleMessage`; `:209-214` the `protocolVersion` getter
-- `crates/paged-canvas/src/camera.rs:24-53` — camera layout, writer and reader steps, the accepted torn read, "the constants below are Rust-authoritative"
-- `crates/paged-canvas/src/gesture.rs:46-71` — the gesture mailbox layout; `crates/paged-canvas-wasm/src/lib.rs:589-611` `updateGestureRaw`; `:676-712` the layout exports
-- `crates/paged-canvas-wasm/src/lib.rs:251-266` — `loadDocumentDirect`; `:216-226` `renderTilePng`
-- `crates/paged-wire/src/lib.rs:582-592` — `ByteBuf`: bytes inside an envelope are a JSON array of numbers
+- `crates/paged-canvas/src/channel.rs:22-32` — envelopes, `seq`, and "Camera updates are NOT in this channel"; `:49-64` why `Tsify` is off the outer envelopes, and the hand-written types
+- `crates/paged-canvas/src/channel.rs:712-734`, `:1411-1431` — the envelope structs and the `kind`/`payload` tagging
+- `crates/paged-canvas-wasm/src/lib.rs:641-657` — `handleMessage`; `:213-218` the `protocolVersion` getter
+- `crates/paged-canvas/src/camera.rs:28-57` — camera layout, writer and reader steps, the accepted torn read, "the constants below are Rust-authoritative"
+- `crates/paged-canvas/src/gesture.rs:50-75` — the gesture mailbox layout; `crates/paged-canvas-wasm/src/lib.rs:593-615` `updateGestureRaw`; `:680-716` the layout exports
+- `crates/paged-canvas-wasm/src/lib.rs:255-270` — `loadDocumentDirect`; `:220-230` `renderTilePng`
+- `crates/paged-wire/src/lib.rs:586-596` — `ByteBuf`: bytes inside an envelope are a JSON array of numbers
 - `editor: apps/canvas/src/worker/worker.ts:175-178`, `:277-299`, `:682-701` — the host compares the layouts and the version after the wasm loads and posts a `protocolMismatch` warning; its drain loop reads the gesture buffer and calls `updateGestureRaw`
 
 ## Alternatives considered
@@ -59,29 +59,29 @@ with `Ready {protocol}` and exposes a `protocolVersion` getter.
   above. `crates/paged-canvas-wasm/Cargo.toml:49` declares `serde-wasm-bindgen`; no Rust
   code under `crates/` calls it.
 - A binary wire, not built: the `ByteBuf` comment says a future CBOR or MessagePack protocol
-  would render "a real bytes blob without code change" (`crates/paged-wire/src/lib.rs:586-588`).
+  would render "a real bytes blob without code change" (`crates/paged-wire/src/lib.rs:590-592`).
 
 ## Consequences
 
 The text path is handled by a function that compiles on every target, so it is tested
-natively with JSON strings (`crates/paged-canvas-wasm/tests/dispatch.rs:43`). Native callers
+natively with JSON strings (`crates/paged-canvas-wasm/tests/dispatch.rs:47`). Native callers
 skip the text: the CLI passes typed `MainToWorker` values to the same dispatch
-(`crates/paged-cli/src/engine.rs:86`, [ADR 113](113-one-typed-door.md)).
+(`crates/paged-cli/src/engine.rs:90`, [ADR 113](113-one-typed-door.md)).
 
 A host must mirror the two buffer layouts and the envelope union. `UpdateGesture` also
 exists as an envelope kind; the camera has no envelope form. `CameraLayout` is a
 plain-bytes stand-in; its comment says the wasm side wraps a real buffer, which no code
-does (`crates/paged-canvas/src/camera.rs:139-142`). A torn camera read is accepted as "a
-single-frame visual glitch" (`:43-48`).
+does (`crates/paged-canvas/src/camera.rs:143-146`). A torn camera read is accepted as "a
+single-frame visual glitch" (`:47-52`).
 Only document load has a direct byte lane for input. `RegisterFont`, `WritePagedPart`,
 image tiles and the exported PDF, IDML and `.paged` bytes travel as JSON number arrays.
 
 The engine does not compare the `protocol` field of an incoming envelope; the check is the
 host's. The comment on `PROTOCOL_VERSION` says the main thread "refuses to proceed on
-mismatch" (`crates/paged-canvas/src/channel.rs:62-65`); the editor's worker script posts a
+mismatch" (`crates/paged-canvas/src/channel.rs:66-69`); the editor's worker script posts a
 warning and continues. The layout comments name three different TypeScript files as the
-mirror (`crates/paged-canvas/src/camera.rs:51`, `crates/paged-canvas/src/gesture.rs:68`,
-`crates/paged-canvas-wasm/src/lib.rs:602`).
+mirror (`crates/paged-canvas/src/camera.rs:55`, `crates/paged-canvas/src/gesture.rs:72`,
+`crates/paged-canvas-wasm/src/lib.rs:606`).
 
 ## Related
 

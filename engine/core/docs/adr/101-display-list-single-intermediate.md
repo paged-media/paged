@@ -10,15 +10,15 @@ builder ([ADR 100](100-two-rasterisers-one-trait.md)) and the PDF exporter
 ([ADR 119](119-pdf-export-backend.md)). The module doc of `display_list.rs` describes the
 shape of the hand-off: "A flat command stream plus a path buffer", where the path buffer
 "lets repeated shapes (especially glyphs) share tessellated data"
-(`crates/paged-compose/src/display_list.rs:15-20`).
+(`crates/paged-compose/src/display_list.rs:19-24`).
 
 Several builds must produce the same drawing: the viewer SDK's load path and the stock
 pipeline, an incremental rebuild and a cold one
 ([ADR 027](027-incremental-flow-invalidation.md)), a document reloaded from its native part
 and the document it was saved from. The `digest` doc comment names the first of these as
-its purpose: the "same code, same scene" tripwire (`crates/paged-compose/src/display_list.rs:1593-1597`).
+its purpose: the "same code, same scene" tripwire (`crates/paged-compose/src/display_list.rs:1597-1601`).
 
-Text is emitted as "one `FillPath` command per glyph" (`crates/paged-compose/src/text.rs:17`).
+Text is emitted as "one `FillPath` command per glyph" (`crates/paged-compose/src/text.rs:21`).
 Glyphs are filled paths and not a text primitive. The repository does not record why.
 
 ## Decision
@@ -33,7 +33,7 @@ It is a flat `Vec<DisplayCommand>` plus pools the commands index into: an intern
   asks for them. The PDF exporter uses them for real text and link annotations. No
   rasteriser reads `link_regions`; the CPU rasteriser reads `glyph_runs` only when
   `snap_glyph_origins` is set, to pick the glyph fills it snaps
-  (`crates/paged-gpu/src/cpu.rs:1046-1052`). The field comments still say "rasterizers
+  (`crates/paged-gpu/src/cpu.rs:1050-1056`). The field comments still say "rasterizers
   never read it".
 - **Scopes are bracket markers in the same stream.** `PushClip`/`PopClip`,
   `BeginBlendGroup`/`EndBlendGroup`, `PushLayer`/`PopLayer` and the three-marker soft mask
@@ -48,43 +48,43 @@ It is a flat `Vec<DisplayCommand>` plus pools the commands index into: an intern
 
 ## Evidence
 
-- `crates/paged-compose/src/display_list.rs:1462-1485` — `DisplayList`, its pools and the two optional side channels; `:321-364`, `:454-457` — `PathBuffer::intern`, `GlyphCacheKey`
-- `crates/paged-compose/src/display_list.rs:1158-1185` — "Why three markers and not a `SoftMaskId` pool": the rejected pool, the passes that walk by flat range, the PDF mapping
-- `crates/paged-compose/src/display_list.rs:982-998` — `bounds` "is a CLIP, not an allocation hint"; `crates/paged-compose/src/extent.rs:36-44` — the fitting pass; `crates/paged-renderer/src/pipeline/build_engine.rs:3627` — where it runs
-- `crates/paged-compose/src/display_list.rs:1586-1639` — `digest()`
-- `crates/paged-sdk/tests/digest_equivalence.rs:15-23` — viewer build against stock build
-- `crates/paged-canvas/src/model.rs:8917-8932`, `:9689-9717` — the digest gate: incremental build against cold build
-- `crates/paged-store/tests/round_trip_render.rs:49-62` — native round trip against import
-- `crates/paged-export-pdf/src/lib.rs:17-20` — the exporter is "A SECOND backend over the same resolved per-page display list"
+- `crates/paged-compose/src/display_list.rs:1466-1489` — `DisplayList`, its pools and the two optional side channels; `:325-368`, `:458-461` — `PathBuffer::intern`, `GlyphCacheKey`
+- `crates/paged-compose/src/display_list.rs:1162-1189` — "Why three markers and not a `SoftMaskId` pool": the rejected pool, the passes that walk by flat range, the PDF mapping
+- `crates/paged-compose/src/display_list.rs:986-1002` — `bounds` "is a CLIP, not an allocation hint"; `crates/paged-compose/src/extent.rs:40-48` — the fitting pass; `crates/paged-renderer/src/pipeline/build_engine.rs:3631` — where it runs
+- `crates/paged-compose/src/display_list.rs:1590-1643` — `digest()`
+- `crates/paged-sdk/tests/digest_equivalence.rs:19-27` — viewer build against stock build
+- `crates/paged-canvas/src/model.rs:8921-8936`, `:9693-9721` — the digest gate: incremental build against cold build
+- `crates/paged-store/tests/round_trip_render.rs:53-66` — native round trip against import
+- `crates/paged-export-pdf/src/lib.rs:21-24` — the exporter is "A SECOND backend over the same resolved per-page display list"
 
 ## Alternatives considered
 
 For soft masks, a `soft_masks: Vec<SoftMaskDef>` pool holding the mask artwork as a nested
 command vector "was rejected because the artwork's paths/gradients/images would then live
 in a *second* set of pools" and every range-walking pass "would need a parallel recursive
-form" (`crates/paged-compose/src/display_list.rs:1170-1178`). For group bounds, letting the
+form" (`crates/paged-compose/src/display_list.rs:1174-1182`). For group bounds, letting the
 CPU buffer's edge be the clip "made one document enclose different content at 72 dpi than
-at 300" (`crates/paged-compose/src/display_list.rs:989-991`, commit `7751cda`); "stop
-clipping" is rejected in `crates/paged-compose/src/extent.rs:40-44`.
+at 300" (`crates/paged-compose/src/display_list.rs:993-995`, commit `7751cda`); "stop
+clipping" is rejected in `crates/paged-compose/src/extent.rs:44-48`.
 
 ## Consequences
 
 Plugin scene layers ([ADR 013](013-in-frame-scenelayer.md)) are lowered into the list by
-`emit_scene_layer` (`crates/paged-compose/src/scene_layer.rs:529`), so they reach every
+`emit_scene_layer` (`crates/paged-compose/src/scene_layer.rs:533`), so they reach every
 back end without a rasteriser path of their own.
 
 Commands are addressed by position. A pass that splices commands into a list that carries
 glyph runs must use `insert_command`, which shifts the recorded indices
-(`crates/paged-compose/src/display_list.rs:1497-1514`); a `BeginBlendGroup` spliced in
-after the fitting pass "will be clipped short" (`:997-998`).
+(`crates/paged-compose/src/display_list.rs:1501-1518`); a `BeginBlendGroup` spliced in
+after the fitting pass "will be clipped short" (`:1001-1002`).
 
 The digest is not a stored format: "don't store digests across engine versions". It does
 not hash the side channels, and it does not cover caret and hit-test geometry; the digest
 gate compares `story_layout` and the diagnostics separately. A comparison of the browser
 wasm's digest with the native one is named as a follow-up and is not built
-(`crates/paged-sdk/tests/digest_equivalence.rs:21-23`).
+(`crates/paged-sdk/tests/digest_equivalence.rs:25-27`).
 
-`crates/paged-compose/src/lib.rs:18-21` and `README.md:5` call the display list
+`crates/paged-compose/src/lib.rs:22-25` and `README.md:5` call the display list
 "versioned". `paged-compose` contains no version constant or field.
 
 ## Related

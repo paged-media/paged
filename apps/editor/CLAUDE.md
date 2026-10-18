@@ -8,9 +8,9 @@ read the root `README.md` for the longer picture and
 ## What this is
 
 Public, **dual-licensed AGPL-3.0 OR PMEL** (And The Next GmbH). The editor
-is a networked app, so the open side is **AGPL** (§13 network copyleft);
-the engine (`paged-media/core`) stays **MPL-2.0 OR PMEL** — more permissive,
-for embedding. (This repo was proprietary / All-Rights-Reserved and private
+is a networked app, so the open side is **AGPL** (§13 network copyleft).
+The engine is under the same terms since the monorepo relicense (ADR
+PM-0001; it was MPL-2.0 OR PMEL before). (This repo was proprietary / All-Rights-Reserved and private
 until 2026-06-22, when it was opened.)
 
 - **License headers apply to every source file** (AGPL Exhibit-style notice

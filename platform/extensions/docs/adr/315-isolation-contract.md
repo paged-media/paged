@@ -71,12 +71,12 @@ core SDK … not a dependency".
 - `plugin-doc: deny.toml:44-47`, `plugin-sheets: deny.toml:42-45`,
   `plugin-data: deny.toml:53-56`, `plugin-image: deny.toml:50-53` — the Rust guard
 - `plugin-publish: Cargo.toml:20-29`, `plugin-publish: README.md:12-15`,
-  `plugin-publish: packages/publish-bundle/src/io/idml.ts:74-84` — engine crates by git
+  `plugin-publish: packages/publish-bundle/src/io/idml.ts:78-88` — engine crates by git
   revision; export through the raw handle, "a transitional bridge"
 - `plugin-draw: packages/draw-bundle/src/handlers/measure.ts:168-173`,
   `plugin-draw: packages/draw-bundle/src/handlers/planar-regions.ts:112-131`,
-  `packages/plugin-api/src/host.ts:876-887` — the remaining raw call; a retired one
-- `plugin-doc: docs/status.md:107-115`, `:131-139`;
+  `packages/plugin-api/src/host.ts:880-891` — the remaining raw call; a retired one
+- `plugin-doc: docs/status.md:107-115`, `:135-143`;
   `plugin-sheets: packages/sheet-bundle/src/session.ts:1549-1557`;
   `plugin-data: data-dataset/src/lib.rs:73-83` — gaps met by a door, and one left open
 

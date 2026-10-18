@@ -9,7 +9,7 @@
 XLSX input and output. Open-source implementations of these exist. The repository names two of them as reference material,
 LibreOffice and IronCalc, in two roles: as source that could be mounted for reference under `references/` (`CLAUDE.md:160`),
 and, for LibreOffice, as an oracle to compare results against (a skeleton later replaced by the Excel
-oracle, `sheet-conformance/tests/excel_oracle.rs:36-45`). Apache POI, OpenOffice
+oracle, `sheet-conformance/tests/excel_oracle.rs:22-31`). Apache POI, OpenOffice
 and Gnumeric are named only as the origin of test workbooks (`sheet-conformance/tests/real_xlsx_corpus.rs:29-32`).
 
 `CLAUDE.md:160-164` states the rule the code follows. The reference mount is "read-only,
@@ -22,7 +22,7 @@ writer was adopted as a component. The repository does not record why. One neigh
 reason is recorded: an external program used as an oracle is held compatible with the rule
 because behaviour is not copyrightable and the program is not linked — desktop Excel
 recalculates generated workbooks and only its values are committed
-(`sheet-conformance/tests/excel_oracle.rs:39-45`).
+(`sheet-conformance/tests/excel_oracle.rs:25-31`).
 
 ## Decision
 
@@ -56,7 +56,7 @@ a dependency, and no reference implementation's source is in the tree.
   column and one row
 - `deny.toml:13-35`, `:42-45`, `.github/workflows/rust.yml:34` — the licence allow-list,
   the source rule, and the CI step
-- `sheet-conformance/tests/excel_oracle.rs:36-72` — the Excel differential oracle: recorded
+- `sheet-conformance/tests/excel_oracle.rs:22-58` — the Excel differential oracle: recorded
   values, agreement rules, and the divergence list checked both ways
 
 ## Alternatives considered
@@ -71,11 +71,11 @@ and as oracle, never as a component to build on. `git log -S` over the Cargo man
 Every function, format rule and XLSX part handler is this repository's code to write and
 to test. A new dependency has to pass `cargo-deny`. The `provenance` field is a convention
 that nothing checks: both build scripts that read the registry ignore it
-(`sheet-core/build.rs:81`, `sheet-fn/build.rs:80`).
+(`sheet-core/build.rs:67`, `sheet-fn/build.rs:66`).
 
 Correctness is not inherited from another engine. It rests on the authored golden corpora
 and the coverage gate ([ADR 507](507-golden-corpora-coverage-gate.md)), checked against
-Excel by the differential oracle (`sheet-conformance/tests/excel_oracle.rs:56-67`): every
+Excel by the differential oracle (`sheet-conformance/tests/excel_oracle.rs:42-53`): every
 disagreement is a listed defect or a recorded ruling, and a fixed defect must leave the list.
 
 Excel behaviour that is adopted on purpose, defects included, is recorded row by row as a

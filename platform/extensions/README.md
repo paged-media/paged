@@ -48,9 +48,10 @@ node packages/plugin-cli/bin/paged-plugin.mjs validate <path/to/manifest.json>
 
 ## License
 
-Dual-licensed **MPL-2.0 OR the Paged Media Enterprise License (PMEL)** —
-deliberately permissive (unlike the AGPL editor) so plugins built on this SDK
-can carry any license. See [`LICENSE.md`](./LICENSE.md), [`LICENSE`](./LICENSE),
-and [`CONTRIBUTING.md`](./CONTRIBUTING.md) (contributions under a CLA).
+Dual-licensed **AGPL-3.0-only OR the Paged Media Enterprise License (PMEL)**,
+like the rest of the repository (ADR PM-0001). Versions published before the
+relicense remain available under MPL-2.0 OR PMEL. See [`LICENSE.md`](./LICENSE.md),
+the full AGPL-3.0 text in [`LICENSE`](../../LICENSE), and
+[`CONTRIBUTING.md`](./CONTRIBUTING.md) (contributions under a CLA).
 
-`SPDX-License-Identifier: MPL-2.0 OR LicenseRef-PMEL`
+`SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-PMEL`

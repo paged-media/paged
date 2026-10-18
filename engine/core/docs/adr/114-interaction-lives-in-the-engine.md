@@ -8,15 +8,15 @@
 An editor has to answer which element is under the pointer, where a caret sits, what a
 drag does to a frame and where it snaps. Each answer depends on the laid-out document:
 paint order across layers, rotated frames, line breaks, threaded stories. That state is in
-`CanvasModel`, the "worker-side data model" (`crates/paged-canvas/src/lib.rs:15`).
+`CanvasModel`, the "worker-side data model" (`crates/paged-canvas/src/lib.rs:19`).
 
 The repository gives reasons for parts of the design. A hit test "must sort that way or
 selection disagrees with what the user sees on multi-layer documents"
-(`crates/paged-canvas/src/hit.rs:26-28`). Selection references characters in a story, "not
+(`crates/paged-canvas/src/hit.rs:30-32`). Selection references characters in a story, "not
 pixels on a page", so that it "survives re-layout, zoom changes, frame moves, and pagination
-shifts" (`crates/paged-canvas/src/selection.rs:19-23`). Element geometry is served "so the
+shifts" (`crates/paged-canvas/src/selection.rs:23-27`). Element geometry is served "so the
 overlay can draw selection chrome without re-deriving the math in TS"
-(`crates/paged-canvas/src/channel.rs:924-926`).
+(`crates/paged-canvas/src/channel.rs:928-930`).
 
 Why interaction as a whole belongs to the engine and not to the host:
 The repository does not record why. The module comments cite a design note by section number.
@@ -36,7 +36,7 @@ pointer facts and receives answers.
   as mirrored from the main thread. The element selection never enters the operation log.
 - **Text geometry.** Caret position, selection rectangles per line, vertical caret
   navigation and line bounds are queries against the built layout; word and paragraph
-  bounds are computed from the story's text (`crates/paged-canvas/src/model.rs:8016-8039`).
+  bounds are computed from the story's text (`crates/paged-canvas/src/model.rs:8020-8043`).
 - **Gestures.** One gesture is active at a time. `begin_gesture` snapshots the committed
   state of the nodes; `update_gesture` writes a preview into the scene and rebuilds;
   `commit_gesture` restores the snapshot and re-applies the final delta as one operation
@@ -48,12 +48,12 @@ pointer facts and receives answers.
 
 ## Evidence
 
-- `crates/paged-canvas/src/hit.rs:17-46` — hit-test rules: paint order, oriented containment, locked layers, group chain; `:194-205` the entry points; `:103-113` marquee by separating axes
-- `crates/paged-canvas/src/gesture.rs:17-22` — the four-phase lifecycle; `:414-427` the accepted gesture types; `:496-589` `update_gesture`; `:595-679` `commit_gesture`
-- `crates/paged-canvas/src/snap.rs:70-115` — tolerance constant, translate-only and un-rotated-only guards, tolerance divided by `camera_scale`
-- `crates/paged-canvas/src/selection.rs:17-48`, `crates/paged-canvas/src/geometry.rs:15-27`, `crates/paged-canvas/src/model.rs:1223-1238` — content-addressed selection, the geometry derived from it, and the model fields that hold selection and the active gesture
-- `crates/paged-canvas/src/channel.rs:807-812`, `:829-930`, `:1257-1297` — the message kinds: `HitTest`, selection and caret queries, marquee, element geometry, the four gesture messages
-- `crates/paged-cli/tests/cli_surface.rs:62-91` — 15 of the 30 message kinds the CLI does not send carry the reason "interaction: a command line has no pointer and no caret"
+- `crates/paged-canvas/src/hit.rs:21-50` — hit-test rules: paint order, oriented containment, locked layers, group chain; `:198-209` the entry points; `:107-117` marquee by separating axes
+- `crates/paged-canvas/src/gesture.rs:21-26` — the four-phase lifecycle; `:418-431` the accepted gesture types; `:500-593` `update_gesture`; `:599-683` `commit_gesture`
+- `crates/paged-canvas/src/snap.rs:74-119` — tolerance constant, translate-only and un-rotated-only guards, tolerance divided by `camera_scale`
+- `crates/paged-canvas/src/selection.rs:21-52`, `crates/paged-canvas/src/geometry.rs:19-31`, `crates/paged-canvas/src/model.rs:1227-1242` — content-addressed selection, the geometry derived from it, and the model fields that hold selection and the active gesture
+- `crates/paged-canvas/src/channel.rs:811-816`, `:833-934`, `:1261-1301` — the message kinds: `HitTest`, selection and caret queries, marquee, element geometry, the four gesture messages
+- `crates/paged-cli/tests/cli_surface.rs:66-95` — 15 of the 30 message kinds the CLI does not send carry the reason "interaction: a command line has no pointer and no caret"
 - `editor: apps/canvas/src/ui/ViewportCanvas.tsx:596-650`, `:676-700`, `:953-957` — the editor picks a gesture kind and targets, then calls `beginGesture`; a click is a `hitTest` round trip
 - `editor: apps/canvas/src/ui/useTextEditing.ts:26-31` — up, down, Home and End go to the engine because they "need line metrics the main thread doesn't have"
 
@@ -61,7 +61,7 @@ pointer facts and receives answers.
 
 An ephemeral preview overlay, instead of mutating the scene and rebuilding on every gesture
 update, is named as a later version: "only worth the complexity once per-update rebuild
-perf hits a wall" (`crates/paged-canvas/src/gesture.rs:28-34`).
+perf hits a wall" (`crates/paged-canvas/src/gesture.rs:32-38`).
 
 ## Consequences
 
@@ -71,7 +71,7 @@ its neighbours). A gesture commit is one entry in the undo log
 ([ADR 110](110-one-undo-timeline.md)).
 
 Each gesture update costs a rebuild ([ADR 107](107-whole-document-build.md)), returns every
-page id, and clears the GPU scene cache (`crates/paged-canvas-wasm/src/dispatch.rs:1263-1267`).
+page id, and clears the GPU scene cache (`crates/paged-canvas-wasm/src/dispatch.rs:1267-1271`).
 
 The host is not free of geometry. The editor classifies a pointer-down by testing it
 against the bounding box of geometry the engine returned for the current selection
@@ -79,8 +79,8 @@ against the bounding box of geometry the engine returned for the current selecti
 right locally.
 
 Snapping applies only to `Translate` and only when no member is rotated. Three comments
-are behind the code: `crates/paged-canvas/src/gesture.rs:23-25` says only Translate ships,
-`:168` calls Rotate reserved, and `crates/paged-canvas/src/snap.rs:28-30` says the camera
+are behind the code: `crates/paged-canvas/src/gesture.rs:27-29` says only Translate ships,
+`:172` calls Rotate reserved, and `crates/paged-canvas/src/snap.rs:32-34` says the camera
 conversion of the tolerance is still to come.
 
 ## Related

@@ -16,20 +16,6 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-/*
- * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at https://mozilla.org/MPL/2.0/.
- *
- * This file is part of paged (https://paged.media) and is additionally
- * available under the Paged Media Enterprise License (PMEL). Full
- * copyright and license information is available in LICENSE.md which is
- * distributed with this source code.
- *
- *  @copyright  Copyright (c) And The Next GmbH
- *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
- */
-
 //! The M4 ingest slice (spec §2.1.3 amended by C-1 Stage A): decode a
 //! placed image's ORIGINAL bytes (C-5 serves PSD/PNG/JPEG) to RGBA8,
 //! run the adjustments chain through Engine A, and hand the result back

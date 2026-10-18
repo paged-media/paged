@@ -45,11 +45,11 @@ wasm packages.
 - `.github/workflows/publish-wasm.yml:298-307`, `:339-342` — the viewer build step; four packages
   published in sequence
 - `.github/workflows/publish-wasm.yml:158-170` — the version comes from the tag
-- `web/idml-viewer/src/bootstrap.ts:17-29`, `.gitignore:37-41` — the bundled wasm is placed by the
+- `web/idml-viewer/src/bootstrap.ts:21-33`, `.gitignore:37-41` — the bundled wasm is placed by the
   workflow and absent in a checkout
-- `web/idml-viewer/src/session.ts:15-22`, `web/idml-viewer/src/viewer.ts:70-74` — the session
+- `web/idml-viewer/src/session.ts:19-26`, `web/idml-viewer/src/viewer.ts:74-78` — the session
   contract and the injectable session
-- `web/idml-viewer/test/api-catalog.test.ts:15-19`, `:49-53` — the catalogue check
+- `web/idml-viewer/test/api-catalog.test.ts:19-23`, `:53-57` — the catalogue check
 - `docs: package.json:29`, `docs: sources.pin:21-27` — the documentation site depends on the
   published package and reads the catalogue from this directory
 
@@ -80,7 +80,7 @@ Other repositories depend on this location: the documentation site reads the cat
 publishing would be keyed on the workflow's file name (`.github/workflows/publish-wasm.yml:27-29`).
 
 Comments still describe the earlier plan: `crates/paged-sdk/Cargo.toml:20` and
-`web/idml-viewer/src/bootstrap.ts:20-21` refer to `viewer/build-wasm.sh`, and
+`web/idml-viewer/src/bootstrap.ts:24-25` refer to `viewer/build-wasm.sh`, and
 `crates/paged-sdk/WEBGPU.md:136-142` to a stub in `viewer/src/session.ts`. Neither path exists here.
 
 ## Related

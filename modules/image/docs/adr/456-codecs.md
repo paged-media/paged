@@ -8,9 +8,9 @@
 The plugin decodes raster files into pixels and encodes edited pixels back into files. Kernels
 run on the GPU ([ADR 450](450-gpu-only-kernels.md)); the codec crate's header sets codecs
 apart from that rule: "Codecs are inherently CPU work and remain so"
-(`image-codecs/src/lib.rs:37`). The same header gives the reason for the trait shape:
+(`image-codecs/src/lib.rs:23`). The same header gives the reason for the trait shape:
 sources and targets do no I/O of their own "so the same adapters serve browser (memory /
-OPFS / ReadableStream) and native (file) builds" (`image-codecs/src/lib.rs:35-37`).
+OPFS / ReadableStream) and native (file) builds" (`image-codecs/src/lib.rs:21-23`).
 
 The rules a codec dependency has to meet are written in the registry: "pure-Rust, no vendored
 C, cargo-deny-permissive" (`registry/codecs.yaml:147-148`). `deny.toml` carries the allow
@@ -35,14 +35,14 @@ PSD is not behind these traits; it has its own crate ([ADR 458](458-psd-preserva
 
 ## Evidence
 
-- `image-codecs/src/source.rs:73-86`, `image-codecs/src/target.rs:56-64` — the two traits
-- `image-codecs/src/bytesource.rs:39-49`, `:64` — `ByteSource` and its only implementation
+- `image-codecs/src/source.rs:59-72`, `image-codecs/src/target.rs:42-50` — the two traits
+- `image-codecs/src/bytesource.rs:25-35`, `:50` — `ByteSource` and its only implementation
 - `image-codecs/Cargo.toml:16-31`, `Cargo.toml:60` — the three codec dependencies; `zune-png` takes its version from the workspace entry
-- `registry/codecs.yaml:24-36`, `:109-113` — the PNG benchmark result (the benchmark is
+- `registry/codecs.yaml:24-36`, `:95-99` — the PNG benchmark result (the benchmark is
   `image-conformance/benches/png_d4.rs`); why the EXIF reader is hand-written
-- `deny.toml:17-43`, `:50-53` — the licence allow list; unknown registries and git denied
+- `deny.toml:17-43`, `:36-39` — the licence allow list; unknown registries and git denied
 - `NOTICE.md:15-23` — the IJG attribution, owed because `jpeg-encoder` ports libjpeg code
-- `image-js/src/ingest.rs:530-546`, `image-js/src/saveback.rs:303-346` — the shipped decode
+- `image-js/src/ingest.rs:516-532`, `image-js/src/saveback.rs:289-332` — the shipped decode
   (format chosen by magic bytes) and encode calls
 
 ## Alternatives considered
@@ -64,19 +64,19 @@ PSD is not behind these traits; it has its own crate ([ADR 458](458-psd-preserva
 
 The plugin decodes PSD (through `image-psd`), PNG and JPEG, and encodes the same three.
 `image-codecs` has no adapter for any other file format; unrecognised bytes are refused
-(`image-js/src/ingest.rs:542-544`). A binary distribution has to carry the IJG sentence:
-`glue/package.json:17` copies `NOTICE.md` into the npm package at publish and `:39` ships it.
+(`image-js/src/ingest.rs:528-530`). A binary distribution has to carry the IJG sentence:
+`glue/package.json:17` copies `NOTICE.md` into the npm package at publish and `:25` ships it.
 
 The I/O-free seam is only partly used. `MemoryByteSource` is the one `ByteSource`;
-`image-codecs/src/bytesource.rs:33-35` names file and OPFS backings as later work. Both
+`image-codecs/src/bytesource.rs:19-21` names file and OPFS backings as later work. Both
 decoders decode the whole image on the first `read_region`, serve windows by copy, and
-report `native_shrink` as `[1]` (`image-codecs/src/png/mod.rs:50-54`,
-`image-codecs/src/jpeg/mod.rs:60-68`). PNG decode keeps 16-bit samples
-(`image-codecs/src/png/decode.rs:158-166`), but PNG encode accepts 8-bit only and writes no
-ICC profile (`image-codecs/src/png/encode.rs:127-133`, `:144-146`). JPEG encode takes RGB
-and Gray, not CMYK (`image-codecs/src/jpeg/mod.rs:70-74`).
+report `native_shrink` as `[1]` (`image-codecs/src/png/mod.rs:36-40`,
+`image-codecs/src/jpeg/mod.rs:46-54`). PNG decode keeps 16-bit samples
+(`image-codecs/src/png/decode.rs:144-152`), but PNG encode accepts 8-bit only and writes no
+ICC profile (`image-codecs/src/png/encode.rs:113-119`, `:130-132`). JPEG encode takes RGB
+and Gray, not CMYK (`image-codecs/src/jpeg/mod.rs:56-60`).
 
-Several comments are behind the code. `image-codecs/src/png/mod.rs:38-40` and
+Several comments are behind the code. `image-codecs/src/png/mod.rs:24-26` and
 `registry/codecs.yaml:37-38` say 16-bit PNG input is refused. `image-codecs/Cargo.toml:28-29`
 and `registry/codecs.yaml:88-89` say the IJG term is not yet on the allow list; `deny.toml:42`
 has it. The AVIF, JPEG XL and EXIF rows argue from an 8 MiB wasm budget; `scripts/build-wasm.sh:17`

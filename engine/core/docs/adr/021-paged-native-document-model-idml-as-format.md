@@ -16,8 +16,8 @@ first artifact is an internal document-model design ("the design doc" below),
 then the executable sequence in Consequences.
 
 **Sources:** the internal direction memo (the full reasoning);
-`crates/paged-scene/src/lib.rs:44-72` (the `Document` = re-exported IDML AST — the model *is*
-IDML); `crates/paged-mutate/src/operation.rs:66-171,182+` (the mutation vocabulary is IDML
+`crates/paged-scene/src/lib.rs:48-76` (the `Document` = re-exported IDML AST — the model *is*
+IDML); `crates/paged-mutate/src/operation.rs:70-175,186+` (the mutation vocabulary is IDML
 nouns); `crates/paged-compose/src/{display_list.rs,scene_layer.rs}` (the format-neutral boundary
 already exists, downstream at compose); the original renderer plan, §C1/§C2/§D (the parser↔scene-graph seam
 discipline + the misshapen-concepts notebook + "Paged's 2026+ design"); an internal lessons notebook (the
@@ -182,36 +182,36 @@ bullet "Licensing invariant".
 - `plugin-publish: crates/idml-import`, `plugin-publish: crates/idml-export` — where the code is.
 
 Two other writers of IDML remain here for their own purposes: the fixture generator
-(`crates/paged-gen/src/package.rs:74`) and the fallback skeleton in
+(`crates/paged-gen/src/package.rs:78`) and the fallback skeleton in
 `crates/paged-store/src/package.rs`.
 
 **2. The model types are Paged-owned.** This supersedes, in Sources, "the `Document` =
 re-exported IDML AST". Code in the direction of this ADR has landed since the Consequences
 bullet "No code lands from this ADR" was written.
 
-- `crates/paged-model/src/lib.rs:15-16` — "the Paged-owned data types and their pure value logic
+- `crates/paged-model/src/lib.rs:19-20` — "the Paged-owned data types and their pure value logic
   (geometry, IDML token maps), with **no XML/ZIP parsing**"; its only dependency is `serde`
   (`crates/paged-model/Cargo.toml:13-14`).
-- `crates/paged-scene/src/lib.rs:31-34`, `:47-71` — `Document` is built from `paged_model`
+- `crates/paged-scene/src/lib.rs:35-38`, `:51-75` — `Document` is built from `paged_model`
   types, is serialisable, and has a `Default` so a document can be built with no IDML source.
 
 The shape of the model still follows IDML: `Document` holds a `designmap`, spreads, stories and
-master spreads (`crates/paged-scene/src/lib.rs:59-70`), and the codec says "The on-disk shape
+master spreads (`crates/paged-scene/src/lib.rs:63-74`), and the codec says "The on-disk shape
 mirrors today's IDML-derived model structure and **will churn**"
-(`crates/paged-store/src/lib.rs:28-29`).
+(`crates/paged-store/src/lib.rs:32-33`).
 
 **3. A native model part exists; this ADR does not mention it.** The model is stored whole at
 `paged/core/model/document.pgm`. It is neither the composition part nor the publishing format
 of the addendum.
 
-- `crates/paged-store/src/lib.rs:36` — the path; `:54` — `PGM_FORMAT_VERSION` (3 at the pinned
-  commit); `:72-94` — JSON encode, and a decode that returns `None` for a part of another
+- `crates/paged-store/src/lib.rs:40` — the path; `:58` — `PGM_FORMAT_VERSION` (3 at the pinned
+  commit); `:76-98` — JSON encode, and a decode that returns `None` for a part of another
   version.
-- `crates/paged-canvas/src/model.rs:4659-4682` — every `.paged` export embeds a fresh model
+- `crates/paged-canvas/src/model.rs:4663-4686` — every `.paged` export embeds a fresh model
   part beside the IDML parts.
-- `crates/paged-canvas/src/model.rs:1520-1560` — on load a model part that decodes wins; an
+- `crates/paged-canvas/src/model.rs:1524-1564` — on load a model part that decodes wins; an
   absent or incompatible one falls back to the IDML import.
-- `crates/paged-store/src/package.rs:15-22` — `wrap_document` packages a natively built
+- `crates/paged-store/src/package.rs:19-26` — `wrap_document` packages a natively built
   document with a one-page IDML fallback skeleton.
 
 **4. The shipped container is still a valid IDML package.** The addendum's "`.paged` is a
@@ -222,31 +222,31 @@ and plugin parts, and a manifest ([ADR 118](118-paged-file-is-a-valid-idml-packa
 [`../reference/paged-file-format.md`](../reference/paged-file-format.md)). No publishing format
 is defined in `crates/`: the strings `content.pgp` and "publishing format" do not occur there.
 
-- `crates/paged-canvas/src/model.rs:4659-4661` — "valid IDML + the plugin `paged/` parts + a
+- `crates/paged-canvas/src/model.rs:4663-4665` — "valid IDML + the plugin `paged/` parts + a
   refreshed `manifest.json`".
-- `plugin-publish: crates/idml-export/src/paged.rs:200` — `write_paged`, the container writer.
+- `plugin-publish: crates/idml-export/src/paged.rs:204` — `write_paged`, the container writer.
 
 **5. The flow and composition models exist as libraries; the composition is a derived
 projection.** This is the state of the Consequences bullet "First concrete increment" and of
 the addendum's composition part.
 
-- `crates/paged-flow/src/lib.rs:49`, `:175`, `:216`, `:298` — `FlowId`, `RegionChain`,
+- `crates/paged-flow/src/lib.rs:53`, `:179`, `:220`, `:302` — `FlowId`, `RegionChain`,
   `Overset` and the driver `run_flow`. In `crates/`, `run_flow` is called only from tests; the
   renderer's story emitter is still the production path, and
-  `crates/paged-renderer/src/flow.rs:28-29` says its flow content "does **not** yet replace
+  `crates/paged-renderer/src/flow.rs:32-33` says its flow content "does **not** yet replace
   `StoryEmitter`".
-- `crates/paged-composition/src/lib.rs:47` — the part path
-  `paged/core/composition/document.pgd`; `:35-38` — the crate is the arrangement kernel
+- `crates/paged-composition/src/lib.rs:51` — the part path
+  `paged/core/composition/document.pgd`; `:39-42` — the crate is the arrangement kernel
   (surfaces, flows, pages, regions, positioning); templates and instances are "later slices".
   Its dependencies are `paged-flow` and `serde` (`crates/paged-composition/Cargo.toml:18-20`).
-- `crates/paged-scene/src/lib.rs:383-396` — `to_composition` derives a composition from the
+- `crates/paged-scene/src/lib.rs:387-400` — `to_composition` derives a composition from the
   document.
-- `crates/paged-canvas/src/model.rs:4684-4703` — the composition part is "a persisted *derived*
+- `crates/paged-canvas/src/model.rs:4688-4707` — the composition part is "a persisted *derived*
   projection, not yet authoritative". `refresh_composition_part`, which writes it, is called
   only from tests, so an ordinary export does not contain it.
-- `crates/paged-renderer/tests/c1_no_idml.rs:15-25` — the test this ADR asks for under "The C1
+- `crates/paged-renderer/tests/c1_no_idml.rs:19-29` — the test this ADR asks for under "The C1
   seam gets enforced in code + CI": a hand-built region chain and a non-IDML content engine
-  rendered to pixels with no `Document` involved. `crates/paged-composition-render/src/lib.rs:21-24`
+  rendered to pixels with no `Document` involved. `crates/paged-composition-render/src/lib.rs:25-28`
   is its reusable form for a composition.
 
 [`../reference/composition-format.md`](../reference/composition-format.md) is the format

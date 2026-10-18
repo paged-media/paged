@@ -14,7 +14,7 @@ generates its plugin reference from the schema (`.github/workflows/notify-docs.y
 The allowed values have to exist in three forms: TypeScript unions in plugin-api, enums in a
 JSON Schema, and runtime sets in the validator. One literal cannot feed all three: plugin-api
 is type-only ([ADR 300](300-type-only-contract.md)), and the CLI may have no dependencies and
-no build step (`packages/plugin-sdk/test/capability-vocabulary.spec.ts:15-25`).
+no build step (`packages/plugin-sdk/test/capability-vocabulary.spec.ts:19-29`).
 `CLAUDE.md:44-45` states the CLI rule. The repository does not record why.
 
 ## Decision
@@ -45,11 +45,11 @@ a test over eight vocabularies instead of by code generation.
   checks; `:21-25` the sets are projections of the schema
 - `packages/plugin-cli/bin/paged-plugin.mjs:412-443` — the namespace rule and the panel-file
   check; `:297-303` the reserved realm; `:331-337`, `:344-368`, `:390-395` the wasm checks
-- `packages/plugin-sdk/test/capability-vocabulary.spec.ts:119-128` — the eight vocabularies
-- `packages/plugin-sdk/test/capability-manifest-cli.spec.ts:37-45` — tests drive the real CLI
+- `packages/plugin-sdk/test/capability-vocabulary.spec.ts:123-132` — the eight vocabularies
+- `packages/plugin-sdk/test/capability-manifest-cli.spec.ts:41-49` — tests drive the real CLI
   as a subprocess
 - `packages/plugin-cli/package.json:1-25` — the package declares no dependencies
-- `packages/plugin-api/src/manifest.ts:39-50` — the TypeScript mirror
+- `packages/plugin-api/src/manifest.ts:43-54` — the TypeScript mirror
 
 ## Alternatives considered
 
@@ -69,18 +69,18 @@ The CLI's header says it mirrors the schema "1:1"
 `capabilities.document`, `capabilities.dataProviders`, or the items of
 `contributes.editContexts`, `objectTypes` and `partTypes`, which the schema forbids.
 Nothing in this repo validates a manifest against the schema file itself; `loadBundle`
-checks only the `id` pattern and `apiVersion` (`packages/plugin-sdk/src/load.ts:72-83`).
+checks only the `id` pattern and `apiVersion` (`packages/plugin-sdk/src/load.ts:76-87`).
 
 Comments and code disagree in places:
 
-- `packages/plugin-api/src/manifest.ts:95-103` says the asset kind `"images"` is reserved and
+- `packages/plugin-api/src/manifest.ts:99-107` says the asset kind `"images"` is reserved and
   rejected; the schema and the CLI (`packages/plugin-cli/bin/paged-plugin.mjs:48-51`) accept it.
 - The CLI header (`packages/plugin-cli/bin/paged-plugin.mjs:11-13`) names tool and command
   ids for the namespace rule; the code also covers importers, exporters and panels.
 - `capabilities.editContext` is validated but "reserved, not yet wired"
-  (`packages/plugin-api/src/manifest.ts:92-94`); the gate reads `contributes.editContexts`.
+  (`packages/plugin-api/src/manifest.ts:96-98`); the gate reads `contributes.editContexts`.
 - Per `packages/plugin-api/src/manifest.ts`, `contributes.partTypes` is declarative only
-  (`:359-369`) and `*.panel.json` paths are not interpreted by the host (`:325-327`).
+  (`:363-373`) and `*.panel.json` paths are not interpreted by the host (`:329-331`).
 
 ## Related
 

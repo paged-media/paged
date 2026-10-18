@@ -9,7 +9,7 @@ publish has not happened yet, and the editor must build from its own repository.
   `engine-catalog.ts`, which imports `./catalog.json` (plugin-api's vendored
   catalog, synced from `@paged-media/canvas-wasm@0.71.2` — the engine this
   editor pins) instead of reaching into a sibling package.
-- Licence: MPL-2.0 OR PMEL, as upstream (the file headers say so).
+- Licence: AGPL-3.0-only OR PMEL, as upstream (the file headers say so).
 - **Do not edit here.** Change plugin-sdk, then re-copy.
 
 ## Removing it

@@ -11,17 +11,17 @@ crates: `PageId` in `paged-renderer`, `ElementId` and the `Mutation` operations 
 contract the CLI, the wasm wire, the Boa bridge, the plugin host and the editor all speak",
 and the capability catalog could not list the operations, because `paged-introspect`,
 "light and published", "must not drag in the canvas model to read a list of names"
-(`crates/paged-wire/src/lib.rs:18-25`).
+(`crates/paged-wire/src/lib.rs:22-29`).
 
 The operation names were written in one place only, the match arms of
 `Mutation::discriminant`, which cannot be enumerated. Code that needed the whole list
 re-derived it "by scraping this function's match arms out of the source text or by
-hand-copying them into another repo" (`crates/paged-wire/src/lib.rs:1659-1664`).
+hand-copying them into another repo" (`crates/paged-wire/src/lib.rs:1663-1668`).
 
 The types moved into `paged-wire` on 2026-09-09 (commit `afdeb69`). One day later the
 publish workflow's dependency audit stopped a release: `paged-renderer` needs only `PageId`,
 and taking the whole crate had put `paged-mutate` into the tree of the read-only viewer SDK
-(`crates/paged-wire/src/lib.rs:41-47`, commit `08fb4b1`).
+(`crates/paged-wire/src/lib.rs:45-51`, commit `08fb4b1`).
 
 ## Decision
 
@@ -47,14 +47,14 @@ default feature.
 
 ## Evidence
 
-- `crates/paged-wire/src/lib.rs:15-52` — crate docs: why the crate exists and "Why `mutations` is a feature"
+- `crates/paged-wire/src/lib.rs:19-56` — crate docs: why the crate exists and "Why `mutations` is a feature"
 - `crates/paged-wire/Cargo.toml:9-18` — `default = ["mutations"]`, `mutations = ["dep:paged-mutate"]`, the optional dependency
 - `crates/paged-renderer/Cargo.toml:41-44` — identities only, `default-features = false`
-- `crates/paged-wire/src/lib.rs:1656-1683`, `:1685-1805`, `:1807-1827` — the macro, the roster, `wire_tag` and `wire_tag_of`
-- `crates/paged-wire/src/lib.rs:157-218` — `ElementId::parse` and its doc ("It was a private function in the Boa bridge")
-- `crates/paged-canvas/src/channel.rs:3356`, `crates/paged-canvas/src/element_selection.rs:34`, `crates/paged-renderer/src/pipeline/mod.rs:660-664` — the re-exports
-- `crates/paged-introspect/src/catalog.rs:92-102`, `:194-201` — `ApiCatalog.operations`, built from `MUTATION_NAMES`
-- `crates/paged-canvas/tests/wire_vocabulary.rs:56-73` — the roster is compared with the variant list in serde's own error message
+- `crates/paged-wire/src/lib.rs:1660-1687`, `:1689-1809`, `:1811-1831` — the macro, the roster, `wire_tag` and `wire_tag_of`
+- `crates/paged-wire/src/lib.rs:161-222` — `ElementId::parse` and its doc ("It was a private function in the Boa bridge")
+- `crates/paged-canvas/src/channel.rs:3360`, `crates/paged-canvas/src/element_selection.rs:38`, `crates/paged-renderer/src/pipeline/mod.rs:664-668` — the re-exports
+- `crates/paged-introspect/src/catalog.rs:96-106`, `:198-205` — `ApiCatalog.operations`, built from `MUTATION_NAMES`
+- `crates/paged-canvas/tests/wire_vocabulary.rs:60-77` — the roster is compared with the variant list in serde's own error message
 
 ## Alternatives considered
 
@@ -74,12 +74,12 @@ A workspace build never compiles the identities-only half, because another membe
 the feature on. `CLAUDE.md:106-108` gives the check: `cargo check -p paged-renderer` alone.
 
 `ElementId::Table` and `ElementId::TableCell` have no address string; `parse` never returns
-them and `to_address` returns `None` for them (`crates/paged-wire/src/lib.rs:175-177`).
+them and `to_address` returns `None` for them (`crates/paged-wire/src/lib.rs:179-181`).
 
 Three comments are behind the code. The crate docs, `CLAUDE.md:98` and the test's floor
 (`>= 117`) say 117 operations; the roster and `crates/paged-introspect/catalog.json` hold
 118. The doc comment on `Mutation` still says "the worker rejects each variant with
-`WorkerError::NotImplemented`" (`crates/paged-wire/src/lib.rs:610-611`). And the crate docs
+`WorkerError::NotImplemented`" (`crates/paged-wire/src/lib.rs:614-615`). And the crate docs
 call it a crate "that depends on the model and the mutation vocabulary and nothing else";
 its manifest names `paged-mutate` (optional) and no model crate.
 

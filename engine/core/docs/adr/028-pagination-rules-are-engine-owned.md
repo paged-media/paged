@@ -15,8 +15,8 @@ DOCX carry. Core's state, verified 2026-10-01:
 
 | Rule | IDML | DOCX | Core today |
 |---|---|---|---|
-| Keep with next (N lines) | `KeepWithNext` | `w:keepNext` | **Modelled and settable but not applied in layout.** It is parsed (`crates/paged-model/src/lib.rs:4338-4342`), settable (`crates/paged-mutate/src/apply/paragraph.rs:411`) and copied into the layout input (`crates/paged-renderer/src/pipeline/geom.rs:583-584`), but no code in `paged-renderer`, `paged-text` or `paged-compose` reads it. |
-| Keep lines together | `KeepLinesTogether` | `w:keepLines` | Same as above (`crates/paged-model/src/lib.rs:4333-4337`, `crates/paged-mutate/src/apply/paragraph.rs:423`). |
+| Keep with next (N lines) | `KeepWithNext` | `w:keepNext` | **Modelled and settable but not applied in layout.** It is parsed (`crates/paged-model/src/lib.rs:4342-4346`), settable (`crates/paged-mutate/src/apply/paragraph.rs:415`) and copied into the layout input (`crates/paged-renderer/src/pipeline/geom.rs:587-588`), but no code in `paged-renderer`, `paged-text` or `paged-compose` reads it. |
+| Keep lines together | `KeepLinesTogether` | `w:keepLines` | Same as above (`crates/paged-model/src/lib.rs:4337-4341`, `crates/paged-mutate/src/apply/paragraph.rs:427`). |
 | Widow/orphan control | `KeepFirstLines` / `KeepLastLines` | `w:widowControl` | Not modelled. |
 | Break before (column/frame/page/odd/even) | `StartParagraph` | `w:pageBreakBefore`, `w:br w:type="page"`, section breaks | Not modelled. |
 
@@ -178,24 +178,24 @@ leave open are closed, except the one in item 6.
 
 **1. The table in "The problem" is superseded.** All four rows are modelled and applied.
 
-- `crates/paged-model/src/lib.rs:4815-4838` (`Paragraph`), `:3933-3955` (`ParagraphStyleDef`),
-  `:4233-4249` (`ResolvedParagraph`) — `keep_lines_together`, `keep_all_lines_together`,
+- `crates/paged-model/src/lib.rs:4819-4842` (`Paragraph`), `:3937-3959` (`ParagraphStyleDef`),
+  `:4237-4253` (`ResolvedParagraph`) — `keep_lines_together`, `keep_all_lines_together`,
   `keep_first_lines`, `keep_last_lines`, `keep_with_next`, `start_paragraph`, `span_columns`.
-- `crates/paged-model/src/lib.rs:91-99` — `StartParagraph`: `Anywhere`, `NextColumn`,
+- `crates/paged-model/src/lib.rs:95-103` — `StartParagraph`: `Anywhere`, `NextColumn`,
   `NextFrame`, `NextPage`, `NextOddPage`, `NextEvenPage`.
-- `crates/paged-renderer/src/pipeline/keeps.rs:15-36` — the keep rules as applied;
-  `:273-279` — `start_target`, the break-before rule.
+- `crates/paged-renderer/src/pipeline/keeps.rs:19-40` — the keep rules as applied;
+  `:277-283` — `start_target`, the break-before rule.
 
 **2. The setters are on the wire.** This closes "Setters for the three new property paths
 ride the protocol 64 bump", "The wire setter rides protocol 64" and "The wire setters ride
 protocol 64" in the records: protocol 64 is the version at the pinned commit
-(`crates/paged-canvas/src/channel.rs:510`).
+(`crates/paged-canvas/src/channel.rs:514`).
 
 - `crates/paged-introspect/catalog.json:1232-1243` — the settable paths
   `paragraphKeepLinesTogether`, `paragraphKeepWithNext`, `paragraphKeepAllLinesTogether`,
   `paragraphKeepFirstLines`, `paragraphKeepLastLines`, `paragraphStartParagraph` and the six
   span and split paths.
-- `crates/paged-mutate/src/apply/layer.rs:2004-2047` — the same paths on a paragraph style.
+- `crates/paged-mutate/src/apply/layer.rs:2008-2051` — the same paths on a paragraph style.
 
 **3. Decision 2's interim diagnostic was not added.** The two modelled rules were applied
 instead, so "Until they are, setting them produces a diagnostic" never took effect. The
@@ -204,39 +204,39 @@ string "not yet applied" does not occur in `crates/`.
 **4. Decision 4 describes a lookahead; the code decides from measured placement.** A story
 is emitted, the frame of every line is recorded, violations become forced breaks, and the
 story is emitted again until the set of breaks stops changing
-(`crates/paged-renderer/src/pipeline/keeps.rs:17-21`). A break applies only while the frame it
-was decided in still starts with the same line (`:38-49`). The extra passes are capped by
+(`crates/paged-renderer/src/pipeline/keeps.rs:21-25`). A break applies only while the frame it
+was decided in still starts with the same line (`:42-53`). The extra passes are capped by
 `MAX_KEEP_PASSES = 4` on top of the footnote passes and two per chain frame
-(`crates/paged-renderer/src/pipeline/build_engine.rs:22-29`, `:3092`). This supersedes "A break
+(`crates/paged-renderer/src/pipeline/build_engine.rs:26-33`, `:3096`). This supersedes "A break
 decision may look at most one region ahead".
 
 **5. A rule that cannot be met yields without a diagnostic.** This supersedes, in
 Consequences, "the rule yields and a diagnostic is emitted". A break is never forced onto a
 line that already opens its frame, and only where a next frame exists
-(`crates/paged-renderer/src/pipeline/keeps.rs:35-36`, `:215-218`). No diagnostic code refers to
+(`crates/paged-renderer/src/pipeline/keeps.rs:39-40`, `:219-222`). No diagnostic code refers to
 keeps (`crates/paged-renderer/src/diagnostics.rs`).
 
 **6. Still as recorded.** The within-paragraph keeps are evaluated at a paragraph's first
-break only (`crates/paged-renderer/src/pipeline/keeps.rs:187-192`). A footnote taller than its
-column is reported, not split (`crates/paged-renderer/src/pipeline/deltas.rs:43-46`).
+break only (`crates/paged-renderer/src/pipeline/keeps.rs:191-196`). A footnote taller than its
+column is reported, not split (`crates/paged-renderer/src/pipeline/deltas.rs:47-50`).
 
 **7. The two list remarks at the end of the last record are closed.**
 
-- Local list overrides: `crates/paged-model/src/lib.rs:4719` — `Paragraph` carries the list
+- Local list overrides: `crates/paged-model/src/lib.rs:4723` — `Paragraph` carries the list
   attributes itself (core `d10ffc9`, rendered in `6192c72`);
-  `plugin-publish: crates/idml-import/src/story.rs:607` — the importer reads
+  `plugin-publish: crates/idml-import/src/story.rs:611` — the importer reads
   `BulletsAndNumberingListType` on a paragraph range. The paths `paragraphListType` to
   `paragraphNumberingCharacterStyle` are settable
   (`crates/paged-introspect/catalog.json:1247-1255`).
-- Tabs in line breaking: `crates/paged-text/src/layout.rs:186`, `:208` — the layout options
+- Tabs in line breaking: `crates/paged-text/src/layout.rs:190`, `:212` — the layout options
   carry a `TabLayout`, so a line breaks where its tabs land (core `6b1c11a`).
 
 **8. Gates.** The fixtures `keeps`, `keeps-reflow`, `start-paragraph`, `span-columns` and
 `list-markers` are in the fidelity gate (`corpus/generated/fidelity-thresholds.json:152`,
-`:168`, `:384`, `:432`, `:408`), and the pipeline tests are
+`:172`, `:388`, `:436`, `:412`), and the pipeline tests are
 `crates/paged-renderer/tests/keeps_pipeline.rs`, `keeps_reflow_pipeline.rs`,
 `start_paragraph_pipeline.rs` and `span_columns_pipeline.rs`. `keeps-reflow` was added on
 2026-10-02 for keeps on a growing chain (core `dd3bfe7`).
 
 Outside this ADR's scope, but changed since: a table row now carries `keep_with_next_row`
-(`crates/paged-model/src/lib.rs:5196-5200`).
+(`crates/paged-model/src/lib.rs:5200-5204`).

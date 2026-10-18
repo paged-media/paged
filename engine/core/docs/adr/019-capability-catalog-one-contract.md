@@ -216,34 +216,34 @@ API reference from the catalog".
 This supersedes, in the corrections above, "it already carried a `PropertyPathJson` mirror of
 `PropertyPath` … *not* merged", and the path counts (179) in the body.
 
-- `crates/paged-introspect/src/catalog.rs:498-547` — `property_paths!` generates
+- `crates/paged-introspect/src/catalog.rs:502-551` — `property_paths!` generates
   `PROPERTY_PATHS` (the advertised names), `ALL_PATHS`, `wire_name`, `unadvertised_reason`
   and `variant_name` from one token list; the `match` arms have no wildcard, so a new
   `PropertyPath` variant does not compile until it is listed.
-- `crates/paged-introspect/src/descriptor.rs:29-43` — the comment recording that the
+- `crates/paged-introspect/src/descriptor.rs:33-47` — the comment recording that the
   `PropertyPathJson` mirror was removed because both types serialised to identical JSON.
-- `crates/paged-script/src/lib.rs:3957-3973` — `parse_property_path` and
+- `crates/paged-script/src/lib.rs:3961-3977` — `parse_property_path` and
   `property_path_label` both delegate to `paged-introspect`. `crates/paged-script/src/catalog.rs`,
   named in Sources, no longer exists.
 - `crates/paged-introspect/catalog.json` at the pinned commit lists 219 settable paths;
   15 more paths are named but not advertised, each carrying a reason string
-  (`crates/paged-introspect/src/catalog.rs:1023`, `:1103-1107`).
+  (`crates/paged-introspect/src/catalog.rs:1027`, `:1107-1111`).
 
 **4. The catalog carries more than the five keys in "The decision".** `ApiCatalog` also has
 `elements` (IDML elements and their attributes, for the generated docs tables) and
 `pathAliases` (the eight paths whose raw wire spelling differs from the advertised name);
-`operations` is read from the `paged-wire` crate (`crates/paged-introspect/src/catalog.rs:82-111`,
-`:196-201`). The committed artifact lists 145 host functions and 118 operations.
+`operations` is read from the `paged-wire` crate (`crates/paged-introspect/src/catalog.rs:86-115`,
+`:200-205`). The committed artifact lists 145 host functions and 118 operations.
 
 **5. Emitters and gates in this repository.** Where the text says `paged-run describe`:
 `paged-run` is now the session binary under a second name
-(`crates/paged-run/src/main.rs:15-35`). The catalog is emitted by `paged describe`
-(`crates/paged-cli/src/inspect.rs:117-121`), by the session command `{"cmd":"describe"}`
-(`crates/paged-cli/src/session.rs:436-440`) and by `describeCatalog()`
-(`crates/paged-introspect-wasm/src/lib.rs:62-66`); all three serialise
-`paged_introspect::api_catalog()` (`crates/paged-script/src/lib.rs:64` re-exports it). The
+(`crates/paged-run/src/main.rs:19-39`). The catalog is emitted by `paged describe`
+(`crates/paged-cli/src/inspect.rs:121-125`), by the session command `{"cmd":"describe"}`
+(`crates/paged-cli/src/session.rs:440-444`) and by `describeCatalog()`
+(`crates/paged-introspect-wasm/src/lib.rs:66-70`); all three serialise
+`paged_introspect::api_catalog()` (`crates/paged-script/src/lib.rs:68` re-exports it). The
 committed `catalog.json` is held current by `catalog_json_artifact_is_current`
-(`crates/paged-introspect/src/catalog.rs:1340-1352`) and is copied into the published
+(`crates/paged-introspect/src/catalog.rs:1344-1356`) and is copied into the published
 `@paged-media/introspect-wasm` package (`.github/workflows/publish-wasm.yml:247-257`).
 
 The completeness check that this ADR names as the cross-surface guard lives outside this

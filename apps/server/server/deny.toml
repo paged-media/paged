@@ -1,0 +1,94 @@
+# cargo-deny policy for the server workspace: the engine's (engine/core/deny.toml),
+# plus what only the server pulls in.
+# cargo-deny configuration for the paged engine.
+# Run:  cargo deny check          (CI runs `check licenses bans sources`)
+# Docs: https://embarkstudios.github.io/cargo-deny/
+
+[advisories]
+version = 2
+# RUSTSEC advisories: fail on vulnerabilities; add IDs here to ignore
+# with a justification once triaged.
+# All four below are UNMAINTAINED advisories (not vulnerabilities) — no
+# known issue, the crates work. They're allow-listed until the upstream
+# tree drops them (the first two are transitive proc-macro deps via the
+# wgpu/Vello lineage; tsify-next is the wire-type generator — migrating
+# to `tsify` is a tracked follow-up, not a CI blocker). ttf-parser is a
+# transitive dep of our SVG lane (resvg → usvg → fontdb → ttf-parser); the
+# advisory has "no safe upgrade available" (the recommended `skrifa` swap
+# must land upstream in resvg first), so it's allow-listed until then.
+ignore = [
+    "RUSTSEC-2024-0436", # paste — unmaintained
+    "RUSTSEC-2024-0370", # proc-macro-error — unmaintained
+    "RUSTSEC-2025-0048", # tsify-next — unmaintained (use tsify)
+    "RUSTSEC-2026-0192", # ttf-parser — unmaintained (via resvg; no safe upgrade, awaits upstream skrifa migration)
+    "RUSTSEC-2026-0206", # rustybuzz — unmaintained (via resvg/usvg; no safe upgrade available)
+]
+
+[licenses]
+version = 2
+confidence-threshold = 0.9
+# paged is AGPL-3.0-only OR PMEL (ADR PM-0001). Dependencies must be
+# permissively licensed (weak copyleft MPL-2.0 at most) so the whole work can
+# be distributed under both: the AGPL and the commercial PMEL. No GPL/AGPL
+# dependency can pass this gate.
+# Tighten/extend this list as `cargo deny check licenses` surfaces the
+# actual transitive set (wgpu, rustybuzz, ttf-parser, tiny-skia, Vello,
+# lcms2, …).
+allow = [
+    # webpki-roots (via ureq, paged-sync): the Mozilla root CA data.
+    "CDLA-Permissive-2.0",
+    "MPL-2.0",
+    # First-party crates this workspace reaches outside itself (from another
+    # workspace in this repository, or by git revision from a former
+    # repository) carry `AGPL-3.0-only OR LicenseRef-PMEL`, or
+    # `MPL-2.0 OR LicenseRef-PMEL` for revisions released before the
+    # relicense (ADR PM-0001). SPDX has no id for the Paged Media Enterprise
+    # License, hence the LicenseRef form; it satisfies either expression.
+    "LicenseRef-PMEL",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "MIT",
+    "MIT-0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "CC0-1.0",
+    "BSL-1.0",
+]
+# Per-crate clarifications for crates whose SPDX can't be auto-detected
+# (e.g. ring, some font/ICC bindings). Add entries here as needed.
+exceptions = []
+
+# This workspace's own crates are AGPL-3.0-only OR LicenseRef-PMEL
+# (ADR PM-0001). The policy above is for dependencies, so the unpublished
+# ones (`publish = false`) are not checked against it; a published one
+# passes through LicenseRef-PMEL.
+[licenses.private]
+ignore = true
+
+[bans]
+multiple-versions = "warn"
+wildcards = "warn"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+# Vello (the GPU/wgpu rasteriser backend) is consumed as a pinned git
+# tag — the pinned revision has no crates.io release.
+#
+# flo_curves is patched to a build carrying the upstream total-order fix for
+# `exterior_paths()` (C-21 — the comparator it sorts points with is not a
+# strict weak ordering, so `sort_by` panics on it, and `panic = abort` in the
+# wasm worker means we cannot catch it). Upstream PR:
+# Logicalshift/flo_curves#33. Pinned by rev in the root Cargo.toml.
+#
+# TEMPORARY. Remove this entry together with the `[patch.crates-io]` block
+# once the fix reaches a crates.io release.
+allow-git = [
+    "https://github.com/linebender/vello.git",
+    "https://github.com/drietsch/flo_curves",
+]

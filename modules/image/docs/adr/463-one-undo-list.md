@@ -35,12 +35,12 @@ Edit menu reads "Undo Brush stroke" rather than a generic "Undo".
 
 ## Evidence
 
-- `image-js/src/layers.rs:1469-1492` — `recorded`: a structure step, with merging
-- `image-js/src/layers.rs:1518-1530` — the journal and the list kept in step
-- `image-js/src/layers.rs:1552-1583` — undo over both kinds of step
-- `image-js/src/layers.rs:1015-1017` — removing a layer records itself
-- `image-js/src/layers.rs:808-820` — the canvas operations record themselves
-- `image-js/src/lib.rs:2680-2690` — every structural export goes through `recorded_edit`
+- `image-js/src/layers.rs:1455-1478` — `recorded`: a structure step, with merging
+- `image-js/src/layers.rs:1504-1516` — the journal and the list kept in step
+- `image-js/src/layers.rs:1538-1569` — undo over both kinds of step
+- `image-js/src/layers.rs:1001-1003` — removing a layer records itself
+- `image-js/src/layers.rs:794-806` — the canvas operations record themselves
+- `image-js/src/lib.rs:2666-2676` — every structural export goes through `recorded_edit`
 - `glue/src/activate.ts:908-919` — the host undo hooks; Undo is disabled when there is nothing to undo
 
 ## Alternatives considered

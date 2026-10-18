@@ -7,7 +7,7 @@
 
 The engine parses formulas from two places: the formula text stored in an XLSX file, and what
 a user types into a cell after `=`. Both go through `sheet_parser::parse`
-(`sheet-js/src/core.rs:452`, `sheet-calc/src/lib.rs:269`).
+(`sheet-js/src/core.rs:438`, `sheet-calc/src/lib.rs:255`).
 
 `registry/features/parser.yaml:1-2` records the order chosen: Excel first, with the note
 "OpenFormula maps onto the same canonical AST later". The repository does not record why.
@@ -45,20 +45,20 @@ language: a locale is a table of separators and names read by the number-format 
 
 ## Evidence
 
-- `sheet-parser/src/lib.rs:33-39`, `:41-55` — what the crate produces; the rulings on unknown functions, `,` and `;`
-- `sheet-parser/src/pratt.rs:312-324`, `:362-380` — the registry lookup and its error; `;` consumed only in an array literal
-- `registry/features/parser.yaml:25-31`, `:48-53` — the unknown-function ruling; the fixpoint as a tested row
-- `sheet-js/src/core.rs:446-470`; `sheet-calc/src/lib.rs:257-275` — load keeps and counts unparsed formulas; cell entry parses after `=` and takes no locale
-- `sheet-core/src/calc_settings.rs:55-83`; `sheet-format/src/locale.rs:39-47`, `:88-119`, `:350-381` — the `Locale` type; what localises; `LocaleData`; the two lookups
-- `registry/features/locale.yaml:48-57`, `:113-132`, `:134-152` — the AM/PM ruling; fr/es/it as table rows; why CJK is not a row
-- `sheet-format/src/parse.rs:224-233`; `sheet-xlsx/src/parts/styles.rs:280-297`; `sheet-xlsx/src/lib.rs:292-299` — the per-code LCID; the workbook locale and its en-US fallback
+- `sheet-parser/src/lib.rs:19-25`, `:27-41` — what the crate produces; the rulings on unknown functions, `,` and `;`
+- `sheet-parser/src/pratt.rs:298-310`, `:348-366` — the registry lookup and its error; `;` consumed only in an array literal
+- `registry/features/parser.yaml:25-31`, `:34-39` — the unknown-function ruling; the fixpoint as a tested row
+- `sheet-js/src/core.rs:432-456`; `sheet-calc/src/lib.rs:243-261` — load keeps and counts unparsed formulas; cell entry parses after `=` and takes no locale
+- `sheet-core/src/calc_settings.rs:41-69`; `sheet-format/src/locale.rs:25-33`, `:74-105`, `:336-367` — the `Locale` type; what localises; `LocaleData`; the two lookups
+- `registry/features/locale.yaml:48-57`, `:99-118`, `:120-138` — the AM/PM ruling; fr/es/it as table rows; why CJK is not a row
+- `sheet-format/src/parse.rs:210-219`; `sheet-xlsx/src/parts/styles.rs:266-283`; `sheet-xlsx/src/lib.rs:278-285` — the per-code LCID; the workbook locale and its en-US fallback
 
 ## Alternatives considered
 
 OpenFormula is named as a later mapping onto the same AST; no OpenFormula parser exists in
 the repository. Teaching the parser `;` as an argument separator was not done: goldens written
 that way are rewritten to `,` by the test runner before they reach the engine
-(`sheet-conformance/tests/corpus_runner.rs:48-55`). Japanese and Chinese locales are a
+(`sheet-conformance/tests/corpus_runner.rs:34-41`). Japanese and Chinese locales are a
 registry row with `status: planned`: era calendars and their own AM/PM strings need rendering
 code and verification against Excel, not a table row (`registry/features/locale.yaml:134-152`).
 
@@ -78,7 +78,7 @@ Limits of what is built:
 - Nothing sets the locale except the XLSX loader. `sheet-js` and the bundle have no setter, so
   a workbook renders as en-US unless a custom number format carries such an LCID.
 - Locale-aware number parsing exists as `parse_number_locale` and `parse_number_seps`
-  (`sheet-format/src/number.rs:63-74`), but only tests call them. Cell entry and implicit
+  (`sheet-format/src/number.rs:49-60`), but only tests call them. Cell entry and implicit
   coercion are locale-independent (`registry/features/locale.yaml:104-108`).
 
 ## Related

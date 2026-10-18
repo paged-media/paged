@@ -1,9 +1,8 @@
 # paged.doc — Cargo workspace.
 #
 # Crates live at REPO TOP LEVEL (mirrors plugin-sheets §4 layout), not under
-# crates/. `paged-ooxml` is the shared MPL-2.0 OOXML foundation; every `docx-*`
-# crate is AGPL-3.0 OR PMEL (the workspace default below). paged-ooxml overrides
-# its own `license` field to MPL.
+# crates/. `paged-ooxml` is the shared OOXML foundation; every crate, it
+# included, is AGPL-3.0-only OR PMEL (the workspace default below).
 [workspace]
 resolver = "2"
 # DOC-02 wasm go/no-go spike PASSED 2026-07-23 (ooxmlsdk 0.12 builds for wasm32);

@@ -52,9 +52,9 @@ where kurbo is wired:
 
 Checked against the code at `9f933f1`. The decision stands: `paged-mutate` depends on kurbo
 0.11.3 (`crates/paged-mutate/Cargo.toml:27`) and on flo_curves, stroke outlining is still
-`kurbo::stroke` at `crates/paged-mutate/src/kurbo_kernel.rs:279`, and the kernel operations
+`kurbo::stroke` at `crates/paged-mutate/src/kurbo_kernel.rs:283`, and the kernel operations
 are still undone from a snapshot of the previous anchors
-(`crates/paged-mutate/src/apply/path_topology.rs:344-349`, `:542-608`). The text above is
+(`crates/paged-mutate/src/apply/path_topology.rs:348-353`, `:546-612`). The text above is
 imprecise or out of date in four places.
 
 **1. The flo_curves pin.** **Sources** cites `flo_curves = "=0.8.0"`. The requirement is now
@@ -65,48 +65,48 @@ release (`Cargo.toml:84-99`; resolved in `Cargo.lock:1101-1103`).
 **2. Which library does which job.** The Decision assigns offsetting and simplification to
 kurbo. In `crates/paged-mutate/src/kurbo_kernel.rs` the split is finer:
 
-- Stroke outlining — kurbo (`:261-291`). A variable-width outline was added later: it flattens
-  the centreline with `kurbo::flatten` (`:333`) and builds the outline contour itself
-  (`:311-398`).
+- Stroke outlining — kurbo (`:265-295`). A variable-width outline was added later: it flattens
+  the centreline with `kurbo::flatten` (`:337`) and builds the outline contour itself
+  (`:315-402`).
 - Offset of a closed contour — flo_curves. The parallel curves come from
-  `flo_curves::bezier::offset` (`:547`, `:575`) and the crossings are resolved by
-  `path_remove_interior_points` (`:546`, `:625-626`); kurbo supplies the enclosed-area measure
-  that picks the inset or outset candidate (`:560-562`, `:639`). The function comment
-  describes this construction (`:523-537`); the module comment at `:26-31` describes a
+  `flo_curves::bezier::offset` (`:551`, `:579`) and the crossings are resolved by
+  `path_remove_interior_points` (`:550`, `:629-630`); kurbo supplies the enclosed-area measure
+  that picks the inset or outset candidate (`:564-566`, `:643`). The function comment
+  describes this construction (`:527-541`); the module comment at `:30-35` describes a
   different one (stroke the boundary, then a boolean against the original) and is stale.
 - Offset of an open path or of several subpaths — the apply arm sends it to the kurbo stroke
   outline at twice the distance, which yields a closed band
-  (`crates/paged-mutate/src/apply/path_topology.rs:496-513`). This supersedes "offset = single
+  (`crates/paged-mutate/src/apply/path_topology.rs:500-517`). This supersedes "offset = single
   closed contour" in Consequences for those inputs; the module comment's "open-path offset is
-  deliberately deferred" (`kurbo_kernel.rs:30-31`) is stale.
+  deliberately deferred" (`kurbo_kernel.rs:34-35`) is stale.
 - Simplification — a Ramer–Douglas–Peucker pass written in the crate drops near-collinear
-  anchors first (`:403-497`), then kurbo's `simplify_bezpath` fits curves through the rest
-  (`:510-515`).
-- Nearest point on a path — kurbo (`:685-709`), called from the canvas model
-  (`crates/paged-canvas/src/model.rs:8423`).
+  anchors first (`:407-501`), then kurbo's `simplify_bezpath` fits curves through the rest
+  (`:514-519`).
+- Nearest point on a path — kurbo (`:689-713`), called from the canvas model
+  (`crates/paged-canvas/src/model.rs:8427`).
 - Booleans and curve fitting — flo_curves, as decided
-  (`crates/paged-mutate/src/pathfinder.rs:32`, `crates/paged-mutate/src/planar.rs:111-116`,
-  `crates/paged-mutate/src/path_math.rs:174`).
+  (`crates/paged-mutate/src/pathfinder.rs:36`, `crates/paged-mutate/src/planar.rs:115-120`,
+  `crates/paged-mutate/src/path_math.rs:178`).
 
 **3. The renderer and the kernel do not share a path type.** The first rationale bullet says
 adopting kurbo "keeps one path representation across mutate→render". In the code each side
 converts at its own boundary:
 
-- `crates/paged-mutate/src/kurbo_kernel.rs:36-39` — every kernel function takes and returns the
+- `crates/paged-mutate/src/kurbo_kernel.rs:40-43` — every kernel function takes and returns the
   model's anchor tables (`PathAnchor`, `subpath_starts`, `subpath_open`); `BezPath` is built
-  inside (`:130`) and converted back (`:173`).
-- `crates/paged-gpu/src/vello_rs.rs:2544-2574` — the Vello backend builds its `BezPath` from the
-  display list's `PathData`, using the kurbo that Vello re-exports (`:114`).
+  inside (`:134`) and converted back (`:177`).
+- `crates/paged-gpu/src/vello_rs.rs:2548-2578` — the Vello backend builds its `BezPath` from the
+  display list's `PathData`, using the kurbo that Vello re-exports (`:118`).
 - `crates/paged-mutate/Cargo.toml:27` is the only manifest of a workspace member that names
   kurbo; `paged-gpu` declares Vello 0.10.0 (`crates/paged-gpu/Cargo.toml:38`). `Cargo.lock`
   resolves two kurbo versions: 0.11.3 for `paged-mutate` (`Cargo.lock:2717`) and 0.13.1 under
-  Vello 0.10.0 through peniko 0.6.1 (`Cargo.lock:4336`, `:2934`).
+  Vello 0.10.0 through peniko 0.6.1 (`Cargo.lock:4336`, `:2938`).
 
 **4. The renderer's own stroke geometry does not use the kernel.** "Bézier flattening" in the
 Decision holds inside `paged-mutate`. The striped and wavy stroke styles and the inside/outside
 stroke alignment are computed in `crates/paged-renderer/src/pipeline/stroke_geom.rs`, which
-flattens curves to polylines at a fixed step count (`:58`, `:68`) and offsets them vertex by
-vertex (`:212`, `:391`). The comment there calls the polyline "a deliberate approximation"
-(`:21-26`) and states the limit of the per-vertex offset (`:381-388`). Its callers are in
-`crates/paged-renderer/src/pipeline/shapes.rs:1009-1026` (alignment), `:1395-1403` (striped)
-and `:1430` (wavy).
+flattens curves to polylines at a fixed step count (`:62`, `:72`) and offsets them vertex by
+vertex (`:216`, `:395`). The comment there calls the polyline "a deliberate approximation"
+(`:25-30`) and states the limit of the per-vertex offset (`:385-392`). Its callers are in
+`crates/paged-renderer/src/pipeline/shapes.rs:1013-1030` (alignment), `:1399-1407` (striped)
+and `:1434` (wavy).

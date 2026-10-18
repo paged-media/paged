@@ -42,45 +42,45 @@ fold call the `image-gpu` dispatch functions directly, through neither engine.
 
 ## Evidence
 
-- `image-pipeline/src/lib.rs:33-36`, `image-pipeline/src/schedule.rs:41-49`, `:270-321` —
+- `image-pipeline/src/lib.rs:19-22`, `image-pipeline/src/schedule.rs:27-35`, `:256-307` —
   Engine A: the lazy pull, tiling, the cache key, the per-tile dispatch
-- `image-graph/src/lib.rs:38-69`, `image-graph/src/eval.rs:168-283` — Engine B: generations,
+- `image-graph/src/lib.rs:24-55`, `image-graph/src/eval.rs:154-269` — Engine B: generations,
   the parameter paths, the journal; window gathering and dispatch
-- `image-core/src/tile.rs:41-52`, `image-graph/src/journal.rs:98-106` — tiles; journal bounds
-- `image-js/src/ingest.rs:876`, `:1121` — the two places production code builds a `Pipeline`
-- `image-js/src/layers.rs:41-124`, `:1389-1586` — the layer model and the fold
-- `image-js/src/lib.rs:2463-2473`, `:2501-2519` — the composite replaces the bound image
-- `image-js/src/mip.rs:57-73`, `glue/test/wasm-surface.spec.ts:50-63` — the one
+- `image-core/src/tile.rs:27-38`, `image-graph/src/journal.rs:84-92` — tiles; journal bounds
+- `image-js/src/ingest.rs:862`, `:1107` — the two places production code builds a `Pipeline`
+- `image-js/src/layers.rs:27-110`, `:1375-1572` — the layer model and the fold
+- `image-js/src/lib.rs:2449-2459`, `:2487-2505` — the composite replaces the bound image
+- `image-js/src/mip.rs:43-59`, `glue/test/wasm-surface.spec.ts:50-63` — the one
   `BufferGraph` in the surface, and its export without a caller
 
 ## Alternatives considered
 
 No single-engine alternative is recorded. For the layer model,
-`image-js/src/layers.rs:45-50` names per-layer bounds and declines them: canvas-sized
+`image-js/src/layers.rs:31-36` names per-layer bounds and declines them: canvas-sized
 layers make the composite a fold with no offset arithmetic and let the brush paint
 anywhere, at the cost of memory per layer. Journalling layer structure is declined at
-`image-js/src/layers.rs:115-119`: those operations are cheap to reverse by hand, and
+`image-js/src/layers.rs:101-105`: those operations are cheap to reverse by hand, and
 logging them would mean holding a removed layer's whole canvas.
-`image-js/src/stroke.rs:318-329` weighs Engine B's parameter split for strokes and
+`image-js/src/stroke.rs:304-315` weighs Engine B's parameter split for strokes and
 concludes that paint is a write, so only the journal was needed.
 
 ## Consequences
 
 Both engines read a kernel's class; neither reads `mip_exact`. Memory grows with layers
 times canvas; the PSD layer import is capped at 384 MiB for that reason
-(`image-psd/src/layer_pixels.rs:61-64`, `:79-82`). Layer structure is not undoable, and
-removing a layer clears the journal (`image-js/src/layers.rs:819-824`).
+(`image-psd/src/layer_pixels.rs:47-50`, `:65-68`). Layer structure is not undoable, and
+removing a layer clears the journal (`image-js/src/layers.rs:805-810`).
 
 Engine B's graph evaluation is not reached by the plugin: `add_op` and `request` have no caller outside `image-graph` and the tests. Engine
 A is built anew for each adjust call, so its cache does not persist between calls. Engine A's dispatch does not branch on the kernel class:
-for a `Windowed` kernel it requests the expanded region upstream (`image-pipeline/src/schedule.rs:100`), then passes the upstream tile for
-the same coordinate to `execute_tile_once` with the output tile's width and height (`image-pipeline/src/schedule.rs:270-321`). Engine B
-gathers an expanded window and uses `execute_windowed_once` (`image-graph/src/eval.rs:178-181`, `:258-263`). The texture pool, the
+for a `Windowed` kernel it requests the expanded region upstream (`image-pipeline/src/schedule.rs:86`), then passes the upstream tile for
+the same coordinate to `execute_tile_once` with the output tile's width and height (`image-pipeline/src/schedule.rs:256-307`). Engine B
+gathers an expanded window and uses `execute_windowed_once` (`image-graph/src/eval.rs:164-167`, `:244-249`). The texture pool, the
 residency manager and batched dispatch in `image-gpu` are used only by tests.
 
 Comments are stale in three places. `image-graph/Cargo.toml:8` describes types and stubs.
-`image-pipeline/src/lib.rs:38-43` lists the encoder sink as future. The header of
-`image-js/src/layers.rs:45-46` says layers are RGBA8; the field is a `Pixels` value of 8 or
+`image-pipeline/src/lib.rs:24-29` lists the encoder sink as future. The header of
+`image-js/src/layers.rs:31-32` says layers are RGBA8; the field is a `Pixels` value of 8 or
 16 bits ([ADR 455](455-pixel-model.md)).
 
 ## Related

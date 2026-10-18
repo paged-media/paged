@@ -5,7 +5,7 @@ posture).**
 
 **Sources:** `crates/paged-write/src/lib.rs:15-40` (carry-through save-back:
 "copies the original package verbatim and patches only what the model can
-faithfully express"); `crates/paged-renderer/src/diagnostics.rs:15-40`
+faithfully express"); `crates/paged-renderer/src/diagnostics.rs:19-44`
 (`RenderDiagnostics` on `BuiltDocument`; `Severity { Info, Warning, Error }`;
 "correct-but-lossy" outcomes reported, not silently warned);
 the internal renderer gap list (the engineering mirror of the public
@@ -66,20 +66,20 @@ entry beats a lossy regeneration. Honesty is a fidelity feature, not a fallback.
 Checked against the code at `9f933f1`, with plugin-publish at `6994ad1` and docs at `2094ba4`.
 The posture stands on both sides. The render-side mechanism is where the ADR says it is:
 `RenderDiagnostics` is carried on `BuiltDocument`
-(`crates/paged-renderer/src/diagnostics.rs:14-25`, `:185`;
-`crates/paged-renderer/src/pipeline/mod.rs:914-928`). On the save side the text above no
+(`crates/paged-renderer/src/diagnostics.rs:18-29`, `:189`;
+`crates/paged-renderer/src/pipeline/mod.rs:918-932`). On the save side the text above no
 longer matches the code in four places.
 
 **1. The IDML save-back writer is no longer in this repository.** `crates/paged-write` does not exist.
 The writer is the crate `idml-export` in plugin-publish, and this repository takes it as a git
 dependency pinned to a revision.
 
-- `plugin-publish: crates/idml-export/src/lib.rs:15-72` — the crate comment the ADR cites,
+- `plugin-publish: crates/idml-export/src/lib.rs:19-76` — the crate comment the ADR cites,
   with the same strategy: the writer "copies the original package verbatim and **patches only
-  what the model can faithfully express**" (`:26-27`).
+  what the model can faithfully express**" (`:30-31`).
 - `crates/paged-canvas/Cargo.toml:35` — the dependency; `Cargo.toml:71-82` — why the
   workspace patches the adapter's own dependencies back onto the local model crates.
-- `crates/paged-canvas/src/model.rs:4371-4381`, `:4398-4408` — the canvas model calls
+- `crates/paged-canvas/src/model.rs:4375-4385`, `:4402-4412` — the canvas model calls
   `idml_export::write_idml_with` with the retained source bytes.
 - The IDML reader moved the same way (`idml-import`, `crates/paged-canvas/Cargo.toml:22`).
 
@@ -95,27 +95,27 @@ name `paged-write` wherever it appears above.
 **2. The writer patches more than Spreads and Stories.** "patches only the changed
 Spreads/Stories" described the first version. The crate comment now lists:
 
-- `plugin-publish: crates/idml-export/src/lib.rs:38-47` — `MasterSpreads/*.xml` is rewritten
+- `plugin-publish: crates/idml-export/src/lib.rs:42-51` — `MasterSpreads/*.xml` is rewritten
   as well; an entry whose rewrite equals its source is still copied verbatim.
-- `plugin-publish: crates/idml-export/src/lib.rs:63-67` — page-item inserts and removals within
+- `plugin-publish: crates/idml-export/src/lib.rs:67-71` — page-item inserts and removals within
   a spread, and new swatches, gradients and styles injected into the `Resources` entries.
-- `plugin-publish: crates/idml-export/src/lib.rs:67-71` — a story or a spread created after
+- `plugin-publish: crates/idml-export/src/lib.rs:71-75` — a story or a spread created after
   load is written as a new part and referenced from `designmap.xml`.
 
-Every other entry is still copied with its original compressed bytes (`:29-33`). The last
+Every other entry is still copied with its original compressed bytes (`:33-37`). The last
 Consequences bullet still holds: the writer emits what the model holds and carries the rest
 through.
 
 **3. An IDML export reports what it could not carry.** The ADR gives the save side one
 mechanism, carry-through. A second one was added: the loss list.
 
-- `crates/paged-canvas/src/export_losses.rs:14-38` — the document is exported, the bytes are
+- `crates/paged-canvas/src/export_losses.rs:18-42` — the document is exported, the bytes are
   parsed again, and the result is compared with the live scene; each construct the re-parsed
   document lacks becomes one line naming the element.
-- `crates/paged-canvas/src/model.rs:4491-4512` — `idml_export_losses`; the comment gives the
+- `crates/paged-canvas/src/model.rs:4495-4516` — `idml_export_losses`; the comment gives the
   reason the list is measured and not declared.
-- `crates/paged-canvas/src/channel.rs:1790-1802` — the `IdmlExported` reply carries the list
-  as `lost`; `crates/paged-canvas-wasm/src/dispatch.rs:1062-1068` fills it on every IDML
+- `crates/paged-canvas/src/channel.rs:1794-1806` — the `IdmlExported` reply carries the list
+  as `lost`; `crates/paged-canvas-wasm/src/dispatch.rs:1066-1072` fills it on every IDML
   export.
 
 See [ADR 124](124-opacity-masks-native.md) for the construct that IDML has no element for.
@@ -123,7 +123,7 @@ See [ADR 124](124-opacity-masks-native.md) for the construct that IDML has no el
 **4. `.paged` is a second save target.** The decision speaks only of the way "back to IDML".
 `export_paged` writes the IDML parts through the same writer and adds the model itself as a
 native part, `paged/core/model/document.pgm`
-(`crates/paged-canvas/src/model.rs:4662-4682`, `crates/paged-store/src/lib.rs:36`, `:72`). The
+(`crates/paged-canvas/src/model.rs:4666-4686`, `crates/paged-store/src/lib.rs:40`, `:76`). The
 container is described in [ADR 118](118-paged-file-is-a-valid-idml-package.md) and the
 direction in [ADR 021](021-paged-native-document-model-idml-as-format.md).
 

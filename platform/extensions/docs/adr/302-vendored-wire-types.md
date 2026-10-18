@@ -11,7 +11,7 @@ repository and ship as the `.d.ts` of the published `@paged-media/canvas-wasm`.
 
 Until 2026-06-06 plugin-api took its types from two editor packages through `link:`
 dependencies, so it could not be published and needed a sibling editor checkout. Commit
-`28850c0` removed both; `packages/plugin-api/src/editor.ts:15-21` records it. The first sync
+`28850c0` removed both; `packages/plugin-api/src/editor.ts:19-25` records it. The first sync
 script copied from that checkout and only warned when it was absent. A day later (commit
 `60d4687`) it was pointed at the published package and made to fail when the source cannot
 be resolved. Its header gives the reason: the copy is a protocol coupling, and a check that
@@ -44,10 +44,10 @@ Editor-facing shapes are hand-written in `editor.ts`.
 - `.github/workflows/publish.yml:45-55`, `:69-77` — the two gates before the publish step
 - `scripts/sync-catalog.mjs:136-227`, `packages/plugin-api/catalog.provenance.json:1-9` — the
   three outcomes; the recorded source revision and `aheadOfPublished: false`
-- `packages/plugin-api/src/mutations.ts:343-365`, `:367-397` — the two types and the gate
-- `packages/plugin-sdk/src/host-impl.ts:1729-1736` — the cast on the mutate path; `:1868-1878`
-  and `:2694-2702` carry the same kind of cast for wire messages
-- `packages/plugin-sdk/src/wasm-loader.ts:247-271`, `packages/plugin-sdk/package.json:28` —
+- `packages/plugin-api/src/mutations.ts:347-369`, `:371-401` — the two types and the gate
+- `packages/plugin-sdk/src/host-impl.ts:1733-1740` — the cast on the mutate path; `:1872-1882`
+  and `:2698-2706` carry the same kind of cast for wire messages
+- `packages/plugin-sdk/src/wasm-loader.ts:251-275`, `packages/plugin-sdk/package.json:28` —
   the test harness derives the expected protocol from the stamp and refuses another wasm
 
 ## Alternatives considered
@@ -55,10 +55,10 @@ Editor-facing shapes are hand-written in `editor.ts`.
 - Types re-exported from linked editor packages: removed in `28850c0`. `README.md:22-25`
   still describes that state.
 - A check that skips when its source is missing: it left the check "silently inert"
-  (`packages/plugin-sdk/test/sync-wire.spec.ts:15-20`).
+  (`packages/plugin-sdk/test/sync-wire.spec.ts:19-24`).
 - Hand-written object types for operations ahead of the wire: replaced on 2026-08-07 by the
   `Extract` aliases, because a hand-written literal that happens to match a generated one is
-  a second type (`packages/plugin-api/src/mutations.ts:376-381`).
+  a second type (`packages/plugin-api/src/mutations.ts:380-385`).
 - Widening the client handle to accept such operations: refused; it would demand more of
   every host than the published wire promises (`DESIGN.md:200-204`).
 
@@ -78,9 +78,9 @@ re-sync (`DESIGN.md:198-199`).
 
 `catalog.json` is vendored and gated, but no source file in this repo imports it, and the
 package's `files` list and build script do not ship it.
-Some comments predate the current state. `packages/plugin-api/src/index.ts:25-26` says the
+Some comments predate the current state. `packages/plugin-api/src/index.ts:29-30` says the
 wire is synced from the editor's generated output; `DESIGN.md:152-159` and
-`packages/plugin-sdk/src/host-impl.ts:1729-1735` speak of a wire at protocol 51.
+`packages/plugin-sdk/src/host-impl.ts:1733-1739` speak of a wire at protocol 51.
 
 ## Related
 

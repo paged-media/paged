@@ -12,7 +12,7 @@ bytes stay the truth — adjusted-pixel save-back is a later milestone, stated i
 (`glue/src/session.ts:28-30`). Save-back has since been built.
 
 The host contract also has a door for per-plugin bytes stored inside the document file
-(`plugin-sdk: packages/plugin-api/src/host.ts:1265-1280`). This bundle does not call it.
+(`plugin-sdk: packages/plugin-api/src/host.ts:1269-1284`). This bundle does not call it.
 The repository does not record why edits are not stored in the document.
 
 ## Decision
@@ -44,7 +44,7 @@ Edited pixels leave only as file bytes.
 - `glue/src/session.ts:1359-1381`, `glue/src/activate.ts:669-679` — the marker; the edit
   context matches on the plugin's own metadata
 - `glue/src/session.ts:2305-2313` — `insertPath`, the only `host.document.mutate` call
-- `glue/src/activate.ts:400-415`, `image-graph/src/journal.rs:98-106` — the undo commands
+- `glue/src/activate.ts:400-415`, `image-graph/src/journal.rs:84-92` — the undo commands
   and the journal bounds
 - `glue/manifest.json:8-11` — `document: { read: "broad", write: "scoped" }`
 
@@ -68,14 +68,14 @@ the previous image handle and closes its PSD parse (`glue/src/session.ts:1393-13
 session state, and none links the frame to a saved file: save-back produces bytes for the host's saver or export UI and stops there.
 
 There are two undo stacks. The host's undo does not cover pixel edits; the plugin's
-journal does not cover layer structure (`image-js/src/layers.rs:115-124`). `glue/src/menu.ts:17-21`
+journal does not cover layer structure (`image-js/src/layers.rs:101-110`). `glue/src/menu.ts:17-21`
 keeps the plugin's undo out of the menu bar because it works on "a DIFFERENT stack (the
 image session's, not the document's)". The marker write is itself a document mutation, so
 it is skipped when a marker is already present (`glue/src/session.ts:1373-1376`).
 
 The PSD exporter and `applyToFile` differ. The exporter calls `applyToFile` only when the adjustment parameters are
 not the identity; at identity it returns `psd_save` of the retained parse (`glue/src/session.ts:1736-1749`,
-`:1622-1625`). Pixels reach the retained parse only through `psd_apply_adjusted` (`image-js/src/lib.rs:3616-3631`),
+`:1622-1625`). Pixels reach the retained parse only through `psd_apply_adjusted` (`image-js/src/lib.rs:3602-3617`),
 and `applyToFile` is its only caller (`glue/src/session.ts:1657`). `applyToFile` runs that save-back whether or not
 the parameters are the identity; when they are not, it needs a GPU device (`glue/src/session.ts:1641-1646`).
 

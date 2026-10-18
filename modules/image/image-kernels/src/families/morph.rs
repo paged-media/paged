@@ -16,20 +16,6 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-/*
- * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at https://mozilla.org/MPL/2.0/.
- *
- * This file is part of paged (https://paged.media) and is additionally
- * available under the Paged Media Enterprise License (PMEL). Full
- * copyright and license information is available in LICENSE.md which is
- * distributed with this source code.
- *
- *  @copyright  Copyright (c) And The Next GmbH
- *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
- */
-
 //! Morphology + rank filters (T3, spec §11) — handwritten WGSL modules
 //! under the ABI v1.1 contract (`abi::assemble` docs). Every kernel here
 //! is windowed, following the `conv.box` windowed convention: output
@@ -126,7 +112,7 @@ pub static MORPH_DILATE: KernelDef = KernelDef {
 // byte-identical by construction (§6.3).
 const MORPH_DILATE_WGSL: &str = "\
 // paged.image kernel `morph.dilate` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     _abi_pad: u32,
@@ -177,7 +163,7 @@ pub static MORPH_ERODE: KernelDef = KernelDef {
 
 const MORPH_ERODE_WGSL: &str = "\
 // paged.image kernel `morph.erode` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     _abi_pad: u32,
@@ -257,7 +243,7 @@ pub static RANK_MEDIAN3: KernelDef = KernelDef {
 
 const MEDIAN3_WGSL: &str = "\
 // paged.image kernel `rank.median3` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     _abi_pad: u32,
@@ -428,7 +414,7 @@ pub static RANK_DESPECKLE: KernelDef = KernelDef {
 // by construction beats a hand-transcribed optimal network.
 const RANK_DESPECKLE_WGSL: &str = "\
 // paged.image kernel `rank.despeckle` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     edge_threshold: f32,
@@ -603,7 +589,7 @@ pub static RANK_DUST_SCRATCHES: KernelDef = KernelDef {
 // a count — it is fixed anyway so the Rust twin can mirror it (§6.3).
 const RANK_DUST_SCRATCHES_WGSL: &str = "\
 // paged.image kernel `rank.dust_scratches` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     radius: u32,

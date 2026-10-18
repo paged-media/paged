@@ -7,7 +7,7 @@
 
 A kernel is a pixel operation with a registry id (`math.add`, `conv.gaussian_h`,
 `compose.multiply`). `image-kernels` holds the definitions and states that "WGSL is the
-implementation" (`image-kernels/src/lib.rs:33`). Some kernels also have a scalar Rust
+implementation" (`image-kernels/src/lib.rs:19`). Some kernels also have a scalar Rust
 version, which the test crate uses to compute expected values
 ([ADR 451](451-one-kernel-definition.md), [ADR 453](453-tolerance-not-golden-bytes.md)).
 
@@ -34,29 +34,29 @@ reported as an error.
 
 ## Evidence
 
-- `image-gpu/src/lib.rs:33-36` — the crate describes itself as the only execution layer
+- `image-gpu/src/lib.rs:19-22` — the crate describes itself as the only execution layer
 - `image-kernels/Cargo.toml:14-19`, `image-conformance/Cargo.toml:13-18` — the `reference`
   feature and the one dependency that turns it on
-- `image-kernels/src/lib.rs:47-48`, `image-kernels/src/family.rs:118-133` — the reference
+- `image-kernels/src/lib.rs:33-34`, `image-kernels/src/family.rs:104-119` — the reference
   helper module and the scalar twin exist only under that feature
-- `image-js/src/lib.rs:172-190`, `image-js/src/lib.rs:514-519` — `init_gpu` rejects without
+- `image-js/src/lib.rs:158-176`, `image-js/src/lib.rs:500-505` — `init_gpu` rejects without
   WebGPU; the adjust runner errors without a device
-- `image-js/src/layers.rs:1407-1413` — the layer composite refuses instead of blending on
+- `image-js/src/layers.rs:1393-1399` — the layer composite refuses instead of blending on
   the CPU
 - `.github/workflows/ci.yml:78-88` — the guard on the wasm32 dependency tree
-- `image-js/src/ingest.rs:1137-1147`, `image-js/src/mip.rs:41-46`,
-  `image-js/src/heal.rs:52-62`, `image-js/src/lib.rs:1645-1653` — four CPU pixel passes,
+- `image-js/src/ingest.rs:1123-1133`, `image-js/src/mip.rs:27-32`,
+  `image-js/src/heal.rs:56-66`, `image-js/src/lib.rs:1631-1639` — four CPU pixel passes,
   each with its stated reason
 - `CLAUDE.md:64-70` — the rule, and the work it names as staying on the CPU
 
 ## Alternatives considered
 
 A CPU fallback for kernels is named and refused where it would have been used: the ingest
-module says "(an absent adapter is an honest error)" (`image-js/src/ingest.rs:43`).
+module says "(an absent adapter is an honest error)" (`image-js/src/ingest.rs:29`).
 
 For the healing brush the opposite choice was weighed. A GPU version of the Jacobi
 iteration would need one dispatch per sweep, "hundreds of round-trips per dab"
-(`image-js/src/heal.rs:56`), so the solve stays on the CPU and its result is applied by the
+(`image-js/src/heal.rs:60`), so the solve stays on the CPU and its result is applied by the
 registered kernel `math.add`.
 
 ## Consequences
@@ -73,12 +73,12 @@ type or a test. The CI guard looks for two crate names in a dependency tree; it 
 detect a CPU pixel loop written into a production crate.
 
 Three CPU passes are described in the code as interim: the curves stage, the reductions in `image-gpu/src/reduce.rs` and the mip
-pyramid each name a GPU version as future work. The curves comment, "no GPU LUT kernel exists yet" (`image-js/src/ingest.rs:1138`),
-is out of date: a table kernel, `adjust.lut1d`, is registered (`image-kernels/src/families/adjust.rs:1616-1628`), but nothing in
+pyramid each name a GPU version as future work. The curves comment, "no GPU LUT kernel exists yet" (`image-js/src/ingest.rs:1124`),
+is out of date: a table kernel, `adjust.lut1d`, is registered (`image-kernels/src/families/adjust.rs:1602-1614`), but nothing in
 `image-js` dispatches it and the adjustment chain still applies the curve with a CPU lookup.
 
-Comments contradict the CI setup. `image-gpu/src/lib.rs:35`, `image-gpu/src/device.rs:34-35`
-and `image-conformance/src/device.rs:34-35` speak of a software adapter in CI.
+Comments contradict the CI setup. `image-gpu/src/lib.rs:21`, `image-gpu/src/device.rs:20-21`
+and `image-conformance/src/device.rs:20-21` speak of a software adapter in CI.
 `.github/workflows/ci.yml:55-59` states that the runner has no adapter and that the GPU
 tests skip, so CI does not execute any kernel. `image-kernels/Cargo.toml:17` calls the
 enabling dependency a dev-dependency; it is a normal dependency of the test crate.

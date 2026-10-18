@@ -45,7 +45,7 @@ draws its own preview and writes to the document only through the client.
   deactivate, then activate; `apps/canvas/src/ui/useGestureSpine.ts:85-88` — the app drives it
 - `packages/tools/src/index.ts:20-27`, `packages/shell/src/PagedShell.tsx:524-539`,
   `apps/canvas/src/main.tsx:1841` — the built-in set, passed as a prop and registered
-- `plugin-sdk: packages/plugin-sdk/src/host-impl.ts:1246` — a bundle's tool, same registry call
+- `plugin-sdk: packages/plugin-sdk/src/host-impl.ts:1250` — a bundle's tool, same registry call
 - `packages/tools/src/handlers/pencil-tool.ts:48`, `packages/tools/src/handlers/pen-tool.ts:56-64`
   — the geometry imports
 - `packages/client/src/client.ts:381-399`, `:1071-1172` — `mutate` and the gesture calls

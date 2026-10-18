@@ -42,15 +42,15 @@ no undo stack and no mutation queue of its own.
 
 ## Evidence
 
-- `packages/plugin-api/src/host.ts:720-728`, `:865-872` — `MutationOutcome` and the change
+- `packages/plugin-api/src/host.ts:724-732`, `:869-876` — `MutationOutcome` and the change
   event kinds; "The single write door", `undo`, `redo`
-- `packages/plugin-sdk/src/host-impl.ts:1713-1754` — `mutate`: the four non-applied returns
-- `packages/plugin-sdk/src/host-impl.ts:1636-1647`, `:1974-1991` — the foreign-key check,
+- `packages/plugin-sdk/src/host-impl.ts:1717-1758` — `mutate`: the four non-applied returns
+- `packages/plugin-sdk/src/host-impl.ts:1640-1651`, `:1978-1995` — the foreign-key check,
   recursive over `batch`; `setMetadata` through `this.mutate`
-- `packages/plugin-sdk/src/host-impl.ts:1755-1773`, `:2014-2021` — `undo` / `redo`; the
+- `packages/plugin-sdk/src/host-impl.ts:1759-1777`, `:2018-2025` — `undo` / `redo`; the
   change events
-- `packages/plugin-api/src/mutations.ts:315-341`, `:362-365` — `bindCreated`; `MutationInput`
-- `DESIGN.md:50-58`, `:130-146`, `:712-715` — the tenets, the section, the rejections
+- `packages/plugin-api/src/mutations.ts:319-345`, `:366-369` — `bindCreated`; `MutationInput`
+- `DESIGN.md:50-58`, `:134-150`, `:716-719` — the tenets, the section, the rejections
 
 ## Alternatives considered
 
@@ -65,25 +65,25 @@ Anything a plugin wants undoable has to be expressible as engine mutations. A mi
 operation is an engine change followed by a wire re-sync, not something the SDK can add.
 `MutationInput = Mutation | PendingMutation` is the provision for operations the published
 wire does not have yet; at this commit every member of `PendingMutation` is already in
-`Mutation`, and a type-level check holds that (`packages/plugin-api/src/mutations.ts:394-397`).
+`Mutation`, and a type-level check holds that (`packages/plugin-api/src/mutations.ts:398-401`).
 
 One exception exists. An active edit context that declares `onUndo` / `onRedo` receives
-the undo keys in place of the document history (`packages/plugin-api/src/host.ts:217-234`;
+the undo keys in place of the document history (`packages/plugin-api/src/host.ts:221-238`;
 [ADR 012](012-k1-modal-session-undo-coalescing.md)).
 
 `mutate` is the write door for the document model, not for everything in the file.
 `host.parts.write` sends its own `writePagedPart` message and throws on failure
-(`packages/plugin-sdk/src/host-impl.ts:2674-2708`). `host.nativeDocument.open` replaces the
+(`packages/plugin-sdk/src/host-impl.ts:2678-2712`). `host.nativeDocument.open` replaces the
 active document through a backend the editor injects
-(`packages/plugin-sdk/src/host-impl.ts:2755-2764`).
+(`packages/plugin-sdk/src/host-impl.ts:2759-2768`).
 
 The raw handle bypasses the door. `host.editor` is the "marked escape hatch"
-(`packages/plugin-api/src/host.ts:1673-1679`); a bundle holding it can call the client
+(`packages/plugin-api/src/host.ts:1677-1683`); a bundle holding it can call the client
 without the capability check or the metadata-key check.
 
 Two texts are out of date: `DESIGN.md:144-146` says v0 "enforces namespace only", while
 `mutate` also enforces the `write` capability; and the comment at
-`packages/plugin-sdk/src/host-impl.ts:1729-1735` still names protocol 51 and a pending
+`packages/plugin-sdk/src/host-impl.ts:1733-1739` still names protocol 51 and a pending
 re-sync for a wire that is now stamped 0.64.0.
 
 ## Related

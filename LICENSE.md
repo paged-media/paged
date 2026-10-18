@@ -18,10 +18,13 @@ it (copy it from any existing source file).
 This repository was assembled from several repositories (see
 [`tooling/import/`](./tooling/import/)). Three of them were published under
 `MPL-2.0 OR LicenseRef-PMEL`: `engine/core`, `modules/publish` and
-`platform/extensions`. Until the relicense commit recorded in ADR PM-0001 lands,
-files in those directories remain under the license stated in their headers
-and in the `LICENSE`/`LICENSE.md` files of those directories. Versions already
-published under MPL-2.0 stay available under MPL-2.0.
+`platform/extensions`, and some files elsewhere carried the MPL notice. The
+relicense recorded in ADR PM-0001
+([`docs/adr/PM-0001-scope-home-and-licence.md`](./docs/adr/PM-0001-scope-home-and-licence.md))
+has landed: every first-party file in this repository is now under
+`AGPL-3.0-only OR LicenseRef-PMEL`. Versions published before the relicense
+(npm packages and tagged releases) remain available under
+`MPL-2.0 OR LicenseRef-PMEL`.
 
 ## GNU Affero General Public License v3 (open source)
 

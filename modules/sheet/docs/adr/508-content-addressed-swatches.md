@@ -48,7 +48,7 @@ fails it creates none.
 - `packages/sheet-host-model/src/palette.ts:299`, `:349-363` — `KnownSwatchIds` and `swatchMintOps`
 - `packages/sheet-bundle/src/swatch-mints.ts:19-40`, `:50-60` — the rule and the read
 - `packages/sheet-bundle/src/lower-chart.ts:115-120`; `packages/sheet-bundle/src/lower.ts:226-231`, `:435-439`; `packages/sheet-host-model/src/chart.ts:415-420` — the three drivers pass the read through; in a chart the mints lead the batch
-- `core: crates/paged-mutate/src/apply/layer.rs:229-238`, `:2274-2298` — a duplicate id is refused; a failed child rolls back its batch
+- `core: crates/paged-mutate/src/apply/layer.rs:233-242`, `:2278-2302` — a duplicate id is refused; a failed child rolls back its batch
 - `registry/features/lower.yaml:72-109`; `CLAUDE.md:123-140` — the ruling with its measurements; the rule as a repo rule
 - `packages/sheet-bundle/src/binding-provider/swatches-provider.ts:184-190`, `:251-265` — what the provider declares; create on first edit
 

@@ -15,7 +15,7 @@ The crate header gives the reason for where the line was drawn. The mapper is
 "Deliberately tiny" and "knows nothing about PDF"; the reader and the heuristics live in
 the TypeScript bundle, "so the wasm stays small and rebuilds rarely, and a model-shape
 change is a compile error here rather than silent data loss in hand-rolled JSON"
-(`crates/pdf-import/src/lib.rs:24-27`).
+(`crates/pdf-import/src/lib.rs:28-31`).
 
 ## Decision
 
@@ -40,16 +40,16 @@ produces it; Rust consumes it and knows nothing else about the source.
 
 ## Evidence
 
-- `crates/pdf-import/src/lib.rs:15-27`, `:47-63`, `:69-75` — the header and its reason; the
+- `crates/pdf-import/src/lib.rs:19-31`, `:51-67`, `:73-79` — the header and its reason; the
   single entry; the wasm export
-- `crates/pdf-import/src/ir.rs:15-25`, `:29-57` — the IR as the seam; its top-level shape
-- `packages/pdf-bundle/src/ir.ts:15-19` — the TypeScript twin, which "MUST stay in lockstep"
-- `packages/pdf-bundle/src/extract.ts:15-25`, `:72-100`, `:182-258` — the heuristics module
-- `packages/pdf-bundle/src/pdfium.ts:345-428` — extraction into the IR; paths merged at `:382-405`
-- `packages/pdf-bundle/src/engine-loader.ts:106-108`, `crates/pdf-import/src/build.rs:104-198`
+- `crates/pdf-import/src/ir.rs:19-29`, `:33-61` — the IR as the seam; its top-level shape
+- `packages/pdf-bundle/src/ir.ts:19-23` — the TypeScript twin, which "MUST stay in lockstep"
+- `packages/pdf-bundle/src/extract.ts:19-29`, `:76-104`, `:186-262` — the heuristics module
+- `packages/pdf-bundle/src/pdfium.ts:349-432` — extraction into the IR; paths merged at `:386-409`
+- `packages/pdf-bundle/src/engine-loader.ts:110-112`, `crates/pdf-import/src/build.rs:108-202`
   — the boundary call; IR to `Document`
-- `packages/pdf-bundle/test/extract.test.ts:17-28`,
-  `crates/pdf-import/tests/build_roundtrip.rs:30-59` — each side is tested on its own input
+- `packages/pdf-bundle/test/extract.test.ts:21-32`,
+  `crates/pdf-import/tests/build_roundtrip.rs:34-63` — each side is tested on its own input
 
 ## Alternatives considered
 
@@ -69,20 +69,20 @@ the Rust test uses JSON written by hand.
 
 The IR carries more than the current reader fills. `pdfium.ts` sets `bold` and `italic`
 to `false` for every glyph, never sets a font family and never sets `background_png_b64`;
-the Rust side still honours all four (`packages/pdf-bundle/src/pdfium.ts:539-548`,
-`crates/pdf-import/src/build.rs:128-143`, `:256-258`). Every line and Bézier segment
-contributes one point (`packages/pdf-bundle/src/pdfium.ts:483-485`), so vector shapes
+the Rust side still honours all four (`packages/pdf-bundle/src/pdfium.ts:543-552`,
+`crates/pdf-import/src/build.rs:132-147`, `:260-262`). Every line and Bézier segment
+contributes one point (`packages/pdf-bundle/src/pdfium.ts:487-489`), so vector shapes
 arrive as polylines.
 
 The promise of "a compile error here" covers the crate, not the shipped binary. The mapper
 wasm in `packages/pdf-bundle/bin/` is a committed product of `scripts/build-wasm.sh`, last
 changed in commit `0c64e7d` (2026-07-23). `crates/pdf-import` has five later commits and
 no workflow rebuilds the binary. `scripts/build-wasm.sh:12` and
-`packages/pdf-bundle/src/engine-loader.ts:38` call `bin/` gitignored; it is tracked.
+`packages/pdf-bundle/src/engine-loader.ts:42` call `bin/` gitignored; it is tracked.
 
-Comments still name the earlier reader: `crates/pdf-import/src/lib.rs:16`, `:25`,
-`crates/pdf-import/src/ir.rs:16-22`, `crates/pdf-import/Cargo.toml:8` and
-`packages/pdf-bundle/src/extract.ts:18-19` refer to pdf.js or to `reconstruct.ts`, a file
+Comments still name the earlier reader: `crates/pdf-import/src/lib.rs:20`, `:29`,
+`crates/pdf-import/src/ir.rs:20-26`, `crates/pdf-import/Cargo.toml:8` and
+`packages/pdf-bundle/src/extract.ts:22-23` refer to pdf.js or to `reconstruct.ts`, a file
 that no longer exists.
 
 ## Related

@@ -53,7 +53,7 @@ Every menu item, keybinding and palette entry resolves to a `CommandContribution
   it cannot contain, replay against the current selection
 - `packages/shell/src/actions/actions-context.tsx:159-161`, `apps/canvas/src/main.tsx:1383-1417`
   — the two observers: the recorder and the journal
-- `plugin-sdk: packages/plugin-sdk/src/host-impl.ts:1314` — a bundle's command, same registry
+- `plugin-sdk: packages/plugin-sdk/src/host-impl.ts:1318` — a bundle's command, same registry
 
 ## Alternatives considered
 

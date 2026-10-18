@@ -171,7 +171,7 @@ vendored from `@paged-media/canvas-wasm` and `@paged-media/introspect-wasm` 0.73
 - **In-process, first-party only.** `loadBundle` accepts no `trust` other than
   `"first-party"`. The code states that the capability gate prevents accidents and is not a
   security boundary, because `host.editor` hands a bundle the raw editor handle
-  (`packages/plugin-sdk/src/host-impl.ts:311-313`). In `warn` mode a violation is logged.
+  (`packages/plugin-sdk/src/host-impl.ts:315-317`). In `warn` mode a violation is logged.
 - **Scope values are not interpreted.** The gate tests whether `document.read` and
   `document.write` are declared; the adapter treats `"scoped"` and `"broad"` alike. In
   `apiVersion` a range is `*`, an exact version or a caret; a caret on `0.x` fixes the minor.

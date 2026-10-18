@@ -15,7 +15,7 @@ later, replaced it. The reader's header gives the reason: PDFium "exposes a stru
 CONTENT model (typed page objects with matrices, colours, path segments, and ORIGINAL
 encoded image bytes) rather than a rendering op-list, which is exactly what faithful
 decomposition wants — and it reads images as their original bytes with no re-decode (the
-thing that stalled pdf.js)" (`packages/pdf-bundle/src/pdfium.ts:16-20`).
+thing that stalled pdf.js)" (`packages/pdf-bundle/src/pdfium.ts:20-24`).
 
 ## Decision
 
@@ -40,14 +40,14 @@ It is the only reader: it serves both the extraction and the page raster.
 
 ## Evidence
 
-- `packages/pdf-bundle/src/pdfium.ts:15-24` — the header: origin, reason, browser-only
-- `packages/pdf-bundle/src/pdfium.ts:76-200` — `loadPdfium` and the wrapped calls
-- `packages/pdf-bundle/src/pdfium.ts:508-551` — the character loop; raw exports at `:514-516`
-- `packages/pdf-bundle/src/pdfium.ts:459-503` — path extraction
-- `packages/pdf-bundle/src/pdfium.ts:576-608`, `:614-673` — JPEG passthrough, bitmap decode,
+- `packages/pdf-bundle/src/pdfium.ts:19-28` — the header: origin, reason, browser-only
+- `packages/pdf-bundle/src/pdfium.ts:80-204` — `loadPdfium` and the wrapped calls
+- `packages/pdf-bundle/src/pdfium.ts:512-555` — the character loop; raw exports at `:518-520`
+- `packages/pdf-bundle/src/pdfium.ts:463-507` — path extraction
+- `packages/pdf-bundle/src/pdfium.ts:580-612`, `:618-677` — JPEG passthrough, bitmap decode,
   the filter test
-- `packages/pdf-bundle/src/pdfium.ts:221-276` — the page raster
-- `packages/pdf-bundle/package.json:18-20`, `:33-37` — `jszip` is the only runtime
+- `packages/pdf-bundle/src/pdfium.ts:225-280` — the page raster
+- `packages/pdf-bundle/package.json:18-20`, `:37-41` — `jszip` is the only runtime
   dependency; `bin` is in the published file list
 - `packages/pdf-bundle/manifest.json:9-16` — the one declared wasm artifact, `pdf-import`
 
@@ -75,12 +75,12 @@ and a canvas for PNG encoding. No test in the repository imports `pdfium.ts`; th
 specs cover the heuristics and the fallback package only.
 
 Not everything PDFium exposes is read. A form object contributes no path or image; it only
-ends a run of merged paths (`packages/pdf-bundle/src/pdfium.ts:411-413`). No font name,
+ends a run of merged paths (`packages/pdf-bundle/src/pdfium.ts:415-417`). No font name,
 weight or style is read for text. An image whose bitmap PDFium cannot produce, or whose
 bitmap format is not one of the four handled, is skipped.
 
 Comments elsewhere still name pdf.js as the reader:
-`packages/pdf-bundle/src/io/pdf.ts:22`, `packages/pdf-bundle/src/activate.ts:15-19`,
+`packages/pdf-bundle/src/io/pdf.ts:26`, `packages/pdf-bundle/src/activate.ts:19-23`,
 `scripts/build-wasm.sh:5-6`.
 
 ## Related
