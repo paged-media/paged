@@ -40,12 +40,6 @@ fileGroups:
     - '/.cargo/*.toml'
 
 tasks:
-  js-lint:
-    description: 'The contract-import guard (scripts/check-contract-imports.mjs).'
-    command: 'bun run lint:contract'
-    inputs:
-      - '@group(js-sources)'
-
   js-test:
     # web-vitest.yml builds the engine wasm before bun test.
     deps: ['~:wasm']

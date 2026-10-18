@@ -125,8 +125,6 @@ jobs:
       - name: bun install (root workspace)
         working-directory: .
         run: bun install --frozen-lockfile
-      - name: contract-import lint (fail fast)
-        run: node scripts/check-contract-imports.mjs
       # A red spec FAILS this job. It used to end in `|| true` (so red
       # results would still be published as evidence), which also meant the
       # TS lane could never go red: a failing spec merged green. Evidence

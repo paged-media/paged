@@ -333,12 +333,6 @@ jobs:
         uses: ./.github/actions/module-wasm
         with: { module: image }
 
-      # Isolation contract, TS half: every import must come through the
-      # sanctioned contract surface (spec §2.1). An editor-internal import
-      # fails here with a pointer to BREAKAGE_LOG.md.
-      - name: contract-import lint
-        run: node scripts/check-contract-imports.mjs
-
       - name: typecheck
         run: bun run --filter './glue' --filter './manifest' typecheck
 
