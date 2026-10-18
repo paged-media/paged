@@ -1,7 +1,7 @@
 $schema: '../../.moon/cache/schemas/project.json'
 
-# The public extension contract and SDK: one pnpm workspace (plugin-api,
-# plugin-sdk, plugin-cli, ai, cli).
+# The public extension contract and SDK: JS packages plugin-api, plugin-sdk,
+# plugin-cli, ai and cli.
 language: 'typescript'
 layer: 'library'
 stack: 'frontend'
