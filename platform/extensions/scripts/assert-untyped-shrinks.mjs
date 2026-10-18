@@ -36,7 +36,9 @@ if (!base || base === ZERO) {
 
 let before;
 try {
-  before = JSON.parse(git(["show", `${base}:${FILE}`]));
+  // `./`: relative to git's cwd (this package's root), not the repository
+  // root — a bare path never resolves in the monorepo and read as "absent".
+  before = JSON.parse(git(["show", `${base}:./${FILE}`]));
 } catch {
   console.log(`untyped baseline: absent at ${base} — first introduction, nothing to compare`);
   process.exit(0);

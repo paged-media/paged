@@ -56,7 +56,11 @@ function resolveBase() {
 // exist there (a brand-new package counts as "bumped").
 function versionAt(ref, pkgDir) {
   try {
-    const json = git(["show", `${ref}:${pkgDir}/package.json`]);
+    // `./` makes the path relative to git's cwd (this package's root). A bare
+    // `<ref>:<path>` resolves from the REPOSITORY root, which in the monorepo
+    // is two levels up: the show failed, this returned null, and every
+    // package counted as "bumped" — the guard could never fire.
+    const json = git(["show", `${ref}:./${pkgDir}/package.json`]);
     return JSON.parse(json).version ?? null;
   } catch {
     return null;

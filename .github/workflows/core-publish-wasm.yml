@@ -1,0 +1,380 @@
+name: core / publish-wasm
+
+# Builds the engine's wasm-bindgen surfaces and publishes them as
+# versioned npm packages that the (private) editor consumes across the
+# package boundary — "decision B" of the migration plan: the editor never
+# takes a Rust path dependency on the engine; it depends on these packages.
+#
+# AUTHENTICATION: the `NPM_TOKEN` secret, with trusted publishing (OIDC)
+# staged behind it.
+#
+# npm's Trusted Publisher config is PER PACKAGE, and the four packages here
+# do not have entries yet — the token-exchange endpoint answers "package not
+# found" for every one of them, while the OIDC claims this workflow presents
+# (repository paged-media/core, workflow publish-wasm.yml, no environment)
+# are exactly right. So the token authorizes the publish and the advisory
+# step below watches for the day it stops being needed.
+#
+# Token failures are the reason four releases went missing. v0.51.0, v0.51.1
+# and v0.51.2 were each tagged, built for ~11 minutes, then died on `npm
+# error 404 ... PUT .../@paged-media%2fcanvas-wasm` — E404-on-PUT is what npm
+# answers an unauthenticated publish, since it will not admit a package
+# exists to a caller who cannot see it. All three were one expired token
+# wearing a "not found" costume, while npm kept serving 0.51.0 to the editor.
+# v0.61.0 then died the SAME way for the opposite reason: no token at all,
+# and an OIDC exchange that failed silently. Hence the hard preflight.
+#
+# When trusted publishing does land, the npm-side config is keyed on this
+# FILENAME — renaming this file, or publishing these packages from another
+# workflow, would break it.
+#
+# Still required, and not automatic:
+#   1. Tag a release, e.g. `git tag v0.1.0 && git push --tags`. The package
+#      version is derived from the tag.
+#   2. In the editor repo, point `packages/client` at the published
+#      `@paged-media/canvas-wasm` (and devtools at
+#      `@paged-media/introspect-wasm`) instead of `build-wasm.sh` output.
+#
+# MONOREPO (step A3): ported from paged-media/core
+# .github/workflows/publish-wasm.yml. Release tags stay `v0.<P>.<n>` at the
+# repository root (the imported core tags live there too). The OIDC claims
+# this workflow presents are now repository paged-media/paged and workflow
+# core-publish-wasm.yml — so any Trusted Publisher entry created for the old
+# repo/filename will NOT match. Token auth (NPM_TOKEN) is unaffected, but the
+# secret must exist on paged-media/paged.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+# Declaring this block sets every unlisted scope to none, so `contents: read`
+# is load-bearing for checkout.
+permissions:
+  id-token: write # the OIDC token trusted publishing exchanges
+  contents: read
+
+defaults:
+  run:
+    working-directory: engine/core
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # THE HARD GATE. `npm whoami` asks the registry the same auth question
+      # `npm publish` will ask, before anything expensive runs — a bad token
+      # costs two seconds and names itself (E401) instead of arriving as
+      # npm's misleading E404-on-PUT eleven minutes in.
+      #
+      # A throwaway userconfig keeps the real ~/.npmrc untouched.
+      - name: preflight — the npm token must authenticate
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${NPM_TOKEN}" ]; then
+            echo "::error::NPM_TOKEN is not set — a tag push would build for ~11 minutes and publish nothing."
+            exit 1
+          fi
+          RC="$(mktemp)"
+          printf '//registry.npmjs.org/:_authToken=%s\n' "${NPM_TOKEN}" > "$RC"
+          if ! WHO=$(NPM_CONFIG_USERCONFIG="$RC" npm whoami --registry https://registry.npmjs.org/ 2>&1); then
+            rm -f "$RC"
+            echo "::error::NPM_TOKEN does not authenticate against the npm registry: ${WHO}"
+            echo "::error::Mint a granular token with read+write on the @paged-media scope and re-set the secret."
+            exit 1
+          fi
+          rm -f "$RC"
+          echo "npm authenticated as: ${WHO}"
+
+      # Node 24, not 20: Node 20/22 bundle npm 10.x, and Node 20 is deprecated
+      # on GitHub runners. npm 11.x is also what trusted publishing needs, so
+      # the switch below costs no further change.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      # ADVISORY, never fatal: is trusted publishing ready to replace the
+      # token yet? The four Trusted Publisher entries are not in place, so
+      # this reports rather than gates — the token above is what authorizes
+      # the publish today.
+      #
+      # It survives as a step because npm's OIDC helper is SILENT on every
+      # failure path: `lib/utils/oidc.js` logs at verbose/silly and returns
+      # undefined, after which publish falls back to whatever token is
+      # configured. That is why v0.61.0's first attempt read as npm's
+      # E404-on-PUT — "package missing" — when it meant "trusted publishing
+      # never happened". Asking the exchange directly is the only way to see
+      # it, and the claims it prints are exactly the values the npmjs.com
+      # form must match.
+      #
+      # When this reports OK for all four: delete the token preflight, drop
+      # `env: NODE_AUTH_TOKEN` from Publish, and remove the NPM_TOKEN secret.
+      - name: advisory — trusted-publishing readiness
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          AUD="npm:registry.npmjs.org"
+          ID_TOKEN="$(curl -sS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${AUD}" | jq -r '.value // empty')"
+          if [ -z "$ID_TOKEN" ]; then
+            echo "::notice::No OIDC id-token for ${AUD} — trusted publishing not available in this run."
+            exit 0
+          fi
+          echo "id-token issued for ${AUD}"
+
+          # Print the claims npm matches a Trusted Publisher against. These
+          # are the ONLY values that can disagree with the npmjs.com form,
+          # and guessing which one differs costs a round-trip each time.
+          # Claims only — never the token. `repository` is the string the
+          # form's org+repo fields must reconstruct, and `job_workflow_ref`
+          # carries the workflow FILENAME npm keys on. An `environment`
+          # claim appears only when the job declares one; if the form names
+          # an environment and this is null, that is the mismatch.
+          PAYLOAD="$(printf '%s' "$ID_TOKEN" | cut -d. -f2 | tr '_-' '/+')"
+          case $(( ${#PAYLOAD} % 4 )) in 2) PAYLOAD="${PAYLOAD}==";; 3) PAYLOAD="${PAYLOAD}=";; esac
+          printf '%s' "$PAYLOAD" | base64 -d 2>/dev/null \
+            | jq '{repository, repository_owner, workflow_ref, job_workflow_ref, event_name, ref, environment, sub, aud}' \
+            || echo "  (could not decode claims)"
+
+          FAILED=0
+          for PKG in canvas-wasm introspect-wasm sdk repo-wasm idml-viewer; do
+            CODE="$(curl -sS -o /tmp/exch.json -w '%{http_code}' -X POST \
+              -H "Authorization: Bearer ${ID_TOKEN}" \
+              "https://registry.npmjs.org/-/npm/v1/oidc/token/exchange/package/@paged-media%2f${PKG}")"
+            if [ "$CODE" = "200" ] && [ -n "$(jq -r '.token // empty' /tmp/exch.json)" ]; then
+              echo "  OK    @paged-media/${PKG}"
+            else
+              MSG="$(jq -r '.message // .error // empty' /tmp/exch.json 2>/dev/null || true)"
+              echo "  NOT READY  @paged-media/${PKG}: HTTP ${CODE} — ${MSG:-no message}"
+              FAILED=1
+            fi
+            rm -f /tmp/exch.json
+          done
+          if [ "$FAILED" = "1" ]; then
+            echo "::notice::Still on token auth. Each package needs its OWN Trusted Publisher entry"
+            echo "::notice::(org 'paged-media', repo 'paged', workflow 'core-publish-wasm.yml', no environment)."
+          else
+            echo "::notice::All five packages authenticate via OIDC — the NPM_TOKEN can be retired."
+          fi
+
+      # The version is the tag, so a run on anything else must not reach the
+      # publish. `workflow_dispatch` accepts any ref: dispatched from main
+      # this used to resolve `version=main`, build for eleven minutes, and
+      # offer npm a package versioned "main". Dispatch against a TAG ref
+      # (`gh workflow run core-publish-wasm.yml --ref v0.61.0`) still works.
+      - name: Resolve version from tag
+        id: ver
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_REF_TYPE}" != "tag" ]; then
+            echo "::error::ref ${GITHUB_REF_NAME} is a ${GITHUB_REF_TYPE}, not a tag — nothing to version a release from."
+            exit 1
+          fi
+          if ! printf '%s' "${GITHUB_REF_NAME}" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::tag ${GITHUB_REF_NAME} is not vMAJOR.MINOR.PATCH[-prerelease]."
+            exit 1
+          fi
+          echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      # W0.9 dist-tag rider (`docs/reference/protocol-governance.md`, Release coupling): prerelease tags
+      # (`v0.N.0-rc.x` — anything with a `-suffix`) publish under the
+      # `next` dist-tag, never `latest`. A clean `0.N.P` publishes under
+      # npm's default (`latest`). This sets a `dist-tag` output the
+      # publish step appends as `--tag` only for prereleases.
+      - name: Derive npm dist-tag from version
+        id: disttag
+        run: |
+          set -euo pipefail
+          V="${{ steps.ver.outputs.version }}"
+          if [[ "$V" == *-* ]]; then
+            echo "tag=next" >> "$GITHUB_OUTPUT"
+            echo "prerelease version '$V' → npm dist-tag 'next' (not latest)"
+          else
+            echo "tag=latest" >> "$GITHUB_OUTPUT"
+            echo "release version '$V' → npm dist-tag 'latest' (default)"
+          fi
+
+      # Pin the toolchain from rust-toolchain.toml (audit B21) — the
+      # published wasm must be built with the same compiler the rest of
+      # CI uses, not a drifting `@stable`.
+      - name: resolve pinned toolchain
+        id: pin
+        run: echo "channel=$(bash scripts/rust-channel.sh)" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.pin.outputs.channel }}
+          targets: wasm32-unknown-unknown
+
+      - name: Install wasm-bindgen-cli (lockfile pin) + binaryen (pinned)
+        run: |
+          set -euo pipefail
+          WB=$(awk '/^name = "wasm-bindgen"$/{getline; gsub(/version = "|"/,""); print; exit}' Cargo.lock)
+          echo "wasm-bindgen pin: $WB"
+          cargo install wasm-bindgen-cli --version "$WB" --locked
+          # Do NOT use apt's binaryen: ubuntu-latest ships v116, which
+          # miscompiles wasm-bindgen's reference-types tables ("Table.grow
+          # failed" at runtime). Same pin as docs' pages.yml.
+          BINARYEN=126
+          curl -fsSL -o /tmp/binaryen.tgz \
+            "https://github.com/WebAssembly/binaryen/releases/download/version_${BINARYEN}/binaryen-version_${BINARYEN}-x86_64-linux.tar.gz"
+          tar -xzf /tmp/binaryen.tgz -C /tmp
+          echo "/tmp/binaryen-version_${BINARYEN}/bin" >> "$GITHUB_PATH"
+          "/tmp/binaryen-version_${BINARYEN}/bin/wasm-opt" --version
+
+      # The three wasm builds use the `wasm-release` profile (Cargo.toml:
+      # release + fat LTO + one codegen unit), so they land in
+      # target/wasm32-unknown-unknown/wasm-release/, not .../release/.
+      - name: Build @paged-media/canvas-wasm
+        run: |
+          set -euo pipefail
+          cargo build --profile wasm-release --target wasm32-unknown-unknown -p paged-canvas-wasm --features gpu
+          OUT=dist/canvas-wasm
+          mkdir -p "$OUT"
+          wasm-bindgen target/wasm32-unknown-unknown/wasm-release/paged_canvas_wasm.wasm \
+            --target web --out-dir "$OUT"
+          wasm-opt -Oz "$OUT/paged_canvas_wasm_bg.wasm" -o "$OUT/paged_canvas_wasm_bg.wasm.opt" \
+            && mv "$OUT/paged_canvas_wasm_bg.wasm.opt" "$OUT/paged_canvas_wasm_bg.wasm"
+          node -e "require('fs').writeFileSync('$OUT/package.json', JSON.stringify({
+            name: '@paged-media/canvas-wasm',
+            version: '${{ steps.ver.outputs.version }}',
+            type: 'module',
+            main: 'paged_canvas_wasm.js',
+            types: 'paged_canvas_wasm.d.ts',
+            files: ['paged_canvas_wasm.js','paged_canvas_wasm_bg.wasm','paged_canvas_wasm.d.ts'],
+            license: 'MPL-2.0 OR LicenseRef-PMEL'
+          }, null, 2))"
+
+      - name: Build @paged-media/introspect-wasm
+        run: |
+          set -euo pipefail
+          cargo build --profile wasm-release --target wasm32-unknown-unknown -p paged-introspect-wasm
+          OUT=dist/introspect-wasm
+          mkdir -p "$OUT"
+          wasm-bindgen target/wasm32-unknown-unknown/wasm-release/paged_introspect_wasm.wasm \
+            --target web --out-dir "$OUT"
+          wasm-opt -Oz "$OUT/paged_introspect_wasm_bg.wasm" -o "$OUT/paged_introspect_wasm_bg.wasm.opt" \
+            && mv "$OUT/paged_introspect_wasm_bg.wasm.opt" "$OUT/paged_introspect_wasm_bg.wasm"
+          # The static capability catalog (ADR 019) ships alongside the wasm so
+          # build-time consumers (plugin SDK sync, state ingest) read it without
+          # booting wasm; describeCatalog() returns the same data at runtime.
+          cp crates/paged-introspect/catalog.json "$OUT/catalog.json"
+          node -e "require('fs').writeFileSync('$OUT/package.json', JSON.stringify({
+            name: '@paged-media/introspect-wasm',
+            version: '${{ steps.ver.outputs.version }}',
+            type: 'module',
+            main: 'paged_introspect_wasm.js',
+            types: 'paged_introspect_wasm.d.ts',
+            files: ['paged_introspect_wasm.js','paged_introspect_wasm_bg.wasm','paged_introspect_wasm.d.ts','catalog.json'],
+            license: 'MPL-2.0 OR LicenseRef-PMEL'
+          }, null, 2))"
+
+      - name: Build @paged-media/repo-wasm
+        run: |
+          set -euo pipefail
+          # The document repository (ADR 180): no engine, no wire, so it rides
+          # the engine's version for traceability but not its protocol.
+          cargo build --profile wasm-release --target wasm32-unknown-unknown -p paged-repo-wasm
+          OUT=dist/repo-wasm
+          mkdir -p "$OUT"
+          wasm-bindgen target/wasm32-unknown-unknown/wasm-release/paged_repo_wasm.wasm \
+            --target web --out-dir "$OUT"
+          wasm-opt -Oz "$OUT/paged_repo_wasm_bg.wasm" -o "$OUT/paged_repo_wasm_bg.wasm.opt" \
+            && mv "$OUT/paged_repo_wasm_bg.wasm.opt" "$OUT/paged_repo_wasm_bg.wasm"
+          node -e "require('fs').writeFileSync('$OUT/package.json', JSON.stringify({
+            name: '@paged-media/repo-wasm',
+            version: '${{ steps.ver.outputs.version }}',
+            type: 'module',
+            main: 'paged_repo_wasm.js',
+            types: 'paged_repo_wasm.d.ts',
+            files: ['paged_repo_wasm.js','paged_repo_wasm_bg.wasm','paged_repo_wasm.d.ts'],
+            license: 'MPL-2.0 OR LicenseRef-PMEL'
+          }, null, 2))"
+
+      - name: Subset audit — paged-sdk must not link editor crates
+        run: |
+          set -euo pipefail
+          # "Sibling, not a shrunk app": the viewer/SDK wasm is
+          # renderer-core only. Any of these in its dependency tree is
+          # a boundary breach — fail loudly.
+          TREE=$(cargo tree -p paged-sdk --target wasm32-unknown-unknown --features gpu -e normal)
+          if echo "$TREE" | grep -E "paged-(mutate|canvas|script)"; then
+            echo "::error::paged-sdk wasm links an editor crate"; exit 1
+          fi
+          echo "subset audit OK — no paged-mutate/-canvas/-script in the tree"
+
+      - name: Build @paged-media/sdk (paged-sdk WebGPU ViewerSession)
+        run: |
+          set -euo pipefail
+          cargo build --profile wasm-release --target wasm32-unknown-unknown -p paged-sdk --features gpu
+          OUT=dist/sdk
+          mkdir -p "$OUT"
+          wasm-bindgen target/wasm32-unknown-unknown/wasm-release/paged_sdk.wasm \
+            --target web --out-dir "$OUT"
+          wasm-opt -Oz "$OUT/paged_sdk_bg.wasm" -o "$OUT/paged_sdk_bg.wasm.opt" \
+            && mv "$OUT/paged_sdk_bg.wasm.opt" "$OUT/paged_sdk_bg.wasm"
+          # Size ratchet (§4.2): print opt + brotli sizes next to the
+          # recorded baseline (2026-06-06: opt 7.20 MB, brotli 2.21 MB).
+          brotli -k -q 11 "$OUT/paged_sdk_bg.wasm"
+          ls -la "$OUT"/paged_sdk_bg.wasm*
+          node -e "require('fs').writeFileSync('$OUT/package.json', JSON.stringify({
+            name: '@paged-media/sdk',
+            version: '${{ steps.ver.outputs.version }}',
+            type: 'module',
+            main: 'paged_sdk.js',
+            types: 'paged_sdk.d.ts',
+            files: ['paged_sdk.js','paged_sdk_bg.wasm','paged_sdk.d.ts'],
+            license: 'MPL-2.0 OR LicenseRef-PMEL'
+          }, null, 2))"
+          rm -f "$OUT/paged_sdk_bg.wasm.br"
+
+      - name: Build @paged-media/idml-viewer (TS wrapper + bundled wasm)
+        run: |
+          set -euo pipefail
+          cd web/idml-viewer
+          npm install --no-fund --no-audit
+          npm test
+          npm run build
+          mkdir -p wasm
+          cp ../../dist/sdk/paged_sdk.js ../../dist/sdk/paged_sdk_bg.wasm ../../dist/sdk/paged_sdk.d.ts wasm/
+          npm pkg set version="${{ steps.ver.outputs.version }}"
+
+      # NODE_AUTH_TOKEN is what authorizes this today. npm still ATTEMPTS the
+      # OIDC exchange first and silently falls back here when it fails — so
+      # the day the Trusted Publisher entries land, publishes start going
+      # through OIDC on their own and this env becomes dead weight rather
+      # than a switch anyone has to throw.
+      - name: Publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Leading ./ is load-bearing: a bare `dist/canvas-wasm` is
+          # parsed by npm as a GitHub owner/repo shorthand, not a path
+          # (it tried git ls-remote github.com/dist/canvas-wasm.git).
+          #
+          # --tag from the dist-tag rider (W0.9): prereleases land on
+          # `next`, releases on `latest`. Passing `--tag latest`
+          # explicitly is a no-op vs npm's default, so the command is
+          # uniform either way.
+          #
+          # These run in sequence with `set -e`, and each package
+          # authenticates against ITS OWN Trusted Publisher entry — so a
+          # package configured wrongly on npmjs.com stops the run with the
+          # earlier ones already published. That is a partial release, and
+          # the fix is to configure it and re-run the tag, not to re-tag.
+          # --loglevel verbose is not noise-for-its-own-sake: npm's OIDC
+          # helper reports EVERY failure at verbose/silly and then silently
+          # falls back to token auth. At the default level a broken trusted
+          # publisher is indistinguishable from a missing package.
+          TAG="${{ steps.disttag.outputs.tag }}"
+          echo "publishing under npm dist-tag: $TAG"
+          npm publish --loglevel verbose --access public --tag "$TAG" ./dist/canvas-wasm
+          npm publish --loglevel verbose --access public --tag "$TAG" ./dist/introspect-wasm
+          npm publish --loglevel verbose --access public --tag "$TAG" ./dist/sdk
+          npm publish --loglevel verbose --access public --tag "$TAG" ./dist/repo-wasm
+          npm publish --loglevel verbose --access public --tag "$TAG" ./web/idml-viewer
