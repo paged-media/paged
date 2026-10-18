@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# The repository's pre-commit hook: the one place commit-time checks run.
+# Enable it once per clone (it then applies to every worktree):
+#
+#   git config core.hooksPath tooling/git/hooks
+#
+# Moon does not manage hooks here (.moon/workspace.yml `vcs.sync: false`).
+# `git commit --no-verify` skips the hook.
+#
+# Each step works on the staged files only and stages its result again. A
+# staged file that also has unstaged changes stops the commit instead (stage
+# the rest, or `git stash --keep-index`), so nothing unstaged is committed.
+set -euo pipefail
+root=$(git rev-parse --show-toplevel)
+
+# Lint fixes go before the formatter, so that the formatter has the last
+# word on the layout.
+
+# Format the staged JS/TS, JSON, CSS, HTML, Markdown and YAML files
+# (bunfig.toml [fmt], /.prettierignore).
+"$root/tooling/js/fmt.sh" --staged
