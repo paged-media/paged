@@ -132,7 +132,7 @@ with the inter-plugin rule that defines the suite.
 
 ### 2.1 Isolation contract (same superset as plugin-sheet)
 
-*Status note (2026-10-02): this section predates the implementation; see [ADR 315](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/315-isolation-contract.md) in plugin-sdk (the isolation contract). In this repository the import rule is checked by `scripts/check-contract-imports.mjs` and `deny.toml`; the glue is the TypeScript package `packages/data-bundle`; the one worker is the DuckDB worker the bundle spawns ([ADR 015](adr/015-duckdb-wasm-vendored.md)); and the Boa sandbox exists only in the native `data-script` crate ([ADR 555](adr/555-batch-reuses-the-engine.md)).*
+*Status note (2026-10-02): this section predates the implementation; see [ADR 315](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/315-isolation-contract.md) in plugin-sdk (the isolation contract). In this repository the import rule is checked by a lint rule (`/bunfig.toml`, PM-0003) and `deny.toml`; the glue is the TypeScript package `packages/data-bundle`; the one worker is the DuckDB worker the bundle spawns ([ADR 015](adr/015-duckdb-wasm-vendored.md)); and the Boa sandbox exists only in the native `data-script` crate ([ADR 555](adr/555-batch-reuses-the-engine.md)).*
 
 1. **Zero core contact** beyond the published SDK; CI builds against SDK
    canaries only.

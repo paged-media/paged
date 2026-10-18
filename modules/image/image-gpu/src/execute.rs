@@ -255,7 +255,7 @@ impl PendingReadback {
         rx.recv()
             .map_err(|_| GpuError::Readback("map callback dropped".into()))?
             .map_err(|e| GpuError::Readback(format!("map_async: {e:?}")))?;
-        Ok(self.collect())
+        self.collect()
     }
 
     /// Async lane: suspend until the map callback fires. On native the
@@ -281,25 +281,29 @@ impl PendingReadback {
         MapFuture(shared)
             .await
             .map_err(|e| GpuError::Readback(format!("map_async: {e:?}")))?;
-        Ok(self.collect())
+        self.collect()
     }
 
     /// Strip the alignment padding out of the mapped rows.
-    fn collect(&self) -> Vec<u8> {
+    fn collect(&self) -> Result<Vec<u8>, GpuError> {
         crate::counters::bump(|c| {
             c.readbacks += 1;
             c.bytes_read_back += self.padded_row as u64 * self.h as u64;
         });
         let mut out = Vec::with_capacity((self.row_bytes * self.h) as usize);
         {
-            let data = self.readback.slice(..).get_mapped_range();
+            let data = self
+                .readback
+                .slice(..)
+                .get_mapped_range()
+                .map_err(|e| GpuError::Readback(format!("mapped range: {e}")))?;
             for row in 0..self.h {
                 let start = (row * self.padded_row) as usize;
                 out.extend_from_slice(&data[start..start + self.row_bytes as usize]);
             }
         }
         self.readback.unmap();
-        out
+        Ok(out)
     }
 }
 

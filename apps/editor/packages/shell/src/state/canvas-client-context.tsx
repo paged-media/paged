@@ -28,7 +28,6 @@ import {
 // apps/canvas/src/channel/{client,protocol,camera} into a shared
 // @paged-media/canvas-bindings package and these paths normalize.
 //
-// eslint-disable-next-line import/no-relative-parent-imports
 import type { CanvasClient } from "@paged-media/client";
 
 const Context = createContext<CanvasClient | null>(null);

@@ -10,7 +10,6 @@
     "preview": "vite preview",
     "typecheck": "bun check -p tsconfig.json && bun check -p functions/tsconfig.json",
     "typecheck:tests": "bun check -p tsconfig.tests.json",
-    "lint": "eslint src vite.config.ts",
     "test:fidelity": "playwright test --config=playwright.config.ts",
     "test:journeys": "playwright test --project=journeys",
     "test:journeys:gpu": "playwright test --project=journeys-gpu",

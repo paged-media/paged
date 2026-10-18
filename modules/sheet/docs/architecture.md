@@ -72,8 +72,9 @@ only package that touches the host.
 The bundle imports the model by relative source path (`../../sheet-host-model/src`). Both
 are private workspace packages (PM-0008); the editor builds them from source.
 `@paged-media/plugin-api`, `@paged-media/plugin-sdk` and `react` are peer dependencies, and
-`scripts/check-contract-imports.mjs` fails on a package import in `packages/*/src` that is none of
-these and not one of this repo's own `@paged-media/sheet-*` packages ([ADR 315](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/315-isolation-contract.md)).
+the contract-import lint rule (`/bunfig.toml`, PM-0003) fails on a package import in `packages/*/src` that is none of
+these, not an internal shared package (`platform/shared/*`) and not one of this repo's own
+`@paged-media/sheet-*` packages ([ADR 315](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/315-isolation-contract.md)).
 
 ## The wasm boundary
 

@@ -41,14 +41,11 @@ import React, {
   type ReactNode,
 } from "react";
 
-// eslint-disable-next-line import/no-relative-parent-imports
 import type { CanvasClient } from "@paged-media/client";
-// eslint-disable-next-line import/no-relative-parent-imports
 import { supportsSharedArrayBuffer } from "@paged-media/client";
 // ADR 025 — the journal ring. Lives in `client` (React-free) precisely so
 // both this package and the canvas app reach the SAME buffer.
 import { journal, errorIdent, identOf } from "@paged-media/client";
-// eslint-disable-next-line import/no-relative-parent-imports
 import type { WorkerToMain } from "@paged-media/client";
 
 import {

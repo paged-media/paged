@@ -32,10 +32,12 @@ manifests and imports: `canvas → tools → shell → catalog → client →
   `apps/canvas` does. `packages/tools` imports path geometry from `@paged-media/draw`.
 - `client` is not the only importer of the engine package: the worker loads the wasm.
 
-Four import boundaries are ESLint errors with their own self-test: worker code may import
+Four import boundaries are lint errors with their own self-test: worker code may import
 neither React nor the shell; `packages/client` may not import React; nothing outside the
 shell deep-imports its internals; the gesture-spine deep paths are reserved for `tools` and
-`client` ([ADR 206](adr/206-package-layering-lint-zones.md)). So code that both the worker
+`client` ([ADR 206](adr/206-package-layering-lint-zones.md)). They are overrides in the
+repository's one lint config (`/bunfig.toml`, run by `bun lint`) and cases in
+`/tooling/js/lint-selftest.mjs` (PM-0003). So code that both the worker
 and the React side need, such as the journal, lives in `client`.
 
 ## The engine boundary

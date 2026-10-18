@@ -22,12 +22,6 @@ dependsOn:
     scope: 'development'
 
 tasks:
-  js-lint:
-    description: 'The contract-import guard (scripts/check-contract-imports.mjs).'
-    command: 'bun run lint:contract'
-    inputs:
-      - '@group(js-sources)'
-
   js-test:
     # slide-bundle's bun test boots the engine wasm; build it first.
     deps: ['~:wasm']

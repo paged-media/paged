@@ -70,6 +70,8 @@ impl GpuContext {
                 // `=1` only: `WGPU_FALLBACK=0` used to force the
                 // fallback too, because any value counted as set.
                 force_fallback_adapter: std::env::var("WGPU_FALLBACK").is_ok_and(|v| v == "1"),
+                // The adapter's own limits, as before wgpu 30 added bucketing.
+                apply_limit_buckets: false,
             })
             .await
             .map_err(|_| GpuError::NoAdapter(format!("{backends:?}")))?;

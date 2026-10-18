@@ -38,8 +38,11 @@ bun run --filter './apps/*' --filter './packages/*' build
 bun run typecheck
 ```
 
-Do **not** run a repo-wide `prettier`/format pass — it drifts unrelated
-files. Format only the files you touched.
+`bun fmt` formats the JavaScript, TypeScript, JSON, CSS, HTML, Markdown and
+YAML of the whole repository, and CI checks it: run `tooling/js/fmt.sh` from
+anywhere (see the root `CONTRIBUTING.md`). Until the one-time mass format is
+on main, run it on the files you change only (`tooling/js/fmt.sh <files>`),
+which is what the pre-commit hook does.
 
 ## Fidelity gate
 

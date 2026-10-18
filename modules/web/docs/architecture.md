@@ -44,7 +44,8 @@ Dependency direction (`web-model` and `web-render` import nothing from this repo
   types: the scene-layer shape is written by hand in `packages/web-render/src/wire.rs` and
   again in `packages/web-model/src/render.ts`.
 - Towards the host, `@paged-media/plugin-api`, `@paged-media/plugin-sdk` and `react` are
-  peer dependencies. `scripts/check-contract-imports.mjs` fails on any other package import.
+  peer dependencies. The contract-import lint rule (`/bunfig.toml`, PM-0003) fails on any other
+  package import.
 
 The layout engine is the Blitz stack, pinned to `=0.3.0-alpha.4` in
 `packages/web-render/Cargo.toml` (the lockfile resolves Stylo 0.17.0, Taffy
