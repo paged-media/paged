@@ -1,0 +1,18 @@
+{
+  "name": "paged-media-plugin-draw",
+  "private": true,
+  "version": "0.0.0",
+  "license": "AGPL-3.0-only OR LicenseRef-PMEL",
+  "type": "module",
+  "scripts": {
+    "typecheck": "pnpm -r run typecheck",
+    "build": "pnpm -r run typecheck",
+    "lint:contract": "node scripts/check-contract-imports.mjs",
+    "test": "node scripts/check-contract-imports.mjs && pnpm -r run test",
+    "bench": "pnpm -r --if-present run bench"
+  },
+  "devDependencies": {
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
+  }
+}

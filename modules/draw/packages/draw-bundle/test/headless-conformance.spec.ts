@@ -1,0 +1,591 @@
+/*
+ * This file is part of paged (https://paged.media).
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// Consumer proof for the B-13 headless conformance harness: activate
+// the REAL paged.draw bundle against a REAL engine (the published
+// @paged-media/canvas-wasm booted in Node by @paged-media/plugin-sdk's
+// createHeadlessHost), assert its contribution log, run one real
+// mutation through the host (engine round-trip), and prove dispose
+// leaves the document unchanged.
+//
+// This is the conformance-fixture replay FOUNDATION the BREAKAGE_LOG
+// B-13 entry calls for. Unlike `activate.spec.ts` (wiring only, over a
+// fake editor), this drives the bundle's document door through the true
+// parse→apply→inverse engine path — no UI, no editor, no browser.
+//
+// CONTRIBUTION COUNT (honesty note): the bundle registers EIGHTEEN
+// tools (three anchor-editing + the pro set: Curvature, Pencil,
+// Gradient Annotator, Measure, Shape Builder, Corner Radius + the v0
+// brushes: Paintbrush, Blob Brush, Eraser + the wave-2 trio:
+// Eyedropper, Width, Lasso Select + the Live Paint pair: Bucket, Face
+// Selection + Type on a Path) AND TWO declarative SCHEMA panels
+// (stroke — W3.1, B-01 RESOLVED; fill — Phase 2d, B-03 consumer; each
+// registered through `host.contribute.schemaPanel`, recorded by the
+// harness as a `schemaPanel` contribution carrying the verbatim
+// schema). The Pen itself is a built-in core-document tool (editor
+// W2.5 division); the layers prototype stays design JSON, and its
+// subject left this bundle with ADR 023 phase D — the Layers PANEL is
+// retired and paged.draw now resolves the HOST panel's values through
+// a binding provider instead. So the contribution log holds eighteen tools + two
+// schema panels + thirty-four commands (4 dash + 2 group + 2
+// gradient-fill + 3 path-ops + 2 join/average + 4 pathfinder + the Phase 9
+// Tier B 5 live-corner + 3 appearance + 3 select-same + the wave-2
+// 4 insert-shape + blend + select-parent-group) + the edit context.
+
+import { describe, expect, it, beforeAll, afterAll } from "vitest";
+
+import { editValue, type HeadlessHost } from "@paged-media/plugin-sdk";
+
+import { drawBundle, installStrokePanelBindings } from "../src";
+import { minimalIdml } from "./fixtures/minimal-idml";
+// The shared engine boot (it probes the editor-checkout layouts for the
+// wasm — see conformance/host.ts).
+import { openHost } from "./conformance/host";
+
+// The fixture's single rectangle leaf (Self="urect").
+const RECT = { kind: "rectangle", id: "urect" } as const;
+
+describe("paged.draw — headless conformance (B-13 replay)", () => {
+  let harness: HeadlessHost;
+
+  beforeAll(async () => {
+    harness = await openHost();
+    await harness.load(minimalIdml());
+  });
+
+  afterAll(() => {
+    harness.dispose();
+  });
+
+  it("boots a real engine (protocol > 0)", () => {
+    expect(harness.protocolVersion).toBeGreaterThan(0);
+    expect(harness.engineVersion).toMatch(/^\d+\.\d+\.\d+/);
+  });
+
+  it("activating the bundle registers its tools + the schema panel in the log", () => {
+    const handle = harness.loadBundle(drawBundle);
+    try {
+      // Every tool is captured, namespaced + in registration order —
+      // the three anchor editors, the pro set (incl. the §13.2 corner
+      // widget), the v0 brushes, the wave-2 trio, the Live Paint pair,
+      // then Type on a Path.
+      expect(harness.toolsContributed().map((t) => t.id)).toEqual([
+        "media.paged.draw.tool.addAnchor",
+        "media.paged.draw.tool.deleteAnchor",
+        "media.paged.draw.tool.convertAnchor",
+        "media.paged.draw.tool.curvature",
+        "media.paged.draw.tool.pencil",
+        "media.paged.draw.tool.gradientAnnotator",
+        "media.paged.draw.tool.measure",
+        "media.paged.draw.tool.shapeBuilder",
+        "media.paged.draw.tool.cornerRadius",
+        "media.paged.draw.tool.paintbrush",
+        "media.paged.draw.tool.blobBrush",
+        "media.paged.draw.tool.eraserBrush",
+        "media.paged.draw.tool.eyedropper",
+        "media.paged.draw.tool.width",
+        "media.paged.draw.tool.lassoSelect",
+        "media.paged.draw.tool.livePaintBucket",
+        "media.paged.draw.tool.livePaintSelect",
+        "media.paged.draw.tool.typeOnPath",
+        "media.paged.draw.tool.repeat",
+        // The Knife — joins the host's Scissors flyout.
+        "media.paged.draw.tool.knife",
+        // Scissors at any point — the same flyout.
+        "media.paged.draw.tool.scissorsAnyPoint",
+      ]);
+      // The contribution log holds the twenty-one tools, then EACH schema
+      // panel as TWO entries: the synthesized React `panel` the panels
+      // registry sees (the host turns a schema into a registry panel via
+      // the injected renderer / seam) AND the `schemaPanel` recorded
+      // VERBATIM through the harness's registration hook. Both are
+      // honest — the registry really got a panel; the log keeps the
+      // schema so conformance can assert it. Stroke first, then fill
+      // (Phase 2d), then the NINE React panels (appearance, graphic
+      // styles, symbols, live paint, pattern, repeat, blend,
+      // objects-on-path, path options — Layers is retired). Then the
+      // commands in registration order, then the W3.2 edit
+      // context.
+      // (Pen is a core built-in.)
+      expect(harness.contributions.map((c) => c.kind)).toEqual([
+        // Three anchor editors + the pro set (Curvature, Pencil,
+        // Gradient Annotator, Measure, Shape Builder, Corner Radius) +
+        // the v0 brushes (Paintbrush, Blob Brush, Eraser) + the
+        // wave-2 trio (Eyedropper, Width, Lasso Select) + the Live
+        // Paint pair (Bucket, Face Selection) + Type on a Path
+        // (C-29) + the Repeat steering widget (§12.4, the one tool
+        // with no shortcut — see tools.ts) + the Knife and Scissors
+        // at any point (keyless too) — twenty-one tools.
+        "tool",
+        "tool",
+        "tool",
+        "tool",
+        "tool",
+        "tool",
+        "tool",
+        "tool",
+        "tool",
+        "tool",
+        "tool",
+        "tool",
+        "tool",
+        "tool",
+        "tool",
+        "tool",
+        "tool",
+        "tool",
+        "tool",
+        "tool",
+        "tool",
+        // (The stroke and fill schema panels were here; their rows moved
+        // to the host's own panels.)
+        // NO Layers panel — ADR 023 phase D retired it behind the
+        // binding-provider seam. Its absence from this log IS the
+        // assertion; the replacement's behaviour is pinned in
+        // `conformance/layers-provider.spec.ts`.
+        // The APPEARANCE panel (the metadata stack + its one-fill/
+        // one-stroke honesty note) — likewise expert-leaf React.
+        "panel",
+        // The GRAPHIC STYLES panel (the document-resident style library
+        // + the selection's link into it) — likewise expert-leaf React.
+        "panel",
+        // The SYMBOLS panel (the document-resident artwork library + the
+        // instances that follow it) — likewise expert-leaf React.
+        "panel",
+        // The LIVE PAINT panel (the document-resident face RECIPES + the
+        // artwork each painted face materialised as) — likewise
+        // expert-leaf React.
+        "panel",
+        // The PATTERN OPTIONS panel (the tile-field parameters + the
+        // not-a-swatch boundary, RFI C-31) — likewise expert-leaf React.
+        "panel",
+        // The REPEAT OPTIONS panel (§12.4's radial/grid/mirror
+        // parameters + the two honesty notes: what "live" means here,
+        // and what clipping costs) — likewise expert-leaf React.
+        "panel",
+        // The BLEND OPTIONS panel (§16.2's three spacing modes, the
+        // spine verbs, easing + independent colour acceleration — and
+        // the catalog's "live preview" as exactly what it is here: a
+        // preview of the PLAN, not of the artwork).
+        "panel",
+        // The OBJECTS ON PATH panel (§16.3's distribution form + the
+        // note that this row MOVES your objects and creates none).
+        "panel",
+        // The PATH OPTIONS panel (the parameters behind the menu's "…":
+        // Offset / Simplify / Outline stroke / the four Insert shapes).
+        "panel",
+        // B-12 — the stroke dash-preset commands (Solid / Dashed /
+        // Dotted / Dash-dot).
+        "command",
+        "command",
+        "command",
+        "command",
+        // NO Group / Ungroup here, and no Select parent group further
+        // down: those three are the HOST's commands now
+        // (`paged.object.*`). Their absence from this log IS the
+        // assertion — basic object operations are what plugins build
+        // on, and shipping them from a plugin meant a user without
+        // paged.draw loaded could not group. The B-04 wire shapes stay
+        // in `commands/group.ts` for Pattern / Symbols / Image Trace.
+        // Phase 2d — Fill: Linear / Radial gradient (B-03).
+        "command",
+        "command",
+        // Phase 4c — Outline stroke / Offset path / Simplify (v30
+        // kernel ops).
+        "command",
+        "command",
+        "command",
+        // PATH OPTIONS — the ten "…" commands (Offset / Simplify /
+        // Outline stroke / Stroke dashes / Reflect / Arc / Spiral / Rect
+        // grid / Polar grid / Select same stroke weight within): each
+        // raises the panel at its section and mutates nothing.
+        "command",
+        "command",
+        "command",
+        "command",
+        "command",
+        "command",
+        "command",
+        "command",
+        "command",
+        "command",
+        // Phase 4c + v56 — Join (the real joinPaths/closePath weld,
+        // coincide fallback on older engines) / Close path / Average
+        // endpoints.
+        "command",
+        "command",
+        "command",
+        // Reverse path direction.
+        "command",
+        // Type ▸ Create outlines (protocol 66, RFI C-69).
+        "command",
+        // Object ▸ Transform — Reflect horizontally / vertically and
+        // Transform again.
+        "command",
+        "command",
+        "command",
+        // Phase 4c — Pathfinder Unite / Subtract / Intersect / Exclude.
+        "command",
+        "command",
+        "command",
+        "command",
+        // B-22 (engine v57) — the REGION Pathfinder row: Divide / Trim
+        // / Merge / Crop / Outline / Minus back.
+        "command",
+        "command",
+        "command",
+        "command",
+        "command",
+        "command",
+        // Illustrator Phase 2 — Make / Release compound path, then
+        // PATTERN EDITING v1 (Bake / Re-plan / Select tiles / Delete
+        // tiles / Release — a re-editable tile FIELD; the catalog row's
+        // swatch half is not buildable, RFI C-31).
+        "command",
+        "command",
+        "command",
+        "command",
+        "command",
+        "command",
+        "command",
+        // Illustrator Phase 3 (§12.4) — REPEATS (Radial / Grid / Mirror
+        // / Update / Select instances / Expand / Release). The catalog's
+        // SIBLING of pattern, not the same row.
+        "command",
+        "command",
+        "command",
+        "command",
+        "command",
+        "command",
+        "command",
+        // Phase 9 (Tier B) — Live Corners (Rounded / Inverse / Bevel /
+        // Fancy / None).
+        "command",
+        "command",
+        "command",
+        "command",
+        "command",
+        // Phase 9 (Tier B) — Appearance (Add fill / Add stroke / Clear)
+        // + the panel's edit surface (Remove layer / Reorder layer).
+        "command",
+        "command",
+        "command",
+        "command",
+        "command",
+        // B-24 — Bake stack to a group / Release baked stack.
+        "command",
+        "command",
+        // Illustrator Phase 2 — Graphic styles (Save from selection /
+        // Apply / Redefine / Break link / Rename / Delete).
+        "command",
+        "command",
+        "command",
+        "command",
+        "command",
+        "command",
+        // Illustrator Phase 2 (§16.1) — Symbols v0 (Define / Place /
+        // Redefine / Break link / Reset transform / Rename / Delete).
+        "command",
+        "command",
+        "command",
+        "command",
+        "command",
+        "command",
+        "command",
+        // Illustrator Phase 2 (the last unbuilt row) — Live Paint v0
+        // (Make group / Fill face / Regenerate / Select faces / Delete
+        // face / Release).
+        "command",
+        "command",
+        "command",
+        "command",
+        "command",
+        "command",
+        // Illustrator Phase 2 (the Transparency row) — Opacity masks
+        // (Make / Release) over the C-28 v58 pair. EXPORT-ONLY.
+        "command",
+        "command",
+        // C-29 (engine v58) — Type on a path (Attach / Detach).
+        "command",
+        "command",
+        // Phase 9 (Tier B) — Select-same (Fill / Stroke / Stroke weight).
+        "command",
+        "command",
+        "command",
+        // Wave 2 — Insert shapes (Arc / Spiral / Rect grid / Polar
+        // grid).
+        "command",
+        "command",
+        "command",
+        "command",
+        // Illustrator Phase 3 (§16.2) — Blends v1 (Make / Update /
+        // Replace spine / Reverse spine / Reverse front-to-back / Select
+        // keys / Expand / Release). Wave 2's v0 was the first of these
+        // eight and paid two undo steps; C-15's bindCreated made every
+        // verb one.
+        "command",
+        "command",
+        "command",
+        "command",
+        "command",
+        "command",
+        "command",
+        "command",
+        // Illustrator Phase 3 (§16.3) — Objects on a path (Make /
+        // Update / Select / Expand / Release). The one arranging row
+        // here that creates nothing: one frameTransform per object.
+        "command",
+        "command",
+        "command",
+        "command",
+        "command",
+        // Illustrator Phase 2 (last row) — Image Trace v0 (the wasm
+        // lane: crates/trace-js over visioncortex).
+        "command",
+        // W3.2 — the vectorGraphic edit context (B-02), recorded
+        // through the harness's editContext registration hook.
+        "editContext",
+        // Phase 8 — the SVG importer + exporter (K-2), recorded through
+        // the harness's recording importer/exporter registries.
+        "importer",
+        "exporter",
+        // ADR 323 — the Draw properties schema panel (property rows over
+        // host.objects), registered after the object model.
+        "panel",
+        "schemaPanel",
+      ]);
+      // The schema panels are recorded VERBATIM (the schema, not React):
+      // ids, sections, and the binding-driven gates.
+      const panels = harness.schemaPanelsContributed();
+      expect(panels.map((p) => p.id)).toEqual([
+        "media.paged.draw.panel.properties",
+      ]);
+      // The captured tool contributions are the real objects too.
+      const add = harness.toolsContributed()[0];
+      expect(add.shortcut).toBe("=");
+      expect(add.cursor).toEqual({ kind: "css", token: "crosshair" });
+      // W3.2 — the edit context is recorded with its matcher + sets, and
+      // the host stamped the own-namespace metadata key.
+      const ecs = harness.editContextsContributed();
+      expect(ecs.map((c) => c.type)).toEqual(["vectorGraphic"]);
+      expect(ecs[0].metadataKey).toBe("x-paged:media.paged.draw");
+      expect(
+        ecs[0].matches?.({
+          id: { kind: "polygon", id: "u1" } as never,
+          kind: "polygon",
+          groupChain: [],
+          metadata: null,
+        }),
+      ).toBe(true);
+      // Phase 8 — the SVG importer/exporter are recorded with their
+      // claimed extensions, and the registered ids match the manifest's
+      // contributes declaration.
+      const importers = harness.importersContributed();
+      expect(importers.map((i) => i.id)).toEqual([
+        "media.paged.draw.importer.svg",
+      ]);
+      expect(importers[0].extensions).toEqual([".svg"]);
+      expect(importers.map((i) => i.id)).toEqual(
+        drawBundle.manifest.contributes?.importers,
+      );
+      const exporters = harness.exportersContributed();
+      expect(exporters.map((e) => e.id)).toEqual([
+        "media.paged.draw.exporter.svg",
+      ]);
+      expect(exporters[0].extension).toBe(".svg");
+      expect(exporters.map((e) => e.id)).toEqual(
+        drawBundle.manifest.contributes?.exporters,
+      );
+    } finally {
+      handle.dispose();
+    }
+  });
+
+  it("the stroke bindings react to real selection (B-01 derived value)", async () => {
+    // The Vector stroke panel is no longer contributed; its exported
+    // binding driver still works when a host installs it.
+    const handle = harness.loadBundle(drawBundle);
+    const sub = installStrokePanelBindings(harness.host);
+    try {
+      // On activation the binding driver primes from the (empty)
+      // selection: nothing selected → hasSelection false.
+      // Selecting the rectangle flips hasSelection true; the rectangle
+      // is bounds-based (no anchor table — B-13 finding b), so
+      // dashControlsVisible stays false (it gates on path anchors).
+      await harness.host.selection.set([RECT as never]);
+      // Give the async recompute a tick to land.
+      await new Promise((r) => setTimeout(r, 0));
+      expect(harness.host.bindings.get("media.paged.draw.hasSelection")).toBe(
+        true,
+      );
+      expect(
+        harness.host.bindings.get("media.paged.draw.dashControlsVisible"),
+      ).toBe(false);
+
+      // Clearing the selection flips hasSelection back to false.
+      await harness.host.selection.set([]);
+      await new Promise((r) => setTimeout(r, 0));
+      expect(harness.host.bindings.get("media.paged.draw.hasSelection")).toBe(
+        false,
+      );
+    } finally {
+      sub.dispose();
+      handle.dispose();
+    }
+  });
+
+  it("runs a real mutation through the host (engine round-trip)", async () => {
+    const handle = harness.loadBundle(drawBundle);
+    try {
+      // Write this plugin's metadata onto the rectangle via the document
+      // door — a real setPluginMetadata mutation, applied + inverted by
+      // the engine, read back through requestElementProperties.
+      const set = await harness.host.document.setMetadata(RECT as never, {
+        v: 1,
+        data: { tool: "addAnchor", note: "headless proof" },
+      });
+      expect(set.applied).toBe(true);
+      const got = await harness.host.document.getMetadata(RECT as never);
+      expect(got).toEqual({
+        v: 1,
+        data: { tool: "addAnchor", note: "headless proof" },
+      });
+
+      // Clear it again so the doc is pristine for the dispose check below.
+      const clear = await harness.host.document.setMetadata(RECT as never, null);
+      expect(clear.applied).toBe(true);
+      expect(await harness.host.document.getMetadata(RECT as never)).toBeNull();
+    } finally {
+      handle.dispose();
+    }
+  });
+
+  it("ADR 323 — the object model is live headless: set / get / batch / undo through host.objects", async () => {
+    const handle = harness.loadBundle(drawBundle);
+    try {
+      const objects = harness.host.objects;
+      const D = "media.paged.draw";
+      const appearance = `plugin:${D}/appearance/rectangle:urect`;
+      // The kinds are registered with the bundle — no edit context needed.
+      expect((await objects.kinds()).filter((k) => k.owner === D)).toHaveLength(10);
+      // A draw write (the metadata stamp + the bake) and a core write in
+      // ONE batch: one engine mutation, one undo step.
+      const before = await objects.get("rectangle:urect", "frameFillColor");
+      const out = await objects.batch([
+        {
+          op: "set",
+          address: appearance,
+          path: "fills",
+          value: [{ color: "Color/Paper", tint: 100, opacity: 100, blendMode: "Normal" }],
+        },
+        { op: "set", address: "rectangle:urect", path: "frameStrokeWeight", value: 5 },
+      ]);
+      expect(out).toMatchObject({ applied: true, undoSteps: 1 });
+      expect(await objects.get(appearance, "fills")).toEqual({
+        kind: "value",
+        value: [{ color: "Color/Paper", tint: 100, opacity: 100, blendMode: "Normal" }],
+      });
+      expect(await objects.get("rectangle:urect", "frameFillColor")).toEqual({
+        kind: "value",
+        value: "Color/Paper",
+      });
+      // A typed command through the same surface.
+      const selected = (await objects.invoke(`${D}.command.selectSameFill`, {
+        targets: ["rectangle:urect"],
+      })) as string[];
+      expect(selected).toEqual(["rectangle:urect"]);
+      // ONE undo takes both writes back.
+      await harness.host.document.undo();
+      expect(await objects.get(appearance, "fills")).toEqual({ kind: "value", value: [] });
+      expect(await objects.get("rectangle:urect", "frameFillColor")).toEqual(before);
+      await harness.host.selection.set([]);
+    } finally {
+      handle.dispose();
+    }
+    // Disposing the bundle removes its kinds from the shared registry.
+    expect((await harness.objects.kinds()).filter((k) => k.owner === "media.paged.draw")).toEqual([]);
+  });
+
+  it("ADR 323 §12.8 — the properties panel's list / struct rows edit through planValueEdit (one undo step each)", async () => {
+    const handle = harness.loadBundle(drawBundle);
+    try {
+      const objects = harness.host.objects;
+      const D = "media.paged.draw";
+      const path = `plugin:${D}/path/rectangle:urect`;
+      const appearance = `plugin:${D}/appearance/rectangle:urect`;
+      // The panel's "selection" rows resolve `<item> > path`: that item's path only.
+      expect(await objects.query(`rectangle:urect > plugin:${D}/path`)).toEqual([path]);
+      // points: a whole table (a plain rectangle answers none), then an item
+      // field edit (the panel's point items, anchor / left / right).
+      const corner = (x: number, y: number) => ({ anchor: [x, y], left: [x, y], right: [x, y] });
+      const square = [corner(0, 0), corner(20, 0), corner(20, 20), corner(0, 20)];
+      expect(await objects.set(path, "points", square)).toMatchObject({ applied: true, undoSteps: 1 });
+      const pts = (await objects.get(path, "points")) as { kind: "value"; value: Array<{ anchor: number[] }> };
+      expect(pts.value).toHaveLength(4);
+      const moved = [pts.value[0]!.anchor[0]! + 3, pts.value[0]!.anchor[1]! + 2];
+      expect(await editValue(objects, [path], "points", { edit: "itemSet", index: 0, field: "anchor", value: moved })).toMatchObject({
+        applied: true,
+        undoSteps: 1,
+      });
+      expect(await objects.get(path, "points[0].anchor")).toEqual({ kind: "value", value: moved });
+      expect(await objects.get(path, "points[1]")).toEqual({ kind: "value", value: pts.value[1] });
+      // An appearance stack: add (the item type's default), then a field edit, then remove.
+      expect(await editValue(objects, [appearance], "fills", { edit: "add", item: { color: "Color/Paper", tint: 100, opacity: 100, blendMode: "Normal" } })).toMatchObject({ applied: true, undoSteps: 1 });
+      expect(await editValue(objects, [appearance], "fills", { edit: "itemSet", index: 0, field: "opacity", value: 40 })).toMatchObject({ applied: true });
+      expect(await objects.get(appearance, "fills")).toEqual({
+        kind: "value",
+        value: [{ color: "Color/Paper", tint: 100, opacity: 40, blendMode: "Normal" }],
+      });
+      expect(await editValue(objects, [appearance], "fills", { edit: "remove", index: 0 })).toMatchObject({ applied: true });
+      expect(await objects.get(appearance, "fills")).toEqual({ kind: "value", value: [] });
+      // Undo walks the edits back one step at a time: the point is restored last.
+      for (let i = 0; i < 4; i++) await harness.host.document.undo();
+      expect(await objects.get(path, "points[0].anchor")).toEqual({ kind: "value", value: pts.value[0]!.anchor });
+    } finally {
+      handle.dispose();
+    }
+  });
+
+  it("dispose leaves the document unchanged (honesty smoke test)", async () => {
+    // Snapshot the scene-tree shape before activation.
+    const treeSize = async () => {
+      const roots = await harness.host.document.tree();
+      let n = 0;
+      const walk = (nodes: { id?: unknown; children?: unknown[] }[]) => {
+        for (const node of nodes) {
+          if (node.id) n++;
+          if (node.children) walk(node.children as never);
+        }
+      };
+      walk(roots as never);
+      return n;
+    };
+    const before = await treeSize();
+
+    const handle = harness.loadBundle(drawBundle);
+    expect(harness.toolsContributed()).toHaveLength(21);
+    handle.dispose();
+
+    // After dispose: the contribution log is empty (registrations torn
+    // down structurally) AND the document is byte-for-byte as found —
+    // the bundle made no uninvited engine writes.
+    expect(harness.contributions).toHaveLength(0);
+    expect(await treeSize()).toBe(before);
+    expect(await harness.host.document.getMetadata(RECT as never)).toBeNull();
+  });
+});

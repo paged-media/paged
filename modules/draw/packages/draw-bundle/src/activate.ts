@@ -1,0 +1,676 @@
+/*
+ * This file is part of paged (https://paged.media).
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// The paged.draw bundle entry — D-milestone status: D3 + W3.1.
+//
+// Registration happens HERE, through the public contribution surface:
+// the three anchor-editing tools (Add/Delete/Convert — the Pen itself
+// is a built-in core-document tool per the W2.5 division), each with
+// its activation command and text-suppressed shortcut via
+// `contributeTool`; AND the STROKE panel as a v1 declarative SCHEMA
+// (W3.1, closes BREAKAGE_LOG B-01) — `contributeSchemaPanel` registers
+// pure data (no React), and `installStrokePanelBindings` publishes the
+// reactive booleans the schema's visibility/enablement gates look up.
+// The host tracks every registration; removing the editor's
+// `loadBundle` call removes draw cleanly — the platform-honesty smoke
+// test.
+//
+// Phase 2d adds: the FILL schema panel (B-03 consumer — the
+// `panels/fill.panel.json` prototype made real, gradient section gated
+// by a published binding) and the gradient-fill preset commands
+// (gradient assignment is a multi-mutation flow above the binding
+// ceiling — the dash precedent). It ALSO added Group / Ungroup, and
+// wave 2 added Select: Parent group; all three have since been retired
+// in favour of the editor's own `paged.object.*` layer — the wire
+// shapes they used stay in commands/group.ts + commands/parentage.ts
+// for Pattern / Symbols / Image Trace / Appearance bake to compose.
+//
+// The layers prototype (`panels/layers.panel.json`) stays a design
+// prototype, and its subject has moved out of this bundle entirely:
+// ADR 023 phase D retired the Layers PANEL and replaced it with a
+// BINDING PROVIDER, so paged.draw now resolves what the HOST's one
+// Layers panel binds to instead of shipping a second one.
+//
+// Phase 4c adds the PRO TOOLSET: four tools (Curvature + Pencil — pure
+// machines over draw-geometry committing one insertPath; Gradient
+// Annotator — axis display + drag steering the B-03 angle/length lane;
+// Measure — read-only, with named honest subsets in handlers/measure.ts),
+// nine commands (Outline stroke / Offset path / Simplify — the v30
+// kernel ops; Join/Average endpoints — the pathPointSet subset, true
+// join being a named engine-op gap; Pathfinder ×4 — pathfinderBoolean),
+// and the stroke panel's Line ends section (the v43 GraphicLine
+// arrowhead properties, gated by a published kind binding).
+
+import type { BundleHandle, BundleHost } from "@paged-media/plugin-api";
+import { contributeMenu } from "./menu";
+import {
+  contributeEditContext,
+  contributeSchemaPanel,
+  contributeTool,
+} from "@paged-media/plugin-sdk";
+
+import manifest from "../manifest.json";
+
+import { drawTools } from "./tools";
+import {
+  contributeAppearanceCommands,
+  APPEARANCE_COMMAND_IDS,
+} from "./commands/appearance";
+import {
+  contributeAppearanceBakeCommands,
+  APPEARANCE_BAKE_COMMAND_IDS,
+} from "./commands/appearance-bake";
+import {
+  contributeGraphicStyleCommands,
+  GRAPHIC_STYLES_COMMAND_IDS,
+} from "./commands/graphic-styles";
+import {
+  contributeSymbolCommands,
+  SYMBOLS_COMMAND_IDS,
+} from "./commands/symbols";
+import {
+  contributeLivePaintCommands,
+  LIVE_PAINT_COMMAND_IDS,
+} from "./commands/live-paint";
+import {
+  contributeOpacityMaskCommands,
+  OPACITY_MASK_COMMAND_IDS,
+} from "./commands/opacity-mask";
+import {
+  contributeTextOnPathCommands,
+  TEXT_ON_PATH_COMMAND_IDS,
+} from "./commands/text-on-path";
+import {
+  contributeCompoundPathCommands,
+  COMPOUND_PATH_COMMAND_IDS,
+} from "./commands/compound-path";
+import { contributeDashCommands, DASH_COMMAND_IDS } from "./commands/dash";
+import {
+  contributePatternCommands,
+  PATTERN_COMMAND_IDS,
+} from "./commands/pattern";
+import {
+  contributeRepeatCommands,
+  REPEAT_COMMAND_IDS,
+} from "./commands/repeat";
+import {
+  contributeLiveCornerCommands,
+  LIVE_CORNER_COMMAND_IDS,
+} from "./commands/live-corners";
+import {
+  contributeSelectSameCommands,
+  SELECT_SAME_COMMAND_IDS,
+} from "./commands/select-same";
+import {
+  contributeInsertShapeCommands,
+  INSERT_SHAPE_COMMAND_IDS,
+} from "./commands/insert-shapes";
+import {
+  contributeBlendCommands,
+  BLEND_COMMAND_IDS,
+} from "./commands/blend";
+import {
+  contributeObjectsOnPathCommands,
+  OBJECTS_ON_PATH_COMMAND_IDS,
+} from "./commands/objects-on-path";
+import {
+  contributeImageTraceCommand,
+  IMAGE_TRACE_COMMAND_IDS,
+} from "./commands/image-trace";
+import {
+  contributeFillGradientCommands,
+  FILL_GRADIENT_COMMAND_IDS,
+} from "./commands/fill-gradient";
+import {
+  contributeJoinAverageCommands,
+  JOIN_AVERAGE_COMMAND_IDS,
+} from "./commands/join-average";
+import {
+  contributePathOpsCommands,
+  PATH_OPS_COMMAND_IDS,
+} from "./commands/path-ops";
+import {
+  contributePathOptionsCommands,
+  lastUsedPayload,
+  PATH_OPTIONS_COMMAND_IDS,
+  PATH_OPTIONS_PANEL_ID,
+} from "./commands/path-options";
+import {
+  contributeReversePathCommands,
+  REVERSE_PATH_COMMAND_IDS,
+} from "./commands/reverse-path";
+import { contributeCreateOutlinesCommands } from "./commands/create-outlines";
+import {
+  contributePathfinderCommands,
+  PATHFINDER_COMMAND_IDS,
+} from "./commands/pathfinder";
+import {
+  contributeTransformCommands,
+  TRANSFORM_COMMAND_IDS,
+} from "./commands/transform";
+import {
+  contributePathfinderRegionCommands,
+  PATHFINDER_REGION_COMMAND_IDS,
+} from "./commands/pathfinder-region";
+import { vectorGraphicEditContext } from "./edit-context";
+import { makeLayersBindingProvider } from "./binding-provider/layers-provider";
+import { registerBindingProvider } from "./binding-provider/adr023-seam";
+import {
+  makeAppearancePanel,
+  APPEARANCE_PANEL_ID,
+} from "./panels/appearance-panel";
+import {
+  makeGraphicStylesPanel,
+  GRAPHIC_STYLES_PANEL_ID,
+} from "./panels/graphic-styles-panel";
+import { makeSymbolsPanel, SYMBOLS_PANEL_ID } from "./panels/symbols-panel";
+import {
+  makeLivePaintPanel,
+  LIVE_PAINT_PANEL_ID,
+} from "./panels/live-paint-panel";
+import { makePatternPanel, PATTERN_PANEL_ID } from "./panels/pattern-panel";
+import { makeRepeatPanel, REPEAT_PANEL_ID } from "./panels/repeat-panel";
+import { makeBlendPanel, BLEND_PANEL_ID } from "./panels/blend-panel";
+import {
+  makeObjectsOnPathPanel,
+  OBJECTS_ON_PATH_PANEL_ID,
+} from "./panels/objects-on-path-panel";
+import { makePathOptionsPanel } from "./panels/path-options-panel";
+import { contributeSvgIo } from "./io/svg";
+import { contributeDrawObjectModel } from "./object-model";
+import {
+  DRAW_PROPERTIES_PANEL,
+  DRAW_PROPERTIES_PANEL_ID,
+  publishDrawPropertyLists,
+} from "./panels/properties-panel";
+
+export function activate(host: BundleHost): BundleHandle {
+  // B-17 — the anchor-edit tools are built from a host-bound factory;
+  // each gesture handler reaches the engine through the `host.*`
+  // facades only (no raw spine — the dogfooding proof, DESIGN.md §4.9).
+  const tools = drawTools(host);
+  for (const tool of tools) {
+    contributeTool(host, tool);
+  }
+  // The Vector stroke and Vector fill panels are no longer contributed:
+  // every row they carried is a core frame property, and the host's
+  // Stroke panel (weight, colour, cap, dashes, arrowheads), Object
+  // Options (corners) and Gradients panel (angle, length) now carry them.
+  // Two panels for one stroke read as two different things. The modules
+  // stay exported for compatibility.
+  // The LAYERS panel is GONE — ADR 023 phase D, the first retirement
+  // behind the binding-provider seam.
+  //
+  // It was `host.contribute.panel({id: "…panel.layers", …})`: a React
+  // list over `document.collection("layers")` carrying its own copy of
+  // the seven `layer*` ops. That was the correct LOCAL decision — the
+  // platform's only two doors both MINT A NEW PANEL — and the result was
+  // "Layers" existing three times across two repos.
+  //
+  // ADR 023 phase D — the replacement, and it is NOT another panel.
+  // While the `vectorGraphic` context is active, this bundle RESOLVES
+  // what the HOST's own Layers panel binds to
+  // (`binding-provider/layers-provider.ts`): one panel in the rail,
+  // retargeting on selection, instead of a second copy of the same
+  // seven ops in a second dock tab.
+  //
+  // Registration happens WITH the edit context further down (phase A
+  // enforces the ordering: a provider on an unregistered context type
+  // could never activate, so the door refuses it).
+  const layersProvider = makeLayersBindingProvider(host);
+  // The APPEARANCE panel — the view over the metadata stack the
+  // appearance commands already model (add/remove/reorder fills +
+  // strokes), with the one-fill/one-stroke engine limit (gap B-24)
+  // stated inline instead of hidden behind a convincing stack. React
+  // for the same reason Layers is (a reorderable list is above the v1
+  // schema panel's scalar ceiling).
+  // PANEL ICONS. Every draw panel has a glyph of its own, and none is a
+  // host panel's: two dock tabs with one icon read as one panel (the
+  // 2026-10 panel review found `panel-stroke` three times and the host's
+  // Effects / Object styles glyphs on draw panels). Each name must exist
+  // in the host's glyph map, or the tab renders the dashed fallback.
+  host.contribute.panel({
+    id: APPEARANCE_PANEL_ID,
+    icon: "ui-sparkle",
+    ...makeAppearancePanel(host),
+  });
+  // Illustrator Phase 2 — GRAPHIC STYLES: the named, LINKED complete
+  // appearance. The library is a `.paged` CONTAINER part (it travels
+  // with the file — `host.storage` is per-browser and plugin metadata is
+  // per-element, so neither could hold it); the link is a reference on
+  // the element's own envelope. A React panel for the Layers/Appearance
+  // reason: a list of named records with per-row actions is above the v1
+  // schema panel's scalar ceiling.
+  host.contribute.panel({
+    id: GRAPHIC_STYLES_PANEL_ID,
+    icon: "ui-wand",
+    ...makeGraphicStylesPanel(host),
+  });
+  // Illustrator Phase 2 (§16.1) — SYMBOLS v0: a named artwork DEFINITION
+  // in a second `.paged` container part, plus INSTANCES re-emitted from
+  // it. Same React reason as the rows above (a list of named records with
+  // per-row actions is above the v1 schema panel's scalar ceiling).
+  host.contribute.panel({
+    id: SYMBOLS_PANEL_ID,
+    icon: "tool-contentPlacer",
+    ...makeSymbolsPanel(host),
+  });
+  // Illustrator Phase 2 (the last unbuilt row) — LIVE PAINT v0. The
+  // panel is where the honest framing lives, because the feature NAME
+  // promises a document-resident face/edge object this engine does not
+  // have: what is built is a REGENERABLE RECIPE (the ordered members +
+  // a paint per face id, in a third `.paged` container part) plus real
+  // artwork inserted over each painted face. commands/live-paint.ts
+  // states the measured undo counts, the 12-input / 256-face refusals,
+  // and the two catalog halves that are NOT built — gap tolerance (the
+  // arrangement door takes no tolerance and the kernel names gap
+  // detection as out of scope) and edge stroking (there are no edge ids
+  // on the wire at all).
+  host.contribute.panel({
+    id: LIVE_PAINT_PANEL_ID,
+    icon: "tool-gradientSwatch",
+    ...makeLivePaintPanel(host),
+  });
+  // Illustrator Phase 2 — PATTERN EDITING v1: the Pattern Options form.
+  // The panel exists because the catalog row is an EDITING MODE (layout,
+  // size, spacing, overlap, copies, dimming) and the SWATCH half of that
+  // row is not buildable at all — there is no pattern paint type in
+  // IDML, in `paged_model::Graphic` or on the wire (RFI C-31). So the
+  // panel carries the boundary verbatim (`PATTERN_PANEL_NOTE`, pinned by
+  // a conformance test) next to the knobs that ARE real.
+  host.contribute.panel({
+    id: PATTERN_PANEL_ID,
+    icon: "ui-grid",
+    ...makePatternPanel(host),
+  });
+  // Illustrator Phase 3 (§12.4) — REPEATS: the Repeat Options form. A
+  // repeat is the catalog's SIBLING of a pattern, not the same thing —
+  // a pattern is a swatch-shaped fill (whose swatch half is not
+  // buildable at all, RFI C-31), a repeat is an object TRANSFORM with
+  // expand/release. The panel carries both honesty notes verbatim
+  // (`REPEAT_PANEL_NOTE`, pinned by a conformance test): what "live"
+  // does and does not mean here, and what clipping costs.
+  host.contribute.panel({
+    id: REPEAT_PANEL_ID,
+    icon: "ui-cols-3",
+    ...makeRepeatPanel(host),
+  });
+  // Illustrator Phase 3 (§16.2) — BLENDS v1: the Blend Options form. The
+  // three SPACING MODES are the substance of the row (Smooth Color
+  // derives its count from the colour distance, Specified Steps is a
+  // count, Specified Distance divides the SPINE's arc length), and the
+  // panel is where the catalog's "live Blend panel preview" is put in
+  // front of the user for exactly what it is: a preview of the PLAN —
+  // the resolved count and where it came from — not of the artwork,
+  // because re-rendering per keystroke would be an undo step per
+  // keystroke. `BLEND_PANEL_NOTE` carries that verbatim.
+  host.contribute.panel({
+    id: BLEND_PANEL_ID,
+    icon: "tool-gradientFeather",
+    ...makeBlendPanel(host),
+  });
+  // Illustrator Phase 3 (§16.3) — OBJECTS ON A PATH: the distribution
+  // form. The panel carries the one thing the form cannot say — that
+  // this row MOVES your objects and creates nothing, which is the
+  // opposite of every other arranging feature in this bundle, and that
+  // an object moved off the page rect answers NOTHING at all, not even
+  // its own metadata (RFI C-23, measured on transforms).
+  host.contribute.panel({
+    id: OBJECTS_ON_PATH_PANEL_ID,
+    icon: "ui-dots",
+    ...makeObjectsOnPathPanel(host),
+  });
+  // PATH OPTIONS — the parameters behind the menu's "…". Offset path,
+  // Simplify and the four Insert shapes each carried an ellipsis and
+  // opened nothing (the contract has no prompt or dialog door); their
+  // commands took a payload nobody could type. This panel is where it is
+  // typed: one section per operation, an Apply that runs the EXISTING
+  // command with those values, and the menu rows now RAISE it at their
+  // section instead of applying fixed defaults
+  // (commands/path-options.ts).
+  host.contribute.panel({
+    id: PATH_OPTIONS_PANEL_ID,
+    icon: "tool-smooth",
+    ...makePathOptionsPanel(host),
+  });
+  // B-12 — the stroke DASH presets as commands (the schema binding
+  // ceiling is scalar, a dash array is a vector → command-driven). Each
+  // commits `setElementProperty{ frameStrokeDashArray, lengths }` to
+  // the selection through the document door.
+  const dashCommandsSub = contributeDashCommands(host);
+  // NOTE — no Group / Ungroup / Select parent group here. Those three
+  // are the HOST's commands now (`paged.object.*`): basic object
+  // operations are what plugins build on, and shipping them from a
+  // plugin meant a user without paged.draw loaded could not group. The
+  // B-04 wire shapes stay in commands/group.ts because Pattern,
+  // Symbols and Image Trace compose them inside larger batches.
+  // Phase 2d — gradient-fill presets (B-03 consumer; a gradient
+  // assignment is a multi-mutation, vector-valued flow above the
+  // binding ceiling → command-driven, the dash precedent).
+  const fillGradientCommandsSub = contributeFillGradientCommands(host);
+  // Phase 4c — the kernel path ops (Outline stroke / Offset path /
+  // Simplify, the v30 wire consumers with documented pt defaults +
+  // payload overrides). Run with NO payload, Offset and Simplify repeat
+  // the values last applied from the Path Options panel — the defaults
+  // until there are any.
+  const pathOpsCommandsSub = contributePathOpsCommands(host, {
+    offset: () => lastUsedPayload(host, "offset"),
+    simplify: () => lastUsedPayload(host, "simplify"),
+  });
+  // The "…" commands (one per section): each RAISES the Path Options panel at its
+  // section (and mutates nothing) — what the menu rows point at.
+  const pathOptionsCommandsSub = contributePathOptionsCommands(host);
+  // Phase 4c — Join/Average over open-path endpoints (pathPointSet
+  // consumers; the TRUE join/close is a named engine-op gap — see
+  // commands/join-average.ts).
+  const joinAverageCommandsSub = contributeJoinAverageCommands(host);
+  // Reverse path direction — every contour of every selected path, in
+  // ONE framePath batch. A visual no-op that the non-zero fill (holes)
+  // and Type on a Path both read (commands/reverse-path.ts).
+  const reversePathCommandsSub = contributeReversePathCommands(host);
+  // Type ▸ Create outlines — a text frame's glyphs as compound paths, one
+  // per colour, in one batch (commands/create-outlines.ts; protocol 66).
+  const createOutlinesCommandsSub = contributeCreateOutlinesCommands(host);
+  // Object ▸ Transform — REFLECT (horizontal / vertical / a typed angle,
+  // about the selection's centre, composed onto each object's own
+  // transform because `frameTransform` replaces) and TRANSFORM AGAIN,
+  // which repeats the last one on the current selection. The copy
+  // variant needs engine 0.65's `duplicateElements` and is probed, not
+  // assumed (commands/transform.ts).
+  const transformCommandsSub = contributeTransformCommands(host);
+  // Phase 4c — Pathfinder Unite/Subtract/Intersect/Exclude (the
+  // pathfinderBoolean wire consumers; first selected = kept).
+  const pathfinderCommandsSub = contributePathfinderCommands(host);
+  // B-22 (engine v57) — the REGION Pathfinder row: Divide / Trim /
+  // Merge / Crop / Outline / Minus back over the planar arrangement.
+  // `elementIds` is TOP-TO-BOTTOM, read from the scene tree's paint
+  // order rather than click order — see commands/pathfinder-region.ts.
+  const pathfinderRegionCommandsSub = contributePathfinderRegionCommands(host);
+  // Illustrator Phase 2 — Make / Release COMPOUND PATH. No new wire op:
+  // `framePath` replaces a whole anchor table (contour boundaries
+  // included) and is the same door core's own `apply_pathfinder` uses.
+  // The winding re-orientation that turns a nested contour into a HOLE
+  // under the engine's NON-ZERO fill lives in draw-geometry — see
+  // commands/compound-path.ts for the undo shape + the honest scope.
+  const compoundPathCommandsSub = contributeCompoundPathCommands(host);
+  // Illustrator Phase 2 — PATTERN EDITING v1 (bake / re-plan / select /
+  // delete tiles / release). The catalog row's "save as a pattern
+  // swatch" half is NOT BUILDABLE and is not faked: there is no pattern
+  // paint type in IDML, none in `paged_model::Graphic` and none on the
+  // wire (RFI C-31), so what a field produces is ARTWORK. What v1 does
+  // deliver is the editing MODE v0 lacked — grid/brick/hex layouts,
+  // tile size, spacing (negative = overlap), overlap ORDER, copy counts
+  // and dimming, all persisted in a `.paged` container part — plus an
+  // ARTBOARD-AWARE tile count that closes v0's off-page residual
+  // (RFI C-23) and a release/re-plan/un-bake path so undo is no longer
+  // the only way back. commands/pattern.ts states the measured undo
+  // counts and the two batch-ordering rules the engine enforces.
+  const patternCommandsSub = contributePatternCommands(host);
+  // Illustrator Phase 3 (§12.4) — REPEATS (radial / grid / mirror, then
+  // update / select / expand / release). The row §12.4 lists BESIDE
+  // pattern, and this bundle keeps them apart: a pattern is a
+  // swatch-shaped FILL, a repeat is an object TRANSFORM whose two verbs
+  // take it apart again. It is also the FIRST feature in this repo to
+  // build in ONE undo step: plugin-sdk `bc52766` put C-15's
+  // `bindCreated` in the contract, so a batch can address the ids it
+  // mints and the inserts, the paint, the links and the group all ride
+  // one batch. CLIPPING rides B-18's pasteInto — and costs the second
+  // undo step, because that same op is what hides an instance from the
+  // scene tree. commands/repeat.ts states every measured count and
+  // consequence.
+  const repeatCommandsSub = contributeRepeatCommands(host);
+  // Phase 9 (Tier B) — Live Corners (the frameCornerOption*/Radius* wire
+  // consumers, Rectangle-only — gap B-23; each preset is an eight-write
+  // batch + a metadata "live" marker).
+  const liveCornerCommandsSub = contributeLiveCornerCommands(host);
+  // Phase 9 (Tier B) — Appearance (multiple fills/strokes): a metadata
+  // stack baked to the frame's top layer (one-fill/one-stroke engine —
+  // gap B-24).
+  const appearanceCommandsSub = contributeAppearanceCommands(host);
+  // B-24 CLOSED — the GROUP BAKE: `bakeAppearance` lowers the metadata
+  // stack onto real stacked page items (one derived path per paint,
+  // sharing the source geometry, wrapped in a group with the source
+  // frame as the carrier); `releaseAppearance` is its exact inverse.
+  // See commands/appearance-bake.ts for the mutation/undo shape and the
+  // named list of what does and does not survive the lowering.
+  const appearanceBakeCommandsSub = contributeAppearanceBakeCommands(host);
+  // Illustrator Phase 2 — GRAPHIC STYLES (save / apply / redefine /
+  // break link / rename / delete). The library is a document-resident
+  // container part (`host.parts`, declared in contributes.partTypes) and
+  // the LINK is a reference on the element's own metadata envelope; a
+  // direct appearance edit marks the object OVERRIDDEN without breaking
+  // the link, and a redefine overwrites it. See commands/graphic-styles.ts
+  // for the persistence shape, the kind projection and the honest limits.
+  const graphicStyleCommandsSub = contributeGraphicStyleCommands(host);
+  // Illustrator Phase 2 (§16.1) — SYMBOLS v0 (define / place / redefine /
+  // break link / reset transform / rename / delete). Core has NO symbol
+  // or instance model and IDML has no such primitive, and there is no
+  // element-duplicate op on the wire — so a definition is a document
+  // container part and an INSTANCE is real artwork re-emitted through
+  // `insertPath` and stamped with a link on every leaf (a group cannot
+  // carry metadata). commands/symbols.ts states the measured undo counts,
+  // the text refusal and everything v0 deliberately does not build (the
+  // eight symbol-SET tools, nine-slice scaling, 3D mapping).
+  const symbolCommandsSub = contributeSymbolCommands(host);
+  // Illustrator Phase 2 (the last unbuilt row) — LIVE PAINT v0 (make
+  // group / fill face / regenerate / select faces / delete face /
+  // release). Faces come from the B-22 planar arrangement, which is a
+  // per-call QUERY: its ids are indices into the ordered member list, so
+  // nothing here survives a member edit by itself. The recipe is a
+  // document container part and a painted face is inserted artwork —
+  // see commands/live-paint.ts for why that is the honest shape, and
+  // RFI C-30 for the persistent object it is standing in for.
+  const livePaintCommandsSub = contributeLivePaintCommands(host);
+  // Illustrator Phase 2 (the Transparency panel row) — OPACITY MASKS
+  // over the C-28 protocol-58 pair. The mask is honoured by the CPU
+  // rasterizer and by PDF EXPORT but NOT by the Vello/WebGPU backend the
+  // canvas draws through, so there is deliberately no panel, no overlay
+  // and no preview here — the command TITLE carries the gap the way
+  // pattern.ts's title carries "copies, not a live fill". Core's seven
+  // refusals (text frame, self, cross-spread, already-masked,
+  // already-a-mask, pasted-in, grouped) are surfaced with the engine's
+  // own sentence rather than re-implemented — see commands/opacity-mask.ts.
+  const opacityMaskCommandsSub = contributeOpacityMaskCommands(host);
+  // Illustrator/InDesign Phase 2 — TYPE ON A PATH over the C-29
+  // protocol-58 pair (plus the tool above). The renderer has always
+  // CONSUMED `<TextPath>`; v58 is the first way to create one, so every
+  // knob offered here is one the renderer honours and `PathEffect` is
+  // deliberately absent (only Rainbow renders). It FLOWS AN EXISTING
+  // story — the wire has no create-story op — and says so.
+  const textOnPathCommandsSub = contributeTextOnPathCommands(host);
+  // Phase 9 (Tier B) — Select-same (pure selection over fill / stroke /
+  // stroke-weight; no mutation).
+  const selectSameCommandsSub = contributeSelectSameCommands(host);
+  // Wave 2 — the parametric insert-shape commands (Arc / Spiral /
+  // Rect grid / Polar grid). Each takes its generator's real parameters
+  // as a payload (commands/insert-shapes.ts); with none it repeats the
+  // values last applied from the Path Options panel, and before there
+  // are any, the v0 geometry.
+  const insertShapeCommandsSub = contributeInsertShapeCommands(host, {
+    arc: () => lastUsedPayload(host, "arc"),
+    spiral: () => lastUsedPayload(host, "spiral"),
+    rectGrid: () => lastUsedPayload(host, "rectGrid"),
+    polarGrid: () => lastUsedPayload(host, "polarGrid"),
+  });
+  // Illustrator Phase 3 (§16.2) — BLENDS v1 (make / update / replace
+  // spine / reverse spine / reverse front-to-back / select keys / expand
+  // / release). Wave 2's v0 shipped ONE command and two undo steps; the
+  // row the catalog names is the three SPACING MODES, a SPINE, easing
+  // with independent colour acceleration, and the two verbs that take a
+  // blend apart. It is the SECOND consumer of C-15's `bindCreated` (after
+  // repeats), so it builds in ONE undo step and rides the same
+  // `v59-wire.ts` seam rather than a second copy of the cast.
+  // commands/blend.ts states every measured count and the two places
+  // this deliberately differs from Illustrator's spine.
+  const blendCommandsSub = contributeBlendCommands(host);
+  // Illustrator Phase 3 (§16.3) — OBJECTS ON A PATH (make / update /
+  // select / expand / release). The one arranging row in this bundle that
+  // creates NOTHING: it writes one `frameTransform` per object, so the
+  // objects on the path ARE the selected objects — element ids survive,
+  // text frames are not refused, and Release writes each object's
+  // remembered home transform straight back. It shares §16.2's
+  // arc-length placement kernel (`draw-geometry/src/along-path.ts`) and
+  // nothing above it.
+  const objectsOnPathCommandsSub = contributeObjectsOnPathCommands(host);
+  // Illustrator Phase 2 (last row) — IMAGE TRACE v0. The one capability
+  // in this repo whose kernel is computer vision rather than path
+  // algebra, so it is the one that ships a Rust/wasm artifact
+  // (crates/draw-trace + crates/trace-js over `visioncortex`, declared in
+  // the manifest under capabilities.wasm[]). Pixels arrive through the
+  // C-5 placed-asset door; holes come out as COMPOUND paths through
+  // draw-geometry's `makeCompoundTable`, because the engine fills
+  // non-zero. One-shot, fills only, main-thread — commands/image-trace.ts
+  // states the whole honest scope, and the command TITLE carries it.
+  const imageTraceCommandSub = contributeImageTraceCommand(host);
+  // W3.2 — the vectorGraphic edit context (closes B-02): double-click a
+  // path enters anchor-editing (the anchor tools focused, the stroke
+  // panel raised, a breadcrumb, Esc exits).
+  //
+  // ADR 023: the context's own hooks now also tell the Layers provider
+  // WHICH element was entered — its scope root, whose siblings are the
+  // object stack the host Layers panel shows. Note this is NOT the
+  // provider's lifetime: that is BORROWED, wrapped by the SDK adapter
+  // around these same hooks, so the shell's context stack stays the
+  // single source of "who is active". The declaration itself is spread
+  // from the shared const, so `edit-context.ts` (and the specs pinning
+  // its matcher / tool set / panel set) are untouched.
+  contributeEditContext(host, {
+    ...vectorGraphicEditContext,
+    onEnter: (ctx) => {
+      vectorGraphicEditContext.onEnter?.(ctx);
+      layersProvider.enter(ctx.id);
+    },
+    onExit: (ctx) => {
+      vectorGraphicEditContext.onExit?.(ctx);
+      layersProvider.exit();
+    },
+  });
+  // …and only NOW the provider: phase A refuses a provider whose edit
+  // context this bundle has not registered yet, because it could never
+  // activate. `null` back means the host predates phase A — draw then
+  // contributes no provider and the host Layers panel keeps reading
+  // core, which is exactly the pre-ADR behaviour.
+  const layersProviderHandle = registerBindingProvider(
+    host,
+    vectorGraphicEditContext.type,
+    layersProvider.provider,
+  );
+  // Phase 8 — SVG interchange (K-2): an `.svg` importer (parse → insert
+  // the shapes through the existing insertPath lane) + an `.svg` exporter
+  // (selection → SVG bytes). Capability-gated; degrades honestly when the
+  // host predates the importer/exporter doors.
+  const svgIoSub = contributeSvgIo(host);
+  // F1 — the menu bar. 92 commands and, until plugin-api 0.2.33, no
+  // route to a menu: every verb was Cmd+K only, shown as a raw id.
+  const menuSub = contributeMenu(host);
+  // ADR 323 — the OBJECT MODEL: ten kinds (path geometry, appearance
+  // stacks, graphic styles, symbols + instances, the five generator
+  // recipes) and the typed twins of the commands above, reached by every
+  // surface — Boa, the Node CLI, data bindings, schema-driven fields —
+  // through `host.objects`. Headless by construction (src/object-model/).
+  const objectModelHandle = contributeDrawObjectModel(host);
+  // ADR 323 — draw's object properties as host-rendered PropertyFields (a
+  // schema panel of property rows; needs the object model + bindings).
+  const propertyListsSub = objectModelHandle
+    ? (contributeSchemaPanel(host, {
+        id: DRAW_PROPERTIES_PANEL_ID,
+        title: DRAW_PROPERTIES_PANEL.title,
+        icon: DRAW_PROPERTIES_PANEL.icon,
+        defaultDock: "right",
+        defaultGroup: "draw",
+        schema: DRAW_PROPERTIES_PANEL,
+      }),
+      publishDrawPropertyLists(host))
+    : null;
+  host.log.info(
+    `activated — ${tools.length} tools + 3 schema panels + 9 React panels + ` +
+      `${
+        DASH_COMMAND_IDS.length +
+        FILL_GRADIENT_COMMAND_IDS.length +
+        PATH_OPS_COMMAND_IDS.length +
+        PATH_OPTIONS_COMMAND_IDS.length +
+        JOIN_AVERAGE_COMMAND_IDS.length +
+        REVERSE_PATH_COMMAND_IDS.length +
+        TRANSFORM_COMMAND_IDS.length +
+        PATHFINDER_COMMAND_IDS.length +
+        PATHFINDER_REGION_COMMAND_IDS.length +
+        COMPOUND_PATH_COMMAND_IDS.length +
+        PATTERN_COMMAND_IDS.length +
+        REPEAT_COMMAND_IDS.length +
+        LIVE_CORNER_COMMAND_IDS.length +
+        APPEARANCE_COMMAND_IDS.length +
+        APPEARANCE_BAKE_COMMAND_IDS.length +
+        GRAPHIC_STYLES_COMMAND_IDS.length +
+        SYMBOLS_COMMAND_IDS.length +
+        LIVE_PAINT_COMMAND_IDS.length +
+        OPACITY_MASK_COMMAND_IDS.length +
+        TEXT_ON_PATH_COMMAND_IDS.length +
+        SELECT_SAME_COMMAND_IDS.length +
+        INSERT_SHAPE_COMMAND_IDS.length +
+        IMAGE_TRACE_COMMAND_IDS.length +
+        BLEND_COMMAND_IDS.length +
+        OBJECTS_ON_PATH_COMMAND_IDS.length
+      } commands + 1 edit context + ` +
+      `${layersProviderHandle ? 1 : 0} binding providers ` +
+      `(apiVersion ${manifest.apiVersion})`,
+  );
+  // The contributions tear down structurally via the host; the binding
+  // subscriptions are allocated OUTSIDE a facade-tracked registration,
+  // so dispose them (and the command groups) here.
+  return {
+    dispose() {
+      // ADR 023 — disposing the provider handle removes the provider
+      // WITHOUT touching the edit context it borrowed activation from.
+      // That separation is what makes phase D a migration with a
+      // rollback point rather than a deletion.
+      layersProviderHandle?.dispose();
+      propertyListsSub?.dispose();
+      objectModelHandle?.dispose();
+      svgIoSub.dispose();
+      menuSub.dispose();
+      imageTraceCommandSub.dispose();
+      objectsOnPathCommandsSub.dispose();
+      blendCommandsSub.dispose();
+      insertShapeCommandsSub.dispose();
+      selectSameCommandsSub.dispose();
+      textOnPathCommandsSub.dispose();
+      opacityMaskCommandsSub.dispose();
+      livePaintCommandsSub.dispose();
+      symbolCommandsSub.dispose();
+      graphicStyleCommandsSub.dispose();
+      appearanceBakeCommandsSub.dispose();
+      appearanceCommandsSub.dispose();
+      liveCornerCommandsSub.dispose();
+      repeatCommandsSub.dispose();
+      patternCommandsSub.dispose();
+      compoundPathCommandsSub.dispose();
+      pathfinderRegionCommandsSub.dispose();
+      pathfinderCommandsSub.dispose();
+      transformCommandsSub.dispose();
+      reversePathCommandsSub.dispose();
+      createOutlinesCommandsSub.dispose();
+      joinAverageCommandsSub.dispose();
+      pathOptionsCommandsSub.dispose();
+      pathOpsCommandsSub.dispose();
+      fillGradientCommandsSub.dispose();
+      dashCommandsSub.dispose();
+    },
+  };
+}
+
+export { manifest };

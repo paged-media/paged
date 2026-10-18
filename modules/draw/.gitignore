@@ -1,0 +1,16 @@
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Rust build output. The wasm ARTIFACT itself is COMMITTED (see
+# scripts/build-wasm.sh): `pnpm test` / `pnpm -r typecheck` and the
+# plugin-cli size gate all have to work on a fresh checkout with no Rust
+# toolchain installed.
+/target
+
+# Per-package vitest JUnit output (CI artifact, never a tracked file).
+junit.xml
+junit-all.xml
+
+# Agent worktrees (local only).
+.claude/worktrees/

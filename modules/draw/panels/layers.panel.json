@@ -1,0 +1,18 @@
+{
+  "$comment": "DESIGN PROTOTYPE — stays a prototype, and CANNOT adopt the v1 schema mechanism yet: the schema's widget set is the curated catalog primitive leaves (numeric / color / toggle / select / readout / section), with NO list widget. Layer/style LISTS are expert-leaf territory (data-bound documentCollection reads + per-row layer ops through paged.mutate) — an honest limit of the v1 schema, recorded in BREAKAGE_LOG.md B-01 (RESOLVED) and plugin-sdk DESIGN.md §12. A layers panel ships as an expert-leaf React panel (host.contribute.panel) until the catalog grows a list primitive.",
+  "panel": "media.paged.draw.panel.layers",
+  "title": { "key": "panel.layers.title" },
+  "icon": "icons/layers.svg",
+  "sections": [
+    {
+      "rows": [
+        {
+          "type": "layerList",
+          "bind": { "kind": "documentCollection", "name": "layers" },
+          "$comment": "Expert leaf: visibility toggle → layerSetVisible, lock → layerSetLocked, rename → layerSetName, reorder → layerMove. Scoped to the edit context's subtree once edit contexts exist (B-02).",
+          "writes": ["collection"]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,686 @@
+{
+  "fixture": "compound-path",
+  "produced_by": {
+    "app": "Adobe Illustrator",
+    "version": "30.1.0",
+    "build": "136R",
+    "locale": "de_DE",
+    "script": "scripts/illustrator/probes/compound-path.jsx",
+    "script_sha256": "2f2d6e6b1baca80e6ffa97a5b15688100d5ab35797fcdd6f8f1d710d55e5fba8",
+    "runner": "scripts/illustrator/run-probe.sh",
+    "recorded_at": "2026-10-02T14:16:49.004Z",
+    "host_os": "macOS 26.4",
+    "ruler_units": "RulerUnits.Points",
+    "artboard_rect_app": [
+      0,
+      792,
+      612,
+      0
+    ]
+  },
+  "units": "pt",
+  "coordinates": "page-local, origin top-left of the artboard, Y down (mapped in and out of Illustrator's Y-up document coordinates through the scratch artboard's top-left corner)",
+  "operation": "all inputs selected, then app.executeMenuCommand(\"compoundPath\") = Object > Compound Path > Make",
+  "cases": [
+    {
+      "id": "nested-cw-cw",
+      "parameters": {},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[300,100],"left":[300,100],"right":[300,100]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[100,300],"left":[100,300],"right":[100,300]}
+            ]
+          },
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[150,150],"left":[150,150],"right":[150,150]},
+              {"anchor":[250,150],"left":[250,150],"right":[250,150]},
+              {"anchor":[250,250],"left":[250,250],"right":[250,250]},
+              {"anchor":[150,250],"left":[150,250],"right":[150,250]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 10000,
+            "bounds": [150,150,250,250],
+            "winding": "ccw",
+            "areaSignedApp": -10000,
+            "polarity": "negative",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "compound": 0,
+            "anchors": [
+              {"anchor":[150,250],"left":[150,250],"right":[150,250]},
+              {"anchor":[250,250],"left":[250,250],"right":[250,250]},
+              {"anchor":[250,150],"left":[250,150],"right":[250,150]},
+              {"anchor":[150,150],"left":[150,150],"right":[150,150]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 40000,
+            "bounds": [100,100,300,300],
+            "winding": "cw",
+            "areaSignedApp": 40000,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "compound": 0,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[300,100],"left":[300,100],"right":[300,100]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[100,300],"left":[100,300],"right":[100,300]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "nested-cw-ccw",
+      "parameters": {},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[300,100],"left":[300,100],"right":[300,100]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[100,300],"left":[100,300],"right":[100,300]}
+            ]
+          },
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[150,150],"left":[150,150],"right":[150,150]},
+              {"anchor":[150,250],"left":[150,250],"right":[150,250]},
+              {"anchor":[250,250],"left":[250,250],"right":[250,250]},
+              {"anchor":[250,150],"left":[250,150],"right":[250,150]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 10000,
+            "bounds": [150,150,250,250],
+            "winding": "ccw",
+            "areaSignedApp": -10000,
+            "polarity": "negative",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "compound": 0,
+            "anchors": [
+              {"anchor":[150,150],"left":[150,150],"right":[150,150]},
+              {"anchor":[150,250],"left":[150,250],"right":[150,250]},
+              {"anchor":[250,250],"left":[250,250],"right":[250,250]},
+              {"anchor":[250,150],"left":[250,150],"right":[250,150]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 40000,
+            "bounds": [100,100,300,300],
+            "winding": "cw",
+            "areaSignedApp": 40000,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "compound": 0,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[300,100],"left":[300,100],"right":[300,100]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[100,300],"left":[100,300],"right":[100,300]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "nested-ccw-ccw",
+      "parameters": {},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[100,300],"left":[100,300],"right":[100,300]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[300,100],"left":[300,100],"right":[300,100]}
+            ]
+          },
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[150,150],"left":[150,150],"right":[150,150]},
+              {"anchor":[150,250],"left":[150,250],"right":[150,250]},
+              {"anchor":[250,250],"left":[250,250],"right":[250,250]},
+              {"anchor":[250,150],"left":[250,150],"right":[250,150]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 10000,
+            "bounds": [150,150,250,250],
+            "winding": "ccw",
+            "areaSignedApp": -10000,
+            "polarity": "negative",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "compound": 0,
+            "anchors": [
+              {"anchor":[150,150],"left":[150,150],"right":[150,150]},
+              {"anchor":[150,250],"left":[150,250],"right":[150,250]},
+              {"anchor":[250,250],"left":[250,250],"right":[250,250]},
+              {"anchor":[250,150],"left":[250,150],"right":[250,150]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 40000,
+            "bounds": [100,100,300,300],
+            "winding": "cw",
+            "areaSignedApp": 40000,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "compound": 0,
+            "anchors": [
+              {"anchor":[300,100],"left":[300,100],"right":[300,100]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[100,300],"left":[100,300],"right":[100,300]},
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "nested-hole-behind-cw-cw",
+      "parameters": {},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[150,150],"left":[150,150],"right":[150,150]},
+              {"anchor":[250,150],"left":[250,150],"right":[250,150]},
+              {"anchor":[250,250],"left":[250,250],"right":[250,250]},
+              {"anchor":[150,250],"left":[150,250],"right":[150,250]}
+            ]
+          },
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[300,100],"left":[300,100],"right":[300,100]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[100,300],"left":[100,300],"right":[100,300]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 40000,
+            "bounds": [100,100,300,300],
+            "winding": "ccw",
+            "areaSignedApp": -40000,
+            "polarity": "negative",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "compound": 0,
+            "anchors": [
+              {"anchor":[100,300],"left":[100,300],"right":[100,300]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[300,100],"left":[300,100],"right":[300,100]},
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 10000,
+            "bounds": [150,150,250,250],
+            "winding": "cw",
+            "areaSignedApp": 10000,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "compound": 0,
+            "anchors": [
+              {"anchor":[150,150],"left":[150,150],"right":[150,150]},
+              {"anchor":[250,150],"left":[250,150],"right":[250,150]},
+              {"anchor":[250,250],"left":[250,250],"right":[250,250]},
+              {"anchor":[150,250],"left":[150,250],"right":[150,250]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "three-deep-cw-cw-cw",
+      "parameters": {},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[300,100],"left":[300,100],"right":[300,100]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[100,300],"left":[100,300],"right":[100,300]}
+            ]
+          },
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[150,150],"left":[150,150],"right":[150,150]},
+              {"anchor":[250,150],"left":[250,150],"right":[250,150]},
+              {"anchor":[250,250],"left":[250,250],"right":[250,250]},
+              {"anchor":[150,250],"left":[150,250],"right":[150,250]}
+            ]
+          },
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[180,180],"left":[180,180],"right":[180,180]},
+              {"anchor":[220,180],"left":[220,180],"right":[220,180]},
+              {"anchor":[220,220],"left":[220,220],"right":[220,220]},
+              {"anchor":[180,220],"left":[180,220],"right":[180,220]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 1600,
+            "bounds": [180,180,220,220],
+            "winding": "ccw",
+            "areaSignedApp": -1600,
+            "polarity": "negative",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "compound": 0,
+            "anchors": [
+              {"anchor":[180,220],"left":[180,220],"right":[180,220]},
+              {"anchor":[220,220],"left":[220,220],"right":[220,220]},
+              {"anchor":[220,180],"left":[220,180],"right":[220,180]},
+              {"anchor":[180,180],"left":[180,180],"right":[180,180]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 10000,
+            "bounds": [150,150,250,250],
+            "winding": "ccw",
+            "areaSignedApp": -10000,
+            "polarity": "negative",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "compound": 0,
+            "anchors": [
+              {"anchor":[150,250],"left":[150,250],"right":[150,250]},
+              {"anchor":[250,250],"left":[250,250],"right":[250,250]},
+              {"anchor":[250,150],"left":[250,150],"right":[250,150]},
+              {"anchor":[150,150],"left":[150,150],"right":[150,150]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 40000,
+            "bounds": [100,100,300,300],
+            "winding": "cw",
+            "areaSignedApp": 40000,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "compound": 0,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[300,100],"left":[300,100],"right":[300,100]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[100,300],"left":[100,300],"right":[100,300]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "four-deep-cw-cw-cw-cw",
+      "parameters": {},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[300,100],"left":[300,100],"right":[300,100]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[100,300],"left":[100,300],"right":[100,300]}
+            ]
+          },
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[150,150],"left":[150,150],"right":[150,150]},
+              {"anchor":[250,150],"left":[250,150],"right":[250,150]},
+              {"anchor":[250,250],"left":[250,250],"right":[250,250]},
+              {"anchor":[150,250],"left":[150,250],"right":[150,250]}
+            ]
+          },
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[180,180],"left":[180,180],"right":[180,180]},
+              {"anchor":[220,180],"left":[220,180],"right":[220,180]},
+              {"anchor":[220,220],"left":[220,220],"right":[220,220]},
+              {"anchor":[180,220],"left":[180,220],"right":[180,220]}
+            ]
+          },
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[190,190],"left":[190,190],"right":[190,190]},
+              {"anchor":[210,190],"left":[210,190],"right":[210,190]},
+              {"anchor":[210,210],"left":[210,210],"right":[210,210]},
+              {"anchor":[190,210],"left":[190,210],"right":[190,210]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 400,
+            "bounds": [190,190,210,210],
+            "winding": "ccw",
+            "areaSignedApp": -400,
+            "polarity": "negative",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "compound": 0,
+            "anchors": [
+              {"anchor":[190,210],"left":[190,210],"right":[190,210]},
+              {"anchor":[210,210],"left":[210,210],"right":[210,210]},
+              {"anchor":[210,190],"left":[210,190],"right":[210,190]},
+              {"anchor":[190,190],"left":[190,190],"right":[190,190]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 1600,
+            "bounds": [180,180,220,220],
+            "winding": "ccw",
+            "areaSignedApp": -1600,
+            "polarity": "negative",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "compound": 0,
+            "anchors": [
+              {"anchor":[180,220],"left":[180,220],"right":[180,220]},
+              {"anchor":[220,220],"left":[220,220],"right":[220,220]},
+              {"anchor":[220,180],"left":[220,180],"right":[220,180]},
+              {"anchor":[180,180],"left":[180,180],"right":[180,180]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 10000,
+            "bounds": [150,150,250,250],
+            "winding": "ccw",
+            "areaSignedApp": -10000,
+            "polarity": "negative",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "compound": 0,
+            "anchors": [
+              {"anchor":[150,250],"left":[150,250],"right":[150,250]},
+              {"anchor":[250,250],"left":[250,250],"right":[250,250]},
+              {"anchor":[250,150],"left":[250,150],"right":[250,150]},
+              {"anchor":[150,150],"left":[150,150],"right":[150,150]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 40000,
+            "bounds": [100,100,300,300],
+            "winding": "cw",
+            "areaSignedApp": 40000,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "compound": 0,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[300,100],"left":[300,100],"right":[300,100]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[100,300],"left":[100,300],"right":[100,300]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "disjoint-cw-ccw",
+      "parameters": {},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[180,100],"left":[180,100],"right":[180,100]},
+              {"anchor":[180,180],"left":[180,180],"right":[180,180]},
+              {"anchor":[100,180],"left":[100,180],"right":[100,180]}
+            ]
+          },
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[220,100],"left":[220,100],"right":[220,100]},
+              {"anchor":[220,180],"left":[220,180],"right":[220,180]},
+              {"anchor":[300,180],"left":[300,180],"right":[300,180]},
+              {"anchor":[300,100],"left":[300,100],"right":[300,100]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 6400,
+            "bounds": [220,100,300,180],
+            "winding": "ccw",
+            "areaSignedApp": -6400,
+            "polarity": "negative",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "compound": 0,
+            "anchors": [
+              {"anchor":[220,100],"left":[220,100],"right":[220,100]},
+              {"anchor":[220,180],"left":[220,180],"right":[220,180]},
+              {"anchor":[300,180],"left":[300,180],"right":[300,180]},
+              {"anchor":[300,100],"left":[300,100],"right":[300,100]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 6400,
+            "bounds": [100,100,180,180],
+            "winding": "cw",
+            "areaSignedApp": 6400,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "compound": 0,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[180,100],"left":[180,100],"right":[180,100]},
+              {"anchor":[180,180],"left":[180,180],"right":[180,180]},
+              {"anchor":[100,180],"left":[100,180],"right":[100,180]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "overlap-cw-cw",
+      "parameters": {},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[200,100],"left":[200,100],"right":[200,100]},
+              {"anchor":[200,180],"left":[200,180],"right":[200,180]},
+              {"anchor":[100,180],"left":[100,180],"right":[100,180]}
+            ]
+          },
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[150,140],"left":[150,140],"right":[150,140]},
+              {"anchor":[260,140],"left":[260,140],"right":[260,140]},
+              {"anchor":[260,220],"left":[260,220],"right":[260,220]},
+              {"anchor":[150,220],"left":[150,220],"right":[150,220]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 8800,
+            "bounds": [150,140,260,220],
+            "winding": "ccw",
+            "areaSignedApp": -8800,
+            "polarity": "negative",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "compound": 0,
+            "anchors": [
+              {"anchor":[150,220],"left":[150,220],"right":[150,220]},
+              {"anchor":[260,220],"left":[260,220],"right":[260,220]},
+              {"anchor":[260,140],"left":[260,140],"right":[260,140]},
+              {"anchor":[150,140],"left":[150,140],"right":[150,140]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 8000,
+            "bounds": [100,100,200,180],
+            "winding": "cw",
+            "areaSignedApp": 8000,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "compound": 0,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[200,100],"left":[200,100],"right":[200,100]},
+              {"anchor":[200,180],"left":[200,180],"right":[200,180]},
+              {"anchor":[100,180],"left":[100,180],"right":[100,180]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "overlap-cw-ccw",
+      "parameters": {},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[200,100],"left":[200,100],"right":[200,100]},
+              {"anchor":[200,180],"left":[200,180],"right":[200,180]},
+              {"anchor":[100,180],"left":[100,180],"right":[100,180]}
+            ]
+          },
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[150,140],"left":[150,140],"right":[150,140]},
+              {"anchor":[150,220],"left":[150,220],"right":[150,220]},
+              {"anchor":[260,220],"left":[260,220],"right":[260,220]},
+              {"anchor":[260,140],"left":[260,140],"right":[260,140]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 8800,
+            "bounds": [150,140,260,220],
+            "winding": "ccw",
+            "areaSignedApp": -8800,
+            "polarity": "negative",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "compound": 0,
+            "anchors": [
+              {"anchor":[150,140],"left":[150,140],"right":[150,140]},
+              {"anchor":[150,220],"left":[150,220],"right":[150,220]},
+              {"anchor":[260,220],"left":[260,220],"right":[260,220]},
+              {"anchor":[260,140],"left":[260,140],"right":[260,140]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 8000,
+            "bounds": [100,100,200,180],
+            "winding": "cw",
+            "areaSignedApp": 8000,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "compound": 0,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[200,100],"left":[200,100],"right":[200,100]},
+              {"anchor":[200,180],"left":[200,180],"right":[200,180]},
+              {"anchor":[100,180],"left":[100,180],"right":[100,180]}
+            ]
+          }
+      ] }
+    }
+  ]
+}

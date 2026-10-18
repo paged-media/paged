@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@paged-media/draw-geometry": ["../draw-geometry/src/index.ts"],
+      "@paged-media/draw-tools": ["../draw-tools/src/index.ts"]
+    }
+  },
+  "include": ["src"]
+}

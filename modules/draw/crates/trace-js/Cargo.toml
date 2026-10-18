@@ -1,0 +1,23 @@
+[package]
+name = "trace-js"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "paged.draw IMAGE TRACE wasm-bindgen surface — the artifact the bundle declares under capabilities.wasm[] and loads in the bundle realm."
+
+[lib]
+name = "trace_js"
+crate-type = ["cdylib", "rlib"]
+
+[lints]
+workspace = true
+
+[dependencies]
+draw-trace = { path = "../draw-trace" }
+serde_json = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = { workspace = true }
+console_error_panic_hook = { workspace = true }

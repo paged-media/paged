@@ -1,0 +1,555 @@
+{
+  "fixture": "offset-path",
+  "produced_by": {
+    "app": "Adobe Illustrator",
+    "version": "30.1.0",
+    "build": "136R",
+    "locale": "de_DE",
+    "script": "scripts/illustrator/probes/offset-path.jsx",
+    "script_sha256": "b886813075e371cb1565b1846d09ba7fe84dc6d83988e879e73793842a80b379",
+    "runner": "scripts/illustrator/run-probe.sh",
+    "recorded_at": "2026-10-02T13:43:19.142Z",
+    "host_os": "macOS 26.4",
+    "ruler_units": "RulerUnits.Points",
+    "artboard_rect_app": [
+      0,
+      792,
+      612,
+      0
+    ]
+  },
+  "units": "pt",
+  "coordinates": "page-local, origin top-left of the artboard, Y down (mapped in and out of Illustrator's Y-up document coordinates through the scratch artboard's top-left corner)",
+  "operation": "PageItem.applyEffect(<LiveEffect name=\"Adobe Offset Path\"> with Dict \"R mlim <miterLimit> R ofst <delta> I jntp <0 round | 1 bevel | 2 miter>\") then app.executeMenuCommand(\"expandStyle\")",
+  "cases": [
+    {
+      "id": "rect-miter-out",
+      "parameters": {"delta":10,"join":"miter","miterLimit":4},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[200,100],"left":[200,100],"right":[200,100]},
+              {"anchor":[200,160],"left":[200,160],"right":[200,160]},
+              {"anchor":[100,160],"left":[100,160],"right":[100,160]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 9600,
+            "bounds": [90,90,210,170],
+            "winding": "cw",
+            "areaSignedApp": 9600,
+            "polarity": "positive",
+            "anchors": [
+              {"anchor":[90,170],"left":[90,170],"right":[90,170]},
+              {"anchor":[90,90],"left":[90,90],"right":[90,90]},
+              {"anchor":[210,90],"left":[210,90],"right":[210,90]},
+              {"anchor":[210,170],"left":[210,170],"right":[210,170]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "rect-miter-in",
+      "parameters": {"delta":-10,"join":"miter","miterLimit":4},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[200,100],"left":[200,100],"right":[200,100]},
+              {"anchor":[200,160],"left":[200,160],"right":[200,160]},
+              {"anchor":[100,160],"left":[100,160],"right":[100,160]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 3200,
+            "bounds": [110,110,190,150],
+            "winding": "cw",
+            "areaSignedApp": 3200,
+            "polarity": "positive",
+            "anchors": [
+              {"anchor":[110,150],"left":[110,150],"right":[110,150]},
+              {"anchor":[110,110],"left":[110,110],"right":[110,110]},
+              {"anchor":[190,110],"left":[190,110],"right":[190,110]},
+              {"anchor":[190,150],"left":[190,150],"right":[190,150]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "rect-round-out",
+      "parameters": {"delta":10,"join":"round","miterLimit":4},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[200,100],"left":[200,100],"right":[200,100]},
+              {"anchor":[200,160],"left":[200,160],"right":[200,160]},
+              {"anchor":[100,160],"left":[100,160],"right":[100,160]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 9514.249,
+            "bounds": [90,90,210,170],
+            "winding": "cw",
+            "areaSignedApp": 9514.249,
+            "polarity": "positive",
+            "anchors": [
+              {"anchor":[100,170],"left":[100,170],"right":[94.477051,170]},
+              {"anchor":[90,160],"left":[90,165.522949],"right":[90,160]},
+              {"anchor":[90,100],"left":[90,100],"right":[90,94.477051]},
+              {"anchor":[100,90],"left":[94.477051,90],"right":[100,90]},
+              {"anchor":[200,90],"left":[200,90],"right":[205.522949,90]},
+              {"anchor":[210,100],"left":[210,94.477051],"right":[210,100]},
+              {"anchor":[210,160],"left":[210,160],"right":[210,165.522949]},
+              {"anchor":[200,170],"left":[205.522949,170],"right":[200,170]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "rect-round-in",
+      "parameters": {"delta":-10,"join":"round","miterLimit":4},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[200,100],"left":[200,100],"right":[200,100]},
+              {"anchor":[200,160],"left":[200,160],"right":[200,160]},
+              {"anchor":[100,160],"left":[100,160],"right":[100,160]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 3200,
+            "bounds": [110,110,190,150],
+            "winding": "cw",
+            "areaSignedApp": 3200,
+            "polarity": "positive",
+            "anchors": [
+              {"anchor":[110,150],"left":[110,150],"right":[110,150]},
+              {"anchor":[110,110],"left":[110,110],"right":[110,110]},
+              {"anchor":[190,110],"left":[190,110],"right":[190,110]},
+              {"anchor":[190,150],"left":[190,150],"right":[190,150]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "rect-bevel-out",
+      "parameters": {"delta":10,"join":"bevel","miterLimit":4},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[200,100],"left":[200,100],"right":[200,100]},
+              {"anchor":[200,160],"left":[200,160],"right":[200,160]},
+              {"anchor":[100,160],"left":[100,160],"right":[100,160]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 9400,
+            "bounds": [90,90,210,170],
+            "winding": "cw",
+            "areaSignedApp": 9400,
+            "polarity": "positive",
+            "anchors": [
+              {"anchor":[100,170],"left":[100,170],"right":[100,170]},
+              {"anchor":[90,160],"left":[90,160],"right":[90,160]},
+              {"anchor":[90,100],"left":[90,100],"right":[90,100]},
+              {"anchor":[100,90],"left":[100,90],"right":[100,90]},
+              {"anchor":[200,90],"left":[200,90],"right":[200,90]},
+              {"anchor":[210,100],"left":[210,100],"right":[210,100]},
+              {"anchor":[210,160],"left":[210,160],"right":[210,160]},
+              {"anchor":[200,170],"left":[200,170],"right":[200,170]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "rect-bevel-in",
+      "parameters": {"delta":-10,"join":"bevel","miterLimit":4},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[200,100],"left":[200,100],"right":[200,100]},
+              {"anchor":[200,160],"left":[200,160],"right":[200,160]},
+              {"anchor":[100,160],"left":[100,160],"right":[100,160]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 3200,
+            "bounds": [110,110,190,150],
+            "winding": "cw",
+            "areaSignedApp": 3200,
+            "polarity": "positive",
+            "anchors": [
+              {"anchor":[110,150],"left":[110,150],"right":[110,150]},
+              {"anchor":[110,110],"left":[110,110],"right":[110,110]},
+              {"anchor":[190,110],"left":[190,110],"right":[190,110]},
+              {"anchor":[190,150],"left":[190,150],"right":[190,150]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "tri-miter-out",
+      "parameters": {"delta":10,"join":"miter","miterLimit":4},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[220,100],"left":[220,100],"right":[220,100]},
+              {"anchor":[100,190],"left":[100,190],"right":[100,190]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 9600,
+            "bounds": [90,90,250,210],
+            "winding": "cw",
+            "areaSignedApp": 9600,
+            "polarity": "positive",
+            "anchors": [
+              {"anchor":[90,90],"left":[90,90],"right":[90,90]},
+              {"anchor":[250,90],"left":[250,90],"right":[250,90]},
+              {"anchor":[90,210],"left":[90,210],"right":[90,210]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "tri-miter-in",
+      "parameters": {"delta":-10,"join":"miter","miterLimit":4},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[220,100],"left":[220,100],"right":[220,100]},
+              {"anchor":[100,190],"left":[100,190],"right":[100,190]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 2400,
+            "bounds": [110,110,190,170],
+            "winding": "cw",
+            "areaSignedApp": 2400,
+            "polarity": "positive",
+            "anchors": [
+              {"anchor":[110,110],"left":[110,110],"right":[110,110]},
+              {"anchor":[190,110],"left":[190,110],"right":[190,110]},
+              {"anchor":[110,170],"left":[110,170],"right":[110,170]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "tri-round-out",
+      "parameters": {"delta":10,"join":"round","miterLimit":4},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[220,100],"left":[220,100],"right":[220,100]},
+              {"anchor":[100,190],"left":[100,190],"right":[100,190]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 9314.193596,
+            "bounds": [90,90,230.000698,200],
+            "winding": "cw",
+            "areaSignedApp": 9314.193596,
+            "polarity": "positive",
+            "anchors": [
+              {"anchor":[99.998535,200],"left":[102.124023,200],"right":[98.474121,200]},
+              {"anchor":[95.527832,198.944336],"left":[96.942871,199.651855],"right":[92.140137,197.250488]},
+              {"anchor":[90,190],"left":[90,193.787598],"right":[90,190]},
+              {"anchor":[90,100],"left":[90,100],"right":[90,94.477051]},
+              {"anchor":[100,90],"left":[94.477051,90],"right":[100,90]},
+              {"anchor":[220,90],"left":[220,90],"right":[224.304199,90]},
+              {"anchor":[229.486816,96.837891],"left":[228.125488,92.754395],"right":[230.848145,100.921387]},
+              {"anchor":[226,108],"left":[229.443359,105.41748],"right":[226,108]},
+              {"anchor":[106,198],"left":[106,198],"right":[104.23584,199.323242]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "tri-round-in",
+      "parameters": {"delta":-10,"join":"round","miterLimit":4},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[220,100],"left":[220,100],"right":[220,100]},
+              {"anchor":[100,190],"left":[100,190],"right":[100,190]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 2400,
+            "bounds": [110,110,190,170],
+            "winding": "cw",
+            "areaSignedApp": 2400,
+            "polarity": "positive",
+            "anchors": [
+              {"anchor":[110,110],"left":[110,110],"right":[110,110]},
+              {"anchor":[190,110],"left":[190,110],"right":[190,110]},
+              {"anchor":[110,170],"left":[110,170],"right":[110,170]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "tri-bevel-out",
+      "parameters": {"delta":10,"join":"bevel","miterLimit":4},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[220,100],"left":[220,100],"right":[220,100]},
+              {"anchor":[100,190],"left":[100,190],"right":[100,190]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 9120,
+            "bounds": [90,90,226,198],
+            "winding": "cw",
+            "areaSignedApp": 9120,
+            "polarity": "positive",
+            "anchors": [
+              {"anchor":[90,190],"left":[90,190],"right":[90,190]},
+              {"anchor":[90,100],"left":[90,100],"right":[90,100]},
+              {"anchor":[100,90],"left":[100,90],"right":[100,90]},
+              {"anchor":[220,90],"left":[220,90],"right":[220,90]},
+              {"anchor":[226,108],"left":[226,108],"right":[226,108]},
+              {"anchor":[106,198],"left":[106,198],"right":[106,198]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "tri-bevel-in",
+      "parameters": {"delta":-10,"join":"bevel","miterLimit":4},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[220,100],"left":[220,100],"right":[220,100]},
+              {"anchor":[100,190],"left":[100,190],"right":[100,190]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 2400,
+            "bounds": [110,110,190,170],
+            "winding": "cw",
+            "areaSignedApp": 2400,
+            "polarity": "positive",
+            "anchors": [
+              {"anchor":[110,110],"left":[110,110],"right":[110,110]},
+              {"anchor":[190,110],"left":[190,110],"right":[190,110]},
+              {"anchor":[110,170],"left":[110,170],"right":[110,170]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "rectccw-miter-out",
+      "parameters": {"delta":10,"join":"miter","miterLimit":4},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[100,160],"left":[100,160],"right":[100,160]},
+              {"anchor":[200,160],"left":[200,160],"right":[200,160]},
+              {"anchor":[200,100],"left":[200,100],"right":[200,100]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 9600,
+            "bounds": [90,90,210,170],
+            "winding": "cw",
+            "areaSignedApp": 9600,
+            "polarity": "positive",
+            "anchors": [
+              {"anchor":[90,170],"left":[90,170],"right":[90,170]},
+              {"anchor":[90,90],"left":[90,90],"right":[90,90]},
+              {"anchor":[210,90],"left":[210,90],"right":[210,90]},
+              {"anchor":[210,170],"left":[210,170],"right":[210,170]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "rectccw-miter-in",
+      "parameters": {"delta":-10,"join":"miter","miterLimit":4},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[100,160],"left":[100,160],"right":[100,160]},
+              {"anchor":[200,160],"left":[200,160],"right":[200,160]},
+              {"anchor":[200,100],"left":[200,100],"right":[200,100]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 3200,
+            "bounds": [110,110,190,150],
+            "winding": "cw",
+            "areaSignedApp": 3200,
+            "polarity": "positive",
+            "anchors": [
+              {"anchor":[110,150],"left":[110,150],"right":[110,150]},
+              {"anchor":[110,110],"left":[110,110],"right":[110,110]},
+              {"anchor":[190,110],"left":[190,110],"right":[190,110]},
+              {"anchor":[190,150],"left":[190,150],"right":[190,150]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "tri-miter-out-limit2",
+      "parameters": {"delta":10,"join":"miter","miterLimit":2},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[220,100],"left":[220,100],"right":[220,100]},
+              {"anchor":[100,190],"left":[100,190],"right":[100,190]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 9170,
+            "bounds": [90,90,226,198],
+            "winding": "cw",
+            "areaSignedApp": 9170,
+            "polarity": "positive",
+            "anchors": [
+              {"anchor":[90,190],"left":[90,190],"right":[90,190]},
+              {"anchor":[90,90],"left":[90,90],"right":[90,90]},
+              {"anchor":[220,90],"left":[220,90],"right":[220,90]},
+              {"anchor":[226,108],"left":[226,108],"right":[226,108]},
+              {"anchor":[106,198],"left":[106,198],"right":[106,198]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "tri-miter-out-limit3_1",
+      "parameters": {"delta":10,"join":"miter","miterLimit":3.1},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[220,100],"left":[220,100],"right":[220,100]},
+              {"anchor":[100,190],"left":[100,190],"right":[100,190]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 9330,
+            "bounds": [90,90,226,210],
+            "winding": "cw",
+            "areaSignedApp": 9330,
+            "polarity": "positive",
+            "anchors": [
+              {"anchor":[90,90],"left":[90,90],"right":[90,90]},
+              {"anchor":[220,90],"left":[220,90],"right":[220,90]},
+              {"anchor":[226,108],"left":[226,108],"right":[226,108]},
+              {"anchor":[90,210],"left":[90,210],"right":[90,210]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "tri-miter-out-limit3_2",
+      "parameters": {"delta":10,"join":"miter","miterLimit":3.2},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[220,100],"left":[220,100],"right":[220,100]},
+              {"anchor":[100,190],"left":[100,190],"right":[100,190]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 9600,
+            "bounds": [90,90,250,210],
+            "winding": "cw",
+            "areaSignedApp": 9600,
+            "polarity": "positive",
+            "anchors": [
+              {"anchor":[90,90],"left":[90,90],"right":[90,90]},
+              {"anchor":[250,90],"left":[250,90],"right":[250,90]},
+              {"anchor":[90,210],"left":[90,210],"right":[90,210]}
+            ]
+          }
+      ] }
+    }
+  ]
+}

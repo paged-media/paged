@@ -1,0 +1,63 @@
+/*
+ * This file is part of paged (https://paged.media).
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// W3.2 — the paged.draw vectorGraphic EDIT CONTEXT (closes B-02).
+//
+// Double-clicking a path-bearing element (polygon / graphic line /
+// rectangle / text frame — the Track-J path kinds) ENTERS the
+// vectorGraphic context: the anchor-editing tool-set is focused
+// (Add/Delete/Convert), the stroke panel is raised, a breadcrumb shows
+// "Vector graphic", and Esc pops back out. Entry is by KIND, not
+// metadata — a path is recognizable from its engine kind, so the
+// matcher reads `candidate.kind` (no `x-paged:` metadata needed; this is
+// the kind-claimed half of the registry, vs. paged.web's metadata-
+// claimed objectType half).
+//
+// Host-agnostic: imports only the plugin-api CONTRACT type. The shell
+// owns the stack / chrome / write-scope; this declares the claim + the
+// tool/panel sets.
+
+import type { EditContextContribution } from "@paged-media/plugin-api";
+
+import { DRAW_TOOL_IDS } from "./tools";
+import { DRAW_PROPERTIES_PANEL_ID } from "./panels/properties-panel";
+
+export const VECTOR_GRAPHIC_CONTEXT = "vectorGraphic";
+
+/** The engine kinds that carry path anchors (the Track-J fan-out). A
+ *  double-click on any of these enters anchor-editing. */
+const PATH_KINDS = new Set(["polygon", "graphicLine", "rectangle", "textFrame"]);
+
+export const vectorGraphicEditContext: EditContextContribution = {
+  type: VECTOR_GRAPHIC_CONTEXT,
+  entry: "doubleClick",
+  // Kind-claimed: any path-bearing element. (paged.web's webFrame is a
+  // rectangle too, but its objectType claims the double-click FIRST via
+  // metadata — see resolveDoubleClick ordering — so a webFrame never
+  // falls through to this kind matcher.)
+  matches: (candidate) =>
+    candidate.kind !== undefined && PATH_KINDS.has(candidate.kind),
+  // The anchor-editing tool-set the context focuses (Add is first → the
+  // host focuses it on enter).
+  toolIds: [...DRAW_TOOL_IDS],
+  // The panel the cockpit raises on enter, and the one the host's
+  // Properties panel shows inline for draw-owned artwork: the selected
+  // object's draw settings (its path points first). It was the Vector
+  // stroke panel, now merged into the host's Stroke panel.
+  panelIds: [DRAW_PROPERTIES_PANEL_ID],
+};

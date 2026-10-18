@@ -1,0 +1,80 @@
+{
+  "name": "@paged-media/draw",
+  "private": false,
+  "version": "0.1.0-canary.20",
+  "license": "AGPL-3.0-only OR LicenseRef-PMEL",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./geometry": "./src/geometry.ts",
+    "./machines": "./src/machines.ts",
+    "./trace-worker": "./src/trace-worker.ts",
+    "./manifest.json": "./manifest.json"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "build": "tsup",
+    "prepublishOnly": "pnpm run build",
+    "bench": "vitest bench --run"
+  },
+  "devDependencies": {
+    "@paged-media/canvas-wasm": "0.71.8",
+    "@paged-media/draw-geometry": "workspace:*",
+    "@paged-media/draw-tools": "workspace:*",
+    "@paged-media/plugin-api": "0.2.55-canary.0",
+    "@paged-media/plugin-sdk": "0.2.55-canary.0",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
+    "@types/node": "20.19.39",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "jsdom": "^30.1.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.9"
+  },
+  "files": [
+    "dist",
+    "wasm",
+    "manifest.json"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "tag": "canary",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./geometry": {
+        "types": "./dist/geometry.d.ts",
+        "default": "./dist/geometry.js"
+      },
+      "./machines": {
+        "types": "./dist/machines.d.ts",
+        "default": "./dist/machines.js"
+      },
+      "./trace-worker": {
+        "types": "./dist/trace-worker.d.ts",
+        "default": "./dist/trace-worker.js"
+      },
+      "./manifest.json": "./manifest.json"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/paged-media/plugin-draw.git",
+    "directory": "packages/draw-bundle"
+  },
+  "peerDependencies": {
+    "@paged-media/plugin-api": ">=0.2.55-canary.0",
+    "@paged-media/plugin-sdk": ">=0.2.55-canary.0",
+    "react": "^18.3.0"
+  }
+}

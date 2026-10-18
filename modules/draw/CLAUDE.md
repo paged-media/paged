@@ -1,0 +1,598 @@
+# CLAUDE.md
+
+Orientation for Claude sessions in **paged-media/plugin-draw** — the
+paged.draw vector plugin (public; dual-licensed AGPL-3.0 OR PMEL, And The
+Next GmbH; license headers on every source file).
+
+## What this is
+
+The distillation repo for draw capability during the
+incubate-then-extract window (strategy:
+`thoughts/docs/paged/plugin-draw/reality-check.md`). Three packages:
+`draw-geometry` (pure math), `draw-tools` (host-agnostic state machines),
+`draw-bundle` (manifest + `activate(host)`). The editor consumes
+geometry/tools via pnpm `link:` and wraps the machines in thin
+`GestureHandler` shims.
+
+Since Image Trace (2026-08-04) there is ALSO a Rust half, in `crates/`:
+`draw-trace` (the tracer kernel over the `visioncortex` crate — colour
+clustering, boundary walking, spline fitting) and `trace-js` (its
+wasm-bindgen surface). The built artifact lands in
+`packages/draw-bundle/wasm/`, which is BOTH the manifest-relative path
+declared under `capabilities.wasm[]` and the path `src/trace-engine.ts`
+imports — one copy, so the manifest/package drift that bit paged.image
+cannot happen here. `scripts/build-wasm.sh` builds it; the artifact is
+COMMITTED so a fresh checkout tests and typechecks with no Rust
+toolchain.
+
+`draw-bundle` is past "skeleton" — `activate(host)` contributes a full
+toolset via `contributeTool` (the Add/Delete/Convert anchor editors in
+the pen flyout, plus the Curvature/Pencil/Gradient-Annotator/Measure/
+Shape-Builder pro tools), the Stroke + Fill schema panels, the
+Appearance/Dash/Path-Ops/Select-Same/Live-Corners commands, the
+Compound-Path pair (Make / Release), PATTERN EDITING v1 (a re-editable
+tile FIELD — and read this before the feature name: "save as a pattern
+SWATCH" IS NOT BUILDABLE and is not faked. There is no pattern paint type
+in IDML, none in `paged_model::Graphic` and none on the wire —
+`SwatchSpec`/`GradientSpec` are the only two shapes
+`createSwatch`/`createGradient` accept — so a field produces ARTWORK, not
+a fill. Filed as RFI C-31: a new paint kind + renderer support in BOTH
+backends + an IDML representation decision, i.e. core work. What v1 DOES
+deliver is everything else the catalog row asks for, and each item was
+one of v0's measured ceilings: real parameters — grid/brick/hex
+lattices, tile size, spacing where NEGATIVE is a geometric overlap, copy
+counts, dimming as a real `frameOpacity` on the copies, and `overlap` =
+which copy paints in FRONT, expressible only because insertion order IS
+paint order (so the vertical choice wins, being the outer sort, and the
+SOURCE can never be lifted above its copies); an ARTBOARD-AWARE tile
+count read from the `pages` collection's `sizePt`, so v0's off-page tiles
+— created, grouped and unreadable, because `pathAnchors`/`elementGeometry`
+are page-keyed (RFI C-23) — now happen only behind an explicit
+`fitToArtboard: false` the spec still pins; and RE-EDITABILITY: re-plan
+with new parameters AND fresh source geometry, release, un-bake, select
+tiles. The recipe is a `.paged` container part — the fourth in this
+repo, after graphic styles / symbols / live paint — with per-leaf links,
+so Release and un-bake work even on a host with no container writer
+(only the PARAMETERS are lost there). The Pattern Options React panel is
+where the not-a-swatch boundary is put in front of the user, and its
+wording is pinned by a test. A v0 `patternTile` stamp
+reads as the legacy field `""`: releasable and un-bakeable, not
+re-plannable. Two batch-ORDERING rules are measured and load-bearing —
+inserts go before deletes (a batch that deletes then inserts is refused
+up to core 0.71.7), and a group must be DISSOLVED before its members are
+deleted), IMAGE TRACE v0,
+GRAPHIC STYLES (a named, LINKED complete appearance — the library is a
+document-resident `.paged` container part written through `host.parts`
+and declared in `contributes.partTypes`; the link is a reference on the
+element's own metadata envelope, a direct appearance edit marks the
+element OVERRIDDEN without breaking the link, and a redefine overwrites
+that override), SYMBOLS v0 (its sibling, same shape: a named artwork
+DEFINITION in a SECOND container part + INSTANCES re-emitted from it.
+Core has no symbol/instance model, IDML has no such primitive, and the
+`Mutation` union has no element-duplicate op — so an instance is
+`insertPath` geometry + flat paint carrying a per-LEAF link, because a
+group cannot hold metadata. Registration points are the §16.1 nine-point
+grid; redefine and reset REBUILD an instance rather than re-point it.
+TEXT is refused (no op copies a story), and the eight symbol-SET tools /
+nine-slice / 3D mapping are named as unbuilt rather than implied), LIVE
+PAINT v0 (the last unbuilt Illustrator Phase-2 row — and the third
+library-in-a-container-part feature. Read the word REGENERABLE before
+the word LIVE: the engine has NO `LivePaintGroup` node and no persistent
+face/edge ids, only B-22's per-call planar QUERY whose ids
+(`<signature>#<component>`) index into the REQUEST's own ordered
+`elementIds`. So a group is a RECIPE — the ordered members plus a paint
+per face id — and a painted face is REAL ARTWORK inserted over the
+region; editing a member repaints nothing until Regenerate re-derives,
+and a face id an edit retires loses its paint with a report. GAP options
+and EDGE stroking are NOT built and the code says exactly why: the
+arrangement door takes no tolerance, the kernel names gap detection as
+out of scope, every input subpath is implicitly CLOSED, and the wire
+carries no edge id at all. The 12-input / 256-face caps REFUSE with the
+engine's own sentence on the pathfinder status binding. Filed as RFI
+C-30), REPEATS v1 (the Illustrator §12.4 row, and the catalog's SIBLING
+of pattern — read the difference before the code: a PATTERN is a
+swatch-shaped FILL, a REPEAT is an object TRANSFORM with expand/release.
+Radial / grid / mirror, one AFFINE per instance in
+`draw-geometry/src/repeat.ts` because a repeat rotates and REFLECTS where
+a tile field only translates. It is the FIRST feature in this repo that
+builds in ONE UNDO STEP: plugin-sdk `bc52766` put C-15's `bindCreated`
+in the contract, so one batch inserts, binds, paints, links and groups —
+measured, 200 instances in ~12 ms, one undo removes all of them.
+EXPAND and RELEASE are Illustrator's two verbs and mean different things
+(expand keeps every instance as artwork; release removes them and keeps
+the source) — note this is pattern v1's pair spelled the OTHER way
+round. CLIPPING is real, over B-18's `pasteInto`, and costs the second
+undo step plus four measured consequences that are all asserted: a
+clipped repeat has NO GROUP (`pasteInto` refuses a grouped child), a
+clipped instance is INVISIBLE to `document.tree()` while still answering
+geometry and metadata by id (so the recipe is its only index, and
+clipping DEGRADES OFF without a container writer), `deleteFrame` REFUSES
+a pasted-in child, and deleting the container ORPHANS its children. The
+recipe is the FIFTH `.paged` container part here. The on-canvas control
+is REAL but bounded and the code says where: a drag steers ONE parameter
+and the overlay draws a GUIDE, because `setToolPreview` takes ONE
+polyline; the artwork is rebuilt once on RELEASE, because a re-plan per
+pointer-move would be an undo step per sample),
+BLENDS v1 (§16.2 — wave 2's v0 was ONE command and two undo steps; the
+CATALOG ROW is the three SPACING MODES, and all three reduce to a step
+count: Specified Steps IS the count, Specified Distance divides the
+SPINE's arc length, Smooth Color divides the COLOUR distance — the
+largest per-channel difference between the two key fills. A TYPED count
+over the 200 ceiling REFUSES and a DERIVED one CLAMPS, because a typo is
+not data. THE SPINE is the path the intermediates follow and its default
+— the straight line between the two keys — is PROVABLY INERT: a
+default-options v1 blend places exactly the lerp v0 placed, so the spine
+offset and the orientation turn both vanish and every deviation is
+opt-in. TWO DELIBERATE DIFFERENCES FROM ILLUSTRATOR, both named in the
+code: a replaced spine KEEPS ITS OWN PAINT (clearing a stroke the user
+drew, unasked, is a worse surprise than a visible spine) and is NOT put
+in the blend's group (so it stays selectable — the whole reason to
+replace one). The two REVERSES are different verbs and both are built:
+reverse SPINE moves geometry, reverse FRONT-TO-BACK moves nothing and
+costs no `reorderElement`, because insertion order IS paint order. Easing
+has a STRENGTH that is a blend, not an exponent, so strength 0 is the
+identity for every curve; colour gets its own curve only when
+`colorEasing` is non-null — that IS "independent colour acceleration".
+The catalog's "live Blend panel preview" is honest about its scope: the
+panel previews the PLAN — the resolved count and where it came from —
+not the artwork, because re-rendering per keystroke is an undo step per
+keystroke. SECOND consumer of C-15, so make/update/replace-spine/both
+reverses/expand/release are ONE undo step EACH),
+OBJECTS ON A PATH (§16.3 — and read this before the code: IT MOVES YOUR
+OBJECTS AND CREATES NOTHING, which is the opposite of every other
+arranging row here. One `setElementProperty { frameTransform }` per
+object, so the objects on the path ARE the selected ones: element ids
+survive, a foreign plugin's metadata on them survives, TEXT IS NOT
+REFUSED (nothing copies a story because nothing is copied), and RELEASE
+is an exact restore rather than an inverse. Nothing is grouped, nothing
+is scaled to fit, and the count mode's count IS the object count —
+there is deliberately no way to ask for more slots than objects, because
+that is what a Repeat is), OPACITY MASKS and TYPE ON
+A PATH (the two protocol-58 rows — see the v58 seam note below), SVG
+import/export, and the `vectorGraphic` EDIT CONTEXT
+(double-click a path-bearing kind → anchor-editing tool-set focused,
+stroke panel raised, Esc pops out). The bundle drives end-to-end through the real editor host:
+the draw-plugin e2e (`editor` `apps/canvas/tests/e2e/draw-plugin.spec.ts`)
+and a DTP journey (`tests/journey/plugins/draw.journey.spec.ts`) author a
+path with the built-in Pen, then refine its anchors (add/delete/convert)
+and stroke through the bundle. The three TS packages carry 2 652 passing
+vitest against engine 0.71.8 (geometry 681, tools 337, bundle 1 634; 34
+skipped — 27 of them the InDesign round-trip generator, which runs only
+with `PAGED_ROUNDTRIP_WRITE`, 3 the opt-in real SVG corpus, 3 the
+page-only cases of the spread-space fake engine, 1 the older-engine
+Create Outlines refusal) and typecheck clean; the two crates carry 26 `cargo test` (draw-trace 22,
+trace-js 4).
+
+**ONE SHARED KERNEL, AND ONLY ONE.** §16.2 (blend spines) and §16.3
+(objects on a path) landed together, so the "is there a common placement
+kernel?" question had to be answered with facts. There is, and it is
+`draw-geometry/src/along-path.ts`: BOTH rows need *point + tangent at a
+fraction of a path's ARC LENGTH*, which means flattening, cumulative
+lengths, a lookup and a tangent — ~150 lines that go wrong twice if
+written twice — plus the same count/spacing distribution rule on top
+(`endpoints: "interior"` keeps a blend's intermediates off its keys;
+`"inclusive"` puts the first and last object on an open path's ends).
+What is deliberately NOT shared is everything ABOVE the slot list,
+because there the two rows need DIFFERENT facts: a blend interpolates NEW
+geometry between two shapes and offsets it onto the spine; objects-on-a-
+path moves EXISTING elements — their own geometry, their own ids — about
+a pivot. Those are three lines each and share nothing but the word
+"affine". One measured detail the kernel carries because it would
+otherwise be silently wrong: a COUNT distribution survives a
+ZERO-LENGTH path (two CONCENTRIC key objects give a blend exactly that,
+and collapsing it to one intermediate would drop every step of an
+ordinary concentric blend); only SPACING collapses, because a zero-length
+path has no gaps to walk.
+
+**THE STRUCTURAL VERBS ARE NOT THIS BUNDLE'S.** Group / Ungroup /
+Select parent group used to be `media.paged.draw.command.*`, which meant
+a user without paged.draw loaded could not group — although `createGroup`
+/ `dissolveGroup` have been wire ops the whole time. They are HOST
+commands now (`paged.object.group` / `.ungroup` / `.selectParentGroup`
+in `editor` `apps/canvas/src/object-commands.ts`, alongside the four
+Arrange verbs the editor never had), and their conformance moved with
+them to `apps/canvas/tests/e2e/object-commands.spec.ts`. Basic object
+operations are what plugins BUILD ON, so exactly one implementation
+ships and it is the host's. What stayed here is what draw's own features
+compose: the wire shapes in `commands/group.ts` (Pattern's re-plan,
+Symbols' instance grouping, Image Trace's contour grouping) and the pure
+`parentGroupOf` walk in `commands/parentage.ts` (Appearance bake,
+Symbols). Do not re-add a plugin-side Group command — `activate.spec.ts`
+and `headless-conformance.spec.ts` both assert its absence.
+
+**The planar arrangement has ONE seam, and it is no longer an escape
+hatch.** `draw-bundle/src/handlers/planar-regions.ts` owns the
+once-per-gesture-scope cache with its cold-start / face-cap point
+queries, the raw↔page face mapping and the refusal reporter. The QUERY
+itself now goes through the published `host.document.planarRegions`
+facade — K-11 shipped in `0.2.28-canary.0`, so the raw `client.send`
+and the two local wire types are gone (they are aliases of the
+contract's `PlanarFace` / `PlanarRegionsResult`). Shape Builder and Live
+Paint both ride it; a third region tool must too. ONE behaviour changed
+with the repin and it is an improvement: `null` used to mean "the host
+did not answer", which conflated an old engine with a dead send; the
+facade answers an unservable door as a REFUSAL carrying the engine's
+reason, so `null` now means only that the capability gate threw.
+
+**THE FOUR WIRE SEAMS ARE NOW FOUR MODULES, NOT FOUR CASTS.** The
+`0.2.28-canary.0` repin (2026-08-05) deleted all thirteen of them:
+`handlers/planar-regions.ts` calls the published facade,
+`commands/v58-wire.ts` and `commands/v59-wire.ts` return
+`PendingMutation` directly, and `binding-provider/adr023-seam.ts`
+re-exports the contract's seven ADR-023 types instead of mirroring them.
+The modules stay, because each still owns real logic (caching, refusal
+reading, capability probes, optional-field omission) and because one
+builder per op is still the rule.
+
+**ONE cast survives, and it is a CONTRACT GAP, not laziness.**
+`batchMutationFor` in `commands/v59-wire.ts`. The generated `Mutation`
+types batch as `{ ops: Mutation[] }` — settled ops only — and
+`PendingMutation` carries no batch variant, so the union cannot express
+"a batch containing a protocol-ahead op". That is exactly what every
+one-undo-step flow here builds, and what `bindCreated` was DESIGNED for
+(it is meaningless outside a batch). The gap is in the hand-maintained
+delta, not in core, which accepts these batches. Filed for the SDK: add
+a `BatchMutation` to `PendingMutation` whose `ops` are `MutationInput[]`.
+Until then there is ONE cast, in ONE function, and every flow routes
+through it.
+
+**A LOCAL MIRROR CAN HIDE A REAL INCOMPATIBILITY — measured, not
+theoretical.** The retired `adr023-seam.ts` mirror declared
+`applyMutation(mutation: Mutation)` where the contract takes a
+`MutationInput`. Under `strictFunctionTypes` a handler accepting only the
+NARROWER union cannot satisfy the wider parameter, so that provider could
+never actually have registered once the cast came off. The mirror was not
+a cosmetically-drifted copy; it was a type this bundle could not have
+used. That is the argument against writing the next one.
+
+**PROTOCOL 58 has ONE seam too**, and its skew is CLOSED.
+`draw-bundle/src/commands/v58-wire.ts` owns the four C-28/C-29 ops
+(`applyOpacityMask` / `releaseOpacityMask` / `attachTextToPath` /
+`detachTextFromPath`), their capability probes and their refusal reader.
+All four are typed in the published delta (plugin-sdk `f00d6dd`), the
+builders return `PendingMutation`, and `OpacityMaskMode` is an alias of
+the contract's `OpacityMaskType` rather than a second declaration of the
+same two strings.
+
+Two honesty facts these rows carry, and neither may be softened:
+- **An opacity mask does NOT render on canvas.** Core honours it in the
+  CPU rasterizer and in PDF export, but NOT in the Vello/WebGPU backend
+  the editor draws through (`push_layer` takes a shape, not a coverage
+  buffer). So there is deliberately no panel, no overlay and no preview:
+  the command TITLE carries the gap (the `pattern.ts` precedent), the
+  success log repeats it, and `OPACITY_MASK_CANVAS_NOTE`'s wording is
+  pinned by a conformance test.
+- **Type on a Path FLOWS AN EXISTING STORY.** No wire op mints a bare
+  story (`insertTextFrame` mints one BOUND to its frame, and a flowed
+  story is refused), so the attach resolves a FREE story — empty frame
+  chain AND unclaimed by a path stamp, because a path-attached story
+  reports an empty frame chain exactly like an unflowed one — and its
+  refusal names the workflow that produces one (type into a frame,
+  delete the FRAME). A "seed a story" command is deliberately NOT built.
+  `PathEffect` is likewise not offered: only `RainbowPathEffect` renders.
+  NOTE the editor USED to ship an INERT built-in `paged.tool.typePath`
+  (a rail entry with no `gesture`, holding `shift+t`); a bundle cannot
+  attach behaviour to a built-in id, so this tool joins the same `type`
+  group beside it under `shift+h`.
+
+**SHORTCUT REGISTERS — the note above is out of date and this is the
+correction.** "`shift+z` is now the ONLY free shift key" was true until
+the editor's `2e6f835` ("no more dead rail entries — wire six, stub
+five, retire four", 2026-08-03) RETIRED three inert built-ins and freed
+their keys: `shift+t` (the placeholder Type on a Path), `i` (a dead
+Eyedropper) and `k` (a dead Measure). The current global picture:
+- editor built-ins hold `v a u b t \ p n f m l c e r s o g h z` plus
+  `shift+p` / `shift+g`, and `w` as the preview toggle;
+- paged.image holds `shift+x y shift+y shift+l shift+w q shift+f shift+e`;
+- paged.draw holds `= -` plus
+  `shift+c/u/n/a/m/b/r/j/k/i/d/s/q/o/v/h`.
+So the free registers WERE exactly `shift+t`, `i`, `k` and `shift+z`.
+UPDATE 2026-10-04: `k` now belongs to the Live Paint Bucket, its
+canonical key; the host's working Eyedropper holds `i` and paged.image
+took `shift+t`, so Type on a Path (`shift+h`) and draw's Eyedropper
+(`shift+d`) stay where they are. Free now: `shift+o` and `shift+z`
+(which reads as an undo variant and stays a trap).
+
+**`.paged` CONTAINER PARTS: there are now SEVEN** — graphic styles,
+symbols, live paint, pattern, repeat, blend (`blend.json`) and objects-on-
+path (`objects-on-path.json`). The last one is the only feature whose
+recipe is NOT load-bearing: each object's HOME transform rides its own
+metadata link, so release and update work on a host with no container
+writer and only the distribution PARAMETERS are lost there.
+
+**RFI C-15 IS NOW IN THE CONTRACT AND THE TWO-BATCH FLOOR IS BROKEN.**
+This section used to say C-15 had landed in core but was unreachable
+here, blocked purely by `@paged-media/plugin-api`. That changed:
+plugin-sdk `bc52766` ("plugin-api: carry `bindCreated` — the op that
+collapses two-batch flows") added `BindCreatedMutation` to the
+protocol-ahead `PendingMutation` delta, and the `0.2.28-canary.0` repin
+INSTALLS it. `bindCreatedMutationFor` returns a real `PendingMutation`;
+the cast it used to ride is gone. What remains is the batch-shaped gap
+described above — `PendingMutation` has no batch variant, so the one
+`batchMutationFor` cast is the only thing between this op and a fully
+typed path.
+
+REPEATS v1 is the first consumer and builds in ONE UNDO STEP. Everything
+measured against the booted engine (protocol **60** — the local wasm
+carries `LayerSummary.parentId`; the harness booted 60, not the 59 an
+earlier note claimed while correcting a staler 58) and pinned in
+`repeat.spec.ts`:
+- the bind must come AFTER its creating child; before it the batch is
+  refused BY NAME ("has nothing to name — no creating child ran before
+  it in this batch");
+- it is its OWN op — a handle inside a creating op's `args` is SILENTLY
+  ignored and the later `$h:` then fails with "node not found";
+- `"$h:<handle>"` resolves in every id position this repo uses: an
+  `ElementId.id`, a bare-string `deleteFrame.frameId`, a
+  `setElementProperty.elementId` (INCLUDING the `framePath` compound
+  re-merge door), a `createGroup.memberIds` entry, and BOTH ends of
+  `pasteInto`;
+- 200 inserts + binds + property writes apply in one batch in ~12 ms and
+  ONE undo removes all of them.
+
+ONE MEASURED EDGE, recorded in `v59-wire.ts` — now DIAGNOSED AND FIXED
+IN CORE, and still worked around here until that engine ships. With an
+EARLIER `bindCreated` in the same batch, a `bindCreated` placed after a
+`createGroup` bound the PREVIOUS creation, so `dissolveGroup { groupId:
+"$h:g" }` refused with "node not found: Group(<the earlier insert's
+id>)". The cause was not the resolver: a wire `createGroup` translated
+with `spec.self_id: None` and let the APPLIER mint the id, while a
+handle-using batch translates every child BEFORE applying any of them —
+so it could only learn a created id from the translated op, and `None`
+there bound nothing. Core now mints the group id at translation time.
+Repeats still reads the previous group out of the TREE before it builds,
+because this bundle runs against whatever wasm the host booted.
+
+BLENDS v1 is the SECOND consumer and is likewise ONE undo step for every
+verb (`blend.spec.ts` measures make / update / both reverses / expand /
+release). OBJECTS ON A PATH is one too, and for a different reason worth
+keeping separate: it creates NOTHING, so it needs no `bindCreated`, no
+batch-ordering rule and no group — just N `frameTransform` writes in one
+batch.
+
+BLEND AND REPEAT (make and update) were one batch already; what they
+still paid was learning what the batch built — a before/after tree diff,
+a metadata read per new leaf to tell steps / instances / the clip frame
+apart, and a third tree read for the new group. They read the handles
+and the group off the reply now (`commands/minted.ts`): a make reads no
+tree, an update only the link walk's one. The new GROUP's id relies on
+core minting it at translation time (the fixed edge above); on an engine
+that does not list it, the reply does not match the batch and both fall
+back to their links. A CLIPPED repeat stays two batches, and the reason
+moved: the paste could ride the build by handle now, but on a host whose
+reply lists nothing the tree diff is the only enumeration left, and a
+pasted-in instance is invisible to it — `repeatClipBatchFor` says so.
+
+PATTERN (make and re-plan) IS ONE BATCH TOO, and the first flow CONVERTED
+rather than built that way: the inserts are named, and the batch that was
+"batch 2" follows them in the same mutation, addressing the copies by
+handle (`patternBatchFor` = the inserts + `patternFinishBatchFor`'s ops,
+so the two lanes cannot drift). THE TWO-BATCH LANE IS KEPT as the
+fallback for an engine that refuses the one batch, and
+`pattern.spec.ts` runs every bake through both — and through hosts that
+cannot say what a batch created — requiring the SAME document from each
+(`test/conformance/one-batch.ts` has the hosts and the comparison).
+
+THE APPEARANCE BAKE STAYS TWO BATCHES, and that is the floor the rules
+allow, not a conversion left undone: the carrier's bake record names its
+derived layers by element id INSIDE its JSON metadata envelope
+(`appearanceBake.layers`, which release and a reopened document read),
+and a `$h:` handle in text is stored as written, never resolved
+(measured, `minted.spec.ts`). So the record can only be written once a
+first mutation has answered with the ids. What changed is that those ids
+come off the reply (`commands/minted.ts`): 0 tree reads, was 2.
+
+COMPOUND-PATH RELEASE IS ONE BATCH FOR THE WHOLE SELECTION (`release
+BatchForAll`): per element, contour 0 back onto the survivor and every
+other contour inserted, named and painted by name. It was two batches PER
+ELEMENT. Nothing is deleted, so no ordering rule binds; the two-per-
+element lane is the fallback.
+
+SYMBOLS — place, reset AND REDEFINE — ARE ONE BATCH, however many
+instances: a redefine of 50 instances was 100 mutations, 100 undo steps
+and 150 tree reads, and is 1, 1 and 1. `symbolBatchFor` sorts every
+instance's ops into the one order several rebuilds allow (inserts,
+dissolves, deletes, finishes, groups — below). That order also fixed an
+as-found failure: three two-piece instances rebuilt one after another hit
+the engine defect below and only the LAST was rebuilt; all their groups
+are dissolved before anything is deleted now. The two-batches-per-
+instance lane is the fallback.
+
+LIVE PAINT fill and regenerate are ONE BATCH (`livePaintBatchFor`): the
+face contours inserted and named, then the replaced fills deleted, the
+holes re-merged, the faces painted and linked. The two-batch lane is the
+fallback.
+
+IMAGE TRACE's commit STAYS TWO BATCHES for the appearance bake's reason:
+the source's trace record names its regions by element id inside its
+JSON metadata (`imageTrace.regions`), where a handle is never resolved.
+What each batch created comes off the reply: 0 tree reads, was 2 (3 with
+a group to find).
+
+**"WHAT DID MY BATCH CREATE" HAS ONE SEAM: `commands/minted.ts`.** A
+batch outcome carries ONE `createdId`, so a flow that inserted several
+paths used to read `document.tree()` before and after its batch and diff
+the two — 2–3 whole-document reads per command. The engine's raw
+`mutationApplied` already lists every element a batch minted, in mint
+order (`minted`); plugin-sdk's `host.document.mutate` dropped it before
+0.2.38 (RFI K-15) and carries it on the outcome since.
+`mutateMinting(host, mutation)` answers it through three lanes and a flow
+never knows which it got: `outcome.minted` (plugin-sdk ≥ 0.2.38 — the
+headless host and the editor both take this one, 0 tree reads), the raw
+reply HEARD on `host.editor.client.subscribe` while the facade writes (an
+older SDK with the hatch — 0 tree reads), and the tree diff (a host with
+neither). The conformance `LANES` reach the two older lanes through
+`withoutMintedOutcome` (`test/conformance/one-batch.ts`). The write
+itself always goes through `host.document.mutate`: `client.send({ kind: "mutate" })` would skip the
+facade's gates, and the headless host does not fan a `send` reply out, so
+no `onDidChange` listener would hear the write. What `minted` contains is
+measured and pinned in `minted.spec.ts`: one entry per CREATING child in
+batch order, a `createGroup` listed as a group, an element the same batch
+deletes again STILL listed, `createSwatch` not listed, and `handle` named
+on some batches and `null` on others — ORDER is the contract. A flow
+never indexes the list by hand: `bindMinted(minting, batch)` reads the
+batch it sent and answers handle → id, the same in every lane.
+
+**THE `frameTransform` DOOR, and three things measured about it** (the
+§16.3 lane rides it; protocol 60):
+- it REPLACES an element's item transform, it does NOT compose with it.
+  Writing the same rotation twice leaves the object at 30°, not 60° —
+  which is what makes an idempotent Update and an EXACT (not inverse)
+  Release possible at all;
+- `elementGeometry.bounds` is the frame box in the element's OWN space
+  and is NOT recomputed by a transform, nor — separately measured — by a
+  `framePath` write. The transform comes back beside it, so page space is
+  `transformBounds(bounds, itemTransform)`. Anything reading `bounds` as
+  if it were page space is wrong on any transformed element;
+- N writes in ONE batch is ONE undo step;
+- it is SPREAD space, while the geometry reads are PAGE space on an
+  engine with core's page-space fix (paged-media/core#70, which adds
+  `pageOrigin`) and spread space on the ones before it. Convert through
+  `src/page-origin.ts` — stored = translate(`pageOrigin ?? [0, 0]`) ∘
+  `itemTransform`, right on both — and never write a geometry read's
+  transform as it came. The same holds for `framePath` on a path
+  `insertPath` just made: `insertPath` adds the page origin, `framePath`
+  does not. `test/page-space/` runs every writer against a fake engine in
+  both shapes; `test/conformance/page-space.spec.ts` does it through the
+  real one on InDesign's page placement (`PAGED_ENGINE_FROM` for a local
+  build of the other).
+
+**RFI C-23 IS NARROWER THAN "PAGE-KEYED" SUGGESTS, and two plausible
+readings of it are FALSE.** Both were written into `objects-on-path.ts`
+as fact and then deleted when they were measured:
+- `getMetadata` is NOT page-keyed, and neither is `document.tree()`. An
+  element moved off the page still answers its own link and is still
+  listed in the tree. What goes silent is `elementGeometry` /
+  `pathAnchors` — the GEOMETRY, which is exactly what a re-distribution
+  needs. So an off-page element is never LOST, only unmeasurable, and a
+  write BY ID still reaches it. (An earlier claim here that an off-page
+  element "answers nothing, not even its metadata" came from a probe
+  whose stamp had been refused for a NAMESPACE reason — the bundle was
+  not loaded. Load the bundle before concluding anything about
+  `setPluginMetadata`.)
+- there is no simple "outside the rect" threshold. A 300 pt box hanging
+  38 pt past the right edge AND 50 pt above the top still answers
+  everything; the same box starting 500 pt across a 612 pt page does not.
+  Where the engine draws that line is NOT modelled here and no guess
+  about it is recorded — §16.3's artboard fit simply applies the stricter
+  "fully inside" rule, so it never needs to know.
+
+**The batch-ORDERING rules the engine enforces**, all measured
+(`minted.spec.ts` pins each with its sentence) and all load-bearing for
+any flow that builds, replaces and groups in ONE batch — the bundle runs
+against whatever wasm the host booted, so the flows keep the order that
+is right on EVERY engine:
+- Inserts go FIRST. Up to core 0.71.7 a batch that DELETES and then
+  INSERTS is refused — "position N out of range for parent Spread" —
+  because the insert's z-position resolves against the spread length the
+  batch STARTED with. 0.71.8 FIXED it (core `d98e439`: the slot is pulled
+  back to the list's length); `minted.spec.ts` / `pattern.spec.ts` now
+  pin that it applies and one undo restores it. (Insert-then-delete was
+  always fine.)
+- A group must be DISSOLVED BEFORE its members are deleted. On 0.64
+  deleting first was refused ("group has an id-less member that cannot
+  round-trip"); on 0.65–0.71.6 it APPLIED and its undo did not bring the
+  group or its members back. 0.71.7 FIXED that (RFI C-84, core
+  `ecad085`) the way InDesign behaves: a group goes with its LAST member,
+  and one undo brings all of them back — so delete-then-dissolve is now
+  REFUSED whole ("node not found: Group(…)"), the dissolve naming a group
+  that is already gone. Either way: dissolve first.
+- SEVERAL rebuilds in one batch: every insert, then every dissolve, then
+  every delete, then every `createGroup`. That order is right on every
+  engine. Rebuild by rebuild (dissolve, delete, group, …) was a trap on
+  0.64 (it applied and the document was wrong); 0.65 gets it right and
+  one undo restores it — the flows keep the grouped order anyway.
+
+**FIXED in 0.65 — the defect every deleting flow used to inherit.**
+On 0.64 deleting a page item that sat BELOW a group in z-order broke that
+group (its member references were not moved down): a re-plan / update /
+rebuild of a record that was not the TOPMOST group on its page was
+refused ("a member already belongs to another group"), and a release /
+un-bake APPLIED and damaged the groups above it. Core fixed it; the pins
+in `minted.spec.ts`, `pattern.spec.ts` and `symbols.spec.ts` now assert
+the fixed behaviour (a re-plan under another group is one batch and one
+undo restores it).
+
+**B-18 NESTING IS REAL, and `commands/group.ts`'s old "a 'paste into'
+cannot be expressed end-to-end" note was wrong — it is corrected in
+place.** `pasteInto { containerId, childId }` nests a top-level item
+inside a container Rectangle / Oval / Polygon, where it renders CLIPPED
+by that container's outline; `releaseFrom { childId }` pops it back.
+Repeats' clipping ships on the pair. FOUR consequences, all measured and
+all asserted in `repeat.spec.ts` — read them before building anything
+else on nesting:
+1. a nested child CANNOT be grouped ("B-18: a grouped item cannot be
+   pasted into a frame (ungroup first)"), so clip and group are
+   mutually exclusive;
+2. a nested child is INVISIBLE to `document.tree()` — the container
+   reports NO children — while `getMetadata` / `elementGeometry` /
+   `pathAnchors` all still answer for it BY ID. So nothing that walks
+   the tree can enumerate nested artwork, and anything that nests must
+   keep its own index;
+3. `deleteFrame` REFUSES a nested child ("B-18: the item is pasted into
+   a container — release it before removing") — release first;
+4. deleting the CONTAINER on 0.64 did not delete its children, it
+   ORPHANED them (they left the tree and still answered
+   `elementGeometry`); 0.65 removes them with it. Delete the children
+   first, the container last — right on both engines.
+What is still NOT representable is a clip GROUP — an arbitrary clip path
+over a set of items. The `GroupSpec` has no clip flag and core's parsed
+`Group` has no mask member; that half stays in the RFI.
+
+## Hard rules
+
+- **Host-agnostic means host-agnostic.** `draw-geometry` has zero deps;
+  `draw-tools` may import ONLY `draw-geometry` + *types* from
+  `@paged-media/plugin-api`. Never import `@paged-media/shell` /
+  `@paged-media/client` / React here — that's the editor shim's job. If a
+  machine seems to need host state, the missing piece is an event/option
+  on the machine API or an RFI gap (the BREAKAGE_LOG was retired 2026-06-12, fully drained).
+- **`@paged-media/plugin-api` is the only sanctioned contract import.**
+  A need it can't meet goes to the cross-repo RFI (`thoughts/docs/paged/plugin-platform/rfi-core-sdk-gaps.md`); the
+  log is the API-v1 punch list — keep it current, mark entries RESOLVED
+  with a pointer when host/core work lands.
+- **Machines stay pure + unit-tested.** Page-local pt in, snapshots/plans
+  out; tolerances are passed in (the host converts px→pt at zoom). Every
+  behavior change lands with a vitest case (`packages/*/test/`).
+- **Wire compatibility is asserted, not assumed.**
+  `draw-tools/src/wire-compat.ts` type-asserts machine output against the
+  engine wire types; a protocol break fails `pnpm typecheck` here. Don't
+  delete those assertions to make a build green — they're the §12.3 alarm.
+- **`panels/*.panel.json` are design prototypes.** Not interpreted by any
+  host; keep them honest against the catalog's binding ceiling (no
+  invented conditionals).
+- **Install order:** editor → plugin-sdk → plugin-draw (`link:` chain).
+- **The Rust half is the EXCEPTION, not the new normal.** `crates/` exists
+  because Image Trace's kernel is computer vision, not path algebra, and
+  `visioncortex` already is that kernel. Path math still belongs in
+  `draw-geometry` — in particular the tracer does NOT decide winding: it
+  reports contours, and `makeCompoundTable` (`mergeCompound` +
+  `orientForNonZeroHoles`) re-winds holes by nesting depth, because the
+  engine fills NON-ZERO. Winding is decided in TS, in
+  `draw-geometry/src/compound.ts`, and nowhere else. There are TWO rules
+  there, for two kinds of contour, and they are NOT interchangeable:
+  nesting depth (even-odd in effect) for traced contours, which have no
+  paint order; PAINT ORDER (`orientByPaintOrder` — the backmost path one
+  way, every other path the other) for Make Compound Path, because that
+  is what Illustrator does — measured, `test/oracle/compound-path.spec.ts`:
+  it stays non-zero and paints a square nested three levels deep SOLID.
+- **`flo_curves` 0.3 (transitively, via visioncortex) is NOT the version
+  the engine had to patch.** Core patches flo_curves 0.8 for a
+  non-transitive comparator in `GraphPath::exterior_paths` that aborts
+  under driftsort. visioncortex touches flo_curves only for
+  `Coordinate`/`Coordinate2D` trait impls and `bezier::Curve::fit_from_points`
+  — it never constructs a `GraphPath` — and 0.3.1 does not contain that
+  comparator at all. Recorded in the workspace `Cargo.toml`; re-check it
+  if the dependency is ever bumped.
+
+## Commands
+
+```bash
+pnpm install && pnpm test && pnpm -r typecheck
+node ../plugin-sdk/packages/plugin-cli/bin/paged-plugin.mjs validate packages/draw-bundle/manifest.json
+
+# The Rust half (only needed when crates/ changes — the artifact is committed)
+cargo fmt --all && cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+./scripts/build-wasm.sh   # → packages/draw-bundle/wasm/, enforces the size budget
+```

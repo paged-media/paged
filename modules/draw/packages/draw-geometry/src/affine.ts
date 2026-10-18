@@ -1,0 +1,89 @@
+/*
+ * This file is part of paged (https://paged.media).
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// 2D affine helpers for itemTransform handling — `[a, b, c, d, tx,
+// ty]` column-major pairs, the IDML/engine convention. Anchor tables
+// live in the path's local frame; click points arrive page-local, so
+// anchor-edit planning inverse-applies the element's transform first.
+
+import type { Vec2, Vec2Mut } from "./types";
+
+export type Affine = readonly [number, number, number, number, number, number];
+
+export function applyAffine(m: Affine | null, x: number, y: number): Vec2Mut {
+  if (!m) return [x, y];
+  return [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
+}
+
+/** Inverse-apply; returns null when the matrix is singular. */
+export function inverseApplyAffine(
+  m: Affine | null,
+  x: number,
+  y: number,
+): Vec2Mut | null {
+  if (!m) return [x, y];
+  const det = m[0] * m[3] - m[1] * m[2];
+  if (Math.abs(det) < 1e-12) return null;
+  const px = x - m[4];
+  const py = y - m[5];
+  return [(m[3] * px - m[2] * py) / det, (-m[1] * px + m[0] * py) / det];
+}
+
+/** Compose two affines (`outer ∘ inner` — apply `inner` first, then
+ *  `outer`). Both in the `[a, b, c, d, tx, ty]` column-pair convention. */
+export function composeAffine(outer: Affine, inner: Affine): Affine {
+  const [a1, b1, c1, d1, e1, f1] = outer;
+  const [a2, b2, c2, d2, e2, f2] = inner;
+  return [
+    a1 * a2 + c1 * b2,
+    b1 * a2 + d1 * b2,
+    a1 * c2 + c1 * d2,
+    b1 * c2 + d1 * d2,
+    a1 * e2 + c1 * f2 + e1,
+    b1 * e2 + d1 * f2 + f1,
+  ];
+}
+
+/** The inverse matrix (`composeAffine(invertAffine(m), m)` is the
+ *  identity); null when `m` is singular or not finite — the same rule as
+ *  `inverseApplyAffine`. */
+export function invertAffine(m: Affine): Affine | null {
+  const det = m[0] * m[3] - m[1] * m[2];
+  if (!Number.isFinite(det) || Math.abs(det) < 1e-12) return null;
+  const a = m[3] / det;
+  const b = -m[1] / det;
+  const c = -m[2] / det;
+  const d = m[0] / det;
+  return [a, b, c, d, -(a * m[4] + c * m[5]), -(b * m[4] + d * m[5])];
+}
+
+/** The identity affine. */
+export const IDENTITY_AFFINE: Affine = [1, 0, 0, 1, 0, 0];
+
+/** Scale factor the transform applies to lengths (uniform-ish
+ *  approximation: average of the basis-vector norms). Used to keep
+ *  pick tolerances meaningful in transformed local space. */
+export function affineScale(m: Affine | null): number {
+  if (!m) return 1;
+  const sx = Math.hypot(m[0], m[1]);
+  const sy = Math.hypot(m[2], m[3]);
+  const s = (sx + sy) / 2;
+  return s > 0 ? s : 1;
+}
+
+export type { Vec2 };
