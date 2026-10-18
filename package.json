@@ -26,18 +26,13 @@
     ],
     "catalog": {
       "@types/bun": "1.4.3",
-      "@types/node": "20.19.39",
+      "@types/node": "^24.19.2",
       "@types/react": "^18.3.31",
       "@types/react-dom": "^18.3.7",
       "react": "^18.3.1",
       "react-dom": "^18.3.1",
       "typescript": "^7.0.2",
       "vite": "^8.3.4"
-    },
-    "catalogs": {
-      "node25": {
-        "@types/node": "^25.9.6"
-      }
     }
   },
   "overrides": {

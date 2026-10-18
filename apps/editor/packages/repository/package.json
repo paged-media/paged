@@ -18,7 +18,7 @@
     "@paged-media/canvas-wasm": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "catalog:node25",
+    "@types/node": "catalog:",
     "typescript": "catalog:"
   }
 }
