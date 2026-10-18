@@ -38,7 +38,7 @@
 //       frame, and a TYPED count over the ceiling (which refuses, where
 //       a DERIVED one clamps).
 
-import { describe, expect, it, beforeAll, afterAll, beforeEach, vi } from "vitest";
+import { describe, expect, it, beforeAll, afterAll, beforeEach, vi } from "bun:test";
 
 import type {
   BundleHost,

@@ -75,7 +75,7 @@
 //   AGREEMENT — the other nine cases (bevel outward, every inward offset)
 //   match Illustrator in area, bounds AND anchor count.
 
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 

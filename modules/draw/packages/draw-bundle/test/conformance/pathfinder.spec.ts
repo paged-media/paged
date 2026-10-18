@@ -24,7 +24,7 @@
 // handlers drive the live selection (first selected = kept,
 // re-selected on success).
 
-import { describe, expect, it, beforeAll, afterAll, beforeEach } from "vitest";
+import { describe, expect, it, beforeAll, afterAll, beforeEach } from "bun:test";
 
 import type {
   CommandContribution,

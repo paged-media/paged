@@ -27,7 +27,7 @@ import { dirname, resolve, join } from "node:path";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "bun:test";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const CLI = resolve(here, "../../plugin-cli/bin/paged-plugin.mjs");

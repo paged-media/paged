@@ -310,7 +310,7 @@ export function makePathOptionsPanel(host: BundleHost): {
       };
     }, [open, copyAvailable]);
 
-    // WHAT A RELOAD COSTS (`test/panels/path-options-panel.spec.tsx`):
+    // WHAT A RELOAD COSTS (`test/panels/path-options-panel.dom.test.tsx`):
     // nothing with no path selected, and ONE property read — the first
     // selected path's own stroke, which is what the Outline stroke
     // section shows it will use AND what the Stroke dashes section

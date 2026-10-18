@@ -18,7 +18,7 @@
 
 // Property tests for svg-shapes.ts — the basic shapes lowered to anchors.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   circleToPath,

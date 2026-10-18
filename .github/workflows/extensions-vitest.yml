@@ -16,11 +16,12 @@
 #
 # MONOREPO (step A3): ported from paged-media/plugin-sdk
 # .github/workflows/vitest.yml; runs in platform/extensions.
-name: extensions / vitest
+name: extensions / bun test
 concurrency:
-  # A newer push to a pull request cancels the older run. Every other run
-  # (main, dispatch) has a group of its own: never cancelled, never queued.
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  # A newer push to a pull request cancels the older run. Main pushes share
+  # one group per event type: a running main run always finishes, and a newer
+  # push replaces the one still waiting, so direct pushes queue at most one.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || format('{0}-{1}', github.ref, github.event_name) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 on:
@@ -76,6 +77,7 @@ defaults:
 
 jobs:
   vitest:
+    name: bun test
     runs-on: ubuntu-latest
     # A cold engine wasm build (a cache miss) takes most of this.
     timeout-minutes: 45
@@ -128,20 +130,24 @@ jobs:
       # the artifact is safely uploaded. Only plugin-sdk emits JUnit; plugin-api
       # is type-only and plugin-cli has no suite, so a run over every package
       # would produce nothing for them.
-      - name: vitest → JUnit
+      # bun's report, rewritten into the vitest shape the evidence has
+      # always had (tooling/js/bun-junit.mjs), so the artifact keeps its
+      # name and its test ids.
+      - name: bun test → JUnit
         run: |
           set -uo pipefail
-          ( cd packages/plugin-sdk && bunx --no-install vitest run \
-            --reporter=default --reporter=junit \
-            --outputFile=junit.xml ) || echo "VITEST_FAILED=1" >> "$GITHUB_ENV"
+          ( cd packages/plugin-sdk && bun run test --reporter=junit --reporter-outfile=junit.bun.xml ) \
+            || echo "TESTS_FAILED=1" >> "$GITHUB_ENV"
+          bun ../../tooling/js/bun-junit.mjs --out packages/plugin-sdk/junit.xml packages/plugin-sdk/junit.bun.xml \
+            || echo "TESTS_FAILED=1" >> "$GITHUB_ENV"
           test -s packages/plugin-sdk/junit.xml
 
       # @paged-media/ai: the agent loop and the proxy against the real
       # engine, with the model replaced by canned turns (no key, no network).
       - name: ai package suite
-        run: ( cd packages/ai && bunx --no-install vitest run ) || echo "VITEST_FAILED=1" >> "$GITHUB_ENV"
+        run: ( cd packages/ai && bun run test ) || echo "TESTS_FAILED=1" >> "$GITHUB_ENV"
 
-      - name: upload vitest results artifact
+      - name: upload JUnit results artifact
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
@@ -151,5 +157,5 @@ jobs:
           retention-days: 14
 
       - name: tests failed
-        if: ${{ env.VITEST_FAILED == '1' }}
+        if: ${{ env.TESTS_FAILED == '1' }}
         run: exit 1

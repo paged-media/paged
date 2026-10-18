@@ -149,3 +149,26 @@ describe("advanceTimersByTimeAsync", () => {
     expect(Date.now() - t0).toBe(300);
   });
 });
+
+// tooling/js/bun-test-setup.ts, which every package's `bun test` preloads.
+describe("bun-test-setup: toMatchObject leaves the received value alone", () => {
+  it("restores what bun's matcher overwrote, at any depth", () => {
+    const row = { kind: "enum", members: ["A", "B", "C"], nested: { deep: [{ q: 1 }] } };
+    expect(row).toMatchObject({
+      kind: expect.stringMatching(/en/),
+      members: expect.arrayContaining(["A"]),
+      nested: { deep: [{ q: expect.any(Number) }] },
+    });
+    // Compared as JSON: bun's equality treats a matcher on the RECEIVED side
+    // as a matcher too, so toEqual would accept the overwritten value.
+    expect(JSON.stringify(row)).toBe('{"kind":"enum","members":["A","B","C"],"nested":{"deep":[{"q":1}]}}');
+    expect(Array.isArray(row.members)).toBe(true);
+  });
+
+  it("still fails, and still negates", () => {
+    const row = { kind: "enum" };
+    expect(() => expect(row).toMatchObject({ kind: "other" })).toThrow(/toMatchObject/);
+    expect(row).not.toMatchObject({ kind: "other" });
+    expect(() => expect(row).not.toMatchObject({ kind: "enum" })).toThrow();
+  });
+});

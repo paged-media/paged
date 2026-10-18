@@ -6,7 +6,7 @@
 //
 // Opt-in like the other real lanes: skips without playwright-core or a
 // Chromium; REQUIRE_REAL_BROWSER=1 makes that a failure.
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "bun:test";
 import { REQUIRE_REAL_DUCKDB } from "./real-duckdb";
 import { REQUIRE_REAL_BROWSER, startBrowserLane, type BrowserLane } from "./browser-lane";
 import { createHash } from "node:crypto";
@@ -18,19 +18,20 @@ const SOURCES = join(__dirname, "..", "..", "..", "conformance", "sources");
 const PARQUET = readFileSync(join(SOURCES, "products.parquet"));
 const XLSX = readFileSync(join(SOURCES, "products.xlsx"));
 
-let lane: BrowserLane | undefined;
-let why = "";
-beforeAll(async () => {
-  const r = await startBrowserLane();
-  lane = r.lane;
-  why = r.error ?? "";
-}, 60_000);
-// Closing Chromium can outlast vitest's 10 s default on a loaded machine.
+const REQUIRED = REQUIRE_REAL_BROWSER || REQUIRE_REAL_DUCKDB;
+const LANE_OFF = !REQUIRED && process.env.PAGED_BROWSER_LANE === "0";
+
+// The lane starts while the file loads, not in a beforeAll: bun:test has no
+// runtime skip (vitest's `ctx.skip()`), so the tests that need the lane are
+// skipped up front when it did not start, exactly where they used to skip.
+const started = LANE_OFF ? { lane: undefined, error: "PAGED_BROWSER_LANE=0" } : await startBrowserLane();
+const lane: BrowserLane | undefined = started.lane;
+const why = started.error ?? "";
+const NO_LANE = !lane && !REQUIRED;
+// Closing Chromium can outlast the 5 s default hook timeout on a loaded machine.
 afterAll(async () => {
   await lane?.close();
 }, 30_000);
-
-const REQUIRED = REQUIRE_REAL_BROWSER || REQUIRE_REAL_DUCKDB;
 
 /** Boot DuckDB in the page, import the fixture tables, run `body` there. */
 async function inPage<T>(body: string, arg?: unknown): Promise<T> {
@@ -56,16 +57,14 @@ async function inPage<T>(body: string, arg?: unknown): Promise<T> {
   );
 }
 
-describe.skipIf(!REQUIRED && process.env.PAGED_BROWSER_LANE === "0")(
+describe.skipIf(LANE_OFF)(
   "the query lane in the shipped browser worker [data.security.gates]",
   () => {
-    it("the lane starts (fails under REQUIRE_REAL_BROWSER / REQUIRE_REAL_DUCKDB when it cannot)", (ctx) => {
-      if (!lane && !REQUIRED) ctx.skip();
+    it.skipIf(NO_LANE)("the lane starts (fails under REQUIRE_REAL_BROWSER / REQUIRE_REAL_DUCKDB when it cannot)", () => {
       expect(lane, why).toBeDefined();
     });
 
-    it("the guard admits a SELECT over a source table, and it runs [data.query.seam]", async (ctx) => {
-      if (!lane && !REQUIRED) ctx.skip();
+    it.skipIf(NO_LANE)("the guard admits a SELECT over a source table, and it runs [data.query.seam]", async () => {
       const out = await inPage<{ verdict: unknown; rows: unknown }>(
         `const verdict = await L.guard(d, "SELECT name FROM people ORDER BY name");
          const rows = (await d.rows("SELECT name FROM people ORDER BY name")).rows;
@@ -79,8 +78,7 @@ describe.skipIf(!REQUIRED && process.env.PAGED_BROWSER_LANE === "0")(
       expect(lane!.offOrigin).toEqual([]);
     });
 
-    it("refuses every reach outside the source tables [data.security.gates]", async (ctx) => {
-      if (!lane && !REQUIRED) ctx.skip();
+    it.skipIf(NO_LANE)("refuses every reach outside the source tables [data.security.gates]", async () => {
       const verdicts = await inPage<(null | { kind: string; message: string })[]>(
         `const out = [];
          for (const sql of arg) out.push(await L.guard(d, sql));
@@ -94,8 +92,7 @@ describe.skipIf(!REQUIRED && process.env.PAGED_BROWSER_LANE === "0")(
       expect(lane!.offOrigin).toEqual([]);
     });
 
-    it("admits ordinary queries — joins, CTEs, aggregates — and DuckDB runs them [data.query.seam]", async (ctx) => {
-      if (!lane && !REQUIRED) ctx.skip();
+    it.skipIf(NO_LANE)("admits ordinary queries — joins, CTEs, aggregates — and DuckDB runs them [data.query.seam]", async () => {
       const out = await inPage<{ verdict: unknown; rows: unknown; error?: string }[]>(
         `const out = [];
          for (const sql of arg) {
@@ -113,8 +110,7 @@ describe.skipIf(!REQUIRED && process.env.PAGED_BROWSER_LANE === "0")(
       });
     });
 
-    it("the engine lock: no statement changes a setting, and imports still work after it [data.security.gates]", async (ctx) => {
-      if (!lane && !REQUIRED) ctx.skip();
+    it.skipIf(NO_LANE)("the engine lock: no statement changes a setting, and imports still work after it [data.security.gates]", async () => {
       const out = await inPage<{ set: string[]; late: unknown }>(
         `const set = [];
          for (const sql of ["SET enable_external_access = true", "SET lock_configuration = false",
@@ -225,14 +221,13 @@ describe.skipIf(!REQUIRED && process.env.PAGED_BROWSER_LANE === "0")(
 // comes from a CROSS-ORIGIN module host (brotli, CORS *, as
 // modules.paged.media serves it) while the DuckDB worker stays in bin/,
 // same-origin (D-05). A host copy that fails falls back to bin/.
-describe.skipIf(!REQUIRED && process.env.PAGED_BROWSER_LANE === "0")(
+describe.skipIf(LANE_OFF)(
   "the engines load through the host's module door [data.query.seam]",
   () => {
     const DATA_WASM = join(__dirname, "..", "bin", "data_js_bg.wasm");
     const sri = (bytes: Buffer) => "sha384-" + createHash("sha384").update(bytes).digest("base64");
 
-    it("DuckDB instantiates from the module host; the worker stays in bin/", async (ctx) => {
-      if (!lane && !REQUIRED) ctx.skip();
+    it.skipIf(NO_LANE)("DuckDB instantiates from the module host; the worker stays in bin/", async () => {
       const before = lane!.served.length;
       const out = await lane!.page.evaluate(
         async ({ origin }: { origin: string }) => {
@@ -260,8 +255,7 @@ describe.skipIf(!REQUIRED && process.env.PAGED_BROWSER_LANE === "0")(
       expect(served).not.toContain("/bin/duckdb-engine.wasm");
     }, 60_000);
 
-    it("a host engine that is not there falls back to bin/", async (ctx) => {
-      if (!lane && !REQUIRED) ctx.skip();
+    it.skipIf(NO_LANE)("a host engine that is not there falls back to bin/", async () => {
       const before = lane!.served.length;
       const out = await lane!.page.evaluate(
         async ({ origin }: { origin: string }) => {
@@ -283,8 +277,7 @@ describe.skipIf(!REQUIRED && process.env.PAGED_BROWSER_LANE === "0")(
       expect(lane!.served.slice(before)).toContain("/bin/duckdb-engine.wasm");
     }, 60_000);
 
-    it("the data engine loads from the module host with its integrity; a wrong digest is refused by the fetch", async (ctx) => {
-      if (!lane && !REQUIRED) ctx.skip();
+    it.skipIf(NO_LANE)("the data engine loads from the module host with its integrity; a wrong digest is refused by the fetch", async () => {
       const good = sri(readFileSync(DATA_WASM));
       const bad = sri(Buffer.from("not the engine"));
       const out = await lane!.page.evaluate(

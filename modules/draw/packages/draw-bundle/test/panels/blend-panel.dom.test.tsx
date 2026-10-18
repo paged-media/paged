@@ -16,9 +16,8 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// @vitest-environment jsdom
 
-// The BLEND OPTIONS panel, RENDERED (jsdom) against the real engine.
+// The BLEND OPTIONS panel, RENDERED (happy-dom) against the real engine.
 //
 // Three parts, a host each:
 //   · AN EMPTY DOCUMENT — the component the bundle contributed, mounted
@@ -39,7 +38,7 @@
 // burst, one walk per document REVISION out of the shared link index
 // (`src/link-index.ts`), and the newest reload wins.
 
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 
 import { metadataReadsPerLeaf } from "../engine-reads";
 

@@ -25,7 +25,7 @@
 // enforces (one key per plugin per host, sub-keys merged), and labels on
 // pages (protocol 70) and on the document.
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "bun:test";
 import type { MutationInput, ObjectWrite } from "@paged-media/plugin-api";
 
 import { CORE_PATHS } from "../src/core-schema";

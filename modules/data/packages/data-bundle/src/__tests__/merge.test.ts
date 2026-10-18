@@ -2,7 +2,7 @@
 // becomes mutations. The real-core proof against the InDesign recordings is
 // test/merge-real-core.spec.ts.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   contentMutation,

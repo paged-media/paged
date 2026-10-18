@@ -34,7 +34,7 @@
 //   6. the gate: the same `capabilities.rendering ∋ "overlay"` gate as
 //      `setToolPreview` — one channel, one gate.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type {
   PluginManifest,

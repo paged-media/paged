@@ -20,7 +20,7 @@
 // reached from a real Boa script through the protocol-71 host bridge, with
 // the model replaced by a stub backend.
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "bun:test";
 
 import { aiObjectModel, AI_COMPLETE_PER_MINUTE } from "../src";
 import { headlessEngine } from "./engine-fixture";

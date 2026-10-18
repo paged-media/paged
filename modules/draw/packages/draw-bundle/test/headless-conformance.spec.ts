@@ -47,7 +47,7 @@
 // Tier B 5 live-corner + 3 appearance + 3 select-same + the wave-2
 // 4 insert-shape + blend + select-parent-group) + the edit context.
 
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 import { editValue, type HeadlessHost } from "@paged-media/plugin-sdk";
 

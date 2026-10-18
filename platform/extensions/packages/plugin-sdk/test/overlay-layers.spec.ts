@@ -27,7 +27,7 @@
 //      with no sink the handle is inert and never touches the slot;
 //   6. the gate: `capabilities.rendering ∋ "overlay"`.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { PluginManifest, ToolPreviewShape } from "@paged-media/plugin-api";
 

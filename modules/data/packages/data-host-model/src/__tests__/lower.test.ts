@@ -21,7 +21,7 @@
 // two-phase batch (insertTextFrame + insertLine per rule + setPluginMetadata)
 // plus the phase-2 text. No host calls — data in, mutations out.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   BINDING_KEY,

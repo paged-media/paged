@@ -24,7 +24,7 @@
 // table and replays every other live face — across bundles sharing one
 // provider — and a bundle's teardown takes its faces with it.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { PluginManifest } from "@paged-media/plugin-api";
 
