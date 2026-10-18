@@ -11,12 +11,12 @@
 // the types data-core has no kind for (TIME, INTERVAL, UUID, LIST, STRUCT)
 // = text in DuckDB's own rendering.
 //
-// Known mismatches are pinned as it.fails("DEFECT …") so they fail loudly the
+// Known mismatches are pinned as it.failing("DEFECT …") so they fail loudly the
 // day they are fixed. GATE: skips without DuckDB, fails under
 // REQUIRE_REAL_DUCKDB=1.
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { basename, join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import type { FieldTypeJson, RecordSetJson, ValueJson } from "../src/query/recordset";
 import { BIN, PKG, tryBootNodeDuckDB } from "./duckdb-node-boot";
 import { bootEngine } from "./pipeline-parts.mjs";
@@ -32,7 +32,7 @@ const recorded = JSON.parse(readFileSync(join(LANE, "recorded", "results.json"),
 /** Where the shipped answer differs from native DuckDB today: each defect
  *  names the case columns it explains. Those columns are carved out of the
  *  case's own test (so any OTHER disagreement in the case still fails) and
- *  checked by an it.fails pin that goes red the day the defect is fixed. */
+ *  checked by an it.failing pin that goes red the day the defect is fixed. */
 const DEFECTS: Array<{ id: string; what: string; cases: Record<string, string[]>; ingest?: string[] }> = [
   // DQ-1 … DQ-4 were fixed in Wave 2 (recordset.ts reads Arrow's raw
   // buffers by type id; duckdb.ts casts the kind-less types to VARCHAR). New
@@ -165,7 +165,7 @@ describe.skipIf(!duck)("DuckDB SQL oracle: shipped duckdb-wasm vs native duckdb 
 
   for (const d of DEFECTS) {
     for (const [id, cols] of Object.entries(d.cases)) {
-      it.fails(`DEFECT ${d.id}: ${d.what} [${id}: ${cols.join(", ")}]`, async () => {
+      it.failing(`DEFECT ${d.id}: ${d.what} [${id}: ${cols.join(", ")}]`, async () => {
         const rec = recorded.results.find((r) => r.id === id)!;
         const rs = await duck!.handle.query(rec.sql);
         expect(compare(rs, rec, (c) => cols.includes(c))).toEqual([]);
@@ -178,7 +178,7 @@ describe.skipIf(!duck || !engineBuilt)("DuckDB SQL oracle: data-js ingests every
   for (const rec of recorded.results) {
     const pin = DEFECTS.find((d) => d.ingest?.includes(rec.id));
     const title = `${rec.id}: ingest_result decodes, counts and maps the native types`;
-    (pin ? it.fails : it)(pin ? `DEFECT ${pin.id}: ${title}` : title, async () => {
+    (pin ? it.failing : it)(pin ? `DEFECT ${pin.id}: ${title}` : title, async () => {
       const rs = await duck!.handle.query(rec.sql);
       const engine = await bootEngine();
       engine.define_source({ id: "s", kind: { kind: "inlineSeed", table: "s" }, capability: "inline" });

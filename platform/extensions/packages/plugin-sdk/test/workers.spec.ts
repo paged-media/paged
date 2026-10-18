@@ -23,7 +23,7 @@
 // byte budget + the sharedMemory/cross-origin-isolation gates, and that
 // bundle dispose terminates every spawned worker.
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "bun:test";
 
 import type {
   PagedEditor,
@@ -108,7 +108,7 @@ function makeHost(workers: WorkersCapability | undefined, withBackend: boolean) 
 }
 
 // SharedArrayBuffer + crossOriginIsolated are not present in the default
-// vitest (node) environment. Stub them so the SAB budget path is testable
+// unit-test (bun) environment. Stub them so the SAB budget path is testable
 // without a cross-origin-isolated browser.
 let restoreGlobals: Array<() => void> = [];
 function withCrossOriginIsolation(on: boolean) {

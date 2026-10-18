@@ -125,8 +125,8 @@ src/
 # Rust unit tests on the canvas crates
 cargo test -p paged-canvas -p paged-canvas-wasm -p paged-renderer -p paged-scene
 
-# TypeScript typecheck
-npx tsc --noEmit
+# TypeScript typecheck (bun check: tsc's errors, on every core)
+bun run typecheck
 
 # Production bundle
 npx vite build

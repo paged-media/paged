@@ -1699,7 +1699,6 @@ export function makeImagePanel(session: ImageSession) {
       setResizeW(s.source?.width ?? 0);
       setResizeH(s.source?.height ?? 0);
       setCanvasSize((c) => ({ ...c, width: s.source?.width ?? 0, height: s.source?.height ?? 0 }));
-      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [s.source?.handle, s.source?.width, s.source?.height]);
     // A NEW image starts from identity in the session (its params are
     // reset on ingest), so the pickers this panel keeps for itself follow:

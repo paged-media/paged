@@ -11,7 +11,7 @@ dist/
 # gate read the one built from this checkout.
 packages/draw-bundle/wasm/trace_js*
 
-# Per-package vitest JUnit output (CI artifact, never a tracked file).
+# Per-package JUnit output (CI artifact, never a tracked file).
 junit.xml
 junit-all.xml
 

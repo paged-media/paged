@@ -28,7 +28,7 @@
 //   4. the no-store door: no backend → read null / keys [] / usage 0,0;
 //      write rejects (the honest no-store posture); supports() is false.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { PluginManifest } from "@paged-media/plugin-api";
 

@@ -21,7 +21,7 @@
 // upstream request is rebuilt from the MODE (system, tools, model, caps the
 // client cannot touch), and the stream comes back intact.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { buildRequest, createProxyTransport, DEFAULT_MODEL, MODE_HEADER, MODE_SPECS, systemPrompt, type ApiCatalog } from "../src";
 import { handleAiProxy, validateMessages, type ProxyUsage } from "../src/proxy";

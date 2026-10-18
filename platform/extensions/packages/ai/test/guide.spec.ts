@@ -19,7 +19,7 @@
 // The guide teaches the model by example, so every example must run. Each
 // fenced js block executes on a fresh document against the real engine.
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "bun:test";
 
 import { AUTHORING_GUIDE } from "../src";
 import { headlessEngine } from "./engine-fixture";

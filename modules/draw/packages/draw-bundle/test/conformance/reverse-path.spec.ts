@@ -30,7 +30,7 @@
 //   (4) a second reversal is the identity, every selected path rides ONE
 //       batch, and ONE undo restores.
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
 
 import type {
   CommandContribution,

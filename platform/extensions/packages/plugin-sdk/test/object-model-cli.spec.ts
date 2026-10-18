@@ -31,7 +31,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "bun:test";
 
 import { VALUE_TYPE_KINDS } from "../src/object-schema";
 import { notesManifest } from "./fixtures/notes-bundle";

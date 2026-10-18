@@ -7,13 +7,20 @@
 //   · the session command on the real stack: a placed paged.data field and a
 //     literal `<<field>>` become placeholders, the IDML loads back in core.
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, mock } from "bun:test";
+import { importActual } from "@paged-media/test-kit";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { dataMergeTemplate, readZip, utf16Csv, writeZip, type ZipEntry } from "../src/datamerge-export";
 import { dataFields, ENGINE_ANCHOR, openRealHost, REQUIRE_REAL_CORE } from "./real-core";
 import { bootRealDuckDB, bootRealEngine, DATA_JS_WASM, REQUIRE_REAL_DUCKDB } from "./real-duckdb";
+
+// bun:test hoists no vi.mock and has no vi.doMock / vi.resetModules: the
+// real exports are taken once, before anything is mocked, and mock.module
+// patches the loaded module in place (every importer sees the change).
+const actualEngine = await importActual(() => import("../src/engine"));
+const actualDuckdb = await importActual(() => import("../src/query/duckdb"));
 
 const fixture = (name: string) =>
   new Uint8Array(readFileSync(fileURLToPath(new URL(`./fixtures/indesign-datamerge/${name}`, import.meta.url))));
@@ -88,10 +95,10 @@ const ready = ENGINE_ANCHOR !== null && probe.handle !== undefined && existsSync
 
 describe.skipIf(!ready && !(REQUIRE_REAL_CORE || REQUIRE_REAL_DUCKDB))("Export as InDesign Data Merge template, real stack [data.export.datamerge]", () => {
   it("a placed field and a literal <<field>> become native placeholders; core reads the result [data.export.datamerge]", async () => {
-    vi.resetModules();
-    vi.doMock("../src/engine", async (orig) => ({ ...(await orig<typeof import("../src/engine")>()), bootEngine: (t: number) => bootRealEngine(t) }));
-    vi.doMock("../src/query/duckdb", async (orig) => ({
-      ...(await orig<typeof import("../src/query/duckdb")>()),
+    mock.module("../src/engine", () => ({
+    ...actualEngine, bootEngine: (t: number) => bootRealEngine(t) }));
+    mock.module("../src/query/duckdb", () => ({
+    ...actualDuckdb,
       bootDuckDB: async () => (await bootRealDuckDB()).handle!,
     }));
     const mod = await import("../src/index");

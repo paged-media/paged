@@ -1,8 +1,9 @@
 name: editor / tests
 concurrency:
-  # A newer push to a pull request cancels the older run. Every other run
-  # (main, dispatch) has a group of its own: never cancelled, never queued.
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  # A newer push to a pull request cancels the older run. Main pushes share
+  # one group per event type: a running main run always finishes, and a newer
+  # push replaces the one still waiting, so direct pushes queue at most one.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || format('{0}-{1}', github.ref, github.event_name) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Editor Playwright surface → state-matrix evidence (W0.5).
@@ -98,7 +99,6 @@ on:
       - "apps/editor/apps/canvas/**"
       - "apps/editor/packages/**"
       - "apps/editor/package.json"
-      - "apps/editor/eslint.config.mjs"
       - "apps/editor/scripts/**"
       # Everything the editor consumes through the workspace: every module
       # bundle (and the Rust it builds its wasm from), the extension
@@ -138,16 +138,16 @@ env:
 jobs:
   # Static guards that need only the editor repo itself — no plugin
   # siblings, no corpus/core checkout, no browser. These scripts all
-  # EXISTED but ran in no CI job (audit 02 E8'): the ESLint architecture
-  # boundaries (eslint.config.mjs — worker/shell/client/gesture-spine
-  # zones) + their self-test, the boot-time cross-origin-isolation check
-  # (the COOP/COEP contract SharedArrayBuffer needs), and the
-  # fidelity-thresholds JSON schema guard (every gated pack has an entry,
-  # so the gate can't silently skip). They're fast (seconds) and depend
-  # only on the root devDependencies, so a plain editor checkout + root
-  # frozen install is the whole setup.
+  # EXISTED but ran in no CI job (audit 02 E8'): the boot-time
+  # cross-origin-isolation check (the COOP/COEP contract SharedArrayBuffer
+  # needs) and the fidelity-thresholds JSON schema guard (every gated pack
+  # has an entry, so the gate can't silently skip). They're fast (seconds)
+  # and depend only on the root devDependencies, so a plain editor checkout
+  # + root frozen install is the whole setup. The import boundaries that
+  # were linted here are lint rules for the whole repository now, run by
+  # lint.yml.
   checks:
-    name: checks (lint + boundaries + boot-coi + thresholds)
+    name: checks (boot-coi + thresholds + guards)
     runs-on: ubuntu-latest
     # Seconds of checks; a cold engine or module wasm build (a cache miss)
     # takes the rest.
@@ -226,14 +226,6 @@ jobs:
       # passed on code that could not run.
       - name: typecheck canvas tests
         run: bun run --filter ./apps/canvas typecheck:tests
-
-      # ESLint architecture boundaries (eslint.config.mjs is boundaries-only,
-      # not style) + the fixtures proving each zone actually fires.
-      - name: lint (architecture boundaries)
-        run: bun run lint
-
-      - name: lint boundaries self-test
-        run: bun run lint:boundaries-selftest
 
       # The COOP/COEP boot contract SharedArrayBuffer needs (pairs with
       # apps/canvas/public/_headers).

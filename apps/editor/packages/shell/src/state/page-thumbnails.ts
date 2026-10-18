@@ -37,7 +37,6 @@
 
 import { useEffect, useRef } from "react";
 
-// eslint-disable-next-line import/no-relative-parent-imports
 import type { PageId, WorkerToMain } from "@paged-media/client";
 
 import { useCanvasClient } from "./canvas-client-context";

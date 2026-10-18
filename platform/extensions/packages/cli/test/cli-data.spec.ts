@@ -29,7 +29,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
 import { openSession } from "../src/session";
 import { cli, FIXTURES, tempDir, writeFixture } from "./helpers";

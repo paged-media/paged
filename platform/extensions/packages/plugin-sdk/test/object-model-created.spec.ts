@@ -24,7 +24,7 @@
 // `$h:<handle>` placeholder). Before this the registry filled `created`
 // for core creates only, so `paged create plugin:…` answered no address.
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "bun:test";
 
 import type { BundleHost, ObjectWrite, PagedBundle, PluginManifest } from "@paged-media/plugin-api";
 

@@ -34,7 +34,7 @@
 //       be softened — the note now states that canvas and export
 //       AGREE, which is what the Vello mask work made true.
 
-import { describe, expect, it, beforeAll, beforeEach, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, beforeEach, afterAll } from "bun:test";
 
 import type { CommandContribution, ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";

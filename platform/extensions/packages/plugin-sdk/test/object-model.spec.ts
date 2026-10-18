@@ -25,7 +25,7 @@
 // AND over core addresses — with a mixed batch landing as ONE undo step
 // and ONE engine mutation.
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "bun:test";
 
 import { createHeadlessHost, type HeadlessHost } from "../src/harness";
 import { minimalIdml } from "./fixtures/minimal-idml";

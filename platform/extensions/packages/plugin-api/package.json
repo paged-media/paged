@@ -1,6 +1,6 @@
 {
   "name": "@paged-media/plugin-api",
-  "version": "0.2.68-canary.0",
+  "version": "0.2.69-canary.0",
   "description": "The Paged plugin contract: manifest, bundle lifecycle, the BundleHost surface, and the contribution + engine wire types. Type-only.",
   "license": "AGPL-3.0-only OR LicenseRef-PMEL",
   "type": "module",
@@ -33,7 +33,7 @@
     }
   },
   "scripts": {
-    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck": "bun check -p tsconfig.json",
     "build": "rm -rf dist && tsc -p tsconfig.build.json && cp src/wire.d.ts dist/wire.d.ts && printf 'export {};\\n' > dist/index.js",
     "prepublishOnly": "bun run build"
   },

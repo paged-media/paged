@@ -6,9 +6,10 @@
 # through the workspace, so no sibling repository is needed.
 name: web / bun test
 concurrency:
-  # A newer push to a pull request cancels the older run. Every other run
-  # (main, dispatch) has a group of its own: never cancelled, never queued.
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  # A newer push to a pull request cancels the older run. Main pushes share
+  # one group per event type: a running main run always finishes, and a newer
+  # push replaces the one still waiting, so direct pushes queue at most one.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || format('{0}-{1}', github.ref, github.event_name) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # MONOREPO (step A3): ported from paged-media/plugin-web
@@ -120,8 +121,6 @@ jobs:
       - name: bun install (root workspace)
         working-directory: .
         run: bun install --frozen-lockfile
-      - name: contract-import lint (fail fast)
-        run: node scripts/check-contract-imports.mjs
       # A red spec FAILS this job. It used to end in `|| true` (so red
       # results would still be published as evidence), which also meant the
       # lane could never go red. Evidence still ships — the JUnit steps below

@@ -33,7 +33,7 @@
 // six verbs is what they leave behind, and Crop / Minus Back are only
 // correct if `elementIds` really is top-to-bottom.
 
-import { describe, expect, it, beforeAll, afterAll, beforeEach } from "vitest";
+import { describe, expect, it, beforeAll, afterAll, beforeEach } from "bun:test";
 
 import type {
   CommandContribution,

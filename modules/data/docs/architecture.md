@@ -72,9 +72,10 @@ that write to the document (`src/lower.ts`).
 - The bundle imports the host model by relative path (`../../data-host-model/src`), and
   tsup inlines it, so the published package does not depend on the private one.
 - `@paged-media/plugin-api`, `@paged-media/plugin-sdk` and `react` are peer dependencies.
-  `scripts/check-contract-imports.mjs` fails on a package import outside its allow-list:
-  those three, this repo's own `@paged-media/data-` packages, `@duckdb/duckdb-wasm` and
-  `apache-arrow`.
+  The contract-import lint rule (`/bunfig.toml`, PM-0003) fails on a package import outside its
+  allow-list:
+  those three, the internal shared packages (`platform/shared/*`), this repo's own
+  `@paged-media/data-` packages, `@duckdb/duckdb-wasm` and `apache-arrow`.
 - The TypeScript interface `DataEngineLike` (`src/engine.ts`) repeats the methods of the
   Rust class by hand, except `define_template` and `lower_barcode_at`. Nothing generates it.
 
@@ -272,7 +273,7 @@ exports of `@paged-media/data`, among them `createSession`, `bootEngine` and `bo
   above 100 MB, and when the installed `wasm-bindgen` differs from the one in `Cargo.lock`.
 - Rust: `cargo test --workspace`; `cargo run -p data-conformance --bin coverage-gate`.
   `deny.toml` allows crates.io as the only source and a fixed list of licences.
-- TypeScript: `pnpm test` runs the import lint, then vitest in both packages. The bundle's
+- TypeScript: `pnpm test` runs the import lint, then `bun test` in both packages. The bundle's
   unit tests use hand-written fake hosts and fake engines. `test/engine-real.spec.ts` loads
   the built wasm; when the file is absent it is skipped, or fails if `REQUIRE_REAL_ENGINE=1`.
   `test/pipeline-real.spec.ts` and `test/duckdb-real.spec.ts` (`pnpm --filter @paged-media/data

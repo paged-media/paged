@@ -44,7 +44,7 @@
 //       wording and the registration surface (including the tool that
 //       deliberately carries NO shortcut).
 
-import { describe, expect, it, beforeAll, afterAll, beforeEach } from "vitest";
+import { describe, expect, it, beforeAll, afterAll, beforeEach } from "bun:test";
 
 import type {
   BundleHost,

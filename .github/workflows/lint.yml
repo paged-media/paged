@@ -1,0 +1,100 @@
+name: lint / bun lint
+concurrency:
+  # A newer push to a pull request cancels the older run. Main pushes share
+  # one group per event type: a running main run always finishes, and a newer
+  # push replaces the one still waiting, so direct pushes queue at most one.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || format('{0}-{1}', github.ref, github.event_name) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# One lint run for the whole repository: bun lint with the one root config
+# (/bunfig.toml [lint], docs/adr/PM-0003-one-lint-config.md), which holds the
+# correctness rules, the editor's import zones, the module and extension
+# contracts (docs/adr/PM-0002) and the Rules of React. Then the self-test that
+# proves each boundary fires (tooling/js/lint-selftest.mjs).
+#
+# bun lint is in Bun's canary builds only, so tooling/js/bun-canary.sh runs one
+# exact npm canary (tooling/js/bun-canary-version) through bunx. Bun itself,
+# for bunx, is the version in /.prototools. There is no install step: the
+# config and its rules are native to bun lint, and a checkout without
+# node_modules lints exactly as an installed one does.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "**/*.ts"
+      - "**/*.tsx"
+      - "**/*.mts"
+      - "**/*.cts"
+      - "**/*.js"
+      - "**/*.jsx"
+      - "**/*.mjs"
+      - "**/*.cjs"
+      - "bunfig.toml"
+      - "eslint-suppressions.json"
+      - "tooling/js/bun-canary.*"
+      - "tooling/js/lint-selftest/**"
+      - "platform/shared/*/package.json"
+      - ".github/workflows/lint.yml"
+  pull_request:
+    paths:
+      - "**/*.ts"
+      - "**/*.tsx"
+      - "**/*.mts"
+      - "**/*.cts"
+      - "**/*.js"
+      - "**/*.jsx"
+      - "**/*.mjs"
+      - "**/*.cjs"
+      - "bunfig.toml"
+      - "eslint-suppressions.json"
+      - "tooling/js/bun-canary.*"
+      - "tooling/js/lint-selftest/**"
+      - "platform/shared/*/package.json"
+      - ".github/workflows/lint.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: bun lint + self-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # Bun at the version in /.prototools (for bunx), installed by proto.
+      - uses: moonrepo/setup-toolchain@v0.6.4
+        with:
+          auto-install: true
+          proto-version: "0.63.1"
+
+      # bunx keeps the pinned canary's package in Bun's package cache.
+      - name: cache the pinned bun lint canary
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-canary-${{ runner.os }}-${{ hashFiles('tooling/js/bun-canary-version') }}
+
+      # Annotations on the diff (github), and the same run as JUnit for the
+      # artifact. A clean run writes an empty <testsuites>.
+      - name: bun lint
+        run: |
+          status=0
+          tooling/js/bun-canary.sh lint --no-script --format junit --output-file lint-junit.xml || status=$?
+          tooling/js/bun-canary.sh lint --no-script --format github || status=$?
+          exit "$status"
+
+      - name: lint self-test (every boundary fires)
+        if: ${{ !cancelled() }}
+        run: bun tooling/js/lint-selftest.mjs
+
+      - name: upload the JUnit report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-junit
+          path: lint-junit.xml
+          if-no-files-found: warn
+          retention-days: 14

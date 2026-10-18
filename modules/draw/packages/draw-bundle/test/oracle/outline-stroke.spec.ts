@@ -56,7 +56,7 @@
 //     - the anchor count is higher: 9 vs 6 (butt/miter), 13 vs 6
 //       (square/miter), see ENGINE_VS_ILLUSTRATOR_ANCHORS.
 
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 

@@ -32,7 +32,7 @@
 //       0.64 the op did not exist and COPY was refused by name; the
 //       refusal path is pinned against a host whose vocabulary lacks it.)
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
 
 import type { CommandContribution, ElementId, PathAnchorsResult } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";

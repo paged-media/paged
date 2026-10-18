@@ -3,7 +3,7 @@
 // re-lower removes the old content (or reuses a table's frame) instead of
 // minting a duplicate beside it.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { documentElements, planRelower } from "../relower";
 

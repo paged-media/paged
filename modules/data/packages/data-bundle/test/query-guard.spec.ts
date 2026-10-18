@@ -2,7 +2,7 @@
 // shipped engine through DuckDB's Node runtime). The browser lane
 // (test/duckdb-browser.spec.ts) proves the same matrix in the shipped
 // worker; both lanes import the matrix from test/guard-matrix.ts.
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "bun:test";
 import type { DuckDBHandle } from "../src/query/duckdb";
 import { loadIntoDuckDB } from "../src/query/import";
 import { checkQuery } from "../src/query/sql";

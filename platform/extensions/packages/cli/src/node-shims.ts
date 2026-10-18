@@ -183,15 +183,19 @@ export function installNodeShims(): void {
     }
     return realFetch(input as RequestInfo, init);
   }) as typeof fetch;
-  if (g.Worker === undefined) {
-    g.Worker = class NodeWorkerShim {
-      constructor(url: string | URL) {
-        const href = String(url);
-        if (/duckdb-browser-eh\.worker\.js$/.test(href)) {
-          return new InProcessDuckDBWorker(href) as unknown as NodeWorkerShim;
-        }
-        throw new Error(`paged CLI: Web Workers are not available headlessly (${href})`);
+  // DuckDB's worker runs in-process under every runtime. Node has no global
+  // Worker; Bun has one, but DuckDB's browser worker script does not run in
+  // it, so the DuckDB URL is routed here first and any other URL goes to the
+  // runtime's own Worker when there is one.
+  const RuntimeWorker = g.Worker as (new (url: string | URL, options?: unknown) => object) | undefined;
+  g.Worker = class HeadlessWorker {
+    constructor(url: string | URL, options?: unknown) {
+      const href = String(url);
+      if (/duckdb-browser-eh\.worker\.js$/.test(href)) {
+        return new InProcessDuckDBWorker(href) as unknown as HeadlessWorker;
       }
-    };
-  }
+      if (RuntimeWorker) return new RuntimeWorker(url, options) as HeadlessWorker;
+      throw new Error(`paged CLI: Web Workers are not available headlessly (${href})`);
+    }
+  };
 }

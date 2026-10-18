@@ -28,7 +28,7 @@
 // nesting depth is counted from the rectangles' own coordinates, and the
 // non-zero region is the angle-summation winding number.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   contourDepths,

@@ -38,7 +38,8 @@
 // The second pair of rows is over a point INSIDE the last face: every
 // box but one rejects it, and one outline is walked.
 
-import { bench, describe } from "vitest";
+// mitata (not a test runner): `bun <this file>` runs the benches.
+import { bench, group as describe, run } from "mitata";
 
 import {
   flattenAnchorPath,
@@ -92,3 +93,5 @@ describe("flattenAnchorPath — what the one-time flatten costs", () => {
     for (const face of curved) flattenAnchorPath(face);
   });
 });
+
+await run();

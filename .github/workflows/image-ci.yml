@@ -9,9 +9,10 @@
 # in-tree platform/extensions plugin-cli, so its sources join the filters.
 name: image / ci
 concurrency:
-  # A newer push to a pull request cancels the older run. Every other run
-  # (main, dispatch) has a group of its own: never cancelled, never queued.
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  # A newer push to a pull request cancels the older run. Main pushes share
+  # one group per event type: a running main run always finishes, and a newer
+  # push replaces the one still waiting, so direct pushes queue at most one.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || format('{0}-{1}', github.ref, github.event_name) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 on:
@@ -332,12 +333,6 @@ jobs:
       - name: module wasm (image)
         uses: ./.github/actions/module-wasm
         with: { module: image }
-
-      # Isolation contract, TS half: every import must come through the
-      # sanctioned contract surface (spec §2.1). An editor-internal import
-      # fails here with a pointer to BREAKAGE_LOG.md.
-      - name: contract-import lint
-        run: node scripts/check-contract-imports.mjs
 
       - name: typecheck
         run: bun run --filter './glue' --filter './manifest' typecheck

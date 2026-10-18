@@ -53,10 +53,10 @@ export const ENGINE_PROTOCOL: number = (() => {
   }
 })();
 
-/** `it` from engine protocol `min` on, `it.fails` (a pinned defect) before
+/** `it` from engine protocol `min` on, `it.failing` (a pinned defect) before
  *  it: a defect a released engine fixes stays pinned against the older one. */
-export function fixedFrom<T extends { fails: unknown }>(min: number, it: T): T | T["fails"] {
-  return ENGINE_PROTOCOL >= min ? it : it.fails;
+export function fixedFrom<T extends { failing: unknown }>(min: number, it: T): T | T["failing"] {
+  return ENGINE_PROTOCOL >= min ? it : it.failing;
 }
 export const REQUIRE_REAL_CORE = process.env.REQUIRE_REAL_CORE === "1";
 

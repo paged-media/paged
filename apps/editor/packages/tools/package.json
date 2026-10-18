@@ -9,8 +9,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit -p tsconfig.json",
-    "lint": "eslint src"
+    "typecheck": "bun check -p tsconfig.json"
   },
   "dependencies": {
     "@paged-media/client": "workspace:*",

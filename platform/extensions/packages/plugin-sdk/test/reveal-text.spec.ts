@@ -20,7 +20,7 @@
 // outline entry, a find hit, a diagnostic). The camera and the text
 // selection are the editor's, so the door runs against a scripted backend.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { PluginManifest } from "@paged-media/plugin-api";
 

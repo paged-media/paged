@@ -32,7 +32,7 @@
 // caches, and the real engine through the headless harness (a resize
 // gesture, its undo, a script that inserts a frame).
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "bun:test";
 
 import type {
   DocumentChangeEvent,

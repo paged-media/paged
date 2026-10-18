@@ -11,8 +11,8 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "bun test --parallel"
+    "typecheck": "bun check -p tsconfig.json",
+    "test": "bun test --parallel --preload ../../../tooling/js/bun-test-setup.ts"
   },
   "devDependencies": {
     "@types/bun": "catalog:",

@@ -39,11 +39,43 @@ moon run :lint                  # every project
 moon ci --base origin/main --head HEAD   # only what your branch affects
 ```
 
+The whole repository has one lint config, `bunfig.toml` `[lint]`, run by `bun lint`
+(correctness rules, import boundaries and the Rules of React; see
+`docs/adr/PM-0003-one-lint-config.md`):
+
+```bash
+bun run lint            # every JavaScript and TypeScript file (also: moon run :lint)
+bun run lint:selftest   # the import boundaries still fire
+git config core.hooksPath tooling/git/hooks   # optional, once: lint and format what you commit
+```
+
+`bun lint` is in Bun's canary builds only for now. `tooling/js/bun-canary.sh` runs the
+pinned canary through `bunx`, so there is nothing extra to install.
+
 Moon installs the root Bun workspace with `--frozen-lockfile` before the
 first JS task and never rewrites package.json, lockfiles, tsconfig.json or
 rust-toolchain.toml. Each component also documents its own build and test
 commands (cargo, `bun run`) in its README and `CLAUDE.md`; start there for the
 directory you are changing.
+
+## Formatting
+
+Rust is formatted by `cargo fmt` (each Cargo workspace's own config). The
+JavaScript, TypeScript, JSON, CSS, HTML, Markdown and YAML are formatted by
+`bun fmt` with Prettier 3's defaults (`bunfig.toml` `[fmt]`), and CI checks
+the whole repository:
+
+```bash
+tooling/js/fmt.sh               # format (the whole repository, or the paths you name)
+tooling/js/fmt.sh --check       # what CI runs
+git config core.hooksPath tooling/git/hooks   # once: format what you commit
+```
+
+`bun fmt` is not in a stable Bun release yet: the script runs the canary
+pinned in `tooling/js/bun-canary-version`, while the runtime stays on the
+Bun in `.prototools`. [`.prettierignore`](./.prettierignore) lists what is
+not formatted (generated files that checks compare byte for byte, test
+data, third-party code, history records, Rust's TOML) and why.
 
 ## Rules that apply everywhere
 
