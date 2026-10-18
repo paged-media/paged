@@ -118,8 +118,8 @@ Rules for every code change in this repo:
   (image placeholders → the core asset mechanism; dynamic tables → the core
   native table contract via OUR OWN lowering code; charts → `paged.draw`),
   never a sibling plugin. The §7.1 data-provider role is a CORE SDK contract —
-  `paged.data` registers a provider and never knows its consumers. TS guard:
-  `scripts/check-contract-imports.mjs`; Rust guard: `deny.toml` [sources] + the
+  `paged.data` registers a provider and never knows its consumers. TS guard: the
+  contract-import lint rule (`/bunfig.toml`, PM-0003); Rust guard: `deny.toml` [sources] + the
   cargo-tree CI guards. SDK gaps become RFI §6 entries /
   plugin-platform RFCs — NEVER core modifications from this project.
 - **LICENSE-BOUNDARY GATE (§3 — unique to this plugin, decisive).** NO
@@ -224,11 +224,11 @@ bun run validate:manifest
 
 # Publishing (publish.yml, after green CI): a version already on npm must be
 # bumped when its inputs changed, and the tarball must carry DuckDB.
-node scripts/package-hash.mjs --check
+bun scripts/package-hash.mjs --check
 bash scripts/pubcheck.sh <packed.tgz>
 
 # Oracles (docs/design/oracles.md): replays run in the suites above
-# (data-conformance oracle.rs / oracle_props.rs; vitest duckdb-sql-oracle +
+# (data-conformance oracle.rs / oracle_props.rs; bun test duckdb-sql-oracle +
 # indesign-merge-duckdb). Re-recording is local only:
 DUCKDB=/path/to/duckdb-v1.1.1 node conformance/duckdb-sql/record.mjs
 bash conformance/indesign-merge/record.sh   # drives InDesign 2025

@@ -95,8 +95,8 @@ Rules for every code change in this repo:
   `plugin-api`, `plugin-sdk`, and published package contracts — never
   `plugin-image` or any other plugin, not at build time, runtime, or via
   side channels, even co-installed. (`paged.draw` chart lowering in T2
-  is a CORE SDK surface, not a plugin.) TS guard:
-  `scripts/check-contract-imports.mjs`; Rust guard: `deny.toml`
+  is a CORE SDK surface, not a plugin.) TS guard: the
+  contract-import lint rule (`/bunfig.toml`, PM-0003); Rust guard: `deny.toml`
   [sources] + the cargo-tree CI guards. SDK gaps become
   RFI §6 entries / plugin-platform RFCs — NEVER core
   modifications from this project.

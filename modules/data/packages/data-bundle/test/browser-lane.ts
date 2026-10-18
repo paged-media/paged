@@ -100,9 +100,9 @@ export async function startBrowserLane(): Promise<{ lane?: BrowserLane; error?: 
   const exe = findChromium(pw.chromium);
   if (!exe) return { error: "no Chromium — set PAGED_CHROMIUM or `npx playwright-core install chromium-headless-shell`" };
 
-  // esbuild via tsup (a root devDependency), as scripts/bundle-duckdb-api.mjs does.
+  // esbuild from modules/data (a devDependency there), as scripts/bundle-duckdb-api.mjs does.
   const rootReq = createRequire(resolve(PKG, "..", "..", "package.json"));
-  const esbuild = createRequire(rootReq.resolve("tsup"))("esbuild");
+  const esbuild = rootReq("esbuild");
   const out = mkdtempSync(join(tmpdir(), "paged-data-lane-"));
   await esbuild.build({
     entryPoints: [join(HERE, "browser", "entry.ts")],

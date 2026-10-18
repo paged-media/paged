@@ -22,8 +22,8 @@
 
 import type { MutationInput, ParsedAddress } from "@paged-media/plugin-api";
 
-import type { CorePlan } from "./core-objects";
-import { formatAddress } from "./object-address";
+import type { CorePlan } from "./core-objects.js";
+import { formatAddress } from "./object-address.js";
 
 const STYLE_DELETE = {
   paragraph: "deleteParagraphStyle",

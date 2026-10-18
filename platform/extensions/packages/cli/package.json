@@ -1,6 +1,7 @@
 {
   "name": "@paged-media/cli",
   "version": "0.1.0-canary.0",
+  "private": true,
   "description": "The paged Node CLI: get/set/query/schema/batch/run/export/apply/merge over core and every installed plugin bundle, through the headless host (ADR 324).",
   "license": "AGPL-3.0-only OR LicenseRef-PMEL",
   "type": "module",
@@ -21,9 +22,8 @@
   ],
   "scripts": {
     "typecheck": "bun check -p tsconfig.json",
-    "build": "tsup",
-    "test": "bun test --timeout 120000 --preload ../../../../tooling/js/bun-test-setup.ts",
-    "prepublishOnly": "bun run build"
+    "build": "rm -rf dist && bun build src/bin.ts --outdir dist --format esm --target node --external @anthropic-ai/sdk --external @paged-media/canvas-wasm --external @duckdb/duckdb-wasm --external react --external react-dom && chmod +x dist/bin.js",
+    "test": "bun test --timeout 120000 --preload ../../../../tooling/js/bun-test-setup.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.128.0",
@@ -45,7 +45,6 @@
     "@paged-media/plugin-sdk": "workspace:*",
     "@types/node": "catalog:",
     "react": "catalog:",
-    "tsup": "^8.5.1",
     "typescript": "catalog:",
     "@types/bun": "catalog:"
   },
@@ -53,17 +52,5 @@
     "type": "git",
     "url": "git+https://github.com/paged-media/paged.git",
     "directory": "platform/extensions/packages/cli"
-  },
-  "publishConfig": {
-    "access": "public",
-    "tag": "canary",
-    "main": "./dist/index.js",
-    "types": "./dist/index.d.ts",
-    "exports": {
-      ".": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.js"
-      }
-    }
   }
 }

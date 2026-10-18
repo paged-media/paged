@@ -181,6 +181,11 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+      # Bun at the version in /.prototools (the repo scripts run on Bun).
+      - uses: moonrepo/setup-toolchain@v0.6.4
+        with:
+          auto-install: true
+          proto-version: "0.63.1"
       # ── The gate's numbers, kept ────────────────────────────────────
       # Everything above uploads only `if: failure()`, so every PASSING
       # run's ΔE2000 and SSIM was computed and thrown away, and the gate's
@@ -191,7 +196,7 @@ jobs:
       - name: derive fidelity evidence + measurements
         if: always()
         run: |
-          node scripts/measurements-from-fidelity.mjs \
+          bun scripts/measurements-from-fidelity.mjs \
             --in /tmp/idml-generated-diff \
             --out-dir "$RUNNER_TEMP" \
             --commit "$GITHUB_SHA" \

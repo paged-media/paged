@@ -103,11 +103,19 @@ tasks:
   wasm-pkg-version:
     description: 'Every workspace wasm package is versioned 0.<PROTOCOL_VERSION>.0-dev (scripts/check-wasm-package-versions.mjs).'
     toolchains: ['system']
-    command: 'node scripts/check-wasm-package-versions.mjs'
+    command: 'bun scripts/check-wasm-package-versions.mjs'
     inputs:
       - 'scripts/check-wasm-package-versions.mjs'
       - 'crates/paged-canvas/src/channel.rs'
       - 'packages/*/package.json'
+
+  wire-schema:
+    description: 'The wire JSON Schema (ADR 187): crates/paged-wire/schema/mutation.schema.json is current and declares what tsify declares (paged-wire --features schema; core-ci runs it).'
+    toolchains: ['rust']
+    command: 'cargo test -p paged-wire --features schema'
+    inputs:
+      - '@group(rust-sources)'
+      - 'crates/paged-wire/schema/mutation.schema.json'
 
   check:
     deps: ['~:wasm-pkg-version']

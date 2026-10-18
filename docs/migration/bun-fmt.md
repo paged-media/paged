@@ -110,30 +110,31 @@ and the contract guard (below) needs the format commits in the same range. A sec
 nothing (verified: all 15 components "already formatted", `--record` "already lists every
 mass-format commit").
 
-Trial run (2026-10-18, on main `c533db244` plus B9's commits; branch `b9/mass-format-trial`, not
-pushed):
+Trial run (2026-10-18, on main `2c033d49a`, the commit that brought B9's infrastructure in;
+branch `b9/mass-format-trial`, not pushed):
 
 | component | files | lines + / − | time |
 |---|---:|---:|---:|
-| engine/core | 37 | 891 / 770 | 1.2 s |
-| apps/editor | 737 | 30,035 / 11,625 | 3.4 s |
-| apps/server | 4 | 77 / 78 | 0.7 s |
-| platform/extensions | 140 | 11,722 / 3,310 | 1.0 s |
-| platform/shared | 6 | 106 / 41 | 0.7 s |
-| modules/data | 136 | 13,039 / 5,296 | 1.0 s |
-| modules/doc | 37 | 2,421 / 1,063 | 0.8 s |
-| modules/draw | 274 | 12,987 / 5,090 | 1.6 s |
-| modules/image | 82 | 3,884 / 1,429 | 1.0 s |
-| modules/publish | 25 | 548 / 201 | 0.7 s |
-| modules/sheet | 99 | 8,953 / 4,521 | 1.0 s |
-| modules/slide | 30 | 1,627 / 469 | 0.8 s |
-| modules/web | 132 | 7,118 / 3,101 | 1.0 s |
-| tooling | 3 | 81 / 19 | 0.8 s |
-| root | 19 | 196 / 184 | 0.9 s |
-| **total** | **1761** | **93,685 / 37,197** | **16.6 s** |
+| engine/core | 37 | 891 / 770 | 1.3 s |
+| apps/editor | 737 | 30,035 / 11,625 | 4.2 s |
+| apps/server | 4 | 77 / 78 | 0.8 s |
+| platform/extensions | 141 | 11,732 / 3,313 | 1.8 s |
+| platform/shared | 6 | 117 / 44 | 0.8 s |
+| modules/data | 136 | 13,223 / 5,417 | 1.6 s |
+| modules/doc | 37 | 2,421 / 1,063 | 0.9 s |
+| modules/draw | 275 | 13,343 / 5,243 | 3.6 s |
+| modules/image | 82 | 3,884 / 1,429 | 2.0 s |
+| modules/publish | 25 | 548 / 201 | 1.8 s |
+| modules/sheet | 99 | 8,953 / 4,521 | 1.6 s |
+| modules/slide | 30 | 1,627 / 469 | 1.2 s |
+| modules/web | 132 | 7,118 / 3,101 | 2.8 s |
+| tooling | 4 | 102 / 23 | 1.4 s |
+| root | 19 | 196 / 184 | 1.5 s |
+| **total** | **1764** | **94,267 / 37,481** | **27.3 s** |
 
-The trial was made twice, the second time after the fixes below; apart from those fixes the two
-runs produced the same trees. After it, `fmt.sh --check` over the whole repository exits 0.
+Two earlier trials on main `c533db244` (1761 files) found the problems below, which B9's commits
+fix; between them, the only differences were those fixes. After the run above, `fmt.sh --check`
+over the whole repository exits 0.
 
 ### What the trial found
 
@@ -164,9 +165,9 @@ before and after the format:
 
 | check | before | after |
 |---|---|---|
-| `bun run --filter '*' typecheck` (`bun check`) | 0 errors (50 runs, 5869 files) | same |
+| `bun run --filter '*' typecheck` (`bun check`) | 0 errors (50 runs, 5889 files) | same |
 | `apps/editor/apps/canvas` `typecheck:tests` | 0 errors | same |
-| the 23 packages' `test` scripts (below) | 5720 pass, 53 skip, 0 fail | same, package by package |
+| the packages' test suites (below; `test`, plus draw's `test:dom` and data's `test:e2e`, `test:duckdb`) | 5738 pass, 55 skip, 0 fail | same, suite by suite |
 | the editor's script tests (`test:boot-coi`, `network-policy`, `modules`, `spread-pages`, `journal`, `object-model`) | 91 pass, 0 fail; `test:object-model` exits 1 after its 28 pass (Node wants a JSON import attribute; already so on main) | same |
 | the editor's guards (`surface-coverage`, `seam-guard`, `applicability`, `feat-vocabulary`, `solo-profiles`, `wasm-budget`, `thresholds`) | pass | same output |
 | the modules' `check-contract-imports.mjs` (7) | pass | same |
@@ -175,20 +176,23 @@ before and after the format:
 | `assert-contract-bumped.mjs`, `assert-untyped-shrinks.mjs` | pass | pass (the format commits are exempt) |
 | `check-workspace-deps.mjs`, `check-wasm-package-versions.mjs`, `sync-ooxml.sh --check`, `paged-plugin validate` | pass | same |
 | vite build: the editor's canvas and devtools apps | pass | pass |
-| `tooling/js/fmt.sh --check`, whole repository | 1761 files need formatting | exit 0 |
+| `tooling/js/fmt.sh --check`, whole repository | 1764 files need formatting (CI reports the same) | exit 0 |
 | excluded or byte-checked files the format touched | | none |
 
-| package | runner | before = after |
+| suite | runner | before = after |
 |---|---|---|
 | `apps/editor/packages/repository` | node --test | 8 pass, 2 skip, 0 fail |
 | `engine/core/web/idml-viewer` | bun test | 27 pass, 0 skip, 0 fail |
-| `modules/data/packages/data-bundle` | vitest | 383 pass, 2 skip, 0 fail |
-| `modules/data/packages/data-host-model` | vitest | 53 pass, 0 skip, 0 fail |
+| `modules/data/packages/data-bundle` | bun test | 383 pass, 2 skip, 0 fail |
+| `modules/data/packages/data-bundle` (`test:duckdb`) | bun test | 7 pass, 0 skip, 0 fail |
+| `modules/data/packages/data-bundle` (`test:e2e`) | bun test | 9 pass, 0 skip, 0 fail |
+| `modules/data/packages/data-host-model` | bun test | 53 pass, 0 skip, 0 fail |
 | `modules/doc/packages/doc-bundle` | bun test | 41 pass, 0 skip, 0 fail |
 | `modules/doc/packages/doc-host-model` | bun test | 44 pass, 0 skip, 0 fail |
-| `modules/draw/packages/draw-bundle` | vitest | 1645 pass, 34 skip, 0 fail |
-| `modules/draw/packages/draw-geometry` | vitest | 681 pass, 0 skip, 0 fail |
-| `modules/draw/packages/draw-tools` | vitest | 337 pass, 0 skip, 0 fail |
+| `modules/draw/packages/draw-bundle` | bun test | 1480 pass, 34 skip, 0 fail |
+| `modules/draw/packages/draw-bundle` (`test:dom`) | bun test | 165 pass, 0 skip, 0 fail |
+| `modules/draw/packages/draw-geometry` | bun test | 681 pass, 0 skip, 0 fail |
+| `modules/draw/packages/draw-tools` | bun test | 337 pass, 0 skip, 0 fail |
 | `modules/image/glue` | bun test | 343 pass, 0 skip, 0 fail |
 | `modules/image/manifest` | paged-plugin validate | exit 0 |
 | `modules/publish/packages/pdf-bundle` | bun test | 26 pass, 0 skip, 0 fail |
@@ -199,10 +203,10 @@ before and after the format:
 | `modules/web/packages/web-bundle` | bun test | 330 pass, 0 skip, 0 fail |
 | `modules/web/packages/web-conformance` | bun test | 103 pass, 0 skip, 0 fail |
 | `modules/web/packages/web-model` | bun test | 290 pass, 9 skip, 0 fail |
-| `platform/extensions/packages/ai` | vitest | 31 pass, 0 skip, 0 fail |
-| `platform/extensions/packages/cli` | vitest | 50 pass, 5 skip, 0 fail |
-| `platform/extensions/packages/plugin-sdk` | vitest | 715 pass, 0 skip, 0 fail |
-| `platform/shared/test-kit` | bun test | 12 pass, 0 skip, 0 fail |
+| `platform/extensions/packages/ai` | bun test | 31 pass, 0 skip, 0 fail |
+| `platform/extensions/packages/cli` | bun test | 50 pass, 7 skip, 0 fail |
+| `platform/extensions/packages/plugin-sdk` | bun test | 715 pass, 0 skip, 0 fail |
+| `platform/shared/test-kit` | bun test | 14 pass, 0 skip, 0 fail |
 
 ## Follow-ups
 

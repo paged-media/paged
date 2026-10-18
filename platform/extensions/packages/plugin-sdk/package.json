@@ -1,6 +1,6 @@
 {
   "name": "@paged-media/plugin-sdk",
-  "version": "0.2.69-canary.0",
+  "version": "0.2.71-canary.0",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -10,7 +10,7 @@
   "scripts": {
     "typecheck": "bun check -p tsconfig.json",
     "test": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts",
-    "build": "tsup src/index.ts --format esm --target es2020 --dts --out-dir dist --clean",
+    "build": "rm -rf dist && bun build src/index.ts --outdir dist --format esm --target node --packages external && tsc -p tsconfig.build.json",
     "prepublishOnly": "bun run build"
   },
   "dependencies": {

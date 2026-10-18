@@ -26,7 +26,6 @@ import {
   type PropsWithChildren,
 } from "react";
 
-// eslint-disable-next-line import/no-relative-parent-imports
 import { IDENTITY_CAMERA, type Camera } from "@paged-media/client";
 
 import { useCanvasClient } from "./canvas-client-context";

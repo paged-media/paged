@@ -41,11 +41,13 @@ export interface TimerClock {
 
 // Captured at import. bun:test does not fake setImmediate; vitest replaces
 // the global, so this reference stays the real one under both.
-const realSetImmediate: ((cb: () => void) => unknown) | undefined = globalThis.setImmediate;
+const realSetImmediate: ((cb: () => void) => unknown) | undefined =
+  globalThis.setImmediate;
 
 /** One turn of the real event loop: every queued microtask has run afterwards. */
 export function settle(): Promise<void> {
-  if (realSetImmediate) return new Promise((resolve) => void realSetImmediate(resolve));
+  if (realSetImmediate)
+    return new Promise((resolve) => void realSetImmediate(resolve));
   return new Promise((resolve) => {
     const channel = new MessageChannel();
     channel.port1.onmessage = () => {
@@ -56,7 +58,10 @@ export function settle(): Promise<void> {
   });
 }
 
-export async function advanceTimersByTimeAsync(clock: TimerClock, ms: number): Promise<void> {
+export async function advanceTimersByTimeAsync(
+  clock: TimerClock,
+  ms: number,
+): Promise<void> {
   await settle();
   if (ms > 1) {
     let reached = false;

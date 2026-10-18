@@ -158,14 +158,10 @@ jobs:
           path: modules/draw/junit-all.xml
           if-no-files-found: error
           retention-days: 14
-      # The two gates the root `bun run test` / `bun run typecheck` scripts carry
-      # and this job used to bypass by calling the runner directly: the
-      # contract-import lint (plugin-api is the ONLY sanctioned contract
-      # import) and the typecheck (the machines' wire shapes are the
-      # contract's `Mutation` variants).
-      - name: contract-import lint
-        if: ${{ !cancelled() }}
-        run: node scripts/check-contract-imports.mjs
+      # The gate the root `bun run typecheck` script carries and this job used
+      # to bypass by calling the runner directly: the machines' wire shapes are the
+      # contract's `Mutation` variants. (The contract-import check is a lint
+      # rule now; the lint workflow runs it for every module.)
       - name: typecheck
         if: ${{ !cancelled() }}
         run: bun run --filter './packages/*' typecheck

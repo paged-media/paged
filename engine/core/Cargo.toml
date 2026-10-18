@@ -81,6 +81,9 @@ tracing = "0.1"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "tiff", "gif", "bmp"] }
 base64 = "0.22"
 tsify-next = { version = "0.5", default-features = false, features = ["js"] }
+# ADR 187 — the wire's JSON Schema, derived next to the `Tsify` derives behind
+# each crate's optional `schema` feature. Never on in a wasm build.
+schemars = "1.2.3"
 wasm-bindgen = "0.2"
 # W1.24 (audit B17) — benchmark harness (dev-only). `html_reports` is
 # off: the bench lane is local + CI-smoke, not a report-publishing gate,

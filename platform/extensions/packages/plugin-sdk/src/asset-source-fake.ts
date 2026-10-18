@@ -29,7 +29,7 @@
 
 import type { FontFaceAsset } from "@paged-media/plugin-api";
 
-import type { BundleAssetProvider } from "./host-impl";
+import type { BundleAssetProvider } from "./host-impl.js";
 
 /** One recorded `getFontFace` call. */
 export interface RecordedFontFaceRequest {

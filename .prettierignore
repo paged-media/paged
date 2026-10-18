@@ -22,9 +22,10 @@ apps/editor/scripts/feat-vocabulary.json
 # hand-kept public API listing, read by docs tooling and api-catalog.test.ts
 engine/core/web/idml-viewer/api-catalog.json
 # Rust tests compare these with serde_json's output (paged-cli,
-# paged-introspect, idml-coverage)
+# paged-introspect, paged-wire --features schema, idml-coverage)
 engine/core/crates/paged-cli/cli.json
 engine/core/crates/paged-introspect/catalog.json
+engine/core/crates/paged-wire/schema/mutation.schema.json
 **/census.json
 **/idml-coverage*.json
 # image-js tests/it/object_schema.rs, glue/test/object-model-manifest.spec.ts
@@ -39,6 +40,9 @@ modules/web/packages/web-conformance/indesign/scripts/
 apps/editor/apps/canvas/showcase/
 # measured tables between GENERATED markers (chrome/parity-table.mjs)
 modules/web/packages/web-conformance/chrome/PARITY.md
+# the recorded Rules-of-React findings, written by bun lint --suppress-all /
+# --prune-suppressions (docs/migration/bun-lint.md)
+eslint-suppressions.json
 
 # --- Test data: inputs, recorded answers, oracles, snapshots, baselines. --
 # Their bytes are the test.

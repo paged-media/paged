@@ -60,7 +60,6 @@
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
-// eslint-disable-next-line import/no-relative-parent-imports
 import type { ElementGeometryItem, ElementId } from "@paged-media/client";
 
 import type { OverlayContribution, OverlayProps } from "../registries/overlay";

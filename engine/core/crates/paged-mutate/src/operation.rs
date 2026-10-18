@@ -190,6 +190,12 @@ impl NodeId {
 /// (`"fill.color"`) — so JS callers don't need to learn the Rust
 /// enum shape.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+// Some variants are documented and some are not, which schemars reorders.
+#[cfg_attr(
+    feature = "schema",
+    schemars(transform = crate::schema::declaration_order::<PropertyPath>)
+)]
 #[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
 #[serde(rename_all = "camelCase")]
 pub enum PropertyPath {
@@ -1572,6 +1578,7 @@ pub enum PropertyPath {
 /// Phase H — which corner of a `PathAnchor` the path-point edit
 /// targets: the anchor itself or one of its two Bezier handles.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[tsify(into_wasm_abi, missing_as_null)]
 #[serde(rename_all = "camelCase")]
 pub enum PathPointRole {
@@ -1586,6 +1593,7 @@ pub enum PathPointRole {
 /// `anchors` Vec; `subpath_starts` marks each contour's first
 /// index).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
 #[serde(rename_all = "camelCase")]
 pub struct PathPointAddress {
@@ -1951,6 +1959,7 @@ impl PropertyPath {
 /// on-curve point, `left` / `right` are the incoming / outgoing
 /// Bezier handles, all in the page item's inner coordinate system.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
 #[serde(rename_all = "camelCase")]
 pub struct PathAnchorSpec {
@@ -1980,6 +1989,7 @@ impl PathAnchorSpec {
 /// (the AST type predates `PartialEq`/`Tsify`; the mirror keeps the
 /// op wire-shaped, the `PathAnchorSpec` precedent).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
 #[serde(rename_all = "camelCase")]
 pub struct GradientFeatherStopSpec {
@@ -1998,6 +2008,7 @@ pub struct GradientFeatherStopSpec {
 /// authoring was missing. `stop_color` round-trips faithfully but the
 /// rasterizer currently consumes `alpha_pct` only.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
 #[serde(rename_all = "camelCase")]
 pub struct GradientFeatherSpec {
@@ -2060,6 +2071,7 @@ impl GradientFeatherSpec {
 /// parser models so the whole-struct `ParagraphRuleAbove` /
 /// `ParagraphRuleBelow` paths round-trip a paragraph's rule verbatim.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
 #[serde(rename_all = "camelCase")]
 pub struct ParagraphRuleSpec {
@@ -2113,6 +2125,7 @@ impl ParagraphRuleSpec {
 /// has no per-element list-edit form, so the UI sends the full new
 /// stop list (the gradient-feather stop-list precedent).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
 #[serde(rename_all = "camelCase")]
 pub struct TabStopSpec {
@@ -2345,6 +2358,7 @@ pub struct RemovedTableLine {
 /// of a specific kind; the apply layer's `TypeMismatch` error fires if
 /// the variant doesn't match what the path expects.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
 #[serde(
     tag = "type",
@@ -2438,7 +2452,11 @@ pub enum Value {
     Bool(bool),
     /// Track M — plain text value (layer name, future story
     /// titles, etc.). Inverse via the previous text.
-    Text(#[serde(deserialize_with = "null_as_empty")] String),
+    Text(
+        #[serde(deserialize_with = "null_as_empty")]
+        #[cfg_attr(feature = "schema", schemars(with = "Option<String>"))]
+        String,
+    ),
     /// SDK Phase 5 (v1 sweep) — full path replacement on any
     /// path-bearing page item. Carries the new anchor list +
     /// `subpath_starts` for compound paths. Used by Pathfinder
@@ -2587,10 +2605,18 @@ pub enum Value {
     /// ADR 132 — an enum member in its IDML spelling. Normalises to `Text`
     /// for the apply layer; the schema layer (`paged-introspect`) checks
     /// membership before it gets there.
-    Enum(#[serde(deserialize_with = "null_as_empty")] String),
+    Enum(
+        #[serde(deserialize_with = "null_as_empty")]
+        #[cfg_attr(feature = "schema", schemars(with = "Option<String>"))]
+        String,
+    ),
     /// ADR 132 — a reference to another document object by self id (a
     /// style, a layer, a master). Normalises to `Text`.
-    Ref(#[serde(deserialize_with = "null_as_empty")] String),
+    Ref(
+        #[serde(deserialize_with = "null_as_empty")]
+        #[cfg_attr(feature = "schema", schemars(with = "Option<String>"))]
+        String,
+    ),
     /// ADR 132 — a whole gradient-stop list, the value of the
     /// `gradient.stops` virtual path (`EditGradient` underneath).
     GradientStops(Vec<GradientStopSpec>),
@@ -2611,6 +2637,7 @@ fn null_as_empty<'de, D: serde::Deserializer<'de>>(d: D) -> Result<String, D::Er
 
 /// v71 — the value of the `swatch.color` virtual path.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
 #[serde(rename_all = "camelCase")]
 pub struct SwatchColorSpec {
@@ -2984,6 +3011,7 @@ impl NodeSpec {
 /// delete-undo are lossless. `space` / `model` / `alternate_space` are
 /// the IDML attribute strings (`ColorSpace::as_attr` etc.).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
 #[serde(rename_all = "camelCase")]
 pub struct SwatchSpec {
@@ -3012,6 +3040,7 @@ pub struct SwatchSpec {
 
 /// Which style collection a `SetStyleProperty` targets.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub enum StyleCollection {
@@ -3024,6 +3053,7 @@ pub enum StyleCollection {
 
 /// One stop of a gradient on the wire. Mirrors `GradientStopRef`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
 #[serde(rename_all = "camelCase")]
 pub struct GradientStopSpec {
@@ -3178,6 +3208,7 @@ impl TextPathSpec {
 
 /// Wire description of a gradient swatch, mirroring `GradientEntry`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
 #[serde(rename_all = "camelCase")]
 pub struct GradientSpec {
@@ -3198,6 +3229,7 @@ pub struct GradientSpec {
 /// the applied op. `continue_across_stories` is the field the renderer
 /// reads for cross-story numbering continuity.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
 #[serde(rename_all = "camelCase")]
 pub struct NumberingListSpec {
@@ -3215,6 +3247,7 @@ pub struct NumberingListSpec {
 
 /// Wire description of a colour group, mirroring `ColorGroupEntry`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
 #[serde(rename_all = "camelCase")]
 pub struct ColorGroupSpec {
@@ -4698,6 +4731,7 @@ pub struct CellAddr {
 
 /// [`Operation::ApplyStyle`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub enum StyleScope {
@@ -4728,6 +4762,7 @@ pub enum StyleScope {
 /// Serialised externally-tagged (the [`FieldKind`] convention):
 /// `"front"` / `"back"` / `"forward"` / `"backward"` / `{"index": 3}`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub enum ZOrderTarget {
@@ -4752,6 +4787,7 @@ pub enum ZOrderTarget {
 /// edit-surviving anchor run whose text is the field's cached display
 /// value (see `paged_model::PlaceholderField`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub enum FieldKind {
@@ -4800,6 +4836,7 @@ impl FieldKind {
 /// the operation wire type doesn't depend on the parser's
 /// serialization shape).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub enum GuideOrientationSpec {
@@ -4827,6 +4864,7 @@ impl GuideOrientationSpec {
 /// flo_curves layer) — kept separate so the apply layer doesn't
 /// leak `flo_curves` types onto the wire.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
 #[serde(rename_all = "camelCase")]
 pub enum PathfinderKind {
@@ -4877,6 +4915,7 @@ pub enum PathfinderRegionVerb {
 /// B-22 — whether `PathfinderFaces` keeps the named faces or removes
 /// them (Shape Builder's drag vs alt-drag).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
 #[serde(rename_all = "camelCase")]
 pub enum FaceSelectMode {

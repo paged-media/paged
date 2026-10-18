@@ -44,7 +44,6 @@ import {
   type ShellRegistries,
 } from "./registries-context";
 
-// eslint-disable-next-line import/no-relative-parent-imports
 import type {
   CanvasClient,
   Mutation,

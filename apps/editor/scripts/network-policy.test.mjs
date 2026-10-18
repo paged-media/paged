@@ -6,7 +6,7 @@
 // loaded with `--experimental-strip-types` like the cross-origin-isolation
 // check.
 //
-// Run: `node --experimental-strip-types scripts/network-policy.test.mjs`
+// Run: `bun test ./scripts/network-policy.test.mjs`
 //   (root script `bun run test:network-policy`).
 
 import { test } from "node:test";
