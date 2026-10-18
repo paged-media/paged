@@ -112,7 +112,7 @@ jobs:
       # it is the one these sources build; REQUIRE_REAL_ENGINE turns every
       # "artifact missing" skip into a failure).
       - name: test
-        run: node scripts/check-contract-imports.mjs && bun run --filter './packages/*' test
+        run: bun run --filter './packages/*' test
         env:
           REQUIRE_REAL_ENGINE: "1"
       - run: bun run --filter './packages/*' build

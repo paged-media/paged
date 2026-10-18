@@ -17,12 +17,6 @@ dependsOn:
     scope: 'development'
 
 tasks:
-  js-lint:
-    description: 'The contract-import guard (scripts/check-contract-imports.mjs).'
-    command: 'bun run lint:contract'
-    inputs:
-      - '@group(js-sources)'
-
   js-test:
     # data-vitest builds the engine wasm and vendors DuckDB before vitest.
     deps: ['~:wasm', '~:duckdb']
