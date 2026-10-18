@@ -85,7 +85,7 @@ a consumer project that installs the tarballs.
     prefixes on the Node built-ins the headless host imports. Vite 6's dependency optimiser
     (esbuild 0.25 at `chrome87, edge88, es2020, firefox78, safari14`) pre-bundles both artifacts
     without an error.
-- The packed `package.json` differs in the version (0.2.70-canary.0), the build script and the
+- The packed `package.json` differs in the version (0.2.71-canary.0), the build script and the
   `typescript` devDependency range.
 
 ## Timings
