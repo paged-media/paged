@@ -202,11 +202,11 @@ fn a_genuinely_removed_item_is_still_removed() {
 /// cleanly wherever it is absent.
 ///
 /// ```text
-/// PAGED_IDML_CORPUS=1 cargo test -p idml-export --test unmodelled_item_roundtrip \
-///     -- --ignored --nocapture
+/// PAGED_CORPUS_DIR=<corpus root> cargo test -p idml-export --test it -- \
+///     --ignored --nocapture unmodelled_item_roundtrip::
 /// ```
 #[test]
-#[ignore = "private corpus: opt-in (PAGED_IDML_CORPUS=1 + the corpus mount)"]
+#[ignore = "corpus: idml"]
 fn corpus_brand_guidelines_keeps_its_two_anchorless_polygons() {
     let Some(root) = corpus::root() else { return };
     let package = corpus::package(&root, "idml/packs/brand-guidelines/template.idml");

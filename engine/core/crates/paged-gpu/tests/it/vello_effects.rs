@@ -32,6 +32,7 @@ use paged_compose::{
     PathSegment, Transform as XF,
 };
 use paged_gpu::{cpu::CpuRasterizer, vello_rs::VelloRasterizer, PathRasterizer, RasterOptions};
+use paged_test_resources::{skip, Resource};
 
 fn unit_rect(list: &mut DisplayList) -> paged_compose::PathId {
     let mut p = PathData::default();
@@ -82,9 +83,14 @@ fn a_feather_takes_alpha_away_it_does_not_add_white_ink() {
     opts.dpi = 72.0;
     let cpu = CpuRasterizer.rasterize(&list, &opts);
     let vello = VelloRasterizer::new().rasterize(&list, &opts);
+    if paged_test_resources::gpu_forced_off() {
+        skip!(Resource::Gpu, "PAGED_FORCE_NO_GPU=1");
+    }
     if vello.iter().all(|b| *b == 0) {
-        eprintln!("no GPU available; skipping");
-        return;
+        skip!(
+            Resource::Gpu,
+            "no wgpu adapter: Vello returned its zero-fill fallback"
+        );
     }
     let (w, _h) = opts.pixel_size();
 

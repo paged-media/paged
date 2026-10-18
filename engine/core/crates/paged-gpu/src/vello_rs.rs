@@ -3195,10 +3195,10 @@ mod tests {
         // (the blur halo). A hard-edge fill would leave them at the
         // background colour; the multi-tap replay must attenuate them.
         //
-        // Skipped silently if Vello's GPU init fails (no adapter, no
-        // driver, headless CI without a GPU). Local runs on a Mac /
-        // workstation with a real GPU exercise the assertion; the
-        // smoke test above stays as the encoder-only fallback.
+        // Without an adapter (no driver, headless CI without a GPU) it
+        // reports `unavailable: GPU adapter` and returns — a failure
+        // under PAGED_REQUIRE_GPU=1, which the GPU lane sets. The smoke
+        // test above stays as the encoder-only check.
         use paged_compose::{
             BlendMode as ComposeBlend, Color as DLColor, DisplayCommand, LayerEffect, Paint,
             PathData, PathSegment, Rect, Transform,
@@ -3257,12 +3257,10 @@ mod tests {
             let i = (y * 80 + x) * 4;
             [buf[i], buf[i + 1], buf[i + 2], buf[i + 3]]
         };
-        let corner = at(2, 2);
-        if corner == [0, 0, 0, 0] {
-            // GPU unavailable — fallback buffer. Skip the assertion;
-            // CI without a GPU exercises only the smoke test.
+        if !gpu_or_skip(&buf) {
             return;
         }
+        let corner = at(2, 2);
         assert!(
             corner[0] > 240,
             "corner pixel should be background white when GPU is live; got {corner:?}"
@@ -3318,12 +3316,33 @@ mod tests {
         list.paths.push_anon(p)
     }
 
-    /// Helper: assert the readback buffer isn't the zero-fill fallback
-    /// (the documented "no GPU available" sentinel from
-    /// `VelloRasterizer::rasterize`). Returns `false` when the GPU
-    /// path didn't actually run — tests treat that as "skip cleanly".
+    /// Whether the readback buffer is a real render rather than the
+    /// zero-fill fallback (the documented "no GPU available" sentinel
+    /// from `VelloRasterizer::rasterize`).
     fn gpu_path_ran(buf: &[u8]) -> bool {
         buf.iter().any(|b| *b != 0)
+    }
+
+    /// The device tests' one skip: `true` when the GPU path ran, else
+    /// `false` after reporting `unavailable: GPU adapter`, which panics
+    /// under `PAGED_REQUIRE_GPU=1` (the GPU lane). `PAGED_FORCE_NO_GPU=1`
+    /// takes this path on a machine that has an adapter.
+    fn gpu_or_skip(buf: &[u8]) -> bool {
+        if paged_test_resources::gpu_forced_off() {
+            paged_test_resources::unavailable(
+                paged_test_resources::Resource::Gpu,
+                "PAGED_FORCE_NO_GPU=1",
+            );
+            return false;
+        }
+        if !gpu_path_ran(buf) {
+            paged_test_resources::unavailable(
+                paged_test_resources::Resource::Gpu,
+                "no wgpu adapter: Vello returned its zero-fill fallback",
+            );
+            return false;
+        }
+        true
     }
 
     /// Tests that toggle the global FORCE_COMPUTE_PATH /
@@ -3427,7 +3446,7 @@ mod tests {
         opts.dpi = 72.0;
         opts.background = ComposeColor::rgba(1.0, 1.0, 1.0, 1.0);
         let buf = v.rasterize(&list, &opts);
-        if !gpu_path_ran(&buf) {
+        if !gpu_or_skip(&buf) {
             return;
         }
         let at = |x: usize, y: usize| -> [u8; 4] {
@@ -3494,7 +3513,7 @@ mod tests {
         opts.dpi = 72.0;
         opts.background = ComposeColor::rgba(1.0, 1.0, 1.0, 1.0);
         let buf = v.rasterize(&list, &opts);
-        if !gpu_path_ran(&buf) {
+        if !gpu_or_skip(&buf) {
             return;
         }
         // Stroke center should land near (5, 5..35) horizontal band.
@@ -3551,7 +3570,7 @@ mod tests {
         opts.dpi = 72.0;
         opts.background = ComposeColor::rgba(1.0, 1.0, 1.0, 1.0);
         let buf_baseline = v1.rasterize(&list, &opts);
-        if !gpu_path_ran(&buf_baseline) {
+        if !gpu_or_skip(&buf_baseline) {
             return;
         }
 
@@ -3624,7 +3643,7 @@ mod tests {
         opts.dpi = 72.0;
         opts.background = ComposeColor::rgba(1.0, 1.0, 1.0, 1.0);
         let baseline_buf = v.rasterize(&baseline, &opts);
-        if !gpu_path_ran(&baseline_buf) {
+        if !gpu_or_skip(&baseline_buf) {
             return;
         }
         let _force = ForceComputeScope::engage();
@@ -3707,7 +3726,7 @@ mod tests {
         opts.dpi = 72.0;
         opts.background = ComposeColor::rgba(1.0, 1.0, 1.0, 1.0);
         let buf_overlap = v.rasterize(&overlap, &opts);
-        if !gpu_path_ran(&buf_overlap) {
+        if !gpu_or_skip(&buf_overlap) {
             return;
         }
         let buf_80 = v.rasterize(&alone80, &opts);
@@ -3778,7 +3797,7 @@ mod tests {
         opts.dpi = 72.0;
         opts.background = ComposeColor::rgba(1.0, 1.0, 1.0, 1.0);
         let buf = v.rasterize(&list, &opts);
-        if !gpu_path_ran(&buf) {
+        if !gpu_or_skip(&buf) {
             return;
         }
         let at = |x: usize, y: usize| -> [u8; 4] {
@@ -3830,14 +3849,14 @@ mod tests {
         opts.dpi = 72.0;
         opts.background = ComposeColor::rgba(1.0, 1.0, 1.0, 1.0);
         let buf_fast = v.rasterize(&list, &opts);
-        if !gpu_path_ran(&buf_fast) {
+        if !gpu_or_skip(&buf_fast) {
             // CPU finisher always "ran" so this means the CPU build
             // didn't even pull tiny-skia — bail.
             return;
         }
         let _force = ForceComputeScope::engage();
         let buf_compute = v.rasterize(&list, &opts);
-        if !gpu_path_ran(&buf_compute) {
+        if !gpu_or_skip(&buf_compute) {
             return;
         }
         // The interior pixel should look blue in both buffers and
@@ -3878,7 +3897,7 @@ mod tests {
         opts.dpi = 72.0;
         opts.background = ComposeColor::rgba(1.0, 1.0, 1.0, 1.0);
         let buf = v.rasterize(&list, &opts);
-        if !gpu_path_ran(&buf) {
+        if !gpu_or_skip(&buf) {
             return;
         }
         // Knockout fallback paints the overprint as a normal cyan
@@ -4005,7 +4024,7 @@ mod tests {
                 let list = stepped_mask_list(mask_type, invert);
                 let opts = stepped_mask_opts();
                 let gpu = VelloRasterizer::new().rasterize(&list, &opts);
-                if !gpu_path_ran(&gpu) {
+                if !gpu_or_skip(&gpu) {
                     return; // no adapter — encoding-only tests still ran
                 }
                 let cpu = crate::CpuRasterizer.rasterize(&list, &opts);
@@ -4111,7 +4130,7 @@ mod tests {
 
         let opts = stepped_mask_opts();
         let gpu = VelloRasterizer::new().rasterize(&list, &opts);
-        if !gpu_path_ran(&gpu) {
+        if !gpu_or_skip(&gpu) {
             return;
         }
         let cpu = crate::CpuRasterizer.rasterize(&list, &opts);
@@ -4171,7 +4190,7 @@ mod tests {
         let mut opts = stepped_mask_opts();
         opts.dpi = 300.0;
         let gpu = VelloRasterizer::new().rasterize(&list, &opts);
-        if !gpu_path_ran(&gpu) {
+        if !gpu_or_skip(&gpu) {
             return;
         }
         let cpu = crate::CpuRasterizer.rasterize(&list, &opts);
@@ -4273,7 +4292,7 @@ mod tests {
 
         let opts = stepped_mask_opts();
         let gpu = VelloRasterizer::new().rasterize(&list, &opts);
-        if !gpu_path_ran(&gpu) {
+        if !gpu_or_skip(&gpu) {
             return;
         }
         let cpu = crate::CpuRasterizer.rasterize(&list, &opts);
@@ -4589,7 +4608,7 @@ mod tests {
     #[cfg(feature = "cpu")]
     fn cpu_gpu_delta(list: &DisplayList, opts: &RasterOptions) -> Option<(u8, usize)> {
         let gpu = VelloRasterizer::new().rasterize(list, opts);
-        if !gpu_path_ran(&gpu) {
+        if !gpu_or_skip(&gpu) {
             return None;
         }
         let cpu = crate::CpuRasterizer.rasterize(list, opts);
@@ -4690,7 +4709,7 @@ mod tests {
         });
         let opts = overflow_opts(72.0);
         let gpu = VelloRasterizer::new().rasterize(&list, &opts);
-        if !gpu_path_ran(&gpu) {
+        if !gpu_or_skip(&gpu) {
             return;
         }
         // x = 22 pt sits in the first gap (8..16 pt past the start).

@@ -30,6 +30,7 @@
 //! against the shipped default and a quietly larger budget there would
 //! let an example that hangs the editor pass.
 
+use paged_test_resources::{skip, Resource};
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
@@ -42,14 +43,20 @@ use std::process::{Command, Stdio};
 /// they agree. `cargo test -p paged-cli` alone rebuilds only ours and
 /// leaves whatever `paged-run` was last built there, which answers the
 /// PREVIOUS protocol and fails this comparison for a reason that is not
-/// drift. A binary older than ours predates our build, so skip that
-/// half loudly rather than report a difference that isn't one.
+/// drift. A binary that predates our build is skipped loudly rather than
+/// reported as a difference that isn't one.
+///
+/// "Predates" allows a minute: one `cargo test --workspace` links the two
+/// binaries in parallel, in either order, so `paged-run` is often a few
+/// milliseconds older than `paged` from the very same build. A strict
+/// `>=` skipped this half on about every other workspace run.
 fn paged_run() -> Option<PathBuf> {
     let mine = PathBuf::from(env!("CARGO_BIN_EXE_paged"));
     let sibling = mine.with_file_name(format!("paged-run{}", std::env::consts::EXE_SUFFIX));
     let built_at = |p: &PathBuf| std::fs::metadata(p).and_then(|m| m.modified()).ok();
+    let same_build = std::time::Duration::from_secs(60);
     match (built_at(&sibling), built_at(&mine)) {
-        (Some(theirs), Some(ours)) if theirs >= ours => Some(sibling),
+        (Some(theirs), Some(ours)) if theirs + same_build >= ours => Some(sibling),
         _ => None,
     }
 }
@@ -116,12 +123,11 @@ fn both_binaries_answer_the_same_protocol() {
 
     let via_paged = replies(env!("CARGO_BIN_EXE_paged"), &["session"]);
     let Some(run) = paged_run() else {
-        eprintln!(
-            "SKIPPING the binary-vs-binary half: paged-run is absent or older \
-             than this build. Run `cargo test --workspace` (as CI does) to \
-             exercise it."
+        skip!(
+            Resource::Fixtures,
+            "the binary-vs-binary half: paged-run is absent or older than this build; \
+             build the whole workspace (`cargo nextest run --workspace`, as CI does)"
         );
-        return;
     };
     let via_run = replies(run.to_str().unwrap(), &[]);
     assert_eq!(

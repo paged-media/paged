@@ -14057,10 +14057,11 @@ mod tests {
     #[test]
     fn registry_faces_name_variable_instances_like_indesign() {
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus/fonts");
-        if !dir.exists() {
-            eprintln!("SKIP: {} absent", dir.display());
-            return;
-        }
+        assert!(
+            dir.is_dir(),
+            "{} is committed at engine/core/corpus/fonts; a partial checkout?",
+            dir.display()
+        );
         let entry = |family: &str, style: Option<&str>, file: &str| FontEntry {
             family: family.into(),
             style: style.map(str::to_string),
@@ -14453,12 +14454,12 @@ mod tests {
         use std::io::Write;
         let font_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../../corpus/fonts/Inter.ttf");
-        let Ok(font) = std::fs::read(&font_path) else {
-            // Font fixture absent in this checkout — skip rather than
-            // fail (mirrors the corpus-optional convention).
-            eprintln!("skip: Inter.ttf not present");
-            return;
-        };
+        let font = std::fs::read(&font_path).unwrap_or_else(|e| {
+            panic!(
+                "{}: {e} — committed at engine/core/corpus/fonts; a partial checkout?",
+                font_path.display()
+            )
+        });
         let mut buf = Vec::new();
         let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
         let opts: zip::write::SimpleFileOptions = zip::write::SimpleFileOptions::default()
@@ -15448,10 +15449,12 @@ nGP4z8DwHxkzoAsAAA8hD/EEN8afAAAAAElFTkSuQmCC";
     fn font_face_lookup_serves_registered_bytes_and_misses_unknown() {
         let font_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../../corpus/fonts/Inter.ttf");
-        let Ok(bytes) = std::fs::read(&font_path) else {
-            eprintln!("skip: Inter.ttf not present");
-            return;
-        };
+        let bytes = std::fs::read(&font_path).unwrap_or_else(|e| {
+            panic!(
+                "{}: {e} — committed at engine/core/corpus/fonts; a partial checkout?",
+                font_path.display()
+            )
+        });
         let registry = vec![FontEntry {
             family: "Inter".to_string(),
             style: Some("Regular".to_string()),

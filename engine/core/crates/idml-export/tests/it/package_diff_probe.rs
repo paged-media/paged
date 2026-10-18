@@ -19,15 +19,18 @@
 //! Opt-in probe: `PAGED_DIFF_PACKAGE=<path>.idml` — open the package,
 //! export it unmutated, and report the first entry that is not
 //! byte-identical with 300 bytes of context. A developer's diff tool for
-//! "which part churns on an unmutated save", nothing more; skipped
-//! unless the variable is set.
+//! "which part churns on an unmutated save", nothing more. The
+//! `lane: package diff` lane, run only when asked for:
+//! `PAGED_DIFF_PACKAGE=<file> cargo nextest run --profile lanes --run-ignored only`.
 
 use crate::pkg;
 
 #[test]
+#[ignore = "lane: package diff (PAGED_DIFF_PACKAGE)"]
 fn unmutated_export_of_the_named_package_is_entry_identical() {
-    let Some(path) = std::env::var_os("PAGED_DIFF_PACKAGE") else {
-        eprintln!("SKIP: PAGED_DIFF_PACKAGE unset");
+    let Some(path) =
+        paged_test_resources::env_var(paged_test_resources::Resource::Corpus, "PAGED_DIFF_PACKAGE")
+    else {
         return;
     };
     let source = std::fs::read(&path).expect("read package");
