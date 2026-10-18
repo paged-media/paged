@@ -1,0 +1,88 @@
+$schema: '../../.moon/cache/schemas/project.json'
+
+# The engine's Cargo workspace. web/idml-viewer is its own project
+# (core-idml-viewer); spikes/blitz-wasm is excluded from the workspace.
+language: 'rust'
+layer: 'library'
+stack: 'systems'
+tags: ['rust', 'engine', 'wasm']
+
+project:
+  title: 'engine/core'
+  description: 'Rust render engine: IDML parsing, composition, GPU rendering, wasm interfaces.'
+
+# The Cargo git dependencies on paged-media/plugin-publish (idml-import,
+# idml-export) are fetched from the old repository at a pinned rev and read
+# nothing in modules/publish, so they are not an edge here. publish -> core
+# is (modules/publish/moon.yml).
+
+fileGroups:
+  rust-sources:
+    - '**/*.rs'
+    - '**/Cargo.toml'
+    - 'Cargo.lock'
+    - 'rust-toolchain*'
+    - '/.cargo/*.toml'
+    - '!web/**'
+    - '!spikes/blitz-wasm/**'
+  rust-tests:
+    - '**/*'
+    - '!docs/**'
+    - '!**/*.md'
+    - '!web/**'
+    - '!spikes/blitz-wasm/**'
+    - '/.cargo/*.toml'
+
+tasks:
+  fixtures:
+    description: 'Regenerate the gitignored corpus/generated/*.idml fixtures that tests read.'
+    toolchains: ['rust']
+    command: 'bash scripts/regen-fixtures.sh'
+    inputs:
+      - '@group(rust-sources)'
+      - 'scripts/regen-fixtures.sh'
+    options:
+      cache: false
+
+  rust-test:
+    deps: ['~:fixtures']
+
+  rust-lint:
+    description: 'clippy as core-ci runs it: native, then the wasm32 surfaces with the shipped features.'
+    script: >-
+      cargo clippy --workspace --all-targets -- -D warnings
+      && cargo clippy --target wasm32-unknown-unknown --all-targets
+      -p paged-canvas-wasm -p paged-gpu -p paged-sdk -p paged-introspect-wasm
+      --features paged-canvas-wasm/gpu,paged-sdk/gpu
+      -- -D warnings
+
+  wasm:
+    description: 'The npm wasm packages (canvas-wasm, introspect-wasm, repo-wasm, sdk) into dist/.'
+    toolchains: ['rust']
+    command: 'bash scripts/build-wasm-packages.sh'
+    inputs:
+      - '@group(rust-sources)'
+      - 'crates/paged-introspect/catalog.json'
+      - 'scripts/build-wasm-packages.sh'
+    outputs:
+      - 'dist/canvas-wasm/**/*'
+      - 'dist/introspect-wasm/**/*'
+      - 'dist/repo-wasm/**/*'
+      - 'dist/sdk/**/*'
+    options:
+      # Needs wasm-bindgen-cli at the Cargo.lock version and binaryen;
+      # core-publish-wasm.yml builds these in CI.
+      runInCI: 'skip'
+
+  wasm-test:
+    description: 'wasm-bindgen tests, Node-hosted (scripts/test-wasm.sh).'
+    toolchains: ['rust']
+    command: 'make test-wasm'
+    inputs:
+      - '@group(rust-sources)'
+      - 'scripts/test-wasm.sh'
+    options:
+      cache: false
+      # Needs wasm-bindgen-test-runner at the Cargo.lock version (core-ci's
+      # wasm lane installs it).
+      runInCI: false

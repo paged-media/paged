@@ -31,6 +31,8 @@ it always builds against the engine at the same commit, and there is no pin
 to move.
 
 ```bash
+moon run publish:test    # nextest + doctests, then the bundle tests (from anywhere)
+# without Moon:
 cargo build --workspace --all-targets
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all --check

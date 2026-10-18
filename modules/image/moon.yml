@@ -1,0 +1,47 @@
+$schema: '../../.moon/cache/schemas/project.json'
+
+# paged.image: a Cargo workspace (image-* crates) and a pnpm workspace
+# (glue/, manifest/).
+language: 'rust'
+layer: 'library'
+stack: 'systems'
+tags: ['rust', 'node', 'module', 'wasm']
+
+project:
+  title: 'modules/image'
+  description: 'Raster image module: kernels, codecs, PSD, GPU pipeline.'
+
+# manifest/'s typecheck and test scripts run the in-tree plugin-cli.
+dependsOn:
+  - id: 'extensions'
+    scope: 'development'
+
+tasks:
+  js-check:
+    inputs:
+      - project: 'extensions'
+        filter: ['packages/plugin-cli/**/*', 'packages/plugin-api/src/manifest.schema.json']
+
+  js-lint:
+    description: 'The contract-import guard (scripts/check-contract-imports.mjs).'
+    command: 'pnpm run lint:contract'
+    inputs:
+      - '@group(js-sources)'
+
+  js-test:
+    inputs:
+      - project: 'extensions'
+        filter: ['packages/plugin-cli/**/*', 'packages/plugin-api/src/manifest.schema.json']
+
+  wasm:
+    description: 'image-js wasm into glue/wasm/ and manifest/wasm/ (scripts/build-wasm.sh).'
+    toolchains: ['rust']
+    command: 'bash scripts/build-wasm.sh'
+    inputs:
+      - '@group(rust-sources)'
+      - 'scripts/build-wasm.sh'
+      - 'scripts/source-hash.mjs'
+    options:
+      # glue/wasm/ is committed, so it is not a cached output.
+      cache: false
+      runInCI: 'skip'

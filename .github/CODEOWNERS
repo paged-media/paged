@@ -7,6 +7,8 @@
 /.moon/                             @drietsch
 /.claude/                           @drietsch
 /.mcp.json                          @drietsch
+/.serena/                           @drietsch
+/.vscode/                           @drietsch
 /.prototools                        @drietsch
 /.protolock                         @drietsch
 /.cargo/                            @drietsch

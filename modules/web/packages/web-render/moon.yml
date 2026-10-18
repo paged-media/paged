@@ -1,0 +1,34 @@
+$schema: '../../../../.moon/cache/schemas/project.json'
+
+# web-render: the standalone Cargo workspace inside modules/web that lowers
+# Blitz's paint output to the scene-layer IR. modules/web builds its wasm.
+language: 'rust'
+layer: 'library'
+stack: 'systems'
+tags: ['rust', 'module']
+
+project:
+  title: 'modules/web/packages/web-render'
+  description: 'Blitz display list to scene-layer lowering (paged.web engine).'
+
+tasks:
+  rust-fmt:
+    command: 'cargo fmt --check'
+
+  rust-lint:
+    description: 'clippy as web-rust runs it: default features, blitz, blitz + perf-counters.'
+    script: >-
+      cargo clippy --all-targets -- -D warnings
+      && cargo clippy --all-targets --features blitz -- -D warnings
+      && cargo clippy --all-targets --features blitz,perf-counters -- -D warnings
+
+  rust-test:
+    description: >-
+      web-rust's test lanes: nextest with blitz, cargo test with default features
+      (unit and doc tests), and the perf budgets.
+    script: >-
+      profile=default;
+      if [ -n "${CI:-}" ] && grep -qs '^\[profile\.ci\]' .config/nextest.toml; then profile=ci; fi;
+      cargo nextest run --features blitz --profile "$profile"
+      && cargo test --no-fail-fast
+      && cargo test --features blitz,perf-counters --test perf_budgets

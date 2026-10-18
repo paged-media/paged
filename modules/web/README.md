@@ -60,6 +60,8 @@ bash scripts/build-wasm.sh --engine   # the engine wasm the tests boot (needs th
                                       # wasm-bindgen-cli version in web-render's Cargo.lock)
 pnpm -r typecheck && REQUIRE_REAL_ENGINE=1 pnpm -r test
 (cd packages/web-render && cargo test --features blitz)
+# or, through Moon from anywhere in the repository:
+moon run web:test web-render:test
 ```
 
 `web-bundle/test/conformance/` runs the bundle against the real engine through

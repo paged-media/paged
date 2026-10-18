@@ -88,4 +88,6 @@ fragmentation → the bundle's engine wasm).
 pnpm install && bash scripts/build-wasm.sh --engine
 pnpm -r typecheck && REQUIRE_REAL_ENGINE=1 pnpm -r test
 (cd packages/web-render && cargo fmt --check && cargo clippy --all-targets --features blitz -- -D warnings && cargo test --features blitz)
+# The same through Moon, from anywhere: engine wasm + vitest, and web-render's lanes
+moon run web:test web-render:test
 ```

@@ -1,0 +1,53 @@
+# JavaScript/TypeScript tasks, inherited by every project tagged `node`
+# (one per pnpm workspace root). They call the workspace's own package.json
+# scripts through pnpm; Moon installs the workspace (`pnpm install
+# --frozen-lockfile`) before the first of them runs.
+#
+# Names carry a `js-` prefix because a module can hold a Cargo and a pnpm
+# workspace in one project; the shared vocabulary is in all.yml.
+$schema: '../cache/schemas/tasks.json'
+
+inheritedBy:
+  tags: ['node']
+
+fileGroups:
+  js-sources:
+    - '**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}'
+    - '**/*.{json,css,html,svg}'
+    - '**/pnpm-workspace.yaml'
+    - '**/pnpm-lock.yaml'
+    - '!docs/**'
+  # Tests may read anything in the workspace (fixtures, manifests, the
+  # built wasm, corpora): everything but docs.
+  js-tests:
+    - '**/*'
+    - '!docs/**'
+    - '!**/*.md'
+
+taskOptions:
+  # A project that redefines one of these tasks replaces its command line
+  # instead of appending to it.
+  mergeArgs: 'replace'
+
+tasks:
+  js-check:
+    description: 'The workspace `typecheck` script.'
+    command: 'pnpm run typecheck'
+    inputs:
+      - '@group(js-sources)'
+
+  js-test:
+    description: 'The workspace `test` script.'
+    command: 'pnpm run test'
+    inputs:
+      - '@group(js-tests)'
+    options:
+      cache: false
+
+  js-build:
+    description: 'Every package `build` script (tsup/tsc to dist/). Local only unless the project says otherwise.'
+    command: 'pnpm -r run build'
+    inputs:
+      - '@group(js-sources)'
+    options:
+      runInCI: false

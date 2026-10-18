@@ -1,0 +1,15 @@
+{
+  "rust-analyzer.linkedProjects": [
+    "engine/core/Cargo.toml",
+    "modules/publish/Cargo.toml",
+    "modules/image/Cargo.toml",
+    "modules/draw/Cargo.toml",
+    "modules/sheet/Cargo.toml",
+    "modules/data/Cargo.toml",
+    "modules/doc/Cargo.toml",
+    "modules/slide/Cargo.toml",
+    "modules/web/packages/web-render/Cargo.toml",
+    "apps/server/server/Cargo.toml"
+  ],
+  "rust-analyzer.cargo.targetDir": true
+}

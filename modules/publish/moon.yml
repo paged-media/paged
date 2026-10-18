@@ -1,0 +1,79 @@
+$schema: '../../.moon/cache/schemas/project.json'
+
+# paged.publish: a Cargo workspace (IDML import/export, PDF import) and a
+# pnpm workspace without a root package.json (packages/pdf-bundle,
+# packages/publish-bundle).
+language: 'rust'
+layer: 'library'
+stack: 'systems'
+tags: ['rust', 'node', 'module', 'wasm']
+
+project:
+  title: 'modules/publish'
+  description: 'Foreign-format publishing: IDML import/export adapters and the PDF bundle.'
+
+# Path dependencies on the engine's crates (paged-model, paged-scene,
+# paged-store; idml-import for pdf-import's tests). The IDML adapter itself
+# lives in engine/core/crates since PM-0005.
+dependsOn:
+  - id: 'core'
+    scope: 'production'
+
+# Path dependencies into the engine: its crates are inputs here too, so
+# `moon ci` re-runs this project when an engine crate it builds changes.
+# (Project file groups replace the workspace ones, so the defaults are
+# restated.)
+fileGroups:
+  rust-sources:
+    - '**/*.rs'
+    - '**/Cargo.toml'
+    - 'Cargo.lock'
+    - 'rust-toolchain*'
+    - '/.cargo/*.toml'
+    - '/engine/core/Cargo.toml'
+    - '/engine/core/crates/**/*.rs'
+    - '/engine/core/crates/**/Cargo.toml'
+  rust-tests:
+    - '**/*'
+    - '!docs/**'
+    - '!**/*.md'
+    - '/.cargo/*.toml'
+    - '/engine/core/Cargo.toml'
+    - '/engine/core/crates/**/*.rs'
+    - '/engine/core/crates/**/Cargo.toml'
+
+
+tasks:
+  rust-build:
+    description: 'publish-ci build: every native target, then the wasm32 build of the bundle crates.'
+    script: >-
+      cargo build --workspace --all-targets
+      && cargo build -p pdf-import --target wasm32-unknown-unknown
+    options:
+      runInCI: true
+
+  js-check:
+    command: 'pnpm -r --filter ./packages/* run typecheck'
+
+  js-test:
+    description: 'vitest in the packages that declare a test script.'
+    command: 'pnpm -r --filter ./packages/* run test'
+
+  js-build:
+    command: 'pnpm -r --filter ./packages/* run build'
+    outputs:
+      - 'packages/*/dist/**/*'
+    options:
+      runInCI: true
+
+  wasm:
+    description: 'pdf-import mapper wasm into packages/pdf-bundle/bin/ (scripts/build-wasm.sh).'
+    toolchains: ['rust']
+    command: 'bash scripts/build-wasm.sh'
+    inputs:
+      - '@group(rust-sources)'
+      - 'scripts/build-wasm.sh'
+    options:
+      # The artifact is committed, so it is not a cached output.
+      cache: false
+      runInCI: 'skip'

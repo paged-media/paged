@@ -9,6 +9,7 @@ Dual-licensed AGPL-3.0-only OR the Paged Media Enterprise License (PMEL), the ve
 See [docs/](docs/README.md).
 
 ```bash
+moon run slide:test                          # Rust and bundle tests (or, without Moon:)
 cargo test --workspace                       # unit tests + corpus (skips without the corpus)
 PAGED_REQUIRE_CORPUS=1 cargo test -p pptx-import --test corpus -- --nocapture
 cargo run -p pptx-import --example pptx-dump -- deck.pptx

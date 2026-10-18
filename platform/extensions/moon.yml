@@ -1,0 +1,44 @@
+$schema: '../../.moon/cache/schemas/project.json'
+
+# The public extension contract and SDK: one pnpm workspace (plugin-api,
+# plugin-sdk, plugin-cli, ai, cli).
+language: 'typescript'
+layer: 'library'
+stack: 'frontend'
+tags: ['node', 'sdk']
+
+project:
+  title: 'platform/extensions'
+  description: 'Extension contract (plugin-api), runtime SDK, manifest CLI, ai and cli packages.'
+
+# scripts/sync-catalog.mjs reads engine/core's catalog.json.
+# (scripts/sync-wire.mjs falls back to the canvas-wasm installed under
+# apps/editor; that lookup is not modelled, it would make a cycle through
+# the modules the editor links.)
+dependsOn:
+  - id: 'core'
+    scope: 'development'
+
+tasks:
+  js-build:
+    description: 'Every package `build` script (tsup/tsc to dist/). extensions-vitest builds before testing.'
+    outputs:
+      - 'packages/*/dist/**/*'
+    options:
+      runInCI: true
+
+  js-test:
+    deps: ['~:js-build']
+
+  catalog-check:
+    description: 'The vendored capability catalog matches engine/core (scripts/sync-catalog.mjs --check).'
+    toolchains: ['system']
+    command: 'node scripts/sync-catalog.mjs --check'
+    inputs:
+      - 'scripts/sync-catalog.mjs'
+      - 'packages/plugin-api/src/catalog.json'
+      - project: 'core'
+        filter: ['crates/paged-introspect/catalog.json']
+    options:
+      # No CI workflow runs it today, and it currently reports drift.
+      runInCI: false

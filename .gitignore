@@ -1,9 +1,24 @@
 # OS / editor
 .DS_Store
 .vscode/
+# ...except the shared rust-analyzer settings at the root (all Cargo workspaces).
+!/.vscode/
+/.vscode/*
+!/.vscode/settings.json
 .idea/
 
 # Local symlinks to private resources (corpus, shared build targets).
 # Private assets never live in this public repository.
 /corpus
 /target
+
+# Moon: local cache and generated Docker contexts (the config in .moon/ is tracked).
+/.moon/cache/
+/.moon/docker/
+
+# Claude Code: personal settings stay local (.claude/settings.json is shared).
+/.claude/settings.local.json
+
+# Serena: its cache, memories and project.local.yml stay local (project.yml is shared).
+/.serena/*
+!/.serena/project.yml

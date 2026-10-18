@@ -19,8 +19,21 @@ Tool versions are pinned in [`.prototools`](./.prototools); install
 [proto](https://moonrepo.dev/proto) and run `proto install`. Rust toolchains
 come from each workspace's `rust-toolchain.toml` through rustup.
 
-Each component documents its own build and test commands in its README and
-`CLAUDE.md`; start there for the directory you are changing.
+Every component's tasks run through [Moon](https://moonrepo.dev/moon) from
+anywhere in the repository, with one project per Cargo or pnpm workspace
+(`moon query projects` lists them):
+
+```bash
+moon run draw:test              # one project; also :fmt, :check, :lint, :build, :wasm
+moon run :lint                  # every project
+moon ci --base origin/main --head HEAD   # only what your branch affects
+```
+
+Moon installs each pnpm workspace with `--frozen-lockfile` before its JS
+tasks and never rewrites package.json, lockfiles, tsconfig.json or
+rust-toolchain.toml. Each component also documents its own build and test
+commands (cargo, pnpm) in its README and `CLAUDE.md`; start there for the
+directory you are changing.
 
 ## Rules that apply everywhere
 

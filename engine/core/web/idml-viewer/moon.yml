@@ -1,0 +1,48 @@
+$schema: '../../../../.moon/cache/schemas/project.json'
+
+# @paged-media/idml-viewer: the TypeScript wrapper around the engine's
+# paged-sdk wasm. A standalone npm package (no lockfile is committed), so it
+# installs with npm like core-ci's viewer job, not through the pnpm toolchain.
+language: 'typescript'
+layer: 'library'
+stack: 'frontend'
+tags: ['node', 'engine']
+
+project:
+  title: 'engine/core/web/idml-viewer'
+  description: 'TypeScript viewer wrapper published as @paged-media/idml-viewer.'
+
+# It wraps core's paged-sdk wasm (core:wasm builds dist/sdk/, which the
+# release copies into wasm/). Its tests use a fake session and need no wasm.
+dependsOn:
+  - id: 'core'
+    scope: 'build'
+
+toolchains:
+  # Not a pnpm workspace: keep Moon from running `pnpm install` here.
+  javascript: false
+  pnpm: false
+
+tasks:
+  install:
+    description: 'npm install, as core-ci does (package-lock.json is gitignored).'
+    command: 'npm install --no-fund --no-audit'
+    inputs:
+      - 'package.json'
+    options:
+      cache: false
+
+  js-check:
+    command: 'npm run typecheck'
+    deps: ['~:install']
+
+  js-test:
+    command: 'npm test'
+    deps: ['~:install']
+
+  js-build:
+    description: 'tsc to dist/.'
+    command: 'npm run build'
+    deps: ['~:install']
+    outputs:
+      - 'dist/**/*'

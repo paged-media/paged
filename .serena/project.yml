@@ -1,0 +1,103 @@
+# Serena 2.0.0 project configuration (keys as in Serena's project.template.yml).
+# How it is used and measured: docs/development/code-intelligence.md.
+# Personal overrides go in .serena/project.local.yml (gitignored).
+
+project_name: "paged"
+
+# rust-analyzer for .rs; typescript-language-server for .ts/.tsx/.js/.mjs.
+language_servers: ["rust", "typescript"]
+
+encoding: "utf-8"
+
+# No shell command before the language servers start.
+activation_command:
+activation_command_timeout: 180
+
+line_ending:
+
+language_backend: "LSP"
+
+# One MCP tool per operation, so .claude/settings.json can allow the read tools
+# and ask before edits. (Serena 2.0 defaults to the REPL interface: one
+# `serena_repl` tool that runs Python, which can only be allowed or asked as a whole.)
+agent_interface: "tools"
+
+# target/, node_modules/, dist/, the private corpus link and the wasm build
+# outputs are gitignored already.
+ignore_all_files_in_gitignore: true
+
+# Project-level ls_specific_settings apply only when the project path is
+# trusted (trusted_project_path_patterns in ~/.serena/serena_config.yml).
+ls_specific_settings:
+  rust:
+    # Applied on top of Serena's own rust-analyzer initializationOptions
+    # (top-level keys replace Serena's). There is no root Cargo.toml and
+    # rust-analyzer only discovers the root and one level below it, so the
+    # ten Cargo workspaces are listed (as in .vscode/settings.json).
+    # rust.analyzerTargetDir is rust-analyzer's alias of cargo.targetDir:
+    # its cargo check runs in target/rust-analyzer and never takes the
+    # build's target-directory lock.
+    initializationOptions:
+      linkedProjects:
+        - "engine/core/Cargo.toml"
+        - "modules/publish/Cargo.toml"
+        - "modules/image/Cargo.toml"
+        - "modules/draw/Cargo.toml"
+        - "modules/sheet/Cargo.toml"
+        - "modules/data/Cargo.toml"
+        - "modules/doc/Cargo.toml"
+        - "modules/slide/Cargo.toml"
+        - "modules/web/packages/web-render/Cargo.toml"
+        - "apps/server/server/Cargo.toml"
+      rust:
+        analyzerTargetDir: true
+
+ls_workspace_folders: ["."]
+
+ls_additional_workspace_folders: []
+
+ignored_paths:
+  - "**/target/**"
+  - "**/node_modules/**"
+  - "**/dist/**"
+  - "corpus/**"
+  - "**/corpus/**"
+  # Fixture data; the TypeScript/JS fixture builders stay indexed.
+  - "**/fixtures/**"
+  - "!**/fixtures/**/*.ts"
+  - "!**/fixtures/**/*.mjs"
+  # Generated wasm-bindgen glue and vendored artifacts.
+  - "modules/*/packages/*/bin/**"
+  - "modules/draw/packages/draw-bundle/wasm/**"
+  - "modules/image/glue/wasm/**"
+  - "modules/image/manifest/wasm/**"
+  - "modules/data/vendor/**"
+  # A stamped copy of modules/doc/paged-ooxml (scripts/sync-ooxml.sh).
+  - "modules/slide/vendor/**"
+  - "engine/core/corpus/generated/**"
+
+read_only: false
+
+excluded_tools: []
+
+included_optional_tools: []
+
+fixed_tools: []
+
+excluded_apis: []
+
+included_apis: []
+
+default_modes:
+
+# No memories and no onboarding: the repository's CLAUDE.md files and docs/
+# are the project knowledge.
+added_modes: ["no-memories"]
+
+initial_prompt: ""
+
+symbol_info_budget:
+
+read_only_memory_patterns: []
+
+ignored_memory_patterns: []
