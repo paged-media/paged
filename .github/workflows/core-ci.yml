@@ -43,23 +43,6 @@ env:
   CARGO_PROFILE_DEV_DEBUG: line-tables-only
 
 jobs:
-  # Resolve the pinned toolchain ONCE from rust-toolchain.toml (audit B21)
-  # so every downstream job installs the same version the file pins
-  # (channel = "1.99.1") instead of drifting on `@stable`.
-  toolchain:
-    name: resolve pinned toolchain
-    # No job needs this one since step A10: each reads the pin itself, which
-    # saves the queue hop they all waited for (docs/migration/ci-speed.md).
-    # Kept, running in parallel, until the open toolchain update (U1) has
-    # merged, which edits the comment above; delete the job then.
-    runs-on: ubuntu-latest
-    outputs:
-      channel: ${{ steps.pin.outputs.channel }}
-    steps:
-      - uses: actions/checkout@v4
-      - id: pin
-        run: echo "channel=$(bash scripts/rust-channel.sh)" >> "$GITHUB_OUTPUT"
-
   # Linux runs the workspace tests ONCE (step A10): nextest gates and writes
   # the JUnit evidence, `cargo test --doc` adds the doctests nextest does not
   # run. Together they are the same tests `cargo test --workspace` ran, which

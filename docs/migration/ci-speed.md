@@ -19,8 +19,8 @@ most 20 jobs run at once, 5 of them on macOS, shared by every repository.
 
 | Lever | Before | After | How measured |
 |---|---|---|---|
-| 1. Run only what is affected | Root Cargo config (`.cargo/config.toml`, `tooling/rust/`) reached no Rust workflow; a dependency or toolchain update skipped the GPU lane; doc's Rust lane never ran on pull requests; a docs-only change ran its component's full CI (2–10 % of component commits) | All 13 Rust workflows watch the root Cargo config; core-gpu watches `Cargo.toml`/`Cargo.lock`/`rust-toolchain.toml`; doc/rust gates pull requests; `docs/**/*.md` under a component triggers nothing | Path filters read from the workflow files; docs-only share from 90 days of git history |
-| 2. `concurrency` | 297 superseded runs, 111 of them ran to the end (1,543 job-minutes after a newer run existed); 114 duplicate runs; 143 runs on main cancelled | All 22 pull-request workflows cancel a superseded run; no push to main is cancelled or queued; deploys never cancel. This PR: one run per workflow, 0 superseded | Runs API over the window; the configuration; one demonstration push |
+| 1. Run only what is affected | Root Cargo config (`.cargo/config.toml`, `tooling/rust/`) reached no Rust workflow; a dependency or toolchain update skipped the GPU lane; doc's Rust lane never ran on pull requests; a docs-only change ran its component's full CI (2–10 % of component commits); `moon ci` re-ran every affected Rust task uncached (551 job-minutes; B3a's run hit its 120 min timeout after 4 min of real work) | All 13 Rust workflows watch the root Cargo config; core-gpu watches `Cargo.toml`/`Cargo.lock`/`rust-toolchain.toml`; doc/rust gates pull requests; `docs/**/*.md` under a component triggers nothing; `moon ci` runs no Rust task (timeout 30 min) | Path filters read from the workflow files; docs-only share from 90 days of git history; moon job logs |
+| 2. `concurrency` | 297 superseded runs, 111 of them ran to the end (1,543 job-minutes after a newer run existed); 114 duplicate runs; 143 runs on main cancelled | All 22 pull-request workflows cancel a superseded run; no push to main is cancelled or queued (a shared main group would have cancelled 99 of 199 main runs); deploys never cancel. This PR: one run per workflow, 0 superseded | Runs API over the window; the configuration; one demonstration push |
 | 3. Rust caching | rust-cache hit rate 20 % (old: 97 %); 0 core caches on main, 12.4 GB of caches against the 10 GB limit, the oldest 30 min old | Pull requests restore main's caches and write none: this PR hit on 6 of 8 core jobs (47 % overall while other PRs still evict); sccache measured on one job and not adopted (warm 4m14s vs rust-cache hit 2m09s) | rust-cache log lines of 251 + 34 + 32 jobs; the Actions cache list; a trial job |
 | 4. Job shape | Linux ran core's 3,797 tests twice (`cargo test`, then nextest), 39.8 job-minutes a run; every core job waited for a 10 s toolchain job, median 12m57s | Linux runs them once (nextest + doctests, same counts): 12m44s in this PR's run; no toolchain hop; core ci 103.9 → 45.5 job-minutes | Step times and `Finished` lines; the jobs API; this PR's run |
 | 5. mold | Links core's Linux builds since A8b | No isolated CI number (linking is inside cargo's compile time) | — |
@@ -165,27 +165,49 @@ none under any `docs/` directory; `modules/sheet` reads its root
 | doc rust | push to main only (ported as it was): a pull request that broke `modules/doc` went red after merging | also on pull requests touching `modules/doc` | workflow file |
 | Docs-only changes | `engine/core/docs/x.md` ran core ci (~104 job-minutes) and core licenses on the pull request, plus fidelity and gpu on main; a module's docs ran its Rust and vitest lanes. 2–10 % of each component's commits in the last 90 days touched only its `docs/**/*.md` (core 14 of 816, data 14 of 190, web 14 of 136, image 8 of 207, sheet 7 of 197, editor 10 of 588, extensions 5 of 150) | `!<component>/docs/**/*.md` in every component workflow's push and pull-request filters: those commits run nothing heavy | workflow files; `git log --name-only` over 2026-07-18 – 2026-10-18 |
 
-Left as they are, with reasons:
+**How the filters apply.** On a push to `main` a path filter sees the
+commits of that push; on a pull request it sees the pull request's whole diff
+against its base, on every push. This PR shows it: its second push changed
+only `docs/` and `tooling/migration/`, and still started all 24 workflows,
+because the PR as a whole edits their files. With pushes going straight to
+`main` (see lever 2), a docs-only push runs nothing heavy.
 
-- **JS consumers of the engine.** On `main` the JS workspaces still consume
-  the engine as npm packages; the change to workspace packages, and the engine
-  paths in the vitest and editor filters, are B3a's (#14). Its filters should
-  also exclude `modules/*/docs/**/*.md` and include `tooling/rust/**`, since
-  its editor filter takes all of `modules/**`.
-- **doc vitest** stays push-only: B3a rewrites what it builds against.
-- **core-fidelity pull-request filter**: U1 (#15) adds `Cargo.toml`,
-  `Cargo.lock` and `rust-toolchain.toml`.
-- **`moon ci`** runs on every pull request without a path filter, which is
-  right: it computes the affected projects itself, from the task inputs in
-  `.moon/` (which already exclude `docs/**` and `**/*.md` and include
-  `/.cargo/*.toml`). It is advisory and runs every affected task from scratch
-  with no Rust cache, so a core pull request runs core's tests a further time:
-  46 runs, 497 job-minutes in the window, up to 66.5 job-minutes per run. Two
-  gaps: its inputs miss `tooling/rust/**`, and `!**/*.md` also hides
-  `modules/sheet/DECIMAL-SPIKE.md`, which a sheet test reads. Making `moon ci`
-  the required check, and dropping the per-component workflows it covers, is
-  where this lever goes next; until then its duplicate core run is the largest
-  avoidable cost left in this lever.
+B3a (#14, merged during A10) made the editor consume every module through the
+workspace, so its filters take all of `modules/**`; editor tests and the
+playground now also exclude `modules/*/docs/**/*.md`. B3a's vitest and editor
+filters list `.cargo/config.toml` but not `tooling/rust/**`; that one is left
+for the open B7 (#30), which is rewriting those workflows. doc vitest stays
+push-only for the same reason.
+
+### `moon ci`
+
+`moon ci` runs on every pull request without a path filter, which is right:
+it computes the affected projects itself, from the task inputs in `.moon/`
+(which exclude `docs/**` and `**/*.md`). It is advisory
+(`continue-on-error`), and it ran every affected task again in one job, from
+scratch, Rust included.
+
+| Measure | Before | How measured |
+|---|---|---|
+| moon ci jobs that ran (to 17:05 UTC) | 34, 551 job-minutes; median 13.8, p90 31.9, max 66.5 | jobs API |
+| B3a's run (39136471411, the broadest diff: nearly every `package.json`) | 120 min, cancelled at the job's `timeout-minutes`. Every non-Rust task (catalog check, all `js-check`, `js-lint`, `js-test`, `js-build`) was done 4 min after `moon ci` started. Of the 7 Rust test tasks, 5 failed within 2 s and `slide:rust-test` printed nothing for 118 min, until the timeout | the job log |
+| Why the Rust tasks failed | they start at once, and each workspace's first Rust task makes rustup install that workspace's pinned toolchain; parallel installs race (`component download failed … could not rename 'downloaded' file`) | the job log |
+| The 17 moon jobs longer than 10 min | Rust tasks 88 % of task time (1,129 of 1,286 task-minutes; tasks run in parallel); the rustup race in 10 of them | job logs |
+| What the Rust tasks duplicate | the 13 Rust workflows run the same fmt, clippy and tests (the task descriptions say so), with a Rust cache | `.moon/` task definitions |
+
+**Decision: `moon ci` runs no Rust task.** `rust-fmt`, `rust-lint` and
+`rust-test` (`.moon/tasks/rust.yml`), publish's `rust-build`, server's
+`rust-check` and core's `fixtures` get `runInCI: false`; `moon run` still
+runs them locally. What stays is the cheap, cross-cutting set (JS checks,
+lints, tests and builds, the catalog check), which took 4 min on the broadest
+diff so far, so `timeout-minutes` drops from 120 to 30, and the disk clean-up
+and nextest install the Rust tests needed are gone. Sharding (`--job` /
+`--job-total`) was not chosen: it adds a set-up per shard and keeps the
+duplicate, uncached Rust runs and the rustup race. Dropping `moon ci` outright
+would lose the comparison A8 set it up for. Making it the required check, with
+the per-component workflows it covers removed, is where this lever goes next;
+its inputs then also need `tooling/rust/**`, and `!**/*.md` must not hide
+`modules/sheet/DECIMAL-SPIKE.md`, which a sheet test reads.
 
 ## Lever 2: `concurrency`
 
@@ -214,7 +236,7 @@ queued or running.
 | Release and publish (core publish-wasm: tags; the module and extension publishers: dispatch only) | no group | unchanged: never cancelled |
 | Schedule and dispatch only (core perf-nightly, sheet fuzz, editor showcase-nightly) | showcase-nightly: one group, cancels | unchanged: not pull-request workflows |
 | CLA (`pull_request_target`, `issue_comment`) | none | unchanged: it records signatures and must not be cancelled |
-| editor protocol-version | none | unchanged here: B3a (#14) deletes the workflow |
+| editor protocol-version | none | deleted by B3a (#14) |
 
 No workflow uses `workflow_run`.
 
@@ -242,6 +264,20 @@ groupless workflows ran (18 % of the window's 6,695), and none of the 143
 `main` runs would have been cancelled. The demonstration push is in [This pull request's CI
 run](#this-pull-requests-ci-run).
 
+**Pushes straight to `main`.** Since 2026-10-18 changes are pushed to `main`
+directly, without pull requests, so the `main` case is the one that counts.
+A shared group per workflow for `main` pushes with `cancel-in-progress: false`
+was considered, so that a burst of pushes would queue instead of piling up.
+It cannot keep every run: GitHub holds one running and one pending run per
+group and cancels the pending one when a newer run arrives. Simulated on the
+window's 199 `main` push runs (each run's measured duration, one group per
+workflow), 148 would have waited behind another run and **99 would have been
+cancelled** while pending; core ci alone would have kept 4 of its 10. So
+`main` keeps a group per run (`github.run_id`): no run on `main` is ever
+cancelled or held back. The cost is that a burst of pushes queues every run
+at once; the path filters, one Linux core test run and the cache hits are
+what keep that short.
+
 ## Lever 3: Rust caching
 
 **What the numbers say.** Restore time is not the problem: a hit costs 1–24 s
@@ -257,7 +293,9 @@ the cached `module-wasm` action) gets
 `save-if: ${{ github.ref == 'refs/heads/main' }}`. Only `main`
 writes caches; a pull request restores `main`'s (a partial match when its
 `Cargo.lock` differs) and writes nothing, so pull requests no longer evict
-`main`'s caches or each other's. The publish, nightly and `main`-only
+`main`'s caches or each other's. The same goes for the Rust cache inside
+B3a's `engine-wasm` action; the one inside `module-wasm` is left to the open
+B3b/B6/B7, which are rewriting that action. The publish, nightly and `main`-only
 workflows already run on `main`.
 
 | Measure | Before | After | How measured |
@@ -327,9 +365,9 @@ queue a second time:
 | core gpu | 26 | 4m07s / 11m26s | 192 |
 
 Each job now reads the pin itself (`bash scripts/rust-channel.sh`, as the
-toolchain job did), so its jobs are queued when the run starts. core-ci's
-toolchain job stays for now, needed by nothing and running beside the others,
-because U1 (#15) edits its comment; it can be deleted once U1 has merged.
+toolchain job did), so its jobs are queued when the run starts. The toolchain
+jobs are gone (core-ci's was kept until U1, #15, had merged, since U1 edited
+its comment).
 `wasm-size` also no longer `needs: check`: it waited for both check legs
 (macOS ~25 min) and then queued again, for a 2 min job.
 
@@ -404,12 +442,14 @@ comparable; job minutes and the cache results are.
 The sccache trial took a further 17.6 job-minutes.
 
 **Lever 2.** One push, one run per workflow: no superseded or duplicate run.
-The demonstration push is the follow-up commit that added these numbers. It
-changes only `docs/` and `tooling/migration/`, so it started only `moon ci`
-and CLA (lever 1: no component workflow); no run of either was still in
-flight, so nothing was cancelled. A newer push cancelling an older run, and a
-push to `main` never being cancelled, show up in the first merges and pull
-requests after this lands; `ci_speed.py report` measures them the same way.
+The demonstration push (16:37, the commit that added these numbers) changed
+only `docs/` and `tooling/migration/`, yet started all 24 workflows again,
+because a pull request's path filters see its whole diff (lever 1); the first
+push's runs had all finished, so there was nothing to cancel, and the second
+set ran green the same way (22 green, the same 2 secret reds; the sccache
+trial repeated at 11m01s cold and 4m08s warm). The `main` side, with pushes
+going straight to `main`, is measured by `ci_speed.py report` on the runs
+after this lands.
 
 **Lever 3.**
 

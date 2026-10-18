@@ -44,6 +44,8 @@ tasks:
       - 'scripts/regen-fixtures.sh'
     options:
       cache: false
+      # Only rust-test reads them, and `moon ci` runs no Rust task.
+      runInCI: false
 
   rust-test:
     deps: ['~:fixtures']
