@@ -1,0 +1,191 @@
+# sheet.fn.date.* (M1 additions) — date/time arithmetic family. Schema: see
+# math.yaml. Rust kernels under sheet-fn/src/families/date2.rs (the M1
+# date track). Provenance: ECMA-376 §18.17.7 + public Microsoft function
+# docs. Conformance: sheet-conformance/tests/fn_date2.rs +
+# corpus/fn-corpus/date2/. Excel-compat rulings (DAYS360 US end-of-month,
+# DATEDIF reversed-range #NUM!, YEARFRAC actual/actual denominator) are
+# documented bug-for-bug in the date2.rs module docs.
+
+- id: sheet.fn.date.edate
+  name: EDATE
+  family: date
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: date2::edate
+  status: implemented
+  provenance: ["ECMA-376 §18.17.7 (EDATE) — start_date, months"]
+  tests:
+    rust: ["sheet-conformance/tests/fn_date2.rs::sheet_fn_date_edate"]
+    corpus: ["corpus/fn-corpus/date2/edate.golden.tsv"]
+
+- id: sheet.fn.date.eomonth
+  name: EOMONTH
+  family: date
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: date2::eomonth
+  status: implemented
+  provenance: ["ECMA-376 §18.17.7 (EOMONTH) — end of month n months from start"]
+  tests:
+    rust: ["sheet-conformance/tests/fn_date2.rs::sheet_fn_date_eomonth"]
+    corpus: ["corpus/fn-corpus/date2/eomonth.golden.tsv"]
+
+- id: sheet.fn.date.datedif
+  name: DATEDIF
+  family: date
+  arity: { min: 3, max: 3 }
+  volatility: none
+  range_aware: false
+  rust: date2::datedif
+  status: implemented
+  provenance: ["Microsoft DATEDIF (public docs) — start_date, end_date, unit"]
+  tests:
+    rust: ["sheet-conformance/tests/fn_date2.rs::sheet_fn_date_datedif"]
+    corpus: ["corpus/fn-corpus/date2/datedif.golden.tsv"]
+
+- id: sheet.fn.date.days
+  name: DAYS
+  family: date
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: date2::days
+  status: implemented
+  provenance: ["Microsoft DAYS (public docs) — end_date, start_date"]
+  tests:
+    rust: ["sheet-conformance/tests/fn_date2.rs::sheet_fn_date_days"]
+    corpus: ["corpus/fn-corpus/date2/days.golden.tsv"]
+
+- id: sheet.fn.date.days360
+  name: DAYS360
+  family: date
+  arity: { min: 2, max: 3 }
+  volatility: none
+  range_aware: false
+  rust: date2::days360
+  status: implemented
+  provenance: ["ECMA-376 §18.17.7 (DAYS360) — start_date, end_date, [method]"]
+  tests:
+    rust: ["sheet-conformance/tests/fn_date2.rs::sheet_fn_date_days360"]
+    corpus: ["corpus/fn-corpus/date2/days360.golden.tsv"]
+
+- id: sheet.fn.date.networkdays
+  name: NETWORKDAYS
+  family: date
+  arity: { min: 2, max: 3 }
+  volatility: none
+  range_aware: true
+  rust: date2::networkdays
+  status: implemented
+  provenance: ["ECMA-376 §18.17.7 (NETWORKDAYS) — start, end, [holidays]"]
+  tests:
+    rust: ["sheet-conformance/tests/fn_date2.rs::sheet_fn_date_networkdays"]
+    corpus: ["corpus/fn-corpus/date2/networkdays.golden.tsv"]
+
+- id: sheet.fn.date.workday
+  name: WORKDAY
+  family: date
+  arity: { min: 2, max: 3 }
+  volatility: none
+  range_aware: true
+  rust: date2::workday
+  status: implemented
+  provenance: ["ECMA-376 §18.17.7 (WORKDAY) — start_date, days, [holidays]"]
+  tests:
+    rust: ["sheet-conformance/tests/fn_date2.rs::sheet_fn_date_workday"]
+    corpus: ["corpus/fn-corpus/date2/workday.golden.tsv"]
+
+- id: sheet.fn.date.yearfrac
+  name: YEARFRAC
+  family: date
+  arity: { min: 2, max: 3 }
+  volatility: none
+  range_aware: false
+  rust: date2::yearfrac
+  status: implemented
+  provenance: ["ECMA-376 §18.17.7 (YEARFRAC) — start_date, end_date, [basis]"]
+  tests:
+    rust: ["sheet-conformance/tests/fn_date2.rs::sheet_fn_date_yearfrac"]
+    corpus: ["corpus/fn-corpus/date2/yearfrac.golden.tsv"]
+
+- id: sheet.fn.date.datevalue
+  name: DATEVALUE
+  family: date
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: date2::datevalue
+  status: implemented
+  provenance: ["ECMA-376 §18.17.7 (DATEVALUE) — parse a date string to a serial"]
+  tests:
+    rust: ["sheet-conformance/tests/fn_date2.rs::sheet_fn_date_datevalue"]
+    corpus: ["corpus/fn-corpus/date2/datevalue.golden.tsv"]
+
+- id: sheet.fn.date.timevalue
+  name: TIMEVALUE
+  family: date
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: date2::timevalue
+  status: implemented
+  provenance: ["ECMA-376 §18.17.7 (TIMEVALUE) — parse a time string to a fraction"]
+  tests:
+    rust: ["sheet-conformance/tests/fn_date2.rs::sheet_fn_date_timevalue"]
+    corpus: ["corpus/fn-corpus/date2/timevalue.golden.tsv"]
+
+- id: sheet.fn.date.weeknum
+  name: WEEKNUM
+  family: date
+  arity: { min: 1, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: date2::weeknum
+  status: implemented
+  provenance: ["ECMA-376 §18.17.7 (WEEKNUM) — serial_number, [return_type]"]
+  tests:
+    rust: ["sheet-conformance/tests/fn_date2.rs::sheet_fn_date_weeknum"]
+    corpus: ["corpus/fn-corpus/date2/weeknum.golden.tsv"]
+
+- id: sheet.fn.date.isoweeknum
+  name: ISOWEEKNUM
+  family: date
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: date2::isoweeknum
+  status: implemented
+  provenance: ["Microsoft ISOWEEKNUM (public docs) — ISO-8601 week number"]
+  tests:
+    rust: ["sheet-conformance/tests/fn_date2.rs::sheet_fn_date_isoweeknum"]
+    corpus: ["corpus/fn-corpus/date2/isoweeknum.golden.tsv"]
+
+# ---- Wave 7 (data & functions) additions ----
+
+- id: sheet.fn.date.networkdays-intl
+  name: NETWORKDAYS.INTL
+  family: date
+  arity: { min: 2, max: 4 }
+  volatility: none
+  range_aware: true
+  rust: date2::networkdays_intl
+  status: implemented
+  provenance: ["Microsoft NETWORKDAYS.INTL (public docs) — start, end, [weekend number/mask], [holidays]"]
+  tests:
+    rust: ["sheet-conformance/tests/fn_wave7.rs::sheet_fn_date_networkdays_intl"]
+    corpus: ["corpus/fn-corpus/date2/networkdays_intl.golden.tsv"]
+
+- id: sheet.fn.date.workday-intl
+  name: WORKDAY.INTL
+  family: date
+  arity: { min: 2, max: 4 }
+  volatility: none
+  range_aware: true
+  rust: date2::workday_intl
+  status: implemented
+  provenance: ["Microsoft WORKDAY.INTL (public docs) — start, days, [weekend number/mask], [holidays]"]
+  tests:
+    rust: ["sheet-conformance/tests/fn_wave7.rs::sheet_fn_date_workday_intl"]
+    corpus: ["corpus/fn-corpus/date2/workday_intl.golden.tsv"]

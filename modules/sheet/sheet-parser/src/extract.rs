@@ -1,0 +1,141 @@
+/*
+ * This file is part of paged (https://paged.media).
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * This file is part of paged (https://paged.media) and is additionally
+ * available under the Paged Media Enterprise License (PMEL). Full
+ * copyright and license information is available in LICENSE.md which is
+ * distributed with this source code.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
+ */
+
+//! Reference extraction (spec §6.2). Walks the AST and collects every cell
+//! ref, range, and defined-name id, plus a `has_volatile` flag set if any
+//! called function carries the registry `volatile` bit. The dependency graph
+//! (in `sheet-calc`) consumes this to build edges; ranges are kept as
+//! intervals (normalized), never exploded per-cell.
+
+use compact_str::CompactString;
+use smallvec::SmallVec;
+
+use sheet_core::ast::{Expr, Formula, NameId};
+use sheet_core::{CellRef, RangeRef};
+
+/// The references a formula reads from, plus its volatility.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct RefSet {
+    /// Single-cell references.
+    pub cells: Vec<CellRef>,
+    /// Range references (each normalized so `start <= end`).
+    pub ranges: Vec<RangeRef>,
+    /// Defined-name ids referenced.
+    pub names: Vec<NameId>,
+    /// Structured-reference table names (M1 tables track). A NAMED structured
+    /// ref (`Table1[Col]`) depends on its table by NAME, not by A1 geometry;
+    /// the dependency graph resolves the name to a range. Usually 0 or 1 entry,
+    /// so a `SmallVec<[_; 1]>`. The bare in-table forms (`[@Col]`) carry an
+    /// EMPTY name and are surfaced via [`RefSet::has_self_table_ref`] instead.
+    pub tables: SmallVec<[CompactString; 1]>,
+    /// True if the formula contains a bare in-table structured reference (the
+    /// `[@Col]` / `[[#This Row],…]` empty-table forms): its anchor table is the
+    /// table CONTAINING the formula's own cell, which only the graph can resolve
+    /// (it has the cell + the model). The graph registers a dep on that table's
+    /// box so a write inside the table reflows the in-table formula.
+    pub has_self_table_ref: bool,
+    /// True if any called function is registry-`volatile`.
+    pub has_volatile: bool,
+    /// Every structured reference as written, so the graph can resolve the
+    /// exact area against the formula's own cell (a calculated column's
+    /// `[@Qty]` reads ONE cell of its row — depending on the whole table
+    /// made every calculated column a cycle).
+    pub structured: Vec<sheet_core::ast::StructuredRef>,
+}
+
+/// Extract the [`RefSet`] of a formula.
+pub fn extract_refs(f: &Formula) -> RefSet {
+    let mut set = RefSet::default();
+    walk(&f.root, &mut set);
+    set
+}
+
+fn walk(e: &Expr, set: &mut RefSet) {
+    match e {
+        Expr::Lit(_) | Expr::Missing => {}
+        Expr::Ref(r) => set.cells.push(*r),
+        Expr::Range(r) => set.ranges.push(r.normalized()),
+        Expr::Name(n) => set.names.push(*n),
+        Expr::Unary(_, inner) => walk(inner, set),
+        Expr::Binary(_, a, b) => {
+            walk(a, set);
+            walk(b, set);
+        }
+        Expr::Func(fid, args) => {
+            let meta = sheet_core::funcs::meta(*fid);
+            if meta.volatile {
+                set.has_volatile = true;
+            }
+            // ROW/ROWS/COLUMN/COLUMNS/AREAS read a reference's GEOMETRY, not
+            // its values: a direct reference argument is no dependency (so
+            // `=ROWS($B$1:B3)` in B3 is not a cycle — Excel agrees).
+            let geometry_only =
+                matches!(meta.name, "ROW" | "ROWS" | "COLUMN" | "COLUMNS" | "AREAS");
+            for a in args {
+                if geometry_only && matches!(a, Expr::Ref(_) | Expr::Range(_)) {
+                    continue;
+                }
+                walk(a, set);
+            }
+        }
+        Expr::Array(rows) => {
+            for row in rows {
+                for el in row {
+                    walk(el, set);
+                }
+            }
+        }
+        // A NAMED structured ref depends on its table by name; the bare
+        // in-table form (`[@Col]`, empty table name) anchors to the table
+        // containing the formula's OWN cell — the graph resolves that, so we
+        // only flag its presence here.
+        Expr::StructuredRef(s) => {
+            set.structured.push(s.clone());
+            if s.table.is_empty() {
+                set.has_self_table_ref = true;
+            } else {
+                set.tables.push(s.table.clone());
+            }
+        }
+        // A spill ref's dependency is its anchor expression.
+        Expr::SpillRef(inner) => walk(inner, set),
+        // A LET/LAMBDA local carries no reference of its own (its binding's
+        // refs are walked where the binding is written).
+        Expr::Local(_) => {}
+        Expr::Call(callee, args) => {
+            walk(callee, set);
+            for a in args {
+                walk(a, set);
+            }
+        }
+    }
+}

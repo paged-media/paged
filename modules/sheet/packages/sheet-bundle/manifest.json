@@ -1,0 +1,489 @@
+{
+  "id": "media.paged.sheet",
+  "name": "paged.sheet",
+  "version": "0.1.0",
+  "apiVersion": "^0.2",
+  "publisher": "paged.media",
+  "capabilities": {
+    "document": {
+      "read": "broad",
+      "write": "scoped"
+    },
+    "rendering": [
+      "hitTest",
+      "sceneLayer"
+    ],
+    "network": false,
+    "dataProviders": {
+      "consume": [
+        "dataset"
+      ],
+      "publish": [
+        "dataset"
+      ]
+    },
+    "clipboard": "full",
+    "keybindings": true,
+    "storage": {
+      "blob": true,
+      "quotaBytes": 33554432
+    },
+    "wasm": [
+      {
+        "name": "sheet-engine",
+        "path": "bin/sheet_js_bg.wasm",
+        "purpose": "compute",
+        "maxBytes": 8388608
+      }
+    ]
+  },
+  "contributes": {
+    "panels": [
+      "media.paged.sheet.panel.workbook",
+      "media.paged.sheet.panel.grid",
+      "media.paged.sheet.panel.datasets",
+      "media.paged.sheet.panel.properties"
+    ],
+    "commands": [
+      "media.paged.sheet.command.importXlsx",
+      "media.paged.sheet.command.lowerToFrame",
+      "media.paged.sheet.command.lowerChartToFrame",
+      "media.paged.sheet.command.openGrid",
+      "media.paged.sheet.command.showGridInFrame",
+      "media.paged.sheet.command.hideGridInFrame",
+      "media.paged.sheet.command.sortRange",
+      "media.paged.sheet.command.findReplace",
+      "media.paged.sheet.command.sheetFromDataset",
+      "media.paged.sheet.command.copySelection",
+      "media.paged.sheet.command.pasteSelection",
+      "media.paged.sheet.command.styleFromCell",
+      "media.paged.sheet.command.paginateToChain",
+      "media.paged.sheet.command.newWorkbook",
+      "media.paged.sheet.command.insertRows",
+      "media.paged.sheet.command.deleteRows",
+      "media.paged.sheet.command.insertColumns",
+      "media.paged.sheet.command.deleteColumns",
+      "media.paged.sheet.command.addSheet",
+      "media.paged.sheet.command.fillDown",
+      "media.paged.sheet.command.fillRight",
+      "media.paged.sheet.command.clearCells",
+      "media.paged.sheet.command.findInSheet",
+      "media.paged.sheet.command.findNext"
+    ],
+    "importers": [
+      "media.paged.sheet.importer.xlsx",
+      "media.paged.sheet.importer.csv"
+    ],
+    "exporters": [
+      "media.paged.sheet.exporter.xlsx"
+    ],
+    "editContexts": [
+      {
+        "type": "sheet",
+        "entry": "doubleClick"
+      }
+    ],
+    "objectTypes": [
+      {
+        "type": "sheetFrame",
+        "bakedFallback": "rectangle"
+      }
+    ],
+    "partTypes": [
+      {
+        "type": "workbook",
+        "role": "source",
+        "format": "xlsx",
+        "linkable": false
+      }
+    ],
+    "objectModel": {
+      "kinds": [
+        {
+          "kind": "workbook",
+          "title": "Workbook",
+          "schema": "object-model/workbook.schema.json"
+        },
+        {
+          "kind": "sheet",
+          "title": "Sheet",
+          "schema": "object-model/sheet.schema.json"
+        },
+        {
+          "kind": "cell",
+          "title": "Cell",
+          "schema": "object-model/cell.schema.json"
+        },
+        {
+          "kind": "range",
+          "title": "Range",
+          "schema": "object-model/range.schema.json"
+        },
+        {
+          "kind": "namedRange",
+          "title": "Named range",
+          "schema": "object-model/namedRange.schema.json"
+        },
+        {
+          "kind": "table",
+          "title": "Table",
+          "schema": "object-model/table.schema.json"
+        },
+        {
+          "kind": "chart",
+          "title": "Chart",
+          "schema": "object-model/chart.schema.json"
+        }
+      ],
+      "commands": [
+        {
+          "id": "media.paged.sheet.command.newWorkbook",
+          "title": "New blank workbook",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "text"
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.importXlsx",
+          "title": "Import workbook (.xlsx)",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "bytes": {
+                "kind": "bytes",
+                "mime": [
+                  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                ]
+              },
+              "name": {
+                "kind": "text",
+                "default": "workbook.xlsx"
+              }
+            }
+          },
+          "result": {
+            "kind": "text"
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.lowerToFrame",
+          "title": "Place a range on the page",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "range": {
+                "kind": "text"
+              }
+            }
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {
+              "frame": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.lowerChartToFrame",
+          "title": "Place a chart on the page",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "chart": {
+                "kind": "number",
+                "integer": true
+              }
+            }
+          },
+          "result": {
+            "kind": "bool"
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.sheetFromDataset",
+          "title": "Sheet from dataset",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "providerId": {
+                "kind": "text"
+              },
+              "live": {
+                "kind": "bool",
+                "default": true
+              }
+            }
+          },
+          "result": {
+            "kind": "text"
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.publishDataset",
+          "title": "Publish a range as a dataset",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "name": {
+                "kind": "text"
+              },
+              "range": {
+                "kind": "text"
+              },
+              "header": {
+                "kind": "bool",
+                "default": true
+              }
+            }
+          },
+          "result": {
+            "kind": "text"
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.unpublishDataset",
+          "title": "Stop publishing a dataset",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "name": {
+                "kind": "text"
+              }
+            }
+          },
+          "result": {
+            "kind": "bool"
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.addSheet",
+          "title": "Add sheet",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "name": {
+                "kind": "text",
+                "optional": true
+              }
+            }
+          },
+          "result": {
+            "kind": "text"
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.insertRows",
+          "title": "Insert rows",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "sheet": {
+                "kind": "text"
+              },
+              "at": {
+                "kind": "number",
+                "integer": true
+              },
+              "count": {
+                "kind": "number",
+                "integer": true,
+                "default": 1
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.deleteRows",
+          "title": "Delete rows",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "sheet": {
+                "kind": "text"
+              },
+              "at": {
+                "kind": "number",
+                "integer": true
+              },
+              "count": {
+                "kind": "number",
+                "integer": true,
+                "default": 1
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.insertColumns",
+          "title": "Insert columns",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "sheet": {
+                "kind": "text"
+              },
+              "at": {
+                "kind": "number",
+                "integer": true
+              },
+              "count": {
+                "kind": "number",
+                "integer": true,
+                "default": 1
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.deleteColumns",
+          "title": "Delete columns",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "sheet": {
+                "kind": "text"
+              },
+              "at": {
+                "kind": "number",
+                "integer": true
+              },
+              "count": {
+                "kind": "number",
+                "integer": true,
+                "default": 1
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.fillDown",
+          "title": "Fill down",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "range": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.fillRight",
+          "title": "Fill right",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "range": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.clearCells",
+          "title": "Clear cells",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "range": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.sortRange",
+          "title": "Sort range",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "range": {
+                "kind": "text"
+              },
+              "keyColumn": {
+                "kind": "number",
+                "integer": true,
+                "default": 0
+              },
+              "ascending": {
+                "kind": "bool",
+                "default": true
+              },
+              "hasHeader": {
+                "kind": "bool",
+                "default": false
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.findInSheet",
+          "title": "Find in workbook",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "needle": {
+                "kind": "text"
+              },
+              "matchCase": {
+                "kind": "bool",
+                "default": false
+              },
+              "entireCell": {
+                "kind": "bool",
+                "default": false
+              },
+              "inFormulas": {
+                "kind": "bool",
+                "default": false
+              }
+            }
+          },
+          "result": {
+            "kind": "list",
+            "of": {
+              "kind": "text"
+            }
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.findReplace",
+          "title": "Replace in workbook",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "needle": {
+                "kind": "text"
+              },
+              "replacement": {
+                "kind": "text"
+              },
+              "matchCase": {
+                "kind": "bool",
+                "default": false
+              },
+              "entireCell": {
+                "kind": "bool",
+                "default": false
+              },
+              "inFormulas": {
+                "kind": "bool",
+                "default": false
+              }
+            }
+          },
+          "result": {
+            "kind": "number",
+            "integer": true
+          }
+        }
+      ]
+    }
+  }
+}

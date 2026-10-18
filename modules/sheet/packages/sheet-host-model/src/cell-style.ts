@@ -1,0 +1,134 @@
+/*
+ * This file is part of paged (https://paged.media).
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// "New cell style from selection" — PURE translation (S-04 cell-style
+// consumer). Composes from existing platform doors (RFI verdict): given a
+// lowered table cell's current properties (read via B-19
+// `host.document.elementProperties`), build the mutations that MINT a cell
+// style (`createCellStyle`) and POPULATE it (`setStyleProperty`,
+// collection "cell") from that cell's appearance.
+//
+// ZERO spreadsheet semantics (CLAUDE.md hard rule): this only re-shapes
+// already-decided document properties into style-collection writes. The
+// engine owns the cell appearance; the platform owns style minting.
+//
+// The apply-back: the engine applies `appliedCellStyle` on a `tableCell`
+// element (S-04, probe-verified; the "wire-shape-only" note on wire.d.ts
+// CellStyleSummary is stale). This module mints + populates; the caller
+// sends the apply and reports a host refusal rather than assuming success.
+
+import type { ElementId, Mutation, PropertyPath, Value } from "@paged-media/plugin-api";
+
+/** A property read off a cell that we carry into a new cell style. The
+ *  wire's `PropertyEntry` is `{ path, value? }`; we narrow to the cell-
+ *  appearance paths a publishing-grade cell style cares about (fill +
+ *  per-edge strokes + insets + vertical justification). */
+const CELL_STYLE_PATHS: ReadonlySet<PropertyPath> = new Set<PropertyPath>([
+  "cellFillColor",
+  "cellFillTint",
+  "cellInsetTop",
+  "cellInsetLeft",
+  "cellInsetBottom",
+  "cellInsetRight",
+  "cellVerticalJustification",
+  "cellTopEdgeStrokeColor",
+  "cellTopEdgeStrokeWeight",
+  "cellTopEdgeStrokeTint",
+  "cellBottomEdgeStrokeColor",
+  "cellBottomEdgeStrokeWeight",
+  "cellBottomEdgeStrokeTint",
+  "cellLeftEdgeStrokeColor",
+  "cellLeftEdgeStrokeWeight",
+  "cellLeftEdgeStrokeTint",
+  "cellRightEdgeStrokeColor",
+  "cellRightEdgeStrokeWeight",
+  "cellRightEdgeStrokeTint",
+]);
+
+/** Is `path` a cell-appearance property a new cell style should capture? */
+export function isCellStylePath(path: PropertyPath): boolean {
+  return CELL_STYLE_PATHS.has(path);
+}
+
+/** One property entry as read from `elementProperties` (the wire shape,
+ *  narrowed). `value` is absent/null for indeterminate reads — those are
+ *  skipped (we never bake an em-dash placeholder into a style). */
+export interface ReadEntry {
+  path: PropertyPath;
+  value?: Value | null;
+}
+
+/** The mutations to mint + populate a cell style from a cell's read
+ *  properties. `createOp` mints (with our own `selfId` — the null-createdId
+ *  precedent so the caller never needs `createdId` back); `propertyOps`
+ *  populate it. `capturedPaths` lists what was carried (for the honest UI
+ *  count). The `applyOp` is the APPLY-BACK the caller sends separately, so
+ *  a refused apply cannot roll back the mint batch. */
+export interface CellStylePlan {
+  styleId: string;
+  createOp: Mutation;
+  propertyOps: Mutation[];
+  capturedPaths: PropertyPath[];
+  applyOp: (cellId: ElementId) => Mutation;
+}
+
+/** Build the mint + populate plan for a cell style named `name` with id
+ *  `styleId` (caller-minted — `createCellStyle` may return `createdId:null`
+ *  for collection creates, so we supply `selfId` and reference it, the draw
+ *  gradient precedent). Only the cell-appearance entries with a concrete
+ *  value are carried; indeterminate (`value` null/absent) and non-cell paths
+ *  are skipped. PURE — no host, no IO. */
+export function planCellStyleFromEntries(
+  styleId: string,
+  name: string,
+  entries: readonly ReadEntry[],
+): CellStylePlan {
+  const createOp: Mutation = {
+    op: "createCellStyle",
+    args: { selfId: styleId, name },
+  };
+
+  const propertyOps: Mutation[] = [];
+  const capturedPaths: PropertyPath[] = [];
+  for (const e of entries) {
+    if (!isCellStylePath(e.path)) continue;
+    if (e.value === undefined || e.value === null) continue; // indeterminate
+    propertyOps.push({
+      op: "setStyleProperty",
+      args: { collection: "cell", styleId, path: e.path, value: e.value },
+    });
+    capturedPaths.push(e.path);
+  }
+
+  return {
+    styleId,
+    createOp,
+    propertyOps,
+    capturedPaths,
+    applyOp: (cellId: ElementId): Mutation => ({
+      op: "setElementProperty",
+      args: {
+        elementId: cellId,
+        path: "appliedCellStyle",
+        // A style reference is carried as a `text` Value (the style's
+        // selfId) — the same shape applied-style writes use elsewhere.
+        value: { type: "text", value: styleId },
+      },
+    }),
+  };
+}

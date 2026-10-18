@@ -1,0 +1,645 @@
+/*
+ * This file is part of paged (https://paged.media).
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * This file is part of paged (https://paged.media) and is additionally
+ * available under the Paged Media Enterprise License (PMEL). Full
+ * copyright and license information is available in LICENSE.md which is
+ * distributed with this source code.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
+ */
+
+//! The XLSX writer (spec §10.2/§10.4).
+//!
+//! Strategy, per the preservation invariant:
+//!
+//! - **Untouched parts** re-emit their stored decompressed bytes verbatim
+//!   (lazy-verbatim). Re-deflating identical bytes yields decompressed
+//!   per-part identity — the zero-edit assertion. (Whole-file/zip-metadata
+//!   identity is explicitly not claimed.)
+//! - **`calcChain.xml` is always dropped** (ruling `sheet.xlsx.calcchain.drop`):
+//!   the part entry, its `[Content_Types]` override, and its workbook
+//!   relationship are removed. Consumers (Excel) regenerate the chain.
+//! - **`[Content_Types].xml` and the workbook `.rels`** re-emit verbatim
+//!   UNLESS calcChain removal changed them, in which case they are rebuilt
+//!   minimally (only the calcChain line removed).
+//! - **Dirty worksheets** re-encode from the model (`r/t/s/v/f` cells,
+//!   `mergeCells`, `cols`, custom row heights) and re-emit captured unknown
+//!   subtrees in schema position (preserve.rs).
+//! - **sharedStrings** rebuilds only when a sheet is dirty AND new strings
+//!   were added; otherwise verbatim.
+
+use crate::error::XlsxError;
+use crate::opc::{ContentTypes, ModeledKind, OpcContainer, PartEntry};
+use crate::sheet_doc::SheetBinding;
+use sheet_core::value::CellValue;
+use sheet_core::{col_to_a1, SheetId, SheetModel};
+use std::borrow::Cow;
+use std::collections::{BTreeMap, HashMap};
+use std::io::Write;
+
+/// The `calcChain.xml` part name (always dropped).
+const CALC_CHAIN_PART: &str = "xl/calcChain.xml";
+
+/// The zip entry options for every part a package is written with.
+///
+/// Each field a zip library could fill in for us is stated, so the same
+/// workbook always saves to the same bytes, on every platform and across
+/// zip upgrades:
+///
+/// - Deflate at level 6 (flate2's default; the backend is pinned in the
+///   root Cargo.toml).
+/// - The DOS timestamp 1980-01-01 00:00:00, never the clock. `default()`
+///   reads the clock when zip's `time` feature is on.
+/// - "Made by" Unix. Since zip 7.2 the default follows the build platform,
+///   so a Windows build would write different headers.
+/// - Mode 0o100644 (a regular file, rw-r--r--) in the external attributes.
+/// - No zip64 extra and no data descriptor (`large_file` off).
+pub fn part_options() -> zip::write::SimpleFileOptions {
+    zip::write::SimpleFileOptions::DEFAULT
+        .compression_method(zip::CompressionMethod::Deflated)
+        .compression_level(Some(6))
+        .last_modified_time(zip::DateTime::DEFAULT)
+        .system(zip::System::Unix)
+        .unix_permissions(0o644)
+        .large_file(false)
+}
+
+/// The dynamic-array formulas of a save: `anchors` maps each anchor
+/// `(sheet, row, col)` to its area `(rows, cols)`; `cm` is the cell-metadata
+/// value that marks a formula dynamic (`None` when the package has no such
+/// record — the anchors are then written as plain array formulas).
+pub struct DynamicArrays<'a> {
+    pub cm: Option<u32>,
+    pub anchors: &'a BTreeMap<(SheetId, u32, u32), (u32, u32)>,
+}
+
+/// How one formula cell is stored.
+#[derive(Clone, Copy)]
+enum ArrayForm {
+    /// A plain `<f>`.
+    None,
+    /// `<f t="array" ref=…>` over `(rows, cols)`, with `cm=` when the
+    /// formula is a dynamic array.
+    Array { area: (u32, u32), cm: Option<u32> },
+}
+
+/// Serialize the document to XLSX bytes.
+///
+/// `bindings` maps each worksheet's part name + SheetId so dirty sheets can
+/// be re-encoded from the model. `formula_texts` supplies the raw `<f>` text
+/// for each edited formula cell. `overrides` maps a part name to bytes that
+/// replace its stored ones (the save-time structure splices).
+pub fn save(
+    container: &OpcContainer,
+    model: &SheetModel,
+    bindings: &[SheetBinding],
+    formula_texts: &BTreeMap<(SheetId, u32, u32), String>,
+    overrides: &BTreeMap<String, Vec<u8>>,
+    dynamic: &DynamicArrays<'_>,
+) -> Result<Vec<u8>, XlsxError> {
+    let drop_calc_chain = container.part(CALC_CHAIN_PART).is_some();
+
+    // sharedStrings is NOT rebuilt here in T0: a dirty re-encode keeps the
+    // original interner (the consumer sheet-js owns string additions before
+    // save), so re-emitting it verbatim stays correct even when sheets are
+    // dirty. The rebuild hook lands when sheet-js writes new strings back.
+
+    let buf = Vec::new();
+    let cursor = std::io::Cursor::new(buf);
+    let mut zip = zip::ZipWriter::new(cursor);
+    let opts = part_options();
+
+    // Worksheet part name → binding, once (was a scan per dirty sheet).
+    let mut by_part: HashMap<&str, &SheetBinding> = HashMap::with_capacity(bindings.len());
+    for b in bindings {
+        // First binding wins, matching the scan it replaces.
+        by_part.entry(b.part_name.as_str()).or_insert(b);
+    }
+
+    for part in &container.parts {
+        let name = part.name();
+
+        // calcChain is dropped entirely.
+        if drop_calc_chain && name == CALC_CHAIN_PART {
+            continue;
+        }
+
+        // A save-time splice (`structure.rs` — e.g. a changed `<calcPr>`)
+        // supersedes the stored bytes of that one part.
+        if let Some(bytes) = overrides.get(name) {
+            zip.start_file(name, opts)?;
+            zip.write_all(bytes).map_err(zip_io)?;
+            continue;
+        }
+
+        // Untouched parts are BORROWED (lazy-verbatim without a copy); only
+        // re-encoded/rebuilt parts allocate.
+        let bytes: Cow<'_, [u8]> = match part {
+            PartEntry::Opaque { bytes, .. } => Cow::Borrowed(bytes),
+            PartEntry::Modeled {
+                kind,
+                raw,
+                dirty,
+                name,
+            } => {
+                match kind {
+                    ModeledKind::ContentTypes => {
+                        if drop_calc_chain {
+                            Cow::Owned(rebuild_content_types(&container.content_types))
+                        } else {
+                            Cow::Borrowed(raw)
+                        }
+                    }
+                    ModeledKind::WorkbookRels => {
+                        if drop_calc_chain {
+                            Cow::Owned(strip_calc_chain_rel(raw)?)
+                        } else {
+                            Cow::Borrowed(raw)
+                        }
+                    }
+                    ModeledKind::Worksheet => {
+                        if *dirty {
+                            let binding = by_part.get(name.as_str()).copied().ok_or_else(|| {
+                                XlsxError::Structure(format!(
+                                    "dirty worksheet {name} has no binding"
+                                ))
+                            })?;
+                            Cow::Owned(encode_worksheet(
+                                model,
+                                binding,
+                                raw,
+                                formula_texts,
+                                dynamic,
+                            )?)
+                        } else {
+                            Cow::Borrowed(raw)
+                        }
+                    }
+                    // Workbook / SharedStrings / Styles: verbatim in T0
+                    // (the model never mutates them through this writer yet).
+                    _ => Cow::Borrowed(raw),
+                }
+            }
+        };
+
+        zip.start_file(name, opts)?;
+        zip.write_all(&bytes).map_err(zip_io)?;
+    }
+
+    let cursor = zip.finish()?;
+    Ok(cursor.into_inner())
+}
+
+fn zip_io(e: std::io::Error) -> XlsxError {
+    XlsxError::Zip(zip::result::ZipError::Io(e))
+}
+
+/// Rebuild `[Content_Types].xml` from the model, omitting the calcChain
+/// override. Deterministic byte output (defaults then overrides, in order).
+fn rebuild_content_types(ct: &ContentTypes) -> Vec<u8> {
+    let mut s = String::new();
+    s.push_str(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#);
+    s.push('\n');
+    s.push_str(r#"<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">"#);
+    for (ext, ty) in &ct.defaults {
+        s.push_str(&format!(
+            r#"<Default Extension="{}" ContentType="{}"/>"#,
+            xml_attr(ext),
+            xml_attr(ty)
+        ));
+    }
+    for (pn, ty) in &ct.overrides {
+        if pn == "/xl/calcChain.xml" {
+            continue;
+        }
+        s.push_str(&format!(
+            r#"<Override PartName="{}" ContentType="{}"/>"#,
+            xml_attr(pn),
+            xml_attr(ty)
+        ));
+    }
+    s.push_str("</Types>");
+    s.into_bytes()
+}
+
+/// Remove the `<Relationship ... /calcChain ... />` line from the workbook
+/// `.rels`, leaving the rest byte-for-byte. We parse + re-serialize only the
+/// relationship rows we recognize, which is enough for T0 because workbook
+/// `.rels` is a flat list of `<Relationship>` elements.
+fn strip_calc_chain_rel(raw: &[u8]) -> Result<Vec<u8>, XlsxError> {
+    use crate::rels::{Relationships, REL_CALC_CHAIN};
+    let rels = Relationships::parse(raw)?;
+    let mut s = String::new();
+    s.push_str(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#);
+    s.push('\n');
+    s.push_str(
+        r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">"#,
+    );
+    for r in &rels.rels {
+        if r.is_type(REL_CALC_CHAIN) {
+            continue;
+        }
+        s.push_str(&format!(
+            r#"<Relationship Id="{}" Type="{}" Target="{}"/>"#,
+            xml_attr(&r.id),
+            xml_attr(&r.rel_type),
+            xml_attr(&r.target)
+        ));
+    }
+    s.push_str("</Relationships>");
+    Ok(s.into_bytes())
+}
+
+/// Re-encode a dirty worksheet from the model.
+///
+/// Emits, in ECMA-376 §18.3.1.99 child order: captured `BeforeSheetData`
+/// subtrees, `<dimension>`, `<cols>`, `<sheetData>` (rows/cells from the
+/// model + `formula_texts`), `<mergeCells>`, then captured `AfterSheetData`
+/// subtrees. Unknown per-cell/row attributes are NOT preserved on a dirty
+/// re-encode (T0 granularity, recorded in the registry note for
+/// `sheet.xlsx.preserve.unknown-subtrees`).
+fn encode_worksheet(
+    model: &SheetModel,
+    binding: &SheetBinding,
+    original: &[u8],
+    formula_texts: &BTreeMap<(SheetId, u32, u32), String>,
+    dynamic: &DynamicArrays<'_>,
+) -> Result<Vec<u8>, XlsxError> {
+    let ws = model
+        .sheet(binding.sheet_id)
+        .ok_or_else(|| XlsxError::Structure("binding points at missing sheet".into()))?;
+    let sid = binding.sheet_id;
+
+    let mut s = String::new();
+    s.push_str(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#);
+    s.push('\n');
+    // The part's own root attributes: the captured subtrees re-emitted below
+    // use the prefixes it declares (Excel's `<sheetFormatPr
+    // x14ac:dyDescent=…>`), and a worksheet with an undeclared prefix is not
+    // XML — Excel refuses to open the workbook.
+    let mut root = root_attrs(original)?;
+    if !root.iter().any(|(k, _)| k == "xmlns") {
+        root.insert(0, ("xmlns".into(), NS_MAIN.into()));
+    }
+    if !root.iter().any(|(k, _)| k == "xmlns:r") {
+        root.push(("xmlns:r".into(), NS_REL.into()));
+    }
+    s.push_str(&crate::splice::render_tag("worksheet", &root, false));
+
+    // Captured children that sit before <sheetData>, in schema order around
+    // the modelled ones (ECMA-376 §18.3.1.99): `sheetPr` precedes
+    // `<dimension>`; `sheetViews` / `sheetFormatPr` follow it.
+    for c in binding.captured.before() {
+        if captured_local(&c.bytes) == "sheetPr" {
+            s.push_str(&String::from_utf8_lossy(&c.bytes));
+        }
+    }
+
+    // <dimension>
+    if let Some(ur) = ws.used_range() {
+        let a = format!("{}{}", col_to_a1(ur.col0), ur.row0 + 1);
+        let b = format!("{}{}", col_to_a1(ur.col1), ur.row1 + 1);
+        if a == b {
+            s.push_str(&format!(r#"<dimension ref="{a}"/>"#));
+        } else {
+            s.push_str(&format!(r#"<dimension ref="{a}:{b}"/>"#));
+        }
+    }
+
+    for c in binding.captured.before() {
+        if captured_local(&c.bytes) != "sheetPr" {
+            s.push_str(&String::from_utf8_lossy(&c.bytes));
+        }
+    }
+
+    // <cols>
+    if !ws.col_widths.is_empty() {
+        s.push_str("<cols>");
+        for (&col, &width) in &ws.col_widths {
+            let c1 = col + 1;
+            s.push_str(&format!(
+                r#"<col min="{c1}" max="{c1}" width="{}" customWidth="1"/>"#,
+                fmt_f64(width)
+            ));
+        }
+        s.push_str("</cols>");
+    }
+
+    // <sheetData> — rows in order, cells in column order within a row.
+    s.push_str("<sheetData>");
+    let mut rows: BTreeMap<u32, Vec<(u32, &sheet_core::Cell)>> = BTreeMap::new();
+    for (&(r, c), cell) in ws.iter_cells() {
+        rows.entry(r).or_default().push((c, cell));
+    }
+    // A hidden row, or one with only a custom height, still needs its
+    // `<row>` even with no cells.
+    for &r in ws.hidden_rows.iter().chain(ws.row_heights.keys()) {
+        rows.entry(r).or_default();
+    }
+    for (&r, cells) in &rows {
+        let r1 = r + 1;
+        let ht = ws.row_heights.get(&r);
+        // Rows the workbook saved hidden stay hidden (a Paged filter view's
+        // rows are a view, not written).
+        let hidden = if ws.hidden_rows.contains(&r) {
+            r#" hidden="1""#
+        } else {
+            ""
+        };
+        match ht {
+            Some(h) => s.push_str(&format!(
+                r#"<row r="{r1}" ht="{}" customHeight="1"{hidden}>"#,
+                fmt_f64(*h)
+            )),
+            None => s.push_str(&format!(r#"<row r="{r1}"{hidden}>"#)),
+        }
+        for (c, cell) in cells {
+            // A dynamic array (Excel's spilled formula) first, then a legacy
+            // CSE array; anything else is a plain formula.
+            let form = match dynamic.anchors.get(&(sid, r, *c)) {
+                Some(&area) => ArrayForm::Array {
+                    area,
+                    cm: dynamic.cm,
+                },
+                None => match ws.array_formulas.get(&(r, *c)) {
+                    Some(&area) => ArrayForm::Array { area, cm: None },
+                    None => ArrayForm::None,
+                },
+            };
+            encode_cell(&mut s, sid, r, *c, cell, formula_texts, form);
+        }
+        s.push_str("</row>");
+    }
+    s.push_str("</sheetData>");
+
+    // Captured children that precede `<mergeCells>` in schema order
+    // (`sheetProtection`, `autoFilter`, … — ECMA-376 §18.3.1.99).
+    for c in binding.captured.after() {
+        if BEFORE_MERGE_CELLS.contains(&captured_local(&c.bytes).as_str()) {
+            s.push_str(&String::from_utf8_lossy(&c.bytes));
+        }
+    }
+
+    // <mergeCells>
+    if !ws.merges.is_empty() {
+        s.push_str(&format!(r#"<mergeCells count="{}">"#, ws.merges.len()));
+        for m in &ws.merges {
+            let n = m.normalized();
+            let a = format!("{}{}", col_to_a1(n.start.col), n.start.row + 1);
+            let b = format!("{}{}", col_to_a1(n.end.col), n.end.row + 1);
+            s.push_str(&format!(r#"<mergeCell ref="{a}:{b}"/>"#));
+        }
+        s.push_str("</mergeCells>");
+    }
+
+    // The remaining captured children (conditional formatting, page setup,
+    // drawing, extLst, …) follow `<mergeCells>`.
+    for c in binding.captured.after() {
+        if !BEFORE_MERGE_CELLS.contains(&captured_local(&c.bytes).as_str()) {
+            s.push_str(&String::from_utf8_lossy(&c.bytes));
+        }
+    }
+
+    s.push_str("</worksheet>");
+    Ok(s.into_bytes())
+}
+
+/// The SpreadsheetML main namespace.
+const NS_MAIN: &str = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+/// The relationships namespace (`r:id`).
+const NS_REL: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+
+/// The attributes of a part's root element (namespace declarations
+/// included), values unescaped.
+fn root_attrs(xml: &[u8]) -> Result<Vec<(String, String)>, XlsxError> {
+    let mut reader = quick_xml::Reader::from_reader(xml);
+    let mut buf = Vec::new();
+    loop {
+        match reader.read_event_into(&mut buf)? {
+            quick_xml::events::Event::Start(e) | quick_xml::events::Event::Empty(e) => {
+                let mut out = Vec::new();
+                for a in e.attributes() {
+                    let a = a?;
+                    out.push((
+                        String::from_utf8_lossy(a.key.as_ref()).into_owned(),
+                        a.normalized_value(quick_xml::XmlVersion::Implicit1_0)
+                            .map_err(XlsxError::Xml)?
+                            .into_owned(),
+                    ));
+                }
+                return Ok(out);
+            }
+            quick_xml::events::Event::Eof => return Ok(Vec::new()),
+            _ => {}
+        }
+        buf.clear();
+    }
+}
+
+/// The `<worksheet>` children that sit between `<sheetData>` and
+/// `<mergeCells>` (ECMA-376 §18.3.1.99 child order).
+const BEFORE_MERGE_CELLS: &[&str] = &[
+    "sheetCalcPr",
+    "sheetProtection",
+    "protectedRanges",
+    "scenarios",
+    "autoFilter",
+    "sortState",
+    "dataConsolidate",
+    "customSheetViews",
+];
+
+/// The local name of a captured subtree's root element (`""` if none).
+pub(crate) fn captured_local(bytes: &[u8]) -> String {
+    let mut reader = quick_xml::Reader::from_reader(bytes);
+    let mut buf = Vec::new();
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(quick_xml::events::Event::Start(e)) | Ok(quick_xml::events::Event::Empty(e)) => {
+                return String::from_utf8_lossy(e.local_name().as_ref()).into_owned();
+            }
+            Ok(quick_xml::events::Event::Eof) | Err(_) => return String::new(),
+            _ => {}
+        }
+        buf.clear();
+    }
+}
+
+/// Encode one `<c>` cell: address, type, style index, value, and formula.
+fn encode_cell(
+    s: &mut String,
+    sid: SheetId,
+    row: u32,
+    col: u32,
+    cell: &sheet_core::Cell,
+    formula_texts: &BTreeMap<(SheetId, u32, u32), String>,
+    form: ArrayForm,
+) {
+    let r = format!("{}{}", col_to_a1(col), row + 1);
+    // Style index: StyleId(0) is default — omit s= for it.
+    let style_attr = if cell.style.0 != 0 {
+        format!(r#" s="{}""#, cell.style.0)
+    } else {
+        String::new()
+    };
+
+    let formula = formula_texts.get(&(sid, row, col));
+
+    // Determine the t= attribute + inner content from the value.
+    let (type_attr, inner) = match &cell.value {
+        CellValue::Empty => (String::new(), String::new()),
+        CellValue::Number(n) => (String::new(), format!("<v>{}</v>", fmt_f64(*n))),
+        CellValue::Bool(b) => (
+            r#" t="b""#.to_owned(),
+            format!("<v>{}</v>", if *b { 1 } else { 0 }),
+        ),
+        CellValue::Error(e) => (
+            r#" t="e""#.to_owned(),
+            format!("<v>{}</v>", xml_text(stored_error(*e))),
+        ),
+        CellValue::Text(t) => {
+            // Formula cells with text results use t="str"; literal text uses
+            // an inline string (T0 does not write back into sharedStrings).
+            if formula.is_some() {
+                (r#" t="str""#.to_owned(), format!("<v>{}</v>", xml_text(t)))
+            } else {
+                (
+                    r#" t="inlineStr""#.to_owned(),
+                    format!("<is><t>{}</t></is>", xml_text(t)),
+                )
+            }
+        }
+    };
+
+    let mut cm_attr = String::new();
+    let formula_xml = match (formula, form) {
+        // An array formula keeps its type and area (`t="array"`); a dynamic
+        // one (a spill) also points at the dynamic-array cell metadata.
+        (
+            Some(f),
+            ArrayForm::Array {
+                area: (rows, cols),
+                cm,
+            },
+        ) => {
+            let (rows, cols) = (rows.max(1), cols.max(1));
+            let area = if (rows, cols) == (1, 1) {
+                r.clone()
+            } else {
+                format!(
+                    "{r}:{}{}",
+                    col_to_a1(col.saturating_add(cols - 1)),
+                    row.saturating_add(rows)
+                )
+            };
+            if let Some(cm) = cm {
+                cm_attr = format!(r#" cm="{cm}""#);
+            }
+            format!(r#"<f t="array" ref="{area}">{}</f>"#, xml_text(f))
+        }
+        (Some(f), ArrayForm::None) => format!("<f>{}</f>", xml_text(f)),
+        (None, _) => String::new(),
+    };
+
+    if inner.is_empty() && formula_xml.is_empty() {
+        // style-only cell
+        s.push_str(&format!(r#"<c r="{r}"{style_attr}{type_attr}/>"#));
+    } else {
+        s.push_str(&format!(
+            r#"<c r="{r}"{style_attr}{type_attr}{cm_attr}>{formula_xml}{inner}</c>"#
+        ));
+    }
+}
+
+/// The `<v>` of an error cell. Excel accepts only the legacy error codes
+/// there and refuses to open a worksheet that caches `#SPILL!`; it caches a
+/// blocked spill as `#VALUE!` itself (the real error rides a rich value Paged
+/// does not write). The anchor's formula recomputes `#SPILL!` on load.
+fn stored_error(e: sheet_core::value::CellError) -> &'static str {
+    match e {
+        sheet_core::value::CellError::Spill => "#VALUE!",
+        e => e.as_str(),
+    }
+}
+
+/// Format an f64 for `<v>` / width / height. Integers print without a
+/// decimal point (Excel convention); other values use Rust's shortest
+/// round-trip representation (the std `{}` formatter is shortest-round-trip).
+fn fmt_f64(n: f64) -> String {
+    if n.fract() == 0.0 && n.is_finite() && n.abs() < 1e15 {
+        format!("{}", n as i64)
+    } else {
+        format!("{n}")
+    }
+}
+
+/// Escape text content for an XML element body.
+fn xml_text(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for ch in s.chars() {
+        match ch {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            _ => out.push(ch),
+        }
+    }
+    out
+}
+
+/// Escape an attribute value.
+fn xml_attr(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for ch in s.chars() {
+        match ch {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            _ => out.push(ch),
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fmt_f64_integers_and_decimals() {
+        assert_eq!(fmt_f64(42.0), "42");
+        assert_eq!(fmt_f64(0.0), "0");
+        assert_eq!(fmt_f64(-7.0), "-7");
+        assert_eq!(fmt_f64(3.5), "3.5");
+        assert_eq!(fmt_f64(20.5), "20.5");
+    }
+
+    #[test]
+    fn xml_escapes() {
+        assert_eq!(xml_text("a & b < c > d"), "a &amp; b &lt; c &gt; d");
+        assert_eq!(xml_attr(r#"x"y&z"#), "x&quot;y&amp;z");
+    }
+}

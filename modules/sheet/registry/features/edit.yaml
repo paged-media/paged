@@ -1,0 +1,188 @@
+# sheet.edit.* — bulk edit operations on the session surface (range sort +
+# find/replace). ALL semantics live in Rust (sheet-js SheetSession; the wasm
+# shim only forwards); the bundle journals the returned per-cell input
+# rewrites (ADR-012) and renders the controls. Headline rulings:
+#
+# - SORT is the honest VALUES-ONLY subset: a range containing formula cells
+#   (or engine-owned spill output) REFUSES with a boundary error — the
+#   engine's only reference rewrite is the structural insert/delete pass;
+#   the $-honouring copy/move rewrite (sheet-parser rewrite_fill) is an
+#   unimplemented T1 stub, so a reference-adjusted row move cannot be built
+#   without silently corrupting references. Never corrupt > partially work.
+# - COLLATION is documented, not pretended: char-wise Unicode default case
+#   folding (char::to_lowercase) in code-point order, ties by exact text;
+#   NO locale tailoring, NO ICU dependency ("ä" sorts after "z"; "ß" ≠ "SS").
+# - REPLACE operates on re-enterable INPUT texts through the normal set_cell
+#   lane; a replacement that fails to parse SKIPS that cell (reported,
+#   untouched — Engine::enter parses before mutating, so never half-applied).
+# Schema: id/title/status/provenance/tests.
+
+- id: sheet.edit.sort.values
+  title: Stable range sort by a key column — numbers numerically before text/bools/errors, payload rows move whole, external dependents recalc, per-cell prev/next input edits returned
+  status: implemented
+  provenance: ["sheet-js/src/core.rs::sort_range", "Phase 4b no-wire slice"]
+  tests:
+    rust: ["sheet-conformance/tests/edit_ops.rs::sheet_edit_sort_values"]
+
+- id: sheet.edit.sort.header
+  title: has_header pins the range's first row (it never moves; the body sorts beneath it)
+  status: implemented
+  provenance: ["sheet-js/src/core.rs::sort_range"]
+  tests:
+    rust: ["sheet-conformance/tests/edit_ops.rs::sheet_edit_sort_header"]
+
+- id: sheet.edit.sort.blanks-last
+  title: Blank key cells sink to the end in BOTH directions (Excel's blanks rule; descending never floats blanks)
+  status: implemented
+  provenance: ["sheet-js/src/core.rs::sort_key_cmp", "Excel sort blanks behavior (public docs)"]
+  tests:
+    rust: ["sheet-conformance/tests/edit_ops.rs::sheet_edit_sort_blanks_last"]
+
+- id: sheet.edit.sort.collation
+  title: "Honest text collation ruling: char-wise Unicode default case folding, code-point order, exact-text tiebreak — no locale tailoring, no ICU (T2 decision)"
+  status: implemented
+  provenance: ["sheet-js/src/core.rs::ci_text_cmp (the documented bounds)"]
+  tests:
+    rust: ["sheet-conformance/tests/edit_ops.rs::sheet_edit_sort_collation"]
+
+- id: sheet.edit.sort.formula-boundary
+  title: Sort over spilled array output REFUSES with a boundary error, model untouched; every moved formula is re-parsed BEFORE anything applies, so a refusal never half-applies (formula cells themselves move — sheet.edit.sort.formulas)
+  status: implemented
+  provenance: ["sheet-js/src/core.rs::sort_range"]
+  tests:
+    rust: ["sheet-conformance/tests/edit_ops.rs::sheet_edit_sort_formula_boundary"]
+
+- id: sheet.edit.sort.formulas
+  title: Sort carries formula cells with their row, re-addressed by the copy rule (sheet_parser::rewrite_fill — relative refs shift by the row delta, $-absolute refs stay, off-grid → #REF!); references from outside the range keep addressing positions (Excel)
+  status: implemented
+  provenance: ["sheet-js/src/core.rs::sort_range", "sheet-parser/src/rewrite.rs::rewrite_fill", "Microsoft 'Sort data in a range or table' — formulas with relative references are adjusted"]
+  tests:
+    rust: ["sheet-conformance/tests/edit_ops.rs::sheet_edit_sort_formulas"]
+
+- id: sheet.edit.filter.view
+  title: AutoFilter as a filter VIEW — set_filter/clear_filter (equals / contains / top / bottom on one column each, AND across columns) hide data rows; the page lowering and pagination skip hidden rows; the workbook's own autoFilter criteria are modelled (read-only, element re-emits verbatim) and rows it saved hidden stay hidden through a dirty re-encode; a Paged view is not written into the xlsx
+  status: implemented
+  provenance: ["sheet-js/src/core.rs::set_filter", "sheet-core/src/filter.rs", "sheet-xlsx/src/parts/autofilter.rs", "sheet-lower/src/lib.rs (hidden-row skip)", "ECMA-376 §18.3.2 autoFilter"]
+  tests:
+    rust: ["sheet-conformance/tests/edit_ops.rs::sheet_edit_filter_view"]
+
+- id: sheet.edit.find.values
+  title: find_all matches the formatted DISPLAY text by default (a formula cell is found by its computed display); row-major hits with excerpts; empty needle is a boundary error
+  status: implemented
+  provenance: ["sheet-js/src/core.rs::find_all"]
+  tests:
+    rust: ["sheet-conformance/tests/edit_ops.rs::sheet_edit_find_values"]
+
+- id: sheet.edit.find.formulas
+  title: in_formulas switches the match surface to the re-enterable INPUT text (so "SUM" finds =SUM(…) cells)
+  status: implemented
+  provenance: ["sheet-js/src/core.rs::find_all", "Excel Find 'Look in: Formulas/Values'"]
+  tests:
+    rust: ["sheet-conformance/tests/edit_ops.rs::sheet_edit_find_formulas"]
+
+- id: sheet.edit.find.case
+  title: match_case toggles case sensitivity; the default fold is char-wise Unicode case folding (same honest bounds as the sort collation)
+  status: implemented
+  provenance: ["sheet-js/src/core.rs::fold_match_at"]
+  tests:
+    rust: ["sheet-conformance/tests/edit_ops.rs::sheet_edit_find_case"]
+
+- id: sheet.edit.find.entire-cell
+  title: entire_cell requires the needle to equal the whole cell text (Excel "Match entire cell contents"), composing with the case toggle
+  status: implemented
+  provenance: ["sheet-js/src/core.rs::text_matches"]
+  tests:
+    rust: ["sheet-conformance/tests/edit_ops.rs::sheet_edit_find_entire_cell"]
+
+- id: sheet.edit.replace.inputs
+  title: replace_all rewrites cell INPUT texts through the normal set_cell lane (formula text editable via in_formulas; formula cells excluded without it); occurrence count + per-cell edits + final displays returned
+  status: implemented
+  provenance: ["sheet-js/src/core.rs::replace_all"]
+  tests:
+    rust: ["sheet-conformance/tests/edit_ops.rs::sheet_edit_replace_inputs"]
+
+- id: sheet.edit.replace.skip
+  title: A replacement that fails to parse SKIPS that cell (reported with a reason, cell untouched, never half-applied); engine-owned spill output is skipped, never shadowed
+  status: implemented
+  provenance: ["sheet-js/src/core.rs::replace_all", "Engine::enter parses before mutating"]
+  tests:
+    rust: ["sheet-conformance/tests/edit_ops.rs::sheet_edit_replace_skip"]
+
+- id: sheet.edit.functions.list
+  title: "list_functions exposes the engine's registry-generated function name table (name/family/arity, implemented-only) — the formula-bar autocomplete's source of truth (constitution §7: completion names come from the ENGINE, never a TS list)"
+  status: implemented
+  provenance: ["sheet-js/src/core.rs::list_functions", "sheet-core/build.rs FUNC_META codegen", "spec §7 registry-driven dispatch"]
+  tests:
+    rust: ["sheet-conformance/tests/js_surface.rs::sheet_js_list_functions"]
+
+# ── Wave 5 — clipboard reference adjust + autofill (sheet-js/src/core/fill.rs)
+
+- id: sheet.edit.clipboard.range-inputs
+  title: A copy snapshots the range's re-enterable INPUT texts in one call (formulas with '=', literals as typed, blanks ""), bounded by the T0 cell cap
+  status: implemented
+  provenance: ["sheet-js/src/core/fill.rs::get_range_inputs"]
+  tests:
+    rust: ["sheet-conformance/tests/edit_fill.rs::sheet_edit_clipboard_range_inputs"]
+
+- id: sheet.edit.clipboard.shift
+  title: Paste re-addresses relative references by the paste offset (copy rule — $ honoured, off-grid → #REF!); values and unparseable text paste verbatim
+  status: implemented
+  provenance: ["sheet-js/src/core/fill.rs::shift_formulas", "sheet-parser/src/rewrite.rs::rewrite_fill", "Microsoft 'Move or copy a formula' — relative references change"]
+  tests:
+    rust: ["sheet-conformance/tests/edit_fill.rs::sheet_edit_clipboard_shift"]
+
+- id: sheet.edit.fill.numbers
+  title: "Fill handle over numbers: one number copies; two or more continue the least-squares linear trend (Excel AutoFill), rounded to 15 significant digits"
+  status: implemented
+  provenance: ["sheet-js/src/core/fill.rs::linear_series", "Microsoft 'Fill data automatically in worksheet cells'"]
+  tests:
+    rust: ["sheet-conformance/tests/edit_fill.rs::sheet_edit_fill_numbers"]
+
+- id: sheet.edit.fill.dates
+  title: "Fill handle over dates: one date steps a day; dates on one day of the month step by their month delta with the day clamped to short months; otherwise the linear trend; the filled cells carry the source format"
+  status: implemented
+  provenance: ["sheet-js/src/core/fill.rs::month_series"]
+  tests:
+    rust: ["sheet-conformance/tests/edit_fill.rs::sheet_edit_fill_dates"]
+
+- id: sheet.edit.fill.names
+  title: "Weekday and month names (short/long, English and German) continue their list by a constant step; the last source's UPPER/lower case is kept"
+  status: implemented
+  provenance: ["sheet-js/src/core/fill.rs::name_series"]
+  tests:
+    rust: ["sheet-conformance/tests/edit_fill.rs::sheet_edit_fill_names"]
+
+- id: sheet.edit.fill.numbered-text
+  title: Text ending in an integer with a shared prefix counts on ("Item 1" → "Item 2"), keeping zero padding
+  status: implemented
+  provenance: ["sheet-js/src/core/fill.rs::numbered_text_series"]
+  tests:
+    rust: ["sheet-conformance/tests/edit_fill.rs::sheet_edit_fill_numbered_text"]
+
+- id: sheet.edit.fill.formulas
+  title: Fill repeats formulas with relative references re-addressed per target cell ($ parts stay); per-cell prev/next inputs returned for one undo group
+  status: implemented
+  provenance: ["sheet-js/src/core/fill.rs::fill_range"]
+  tests:
+    rust: ["sheet-conformance/tests/edit_fill.rs::sheet_edit_fill_formulas"]
+
+- id: sheet.edit.fill.copy
+  title: Fill down / fill right (series off) repeats the source block cyclically — no series
+  status: implemented
+  provenance: ["sheet-js/src/core/fill.rs::fill_range"]
+  tests:
+    rust: ["sheet-conformance/tests/edit_fill.rs::sheet_edit_fill_copy"]
+
+- id: sheet.edit.fill.direction
+  title: Fill runs down, up, right and left (the series continues away from the source); a target that does not extend the source in exactly one direction is refused, model untouched
+  status: implemented
+  provenance: ["sheet-js/src/core/fill.rs::fill_range"]
+  tests:
+    rust: ["sheet-conformance/tests/edit_fill.rs::sheet_edit_fill_direction"]
+
+- id: sheet.edit.fill.lanes
+  title: Each lane (column when filling down) fills on its own; a mixed lane repeats its source
+  status: implemented
+  provenance: ["sheet-js/src/core/fill.rs::series_of"]
+  tests:
+    rust: ["sheet-conformance/tests/edit_fill.rs::sheet_edit_fill_lanes"]

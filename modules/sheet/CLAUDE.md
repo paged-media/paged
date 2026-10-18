@@ -1,0 +1,223 @@
+# CLAUDE.md — paged-media/plugin-sheets
+
+Orientation for Claude sessions in **paged-media/plugin-sheets** — the
+paged.sheet spreadsheet subsystem, delivered as a Paged plugin (public;
+dual-licensed AGPL-3.0 OR PMEL, And The Next GmbH).
+
+## What this is
+
+A Rust/WASM calculation engine + sheet document model: live spreadsheets
+inside a print-grade layout document — a **publishing instrument, not an
+Excel replacement** (every scope decision follows from that). The page
+surface is COMPILED to native Paged content (a real `<Table>` via
+insertTable + cell pour + spans + cell strokes/fills — S-03 resolved; the
+tab-text + drawn-rules degradation is retained as the explicit fallback
+lane); the sheets-mode grid (T1+) renders vector on an SDK surface
+(S-02). XLSX round-trip safety ("Paged never destroys a workbook") is a
+launch property.
+
+Spec (the authority): `docs/concept.md` (architecture, status and decisions are in `docs/` too;
+the original planning paper is archived at `~/paged/thoughts/docs/archive/plugin-sheets/base-idea.md`).
+Where code and spec differ, `docs/status.md` and `docs/design/analysis-2026-10-04.md` say how.
+SDK gap tracker: the cross-repo RFI (the internal gap register) (S-NN ids in §6; per-plugin BREAKAGE_LOG retired 2026-06-12).
+
+**STATUS: M0–M3 shipped** (11 Rust crates, ~1272 nextest; the registry
+rows below are the live ledger). Rust crates (Cargo workspace, top level
+per spec §4): `sheet-core` (frozen types + AST), `sheet-parser`,
+`sheet-calc`, `sheet-fn`, `sheet-format`, `sheet-xlsx`, `sheet-lower`,
+`sheet-grid` (windowed GridScene — the in-frame surface), `sheet-chart`
+(plotters + a custom paged.draw `DrawingBackend` → a frozen ChartGeometry
+IR — NOT charming, NOT hand-rolled SVG), `sheet-js` (wasm-bindgen
+surface), `sheet-conformance` (TEST-ONLY). TS packages (pnpm `packages/*`,
+draw/web convention): `sheet-host-model` (pure LoweredContent→Mutation
+translation) + `sheet-bundle` (manifest + `activate(host)` + workbook
+panel + grid panel + datasets panel + 12 commands + engine boot).
+
+What landed (verified — see `~/paged/cockpit/docs/features/sheet/`):
+the calc engine, function library, spill, structured tables, the chart
+engine, and **XLSX round-trip** (preservation-safe both directions). The
+page surface **lowers to a native `<Table>`** (S-03 / `sheet.lower.page`),
+UNSTYLED: the page calls `getRangeLowered` (the NoStyles door), not
+`getRangeStyled`. **Multi-frame pagination** (S-05) is built in the engine
+and exported as `lowerPaginatedToChain` / `subscribeChainReflow`, but NO
+command or panel calls it — a user cannot reach it.
+The **in-frame grid renders + edits via K-1** (`sheet.grid.inframe`):
+`host.contribute.sceneLayer` paints the windowed grid (C-1 vector v0.39.0
++ text v0.40.0), and the modal edit session is wired end-to-end
+(double-click entry → content-coord cell select → keystroke editor →
+Enter/Esc, session-scoped Cmd-Z per ADR-012) — driven by the editor
+journey `apps/canvas/tests/journey/plugins/sheet.journey.spec.ts` and the
+e2e `sheet-modal-session.spec.ts`. Workbook **persistence** rides
+`host.blob` (OPFS, S-08) + the `.paged` container part: written on
+import AND re-saved after every committed edit (debounced
+`PERSIST_DEBOUNCE_MS`, flushed on dispose / `flushPersist()`; before
+2026-10-04 edits were lost on reload); the
+**data-provider CONSUMER** (S-15, `sheetFromDataset`) sources a sheet from
+a governed dataset.
+
+## Project State & Feature Matrix (cockpit)
+
+The feature inventory, test linkage and live status for ALL Paged repos are derived by
+[Cockpit](https://github.com/drietsch/cockpit) from `~/paged/cockpit/` (`cockpit.toml` with
+`root = ".."`; features in `cockpit/docs/features/<chapter>/<id>.md`). There is NO feature
+matrix in this repo; do not create one.
+
+Rules for every code change in this repo:
+
+1. NEW CAPABILITY → feature file. If your change adds or completes a feature, add or update
+   `cockpit/docs/features/<chapter>/<id>.md` (separate commit in `paged/cockpit`, referenced
+   from this one). Feature ids are immutable; rename with `superseded_by`.
+2. EVERY NEW TEST → feature link. Playwright: `{ tag: ['@feat:<id>'] }`. Rust: a test name
+   ending in `__feat__<id_with_underscores>` or containing `[<id>]`. Otherwise an entry in
+   `cockpit/test-map.yaml`.
+3. STATUS CHANGE → `claims:` in the feature file, never prose. "X is now shipped/partial" is a
+   claim edit; whether it *works* is computed from evidence and cannot be written.
+4. BEFORE claiming a feature done: `cockpit feature <id> --json` (or its page in
+   `cockpit serve`) — done means the linked tests are green and were produced after the
+   latest implementation commit.
+5. `cockpit validate --strict` is the gate (references resolve, required evidence present and
+   fresh). `cockpit pull` fetches the newest CI artifacts; `cockpit status` is the summary.
+6. FOUND A BUG while working? If a test exposes it, let it fail and push — the failure shows
+   up as attention on its feature. Never commit `.cockpit/`.
+
+## Hard rules (this repo's constitution — spec §1/§2/§3)
+
+- **ALL SPREADSHEET SEMANTICS LIVE IN RUST.** Formula parsing,
+  evaluation, the function library, coercion, number formatting, XLSX
+  I/O, and lowering geometry are `sheet-*` crates compiled to ONE wasm
+  module (`sheet-js`). The TS packages are thin glue: bundle lifecycle,
+  panel, file input, and translating the engine's already-computed
+  output into host mutations. **Never implement an Excel-like operation
+  in TypeScript** — if the bundle seems to need one, the missing piece
+  is a `sheet-js` API.
+- **ISOLATION CONTRACT, superset (§2.1).** Zero core contact AND zero
+  inter-plugin contact: the only `@paged-media/*` dependencies are
+  `plugin-api`, `plugin-sdk`, and published package contracts — never
+  `plugin-image` or any other plugin, not at build time, runtime, or via
+  side channels, even co-installed. (`paged.draw` chart lowering in T2
+  is a CORE SDK surface, not a plugin.) TS guard:
+  `scripts/check-contract-imports.mjs`; Rust guard: `deny.toml`
+  [sources] + the cargo-tree CI guards. SDK gaps become
+  RFI §6 entries / plugin-platform RFCs — NEVER core
+  modifications from this project.
+- **REGISTRY-DRIVEN DISPATCH (§7/§12.2).** The function table is
+  generated at build time from `registry/functions/*.yaml`
+  (`sheet-core/build.rs` emits the name→id table; `sheet-fn/build.rs`
+  emits the dispatch match). No row → no dispatch entry → **an
+  unregistered function is uncallable by construction**. Same principle
+  queued for XLSX part handlers and lowering rules. The coverage gate
+  (`cargo run -p sheet-conformance --bin coverage-gate`) fails below
+  100% tests-per-implemented-row.
+- **PURE KERNELS.** `sheet-fn` functions are pure
+  `fn(&[Arg], &EvalCtx) -> CellValue` — they never see the dependency
+  graph, the scheduler, or the SDK (spec §4 rule 1). `sheet-lower` is
+  pure model→IR. `sheet-host-model` (TS) is pure data→Mutation[]. Every
+  behavior change lands with a test.
+- **PRESERVATION INVARIANT (§10.2).** "Paged never destroys a
+  workbook." Unknown parts byte-identical; unknown subtrees in known
+  parts retained and re-emitted in place; untouched understood parts
+  re-emit original bytes (lazy-verbatim). Zero-edit round-trip is
+  byte-identical except the dropped `calcChain.xml` (registry ruling
+  `sheet.xlsx.calcchain.drop`).
+- **EXCEL-COMPAT IS A RULING, NEVER AN ACCIDENT (§3).** f64 arithmetic
+  (D-6; the `Numeric` trait keeps exact-decimal open), 1900 leap-bug
+  serial 60, 15-significant-digit display — each adopted defect is an
+  explicit registry ruling with provenance. Oracle disagreements get
+  recorded rulings.
+- **PUBLISHING-FIRST SCOPE (§1, permanent).** Pivot tables, data
+  validation, what-if, external links, VBA execution are NEVER
+  interpreted — they round-trip preserved. This is a product decision,
+  not a deferral; don't "helpfully" implement them.
+- **A MINT INSIDE A BATCH IS NOT IDEMPOTENT, however idempotent it
+  looks.** paged.sheet mints document swatches at deterministic,
+  content-addressed ids, so re-running a lowering asks for ids the
+  document already has — which reads like a harmless no-op and is not
+  one. Core REFUSES a `createSwatch` whose `selfId` exists
+  (`DuplicateNodeId`) and a refused child fails the WHOLE
+  `Operation::Batch` (`apply_batch` rolls back every sibling). The damage
+  is never confined to the redundant mint: measured against the real
+  engine, lowering a chart twice — or lowering ANY second chart, since
+  every chart shares the axis grey — landed *nothing*, not merely a lost
+  colour. So every lane that mints inside a batch **reads the document
+  first (`readKnownSwatchIds`) and emits only the absent ids
+  (`swatchMintOps`); a FAILED read mints NOTHING** — the batch still
+  applies and only the colour degrades (an unresolvable colorRef is a
+  paint miss, not an op error). Never gamble the batch to save a colour.
+  This generalises past swatches to **any** document resource core keys
+  by id (styles, layers, groups) and past this plugin to any plugin that
+  mints inside a batch. Registry: `sheet.lower.swatch-mint-dedupe`.
+- **The bundle touches host surfaces + React only.** No
+  `@paged-media/shell`/`client` imports — writes via
+  `host.document.mutate`, binding via `setPluginMetadata` (namespace
+  `x-paged:media.paged.sheet`), persistence via `host.blob` (OPFS,
+  S-08 shipped — per-plugin keyed, restores the last SAVED workbook,
+  edits included; the panel says so). Panels are factories closing over `BundleHost`;
+  styling = the token layer (`--pg-*`, `--status-*`, `--font-mono`,
+  `--space-*`, `--radius-*`).
+- **Reserved seams stay honest.** The page-lowering (S-03), in-frame
+  grid + K-1 modal edit session (S-02/C-1/K-1), importer registration
+  (S-06/S-11), OPFS + container-part persistence (S-08), and the data-provider
+  consumer (S-15) SHIP. Pagination (S-05) is BUILT but has no command.
+  DONE in the RFI, no longer gaps: per-cell fill/borders and
+  `appliedCellStyle` on a `tableCell` ElementId (S-04 — core applies
+  them, probe-verified), owned-content interception (S-09, editor-side),
+  the range clipboard with a tabular payload (S-14 / K-6), the editor-side
+  metrics RPC (K-7 — real shaper metrics since v0.38.0, e2e-pinned in the
+  editor's `text-measure.spec.ts`). Text ops inside `Mutation::Batch` are
+  DONE in core (C-14, v0.61.0; one rebuild per batch since v0.63.0), so
+  the per-cell pour in `lower.ts` is a plugin-side leftover, not an engine
+  limit. What is still open stays labelled, never faked: the §8.0
+  seamless-undo boundary is TBD; in-frame text v1 has caveats (default
+  face, upright glyphs); full sheets-MODE (S-01); the vector scene layer
+  invalidates every page cache per submit (core `CacheEffect::ClearAll`).
+  The manifest + UI must keep saying so for the unshipped pieces.
+- **CLEAN-ROOM (§3).** `references/` (LibreOffice/IronCalc, IF ever
+  mounted) is read-only, analyst-only, gitignored, excluded from all
+  artifacts; implementers never read it. **T0: references/ is NOT
+  mounted** — implementation derives from ECMA-376 / ISO-IEC 29500,
+  OpenFormula, public Microsoft documentation, and golden corpora.
+- **LICENSE ASYMMETRY.** Rust crates are dual MPL-2.0 OR PMEL — every
+  `.rs` carries the 13-line MPL/PMEL header (copy from
+  `sheet-core/src/lib.rs`). TS files (`packages/`, `scripts/`) carry NO
+  header (private-side convention, like plugin-draw/plugin-web).
+- **Interface freeze.** `sheet-core` types, the AST, the `sheet-fn`
+  calling convention (`Arg`/`EvalCtx`), and the registry YAML schema are
+  FROZEN (M0 phase 0). Changes go through the orchestrator as versioned
+  amendments, never drive-by edits.
+
+## Two-registry split
+
+- `~/paged/cockpit/docs/features/sheet/<id>.md` (Cockpit, chapter `sheet`) — the
+  STATUS ledger (component `plugin.sheet`; `claims:` planned/partial/shipped,
+  health from evidence).
+- `plugin-sheets/registry/` (here) — build-consumed metadata:
+  `functions/*.yaml` (one row per function: arity, volatility,
+  range-awareness, provenance, test pointers — drives codegen) and
+  `features/*.yaml` (calc/format/xlsx/lower rulings + test pointers).
+  The ids mirror the Cockpit `sheet.*` ids so the registries join by id.
+
+## Commands
+
+```bash
+# Rust (the engine)
+cargo build --workspace && cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings
+cargo run -p sheet-conformance --bin coverage-gate    # the §12.2 gate
+
+# Dependency guards (CI runs these; run before claiming green)
+cargo tree -p sheet-fn --edges normal | grep -E 'sheet-(calc|parser|xlsx|lower|js)' && echo LEAK
+cargo tree -p sheet-js --target wasm32-unknown-unknown | grep -E 'sheet-conformance|proptest' && echo LEAK
+cargo deny check
+
+# wasm artifact (100 MB app wasm budget; lands in packages/sheet-bundle/bin/)
+bash scripts/build-wasm.sh
+
+# TS (the bundle) — install order: editor → plugin-sdk → plugin-sheets
+pnpm install && pnpm test && pnpm typecheck
+pnpm validate:manifest
+
+# Excel differential oracle — CI compares against the committed recordings:
+cargo test -p sheet-conformance --test excel_oracle
+# re-record (maintainer, macOS + Excel): sheet-conformance/oracle/excel/
+#   python3 generate.py && ./drive.sh && python3 read.py
+```

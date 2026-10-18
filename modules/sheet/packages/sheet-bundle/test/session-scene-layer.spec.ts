@@ -1,0 +1,287 @@
+/*
+ * This file is part of paged (https://paged.media).
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// sheet.scene-layer.in-frame (K-1): the session renders the windowed
+// GridScene INTO a frame via host.contribute.sceneLayer() (C-1), and a
+// FRAME-CONTENT-space pointer selects the cell it falls in + re-renders the
+// grid with the selection chrome. No DOM, no wasm: a fake engine returns a
+// fixed GridScene and a fake host captures every scene-layer submit so we
+// can assert what core would compose.
+
+import { describe, expect, it } from "vitest";
+
+import type { BundleHost, SceneLayer } from "@paged-media/plugin-api";
+import type { GridScene } from "@paged-media/sheet-host-model";
+
+import { createWorkbookSession, type SheetEngine } from "../src";
+
+// A 2×2 viewport: cols 40pt (x 0/40/80), rows 20pt (y 0/20/40).
+function scene2x2(): GridScene {
+  return {
+    viewport: {
+      firstRow: 0,
+      firstCol: 0,
+      rows: 2,
+      cols: 2,
+      xOffsets: [0, 40, 80],
+      yOffsets: [0, 20, 40],
+    },
+    cells: [
+      { row: 0, col: 0, text: "Name", align: "left", styleKey: 0 },
+      { row: 0, col: 1, text: "100", align: "right", styleKey: 0 },
+    ],
+    styles: [
+      {
+        key: 0,
+        bold: false,
+        italic: false,
+        fontSizePt: null,
+        fontName: null,
+        fillRgb: null,
+        textRgb: null,
+        borderTop: false,
+        borderRight: false,
+        borderBottom: false,
+        borderLeft: false,
+      },
+    ],
+    gridlines: { h: [], v: [] },
+    selection: null,
+  };
+}
+
+function fakeEngine() {
+  const setSelCalls: Array<[number, number, number, number, number]> = [];
+  const setCellCalls: Array<[number, number, number, string]> = [];
+  const engine: SheetEngine = {
+    loadXlsx() {},
+    saveXlsx: () => new Uint8Array(),
+    setCell: (sheet, row, col, input) => {
+      setCellCalls.push([sheet, row, col, input]);
+      return { changed: [{ sheet, row, col, display: input }] };
+    },
+    // A populated B1 so the F2/Backspace-from-value path has a seed.
+    getCellDisplay: (_sheet, row, col) => (row === 0 && col === 1 ? "100" : ""),
+    getCellInput: (_sheet, row, col) => (row === 0 && col === 1 ? "100" : ""),
+    sortRange: () => ({ changed: [], edits: [] }),
+    findAll: () => [],
+    replaceAll: () => ({ occurrences: 0, changed: [], edits: [], skipped: [] }),
+    getRangeLowered: () => ({ cols: [], rows: [], rules: { h: [], v: [] }, merges: [] }),
+    getRangeStyled: () => ({ cols: [], rows: [], rules: { h: [], v: [] }, merges: [] }),
+    getRangeValues: () => [],
+    paginate: () => [],
+    // The fake ignores the window args and always returns the 2×2 scene; the
+    // session overlays its own selection onto it via computeGridScene.
+    getGridScene: () => scene2x2(),
+    setGridSelection(sheet, anchorRow, anchorCol, rows, cols) {
+      setSelCalls.push([sheet, anchorRow, anchorCol, rows, cols]);
+    },
+    listSheets: () => [{ id: 0, name: "Sheet1", rows: 2, cols: 2 }],
+    listCharts: () => [],
+    chartKinds: () => ["column"],
+    addChart: () => 0,
+    listFreezePanes: () => [],
+    listDataValidations: () => [],
+    listComments: () => [],
+    listFunctions: () => [],
+    getChartGeometry: () => ({ widthPt: 0, heightPt: 0, prims: [] }),
+    dispose() {},
+  };
+  return { engine, setSelCalls, setCellCalls };
+}
+
+/** The rendered text of `(row, col)` in the last submitted scene layer's
+ *  text items, or undefined. The grid lowers each cell's text at its
+ *  leading edge; we read the buffer back by matching the value. */
+function textsOf(submit: { layer: SceneLayer }): string[] {
+  return submit.layer.items
+    .filter((i): i is Extract<SceneLayer["items"][number], { kind: "text" }> =>
+      i.kind === "text",
+    )
+    .map((i) => i.text);
+}
+
+/** A host that wires the scene-layer channel + a frame geometry read, and
+ *  CAPTURES every `submit(elementId, layer)`. */
+function fakeHost() {
+  const submits: Array<{ elementId: string; layer: SceneLayer }> = [];
+  let cleared: string | null = null;
+  const host = {
+    log: { debug() {}, info() {}, warn() {}, error() {} },
+    supports: (f: string) => f === "rendering.sceneLayer@1",
+    contribute: {
+      sceneLayer: () => ({
+        async submit(elementId: string, layer: SceneLayer) {
+          submits.push({ elementId, layer });
+        },
+        async clear(elementId: string) {
+          cleared = elementId;
+        },
+        dispose() {},
+      }),
+    },
+    document: {
+      // bounds = [top, left, bottom, right] → an 80×40 content box.
+      elementGeometry: async () => [{ bounds: [0, 0, 40, 80] }],
+    },
+  } as unknown as BundleHost;
+  return { host, submits, cleared: () => cleared };
+}
+
+/** Let the coalesced in-frame submit land (Wave 2: submits are batched
+ *  per animation frame — a microtask turn where there is no rAF). */
+const nextFrame = () => new Promise((r) => setTimeout(r, 0));
+
+/** A booted+loaded session over the fakes (bypassing the wasm boot). */
+function bootedSession(host: BundleHost, engine: SheetEngine) {
+  const session = createWorkbookSession(host);
+  const st = session.state();
+  st.engine = engine;
+  st.activeSheet = 0;
+  st.fileName = "demo.xlsx";
+  st.selectedRange = "A1:B2";
+  return session;
+}
+
+describe("sheet_scene_layer_in_frame: K-1 click-to-select", () => {
+  it("renders the grid in-frame, then selects the cell under a content point", async () => {
+    const { engine, setSelCalls } = fakeEngine();
+    const { host, submits } = fakeHost();
+    const session = bootedSession(host, engine);
+
+    const shown = await session.showGridInFrame("frame-1");
+    expect(shown).toBe(true);
+    expect(submits).toHaveLength(1);
+    expect(submits[0].elementId).toBe("frame-1");
+    // The first render carries no selection (no fillPath wash).
+    expect(submits[0].layer.items.some((i) => i.kind === "fillPath")).toBe(false);
+
+    // A content-space point in col1 (x∈[40,80)) row0 (y∈[0,20)).
+    const hit = session.selectCellInFrame(50, 10);
+    expect(hit).toBe(true);
+    await nextFrame();
+    // The cell was selected (engine told + session state).
+    expect(setSelCalls).toContainEqual([0, 0, 1, 1, 1]);
+    // A re-render was submitted (now WITH the selection wash + stroke, and
+    // the Wave 5 fill-handle knob at the selection's bottom-right corner).
+    expect(submits).toHaveLength(2);
+    const last = submits[1].layer.items.slice(-3);
+    expect(last.map((i) => i.kind)).toEqual(["fillPath", "strokePath", "fillPath"]);
+  });
+
+  it("returns false (no extra submit) for a point outside the windowed cells", async () => {
+    const { engine } = fakeEngine();
+    const { host, submits } = fakeHost();
+    const session = bootedSession(host, engine);
+
+    await session.showGridInFrame("frame-1");
+    expect(submits).toHaveLength(1);
+
+    const hit = session.selectCellInFrame(999, 999);
+    expect(hit).toBe(false);
+    expect(submits).toHaveLength(1); // no re-render
+  });
+
+  it("returns false before any in-frame grid is shown (nothing to hit)", () => {
+    const { engine } = fakeEngine();
+    const { host } = fakeHost();
+    const session = bootedSession(host, engine);
+    expect(session.selectCellInFrame(10, 10)).toBe(false);
+  });
+});
+
+describe("sheet_scene_layer_in_frame: K-1 cell editor", () => {
+  async function shownSession() {
+    const { engine, setCellCalls } = fakeEngine();
+    const { host, submits } = fakeHost();
+    const session = bootedSession(host, engine);
+    await session.showGridInFrame("frame-1");
+    // Select B1 (col1/row0) — the edit target.
+    session.selectCellInFrame(50, 10);
+    await nextFrame();
+    return { session, submits, setCellCalls };
+  }
+
+  it("a printable key begins a replace-mode edit on the selected cell", async () => {
+    const { session, submits } = await shownSession();
+    const before = submits.length;
+    expect(session.typeCellChar("7")).toBe(true);
+    expect(session.isCellEditing()).toBe(true);
+    await nextFrame();
+    // Re-rendered with the buffer "7" overlaid on B1 (replacing "100").
+    expect(submits).toHaveLength(before + 1);
+    const texts = textsOf(submits[submits.length - 1]);
+    expect(texts).toContain("7");
+    expect(texts).not.toContain("100");
+  });
+
+  it("appends subsequent chars to the open buffer", async () => {
+    const { session, submits } = await shownSession();
+    session.typeCellChar("4");
+    session.typeCellChar("2");
+    await nextFrame();
+    // ONE submit for the two keystrokes (same frame), showing both.
+    expect(textsOf(submits[submits.length - 1])).toContain("42");
+  });
+
+  it("Backspace opens from the cell value then drops the last char", async () => {
+    const { session, submits } = await shownSession();
+    // Not yet editing → opens from B1's value "100", drops to "10".
+    expect(session.backspaceCellEdit()).toBe(true);
+    await nextFrame();
+    expect(textsOf(submits[submits.length - 1])).toContain("10");
+  });
+
+  it("commit writes the buffer through the engine + clears the edit", async () => {
+    const { session, submits, setCellCalls } = await shownSession();
+    session.typeCellChar("9");
+    expect(session.commitCellEdit()).toBe(true);
+    // engine.setCell(sheet0, row0, col1, "9").
+    expect(setCellCalls).toContainEqual([0, 0, 1, "9"]);
+    expect(session.isCellEditing()).toBe(false);
+    await nextFrame();
+    // The committed engine value re-renders (fake getGridScene → "100").
+    expect(textsOf(submits[submits.length - 1])).toContain("100");
+  });
+
+  it("cancel drops the buffer with no engine write", async () => {
+    const { session, setCellCalls } = await shownSession();
+    session.typeCellChar("5");
+    session.cancelCellEdit();
+    expect(session.isCellEditing()).toBe(false);
+    expect(setCellCalls).toHaveLength(0);
+  });
+
+  it("a click on another cell cancels an in-progress edit", async () => {
+    const { session } = await shownSession();
+    session.typeCellChar("5");
+    expect(session.isCellEditing()).toBe(true);
+    // Click A1 (col0/row0).
+    session.selectCellInFrame(10, 10);
+    expect(session.isCellEditing()).toBe(false);
+  });
+
+  it("typing with no selected cell is a no-op", async () => {
+    const { engine } = fakeEngine();
+    const { host } = fakeHost();
+    const session = bootedSession(host, engine);
+    await session.showGridInFrame("frame-1"); // grid shown, nothing selected
+    expect(session.typeCellChar("x")).toBe(false);
+    expect(session.isCellEditing()).toBe(false);
+  });
+});

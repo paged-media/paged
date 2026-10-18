@@ -1,0 +1,373 @@
+/*
+ * This file is part of paged (https://paged.media).
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * This file is part of paged (https://paged.media) and is additionally
+ * available under the Paged Media Enterprise License (PMEL). Full
+ * copyright and license information is available in LICENSE.md which is
+ * distributed with this source code.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
+ */
+
+//! The OPC (Open Packaging Conventions, ECMA-376 Part 2) container layer.
+//!
+//! Reads the workbook zip into an *ordered* [`OpcContainer`] of
+//! [`PartEntry`] — the on-disk entry order is preserved so an unmodeled
+//! re-write keeps parts in their original sequence. Directory entries are
+//! dropped (zip-only artifacts; OPC parts are flat names). Part bytes are
+//! stored decompressed; the writer recompresses with deflate, which yields
+//! decompressed-byte identity (the spec's per-part zero-edit assertion —
+//! whole-file/zip-metadata identity is explicitly *not* claimed, §10.2).
+//!
+//! `[Content_Types].xml` is parsed into a [`ContentTypes`] model (defaults
+//! keyed by extension + per-part overrides) so the writer can drop the
+//! `calcChain.xml` override without re-flowing the rest.
+
+use crate::error::XlsxError;
+use std::collections::HashMap;
+use std::io::Read;
+
+/// Logical OPC content-type for the `[Content_Types].xml` part name.
+pub const CONTENT_TYPES_PART: &str = "[Content_Types].xml";
+
+/// One part of the package. `Opaque` parts are preserved byte-identical
+/// (the preservation invariant, §10.2); `Modeled` parts are understood and
+/// may be re-encoded from the model when dirty, else re-emitted verbatim
+/// (lazy-verbatim).
+#[derive(Debug, Clone)]
+pub enum PartEntry {
+    /// Preserved byte-identical — themes, docProps, pivot caches,
+    /// `vbaProject.bin`, customXml, calcChain, anything we don't model.
+    Opaque { name: String, bytes: Vec<u8> },
+    /// An understood part. `raw` is the original decompressed bytes;
+    /// `dirty` flips when the model owning it is mutated, triggering a
+    /// re-encode on save (otherwise `raw` is re-emitted verbatim).
+    Modeled {
+        name: String,
+        kind: ModeledKind,
+        raw: Vec<u8>,
+        dirty: bool,
+    },
+}
+
+/// Which understood part a [`PartEntry::Modeled`] is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ModeledKind {
+    Workbook,
+    WorkbookRels,
+    Worksheet,
+    SharedStrings,
+    Styles,
+    ContentTypes,
+}
+
+impl PartEntry {
+    /// The part name (zip entry name) regardless of variant.
+    pub fn name(&self) -> &str {
+        match self {
+            PartEntry::Opaque { name, .. } => name,
+            PartEntry::Modeled { name, .. } => name,
+        }
+    }
+
+    /// The decompressed bytes regardless of variant.
+    pub fn bytes(&self) -> &[u8] {
+        match self {
+            PartEntry::Opaque { bytes, .. } => bytes,
+            PartEntry::Modeled { raw, .. } => raw,
+        }
+    }
+}
+
+/// `[Content_Types].xml` model: extension defaults + per-part overrides, in
+/// document order so the writer can re-serialize it identically when nothing
+/// changed and minimally when the calcChain override is removed.
+#[derive(Debug, Clone, Default)]
+pub struct ContentTypes {
+    /// `<Default Extension=".." ContentType="..">` in order.
+    pub defaults: Vec<(String, String)>,
+    /// `<Override PartName="/.." ContentType="..">` in order.
+    pub overrides: Vec<(String, String)>,
+}
+
+impl ContentTypes {
+    /// Parse `[Content_Types].xml`. We only need extension/part-name keys and
+    /// their content types; anything else is structurally invalid OPC.
+    pub fn parse(xml: &[u8]) -> Result<ContentTypes, XlsxError> {
+        use quick_xml::events::Event;
+        let mut reader = quick_xml::Reader::from_reader(xml);
+        reader.config_mut().trim_text(false);
+        let mut ct = ContentTypes::default();
+        let mut buf = Vec::new();
+        loop {
+            match reader.read_event_into(&mut buf)? {
+                Event::Empty(e) | Event::Start(e) => {
+                    let local = e.local_name();
+                    match local.as_ref() {
+                        b"Default" => {
+                            let ext = attr(&e, b"Extension")?;
+                            let ty = attr(&e, b"ContentType")?;
+                            if let (Some(ext), Some(ty)) = (ext, ty) {
+                                ct.defaults.push((ext, ty));
+                            }
+                        }
+                        b"Override" => {
+                            let pn = attr(&e, b"PartName")?;
+                            let ty = attr(&e, b"ContentType")?;
+                            if let (Some(pn), Some(ty)) = (pn, ty) {
+                                ct.overrides.push((pn, ty));
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                Event::Eof => break,
+                _ => {}
+            }
+            buf.clear();
+        }
+        Ok(ct)
+    }
+
+    /// True if an `<Override>` exists for the given absolute part name
+    /// (e.g. `/xl/calcChain.xml`).
+    pub fn has_override(&self, part_name: &str) -> bool {
+        self.overrides.iter().any(|(pn, _)| pn == part_name)
+    }
+}
+
+/// Resolve a general/character reference event (`&amp;`, `&#10;`, `&#x0A;`,
+/// …) to its replacement text.
+///
+/// quick-xml 0.38+ no longer resolves references inside `Event::Text`; the
+/// reader emits a separate `Event::GeneralRef` for each `&…;` in element
+/// content, so every text-accumulating parse loop routes those events here.
+/// SpreadsheetML defines no DTD entities, so only character references and
+/// the five predefined XML entities can appear; anything else is an escape
+/// error (the same class 0.36's `unescape()` raised for it).
+pub(crate) fn general_ref(r: &quick_xml::events::BytesRef<'_>) -> Result<String, XlsxError> {
+    if let Some(ch) = r.resolve_char_ref().map_err(XlsxError::Xml)? {
+        return Ok(ch.to_string());
+    }
+    let name = r.decode()?;
+    match quick_xml::escape::resolve_predefined_entity(&name) {
+        Some(s) => Ok(s.to_string()),
+        // The 0..0 span is a placeholder: BytesRef carries no source offset.
+        None => Err(XlsxError::Escape(
+            quick_xml::escape::EscapeError::UnrecognizedEntity(0..0, name.into_owned()),
+        )),
+    }
+}
+
+/// Read an attribute's UTF-8 value by local name, ignoring namespace prefix.
+pub(crate) fn attr(
+    e: &quick_xml::events::BytesStart<'_>,
+    key: &[u8],
+) -> Result<Option<String>, XlsxError> {
+    for a in e.attributes() {
+        let a = a?;
+        let k = a.key;
+        let local = k.local_name();
+        if local.as_ref() == key {
+            // 0.37+: `unescape_value()` is deprecated; `normalized_value`
+            // additionally applies XML attribute-value normalization
+            // (tab/CR/LF → space), which the XML spec requires anyway.
+            let v = a
+                .normalized_value(quick_xml::XmlVersion::Implicit1_0)
+                .map_err(XlsxError::Xml)?;
+            return Ok(Some(v.into_owned()));
+        }
+    }
+    Ok(None)
+}
+
+/// Largest pre-allocation made from an entry's DECLARED size; growth past
+/// it follows the bytes actually inflated.
+const PREALLOC_CAP: u64 = 8 << 20;
+
+/// The whole package: an ordered list of parts plus the parsed content-type
+/// table. This is what `sheet-core`'s opaque `PreservedParts` slot holds.
+#[derive(Debug, Clone)]
+pub struct OpcContainer {
+    /// Parts in original zip entry order (dirs already dropped).
+    pub parts: Vec<PartEntry>,
+    /// Parsed `[Content_Types].xml` (kept for writer re-serialization).
+    pub content_types: ContentTypes,
+    /// True once a structural change (calcChain drop, sheet re-encode) made
+    /// the container diverge from the byte-for-byte original.
+    pub dirty: bool,
+    /// Part name → index into `parts`, built on read (lookups were a linear
+    /// scan per call). `parts` is public, so every lookup verifies the hit
+    /// and falls back to the scan if the vector was reshaped behind it.
+    index: HashMap<String, usize>,
+}
+
+impl OpcContainer {
+    /// Read a zip archive into ordered parts. Every part starts `Opaque`;
+    /// the parse layer promotes the understood ones to `Modeled` afterwards.
+    pub fn read(bytes: &[u8]) -> Result<OpcContainer, XlsxError> {
+        Self::read_with_budget(bytes, crate::MAX_UNCOMPRESSED_BYTES)
+    }
+
+    /// [`read`](Self::read) with an explicit total-uncompressed budget.
+    ///
+    /// An entry's header may CLAIM any uncompressed size; the claim is
+    /// never trusted for allocation (fuzzing found 2.6 KB inputs asking
+    /// for 3.4 GB). Each entry is read through a limit of the budget still
+    /// unspent, so a decompression bomb stops at the budget with a typed
+    /// [`XlsxError::Budget`] instead of exhausting memory.
+    pub fn read_with_budget(bytes: &[u8], budget: u64) -> Result<OpcContainer, XlsxError> {
+        // Container sniff BEFORE the zip reader. A legacy .xls is
+        // CFB/OLE, and the zip crate locates a package by scanning
+        // backwards for the EOCD — so a CFB file carrying anything
+        // zip-shaped can be opened as if it were OOXML. POI's
+        // `drawings.xls` (magic D0CF11E0, "Name of Creating
+        // Application: Microsoft Excel") did precisely that.
+        //
+        // The same sniff exists in paged-ooxml for `.doc`; this crate
+        // simply had never been shown a real .xls, having only ever been
+        // fed generate.py output.
+        const CFB_MAGIC: &[u8] = &[0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
+        if bytes.starts_with(CFB_MAGIC) {
+            return Err(XlsxError::LegacyBinaryXls);
+        }
+        let cursor = std::io::Cursor::new(bytes);
+        let mut zip = zip::ZipArchive::new(cursor)?;
+        let mut parts = Vec::with_capacity(zip.len().min(4096));
+        let mut remaining = budget;
+        let mut content_types: Option<ContentTypes> = None;
+
+        for i in 0..zip.len() {
+            let mut file = zip.by_index(i)?;
+            // OPC parts are flat names; directory entries are zip-only noise.
+            if file.is_dir() {
+                continue;
+            }
+            // Valid UTF-8 bytes are read as UTF-8, anything else as CP437
+            // (zip 9; 2.x went by the entry's UTF-8 flag alone).
+            let name = file.name()?.into_owned();
+            // The declared size is only a HINT, bounded by what the
+            // compressed bytes could plausibly hold and by a fixed cap.
+            let hint = file
+                .size()
+                .min(remaining)
+                .min(PREALLOC_CAP)
+                .min(bytes.len() as u64 * 1032);
+            let mut data = Vec::with_capacity(hint as usize);
+            // Read at most one byte past the budget: reaching it means the
+            // entry (or the package) is larger than we will hold.
+            (&mut file).take(remaining + 1).read_to_end(&mut data)?;
+            if data.len() as u64 > remaining {
+                return Err(XlsxError::Budget(format!(
+                    "part {name} exceeds the {budget}-byte uncompressed budget"
+                )));
+            }
+            remaining -= data.len() as u64;
+            if name == CONTENT_TYPES_PART {
+                content_types = Some(ContentTypes::parse(&data)?);
+                parts.push(PartEntry::Modeled {
+                    name,
+                    kind: ModeledKind::ContentTypes,
+                    raw: data,
+                    dirty: false,
+                });
+            } else {
+                parts.push(PartEntry::Opaque { name, bytes: data });
+            }
+        }
+
+        let content_types = content_types
+            .ok_or_else(|| XlsxError::Structure(format!("missing {CONTENT_TYPES_PART}")))?;
+
+        // First occurrence wins, matching the scan it replaces.
+        let mut index = HashMap::with_capacity(parts.len());
+        for (i, p) in parts.iter().enumerate() {
+            index.entry(p.name().to_owned()).or_insert(i);
+        }
+        Ok(OpcContainer {
+            parts,
+            content_types,
+            dirty: false,
+            index,
+        })
+    }
+
+    /// The index of the part named `name`: the map's answer when it still
+    /// names that part, else a scan.
+    fn position(&self, name: &str) -> Option<usize> {
+        match self.index.get(name) {
+            Some(&i) if self.parts.get(i).is_some_and(|p| p.name() == name) => Some(i),
+            _ => self.parts.iter().position(|p| p.name() == name),
+        }
+    }
+
+    /// Find a part by exact name.
+    pub fn part(&self, name: &str) -> Option<&PartEntry> {
+        self.position(name).map(|i| &self.parts[i])
+    }
+
+    /// Find a part by exact name, mutably.
+    pub fn part_mut(&mut self, name: &str) -> Option<&mut PartEntry> {
+        self.position(name).map(|i| &mut self.parts[i])
+    }
+
+    /// Promote the part `name` (if present and still `Opaque`) to a
+    /// `Modeled` part of `kind`. No-op if absent or already modeled. Moves the
+    /// bytes (no copy).
+    pub fn promote(&mut self, name: &str, kind: ModeledKind) {
+        if let Some(idx) = self.position(name) {
+            if let PartEntry::Opaque { name, bytes } = &mut self.parts[idx] {
+                let (name, bytes) = (std::mem::take(name), std::mem::take(bytes));
+                self.parts[idx] = PartEntry::Modeled {
+                    name,
+                    kind,
+                    raw: bytes,
+                    dirty: false,
+                };
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn content_types_parse_defaults_and_overrides() {
+        let xml = br#"<?xml version="1.0"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/calcChain.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.calcChain+xml"/>
+</Types>"#;
+        let ct = ContentTypes::parse(xml).unwrap();
+        assert_eq!(ct.defaults.len(), 2);
+        assert_eq!(ct.defaults[0].0, "rels");
+        assert_eq!(ct.overrides.len(), 2);
+        assert!(ct.has_override("/xl/calcChain.xml"));
+        assert!(!ct.has_override("/xl/sharedStrings.xml"));
+    }
+}

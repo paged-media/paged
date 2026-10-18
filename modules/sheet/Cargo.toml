@@ -1,0 +1,93 @@
+# paged.sheet — Rust workspace. Crates live at REPO TOP LEVEL per the
+# spec (§4 of docs/concept.md), not under
+# crates/. references/ is NEVER a member (read-only clean-room mounts —
+# NOT mounted in T0). sheet-grid joins at M1 (T1, spec §8.1 — the
+# sheets-mode vector grid scene). sheet-chart joins at M2 Phase A (T2, spec
+# §8.4 — the chart model + pure geometry IR generator).
+[workspace]
+resolver = "2"
+members = [
+    "sheet-core",
+    "sheet-parser",
+    "sheet-calc",
+    "sheet-fn",
+    "sheet-format",
+    "sheet-xlsx",
+    "sheet-lower",
+    "sheet-grid",
+    "sheet-chart",
+    "sheet-js",
+    "sheet-conformance",
+]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.93"
+license = "AGPL-3.0-only OR LicenseRef-PMEL"
+publish = false
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "warn"
+
+[workspace.lints.clippy]
+needless_pass_by_value = "allow"
+too_many_arguments = "allow"
+
+[workspace.dependencies]
+thiserror = "2"
+compact_str = { version = "0.8", features = ["serde"] }
+smallvec = "1"
+rustc-hash = "2"
+serde = { version = "1", features = ["derive"] }
+# YAML for the build-time registry codegen (sheet-core / sheet-fn build.rs)
+# and the test-only coverage gate — never in the shipped wasm. serde_norway
+# is the maintained serde_yaml fork: serde_yaml is archived and its
+# unsafe-libyaml is flagged unmaintained (RUSTSEC-2024-0449); serde_norway
+# rides the maintained unsafe-libyaml-norway, with the same API.
+serde_norway = "0.9"
+# Chart layout engine (sheet-chart, spec §8.4). default-features = false keeps
+# ONLY plotters-core: the ChartBuilder/coordinate engine + the DrawingBackend
+# trait + the series helpers — NO bitmap/svg backend, NO font rasterizer
+# (ttf-parser/font-kit/ab_glyph), NO `image`. sheet-chart drives a CUSTOM
+# vector DrawingBackend that emits the frozen ChartGeometry IR; text metrics
+# are approximated in the backend (no font feature). The series helpers
+# (histogram/line/area/point) carry no extra deps.
+plotters = { version = "0.3", default-features = false, features = [
+    "histogram",
+    "line_series",
+    "area_series",
+    "point_series",
+] }
+plotters-backend = { version = "0.3", default-features = false }
+serde_json = "1"
+ryu = "1"
+# The XLSX container (OPC zip). 9.x fixes RUSTSEC-2026-0367/0368/0369; all
+# three are in `extract()`, which nothing here calls. Deflate only, through
+# flate2 on its Rust backend (miniz_oxide): the compressor zip 2.x's
+# `deflate` feature selected. zip 9's `deflate` feature switched to zlib-rs
+# (plus zopfli), whose deflate streams differ byte for byte, so it is not
+# used. flate2 below picks the backend; sheet-xlsx declares it so every
+# build that writes a package compiles the same compressor.
+zip = { version = "9.0.4", default-features = false, features = ["deflate-flate2"] }
+flate2 = { version = "1.1", default-features = false, features = ["rust_backend"] }
+# default-features = false is quick-xml's own default feature set (empty) made
+# explicit — sheet-xlsx uses only Reader/Writer/events (no serde `serialize`,
+# no `encoding`); shape matches plugin-data's pin. 0.41 clears the two
+# RUSTSEC advisories against 0.36.x (quadratic duplicate-attribute check +
+# unbounded NsReader namespace allocation).
+quick-xml = { version = "0.41", default-features = false }
+wasm-bindgen = "0.2"
+js-sys = "0.3"
+serde-wasm-bindgen = "0.6"
+console_error_panic_hook = "0.1"
+getrandom = { version = "0.3", features = ["wasm_js"] }
+proptest = "1"
+
+# wasm-opt is run by scripts/build-wasm.sh (binaryen pinned in CI — see
+# the binaryen reftypes gotcha; locally it is skipped when absent).
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1

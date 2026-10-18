@@ -1,0 +1,120 @@
+/*
+ * This file is part of paged (https://paged.media).
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// sheet.plugin.binding.metadata — the frame-binding envelope: round-trip
+// through make/parse, the fixed namespace key, and defensive rejection
+// of every malformed shape (a foreign/corrupt metadata blob degrades to
+// "not a sheet frame", never a crash).
+
+import { describe, expect, it } from "vitest";
+
+import {
+  BINDING_KEY,
+  BINDING_VERSION,
+  contentHash,
+  makeBinding,
+  parseBinding,
+} from "../src";
+
+describe("sheet_plugin_binding_metadata: key + version", () => {
+  it("the binding key is this plugin's own derived namespace", () => {
+    expect(BINDING_KEY).toBe("x-paged:media.paged.sheet");
+  });
+  it("the envelope version is 1", () => {
+    expect(BINDING_VERSION).toBe(1);
+  });
+});
+
+describe("sheet_plugin_binding_metadata: round-trip", () => {
+  it("make → parse is the identity for a valid binding", () => {
+    const b = makeBinding("Budget 2026", "A1:F40", 12);
+    expect(b).toEqual({
+      v: 1,
+      data: { sheet: "Budget 2026", range: "A1:F40", contentVersion: 12 },
+    });
+    expect(parseBinding(b)).toEqual(b);
+  });
+
+  it("survives JSON serialisation (the metadata carrier form)", () => {
+    const b = makeBinding("Sheet1", "B2:C9", 0);
+    expect(parseBinding(JSON.parse(JSON.stringify(b)))).toEqual(b);
+  });
+});
+
+describe("sheet_plugin_binding_metadata: rejects garbage", () => {
+  const garbage: Array<[string, unknown]> = [
+    ["null", null],
+    ["undefined", undefined],
+    ["a number", 42],
+    ["a string", "A1:B2"],
+    ["an array", [1, 2, 3]],
+    ["wrong version", { v: 2, data: { sheet: "S", range: "A1", contentVersion: 1 } }],
+    ["missing data", { v: 1 }],
+    ["data not an object", { v: 1, data: "A1" }],
+    ["missing sheet", { v: 1, data: { range: "A1", contentVersion: 1 } }],
+    ["sheet not a string", { v: 1, data: { sheet: 1, range: "A1", contentVersion: 1 } }],
+    ["missing range", { v: 1, data: { sheet: "S", contentVersion: 1 } }],
+    ["range not a string", { v: 1, data: { sheet: "S", range: 5, contentVersion: 1 } }],
+    ["contentVersion not a number", { v: 1, data: { sheet: "S", range: "A1", contentVersion: "x" } }],
+    ["contentVersion NaN", { v: 1, data: { sheet: "S", range: "A1", contentVersion: NaN } }],
+  ];
+
+  for (const [label, value] of garbage) {
+    it(`returns null for ${label}`, () => {
+      expect(parseBinding(value)).toBeNull();
+    });
+  }
+
+  it("strips extra fields — parse normalises to the contract shape", () => {
+    const dirty = {
+      v: 1,
+      data: { sheet: "S", range: "A1:B2", contentVersion: 3, extra: "ignored" },
+      stray: true,
+    };
+    expect(parseBinding(dirty)).toEqual({
+      v: 1,
+      data: { sheet: "S", range: "A1:B2", contentVersion: 3 },
+    });
+  });
+
+  it("carries a table record (Wave 9) and drops a malformed one, never the binding [sheet.plugin.persistence]", () => {
+    const table = { storyId: "Story/u9", tableId: "t3", hash: "0badf00d", widths: [40, 52.5] };
+    const b = makeBinding("S", "A1:B2", 4, table);
+    expect(parseBinding(JSON.parse(JSON.stringify(b)))).toEqual(b);
+    const bad = { v: 1, data: { sheet: "S", range: "A1:B2", contentVersion: 4, table: { storyId: 1 } } };
+    expect(parseBinding(bad)).toEqual({
+      v: 1,
+      data: { sheet: "S", range: "A1:B2", contentVersion: 4 },
+    });
+  });
+
+  it("a one-batch placement's record carries no ids; half a pair is malformed [sheet.plugin.persistence]", () => {
+    const table = { hash: "0badf00d", widths: [40] };
+    const b = makeBinding("S", "A1:B2", 4, table);
+    expect(parseBinding(JSON.parse(JSON.stringify(b)))).toEqual(b);
+    const half = { v: 1, data: { sheet: "S", range: "A1", contentVersion: 1, table: { storyId: "Story/u1", hash: "x", widths: [] } } };
+    expect(parseBinding(half)?.data.table).toBeUndefined();
+  });
+
+  it("contentHash is stable and content-sensitive [sheet.plugin.persistence]", () => {
+    const a = { rows: [{ cells: [{ text: "1" }] }] };
+    expect(contentHash(a)).toBe(contentHash(JSON.parse(JSON.stringify(a))));
+    expect(contentHash(a)).toMatch(/^[0-9a-f]{8}$/);
+    expect(contentHash({ rows: [{ cells: [{ text: "2" }] }] })).not.toBe(contentHash(a));
+  });
+});

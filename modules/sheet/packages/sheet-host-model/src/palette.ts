@@ -1,0 +1,405 @@
+/*
+ * This file is part of paged (https://paged.media).
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// THE WORKBOOK PALETTE — the document swatches paged.sheet mints, in one
+// place, so the panel that SHOWS them and the lowering that CREATES them
+// can never disagree about an id.
+//
+// WHY THIS FILE EXISTS AT ALL (ADR 023, the colour/scope proof consumer).
+// paged.sheet has been minting real document swatches from PRODUCTION
+// code for a long time — `chart.ts` emits one `createSwatch` per distinct
+// chart colour and `lower-to-mutations.ts` one per distinct data-bar
+// colour — because a `frameFillColor` takes a `Color/<id>` ref, not an
+// inline hex. What it never had was a SURFACE: no panel could show that
+// palette, rename an entry or recolour one, because the platform's only
+// two ways to put a panel on screen both mint a NEW panel. ADR 023's
+// binding-provider seam is that surface, and this module is the pure
+// half of it: workbook facts in, `SwatchSummary`/`SwatchSpec` out.
+//
+// THE ID CONVENTION IS THE CONTRACT. `Color/uPagedSheet<Facet><HEX>` is
+// deterministic and content-addressed, which is what makes one colour
+// reuse ONE swatch across primitives, across re-lowers, and — now —
+// across the panel. Both minting call sites were carrying their own copy
+// of the convention; a provider serving ids the lowering does not mint
+// would hand the host a swatch id core cannot resolve, so the two copies
+// became one and the lowering imports it from here.
+//
+// PURE. Data in, descriptors out — no host calls, no engine calls, no
+// spreadsheet semantics (the colours are DECIDED in Rust: `fill_rgb` /
+// `text_rgb` on `LoweredStyle`, the chart palette in `sheet-chart`).
+
+import type {
+  Mutation,
+  SwatchSpec,
+  SwatchSummary,
+} from "@paged-media/plugin-api";
+
+import type { ChartGeometry } from "./chart";
+import type { LoweredContent, LoweredStyle } from "./lowered";
+
+/** Which part of the workbook a palette colour came from. The facet is
+ *  part of the swatch ID, not decoration: a chart blue and a data-bar
+ *  blue are different document swatches on purpose, so recolouring the
+ *  chart palette does not silently move every conditional-format bar. */
+export type PaletteFacet = "chart" | "dataBar" | "cellFill" | "cellText" | "cellStroke";
+
+/** One entry of the workbook palette: a colour paged.sheet mints (or
+ *  would mint) as a document swatch.
+ *
+ *  `selfId` is a REAL document swatch id — the same one the lowering
+ *  emits — because the vocabulary rule obliges a binding provider to
+ *  serve core's own row shape, and because the host's colour chip is
+ *  resolved by a separate core RPC keyed on exactly this id. */
+export interface PaletteEntry {
+  selfId: string;
+  name: string;
+  facet: PaletteFacet;
+  /** Canonical uppercase 6-digit hex body, WITHOUT the leading `#`. */
+  hex: string;
+  /** 0..255 RGB channels — the IDML convention core's `SwatchSpec` takes. */
+  rgb: [number, number, number];
+}
+
+/** Normalise a `#RGB` / `#RRGGBB` (any case) to the canonical uppercase
+ *  6-digit body WITHOUT `#`, or `null` when it is not a well-formed hex
+ *  colour. A malformed colour degrades to "no swatch", never a throw —
+ *  the same defensive guard both minting call sites already had, now
+ *  shared so they cannot normalise differently. 3-digit shorthand
+ *  expands per CSS (`#abc` → `AABBCC`). */
+export function normalizePaletteHex(hex: string): string | null {
+  const m = /^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.exec(hex.trim());
+  if (!m) return null;
+  let body = m[1];
+  if (body.length === 3) {
+    body = body[0] + body[0] + body[1] + body[1] + body[2] + body[2];
+  }
+  return body.toUpperCase();
+}
+
+/** RGB channel triple (0..255) from a canonical 6-digit hex body. */
+export function paletteRgb255(canonHex: string): [number, number, number] {
+  return [
+    parseInt(canonHex.slice(0, 2), 16),
+    parseInt(canonHex.slice(2, 4), 16),
+    parseInt(canonHex.slice(4, 6), 16),
+  ];
+}
+
+/** The `u`-prefixed local part follows core's `Color/u<...>` minted-id
+ *  convention; the hex keeps it stable AND human-recognisable in the
+ *  Swatches panel. */
+const FACET_PREFIX: Record<PaletteFacet, string> = {
+  chart: "Color/uPagedSheetChart",
+  dataBar: "Color/uPagedSheetDataBar",
+  cellFill: "Color/uPagedSheetCellFill",
+  cellText: "Color/uPagedSheetCellText",
+  cellStroke: "Color/uPagedSheetCellStroke",
+};
+
+const FACET_LABEL: Record<PaletteFacet, string> = {
+  chart: "paged.sheet chart",
+  dataBar: "paged.sheet data bar",
+  cellFill: "paged.sheet cell fill",
+  cellText: "paged.sheet cell text",
+  cellStroke: "paged.sheet cell border",
+};
+
+/** THE deterministic document-swatch id for a workbook colour. The one
+ *  implementation — `chart.ts`, `lower-to-mutations.ts` and the binding
+ *  provider all route through it. */
+export function paletteSwatchId(facet: PaletteFacet, canonHex: string): string {
+  return `${FACET_PREFIX[facet]}${canonHex}`;
+}
+
+/** THE swatch NAME for a workbook colour, likewise shared. */
+export function paletteSwatchName(
+  facet: PaletteFacet,
+  canonHex: string,
+): string {
+  return `${FACET_LABEL[facet]} ${canonHex}`;
+}
+
+/** Build one palette entry from an already-canonical hex body. */
+export function paletteEntry(
+  facet: PaletteFacet,
+  canonHex: string,
+): PaletteEntry {
+  return {
+    selfId: paletteSwatchId(facet, canonHex),
+    name: paletteSwatchName(facet, canonHex),
+    facet,
+    hex: canonHex,
+    rgb: paletteRgb255(canonHex),
+  };
+}
+
+/** The DISTINCT chart colours (fills + strokes) across a chart geometry,
+ *  in first-appearance order, as canonical hex bodies. Deterministic —
+ *  the property `chart.ts`'s §8.4 swatch coherence rests on. */
+export function distinctChartHexes(geom: ChartGeometry): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const add = (c: string | null) => {
+    if (c == null) return;
+    const h = normalizePaletteHex(c);
+    if (h == null || seen.has(h)) return;
+    seen.add(h);
+    out.push(h);
+  };
+  for (const prim of geom.prims) {
+    switch (prim.kind) {
+      case "rect":
+        add(prim.fill);
+        add(prim.stroke);
+        break;
+      case "line":
+        add(prim.stroke);
+        break;
+      case "polygon":
+        add(prim.fill);
+        add(prim.stroke);
+        break;
+      case "wedge":
+        add(prim.fill);
+        add(prim.stroke);
+        break;
+      // text carries no fill/stroke colour in the IR.
+    }
+  }
+  return out;
+}
+
+/** The distinct data-bar colours across a lowered region, in
+ *  first-appearance order, as canonical hex bodies. */
+export function distinctDataBarHexes(content: LoweredContent): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const bar of content.databars ?? []) {
+    const h = normalizePaletteHex(bar.fill);
+    if (h == null || seen.has(h)) continue;
+    seen.add(h);
+    out.push(h);
+  }
+  return out;
+}
+
+/** The distinct colours a lowered region's STYLE TABLE carries on one
+ *  axis, in styles-table order, as canonical hex bodies. The default key
+ *  0 is skipped (it is never an override) and a malformed hex is dropped
+ *  — the same degrade-to-nothing guard the bar/chart lanes use. */
+function distinctStyleHexes(
+  content: LoweredContent,
+  pick: (s: LoweredStyle) => string | null | undefined,
+): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const style of content.styles ?? []) {
+    if (style.key === 0) continue;
+    const raw = pick(style);
+    if (raw == null) continue;
+    const h = normalizePaletteHex(raw);
+    if (h == null || seen.has(h)) continue;
+    seen.add(h);
+    out.push(h);
+  }
+  return out;
+}
+
+/** The distinct CELL FILL colours across a lowered region
+ *  (`LoweredStyle.fillRgb`), in styles-table order. These are the
+ *  colours `lower-to-table.ts` mints swatches for before referencing
+ *  them from a `cellFillColor`. */
+export function distinctCellFillHexes(content: LoweredContent): string[] {
+  return distinctStyleHexes(content, (s) => s.fillRgb);
+}
+
+/** The distinct cell BORDER colours across a lowered region (every edge of
+ *  `LoweredStyle.borderLines`), in styles-table order (Wave 6). */
+export function distinctCellStrokeHexes(content: LoweredContent): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const style of content.styles ?? []) {
+    if (style.key === 0) continue;
+    const l = style.borderLines;
+    for (const line of [l?.top, l?.right, l?.bottom, l?.left]) {
+      const h = line?.rgb == null ? null : normalizePaletteHex(line.rgb);
+      if (h == null || seen.has(h)) continue;
+      seen.add(h);
+      out.push(h);
+    }
+  }
+  return out;
+}
+
+/** The distinct CELL TEXT colours across a lowered region
+ *  (`LoweredStyle.textRgb`), in styles-table order. These are the
+ *  colours `lower-to-mutations.ts` mints swatches for before
+ *  referencing them from a `characterFillColor`. */
+export function distinctCellTextHexes(content: LoweredContent): string[] {
+  return distinctStyleHexes(content, (s) => s.textRgb);
+}
+
+/** What the palette is derived FROM. Both members are optional: a
+ *  chartless workbook still has data bars, and a table without
+ *  conditional formatting still has charts. */
+export interface PaletteSources {
+  /** Every parsed chart's geometry, in workbook chart order. */
+  charts?: readonly ChartGeometry[];
+  /** The lowered region(s) currently on the page — data bars live here. */
+  regions?: readonly LoweredContent[];
+}
+
+/**
+ * THE WORKBOOK PALETTE: every colour paged.sheet mints as a document
+ * swatch, deduped by swatch id, in a deterministic order (charts in
+ * chart order, then per region: data bars, then cell fills).
+ *
+ * CELL FILL IS IN HERE NOW, and that is a correction. The Swatches slice
+ * left it out with a stated reason: `lower-to-table.ts` passed
+ * `LoweredStyle.fillRgb` straight into a `{type:"colorRef"}` value, core
+ * resolves a colorRef by SWATCH ID (`Graphic::resolve`), so `#FFFF00`
+ * named nothing and serving it here would have been an unresolvable chip
+ * in a COLOUR panel. That reading was right, and a render settled it: a
+ * `cellFillColor` over a raw hex paints ZERO pixels. The native-table
+ * lowering now MINTS a real document swatch per distinct cell fill and
+ * references it by id, so those colours are part of the palette the
+ * lowering creates — exactly the set this function reports.
+ *
+ * CELL TEXT COLOUR IS STILL OUT, for the reason cell fill no longer is.
+ * `styleProps` names a `cellText` swatch and `cellTextSwatchOps` builds
+ * its mints, but NOTHING APPLIES THEM yet: `StyleEmission` is prepared
+ * for the S-04 doc-style-group path and no driver emits it. A cellText
+ * chip would therefore name a swatch no document has — the same lie,
+ * one axis over. It joins the palette when a caller applies the
+ * emissions.
+ */
+export function workbookPalette(sources: PaletteSources): PaletteEntry[] {
+  const byId = new Map<string, PaletteEntry>();
+  const push = (facet: PaletteFacet, canonHex: string) => {
+    const entry = paletteEntry(facet, canonHex);
+    if (!byId.has(entry.selfId)) byId.set(entry.selfId, entry);
+  };
+  for (const geom of sources.charts ?? []) {
+    for (const hex of distinctChartHexes(geom)) push("chart", hex);
+  }
+  for (const region of sources.regions ?? []) {
+    for (const hex of distinctDataBarHexes(region)) push("dataBar", hex);
+    for (const hex of distinctCellFillHexes(region)) push("cellFill", hex);
+    for (const hex of distinctCellStrokeHexes(region)) push("cellStroke", hex);
+  }
+  return [...byId.values()];
+}
+
+/**
+ * What the caller KNOWS about the swatches the document already carries:
+ *
+ *  - a `ReadonlySet` — the ids read from `document.collection("swatches")`;
+ *  - `null` — the read FAILED, so the document's swatches are UNKNOWN;
+ *  - omitted — the caller is not consulting the document at all (a pure
+ *    test, or a caller that knows the target is virgin).
+ *
+ * The type is deliberately the RETURN TYPE of the read door, so a driver
+ * can pass the read straight through and the ruling for each case lives
+ * in one place ([`swatchMintOps`]) instead of at every call site.
+ */
+export type KnownSwatchIds = ReadonlySet<string> | null;
+
+/**
+ * THE mint list for a set of palette colours: one `createSwatch` per
+ * colour the document does not already carry.
+ *
+ * ── THE HAZARD THIS EXISTS FOR ──────────────────────────────────────
+ *
+ * AN IDEMPOTENT-*LOOKING* MINT INSIDE A BATCH IS NOT IDEMPOTENT. Every
+ * swatch id here is content-addressed (`paletteSwatchId`), so re-running
+ * a lowering asks for the SAME ids — which reads like a harmless no-op
+ * and is not one. Core REFUSES a `createSwatch` whose `selfId` already
+ * exists (`OperationError::DuplicateNodeId`), and a refused child fails
+ * the WHOLE `Operation::Batch`: `apply_batch` rolls back every sibling
+ * already applied and returns `BatchFailed`. The damage is therefore
+ * never confined to the redundant mint — it is the entire batch.
+ *
+ * Measured against core's real engine (paged-run + the CPU rasterizer)
+ * over the exact ops this plugin emits:
+ *
+ *   chart 0 lowered, then lowered AGAIN   → 2nd batch applied:false,
+ *                                           scene nodes 18 → 18 (the
+ *                                           whole second chart lost)
+ *   chart 0, then a DIFFERENT chart       → 2nd batch applied:false
+ *                                           (they share the axis grey
+ *                                           `#888888`, so a workbook's
+ *                                           SECOND chart never landed)
+ *   the same batch minus its mints        → applied:true, 18 nodes,
+ *                                           art present but UNPAINTED
+ *
+ * That last row is the licence for the degradation below: a colorRef
+ * naming a swatch the document lacks does NOT reject the op — the paint
+ * lookup just misses. So dropping mints costs colour; keeping a
+ * duplicate mint costs everything.
+ *
+ * ── THE RULING ──────────────────────────────────────────────────────
+ *
+ * `knownSwatchIds === null` (the read failed) mints NOTHING. Minting
+ * blind risks a duplicate, and a duplicate takes the batch down with it;
+ * minting nothing costs only the colours, which is exactly the state the
+ * caller was in before it minted anything at all. NEVER GAMBLE THE BATCH
+ * TO SAVE A COLOUR.
+ *
+ * Any plugin that mints document resources inside a batch has this same
+ * exposure — swatches, styles, layers, anything core keys by id. Read
+ * first, mint only what is absent, and degrade the *resource* rather
+ * than the batch when you cannot read.
+ *
+ * PURE: data in, `Mutation[]` out.
+ */
+export function swatchMintOps(
+  facet: PaletteFacet,
+  canonHexes: readonly string[],
+  knownSwatchIds?: KnownSwatchIds,
+): Mutation[] {
+  // A failed read is not "the document has none" — see the ruling above.
+  if (knownSwatchIds === null) return [];
+  const ops: Mutation[] = [];
+  for (const canonHex of canonHexes) {
+    if (knownSwatchIds?.has(paletteSwatchId(facet, canonHex))) continue;
+    const spec: SwatchSpec = paletteEntryToSpec(paletteEntry(facet, canonHex));
+    ops.push({ op: "createSwatch", args: { spec } });
+  }
+  return ops;
+}
+
+/** Project a palette entry onto core's `swatches` ROW shape. `kind`
+ *  mirrors what core reports for a minted process colour, so the host's
+ *  one row renderer draws a provider row and a core row identically —
+ *  the vocabulary rule applied to collections. */
+export function paletteEntryToSummary(entry: PaletteEntry): SwatchSummary {
+  return { selfId: entry.selfId, name: entry.name, kind: "process" };
+}
+
+/** Project a palette entry onto core's `SwatchSpec` — the payload
+ *  `createSwatch` / `editSwatch` carry. RGB process at 0..255 channels
+ *  (the IDML convention core expects). */
+export function paletteEntryToSpec(entry: PaletteEntry): SwatchSpec {
+  return {
+    selfId: entry.selfId,
+    name: entry.name,
+    space: "RGB",
+    value: [...entry.rgb],
+    model: "Process",
+  };
+}

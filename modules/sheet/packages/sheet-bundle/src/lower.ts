@@ -1,0 +1,2018 @@
+/*
+ * This file is part of paged (https://paged.media).
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// The NATIVE-TABLE page lower (S-03 RESOLVED; spec §8.2). The engine
+// lowers the range to the IR (Rust), the host-model translators turn it
+// into wire ops (pure), and THIS module drives the host writes — the
+// only place in the bundle that calls host.document.mutate.
+//
+// TWO LANES:
+//
+//   native-table (DEFAULT) — two batches:
+//     1 — mutate(batch): insertTextFrame + bindCreated + setPluginMetadata
+//       (binding) + insertTable into the frame's story (`$h:f`, C-15
+//       handles), sized by font metrics (S-13); the outcome mints the
+//       table, whose id carries the story. No drawn rules: the table
+//       carries its own cell edges.
+//     2 — mutate(batch): the table's whole content — swatch + character-
+//       style mints, the cell pour (insertText per cell via TextCellAddr;
+//       core takes text ops in a batch since v0.61), the decor (setCellSpan
+//       per merge, cellFillColor + cell*EdgeStrokeWeight via tableCell-
+//       scoped setElementProperty) and the cell text styles.
+//     A host that refuses the first batch gets the PHASED placement (frame
+//     batch, insertTable, content batch).
+//     On a protocol-66 host (core resolves a table handle in a `tableId`
+//     position) both batches are ONE: see `placeInOneCall`.
+//
+//   tab-text (EXPLICIT FALLBACK, spec §2.2 degradation) — the retained
+//     two-phase lane (lower-to-mutations.ts): frame + drawn rules +
+//     binding, then the tab/newline text pour. Selected via the `lane`
+//     option, and used at runtime when a host REJECTS insertTable (an
+//     older wire) — the degradation stays available and tested.
+//
+// RESOLVING THE STORY (the read door). plugin-api exposes no direct
+// frame→story lookup (SceneTreeNode/collections don't carry it); the
+// available door that DOES is `host.document.hitTest`, whose HitResult
+// carries `storyId`. So we hit-test the new frame's centre to recover
+// its story. This mirrors how a created element is re-resolved through a
+// read door (plugin-web re-reads its created frame via getMetadata; here
+// the needed datum is the story, and hitTest is the door that yields it).
+
+import type {
+  BundleHost,
+  Disposable,
+  ElementId,
+  Mutation,
+  MutationOutcome,
+  PageId,
+  PageSummary,
+} from "@paged-media/plugin-api";
+import {
+  BINDING_KEY,
+  cellFillSwatchOps,
+  contentHash,
+  defaultPlacement,
+  joinText,
+  lowerToMutations,
+  makeBinding,
+  pageTableMutations,
+  tableCellOps,
+  tableDecorOps,
+  tableInsertOp,
+  offsetTableRows,
+  tableRefreshOps,
+  tableDataBarOps,
+  cellAlignApplies,
+  cellAlignStyleMints,
+  cellsNeedingRealign,
+  needsAlignStyles,
+  cellCharacterStyleApplies,
+  cellCharacterStyleMints,
+  cellCharacterStyles,
+  cellsNeedingRestyle,
+  cellTextSwatchOps,
+  ENGINE_DEFAULT_SIZE_PT,
+  MAX_HEIGHT_PT,
+  tableFrameHeightPt,
+  type LoweredContent,
+  type LoweredStyle,
+  type Page,
+  type Placement,
+  type TableFit,
+} from "../../sheet-host-model/src";
+
+import type { FrameBox, SheetEngine } from "./engine";
+import {
+  beforeMint,
+  deleteTableOp,
+  doors66,
+  geometryStoryId,
+  isUnknownVariant,
+  mintedElements,
+  noteMinted,
+  tableHandlesLikely,
+} from "./protocol66";
+import { readKnownSwatchIds } from "./swatch-mints";
+
+/**
+ * The point size an un-styled lowered cell RENDERS at.
+ *
+ * Not a preference — a coupling. `styleProps` emits
+ * `characterFontSize` only when the workbook's style carries a size, so a
+ * cell without one is poured as a bare run and the engine sizes it from
+ * the document default (`PipelineOptions::default_point_size`, 12 pt;
+ * `[No paragraph style]` in a generated fixture agrees). Measuring at any
+ * other number sizes the column for text nobody renders.
+ *
+ * It was 11 — Excel's Calibri default, the size the writer WISHED for and
+ * never wrote. Every column came out 12/11 = 9% too narrow, which the
+ * flat `CELL_INSET_PT` hid for every string under ~44 pt. Measured
+ * through the real host door on the showcase's workbook: "Region"
+ * measured 35.84 pt at 11 and renders 39.11 pt at 12 — 0.73 pt of the
+ * inset left, so it fits; "Revenue" measured 44.91 and renders 49.02 in a
+ * 48.91 pt column, overflowing by 0.11 pt, so the second column's own
+ * header wrapped.
+ */
+export const DEFAULT_CELL_POINT_SIZE = 12;
+
+/** The face and size a lowered cell is poured at — the key its metrics are
+ *  measured under. Both fallbacks are the rule {@link measureColumnWidths}
+ *  states: `""` for the family (the engine's default-face resolution) and
+ *  {@link DEFAULT_CELL_POINT_SIZE} for the size. */
+function faceOf(style: LoweredStyle | null): { family: string; style: string | null; sizePt: number } {
+  return {
+    family: style?.fontName ?? "",
+    style: style?.bold || style?.italic ? "Bold" : null,
+    sizePt: style?.fontSizePt ?? DEFAULT_CELL_POINT_SIZE,
+  };
+}
+
+const faceKey = (f: { family: string; style: string | null; sizePt: number }): string =>
+  `${f.family}|${f.style ?? ""}|${f.sizePt}`;
+
+/** What one column measurement pass learns: the widths, and the vertical
+ *  metrics the engine's layout of the table will use ({@link TableFit}). */
+export interface MeasuredColumns {
+  widths: number[];
+  fit: TableFit;
+}
+
+/** Per-column width (pt) from the document's font metrics (S-13). For
+ *  each column, measure the widest formatted cell text via the host
+ *  shaper and add a small inset; fall back to the IR's char-based width
+ *  when the shaper is unwired or yields nothing. Keeps the page table and
+ *  any future grid view resolving to the SAME widths (the §8.3
+ *  cross-surface-consistency requirement).
+ *
+ *  The measurement must ask for the face and size the POUR will actually
+ *  use, or the width is a measurement of a different document. Both
+ *  fallbacks below are that rule: `""` for the family (the engine's own
+ *  default-face resolution, which is what a bare run gets) and
+ *  {@link DEFAULT_CELL_POINT_SIZE} for the size.
+ *
+ *  The SAME calls answer the table's height: every measurement carries the
+ *  face's ascender, which is what the engine sets a one-line cell's first
+ *  baseline — and the blank line it leaves above a placed table — on
+ *  ({@link TableFit}, `placement.ts`). No call is added for it. */
+export async function measureColumns(
+  host: BundleHost,
+  content: LoweredContent,
+): Promise<MeasuredColumns> {
+  const styleOf = (key: number | undefined) =>
+    key == null ? null : (content.styles ?? []).find((s) => s.key === key) ?? null;
+  const CELL_INSET_PT = 4; // left+right padding inside a cell
+  /** Ascender (pt) per measured face key. */
+  const ascenders = new Map<string, number>();
+
+  const widths = await Promise.all(
+    content.cols.map(async (col) => {
+      let widest = "";
+      let style: ReturnType<typeof styleOf> = null;
+      for (const row of content.rows) {
+        for (const cell of row.cells) {
+          if (cell.col === col.index && cell.text.length > widest.length) {
+            widest = cell.text;
+            style = styleOf(cell.styleKey);
+          }
+        }
+      }
+      if (widest.length === 0) return col.widthPt;
+      const face = faceOf(style);
+      const metrics = await host.text.measureString(face.family, face.style, widest, face.sizePt);
+      if (Number.isFinite(metrics.ascender) && metrics.ascender > 0) {
+        ascenders.set(faceKey(face), metrics.ascender);
+      }
+      const measured = metrics.advance + CELL_INSET_PT;
+      return measured > 0 ? measured : col.widthPt;
+    }),
+  );
+
+  // A face nobody measured is scaled from the measured ones — by the
+  // TALLEST ascender per point, so an unmeasured cell is never assumed
+  // shorter than a measured one — and, with nothing measured at all, from
+  // the engine's own metric-less estimate (an ascender of 0.8 em).
+  let perPt = 0;
+  for (const [key, asc] of ascenders) {
+    const size = Number(key.slice(key.lastIndexOf("|") + 1));
+    if (size > 0) perPt = Math.max(perPt, asc / size);
+  }
+  if (perPt === 0) perPt = 0.8;
+  const ascenderOf = (face: { family: string; style: string | null; sizePt: number }) =>
+    ascenders.get(faceKey(face)) ?? perPt * face.sizePt;
+  const fit: TableFit = {
+    defaultAscenderPt: ascenderOf({ family: "", style: null, sizePt: ENGINE_DEFAULT_SIZE_PT }),
+    cellAscenderPt: (r, c) => {
+      const cell = content.rows[r]?.cells.find((x) => x.col === c);
+      return ascenderOf(faceOf(cell ? styleOf(cell.styleKey) : null));
+    },
+  };
+  return { widths, fit };
+}
+
+/** The column widths alone ({@link measureColumns}). */
+async function measureColumnWidths(
+  host: BundleHost,
+  content: LoweredContent,
+): Promise<number[]> {
+  return (await measureColumns(host, content)).widths;
+}
+
+/** `placement` with its height replaced by the height of the native table
+ *  the engine lays out for `content` (clamped like every default placement);
+ *  its page, top, left and width stand. */
+export function fittedPlacement(
+  placement: Placement,
+  content: LoweredContent,
+  fit: TableFit,
+): Placement {
+  const [top, left, , right] = placement.bounds;
+  const height = Math.min(tableFrameHeightPt(content, fit), MAX_HEIGHT_PT);
+  return { pageId: placement.pageId, bounds: [top, left, top + height, right] };
+}
+
+/** The active page id (meta first, else the first page). Mirrors
+ *  plugin-web's `activePageId`. */
+async function activePageId(host: BundleHost): Promise<PageId | null> {
+  const meta = await host.document.meta();
+  if (meta.activePage) return meta.activePage;
+  const pages = await host.document.collection<{ selfId: string }>("pages");
+  return pages.length > 0 ? pages[0].selfId : null;
+}
+
+/** Where the current selection sits (Wave 4 — new frames land at the
+ *  selection instead of a fixed 24 pt from the page origin): the page and
+ *  page-local top-left of the FIRST selected element, its content box
+ *  carried through its item transform. Null with nothing selected, or when
+ *  the element is on the pasteboard (no page). */
+export async function selectionAnchor(
+  host: BundleHost,
+): Promise<{ pageId: PageId; top: number; left: number } | null> {
+  let selected: ElementId[];
+  try {
+    selected = host.selection.get();
+  } catch {
+    return null;
+  }
+  const first = selected.find(
+    (id) => id.kind !== "storyRange" && id.kind !== "table" && id.kind !== "tableCell",
+  );
+  if (!first) return null;
+  let geom: Awaited<ReturnType<BundleHost["document"]["elementGeometry"]>>;
+  try {
+    geom = await host.document.elementGeometry([first]);
+  } catch {
+    return null;
+  }
+  const g = geom[0];
+  if (!g || !g.pageId) return null;
+  const [top, left] = g.bounds;
+  const [a, b, c, d, tx, ty] = g.itemTransform ?? [1, 0, 0, 1, 0, 0];
+  return { pageId: g.pageId, left: a * left + c * top + tx, top: b * left + d * top + ty };
+}
+
+/** The page-space box of the FIRST selected element (its content box
+ *  carried through its item transform — all four corners, so a rotated
+ *  element's box is its true extent). Null with nothing selected, or when
+ *  the element is on the pasteboard (no page). */
+export async function selectionBox(
+  host: BundleHost,
+): Promise<{ pageId: PageId; top: number; left: number; bottom: number; right: number } | null> {
+  let selected: ElementId[];
+  try {
+    selected = host.selection.get();
+  } catch {
+    return null;
+  }
+  const first = selected.find(
+    (id) => id.kind !== "storyRange" && id.kind !== "table" && id.kind !== "tableCell",
+  );
+  if (!first) return null;
+  let geom: Awaited<ReturnType<BundleHost["document"]["elementGeometry"]>>;
+  try {
+    geom = await host.document.elementGeometry([first]);
+  } catch {
+    return null;
+  }
+  const g = geom[0];
+  if (!g || !g.pageId) return null;
+  const [top, left, bottom, right] = g.bounds;
+  const [a, b, c, d, tx, ty] = g.itemTransform ?? [1, 0, 0, 1, 0, 0];
+  const xs: number[] = [];
+  const ys: number[] = [];
+  for (const [x, y] of [
+    [left, top],
+    [right, top],
+    [right, bottom],
+    [left, bottom],
+  ]) {
+    xs.push(a * x + c * y + tx);
+    ys.push(b * x + d * y + ty);
+  }
+  return {
+    pageId: g.pageId,
+    top: Math.min(...ys),
+    left: Math.min(...xs),
+    bottom: Math.max(...ys),
+    right: Math.max(...xs),
+  };
+}
+
+/** Whether a selection on `selectionPage` still places new content, the
+ *  user being on `activePage`. New content goes where the user is: a
+ *  selection counts while it is on the active page's spread (a spread
+ *  view's other page included), and not once the view has moved to another
+ *  spread. Selected on page 12 and scrolled to page 40, the frame belongs
+ *  on page 40, as InDesign places onto the spread in view; placed beside
+ *  the selection instead, it landed on a page nobody was looking at. With
+ *  no active page known, or no spread to compare, the selection counts. */
+export function selectionIsInView(
+  pages: readonly Pick<PageSummary, "selfId" | "spreadId">[],
+  selectionPage: PageId,
+  activePage: PageId | null,
+): boolean {
+  if (!activePage || activePage === selectionPage) return true;
+  const spreadOf = (id: PageId) => pages.find((p) => p.selfId === id)?.spreadId ?? null;
+  const active = spreadOf(activePage);
+  const selected = spreadOf(selectionPage);
+  if (active === null || selected === null) return true;
+  return active === selected;
+}
+
+/** {@link selectionIsInView}, reading the pages only when the selection is
+ *  on another page than the active one. */
+async function selectionCounts(
+  host: BundleHost,
+  selectionPage: PageId,
+  activePage: PageId | null,
+): Promise<boolean> {
+  if (!activePage || activePage === selectionPage) return true;
+  try {
+    const pages = await host.document.collection<PageSummary>("pages");
+    return selectionIsInView(pages, selectionPage, activePage);
+  } catch {
+    return true;
+  }
+}
+
+/** A placement for `content` at the current selection, or the default one
+ *  on the active page when nothing usable is selected, or the selection is
+ *  on another spread ({@link selectionIsInView}). */
+export async function placementForContent(
+  host: BundleHost,
+  content: LoweredContent,
+): Promise<Placement | null> {
+  const at = await selectionAnchor(host);
+  const active = (await host.document.meta()).activePage ?? null;
+  if (at && (await selectionCounts(host, at.pageId, active))) {
+    const sized = defaultPlacement(at.pageId, content).bounds;
+    const h = sized[2] - sized[0];
+    const w = sized[3] - sized[1];
+    return { pageId: at.pageId, bounds: [at.top, at.left, at.top + h, at.left + w] };
+  }
+  // `meta` is read once: with no active page the first page, as
+  // `activePageId` falls back.
+  const pageId =
+    active ?? (await host.document.collection<{ selfId: string }>("pages"))[0]?.selfId ?? null;
+  return pageId ? defaultPlacement(pageId, content) : null;
+}
+
+/** The bare `table_id` STRING from a created Table ElementId. `insertTable`
+ *  mints a Table addressed by `{ kind: "table", id: { story_id, table_id } }`
+ *  (the wire ElementId::Table is a STRUCTURED id, not a string). The
+ *  cell-addressing ops — `insertText.cell.tableId` and the `tableCell`
+ *  ElementId — need the bare `table_id`. Reading `createdId.id` as a string
+ *  (the old bug) nested the whole `{story_id, table_id}` object as `table_id`,
+ *  so the engine rejected the cell pour with "invalid type: map, expected a
+ *  string" and the table rendered BLANK. Narrow on `kind` to extract it. */
+function tableIdOf(created: ElementId): string {
+  if (created.kind === "table") {
+    return created.id.table_id;
+  }
+  // Defensive: a host minting a bare-string table id (none does today).
+  return created.id as unknown as string;
+}
+
+/** Raw frame id from a created ElementId (the hitTest filter / text ops
+ *  key off the string id). */
+function frameIdOf(id: ElementId): string | null {
+  if (id.kind === "textFrame" || id.kind === "rectangle") {
+    return id.id as string;
+  }
+  return null;
+}
+
+/** Everything a native table's content needs, as ONE op list: the swatch
+ *  mints (cell fills + cell text colours), the character-style mints, the
+ *  cell text pour, the decor (merges → `setCellSpan`, style fills + grid
+ *  rules → `tableCell`-scoped `setElementProperty`) and the per-cell
+ *  character-style applies.
+ *
+ *  Core applies text ops inside a `Mutation::Batch` as one undo step
+ *  since v0.61 and rebuilds once per batch since v0.63, so the content of
+ *  a table is ONE `mutate` (it was one per cell: 1000 round trips and
+ *  1000 rebuilds for a 50×20 range).
+ *
+ *  The mints LEAD: a `cellFillColor` colorRef / an `applyStyle` names an
+ *  id, and a cell whose swatch does not exist is left UNPAINTED by the
+ *  renderer. Reads happen only when there is something to mint, and a
+ *  FAILED read mints nothing (`null` known-set): core refuses a duplicate
+ *  `createSwatch` / `createCharacterStyle`, and the refusal would fail the
+ *  whole batch — text included. Fill and text swatches never collide
+ *  (their palette ids carry the facet). */
+async function tableContentOps(
+  host: BundleHost,
+  content: LoweredContent,
+  storyId: string,
+  tableId: string,
+): Promise<{ ops: Mutation[]; styleOps: Mutation[] }> {
+  const pour = tableCellOps(content, storyId, tableId);
+  const pourOps = pour.op === "batch" ? pour.args.ops : [pour];
+  const decor = tableDecorOps(content, storyId, tableId);
+  if (decor.unmappedRules > 0) {
+    host.log.warn(
+      `lower: ${decor.unmappedRules} grid rule(s) aligned to no cell boundary ` +
+        "(not drawn natively)",
+    );
+  }
+  const wantsFills = cellFillSwatchOps(content).length > 0;
+  const wantsText = cellCharacterStyles(content).size > 0;
+  const wantsAlign = needsAlignStyles(content);
+  const [swatches, styles, paragraphs] = await Promise.all([
+    wantsFills || wantsText ? readKnownSwatchIds(host) : Promise.resolve(undefined),
+    wantsText ? readKnownCharacterStyleIds(host) : Promise.resolve(null),
+    wantsAlign ? readKnownParagraphStyleIds(host) : Promise.resolve(null),
+  ]);
+  const fillMints = wantsFills ? cellFillSwatchOps(content, swatches) : [];
+  const styleOps = [
+    ...(wantsText
+      ? [
+          ...cellTextSwatchOps(content, swatches),
+          ...cellCharacterStyleMints(content, styles),
+          ...cellCharacterStyleApplies(content, storyId, tableId),
+        ]
+      : []),
+    // Wave 9: horizontal alignment — numbers right, centred cells centred.
+    ...(wantsAlign
+      ? [
+          ...cellAlignStyleMints(content, paragraphs),
+          ...cellAlignApplies(content, storyId, tableId, {
+            available: paragraphs === null ? new Set() : undefined,
+          }),
+        ]
+      : []),
+  ];
+  return { ops: [...fillMints, ...pourOps, ...decor.ops], styleOps };
+}
+
+/** Where a native table's data bars are drawn (Wave 9): the page and the
+ *  frame's page-local top-left, and the table's column widths. */
+export interface BarPlacement {
+  pageId: PageId;
+  origin: [number, number];
+  widths: readonly number[];
+}
+
+/** The ops that draw `content`'s data bars at `at` (their colour mints read
+ *  first), or none. */
+async function barOps(
+  host: BundleHost,
+  content: LoweredContent,
+  at: BarPlacement | undefined,
+): Promise<Mutation[]> {
+  if (!at || (content.databars ?? []).length === 0) return [];
+  return tableDataBarOps(content, at.widths, at.pageId, at.origin, await readKnownSwatchIds(host));
+}
+
+const isPolygon = (id: ElementId) => id.kind === "polygon";
+
+/** Pour a native table's content (see {@link tableContentOps}) as ONE
+ *  `mutate`, with its data bars (Wave 9: drawn under the frame, their ids
+ *  read back from `minted` or a scene-tree diff) and the caller's `tail`.
+ *  Should core refuse the combined batch, the content is retried in its two
+ *  lanes — text + decor + bars, then the cell text styles — so a style
+ *  refusal never costs the cell text. */
+async function pourCellContent(
+  host: BundleHost,
+  content: LoweredContent,
+  storyId: string,
+  tableId: string,
+  tail: readonly Mutation[] = [],
+  bars?: BarPlacement,
+): Promise<{ calls: number; barIds: ElementId[] }> {
+  const { ops, styleOps } = await tableContentOps(host, content, storyId, tableId);
+  const drawn = await barOps(host, content, bars);
+  const before = drawn.length > 0 ? await beforeMint(host) : null;
+  const lane1 = [...ops, ...drawn, ...tail];
+  const all = [...lane1, ...styleOps];
+  if (all.length === 0) return { calls: 0, barIds: [] };
+  const r = await host.document.mutate({ op: "batch", args: { ops: all } });
+  if (r.applied) {
+    const barIds = drawn.length > 0 ? await mintedElements(host, r, before, isPolygon) : [];
+    return { calls: 1, barIds };
+  }
+  host.log.warn("lower: table content batch rejected — retrying per lane", r);
+  let calls = 1;
+  let barIds: ElementId[] = [];
+  for (const [lane, what] of [
+    [lane1, "cell text + decor"],
+    [styleOps, "cell text styles"],
+  ] as const) {
+    if (lane.length === 0) continue;
+    calls += 1;
+    const t = await host.document.mutate({ op: "batch", args: { ops: [...lane] } });
+    if (!t.applied) host.log.warn(`lower: ${what} rejected`, t);
+    else if (lane === lane1 && drawn.length > 0) {
+      barIds = await mintedElements(host, t, before, isPolygon);
+    }
+  }
+  return { calls, barIds };
+}
+
+/** The binding a placed native table's frame carries (Wave 9): the sheet,
+ *  range and content version, plus the table record a LATER session finds
+ *  it by — its story and table ids, the hash of what it shows, its column
+ *  widths. One `setPluginMetadata`, meant to ride the batch that wrote the
+ *  content it describes. */
+export function tableBindingStamp(
+  frameId: string,
+  sheetName: string,
+  range: string,
+  contentVersion: number,
+  storyId: string,
+  tableId: string,
+  content: LoweredContent,
+  widths: readonly number[],
+): Mutation {
+  return {
+    op: "setPluginMetadata",
+    args: {
+      elementId: { kind: "textFrame", id: frameId },
+      key: BINDING_KEY,
+      value: JSON.stringify(
+        makeBinding(sheetName, range, contentVersion, {
+          storyId,
+          tableId,
+          hash: contentHash(content),
+          widths: [...widths],
+        }),
+      ),
+    },
+  };
+}
+
+/** The document's paragraph-style ids, or null when the read failed. */
+async function readKnownParagraphStyleIds(
+  host: BundleHost,
+): Promise<Set<string> | null> {
+  try {
+    const rows = await host.document.collection<{ selfId: string }>("paragraphStyles");
+    return new Set(rows.map((r) => r.selfId));
+  } catch (err) {
+    host.log.warn("cell alignment: paragraph-style read failed", err);
+    return null;
+  }
+}
+
+/** The document's character-style ids, or null when the read failed. */
+async function readKnownCharacterStyleIds(
+  host: BundleHost,
+): Promise<Set<string> | null> {
+  try {
+    const rows = await host.document.collection<{ selfId: string }>("characterStyles");
+    return new Set(rows.map((r) => r.selfId));
+  } catch (err) {
+    host.log.warn("cell text styles: character-style read failed", err);
+    return null;
+  }
+}
+
+/** Which translation lane the page lower drives. `native-table` (the
+ *  default) emits a real Paged `<Table>`; `tab-text` is the retained
+ *  spec §2.2 degradation (tab-aligned text + drawn rules). */
+export type LowerLane = "native-table" | "tab-text";
+
+/** What a successful native-table lowering produced — the frame, its
+ *  resolved story, and the minted table id (S-04: the cell-style consumer
+ *  addresses this table's cells). Reported via [`LowerLaneOptions.onLowered`]
+ *  so the return type (the frame id string) stays unchanged for existing
+ *  callers. */
+export interface LoweredTableInfo {
+  frameId: string;
+  storyId: string;
+  tableId: string;
+  sheet: number;
+  range: string;
+  /** The page the frame was placed on. */
+  pageId?: PageId;
+  /** What the table currently shows — the baseline a refresh diffs from
+   *  (Wave 4: placed tables refresh in place after edits). Undefined for a
+   *  table a later session rediscovered whose page content is not the
+   *  workbook's lowering (Wave 9): a refresh replaces it whole. */
+  content?: LoweredContent;
+  /** The column widths the table was sized with. */
+  columnWidths?: number[];
+  /** The workbook content version this table reflects (also in its
+   *  binding metadata). */
+  contentVersion?: number;
+  /** The data-bar paths drawn under the table (Wave 9) — a refresh deletes
+   *  and redraws them. */
+  barIds?: ElementId[];
+  /** The header rows the host added above the workbook's rows
+   *  (`insertHeaderRow`), as the engine last reported them: a refresh
+   *  writes the workbook's row 0 to the table's row `headerRows`, so the
+   *  band is kept. Absent: none (the engine reports bands since core
+   *  v0.71.13; on an older one a banded table is replaced). */
+  headerRows?: number;
+}
+
+/** Lane options for [`lowerSelectionToFrame`]. */
+export interface LowerLaneOptions {
+  /** Force a lane; default `"native-table"`. The tab-text fallback also
+   *  engages at runtime when the host rejects `insertTable`. */
+  lane?: LowerLane;
+  /** Called when a NATIVE TABLE landed (not the tab-text fallback) with the
+   *  resolved frame/story/table ids — lets the session record the lowered
+   *  table so a later "new style from cell" can address its cells (S-04).
+   *  Never called on the fallback (no native table to address). */
+  onLowered?: (info: LoweredTableInfo) => void;
+  /** Where the frame lands (Wave 4: the session places at the current
+   *  selection); default `defaultPlacement` on the active page. */
+  placement?: Placement;
+  /** Size the frame's HEIGHT to the native table the engine lays out
+   *  ({@link fittedPlacement}) rather than taking `placement`'s. Default:
+   *  true when no `placement` is given (a fresh default placement); a
+   *  caller that passes one says whether its height is a box to keep (a
+   *  re-placement where the frame stood) or only an estimate (a fresh
+   *  placement at the selection). */
+  fitHeight?: boolean;
+  /** The workbook content version recorded in the binding (default 0). */
+  contentVersion?: number;
+  /** The page lowering of the range when the caller already has it (the
+   *  session lowers once to size the placement) — saves a second engine
+   *  call. */
+  content?: LoweredContent;
+  /** Select the placed frame (default true; a background re-placement
+   *  leaves the user's selection alone). */
+  select?: boolean;
+}
+
+/** The PAGE lowering of a range: real styles + conditional formatting
+ *  (`getRangePage`, Wave 4), falling back to the frozen key-0 door on an
+ *  engine that predates it. */
+export function pageContent(
+  engine: SheetEngine,
+  sheet: number,
+  range: string,
+): LoweredContent {
+  return engine.getRangePage
+    ? engine.getRangePage(sheet, range, { includeGridRules: true })
+    : engine.getRangeLowered(sheet, range, { includeGridRules: true });
+}
+
+/**
+ * Lower `sheet`/`range` to a fresh page frame. Engine computes the IR;
+ * the translators (pure) shape the mutations; this drives the host
+ * writes. Returns the created frame's raw id, or null on any failure
+ * (mutate-never-throws: outcomes are checked, not caught).
+ */
+/** Snapshot the document's story ids (the `stories` collection). */
+export async function storyIdsSnapshot(host: BundleHost): Promise<Set<string>> {
+  const items = await host.document.collection<{ selfId: string }>("stories");
+  return new Set(items.map((s) => s.selfId));
+}
+
+/** Resolve a JUST-CREATED frame's story by DIFFING the stories
+ *  collection across the insert. The hitTest read door reports
+ *  `storyId: null` for an EMPTY text frame (verified against the real
+ *  engine — the text hit path needs content), so the only working
+ *  resolution today is the before/after diff: exactly one new story id
+ *  belongs to the new frame. The proper frame→story read door is named
+ *  in the cross-repo RFI (v43 batch candidate). */
+async function newStoryId(
+  host: BundleHost,
+  before: ReadonlySet<string>,
+): Promise<string | null> {
+  const after = await host.document.collection<{ selfId: string }>("stories");
+  const fresh = after
+    .map((s) => s.selfId)
+    .filter((id) => !before.has(id));
+  return fresh.length === 1 ? fresh[0] : null;
+}
+
+export async function lowerSelectionToFrame(
+  host: BundleHost,
+  engine: SheetEngine,
+  sheet: number,
+  range: string,
+  opts?: LowerLaneOptions,
+): Promise<string | null> {
+  const pageId = opts?.placement?.pageId ?? (await activePageId(host));
+  if (!pageId) {
+    host.log.warn("lower: no page to place the sheet frame into");
+    return null;
+  }
+
+  // Engine-computed IR (all spreadsheet semantics in Rust): the PAGE door —
+  // the workbook's real fills/borders with conditional formatting folded on
+  // top (Wave 4; until then this read the frozen key-0 door and every
+  // placed table came out unstyled).
+  const content = opts?.content ?? pageContent(engine, sheet, range);
+  const sheetInfo = engine.listSheets().find((s) => s.id === sheet);
+  const sheetName = sheetInfo ? sheetInfo.name : String(sheet);
+
+  let placement = opts?.placement ?? defaultPlacement(pageId, content);
+  // The session's workbook revision (Wave 4) — a refresh rewrites it.
+  const contentVersion = opts?.contentVersion ?? 0;
+  const binding = makeBinding(sheetName, range, contentVersion);
+
+  if (opts?.lane === "tab-text") {
+    return lowerTabTextToFrame(host, content, placement, binding);
+  }
+
+  // Sized by font metrics (S-13) — the content alone decides the widths,
+  // so they are measured BEFORE anything is written. The same measurements
+  // size the frame's height to the table the engine will lay out: a frame
+  // as tall as the workbook's rows cannot hold them (the engine starts the
+  // table one line down, and grows a row to its tallest cell).
+  const { widths: columnWidths, fit } = await measureColumns(host, content);
+  if (opts?.fitHeight ?? !opts?.placement) {
+    placement = fittedPlacement(placement, content, fit);
+  }
+
+  if (tableHandlesLikely(host)) {
+    const one = await placeInOneCall(host, content, pageId, placement, columnWidths, {
+      ...opts,
+      sheet,
+      range,
+      contentVersion,
+      sheetName,
+    });
+    if (one !== REFUSED) return one;
+  }
+
+  // ONE batch: the frame, its binding and the native table (C-15 handles,
+  // core v0.64: `$h:f` in the table's `storyId` position is the story the
+  // frame insert minted). The batch reports the LAST id minted — the
+  // table, whose structured id carries its story; the frame is that
+  // story's (only) chain link.
+  const placed = await host.document.mutate({
+    op: "batch",
+    args: {
+      ops: [
+        { op: "insertTextFrame", args: { pageId, bounds: placement.bounds } },
+        { op: "bindCreated", args: { handle: FRAME_HANDLE } },
+        {
+          op: "setPluginMetadata",
+          args: {
+            elementId: { kind: "textFrame", id: `$h:${FRAME_HANDLE}` },
+            key: BINDING_KEY,
+            value: JSON.stringify(binding),
+          },
+        },
+        tableInsertOp(content, `$h:${FRAME_HANDLE}`, columnWidths),
+      ],
+    },
+  });
+  if (!placed.applied) {
+    // A host without in-batch handles (or one that refuses insertTable):
+    // nothing landed (a refused batch rolls back whole) — the phased
+    // placement, with its tab-text degradation.
+    host.log.debug("lower: one-batch placement refused — phased placement", placed);
+    return lowerPhased(host, content, pageId, placement, binding, columnWidths, {
+      ...opts,
+      sheet,
+      range,
+      contentVersion,
+      sheetName,
+    });
+  }
+  if (placed.createdId?.kind !== "table") {
+    // Applied, but the reply names no table: the frame stands and there is
+    // no table id to pour into. Never place a second frame over it.
+    host.log.warn("lower: placement applied without reporting its table", placed);
+    return placed.createdId ? frameIdOf(placed.createdId) : null;
+  }
+  const storyId = placed.createdId.id.story_id;
+  const tableId = placed.createdId.id.table_id;
+  // The frame: named in the 66 `minted` list — by its handle, or by mint
+  // order (a batch with no text child reports every handle null; this batch
+  // mints exactly one text frame) — else read back off the table's story
+  // chain (one read).
+  const minted = noteMinted(host, placed);
+  const mintedFrame =
+    minted?.find((m) => m.handle === FRAME_HANDLE) ??
+    minted?.find((m) => m.element.kind === "textFrame");
+  let frameId: string | null = mintedFrame ? frameIdOf(mintedFrame.element) : null;
+  if (!frameId) {
+    try {
+      frameId = (await host.document.frameChain(storyId))[0]?.frameId ?? null;
+    } catch (err) {
+      host.log.warn("lower: frame chain read failed", err);
+    }
+  }
+
+  // The table's content — text, decor and text styles — as ONE more batch,
+  // with the binding re-stamped to carry the table record. (Core 0eff96b
+  // resolves a table handle in a `tableId` position, which folds this into
+  // the placement batch: one mutate, one undo step.)
+  const { barIds } = await pourCellContent(
+    host,
+    content,
+    storyId,
+    tableId,
+    frameId
+      ? [tableBindingStamp(frameId, sheetName, range, contentVersion, storyId, tableId, content, columnWidths)]
+      : [],
+    // Data bars (Wave 9), under the frame at its page position.
+    { pageId, origin: [placement.bounds[0], placement.bounds[1]], widths: columnWidths },
+  );
+
+  if (!frameId) {
+    host.log.warn("lower: placed the table but could not read its frame back");
+    return null;
+  }
+  opts?.onLowered?.({
+    frameId,
+    storyId,
+    tableId,
+    sheet,
+    range,
+    pageId,
+    content,
+    columnWidths,
+    contentVersion,
+    barIds,
+  });
+  if (opts?.select !== false) await host.selection.set([{ kind: "textFrame", id: frameId }]);
+  return frameId;
+}
+
+/** The within-batch handle the placement names its frame by. */
+const FRAME_HANDLE = "f";
+/** The within-batch handle the one-call placement names its table by. */
+const TABLE_HANDLE = "t";
+
+/** {@link placeInOneCall}'s "the host refused the batch" — nothing landed;
+ *  the caller places the two-batch way. */
+const REFUSED = Symbol("refused");
+
+/**
+ * The whole placement as ONE `mutate` (protocol 66): the frame, its binding,
+ * the native table, the cell pour, the decor, the data bars and the cell
+ * text styles. The content addresses the table by its handle — `$h:t` in a
+ * `storyId` position is the table's story, in a `tableId` / `table_id`
+ * position the table itself (core 0eff96b) — and the frame, table and bars
+ * the batch minted come back in the outcome's `minted` list. One build, one
+ * undo step, one round trip (it was two).
+ *
+ * The binding cannot name the table's ids: they do not exist when the batch
+ * is sent, and a handle inside a metadata VALUE is content, never an
+ * address. It carries the record without them ({@link TableRecord}); this
+ * session knows them from `minted`, a later one reads them off the page.
+ *
+ * A refusal rolls the batch back whole; it is remembered for the host (the
+ * next placement goes the two-batch way at once) and reported as
+ * {@link REFUSED}.
+ */
+async function placeInOneCall(
+  host: BundleHost,
+  content: LoweredContent,
+  pageId: PageId,
+  placement: Placement,
+  columnWidths: number[],
+  opts: LowerLaneOptions & {
+    sheet: number;
+    range: string;
+    contentVersion: number;
+    sheetName: string;
+  },
+): Promise<string | null | typeof REFUSED> {
+  const { sheet, range, contentVersion, sheetName } = opts;
+  const table = `$h:${TABLE_HANDLE}`;
+  const { ops, styleOps } = await tableContentOps(host, content, table, table);
+  const origin: [number, number] = [placement.bounds[0], placement.bounds[1]];
+  const drawn = await barOps(host, content, { pageId, origin, widths: columnWidths });
+  const binding = makeBinding(sheetName, range, contentVersion, {
+    hash: contentHash(content),
+    widths: [...columnWidths],
+  });
+  const r = await host.document.mutate({
+    op: "batch",
+    args: {
+      ops: [
+        { op: "insertTextFrame", args: { pageId, bounds: placement.bounds } },
+        { op: "bindCreated", args: { handle: FRAME_HANDLE } },
+        {
+          op: "setPluginMetadata",
+          args: {
+            elementId: { kind: "textFrame", id: `$h:${FRAME_HANDLE}` },
+            key: BINDING_KEY,
+            value: JSON.stringify(binding),
+          },
+        },
+        tableInsertOp(content, `$h:${FRAME_HANDLE}`, columnWidths),
+        { op: "bindCreated", args: { handle: TABLE_HANDLE } },
+        ...ops,
+        ...drawn,
+        ...styleOps,
+      ],
+    },
+  });
+  const doors = doors66(host);
+  if (!r.applied) {
+    doors.tableHandles = false;
+    host.log.debug("lower: one-call placement refused — two-batch placement", r);
+    return REFUSED;
+  }
+  doors.tableHandles = true;
+  // By handle, else by kind: the batch mints exactly one text frame and one
+  // table (a batch's `minted` may carry every handle null).
+  const minted = noteMinted(host, r) ?? [];
+  const frame = (
+    minted.find((m) => m.handle === FRAME_HANDLE) ??
+    minted.find((m) => m.element.kind === "textFrame")
+  )?.element;
+  const created = (
+    minted.find((m) => m.handle === TABLE_HANDLE) ??
+    minted.find((m) => m.element.kind === "table")
+  )?.element;
+  const frameId = frame ? frameIdOf(frame) : null;
+  if (!frameId || created?.kind !== "table") {
+    // Applied — the table stands — but the reply does not name it. Never
+    // place a second one over it.
+    host.log.warn("lower: one-call placement applied without naming its frame and table", r);
+    return frameId;
+  }
+  const storyId = created.id.story_id;
+  const tableId = created.id.table_id;
+  const barIds = drawn.length > 0 ? minted.map((m) => m.element).filter(isPolygon) : [];
+  opts.onLowered?.({
+    frameId,
+    storyId,
+    tableId,
+    sheet,
+    range,
+    pageId,
+    content,
+    columnWidths,
+    contentVersion,
+    barIds,
+  });
+  if (opts.select !== false) await host.selection.set([{ kind: "textFrame", id: frameId }]);
+  return frameId;
+}
+
+/** The story and table a placed frame shows, read off the PAGE: a hit test
+ *  down the frame's first column until it lands in a table cell (the table
+ *  starts below the frame's top inset and any line above it). For a table
+ *  whose binding carries no ids ({@link placeInOneCall}). Null when no probe
+ *  lands in a cell of this frame. Reads only. */
+export async function tableUnderFrame(
+  host: BundleHost,
+  frameId: string,
+  widths: readonly number[],
+): Promise<{ storyId: string; tableId: string } | null> {
+  let g: Awaited<ReturnType<BundleHost["document"]["elementGeometry"]>>[number] | undefined;
+  try {
+    [g] = await host.document.elementGeometry([{ kind: "textFrame", id: frameId }]);
+  } catch (err) {
+    host.log.debug("tableUnderFrame: geometry read failed", err);
+    return null;
+  }
+  if (!g?.pageId) return null;
+  const [top, left, bottom] = g.bounds;
+  const [a, b, c, d, tx, ty] = g.itemTransform ?? [1, 0, 0, 1, 0, 0];
+  const x = left + Math.min(3, (widths[0] ?? 6) / 2);
+  for (let y = top + 2, n = 0; y < bottom && n < TABLE_PROBES; y += 4, n += 1) {
+    let hit: Awaited<ReturnType<BundleHost["document"]["hitTest"]>>;
+    try {
+      hit = await host.document.hitTest(g.pageId, [a * x + c * y + tx, b * x + d * y + ty], "text");
+    } catch {
+      return null;
+    }
+    if (hit && hit.frameId === frameId && hit.storyId && hit.tableContext) {
+      return { storyId: hit.storyId, tableId: hit.tableContext.tableId };
+    }
+  }
+  return null;
+}
+
+/** How many points down a frame {@link tableUnderFrame} tries (4 pt apart). */
+const TABLE_PROBES = 24;
+
+/** The PHASED native placement — the shape before in-batch handles, kept
+ *  for a host that refuses the one-batch placement: (1) the frame + its
+ *  binding, (2) `insertTable` into the frame's story (resolved by diffing
+ *  the stories collection), (3) the content batch. A host that rejects
+ *  `insertTable` degrades to the spec §2.2 tab-text pour. */
+async function lowerPhased(
+  host: BundleHost,
+  content: LoweredContent,
+  pageId: PageId,
+  placement: Placement,
+  binding: ReturnType<typeof makeBinding>,
+  columnWidths: number[],
+  opts: LowerLaneOptions & {
+    sheet: number;
+    range: string;
+    contentVersion: number;
+    sheetName: string;
+  },
+): Promise<string | null> {
+  const { sheet, range, contentVersion, sheetName } = opts;
+  // Snapshot story ids BEFORE phase 1 — the new frame's story is the
+  // diff (see newStoryId).
+  const storiesBefore = await storyIdsSnapshot(host);
+
+  // Phase 1 — the frame + its binding, one undoable step. NO drawn rules:
+  // a native `<Table>` (S-03 RESOLVED, protocol v37) carries its own cell
+  // edges (phase 3). The binding rides the batch-created frame via
+  // `$created`.
+  const outcome = await host.document.mutate({
+    op: "batch",
+    args: {
+      ops: [
+        { op: "insertTextFrame", args: { pageId, bounds: placement.bounds } },
+        {
+          op: "setPluginMetadata",
+          args: {
+            elementId: { kind: "textFrame", id: "$created" },
+            key: BINDING_KEY,
+            value: JSON.stringify(binding),
+          },
+        },
+      ],
+    },
+  });
+  if (!outcome.applied || !outcome.createdId) {
+    host.log.warn("lower: phase-1 frame batch rejected", outcome);
+    return null;
+  }
+  const frameId = frameIdOf(outcome.createdId);
+  if (!frameId) {
+    host.log.warn("lower: created element is not a frame target");
+    return null;
+  }
+
+  // Resolve the new frame's story by DIFFING the stories collection
+  // (snapshotted before phase 1) — the hitTest door cannot see an empty
+  // frame's story (storyId:null, verified live); see newStoryId().
+  const storyId = await newStoryId(host, storiesBefore);
+  if (!storyId) {
+    host.log.warn(
+      "lower: could not resolve the created frame's story; frame placed " +
+        "empty (stories-diff ambiguous)",
+    );
+    await host.selection.set([outcome.createdId]);
+    return frameId;
+  }
+
+  // Phase 2 — create the native table in that story. createdId is the
+  // new tableId.
+  const tableOutcome = await host.document.mutate(
+    tableInsertOp(content, storyId, columnWidths),
+  );
+  if (!tableOutcome.applied || !tableOutcome.createdId) {
+    // RUNTIME FALLBACK: a host whose wire predates insertTable rejects the
+    // op — degrade to the spec §2.2 tab-text pour into the story we already
+    // resolved (the frame + binding stand; rules are not retrofittable
+    // without the table). Honest, logged, never silent.
+    host.log.warn(
+      "lower: insertTable rejected — falling back to the tab-text pour",
+      tableOutcome,
+    );
+    const text = joinText(content);
+    if (text.length > 0) {
+      const pour = await host.document.mutate({
+        op: "insertText",
+        args: { storyId, offset: 0, text },
+      });
+      if (!pour.applied) {
+        host.log.warn("lower: fallback text pour rejected", pour);
+      }
+    }
+    await host.selection.set([outcome.createdId]);
+    return frameId;
+  }
+  const tableId = tableIdOf(tableOutcome.createdId);
+
+  // Phase 3 — the content, one batch (see pourCellContent), its data bars,
+  // the binding re-stamped with the table record.
+  const { barIds } = await pourCellContent(
+    host,
+    content,
+    storyId,
+    tableId,
+    [tableBindingStamp(frameId, sheetName, range, contentVersion, storyId, tableId, content, columnWidths)],
+    { pageId, origin: [placement.bounds[0], placement.bounds[1]], widths: columnWidths },
+  );
+
+  // S-04 — report the resolved native table so the session can address its
+  // cells for "new style from cell". Only the native-table lane reports
+  // (the tab-text fallback has no table to address).
+  opts?.onLowered?.({
+    frameId,
+    storyId,
+    tableId,
+    sheet,
+    range,
+    pageId,
+    content,
+    columnWidths,
+    contentVersion,
+    barIds,
+  });
+
+  await host.selection.set([outcome.createdId]);
+  return frameId;
+}
+
+/** The retained tab-text lane (spec §2.2 degradation): the pure
+ *  `lowerToMutations` batch (frame + drawn rules + binding), then the
+ *  tab/newline text pour into the resolved story.
+ *
+ *  The data-bar swatch mints ride INSIDE that phase-1 batch, so the
+ *  document's swatches are read first and an already-present colour is
+ *  referenced rather than re-created: a duplicate `createSwatch` fails the
+ *  whole batch, which here would cost the FRAME, the rules and the binding
+ *  — not just a bar's colour. The read is skipped when the region carries
+ *  no bars (today's `getRangeLowered` never emits any — Rust's
+ *  `lower_range` is not the condfmt lowering — so this normally costs no
+ *  extra host round-trip). */
+async function lowerTabTextToFrame(
+  host: BundleHost,
+  content: LoweredContent,
+  placement: { pageId: PageId; bounds: [number, number, number, number] },
+  binding: ReturnType<typeof makeBinding>,
+): Promise<string | null> {
+  const known =
+    (content.databars ?? []).length === 0
+      ? undefined
+      : await readKnownSwatchIds(host);
+  const { batch, text } = lowerToMutations(content, placement, binding, known);
+
+  // Snapshot story ids before the frame insert (see newStoryId).
+  const storiesBefore = await storyIdsSnapshot(host);
+
+  const outcome = await host.document.mutate(batch);
+  if (!outcome.applied || !outcome.createdId) {
+    host.log.warn("lower(tab-text): phase-1 batch rejected", outcome);
+    return null;
+  }
+  const frameId = frameIdOf(outcome.createdId);
+  if (!frameId) {
+    host.log.warn("lower(tab-text): created element is not a frame target");
+    return null;
+  }
+
+  const storyId = await newStoryId(host, storiesBefore);
+  if (!storyId) {
+    host.log.warn(
+      "lower(tab-text): could not resolve the created frame's story; " +
+        "frame placed empty (stories-diff ambiguous)",
+    );
+    await host.selection.set([outcome.createdId]);
+    return frameId;
+  }
+
+  if (text.length > 0) {
+    const pour = await host.document.mutate({
+      op: "insertText",
+      args: { storyId, offset: 0, text },
+    });
+    if (!pour.applied) {
+      host.log.warn("lower(tab-text): phase-2 text pour rejected", pour);
+    }
+  }
+
+  await host.selection.set([outcome.createdId]);
+  return frameId;
+}
+
+// ── Live multi-frame pagination across the host frame chain (Wave 2D,
+// RFI C-2 / S-05; spec §8.2 "the killer feature"). The engine threads a
+// tall range across the chain's content boxes (Rust); this flow reads the
+// real chain via host.document.frameChain, resolves each frame's content
+// box via host.document.elementGeometry, lowers each Page into ITS frame's
+// story, and re-paginates when a content-box reflow event fires (§8.5: a
+// pure transform — move/scale/rotate — never re-paginates; only a
+// resizeFrame does, carried by DocumentChangeEvent.reflow).
+
+/** A resolved chain frame: its raw frame id + content box (frame-content pt,
+ *  §8.5 — the geometry door's bounds ARE the content box). */
+export interface ChainFrame {
+  frameId: string;
+  box: FrameBox;
+}
+
+/** Resolve a frame's content box (frame-content pt) from its page geometry.
+ *  `elementGeometry` returns `bounds: [top, left, bottom, right]` in
+ *  content-box space (§8.5) — exactly the box pagination threads into. */
+function boxOf(bounds: [number, number, number, number]): FrameBox {
+  const [top, left, bottom, right] = bounds;
+  return { widthPt: right - left, heightPt: bottom - top };
+}
+
+/**
+ * Read the host frame chain starting from `storyId` and resolve each link's
+ * content box (Wave 2D / S-05). Returns the ordered `ChainFrame[]` — the
+ * input to pagination. A link with no resolvable geometry is dropped (the
+ * caller under-provisioned; pagination tolerates a short chain). Empty when
+ * the story threads no frames.
+ */
+export async function resolveChain(
+  host: BundleHost,
+  storyId: string,
+): Promise<ChainFrame[]> {
+  const links = await host.document.frameChain(storyId);
+  if (links.length === 0) return [];
+
+  const ids = links.map((l) => ({
+    kind: "textFrame" as const,
+    id: l.frameId,
+  }));
+  const geom = await host.document.elementGeometry(ids);
+  const byId = new Map(geom.map((g) => [idOf(g.id), g.bounds]));
+
+  const chain: ChainFrame[] = [];
+  for (const link of links) {
+    const bounds = byId.get(link.frameId);
+    if (!bounds) continue; // no geometry → drop this link (honest shortfall)
+    chain.push({ frameId: link.frameId, box: boxOf(bounds) });
+  }
+  return chain;
+}
+
+/** The raw id string of an ElementId (textFrame/rectangle carry a string
+ *  id; others are out of scope for the chain). */
+function idOf(id: ElementId): string | null {
+  if (id.kind === "textFrame" || id.kind === "rectangle") {
+    return id.id as string;
+  }
+  return null;
+}
+
+/** The story a frame belongs to (Wave 4). The 66 geometry read carries a
+ *  text frame's `storyId` — one read. A host without it (the field absent on
+ *  a text frame's item, remembered per host) gets the walk: every story asked
+ *  for its frame chain (the hitTest door answers `storyId: null` for an empty
+ *  frame), the chain that contains `frameId` naming the story. Null when no
+ *  story threads the frame. */
+export async function storyOfFrame(
+  host: BundleHost,
+  frameId: string,
+): Promise<string | null> {
+  const doors = doors66(host);
+  if (doors.geometryStoryId !== false) {
+    try {
+      const [item] = await host.document.elementGeometry([{ kind: "textFrame", id: frameId }]);
+      const storyId = item ? geometryStoryId(item) : undefined;
+      if (storyId) {
+        doors.geometryStoryId = true;
+        return storyId;
+      }
+      // A text frame's item without a story: a pre-66 geometry read.
+      if (item) doors.geometryStoryId = false;
+    } catch (err) {
+      host.log.debug("storyOfFrame: geometry read failed — walking the stories", err);
+    }
+  }
+  const stories = await host.document.collection<{ selfId: string }>("stories");
+  for (const s of stories) {
+    const links = await host.document.frameChain(s.selfId);
+    if (links.some((l) => l.frameId === frameId)) return s.selfId;
+  }
+  return null;
+}
+
+/** The ops of a placed table's in-place refresh (`tableRefreshOps`), by
+ *  apply lane: the structure, the changed cells' text, the decor led by the
+ *  fill/stroke swatch mints it names, and the cell text styles (their
+ *  swatch + character-style mints, then the per-cell applies). Null when
+ *  nothing moved — a re-pagination that lands on the same split, an edit
+ *  outside this table's range. One swatch read serves every lane (fill and
+ *  text swatch ids never collide: their palette ids carry the facet). */
+async function tableRefreshLanes(
+  host: BundleHost,
+  storyId: string,
+  tableId: string,
+  prev: LoweredContent,
+  prevWidths: readonly number[],
+  next: LoweredContent,
+  nextWidths: readonly number[],
+  headerRows = 0,
+): Promise<Mutation[][] | null> {
+  if (
+    JSON.stringify(prev) === JSON.stringify(next) &&
+    JSON.stringify(prevWidths) === JSON.stringify(nextWidths)
+  ) {
+    return null;
+  }
+  const ops = tableRefreshOps(prev, next, storyId, tableId, prevWidths, nextWidths);
+  const restyle = cellsNeedingRestyle(prev, next);
+  const realign = cellsNeedingRealign(prev, next);
+  const wantsFills = cellFillSwatchOps(next).length > 0;
+  const wantsText = restyle.size > 0 && cellCharacterStyles(next).size > 0;
+  const wantsAlign = realign.size > 0 && needsAlignStyles(next);
+  const [swatches, styles, paragraphs] = await Promise.all([
+    wantsFills || wantsText ? readKnownSwatchIds(host) : Promise.resolve(undefined),
+    wantsText ? readKnownCharacterStyleIds(host) : Promise.resolve(null),
+    wantsAlign ? readKnownParagraphStyleIds(host) : Promise.resolve(null),
+  ]);
+  const decor = [...(wantsFills ? cellFillSwatchOps(next, swatches) : []), ...ops.decor];
+  const style =
+    restyle.size === 0
+      ? []
+      : [
+          ...(wantsText
+            ? [
+                ...cellTextSwatchOps(next, swatches),
+                ...cellCharacterStyleMints(next, styles),
+              ]
+            : []),
+          ...cellCharacterStyleApplies(next, storyId, tableId, {
+            cells: restyle,
+            includeDefault: true,
+          }),
+        ];
+  const align =
+    realign.size === 0
+      ? []
+      : [
+          ...(wantsAlign ? cellAlignStyleMints(next, paragraphs) : []),
+          ...cellAlignApplies(next, storyId, tableId, {
+            cells: realign,
+            includeDefault: true,
+            available: wantsAlign && paragraphs === null ? new Set() : undefined,
+          }),
+        ];
+  // Below a host header band: the workbook's row 0 is the table's row
+  // `headerRows` (ops naming no row pass unchanged).
+  return [ops.structure, ops.text, decor, [...style, ...align]]
+    .filter((l) => l.length > 0)
+    .map((l) => offsetTableRows(l, tableId, headerRows));
+}
+
+/** Apply a placed table's in-place refresh as ONE `mutate` — the lanes of
+ *  {@link tableRefreshLanes} plus the caller's `tail` (the binding re-stamp)
+ *  in one batch, so the page text and the version it shows are ONE document
+ *  undo step (Wave 9: they were four-plus mutates, and a host Cmd-Z took the
+ *  binding — and with it the workbook — back a step before the text). A
+ *  refused batch rolls back whole; then each lane goes alone, so a style
+ *  refusal never costs the cell text. Returns the `mutate` count. */
+async function applyTableRefresh(
+  host: BundleHost,
+  storyId: string,
+  tableId: string,
+  prev: LoweredContent,
+  prevWidths: readonly number[],
+  next: LoweredContent,
+  nextWidths: readonly number[],
+  tail: readonly Mutation[] = [],
+  headerRows = 0,
+): Promise<{ calls: number; tailOutcome: MutationOutcome | null }> {
+  const lanes =
+    (await tableRefreshLanes(
+      host,
+      storyId,
+      tableId,
+      prev,
+      prevWidths,
+      next,
+      nextWidths,
+      headerRows,
+    )) ?? [];
+  const all = [...lanes.flat(), ...tail];
+  if (all.length === 0) return { calls: 0, tailOutcome: null };
+  const r = await host.document.mutate({ op: "batch", args: { ops: all } });
+  if (r.applied) return { calls: 1, tailOutcome: r };
+  host.log.warn("refresh: one-batch refresh rejected — retrying per lane", r);
+  let calls = 1;
+  let tailOutcome: MutationOutcome | null = null;
+  for (const lane of [...lanes, [...tail]]) {
+    if (lane.length === 0) continue;
+    calls += 1;
+    const l = await host.document.mutate({ op: "batch", args: { ops: lane } });
+    if (!l.applied) host.log.warn("refresh: lane rejected", l);
+    if (lane.length === tail.length && lane.every((op, i) => op === tail[i])) tailOutcome = l;
+  }
+  return { calls, tailOutcome };
+}
+
+/** A frame's page and page-local top-left (its content box carried through
+ *  its item transform), or null when the geometry read cannot say. */
+async function frameOrigin(
+  host: BundleHost,
+  frameId: string,
+): Promise<{ pageId: PageId; origin: [number, number] } | null> {
+  try {
+    const [g] = await host.document.elementGeometry([{ kind: "textFrame", id: frameId }]);
+    if (!g?.pageId) return null;
+    const [top, left] = g.bounds;
+    const [a, b, c, d, tx, ty] = g.itemTransform ?? [1, 0, 0, 1, 0, 0];
+    return { pageId: g.pageId, origin: [b * left + d * top + ty, a * left + c * top + tx] };
+  } catch (err) {
+    host.log.warn("refresh: frame geometry read failed", err);
+    return null;
+  }
+}
+
+/**
+ * Refresh a placed native table IN PLACE to `next` (Wave 4 — placed tables
+ * follow edits). Diffs against the table's recorded content: only changed
+ * cells are re-poured, rows/columns reshaped at the tail, removed fills and
+ * edges reset — the table is never duplicated. Its data bars (Wave 9) are
+ * redrawn where the frame stands now, the old ones deleted in the same
+ * batch. Re-stamps the frame's binding with `contentVersion`. One batch,
+ * one undo step. Returns the updated record (the new baseline). The
+ * workbook's rows are written below `info.headerRows` (a host header band,
+ * see {@link refreshBands}), which is left as it is.
+ */
+export async function refreshLoweredTable(
+  host: BundleHost,
+  info: LoweredTableInfo,
+  next: LoweredContent,
+  contentVersion: number,
+  sheetName: string,
+): Promise<LoweredTableInfo> {
+  const prev = info.content;
+  const prevWidths = info.columnWidths ?? [];
+  const nextWidths = await measureColumnWidths(host, next);
+  // The binding re-stamp rides the refresh batch: one undo step.
+  const stamp = tableBindingStamp(
+    info.frameId,
+    sheetName,
+    info.range,
+    contentVersion,
+    info.storyId,
+    info.tableId,
+    next,
+    nextWidths,
+  );
+  const oldBars = info.barIds ?? [];
+  let drawn: Mutation[] = [];
+  if (oldBars.length > 0 || (next.databars ?? []).length > 0) {
+    const at = await frameOrigin(host, info.frameId);
+    if (at) drawn = await barOps(host, next, { ...at, widths: nextWidths });
+  }
+  const removals: Mutation[] = oldBars.map((id) => ({
+    op: "deleteFrame",
+    args: { frameId: id.id as string },
+  }));
+  const before = drawn.length > 0 ? await beforeMint(host) : null;
+  const { tailOutcome } = await applyTableRefresh(
+    host,
+    info.storyId,
+    info.tableId,
+    prev ?? next,
+    prev ? prevWidths : nextWidths,
+    next,
+    nextWidths,
+    [...removals, ...drawn, stamp],
+    info.headerRows ?? 0,
+  );
+  // A refused tail left the old bars standing; an applied one replaced them.
+  const barIds = !tailOutcome?.applied
+    ? oldBars
+    : drawn.length > 0
+      ? await mintedElements(host, tailOutcome, before, isPolygon)
+      : [];
+  return { ...info, content: next, columnWidths: nextWidths, contentVersion, barIds };
+}
+
+// ── what a placed table shows, kept with the document ─────────────────────
+//
+// A table has no read door for its cells, so a refresh can only diff the
+// page against the content it last poured there. In a session that content
+// is in memory; for a LATER session (a reopened document) it is kept in a
+// container part named by the content hash the frame's binding records,
+// `placements/<hash>.json`. The binding rides the same batch as the content
+// it describes, so whichever version the document shows — after an undo
+// too — the part named by its binding is that content.
+
+/** The part a placed table's shown content is kept in. */
+function placementPart(hash: string): string {
+  return `placements/${hash}.json`;
+}
+
+/** Keep `content` as what a placed table shows (see above). Best effort: a
+ *  host without container parts keeps nothing, and a later session then
+ *  replaces a stale table instead of refreshing it. */
+export async function rememberShownContent(host: BundleHost, content: LoweredContent): Promise<void> {
+  if (!host.supports("storage.parts@1")) return;
+  try {
+    await host.parts.write(
+      placementPart(contentHash(content)),
+      new TextEncoder().encode(JSON.stringify(content)),
+    );
+  } catch (err) {
+    host.log.warn("placement record write failed", err);
+  }
+}
+
+/** The content a placed table's binding says it shows (`hash`), or null
+ *  when it was not kept (placed before records existed, or by a host
+ *  without container parts) or does not hash to `hash`. */
+export async function recallShownContent(
+  host: BundleHost,
+  hash: string,
+): Promise<LoweredContent | null> {
+  if (!host.supports("storage.parts@1")) return null;
+  try {
+    const bytes = await host.parts.read(placementPart(hash));
+    if (!bytes) return null;
+    const content = JSON.parse(new TextDecoder().decode(bytes)) as LoweredContent;
+    return contentHash(content) === hash ? content : null;
+  } catch (err) {
+    host.log.warn("placement record read failed", err);
+    return null;
+  }
+}
+
+/** Drop the kept content `hash` (no placed table shows it any more). */
+export async function forgetShownContent(host: BundleHost, hash: string): Promise<void> {
+  if (!host.supports("storage.parts@1")) return;
+  try {
+    await host.parts.delete(placementPart(hash));
+  } catch (err) {
+    host.log.warn("placement record delete failed", err);
+  }
+}
+
+/** A placed table's row and column counts as the host reports them
+ *  (`tableRowCount` counts header, body and footer rows), or null when the
+ *  host cannot say. `header` and `footer` are the host's bands
+ *  (`tableHeaderRowCount` / `tableFooterRowCount`), present only where the
+ *  engine reports them (core v0.71.13 and later; an older engine lists
+ *  neither). */
+export async function tableShape(
+  host: BundleHost,
+  storyId: string,
+  tableId: string,
+): Promise<{ rows: number; cols: number; header?: number; footer?: number } | null> {
+  let props: Awaited<ReturnType<BundleHost["document"]["elementProperties"]>>;
+  try {
+    props = await host.document.elementProperties({
+      kind: "table",
+      id: { story_id: storyId, table_id: tableId },
+    });
+  } catch (err) {
+    host.log.debug("tableShape: table properties read failed", err);
+    return null;
+  }
+  const count = (path: string): number | null => {
+    const v = props?.entries.find((e) => (e.path as string) === path)?.value;
+    return v?.type === "length" && typeof v.value === "number" ? v.value : null;
+  };
+  const rows = count("tableRowCount");
+  const cols = count("tableColumnCount");
+  if (rows === null || cols === null) return null;
+  const header = count("tableHeaderRowCount");
+  const footer = count("tableFooterRowCount");
+  return header === null || footer === null ? { rows, cols } : { rows, cols, header, footer };
+}
+
+/** Where the workbook's rows sit in a placed table: below the host's
+ *  header band (`header` rows) and above its footer band (`footer` rows). */
+export interface TableBands {
+  header: number;
+  footer: number;
+}
+
+/** Whether a placed table can be refreshed IN PLACE from `shown` (the
+ *  content last poured into it), and where its rows sit if so.
+ *
+ *  Where the engine reports the table's header and footer bands (core
+ *  v0.71.13), the table can be refreshed when its body (rows outside the
+ *  bands) and its columns are exactly `shown`'s: the refresh writes the
+ *  body and keeps the bands the host added (`insertHeaderRow`,
+ *  `insertFooterRow`). Where it does not (an older engine), only a table
+ *  with exactly `shown`'s rows and columns can be, at no offset: the host
+ *  reports the row count but not where a band sits, so the workbook's
+ *  rows cannot be told apart from the host's, and a refresh by position
+ *  would pour the workbook into the band. Null when it cannot be refreshed
+ *  in place (rows or columns the host inserted into the body, or a band
+ *  on an older engine): replacing it is then the only refresh that writes
+ *  nothing into the host's rows. When the host cannot report the shape,
+ *  the bands last known (`info.headerRows`) are kept. */
+export async function refreshBands(
+  host: BundleHost,
+  info: LoweredTableInfo,
+  shown: LoweredContent,
+): Promise<TableBands | null> {
+  const shape = await tableShape(host, info.storyId, info.tableId);
+  if (!shape) return { header: info.headerRows ?? 0, footer: 0 };
+  const cols = shape.cols === shown.cols.length;
+  if (shape.header !== undefined && shape.footer !== undefined) {
+    const body = shape.rows - shape.header - shape.footer;
+    if (cols && body === shown.rows.length) return { header: shape.header, footer: shape.footer };
+    host.log.warn(
+      `refresh: the table in frame ${info.frameId} has ${body}×${shape.cols} body cells where ` +
+        `${shown.rows.length}×${shown.cols.length} were placed — rows or columns the host ` +
+        "inserted cannot be located, so the table is replaced",
+    );
+    return null;
+  }
+  if (cols && shape.rows === shown.rows.length) return { header: 0, footer: 0 };
+  host.log.warn(
+    `refresh: the table in frame ${info.frameId} has ${shape.rows}×${shape.cols} cells where ` +
+      `${shown.rows.length}×${shown.cols.length} were placed — rows or columns the host ` +
+      "added cannot be located, so the table is replaced",
+  );
+  return null;
+}
+
+/**
+ * Replace a placed table that cannot be refreshed in place: its current
+ * content is UNKNOWN (a later session found it stale and no record of what
+ * it shows was kept — see `rememberShownContent`), or the host reshaped it
+ * (`refreshBands`: rows or columns the host inserted cannot be located, or a
+ * band on an engine that does not report bands). There is no read door for
+ * a table's cells, so it cannot be diffed: with the 66 `deleteTable` door
+ * the table is deleted and a fresh one inserted in the same story (the
+ * frame stays; the table id, and anything the host added to the table, do
+ * not); a pre-66 host gets the frame re-placed where it stands. Null when
+ * nothing could be placed.
+ */
+export async function replaceLoweredTable(
+  host: BundleHost,
+  engine: SheetEngine,
+  info: LoweredTableInfo,
+  next: LoweredContent,
+  contentVersion: number,
+  sheetName: string,
+): Promise<LoweredTableInfo | null> {
+  const widths = await measureColumnWidths(host, next);
+  const doors = doors66(host);
+  const oldBars = (info.barIds ?? []).map((id) => ({
+    op: "deleteFrame" as const,
+    args: { frameId: id.id as string },
+  }));
+  if (doors.deleteTable !== false) {
+    const r = await host.document.mutate({
+      op: "batch",
+      args: {
+        ops: [
+          ...oldBars,
+          deleteTableOp(info.storyId, info.tableId),
+          tableInsertOp(next, info.storyId, widths),
+        ],
+      },
+    });
+    if (r.applied && r.createdId?.kind === "table") {
+      doors.deleteTable = true;
+      const tableId = tableIdOf(r.createdId);
+      const at = await frameOrigin(host, info.frameId);
+      const { barIds } = await pourCellContent(
+        host,
+        next,
+        info.storyId,
+        tableId,
+        [tableBindingStamp(info.frameId, sheetName, info.range, contentVersion, info.storyId, tableId, next, widths)],
+        at ? { ...at, widths } : undefined,
+      );
+      // A fresh table: no band of the host's above its rows.
+      return {
+        ...info,
+        tableId,
+        content: next,
+        columnWidths: widths,
+        contentVersion,
+        barIds,
+        headerRows: undefined,
+      };
+    }
+    if (isUnknownVariant(r, "deleteTable")) doors.deleteTable = false;
+    else host.log.warn("replace: deleteTable + insertTable rejected", r);
+  }
+  // Pre-66: re-place the frame where it stands (its page-space box).
+  let geom: Awaited<ReturnType<BundleHost["document"]["elementGeometry"]>>;
+  try {
+    geom = await host.document.elementGeometry([{ kind: "textFrame", id: info.frameId }]);
+  } catch (err) {
+    host.log.warn("replace: frame geometry read failed", err);
+    return null;
+  }
+  const g = geom[0];
+  if (!g?.pageId) return null;
+  const [top, left, bottom, right] = g.bounds;
+  const [a, b, c, d, tx, ty] = g.itemTransform ?? [1, 0, 0, 1, 0, 0];
+  const at = { left: a * left + c * top + tx, top: b * left + d * top + ty };
+  const del = await host.document.mutate({
+    op: "batch",
+    args: { ops: [...oldBars, { op: "deleteFrame", args: { frameId: info.frameId } }] },
+  });
+  if (!del.applied) {
+    host.log.warn("replace: removing the stale frame was rejected", del);
+    return null;
+  }
+  let placed: LoweredTableInfo | null = null;
+  await lowerSelectionToFrame(host, engine, info.sheet, info.range, {
+    content: next,
+    contentVersion,
+    placement: {
+      pageId: g.pageId,
+      bounds: [at.top, at.left, at.top + (bottom - top), at.left + (right - left)],
+    },
+    select: false,
+    onLowered: (p) => {
+      placed = p;
+    },
+  });
+  return placed;
+}
+
+/** One table a chain placement owns: the table id and what it shows. A
+ *  `blank` table belongs to a frame the last pagination did not need, on a
+ *  host without the 66 `deleteTable` door: it is emptied, kept, and reused
+ *  when the range needs more frames again. */
+export interface ChainTable {
+  tableId: string;
+  content: LoweredContent;
+  widths: number[];
+  blank: boolean;
+}
+
+/** The result of a chain pagination pass. */
+export interface ChainLowerResult {
+  /** The story whose chain was paginated. */
+  storyId: string;
+  /** The resolved chain frames (in order). */
+  chain: ChainFrame[];
+  /** The pages the engine produced (one per filled frame). */
+  pages: Page[];
+  /** The tableId lowered into each page's frame (null where the table was
+   *  rejected). */
+  tableIds: (string | null)[];
+  /** Every table this placement owns, in story order (the baseline the
+   *  next pass refreshes from — see `subscribeChainReflow`'s `from`). */
+  tables: ChainTable[];
+}
+
+/** Pagination options (forwarded to the engine). */
+export interface ChainOptions {
+  repeatedHeaderRows?: number;
+  continuedMarker?: boolean;
+  keepRowsTogether?: [number, number][];
+}
+
+/** The content an unused chain table is reshaped to: one empty row. */
+function blankContent(like: LoweredContent): LoweredContent {
+  return {
+    cols: like.cols,
+    rows: [{ index: 0, heightPt: 1, cells: [] }],
+    rules: { h: [], v: [] },
+    merges: [],
+    styles: like.styles,
+  };
+}
+
+/** Delete `tables` from `storyId` in one batch through the 66
+ *  `deleteTable` door. False when the host lacks the door (remembered, so
+ *  it is asked once per host) or refused the batch — the caller then empties
+ *  the tables instead. */
+async function deleteTables(
+  host: BundleHost,
+  storyId: string,
+  tables: readonly ChainTable[],
+): Promise<boolean> {
+  const doors = doors66(host);
+  if (doors.deleteTable === false) return false;
+  const r = await host.document.mutate({
+    op: "batch",
+    args: { ops: tables.map((t) => deleteTableOp(storyId, t.tableId)) },
+  });
+  if (r.applied) {
+    doors.deleteTable = true;
+    return true;
+  }
+  if (isUnknownVariant(r, "deleteTable")) {
+    doors.deleteTable = false;
+  } else {
+    host.log.warn("chain-lower: deleteTable rejected", r);
+  }
+  return false;
+}
+
+/**
+ * One pagination pass over a chain (Wave 2D / S-05; Wave 4 replace). Asks
+ * the engine to paginate the range into the chain's content boxes (all
+ * threading math in Rust), then for page i: REFRESHES the placement's i-th
+ * table in place when it has one, else appends a new table (insertTable
+ * appends to the story, so story order = page order). Tables the pass no
+ * longer needs are deleted (66 `deleteTable`), else emptied. All pages go into the
+ * CHAIN'S story — threaded frames share one story.
+ */
+async function paginatePass(
+  host: BundleHost,
+  engine: SheetEngine,
+  sheet: number,
+  range: string,
+  storyId: string,
+  chain: ChainFrame[],
+  owned: ChainTable[],
+  opts?: ChainOptions,
+): Promise<ChainLowerResult> {
+  const pages = engine.paginate(
+    sheet,
+    range,
+    chain.map((c) => c.box),
+    {
+      repeatedHeaderRows: opts?.repeatedHeaderRows,
+      continuedMarker: opts?.continuedMarker,
+      keepRowsTogether: opts?.keepRowsTogether,
+    },
+  );
+  const tables: ChainTable[] = [];
+  const tableIds: (string | null)[] = [];
+  for (const [i, page] of pages.entries()) {
+    const widths = await measureColumnWidths(host, page.content);
+    const prev = owned[i];
+    if (prev) {
+      await applyTableRefresh(
+        host,
+        storyId,
+        prev.tableId,
+        prev.content,
+        prev.widths,
+        page.content,
+        widths,
+      );
+      tables.push({ tableId: prev.tableId, content: page.content, widths, blank: false });
+      tableIds.push(prev.tableId);
+      continue;
+    }
+    const ops = pageTableMutations(page, storyId, widths);
+    const outcome = await host.document.mutate(ops.insert);
+    if (!outcome.applied || !outcome.createdId) {
+      host.log.warn("chain-lower: insertTable rejected", outcome);
+      tableIds.push(null);
+      continue;
+    }
+    const tableId = tableIdOf(outcome.createdId);
+    await pourCellContent(host, page.content, storyId, tableId);
+    tables.push({ tableId, content: page.content, widths, blank: false });
+    tableIds.push(tableId);
+  }
+  // Tables the range no longer needs: DELETED where the host has the 66
+  // `deleteTable` door, else emptied and kept for reuse (a pre-66 wire has
+  // no table-delete op).
+  const spare = owned.slice(pages.length);
+  if (spare.length > 0 && (await deleteTables(host, storyId, spare))) {
+    return { storyId, chain, pages, tableIds, tables };
+  }
+  if (spare.some((t) => !t.blank)) {
+    host.log.warn(
+      `chain-lower: ${spare.length} table(s) no longer needed were emptied — ` +
+        "this editor version cannot delete tables",
+    );
+  }
+  for (const t of spare) {
+    if (t.blank) {
+      tables.push(t);
+      continue;
+    }
+    const blank = blankContent(t.content);
+    await applyTableRefresh(host, storyId, t.tableId, t.content, t.widths, blank, t.widths);
+    tables.push({ ...t, content: blank, blank: true });
+  }
+  return { storyId, chain, pages, tableIds, tables };
+}
+
+/**
+ * Lower `sheet`/`range` ACROSS a host frame chain with live pagination
+ * (Wave 2D, RFI C-2 / S-05; spec §8.2). Reads the real chain via
+ * `host.document.frameChain(storyId)`, resolves each frame's content box via
+ * `host.document.elementGeometry`, asks the engine to paginate the range into
+ * those boxes (all threading math in Rust), and lowers each resulting `Page`
+ * as a native table into the chain's story. Returns the pass result, or null
+ * when no chain resolves.
+ *
+ * `chainStoryId` selects the chain (the story the threaded frames share).
+ * The caller may supply a ready `chain` (the frames + boxes) to bypass the
+ * host reads — same downstream lowering.
+ */
+export async function lowerPaginatedToChain(
+  host: BundleHost,
+  engine: SheetEngine,
+  sheet: number,
+  range: string,
+  chainStoryId: string,
+  opts?: ChainOptions & { chain?: ChainFrame[] },
+): Promise<ChainLowerResult | null> {
+  const chain = opts?.chain ?? (await resolveChain(host, chainStoryId));
+  if (chain.length === 0) {
+    host.log.warn(`chain-lower: story ${chainStoryId} threads no frames`);
+    return null;
+  }
+  return paginatePass(host, engine, sheet, range, chainStoryId, chain, [], opts);
+}
+
+/** How long a burst of reflow events settles before ONE re-pagination. */
+export const CHAIN_REFLOW_DEBOUNCE_MS = 150;
+
+/** A live chain placement (Wave 4): re-paginates on reflow (debounced) and
+ *  on demand (`refresh()`, after workbook edits), always REPLACING the
+ *  placement's own tables rather than adding new ones. */
+export interface ChainSubscription extends Disposable {
+  /** Re-paginate now (serialised behind any pass in flight). */
+  refresh(): Promise<ChainLowerResult | null>;
+  /** The latest pass (null before the first). */
+  current(): ChainLowerResult | null;
+  /** Resolves when the pass in flight (if any) has finished. */
+  idle(): Promise<ChainLowerResult | null>;
+}
+
+/**
+ * Subscribe to live re-pagination for a chain (Wave 2D, S-05; §8.5). Every
+ * `host.document.onDidChange` event that carries `reflow` for a frame IN the
+ * chain schedules a re-pagination, DEBOUNCED (`debounceMs`) so a resize drag
+ * paginates once at its end, whatever committed the change: a `resizeFrame`
+ * (`mutationApplied`) or a frame resized by its handles (`gestureCommitted`,
+ * which carries the reflow from core v0.71.13 through plugin-sdk 0.2.58).
+ * The event is keyed off the field's presence: an older host reports a
+ * handle resize without it, and the split stays where it was, as before.
+ * Events with NO `reflow` are the §8.5 transform case (move/scale/rotate is
+ * display-only) and are IGNORED. Each pass refreshes the tables of the
+ * previous one in place (pass `from` — the `lowerPaginatedToChain` result —
+ * so the first reflow replaces what that placed instead of adding to it).
+ */
+export function subscribeChainReflow(
+  host: BundleHost,
+  engine: SheetEngine,
+  sheet: number,
+  range: string,
+  chainStoryId: string,
+  opts?: ChainOptions & { from?: ChainLowerResult | null; debounceMs?: number },
+): ChainSubscription {
+  let last: ChainLowerResult | null = opts?.from ?? null;
+  let chainFrameIds = new Set<string>(last?.chain.map((c) => c.frameId) ?? []);
+  if (chainFrameIds.size === 0) {
+    void resolveChain(host, chainStoryId).then((chain) => {
+      if (chainFrameIds.size === 0) chainFrameIds = new Set(chain.map((c) => c.frameId));
+    });
+  }
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let inflight: Promise<ChainLowerResult | null> = Promise.resolve(last);
+  let disposed = false;
+
+  const run = (): Promise<ChainLowerResult | null> => {
+    inflight = inflight.then(async () => {
+      if (disposed) return last;
+      const chain = await resolveChain(host, chainStoryId);
+      if (chain.length === 0) return last;
+      last = await paginatePass(
+        host,
+        engine,
+        sheet,
+        range,
+        chainStoryId,
+        chain,
+        last?.tables ?? [],
+        opts,
+      );
+      chainFrameIds = new Set(last.chain.map((c) => c.frameId));
+      return last;
+    });
+    return inflight;
+  };
+
+  const sub = host.document.onDidChange((e) => {
+    // §8.5: no reflow → a pure transform → DO NOT re-paginate. A resize
+    // reports one on a mutation and, from core v0.71.13, on a gesture.
+    if (!e.reflow) return;
+    if (chainFrameIds.size > 0 && !chainFrameIds.has(e.reflow.frameId)) return;
+    if (timer !== null) clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = null;
+      void run();
+    }, opts?.debounceMs ?? CHAIN_REFLOW_DEBOUNCE_MS);
+  });
+
+  return {
+    refresh: run,
+    current: () => last,
+    idle: () => inflight,
+    dispose() {
+      disposed = true;
+      if (timer !== null) clearTimeout(timer);
+      timer = null;
+      sub.dispose();
+    },
+  };
+}

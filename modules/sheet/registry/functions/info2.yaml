@@ -1,0 +1,137 @@
+# sheet.fn.info.* (M1 additions) — information family. Schema: see
+# math.yaml. Rust kernels under sheet-fn/src/families/info2.rs (the M1
+# info track). Provenance: ECMA-376 §18.17.7 + public Microsoft function
+# docs. Family token stays `info`; the `2` is only the source-file/track
+# suffix.
+
+- id: sheet.fn.info.n
+  name: N
+  family: info
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: info2::n
+  status: implemented
+  provenance: ["ECMA-376 §18.17.7 (N) — number id, TRUE->1, FALSE->0, blank->0, text->0 (does NOT parse numeric text), error propagates"]
+  tests:
+    rust: ["sheet-conformance/tests/fn_info2.rs::sheet_fn_info_n"]
+    corpus: ["corpus/fn-corpus/info2/n.golden.tsv"]
+
+- id: sheet.fn.info.type
+  name: TYPE
+  family: info
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: info2::type_fn
+  status: implemented
+  provenance: ["ECMA-376 §18.17.7 (TYPE) — 1 number, 2 text, 4 logical, 16 error, 64 array; inspects (error subject -> 16); blank -> 1"]
+  tests:
+    rust: ["sheet-conformance/tests/fn_info2.rs::sheet_fn_info_type"]
+    corpus: ["corpus/fn-corpus/info2/type.golden.tsv"]
+
+- id: sheet.fn.info.error-type
+  name: ERROR.TYPE
+  family: info
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: info2::error_type
+  status: implemented
+  provenance: ["ECMA-376 §18.17.7 (ERROR.TYPE) — 1..7 index (#NULL!..#N/A); non-error -> #N/A; #SPILL! ruled -> #N/A (no classic index)"]
+  tests:
+    rust: ["sheet-conformance/tests/fn_info2.rs::sheet_fn_info_error_type"]
+    corpus: ["corpus/fn-corpus/info2/error_type.golden.tsv"]
+
+- id: sheet.fn.info.sheet
+  name: SHEET
+  family: info
+  arity: { min: 0, max: 1 }
+  volatility: none
+  range_aware: true
+  ref_args: true
+  rust: info2::sheet
+  status: implemented
+  provenance: ["Microsoft SHEET (public docs) — 1-based sheet of a reference; current cell's sheet when absent. a non-reference non-text value is #N/A (Excel 16, recorded). T1 LIMITATION: sheet-name text arg unsupported (falls back to the current sheet)"]
+  tests:
+    rust: ["sheet-conformance/tests/fn_info2.rs::sheet_fn_info_sheet"]
+    corpus: ["corpus/fn-corpus/info2/sheet.golden.tsv"]
+
+- id: sheet.fn.info.sheets
+  name: SHEETS
+  family: info
+  arity: { min: 0, max: 1 }
+  volatility: none
+  range_aware: true
+  ref_args: true
+  rust: info2::sheets
+  status: implemented
+  provenance: ["Microsoft SHEETS (public docs) — sheets a reference spans. T1 LIMITATION: always 1 (no 3-D range Arg shape; EvalCtx lacks a workbook sheet count)"]
+  tests:
+    rust: ["sheet-conformance/tests/fn_info2.rs::sheet_fn_info_sheets"]
+    corpus: ["corpus/fn-corpus/info2/sheets.golden.tsv"]
+
+- id: sheet.fn.info.iseven
+  name: ISEVEN
+  family: info
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: info2::iseven
+  status: implemented
+  provenance: ["ECMA-376 §18.17.7 (ISEVEN) — coerce to number, truncate toward zero, even parity; non-numeric text -> #VALUE!; error propagates"]
+  tests:
+    rust: ["sheet-conformance/tests/fn_info2.rs::sheet_fn_info_iseven"]
+    corpus: ["corpus/fn-corpus/info2/iseven.golden.tsv"]
+
+- id: sheet.fn.info.isodd
+  name: ISODD
+  family: info
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: info2::isodd
+  status: implemented
+  provenance: ["ECMA-376 §18.17.7 (ISODD) — coerce to number, truncate toward zero, odd parity; non-numeric text -> #VALUE!; error propagates"]
+  tests:
+    rust: ["sheet-conformance/tests/fn_info2.rs::sheet_fn_info_isodd"]
+    corpus: ["corpus/fn-corpus/info2/isodd.golden.tsv"]
+
+# ISFORMULA — EVALUATOR SPECIAL FORM (M2 Phase A, `special_form: true`). It
+# must know whether the *referenced cell* stores a formula, which a pure
+# fn(&[Arg], &EvalCtx) kernel cannot see (a `2` is Number(2.0) whether typed or
+# computed). Rather than add a formula-ness flag to the FROZEN calling
+# convention, it is handled in `sheet-calc/eval.rs`: the arg is resolved to a
+# CellRef and `cell.formula.is_some()` is read directly from the model. The
+# pure dispatch door returns #NAME? for this row (eval intercepts first).
+- id: sheet.fn.info.isformula
+  name: ISFORMULA
+  family: info
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: true
+  ref_args: true
+  special_form: true
+  status: implemented
+  provenance: ["Microsoft ISFORMULA (public docs) — true if the reference is a formula cell. EVALUATOR SPECIAL FORM (M2 Phase A): resolved to a CellRef in sheet-calc/eval.rs; returns Bool(cell.formula.is_some())."]
+  tests:
+    rust: ["sheet-conformance/tests/special_forms.rs::sheet_fn_info_isformula"]
+    corpus: []
+
+# ISREF — EVALUATOR SPECIAL FORM (Wave 7). Whether the argument IS a reference
+# is a property of the expression, not of its value (a nested array or an
+# array literal reaches a kernel as a range view too), so it is answered in
+# sheet-calc/eval.rs through the same reference resolution OFFSET/INDIRECT use.
+- id: sheet.fn.info.isref
+  name: ISREF
+  family: info
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: true
+  ref_args: true
+  special_form: true
+  status: implemented
+  provenance: ["Microsoft ISREF (public docs) — TRUE if value refers to a reference (cell, range, range name, OFFSET/INDIRECT result); FALSE for a value, an array or an unresolvable INDIRECT"]
+  tests:
+    rust: ["sheet-conformance/tests/fn_lambda.rs::sheet_fn_info_isref"]
+    corpus: ["corpus/fn-corpus/info2/isref.golden.tsv"]

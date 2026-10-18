@@ -1,0 +1,21 @@
+# Engine-vs-Excel disagreements over the fn-corpus (tests/excel_oracle.rs).
+# kind: defect = the engine is wrong (fixing it must delete the row);
+#       diverges = a recorded ruling or a harness artifact, with its reason.
+# engine/excel are typed tokens (n: s: b: e: blank). The lane fails on an unlisted
+# disagreement, on a row whose values moved, and on a row that now agrees.
+# file	id	kind	engine	excel	reason
+drop.golden.tsv	all-value	diverges	e:#VALUE!	e:#CALC!	ruling: the engine has no #CALC! (CellError lacks it); an empty/zero-shape array result is grounded to an older error. Excel 365 returns #CALC!
+filter.golden.tsv	filter-empty-na	diverges	e:#N/A	e:#CALC!	ruling: the engine has no #CALC! (CellError lacks it); an empty/zero-shape array result is grounded to an older error. Excel 365 returns #CALC!
+irr.golden.tsv	irr-doc-pos	diverges	n:0.08663094803625213	n:8.663094803652216E-2	iterative solver: the engine converges to a tighter root than Excel's own stopping tolerance; both are roots within Excel's precision of the method
+lambda.golden.tsv	as-value-calc	diverges	e:#VALUE!	e:#CALC!	ruling: the engine has no #CALC! (CellError lacks it); an empty/zero-shape array result is grounded to an older error. Excel 365 returns #CALC!
+rate.golden.tsv	rate-loan	diverges	n:0.007701472488233239	n:7.7014724882013682E-3	iterative solver: the engine converges to a tighter root than Excel's own stopping tolerance; both are roots within Excel's precision of the method
+sequence.golden.tsv	seq-zero-shape	diverges	e:#VALUE!	e:#CALC!	ruling: the engine has no #CALC! (CellError lacks it); an empty/zero-shape array result is grounded to an older error. Excel 365 returns #CALC!
+sheet.golden.tsv	multi-cell-range-origin-sheet	diverges	n:1	n:39	harness artifact: the oracle workbook holds one sheet per case, so Excel's SHEET()/SHEETS() see a many-sheet workbook while the engine case has one sheet
+sheet.golden.tsv	no-arg-is-current-sheet	diverges	n:1	n:37	harness artifact: the oracle workbook holds one sheet per case, so Excel's SHEET()/SHEETS() see a many-sheet workbook while the engine case has one sheet
+sheet.golden.tsv	scalar-text-name-arg-falls-back	diverges	n:1	e:#N/A	harness artifact: the oracle workbook has no sheet named Sheet1 (sheets are c1..cN), so Excel's #N/A is about the harness
+sheet.golden.tsv	single-cell-range-origin-sheet	diverges	n:1	n:38	harness artifact: the oracle workbook holds one sheet per case, so Excel's SHEET()/SHEETS() see a many-sheet workbook while the engine case has one sheet
+sheets.golden.tsv	no-arg-is-one	diverges	n:1	n:52	harness artifact: the oracle workbook holds one sheet per case, so Excel's SHEET()/SHEETS() see a many-sheet workbook while the engine case has one sheet
+take.golden.tsv	zero-value	diverges	e:#VALUE!	e:#CALC!	ruling: the engine has no #CALC! (CellError lacks it); an empty/zero-shape array result is grounded to an older error. Excel 365 returns #CALC!
+xirr.golden.tsv	xirr-guess	diverges	n:0.10000000000000006	n:9.9999994039535522E-2	iterative solver: the engine converges to a tighter root than Excel's own stopping tolerance; both are roots within Excel's precision of the method
+xirr.golden.tsv	xirr-one-year	diverges	n:0.1	n:9.9999994039535522E-2	iterative solver: the engine converges to a tighter root than Excel's own stopping tolerance; both are roots within Excel's precision of the method
+xirr.golden.tsv	xirr-two-year	diverges	n:0.1	n:9.9999994039535522E-2	iterative solver: the engine converges to a tighter root than Excel's own stopping tolerance; both are roots within Excel's precision of the method

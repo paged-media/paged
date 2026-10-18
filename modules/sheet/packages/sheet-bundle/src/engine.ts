@@ -1,0 +1,1092 @@
+/*
+ * This file is part of paged (https://paged.media).
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// The typed engine FACADE + boot. The Rust wasm (sheet-js) does ALL the
+// spreadsheet work; this is a thin TS shape over its snake_case
+// wasm-bindgen methods (CLAUDE.md hard rule: no Excel-like operation in
+// TS — every method here forwards to a wasm call). The facade exists so
+// the rest of the bundle codes against a stable camelCase contract and so
+// the not-yet-built artifact can be stubbed in tests.
+//
+// BOOT (S-10). The artifact is the wasm-bindgen `--target web` glue
+// (`bin/sheet_js.js` + `bin/sheet_js_bg.wasm`, produced by
+// scripts/build-wasm.sh — lands in Phase 2). We DON'T use the host's
+// `loadBundleWasm` (it instantiates a RAW module — no wbindgen imports;
+// S-10), we load the glue in the bundle realm exactly like
+// @paged-media/canvas-wasm does, branching browser vs Node the way
+// plugin-sdk's wasm-loader.ts does:
+//   · browser: `default(new URL("./sheet_js_bg.wasm", import.meta.url))`
+//   · Node:    `node:fs` readFile the bytes, `initSync({ module: bytes })`
+// Until the artifact exists the dynamic import REJECTS — bootEngine
+// surfaces that honestly so the panel can say "engine wasm not built".
+
+import type {
+  ChartGeometry,
+  GridScene,
+  LoweredContent,
+  Page,
+} from "../../sheet-host-model/src";
+
+// ------------------------------------------------------------ facade
+
+/** One worksheet's identity + dimensions. `rows`/`cols` are the used
+ *  extent (the engine computes it) so the panel can default the range
+ *  input without a separate call. */
+export interface SheetInfo {
+  id: number;
+  name: string;
+  rows: number;
+  cols: number;
+}
+
+/** One changed cell after an edit — the engine returns the recomputed
+ *  DISPLAY string (already number-formatted in Rust, spec §9). */
+export interface CellChange {
+  sheet: number;
+  row: number;
+  col: number;
+  display: string;
+}
+
+/** Options the lowering pass honours (forwarded verbatim to wasm). */
+export interface LowerOptions {
+  includeGridRules?: boolean;
+  headerRows?: number;
+}
+
+/** Options the grid-scene windowing honours (forwarded verbatim to wasm —
+ *  the engine windows in Rust, spec §8.1). `freezeRows`/`freezeCols` OVERRIDE
+ *  the workbook's stored frozen-pane split for this scene; omit them to use
+ *  the workbook's own `<sheetViews><pane>` split (the engine reads it). */
+export interface GridSceneOptions {
+  includeGridlines?: boolean;
+  freezeRows?: number;
+  freezeCols?: number;
+}
+
+/** One worksheet's frozen-pane split (spec §8.1) — read-only derived state
+ *  parsed from the workbook's `<sheetViews><pane>` (which still round-trips
+ *  byte-identical). Only sheets WITH a frozen pane are reported. */
+export interface FreezeInfo {
+  sheet: number;
+  rows: number;
+  cols: number;
+}
+
+/** One worksheet's DATA-VALIDATION inventory (spec §1.1/§11/T∞ — PRESERVE-
+ *  ONLY). Data validation round-trips preserved but is NEVER enforced,
+ *  evaluated, or rendered as a runtime dropdown; this inventory exists ONLY so
+ *  the panel can SHOW that the workbook carries validations Paged preserves but
+ *  does not enforce. `count` is the headline number; `kinds` the distinct
+ *  validation types present (display only). */
+export interface DataValidationInfo {
+  sheet: number;
+  count: number;
+  kinds: string[];
+}
+
+/** One cell comment / note (preserve-first; spec §10.2). Read-only display
+ *  state from the workbook's opaque `xl/commentsN.xml` (which round-trips
+ *  byte-identical). The grid shows an indicator; this carries the text + author
+ *  for the panel/hover. */
+export interface CommentInfo {
+  sheet: number;
+  row: number;
+  col: number;
+  author: string;
+  text: string;
+}
+
+/** One frame's content box for pagination (the host chain link's content
+ *  box; Wave 2D / S-05). Only height bounds the split; width rides along.
+ *  Forwarded verbatim to wasm. */
+export interface FrameBox {
+  widthPt: number;
+  heightPt: number;
+}
+
+/** Options the pagination pass honours (forwarded verbatim to wasm — the
+ *  threading math lives in Rust, spec §8.2). */
+export interface PaginateOptions {
+  /** Leading rows re-emitted at the top of every continuation frame. */
+  repeatedHeaderRows?: number;
+  /** Append a continued-from marker to frames followed by more body rows. */
+  continuedMarker?: boolean;
+  /** Range-relative `[firstRow, lastRow]` blocks never split across a break. */
+  keepRowsTogether?: [number, number][];
+}
+
+/** One cell rewritten by a bulk edit op (sort / replace) — BOTH
+ *  re-enterable INPUT texts (the ADR-012 journal's inverse pair), straight
+ *  from the engine so the session can journal the whole op as one grouped
+ *  undo step. */
+/** One input of a batch write (`setCells`). */
+export interface CellInputArg {
+  sheet: number;
+  row: number;
+  col: number;
+  input: string;
+}
+
+/** `setCells`' deliberately slim result: how many stored values changed
+ *  (written + recomputed), the circular cells, if any, and each input's
+ *  PRIOR re-enterable input (parallel to the inputs — the undo journal's
+ *  inverse, so a batch write needs no per-cell `getCellInput` first).
+ *  `prevInputs` is absent on an engine that predates it. */
+export interface SetCellsResult {
+  changedCount: number;
+  circular: { sheet: number; row: number; col: number }[];
+  prevInputs?: string[];
+}
+
+export interface CellEditRecord {
+  sheet: number;
+  row: number;
+  col: number;
+  prevInput: string;
+  nextInput: string;
+}
+
+/** The engine's range-sort result: recomputed displays + the per-cell
+ *  input rewrites (journal lane). All sort semantics (stable order, typed
+ *  ranks, blanks-last, the formula-refusal boundary) are decided in Rust. */
+export interface SortResult {
+  changed: CellChange[];
+  edits: CellEditRecord[];
+  /** Wave 9 — the style ids a fill swapped over its target (absent when it
+   *  carried no format): what the undo journal restores. */
+  styles?: { range: string; before: number[]; after: number[] };
+}
+
+/** The rows a sheet's filter VIEW hides (0-based sheet rows, ascending). */
+export interface FilterResult {
+  hiddenRows: number[];
+}
+
+/** Options for find/replace (forwarded verbatim to wasm; matching/collation
+ *  semantics are decided in Rust — documented on the registry rows). */
+export interface FindOptions {
+  matchCase?: boolean;
+  entireCell?: boolean;
+  inFormulas?: boolean;
+}
+
+/** One find hit: the address + a truncated excerpt of the matched text
+ *  (display or input per `inFormulas`). */
+export interface FindMatch {
+  sheet: number;
+  row: number;
+  col: number;
+  excerpt: string;
+}
+
+/** One cell replace_all matched but did not rewrite (parse-failed
+ *  replacement or engine-owned spill output) — reported, never corrupted. */
+export interface SkippedCell {
+  sheet: number;
+  row: number;
+  col: number;
+  reason: string;
+}
+
+/** The engine's replace-all result: spliced-occurrence count, recomputed
+ *  displays, the per-cell input rewrites (journal lane), and the skip
+ *  report. */
+export interface ReplaceResult {
+  occurrences: number;
+  changed: CellChange[];
+  edits: CellEditRecord[];
+  skipped: SkippedCell[];
+}
+
+/** One chart in the workbook (M2 charts track, spec §8.4) — the engine's
+ *  parsed-chart summary for the panel's chart list. `index` is the handle
+ *  `getChartGeometry` takes. */
+export interface ChartInfo {
+  index: number;
+  hostSheet: number;
+  /** The lowercase kind tag (`"column"`, `"bar"`, `"line"`, `"area"`,
+   *  `"pie"`, `"donut"`, `"scatter"`). */
+  kind: string;
+  title: string | null;
+  seriesCount: number;
+}
+
+/** One registered function for the formula-bar autocomplete (S-04). The
+ *  list is the ENGINE's registry-generated name table (constitution §7 —
+ *  the completion names are the engine's truth, NEVER a hand-kept TS list).
+ *  `maxArgs` null = variadic. Only implemented functions appear. */
+export interface FunctionInfo {
+  name: string;
+  family: string;
+  minArgs: number;
+  maxArgs: number | null;
+}
+
+/** The stable engine contract the bundle codes against. Every method is
+ *  a forward to the wasm surface; the facade only renames + shapes. */
+export interface SheetEngine {
+  /** Parse XLSX bytes into the in-memory model (preservation-first; the
+   *  bytes round-trip on save — spec §10). */
+  loadXlsx(bytes: Uint8Array): void;
+  /** Re-emit the workbook as XLSX bytes (lazy-verbatim preservation). */
+  saveXlsx(): Uint8Array;
+  /** Commit one cell input (value or formula); returns every cell whose
+   *  DISPLAY changed (the dirty cut, recomputed in Rust). */
+  setCell(
+    sheet: number,
+    row: number,
+    col: number,
+    input: string,
+  ): { changed: CellChange[] };
+  /** Commit MANY cell inputs with ONE recalc (Wave 2 batch door). Every
+   *  input is validated first: a bad sheet id or a parse error throws and
+   *  leaves the workbook untouched. Optional — an artifact that predates
+   *  the door has no `set_cells`; callers fall back to `setCell`. */
+  setCells?(inputs: readonly CellInputArg[]): SetCellsResult;
+  /** The current formatted display of one cell. */
+  getCellDisplay(sheet: number, row: number, col: number): string;
+  /** The cell's re-enterable INPUT text (`"=…"` for a formula cell; `""`
+   *  for empty/OOB) — the ADR-012 undo journal's faithful inverse (the
+   *  display is NOT re-enterable for formula cells). */
+  getCellInput(sheet: number, row: number, col: number): string;
+  /** Stable sort of a range's rows by a key column (0-based, RELATIVE to
+   *  the range). Formula cells move with their row, relative references
+   *  re-addressed (Excel's rule); a range holding spilled array output
+   *  THROWS the honest boundary error — all semantics in Rust
+   *  (sheet.edit.sort.*). */
+  sortRange(
+    sheet: number,
+    range: string,
+    keyCol: number,
+    ascending: boolean,
+    hasHeader: boolean,
+  ): SortResult;
+  /** Set one column criterion of the sheet's filter VIEW over `range`
+   *  (header row first): `kind` is "equals" | "contains" | "top" | "bottom",
+   *  `col` 0-based within the range. The page lowering skips the hidden rows;
+   *  nothing is written into the xlsx (sheet.edit.filter.view). Optional on
+   *  the interface: the door exists from the Wave-7 engine on, and test
+   *  fakes need not implement it. */
+  setFilter?(
+    sheet: number,
+    range: string,
+    col: number,
+    kind: string,
+    value: string,
+  ): FilterResult;
+  /** Remove the sheet's filter view (sheet.edit.filter.view). */
+  clearFilter?(sheet: number): FilterResult;
+  /** Find every populated cell matching `needle`; `sheet` scopes to one
+   *  sheet, `undefined` scans the whole workbook (sheet.edit.find.*). */
+  findAll(
+    sheet: number | undefined,
+    needle: string,
+    opts?: FindOptions,
+  ): FindMatch[];
+  /** Replace every occurrence over the scope, operating on cell INPUT
+   *  texts via the normal set-cell lane; parse-failing replacements are
+   *  SKIPPED + reported, never half-applied (sheet.edit.replace.*). */
+  replaceAll(
+    sheet: number | undefined,
+    needle: string,
+    replacement: string,
+    opts?: FindOptions,
+  ): ReplaceResult;
+  /** Lower a range to the IR the host-model translator consumes (spec
+   *  §8.2). All geometry/formatting decided in Rust. */
+  getRangeLowered(
+    sheet: number,
+    range: string,
+    opts?: LowerOptions,
+  ): LoweredContent;
+  /** ADR 023 — the same IR with the workbook's REAL per-cell visual styles
+   *  resolved (the M1 style-map track: bold/italic, font size + face, cell
+   *  fill, text colour, borders), where [`getRangeLowered`] emits the frozen
+   *  key-0-only table the page lowering is contracted to.
+   *
+   *  A SEPARATE door on purpose: the page lowering's output is a shipped
+   *  contract, and turning real styles on underneath it changes what lands
+   *  in the document. This exposes a table `sheet-lower` already builds and
+   *  `sheet-conformance` already pins, and which had NO route across the
+   *  wasm boundary at all. Base styles only — conditional formatting is not
+   *  folded in (see `SheetSession::get_range_styled`). */
+  getRangeStyled(
+    sheet: number,
+    range: string,
+    opts?: LowerOptions,
+  ): LoweredContent;
+  /** Read a range (`"A1:D9"` or `"A1"`) as a RECTANGULAR grid of formatted
+   *  DISPLAY strings — the K-6 / S-14 clipboard copy interchange. `out[r][c]`
+   *  is the number-formatted display of the cell at the range's row `r`, col
+   *  `c` (`""` for empty); a formula cell yields its computed display. All
+   *  formatting/normalization decided in Rust (the same value the lowering
+   *  and the grid show — spec §8.3). Junk endpoints / an OOB sheet THROW the
+   *  boundary error. */
+  getRangeValues(sheet: number, range: string): string[][];
+  /** Paginate a range across the host frame chain's content boxes (Wave 2D
+   *  / S-05). `frames` is the chain's content boxes (only height splits);
+   *  returns one `Page` per filled frame — each a self-contained
+   *  `LoweredContent` plus its chain index + continuation flags. The
+   *  threading math lives in Rust (spec §8.2, the killer feature). */
+  paginate(
+    sheet: number,
+    range: string,
+    frames: FrameBox[],
+    opts?: PaginateOptions,
+  ): Page[];
+  /** Window a sheet into a [`GridScene`] for the sheets-mode grid surface
+   *  (spec §8.1, S-02). The engine windows from the `(firstRow, firstCol)`
+   *  scroll origin bounded by `(wPt, hPt)` and materializes only visible
+   *  populated cells in Rust; the panel only paints the result. The wasm
+   *  side (`get_grid_scene`) lands in the JOINS phase; the facade maps it
+   *  now so the panel codes against a stable contract. */
+  getGridScene(
+    sheet: number,
+    firstRow: number,
+    firstCol: number,
+    wPt: number,
+    hPt: number,
+    opts?: GridSceneOptions,
+  ): GridScene;
+  /** Record the sheets-mode selection rectangle in the engine model so the
+   *  next [`getGridScene`] carries it (spec §8.1 — selection is engine
+   *  state, the panel only requests it). `setGridSelection` forwards to
+   *  wasm; the wasm side lands in JOINS. */
+  setGridSelection(
+    sheet: number,
+    anchorRow: number,
+    anchorCol: number,
+    rows: number,
+    cols: number,
+  ): void;
+  /** Enumerate the workbook's sheets (id, name, used extent). */
+  listSheets(): SheetInfo[];
+  /** Enumerate the workbook's charts (M2 charts track, spec §8.4). Parsed
+   *  from the XLSX chart parts on load; empty for a chartless workbook. */
+  listCharts(): ChartInfo[];
+  /** The chart-kind tags `addChart` accepts, in panel order. READ from the
+   *  engine, never hard-coded in TS: all chart semantics (including which
+   *  kinds exist) live in Rust, so the UI cannot offer a kind the engine
+   *  refuses. */
+  chartKinds(): string[];
+  /** AUTHOR a chart over live data. `kind` ∈ [`chartKinds`]; `seriesIn` is
+   *  the transpose control — `"columns"` (the default) reads one series per
+   *  values COLUMN, `"rows"` one per ROW, re-reading the SAME cells the other
+   *  way round (never a rewrite of the user's data). Returns the new chart
+   *  index (same handle the geometry/lowering lanes take). Publishing-first:
+   *  authored charts are page-side only — never written back to xlsx. */
+  addChart(
+    sheet: number,
+    values: string,
+    categories: string,
+    kind: string,
+    title: string,
+    seriesIn?: string,
+  ): number;
+  /** Enumerate the worksheets with a FROZEN PANE (spec §8.1). Read-only
+   *  derived state parsed from the workbook's `<sheetViews><pane>` on load
+   *  (the view round-trips byte-identical); empty when none are frozen. */
+  listFreezePanes(): FreezeInfo[];
+  /** Enumerate the worksheets carrying DATA VALIDATIONS (spec §1.1/§11/T∞ —
+   *  PRESERVE-ONLY). A read-only inventory (count + kinds) for preservation
+   *  transparency: the panel SHOWS that the workbook carries validations Paged
+   *  preserves but does NOT enforce — never a runtime dropdown. Empty when the
+   *  workbook has none. */
+  listDataValidations(): DataValidationInfo[];
+  /** Enumerate the workbook's cell comments / notes (preserve-first; spec
+   *  §10.2). Read-only display state from the opaque `xl/commentsN.xml` parts;
+   *  the grid shows an indicator (folded into `getGridScene`), this carries the
+   *  text for the panel/hover. Empty when the workbook has none. */
+  listComments(): CommentInfo[];
+  /** Enumerate the engine's registered IMPLEMENTED functions for the
+   *  formula-bar autocomplete (S-04). The names come from the engine's
+   *  registry table (constitution §7) — never a TS list. Workbook-
+   *  independent (the registry is build-time fixed). */
+  listFunctions(): FunctionInfo[];
+  /** Resolve chart `index`'s series ranges against the live model and
+   *  generate its geometry IR for a `wPt × hPt` content box (spec §8.4 —
+   *  live to recalc). The IR feeds BOTH the page paged.draw lowering and the
+   *  grid view (one generator, two projections). */
+  getChartGeometry(index: number, wPt: number, hPt: number): ChartGeometry;
+  /** Release the wasm-held model. */
+  dispose(): void;
+
+  // ── Wave 4 doors. Optional so test doubles written before them stay
+  // valid; `wrapEngine` always supplies every one. ──────────────────────
+
+  /** Lower a range for the PAGE: the workbook's real per-cell styles with
+   *  conditional formatting folded on top, grid rules on by default — the
+   *  placed table's door (`getRangeLowered` keeps its key-0 contract). */
+  getRangePage?(sheet: number, range: string, opts?: LowerOptions): LoweredContent;
+  /** Re-evaluate volatile cells (NOW/TODAY/RAND) against the host clock
+   *  (the facade reads the clock itself). */
+  recalcVolatile?(): { changed: CellChange[] };
+  /** The `<calcPr>` iteration knobs in effect. */
+  calcSettings?(): CalcSettingsInfo;
+  /** Toggle iterative calculation (written back to `<calcPr>` on save). */
+  setIterative?(on: boolean, maxIter: number, maxChange: number): { changed: CellChange[] };
+  /** Add a worksheet at the end (empty name = next free `SheetN`); its id. */
+  addSheet?(name: string): number;
+  /** Rename a worksheet (Excel's name rules; throws the reason). */
+  renameSheet?(sheet: number, name: string): void;
+  /** Delete a worksheet; references to it become `#REF!`. */
+  deleteSheet?(sheet: number): { changed: CellChange[] };
+  /** Insert/delete `n` rows or columns at 0-based `at`. Throws (model
+   *  untouched) when preserved content would be left addressing the wrong
+   *  cells — the message names what blocks it. */
+  structuralEdit?(
+    sheet: number,
+    kind: StructuralEditKind,
+    at: number,
+    n: number,
+  ): { changed: CellChange[] };
+  /** Replace the workbook with delimited text (CSV/TSV) as one sheet.
+   *  `delimiter` "" = sniff; `localeTag` reads numbers + dates. */
+  loadCsv?(text: string, delimiter: string, localeTag: string, sheetName: string): void;
+
+  // ── Wave 6 doors (optional for older fakes; `wrapEngine` supplies all).
+
+  /** Apply a partial style to a range (A1, a defined name or a table). */
+  setStyle?(sheet: number, range: string, patch: CellStylePatch): { cells: number; styles: number };
+  /** The full style of one cell. */
+  getStyle?(sheet: number, row: number, col: number): CellStylePatch;
+  /** Wave 9 — the style ids of every cell of `range`, row-major: an exact
+   *  snapshot for `setStyleIds` (the in-session undo of a format change). */
+  getStyleIds?(sheet: number, range: string): number[];
+  /** Wave 9 — restore a `getStyleIds` snapshot (refused whole on a count
+   *  mismatch or an unknown id). */
+  setStyleIds?(sheet: number, range: string, ids: readonly number[]): void;
+  /** Merge a range (top-left keeps its content; the rest is cleared). */
+  merge?(sheet: number, range: string): { changed: CellChange[] };
+  /** Remove every merge intersecting a range; how many. */
+  unmerge?(sheet: number, range: string): number;
+  /** Set (`null` clears) the width of columns `first..=last`, characters. */
+  setColWidth?(sheet: number, first: number, last: number, width: number | null): void;
+  /** Set (`null` clears) the height of rows `first..=last`, points. */
+  setRowHeight?(sheet: number, first: number, last: number, height: number | null): void;
+  /** Freeze the first `rows` rows and `cols` columns (`0, 0` clears). */
+  setFreeze?(sheet: number, rows: number, cols: number): void;
+  /** Sizes, merges and the frozen split of a sheet. */
+  getLayout?(sheet: number): SheetLayoutInfo;
+  /** Define (or redefine) a name → a range as seen from `sheet`. */
+  defineName?(sheet: number, name: string, refersTo: string, scope: number | null): void;
+  /** Delete a defined name. */
+  deleteName?(sheet: number, name: string, scope: number | null): void;
+  /** The workbook's defined names. */
+  listNames?(): NameInfo[];
+  /** Resolve A1 / a name / a table name to `{sheet, range}`. */
+  resolveRange?(sheet: number, text: string): ResolvedRange;
+
+  // ── Wave 5 doors (editing fundamentals). ────────────────────────────
+
+  /** The re-enterable INPUT text of every cell in `range` (row-major;
+   *  formulas with `=`) — a copy's snapshot, one call for the block. */
+  getRangeInputs?(sheet: number, range: string): string[][];
+  /** Re-address copied inputs for a paste `dRow` rows down / `dCol`
+   *  columns right (the copy rule — `$` honoured, off-grid `#REF!`). Pure. */
+  shiftFormulas?(sheet: number, inputs: string[][], dRow: number, dCol: number): string[][];
+  /** Fill `dst` from `src` (`series` = the fill handle; false = fill
+   *  down/right). The per-cell rewrites journal as one undo step. */
+  fillRange?(sheet: number, src: string, dst: string, series: boolean): SortResult;
+  /** ADR 323 — the computed values of a range, typed and unformatted
+   *  (number | string | boolean | null, errors as `{ error }`). */
+  getRangeRaw?(sheet: number, range: string): RawValue[][];
+  /** ADR 323 — every structured table (read-only). */
+  listTables?(): TableInfo[];
+  /** ADR 323 — every chart with its series ranges and options. */
+  chartSpecs?(): ChartSpec[];
+  /** ADR 323 — patch one chart (validated whole; page-side only). */
+  updateChart?(index: number, patch: ChartPatch): void;
+}
+
+/** One computed cell value (no number format applied). */
+export type RawValue = number | string | boolean | null | { error: string };
+
+/** One structured table (ListObject) as the engine models it. */
+export interface TableInfo {
+  name: string;
+  sheet: number;
+  /** Full extent (header + body + totals), plain A1 without the sheet. */
+  range: string;
+  columns: string[];
+  headerRow: boolean;
+  totalsRow: boolean;
+  styleName?: string | null;
+}
+
+/** One chart series; ranges as `Sheet!A1:B2`. */
+export interface SeriesSpec {
+  name?: string | null;
+  values: string;
+  categories?: string | null;
+  color?: string | null;
+}
+
+/** One chart with the options the object model reads. */
+export interface ChartSpec {
+  index: number;
+  hostSheet: number;
+  kind: string;
+  title?: string | null;
+  legend: boolean;
+  series: SeriesSpec[];
+  categoryAxisTitle?: string | null;
+  valueAxisTitle?: string | null;
+  valueAxisMin?: number | null;
+  valueAxisMax?: number | null;
+}
+
+/** A chart patch: absent = unchanged, `null` clears a nullable field. A
+ *  series argument's empty strings mean none. */
+export interface ChartPatch {
+  kind?: string;
+  title?: string | null;
+  legend?: boolean;
+  series?: { values: string; categories: string; name: string; color: string }[];
+  categoryAxisTitle?: string | null;
+  valueAxisTitle?: string | null;
+  valueAxisMin?: number | null;
+  valueAxisMax?: number | null;
+}
+
+/** A range argument resolved by the engine: its sheet, normalized A1, and
+ *  0-based inclusive bounds. */
+export interface ResolvedRange {
+  sheet: number;
+  range: string;
+  top: number;
+  left: number;
+  bottom: number;
+  right: number;
+}
+
+// ── Wave 6: formatting & layout ──────────────────────────────────────────
+
+/** One border edge of a style patch: an xlsx line style (`thin`, `medium`,
+ *  `thick`, `dashed`, `dotted`, `double`, `hair`, …; `none` removes it) and
+ *  an optional `#RRGGBB` colour (absent = automatic). */
+export interface EdgeStyle {
+  style: string;
+  color?: string | null;
+}
+
+/** A partial cell style (`setStyle`): absent fields are left as each cell
+ *  has them; an EMPTY `fontColor` / `fill` clears it; `hAlign` `general`
+ *  and `vAlign` `bottom` are the defaults. `getStyle` answers the same shape
+ *  with every field present. All semantics (validation, dedup, the xlsx
+ *  records) are Rust's. */
+export interface CellStylePatch {
+  numFmt?: string;
+  fontName?: string;
+  fontSize?: number;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  fontColor?: string;
+  fill?: string;
+  borderTop?: EdgeStyle;
+  borderRight?: EdgeStyle;
+  borderBottom?: EdgeStyle;
+  borderLeft?: EdgeStyle;
+  hAlign?: string;
+  vAlign?: string;
+  wrap?: boolean;
+}
+
+/** A sheet's layout: explicit column widths (characters) and row heights
+ *  (points) as `[index, size]` pairs, merges in A1, the frozen split. */
+export interface SheetLayoutInfo {
+  colWidths: [number, number][];
+  rowHeights: [number, number][];
+  merges: string[];
+  freezeRows: number;
+  freezeCols: number;
+}
+
+/** One defined name (`scope` absent = workbook scope). */
+export interface NameInfo {
+  name: string;
+  scope?: number | null;
+  refersTo: string;
+}
+
+/** The structural edits `structuralEdit` accepts. */
+export type StructuralEditKind =
+  | "insertRows"
+  | "deleteRows"
+  | "insertCols"
+  | "deleteCols";
+
+/** The `<calcPr>` iteration knobs. */
+export interface CalcSettingsInfo {
+  iterative: boolean;
+  maxIter: number;
+  maxChange: number;
+}
+
+/** The host clock the facade feeds `NOW`/`TODAY` from. Injected so tests
+ *  can pin it; the default reads `Date`. */
+export interface HostClock {
+  /** Milliseconds since the Unix epoch (UTC). */
+  nowMs(): number;
+  /** `Date#getTimezoneOffset()` — minutes, UTC minus local. */
+  tzOffsetMin(): number;
+}
+
+export const SYSTEM_CLOCK: HostClock = {
+  nowMs: () => Date.now(),
+  tzOffsetMin: () => new Date().getTimezoneOffset(),
+};
+
+// ---------------------------------------------------- wasm surface shape
+
+/** The snake_case wasm-bindgen surface (sheet-js). A structural subset —
+ *  only the members the bundle drives. The artifact lands in Phase 2;
+ *  this shape is the contract the facade maps over. */
+export interface SheetWasmEngine {
+  load_xlsx(bytes: Uint8Array): void;
+  save_xlsx(): Uint8Array;
+  set_cell(
+    sheet: number,
+    row: number,
+    col: number,
+    input: string,
+  ): { changed: CellChange[] };
+  set_cells?(inputs: readonly CellInputArg[]): SetCellsResult;
+  get_cell_display(sheet: number, row: number, col: number): string;
+  get_cell_input(sheet: number, row: number, col: number): string;
+  sort_range(
+    sheet: number,
+    range: string,
+    key_col: number,
+    ascending: boolean,
+    has_header: boolean,
+  ): SortResult;
+  find_all(
+    sheet: number | undefined,
+    needle: string,
+    opts?: FindOptions,
+  ): FindMatch[];
+  replace_all(
+    sheet: number | undefined,
+    needle: string,
+    replacement: string,
+    opts?: FindOptions,
+  ): ReplaceResult;
+  get_range_lowered(
+    sheet: number,
+    range: string,
+    opts?: LowerOptions,
+  ): LoweredContent;
+  get_range_styled(
+    sheet: number,
+    range: string,
+    opts?: LowerOptions,
+  ): LoweredContent;
+  get_range_values(sheet: number, range: string): string[][];
+  paginate(
+    sheet: number,
+    range: string,
+    frames: FrameBox[],
+    opts?: PaginateOptions,
+  ): Page[];
+  get_grid_scene(
+    sheet: number,
+    first_row: number,
+    first_col: number,
+    w_pt: number,
+    h_pt: number,
+    opts?: GridSceneOptions,
+  ): GridScene;
+  set_grid_selection(
+    sheet: number,
+    anchor_row: number,
+    anchor_col: number,
+    rows: number,
+    cols: number,
+  ): void;
+  list_sheets(): SheetInfo[];
+  list_charts(): ChartInfo[];
+  chart_kinds(): string[];
+  add_chart(
+    sheet: number,
+    values: string,
+    categories: string,
+    kind: string,
+    title: string,
+    series_in: string,
+  ): number;
+  list_freeze_panes(): FreezeInfo[];
+  list_data_validations(): DataValidationInfo[];
+  list_comments(): CommentInfo[];
+  list_functions(): FunctionInfo[];
+  get_chart_geometry(index: number, w_pt: number, h_pt: number): ChartGeometry;
+  free(): void;
+  // Wave 4 (optional: older artifacts / fakes lack them).
+  get_range_page?(sheet: number, range: string, opts?: LowerOptions): LoweredContent;
+  set_clock?(unix_ms: number, tz_offset_min: number): number;
+  recalc_volatile?(): { changed: CellChange[] };
+  calc_settings?(): CalcSettingsInfo;
+  set_iterative?(on: boolean, max_iter: number, max_change: number): { changed: CellChange[] };
+  add_sheet?(name: string): number;
+  rename_sheet?(sheet: number, name: string): void;
+  delete_sheet?(sheet: number): { changed: CellChange[] };
+  structural_edit?(sheet: number, kind: string, at: number, n: number): { changed: CellChange[] };
+  get_range_inputs?(sheet: number, range: string): string[][];
+  shift_formulas?(sheet: number, inputs: string[][], drow: number, dcol: number): string[][];
+  fill_range?(sheet: number, src: string, dst: string, series: boolean): SortResult;
+  load_csv?(text: string, delimiter: string, locale_tag: string, sheet_name: string): void;
+  // Wave 6.
+  set_style?(sheet: number, range: string, patch: CellStylePatch): { cells: number; styles: number };
+  get_style?(sheet: number, row: number, col: number): CellStylePatch;
+  get_style_ids?(sheet: number, range: string): Uint32Array;
+  set_style_ids?(sheet: number, range: string, ids: Uint32Array): void;
+  merge?(sheet: number, range: string): { changed: CellChange[] };
+  unmerge?(sheet: number, range: string): number;
+  set_col_width?(sheet: number, first: number, last: number, width?: number): void;
+  set_row_height?(sheet: number, first: number, last: number, height?: number): void;
+  set_freeze?(sheet: number, rows: number, cols: number): void;
+  get_layout?(sheet: number): SheetLayoutInfo;
+  define_name?(sheet: number, name: string, refers_to: string, scope?: number): void;
+  delete_name?(sheet: number, name: string, scope?: number): void;
+  list_names?(): NameInfo[];
+  resolve_range?(sheet: number, text: string): ResolvedRange;
+  get_range_raw?(sheet: number, range: string): (RawValue | undefined)[][];
+  list_tables?(): TableInfo[];
+  chart_specs?(): ChartSpec[];
+  update_chart?(index: number, patch: ChartPatch): void;
+}
+
+/** The module shape the wasm-bindgen `--target web` glue exports. */
+export interface SheetWasmModule {
+  /** Browser init: fetch + instantiate from a URL (or accept bytes). */
+  default(input?: unknown): Promise<unknown>;
+  /** Node init: synchronous instantiate from raw bytes / a Module. */
+  initSync(module: { module: BufferSource | WebAssembly.Module }): unknown;
+  /** The engine constructor (the wasm class wraps the SheetModel). */
+  SheetEngine: new () => SheetWasmEngine;
+}
+
+// ----------------------------------------------------------- the facade
+
+/** Wrap a booted wasm engine in the camelCase facade. Split out so the
+ *  mapping is unit-testable over a fake wasm object (no real wasm). */
+export function wrapEngine(
+  wasm: SheetWasmEngine,
+  clock: HostClock = SYSTEM_CLOCK,
+): SheetEngine {
+  // Wave 4 — NOW/TODAY follow the host clock. Every write that recalcs
+  // (load, cell entry, sort, replace, structural edits) first hands the
+  // engine the current time; the serial conversion (date system, local
+  // time) is Rust's. Absent on an older artifact → a no-op.
+  // Throttled to one call per second of host time: NOW's resolution is a
+  // second, and a 1000-cell paste must not cost 1000 extra wasm calls.
+  let lastTick = Number.NEGATIVE_INFINITY;
+  const tick = () => {
+    const now = clock.nowMs();
+    if (now - lastTick < 1000) return;
+    lastTick = now;
+    wasm.set_clock?.(now, clock.tzOffsetMin());
+  };
+  const need = <K extends keyof SheetWasmEngine>(k: K) => {
+    const f = wasm[k];
+    if (typeof f !== "function") {
+      throw new Error(`engine wasm predates ${String(k)} — rebuild it`);
+    }
+    return (f as (...a: unknown[]) => unknown).bind(wasm);
+  };
+  const facade: SheetEngine = {
+    loadXlsx: (bytes) => {
+      tick();
+      wasm.load_xlsx(bytes);
+    },
+    saveXlsx: () => wasm.save_xlsx(),
+    setCell: (sheet, row, col, input) => {
+      tick();
+      return wasm.set_cell(sheet, row, col, input);
+    },
+    setCells: wasm.set_cells
+      ? (inputs) => {
+          tick();
+          return wasm.set_cells!(inputs);
+        }
+      : undefined,
+    getCellDisplay: (sheet, row, col) =>
+      wasm.get_cell_display(sheet, row, col),
+    getCellInput: (sheet, row, col) => wasm.get_cell_input(sheet, row, col),
+    sortRange: (sheet, range, keyCol, ascending, hasHeader) => {
+      tick();
+      return wasm.sort_range(sheet, range, keyCol, ascending, hasHeader);
+    },
+    findAll: (sheet, needle, opts) => wasm.find_all(sheet, needle, opts),
+    replaceAll: (sheet, needle, replacement, opts) => {
+      tick();
+      return wasm.replace_all(sheet, needle, replacement, opts);
+    },
+    getRangeLowered: (sheet, range, opts) =>
+      wasm.get_range_lowered(sheet, range, opts),
+    getRangeStyled: (sheet, range, opts) =>
+      wasm.get_range_styled(sheet, range, opts),
+    getRangeValues: (sheet, range) => wasm.get_range_values(sheet, range),
+    paginate: (sheet, range, frames, opts) =>
+      wasm.paginate(sheet, range, frames, opts),
+    getGridScene: (sheet, firstRow, firstCol, wPt, hPt, opts) =>
+      wasm.get_grid_scene(sheet, firstRow, firstCol, wPt, hPt, opts),
+    setGridSelection: (sheet, anchorRow, anchorCol, rows, cols) =>
+      wasm.set_grid_selection(sheet, anchorRow, anchorCol, rows, cols),
+    listSheets: () => wasm.list_sheets(),
+    listCharts: () => wasm.list_charts(),
+    chartKinds: () => wasm.chart_kinds(),
+    // An omitted `seriesIn` is the engine's own default ("" => columns), so
+    // the older 5-argument call keeps its exact meaning.
+    addChart: (sheet, values, categories, kind, title, seriesIn) =>
+      wasm.add_chart(sheet, values, categories, kind, title, seriesIn ?? ""),
+    listFreezePanes: () => wasm.list_freeze_panes(),
+    listDataValidations: () => wasm.list_data_validations(),
+    listComments: () => wasm.list_comments(),
+    listFunctions: () => wasm.list_functions(),
+    getChartGeometry: (index, wPt, hPt) =>
+      wasm.get_chart_geometry(index, wPt, hPt),
+    dispose: () => wasm.free(),
+    getRangePage: (sheet, range, opts) =>
+      need("get_range_page")(sheet, range, opts) as LoweredContent,
+    recalcVolatile: () => {
+      tick();
+      return need("recalc_volatile")() as { changed: CellChange[] };
+    },
+    calcSettings: () => need("calc_settings")() as CalcSettingsInfo,
+    setIterative: (on, maxIter, maxChange) =>
+      need("set_iterative")(on, maxIter, maxChange) as { changed: CellChange[] },
+    addSheet: (name) => need("add_sheet")(name) as number,
+    renameSheet: (sheet, name) => {
+      need("rename_sheet")(sheet, name);
+    },
+    deleteSheet: (sheet) => {
+      tick();
+      return need("delete_sheet")(sheet) as { changed: CellChange[] };
+    },
+    structuralEdit: (sheet, kind, at, n) => {
+      tick();
+      return need("structural_edit")(sheet, kind, at, n) as {
+        changed: CellChange[];
+      };
+    },
+    loadCsv: (text, delimiter, localeTag, sheetName) => {
+      tick();
+      need("load_csv")(text, delimiter, localeTag, sheetName);
+    },
+    // Wave 6 — formatting & layout. `null` crosses as `undefined` (the
+    // wasm `Option<…>` reads an absent value).
+    setStyle: (sheet, range, patch) =>
+      need("set_style")(sheet, range, patch) as { cells: number; styles: number },
+    getStyle: (sheet, row, col) => need("get_style")(sheet, row, col) as CellStylePatch,
+    getStyleIds: (sheet, range) => Array.from(need("get_style_ids")(sheet, range) as Uint32Array),
+    setStyleIds: (sheet, range, ids) =>
+      need("set_style_ids")(sheet, range, Uint32Array.from(ids)),
+    merge: (sheet, range) => {
+      tick();
+      return need("merge")(sheet, range) as { changed: CellChange[] };
+    },
+    unmerge: (sheet, range) => need("unmerge")(sheet, range) as number,
+    setColWidth: (sheet, first, last, width) => {
+      need("set_col_width")(sheet, first, last, width ?? undefined);
+    },
+    setRowHeight: (sheet, first, last, height) => {
+      need("set_row_height")(sheet, first, last, height ?? undefined);
+    },
+    setFreeze: (sheet, rows, cols) => {
+      need("set_freeze")(sheet, rows, cols);
+    },
+    getLayout: (sheet) => need("get_layout")(sheet) as SheetLayoutInfo,
+    defineName: (sheet, name, refersTo, scope) => {
+      tick();
+      need("define_name")(sheet, name, refersTo, scope ?? undefined);
+    },
+    deleteName: (sheet, name, scope) => {
+      tick();
+      need("delete_name")(sheet, name, scope ?? undefined);
+    },
+    listNames: () => need("list_names")() as NameInfo[],
+    resolveRange: (sheet, text) =>
+      need("resolve_range")(sheet, text) as ResolvedRange,
+    getRangeInputs: (sheet, range) =>
+      need("get_range_inputs")(sheet, range) as string[][],
+    shiftFormulas: (sheet, inputs, dRow, dCol) =>
+      need("shift_formulas")(sheet, inputs, dRow, dCol) as string[][],
+    fillRange: (sheet, src, dst, series) => {
+      tick();
+      return need("fill_range")(sheet, src, dst, series) as SortResult;
+    },
+    getRangeRaw: (sheet, range) =>
+      (need("get_range_raw")(sheet, range) as (RawValue | undefined)[][]).map((row) =>
+        row.map((v) => (v === undefined ? null : v)),
+      ),
+    listTables: () => need("list_tables")() as TableInfo[],
+    chartSpecs: () => need("chart_specs")() as ChartSpec[],
+    updateChart: (index, patch) => {
+      need("update_chart")(index, patch);
+    },
+  };
+  return guardTraps(facade);
+}
+
+/** A wasm TRAP (a Rust panic, or a read of memory that is not this
+ *  engine's) leaves the instance unusable: the shadow stack and any
+ *  borrow it held are never unwound, so the next call reads garbage or
+ *  traps again somewhere unrelated. The guard turns the first trap into a
+ *  diagnostic naming the call, and refuses every later call with the same
+ *  diagnostic instead of re-entering the broken instance (`dispose` of a
+ *  trapped engine is a no-op). Boundary errors (`Err` → a thrown string or
+ *  Error) pass through untouched — the engine stays healthy after those. */
+export function guardTraps(engine: SheetEngine): SheetEngine {
+  let trapped: Error | null = null;
+  const isTrap = (err: unknown) =>
+    typeof WebAssembly !== "undefined" && err instanceof WebAssembly.RuntimeError;
+  const out: Record<string, unknown> = {};
+  for (const [name, member] of Object.entries(engine)) {
+    if (typeof member !== "function") {
+      out[name] = member;
+      continue;
+    }
+    out[name] = (...args: unknown[]) => {
+      if (trapped) {
+        if (name === "dispose") return undefined;
+        throw trapped;
+      }
+      try {
+        return (member as (...a: unknown[]) => unknown)(...args);
+      } catch (err) {
+        if (!isTrap(err)) throw err;
+        trapped = new Error(
+          `sheet engine trapped in ${name} (${(err as Error).message}); ` +
+            "the engine is unusable until the workbook is reopened in a fresh editor",
+          { cause: err },
+        );
+        throw trapped;
+      }
+    };
+  }
+  return out as unknown as SheetEngine;
+}
+
+// ------------------------------------------------------------- the boot
+
+/** Error message when the artifact is absent (the honest seam — S-10:
+ *  the wasm lands in Phase 2 via scripts/build-wasm.sh). */
+export const ENGINE_NOT_BUILT =
+  "engine wasm not built — run scripts/build-wasm.sh";
+
+/** Is this a Node-like (non-browser) realm? `window`/`document` absent. */
+function isNode(): boolean {
+  return (
+    typeof process !== "undefined" &&
+    process.versions != null &&
+    process.versions.node != null &&
+    typeof (globalThis as { window?: unknown }).window === "undefined"
+  );
+}
+
+/** Load + instantiate the engine wasm module (the glue + the `_bg.wasm`),
+ *  branching browser vs Node exactly like `bootEngine`. Split out so both
+ *  the XLSX-load boot and the EMPTY-workbook boot (S-15) share one
+ *  instantiate path. Rejects with ENGINE_NOT_BUILT-flavoured detail when
+ *  the artifact is missing. */
+/** The one module load per realm (single flight). The glue keeps ONE
+ *  module-level instance, and its async `default()` checks "already
+ *  initialised" BEFORE its await: two boots in flight at once (a reopened
+ *  document restores on activation AND on `documentLoaded`) both
+ *  instantiated, the second replaced the instance, and an engine built on
+ *  the first then read the second's memory with its own pointer —
+ *  "memory access out of bounds" in `list_freeze_panes`. Every boot shares
+ *  this promise; a failed load is forgotten so a later boot can retry. */
+let moduleLoad: Promise<SheetWasmModule> | null = null;
+function loadModule(): Promise<SheetWasmModule> {
+  if (!moduleLoad) {
+    moduleLoad = instantiateModule().catch((err: unknown) => {
+      moduleLoad = null;
+      throw err;
+    });
+  }
+  return moduleLoad;
+}
+
+async function instantiateModule(): Promise<SheetWasmModule> {
+  let mod: SheetWasmModule;
+  try {
+    // @ts-ignore — the artifact (bin/sheet_js.js, the wasm-bindgen
+    // --target web glue) is produced by scripts/build-wasm.sh in Phase 2
+    // and is intentionally absent from the source tree; the dynamic
+    // import resolves at runtime once built. Typed via SheetWasmModule.
+    mod = (await import("../bin/sheet_js.js")) as SheetWasmModule;
+  } catch (cause) {
+    throw new Error(ENGINE_NOT_BUILT, { cause });
+  }
+
+  if (isNode()) {
+    const { readFile } = await import("node:fs/promises");
+    const { fileURLToPath } = await import("node:url");
+    const wasmPath = fileURLToPath(
+      new URL("../bin/sheet_js_bg.wasm", import.meta.url),
+    );
+    const bytes = await readFile(wasmPath);
+    mod.initSync({
+      module: new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength),
+    });
+  } else {
+    // Browser path: resolve the artifact through the bundler's explicit
+    // `?url` import (the editor's wasm-loading convention). A bare
+    // relative URL resolves against the SERVED module path, and the dev
+    // server answers its HTML fallback — the
+    // "expected magic word 00 61 73 6d, found 3c 21 64 6f" boot failure
+    // the K-1 live-validation e2e surfaced. Object form: the bare
+    // argument is deprecated by wasm-bindgen.
+    // @ts-ignore — `?url` is a bundler affordance, untyped.
+    const wasmUrl = (await import("../bin/sheet_js_bg.wasm?url")) as {
+      default: string;
+    };
+    await mod.default({ module_or_path: wasmUrl.default });
+  }
+  return mod;
+}
+
+/** Load + boot the engine wasm, returning the facade. Browser path
+ *  passes the `_bg.wasm` URL to `default()`; Node path reads the bytes
+ *  and `initSync`s (mirroring plugin-sdk's wasm-loader.ts). Rejects with
+ *  ENGINE_NOT_BUILT-flavoured detail when the artifact is missing so the
+ *  panel can surface the honest "not built" state. */
+export async function bootEngine(clock?: HostClock): Promise<SheetEngine> {
+  const mod = await loadModule();
+  return wrapEngine(new mod.SheetEngine(), clock);
+}
+
+/** Boot a FRESH, EMPTY workbook (S-15 — source-a-sheet-from-a-dataset).
+ *  `new SheetEngine()` boots an empty workbook with one sheet "Sheet1"
+ *  (sheet id 0); the caller seeds cells with `setCell`. Identical boot
+ *  path to `bootEngine` — the only difference is no `loadXlsx`, so the
+ *  workbook starts blank rather than parsed from bytes. Same honest
+ *  ENGINE_NOT_BUILT rejection when the artifact is absent. */
+export async function bootEmptyEngine(clock?: HostClock): Promise<SheetEngine> {
+  const mod = await loadModule();
+  const engine = wrapEngine(new mod.SheetEngine(), clock);
+  // Wave 4 — the boot sets the clock too (a blank workbook has no volatile
+  // cell yet, so this is one cheap call; it makes the first TODAY() typed
+  // into it right without waiting for another write).
+  engine.recalcVolatile?.();
+  return engine;
+}

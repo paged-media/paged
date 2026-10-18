@@ -1,0 +1,481 @@
+/*
+ * This file is part of paged (https://paged.media).
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// The REAL engine boot (sheet.plugin.engine.boot): boots the actual
+// wasm-bindgen artifact in Node via the same glue path engine.ts uses
+// (initSync over bytes — the S-10 bundle-realm pattern) and drives one
+// full entry -> recalc -> lower -> save -> reload loop.
+//
+// DUAL-GATED (audit P3): when packages/sheet-bundle/bin/sheet_js_bg.wasm
+// has not been built (scripts/build-wasm.sh), the suite SKIPS locally —
+// the pure-TS vitest lane stays green without a Rust toolchain. In CI the
+// vitest workflow BUILDS the artifact and sets REQUIRE_REAL_ENGINE=1,
+// under which a missing artifact FAILS the suite instead of skipping it —
+// the skip gate can never silently drop the real boot out of CI again.
+// (The rust lane builds the artifact too, but never runs vitest; before
+// this gate the real boot ran on NOBODY's CI.)
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
+
+import {
+  chartGeometryToMutations,
+  makeBinding,
+  styleProps,
+  workbookPalette,
+  type ChartGeometry,
+  type LoweredContent,
+} from "@paged-media/sheet-host-model";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const BIN = join(HERE, "..", "bin");
+const WASM = join(BIN, "sheet_js_bg.wasm");
+const built = existsSync(WASM);
+const CHART_XLSX = join(HERE, "..", "..", "..", "corpus/xlsx-corpus/09-chart.xlsx");
+/** ADR 023 — the TEXT-STYLES fixture: A/B columns carry two genuinely
+ *  different per-cell fonts, C carries none. The editor's
+ *  `text-retarget.spec.ts` pins the SAME numbers, so the two ends of the
+ *  seam agree by test rather than by coincidence — the discipline the
+ *  Swatches slice used for `Color/uPagedSheetChart3366CC`. */
+const TEXT_XLSX = join(
+  HERE,
+  "..",
+  "..",
+  "..",
+  "corpus/xlsx-corpus/14-textstyles.xlsx",
+);
+
+// The CI half of the dual gate: REQUIRE_REAL_ENGINE=1 turns "artifact
+// missing" from a skip into a hard failure with a build pointer.
+if (process.env.REQUIRE_REAL_ENGINE === "1" && !built) {
+  describe("real engine boot (wasm artifact) — REQUIRED", () => {
+    it("FAILS: REQUIRE_REAL_ENGINE=1 but the wasm artifact is missing", () => {
+      throw new Error(
+        `REQUIRE_REAL_ENGINE=1 but ${WASM} is missing — ` +
+          "build it with `bash scripts/build-wasm.sh` (CI must build the " +
+          "artifact before running vitest; skipping is not allowed here)",
+      );
+    });
+  });
+}
+
+describe.skipIf(!built)("real engine boot (wasm artifact)", () => {
+  it("boots, calculates, lowers, and round-trips xlsx", async () => {
+    const glue = await import(/* @vite-ignore */ join(BIN, "sheet_js.js"));
+    glue.initSync({ module: readFileSync(WASM) });
+
+    const e = new glue.SheetEngine();
+    e.set_cell(0, 0, 0, "100");
+    e.set_cell(0, 1, 0, "250.5");
+    e.set_cell(0, 2, 0, "=SUM(A1:A2)*0.19");
+    expect(e.get_cell_display(0, 2, 0)).toBe("66.595");
+
+    // Editing a precedent recalculates the dependent chain.
+    const r = e.set_cell(0, 0, 0, "1000");
+    const changed = r.changed.map((c: { row: number; display: string }) => [c.row, c.display]);
+    expect(changed).toContainEqual([2, "237.595"]);
+
+    // Lowered IR carries the formatted text (the §8.3 contract).
+    const low = e.get_range_lowered(0, "A1:A3", { includeGridRules: true });
+    expect(low.rows.map((row: { cells: { text: string }[] }) => row.cells[0].text)).toEqual([
+      "1000",
+      "250.5",
+      "237.595",
+    ]);
+    expect(low.rules.h.length).toBeGreaterThan(0);
+
+    // Save -> reload: formulas and values survive.
+    const saved = e.save_xlsx();
+    const e2 = new glue.SheetEngine();
+    e2.load_xlsx(saved);
+    expect(e2.get_cell_display(0, 2, 0)).toBe("237.595");
+    e.free();
+    e2.free();
+  });
+
+  // Wave 2D (S-05): paginate a tall range across a 2-frame chain end-to-end
+  // across the real wasm door — the Rust engine threads the rows and serialises
+  // a Vec<Page> the TS facade reads (camelCase frameIndex/continued).
+  it("paginates a range across a frame chain (Wave 2D, S-05)", async () => {
+    const glue = await import(/* @vite-ignore */ join(BIN, "sheet_js.js"));
+    glue.initSync({ module: readFileSync(WASM) });
+    const e = new glue.SheetEngine();
+    for (let r = 0; r < 6; r++) e.set_cell(0, r, 0, `r${r}`);
+
+    // Two 45pt frames (= 3 rows of 15pt each) → the 6 rows split 3/3.
+    const pages = e.paginate(
+      0,
+      "A1:A6",
+      [
+        { widthPt: 200, heightPt: 45 },
+        { widthPt: 200, heightPt: 45 },
+      ],
+      { continuedMarker: true },
+    ) as Array<{
+      frameIndex: number;
+      continued: boolean;
+      content: { rows: { cells: { text: string }[] }[] };
+    }>;
+
+    expect(pages.length).toBe(2);
+    expect(pages[0].frameIndex).toBe(0);
+    expect(pages[1].frameIndex).toBe(1);
+    expect(pages[0].continued).toBe(true); // more body rows follow
+    expect(pages[1].continued).toBe(false);
+    expect(pages[0].content.rows[0].cells[0].text).toBe("r0");
+    expect(pages[1].content.rows[0].cells[0].text).toBe("r3");
+    e.free();
+  });
+
+  // FREEZE AMENDMENT (audit finding 1): a full-sheet lowered range must throw a
+  // JS error across the wasm door — NOT abort the allocator and poison the
+  // wasm-bindgen borrow (which used to brick every later &mut call). The
+  // session must stay usable after the rejection.
+  it("rejects an oversize lowered range and stays usable (finding 1)", async () => {
+    const glue = await import(/* @vite-ignore */ join(BIN, "sheet_js.js"));
+    glue.initSync({ module: readFileSync(WASM) });
+    const e = new glue.SheetEngine();
+
+    // The full-sheet range A1:XFD1048576 (~1.7e10 cells) throws, it does not
+    // crash the module.
+    expect(() => e.get_range_lowered(0, "A1:XFD1048576", {})).toThrow(/T0 lowering cap/);
+
+    // The session is NOT poisoned: a following &mut call still works.
+    e.set_cell(0, 0, 0, "42");
+    expect(e.get_cell_display(0, 0, 0)).toBe("42");
+
+    // A range exactly at the cap is still accepted end-to-end.
+    const atCap = e.get_range_lowered(0, "A1:A1048576", {});
+    expect(atCap.rows.length).toBe(1_048_576);
+    expect(atCap.rows[0].cells[0].text).toBe("42");
+    e.free();
+  });
+
+  // FREEZE AMENDMENT (audit finding 2): set_cell with an out-of-range sheet id
+  // must throw a JS error and must NOT auto-create a phantom sheet (whose data
+  // would silently drop on save). The workbook stays one sheet, clean.
+  it("rejects an out-of-range sheet id without phantom sheets (finding 2)", async () => {
+    const glue = await import(/* @vite-ignore */ join(BIN, "sheet_js.js"));
+    glue.initSync({ module: readFileSync(WASM) });
+    const e = new glue.SheetEngine();
+
+    expect(e.list_sheets().length).toBe(1);
+
+    // set_cell(5, ...) on a 1-sheet workbook throws across the door.
+    expect(() => e.set_cell(5, 0, 0, "boom")).toThrow(/out of range/);
+
+    // No phantom sheet was created; the workbook stays clean (not dirty).
+    expect(e.list_sheets().length).toBe(1);
+    expect(e.metadata().dirty).toBe(false);
+
+    // get_cell_display on the OOB sheet returns "" by contract, creating
+    // nothing.
+    expect(e.get_cell_display(5, 0, 0)).toBe("");
+    expect(e.list_sheets().length).toBe(1);
+    e.free();
+  });
+
+  // FINDING 1 end-to-end smoke: get_chart_geometry on the real 09-chart
+  // workbook, lower it through chartGeometryToMutations, and prove the chart's
+  // FILL/STROKE colours now ride out as document swatches + frame colour refs
+  // (pre-fix the whole palette was silently dropped).
+  it("lowers a real chart's palette to swatches + frame colour refs (finding 1)", async () => {
+    const glue = await import(/* @vite-ignore */ join(BIN, "sheet_js.js"));
+    glue.initSync({ module: readFileSync(WASM) });
+    const e = new glue.SheetEngine();
+    e.load_xlsx(readFileSync(CHART_XLSX));
+
+    const charts = e.list_charts() as Array<{ index: number }>;
+    expect(charts.length).toBeGreaterThan(0);
+
+    const geom = e.get_chart_geometry(charts[0].index, 300, 200) as ChartGeometry;
+    // The geometry carries colour-bearing primitives (the bug was that these
+    // colours never reached the host mutations).
+    const colourBearing = geom.prims.filter(
+      (p) =>
+        (p.kind === "rect" && p.fill) ||
+        (p.kind === "wedge" && p.fill) ||
+        (p.kind === "polygon" && p.fill) ||
+        (p.kind === "line" && p.stroke),
+    );
+    expect(colourBearing.length).toBeGreaterThan(0);
+
+    const { batch } = chartGeometryToMutations(
+      geom,
+      { pageId: "Page/u1", bounds: [0, 0, 200, 300] },
+      makeBinding("Sheet1", "A1:B5", 1),
+    );
+    const ops = (batch as { args: { ops: Array<{ op: string; args: Record<string, unknown> }> } })
+      .args.ops;
+
+    // At least one createSwatch (the palette becomes real document swatches).
+    const swatches = ops.filter((o) => o.op === "createSwatch");
+    expect(swatches.length).toBeGreaterThan(0);
+    // Each swatch is an RGB swatch with 0..255 channels.
+    for (const s of swatches) {
+      const spec = s.args.spec as { space: string; value: number[] };
+      expect(spec.space).toBe("RGB");
+      expect(spec.value).toHaveLength(3);
+      for (const ch of spec.value) {
+        expect(ch).toBeGreaterThanOrEqual(0);
+        expect(ch).toBeLessThanOrEqual(255);
+      }
+    }
+
+    // At least one frameFillColor or frameStrokeColor ref, pointing at a minted
+    // swatch id (NOT a default-coloured path — the finding-1 fix).
+    const colourRefs = ops.filter(
+      (o) =>
+        o.op === "setElementProperty" &&
+        ((o.args.path as string) === "frameFillColor" ||
+          (o.args.path as string) === "frameStrokeColor"),
+    );
+    expect(colourRefs.length).toBeGreaterThan(0);
+    const swatchIds = new Set(
+      swatches.map((s) => (s.args.spec as { selfId: string }).selfId),
+    );
+    for (const c of colourRefs) {
+      const v = c.args.value as { type: string; value: string };
+      expect(v.type).toBe("colorRef");
+      expect(swatchIds.has(v.value)).toBe(true);
+    }
+
+    e.free();
+  });
+
+  // ADR 023 — the WORKBOOK PALETTE derived from a REAL workbook. The host
+  // Swatches panel binds to these ids while the `sheet` edit context is
+  // active, and the host resolves a colour chip BY DOCUMENT SWATCH ID, so
+  // "the palette's ids are the lowering's ids" has to hold against the
+  // actual engine and not just against a hand-built geometry.
+  it("derives the workbook palette from a real chart workbook (ADR 023)", async () => {
+    const glue = await import(/* @vite-ignore */ join(BIN, "sheet_js.js"));
+    glue.initSync({ module: readFileSync(WASM) });
+    const e = new glue.SheetEngine();
+    e.load_xlsx(readFileSync(CHART_XLSX));
+
+    const charts = e.list_charts() as Array<{ index: number }>;
+    expect(charts.length).toBeGreaterThan(0);
+    const geoms = charts.map(
+      (c) => e.get_chart_geometry(c.index, 400, 300) as ChartGeometry,
+    );
+
+    const palette = workbookPalette({ charts: geoms });
+    expect(palette.length).toBeGreaterThan(0);
+    // Every entry is a REAL document swatch id in paged.sheet's minted
+    // namespace — never a raw hex, which core's `Graphic::resolve` could
+    // not look up.
+    for (const entry of palette) {
+      expect(entry.selfId.startsWith("Color/uPagedSheet")).toBe(true);
+    }
+    // 09-chart.xlsx declares its series colour explicitly
+    // (`<a:srgbClr val="3366CC"/>`), so that colour must be in the
+    // palette at its deterministic id — the value the editor's
+    // swatches-retarget e2e asserts the host panel shows.
+    expect(palette.map((p) => p.selfId)).toContain(
+      "Color/uPagedSheetChart3366CC",
+    );
+
+    // …and the palette agrees with what the lowering actually mints.
+    const { batch } = chartGeometryToMutations(
+      geoms[0],
+      { pageId: "Page/u1", bounds: [0, 0, 300, 400] },
+      makeBinding("Sheet1", "A1:B5", 1),
+    );
+    const ops = (
+      batch as { args: { ops: Array<{ op: string; args: Record<string, unknown> }> } }
+    ).args.ops;
+    const mintedIds = ops
+      .filter((o) => o.op === "createSwatch")
+      .map((o) => (o.args.spec as { selfId: string }).selfId);
+    expect(mintedIds).toEqual(
+      workbookPalette({ charts: [geoms[0]] }).map((p) => p.selfId),
+    );
+    e.free();
+  });
+
+  // GRAPHS (Illustrator catalog §16.4). The engine advertises its OWN kind
+  // set — the panel reads it rather than hard-coding one — and every
+  // advertised kind, including the three added for the catalog row (stacked
+  // column/bar, radar), lowers through the UNCHANGED `chartGeometryToMutations`.
+  // That is the load-bearing claim: the new kinds are expressed entirely in
+  // the FROZEN Primitive vocabulary, so the paged.draw translator needed no
+  // change and no new core op. A kind that smuggled in a new primitive would
+  // fail here, on the real wasm.
+  it("authors and lowers every advertised chart kind (§16.4 graphs)", async () => {
+    const glue = await import(/* @vite-ignore */ join(BIN, "sheet_js.js"));
+    glue.initSync({ module: readFileSync(WASM) });
+    const e = new glue.SheetEngine();
+    e.load_xlsx(readFileSync(CHART_XLSX));
+
+    const kinds = e.chart_kinds() as string[];
+    // Illustrator's nine graph types are a SUBSET of what the engine offers.
+    for (const want of [
+      "column",
+      "stackedColumn",
+      "bar",
+      "stackedBar",
+      "line",
+      "area",
+      "scatter",
+      "pie",
+      "radar",
+    ]) {
+      expect(kinds).toContain(want);
+    }
+
+    // The primitive kinds the frozen IR defines — and the ONLY ones the
+    // translator knows how to lower.
+    const FROZEN = new Set(["rect", "line", "polygon", "wedge", "text"]);
+    for (const kind of kinds) {
+      const idx = e.add_chart(0, "B2:C4", "A2:A4", kind, "", "columns") as number;
+      const geom = e.get_chart_geometry(idx, 320, 240) as ChartGeometry;
+      expect(geom.prims.length, `${kind} draws primitives`).toBeGreaterThan(0);
+      for (const p of geom.prims) {
+        expect(FROZEN.has(p.kind), `${kind} emits only frozen primitives`).toBe(
+          true,
+        );
+      }
+      const { batch } = chartGeometryToMutations(
+        geom,
+        { pageId: "Page/u1", bounds: [0, 0, 240, 320] },
+        makeBinding("Sheet1", `chart:${idx}`, 0),
+      );
+      const ops = (
+        batch as { args: { ops: Array<{ op: string }> } }
+      ).args.ops;
+      expect(ops.length, `${kind} lowers to host ops`).toBeGreaterThan(0);
+      // Every op is one the existing translator already emitted — no new
+      // core door was needed for any new kind.
+      const allowed = new Set([
+        "createSwatch",
+        "insertPath",
+        "insertTextFrame",
+        "setElementProperty",
+        "setPluginMetadata",
+      ]);
+      for (const o of ops) expect(allowed.has(o.op), `${kind}: ${o.op}`).toBe(true);
+    }
+
+    // TRANSPOSE ROWS/COLUMNS: the same B2:C4 block is 2 column-series or 3
+    // row-series. Re-read, never rewritten.
+    const byCol = e.add_chart(0, "B2:C4", "A2:A4", "column", "", "columns") as number;
+    const byRow = e.add_chart(0, "B2:C4", "A2:A4", "column", "", "rows") as number;
+    const list = e.list_charts() as Array<{ index: number; seriesCount: number }>;
+    expect(list[byCol].seriesCount).toBe(2);
+    expect(list[byRow].seriesCount).toBe(3);
+    // A bad orientation is a boundary error, not a silent default.
+    expect(() => e.add_chart(0, "B2:C4", "", "column", "", "diagonal")).toThrow(
+      /orientation/,
+    );
+
+    e.free();
+  });
+
+  // S-04 formula bar: the function name table flows through the REAL wasm
+  // door — the engine's registry codegen (sheet-core/build.rs FUNC_META) is
+  // the autocomplete's source (constitution §7), proven against the artifact.
+  it("lists the registry functions for the formula bar (S-04)", async () => {
+    const glue = await import(/* @vite-ignore */ join(BIN, "sheet_js.js"));
+    glue.initSync({ module: readFileSync(WASM) });
+    const e = new glue.SheetEngine();
+
+    const fns = e.list_functions() as Array<{
+      name: string;
+      family: string;
+      minArgs: number;
+      maxArgs: number | null;
+    }>;
+    expect(fns.length).toBeGreaterThan(50);
+
+    const sum = fns.find((f) => f.name === "SUM");
+    expect(sum).toBeDefined();
+    expect(sum?.minArgs).toBe(1);
+    // Variadic — Rust `Option<u8>::None` crosses serde-wasm-bindgen as
+    // `undefined` (not `null`); arityHint treats both as "no upper bound".
+    expect(sum?.maxArgs == null).toBe(true);
+    // A different family rides along (not an agg-only slice).
+    expect(fns.some((f) => f.name === "VLOOKUP")).toBe(true);
+    e.free();
+  });
+
+  // ADR 023 phase D — the CHARACTER/PARAGRAPH provider's source of truth.
+  // The provider reads cell styles out of `get_range_lowered` and maps
+  // them with `styleProps` (the SAME translation the page lowering uses).
+  // If the engine did not record these overrides, the whole VALUE-axis
+  // proof would be vacuously green over an empty style table — so pin
+  // them against the real artifact.
+  it("records per-cell font overrides the text provider reads (ADR 023)", async () => {
+    const glue = await import(/* @vite-ignore */ join(BIN, "sheet_js.js"));
+    glue.initSync({ module: readFileSync(WASM) });
+    const e = new glue.SheetEngine();
+    e.load_xlsx(readFileSync(TEXT_XLSX));
+
+    // The STYLED door (`get_range_styled`), not the frozen page-lowering
+    // one: `get_range_lowered` emits the key-0-only table by contract, and
+    // that contract is asserted alongside so the split stays honest.
+    expect(
+      (
+        e.get_range_lowered(0, "A1:C2", {
+          includeGridRules: false,
+        }) as LoweredContent
+      ).styles?.length,
+    ).toBe(1);
+    const low = e.get_range_styled(0, "A1:C2", {
+      includeGridRules: false,
+    }) as LoweredContent;
+    const styles = low.styles ?? [];
+    // A REAL style table, not the T0 key-0-only one.
+    expect(styles.length).toBeGreaterThan(1);
+
+    const styleAt = (row: number, col: number) => {
+      const cell = low.rows
+        .find((r) => r.index === row)
+        ?.cells.find((c) => c.col === col);
+      return styles[cell?.styleKey ?? 0];
+    };
+    const propsAt = (row: number, col: number) =>
+      Object.fromEntries(
+        styleProps(styleAt(row, col)).map((p) => [p.path, p.value]),
+      );
+
+    // Column A — bold, 18pt, Georgia. Both rows the SAME (the uniform
+    // case the panel must show as a value).
+    for (const row of [0, 1]) {
+      expect(propsAt(row, 0)).toMatchObject({
+        characterFontStyle: { type: "text", value: "Bold" },
+        characterFontSize: { type: "length", value: 18 },
+        characterFontFamily: { type: "text", value: "Georgia" },
+      });
+    }
+    // Column B — italic, 9pt, Verdana. DIFFERENT from A on all three, so
+    // an A+B selection is genuinely mixed and not mixed by accident.
+    expect(propsAt(0, 1)).toMatchObject({
+      characterFontStyle: { type: "text", value: "Italic" },
+      characterFontSize: { type: "length", value: 9 },
+      characterFontFamily: { type: "text", value: "Verdana" },
+    });
+    // Column C — the WORKBOOK DEFAULT font. The engine records size/name
+    // only when they DIFFER from it (`sheet-xlsx` visual_of, the §8.3
+    // "don't splatter local overrides" ruling), so this cell declares
+    // NOTHING and the provider answers `absent` over it — not "11 pt".
+    expect(propsAt(0, 2)).toEqual({});
+    e.free();
+  });
+});

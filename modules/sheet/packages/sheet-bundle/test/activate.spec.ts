@@ -1,0 +1,333 @@
+/*
+ * This file is part of paged (https://paged.media).
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// sheet.plugin.bundle.activate — registration wiring against a minimal
+// hand-rolled fake BundleHost (no editor, no engine): the bundle
+// contributes ONE panel + the two commands, and dispose tears the
+// session down cleanly (the honesty smoke test). Engine behavior is NOT
+// exercised here — this is wiring only.
+
+import { describe, expect, it } from "vitest";
+
+import type {
+  BundleHost,
+  CommandContribution,
+  Disposable,
+  EditContextContribution,
+  ExporterContribution,
+  ImporterContribution,
+  ObjectTypeContribution,
+  PanelContribution,
+} from "@paged-media/plugin-api";
+
+import { sheetBundle } from "../src";
+
+/** A minimal recording fake of the slice of BundleHost activate touches:
+ *  contribute.panel / contribute.command, log, and shell.openPanel. Each
+ *  registration returns a Disposable the fake tracks so we can assert
+ *  teardown. */
+function fakeHost() {
+  const panels: PanelContribution[] = [];
+  const commands: CommandContribution[] = [];
+  const importers: ImporterContribution[] = [];
+  const exporters: ExporterContribution[] = [];
+  const objectTypes: ObjectTypeContribution[] = [];
+  const editContexts: EditContextContribution[] = [];
+  let disposed = 0;
+  const track = (): Disposable => ({
+    dispose() {
+      disposed += 1;
+    },
+  });
+  const openedPanels: string[] = [];
+  const host = {
+    manifest: sheetBundle.manifest,
+    log: { debug() {}, info() {}, warn() {}, error() {} },
+    // The IO contribution doors are wired; the host file picker is NOT,
+    // so importXlsx exercises the panel-fallback path (S-11 fallback).
+    supports: (f: string) =>
+      f === "contribute.importer@1" ||
+      f === "contribute.exporter@1" ||
+      f === "contribute.objectType@1" ||
+      f === "contribute.editContext@1" ||
+      f === "contribute.schemaPanel@1",
+    contribute: {
+      panel(c: PanelContribution): Disposable {
+        panels.push(c);
+        return track();
+      },
+      // ADR 323 — the property-rows panel registers as a schema panel.
+      schemaPanel(c: PanelContribution): Disposable {
+        panels.push(c);
+        return track();
+      },
+      command(c: CommandContribution): Disposable {
+        commands.push(c);
+        return track();
+      },
+      importer(c: ImporterContribution): Disposable {
+        importers.push(c);
+        return track();
+      },
+      exporter(c: ExporterContribution): Disposable {
+        exporters.push(c);
+        return track();
+      },
+      objectType(c: ObjectTypeContribution): Disposable {
+        objectTypes.push(c);
+        return track();
+      },
+      editContext(c: EditContextContribution): Disposable {
+        editContexts.push(c);
+        return track();
+      },
+    },
+    bindings: { publish() {}, get: () => undefined, delete() {}, onDidChange: () => ({ dispose() {} }) },
+    selection: { get: () => [], onDidChange: () => ({ dispose() {} }) },
+    objects: { query: async () => [], get: async () => ({ kind: "absent" }), onDidChange: () => ({ dispose() {} }) },
+    shell: {
+      openPanel(id: string) {
+        openedPanels.push(id);
+      },
+      closePanel() {},
+    },
+  } as unknown as BundleHost;
+  return {
+    host,
+    panels,
+    commands,
+    importers,
+    exporters,
+    objectTypes,
+    editContexts,
+    openedPanels,
+    disposedCount: () => disposed,
+  };
+}
+
+describe("sheet_plugin_bundle_activate", () => {
+  it("registers the workbook + grid + datasets + properties panels under their declared ids", () => {
+    const fake = fakeHost();
+    sheetBundle.activate(fake.host);
+    expect(fake.panels.map((p) => p.id)).toEqual([
+      "media.paged.sheet.panel.workbook",
+      "media.paged.sheet.panel.grid",
+      "media.paged.sheet.panel.datasets",
+      "media.paged.sheet.panel.properties",
+    ]);
+    expect(fake.panels[0].title).toBe("Workbook");
+    expect(fake.panels[0].defaultDock).toBe("right");
+    expect(fake.panels[1].title).toBe("Grid");
+    expect(fake.panels[1].defaultDock).toBe("right");
+    expect(fake.panels[2].title).toBe("Datasets");
+    expect(fake.panels[2].defaultDock).toBe("right");
+  });
+
+  it("registers the commands under their declared ids", () => {
+    const fake = fakeHost();
+    sheetBundle.activate(fake.host);
+    expect(fake.commands.map((c) => c.id)).toEqual([
+      "media.paged.sheet.command.importXlsx",
+      "media.paged.sheet.command.lowerToFrame",
+      "media.paged.sheet.command.lowerChartToFrame",
+      "media.paged.sheet.command.openGrid",
+      "media.paged.sheet.command.showGridInFrame",
+      "media.paged.sheet.command.hideGridInFrame",
+      "media.paged.sheet.command.sortRange",
+      "media.paged.sheet.command.findReplace",
+      "media.paged.sheet.command.sheetFromDataset",
+      "media.paged.sheet.command.copySelection",
+      "media.paged.sheet.command.pasteSelection",
+      "media.paged.sheet.command.styleFromCell",
+      "media.paged.sheet.command.paginateToChain",
+      "media.paged.sheet.command.newWorkbook",
+      "media.paged.sheet.command.insertRows",
+      "media.paged.sheet.command.deleteRows",
+      "media.paged.sheet.command.insertColumns",
+      "media.paged.sheet.command.deleteColumns",
+      "media.paged.sheet.command.addSheet",
+      "media.paged.sheet.command.fillDown",
+      "media.paged.sheet.command.fillRight",
+      "media.paged.sheet.command.clearCells",
+      "media.paged.sheet.command.findInSheet",
+      "media.paged.sheet.command.findNext",
+    ]);
+  });
+
+  it("titles the placing verbs 'Place … on page' (the ids keep their names)", () => {
+    const fake = fakeHost();
+    sheetBundle.activate(fake.host);
+    const title = (suffix: string) =>
+      fake.commands.find((c) => c.id === `media.paged.sheet.command.${suffix}`)?.title;
+    expect(title("lowerToFrame")).toBe("Place selection on page");
+    expect(title("lowerChartToFrame")).toBe("Place chart on page");
+  });
+
+  it("sortRange opens the workbook panel; findReplace the grid panel (where find lives)", () => {
+    const fake = fakeHost();
+    sheetBundle.activate(fake.host);
+    fake.commands.find((c) => c.id.endsWith("sortRange"))?.handler(undefined);
+    fake.commands.find((c) => c.id.endsWith("findReplace"))?.handler(undefined);
+    expect(fake.openedPanels).toEqual([
+      "media.paged.sheet.panel.workbook",
+      "media.paged.sheet.panel.grid",
+    ]);
+  });
+
+  it("openGrid command opens the grid panel", () => {
+    const fake = fakeHost();
+    sheetBundle.activate(fake.host);
+    const openCmd = fake.commands.find((c) => c.id.endsWith("openGrid"));
+    openCmd?.handler(undefined);
+    expect(fake.openedPanels).toEqual(["media.paged.sheet.panel.grid"]);
+  });
+
+  it("sheetFromDataset command opens the datasets panel (S-15)", () => {
+    const fake = fakeHost();
+    sheetBundle.activate(fake.host);
+    const cmd = fake.commands.find((c) => c.id.endsWith("sheetFromDataset"));
+    cmd?.handler(undefined);
+    expect(fake.openedPanels).toEqual(["media.paged.sheet.panel.datasets"]);
+  });
+
+  it("registered ids match the manifest's contributes declaration", () => {
+    const fake = fakeHost();
+    sheetBundle.activate(fake.host);
+    expect(fake.panels.map((p) => p.id)).toEqual(
+      sheetBundle.manifest.contributes?.panels,
+    );
+    expect(fake.commands.map((c) => c.id)).toEqual(
+      sheetBundle.manifest.contributes?.commands,
+    );
+  });
+
+  it("importXlsx command falls back to opening the panel when no host picker (S-11 fallback)", () => {
+    const fake = fakeHost();
+    sheetBundle.activate(fake.host);
+    const importCmd = fake.commands.find((c) =>
+      c.id.endsWith("importXlsx"),
+    );
+    // The fake reports no shell.pickFile@1, so pickAndImport opens the
+    // workbook panel (the panel's <input> is the no-picker path).
+    importCmd?.handler(undefined);
+    expect(fake.openedPanels).toEqual(["media.paged.sheet.panel.workbook"]);
+  });
+
+  it("registers the .xlsx importer + exporter (K-2 / S-06)", () => {
+    const fake = fakeHost();
+    sheetBundle.activate(fake.host);
+    expect(fake.importers.map((i) => i.id)).toEqual([
+      "media.paged.sheet.importer.xlsx",
+      "media.paged.sheet.importer.csv",
+    ]);
+    expect(fake.importers[0].extensions).toEqual([".xlsx"]);
+    // Wave 4 [sheet.import.csv] — CSV/TSV open through the same door.
+    expect(fake.importers[1].extensions).toEqual([".csv", ".tsv"]);
+    expect(fake.exporters.map((e) => e.id)).toEqual([
+      "media.paged.sheet.exporter.xlsx",
+    ]);
+    expect(fake.exporters[0].extension).toBe(".xlsx");
+    // The declared ids match the manifest's contributes block.
+    expect(fake.importers.map((i) => i.id)).toEqual(
+      sheetBundle.manifest.contributes?.importers,
+    );
+    expect(fake.exporters.map((e) => e.id)).toEqual(
+      sheetBundle.manifest.contributes?.exporters,
+    );
+  });
+
+  it("registers the sheetFrame objectType + sheet editContext (K-1 entry)", () => {
+    const fake = fakeHost();
+    sheetBundle.activate(fake.host);
+    // The objectType marks a lowered sheet frame (by its own binding
+    // metadata) and routes its double-click to the "sheet" context.
+    expect(fake.objectTypes.map((o) => o.type)).toEqual(["sheetFrame"]);
+    const ot = fake.objectTypes[0];
+    expect(ot.bakedFallback).toBe("rectangle");
+    expect(ot.editContextType).toBe("sheet");
+    // A candidate WITHOUT this plugin's binding metadata is not a match.
+    // (parseBinding validates the envelope shape; null → no claim.)
+    expect(
+      ot.matches({
+        id: { kind: "rectangle", id: "r1" },
+        groupChain: [],
+        metadata: null,
+      }),
+    ).toBe(false);
+    // The editContext enters on double-click and shows/hides the grid.
+    expect(fake.editContexts.map((e) => e.type)).toEqual(["sheet"]);
+    expect(fake.editContexts[0].entry).toBe("doubleClick");
+    // The declared types match the manifest's contributes block.
+    expect(fake.objectTypes.map((o) => o.type)).toEqual(
+      sheetBundle.manifest.contributes?.objectTypes?.map((o) => o.type),
+    );
+    expect(fake.editContexts.map((e) => e.type)).toEqual(
+      sheetBundle.manifest.contributes?.editContexts?.map((e) => e.type),
+    );
+  });
+
+  it("ADR 024 — the sheet context declares its surface, and empty MEANS empty", () => {
+    const fake = fakeHost();
+    sheetBundle.activate(fake.host);
+    const ctx = fake.editContexts[0]!;
+
+    // NO canvas tool edits a spreadsheet — declared, not omitted. The
+    // distinction is load-bearing: absent means "unrestricted" and left
+    // the whole rail lit inside a workbook, which is the surface lying
+    // about what it can do.
+    expect(ctx.toolIds, "toolIds is DECLARED").toBeDefined();
+    expect(ctx.toolIds).toEqual([]);
+    // …and the workbook panel is the context's own surface.
+    expect(ctx.panelIds).toContain("media.paged.sheet.panel.workbook");
+  });
+
+  it("ADR 024 — the clipboard verbs are gated on a workbook, and named honestly", () => {
+    const fake = fakeHost();
+    sheetBundle.activate(fake.host);
+    const paste = fake.commands.find(
+      (c) => c.id === "media.paged.sheet.command.pasteSelection",
+    )!;
+    const copy = fake.commands.find(
+      (c) => c.id === "media.paged.sheet.command.copySelection",
+    )!;
+
+    // TITLE. This was plain "Paste", and since the editor has no host
+    // Copy/Paste it was the ONLY hit for a user typing "paste" — a
+    // command that then silently did nothing outside a workbook.
+    expect(paste.title, "no longer masquerades as the global Paste").not.toBe(
+      "Paste",
+    );
+    expect(paste.title).toContain("sheet");
+
+    // GATE. No workbook is open in a freshly activated bundle, so both
+    // must report themselves inapplicable rather than be offered.
+    for (const c of [paste, copy]) {
+      expect(c.when, `${c.id} declares a predicate`).toBeDefined();
+      expect(
+        (c.when as (s: unknown) => boolean)(null),
+        `${c.id} is not offered without a workbook`,
+      ).toBe(false);
+    }
+  });
+
+  it("dispose tears the session down (no throw — honesty smoke test)", () => {
+    const fake = fakeHost();
+    const handle = sheetBundle.activate(fake.host);
+    expect(() => handle.dispose()).not.toThrow();
+  });
+});

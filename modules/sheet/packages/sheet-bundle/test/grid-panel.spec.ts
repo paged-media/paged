@@ -1,0 +1,408 @@
+/*
+ * This file is part of paged (https://paged.media).
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// sheet.grid.panel-edit-contract (the bundle-side panel): the interim
+// sheets-mode grid panel (spec §8.1, S-02) renders the engine-windowed
+// GridScene as an SVG, click-selects a cell (→ session.setGridSelection →
+// the next scene carries the selection chrome), and commits a cell edit
+// (double-click → editor → Enter → session.editCell → engine.setCell).
+//
+// No DOM: react-test-renderer renders the component to a JS test tree; we
+// find nodes by their data-* props and invoke their handlers with hand-
+// built events. A fake engine returns a hand-built GridScene over the real
+// session (so the session's gridScene overlay + editCell write-path are
+// exercised), and a fake host records nothing host-side beyond logging.
+
+import { createElement } from "react";
+import { act, create, type ReactTestRenderer } from "react-test-renderer";
+import { describe, expect, it } from "vitest";
+
+import type { BundleHost } from "@paged-media/plugin-api";
+import type { GridScene } from "@paged-media/sheet-host-model";
+
+import {
+  createWorkbookSession,
+  makeGridPanel,
+  type SheetEngine,
+} from "../src";
+
+// A 2×2 viewport scene (cols 40pt, rows 20pt) with two populated cells —
+// the same shape the host-model grid.spec uses, here returned by the engine.
+function scene2x2(): GridScene {
+  return {
+    viewport: {
+      firstRow: 0,
+      firstCol: 0,
+      rows: 2,
+      cols: 2,
+      xOffsets: [0, 40, 80],
+      yOffsets: [0, 20, 40],
+    },
+    cells: [
+      { row: 0, col: 0, text: "Name", align: "left", styleKey: 0 },
+      { row: 0, col: 1, text: "100", align: "right", styleKey: 0 },
+    ],
+    styles: [
+      {
+        key: 0,
+        bold: false,
+        italic: false,
+        fontSizePt: null,
+        fontName: null,
+        fillRgb: null,
+        textRgb: null,
+        borderTop: false,
+        borderRight: false,
+        borderBottom: false,
+        borderLeft: false,
+      },
+    ],
+    gridlines: {
+      h: [
+        { at: 0, from: 0, to: 80 },
+        { at: 20, from: 0, to: 80 },
+        { at: 40, from: 0, to: 80 },
+      ],
+      v: [
+        { at: 0, from: 0, to: 40 },
+        { at: 40, from: 0, to: 40 },
+        { at: 80, from: 0, to: 40 },
+      ],
+    },
+    selection: null,
+  };
+}
+
+/** A fake engine: one sheet, a fixed GridScene window, and a recording
+ *  setCell / setGridSelection so the panel→session→engine path is visible. */
+function fakeEngine() {
+  const setCellCalls: Array<[number, number, number, string]> = [];
+  const setSelCalls: Array<[number, number, number, number, number]> = [];
+  const engine: SheetEngine = {
+    loadXlsx() {},
+    saveXlsx: () => new Uint8Array(),
+    setCell(sheet, row, col, input) {
+      setCellCalls.push([sheet, row, col, input]);
+      return { changed: [{ sheet, row, col, display: input }] };
+    },
+    getCellDisplay: () => "",
+    getCellInput: (_sheet, row, col) => (row === 0 && col === 1 ? "100" : ""),
+    sortRange: () => ({ changed: [], edits: [] }),
+    findAll: () => [],
+    replaceAll: () => ({ occurrences: 0, changed: [], edits: [], skipped: [] }),
+    getRangeLowered: () => ({
+      cols: [],
+      rows: [],
+      rules: { h: [], v: [] },
+      merges: [],
+    }),
+    getRangeStyled: () => ({
+      cols: [],
+      rows: [],
+      rules: { h: [], v: [] },
+      merges: [],
+    }),
+    getRangeValues: () => [],
+    paginate: () => [],
+    getGridScene: () => scene2x2(),
+    setGridSelection(sheet, anchorRow, anchorCol, rows, cols) {
+      setSelCalls.push([sheet, anchorRow, anchorCol, rows, cols]);
+    },
+    listSheets: () => [{ id: 0, name: "Sheet1", rows: 2, cols: 2 }],
+    listCharts: () => [],
+    chartKinds: () => ["column"],
+    addChart: () => 0,
+    listFreezePanes: () => [],
+    listDataValidations: () => [],
+    listComments: () => [],
+    listFunctions: () => [
+      { name: "SUM", family: "math", minArgs: 1, maxArgs: null },
+      { name: "SUMIF", family: "math", minArgs: 2, maxArgs: 3 },
+    ],
+    getChartGeometry: () => ({ widthPt: 0, heightPt: 0, prims: [] }),
+    dispose() {},
+  };
+  return { engine, setCellCalls, setSelCalls };
+}
+
+/** A minimal fake host — only log is touched by the grid panel. */
+function fakeHost(): BundleHost {
+  return {
+    log: { debug() {}, info() {}, warn() {}, error() {} },
+  } as unknown as BundleHost;
+}
+
+/** A mouse event whose currentTarget reports a zero-origin rect, so the
+ *  panel's pixel→pt mapping is the identity (PX_PER_PT === 1). */
+function clickAt(clientX: number, clientY: number) {
+  return {
+    clientX,
+    clientY,
+    preventDefault() {},
+    currentTarget: {
+      getBoundingClientRect: () => ({ left: 0, top: 0 }),
+    },
+  } as unknown as React.MouseEvent<SVGSVGElement>;
+}
+
+/** Walk the test tree collecting nodes carrying the given data-* prop. */
+function byData(
+  tree: ReactTestRenderer,
+  key: string,
+  value?: string,
+): import("react-test-renderer").ReactTestInstance[] {
+  return tree.root.findAll(
+    (n) =>
+      n.props != null &&
+      n.props[key] !== undefined &&
+      (value === undefined || n.props[key] === value),
+  );
+}
+
+/** Mount the grid panel over a session whose engine is forced to the fake
+ *  (bypassing the wasm boot — we test the panel, not the artifact). */
+function mountPanel() {
+  const { engine, setCellCalls, setSelCalls } = fakeEngine();
+  const host = fakeHost();
+  const session = createWorkbookSession(host);
+  // Force the in-memory session into a booted+loaded state directly.
+  const st = session.state();
+  st.engine = engine;
+  st.activeSheet = 0;
+  st.fileName = "demo.xlsx";
+  st.selectedRange = "A1:B2";
+
+  const Panel = makeGridPanel(host, session);
+  let tree!: ReactTestRenderer;
+  act(() => {
+    tree = create(createElement(Panel));
+  });
+  return { tree, session, setCellCalls, setSelCalls };
+}
+
+describe("sheet_grid_panel_edit_contract: render", () => {
+  it("renders the engine-windowed scene as an SVG (cells + gridlines)", () => {
+    const { tree } = mountPanel();
+    const svgRoots = byData(tree, "data-grid-svg-root");
+    expect(svgRoots).toHaveLength(1);
+    const inner = svgRoots[0].props.dangerouslySetInnerHTML.__html as string;
+    // The formatted cell text the engine produced is painted.
+    expect(inner).toContain(">Name</text>");
+    expect(inner).toContain(">100</text>");
+    // Gridlines from the scene's rule sets.
+    expect(inner).toContain("<line ");
+    // The surface is present and sized to the viewport extent (80×40 pt).
+    const svgProps = svgRoots[0].props;
+    expect(svgProps.width).toBe(80);
+    expect(svgProps.height).toBe(40);
+  });
+
+  it("shows the how-to notice (the grid also edits in-frame since Wave 5)", () => {
+    const { tree } = mountPanel();
+    const notice = byData(tree, "data-grid-honesty");
+    expect(notice).toHaveLength(1);
+    const text = JSON.stringify(notice[0].props.children);
+    expect(text).toContain("Click a cell to select it");
+    expect(text).toContain("inside a placed sheet frame");
+  });
+
+  it("renders the honest empty state before a workbook is loaded", () => {
+    const host = fakeHost();
+    const session = createWorkbookSession(host);
+    const Panel = makeGridPanel(host, session);
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(createElement(Panel));
+    });
+    // No grid surface, just the import prompt.
+    expect(byData(tree, "data-grid-svg-root")).toHaveLength(0);
+    expect(byData(tree, "data-sheet-panel", "grid")).toHaveLength(1);
+  });
+});
+
+describe("sheet_grid_panel_edit_contract: select", () => {
+  it("click on a cell records the selection via the session", () => {
+    const { tree, session, setSelCalls } = mountPanel();
+    const svg = byData(tree, "data-grid-svg-root")[0];
+    // Click in col 1 / row 0 (x in [40,80), y in [0,20)).
+    act(() => {
+      svg.props.onClick(clickAt(50, 10));
+    });
+    // The session forwarded the selection to the engine…
+    expect(setSelCalls).toContainEqual([0, 0, 1, 1, 1]);
+    // …and holds it in state so the next scene carries the chrome.
+    expect(session.state().gridSelection).toEqual({
+      anchorRow: 0,
+      anchorCol: 1,
+      rows: 1,
+      cols: 1,
+    });
+  });
+
+  it("the re-rendered scene paints the selection rectangle", () => {
+    const { tree, session } = mountPanel();
+    const svg = byData(tree, "data-grid-svg-root")[0];
+    act(() => {
+      svg.props.onClick(clickAt(50, 10));
+    });
+    // After selection the session overlays it on the scene the panel paints.
+    const scene = session.gridScene(0, 0, 480, 320);
+    expect(scene?.selection).toEqual({
+      anchorRow: 0,
+      anchorCol: 1,
+      rows: 1,
+      cols: 1,
+    });
+  });
+});
+
+describe("sheet_grid_panel_edit_contract: edit-commit", () => {
+  it("double-click opens the editor seeded with the cell's re-enterable input", () => {
+    const { tree } = mountPanel();
+    const svg = byData(tree, "data-grid-svg-root")[0];
+    act(() => {
+      svg.props.onDoubleClick(clickAt(50, 10)); // col1/row0 = "100"
+    });
+    const editors = byData(tree, "data-grid-editor");
+    expect(editors).toHaveLength(1);
+    expect(editors[0].props.value).toBe("100");
+  });
+
+  it("Enter commits the edited value through session.editCell → engine.setCell", () => {
+    const { tree, setCellCalls } = mountPanel();
+    const svg = byData(tree, "data-grid-svg-root")[0];
+    act(() => {
+      svg.props.onDoubleClick(clickAt(10, 10)); // col0/row0 = "Name"
+    });
+    let editor = byData(tree, "data-grid-editor")[0];
+    // Type a new value, then press Enter.
+    act(() => {
+      editor.props.onChange({ target: { value: "Total" } });
+    });
+    editor = byData(tree, "data-grid-editor")[0];
+    act(() => {
+      editor.props.onKeyDown({ key: "Enter", preventDefault() {} });
+    });
+    // The engine received the commit at the clicked cell (sheet 0, r0, c0).
+    expect(setCellCalls).toContainEqual([0, 0, 0, "Total"]);
+    // The editor closes after commit.
+    expect(byData(tree, "data-grid-editor")).toHaveLength(0);
+  });
+
+  it("Escape abandons the edit (no setCell)", () => {
+    const { tree, setCellCalls } = mountPanel();
+    const svg = byData(tree, "data-grid-svg-root")[0];
+    act(() => {
+      svg.props.onDoubleClick(clickAt(10, 10));
+    });
+    const editor = byData(tree, "data-grid-editor")[0];
+    act(() => {
+      editor.props.onKeyDown({ key: "Escape", preventDefault() {} });
+    });
+    expect(setCellCalls).toHaveLength(0);
+    expect(byData(tree, "data-grid-editor")).toHaveLength(0);
+  });
+
+  it("a scroll control re-windows from a new origin", () => {
+    const { tree } = mountPanel();
+    const down = byData(tree, "data-grid-scroll", "down")[0];
+    act(() => {
+      down.props.onClick();
+    });
+    // The origin indicator advances one row.
+    const origin = byData(tree, "data-grid-origin")[0];
+    const text = JSON.stringify(origin.props.children);
+    expect(text).toContain("1"); // R1
+  });
+});
+
+describe("sheet_grid_panel_edit_contract: panel UX", () => {
+  it("sizes the grid viewport from the panel's measured width, not a fixed width", () => {
+    const { engine } = fakeEngine();
+    const widths: number[] = [];
+    const getGridScene = engine.getGridScene.bind(engine);
+    engine.getGridScene = (sheet, r, c, w, h, o) => {
+      widths.push(w);
+      return getGridScene(sheet, r, c, w, h, o);
+    };
+    let fire: ((width: number) => void) | null = null;
+    const g = globalThis as { ResizeObserver?: unknown };
+    const prev = g.ResizeObserver;
+    g.ResizeObserver = class {
+      constructor(private cb: (e: { contentRect: { width: number } }[]) => void) {
+        fire = (width) => this.cb([{ contentRect: { width } }]);
+      }
+      observe() {}
+      disconnect() {}
+    };
+    try {
+      const host = fakeHost();
+      const session = createWorkbookSession(host);
+      const st = session.state();
+      st.engine = engine;
+      st.activeSheet = 0;
+      const Panel = makeGridPanel(host, session);
+      let tree!: ReactTestRenderer;
+      act(() => {
+        tree = create(createElement(Panel), { createNodeMock: () => ({}) });
+      });
+      // Before a measurement: the standard dock's width, never 480.
+      expect(widths.at(-1)).toBe(280);
+      act(() => fire?.(600));
+      expect(widths.at(-1)).toBe(598); // the content box minus the border
+      act(() => fire?.(0)); // a hidden dock keeps the last size
+      expect(widths.at(-1)).toBe(598);
+      act(() => tree.unmount());
+    } finally {
+      g.ResizeObserver = prev;
+    }
+  });
+
+  it("shows a copy or paste refusal in the panel, not only in the log", async () => {
+    const { tree, session } = mountPanel();
+    expect(byData(tree, "data-grid-notice")).toHaveLength(0);
+    await act(async () => {
+      await session.copySelection(); // no selection → refused
+    });
+    const notice = byData(tree, "data-grid-notice", "error");
+    expect(notice).toHaveLength(1);
+    expect(JSON.stringify(notice[0].props.children)).toContain("Can't copy");
+    await act(async () => {
+      await session.pasteAtSelection();
+    });
+    expect(JSON.stringify(byData(tree, "data-grid-notice")[0].props.children)).toContain(
+      "Can't paste",
+    );
+  });
+
+  it("find all, replace and the match toggles live in the grid (the one home for find)", () => {
+    const { tree } = mountPanel();
+    act(() => {
+      byData(tree, "data-sheet-find-needle")[0].props.onChange({ target: { value: "Name" } });
+    });
+    const findAll = byData(tree, "data-sheet-find").filter((n) => n.type === "button");
+    expect(findAll).toHaveLength(1);
+    act(() => findAll[0].props.onClick());
+    expect(JSON.stringify(byData(tree, "data-sheet-find-msg")[0].props.children)).toContain(
+      "0 matches",
+    );
+    expect(byData(tree, "data-sheet-find-replacement")).toHaveLength(1);
+    expect(byData(tree, "data-sheet-replace-all")).toHaveLength(1);
+    expect(byData(tree, "data-sheet-find-case")).toHaveLength(1);
+  });
+});

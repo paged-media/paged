@@ -1,0 +1,52 @@
+[package]
+name = "sheet-conformance"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "paged.sheet TEST-ONLY conformance: golden corpora, property tests, the Excel differential oracle (recorded values, tests/excel_oracle.rs), the coverage gate. Never a dependency of any shipping crate."
+
+[lints]
+workspace = true
+
+[features]
+# exact-decimal — forwards sheet-fn's D-6 exact-decimal SPIKE feature (M3) so
+# the decimal half of tests/decimal_spike.rs compiles + runs. OFF by default:
+# the f64 half of the spike test always runs; the decimal divergence
+# assertions are cfg-gated on this feature. Run with:
+#   cargo test -p sheet-conformance --features exact-decimal --test decimal_spike
+exact-decimal = ["sheet-fn/exact-decimal"]
+
+[[bin]]
+name = "coverage-gate"
+path = "src/bin/coverage_gate.rs"
+
+[dependencies]
+sheet-core = { path = "../sheet-core" }
+sheet-parser = { path = "../sheet-parser" }
+sheet-calc = { path = "../sheet-calc" }
+sheet-fn = { path = "../sheet-fn" }
+sheet-format = { path = "../sheet-format" }
+sheet-xlsx = { path = "../sheet-xlsx" }
+sheet-lower = { path = "../sheet-lower" }
+# The sheets-mode grid surface (spec §8.1): the freeze-pane conformance test
+# renders the frozen split through `sheet_grid::grid_scene`.
+sheet-grid = { path = "../sheet-grid" }
+# The M2 charts track (spec §8.4): the chart conformance test parses the
+# corpus chart fixture into ChartModel and projects it through the pure
+# `sheet_chart::generate` geometry IR.
+sheet-chart = { path = "../sheet-chart" }
+# sheet-js exposes the rlib `core::SheetSession` (plain Rust); the native
+# js_surface test drives the full load→recalc→set→save→lower loop through it.
+# (sheet-js's wasm `#[wasm_bindgen]` shim compiles only for wasm32; the native
+# logic is the SheetSession this dep reaches — TEST-ONLY, never a ship dep.)
+sheet-js = { path = "../sheet-js" }
+serde.workspace = true
+serde_norway.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+# The XLSX round-trip test unzips parts to assert per-part byte identity.
+zip.workspace = true
