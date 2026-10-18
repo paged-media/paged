@@ -46,7 +46,7 @@ The whole repository has one lint config, `bunfig.toml` `[lint]`, run by `bun li
 ```bash
 bun run lint            # every JavaScript and TypeScript file (also: moon run :lint)
 bun run lint:selftest   # the import boundaries still fire
-git config core.hooksPath tooling/git/hooks   # optional: bun lint --staged --fix before each commit
+git config core.hooksPath tooling/git/hooks   # optional, once: lint and format what you commit
 ```
 
 `bun lint` is in Bun's canary builds only for now. `tooling/js/bun-canary.sh` runs the
