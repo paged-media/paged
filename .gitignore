@@ -15,3 +15,10 @@
 # Moon: local cache and generated Docker contexts (the config in .moon/ is tracked).
 /.moon/cache/
 /.moon/docker/
+
+# Claude Code: personal settings stay local (.claude/settings.json is shared).
+/.claude/settings.local.json
+
+# Serena: its cache, memories and project.local.yml stay local (project.yml is shared).
+/.serena/*
+!/.serena/project.yml

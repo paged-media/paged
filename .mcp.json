@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "moon": {
+      "type": "stdio",
+      "command": "moon",
+      "args": ["mcp"]
+    },
+    "serena": {
+      "type": "stdio",
+      "command": "serena",
+      "args": ["start-mcp-server", "--context", "claude-code", "--project-from-cwd"]
+    }
+  }
+}

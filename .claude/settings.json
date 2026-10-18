@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "mcp__moon__get_projects",
+      "mcp__moon__get_project",
+      "mcp__moon__get_tasks",
+      "mcp__moon__get_task",
+      "mcp__moon__get_changed_files",
+      "mcp__moon__get_templates",
+      "mcp__moon__get_template",
+      "mcp__serena__initial_instructions",
+      "mcp__serena__get_current_config",
+      "mcp__serena__get_symbols_overview",
+      "mcp__serena__find_symbol",
+      "mcp__serena__find_referencing_symbols",
+      "mcp__serena__find_implementations",
+      "mcp__serena__find_declaration",
+      "mcp__serena__get_diagnostics_for_file",
+      "mcp__serena__get_diagnostics_for_symbol"
+    ],
+    "ask": [
+      "mcp__moon__sync_projects",
+      "mcp__moon__sync_workspace",
+      "mcp__moon__generate",
+      "mcp__serena__replace_symbol_body",
+      "mcp__serena__insert_after_symbol",
+      "mcp__serena__insert_before_symbol",
+      "mcp__serena__rename_symbol",
+      "mcp__serena__replace_content",
+      "mcp__serena__replace_in_files",
+      "mcp__serena__delete_lines",
+      "mcp__serena__replace_lines",
+      "mcp__serena__insert_at_line",
+      "mcp__serena__restart_language_server",
+      "mcp__serena__activate_project",
+      "mcp__serena__remove_project"
+    ]
+  }
+}
