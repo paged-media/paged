@@ -98,6 +98,18 @@ tasks:
       # core-publish-wasm.yml runs the same build in CI.
       runInCI: 'skip'
 
+  wasm-pkg-version:
+    description: 'Every workspace wasm package is versioned 0.<PROTOCOL_VERSION>.0-dev (scripts/check-wasm-package-versions.mjs).'
+    toolchains: ['system']
+    command: 'node scripts/check-wasm-package-versions.mjs'
+    inputs:
+      - 'scripts/check-wasm-package-versions.mjs'
+      - 'crates/paged-canvas/src/channel.rs'
+      - 'packages/*/package.json'
+
+  check:
+    deps: ['~:wasm-pkg-version']
+
   wasm-test:
     description: 'wasm-bindgen tests, Node-hosted (scripts/test-wasm.sh).'
     toolchains: ['rust']

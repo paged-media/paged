@@ -405,15 +405,25 @@ jobs:
   # CHANGES PROTOCOL_VERSION, the matching tag must exist or this job
   # FAILS. Pushes that leave the constant alone pass untouched — the
   # standing-state warning stays with tag-on-bump.
+  #
+  # The job also runs on pull requests, for the other number that must follow
+  # PROTOCOL_VERSION: the workspace wasm packages (packages/<pkg>/package.json,
+  # ADR 185) are versioned 0.<PROTOCOL_VERSION>.0-dev, and the editor takes
+  # its protocol from canvas-wasm's minor. The tag check stays push-only.
   protocol-tag-guard:
     name: protocol-tag-guard
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # full history for the push-range diff + tags
+          # Full history for the push-range diff + tags; a pull request runs
+          # only the version check, which needs the tree.
+          fetch-depth: ${{ github.event_name == 'push' && '0' || '1' }}
+      - name: the workspace wasm packages carry PROTOCOL_VERSION
+        # The runner's Node; the script has no dependencies.
+        run: node scripts/check-wasm-package-versions.mjs
       - name: fail if this push bumps PROTOCOL_VERSION without its tag
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
         env:
           BEFORE: ${{ github.event.before }}
         run: |
