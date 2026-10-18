@@ -1,0 +1,751 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * This file is part of paged (https://paged.media) and is additionally
+ * available under the Paged Media Enterprise License (PMEL). Full
+ * copyright and license information is available in LICENSE.md which is
+ * distributed with this source code.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
+ */
+
+// The hand-written editor contract (M1.1(a), decision 2026-06-06).
+//
+// Until this pass, these types were re-exports from the private
+// editor's @paged-media/shell — unpublishable. Now plugin-api OWNS
+// them; the EDITOR asserts compatibility against this file
+// (apps/canvas/src/plugin-api-compat.ts) through the dev link, so
+// drift fails the editor's typecheck, not a third party's build.
+//
+// Two kinds of types live here, with different fidelity rules:
+//  · CONTRIBUTION shapes (ToolContribution, PanelContribution, …)
+//    mirror the editor 1:1 — bundles author them, the host consumes
+//    them, so assignability must hold in BOTH directions.
+//  · HANDLE shapes (PagedEditor, PagedClient, registries) are
+//    deliberately NARROW — the contract names only what the SDK and
+//    real bundles use; the editor's richer reality stays assignable
+//    TO the contract (extra members are invisible, not promised).
+//    Widening a handle type here is an API addition and gets the
+//    same review as any other surface change.
+
+import type { ComponentType } from "react";
+
+import type {
+  EditContextContribution,
+  ObjectTypeContribution,
+  SceneImage,
+  SceneImageTile,
+} from "./host";
+import type {
+  CollectionName,
+  ContentSelection,
+  DocumentMeta,
+  ElementGeometryItem,
+  ElementId,
+  MainToWorkerKind,
+  Mutation,
+  PageId,
+  PathAnchorsResult,
+  ProviderTileWire,
+  ResourceTilesNeededWire,
+  SceneLayer,
+  SelectionMode,
+  WorkerToMain,
+} from "./wire";
+
+/** C-6 (I-06) — the editor-channel claim shape (the v44
+ *  `claimImageResource` payload, named for the `PagedEditor.images`
+ *  member). The SDK adapter derives it from
+ *  `ImageResourceClaimOptions` + the bundle-supplied revision. */
+export interface ImageResourceClaim {
+  imageId: string;
+  levels: number;
+  tileSize: number;
+  baseWidth: number;
+  baseHeight: number;
+  revision: number;
+}
+
+/** C-6 — the worker's tile-miss notification, as the editor channel
+ *  surfaces it (the v44 `resourceTilesNeeded` payload). */
+export type ResourceTilesNeeded = ResourceTilesNeededWire;
+
+// ---------------------------------------------------------------- base
+
+export interface Disposable {
+  dispose(): void;
+}
+
+export type DockEdge = "left" | "right" | "top" | "bottom" | "center";
+
+/** Enablement/visibility predicate. The string DSL form is inert
+ *  until the host grows an evaluator; the function form receives the
+ *  live editor handle. */
+export type VisibilityPredicate = string | ((state: unknown) => boolean);
+
+// -------------------------------------------------------------- cursors
+
+export type CssCursorToken =
+  | "default"
+  | "crosshair"
+  | "grab"
+  | "grabbing"
+  | "move"
+  | "text"
+  | "pointer"
+  | "not-allowed"
+  | "copy"
+  | "cell"
+  | "zoom-in"
+  | "zoom-out"
+  | "nwse-resize"
+  | "nesw-resize"
+  | "ew-resize"
+  | "ns-resize";
+
+export type CursorSpec =
+  | { kind: "css"; token: CssCursorToken }
+  | { kind: "svg"; src: string; hotspot: { x: number; y: number } };
+
+// ------------------------------------------------------------- gestures
+
+/** Why a handler is being deactivated: a real tool change ("switch")
+ *  commits/cancels in-flight state; a spring-load push/pop
+ *  ("suspend") must keep it. */
+export type DeactivateReason = "switch" | "suspend";
+
+/** A pointer event on the canvas overlay, already page-resolved and
+ *  camera-inverted by the host — handlers never touch camera math.
+ *  Coordinates are document points (pt). */
+export interface CanvasPointerEvent {
+  /** Page the pointer is over, or null on the pasteboard. */
+  pageId: string | null;
+  /** Page-local point in pt. null off-page. */
+  pagePoint: [number, number] | null;
+  /** Page-independent document point in pt. */
+  docPoint: [number, number];
+  modifiers: { shift: boolean; alt: boolean; cmd: boolean; ctrl: boolean };
+  /** Largest pointer delta this gesture, CSS px — click-vs-drag. */
+  maxDelta: number;
+  /** Mouse button (0 = primary). */
+  button: number;
+  /** Underlying DOM target — handlers may read `data-*` hooks. */
+  target: unknown;
+  /**
+   * Pointer-Events normalized pressure, 0..1 (B-08). Browser
+   * semantics are preserved verbatim: a pen reports its physical
+   * pressure; a mouse reports `0` with no button and `0.5` while a
+   * button is held; touch reports `0`/`0.5` likewise. The host reads
+   * `PointerEvent.pressure` straight through, so a stylus drives
+   * variable-width strokes (§13.12, Tier B) once the renderer can
+   * consume a pressure profile. Defaults to `0.5` on synthetic
+   * events that omit it.
+   */
+  pressure: number;
+  /** Pen tilt around the X axis, −90..90 deg (Pointer Events). `0`
+   *  for mouse/touch and pens without tilt support. */
+  tiltX: number;
+  /** Pen tilt around the Y axis, −90..90 deg (Pointer Events). `0`
+   *  for mouse/touch and pens without tilt support. */
+  tiltY: number;
+  /** Originating device class (Pointer Events `pointerType`). Lets a
+   *  tool branch stylus-only behaviour. Defaults to `"mouse"`. */
+  pointerType: "mouse" | "pen" | "touch";
+}
+
+/** Ephemeral overlay primitive published during a gesture. Kept
+ *  opaque so the contract is stable across host overlay growth. */
+export type OverlayPrimitive = Record<string, unknown>;
+
+export interface OverlayContext {
+  setPreview(primitives: readonly OverlayPrimitive[]): void;
+}
+
+/** The contract every tool's `gesture()` factory returns. Mutate only
+ *  through `paged.client` / the document surface — never by reaching
+ *  into model state. */
+export interface GestureHandler {
+  onActivate(paged: PagedEditor): void;
+  onDeactivate(reason: DeactivateReason): void;
+  onPointerDown(e: CanvasPointerEvent): void;
+  onPointerMove(e: CanvasPointerEvent): void;
+  onPointerUp(e: CanvasPointerEvent): void;
+  onKey?(e: KeyboardEvent): void;
+  cursorAt?(e: CanvasPointerEvent): CursorSpec | undefined;
+  renderOverlay?(ctx: OverlayContext): void;
+}
+
+// ---------------------------------------------------------------- tools
+
+export type ToolId = string;
+export type ToolGroupId = string;
+export type ToolSectionId = "selection" | "drawType" | "transform" | "modNav";
+
+export type ToolOptionField =
+  | {
+      kind: "number";
+      key: string;
+      label: string;
+      min?: number;
+      max?: number;
+      step?: number;
+      unit?: string;
+    }
+  | { kind: "toggle"; key: string; label: string }
+  | {
+      kind: "select";
+      key: string;
+      label: string;
+      options: Array<{ value: string; label: string }>;
+    };
+
+export interface ToolOptionsSpec {
+  toolId: string;
+  fields: ToolOptionField[];
+}
+
+export interface ToolContribution {
+  /** Stable id, `<namespace>.<tool>` — namespace-checked at register. */
+  id: ToolId;
+  title: string;
+  icon: string;
+  /** Single-key shortcut (`"p"`, `"shift+c"`). Wire it through the
+   *  SDK's `contributeTool` so the activation command + guard exist. */
+  shortcut?: string;
+  /** Flyout group — one rail slot; shared group = shared flyout. */
+  group: ToolGroupId;
+  section: ToolSectionId;
+  order?: number;
+  /** Slot position hint within the section (B-14): the rail orders
+   *  slots by the minimum slotOrder across a group's members; absent
+   *  = first-seen registration order (late bundles trail). */
+  slotOrder?: number;
+  isGroupDefault?: boolean;
+  cursor?: CursorSpec;
+  /** Handler factory the host mounts when the tool activates. Absent
+   *  = rail data only (inert). */
+  gesture?: () => GestureHandler;
+  options?: ToolOptionsSpec;
+  when?: VisibilityPredicate;
+}
+
+// --------------------------------------------------------------- panels
+
+export interface PanelApi {
+  id: string;
+}
+
+export interface PanelProps {
+  /** The live editor handle (cast to `PagedEditor`). */
+  paged: unknown;
+  api: PanelApi;
+}
+
+export interface PanelContribution {
+  id: string;
+  title: string;
+  component: ComponentType<PanelProps>;
+  defaultDock?: DockEdge;
+  defaultGroup?: string;
+  icon?: string;
+  /** K-8 — opt into the editor's PANEL RAIL: hosts that support the
+   *  rail door render a launcher item for this panel after the
+   *  built-ins. Off by default (the Window menu + palette remain the
+   *  baseline discovery surfaces). */
+  rail?: boolean;
+  /** K-8 — a self-contained SVG glyph (the inner markup of a 24×24
+   *  viewBox, currentColor strokes/fills, no script/foreignObject/event
+   *  handlers — the host SANITIZES before rendering). Used when `icon`
+   *  names no host glyph; the honest fallback stays the iconless tab. */
+  iconSvg?: string;
+  when?: VisibilityPredicate;
+  closable?: boolean;
+  movable?: boolean;
+  /** Provenance — the display name of the OWNING BUNDLE (e.g.
+   *  "paged.draw"), stamped by the HOST at registration time from the
+   *  bundle's manifest. Plugins never set this themselves; any value a
+   *  bundle passes is overwritten by the host adapter. Additive: older
+   *  editors simply ignore it. */
+  source?: string;
+}
+
+// ------------------------------------------------------------- overlays
+
+export interface OverlayPageRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface OverlayProps {
+  paged: unknown;
+  /** Camera snapshot at the current frame. */
+  camera: { scale: number; tx: number; ty: number };
+  /** Page rectangles in document space, in page-id order. */
+  pageRects: ReadonlyMap<PageId, OverlayPageRect>;
+}
+
+export interface OverlayContribution {
+  id: string;
+  render: ComponentType<OverlayProps>;
+  /** Z-order; higher renders on top. Default 100. */
+  z?: number;
+  when?: VisibilityPredicate;
+}
+
+// --------------------------------------------- commands + keybindings
+
+export interface CommandContribution {
+  id: string;
+  title: string;
+  category?: string;
+  icon?: string;
+  handler: (paged: unknown, payload?: unknown) => unknown | Promise<unknown>;
+  when?: VisibilityPredicate;
+}
+
+export interface KeybindingContribution {
+  /** Lowercased combo: `"cmd+shift+h"`, `"p"`, `"escape"`. */
+  key: string;
+  command: string;
+  when?: VisibilityPredicate;
+}
+
+// ----------------------------------------------- importers + exporters
+// Document IO contributions (K-2 / S-06 ↔ plugin-image I-05). An IMPORTER
+// claims file extensions / MIME types; when the host opens a matching file
+// (File menu, drag-drop, or `host.shell.pickFile`) it routes the bytes to
+// the importer's `import()` INSTEAD of the default IDML loader — so the
+// plugin owns what the file becomes (load into its own engine, lower a
+// range, …; it does NOT replace the document unless it chooses to). An
+// EXPORTER claims an extension and produces bytes on demand (the export UI
+// lists it). Both mirror the `command` contract: a namespaced id the
+// manifest must list, with the rich object handed in at register time.
+
+/** A file handed to an importer — bytes already read at the host boundary
+ *  (the contract never leaks a DOM `File`, so a bundle stays environment-
+ *  agnostic / isolate-ready). */
+export interface ImportRequest {
+  /** Original file name incl. extension (e.g. `"budget.xlsx"`). */
+  name: string;
+  /** The file's raw bytes. */
+  bytes: Uint8Array;
+  /** MIME type the host reported (may be `""` when the OS gave none). */
+  mimeType: string;
+}
+
+export interface ImporterContribution {
+  /** Stable id, `<namespace>.<importer>` — namespace-checked at register. */
+  id: string;
+  /** Human label for the Open/Import UI (e.g. `"Spreadsheet"`). */
+  title: string;
+  /** Extensions this importer handles, leading dot, lowercased
+   *  (`[".xlsx"]`). The host matches an opened file by extension first. */
+  extensions: readonly string[];
+  /** MIME types this importer also matches (optional; feeds the file
+   *  picker's `accept` and a secondary match when the extension is
+   *  ambiguous). */
+  mimeTypes?: readonly string[];
+  /** Handle an opened file. The importer drives the host through its own
+   *  surfaces (load into an engine, lower into the document, …); it does
+   *  not return a document. Async so it can boot wasm / await mutations. */
+  import(file: ImportRequest): void | Promise<void>;
+}
+
+/** What an exporter yields — bytes plus the suggested download name. */
+export interface ExportResult {
+  bytes: Uint8Array;
+  /** Suggested file name (the host may still let the user rename). */
+  fileName: string;
+}
+
+export interface ExporterContribution {
+  /** Stable id, `<namespace>.<exporter>` — namespace-checked at register. */
+  id: string;
+  /** Human label for the Export UI (e.g. `"Workbook (.xlsx)"`). */
+  title: string;
+  /** The extension the produced file carries, leading dot (`".xlsx"`). */
+  extension: string;
+  /** MIME type to stamp on the produced blob (optional). */
+  mimeType?: string;
+  /** Produce the bytes to save, or null to abort silently (nothing to
+   *  export). Async so it can pull from a wasm engine. */
+  export(): Promise<ExportResult | null> | ExportResult | null;
+}
+
+// ----------------------------------------------------------- registries
+// NARROW handle contracts: `register` is the only promised member —
+// the editor's richer registries stay assignable.
+
+export interface ToolRegistry {
+  register(contribution: ToolContribution): Disposable;
+}
+export interface PanelRegistry {
+  register(contribution: PanelContribution): Disposable;
+}
+export interface CommandRegistry {
+  register(contribution: CommandContribution): Disposable;
+}
+export interface KeybindingRegistry {
+  register(contribution: KeybindingContribution): Disposable;
+}
+export interface OverlayRegistry {
+  register(contribution: OverlayContribution): Disposable;
+}
+
+/** W3.2 — the edit-context registry (the shell owns the stack + chrome
+ *  + write-scope; this narrow contract is just the registration door).
+ *  The contribution type lives in ./host (the bundle-facing surface). */
+/** The host's menu registry, narrowed to what a bundle may do with it.
+ *
+ *  `register` only, and the item shape is the HOST's own
+ *  `MenuItemContribution` rather than the plugin-facing
+ *  `MenuContribution` — the SDK translates one into the other, turning
+ *  the declarative `scope` into the `when` predicate the host already
+ *  uses for "does this apply where you are standing". Keeping the
+ *  translation in the SDK is what lets the plugin-facing shape stay
+ *  declarative while the host keeps one vocabulary for visibility. */
+export interface MenuRegistry {
+  register(item: {
+    path: string;
+    command: string;
+    order?: number;
+    group?: string;
+    when?: (state: unknown) => boolean;
+  }): Disposable;
+}
+
+export interface EditContextRegistry {
+  register(contribution: EditContextContribution): Disposable;
+}
+/** W3.2 — the object-type registry (the shell owns hit-routing; a
+ *  matching element's double-click enters its `editContextType`). */
+export interface ObjectTypeRegistry {
+  register(contribution: ObjectTypeContribution): Disposable;
+}
+
+/** K-2 / S-06 — the document-importer registry (the shell owns file→plugin
+ *  routing in the open/drag-drop flow). Narrow: `register` only. */
+export interface ImporterRegistry {
+  register(contribution: ImporterContribution): Disposable;
+}
+/** K-2 / S-06 — the document-exporter registry (the export UI lists the
+ *  registered exporters and pulls bytes on demand). */
+export interface ExporterRegistry {
+  register(contribution: ExporterContribution): Disposable;
+}
+
+export interface ShellRegistries {
+  tools: ToolRegistry;
+  panels: PanelRegistry;
+  commands: CommandRegistry;
+  keybindings: KeybindingRegistry;
+  overlays: OverlayRegistry;
+  /** W3.2 — edit contexts (B-02). Narrow: `register` only. Optional on
+   *  the contract so a host that hasn't wired the registry yet stays
+   *  assignable; the SDK adapter falls back to a recording stub. */
+  editContexts?: EditContextRegistry;
+  /** Menu entries (`contribute.menu`). Optional for the same reason as
+   *  `editContexts`: a host predating the door stays assignable, and the
+   *  SDK reports the contribution as unavailable rather than throwing. */
+  menus?: MenuRegistry;
+  /** W3.2 — object types (W-03). Optional for the same reason. */
+  objectTypes?: ObjectTypeRegistry;
+  /** K-2 / S-06 — document importers (file → plugin). Optional on the
+   *  contract so a host that hasn't wired the registry stays assignable;
+   *  the SDK adapter falls back to a tracked no-op (the headless harness
+   *  injects a recording registry). */
+  importers?: ImporterRegistry;
+  /** K-2 / S-06 — document exporters (plugin → file). Optional likewise. */
+  exporters?: ExporterRegistry;
+}
+
+// ---------------------------------------------------- overlay signals
+
+export interface MarqueeRectPageLocal {
+  pageId: PageId;
+  /** `[top, left, bottom, right]` in page-local pt. */
+  rect: [number, number, number, number];
+}
+
+export interface ToolPreviewPolyline {
+  pageId: PageId;
+  points: ReadonlyArray<[number, number]>;
+  /** Draw the closing edge (pen/polygon previews). */
+  close?: boolean;
+}
+
+/**
+ * A path/cubic tool preview (B-07). Where `ToolPreviewPolyline` forces
+ * an in-progress pen run to FLATTEN its cubics (sampling artefacts at
+ * high zoom, wasted work per pointermove), this variant carries the
+ * true anchor/handle form so the host renders real Béziers — one SVG
+ * `<path>` of `C` commands, exact at any zoom.
+ *
+ * `anchors` is the engine's `PathAnchorSpec` form (on-curve `anchor` +
+ * incoming `left` + outgoing `right` handles, IDML `PathPointType`
+ * semantics — structurally `draw-tools`' `AnchorTriple` and what
+ * `insertPath` consumes, so the same run feeds both preview and
+ * commit). `close` draws the closing cubic back to anchor 0. `dashed`
+ * selects the dashed-vs-solid stroke from the shared preview vocabulary
+ * (solid by default, matching the rubber-band family).
+ */
+export interface ToolPreviewPath {
+  pageId: PageId;
+  /** Cubic anchors in page-local pt (the `PathAnchorSpec` shape). */
+  anchors: ReadonlyArray<{
+    anchor: [number, number];
+    left: [number, number];
+    right: [number, number];
+  }>;
+  /** Close the contour (draw the cubic from the last anchor back to 0). */
+  close?: boolean;
+  /** Dashed stroke instead of the default solid (preview vocabulary). */
+  dashed?: boolean;
+}
+
+/**
+ * A text tool-preview (the overlay TEXT primitive). Closes the RFI
+ * gap "the overlay channel carries shapes only, no text primitive" —
+ * consumer: paged.draw's Measure tool readout (an on-canvas
+ * length/angle HUD was impossible with shapes alone); future
+ * consumers: the Dimension tool, crop HUDs, Ruler markers.
+ *
+ * `x`/`y` are the text anchor position in page-local pt — the SAME
+ * space every other preview variant uses. The host renders the label
+ * at a constant SCREEN size (like its page captions), so `size` is a
+ * screen-px font size (default host-chosen, ~11), not a document pt
+ * size that would scale with zoom. `anchor` is SVG `text-anchor`
+ * semantics relative to `x`. `background` opts into a small backing
+ * plate behind the label for legibility over page content.
+ *
+ * PLAIN TEXT ONLY — the host sanitizes (control characters stripped,
+ * no markup interpreted). Probe `supports("overlay.text@1")`.
+ */
+export interface ToolPreviewText {
+  /** Explicit discriminant — the first in this vocabulary (the older
+   *  variants discriminate structurally; new primitives get a `kind`). */
+  kind: "text";
+  pageId: PageId;
+  /** Text anchor x, page-local pt. */
+  x: number;
+  /** Text BASELINE y, page-local pt. */
+  y: number;
+  /** The label. Plain text; the host sanitizes + may truncate. */
+  text: string;
+  /** Font size in screen px (constant under zoom). Host default ~11. */
+  size?: number;
+  /** Horizontal anchoring relative to `x` (SVG text-anchor). Default "start". */
+  anchor?: "start" | "middle" | "end";
+  /** Render a small backing plate behind the label for legibility. */
+  background?: boolean;
+}
+
+export type ToolPreviewShape =
+  | MarqueeRectPageLocal
+  | ToolPreviewPolyline
+  | ToolPreviewPath
+  | ToolPreviewText;
+
+// ------------------------------------------------------------- client
+// The NARROW engine-client contract — what the SDK and real bundles
+// call. The editor's CanvasClient (100+ methods) stays assignable.
+
+export interface PagedClient {
+  mutate(mutation: Mutation): Promise<WorkerToMain>;
+  undo(): Promise<WorkerToMain>;
+  redo(): Promise<WorkerToMain>;
+  collection<T>(name: CollectionName): Promise<readonly T[]>;
+  documentMeta(): Promise<DocumentMeta>;
+  pathAnchors(id: ElementId): Promise<PathAnchorsResult | null>;
+  elementGeometry(ids: ElementId[]): Promise<ElementGeometryItem[]>;
+  setElementSelection(
+    ids: ElementId[],
+    mode: SelectionMode,
+  ): Promise<ElementId[]>;
+  send(message: MainToWorkerKind): Promise<WorkerToMain>;
+  subscribe(listener: (msg: WorkerToMain) => void): () => void;
+  /**
+   * ADR 330 — put a face in the engine's DOCUMENT font registry for the
+   * document open now: the client drops it before the next document loads
+   * (whatever loads it), so no other document lays out with it. Resolves
+   * with the engine's reply (`fontRegistered`, with the pages laid out
+   * again). Rejects when no document is open, or when the document closed
+   * before the face could be registered. Optional: without it
+   * `host.assets.registerDocumentFont` sends `registerFont` itself, the
+   * face lives for the engine session, and
+   * `supports("assets.documentFont@2")` is false.
+   */
+  registerDocumentFont?(
+    family: string,
+    bytes: Uint8Array,
+    style: string | null,
+  ): Promise<WorkerToMain>;
+}
+
+// -------------------------------------------------------- PagedEditor
+// The NARROW editor handle: what gesture handlers receive from the
+// host's tool spine and what `host.editor` exposes (the marked v0
+// escape hatch — DESIGN.md §4.9).
+
+export interface PagedEditor {
+  client: PagedClient;
+  registries: ShellRegistries;
+  selection: {
+    elementSelection: ElementId[];
+    setElementSelection(ids: ElementId[]): void;
+    setElementGeometry(items: ElementGeometryItem[]): void;
+  };
+  camera: {
+    camera: { scale: number; tx: number; ty: number };
+  };
+  /** S-13 font measurement — the editor routes this to the canvas-wasm
+   *  `CanvasWorker.measureText` query (async across the worker boundary).
+   *  `undefined` when the host build wires no shaper (headless / older
+   *  editor); the host surface then falls back to an estimate. */
+  text?: {
+    measure(
+      family: string,
+      style: string | null,
+      text: string,
+      sizePt: number,
+    ): Promise<{ advance: number; ascender: number; descender: number }>;
+    /** D-27 — measure many strings in one face + size in ONE round-trip
+     *  to the shaper; one entry per input, in order. Optional: absent,
+     *  `host.text.measureStrings` fans out to `measure` and
+     *  `supports("text.measureStrings@1")` is false. */
+    measureMany?(
+      family: string,
+      style: string | null,
+      texts: readonly string[],
+      sizePt: number,
+    ): Promise<Array<{ advance: number; ascender: number; descender: number }>>;
+  };
+  /** C-1 — in-frame plugin scene layers. The editor routes these to the
+   *  canvas-wasm `submitSceneLayer` / `clearSceneLayer` channel (async,
+   *  across the worker boundary). `undefined` when the host build wires no
+   *  scene channel (headless / older editor); `host.contribute.sceneLayer()`
+   *  then warns + no-ops and `supports("rendering.sceneLayer@1")` is false. */
+  sceneLayers?: {
+    /**
+     * `caller` (C-34) — the plugin submitting. OPTIONAL, and omitting it
+     * keeps the prior behaviour exactly: the engine records no owner and
+     * enforces nothing.
+     *
+     * When present the engine records which plugin claimed the frame's
+     * render and refuses a foreign replace, because a frame's in-frame
+     * render belongs to ONE content type and the door used to be an
+     * unconditional insert. The SDK adapter fills it from the manifest
+     * id, so a bundle never passes it itself.
+     */
+    /** Resolves with the engine's `sceneLayerApplied` report (protocol
+     *  68: `fontFallbacks`, the text faces that fell back to the default
+     *  font); an older host resolves `void`, read as "no fallbacks". */
+    submit(
+      elementId: string,
+      layer: SceneLayer,
+      caller?: string,
+    ): Promise<void | { fontFallbacks?: readonly string[] | null }>;
+    clear(elementId: string): Promise<void>;
+    /** Protocol 66 — the BINARY scene-image lane (canvas-wasm
+     *  `submitSceneImageDirect`): the bytes cross as a `Uint8Array`,
+     *  transferred when `transfer` is true. Optional: absent on an older
+     *  host, and the SDK then falls back to `submit()`. */
+    submitImage?(
+      elementId: string,
+      image: SceneImage,
+      caller?: string,
+      transfer?: boolean,
+    ): Promise<void>;
+    /** Protocol 66 — patch tiles of the image `submitImage` set
+     *  (canvas-wasm `submitSceneImageTilesDirect`). Optional with
+     *  `submitImage`; the SDK uses the lane only when both exist. */
+    submitImageTiles?(
+      elementId: string,
+      tiles: readonly SceneImageTile[],
+      caller?: string,
+      transfer?: boolean,
+    ): Promise<void>;
+  };
+  /** Protocol 66 — the BINARY `.paged` parts lane (canvas-wasm
+   *  `writePagedPartDirect` / `readPagedPartDirect` + `deletePagedPart`).
+   *  FULL paths (`paged/<plugin-id>/…`); the SDK adapter scopes them.
+   *  Optional: absent on an older host, and the SDK falls back to the
+   *  JSON `client.send` messages. */
+  parts?: {
+    write(path: string, bytes: Uint8Array, caller?: string): Promise<void>;
+    read(path: string): Promise<Uint8Array | null>;
+    delete(path: string, caller?: string): Promise<boolean>;
+  };
+  /** Protocol 66 — the BINARY commit lane (canvas-wasm
+   *  `mutateWithBytesDirect`): apply `mutation` (a `batch` included) after
+   *  handing `bytes` to its FIRST `replaceImageBytes` whose `bytes` is `[]`,
+   *  depth-first through batches. The engine refuses a mutation with no such
+   *  slot. The buffer moves to the worker when `transfer` is true. Resolves
+   *  with the same reply `client.mutate` does. Optional: absent on an older
+   *  host, and the SDK then splices `Array.from(bytes)` into that slot and
+   *  calls `client.mutate`. */
+  mutateWithBytes?(
+    mutation: Mutation,
+    bytes: Uint8Array,
+    transfer?: boolean,
+  ): Promise<WorkerToMain>;
+  /** C-6 (I-06) — the renderer RESOURCE-PROVIDER channel. The editor
+   *  routes these to the canvas-wasm `claimImageResource` /
+   *  `submitResourceTiles` / `releaseImageResource` messages (the v44
+   *  wire) AND surfaces the worker's `resourceTilesNeeded` events
+   *  (`onResourceTilesNeeded`) so the SDK adapter can pull + submit the
+   *  tiles. `undefined` when the host build wires no resource channel
+   *  (headless / older editor); `host.images.claimImageResource()` then
+   *  warns + no-ops and `supports("rendering.resourceProvider@1")` is
+   *  false. All four members mirror the editor's CanvasClient surface. */
+  images?: {
+    claim(claim: ImageResourceClaim): Promise<void>;
+    release(imageId: string): Promise<void>;
+    submitTiles(
+      imageId: string,
+      level: number,
+      tiles: ProviderTileWire[],
+      generation: number,
+    ): Promise<void>;
+    /** Subscribe to the worker's `resourceTilesNeeded` notifications
+     *  (worker → main). The returned function unsubscribes. */
+    onResourceTilesNeeded(
+      listener: (need: ResourceTilesNeeded) => void,
+    ): () => void;
+  };
+  overlaySignals: {
+    setToolPreview(value: ToolPreviewShape | null): void;
+    /** K-9 — the MULTI-shape tool-preview sink. `undefined` when the host
+     *  build's overlay renderer predates the multi-shape channel (older
+     *  editor / a headless host that wires only the single slot); the
+     *  `host.overlay.setToolPreviews` door then degrades to the first
+     *  shape on `setToolPreview` and
+     *  `supports("overlay.multiPreview@1")` is false. Same slot as
+     *  `setToolPreview` — this REPLACES the slot's content with the
+     *  list; `null` clears it. */
+    setToolPreviews?(value: readonly ToolPreviewShape[] | null): void;
+    /** W-20 — the retained plugin overlay LAYERS, kept apart from the
+     *  tool-preview slot. `key` is host-wide (the SDK passes
+     *  `<manifest id>/<layer id>`). The FIRST call for a key fixes the
+     *  layer's place in the stack (layers draw in first-set order, below
+     *  the tool-preview slot); later calls replace its shapes, and `[]`
+     *  empties it without giving up the place. Optional with
+     *  `removeOverlayLayer`: on a host without both the SDK's
+     *  `host.overlay.layer` draws nothing and
+     *  `supports("overlay.layers@1")` is false. */
+    setOverlayLayer?(key: string, shapes: readonly ToolPreviewShape[]): void;
+    /** W-20 — drop a layer and its place in the stack. */
+    removeOverlayLayer?(key: string): void;
+  };
+  tool: {
+    setBaseTool(id: ToolId): void;
+  };
+  contentSelection: {
+    contentSelection: ContentSelection | null;
+  };
+}

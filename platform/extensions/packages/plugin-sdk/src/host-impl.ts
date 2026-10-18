@@ -1,0 +1,4529 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * This file is part of paged (https://paged.media) and is additionally
+ * available under the Paged Media Enterprise License (PMEL). Full
+ * copyright and license information is available in LICENSE.md which is
+ * distributed with this source code.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
+ */
+
+// createBundleHost — the in-process implementation of the BundleHost
+// contract. Lives in the SDK (not the editor) so the contract's
+// implementation is versioned with its types (DESIGN.md §3); the
+// editor's only job is one `loadBundle()` call per bundle. The
+// isolate migration is a SECOND implementation of the same interface
+// (an RPC proxy), not an editor refactor.
+//
+// A pure function over the editor handle: no imports from
+// `@paged-media/shell`/`client` at VALUE level — everything arrives
+// via `getEditor()`, resolved at call time (the command registry's
+// thunk idiom, avoids stale-closure drift).
+
+import { createCoreObjects } from "./core-objects";
+import { createObjectRegistry, type ObjectRegistry } from "./object-registry";
+import { isCoreCommand } from "./core-commands";
+import { checkSchemaRows } from "./object-schema";
+import type {
+  ObjectModelContribution,
+  ObjectModelHandle,
+  ObjectsSurface,
+  ObjectWriteResult,
+} from "@paged-media/plugin-api";
+import type {
+  ActiveBindingProvider,
+  AssetSurface,
+  BindingCollectionRequest,
+  BindingCollectionResult,
+  BindingProvider,
+  BindingProviderHandle,
+  BindingPropertyRequest,
+  BindingPropertyWrite,
+  BindingReadResult,
+  BindingWriteResult,
+  BindingsSurface,
+  BlobSurface,
+  CollectionName,
+  PropertyPath,
+  PartsSurface,
+  NativeDocumentSurface,
+  DocumentsSurface,
+  OpenDocumentResult,
+  BundleHost,
+  ClipboardSurface,
+  ClipboardPayload,
+  ContributionSurface,
+  Diagnostic,
+  DiagnosticsSurface,
+  JournalRecord,
+  JournalSurface,
+  Disposable,
+  DocumentChangeEvent,
+  DocumentFontOutcome,
+  DocumentOpenedEvent,
+  FrameChainLink,
+  StoryContent,
+  DocumentSurface,
+  EditContextContribution,
+  ElementId,
+  FontFaceAsset,
+  HitFilter,
+  HitResult,
+  ImagesSurface,
+  ImageResourceClaimOptions,
+  MainToWorkerKind,
+  PlanarRegionsResult,
+  WorkersSurface,
+  ModulesSurface,
+  HostedModule,
+  WasmArtifact,
+  BundleWorker,
+  SpawnWorkerOptions,
+  SecretsSurface,
+  ProviderTileWire,
+  ConsentResult,
+  DataProvidersSurface,
+  DataProviderRegistration,
+  DataProviderHandle,
+  DataProviderInfo,
+  DataProviderSnapshot,
+  Mutation,
+  MutationInput,
+  MutationOutcome,
+  NetworkSurface,
+  ObjectTypeContribution,
+  OverlayLayer,
+  OverlaySurface,
+  PagedEditor,
+  PanelContribution,
+  PluginLogger,
+  PluginManifest,
+  PluginMetadataEnvelope,
+  SceneTreeNode,
+  SceneLayerSurface,
+  SceneImage,
+  SceneImageTile,
+  ToolSettingValue,
+  ToolsSurface,
+  WillSaveEvent,
+  SchemaPanelContribution,
+  SchemaPanelRenderer,
+  SelectionMode,
+  SelectionSurface,
+  ShellSurface,
+  StorageSurface,
+  TextCaret,
+  TextSurface,
+  ViewportSurface,
+  RenderSurface,
+  SnapshotPng,
+  WidgetSurface,
+  SnapPointQuery,
+  SnapPointResult,
+} from "@paged-media/plugin-api";
+
+import { DisposableStore, toDisposable } from "./disposables";
+import { documentChangeOf } from "./document-change";
+import { FALLBACK_WIDGETS } from "./widgets-fallback";
+import { makeSchemaPanelComponent } from "./schema-panel";
+
+/** The reply envelope `client.mutate` resolves with. */
+type MutateReply = Awaited<ReturnType<PagedEditor["client"]["mutate"]>>;
+
+/** Is `bytes: []` a slot? The engine fills a `replaceImageBytes` whose
+ *  `bytes` is PRESENT and empty — an absent `bytes` is not a slot. */
+function isBytesSlot(m: MutationInput): boolean {
+  if (m.op !== "replaceImageBytes") return false;
+  const b = (m.args as { bytes?: unknown }).bytes;
+  return Array.isArray(b) && b.length === 0;
+}
+
+/** Does `m` carry a slot for `mutateWithBytes`: a `replaceImageBytes` with
+ *  `bytes: []`, itself or depth-first inside a `batch` (the engine's
+ *  `fill_bytes_slot` rule)? */
+function hasBytesSlot(m: MutationInput): boolean {
+  if (isBytesSlot(m)) return true;
+  if (m.op === "batch") return m.args.ops.some((op) => hasBytesSlot(op));
+  return false;
+}
+
+/** `m` with `bytes` in its FIRST slot (depth-first, as the engine fills
+ *  it) — a copy; the bundle's mutation is not touched. Only the first slot
+ *  is filled, so a later `bytes: []` stays empty, as on the binary lane. */
+function spliceBytesSlot(m: MutationInput, bytes: number[]): MutationInput {
+  let filled = false;
+  const visit = (node: MutationInput): MutationInput => {
+    if (filled) return node;
+    if (isBytesSlot(node)) {
+      filled = true;
+      return { ...node, args: { ...node.args, bytes } } as MutationInput;
+    }
+    if (node.op === "batch") {
+      return {
+        ...node,
+        args: { ...node.args, ops: node.args.ops.map((op) => visit(op) as Mutation) },
+      };
+    }
+    return node;
+  };
+  return visit(m);
+}
+
+/** The implemented feature set — `host.supports()` answers from this,
+ *  so docs/tests can't drift from code. Form: `"area.member@major"`. */
+export const HOST_FEATURES: readonly string[] = [
+  "contribute.tool@1",
+  "contribute.panel@1",
+  "contribute.schemaPanel@1",
+  "bindings@1",
+  "contribute.command@1",
+  "contribute.keybinding@1",
+  "contribute.overlay@1",
+  "contribute.editContext@1",
+  "contribute.objectType@1",
+  // ADR-023 phase A — the binding-provider DOOR exists in this SDK (a
+  // bundle may call `host.contribute.bindingProvider` without a
+  // TypeError). STATIC, and it deliberately does NOT claim that anything
+  // will consult the provider — that is the separate, DYNAMIC
+  // `bindings.provider@1`, which is true only when the host wired a
+  // shared registry. Same static-door / dynamic-backing split as
+  // `contribute.schemaPanel@1` + `schemaPanel.renderer@1`.
+  "contribute.bindingProvider@1",
+  // ADR 323 — the object model: the contribution door and `host.objects`
+  // (core addresses always route; a private registry serves core + this
+  // bundle's own kinds when the host injects no shared one).
+  "contribute.objectModel@1",
+  "objects@1",
+  "contribute.importer@1",
+  "contribute.exporter@1",
+  "document.mutate@1",
+  "document.undo@1",
+  "document.collection@1",
+  "document.frameChain@1",
+  "document.meta@1",
+  "document.pathAnchors@1",
+  "document.hitTest@1",
+  "document.elementGeometry@1",
+  "document.elementProperties@1",
+  "document.placeholders@1",
+  "document.tree@1",
+  // C-16 — the per-element parentage read. STATIC like `document.tree@1`
+  // and for the same reason: it is served ENTIRELY by this SDK from the
+  // scene tree the existing `requestSceneTree` wire query already
+  // returns, so there is no engine version to gate on (no core door was
+  // needed — DESIGN.md §4.3d).
+  "document.parentOf@1",
+  "document.onDidChange@1",
+  // ADR 327 — `onDidChange` reports EVERY committed change: a canvas
+  // gesture's commit (`gestureCommitted`) and a script run (`scriptResult`,
+  // `pagesUnknown`) as well as mutations, undos and redos. STATIC: the
+  // editor's client hands every reply to its subscribers, and the headless
+  // harness does the same for these.
+  "document.onDidChange@2",
+  // Core ADR 159 — the event follows what the reply says: a gesture that
+  // resized one frame carries its `reflow`, a script that only read is no
+  // change (`writes: 0`), and a script's `pageIds` come from the reply.
+  // STATIC like @2: the flag says this SDK reads the fields; an engine older
+  // than 0.71.13 does not send them, and the event then falls back to @2's
+  // (no gesture reflow; every script a change with `pagesUnknown`).
+  "document.onDidChange@3",
+  // W-22 — the document-opened event. STATIC: it is the client's
+  // `documentLoaded` broadcast filtered, and every host posts that on
+  // every load (File ▸ Open, File ▸ New, a native-document open).
+  "document.onDidOpen@1",
+  "document.getMetadata@1",
+  "document.setMetadata@1",
+  // Protocol 69 — the document-scoped label. Static like the snap door:
+  // the flag says this SDK forwards the two calls; an engine older than 69
+  // answers `null` on read (no `pluginMetadata` in its DocumentMeta) and
+  // `applied: false` on write (it does not know the op).
+  "document.documentMetadata@1",
+  "selection@1",
+  "viewport@1",
+  "overlay.toolPreview@1",
+  "storage@1",
+  "diagnostics@1",
+  // The overlay TEXT primitive (RFI "overlay carries shapes only" —
+  // consumer: paged.draw's Measure readout). A pure pass-through on the
+  // same tool-preview channel; the renderer that knows the variant ships
+  // in the same host release that bumps this SDK, so the flag is static
+  // like the channel's own `overlay.toolPreview@1`. The headless harness
+  // records the shape verbatim.
+  "overlay.text@1",
+  // ADR 328 — the document-face door. STATIC like `assets.images@1`: the
+  // engine's document registry answers it (protocol 70's `scope`), no
+  // injected source is involved, and the worker handshake refuses an engine
+  // older than the pin. Fill-only; a refusal comes back as an outcome.
+  "assets.documentFont@1",
+  // C-5 / I-04 (core v42): the placed-image bytes read is engine-served
+  // through the wire (no injected source), so it is unconditionally
+  // implemented at the pinned canvas-wasm — unlike assets.fonts@1, which
+  // stays conditional on the editor's injected byte source.
+  "assets.images@1",
+  // .paged container parts door (file-format.md) — the engine (canvas-wasm
+  // v51) is the writer, so it is live whenever a bundle runs (the worker
+  // handshake guarantees a v51-protocol worker).
+  "storage.parts@1",
+  // Protocol 66 — `host.parts.delete`. Static for the same reason as @1:
+  // the pinned engine (the worker handshake refuses an older one) answers
+  // `deletePagedPart`, and the binary lane is an optimisation the SDK
+  // falls back from, not a different contract.
+  "storage.parts@2",
+  // B-22 (protocol v57) — the planar-region read door. STATIC, and the
+  // flag means exactly one thing: this SDK's document surface IMPLEMENTS
+  // `planarRegions` and forwards it (retiring the `host.editor.client`
+  // escape hatch). It does NOT claim the host's engine carries v57 — the
+  // vendored wire is still 0.51, so that answer is per-call: a pre-v57
+  // engine (or any host that doesn't answer the query) comes back as
+  // `{ found: false, reason }`, never a fake empty face list. Same
+  // honesty split as the protocol-ahead mutations (mutations.ts): the
+  // engine-level gate is the worker handshake, not `supports()`.
+  "document.planarRegions@1",
+  // v67 (RFI C-68) — the engine's point snapper. Static like the region
+  // door: the flag says this SDK forwards `snapPoint`; an engine older
+  // than v67 answers the point unsnapped, never a throw.
+  "document.snapPoint@1",
+  // v70 — page images from the engine's renderer (`requestSnapshot` with
+  // `hideItems`). Static like the snapper: the flag says this SDK
+  // forwards the query; an engine that refuses answers null.
+  "render.snapshot@1",
+  // DOC-03 structured whole-story read (canvas-wasm v54). Static for the same
+  // reason as storage.parts@1: the pinned engine is the server, and the worker
+  // handshake refuses a protocol older than the pin — so a running bundle is
+  // always talking to an engine that answers RequestStoryContent.
+  "document.readStory@1",
+];
+
+/** Thrown by reserved surface members — a visible seam, never
+ *  fake-interactive. */
+export class PluginApiNotImplemented extends Error {
+  constructor(member: string, pointer: string) {
+    super(
+      `plugin-api: ${member} is reserved and not implemented in v0 (${pointer})`,
+    );
+    this.name = "PluginApiNotImplemented";
+  }
+}
+
+/**
+ * Thrown (in `capabilityMode: 'enforce'`) when a bundle USES a host
+ * door it did not DECLARE in its manifest — the trust-line record's
+ * (W0.11) "manifest capabilities ENFORCED, not advisory" gate, applied
+ * at the chokepoint. Same loud-honesty style as the namespace gate: the
+ * message names the door, the missing declaration, and where to add it.
+ *
+ * v1 stance (in-process, no isolation): this is HONESTY +
+ * accident-prevention, not a security boundary — a bundle holding the
+ * raw `host.editor` handle can still bypass the facade. The error makes
+ * declaration↔use drift loud during dogfooding so the manifest stays a
+ * truthful description of what the bundle actually touches.
+ */
+export class PluginCapabilityError extends Error {
+  /** The host door that was called (e.g. `"contribute.tool"`). */
+  readonly door: string;
+  /** The manifest declaration that would authorize it (e.g.
+   *  `'contributes.tools[] must include "media.paged.web.tool.pen"'`). */
+  readonly missingDeclaration: string;
+  constructor(door: string, missingDeclaration: string, pluginId: string) {
+    super(
+      `plugin-api: ${pluginId} called ${door} without declaring it — ` +
+        `${missingDeclaration}. Manifest capabilities are ENFORCED ` +
+        `(trust-line W0.11): declare the use or the host refuses it.`,
+    );
+    this.name = "PluginCapabilityError";
+    this.door = door;
+    this.missingDeclaration = missingDeclaration;
+  }
+}
+
+/** Minimal storage backing so tests / headless hosts can inject one;
+ *  defaults to localStorage when present, else an in-memory Map. */
+export interface StorageBacking {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+  removeItem(key: string): void;
+  /** All keys currently in the backing (unfiltered). */
+  keys(): string[];
+}
+
+/** The host-provided network consent primitive (paged.data D-03; base-idea §11).
+ *  The editor owns the consent UI (the visible data-source manifest) and the
+ *  CSP `connect-src` enforcement; this hook is how the host adapter asks the
+ *  user. When absent, `host.network.requestConsent` DENIES every origin (the
+ *  honest no-consent posture) and `supports("network.consent@1")` is false. */
+export interface ConsentBackend {
+  request(origins: readonly string[], purpose: string): Promise<ConsentResult>;
+}
+
+function defaultStorageBacking(): StorageBacking {
+  const ls = (globalThis as { localStorage?: Storage }).localStorage;
+  if (ls) {
+    return {
+      getItem: (k) => ls.getItem(k),
+      setItem: (k, v) => ls.setItem(k, v),
+      removeItem: (k) => ls.removeItem(k),
+      keys: () => {
+        const out: string[] = [];
+        for (let i = 0; i < ls.length; i++) {
+          const k = ls.key(i);
+          if (k !== null) out.push(k);
+        }
+        return out;
+      },
+    };
+  }
+  const map = new Map<string, string>();
+  return {
+    getItem: (k) => map.get(k) ?? null,
+    setItem: (k, v) => void map.set(k, v),
+    removeItem: (k) => void map.delete(k),
+    keys: () => Array.from(map.keys()),
+  };
+}
+
+/**
+ * A host-side aggregator the editor injects to power a PROBLEMS PANEL
+ * (paged.web W-05): every `host.diagnostics.set/clear` is mirrored
+ * here keyed by `(bundleId, key)`, so one editor surface can list
+ * diagnostics across all loaded bundles. The per-bundle in-host store
+ * (`host.diagnostics.get`) is unchanged — this is a fan-out, not a
+ * replacement. `bundleId` lets the panel attribute + de-dupe and
+ * lets click-to-focus resolve the owning panel.
+ */
+export interface DiagnosticsSink {
+  publish(bundleId: string, key: string, diagnostics: Diagnostic[]): void;
+  clear(bundleId: string, key?: string): void;
+}
+
+/**
+ * ADR 025 — the host's journal buffer, injected the same way `DiagnosticsSink`
+ * is, and for the same reason: the ring lives in the app (one per session,
+ * created outside any bundle), and every loaded bundle fans INTO it with its
+ * own id stamped by the host.
+ *
+ * Structurally identical to the diagnostics fan-out on purpose: `manifest`,
+ * `storage`, `diagnostics`, `supports` and `log` are the members DESIGN.md §6
+ * already lists as "trivial proxy" across the future isolate boundary, and a
+ * plain-JSON, bundleId-keyed sink joins them without adding a new problem.
+ */
+export interface JournalSink {
+  record(bundleId: string, entry: JournalRecord): void;
+}
+
+/** Asset-store budgets (W-06). The per-face cap mirrors the wasm lane's
+ *  per-artifact ceiling (DESIGN.md §10/§13.3) — a bundle can never be
+ *  handed an unbounded face buffer. The host facade refuses an
+ *  over-budget face (returns `null` + a `log.warn`). */
+export const ASSET_BUDGETS = {
+  /** Largest font face the door will serve, in bytes (8 MiB). */
+  maxFontFaceBytes: 8 * 1024 * 1024,
+} as const;
+
+/**
+ * The byte source the editor injects to back `host.assets` (W-06). The
+ * same injection shape as `widgets`/`diagnosticsSink`: a value the host
+ * app passes at `loadBundle` time. It serves the bytes the DOCUMENT
+ * already holds for a face — READ-ONLY, never a network fetch on the
+ * bundle's behalf (offline-forever, DESIGN.md §13.3). Returning `null`
+ * is the honest no-bytes answer (an unregistered family, or — in v1 of
+ * the editor adapter — every family, until the engine exposes a
+ * font-bytes read-back; DESIGN.md §13.4).
+ */
+export interface BundleAssetProvider {
+  /** The bytes of a document font face, or `null` when the host has
+   *  none. Style-agnostic when `style` is omitted. */
+  getFontFace(
+    family: string,
+    style?: string,
+  ): Promise<FontFaceAsset | null>;
+  /** W-15 — register a face in the engine's SCENE-LAYER face table
+   *  (`registerFont` with `scope: "sceneLayer"`): scene-layer text
+   *  resolves it, the document never sees it. The SDK calls it once per
+   *  `host.assets.registerFont` and again when it replays the live faces
+   *  after a disposal. Optional: a host without it (with
+   *  `clearSceneFonts`) leaves `supports("assets.registerFont@1")` false. */
+  registerFont?(
+    family: string,
+    bytes: Uint8Array,
+    style?: string,
+  ): Promise<void>;
+  /** W-15 — drop every scene-layer face (`clearFontRegistry` with
+   *  `scope: "sceneLayer"`), leaving the document's faces alone. The SDK
+   *  owns which faces are live, so disposing one face is "clear, then
+   *  register the rest again". */
+  clearSceneFonts?(): Promise<void>;
+}
+
+/** One live bundle face in a provider's scene table. */
+interface SceneFaceEntry {
+  family: string;
+  style?: string;
+  bytes: Uint8Array;
+}
+
+/** The live scene faces of one provider, shared by every bundle the host
+ *  loaded over it (the editor injects ONE provider for all bundles, and
+ *  the engine has ONE scene table), plus the queue that keeps register /
+ *  clear / replay in order. */
+interface SceneFaceLedger {
+  entries: SceneFaceEntry[];
+  queue: Promise<void>;
+}
+
+const sceneFaceLedgers = new WeakMap<BundleAssetProvider, SceneFaceLedger>();
+
+function sceneFaceLedger(provider: BundleAssetProvider): SceneFaceLedger {
+  let ledger = sceneFaceLedgers.get(provider);
+  if (!ledger) {
+    ledger = { entries: [], queue: Promise.resolve() };
+    sceneFaceLedgers.set(provider, ledger);
+  }
+  return ledger;
+}
+
+/** ADR 328 — one queue per engine client for document-face registrations,
+ *  so two calls for the same face (from one bundle or two) check and
+ *  register one after the other and the second finds the face held. */
+const documentFaceQueues = new WeakMap<object, Promise<unknown>>();
+
+/** The container a face's first bytes announce, as the engine sniffs it:
+ *  the sfnt magics the canvas reads (TrueType, OpenType/CFF, a collection),
+ *  the WOFF pair it does not, or `null` for bytes that are not a face. */
+function faceContainer(bytes: Uint8Array): "sfnt" | "woff" | null {
+  if (bytes.byteLength < 4) return null;
+  const magic = String.fromCharCode(bytes[0]!, bytes[1]!, bytes[2]!, bytes[3]!);
+  if (magic === "\u0000\u0001\u0000\u0000" || magic === "true" || magic === "OTTO" || magic === "ttcf") {
+    return "sfnt";
+  }
+  if (magic === "wOFF" || magic === "wOF2") return "woff";
+  return null;
+}
+
+/** Blob-store budgets (K-4 / S-08). The default per-plugin quota when a
+ *  manifest requests none; a manifest's `storage.quotaBytes` may only
+ *  TIGHTEN it (the adapter enforces the stricter). */
+export const BLOB_BUDGETS = {
+  /** Default per-plugin blob ceiling, in bytes (64 MiB). */
+  defaultQuotaBytes: 64 * 1024 * 1024,
+} as const;
+
+/** Worker spawn + SAB budgets (K-3 / S-07). The host enforces the
+ *  stricter of these and any manifest tightening. */
+export const WORKER_BUDGETS = {
+  /** Hard worker-count cap per bundle. The grant is `min(declared.max,
+   *  hardwareConcurrency, maxWorkers)` — a runaway `max` can't exhaust
+   *  the machine. */
+  maxWorkers: 8,
+  /** Default per-bundle shared-memory ceiling, in bytes (256 MiB). A
+   *  manifest's `maxSharedBytes` may only TIGHTEN this. */
+  defaultSharedBytes: 256 * 1024 * 1024,
+} as const;
+
+/**
+ * The backend the editor injects to back `host.blob` (K-4 / S-08): a
+ * RAW per-plugin byte store (OPFS in-browser; an in-memory map in the
+ * headless harness). The SDK adapter owns namespacing (passes the
+ * plugin id), the capability gate, and the quota — the backend only does
+ * scoped IO. Keys are opaque strings the adapter forwards verbatim.
+ */
+export interface BlobStore {
+  write(pluginId: string, key: string, bytes: Uint8Array): Promise<void>;
+  read(pluginId: string, key: string): Promise<Uint8Array | null>;
+  delete(pluginId: string, key: string): Promise<void>;
+  keys(pluginId: string): Promise<string[]>;
+  /** Total bytes this plugin currently stores. */
+  used(pluginId: string): Promise<number>;
+}
+
+/**
+ * A raw spawned worker the `WorkerBackend` hands back (K-3 / S-07). The
+ * SDK adapter owns the capability gate, the count cap, the SAB budget,
+ * and teardown tracking; this backend only constructs the realm + does
+ * the raw message IO. `post` forwards to the underlying worker (optional
+ * transfer); `onMessage` subscribes (the backend fans out); `terminate`
+ * destroys the realm.
+ */
+export interface SpawnedWorker {
+  post(message: unknown, transfer?: Transferable[]): void;
+  onMessage(handler: (message: unknown) => void): Disposable;
+  terminate(): void;
+}
+
+/**
+ * The backend the editor injects to back `host.workers` (K-3 / S-07 /
+ * I-02): it resolves a bundle's DECLARED, bundle-relative `module` path
+ * through the bundle's own asset base (the `/@fs/`-allowed sibling-plugin
+ * path the wasm artifacts use) and constructs an ES-module `Worker`. The
+ * SDK adapter passes the plugin id + the declared module path; the
+ * backend never invents a URL. Returns a `SpawnedWorker` (or rejects when
+ * the module fails to resolve/construct). The SAB itself is allocated by
+ * the SDK adapter (a plain `new SharedArrayBuffer` under the host budget)
+ * — the backend's job is purely the worker realm. A headless host injects
+ * no backend → `spawn` rejects + `supports("workers@1")` is false.
+ */
+export interface WorkerBackend {
+  spawn(pluginId: string, module: string, name?: string): Promise<SpawnedWorker>;
+}
+
+/**
+ * What a `ModulesBackend` answers for one declared artifact: the URL the
+ * host serves its bytes at and, when the host knows it, the bytes'
+ * Subresource Integrity (`sha384-…`).
+ */
+export interface ModuleLocation {
+  url: string;
+  integrity?: string | null;
+}
+
+/**
+ * The backend the editor injects to back `host.modules` (ADR 326). The SDK
+ * adapter owns the capability gate (only a name declared in
+ * `capabilities.wasm` reaches the backend, and the backend receives the
+ * DECLARED artifact, never a bundle-supplied path) and the integrity rule
+ * (the manifest's own `integrity` wins; a contradicting host answer is
+ * refused). The backend maps `(pluginId, artifact)` to where the host serves
+ * those bytes — the editor answers from its build-time module manifest
+ * (`https://modules.paged.media/<package>/<version>/<path>` in a deployed
+ * build). `null` = "not served here": the bundle loads its own copy. A
+ * headless host injects none → every answer is `null` and
+ * `supports("modules@1")` is false.
+ */
+export interface ModulesBackend {
+  url(
+    pluginId: string,
+    artifact: WasmArtifact,
+  ): ModuleLocation | null | Promise<ModuleLocation | null>;
+}
+
+/**
+ * The backend the editor injects to back `host.secrets` (D-11;
+ * rfc-credential-store): a REFERENCE-ONLY, host-owned credential store. The
+ * SDK adapter owns the capability gate + the namespacing (passes the plugin
+ * id); this backend owns the storage tier (WebCrypto-wrapped IndexedDB in
+ * the editor, an in-memory map in the headless harness) AND the user PROMPT
+ * — the RFC's "via host UI only": `set` resolves only after the host has
+ * the material (the editor backing prompts the user; the plugin's supplied
+ * `secret` is the value to STORE, never persisted silently by the adapter).
+ *
+ * The trust line is the ABSENCE of a read: there is `set`/`exists`/`forget`
+ * and NO `get` — secret bytes never leave the host realm. A headless host
+ * injects no backend → `set`/`forget` reject, `exists` is false,
+ * `supports("secrets@1")` is false. The plugin id + the (caller-supplied)
+ * `ref` together namespace the stored secret (`paged:<plugin-id>:<ref>`).
+ */
+export interface SecretStoreBackend {
+  /** Store `secret` for `pluginId` under `ref` (the editor backing PROMPTS
+   *  the user — "via host UI only"). Rejects when the user declines or the
+   *  store is unavailable. */
+  set(pluginId: string, ref: string, secret: string): Promise<void>;
+  /** Whether a secret is stored for `pluginId`/`ref`. */
+  exists(pluginId: string, ref: string): Promise<boolean>;
+  /** Forget the secret for `pluginId`/`ref` (idempotent). */
+  forget(pluginId: string, ref: string): Promise<void>;
+}
+
+/**
+ * The backend the editor injects to back `host.clipboard` (K-6 / S-14): a
+ * thin read/write pair over the REAL system clipboard (`navigator.clipboard`
+ * in-browser; a fake in the headless harness). The SDK adapter owns the
+ * capability gate + the `"vector"` tabular-stripping; this backend only does
+ * the raw IO. `read` recovers a `{ text?, tabular? }` payload (or `null` when
+ * the platform offers nothing / refuses); `write` puts a payload on the
+ * clipboard (the editor backend lays down BOTH `text/plain` TSV and a
+ * `text/html` `<table>` so a paste into Excel/Sheets/Word lands a real grid).
+ */
+export interface ClipboardBackend {
+  read(): Promise<ClipboardPayload | null>;
+  write(payload: ClipboardPayload): Promise<void>;
+}
+
+/**
+ * The reader the editor injects to back `host.text.caret()` (C-9): a
+ * synchronous read of the user's ACTIVE text caret from the editor's
+ * text-editing/content-selection state (the caret lives in EDITOR
+ * state, not the engine). The SDK adapter owns nothing here but the
+ * pass-through + the honest no-backend default — `read()` answers the
+ * caret in the engine text-op offset convention (`ContentSelection`
+ * story-local offsets; see `TextCaret`), `null` when no caret is
+ * active. The editor's backend also answers `null` for a
+ * cell-qualified caret (cell-local offsets must not leak as
+ * story-local — the documented v1 gap). When absent,
+ * `host.text.caret()` is always `null` and `supports("text.caret@1")`
+ * is false.
+ */
+export interface TextCaretBackend {
+  read(): TextCaret | null;
+}
+
+/**
+ * The backend the editor injects to back `host.nativeDocument` (ADR-021 /
+ * document-model direction): the isolate-safe replacement for an importer/
+ * exporter reaching through `host.editor.client`. It exposes read access to
+ * the document's CORE-OWNED native parts (the `paged/core/` MODEL + COMPOSITION
+ * parts) plus a `open` that loads a plugin-produced native/importable package
+ * as the active document. The SDK adapter owns the capability gate; this
+ * backend only does the raw IO. A headless host injects no backend → the reads
+ * answer `null`/`[]`, `open` rejects, and `supports("document.readNative@1")` /
+ * `supports("document.openNative@1")` are false (the honest no-backend door).
+ */
+export interface NativeDocumentBackend {
+  readModel(): Promise<Uint8Array | null>;
+  readComposition(): Promise<Uint8Array | null>;
+  listParts(prefix?: string): Promise<string[]>;
+  open(bytes: Uint8Array): Promise<void>;
+}
+
+/**
+ * D-26 — the backend the editor injects to back `host.documents`. The SDK
+ * owns the capability gate (`capabilities.documents.export` / `.open`); the
+ * backend owns the IO AND the unsaved-edits decision: `open` must ask the
+ * user (host UI) before discarding a dirty active document and answer
+ * `{ opened: false, reason: "declined" }` when they keep it. `requester`
+ * is filled by the SDK from the calling bundle's manifest (not from the
+ * plugin's arguments), so the prompt can name who is asking. No backend →
+ * both doors reject and `supports("documents.open@1")` /
+ * `supports("documents.exportPaged@1")` are false.
+ */
+export interface DocumentsBackend {
+  exportPaged(): Promise<Uint8Array>;
+  open(
+    bytes: Uint8Array,
+    request: {
+      name: string | null;
+      requester: { id: string; name: string };
+    },
+  ): Promise<OpenDocumentResult>;
+}
+
+/**
+ * v70 — the backend the editor injects to back `host.viewport`'s page
+ * members. The editor owns the camera and the page layout, so it answers
+ * which page is active and moves the camera to one. No backend →
+ * `goToPage` answers false, `activePage` null, the event never fires and
+ * `supports("viewport.pages@1")` is false.
+ */
+export interface PagesBackend {
+  goToPage(pageId: string, fit: "page" | "width"): boolean | Promise<boolean>;
+  activePage(): string | null;
+  onDidChangeActivePage(listener: (pageId: string | null) => void): () => void;
+}
+
+/**
+ * The backend the editor injects to back `host.viewport.revealText`. The
+ * editor owns the camera, the page layout and the text selection, so it
+ * locates the range on the page, moves there and (optionally) selects it.
+ * No backend → `revealText` answers false and
+ * `supports("viewport.revealText@1")` is false.
+ */
+export interface TextRevealBackend {
+  revealText(
+    range: { storyId: string; start: number; end: number },
+    select: boolean,
+  ): boolean | Promise<boolean>;
+}
+
+/** The SHARED cross-plugin data-provider registry (paged.data §7.1 / D-09). The
+ *  editor creates ONE (`createDataProviderRegistry`) and injects the SAME
+ *  instance into every plugin host, so a provider plugin and a consumer plugin
+ *  rendezvous through it. The per-plugin capability gate lives in the host
+ *  surface; this backend is the neutral store + fan-out. */
+export interface DataProviderBackend {
+  register(registration: DataProviderRegistration): DataProviderHandle;
+  discover(category?: string): readonly DataProviderInfo[];
+  get(id: string): Promise<DataProviderSnapshot | null>;
+  onDidChange(id: string, listener: (revision: string) => void): Disposable;
+}
+
+/** Build a shared in-memory data-provider registry (D-09). The editor holds ONE
+ *  and injects it into every `createBundleHost` call as `options.dataProviders`;
+ *  providers and consumers (different plugin hosts) meet through it. Reference
+ *  implementation — an RPC/isolate host swaps a proxy with the same contract. */
+export function createDataProviderRegistry(): DataProviderBackend {
+  const providers = new Map<
+    string,
+    { reg: DataProviderRegistration; revision: string }
+  >();
+  const listeners = new Map<string, Set<(revision: string) => void>>();
+  return {
+    register(registration) {
+      providers.set(registration.id, {
+        reg: registration,
+        revision: registration.revision,
+      });
+      return {
+        update(revision) {
+          const entry = providers.get(registration.id);
+          if (entry) entry.revision = revision;
+          for (const l of listeners.get(registration.id) ?? []) l(revision);
+        },
+        dispose() {
+          providers.delete(registration.id);
+        },
+      };
+    },
+    discover(category) {
+      return [...providers.values()]
+        .filter((e) => category === undefined || e.reg.category === category)
+        .map((e) => ({
+          id: e.reg.id,
+          category: e.reg.category,
+          schema: e.reg.schema,
+          revision: e.revision,
+        }));
+    },
+    async get(id) {
+      const entry = providers.get(id);
+      if (!entry) return null;
+      const records = await entry.reg.getSnapshot();
+      return { id, revision: entry.revision, records };
+    },
+    onDidChange(id, listener) {
+      let set = listeners.get(id);
+      if (!set) {
+        set = new Set();
+        listeners.set(id, set);
+      }
+      set.add(listener);
+      return toDisposable(() => set.delete(listener));
+    },
+  };
+}
+
+// ------------------------------------------- binding providers (ADR-023)
+//
+// The SHARED registry every plugin host writes into and the HOST's own
+// panels read from — the same injection shape as `dataProviders` (the
+// editor builds ONE with `createBindingProviderRegistry()` and passes
+// the SAME instance to every `createBundleHost` call), because the whole
+// point is cross-bundle: one host Layers panel must be able to ask "who
+// resolves `layers` right now?" without knowing which bundles exist.
+//
+// It keeps TWO things:
+//   · the ACTIVE CONTEXT STACK — pushed/popped by the SDK adapter from
+//     the shell's own `onEnter`/`onExit` calls, so activation is DERIVED
+//     from the shell's context stack rather than reported alongside it
+//     (there is exactly one notion of "who is active", ADR-023's rule);
+//   · the registered PROVIDERS, keyed by (plugin, contextType).
+//
+// Resolution walks the active stack INNERMOST-FIRST. That is the whole
+// precedence model: contexts nest (the shell pushes and Esc pops one
+// level), so the innermost active context is by construction the one
+// that owns the current selection.
+
+/** One provider as the registry holds it (the adapter's registration
+ *  payload — the bundle identity the contract's answers carry as
+ *  `provider`, plus the borrowed context type). */
+export interface RegisteredBindingProvider {
+  plugin: string;
+  contextType: string;
+  provider: BindingProvider;
+}
+
+/**
+ * The shared binding-provider registry (ADR-023 phase A). TWO audiences,
+ * deliberately on one object (like {@link DataProviderBackend}):
+ *
+ *   · the SDK ADAPTER calls `register` / `setContextActive` — a bundle
+ *     never touches these; it reaches the registry only through
+ *     `host.contribute.bindingProvider`;
+ *   · the HOST APP (the editor's shared panels, phase C) calls
+ *     `activeProviders` / `readProperty` / `writeProperty` /
+ *     `readCollection` / `applyMutation` / `onDidChange`.
+ *
+ * FALL-THROUGH IS THE HOST'S JOB, not the registry's: every resolution
+ * answers either a claim or a typed `resolved: false` / `handled: false`
+ * refusal, and the host reads/writes CORE on the refusal. The registry
+ * holds no editor handle and therefore cannot — and must not — fall
+ * through on the host's behalf; keeping the two separable is what lets
+ * the isolate implementation be an RPC proxy of exactly this shape.
+ */
+export interface BindingProviderBackend {
+  // ---- adapter side (bundles never call these) ----
+  /** Register a provider. Disposing removes it without touching the
+   *  edit context whose activation it borrows. */
+  register(entry: RegisteredBindingProvider): Disposable;
+  /** Report an edit context entering (`active: true`) or leaving. Called
+   *  by the adapter from the shell's own `onEnter`/`onExit`. */
+  setContextActive(
+    plugin: string,
+    contextType: string,
+    elementId: string | null,
+    active: boolean,
+  ): void;
+  /** A provider announced `invalidate()` — fan out to host subscribers. */
+  notifyChanged(plugin: string, contextType: string): void;
+  // ---- host side ----
+  /** The active provider stack, INNERMOST FIRST (= precedence order). */
+  activeProviders(): readonly ActiveBindingProvider[];
+  readProperty(request: BindingPropertyRequest): Promise<BindingReadResult>;
+  writeProperty(request: BindingPropertyWrite): Promise<BindingWriteResult>;
+  readCollection(
+    request: BindingCollectionRequest,
+  ): Promise<BindingCollectionResult>;
+  /** Offer a structural mutation to the active providers before sending
+   *  it to core (`layerMove`, `createSwatch`, …). */
+  applyMutation(mutation: MutationInput): Promise<BindingWriteResult>;
+  /** Fires when the active stack changes OR a provider invalidates —
+   *  the host panel's re-read signal. */
+  onDidChange(listener: () => void): Disposable;
+}
+
+/** Build a shared binding-provider registry (ADR-023 phase A). The editor
+ *  holds ONE and injects it into every `createBundleHost` call as
+ *  `options.bindingProviders`. Reference implementation — an
+ *  RPC/isolate host swaps a proxy with the same contract. */
+export function createBindingProviderRegistry(): BindingProviderBackend {
+  /** (plugin, contextType) → the registered providers, in registration
+   *  order. A key holds at most one provider in practice; the array
+   *  keeps a second registration honest rather than silently replacing
+   *  the first. */
+  const providers = new Map<string, RegisteredBindingProvider[]>();
+  /** The active context stack, OUTERMOST first (push order = the shell's
+   *  enter order). Resolution reads it reversed. */
+  const stack: { plugin: string; contextType: string; elementId: string | null }[] =
+    [];
+  const listeners = new Set<() => void>();
+  // The separator is the ESCAPE `\u0000`, not a literal NUL byte. A raw
+  // control character in the source makes every tool that sniffs content
+  // treat this 3k-line file as BINARY — `grep` silently matches nothing
+  // in it, `file(1)` reports "data", and diffs go opaque. Same value,
+  // same collision-proof key, readable file.
+  const key = (plugin: string, contextType: string) =>
+    `${plugin}\u0000${contextType}`;
+  const emit = () => {
+    for (const l of [...listeners]) l();
+  };
+
+  /** The active (frame, provider) pairs, innermost first. */
+  const active = (): {
+    frame: { plugin: string; contextType: string; elementId: string | null };
+    entry: RegisteredBindingProvider;
+  }[] => {
+    const out: {
+      frame: { plugin: string; contextType: string; elementId: string | null };
+      entry: RegisteredBindingProvider;
+    }[] = [];
+    for (let i = stack.length - 1; i >= 0; i--) {
+      const frame = stack[i];
+      for (const entry of providers.get(key(frame.plugin, frame.contextType)) ??
+        []) {
+        out.push({ frame, entry });
+      }
+    }
+    return out;
+  };
+
+  const declaresPath = (e: RegisteredBindingProvider, path: PropertyPath) =>
+    e.provider.provides.paths?.includes(path) ?? false;
+  /** Does this provider accept WRITES for `path`? `writablePaths` is the
+   *  optional NARROWING of `paths`; omitted keeps the pre-existing
+   *  "everything declared is writable". A declared-but-not-writable path
+   *  is skipped here so the provider's `writeProperty` is never called
+   *  for it — the declaration is the gate on this lane exactly as it is
+   *  on the others. */
+  const declaresWritablePath = (
+    e: RegisteredBindingProvider,
+    path: PropertyPath,
+  ) => {
+    const w = e.provider.provides.writablePaths;
+    if (w === undefined) return declaresPath(e, path);
+    return declaresPath(e, path) && w.includes(path);
+  };
+  const declaresCollection = (
+    e: RegisteredBindingProvider,
+    collection: CollectionName,
+  ) => e.provider.provides.collections?.includes(collection) ?? false;
+
+  return {
+    register(entry) {
+      const k = key(entry.plugin, entry.contextType);
+      const list = providers.get(k) ?? [];
+      list.push(entry);
+      providers.set(k, list);
+      emit();
+      return toDisposable(() => {
+        const cur = providers.get(k);
+        if (!cur) return;
+        const i = cur.indexOf(entry);
+        if (i >= 0) cur.splice(i, 1);
+        if (cur.length === 0) providers.delete(k);
+        emit();
+      });
+    },
+    setContextActive(plugin, contextType, elementId, isActive) {
+      if (isActive) {
+        stack.push({ plugin, contextType, elementId });
+      } else {
+        // Pop the INNERMOST matching frame: the same context type can be
+        // entered twice (a frame inside a frame), and exiting must
+        // unwind the one the shell is unwinding, not the outer one.
+        for (let i = stack.length - 1; i >= 0; i--) {
+          if (stack[i].plugin === plugin && stack[i].contextType === contextType) {
+            stack.splice(i, 1);
+            break;
+          }
+        }
+      }
+      emit();
+    },
+    notifyChanged() {
+      emit();
+    },
+    activeProviders() {
+      return active().map(({ frame, entry }) => ({
+        plugin: frame.plugin,
+        contextType: frame.contextType,
+        elementId: frame.elementId,
+        provides: entry.provider.provides,
+      }));
+    },
+    async readProperty(request) {
+      // A ROW target is special, and the special case is the whole
+      // reason the model is honest: a row this provider handed out does
+      // NOT exist in core, so an undeclared path over it must NOT fall
+      // through — the panel would then show the CORE selection's value
+      // for a row core has never heard of. Only providers owning that
+      // collection are consulted, and an owned-but-undeclared path is
+      // `absent` (blank the control), never `decline`.
+      const rowScoped =
+        request.target.kind === "row" ? request.target.collection : null;
+      for (const { entry } of active()) {
+        if (rowScoped !== null && !declaresCollection(entry, rowScoped)) continue;
+        if (!declaresPath(entry, request.path)) {
+          if (rowScoped === null) continue;
+          return {
+            resolved: true,
+            provider: entry.plugin,
+            read: {
+              kind: "absent",
+              reason:
+                `${entry.plugin} owns collection "${rowScoped}" but does not ` +
+                `serve "${request.path}" for its rows`,
+            },
+          };
+        }
+        if (!entry.provider.readProperty) continue;
+        const read = await entry.provider.readProperty(request);
+        if (read.kind === "decline") continue;
+        return { resolved: true, provider: entry.plugin, read };
+      }
+      return {
+        resolved: false,
+        reason: `no active binding provider claimed "${request.path}"`,
+      };
+    },
+    async writeProperty(request) {
+      const rowScoped =
+        request.target.kind === "row" ? request.target.collection : null;
+      for (const { entry } of active()) {
+        if (rowScoped !== null && !declaresCollection(entry, rowScoped)) continue;
+        if (!declaresWritablePath(entry, request.path)) continue;
+        if (!entry.provider.writeProperty) continue;
+        const write = await entry.provider.writeProperty(request);
+        if (write.kind === "decline") continue;
+        return { handled: true, provider: entry.plugin, outcome: write.outcome };
+      }
+      return {
+        handled: false,
+        reason: `no active binding provider claimed a write to "${request.path}"`,
+      };
+    },
+    async readCollection(request) {
+      for (const { entry } of active()) {
+        if (!declaresCollection(entry, request.collection)) continue;
+        if (!entry.provider.readCollection) continue;
+        const read = await entry.provider.readCollection(request);
+        if (read.kind === "decline") continue;
+        return { resolved: true, provider: entry.plugin, rows: read.rows };
+      }
+      return {
+        resolved: false,
+        reason: `no active binding provider claimed collection "${request.collection}"`,
+      };
+    },
+    async applyMutation(mutation) {
+      for (const { entry } of active()) {
+        if (!(entry.provider.provides.ops?.includes(mutation.op) ?? false))
+          continue;
+        if (!entry.provider.applyMutation) continue;
+        const write = await entry.provider.applyMutation(mutation);
+        if (write.kind === "decline") continue;
+        return { handled: true, provider: entry.plugin, outcome: write.outcome };
+      }
+      return {
+        handled: false,
+        reason: `no active binding provider claimed the "${mutation.op}" op`,
+      };
+    },
+    onDidChange(listener) {
+      listeners.add(listener);
+      return toDisposable(() => listeners.delete(listener));
+    },
+  };
+}
+
+/**
+ * Trust posture the HOST asserts for a bundle at the load path
+ * (`plugin-trust-line.md`). Same-realm execution — full `BundleHost`
+ * + the raw `PagedEditor` via `host.editor` — is FIRST-PARTY-ONLY
+ * during incubation. There is no sound *cryptographic* identity signal
+ * yet (package signing is the last unchecked gate box), and the
+ * manifest `id` namespace (`media.paged.*`) is SELF-ASSERTED — a
+ * foreign bundle could claim it — so the trust signal cannot come from
+ * the bundle. It comes from the HOST vouching, here: a value the
+ * caller supplies, defaulting to `'first-party'`. The loader refuses
+ * anything else (`load.ts`), turning the drift-by-default the trust
+ * line warns about (a quiet dynamic-import of foreign code on the
+ * same-realm path) into a deliberate, greppable, reviewable act that
+ * still does not load until the isolate/RPC host gate is built.
+ */
+export type BundleTrust = "first-party";
+
+/**
+ * What the HOST APP injects as `shell` (K-10). Structurally the
+ * bundle-facing {@link ShellSurface}, except that doors added AFTER a
+ * host app adopted the option are optional here — today `saveFile`,
+ * which the editor gained one release after `pickFile`. A host that
+ * implements the full surface is assignable unchanged; a host that
+ * omits `saveFile` still injects a valid backend and
+ * `supports("shell.saveFile@1")` reports the truth.
+ */
+export type ShellBackend = Omit<ShellSurface, "saveFile" | "enterEditContext"> &
+  Partial<Pick<ShellSurface, "saveFile" | "enterEditContext">>;
+
+/** The host's will-save registry (protocol 66 batch): the editor awaits
+ *  every registered listener before it serialises the document. The SDK
+ *  wraps each bundle listener so it is awaited and its errors contained. */
+export interface WillSaveBackend {
+  register(
+    pluginId: string,
+    listener: (e: WillSaveEvent) => Promise<void>,
+  ): Disposable;
+}
+
+/** The host's tool-options store, read side: the values its tool-options
+ *  UI holds per tool id, plus a change subscription. */
+export interface ToolSettingsBackend {
+  get(toolId: string): Record<string, ToolSettingValue>;
+  subscribe(toolId: string, listener: () => void): () => void;
+}
+
+export interface CreateBundleHostOptions {
+  /**
+   * The host's trust assertion for this bundle (`plugin-trust-line.md`).
+   * Defaults to `'first-party'` — the only value the loader accepts
+   * today. Passing any other value (e.g. via a future dynamic-import
+   * experiment) is refused loudly at the load path, gated on the
+   * isolate/RPC host + capability enforcement + signing.
+   */
+  trust?: BundleTrust;
+  storage?: StorageBacking;
+  /** Host-provided network consent (paged.data D-03; base-idea §11): the editor
+   *  injects the consent prompt + the data-source-manifest UI. When absent,
+   *  `host.network` denies every origin and `supports("network.consent@1")` is
+   *  false (the honest no-consent posture). */
+  consent?: ConsentBackend;
+  /** Host-provided SHARED data-provider registry (paged.data §7.1 / D-09): the
+   *  editor creates ONE (`createDataProviderRegistry`) and injects the SAME
+   *  instance into every plugin host, so a provider and a consumer rendezvous
+   *  through it. When absent, `host.dataProviders` discover() is empty +
+   *  register() is a no-op and `supports("dataProviders@1")` is false. */
+  dataProviders?: DataProviderBackend;
+  /** Host-provided SHARED BINDING-PROVIDER registry (ADR-023 phase A): the
+   *  editor creates ONE (`createBindingProviderRegistry`) and injects the SAME
+   *  instance into every plugin host, so its own panels can ask "who resolves
+   *  this path / collection / op right now?" across all loaded bundles. When
+   *  absent, `host.contribute.bindingProvider` warns + returns an inert handle
+   *  (nothing would ever consult the provider) and
+   *  `supports("bindings.provider@1")` is false. */
+  bindingProviders?: BindingProviderBackend;
+  /** Host-provided SHARED OBJECT REGISTRY (ADR 323): the editor / headless
+   *  host / Node CLI creates ONE (`createObjectRegistry({ core:
+   *  createCoreObjects(getEditor) })`) and injects the SAME instance into
+   *  every plugin host, so `host.objects` routes across bundles. When
+   *  absent, the host builds a PRIVATE registry (core + this bundle's own
+   *  kinds) and `supports("objects.shared@1")` is false. */
+  objects?: ObjectRegistry;
+  /** Console sink override.
+   *
+   *  Originally a test hook, and now ALSO the production capture point: the
+   *  editor passes a sink that censuses every `host.log` line (severity + a
+   *  hash of the message) into the journal while forwarding the real text to
+   *  the real console. See ADR 025 §5 — a census, not a mirror, because
+   *  `host.log` is free text across ~900 call sites. */
+  console?: Pick<Console, "debug" | "info" | "warn" | "error">;
+  /** ADR 025 — where `host.journal` entries go. Absent = the surface is
+   *  inert and `supports("journal@1")` is false. */
+  journal?: JournalSink;
+  /** Shell actions the HOST APP owns (the cockpit's panel placement).
+   *  When absent, `host.shell` warns and no-ops, and
+   *  `supports("shell.openPanel@1")` answers false. Typed as
+   *  {@link ShellBackend}, not `ShellSurface`: doors the host app has
+   *  not adopted yet are OPTIONAL here and each answers its own honest
+   *  no-backend value through the wrapper. */
+  shell?: ShellBackend;
+  /** Host-provided panel widgets (W-04): the real code editor lives in
+   *  the editor's UI package and is injected here. When absent,
+   *  `host.widgets` is the plain-textarea fallback and
+   *  `supports("widgets.codeEditor@1")` answers false. */
+  widgets?: Partial<WidgetSurface>;
+  /** §12.8 — the host's `PropertyField` (and its schema-panel property
+   *  rows) render LIST and STRUCT values with `items` / `fields`, editing
+   *  through `editValue`. Makes `supports("widgets.propertyField.values@1")`
+   *  true (only together with `widgets.PropertyField`). */
+  propertyFieldValues?: boolean;
+  /** The host's will-save registry. When absent, `document.onWillSave`
+   *  holds listeners that never run and `supports("document.onWillSave@1")`
+   *  is false. */
+  willSave?: WillSaveBackend;
+  /** W-19 — the host's shell fills `pageId` / `pagePoint` /
+   *  `contentPoint` on the `EnteredEditContext` of a POINTER entry (the
+   *  double-click, the Type-tool click on owned content). The SDK passes
+   *  the entered context through untouched either way; this flag only
+   *  makes `supports("editContext.enterPoint@1")` true, so it is the HOST
+   *  that vouches for delivery. */
+  editContextEnterPoint?: boolean;
+  /** The host's tool-options store. When absent, `host.tools.settings`
+   *  answers `{}` and `supports("tools.settings@1")` is false. */
+  toolSettings?: ToolSettingsBackend;
+  /** Host-provided SCHEMA-PANEL renderer (W3.1): the editor's
+   *  `SchemaPanelRenderer` that walks a `PanelSchema` through the
+   *  catalog + subscribes to the bundle's bindings. When absent,
+   *  `contribute.schemaPanel` registers a visible "needs a host
+   *  renderer" seam panel (never a throw, never fake UI) and
+   *  `supports("contribute.schemaPanel@1")` still answers true (the
+   *  door exists; only the rich rendering is host-injected). */
+  schemaPanelRenderer?: SchemaPanelRenderer;
+  /** Internal registration hook (the headless harness): called at the
+   *  moment a schema panel registers, with the verbatim contribution,
+   *  so the conformance log can record the SCHEMA assertably (the
+   *  registry only sees the synthesized React `PanelContribution`). The
+   *  returned disposer (if any) is tracked alongside the panel
+   *  registration. Not part of the public contract — a host-adapter
+   *  seam. */
+  onSchemaPanelRegistered?: (
+    contribution: SchemaPanelContribution,
+  ) => Disposable | void;
+  /** Internal registration hook (the headless harness, W3.2): called
+   *  when an EDIT CONTEXT registers (after the namespace + capability
+   *  gates pass), with the verbatim contribution, so the conformance log
+   *  can record it. When the editor provides no `editContexts` registry,
+   *  this is ALSO the recording stub's only consumer — the door no
+   *  longer throws, it records. Not part of the public contract. */
+  onEditContextRegistered?: (
+    contribution: EditContextContribution,
+  ) => Disposable | void;
+  /** Internal registration hook (the headless harness, W3.2): the
+   *  object-type analogue of `onEditContextRegistered`. */
+  onObjectTypeRegistered?: (
+    contribution: ObjectTypeContribution,
+  ) => Disposable | void;
+  /** Host-side problems-panel aggregator (W-05). When present,
+   *  `supports("diagnostics.publish@1")` answers true and every
+   *  `host.diagnostics.set/clear` fans out to it. */
+  diagnosticsSink?: DiagnosticsSink;
+  /** Host-provided ASSET byte source (W-06). When present,
+   *  `host.assets.getFontFace` serves DOCUMENT font face bytes through
+   *  it (capability-gated, budget-clamped) and
+   *  `supports("assets.fonts@1")` answers true. When absent, every
+   *  asset read answers `null` (the honest no-bytes door) and the
+   *  feature flag is false. */
+  assetSource?: BundleAssetProvider;
+  /** Host-provided BLOB backend (K-4 / S-08). When present,
+   *  `host.blob.*` persists per-plugin bytes through it (capability-
+   *  gated, quota-clamped) and `supports("storage.blob@1")` answers true.
+   *  When absent, reads answer empty and writes reject (the honest
+   *  no-store door). */
+  blobStore?: BlobStore;
+  /** Host-provided TEXT-CARET reader (C-9). When present,
+   *  `host.text.caret()` reads the user's active text caret through it
+   *  and `supports("text.caret@1")` answers true. When absent, `caret()`
+   *  always answers `null` (the honest no-reader door — a read door like
+   *  `text.measureString`, no capability gate). */
+  textCaret?: TextCaretBackend;
+  /** Host-provided CLIPBOARD backend (K-6 / S-14). When present,
+   *  `host.clipboard.read/write` go through it (capability-gated on
+   *  `capabilities.clipboard`) and `supports("clipboard@1")` answers true.
+   *  When absent, `read` answers `null` and `write` is a no-op (the honest
+   *  no-clipboard door). */
+  clipboard?: ClipboardBackend;
+  /** Host-provided NATIVE-DOCUMENT backend (ADR-021). When present,
+   *  `host.nativeDocument.readModel/readComposition/listParts` read the
+   *  document's core-owned `paged/core/` native parts through it (gated on
+   *  `capabilities.document.readNative`) and `host.nativeDocument.open` loads a
+   *  plugin-produced package as the active document (gated on
+   *  `capabilities.document.openNative`); `supports("document.readNative@1")` /
+   *  `supports("document.openNative@1")` answer true. When absent, the reads
+   *  answer `null`/`[]` and `open` rejects (the honest no-backend door). */
+  nativeDocument?: NativeDocumentBackend;
+  /** D-26 — host-provided DOCUMENTS backend. When present,
+   *  `host.documents.exportPaged` / `open` go through it (gated on
+   *  `capabilities.documents.export` / `.open`) and
+   *  `supports("documents.exportPaged@1")` / `supports("documents.open@1")`
+   *  answer true. When absent, both doors reject. */
+  documents?: DocumentsBackend;
+  /** v70 — page navigation for `host.viewport` (`goToPage`,
+   *  `activePage`, `onDidChangeActivePage`). When present,
+   *  `supports("viewport.pages@1")` is true. */
+  pages?: PagesBackend;
+  /** Text navigation for `host.viewport.revealText`. When present,
+   *  `supports("viewport.revealText@1")` is true. */
+  text?: TextRevealBackend;
+  /** Host-provided WORKER backend (K-3 / S-07 / I-02). When present,
+   *  `host.workers.spawn` resolves a declared bundle-relative module +
+   *  constructs a host-owned `Worker` through it (capability-gated,
+   *  count-capped, SAB-budgeted, teardown-tracked) and
+   *  `supports("workers@1")` answers true. When absent, `spawn` rejects
+   *  honestly, `concurrency()` is 0, and the feature flag is false (the
+   *  honest no-worker door). */
+  workers?: WorkerBackend;
+  /** Host-provided MODULE backend (ADR 326). When present,
+   *  `host.modules.resolve/url/fetch` answer a declared `capabilities.wasm`
+   *  artifact with the URL the host serves it at (+ integrity) and
+   *  `supports("modules@1")` answers true. When absent every answer is
+   *  `null` and the bundle loads its bundle-relative copy. */
+  modules?: ModulesBackend;
+  /** Host-provided CREDENTIAL-STORE backend (D-11; rfc-credential-store).
+   *  When present, `host.secrets.set/exists/forget` go through it
+   *  (capability-gated on `capabilities.secrets`; `set` prompts the user —
+   *  "via host UI only") and `supports("secrets@1")` answers true. When
+   *  absent, `set`/`forget` reject and `exists` is false (the honest
+   *  no-store door). REFERENCE-ONLY: there is no `get` anywhere — secret
+   *  bytes never enter the plugin realm. */
+  secrets?: SecretStoreBackend;
+  /**
+   * How the host treats a declaration↔use mismatch — a bundle that
+   * USES a door (`contribute.tool`, `document.mutate`, …) it did not
+   * DECLARE in its manifest (trust-line W0.11). Defaults to
+   * `'enforce'`: the violating call throws `PluginCapabilityError`
+   * (contribution registrations) or returns a non-applied
+   * `MutationOutcome` for the write doors (mutate-never-throws). In
+   * `'warn'` mode the violation is logged through `host.log.warn`
+   * and the call proceeds — the migration escape hatch for a host
+   * that loads not-yet-adopted manifests. The namespace gate and the
+   * metadata-namespace gate are UNAFFECTED — they are always loud.
+   */
+  capabilityMode?: "enforce" | "warn";
+}
+
+export interface BundleHostHandle {
+  host: BundleHost;
+  /** Tears down every registration made through the host's facades. */
+  dispose(): void;
+}
+
+/** Refuse a malformed scene image before any lane sees it. */
+function checkImage(image: SceneImage): void {
+  const { width, height, rgba } = image;
+  if (
+    !Number.isInteger(width) ||
+    !Number.isInteger(height) ||
+    width <= 0 ||
+    height <= 0 ||
+    rgba.length !== width * height * 4
+  ) {
+    throw new Error(
+      `contribute.sceneLayer().submitImage: ${rgba.length} bytes for a ` +
+        `${width}x${height} RGBA8 image (want width*height*4)`,
+    );
+  }
+}
+
+/** The JSON-lane layer for one image (the pre-66 `submit` shape). */
+function imageLayer(image: SceneImage) {
+  const [x, y, w, h] = image.dest;
+  return {
+    items: [
+      {
+        kind: "image" as const,
+        rgba: Array.from(image.rgba),
+        width: image.width,
+        height: image.height,
+        x,
+        y,
+        w,
+        h,
+      },
+    ],
+  };
+}
+
+/** Every tile inside the image, with the right byte count — checked for
+ *  the whole call before any byte moves (the engine's rule too). */
+function checkTiles(
+  image: { width: number; height: number },
+  tiles: readonly SceneImageTile[],
+): void {
+  for (const t of tiles) {
+    if (
+      t.width <= 0 ||
+      t.height <= 0 ||
+      t.x < 0 ||
+      t.y < 0 ||
+      t.x + t.width > image.width ||
+      t.y + t.height > image.height ||
+      t.rgba.length !== t.width * t.height * 4
+    ) {
+      throw new Error(
+        `contribute.sceneLayer().submitImageTiles: tile ${t.x},${t.y} ` +
+          `${t.width}x${t.height} (${t.rgba.length} bytes) does not fit the ` +
+          `${image.width}x${image.height} image`,
+      );
+    }
+  }
+}
+
+/** Patch already-checked `tiles` into `image` in place. */
+function patchImage(image: SceneImage, tiles: readonly SceneImageTile[]): void {
+  const stride = image.width * 4;
+  for (const t of tiles) {
+    const row = t.width * 4;
+    for (let j = 0; j < t.height; j++) {
+      const dst = (t.y + j) * stride + t.x * 4;
+      image.rgba.set(t.rgba.subarray(j * row, j * row + row), dst);
+    }
+  }
+}
+
+export function createBundleHost(
+  getEditor: () => PagedEditor,
+  manifest: PluginManifest,
+  options?: CreateBundleHostOptions,
+): BundleHostHandle {
+  const store = new DisposableStore();
+  const sink = options?.console ?? console;
+  const ns = `${manifest.id}.`;
+  const tag = `[${manifest.id}]`;
+
+  // Plugin-metadata namespace — the FULL manifest id (not a
+  // shortname) so third-party ids can never collide:
+  // "x-paged:paged.web", "x-paged:acme.charts".
+  const metadataKey = (m: PluginManifest) => `x-paged:${m.id}`;
+
+  const assertNamespaced = (id: string, kind: string): void => {
+    if (!id.startsWith(ns)) {
+      throw new Error(
+        `plugin-api: ${kind} id "${id}" must be namespaced under "${ns}" ` +
+          `(the manifest id) — the namespace rule is where capability ` +
+          `enforcement attaches`,
+      );
+    }
+  };
+
+  const log: PluginLogger = {
+    debug: (m, ...a) => sink.debug(`${tag} ${m}`, ...a),
+    info: (m, ...a) => sink.info(`${tag} ${m}`, ...a),
+    warn: (m, ...a) => sink.warn(`${tag} ${m}`, ...a),
+    error: (m, ...a) => sink.error(`${tag} ${m}`, ...a),
+  };
+
+  // ADR 323 — the shared object registry, or a private one over this
+  // host's editor (core addresses + this bundle's own kinds).
+  const objectRegistry: ObjectRegistry = options?.objects ?? createPrivateObjects();
+  function createPrivateObjects(): ObjectRegistry {
+    const core = createCoreObjects(getEditor);
+    store.add({ dispose: () => core.dispose() });
+    return createObjectRegistry({ core, log });
+  }
+
+  // ADR 025 — the journal door. Deliberately NOT capability-gated: the
+  // capability system gates AUTHORITY (reading the document, the network,
+  // storage), and a write-only, bounded, sanitised, host-attributed sink
+  // grants none. There is no capability for `host.log` either, and this is
+  // strictly less powerful than `log` — log carries free text to the console,
+  // this carries scalars to a ring.
+  const journalSink = options?.journal;
+  const journal: JournalSurface = {
+    record(entry: JournalRecord): void {
+      if (!journalSink) return; // inert, never throwing
+      try {
+        // The same namespace chokepoint every other contribution id passes,
+        // so an entry is always attributable and can never be spoofed onto
+        // another plugin's namespace.
+        assertNamespaced(entry.code, "journal");
+        journalSink.record(manifest.id, entry);
+      } catch (err) {
+        // An instrumentation door that can break the plugin it instruments is
+        // worse than no door. A bad code is the AUTHOR's bug, so say so once
+        // through the logger rather than throwing into their call stack.
+        log.warn(`journal.record refused: ${String(err)}`);
+      }
+    },
+    async time<T>(code: string, fn: () => T | Promise<T>): Promise<T> {
+      const t0 = Date.now();
+      try {
+        const out = await fn();
+        journal.record({ code, durMs: Date.now() - t0, data: { ok: true } });
+        return out;
+      } catch (err) {
+        // Record the failure, then RETHROW unchanged: timing a call must not
+        // alter what it returns or swallow what it throws.
+        journal.record({
+          code,
+          severity: "error",
+          durMs: Date.now() - t0,
+          data: { ok: false },
+        });
+        throw err;
+      }
+    },
+  };
+
+  // ------------------------------------------ capability enforcement
+  // The trust-line W0.11 gate: a door a bundle USES must be DECLARED
+  // in its manifest. Same chokepoint as the namespace rule (DESIGN.md
+  // §2.7), stricter policy. 'warn' logs + proceeds (migration hatch);
+  // 'enforce' (default) refuses — throwing for the contribution doors,
+  // a non-applied outcome for the write doors (mutate-never-throws).
+  const capabilityMode = options?.capabilityMode ?? "enforce";
+  const caps = manifest.capabilities;
+  const declared = manifest.contributes;
+
+  /** Declaration predicates — one per door class. Read straight off
+   *  the manifest so the manifest stays the single source of truth. */
+  const hasDoc = (dir: "read" | "write"): boolean =>
+    caps?.document?.[dir] !== undefined;
+  /** ADR-021 — the native-document READ doors are DECLARED when
+   *  `capabilities.document.readNative` is true; the LOAD door (`open`) when
+   *  `capabilities.document.openNative` is true. */
+  const hasNativeRead = (): boolean => caps?.document?.readNative === true;
+  const hasNativeOpen = (): boolean => caps?.document?.openNative === true;
+  const hasRendering = (
+    s: "sceneLayer" | "overlay" | "hitTest" | "resourceProvider",
+  ): boolean => caps?.rendering?.includes(s) ?? false;
+  const hasAsset = (k: "fonts" | "images"): boolean =>
+    caps?.assets?.includes(k) ?? false;
+  const hasBlobStore = (): boolean => caps?.storage?.blob === true;
+  /** K-6 — the clipboard grant. `"full"` authorizes the whole door
+   *  (text + tabular); `"vector"` authorizes the door but text-ONLY (the
+   *  surface strips a tabular write + never surfaces a tabular read);
+   *  `"none"`/absent denies entirely. Returns the granted tier. */
+  const clipboardGrant = (): "full" | "vector" | "none" =>
+    caps?.clipboard === "full"
+      ? "full"
+      : caps?.clipboard === "vector"
+        ? "vector"
+        : "none";
+  /** K-3 — the worker door is DECLARED when `capabilities.workers` is
+   *  present (an object with a numeric `max`). */
+  const hasWorkers = (): boolean =>
+    typeof caps?.workers?.max === "number";
+  /** D-11 — the credential-store door is DECLARED when
+   *  `capabilities.secrets.sources` is true (the v1 grant). */
+  const hasSecrets = (): boolean => caps?.secrets?.sources === true;
+  /** I-07 / C-1 Stage B (realm-local; ADR-018) — the GPU usage is DECLARED
+   *  when `capabilities.gpu.realm` is `"bundle"` (the only value v1 grants).
+   *  DECLARE-ONLY: there is NO `host.gpu` device door — the bundle drives
+   *  WebGPU in its own realm via `navigator.gpu`; this flag only reflects
+   *  that the usage is blessed (`supports("gpu@1")`). */
+  const hasGpu = (): boolean => caps?.gpu?.realm === "bundle";
+  /** D-26 — the documents doors are DECLARED per direction:
+   *  `capabilities.documents.export` / `.open` true. */
+  const hasDocuments = (dir: "export" | "open"): boolean =>
+    caps?.documents?.[dir] === true;
+  const lists = (
+    arr: readonly string[] | undefined,
+    id: string,
+  ): boolean => arr?.includes(id) ?? false;
+
+  /** W3.2 — an edit-context / object-type `type` is DECLARED when the
+   *  manifest's `contributes.editContexts[]` / `contributes.objectTypes[]`
+   *  lists an entry with that `type`. (These are object arrays keyed by
+   *  `type`, not flat id arrays, so they need their own predicate.) */
+  const declaresType = (
+    arr: ReadonlyArray<{ type: string }> | undefined,
+    type: string,
+  ): boolean => arr?.some((e) => e.type === type) ?? false;
+
+  /** The verdict for the contribution/non-document doors: in 'enforce'
+   *  a violation throws PluginCapabilityError; in 'warn' it logs and
+   *  the caller proceeds. Returns void either way. */
+  const requireDeclared = (
+    ok: boolean,
+    door: string,
+    missing: string,
+  ): void => {
+    if (ok) return;
+    if (capabilityMode === "warn") {
+      log.warn(
+        `${door} used without declaring it — ${missing} (capabilityMode: ` +
+          `'warn'; would refuse in 'enforce')`,
+      );
+      return;
+    }
+    throw new PluginCapabilityError(door, missing, manifest.id);
+  };
+
+  /** The verdict for the WRITE doors, which never throw (mutate-never-
+   *  throws): in 'enforce' a violation returns a failure REASON string
+   *  (the caller maps it to `{ applied: false, error }`); in 'warn' it
+   *  logs and returns null (proceed). `null` = authorized/allowed. */
+  const denyWrite = (ok: boolean, door: string, missing: string): string | null => {
+    if (ok) return null;
+    const reason = `${door} requires ${missing} (trust-line W0.11)`;
+    if (capabilityMode === "warn") {
+      log.warn(`${reason} — proceeding (capabilityMode: 'warn')`);
+      return null;
+    }
+    return reason;
+  };
+
+  // ------------------------------------ binding providers (ADR-023 A)
+  // Edit-context types THIS bundle actually registered. A binding
+  // provider borrows one of them for its activation, so registering a
+  // provider for a type that was never contributed would produce a
+  // resolver that can never be consulted — refused loudly below rather
+  // than accepted and silently inert.
+  const registeredContexts = new Set<string>();
+  const bindingRegistry = options?.bindingProviders;
+
+  // -------------------------------------------------------------------
+  // Which lanes must be implemented for which declaration. Declaring a
+  // lane in `provides` without its callback is an authoring bug (the
+  // registry would skip the provider forever), so it is a loud
+  // registration error — the same posture as the namespace rule.
+  const providerLaneGaps = (p: BindingProvider): string[] => {
+    const gaps: string[] = [];
+    if ((p.provides.paths?.length ?? 0) > 0 && !p.readProperty)
+      gaps.push("provides.paths declared without readProperty()");
+    if ((p.provides.collections?.length ?? 0) > 0 && !p.readCollection)
+      gaps.push("provides.collections declared without readCollection()");
+    if ((p.provides.ops?.length ?? 0) > 0 && !p.applyMutation)
+      gaps.push("provides.ops declared without applyMutation()");
+    // A declaration list is a SET: a repeated entry means two intents
+    // fought over one key and one lost silently. Say so instead.
+    const dupes = (label: string, xs: readonly string[] | undefined) => {
+      const seen = new Set<string>();
+      for (const x of xs ?? []) {
+        if (seen.has(x)) gaps.push(`provides.${label} lists "${x}" twice`);
+        seen.add(x);
+      }
+    };
+    dupes("paths", p.provides.paths);
+    dupes("collections", p.provides.collections);
+    dupes("ops", p.provides.ops);
+    dupes("writablePaths", p.provides.writablePaths);
+    // `writablePaths` NARROWS `paths`; a member outside it is a path the
+    // provider believes it writes and will never be asked about, which is
+    // the silent-loss shape the dupe check exists for.
+    for (const w of p.provides.writablePaths ?? []) {
+      if (!(p.provides.paths ?? []).includes(w)) {
+        gaps.push(
+          `provides.writablePaths lists "${w}", which is not in provides.paths`,
+        );
+      }
+    }
+    if (p.provides.writablePaths !== undefined && !p.writeProperty) {
+      // Not a gap when the list is EMPTY — "I read these and write none"
+      // is precisely what an empty narrowing declares, and a read-only
+      // provider has no write callback to offer.
+      if (p.provides.writablePaths.length > 0)
+        gaps.push("provides.writablePaths declared without writeProperty()");
+    }
+    if (
+      (p.provides.paths?.length ?? 0) === 0 &&
+      (p.provides.collections?.length ?? 0) === 0 &&
+      (p.provides.ops?.length ?? 0) === 0
+    ) {
+      gaps.push("provides declares nothing — the provider could never answer");
+    }
+    return gaps;
+  };
+
+  // ---------------------------------------------------- contribute
+  // The namespace rule fires FIRST (always loud), then the capability
+  // gate: a contributed id must be listed in the matching
+  // `contributes.*` category (the manifest is the declaration).
+  const contribute: ContributionSurface = {
+    tool(c) {
+      assertNamespaced(c.id, "tool");
+      requireDeclared(
+        lists(declared?.tools, c.id),
+        "contribute.tool",
+        `contributes.tools[] must include "${c.id}"`,
+      );
+      return store.add(getEditor().registries.tools.register(c));
+    },
+    panel(c) {
+      assertNamespaced(c.id, "panel");
+      requireDeclared(
+        lists(declared?.panels, c.id),
+        "contribute.panel",
+        `contributes.panels[] must include "${c.id}"`,
+      );
+      // Provenance is HOST-stamped from the manifest (U8/U9): the
+      // contribution's `source` is never bundle-authored — overwrite
+      // whatever the bundle passed so the field stays trustworthy.
+      return store.add(
+        getEditor().registries.panels.register({
+          ...c,
+          source: manifest.name,
+        }),
+      );
+    },
+    schemaPanel(c) {
+      // SAME gates as `panel`: the namespace rule (always loud) then the
+      // capability gate — a schema panel is still a panel, so its id
+      // must be listed in `contributes.panels[]`. It carries NO React;
+      // the host's injected `SchemaPanelRenderer` (or the seam fallback)
+      // turns the schema + this bundle's `bindings` into the component
+      // the registry needs.
+      assertNamespaced(c.id, "schemaPanel");
+      requireDeclared(
+        lists(declared?.panels, c.id),
+        "contribute.schemaPanel",
+        `contributes.panels[] must include "${c.id}"`,
+      );
+      const panel: PanelContribution = {
+        id: c.id,
+        title: c.title,
+        icon: c.icon,
+        defaultDock: c.defaultDock,
+        defaultGroup: c.defaultGroup,
+        closable: c.closable,
+        movable: c.movable,
+        // Host-stamped provenance, same as `panel()` above.
+        source: manifest.name,
+        component: makeSchemaPanelComponent(
+          c,
+          bindings,
+          options?.schemaPanelRenderer,
+        ),
+      };
+      const reg = store.add(getEditor().registries.panels.register(panel));
+      // Let a host adapter (the headless harness) record the SCHEMA
+      // itself; the registry only ever saw the synthesized React panel.
+      const recorded = options?.onSchemaPanelRegistered?.(c);
+      if (recorded) {
+        const d = store.add(recorded);
+        return toDisposable(() => {
+          reg.dispose();
+          d.dispose();
+        });
+      }
+      return reg;
+    },
+    command(c) {
+      assertNamespaced(c.id, "command");
+      requireDeclared(
+        lists(declared?.commands, c.id),
+        "contribute.command",
+        `contributes.commands[] must include "${c.id}"`,
+      );
+      return store.add(getEditor().registries.commands.register(c));
+    },
+    keybinding(c) {
+      // Keybindings carry no id to list; the boolean capability is
+      // their declaration.
+      requireDeclared(
+        caps?.keybindings === true,
+        "contribute.keybinding",
+        "capabilities.keybindings must be true",
+      );
+      return store.add(getEditor().registries.keybindings.register(c));
+    },
+    menu(c) {
+      // The entry must point at a command THIS bundle declared. An entry
+      // onto a command that does not exist renders, accepts a click and
+      // silently does nothing — the dead-affordance shape the tool rail
+      // already learned to refuse, where the user reads the failure as
+      // their own mistake. Checked here rather than in the host so the
+      // bundle is told at registration, not the user at click time.
+      assertNamespaced(c.command, "menu");
+      requireDeclared(
+        lists(declared?.commands, c.command),
+        "contribute.menu",
+        `contributes.commands[] must include "${c.command}" before a menu ` +
+          `entry can invoke it`,
+      );
+      const scope = c.scope ?? "document";
+      const editContext =
+        typeof scope === "object" ? scope.editContext : null;
+      const menus = getEditor().registries.menus;
+      if (!menus) {
+        // A host that predates this door. Report it rather than throwing:
+        // a bundle built against a newer contract must still LOAD on an
+        // older host, with the contribution simply absent.
+        return { dispose() {} };
+      }
+      return store.add(
+        menus.register({
+          path: c.path,
+          command: c.command,
+          order: c.order,
+          group: c.group,
+          // The scope becomes a `when` predicate, which is the host's
+          // existing vocabulary for "does this apply where you are
+          // standing" — the same field the Insert items and the Window
+          // menu already use. A context-scoped entry is simply one whose
+          // predicate asks what context is active.
+          when: (state: unknown) => {
+            const st = state as {
+              document?: { handle?: { pageCount?: number } | null } | null;
+              editContext?: { type?: string } | null;
+            } | null;
+            if (!st?.document?.handle || (st.document.handle.pageCount ?? 0) === 0) {
+              return false;
+            }
+            if (editContext === null) return true;
+            return st.editContext?.type === editContext;
+          },
+        }),
+      );
+    },
+    overlay(c) {
+      assertNamespaced(c.id, "overlay");
+      requireDeclared(
+        hasRendering("overlay"),
+        "contribute.overlay",
+        'capabilities.rendering must include "overlay"',
+      );
+      return store.add(getEditor().registries.overlays.register(c));
+    },
+    // W3.2 (un-reserved — B-02 / W-03): the last two reserved doors. The
+    // capability gate keys off the OBJECT arrays in `contributes`
+    // (`editContexts[]` / `objectTypes[]` carry `{type,…}`, not flat
+    // ids). The shell owns the stack / chrome / write-scope; the SDK
+    // adapter just hands the contribution to the editor's registry (or,
+    // when the host hasn't wired one — headless / not-yet-adopted —
+    // records it through the harness hook). The `type` is a content-type
+    // name, NOT a namespaced id, so the namespace rule does NOT apply
+    // (the capability gate is the only gate).
+    editContext(c) {
+      requireDeclared(
+        declaresType(declared?.editContexts, c.type),
+        "contribute.editContext",
+        `contributes.editContexts[] must declare { type: "${c.type}" }`,
+      );
+      // Stamp the OWN-namespace metadata key so the host resolves the
+      // candidate's `metadata` from THIS plugin's envelope before calling
+      // `matches` (a bundle never sees a foreign plugin's metadata).
+      //
+      // ADR-023 — and WRAP the lifecycle hooks when a binding-provider
+      // registry is wired. This is how a provider's lifetime is DERIVED
+      // from the shell's context stack instead of reported alongside it:
+      // the shell already calls `onEnter`/`onExit` at exactly the moments
+      // a context gains and loses ownership of the selection, so the
+      // adapter listens in rather than asking the editor for a second
+      // "who is active" signal that could disagree. The bundle's own
+      // hooks still run, unchanged and first-class.
+      registeredContexts.add(c.type);
+      const stamped: EditContextContribution = {
+        ...c,
+        metadataKey: metadataKey(manifest),
+        ...(bindingRegistry
+          ? {
+              onEnter: (ctx) => {
+                bindingRegistry.setContextActive(
+                  manifest.id,
+                  c.type,
+                  typeof ctx.id?.id === "string" ? ctx.id.id : null,
+                  true,
+                );
+                c.onEnter?.(ctx);
+              },
+              onExit: (ctx) => {
+                // The bundle's hook runs BEFORE deactivation so its
+                // teardown can still resolve through its own provider.
+                c.onExit?.(ctx);
+                bindingRegistry.setContextActive(
+                  manifest.id,
+                  c.type,
+                  typeof ctx.id?.id === "string" ? ctx.id.id : null,
+                  false,
+                );
+              },
+            }
+          : {}),
+      };
+      const reg = getEditor().registries.editContexts;
+      const recorded = options?.onEditContextRegistered?.(stamped);
+      if (reg) {
+        const d = store.add(reg.register(stamped));
+        if (recorded) {
+          const r = store.add(recorded);
+          return toDisposable(() => {
+            d.dispose();
+            r.dispose();
+          });
+        }
+        return d;
+      }
+      // No shell registry wired — the recording stub IS the
+      // registration (the door no longer throws). The harness hook (if
+      // present) captures it; otherwise it is a tracked no-op.
+      if (recorded) return store.add(recorded);
+      return store.add(toDisposable(() => {}));
+    },
+    objectType(c) {
+      requireDeclared(
+        declaresType(declared?.objectTypes, c.type),
+        "contribute.objectType",
+        `contributes.objectTypes[] must declare { type: "${c.type}" }`,
+      );
+      const stamped: ObjectTypeContribution = {
+        ...c,
+        metadataKey: metadataKey(manifest),
+      };
+      const reg = getEditor().registries.objectTypes;
+      const recorded = options?.onObjectTypeRegistered?.(stamped);
+      if (reg) {
+        const d = store.add(reg.register(stamped));
+        if (recorded) {
+          const r = store.add(recorded);
+          return toDisposable(() => {
+            d.dispose();
+            r.dispose();
+          });
+        }
+        return d;
+      }
+      if (recorded) return store.add(recorded);
+      return store.add(toDisposable(() => {}));
+    },
+    // ADR-023 phase A — the BINDING-PROVIDER door. Three gates, in
+    // order, all loud:
+    //   1. the CAPABILITY gate, borrowed whole from the edit context the
+    //      provider attaches to (`contributes.editContexts[]` must
+    //      declare the type). No new manifest field and no new
+    //      capability: the authority a provider exercises IS the
+    //      authority the active context already holds over the selection
+    //      it owns, so a second declaration would be ceremony, not a
+    //      gate. (Precedent: `EditContextContribution.toolIds` swaps the
+    //      whole tool rail and is not separately declared either.)
+    //   2. the ORDERING rule — the context must already be registered by
+    //      THIS bundle. A provider on an unregistered type can never
+    //      activate; accepting it would be the fake-interactive failure
+    //      the platform refuses.
+    //   3. the DECLARATION shape — a lane declared without its callback,
+    //      a repeated entry, or an empty `provides` is an authoring bug
+    //      that would make the provider silently unreachable.
+    // Then the honest no-backend door: no registry wired → warn + an
+    // inert handle (probe `supports("bindings.provider@1")`).
+    bindingProvider(contextType, provider): BindingProviderHandle {
+      requireDeclared(
+        declaresType(declared?.editContexts, contextType),
+        "contribute.bindingProvider",
+        `contributes.editContexts[] must declare { type: "${contextType}" } ` +
+          `(a binding provider borrows its edit context's declaration)`,
+      );
+      if (!registeredContexts.has(contextType)) {
+        throw new Error(
+          `plugin-api: contribute.bindingProvider("${contextType}") — no such ` +
+            `edit context is registered by ${manifest.id}. A provider BORROWS ` +
+            `its context's activation (ADR-023): call ` +
+            `contribute.editContext({ type: "${contextType}", … }) first, or ` +
+            `the provider could never be consulted.`,
+        );
+      }
+      const gaps = providerLaneGaps(provider);
+      if (gaps.length > 0) {
+        throw new Error(
+          `plugin-api: contribute.bindingProvider("${contextType}") — ` +
+            `${gaps.join("; ")}. A declared lane the registry can never call ` +
+            `is a silently dead provider, so the declaration is refused.`,
+        );
+      }
+      if (!bindingRegistry) {
+        log.warn(
+          `contribute.bindingProvider("${contextType}") registered nothing — ` +
+            `the host wired no binding-provider registry, so no panel will ` +
+            `ever consult it (probe supports("bindings.provider@1"))`,
+        );
+        return store.add({
+          invalidate() {},
+          dispose() {},
+        }) as BindingProviderHandle;
+      }
+      const entry: RegisteredBindingProvider = {
+        plugin: manifest.id,
+        contextType,
+        provider,
+      };
+      const reg = store.add(bindingRegistry.register(entry));
+      const handle: BindingProviderHandle = {
+        invalidate() {
+          bindingRegistry.notifyChanged(manifest.id, contextType);
+        },
+        dispose() {
+          reg.dispose();
+        },
+      };
+      return handle;
+    },
+    // K-2 / S-06 — document IO. Mirrors `command`: namespaced id the
+    // manifest must list, routed to the shell registry. The registry is
+    // OPTIONAL on the handle (a host that hasn't wired it stays
+    // assignable) — when absent the door is a tracked no-op; the headless
+    // harness injects a recording registry so conformance can assert it.
+    importer(c) {
+      assertNamespaced(c.id, "importer");
+      requireDeclared(
+        lists(declared?.importers, c.id),
+        "contribute.importer",
+        `contributes.importers[] must include "${c.id}"`,
+      );
+      const reg = getEditor().registries.importers;
+      if (reg) return store.add(reg.register(c));
+      return store.add(toDisposable(() => {}));
+    },
+    exporter(c) {
+      assertNamespaced(c.id, "exporter");
+      requireDeclared(
+        lists(declared?.exporters, c.id),
+        "contribute.exporter",
+        `contributes.exporters[] must include "${c.id}"`,
+      );
+      const reg = getEditor().registries.exporters;
+      if (reg) return store.add(reg.register(c));
+      return store.add(toDisposable(() => {}));
+    },
+    // C-1 — the in-frame scene-layer surface. Capability-gated on
+    // `rendering ∋ sceneLayer`; routes submit/clear to the editor's scene
+    // channel (`getEditor().sceneLayers` → canvas-wasm submit/clear). When
+    // no channel is wired (headless / older editor) the surface warns +
+    // no-ops (probe `supports("rendering.sceneLayer@1")`). Disposing the
+    // surface clears every layer it submitted (tracked so host.dispose()
+    // tears them down).
+    objectModel(model: ObjectModelContribution): ObjectModelHandle {
+      // ADR 323 — the capability gate: every kind / typed command must be
+      // declared in `contributes.objectModel`, and an INLINE manifest
+      // schema must name the same paths as the runtime rows (rule 4).
+      const decl = declared?.objectModel;
+      for (const k of model.kinds) {
+        const d = decl?.kinds.find((x) => x.kind === k.kind);
+        requireDeclared(
+          d !== undefined,
+          "contribute.objectModel",
+          `contributes.objectModel.kinds[] must include "${k.kind}"`,
+        );
+        const why = checkSchemaRows(k.schema);
+        if (why) throw new Error(`plugin-api: object kind "${k.kind}": ${why}`);
+        if (d && Array.isArray(d.schema)) {
+          const a = d.schema.map((r) => r.path).sort().join(",");
+          const b = k.schema.map((r) => r.path).sort().join(",");
+          if (a !== b) {
+            throw new Error(
+              `plugin-api: object kind "${k.kind}" registers paths [${b}] but the manifest declares [${a}]`,
+            );
+          }
+        }
+      }
+      for (const c of model.commands ?? []) {
+        assertNamespaced(c.id, "typed command");
+        requireDeclared(
+          decl?.commands?.some((x) => x.id === c.id) ?? false,
+          "contribute.objectModel",
+          `contributes.objectModel.commands[] must include "${c.id}"`,
+        );
+      }
+      const handle = objectRegistry.register({ plugin: manifest.id, model, parts, log });
+      store.add(handle);
+      return handle;
+    },
+    sceneLayer() {
+      requireDeclared(
+        hasRendering("sceneLayer"),
+        "contribute.sceneLayer",
+        'capabilities.rendering must include "sceneLayer"',
+      );
+      const submitted = new Set<string>();
+      // Elements this surface gave a whole image (the tiles' target), with
+      // its pixel size so tiles are checked on either lane.
+      const imaged = new Map<string, { width: number; height: number }>();
+      // Fallback lane only: the SDK's own copy of each element's image,
+      // patched by tiles and resent whole over JSON.
+      const retained = new Map<string, SceneImage>();
+      const channel = () => getEditor().sceneLayers;
+      const surface: SceneLayerSurface = {
+        async submit(elementId, layer) {
+          const ch = channel();
+          if (!ch) {
+            log.warn(
+              `contribute.sceneLayer().submit("${elementId}") ignored — the ` +
+                `host wired no scene channel (probe ` +
+                `supports("rendering.sceneLayer@1"))`,
+            );
+            return { fontFallbacks: [] };
+          }
+          submitted.add(elementId);
+          // C-34 — DECLARE WHO IS RENDERING. The bundle never passes
+          // this; the adapter fills it from the manifest, which is the
+          // only place the identity is trustworthy. An engine without
+          // the gate ignores it, so this is additive.
+          const reply = await ch.submit(elementId, layer, manifest.id);
+          // Protocol 68 — the faces that fell back to the default font. An
+          // older host resolves void: no report, never a guess.
+          const fontFallbacks =
+            reply && Array.isArray(reply.fontFallbacks) ? [...reply.fontFallbacks] : [];
+          return { fontFallbacks };
+        },
+        async clear(elementId) {
+          submitted.delete(elementId);
+          imaged.delete(elementId);
+          retained.delete(elementId);
+          await channel()?.clear(elementId);
+        },
+        // Protocol 66 — the binary scene-image lane, with the SDK owning
+        // the fallback so a bundle calls one method on every host.
+        async submitImage(elementId, image, options) {
+          const ch = channel();
+          if (!ch) {
+            log.warn(
+              `contribute.sceneLayer().submitImage("${elementId}") ignored — ` +
+                `the host wired no scene channel (probe ` +
+                `supports("rendering.sceneLayer@1"))`,
+            );
+            return;
+          }
+          checkImage(image);
+          submitted.add(elementId);
+          imaged.set(elementId, { width: image.width, height: image.height });
+          if (ch.submitImage && ch.submitImageTiles) {
+            retained.delete(elementId);
+            await ch.submitImage(
+              elementId,
+              image,
+              manifest.id,
+              options?.transfer ?? false,
+            );
+            return;
+          }
+          // Older host: keep a COPY to patch tiles into (the bundle may
+          // reuse or transfer its own buffer), and send the whole image
+          // over the JSON lane.
+          const copy: SceneImage = {
+            rgba: new Uint8Array(image.rgba),
+            width: image.width,
+            height: image.height,
+            dest: [...image.dest] as [number, number, number, number],
+          };
+          retained.set(elementId, copy);
+          await ch.submit(elementId, imageLayer(copy), manifest.id);
+        },
+        async submitImageTiles(elementId, tiles, options) {
+          const ch = channel();
+          if (!ch) {
+            log.warn(
+              `contribute.sceneLayer().submitImageTiles("${elementId}") ` +
+                `ignored — the host wired no scene channel`,
+            );
+            return;
+          }
+          const size = imaged.get(elementId);
+          if (!size) {
+            throw new Error(
+              `contribute.sceneLayer().submitImageTiles("${elementId}"): no ` +
+                `image was submitted for this element — call submitImage first`,
+            );
+          }
+          checkTiles(size, tiles);
+          if (ch.submitImage && ch.submitImageTiles) {
+            await ch.submitImageTiles(
+              elementId,
+              tiles,
+              manifest.id,
+              options?.transfer ?? false,
+            );
+            return;
+          }
+          const image = retained.get(elementId);
+          if (!image) {
+            throw new Error(
+              `contribute.sceneLayer().submitImageTiles("${elementId}"): the ` +
+                `retained image is gone (the binary lane went away mid-session)`,
+            );
+          }
+          patchImage(image, tiles);
+          await ch.submit(elementId, imageLayer(image), manifest.id);
+        },
+        dispose() {
+          const ch = channel();
+          if (ch) {
+            for (const id of submitted) void ch.clear(id);
+          }
+          submitted.clear();
+          imaged.clear();
+          retained.clear();
+        },
+      };
+      return store.add(surface);
+    },
+  };
+
+  // ------------------------------------------------------ document
+  /** The namespace rule at the WRITE chokepoint: a raw mutate may
+   *  carry setPluginMetadata (incl. nested in batches — e.g. the
+   *  v34 batch-created-sentinel insert flow), but only for THIS
+   *  plugin's derived key. Returns the offending key, or null. */
+  const foreignMetadataKey = (m: MutationInput): string | null => {
+    // Protocol 69: the document-scoped label is gated exactly like the
+    // page-item one — a bundle writes only its own `x-paged:<id>` key. A
+    // page carrier, should one land, takes the same key.
+    if (
+      m.op === "setPluginMetadata" ||
+      m.op === "setDocumentMetadata" ||
+      m.op === "setPageMetadata"
+    ) {
+      return m.args.key === metadataKey(manifest) ? null : m.args.key;
+    }
+    if (m.op === "batch") {
+      for (const child of m.args.ops) {
+        const bad = foreignMetadataKey(child);
+        if (bad !== null) return bad;
+      }
+    }
+    return null;
+  };
+  /** Read doors require `capabilities.document.read`. Like the
+   *  contribution gate, an undeclared read throws in 'enforce' (it is a
+   *  manifest bug, surfaced loudly) and logs+proceeds in 'warn'. */
+  const requireDocRead = (door: string): void =>
+    requireDeclared(
+      hasDoc("read"),
+      door,
+      "capabilities.document.read must be declared",
+    );
+  /** ADR-021 — the native-document read doors require
+   *  `capabilities.document.readNative`; `open` requires
+   *  `capabilities.document.openNative`. Both throw in 'enforce' (a manifest
+   *  bug) and log+proceed in 'warn', like every other read door. */
+  const requireNativeRead = (door: string): void =>
+    requireDeclared(
+      hasNativeRead(),
+      door,
+      "capabilities.document.readNative must be declared",
+    );
+  const requireNativeOpen = (door: string): void =>
+    requireDeclared(
+      hasNativeOpen(),
+      door,
+      "capabilities.document.openNative must be declared",
+    );
+
+  // ------------------------------------------- C-16 the parent index
+  // `document.parentOf` needs NO engine door: the `requestSceneTree`
+  // reply already carries full parentage (nodes nest; the ones that are
+  // addressable carry their `ElementId`). What was missing was a
+  // per-element READ — paged.draw's selectParentGroup walked the entire
+  // tree on every press. So the adapter derives the index ONCE and
+  // rebuilds it when the document changes: the O(document) walk moves
+  // from once-per-press to once-per-edit, and the answer stays exactly
+  // as fresh as `tree()` (never fresher — that is the honest ceiling of
+  // a derived read).
+  //
+  // Keyed by the string element id; only string-id kinds nest (a
+  // storyRange/table address is structural, never a group child).
+  let parentIndex: Map<string, ElementId> | null = null;
+  let parentIndexWired = false;
+  const buildParentIndex = (roots: readonly SceneTreeNode[]) => {
+    const index = new Map<string, ElementId>();
+    const walk = (
+      nodes: readonly SceneTreeNode[],
+      parent: ElementId | null,
+    ): void => {
+      for (const node of nodes) {
+        const id = node.id ?? null;
+        // A node WITHOUT an ElementId (Spread / Page rows) is not an
+        // element, so it does not become anyone's parent — its children
+        // inherit the nearest addressable ancestor instead.
+        if (id && typeof id.id === "string") {
+          if (parent) index.set(id.id, parent);
+          walk(node.children ?? [], id);
+        } else {
+          walk(node.children ?? [], parent);
+        }
+      }
+    };
+    walk(roots, null);
+    return index;
+  };
+
+  /** The gates every raw write door applies, in order: the declared
+   *  `document.write` capability (mutate-never-throws → a non-applied
+   *  outcome), then the metadata namespace (loud regardless). `null` =
+   *  the write may proceed. */
+  const gateRawWrite = (
+    mutation: MutationInput,
+    door: string,
+  ): MutationOutcome | null => {
+    const denied = denyWrite(hasDoc("write"), door, "capabilities.document.write");
+    if (denied !== null) return { applied: false, error: denied };
+    const foreign = foreignMetadataKey(mutation);
+    if (foreign !== null) {
+      const error = `metadata key "${foreign}" is outside this plugin's namespace ("${metadataKey(manifest)}")`;
+      log.warn(error);
+      return { applied: false, error };
+    }
+    return null;
+  };
+  /** A `Mutate` reply envelope as the bundle-facing outcome. */
+  const mutateOutcome = (reply: MutateReply): MutationOutcome => {
+    if (reply.kind === "mutationApplied") {
+      // `minted` is copied through when the engine sent it (additive on
+      // the wire): a batch's `createdId` is only its LAST creation, so
+      // without the list a bundle could not learn what its batch made.
+      const minted = reply.payload.minted;
+      return {
+        applied: true,
+        createdId: reply.payload.createdId ?? null,
+        pageIds: reply.payload.pageIds,
+        ...(minted !== undefined ? { minted } : {}),
+        ...(typeof reply.payload.appliedSeq === "number" ? { appliedSeq: reply.payload.appliedSeq } : {}),
+      };
+    }
+    return {
+      applied: false,
+      error:
+        reply.kind === "mutationFailed"
+          ? (reply as { payload?: unknown }).payload
+          : reply,
+    };
+  };
+
+  const document: DocumentSurface = {
+    async mutate(mutation: MutationInput): Promise<MutationOutcome> {
+      const gated = gateRawWrite(mutation, "document.mutate");
+      if (gated !== null) return gated;
+      try {
+        // The narrow `PagedClient.mutate` handle is typed against the
+        // VENDORED `Mutation` (protocol 51). A protocol-ahead op (v56;
+        // mutations.ts `PendingMutation`) is a real payload the live
+        // worker accepts — the cast is the ONE seam that carries it
+        // until `sync-wire.mjs` re-vendors canvas-wasm 0.56 and the
+        // union absorbs it. Widening the handle instead would demand
+        // more of every host than the published wire promises.
+        const reply = await getEditor().client.mutate(mutation as Mutation);
+        return mutateOutcome(reply);
+      } catch (error) {
+        return { applied: false, error };
+      }
+    },
+    async mutateWithBytes(
+      mutation: MutationInput,
+      bytes: Uint8Array,
+      options?: { transfer?: boolean },
+    ): Promise<MutationOutcome> {
+      const gated = gateRawWrite(mutation, "document.mutateWithBytes");
+      if (gated !== null) return gated;
+      // Both lanes refuse a mutation without a slot for the bytes, so a
+      // bundle sees the same answer on every host (the engine's own words
+      // on the binary lane; these on the fallback, before anything moves).
+      if (!hasBytesSlot(mutation)) {
+        return {
+          applied: false,
+          error:
+            "mutateWithBytes: no replaceImageBytes with an empty `bytes` slot to fill",
+        };
+      }
+      try {
+        const editor = getEditor();
+        if (typeof editor.mutateWithBytes === "function") {
+          const reply = await editor.mutateWithBytes(
+            mutation as Mutation,
+            bytes,
+            options?.transfer === true,
+          );
+          return mutateOutcome(reply);
+        }
+        // Older host: the bytes ride the JSON channel as a `number[]`.
+        const reply = await editor.client.mutate(
+          spliceBytesSlot(mutation, Array.from(bytes)) as Mutation,
+        );
+        return mutateOutcome(reply);
+      } catch (error) {
+        return { applied: false, error };
+      }
+    },
+    async undo() {
+      // undo/redo move shared history — write doors. They return void,
+      // so an undeclared call throws (enforce) / warns (warn) rather
+      // than silently no-opping.
+      requireDeclared(
+        hasDoc("write"),
+        "document.undo",
+        "capabilities.document.write",
+      );
+      await getEditor().client.undo();
+    },
+    async redo() {
+      requireDeclared(
+        hasDoc("write"),
+        "document.redo",
+        "capabilities.document.write",
+      );
+      await getEditor().client.redo();
+    },
+    collection(name) {
+      requireDocRead("document.collection");
+      return getEditor().client.collection(name);
+    },
+    meta() {
+      requireDocRead("document.meta");
+      return getEditor().client.documentMeta();
+    },
+    pathAnchors(id: ElementId) {
+      requireDocRead("document.pathAnchors");
+      return getEditor()
+        .client.pathAnchors(id)
+        .catch(() => null);
+    },
+    async hitTest(
+      pageId,
+      point,
+      filter: HitFilter = "any",
+    ): Promise<HitResult | null> {
+      // hitTest is a render-pipeline read: it needs BOTH a document
+      // read AND the `hitTest` rendering surface (the host-side picking
+      // service). Both must be declared.
+      requireDocRead("document.hitTest");
+      requireDeclared(
+        hasRendering("hitTest"),
+        "document.hitTest",
+        'capabilities.rendering must include "hitTest"',
+      );
+      try {
+        const reply = await getEditor().client.send({
+          kind: "hitTest",
+          payload: { pageId, docPoint: point, filter },
+        });
+        return reply.kind === "hitResult" ? reply.payload : null;
+      } catch {
+        return null;
+      }
+    },
+    elementGeometry(ids) {
+      requireDocRead("document.elementGeometry");
+      return getEditor().client.elementGeometry(ids);
+    },
+    async placeholders() {
+      // D-01 — the read half of the tagged-placeholder loop (protocol
+      // v43). Channel failure answers an empty list, never a throw.
+      requireDocRead("document.placeholders");
+      try {
+        const reply = await getEditor().client.send({
+          kind: "requestDocumentPlaceholders",
+        });
+        return reply.kind === "documentPlaceholders"
+          ? reply.payload.items
+          : [];
+      } catch {
+        return [];
+      }
+    },
+    async elementProperties(id) {
+      // B-19 — the typed read over `requestElementProperties` (the same
+      // wire query getMetadata filters); null on miss or channel failure.
+      requireDocRead("document.elementProperties");
+      try {
+        const reply = await getEditor().client.send({
+          kind: "requestElementProperties",
+          payload: { id },
+        });
+        return reply.kind === "elementProperties"
+          ? reply.payload.result
+          : null;
+      } catch {
+        return null;
+      }
+    },
+    async planarRegions(
+      elementIds: ElementId[],
+      point?: [number, number],
+    ): Promise<PlanarRegionsResult> {
+      // B-22 (protocol v57) — the region read door, routed over the same
+      // request/reply channel as `elementProperties` / `placeholders` /
+      // `tree`. It differs from them in what it answers when the reply
+      // doesn't come: those collapse to `null` / `[]`, which is exactly
+      // what this door must NOT do — an empty face list reads as "these
+      // paths divide into nothing". So an unanswered query becomes a
+      // typed REFUSAL (`found: false` + a reason), the same channel the
+      // engine itself uses for its input cap. Never throws.
+      requireDocRead("document.planarRegions");
+      const refusal = (reason: string): PlanarRegionsResult => ({
+        found: false,
+        faces: [],
+        inputCount: elementIds.length,
+        complete: false,
+        reason,
+      });
+      try {
+        // TWO casts, one per direction, for the same reason the `mutate`
+        // seam carries one: `requestPlanarRegions` / `planarRegions` are
+        // v57 wire kinds and the vendored union is protocol 51. Both
+        // disappear when `sync-wire.mjs` re-vendors canvas-wasm 0.57.
+        const reply = (await getEditor().client.send({
+          kind: "requestPlanarRegions",
+          payload: point ? { elementIds, point } : { elementIds },
+        } as unknown as MainToWorkerKind)) as unknown as {
+          kind: string;
+          payload?: { result?: PlanarRegionsResult };
+        };
+        if (reply.kind !== "planarRegions") {
+          return refusal(
+            "this host did not answer requestPlanarRegions — its engine " +
+              "predates the planar-region read door (protocol v57)",
+          );
+        }
+        return (
+          reply.payload?.result ??
+          refusal("the engine answered planarRegions with no result")
+        );
+      } catch (error) {
+        return refusal(`the region read door failed: ${String(error)}`);
+      }
+    },
+    async snapPoint(query: SnapPointQuery): Promise<SnapPointResult> {
+      // v67 (RFI C-68). An unanswered query is the point UNSNAPPED — the
+      // one answer that is never wrong for a tool to act on — not a throw
+      // a pointer handler would have to catch on every move.
+      requireDocRead("document.snapPoint");
+      const unsnapped = (): SnapPointResult => ({
+        point: [query.point[0], query.point[1]],
+        snapped: false,
+        lines: [],
+        tolerancePt: 0,
+      });
+      try {
+        const reply = await getEditor().client.send({
+          kind: "requestSnapPoint",
+          payload: { query },
+        });
+        return reply.kind === "snapPoint" ? reply.payload.result : unsnapped();
+      } catch {
+        return unsnapped();
+      }
+    },
+    async tree(): Promise<SceneTreeNode[]> {
+      requireDocRead("document.tree");
+      const reply = await getEditor().client.send({
+        kind: "requestSceneTree",
+      });
+      return reply.kind === "sceneTree" ? reply.payload.roots : [];
+    },
+    async parentOf(id: ElementId): Promise<ElementId | null> {
+      // C-16 — served from the SAME scene tree as `tree()`, memoized.
+      // No new wire op (see the parent-index note above).
+      requireDocRead("document.parentOf");
+      // Only string-id kinds can be a group child; a storyRange/table
+      // address is structural, so the honest answer is null without a
+      // read at all.
+      if (typeof id.id !== "string") return null;
+      if (!parentIndexWired) {
+        // Wired LAZILY on first use so a bundle that never asks for
+        // parentage pays for no subscription. The index is dropped on
+        // every committed change (the set `document.onDidChange` reports:
+        // a script can group and ungroup) — the next read rebuilds it from
+        // one fresh tree.
+        parentIndexWired = true;
+        const off = getEditor().client.subscribe((msg) => {
+          if (
+            documentChangeOf(msg) !== null ||
+            // A newly opened document invalidates everything; the kind
+            // is matched defensively (not every host posts it).
+            msg.kind === "documentLoaded"
+          ) {
+            parentIndex = null;
+          }
+        });
+        store.add(toDisposable(off));
+      }
+      if (!parentIndex) {
+        // No in-flight de-duplication by design: a burst of CONCURRENT
+        // first calls may each issue a read (they cannot each get a
+        // WRONG answer, which a shared in-flight promise could once an
+        // invalidation lands mid-read). Sequential presses — the actual
+        // consumer shape — cost exactly one.
+        const reply = await getEditor().client.send({
+          kind: "requestSceneTree",
+        });
+        // A host that cannot answer leaves the index EMPTY rather than
+        // unset — a failed read must not turn into a rebuild storm on
+        // every press (the cost this door exists to remove).
+        parentIndex = buildParentIndex(
+          reply.kind === "sceneTree" ? reply.payload.roots : [],
+        );
+      }
+      return parentIndex.get(id.id) ?? null;
+    },
+    async getMetadata(id) {
+      requireDocRead("document.getMetadata");
+      const key = metadataKey(manifest);
+      const reply = await getEditor().client.send({
+        kind: "requestElementProperties",
+        payload: { id },
+      });
+      if (reply.kind !== "elementProperties" || !reply.payload.result) {
+        return null;
+      }
+      for (const entry of reply.payload.result.entries) {
+        const v = entry.value;
+        if (
+          v &&
+          typeof v === "object" &&
+          v.type === "pluginMetadata" &&
+          v.value.key === key &&
+          typeof v.value.value === "string"
+        ) {
+          try {
+            return JSON.parse(v.value.value) as PluginMetadataEnvelope;
+          } catch {
+            return null; // engine-gated on write; treat corrupt as absent
+          }
+        }
+      }
+      return null;
+    },
+    async setMetadata(id, envelope) {
+      // The plugin's OWN namespace only — the key is derived, never
+      // caller-supplied (the engine additionally gates the prefix,
+      // the 64 KiB cap and the envelope shape). B-16: name the calling
+      // plugin so the ENGINE cross-checks the key is in this plugin's
+      // `x-paged:<id>` namespace (protocol v36, additive) — defense in
+      // depth that holds even for a bundle reaching the raw handle, and
+      // the teeth the isolate boundary will rely on.
+      return this.mutate({
+        op: "setPluginMetadata",
+        args: {
+          elementId: id,
+          key: metadataKey(manifest),
+          value: envelope === null ? null : JSON.stringify(envelope),
+          caller: manifest.id,
+        },
+      });
+    },
+    async getDocumentMetadata() {
+      requireDocRead("document.getDocumentMetadata");
+      const key = metadataKey(manifest);
+      const meta = (await getEditor().client.documentMeta()) as {
+        pluginMetadata?: { key: string; value: string }[];
+      };
+      const entry = meta.pluginMetadata?.find((e) => e.key === key);
+      if (!entry) return null;
+      try {
+        return JSON.parse(entry.value) as PluginMetadataEnvelope;
+      } catch {
+        return null; // engine-gated on write; treat corrupt as absent
+      }
+    },
+    async setDocumentMetadata(envelope) {
+      // Same posture as setMetadata: the key is derived, never supplied,
+      // and the caller is named so the engine cross-checks it.
+      return this.mutate({
+        op: "setDocumentMetadata",
+        args: {
+          key: metadataKey(manifest),
+          value: envelope === null ? null : JSON.stringify(envelope),
+          caller: manifest.id,
+        },
+      });
+    },
+    async frameChain(storyId: string): Promise<FrameChainLink[]> {
+      requireDocRead("document.frameChain");
+      const reply = await getEditor().client.send({
+        kind: "requestFrameChain",
+        payload: { storyId },
+      });
+      return reply.kind === "frameChainResult" ? reply.payload.links : [];
+    },
+    async storyContent(storyId: string): Promise<StoryContent | null> {
+      // DOC-03 (protocol v54): the structured whole-story read. Forwards like
+      // frameChain — the plugin gets text + styles back as data it can diff,
+      // which `readModel`'s opaque core-native bytes could never give an
+      // isolation-clean plugin.
+      requireDocRead("document.storyContent");
+      const reply = await getEditor().client.send({
+        kind: "requestStoryContent",
+        payload: { storyId },
+      });
+      return reply.kind === "storyContentResult"
+        ? (reply.payload.content ?? null)
+        : null;
+    },
+    onDidChange(listener: (e: DocumentChangeEvent) => void): Disposable {
+      requireDocRead("document.onDidChange");
+      // Every committed change, whatever committed it (ADR 327): a
+      // mutation, an undo/redo, a canvas gesture's commit, a script run.
+      // document-change.ts is the one place that decides what counts.
+      const off = getEditor().client.subscribe((msg) => {
+        const change = documentChangeOf(msg);
+        if (change) listener(change);
+      });
+      return store.add(toDisposable(off));
+    },
+    // W-22 — the raw `documentLoaded` broadcast, narrowed to a clonable
+    // snapshot (the handle's stats / ruler guides stay host-side).
+    onDidOpen(listener: (e: DocumentOpenedEvent) => void): Disposable {
+      requireDocRead("document.onDidOpen");
+      const off = getEditor().client.subscribe((msg) => {
+        if (msg.kind !== "documentLoaded") return;
+        const h = msg.payload;
+        try {
+          listener({
+            docId: h.docId,
+            pageCount: h.pageCount,
+            pageIds: [...h.pageIds],
+            pageSizesPt: h.pageSizesPt.map(
+              ([w, hgt]) => [w, hgt] as [number, number],
+            ),
+          });
+        } catch (err) {
+          log.error(`document.onDidOpen listener failed: ${String(err)}`);
+        }
+      });
+      return store.add(toDisposable(off));
+    },
+    // Protocol 66 batch — the save hook. The host awaits every
+    // registered listener before it serialises the document; the wrapper
+    // makes a bundle's failure a logged event, never a failed save.
+    onWillSave(listener) {
+      const backend = options?.willSave;
+      if (!backend) {
+        // Held, never called: the honest no-backend door
+        // (supports("document.onWillSave@1") is false).
+        return store.add(toDisposable(() => {}));
+      }
+      const wrapped = async (e: WillSaveEvent): Promise<void> => {
+        try {
+          await listener(e);
+        } catch (err) {
+          log.error(`document.onWillSave listener failed: ${String(err)}`);
+        }
+      };
+      return store.add(backend.register(manifest.id, wrapped));
+    },
+  };
+
+  // ----------------------------------------------------- selection
+  // Reading selection (get/onDidChange) is ambient UI state — every
+  // bundle may observe it, no capability needed. CHANGING it
+  // (`selection.set`) is a document-level action, gated on
+  // `capabilities.document.write` (the post-insert select pattern is
+  // part of a write flow).
+  const selection: SelectionSurface = {
+    get() {
+      return getEditor().selection.elementSelection;
+    },
+    async set(ids: ElementId[], mode: SelectionMode = "replace") {
+      requireDeclared(
+        hasDoc("write"),
+        "selection.set",
+        "capabilities.document.write",
+      );
+      const editor = getEditor();
+      const applied = await editor.client.setElementSelection(ids, mode);
+      editor.selection.setElementSelection(applied);
+      // The selection box is drawn from the host's geometry mirror, which
+      // a selection alone does not move: without this read the box stayed
+      // on the previous selection. The ids asked are the applied ones, as
+      // the host's click path asks; a group, for which the engine answers
+      // no geometry, clears the box just as clicking it does.
+      try {
+        editor.selection.setElementGeometry(
+          await editor.client.elementGeometry(applied),
+        );
+      } catch {
+        // Geometry is selection chrome; the selection itself is set.
+      }
+      return applied;
+    },
+    onDidChange(listener) {
+      const off = getEditor().client.subscribe((msg) => {
+        if (msg.kind === "elementSelectionApplied") {
+          listener(msg.payload.ids);
+        }
+      });
+      return store.add(toDisposable(off));
+    },
+  };
+
+  // ------------------------------------------------------ viewport
+  // v70 — the page members are the editor's (camera + page layout); with
+  // no backend they answer the honest nothing.
+  const pagesBackend = options?.pages;
+  const viewport: ViewportSurface = {
+    camera() {
+      const cam = getEditor().camera.camera;
+      return { scale: cam.scale, tx: cam.tx, ty: cam.ty };
+    },
+    pxToPt(px: number) {
+      const scale = getEditor().camera.camera.scale;
+      return px / (scale > 0 ? scale : 1);
+    },
+    async goToPage(pageId, opts) {
+      if (!pagesBackend || typeof pageId !== "string" || pageId === "") {
+        return false;
+      }
+      const fit = opts?.fit === "width" ? "width" : "page";
+      return (await pagesBackend.goToPage(pageId, fit)) === true;
+    },
+    activePage() {
+      return pagesBackend ? pagesBackend.activePage() : null;
+    },
+    onDidChangeActivePage(listener) {
+      if (!pagesBackend) {
+        return toDisposable(() => {});
+      }
+      return store.add(toDisposable(pagesBackend.onDidChangeActivePage(listener)));
+    },
+    async revealText(range, opts) {
+      const textBackend = options?.text;
+      if (!textBackend || !range || typeof range.storyId !== "string" || range.storyId === "") {
+        return false;
+      }
+      const start = Math.trunc(Number(range.start));
+      const end = Math.trunc(Number(range.end));
+      if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end < start) {
+        return false;
+      }
+      const select = opts?.select !== false;
+      try {
+        return (await textBackend.revealText({ storyId: range.storyId, start, end }, select)) === true;
+      } catch {
+        return false;
+      }
+    },
+  };
+
+  // -------------------------------------------------------- render
+  // v70 — a page as a PNG from the engine's renderer, optionally with
+  // items left out (`requestSnapshot.hideItems`, a query: no document
+  // change, no undo step). A read, gated like the other document reads.
+  const render: RenderSurface = {
+    async snapshot(pageId, opts) {
+      requireDocRead("render.snapshot");
+      const widthPx = Math.round(opts?.widthPx ?? 0);
+      if (!(widthPx >= 1 && widthPx <= 8192)) {
+        throw new Error("host.render.snapshot: widthPx must be 1 to 8192");
+      }
+      const hideItems = Array.isArray(opts?.hideItems) ? opts.hideItems : [];
+      let reply: { kind: string; payload?: unknown };
+      try {
+        reply = (await getEditor().client.send({
+          kind: "requestSnapshot",
+          payload: { pageId, targetWidthPx: widthPx, hideItems },
+        } as never)) as { kind: string; payload?: unknown };
+      } catch {
+        return null;
+      }
+      if (reply.kind !== "snapshotReady") {
+        return null;
+      }
+      const p = reply.payload as SnapshotPng;
+      return {
+        pageId: p.pageId,
+        widthPx: p.widthPx,
+        heightPx: p.heightPx,
+        png: Uint8Array.from(p.pngBytes),
+        layoutGeneration: p.layoutGeneration,
+      };
+    },
+  };
+
+  // --------------------------------------------------------- text
+  // Font measurement (S-13). A read door — no capability gate (like
+  // `viewport`). Routes to the editor's shaper when wired; otherwise an
+  // honest monospace-ish estimate so headless / older editors stay
+  // usable (the plugin checks `supports("text.measure@1")` to know which
+  // it got). `~0.5em` advance + `0.8em/0.2em` asc/desc are the standard
+  // fallback the bundle already used before this door existed.
+  const text: TextSurface = {
+    async measureString(family, style, str, sizePt) {
+      const editorText = getEditor().text;
+      if (editorText) {
+        return editorText.measure(family, style, str, sizePt);
+      }
+      return {
+        advance: str.length * sizePt * 0.5,
+        ascender: sizePt * 0.8,
+        descender: -sizePt * 0.2,
+      };
+    },
+    // C-9 — the caret read door. A read of EDITOR state (the
+    // text-editing caret), injected by the host app like clipboard /
+    // consent; no capability gate (a read door, like measureString /
+    // viewport). No backend → the honest null (probe
+    // supports("text.caret@1") to distinguish "no caret" from
+    // "no reader").
+    caret(): TextCaret | null {
+      return options?.textCaret?.read() ?? null;
+    },
+    // D-27 — the batched measure. One round-trip when the editor wires
+    // `measureMany`; otherwise the same answers one call at a time (or
+    // the estimate), so a bundle never needs two code paths.
+    async measureStrings(family, style, texts, sizePt) {
+      if (texts.length === 0) return [];
+      const editorText = getEditor().text;
+      if (editorText?.measureMany) {
+        const out = await editorText.measureMany(family, style, texts, sizePt);
+        if (out.length !== texts.length) {
+          throw new Error(
+            `host.text.measureStrings: the host answered ${out.length} ` +
+              `metrics for ${texts.length} strings`,
+          );
+        }
+        return out;
+      }
+      return Promise.all(
+        texts.map((t) => text.measureString(family, style, t, sizePt)),
+      );
+    },
+  };
+
+  // ------------------------------------------------------- overlay
+  // The tool-preview channel is a render-pipeline surface — gated on
+  // `capabilities.rendering` including "overlay" (same surface as
+  // `contribute.overlay`).
+  let overlayLayerSeq = 0;
+  let overlayLayerWarned = false;
+  const liveOverlayLayers = new Set<string>();
+  const overlay: OverlaySurface = {
+    setToolPreview(shape) {
+      requireDeclared(
+        hasRendering("overlay"),
+        "overlay.setToolPreview",
+        'capabilities.rendering must include "overlay"',
+      );
+      getEditor().overlaySignals.setToolPreview(shape);
+    },
+    // K-9 — the MULTI-shape write on the SAME slot + the SAME gate. When
+    // the host wired a multi-shape sink we hand the list over verbatim
+    // (the adapter never re-shapes a preview — the renderer owns layout).
+    // When it did not, the honest degradation is the pre-K-9 behaviour a
+    // bundle used to hand-code: the FIRST shape through the single slot,
+    // never a throw. `null`/empty clears, so a bundle's teardown path is
+    // the same either way.
+    setToolPreviews(shapes) {
+      requireDeclared(
+        hasRendering("overlay"),
+        "overlay.setToolPreviews",
+        'capabilities.rendering must include "overlay"',
+      );
+      const signals = getEditor().overlaySignals;
+      const list = shapes && shapes.length > 0 ? shapes : null;
+      if (signals.setToolPreviews) {
+        signals.setToolPreviews(list);
+        return;
+      }
+      signals.setToolPreview(list ? list[0] : null);
+    },
+    // W-20 — retained per-bundle layers. Each layer is a host-wide key
+    // `<manifest id>/<layer id>`; registering it with `[]` at creation
+    // fixes its place in the stack (creation order), so a later `set`
+    // never reorders it. Without a host sink the handle is inert (warned
+    // once per bundle) — never a throw, never a write into the shared
+    // tool-preview slot, which would erase the active tool's preview.
+    layer(id?: string): OverlayLayer {
+      requireDeclared(
+        hasRendering("overlay"),
+        "overlay.layer",
+        'capabilities.rendering must include "overlay"',
+      );
+      const layerId = id ?? `layer-${++overlayLayerSeq}`;
+      if (liveOverlayLayers.has(layerId)) {
+        throw new Error(
+          `host.overlay.layer("${layerId}"): a layer with this id is already ` +
+            `live in ${manifest.id} — dispose it first or pick another id`,
+        );
+      }
+      const key = `${manifest.id}/${layerId}`;
+      const signals = getEditor().overlaySignals;
+      const sink =
+        typeof signals?.setOverlayLayer === "function" &&
+        typeof signals?.removeOverlayLayer === "function"
+          ? signals
+          : null;
+      if (!sink && !overlayLayerWarned) {
+        overlayLayerWarned = true;
+        log.warn(
+          'host.overlay.layer — this host renders no overlay layers ' +
+            '(supports("overlay.layers@1") is false); shapes are dropped',
+        );
+      }
+      liveOverlayLayers.add(layerId);
+      sink?.setOverlayLayer!(key, []);
+      let disposed = false;
+      const handle: OverlayLayer = {
+        id: layerId,
+        set(shapes) {
+          if (disposed) return;
+          sink?.setOverlayLayer!(key, [...shapes]);
+        },
+        clear() {
+          if (disposed) return;
+          sink?.setOverlayLayer!(key, []);
+        },
+        dispose() {
+          if (disposed) return;
+          disposed = true;
+          liveOverlayLayers.delete(layerId);
+          sink?.removeOverlayLayer!(key);
+        },
+      };
+      store.add(handle);
+      return handle;
+    },
+  };
+
+  // ------------------------------------------------------- storage
+  const backing = options?.storage ?? defaultStorageBacking();
+  const prefix = `paged.plugin.${manifest.id}.`;
+  const storage: StorageSurface = {
+    get<T>(key: string): T | undefined {
+      const raw = backing.getItem(prefix + key);
+      if (raw === null) return undefined;
+      try {
+        return JSON.parse(raw) as T;
+      } catch {
+        return undefined;
+      }
+    },
+    set(key, value) {
+      backing.setItem(prefix + key, JSON.stringify(value));
+    },
+    delete(key) {
+      backing.removeItem(prefix + key);
+    },
+    keys() {
+      return backing
+        .keys()
+        .filter((k) => k.startsWith(prefix))
+        .map((k) => k.slice(prefix.length));
+    },
+  };
+
+  // --------------------------------------------------- network (D-03)
+  //
+  // `capabilities.network` is the OUTER bound (the origins the bundle MAY ever
+  // request); per-origin user consent is the inner gate. Remembered grants
+  // persist in the bundle's own storage namespace. No consent backend wired →
+  // every request is denied (honest no-consent posture). The host never proxies
+  // bytes; a granted origin authorizes the BUNDLE's own reach (DuckDB httpfs),
+  // enforced at the realm boundary by the editor's CSP (the editor follow-up).
+  const declaredNetwork = manifest.capabilities?.network;
+  const networkDeclared =
+    declaredNetwork === true ||
+    (typeof declaredNetwork === "object" && declaredNetwork !== null);
+  const mayRequest = (origin: string): boolean => {
+    if (declaredNetwork === true) return true;
+    if (typeof declaredNetwork === "object" && declaredNetwork !== null) {
+      const o = declaredNetwork.origins;
+      return o === "consent" || (Array.isArray(o) && o.includes(origin));
+    }
+    return false;
+  };
+  const CONSENT_KEY = "network.consentedOrigins";
+  const granted = new Set<string>(storage.get<string[]>(CONSENT_KEY) ?? []);
+  const network: NetworkSurface = {
+    async requestConsent(origins, purpose): Promise<ConsentResult> {
+      requireDeclared(
+        networkDeclared,
+        "network.requestConsent",
+        "capabilities.network must declare the network capability (boolean or { origins })",
+      );
+      const inScope = origins.filter(mayRequest);
+      const outOfScope = origins.filter((o) => !mayRequest(o));
+      if (outOfScope.length > 0) {
+        log.warn(
+          `network.requestConsent: ${outOfScope.length} origin(s) outside the ` +
+            `declared capabilities.network allow-list — denied: ${outOfScope.join(", ")}`,
+        );
+      }
+      const need = inScope.filter((o) => !granted.has(o));
+      let prompted: ConsentResult = { granted: [], denied: [], remembered: false };
+      if (need.length > 0) {
+        if (options?.consent) {
+          prompted = await options.consent.request(need, purpose);
+        } else {
+          log.warn(
+            "network.requestConsent: no consent backend wired — denying " +
+              "(supports('network.consent@1') is false; the editor injects one)",
+          );
+          prompted = { granted: [], denied: need, remembered: false };
+        }
+      }
+      for (const o of prompted.granted) granted.add(o);
+      if (prompted.remembered) storage.set(CONSENT_KEY, [...granted]);
+      return {
+        granted: inScope.filter((o) => granted.has(o)),
+        denied: [...outOfScope, ...inScope.filter((o) => !granted.has(o))],
+        remembered: prompted.remembered,
+      };
+    },
+    consentedOrigins() {
+      return [...granted];
+    },
+  };
+
+  // ----------------------------------------- data providers (D-09)
+  //
+  // The cross-plugin registry is a SHARED backend (options.dataProviders) the
+  // editor injects identically into every plugin host; this surface adds the
+  // per-plugin capability gate: register needs publish ∋ category, discover/get
+  // need consume. No backend wired → discover empty, register a no-op handle,
+  // get null (graceful absence + the honest no-registry posture).
+  const dpCap = manifest.capabilities?.dataProviders;
+  const mayPublish = (category: string): boolean =>
+    Array.isArray(dpCap?.publish) && dpCap.publish.includes(category);
+  const mayConsume = (category?: string): boolean =>
+    Array.isArray(dpCap?.consume) &&
+    (category === undefined || dpCap.consume.includes(category));
+  const consumeDeclared =
+    Array.isArray(dpCap?.consume) && dpCap.consume.length > 0;
+  const dataProviders: DataProvidersSurface = {
+    register(registration) {
+      requireDeclared(
+        mayPublish(registration.category),
+        "dataProviders.register",
+        `capabilities.dataProviders.publish must include "${registration.category}"`,
+      );
+      if (!options?.dataProviders) {
+        log.warn(
+          `dataProviders.register("${registration.id}") — no shared registry ` +
+            "wired (supports('dataProviders@1') is false; the editor injects one)",
+        );
+        return { update() {}, dispose() {} };
+      }
+      return options.dataProviders.register(registration);
+    },
+    discover(category) {
+      requireDeclared(
+        mayConsume(category),
+        "dataProviders.discover",
+        "capabilities.dataProviders.consume must include the category",
+      );
+      return options?.dataProviders?.discover(category) ?? [];
+    },
+    async get(id) {
+      requireDeclared(
+        consumeDeclared,
+        "dataProviders.get",
+        "capabilities.dataProviders.consume must be declared",
+      );
+      return (await options?.dataProviders?.get(id)) ?? null;
+    },
+    onDidChange(id, listener) {
+      if (!options?.dataProviders) return toDisposable(() => undefined);
+      return store.add(options.dataProviders.onDidChange(id, listener));
+    },
+  };
+
+  // --------------------------------------------------- diagnostics
+  const diagnosticStore = new Map<string, Diagnostic[]>();
+  const diagnosticListeners = new Set<(key: string) => void>();
+  const emitDiagnostics = (key: string) => {
+    for (const l of diagnosticListeners) l(key);
+  };
+  const diagnostics: DiagnosticsSurface = {
+    set(key, items) {
+      diagnosticStore.set(key, items);
+      // Console mirror — the v0 floor (a problems panel consumes the
+      // SAME store via the injected sink; the mirror stays for
+      // headless hosts).
+      for (const d of items) {
+        const line = `${tag} ${key}: ${d.message}` +
+          (d.line !== undefined ? ` (${d.source ?? ""}:${d.line})` : "");
+        if (d.severity === "error") sink.error(line);
+        else if (d.severity === "warning") sink.warn(line);
+        else sink.info(line);
+      }
+      // Fan out to the host problems panel (W-05) keyed by bundle id.
+      options?.diagnosticsSink?.publish(manifest.id, key, items);
+      emitDiagnostics(key);
+    },
+    clear(key) {
+      if (key !== undefined) diagnosticStore.delete(key);
+      else diagnosticStore.clear();
+      options?.diagnosticsSink?.clear(manifest.id, key);
+      emitDiagnostics(key ?? "");
+    },
+    get(key) {
+      return diagnosticStore.get(key) ?? [];
+    },
+    onDidChange(listener) {
+      diagnosticListeners.add(listener);
+      return store.add(toDisposable(() => diagnosticListeners.delete(listener)));
+    },
+  };
+
+  // -------------------------------------------------------- bindings
+  // The publish-bindings store (W3.1) — named reactive values the
+  // bundle publishes; schema rows reference them via `{ bind: name }`
+  // for visible/enabled. The plugin owns the derivation; the store owns
+  // the lookup + change fan-out (the host's SchemaPanelRenderer
+  // subscribes). JSON-only, in-memory, per-bundle (cleared on dispose
+  // via the listener teardown through the DisposableStore).
+  const bindingStore = new Map<string, unknown>();
+  const bindingListeners = new Set<(name: string) => void>();
+  const emitBinding = (name: string) => {
+    for (const l of bindingListeners) l(name);
+  };
+  const bindings: BindingsSurface = {
+    publish(name, value) {
+      bindingStore.set(name, value);
+      emitBinding(name);
+    },
+    get(name) {
+      return bindingStore.get(name);
+    },
+    delete(name) {
+      if (bindingStore.delete(name)) emitBinding(name);
+    },
+    onDidChange(listener) {
+      bindingListeners.add(listener);
+      return store.add(toDisposable(() => bindingListeners.delete(listener)));
+    },
+  };
+
+  // --------------------------------------------------------- shell
+  // The bundle-facing surface WRAPS the injected backend rather than
+  // being it (K-10). Two reasons, both structural: the backend's doors
+  // arrive one release at a time (a host app that predates `saveFile`
+  // still injects a valid `shell`), and each door's no-backend answer
+  // has to be the honest one — a missing member must never surface to a
+  // bundle as `host.shell.saveFile is not a function`.
+  const shellBackend = options?.shell;
+  const shell: ShellSurface = {
+    openPanel(panelId) {
+      if (shellBackend) {
+        shellBackend.openPanel(panelId);
+        return;
+      }
+      log.warn(
+        `shell.openPanel("${panelId}") ignored — the host app provided no ` +
+          `shell actions (probe with supports("shell.openPanel@1"))`,
+      );
+    },
+    closePanel(panelId) {
+      /* same contract as openPanel — warn once is enough */
+      shellBackend?.closePanel(panelId);
+    },
+    async pickFile(pickOptions) {
+      // No picker wired (headless / not-yet-adopted host): the honest
+      // no-picker door resolves empty (probe supports("shell.pickFile@1")).
+      if (shellBackend) return shellBackend.pickFile(pickOptions);
+      log.warn(
+        `shell.pickFile() ignored — the host app provided no shell actions ` +
+          `(probe with supports("shell.pickFile@1"))`,
+      );
+      return [];
+    },
+    // K-10 — the write half. No saver wired (headless, or a host app
+    // older than the door) answers FALSE, never a throw: "the bytes were
+    // not delivered" is a result a bundle can act on (keep the Export
+    // Center path, disable the menu item), which a rejection would turn
+    // into an unhandled promise in a click handler.
+    async saveFile(saveOptions) {
+      if (shellBackend?.saveFile) {
+        return shellBackend.saveFile(saveOptions);
+      }
+      log.warn(
+        `shell.saveFile("${saveOptions.suggestedName}") ignored — the host ` +
+          `app wired no file saver (probe with supports("shell.saveFile@1"))`,
+      );
+      return false;
+    },
+    // Programmatic entry into one of THIS bundle's edit contexts — the
+    // same stack push a double-click performs. A foreign or unregistered
+    // type is a bug in the bundle, so it throws; a host that cannot enter
+    // answers false.
+    async enterEditContext(type, elementId) {
+      if (!registeredContexts.has(type)) {
+        throw new Error(
+          `plugin-api: shell.enterEditContext("${type}") — ${manifest.id} has ` +
+            `registered no edit context of that type. A bundle enters only ` +
+            `its own contexts: call contribute.editContext({ type: "${type}", … }) first.`,
+        );
+      }
+      if (!shellBackend?.enterEditContext) {
+        log.warn(
+          `shell.enterEditContext("${type}") ignored — the host app wired no ` +
+            `context entry (probe with supports("shell.enterEditContext@1"))`,
+        );
+        return false;
+      }
+      return shellBackend.enterEditContext(type, elementId);
+    },
+  };
+
+  // --------------------------------------------------------- tools
+  // The tool-settings READ door: the values the host's tool-options UI
+  // holds for this bundle's own tools. Namespaced like every tool id —
+  // a bundle cannot read another plugin's tool state.
+  const toolSettingsBackend = options?.toolSettings;
+  const tools: ToolsSurface = {
+    settings(toolId) {
+      assertNamespaced(toolId, "tools.settings tool");
+      return { ...(toolSettingsBackend?.get(toolId) ?? {}) };
+    },
+    onDidChangeSettings(toolId, listener) {
+      assertNamespaced(toolId, "tools.onDidChangeSettings tool");
+      if (!toolSettingsBackend) return store.add(toDisposable(() => {}));
+      const off = toolSettingsBackend.subscribe(toolId, () =>
+        listener({ ...toolSettingsBackend.get(toolId) }),
+      );
+      return store.add(toDisposable(off));
+    },
+  };
+
+  // --------------------------------------------------------- widgets
+  // The host app owns the widget catalog (W-04). When it injects one,
+  // bundles get the rich CodeEditor; otherwise the plain-textarea
+  // fallback stands in — same props contract, honest seam. Merged per
+  // member: a host that injects only the code editor keeps the native
+  // colour-input fallback, and vice versa.
+  const widgets: WidgetSurface = { ...FALLBACK_WIDGETS, ...options?.widgets };
+
+  // --------------------------------------------------------- assets
+  // The capability-gated asset store (W-06). READ-ONLY: serves the
+  // bytes the DOCUMENT already holds for a face, through the injected
+  // `assetSource` — never a network fetch on the bundle's behalf
+  // (offline-forever, DESIGN.md §13.3). The gate (`getFontFace` needs
+  // `capabilities.assets` ∋ "fonts") is a READ door: it THROWS in
+  // 'enforce', warns+proceeds in 'warn', like every other read door.
+  // No source injected → every read answers `null` (the honest
+  // no-bytes door), and `supports("assets.fonts@1")` is false.
+  const assetSource = options?.assetSource;
+  const assets: AssetSurface = {
+    async getFontFace(family, style) {
+      requireDeclared(
+        hasAsset("fonts"),
+        "assets.getFontFace",
+        'capabilities.assets must include "fonts"',
+      );
+      if (!assetSource) return null;
+      let face: FontFaceAsset | null;
+      try {
+        face = await assetSource.getFontFace(family, style);
+      } catch {
+        // A throwing source must not break a bundle's preview — the
+        // door's failure mode is "no bytes", not an exception.
+        return null;
+      }
+      if (!face) return null;
+      // Budget clamp — refuse an over-budget face rather than hand a
+      // bundle an unbounded buffer (DESIGN.md §13.3).
+      if (face.bytes.byteLength > ASSET_BUDGETS.maxFontFaceBytes) {
+        log.warn(
+          `assets.getFontFace("${family}"${style ? `, "${style}"` : ""}) ` +
+            `served ${face.bytes.byteLength} bytes, over the ` +
+            `${ASSET_BUDGETS.maxFontFaceBytes}-byte per-face cap — refused`,
+        );
+        return null;
+      }
+      return face;
+    },
+    // W-15 — the one WRITE: a scene-layer face. The engine has a single
+    // scene table that `clearFontRegistry` can only empty as a whole, so
+    // the SDK keeps the list of live faces per provider (across bundles)
+    // and disposes one face by clearing and replaying the others. Every
+    // engine call goes through the ledger's queue, so a replay never
+    // interleaves with a registration.
+    async registerFont(bytes, family, style) {
+      requireDeclared(
+        hasAsset("fonts"),
+        "assets.registerFont",
+        'capabilities.assets must include "fonts"',
+      );
+      const label = `assets.registerFont("${family}"${style ? `, "${style}"` : ""})`;
+      if (bytes.byteLength > ASSET_BUDGETS.maxFontFaceBytes) {
+        throw new Error(
+          `${label}: ${bytes.byteLength} bytes is over the ` +
+            `${ASSET_BUDGETS.maxFontFaceBytes}-byte per-face cap`,
+        );
+      }
+      const provider = assetSource;
+      const register = provider?.registerFont?.bind(provider);
+      const clear = provider?.clearSceneFonts?.bind(provider);
+      if (!provider || !register || !clear) {
+        log.warn(
+          `${label} ignored — the host cannot register scene faces ` +
+            `(probe supports("assets.registerFont@1")); scene text keeps ` +
+            `its fallback face`,
+        );
+        return toDisposable(() => {});
+      }
+      const ledger = sceneFaceLedger(provider);
+      const entry: SceneFaceEntry =
+        style === undefined
+          ? { family, bytes: bytes.slice() }
+          : { family, style, bytes: bytes.slice() };
+      const run = (job: () => Promise<void>): Promise<void> => {
+        const next = ledger.queue.then(job);
+        // The queue survives a failed job; the caller still sees it fail.
+        ledger.queue = next.catch(() => {});
+        return next;
+      };
+      await run(async () => {
+        await register(entry.family, entry.bytes, entry.style);
+        ledger.entries.push(entry);
+      });
+      let disposed = false;
+      return store.add(
+        toDisposable(() => {
+          if (disposed) return;
+          disposed = true;
+          void run(async () => {
+            const i = ledger.entries.indexOf(entry);
+            if (i < 0) return;
+            ledger.entries.splice(i, 1);
+            await clear();
+            for (const live of ledger.entries) {
+              await register(live.family, live.bytes, live.style);
+            }
+          }).catch((error: unknown) => {
+            log.warn(`${label}: dropping the face failed: ${String(error)}`);
+          });
+        }),
+      );
+    },
+    // ADR 328 — a face for the DOCUMENT where it holds none. Engine-served
+    // like `getPlacedImage` (no injected provider): the document registry
+    // is the engine's. Fill-only — the engine is asked first whether it
+    // holds the face, and a held face is never sent again — so a bundle
+    // cannot change how text that already resolves is drawn. ADR 330 — its
+    // lifetime is the client's: one with `registerDocumentFont` scopes the
+    // face to the open document (`@2`).
+    async registerDocumentFont(bytes, family, style) {
+      requireDeclared(
+        hasAsset("fonts"),
+        "assets.registerDocumentFont",
+        'capabilities.assets must include "fonts"',
+      );
+      const label = `assets.registerDocumentFont("${family}"${style ? `, "${style}"` : ""})`;
+      const refuse = (reason: string): DocumentFontOutcome => {
+        log.warn(`${label} refused: ${reason}`);
+        return { status: "refused", reason };
+      };
+      // It changes how the document lays out: a document write.
+      const denied = denyWrite(hasDoc("write"), "assets.registerDocumentFont", "capabilities.document.write");
+      if (denied !== null) return refuse(denied);
+      if (family.trim() === "") return refuse("the family is empty");
+      if (bytes.byteLength > ASSET_BUDGETS.maxFontFaceBytes) {
+        return refuse(
+          `${bytes.byteLength} bytes is over the ${ASSET_BUDGETS.maxFontFaceBytes}-byte per-face cap`,
+        );
+      }
+      const container = faceContainer(bytes);
+      if (container !== "sfnt") {
+        return refuse(
+          container === "woff"
+            ? "a WOFF or WOFF2 face — the canvas reads TrueType and OpenType only"
+            : "the bytes are not a TrueType or OpenType face",
+        );
+      }
+      // Copied before the first await: the caller may reuse its buffer.
+      const face = bytes.slice();
+      let client: PagedEditor["client"];
+      try {
+        client = getEditor().client;
+      } catch (err) {
+        return refuse(`no engine to give the face to (${String(err)})`);
+      }
+      const run = async (): Promise<DocumentFontOutcome> => {
+        try {
+          const held = await client.send({
+            kind: "requestFontFaceBytes",
+            payload: { family, style: style ?? null },
+          });
+          // The engine answers a style it lacks with the family's regular
+          // face; only the style asked for (or, for a style-less ask, any
+          // face of the family) counts as held.
+          if (
+            held.kind === "fontFaceBytes" &&
+            held.payload.found &&
+            (style === undefined || held.payload.style === style)
+          ) {
+            return { status: "held" };
+          }
+          // ADR 330 — a client that scopes the face to the open document
+          // registers it; without one the face lives for the engine
+          // session (`assets.documentFont@1` only).
+          const scoped = client.registerDocumentFont;
+          let reply: Awaited<ReturnType<typeof client.send>>;
+          if (typeof scoped === "function") {
+            try {
+              reply = await scoped.call(client, family, face, style ?? null);
+            } catch (err) {
+              return refuse(err instanceof Error ? err.message : String(err));
+            }
+          } else {
+            reply = await client.send({
+              kind: "registerFont",
+              payload: { family, style: style ?? null, bytes: Array.from(face), scope: "document" },
+            });
+          }
+          if (reply.kind !== "fontRegistered") {
+            return refuse(`the engine answered ${reply.kind}`);
+          }
+          return { status: "registered", pageIds: [...(reply.payload.pageIds ?? [])] };
+        } catch (err) {
+          return refuse(`the engine could not be reached (${String(err)})`);
+        }
+      };
+      const queued = (documentFaceQueues.get(client) ?? Promise.resolve()).then(run, run);
+      documentFaceQueues.set(client, queued);
+      return queued;
+    },
+    // C-5 / I-04 (core v42): a placed DOCUMENT image's ORIGINAL bytes,
+    // straight from the engine's resolver/parse cache through the
+    // `requestPlacedAssetBytes` wire query — no injected source needed
+    // (the engine IS the byte holder). `found:false` and any channel
+    // failure both answer `null`, the door's honest no-bytes mode. No
+    // size clamp: document-scale originals (PSDs) are the use case and
+    // the engine only serves what the document already holds.
+    async getPlacedImage(elementId) {
+      requireDeclared(
+        hasAsset("images"),
+        "assets.getPlacedImage",
+        'capabilities.assets must include "images"',
+      );
+      try {
+        const reply = await getEditor().client.send({
+          kind: "requestPlacedAssetBytes",
+          payload: { elementId },
+        });
+        if (reply.kind !== "placedAssetBytes" || !reply.payload.found) {
+          return null;
+        }
+        const p = reply.payload;
+        return {
+          bytes: Uint8Array.from(p.encoded),
+          uri: p.uri,
+          width: p.width,
+          height: p.height,
+        };
+      } catch {
+        return null;
+      }
+    },
+  };
+
+  // --------------------------------------------------------- images
+  // The capability-gated RENDERER RESOURCE-PROVIDER door (C-6 / I-06; the
+  // v44 wire). A claim registers a placed image's pyramid with the
+  // renderer (`channel.claim` → `claimImageResource`); the renderer pulls
+  // tiles it needs by emitting `resourceTilesNeeded`, which the editor
+  // surfaces through `channel.onResourceTilesNeeded`. THE SDK ADAPTER
+  // OWNS THE PLUMBING: per needed event for THIS image, it calls the
+  // bundle's `source(level, x, y)` for each grid origin, batches the
+  // non-null results, and submits them (`channel.submitTiles` →
+  // `submitResourceTiles`) echoing the generation so a stale reply is
+  // dropped worker-side. Disposing the claim releases it (`channel.release`
+  // → `releaseImageResource`) and stops routing its needed events. The
+  // gate is a render-pipeline door: `claimImageResource` requires
+  // `capabilities.rendering` ∋ "resourceProvider" (throws in 'enforce',
+  // warns in 'warn'). No channel wired → claim warns + returns an inert
+  // Disposable and `supports("rendering.resourceProvider@1")` is false.
+  const imageChannel = () => getEditor().images;
+  const images: ImagesSurface = {
+    claimImageResource(elementId: string, opts: ImageResourceClaimOptions) {
+      requireDeclared(
+        hasRendering("resourceProvider"),
+        "images.claimImageResource",
+        'capabilities.rendering must include "resourceProvider"',
+      );
+      const channel = imageChannel();
+      if (!channel) {
+        log.warn(
+          `images.claimImageResource("${elementId}") ignored — the host ` +
+            `wired no resource channel (probe ` +
+            `supports("rendering.resourceProvider@1"))`,
+        );
+        return store.add(toDisposable(() => {}));
+      }
+      let released = false;
+      // Route only THIS image's needed events; pull → submit per miss.
+      const off = channel.onResourceTilesNeeded((need) => {
+        if (released || need.imageId !== elementId) return;
+        void (async () => {
+          const tiles: ProviderTileWire[] = [];
+          for (const [x, y] of need.tiles) {
+            let tile: Awaited<ReturnType<typeof opts.source>>;
+            try {
+              tile = await opts.source(need.level, x, y);
+            } catch (err) {
+              // A throwing source must not strand the fill — skip the
+              // tile (the renderer keeps the fallback level for it).
+              log.warn(
+                `images.source(level ${need.level}, ${x}, ${y}) threw — ` +
+                  `tile skipped`,
+                err,
+              );
+              continue;
+            }
+            if (!tile) continue;
+            tiles.push({
+              x: tile.x,
+              y: tile.y,
+              width: tile.width,
+              height: tile.height,
+              // The wire carries a plain number[]; Array.from copies the
+              // RGBA8 view (isolate-proxy-safe, like the scene-layer path).
+              rgba: Array.from(tile.rgba),
+            });
+          }
+          if (released || tiles.length === 0) return;
+          try {
+            await channel.submitTiles(
+              elementId,
+              need.level,
+              tiles,
+              need.generation,
+            );
+          } catch (err) {
+            log.warn(
+              `images.submitTiles("${elementId}", level ${need.level}) failed`,
+              err,
+            );
+          }
+        })();
+      });
+      // The claim itself — fire-and-forget; the renderer registers it and
+      // begins pulling. A claim that races a release is harmless (release
+      // wins via `released`).
+      void channel
+        .claim({
+          imageId: elementId,
+          levels: opts.levels,
+          tileSize: opts.tileSize,
+          baseWidth: opts.baseWidth,
+          baseHeight: opts.baseHeight,
+          revision: opts.revision(),
+        })
+        .catch((err) => {
+          log.warn(`images.claim("${elementId}") failed`, err);
+        });
+      return store.add(
+        toDisposable(() => {
+          if (released) return;
+          released = true;
+          off();
+          void channel.release(elementId).catch((err) => {
+            log.warn(`images.release("${elementId}") failed`, err);
+          });
+        }),
+      );
+    },
+  };
+
+  // --------------------------------------------------------- blob
+  // The capability-gated binary store (K-4 / S-08). Per-plugin namespaced
+  // (the adapter passes manifest.id; the backend scopes by it), quota-
+  // clamped (the stricter of the host default and the manifest's
+  // requested storage.quotaBytes). No backend injected → reads answer
+  // empty, writes reject (the honest no-store door); supports() is false.
+  const blobBackend = options?.blobStore;
+  const blobQuota = Math.min(
+    BLOB_BUDGETS.defaultQuotaBytes,
+    caps?.storage?.quotaBytes ?? BLOB_BUDGETS.defaultQuotaBytes,
+  );
+  const blobGate = (door: string): void =>
+    requireDeclared(
+      hasBlobStore(),
+      door,
+      'capabilities.storage must include { blob: true }',
+    );
+  const blob: BlobSurface = {
+    async write(key, bytes) {
+      blobGate("blob.write");
+      if (!blobBackend) {
+        throw new Error(
+          `host.blob.write("${key}") — no blob store wired ` +
+            `(supports("storage.blob@1") is false; the editor injects one)`,
+        );
+      }
+      // Overwrite = delete-then-write so `used` already excludes the old
+      // value; then the quota check is a simple projected-total compare.
+      await blobBackend.delete(manifest.id, key);
+      const used = await blobBackend.used(manifest.id);
+      if (used + bytes.byteLength > blobQuota) {
+        throw new Error(
+          `host.blob.write("${key}") — ${bytes.byteLength} bytes would ` +
+            `exceed the ${blobQuota}-byte quota (used ${used}) — refused`,
+        );
+      }
+      await blobBackend.write(manifest.id, key, bytes);
+    },
+    async read(key) {
+      blobGate("blob.read");
+      if (!blobBackend) return null;
+      return blobBackend.read(manifest.id, key);
+    },
+    async delete(key) {
+      blobGate("blob.delete");
+      if (!blobBackend) return;
+      await blobBackend.delete(manifest.id, key);
+    },
+    async keys() {
+      blobGate("blob.keys");
+      if (!blobBackend) return [];
+      return blobBackend.keys(manifest.id);
+    },
+    async usage() {
+      blobGate("blob.usage");
+      if (!blobBackend) return { used: 0, quota: 0 };
+      return { used: await blobBackend.used(manifest.id), quota: blobQuota };
+    },
+  };
+
+  // ----------------------------------------------------- parts
+  // The `.paged` CONTAINER parts door (file-format.md, v51): per-plugin
+  // namespaced bytes persisted INTO the document container (they travel WITH
+  // the .paged file, unlike host.blob's per-browser OPFS), via the
+  // writePagedPart / readPagedPart / listPagedParts wire ops. Paths are
+  // RELATIVE to this plugin's own paged/<id>/ subtree — the door prepends it
+  // and rejects `..` / absolute escapes, so a bundle can only touch its own
+  // parts. No injected backend: the engine (canvas-wasm) is the writer, so the
+  // door is always live against a v51 worker (the handshake guarantees that).
+  const partsBase = `paged/${manifest.id}/`;
+  const partsFull = (rel: string): string => {
+    const clean = rel.replace(/^\/+/, "");
+    if (clean.split("/").includes("..")) {
+      throw new Error(`host.parts: path "${rel}" must not contain ".."`);
+    }
+    return partsBase + clean;
+  };
+  const parts: PartsSurface = {
+    async write(path, bytes) {
+      const full = partsFull(path);
+      // Protocol 66 — the binary lane: the bytes cross as a Uint8Array.
+      const binary = getEditor().parts;
+      if (binary) {
+        try {
+          await binary.write(full, bytes, manifest.id);
+        } catch (err) {
+          throw new Error(`host.parts.write("${path}"): ${String(err)}`);
+        }
+        return;
+      }
+      const reply = await getEditor().client.send({
+        kind: "writePagedPart",
+        payload: {
+          path: full,
+          bytes: Array.from(bytes),
+          // C-34 — DECLARE WHO IS WRITING, so the engine
+          // confines this to `paged/<id>/` instead of trusting that we
+          // built the path correctly. `partsFull` already scopes it;
+          // that is a convention held in THIS file, and a convention is
+          // not a boundary — a bundle reaching the raw handle bypasses
+          // it entirely. Saying the caller moves the check to the one
+          // place that cannot be routed around.
+          //
+          // Safe against an older worker: the wire has no
+          // `deny_unknown_fields`, so an engine without the gate
+          // ignores this and behaves exactly as before. No `supports()`
+          // probe needed — there is no degraded path to choose between.
+          caller: manifest.id,
+        },
+      });
+      if (reply.kind !== "pagedPartWritten") {
+        const err =
+          reply.kind === "pagedPartFailed" ? reply.payload.error : `unexpected ${reply.kind}`;
+        throw new Error(`host.parts.write("${path}"): ${err}`);
+      }
+    },
+    async read(path) {
+      const full = partsFull(path);
+      const binary = getEditor().parts;
+      if (binary) return binary.read(full);
+      const reply = await getEditor().client.send({
+        kind: "readPagedPart",
+        payload: { path: full },
+      });
+      if (reply.kind === "pagedPartRead") {
+        return reply.payload.found ? Uint8Array.from(reply.payload.bytes) : null;
+      }
+      return null; // pagedPartFailed (e.g. no document) → the honest null
+    },
+    async list(prefix = "") {
+      const reply = await getEditor().client.send({
+        kind: "listPagedParts",
+        payload: { prefix: partsFull(prefix) },
+      });
+      if (reply.kind !== "pagedPartList") return [];
+      // Strip the namespace back off — bundles speak in relative paths.
+      return reply.payload.paths.map((p) =>
+        p.startsWith(partsBase) ? p.slice(partsBase.length) : p,
+      );
+    },
+    // Protocol 66 — `deletePagedPart`. The engine tombstones a part the
+    // loaded file carries, so it leaves the next save rather than
+    // reappearing from the source container.
+    async delete(path) {
+      const full = partsFull(path);
+      const binary = getEditor().parts;
+      if (binary) {
+        try {
+          return await binary.delete(full, manifest.id);
+        } catch (err) {
+          throw new Error(`host.parts.delete("${path}"): ${String(err)}`);
+        }
+      }
+      const reply = await getEditor().client.send({
+        kind: "deletePagedPart",
+        payload: { path: full, caller: manifest.id },
+      });
+      if (reply.kind === "pagedPartDeleted") return reply.payload.existed;
+      const err =
+        reply.kind === "pagedPartFailed" ? reply.payload.error : `unexpected ${reply.kind}`;
+      throw new Error(`host.parts.delete("${path}"): ${err}`);
+    },
+  };
+
+  // ----------------------------------------------- nativeDocument
+  // The isolate-safe NATIVE-DOCUMENT door (ADR-021 / document-model direction):
+  // the isolate-safe replacement for an importer/exporter reaching through
+  // `host.editor.client`. It forwards to an EDITOR-INJECTED backend (like
+  // `assetSource`): the reads (readModel/readComposition/listParts) are gated on
+  // `capabilities.document.readNative`, `open` on `capabilities.document.openNative`
+  // — both READ-style gates that THROW in 'enforce' and warn+proceed in 'warn'.
+  // No backend injected → the reads answer the honest null/`[]`, `open` throws,
+  // and supports("document.readNative@1")/("document.openNative@1") are false.
+  const nativeDocBackend = options?.nativeDocument;
+  const nativeDocument: NativeDocumentSurface = {
+    async readModel() {
+      requireNativeRead("nativeDocument.readModel");
+      return nativeDocBackend ? nativeDocBackend.readModel() : null;
+    },
+    async readComposition() {
+      requireNativeRead("nativeDocument.readComposition");
+      return nativeDocBackend ? nativeDocBackend.readComposition() : null;
+    },
+    async listParts(prefix) {
+      requireNativeRead("nativeDocument.listParts");
+      return nativeDocBackend ? nativeDocBackend.listParts(prefix) : [];
+    },
+    async open(bytes) {
+      requireNativeOpen("nativeDocument.open");
+      if (!nativeDocBackend) {
+        throw new Error(
+          "host.nativeDocument.open: the host wired no nativeDocument backend " +
+            '(supports("document.openNative@1") is false; the editor injects one)',
+        );
+      }
+      return nativeDocBackend.open(bytes);
+    },
+  };
+
+  // ----------------------------------------------------- documents
+  // D-26 — serialize the active document / replace it with plugin-built
+  // bytes. Both doors THROW on an undeclared use in 'enforce' (a manifest
+  // bug) and warn+proceed in 'warn', like nativeDocument. The unsaved-edits
+  // prompt is the BACKEND's (host UI); the SDK passes the requester from the
+  // manifest so the prompt names the bundle, and copies the bytes so a
+  // host that transfers buffers cannot detach the caller's array.
+  const documentsBackend = options?.documents;
+  const documents: DocumentsSurface = {
+    async exportPaged() {
+      requireDeclared(
+        hasDocuments("export"),
+        "documents.exportPaged",
+        "capabilities.documents.export must be declared",
+      );
+      if (!documentsBackend) {
+        throw new Error(
+          "host.documents.exportPaged: the host wired no documents backend " +
+            '(supports("documents.exportPaged@1") is false)',
+        );
+      }
+      return documentsBackend.exportPaged();
+    },
+    async open(bytes, opts) {
+      requireDeclared(
+        hasDocuments("open"),
+        "documents.open",
+        "capabilities.documents.open must be declared",
+      );
+      if (!documentsBackend) {
+        throw new Error(
+          "host.documents.open: the host wired no documents backend " +
+            '(supports("documents.open@1") is false)',
+        );
+      }
+      if (!(bytes instanceof Uint8Array) || bytes.byteLength === 0) {
+        throw new Error("host.documents.open: bytes must be a non-empty Uint8Array");
+      }
+      const name =
+        typeof opts?.name === "string" && opts.name.trim() !== ""
+          ? opts.name.trim()
+          : null;
+      return documentsBackend.open(bytes.slice(), {
+        name,
+        requester: { id: manifest.id, name: manifest.name },
+      });
+    },
+  };
+
+  // ----------------------------------------------------- clipboard
+  // The capability-gated SYSTEM-clipboard door (K-6 / S-14). Read/write a
+  // `{ text?, tabular? }` payload through the injected backend. The gate
+  // is a READ-AND-WRITE door: it THROWS in 'enforce' (a manifest bug —
+  // the bundle used a door it didn't declare), warns+proceeds in 'warn',
+  // like every other gated door. The TIER decides tabular: `"full"` ⇒
+  // both halves; `"vector"` ⇒ text only (a tabular WRITE is stripped + a
+  // tabular READ is never surfaced); `"none"`/absent ⇒ denied. No backend
+  // wired → read answers `null`, write no-ops (the honest no-clipboard
+  // door); supports("clipboard@1") is false.
+  const clipboardBackend = options?.clipboard;
+  const clipboardGate = (door: string): "full" | "vector" => {
+    const grant = clipboardGrant();
+    requireDeclared(
+      grant !== "none",
+      door,
+      'capabilities.clipboard must be "full" or "vector"',
+    );
+    // In 'warn' mode an undeclared bundle reaches here with grant "none";
+    // treat the proceed as the narrower "vector" tier (text only) so a
+    // warn-migration host never silently leaks a cell grid.
+    return grant === "full" ? "full" : "vector";
+  };
+  const clipboard: ClipboardSurface = {
+    async read() {
+      const tier = clipboardGate("clipboard.read");
+      if (!clipboardBackend) return null;
+      let payload: ClipboardPayload | null;
+      try {
+        payload = await clipboardBackend.read();
+      } catch {
+        // A throwing/denied platform read is "nothing readable", not an
+        // exception the bundle must handle.
+        return null;
+      }
+      if (!payload) return null;
+      // A "vector" grant never receives the tabular half.
+      if (tier === "vector" && payload.tabular !== undefined) {
+        const { tabular: _dropped, ...rest } = payload;
+        return rest;
+      }
+      return payload;
+    },
+    async write(payload: ClipboardPayload) {
+      const tier = clipboardGate("clipboard.write");
+      if (!clipboardBackend) return;
+      let toWrite = payload;
+      // A "vector" grant may only write text — strip a supplied tabular
+      // half (log once so the author sees the honest narrowing).
+      if (tier === "vector" && payload.tabular !== undefined) {
+        log.warn(
+          'clipboard.write: dropping the tabular payload — capabilities.clipboard ' +
+            'is "vector" (text only); declare "full" to copy a cell grid',
+        );
+        const { tabular: _dropped, ...rest } = payload;
+        toWrite = rest;
+      }
+      try {
+        await clipboardBackend.write(toWrite);
+      } catch (err) {
+        // A platform refusal (no user gesture, permission denied) is not a
+        // bundle error — the door's failure mode is "nothing copied".
+        log.warn("clipboard.write: the platform refused the write", err);
+      }
+    },
+  };
+
+  // ----------------------------------------------------- workers
+  // The capability-gated WORKER door (K-3 / S-07 / I-02). spawn() resolves
+  // a DECLARED, bundle-relative module through the injected WorkerBackend
+  // (which owns the /@fs/ resolution + Worker construction), wraps it in a
+  // BundleWorker, and TRACKS it so bundle dispose terminates every spawned
+  // worker — the platform-honesty smoke test by construction. The
+  // worker-count cap is min(declared.max, hardwareConcurrency, 8); SAB
+  // allocation is a plain new SharedArrayBuffer gated by sharedMemory +
+  // a per-bundle byte budget (the stricter of the host default and the
+  // manifest's maxSharedBytes). No backend wired → spawn rejects honestly,
+  // concurrency() is 0, supports("workers@1") is false.
+  const workerBackend = options?.workers;
+  const declaredWorkers = caps?.workers;
+  const hardwareConcurrency =
+    (globalThis.navigator as { hardwareConcurrency?: number } | undefined)
+      ?.hardwareConcurrency ?? 1;
+  // Grant: min(declared.max, hardwareConcurrency, hard cap). 0 when
+  // undeclared / no backend (the door is dormant either way).
+  const workerCap =
+    hasWorkers() && workerBackend
+      ? Math.max(
+          0,
+          Math.min(
+            declaredWorkers?.max ?? 0,
+            hardwareConcurrency,
+            WORKER_BUDGETS.maxWorkers,
+          ),
+        )
+      : 0;
+  // Per-bundle shared-memory ceiling — the stricter of the host default
+  // and the manifest's requested maxSharedBytes.
+  const sharedByteBudget = Math.min(
+    WORKER_BUDGETS.defaultSharedBytes,
+    declaredWorkers?.maxSharedBytes ?? WORKER_BUDGETS.defaultSharedBytes,
+  );
+  const sharedMemoryDeclared = declaredWorkers?.sharedMemory === true;
+  // Cross-origin isolation is the hard browser gate for SharedArrayBuffer
+  // (the editor's COOP/COEP). Read it honestly — false under a host that
+  // isn't isolated (and in most test environments).
+  const crossOriginIsolated = (
+    globalThis as { crossOriginIsolated?: boolean }
+  ).crossOriginIsolated === true;
+  // Live accounting across every worker this bundle spawns.
+  let liveWorkerCount = 0;
+  let sharedBytesUsed = 0;
+
+  const makeBundleWorker = (raw: SpawnedWorker): BundleWorker => {
+    let terminated = false;
+    let mySharedBytes = 0;
+    const subs = new DisposableStore();
+    const worker: BundleWorker = {
+      post(message, transfer) {
+        if (terminated) return;
+        raw.post(message, transfer);
+      },
+      onMessage(handler) {
+        if (terminated) return toDisposable(() => {});
+        return subs.add(raw.onMessage(handler));
+      },
+      allocateShared(bytes) {
+        if (terminated) return null;
+        if (!sharedMemoryDeclared) {
+          log.warn(
+            "workers.allocateShared: capabilities.workers.sharedMemory is " +
+              "not declared — no SharedArrayBuffer (declare it to allocate)",
+          );
+          return null;
+        }
+        if (!crossOriginIsolated) {
+          log.warn(
+            "workers.allocateShared: the environment is not cross-origin " +
+              "isolated — SharedArrayBuffer is unavailable (the host needs " +
+              "COOP/COEP)",
+          );
+          return null;
+        }
+        if (!Number.isInteger(bytes) || bytes <= 0) return null;
+        if (sharedBytesUsed + bytes > sharedByteBudget) {
+          log.warn(
+            `workers.allocateShared(${bytes}) would exceed the ` +
+              `${sharedByteBudget}-byte per-bundle shared-memory budget ` +
+              `(used ${sharedBytesUsed}) — refused`,
+          );
+          return null;
+        }
+        let sab: SharedArrayBuffer;
+        try {
+          sab = new SharedArrayBuffer(bytes);
+        } catch (err) {
+          log.warn(`workers.allocateShared(${bytes}) failed`, err);
+          return null;
+        }
+        sharedBytesUsed += bytes;
+        mySharedBytes += bytes;
+        return sab;
+      },
+      terminate() {
+        if (terminated) return;
+        terminated = true;
+        subs.dispose();
+        // Return this worker's shared-memory budget to the bundle pool.
+        sharedBytesUsed -= mySharedBytes;
+        mySharedBytes = 0;
+        liveWorkerCount = Math.max(0, liveWorkerCount - 1);
+        try {
+          raw.terminate();
+        } catch (err) {
+          log.warn("workers.terminate: backend terminate threw", err);
+        }
+      },
+    };
+    return worker;
+  };
+
+  const workers: WorkersSurface = {
+    async spawn(opts: SpawnWorkerOptions): Promise<BundleWorker> {
+      // The gate is a read-and-spawn door — THROW (reject) in 'enforce',
+      // warn+proceed in 'warn', like every other gated door. Surface it as
+      // a rejected promise (spawn returns a Promise).
+      requireDeclared(
+        hasWorkers(),
+        "workers.spawn",
+        "capabilities.workers must be declared",
+      );
+      if (!workerBackend) {
+        throw new Error(
+          `host.workers.spawn("${opts.module}") — no worker backend wired ` +
+            `(supports("workers@1") is false; the editor injects one)`,
+        );
+      }
+      if (liveWorkerCount >= workerCap) {
+        throw new Error(
+          `host.workers.spawn("${opts.module}") — the ${workerCap}-worker ` +
+            `count cap is reached (declared max ${declaredWorkers?.max}, ` +
+            `clamped to min(declared, hardwareConcurrency ${hardwareConcurrency}, ` +
+            `${WORKER_BUDGETS.maxWorkers})) — terminate a worker first`,
+        );
+      }
+      // Reserve the slot BEFORE the async construct so a burst of spawns
+      // can't all pass the cap check; release it on a construct failure.
+      liveWorkerCount++;
+      let raw: SpawnedWorker;
+      try {
+        raw = await workerBackend.spawn(manifest.id, opts.module, opts.name);
+      } catch (err) {
+        liveWorkerCount = Math.max(0, liveWorkerCount - 1);
+        throw err instanceof Error
+          ? err
+          : new Error(
+              `host.workers.spawn("${opts.module}") failed: ${String(err)}`,
+            );
+      }
+      const worker = makeBundleWorker(raw);
+      // Track for automatic teardown on bundle dispose (idempotent
+      // terminate, so a bundle that ALSO terminates explicitly is fine).
+      store.add(toDisposable(() => worker.terminate()));
+      return worker;
+    },
+    concurrency: () => workerCap,
+  };
+
+  // ----------------------------------------------------- modules
+  // The MODULE door (ADR 326). resolve() answers a DECLARED capabilities.wasm
+  // artifact with the URL the host serves it at. Declared-only: the backend
+  // receives the manifest's artifact, never a bundle-supplied path, and an
+  // undeclared name is refused (throws in 'enforce'). Integrity: the
+  // manifest's own stamp wins (the bundle vouches for its bytes wherever
+  // they are served); a host answer with a DIFFERENT digest of the same
+  // algorithm is refused, so a stale module manifest cannot silently swap
+  // bytes — the bundle then loads its own copy. No backend → null.
+  const modulesBackend = options?.modules;
+  const declaredWasm = (name: string): WasmArtifact | undefined =>
+    caps?.wasm?.find((a) => a.name === name);
+  const sriAlgorithm = (sri: string): string => sri.split("-", 1)[0] ?? "";
+  const modules: ModulesSurface = {
+    async resolve(name: string): Promise<HostedModule | null> {
+      const artifact = declaredWasm(name);
+      requireDeclared(
+        artifact !== undefined,
+        `modules.resolve("${name}")`,
+        `capabilities.wasm must declare an artifact named "${name}"`,
+      );
+      if (!artifact || !modulesBackend) return null;
+      let answer: ModuleLocation | null;
+      try {
+        answer = await modulesBackend.url(manifest.id, { ...artifact });
+      } catch (err) {
+        log.warn(`modules.resolve("${name}"): the host backend threw`, err);
+        return null;
+      }
+      if (!answer || typeof answer.url !== "string") return null;
+      let url: string;
+      try {
+        url = new URL(answer.url).href;
+      } catch {
+        log.warn(`modules.resolve("${name}"): the host answered a non-absolute URL "${answer.url}"`);
+        return null;
+      }
+      const declaredSri = artifact.integrity ?? null;
+      const hostSri = answer.integrity ?? null;
+      if (
+        declaredSri &&
+        hostSri &&
+        sriAlgorithm(declaredSri) === sriAlgorithm(hostSri) &&
+        declaredSri !== hostSri
+      ) {
+        log.warn(
+          `modules.resolve("${name}"): the host serves bytes whose integrity ` +
+            `(${hostSri}) differs from the manifest's (${declaredSri}) — ` +
+            `refused; load the bundle's own copy`,
+        );
+        return null;
+      }
+      return { url, integrity: declaredSri ?? hostSri, artifact };
+    },
+    async url(name: string): Promise<string | null> {
+      return (await modules.resolve(name))?.url ?? null;
+    },
+    async fetch(name: string): Promise<Response | null> {
+      const hosted = await modules.resolve(name);
+      if (!hosted) return null;
+      return hosted.integrity
+        ? globalThis.fetch(hosted.url, { integrity: hosted.integrity })
+        : globalThis.fetch(hosted.url);
+    },
+  };
+
+  // ----------------------------------------------------- secrets
+  // The capability-gated, REFERENCE-ONLY credential store (D-11;
+  // rfc-credential-store). set/exists/forget take a credentialRef + (for
+  // set) the secret to STORE; there is NO get — the trust line is that
+  // secret bytes never come BACK to the plugin. The host injects the
+  // material at the attach/fetch door on its own side. The capability gate
+  // (an undeclared capabilities.secrets) THROWS in 'enforce'; a missing
+  // BACKEND is the graceful honest answer — set/forget reject, exists is
+  // false, supports("secrets@1") false. The backend owns the storage tier
+  // AND the user prompt ("via host UI only").
+  const secretStore = options?.secrets;
+  const secrets: SecretsSurface = {
+    async set(ref: string, secret: string): Promise<void> {
+      requireDeclared(
+        hasSecrets(),
+        "secrets.set",
+        "capabilities.secrets must declare { sources: true }",
+      );
+      if (!secretStore) {
+        throw new Error(
+          `host.secrets.set("${ref}") — no secret-store backend wired ` +
+            `(supports("secrets@1") is false; the editor injects one)`,
+        );
+      }
+      await secretStore.set(manifest.id, ref, secret);
+    },
+    async exists(ref: string): Promise<boolean> {
+      requireDeclared(
+        hasSecrets(),
+        "secrets.exists",
+        "capabilities.secrets must declare { sources: true }",
+      );
+      if (!secretStore) return false;
+      return secretStore.exists(manifest.id, ref);
+    },
+    async forget(ref: string): Promise<void> {
+      requireDeclared(
+        hasSecrets(),
+        "secrets.forget",
+        "capabilities.secrets must declare { sources: true }",
+      );
+      // No backend → nothing to forget (the honest no-store no-op; the
+      // capability gate already fired above for the undeclared case).
+      if (!secretStore) {
+        log.warn(
+          `host.secrets.forget("${ref}") — no secret-store backend wired ` +
+            `(supports("secrets@1") is false); nothing to forget`,
+        );
+        return;
+      }
+      await secretStore.forget(manifest.id, ref);
+    },
+  };
+
+  const featureSet = new Set(HOST_FEATURES);
+  if (options?.journal) {
+    // ADR 025 — DYNAMIC, not static: the door always exists (it is inert
+    // without a backend), so the flag means "a real ring is wired and your
+    // entries will actually be kept". Same static-door / dynamic-backing
+    // split as contribute.schemaPanel@1 vs schemaPanel.renderer@1.
+    featureSet.add("journal@1");
+  }
+  if (getEditor().text) {
+    // The door always exists (it falls back to an estimate); the FEATURE
+    // flag means "a real engine shaper is wired" — a bundle probes it to
+    // decide whether to trust measured widths for cross-surface fidelity.
+    featureSet.add("text.measure@1");
+  }
+  if (getEditor().text?.measureMany) {
+    // D-27 — the batch door always exists (it fans out without this); the
+    // flag means the host serves a batch in ONE round-trip to its shaper.
+    featureSet.add("text.measureStrings@1");
+  }
+  if (getEditor().sceneLayers) {
+    // C-1 — a real scene channel is wired (the editor routes to the
+    // canvas-wasm submit/clear). The contribute.sceneLayer() door always
+    // exists (warns + no-ops without this); the flag tells a bundle the
+    // in-frame layer will actually render.
+    featureSet.add("rendering.sceneLayer@1");
+    // v68 — on that channel a text item draws in the face it names
+    // (family / style / weight / italic) and `submit` reports the faces
+    // that fell back. Tied to the channel, not the engine: the worker
+    // handshake refuses an engine older than the pinned wire, so a wired
+    // channel talks to an engine that resolves faces.
+    featureSet.add("rendering.sceneLayer.faces@1");
+  }
+  // `?.` although the member is non-optional in the contract: a host
+  // handle is a plain object a test/adapter may build partially, and a
+  // feature PROBE must never be the thing that throws.
+  if (typeof getEditor().overlaySignals?.setToolPreviews === "function") {
+    // K-9 — a real MULTI-shape preview sink is wired (the editor's
+    // overlay renders a list, not one node). The door always exists
+    // (it degrades to the first shape on the single slot without this);
+    // the flag tells a bundle it may publish geometry AND a label
+    // together instead of trading one for the other.
+    featureSet.add("overlay.multiPreview@1");
+  }
+  if (
+    typeof getEditor().overlaySignals?.setOverlayLayer === "function" &&
+    typeof getEditor().overlaySignals?.removeOverlayLayer === "function"
+  ) {
+    // W-20 — the host renders retained per-bundle layers. Both members,
+    // or none: a host that can add a layer but not drop one would leak a
+    // disposed bundle's shapes onto the canvas.
+    featureSet.add("overlay.layers@1");
+  }
+  if (options?.editContextEnterPoint === true) {
+    // W-19 — the host shell vouches that a pointer entry carries the
+    // entering point (see the option).
+    featureSet.add("editContext.enterPoint@1");
+  }
+  if (getEditor().images) {
+    // C-6 (I-06) — a real resource channel is wired (the editor routes the
+    // v44 claim/submit/release + surfaces resourceTilesNeeded). The
+    // host.images door always exists (warns + no-ops without this); the
+    // flag tells a bundle the renderer will actually pull its tiles.
+    featureSet.add("rendering.resourceProvider@1");
+  }
+  if (options?.shell) {
+    featureSet.add("shell.openPanel@1");
+    // A wired shell implements the file picker too (the ShellSurface
+    // contract mandates pickFile); the flag tells a bundle a real picker
+    // is reachable rather than the empty no-picker door (K-5 / S-11).
+    featureSet.add("shell.pickFile@1");
+    if (typeof options.shell.saveFile === "function") {
+      // K-10 — PER-MEMBER, unlike pickFile above: `saveFile` joined the
+      // backend after hosts had already adopted the option, so its
+      // presence is the only truthful signal that bytes handed to
+      // `host.shell.saveFile` reach the user's filesystem.
+      featureSet.add("shell.saveFile@1");
+    }
+  }
+  if (options?.widgets?.CodeEditor) {
+    featureSet.add("widgets.codeEditor@1");
+  }
+  if (options?.widgets?.ColorPicker) {
+    // The host's own mixer is wired; without it the bundle gets the
+    // native `<input type="color">`.
+    featureSet.add("widgets.colorPicker@1");
+  }
+  // ADR 323 — the host's schema-driven property field (and its frame)
+  // for React panels; optional members, so the probe is their presence.
+  if (options?.widgets?.PropertyField) {
+    featureSet.add("widgets.propertyField@1");
+    if (options.propertyFieldValues) featureSet.add("widgets.propertyField.values@1");
+  }
+  if (options?.willSave) {
+    featureSet.add("document.onWillSave@1");
+  }
+  if (typeof options?.shell?.enterEditContext === "function") {
+    featureSet.add("shell.enterEditContext@1");
+  }
+  if (options?.toolSettings) {
+    featureSet.add("tools.settings@1");
+  }
+  {
+    // Protocol 66 — the binary scene-image lane. Both members, or the SDK
+    // keeps the JSON fallback for both (a half-wired host would patch an
+    // image the other lane never set).
+    const sl = getEditor().sceneLayers;
+    if (
+      typeof sl?.submitImage === "function" &&
+      typeof sl?.submitImageTiles === "function"
+    ) {
+      featureSet.add("rendering.sceneLayer.binary@1");
+    }
+  }
+  if (typeof getEditor().client?.registerDocumentFont === "function") {
+    // ADR 330 — the client scopes a document face to the open document: it
+    // is dropped before the next document loads. Without it the face lives
+    // for the engine session (ADR 328, `@1` only).
+    featureSet.add("assets.documentFont@2");
+  }
+  if (typeof getEditor().mutateWithBytes === "function") {
+    // Protocol 66 — the binary commit lane. `document.mutateWithBytes`
+    // always exists (it splices a `number[]` into the JSON mutate without
+    // this); the flag tells a bundle its bytes are not converted, so the
+    // JSON channel's size limit does not apply.
+    featureSet.add("document.mutateBinary@1");
+  }
+  if (options?.schemaPanelRenderer) {
+    featureSet.add("schemaPanel.renderer@1");
+  }
+  if (options?.diagnosticsSink) {
+    featureSet.add("diagnostics.publish@1");
+  }
+  if (options?.assetSource) {
+    // The door always exists; the FEATURE flag means "a real byte
+    // source is wired" — a bundle probes it to decide whether to
+    // attempt `@font-face` composition at all.
+    featureSet.add("assets.fonts@1");
+  }
+  if (
+    typeof options?.assetSource?.registerFont === "function" &&
+    typeof options?.assetSource?.clearSceneFonts === "function"
+  ) {
+    // W-15 — both members, or none: a host that can add a scene face but
+    // not drop one would keep a disposed bundle's faces alive.
+    featureSet.add("assets.registerFont@1");
+  }
+  if (options?.consent) {
+    // The network door always exists (default-deny); this flag means a real
+    // consent backend is wired, so a bundle can actually obtain a grant (D-03).
+    featureSet.add("network.consent@1");
+  }
+  if (options?.dataProviders) {
+    // The door always exists (no-registry fallback); this flag means a real
+    // SHARED registry is wired, so providers + consumers can actually
+    // rendezvous (D-09).
+    featureSet.add("dataProviders@1");
+  }
+  if (options?.bindingProviders) {
+    // ADR-023 — the door always exists (see the static flag above); this
+    // one means a real SHARED registry is wired, so a registered
+    // provider will actually be consulted by the host's panels and the
+    // adapter reports context activation into it.
+    featureSet.add("bindings.provider@1");
+  }
+  if (options?.blobStore) {
+    // The blob door always exists (no-store fallback); this flag means a
+    // real OPFS/backing store is wired, so a bundle can actually persist
+    // bytes (K-4 / S-08).
+    featureSet.add("storage.blob@1");
+  }
+  if (options?.clipboard) {
+    // The clipboard door always exists (no-clipboard fallback); this flag
+    // means a real system-clipboard backend is wired, so a bundle can
+    // actually read/write the clipboard (K-6 / S-14).
+    featureSet.add("clipboard@1");
+  }
+  if (options?.textCaret) {
+    // The caret door always exists (no-reader fallback: always null); this
+    // flag means a real caret reader is wired, so a bundle can distinguish
+    // "no active caret" from "host can't tell me" (C-9 — paged.data
+    // first-insert placement).
+    featureSet.add("text.caret@1");
+  }
+  if (options?.nativeDocument) {
+    // The nativeDocument door always exists (no-backend fallback: reads answer
+    // null/[], open rejects); these flags mean a real NativeDocumentBackend is
+    // wired, so a bundle can actually read the core-owned native parts and load
+    // a package as the active document (ADR-021).
+    featureSet.add("document.readNative@1");
+    featureSet.add("document.openNative@1");
+  }
+  if (options?.pages) {
+    // v70 — page navigation and the active-page event are the editor's.
+    featureSet.add("viewport.pages@1");
+  }
+  if (options?.text) {
+    // Taking the user to a piece of text (an outline entry, a find hit).
+    featureSet.add("viewport.revealText@1");
+  }
+  if (options?.documents) {
+    // D-26 — the documents doors always exist (no backend: both reject);
+    // these flags mean a real DocumentsBackend is wired.
+    featureSet.add("documents.exportPaged@1");
+    featureSet.add("documents.open@1");
+  }
+  if (options?.workers) {
+    // The workers door always exists (no-worker fallback: spawn rejects);
+    // this flag means a real WorkerBackend is wired, so a bundle can
+    // actually spawn off-main-thread workers (K-3 / S-07 / I-02).
+    featureSet.add("workers@1");
+  }
+  if (options?.modules) {
+    // The modules door always exists (no backend: every answer is null and
+    // the bundle loads its own copy); this flag means the host serves
+    // declared wasm artifacts itself (ADR 326).
+    featureSet.add("modules@1");
+  }
+  if (options?.secrets) {
+    // The secrets door always exists (no-store fallback: set/forget reject,
+    // exists false); this flag means a real SecretStoreBackend is wired, so
+    // a bundle can actually have the host hold a credential by ref (D-11).
+    featureSet.add("secrets@1");
+  }
+  if (hasGpu()) {
+    // I-07 / C-1 Stage B (realm-local; ADR-018). UNLIKE every flag above,
+    // this reflects the DECLARATION, not a host-wired backend: there is no
+    // device door to wire (the bundle drives WebGPU itself via navigator.gpu
+    // in its own realm). The flag simply blesses that the realm-local GPU
+    // usage is declared in the contract — the host surfaces "this plugin uses
+    // the GPU" from it. NO zero-copy host composite, NO shared device.
+    featureSet.add("gpu@1");
+  }
+
+  // ------------------------------------------------- objects (ADR 323)
+  // The bundle's view of the registry: reads gated on `document.read`
+  // (throws in 'enforce', like every read door), writes on
+  // `document.write` (a refused write is a result, never a throw).
+  const deniedWrite = (door: string): ObjectWriteResult | null => {
+    const reason = denyWrite(hasDoc("write"), door, "capabilities.document.write");
+    return reason === null ? null : { applied: false, code: "denied", reason, undoSteps: 0 };
+  };
+  const objects: ObjectsSurface = {
+    query(selector, opts) {
+      requireDocRead("objects.query");
+      return objectRegistry.query(selector, opts);
+    },
+    get(address, path) {
+      requireDocRead("objects.get");
+      return objectRegistry.get(address, path);
+    },
+    getAll(address, opts) {
+      requireDocRead("objects.getAll");
+      return objectRegistry.getAll(address, opts);
+    },
+    async set(address, path, value, opts) {
+      return deniedWrite("objects.set") ?? objectRegistry.set(address, path, value, opts);
+    },
+    async batch(ops, opts) {
+      return deniedWrite("objects.batch") ?? objectRegistry.batch(ops, opts);
+    },
+    schema: (addressOrKind) => objectRegistry.schema(addressOrKind),
+    kinds: () => objectRegistry.kinds(),
+    commands: () => objectRegistry.commands(),
+    async invoke(command, args) {
+      // A typed CORE command writes the document: the write gate applies.
+      if (isCoreCommand(command)) {
+        const denied = deniedWrite(`objects.invoke(${command})`);
+        if (denied) throw new Error(`denied: ${denied.reason}`);
+      }
+      return objectRegistry.invoke(command, args);
+    },
+    onDidChange(listener, filter) {
+      return store.add(objectRegistry.onDidChange(listener, filter));
+    },
+  };
+  if (options?.objects) featureSet.add("objects.shared@1");
+
+  const host: BundleHost = {
+    manifest,
+    log,
+    contribute,
+    document,
+    selection,
+    viewport,
+    render,
+    text,
+    overlay,
+    shell,
+    storage,
+    blob,
+    parts,
+    nativeDocument,
+    documents,
+    network,
+    dataProviders,
+    diagnostics,
+    journal,
+    bindings,
+    widgets,
+    assets,
+    images,
+    workers,
+    modules,
+    secrets,
+    clipboard,
+    tools,
+    objects,
+    supports: (feature) => featureSet.has(feature),
+    get editor() {
+      return getEditor();
+    },
+  };
+
+  return {
+    host,
+    dispose() {
+      store.dispose();
+    },
+  };
+}

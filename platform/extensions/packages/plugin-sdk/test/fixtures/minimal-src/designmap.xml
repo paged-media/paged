@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<?aid style="50" type="document" readerVersion="6.0" featureSet="257" product="20.0(32)"?>
+<Document xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="20.0" Self="d" StoryList="" Name="paged-headless-fixture.indd">
+<idPkg:Graphic src="Resources/Graphic.xml"/>
+<idPkg:Fonts src="Resources/Fonts.xml"/>
+<idPkg:Styles src="Resources/Styles.xml"/>
+<idPkg:Preferences src="Resources/Preferences.xml"/>
+<idPkg:Tags src="XML/Tags.xml"/>
+<idPkg:MasterSpread src="MasterSpreads/MasterSpread_um.xml"/>
+<idPkg:Spread src="Spreads/Spread_us.xml"/>
+<idPkg:BackingStory src="XML/BackingStory.xml"/>
+</Document>

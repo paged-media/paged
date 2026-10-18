@@ -1,0 +1,26 @@
+{
+  "name": "@paged-media/plugin-cli",
+  "version": "0.1.6",
+  "description": "Validate Paged plugin manifests (schema + namespace rule), stamp wasm integrity, and upload declared wasm to the module host. Part of the Paged plugin SDK.",
+  "license": "MPL-2.0 OR LicenseRef-PMEL",
+  "type": "module",
+  "bin": {
+    "paged-plugin": "./bin/paged-plugin.mjs"
+  },
+  "files": [
+    "bin",
+    "untyped-commands.baseline.json"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/paged-media/plugin-sdk.git",
+    "directory": "packages/plugin-cli"
+  },
+  "publishConfig": {
+    "access": "public",
+    "tag": "canary"
+  },
+  "scripts": {
+    "validate": "node ./bin/paged-plugin.mjs validate"
+  }
+}

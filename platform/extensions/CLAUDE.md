@@ -1,0 +1,74 @@
+# CLAUDE.md
+
+Orientation for Claude sessions in **paged-media/sdk** — the plugin
+contract + tooling workspace. Public; dual-licensed MPL-2.0 OR PMEL —
+deliberately permissive (unlike the AGPL editor) so plugins built on it can
+carry any license.
+
+## What this is
+
+pnpm workspace with five packages (see README for the tier table):
+`packages/plugin-api` (the contract, **type-only**), `packages/plugin-sdk`
+(the runtime: in-process `BundleHost` adapter, loader, gesture kit,
+object registry, headless host), `packages/plugin-cli` (zero-dep ESM CLI,
+no build step), `packages/cli` (`@paged-media/cli`, bin `paged-node`: the Node
+CLI over the headless host, ADR 324) and `packages/ai` (`@paged-media/ai`,
+ADR 325). **`DESIGN.md` is the deliberation record** — when code and
+DESIGN.md disagree, fix one of them in the same change. Decision records
+are in `docs/adr/`; the object model is ADR 329, though the code still
+cites its proposal number, "ADR 323".
+
+## Hard rules
+
+- **`plugin-api` is type-only.** Every export is `export type`. A value
+  export would drag host code (React, the wasm loader) into bundle module
+  graphs and break host-free unit testing in plugin repos. Values reach
+  bundles via `BundleHost` at activation.
+- **No speculative surface.** A type joins the façade when a real bundle
+  (paged.draw first) needs it. Gaps are recorded in
+  the cross-repo RFI (the internal gap register), not pre-emptively "fixed" here.
+- **This package OWNS its types (since the M1.1(a) vendoring pass,
+  2026-06-06):** hand-written editor-contract shapes in
+  `plugin-api/src/editor.ts` (handles NARROW, contributions 1:1) and
+  the engine wire types VENDORED in `src/wire.d.ts` — synced from the
+  **published `@paged-media/canvas-wasm` `.d.ts`** (Decision B,
+  repointed 2026-06-07) via `scripts/sync-wire.mjs`. The script resolves
+  that package from the editor's `packages/client` node_modules (or
+  `--source <path>` / `PAGED_CANVAS_WASM_FROM`), and EXITS NONZERO if
+  neither resolves — no warn-skip. `wire.d.ts` carries a
+  `// Synced from @paged-media/canvas-wasm@<version>` stamp; `--check`
+  (a hard gate in CI, see `publish.yml`) fails on content drift OR a
+  stale stamp. The EDITOR asserts compat through its dev link
+  (`apps/canvas/src/plugin-api-compat.ts`) — widen a handle type only
+  with API review. The workspace builds STANDALONE; sibling checkouts
+  are a dev-time luxury.
+- **Naming:** the plugin runtime is `@paged-media/plugin-sdk`;
+  `@paged-media/sdk` is the core repo's WebGPU `ViewerSession` and must
+  not be claimed here.
+- **CLI stays dependency-free.** `paged-plugin.mjs` hand-mirrors
+  `manifest.schema.json`; change them together.
+- **The host adapter lives HERE, not in the editor.**
+  `plugin-sdk/src/host-impl.ts` implements `BundleHost` as a pure
+  function over `() => PagedEditor`; the editor's only job is one
+  `loadBundle()` call per bundle. The isolate migration is a second
+  implementation of the same interface (RPC proxy), never an editor
+  refactor. Keep `HOST_FEATURES` in sync with what's actually
+  implemented — `supports()` answers from it.
+- **Reserved members throw `PluginApiNotImplemented`** with a pointer —
+  visible seams, never fake-interactive (the brand honesty rule applied
+  to API design).
+- **React is optional at RUNTIME, and so is the top-level await that
+  would resolve it.** `plugin-sdk/src/react-optional.ts` is the ONE
+  place that touches React: a NON-awaited module-scope `import("react")`
+  feeding a sync cache the render paths read. A static react import
+  makes the barrel unloadable without React; a top-level `await` makes
+  the published bundle un-pre-bundleable by Vite (its dep-optimizer
+  floor is ES2020). Both have shipped and broken consumers. The build
+  pins `--target es2020` as the gate — do not raise it. DESIGN.md §5.1.
+
+## Commands
+
+```bash
+pnpm install && pnpm -r typecheck
+node packages/plugin-cli/bin/paged-plugin.mjs validate <manifest.json>
+```

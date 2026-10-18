@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="20.0">
+<Spread Self="us" PageCount="1" ItemTransform="1 0 0 1 0 0">
+<Page Self="usp" Name="1" GeometricBounds="0 0 792 612" ItemTransform="1 0 0 1 0 0" AppliedMaster="um"/>
+<Rectangle Self="urect" ItemLayer="ul" GeometricBounds="100 100 300 300" ItemTransform="1 0 0 1 0 0" FillColor="Color/Black">
+<Properties><PathGeometry><GeometryPathType PathOpen="false"><PathPointArray>
+<PathPointType Anchor="100 100" LeftDirection="100 100" RightDirection="100 100"/>
+<PathPointType Anchor="100 300" LeftDirection="100 300" RightDirection="100 300"/>
+<PathPointType Anchor="300 300" LeftDirection="300 300" RightDirection="300 300"/>
+<PathPointType Anchor="300 100" LeftDirection="300 100" RightDirection="300 100"/>
+</PathPointArray></GeometryPathType></PathGeometry></Properties>
+</Rectangle>
+</Spread>
+</idPkg:Spread>

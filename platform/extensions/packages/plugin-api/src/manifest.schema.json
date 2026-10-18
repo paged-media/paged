@@ -1,0 +1,538 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://paged.media/schemas/plugin-manifest.schema.json",
+  "$comment": "SINGLE SOURCE OF TRUTH for the closed capability vocabularies (rendering surfaces, asset kinds, clipboard grants, wasm purposes, edit-context scopes/entries, baked fallbacks). The plugin-api TS unions (manifest.ts/assets.ts) and the plugin-cli runtime Sets are PROJECTIONS of these enums; plugin-sdk/test/capability-vocabulary.spec.ts gates them against this file (ADR 019). Change a vocabulary HERE first.",
+  "title": "Paged plugin manifest",
+  "type": "object",
+  "required": [
+    "id",
+    "name",
+    "version",
+    "apiVersion"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9-]*)+$",
+      "description": "Reverse-DNS plugin identity; namespace prefix for all contribution ids."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?$"
+    },
+    "apiVersion": {
+      "type": "string",
+      "minLength": 1
+    },
+    "publisher": {
+      "type": "string"
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "document": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "read": {
+              "enum": [
+                "broad",
+                "scoped"
+              ]
+            },
+            "write": {
+              "enum": [
+                "broad",
+                "scoped"
+              ]
+            },
+            "readNative": {
+              "type": "boolean",
+              "description": "Privileged read of the document's core-owned native parts (host.nativeDocument reads; the paged/core/ subtree — ADR-021)."
+            },
+            "openNative": {
+              "type": "boolean",
+              "description": "Authorizes replacing the active document by loading a plugin-produced native/importable package (host.nativeDocument.open)."
+            }
+          }
+        },
+        "rendering": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "sceneLayer",
+              "overlay",
+              "hitTest",
+              "resourceProvider"
+            ]
+          }
+        },
+        "keybindings": {
+          "type": "boolean",
+          "description": "The bundle registers keybindings directly via contribute.keybinding. Keybindings have no id to list under contributes, so this boolean is their capability declaration."
+        },
+        "editContext": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "assets": {
+          "type": "array",
+          "description": "Asset-store reads the bundle uses. \"fonts\" gates host.assets.getFontFace (W-06); \"images\" gates host.assets.getPlacedImage (C-5 / I-04, core v42). See DESIGN.md §13.",
+          "items": {
+            "enum": [
+              "fonts",
+              "images"
+            ]
+          }
+        },
+        "network": {
+          "description": "Network reach the bundle declares (D-03). Boolean shorthand, or a per-origin allow-list + purpose. Reach is always consent-gated; documents do not fetch on open.",
+          "oneOf": [
+            { "type": "boolean" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["origins"],
+              "properties": {
+                "origins": {
+                  "oneOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^https?://[^/]+$"
+                      }
+                    },
+                    { "const": "consent" }
+                  ]
+                },
+                "purpose": { "type": "string" }
+              }
+            }
+          ]
+        },
+        "dataProviders": {
+          "type": "object",
+          "description": "Data-provider roles (paged.data §7.1 / D-09). 'publish' = categories the bundle may register providers in; 'consume' = categories it may discover + read. The neutral cross-plugin composition; plugins rendezvous at host.dataProviders, never by direct contact.",
+          "additionalProperties": false,
+          "properties": {
+            "publish": { "type": "array", "items": { "type": "string" } },
+            "consume": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "storage": {
+          "type": "object",
+          "description": "Persistent binary storage (K-4 / S-08). 'blob' gates the OPFS-backed host.blob byte store; 'quotaBytes' requests a ceiling (host enforces the stricter of it and its hard per-plugin cap).",
+          "additionalProperties": false,
+          "properties": {
+            "blob": { "type": "boolean" },
+            "quotaBytes": { "type": "integer" }
+          }
+        },
+        "clipboard": {
+          "enum": [
+            "none",
+            "vector",
+            "full"
+          ]
+        },
+        "workers": {
+          "type": "object",
+          "description": "Worker spawn + SharedArrayBuffer (K-3 / S-07 / I-02). 'max' is the worker-count ceiling requested (host clamps to min(declared, hardwareConcurrency, 8)); 'sharedMemory' declares SAB use (gates allocateShared); 'maxSharedBytes' requests a per-bundle shared-memory ceiling (host enforces the stricter of it and its 256 MiB default cap). Gates host.workers.",
+          "additionalProperties": false,
+          "required": [
+            "max"
+          ],
+          "properties": {
+            "max": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8
+            },
+            "sharedMemory": {
+              "type": "boolean"
+            },
+            "maxSharedBytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 268435456
+            }
+          }
+        },
+        "secrets": {
+          "type": "object",
+          "description": "Host credential-store door (D-11; rfc-credential-store). 'sources' grants host.secrets for authenticated DB-attach / remote sources. REFERENCE-ONLY + host-owned: plugins hold credentialRef strings, never secret material; the surface has set/exists/forget and NO get. Gates host.secrets.",
+          "additionalProperties": false,
+          "required": [
+            "sources"
+          ],
+          "properties": {
+            "sources": {
+              "type": "boolean"
+            }
+          }
+        },
+        "documents": {
+          "type": "object",
+          "description": "Documents door (D-26; host.documents). 'export' grants exportPaged (serialize the active document, the whole container); 'open' grants open (replace the active document with plugin-built bytes; the host asks the user before discarding unsaved edits). An absent field denies that door.",
+          "additionalProperties": false,
+          "properties": {
+            "export": {
+              "type": "boolean"
+            },
+            "open": {
+              "type": "boolean"
+            }
+          }
+        },
+        "gpu": {
+          "type": "object",
+          "description": "WebGPU usage declaration (I-07 / C-1 Stage B realm-local; ADR-018). DECLARE-ONLY: no GPUDevice is handed to the bundle — it legitimizes the realm-local WebGPU usage the bundle already does in its own JS realm (paged.image Engine-B). realm:\"bundle\" is the only value accepted today; realm:\"shared\" (future host-device-sharing) is reserved and REJECTED until the zero-copy walls lift. No requestGpuDevice surface exists.",
+          "additionalProperties": false,
+          "required": [
+            "realm"
+          ],
+          "properties": {
+            "realm": {
+              "const": "bundle"
+            }
+          }
+        },
+        "wasm": {
+          "type": "array",
+          "description": "Declared WebAssembly artifacts the bundle ships and loads at runtime (capability-gated, declared-only, budgeted). See docs/wasm-packaging.md.",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "path",
+              "purpose"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "path": {
+                "type": "string",
+                "pattern": "^(?!/)(?!.*\\.\\.).+\\.wasm$",
+                "description": "Bundle-relative path to the .wasm file; no leading slash, no '..' segment."
+              },
+              "purpose": {
+                "enum": [
+                  "layout",
+                  "codec",
+                  "compute",
+                  "engine"
+                ]
+              },
+              "maxBytes": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100000000,
+                "description": "Per-artifact byte ceiling (tightens, never widens, the host cap). Host cap: 100 MB, the app-wide envelope (whole editor + every plugin, 2026-08-19). Enforced as a SUM by the editor's scripts/wasm-budget.mjs; this per-artifact value is a hard upper stop a manifest may only tighten."
+              },
+              "integrity": {
+                "type": "string",
+                "pattern": "^sha(256|384|512)-[A-Za-z0-9+/]+={0,2}$",
+                "description": "Subresource Integrity of the shipped bytes (sha384- recommended). Stamped by `paged-plugin integrity`; the CLI fails a stamp that does not match the file. host.modules passes it to fetch (ADR 326)."
+              }
+            }
+          }
+        }
+      }
+    },
+    "contributes": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tools": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "panels": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "commands": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "editContexts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "type",
+              "entry"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "type": {
+                "type": "string"
+              },
+              "entry": {
+                "enum": [
+                  "doubleClick"
+                ]
+              },
+              "priority": {
+                "type": "integer"
+              }
+            }
+          }
+        },
+        "objectTypes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "type",
+              "bakedFallback"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "type": {
+                "type": "string"
+              },
+              "bakedFallback": {
+                "enum": [
+                  "group",
+                  "rectangle",
+                  "raster"
+                ]
+              }
+            }
+          }
+        },
+        "importers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "exporters": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "objectModel": {
+          "description": "ADR 323 — the object model contributed through host.contribute.objectModel. schema/args are inline or a bundle-relative path to a JSON file.",
+          "type": "object",
+          "required": [
+            "kinds"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kinds": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "kind",
+                  "title",
+                  "schema"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "schema": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {
+                          "type": "object",
+                          "required": [
+                            "path",
+                            "type"
+                          ],
+                          "properties": {
+                            "path": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "type": {
+                              "type": "object",
+                              "required": [
+                                "kind"
+                              ],
+                              "properties": {
+                                "kind": {
+                                  "enum": [
+                                    "bool",
+                                    "number",
+                                    "length",
+                                    "color",
+                                    "enum",
+                                    "text",
+                                    "ref",
+                                    "bounds",
+                                    "transform",
+                                    "point",
+                                    "bytes",
+                                    "asset",
+                                    "list",
+                                    "map",
+                                    "struct"
+                                  ]
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            "commands": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "id",
+                  "title",
+                  "args"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "args": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "object",
+                        "required": [
+                          "kind"
+                        ],
+                        "properties": {
+                          "kind": {
+                            "enum": [
+                              "bool",
+                              "number",
+                              "length",
+                              "color",
+                              "enum",
+                              "text",
+                              "ref",
+                              "bounds",
+                              "transform",
+                              "point",
+                              "bytes",
+                              "asset",
+                              "list",
+                              "map",
+                              "struct"
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "result": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "object",
+                        "required": [
+                          "kind"
+                        ],
+                        "properties": {
+                          "kind": {
+                            "enum": [
+                              "bool",
+                              "number",
+                              "length",
+                              "color",
+                              "enum",
+                              "text",
+                              "ref",
+                              "bounds",
+                              "transform",
+                              "point",
+                              "bytes",
+                              "asset",
+                              "list",
+                              "map",
+                              "struct"
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "partTypes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "type",
+              "role",
+              "format"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "type": {
+                "type": "string"
+              },
+              "role": {
+                "enum": [
+                  "spec",
+                  "source",
+                  "derived"
+                ]
+              },
+              "format": {
+                "type": "string"
+              },
+              "linkable": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

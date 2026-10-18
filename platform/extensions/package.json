@@ -1,0 +1,17 @@
+{
+  "name": "paged-media-sdk",
+  "private": true,
+  "version": "0.0.0",
+  "license": "MPL-2.0 OR LicenseRef-PMEL",
+  "type": "module",
+  "scripts": {
+    "typecheck": "pnpm -r run typecheck",
+    "build": "pnpm -r run typecheck",
+    "test": "pnpm -r run test"
+  },
+  "devDependencies": {
+    "dts-bundle-generator": "^9.5.1",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
+  }
+}
