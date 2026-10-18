@@ -1,0 +1,15 @@
+# Tool versions for this repository, installed and resolved by proto
+# (https://moonrepo.dev/proto). `proto install` sets everything up.
+#
+# Rust is NOT pinned here: each Cargo workspace keeps its own
+# rust-toolchain.toml, which rustup honours per directory.
+# pnpm is resolved per component from its package.json `packageManager`
+# field until the components share one Bun workspace.
+moon = "2.6.2"
+bun = "1.4.3"
+# Node is only for what Bun can't run (Playwright's runner, wrangler, npm
+# publish with provenance). Minimum 24.22.0.
+node = "24.22.0"
+
+[settings]
+unstable-lockfile = true
