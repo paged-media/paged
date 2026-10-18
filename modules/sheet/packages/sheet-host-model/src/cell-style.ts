@@ -32,7 +32,12 @@
 // CellStyleSummary is stale). This module mints + populates; the caller
 // sends the apply and reports a host refusal rather than assuming success.
 
-import type { ElementId, Mutation, PropertyPath, Value } from "@paged-media/plugin-api";
+import type {
+  ElementId,
+  Mutation,
+  PropertyPath,
+  Value,
+} from "@paged-media/plugin-api";
 
 /** A property read off a cell that we carry into a new cell style. The
  *  wire's `PropertyEntry` is `{ path, value? }`; we narrow to the cell-

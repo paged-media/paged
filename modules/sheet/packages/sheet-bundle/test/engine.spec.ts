@@ -43,12 +43,21 @@ function fakeWasm() {
   const calls: Array<{ method: string; args: unknown[] }> = [];
   const lowered: LoweredContent = {
     cols: [{ index: 0, widthPt: 40 }],
-    rows: [{ index: 0, heightPt: 16, cells: [{ col: 0, text: "x", align: "left" }] }],
+    rows: [
+      { index: 0, heightPt: 16, cells: [{ col: 0, text: "x", align: "left" }] },
+    ],
     rules: { h: [], v: [] },
     merges: [],
   };
   const scene: GridScene = {
-    viewport: { firstRow: 0, firstCol: 0, rows: 1, cols: 1, xOffsets: [0, 40], yOffsets: [0, 16] },
+    viewport: {
+      firstRow: 0,
+      firstCol: 0,
+      rows: 1,
+      cols: 1,
+      xOffsets: [0, 40],
+      yOffsets: [0, 16],
+    },
     cells: [{ row: 0, col: 0, text: "x", align: "left", styleKey: 0 }],
     styles: [],
     gridlines: { h: [], v: [] },
@@ -58,7 +67,16 @@ function fakeWasm() {
     widthPt: 120,
     heightPt: 90,
     prims: [
-      { kind: "rect", x: 0, y: 0, w: 10, h: 20, fill: "#4E79A7", stroke: null, strokeW: 0 },
+      {
+        kind: "rect",
+        x: 0,
+        y: 0,
+        w: 10,
+        h: 20,
+        fill: "#4E79A7",
+        stroke: null,
+        strokeW: 0,
+      },
     ],
   };
   const wasm: SheetWasmEngine = {
@@ -206,12 +224,9 @@ describe("sheet_plugin_engine_boot: facade mapping", () => {
     );
     expect(engine.getRangeValues(0, "A1:B2")).toEqual([["x"]]);
     expect(
-      engine.paginate(
-        0,
-        "A1:B9",
-        [{ widthPt: 100, heightPt: 50 }],
-        { continuedMarker: true },
-      ),
+      engine.paginate(0, "A1:B9", [{ widthPt: 100, heightPt: 50 }], {
+        continuedMarker: true,
+      }),
     ).toEqual([
       { frameIndex: 0, content: lowered, continued: false, oversize: false },
     ]);
@@ -269,7 +284,14 @@ describe("sheet_plugin_engine_boot: facade mapping", () => {
       [{ widthPt: 100, heightPt: 50 }],
       { continuedMarker: true },
     ]); // paginate
-    expect(calls[8].args).toEqual([0, 0, 0, 480, 320, { includeGridlines: true }]);
+    expect(calls[8].args).toEqual([
+      0,
+      0,
+      0,
+      480,
+      320,
+      { includeGridlines: true },
+    ]);
     expect(calls[9].args).toEqual([0, 1, 2, 3, 4]);
     expect(calls[16].args).toEqual([0, 360, 240]); // get_chart_geometry
   });
@@ -306,21 +328,34 @@ describe("sheet_plugin_engine_boot: facade mapping", () => {
 // here the honest FAILURE when bin/ is unbuilt; engine-real.spec.ts the
 // real boot when scripts/build-wasm.sh has produced it.
 const artifactBuilt = existsSync(
-  join(dirname(fileURLToPath(import.meta.url)), "..", "bin", "sheet_js_bg.wasm"),
+  join(
+    dirname(fileURLToPath(import.meta.url)),
+    "..",
+    "bin",
+    "sheet_js_bg.wasm",
+  ),
 );
 
-describe.skipIf(artifactBuilt)("sheet_plugin_engine_boot: boot-failure path (S-10)", () => {
-  it("rejects with the 'not built' message when the artifact is absent", async () => {
-    // bin/sheet_js.js is absent until scripts/build-wasm.sh runs — the
-    // dynamic import fails and bootEngine surfaces it honestly.
-    await expect(bootEngine()).rejects.toThrow(ENGINE_NOT_BUILT);
-  });
-});
+describe.skipIf(artifactBuilt)(
+  "sheet_plugin_engine_boot: boot-failure path (S-10)",
+  () => {
+    it("rejects with the 'not built' message when the artifact is absent", async () => {
+      // bin/sheet_js.js is absent until scripts/build-wasm.sh runs — the
+      // dynamic import fails and bootEngine surfaces it honestly.
+      await expect(bootEngine()).rejects.toThrow(ENGINE_NOT_BUILT);
+    });
+  },
+);
 
-describe.skipIf(!artifactBuilt)("sheet_plugin_engine_boot: built-artifact boot", () => {
-  it("resolves the facade over the real wasm", async () => {
-    const engine = await bootEngine();
-    expect(engine.listSheets()).toEqual([{ id: 0, name: "Sheet1", rows: 0, cols: 0 }]);
-    engine.dispose();
-  });
-});
+describe.skipIf(!artifactBuilt)(
+  "sheet_plugin_engine_boot: built-artifact boot",
+  () => {
+    it("resolves the facade over the real wasm", async () => {
+      const engine = await bootEngine();
+      expect(engine.listSheets()).toEqual([
+        { id: 0, name: "Sheet1", rows: 0, cols: 0 },
+      ]);
+      engine.dispose();
+    });
+  },
+);

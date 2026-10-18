@@ -51,7 +51,10 @@ describe("sheet_plugin_workbook_part", () => {
     await writeWorkbookPart(host, bytes, "budget.xlsx");
 
     // Two parts under the namespace-relative paths the module owns.
-    expect([...store.keys()].sort()).toEqual(["workbook.name", "workbook.xlsx"]);
+    expect([...store.keys()].sort()).toEqual([
+      "workbook.name",
+      "workbook.xlsx",
+    ]);
 
     const back = await readWorkbookPart(host);
     expect(back).not.toBeNull();

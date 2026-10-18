@@ -58,7 +58,10 @@ function isNameChar(ch: string): boolean {
 /** Extract the completion token ending at `caret` in `input`. Scans left
  *  over name chars from the caret. Returns `text === ""` when the char
  *  before the caret is not a name char (nothing to complete). Pure. */
-export function completionTokenAt(input: string, caret: number): CompletionToken {
+export function completionTokenAt(
+  input: string,
+  caret: number,
+): CompletionToken {
   const end = Math.max(0, Math.min(caret, input.length));
   let start = end;
   while (start > 0 && isNameChar(input[start - 1])) start -= 1;
@@ -102,7 +105,10 @@ export function applyCompletion(
   const head = input.slice(0, token.start);
   const tail = input.slice(token.end);
   const inserted = `${name}(`;
-  return { value: head + inserted + tail, caret: head.length + inserted.length };
+  return {
+    value: head + inserted + tail,
+    caret: head.length + inserted.length,
+  };
 }
 
 /** A short arity hint for the suggestion list (e.g. `"1+"` variadic,

@@ -127,7 +127,8 @@ export class Tally {
       const m = args[0] as { op?: string; args?: { ops?: { op?: string }[] } };
       const kinds: Record<string, number> = {};
       const children = m?.op === "batch" ? (m.args?.ops ?? []) : [m];
-      for (const c of children) kinds[c?.op ?? "?"] = (kinds[c?.op ?? "?"] ?? 0) + 1;
+      for (const c of children)
+        kinds[c?.op ?? "?"] = (kinds[c?.op ?? "?"] ?? 0) + 1;
       this.c.mutations.push({
         op: m?.op ?? "?",
         ops: m?.op === "batch" ? (m.args?.ops?.length ?? 0) : 1,
@@ -144,7 +145,8 @@ export class Tally {
   /** Watch a reply without touching what the caller sees. */
   observe(door: string, result: unknown): void {
     if (door !== "document.mutate") return;
-    if (!result || typeof (result as PromiseLike<unknown>).then !== "function") return;
+    if (!result || typeof (result as PromiseLike<unknown>).then !== "function")
+      return;
     const counts = this.c;
     (result as PromiseLike<{ applied?: boolean }>).then(
       (o) => {
@@ -230,13 +232,19 @@ function wrapCounting<T extends object>(
           tally.note(door, args);
           const result = Reflect.apply(value, obj, args) as unknown;
           tally.observe(door, result);
-          if (door === "contribute.sceneLayer" && result && typeof result === "object") {
+          if (
+            door === "contribute.sceneLayer" &&
+            result &&
+            typeof result === "object"
+          ) {
             return wrapCounting(result, "sceneLayer", tally, wrapped);
           }
           return result;
         };
       }
-      return isPlainObject(value) ? wrapCounting(value, door, tally, wrapped) : value;
+      return isPlainObject(value)
+        ? wrapCounting(value, door, tally, wrapped)
+        : value;
     },
   });
   wrapped.set(target, proxy);
@@ -261,7 +269,12 @@ export const SHARED = new Tally();
 
 /** Count every call into the sheet engine facade as `engine.<method>`. */
 export function countingEngine(engine: SheetEngine, tally: Tally): SheetEngine {
-  return wrapCounting(engine as unknown as object, "engine", tally, new WeakMap()) as SheetEngine;
+  return wrapCounting(
+    engine as unknown as object,
+    "engine",
+    tally,
+    new WeakMap(),
+  ) as SheetEngine;
 }
 
 /** The per-test timeout the budget specs set. A count does not get slower
@@ -303,7 +316,9 @@ export function report(
 ): WorkLog {
   if (process.env.PERF_SHOW) {
     // eslint-disable-next-line no-console
-    console.log(`PERF ${scenario} ${JSON.stringify({ ...workSummary(work), ...extra })}`);
+    console.log(
+      `PERF ${scenario} ${JSON.stringify({ ...workSummary(work), ...extra })}`,
+    );
   }
   return work;
 }

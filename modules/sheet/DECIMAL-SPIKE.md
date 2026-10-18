@@ -21,13 +21,13 @@ default. f64 stays the v1 default.**
 
 The spike succeeds technically: an exact base-10 `Numeric` backend drops into
 the D-6 seam as a pure type substitution, with no kernel rewrite and a small
-(~40 KiB) wasm cost. But adopting it *now* would either (a) silently diverge
+(~40 KiB) wasm cost. But adopting it _now_ would either (a) silently diverge
 from Excel — the very oracle this engine is conformance-tested against — or
 (b) require building a whole opt-in surface (per-workbook precision setting,
 XLSX round-trip semantics, formatter/coercion review) for which there is no
 v1 demand. The right move is to **keep the seam proven and shipped (this
 spike), and gate the user-facing mode on real v2 demand** — paged.sheet is a
-*publishing instrument*, and a print document showing `0.30000000000000004`
+_publishing instrument_, and a print document showing `0.30000000000000004`
 is already prevented by the 15-significant-digit display rule (D-6), so the
 correctness win is mostly invisible in v1's actual output.
 
@@ -36,26 +36,26 @@ correctness win is mostly invisible in v1's actual output.
 `sheet-fn/src/num_decimal.rs` implements `impl Numeric for Decimal`, a
 transparent newtype over `rust_decimal::Decimal`, gated behind the
 `exact-decimal` cargo feature (OFF by default). It is a literal drop-in for
-`F64`: the conformance test's `replay::<N: Numeric>(…)` runs the *identical*
+`F64`: the conformance test's `replay::<N: Numeric>(…)` runs the _identical_
 code through both backends. That is the D-6 thesis demonstrated — the trait
 boundary in `sheet-fn` keeps decimal mode open, and swapping it in is a type
 substitution, not a rewrite.
 
-The `from_f64` lift uses rust_decimal's default *remove-excess-bits*
+The `from_f64` lift uses rust_decimal's default _remove-excess-bits_
 rounding, so the user's literal `0.1` becomes exactly `0.1` (not the IEEE
-`0.1000000000000000055…`). That is the hinge: summing the *typed* values in
+`0.1000000000000000055…`). That is the hinge: summing the _typed_ values in
 base-10 avoids the binary representation error f64 carries through the same
 arithmetic.
 
 ## Carrier evaluated — `rust_decimal`
 
-| property            | finding |
-|---------------------|---------|
-| license             | **MIT** (transitive deps `arrayvec`, `num-traits`: MIT OR Apache-2.0) — clean for the dual AGPL-3.0/PMEL repo |
-| purity / wasm       | pure Rust, ships a `cfg(target_arch = "wasm32")` shim, **no native/C deps** (`cargo tree -p sheet-fn --features exact-decimal` shows only `arrayvec` + `num-traits`) |
-| representation      | 96-bit integer significand × base-10 scale (0..=28) → **28-29 significant digits** |
-| headroom vs Excel   | comfortably wider than Excel's 15-significant-digit *display* budget (D-6) |
-| features used       | `default-features = false`, `["std", "maths"]` — drops serde/db/rand; `maths` adds `MathematicalOps` (powi/powu/powd) |
+| property          | finding                                                                                                                                                              |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| license           | **MIT** (transitive deps `arrayvec`, `num-traits`: MIT OR Apache-2.0) — clean for the dual AGPL-3.0/PMEL repo                                                        |
+| purity / wasm     | pure Rust, ships a `cfg(target_arch = "wasm32")` shim, **no native/C deps** (`cargo tree -p sheet-fn --features exact-decimal` shows only `arrayvec` + `num-traits`) |
+| representation    | 96-bit integer significand × base-10 scale (0..=28) → **28-29 significant digits**                                                                                   |
+| headroom vs Excel | comfortably wider than Excel's 15-significant-digit _display_ budget (D-6)                                                                                           |
+| features used     | `default-features = false`, `["std", "maths"]` — drops serde/db/rand; `maths` adds `MathematicalOps` (powi/powu/powd)                                                |
 
 Alternatives considered and rejected: a **hand-rolled fixed-point `i128`**
 (re-implements rounding, scale alignment, and `Display` from scratch — more
@@ -70,16 +70,16 @@ backends. The f64 half runs in the default build (so the goldens are pinned
 as the true IEEE-754 values Excel itself carries); the decimal half runs
 under `--features exact-decimal`.
 
-| case | f64 result | decimal result | diverges |
-|------|-----------:|---------------:|:--------:|
-| `0.1 + 0.2`            | `0.30000000000000004` | `0.3`  | yes |
-| `0.1 + 0.2 + 0.3`      | `0.6000000000000001`  | `0.6`  | yes |
-| `1.1 + 2.2`            | `3.3000000000000003`  | `3.3`  | yes |
-| `0.10 + 0.20 + 0.05`   | `0.35000000000000003` | `0.35` | yes |
-| `0.01 added ×100`      | `1.0000000000000007`  | `1`    | yes |
-| `0.1 added ×10` (left-fold) | `0.9999999999999999` | `1` | yes |
-| `0.5 + 0.25 + 0.125`   | `0.875`               | `0.875`| **no** |
-| `19.99 + 5.99 + 2.49`  | `28.47`               | `28.47`| **no** |
+| case                        |            f64 result | decimal result | diverges |
+| --------------------------- | --------------------: | -------------: | :------: |
+| `0.1 + 0.2`                 | `0.30000000000000004` |          `0.3` |   yes    |
+| `0.1 + 0.2 + 0.3`           |  `0.6000000000000001` |          `0.6` |   yes    |
+| `1.1 + 2.2`                 |  `3.3000000000000003` |          `3.3` |   yes    |
+| `0.10 + 0.20 + 0.05`        | `0.35000000000000003` |         `0.35` |   yes    |
+| `0.01 added ×100`           |  `1.0000000000000007` |            `1` |   yes    |
+| `0.1 added ×10` (left-fold) |  `0.9999999999999999` |            `1` |   yes    |
+| `0.5 + 0.25 + 0.125`        |               `0.875` |        `0.875` |  **no**  |
+| `19.99 + 5.99 + 2.49`       |               `28.47` |        `28.47` |  **no**  |
 
 The corpus is deliberately **honest about both outcomes**: f64 is not always
 wrong — sums of exactly-representable binary fractions (halves, quarters,
@@ -93,7 +93,7 @@ not.
 ### The central caveat: decimal is not a universal cure
 
 `1/3` is non-terminating in **base-10 too**. Decimal `1/3 * 3` carries 28
-nines (`0.9999…9`), which is *not* exactly `1` — it only rounds back to `1.0`
+nines (`0.9999…9`), which is _not_ exactly `1` — it only rounds back to `1.0`
 at the f64 boundary (same as f64's own lucky `1.0`). Asserted in
 `sheet_calc_decimal_impl_thirds_caveat`. Exact-decimal buys exactness for
 **terminating** decimals (money, tenths, the `+ - * /` of accumulation), not
@@ -116,11 +116,11 @@ Measured by building representative throwaway `cdylib`s for
 `wasm32-unknown-unknown` (`opt-level = "s"`, `lto`, exercising
 `from_f64`/`+`/`-`/`*`/`/`/`powd`/`to_f64`):
 
-| build | wasm size |
-|-------|----------:|
-| baseline (no `rust_decimal`)         | ~0.4 KiB |
-| with `rust_decimal` (`std` + `maths`)| ~49 KiB  |
-| **delta**                            | **~48 KiB** (~40 KiB after `wasm-opt -Oz`) |
+| build                                 |                                  wasm size |
+| ------------------------------------- | -----------------------------------------: |
+| baseline (no `rust_decimal`)          |                                   ~0.4 KiB |
+| with `rust_decimal` (`std` + `maths`) |                                    ~49 KiB |
+| **delta**                             | **~48 KiB** (~40 KiB after `wasm-opt -Oz`) |
 
 Well within the 100 MB app wasm budget. `sheet-js` does not currently forward
 the feature, so the **default shipped wasm is byte-unchanged** — `rust_decimal`
@@ -137,7 +137,7 @@ Fair add-only / multiply-only microbenchmarks (native, `opt-level = 3`):
 
 For spreadsheet workloads (sums of columns dominate; multiplies are sparse)
 this is acceptable, but it is a real cost that argues against making decimal
-the *default*.
+the _default_.
 
 ## Why DEFER (not ADOPT-now), in full
 
@@ -146,15 +146,15 @@ the *default*.
    LibreOffice differential oracle — assumes f64. An exact-decimal mode would
    **diverge from the oracle by design** on exactly the divergence-corpus
    cases. Shipping it as the default would turn passing conformance into
-   failing conformance. It can only ever be an *opt-in* that the user accepts
+   failing conformance. It can only ever be an _opt-in_ that the user accepts
    "this no longer matches Excel."
 2. **The display rule already hides the v1 pain.** D-6's 15-significant-digit
-   *display* semantics mean a v1 print document never shows
+   _display_ semantics mean a v1 print document never shows
    `0.30000000000000004` — it shows `0.3`. The correctness win is largely
    invisible in v1's actual rendered output, which is the product surface.
-3. **Opt-in is a surface, not a flag.** A real exact-decimal *mode* needs: a
+3. **Opt-in is a surface, not a flag.** A real exact-decimal _mode_ needs: a
    per-workbook precision setting in `CalcSettings`, an XLSX round-trip story
-   (Excel has no "decimal mode" to round-trip *to*), and a review of the
+   (Excel has no "decimal mode" to round-trip _to_), and a review of the
    formatter + coercion boundaries. That is v2-sized work with no v1 demand.
 4. **The seam is the deliverable.** D-6's actual requirement — "the CellValue
    design must not foreclose it" — is **met and now proven** by this spike. We

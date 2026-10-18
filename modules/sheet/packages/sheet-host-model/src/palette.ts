@@ -56,7 +56,8 @@ import type { LoweredContent, LoweredStyle } from "./lowered";
  *  part of the swatch ID, not decoration: a chart blue and a data-bar
  *  blue are different document swatches on purpose, so recolouring the
  *  chart palette does not silently move every conditional-format bar. */
-export type PaletteFacet = "chart" | "dataBar" | "cellFill" | "cellText" | "cellStroke";
+export type PaletteFacet =
+  "chart" | "dataBar" | "cellFill" | "cellText" | "cellStroke";
 
 /** One entry of the workbook palette: a colour paged.sheet mints (or
  *  would mint) as a document swatch.

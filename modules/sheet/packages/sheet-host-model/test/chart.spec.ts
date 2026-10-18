@@ -96,7 +96,11 @@ describe("sheet_chart_lower_paged_draw: rect → insertPath", () => {
       "setPluginMetadata",
     ]);
     const path = ops[0] as {
-      args: { pageId: string; anchors: Array<{ anchor: [number, number] }>; open: boolean };
+      args: {
+        pageId: string;
+        anchors: Array<{ anchor: [number, number] }>;
+        open: boolean;
+      };
     };
     expect(path.args.pageId).toBe("Page/u1");
     expect(path.args.open).toBe(false); // a rect is closed
@@ -294,19 +298,40 @@ describe("sheet_chart_lower_paged_draw: a label frame is sized to its text [shee
 
   it("sits at its anchor: start from it, middle about it, end at it", () => {
     const w = 66 + LABEL_SLACK_PT;
-    expect(labelBox(prim({ anchor: "start" }), m, 0, 0, 360)[1]).toBeCloseTo(100, 6);
-    expect(labelBox(prim({ anchor: "middle" }), m, 0, 0, 360)[1]).toBeCloseTo(100 - w / 2, 6);
-    expect(labelBox(prim({ anchor: "end" }), m, 0, 0, 360)[3]).toBeCloseTo(100, 6);
+    expect(labelBox(prim({ anchor: "start" }), m, 0, 0, 360)[1]).toBeCloseTo(
+      100,
+      6,
+    );
+    expect(labelBox(prim({ anchor: "middle" }), m, 0, 0, 360)[1]).toBeCloseTo(
+      100 - w / 2,
+      6,
+    );
+    expect(labelBox(prim({ anchor: "end" }), m, 0, 0, 360)[3]).toBeCloseTo(
+      100,
+      6,
+    );
   });
 
   it("never hangs outside the chart's box (the value labels used to start 20 pt off the page)", () => {
     // An end-anchored label whose anchor is 4 pt in from the chart's left:
     // a 30 pt label would start 26 pt LEFT of the chart. It is kept inside.
-    const [, l, , r] = labelBox(prim({ x: 4, anchor: "end" }), { ...m, advance: 28 }, 24, 0, 360);
+    const [, l, , r] = labelBox(
+      prim({ x: 4, anchor: "end" }),
+      { ...m, advance: 28 },
+      24,
+      0,
+      360,
+    );
     expect(l).toBeCloseTo(24, 6);
     expect(r - l).toBeCloseTo(28 + LABEL_SLACK_PT, 6);
     // And on the right edge the same.
-    const [, l2, , r2] = labelBox(prim({ x: 355, anchor: "start" }), m, 24, 0, 360);
+    const [, l2, , r2] = labelBox(
+      prim({ x: 355, anchor: "start" }),
+      m,
+      24,
+      0,
+      360,
+    );
     expect(r2).toBeCloseTo(24 + 360, 6);
     expect(r2 - l2).toBeCloseTo(66 + LABEL_SLACK_PT, 6);
   });
@@ -315,16 +340,30 @@ describe("sheet_chart_lower_paged_draw: a label frame is sized to its text [shee
     const geom: ChartGeometry = {
       widthPt: 360,
       heightPt: 240,
-      prims: [prim({ x: 180, y: 10 }), prim({ s: "Notebooks", x: 60, y: 230, sizePt: 8 })],
+      prims: [
+        prim({ x: 180, y: 10 }),
+        prim({ s: "Notebooks", x: 60, y: 230, sizePt: 8 }),
+      ],
     };
-    const { batch, texts } = chartGeometryToMutations(geom, placement, binding, undefined, [m, null]);
-    const frames = (batch as { args: { ops: { op: string; args: { bounds?: number[] } }[] } }).args.ops
+    const { batch, texts } = chartGeometryToMutations(
+      geom,
+      placement,
+      binding,
+      undefined,
+      [m, null],
+    );
+    const frames = (
+      batch as { args: { ops: { op: string; args: { bounds?: number[] } }[] } }
+    ).args.ops
       .filter((o) => o.op === "insertTextFrame")
       .map((o) => o.args.bounds!);
     expect(frames[0][3] - frames[0][1]).toBeCloseTo(66 + LABEL_SLACK_PT, 6);
     const est = estimateLabelMetrics("Notebooks", 8);
     expect(est.advance).toBeCloseTo(9 * 0.55 * 8, 6);
-    expect(frames[1][3] - frames[1][1]).toBeCloseTo(est.advance + LABEL_SLACK_PT, 6);
+    expect(frames[1][3] - frames[1][1]).toBeCloseTo(
+      est.advance + LABEL_SLACK_PT,
+      6,
+    );
     // Each label's text record carries the box its frame was given.
     expect(texts.map((t) => t.bounds)).toEqual(frames);
   });
@@ -344,7 +383,10 @@ describe("sheet_chart_lower_paged_draw: a label frame is sized to its text [shee
       {
         op: "setElementProperty",
         args: {
-          elementId: { kind: "storyRange", id: { story_id: "$h:l3", start: 0, end: 9 } },
+          elementId: {
+            kind: "storyRange",
+            id: { story_id: "$h:l3", start: 0, end: 9 },
+          },
           path: "characterFontSize",
           value: { type: "length", value: 8 },
         },
@@ -352,7 +394,10 @@ describe("sheet_chart_lower_paged_draw: a label frame is sized to its text [shee
       {
         op: "setElementProperty",
         args: {
-          elementId: { kind: "storyRange", id: { story_id: "$h:l3", start: 0, end: 9 } },
+          elementId: {
+            kind: "storyRange",
+            id: { story_id: "$h:l3", start: 0, end: 9 },
+          },
           path: "paragraphJustification",
           value: { type: "text", value: "RightAlign" },
         },
@@ -382,7 +427,11 @@ describe("sheet_chart_lower_paged_draw: binding + determinism", () => {
     const ops = batchOps(geom);
     const meta = ops.find((o) => o.op === "setPluginMetadata") as {
       op: string;
-      args: { elementId: { kind: string; id: string }; key: string; value: string };
+      args: {
+        elementId: { kind: string; id: string };
+        key: string;
+        value: string;
+      };
     };
     expect(meta.op).toBe("setPluginMetadata");
     // A vector-first chart binds on the minted polygon (insertPath node).
@@ -395,7 +444,9 @@ describe("sheet_chart_lower_paged_draw: binding + determinism", () => {
     const textOnly: ChartGeometry = {
       widthPt: 50,
       heightPt: 20,
-      prims: [{ kind: "text", x: 25, y: 10, s: "T", sizePt: 10, anchor: "middle" }],
+      prims: [
+        { kind: "text", x: 25, y: 10, s: "T", sizePt: 10, anchor: "middle" },
+      ],
     };
     const ops = batchOps(textOnly);
     const meta = ops.find((o) => o.op === "setPluginMetadata") as {
@@ -448,7 +499,10 @@ describe("sheet_chart_lower_paged_draw: colour → swatch + colorRef (FINDING 1)
     for (let i = pathIdx + 1; i < ops.length; i++) {
       if (ops[i].op === "insertPath" || ops[i].op === "insertTextFrame") break;
       if (ops[i].op !== "setElementProperty") continue;
-      const a = ops[i].args as { path: string; value: { type: string; value: unknown } };
+      const a = ops[i].args as {
+        path: string;
+        value: { type: string; value: unknown };
+      };
       if (a.path === propPath) return a.value;
     }
     return undefined;
@@ -583,8 +637,26 @@ describe("sheet_chart_lower_paged_draw: colour → swatch + colorRef (FINDING 1)
       widthPt: 100,
       heightPt: 80,
       prims: [
-        { kind: "rect", x: 0, y: 0, w: 5, h: 10, fill: "#4E79A7", stroke: null, strokeW: 0 },
-        { kind: "rect", x: 10, y: 0, w: 5, h: 20, fill: "#4E79A7", stroke: null, strokeW: 0 },
+        {
+          kind: "rect",
+          x: 0,
+          y: 0,
+          w: 5,
+          h: 10,
+          fill: "#4E79A7",
+          stroke: null,
+          strokeW: 0,
+        },
+        {
+          kind: "rect",
+          x: 10,
+          y: 0,
+          w: 5,
+          h: 20,
+          fill: "#4E79A7",
+          stroke: null,
+          strokeW: 0,
+        },
       ],
     };
     // Same colour twice → ONE swatch, both bars reference it.
@@ -605,9 +677,27 @@ describe("sheet_chart_lower_paged_draw: colour → swatch + colorRef (FINDING 1)
       widthPt: 50,
       heightPt: 50,
       prims: [
-        { kind: "rect", x: 0, y: 0, w: 5, h: 5, fill: "#abc", stroke: null, strokeW: 0 },
+        {
+          kind: "rect",
+          x: 0,
+          y: 0,
+          w: 5,
+          h: 5,
+          fill: "#abc",
+          stroke: null,
+          strokeW: 0,
+        },
         // A malformed colour: no swatch, no fill op (falls back to default).
-        { kind: "rect", x: 6, y: 0, w: 5, h: 5, fill: "not-a-color", stroke: null, strokeW: 0 },
+        {
+          kind: "rect",
+          x: 6,
+          y: 0,
+          w: 5,
+          h: 5,
+          fill: "not-a-color",
+          stroke: null,
+          strokeW: 0,
+        },
       ],
     };
     const swatches = swatchCreateOps(geom);
