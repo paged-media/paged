@@ -242,6 +242,12 @@ three. CI fails a push to `main` that changes `PROTOCOL_VERSION` without the mat
 [ADR 200](https://github.com/paged-media/editor/blob/main/docs/adr/200-engine-as-npm-wasm-packages.md)
 and [ADR 202](https://github.com/paged-media/editor/blob/main/docs/adr/202-render-worker-owns-the-canvas.md).
 
+*Amendment (2026-10-18): the wasm packages, `@paged-media/repo-wasm` among them, now have
+directories in the tree: `packages/<pkg>/`, members of the root Bun workspace, each with a
+committed `package.json` at `0.<protocol>.0-dev`. `scripts/build-wasm-packages.sh --workspace`
+builds into them, and `.github/workflows/core-publish-wasm.yml` publishes copies at the tag's
+version ([ADR 185](adr/185-the-wasm-packages-are-workspace-packages.md)).*
+
 ## Build and test
 
 - Locally: `cargo build --workspace`, `cargo test --workspace`, clippy with `-D warnings`,
