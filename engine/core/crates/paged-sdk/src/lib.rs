@@ -352,6 +352,41 @@ mod wasm {
         /// and cache. `only_page` restricts the pass to one page laid
         /// out at y = 0 (the wrapper's `"single"` layout mode).
         ///
+        /// Why the GPU device was lost (a GPU-process crash, a driver
+        /// reset), once it has been; `undefined` while it serves. Every
+        /// present reports `gpu_lost` after a loss.
+        #[wasm_bindgen(js_name = gpuLostReason)]
+        pub fn gpu_lost_reason(&self) -> Option<String> {
+            self.presenter
+                .borrow()
+                .as_ref()
+                .and_then(|p| p.lost_reason())
+        }
+
+        /// After a loss: request a new device and rebind the same canvas.
+        /// Resolves `true` when presents work again (cached page scenes
+        /// stay valid), `false` when the browser grants no device — the
+        /// viewer has no CPU lane, so the embedder shows its
+        /// "requires WebGPU" state then.
+        // The promise owns the presenter while the browser answers and
+        // borrows nothing (see `GpuSlot`).
+        #[wasm_bindgen(js_name = recoverGpu, unchecked_return_type = "Promise<boolean>")]
+        pub fn recover_gpu(&self) -> js_sys::Promise {
+            let slot = self.presenter.clone();
+            wasm_bindgen_futures::future_to_promise(async move {
+                let Some(old) = slot.borrow_mut().take() else {
+                    return Ok(JsValue::FALSE);
+                };
+                Ok(match old.recover().await {
+                    Ok(p) => {
+                        *slot.borrow_mut() = Some(p);
+                        JsValue::TRUE
+                    }
+                    Err(_) => JsValue::FALSE,
+                })
+            })
+        }
+
         /// Requires a bound presenter (any `render_to_canvas*` call
         /// binds one).
         pub fn present(
@@ -417,10 +452,7 @@ mod wasm {
                 .collect();
 
             let bg = Color::rgba(0.898, 0.905, 0.922, 1.0);
-            match presenter.present_scenes(&scene_list, bg) {
-                Ok(()) => Diagnostics::ok(),
-                Err(e) => Diagnostics::error("present", &format!("present: {e}")),
-            }
+            present_result(presenter.present_scenes(&scene_list, bg))
         }
 
         /// Headless render of ONE page scaled to `target_width_px`
@@ -545,6 +577,20 @@ mod wasm {
         }
     }
 
+    /// A present's outcome as diagnostics. A lost device has its own code,
+    /// `gpu_lost`: every later present fails the same way until
+    /// `recoverGpu` binds a new device, so the embedder can say so instead
+    /// of showing a stale or blank canvas.
+    fn present_result(r: Result<(), paged_gpu::SurfaceError>) -> Diagnostics {
+        match r {
+            Ok(()) => Diagnostics::ok(),
+            Err(paged_gpu::SurfaceError::DeviceLost(reason)) => {
+                Diagnostics::error("gpu_lost", &format!("GPU device lost: {reason}"))
+            }
+            Err(e) => Diagnostics::error("present", &format!("present: {e}")),
+        }
+    }
+
     /// Present `page` (an unscaled scene and its size in pt) fit-and-centred
     /// into the slot's surface, on a light-grey surround (page body and
     /// border come from `build_page_scene`).
@@ -564,10 +610,7 @@ mod wasm {
         let ty = (sh - ph * scale) * 0.5;
         let transform = [scale, 0.0, 0.0, scale, tx, ty];
         let bg = Color::rgba(0.898, 0.905, 0.922, 1.0);
-        match presenter.present_scenes(&[(&scene, transform)], bg) {
-            Ok(()) => Diagnostics::ok(),
-            Err(e) => Diagnostics::error("present", &format!("present: {e}")),
-        }
+        present_result(presenter.present_scenes(&[(&scene, transform)], bg))
     }
 
     /// A presenter (hence a wgpu device) for headless readback, on a

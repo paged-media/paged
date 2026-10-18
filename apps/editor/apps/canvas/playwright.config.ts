@@ -197,6 +197,8 @@ export default defineConfig({
       testIgnore: [
         "**/gpu-backend.journey.spec.ts",
         "**/gpu-reentrancy.journey.spec.ts",
+        "**/snapshot-backends.journey.spec.ts",
+        "**/gpu-device-loss.journey.spec.ts",
       ],
       snapshotPathTemplate:
         "{testDir}/__screenshots__/{testFileName}/{arg}-{projectName}-{platform}{ext}",
