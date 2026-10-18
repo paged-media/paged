@@ -1,0 +1,86 @@
+# Import manifest for paged-media/paged.
+#
+# Each entry is one source repository folded into the monorepo by
+# assemble.py. `ref` is what gets imported; the assembler records the SHA it
+# resolved in import-lock.json, and that lock (not this file) is the record of
+# what a given assembly contains.
+#
+# Path rules apply to the SOURCE layout (before the prefix is added):
+#   include          import only these paths (everything else is dropped,
+#                    in every commit)
+#   exclude_globs    drop these paths in every commit
+#   strip_history_only
+#     paths          drop blobs at these globs unless the blob is also in the
+#                    tip tree (old committed builds; the current one stays)
+#     over_bytes     drop any blob at least this large unless it is also in
+#                    the tip tree
+# Tags are only imported where `tags: true`.
+
+org: paged-media
+date: "2026-10-18T00:00:00Z"   # fixed date for the root and merge commits, so re-runs are reproducible
+
+repos:
+  - name: core
+    ref: main
+    prefix: engine/core
+    tags: true
+
+  - name: plugin-publish
+    ref: main
+    prefix: modules/publish
+
+  - name: plugin-sdk
+    ref: main
+    prefix: platform/extensions
+
+  - name: plugin-image
+    ref: main
+    prefix: modules/image
+    strip_history_only:
+      paths:
+        - "glue/wasm/*.wasm"
+        - "manifest/wasm/*.wasm"
+
+  - name: plugin-draw
+    ref: main
+    prefix: modules/draw
+
+  - name: plugin-sheets
+    ref: main
+    prefix: modules/sheet
+
+  - name: plugin-data
+    ref: main
+    prefix: modules/data
+
+  - name: plugin-doc
+    ref: main
+    prefix: modules/doc
+
+  - name: plugin-slide
+    ref: main
+    prefix: modules/slide
+
+  - name: plugin-web
+    ref: main
+    prefix: modules/web
+
+  - name: editor
+    ref: main
+    prefix: apps/editor
+    exclude_globs:
+      - "apps/canvas/showcase/checkpoints.*"
+    strip_history_only:
+      over_bytes: 5000000
+      paths:
+        - "packages/client/src/wasm/*.wasm"
+        - "apps/devtools/src/wasm/*.wasm"
+
+  - name: editor-server
+    ref: main
+    prefix: apps/server
+    include:
+      - server/
+      - docs/
+      - LICENSE
+      - LICENSE.md

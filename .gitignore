@@ -1,0 +1,9 @@
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Local symlinks to private resources (corpus, shared build targets).
+# Private assets never live in this public repository.
+/corpus
+/target

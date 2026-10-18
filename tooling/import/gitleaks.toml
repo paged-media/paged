@@ -1,0 +1,13 @@
+# gitleaks config for the import gate: the default ruleset plus narrow,
+# reviewed allowlists. Every entry names what it allows and why.
+
+[extend]
+useDefault = true
+
+# Keyboard shortcut tables (`{ key: "shift+arrowright", command: … }`) match
+# generic-api-key. Reviewed 2026-10-18: apps/editor/apps/canvas/src/object-commands.ts.
+[[allowlists]]
+description = "keyboard shortcut keys in command tables"
+targetRules = ["generic-api-key"]
+regexTarget = "line"
+regexes = ['''key:\s*"(?:[a-z]+\+)*(?:arrow(?:left|right|up|down)|[a-z0-9]|enter|escape|tab|backspace|delete|home|end|pageup|pagedown|space)"''']

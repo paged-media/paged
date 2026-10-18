@@ -1,0 +1,98 @@
+[
+  {
+    "name": "core",
+    "prefix": "engine/core",
+    "source_sha": "19c16fd7e154ed6bc7384a5929e460eeb1151ba1",
+    "imported_sha": "d9e4747ed575eab5f0314412248e1e8b177e88ce",
+    "stripped_blobs": 0,
+    "tags": 56
+  },
+  {
+    "name": "plugin-publish",
+    "prefix": "modules/publish",
+    "source_sha": "05c57195d9a7514357cede90d89d987141bf01d8",
+    "imported_sha": "51673d48c1cc34ae4471b2683ecf42ce568774dd",
+    "stripped_blobs": 0,
+    "tags": 0
+  },
+  {
+    "name": "plugin-sdk",
+    "prefix": "platform/extensions",
+    "source_sha": "e119ab65837d8fa0670a18c33b3448631cfd79d9",
+    "imported_sha": "714584f3376d86433cce033a103447c1646a34ba",
+    "stripped_blobs": 0,
+    "tags": 0
+  },
+  {
+    "name": "plugin-image",
+    "prefix": "modules/image",
+    "source_sha": "45393632e5df7c9015db034a9a98cf95747ab2df",
+    "imported_sha": "3fbf6f1ed9e515c85b34bd78b9a4faa466958c84",
+    "stripped_blobs": 75,
+    "tags": 0
+  },
+  {
+    "name": "plugin-draw",
+    "prefix": "modules/draw",
+    "source_sha": "b598a4fbe04f5a4257869aa69ea273e7707cb2e6",
+    "imported_sha": "ac265b005ee009441945d4a2cd54b0a5d4ba37ab",
+    "stripped_blobs": 0,
+    "tags": 0
+  },
+  {
+    "name": "plugin-sheets",
+    "prefix": "modules/sheet",
+    "source_sha": "89ae7897ba342c8579305486302a97dd352d83a6",
+    "imported_sha": "e845ecaa747d56509d1d3956b463f3f71e33b409",
+    "stripped_blobs": 0,
+    "tags": 0
+  },
+  {
+    "name": "plugin-data",
+    "prefix": "modules/data",
+    "source_sha": "11799a60401decc9ec7bfd7b14922251d847e90a",
+    "imported_sha": "7cb3a58849edb290887104b9c167f6d47fdd775b",
+    "stripped_blobs": 0,
+    "tags": 0
+  },
+  {
+    "name": "plugin-doc",
+    "prefix": "modules/doc",
+    "source_sha": "e12353e826ed5406760857727699f1bf3aa7116a",
+    "imported_sha": "9f35f59b194f9f0fe639ac2f4e5050ac2afb63ed",
+    "stripped_blobs": 0,
+    "tags": 0
+  },
+  {
+    "name": "plugin-slide",
+    "prefix": "modules/slide",
+    "source_sha": "0ff05830f86b8d4c8adf3530bc3b796a8625af2e",
+    "imported_sha": "c14d554b7b95e242681764f80e736b32539c0985",
+    "stripped_blobs": 0,
+    "tags": 0
+  },
+  {
+    "name": "plugin-web",
+    "prefix": "modules/web",
+    "source_sha": "a6369f712713c357a373e82e6fc3f2c6a110ea20",
+    "imported_sha": "5a9172287fa42b731892cf54ab29559990b9fcab",
+    "stripped_blobs": 0,
+    "tags": 0
+  },
+  {
+    "name": "editor",
+    "prefix": "apps/editor",
+    "source_sha": "5497f52556712c51327491a91947c0c8052ff1ce",
+    "imported_sha": "3fdbc7b77f51ea25b954a24aead14928c7d00811",
+    "stripped_blobs": 9,
+    "tags": 0
+  },
+  {
+    "name": "editor-server",
+    "prefix": "apps/server",
+    "source_sha": "4c594339239f4ba0f56dfbaa95cf64f5eb246c1d",
+    "imported_sha": "72ec0d67b7e6097deb4788bb51630a4d4650f26b",
+    "stripped_blobs": 0,
+    "tags": 0
+  }
+]
