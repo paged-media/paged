@@ -43,8 +43,8 @@ const decode = (s) =>
 // vitest's escapeXML: the five entities, then the characters XML 1.0 forbids
 // (and the ones it discourages) are dropped, not escaped. bun writes them
 // raw, which no XML parser accepts. Newlines stay raw, as vitest left them.
-// eslint-disable-next-line no-control-regex -- these are the control characters XML 1.0 forbids
 const INVALID =
+  // eslint-disable-next-line no-control-regex -- these are the control characters XML 1.0 forbids
   /([\0-\x08\v\f\x0E-\x1F\uFFFD\uFFFE\uFFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:[^\uD800-\uDBFF]|^)[\uDC00-\uDFFF])/g;
 const DISCOURAGED = new RegExp(
   // eslint-disable-next-line no-control-regex -- the characters XML 1.0 discourages
