@@ -767,7 +767,7 @@ name = "image-psd"
 version = "0.0.0"
 dependencies = [
  "image-core",
- "miniz_oxide 0.8.9",
+ "miniz_oxide 0.9.1",
  "thiserror",
 ]
 
