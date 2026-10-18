@@ -29,8 +29,7 @@ import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it } from "bun:test";
 
-// The generator is a plain .mjs (no .d.ts).
-// @ts-expect-error — JS module, no types; it exports pure fns and paths.
+// The generator is a plain .mjs, typed by scripts/gen-core-commands.d.mts.
 import {
   generate,
   SCHEMA,
