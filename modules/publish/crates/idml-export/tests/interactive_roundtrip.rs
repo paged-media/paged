@@ -58,7 +58,11 @@ fn an_unrelated_move_leaves_every_interactive_object_as_it_was() {
     let source = std::str::from_utf8(SPREAD).unwrap();
     let before = subtrees(source);
     assert_eq!(before.len(), 4);
-    assert_eq!(subtrees(&out), before, "every interactive subtree byte for byte");
+    assert_eq!(
+        subtrees(&out),
+        before,
+        "every interactive subtree byte for byte"
+    );
     for id in ["ude", "ue5", "ue0", "udf"] {
         assert_eq!(
             out.matches(&format!("Self=\"{id}\"")).count(),
