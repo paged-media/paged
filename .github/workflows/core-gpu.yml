@@ -79,6 +79,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ needs.toolchain.outputs.channel }}
+      - name: mold (the Rust linker on Linux, .cargo/config.toml)
+        if: runner.os == 'Linux'
+        uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: engine/core -> target

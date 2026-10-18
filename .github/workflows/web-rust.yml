@@ -42,6 +42,9 @@ jobs:
         with:
           toolchain: 1.93.0
           components: rustfmt, clippy
+      - name: mold (the Rust linker on Linux, .cargo/config.toml)
+        if: runner.os == 'Linux'
+        uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: modules/web/packages/web-render -> target
@@ -60,6 +63,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.93.0
+      - name: mold (the Rust linker on Linux, .cargo/config.toml)
+        if: runner.os == 'Linux'
+        uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: modules/web/packages/web-render -> target
@@ -84,3 +90,12 @@ jobs:
           path: modules/web/packages/web-render/target/nextest/ci/junit.xml
           if-no-files-found: error
           retention-days: 14
+      # A silent fallback to the default linker fails here: mold stamps
+      # the .comment section of what it links.
+      - name: mold linked the test binaries
+        if: runner.os == 'Linux'
+        run: |
+          bin=$(find "${CARGO_TARGET_DIR:-target}/debug/deps" -maxdepth 1 -type f -perm -u+x ! -name '*.so' | head -1)
+          test -n "$bin" || { echo "::error::no test binary in target/debug/deps"; exit 1; }
+          readelf -p .comment "$bin" | grep -q mold || { echo "::error::$bin was not linked by mold"; exit 1; }
+          echo "mold linked $bin"
