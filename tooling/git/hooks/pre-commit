@@ -1,0 +1,14 @@
+#!/bin/sh
+# The repository's pre-commit hook: bun lint, with the root config, on the
+# staged JavaScript and TypeScript files. It fixes what it can and the fixes
+# go into the commit. A file with both staged and unstaged changes is not
+# fixed: bun lint says so and the commit stops.
+#
+# Git does not install it by itself. Once per clone:
+#
+#   git config core.hooksPath tooling/git/hooks
+#
+# (`git commit --no-verify` skips it.)
+set -e
+root=$(git rev-parse --show-toplevel)
+exec "$root/tooling/js/bun-canary.sh" lint --no-script --staged --fix
