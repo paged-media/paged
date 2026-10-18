@@ -580,13 +580,12 @@ impl ColorContext {
                 Some(c) => c.clone()?,
                 None => indexed_color(i as u32)?.to_string(),
             }
-        } else if let Some(t) = a.theme.as_deref().and_then(|v| v.parse::<u32>().ok()) {
+        } else {
+            let t = a.theme.as_deref().and_then(|v| v.parse::<u32>().ok())?;
             match self.theme.as_ref().and_then(|p| p.color(t)) {
                 Some(c) => c.to_string(),
                 None => theme_color(t)?.to_string(),
             }
-        } else {
-            return None;
         };
         match a.tint.as_deref().and_then(|v| v.parse::<f64>().ok()) {
             Some(tint) => Some(apply_tint(&base, tint)),

@@ -300,10 +300,8 @@ fn scan_refs(refs: &[Arg], skip_errors: bool) -> Scan {
                             s.nums.push(n);
                             s.count_numbers += 1;
                         }
-                        CellValue::Error(e) => {
-                            if !skip_errors {
-                                s.first_error.get_or_insert(e);
-                            }
+                        CellValue::Error(e) if !skip_errors => {
+                            s.first_error.get_or_insert(e);
                         }
                         // Text / Bool / Empty: skipped for value aggregates
                         // (already counted for COUNTA above when non-blank).

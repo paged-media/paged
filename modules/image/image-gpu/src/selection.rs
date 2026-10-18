@@ -162,7 +162,7 @@ mod tests {
         assert_eq!(m.height(), 3);
         assert_eq!(m.bytes().len(), 4 * 3 * 2);
         // Every texel is the f16 bit pattern for 1.0.
-        for chunk in m.bytes().chunks_exact(2) {
+        for chunk in m.bytes().as_chunks::<2>().0 {
             assert_eq!(u16::from_le_bytes([chunk[0], chunk[1]]), ONE_F16_BITS);
         }
         for y in 0..3 {
@@ -191,7 +191,7 @@ mod tests {
     #[test]
     fn constant_zero_is_all_zeroes() {
         let m = SelectionMask::constant_zero(3, 3);
-        for chunk in m.bytes().chunks_exact(2) {
+        for chunk in m.bytes().as_chunks::<2>().0 {
             assert_eq!(u16::from_le_bytes([chunk[0], chunk[1]]), 0u16);
         }
         assert_eq!(m.weight_at(1, 1), 0.0);

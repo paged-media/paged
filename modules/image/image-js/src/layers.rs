@@ -413,7 +413,7 @@ impl Layer {
 /// clipping folds into the existing mask path rather than needing a
 /// second compositing mode.
 fn alpha_of(rgba: &[u8]) -> Vec<u8> {
-    rgba.chunks_exact(4).map(|p| p[3]).collect()
+    rgba.as_chunks::<4>().0.iter().map(|p| p[3]).collect()
 }
 
 /// The journal-scope bit that marks an entry as a MASK edit. Layer ids
@@ -439,7 +439,11 @@ pub fn mask_to_grey(mask: &SelectionCoverage) -> Arc<[u8]> {
 /// stays grey through a stroke — every paint colour on it is a grey —
 /// so red, green and blue agree and any one of them is the value.
 pub fn mask_from_grey(width: u32, height: u32, rgba: &[u8]) -> Option<SelectionCoverage> {
-    SelectionCoverage::from_data(width, height, rgba.chunks_exact(4).map(|p| p[0]).collect())
+    SelectionCoverage::from_data(
+        width,
+        height,
+        rgba.as_chunks::<4>().0.iter().map(|p| p[0]).collect(),
+    )
 }
 
 /// A layer's own coverage AND its clip base, multiplied.
@@ -498,7 +502,7 @@ fn effective_coverage(
 /// composite trivial (and therefore GPU-free) until something is
 /// actually painted into it.
 fn is_fully_transparent(rgba: &[u8]) -> bool {
-    rgba.chunks_exact(4).all(|t| t[3] == 0)
+    rgba.as_chunks::<4>().0.iter().all(|t| t[3] == 0)
 }
 
 /// The undo/redo readout the panel shows.
@@ -3107,7 +3111,7 @@ pub fn smart_render_agreement(
         let r = plate
             .rect
             .unwrap_or(Region::new(0, 0, import.width, import.height));
-        for (k, px) in plate.rgba.chunks_exact(4).enumerate() {
+        for (k, px) in plate.rgba.as_chunks::<4>().0.iter().enumerate() {
             if px[3] == 0 || r.w == 0 {
                 continue;
             }
@@ -3213,7 +3217,12 @@ pub fn cmyk_flatten_agreement(ours: &[u8], theirs: &[u8]) -> CmykFlattenAgreemen
         ((u32::from(p[c]) * a + 255 * (255 - a) + 127) / 255) as i32
     };
     let (mut n, mut off, mut shift, mut sum, mut max) = (0usize, 0usize, 0usize, 0u64, 0u32);
-    for (a, b) in ours.chunks_exact(4).zip(theirs.chunks_exact(4)) {
+    for (a, b) in ours
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(theirs.as_chunks::<4>().0)
+    {
         n += 1;
         let d = (0..3)
             .map(|c| (over_white(a, c) - over_white(b, c)).unsigned_abs())
@@ -3375,7 +3384,9 @@ mod tests {
         s.active()
             .rgba
             .to_rgba8()
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .map(|p| p[0])
             .collect()
     }
@@ -3413,7 +3424,7 @@ mod tests {
         .expect("grow");
         // Anchored right: two transparent columns on the left.
         let px = s.active().rgba.to_rgba8().into_owned();
-        let alpha: Vec<u8> = px.chunks_exact(4).map(|p| p[3]).collect();
+        let alpha: Vec<u8> = px.as_chunks::<4>().0.iter().map(|p| p[3]).collect();
         assert_eq!(alpha, vec![0, 0, 255, 255, 255, 0, 0, 255, 255, 255]);
         assert_eq!(reds(&s)[2..5], [0, 1, 2]);
         // Shrink centred: the middle column survives.
@@ -4176,7 +4187,7 @@ mod tests {
         // what we are measuring. px(8,8,0) is transparent black, so set
         // an opaque black background explicitly.
         let mut opaque_black = vec![0u8; 8 * 8 * 4];
-        for p in opaque_black.chunks_exact_mut(4) {
+        for p in opaque_black.as_chunks_mut::<4>().0 {
             p[3] = 255;
         }
         s.edit_active(
@@ -4190,7 +4201,7 @@ mod tests {
             .expect("unlocked");
         s.set_opacity(1, 0.5).expect("in range");
         let out = pollster::block_on(s.composite(Some(ctx), None)).expect("composite");
-        for t in out.chunks_exact(4) {
+        for t in out.as_chunks::<4>().0 {
             assert!(
                 (t[0] as i32 - 128).abs() <= 2,
                 "50% white over black should be ~128, got {}",
@@ -4206,7 +4217,7 @@ mod tests {
         let mut s = LayerStack::from_image(8, 8, px(8, 8, 255)).expect("valid");
         s.add("Half");
         let mut half = vec![128u8; 8 * 8 * 4];
-        for p in half.chunks_exact_mut(4) {
+        for p in half.as_chunks_mut::<4>().0 {
             p[3] = 255;
         }
         s.edit_active(
@@ -4217,7 +4228,7 @@ mod tests {
         .expect("unlocked");
         s.set_blend(1, "multiply").expect("registered");
         let out = pollster::block_on(s.composite(Some(ctx), None)).expect("composite");
-        for t in out.chunks_exact(4) {
+        for t in out.as_chunks::<4>().0 {
             assert!(
                 (t[0] as i32 - 128).abs() <= 2,
                 "white × 50% grey is 50% grey, got {}",
@@ -4257,7 +4268,7 @@ mod tests {
         let (w, h) = (64u32, 64u32);
         // An OPAQUE photo layer, so the composite is well defined.
         let mut photo = vec![0u8; (w * h * 4) as usize];
-        for p in photo.chunks_exact_mut(4) {
+        for p in photo.as_chunks_mut::<4>().0 {
             p[0] = 40;
             p[1] = 90;
             p[2] = 160;
@@ -4322,7 +4333,7 @@ mod tests {
         let mut s = stack(300, 200);
         let before = s.active().rgba.to_rgba8().into_owned();
         let mut painted = before.clone();
-        for p in painted.chunks_exact_mut(4) {
+        for p in painted.as_chunks_mut::<4>().0 {
             p[0] = 200;
         }
         s.edit_active(
@@ -4547,7 +4558,7 @@ mod tests {
         s.set_clipped(at, true).expect("clip the adjustment too");
         let out = pollster::block_on(s.composite(Some(ctx), None)).expect("composite");
         assert!(
-            out.chunks_exact(4).all(|p| p[3] == 0),
+            out.as_chunks::<4>().0.iter().all(|p| p[3] == 0),
             "everything was clipped to nothing, so nothing shows"
         );
     }
@@ -4967,7 +4978,7 @@ mod tests {
         let out = pollster::block_on(s.composite(Some(ctx), None)).expect("composite");
 
         let mut seen = [false; 256];
-        for px in out.chunks_exact(4) {
+        for px in out.as_chunks::<4>().0 {
             seen[px[0] as usize] = true;
         }
         let levels = seen.iter().filter(|b| **b).count();
@@ -5062,7 +5073,9 @@ mod tests {
         let m = SelectionCoverage::from_data(8, 8, data.clone()).expect("mask");
         let grey = mask_to_grey(&m);
         assert!(grey
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .all(|p| p[0] == p[1] && p[1] == p[2] && p[3] == 255));
         assert_eq!(mask_from_grey(8, 8, &grey).expect("back").data(), &data[..]);
         assert_ne!(mask_scope(7), 7, "a mask scope never equals a pixel scope");
@@ -5157,7 +5170,10 @@ mod tests {
         s.add_mask(1, false).expect("hide all");
         s.set_edit_target(1, true).expect("target");
         let hidden = pollster::block_on(s.composite(Some(ctx), None)).expect("composite");
-        assert!(hidden.chunks_exact(4).all(|p| p[0] == 128), "fully hidden");
+        assert!(
+            hidden.as_chunks::<4>().0.iter().all(|p| p[0] == 128),
+            "fully hidden"
+        );
 
         let mut p = crate::stroke::StrokeParams::defaults(crate::stroke::StrokeTool::Eraser);
         p.size = 8.0;

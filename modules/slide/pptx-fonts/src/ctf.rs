@@ -208,7 +208,7 @@ fn hdmx(data: &[u8], dir: &[sfnt::Table<'_>], num_glyphs: usize) -> Result<Vec<u
     out.extend_from_slice(&version.to_be_bytes());
     out.extend_from_slice(&(records as u16).to_be_bytes());
     out.extend_from_slice(&(record_size as u32).to_be_bytes());
-    for rec in heads.chunks_exact(2) {
+    for rec in heads.as_chunks::<2>().0 {
         let (ppem, max_width) = (rec[0] as i64, rec[1]);
         let start = out.len();
         out.extend_from_slice(&[rec[0], max_width]);

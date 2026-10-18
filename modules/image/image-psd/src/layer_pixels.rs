@@ -1549,7 +1549,7 @@ impl PsdFile {
         let rect_rgba: Vec<u8> = match ink_to_rgba8 {
             Some(convert) if cmyk => {
                 let mut ink = vec![0u8; plane_len * 4];
-                for (i, px) in ink.chunks_exact_mut(4).enumerate() {
+                for (i, px) in ink.as_chunks_mut::<4>().0.iter_mut().enumerate() {
                     for c in 0..4 {
                         px[c] = 255 - planes[c][i];
                     }
@@ -1568,7 +1568,7 @@ impl PsdFile {
             }
             _ => {
                 let mut out = vec![0u8; plane_len * 4];
-                for (i, px) in out.chunks_exact_mut(4).enumerate() {
+                for (i, px) in out.as_chunks_mut::<4>().0.iter_mut().enumerate() {
                     px[0] = planes[0][i];
                     px[1] = planes[1][i];
                     px[2] = planes[2][i];

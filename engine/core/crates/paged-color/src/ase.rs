@@ -121,7 +121,7 @@ impl<'a> Reader<'a> {
         let units = self.u16()? as usize;
         let raw = self.take(units * 2)?;
         let mut points = Vec::with_capacity(units.saturating_sub(1));
-        for ch in raw.chunks_exact(2) {
+        for ch in raw.as_chunks::<2>().0 {
             points.push(u16::from_be_bytes([ch[0], ch[1]]));
         }
         // Strip the trailing null (and tolerate its absence).

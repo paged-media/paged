@@ -237,7 +237,7 @@ impl VmArray {
                     )));
                 }
                 let mut out = Vec::with_capacity(pixels as usize);
-                for chunk in self.data[..need].chunks_exact(2) {
+                for chunk in self.data[..need].as_chunks::<2>().0 {
                     out.push(u16::from_be_bytes([chunk[0], chunk[1]]));
                 }
                 Ok(VmSamples::Sixteen(out))

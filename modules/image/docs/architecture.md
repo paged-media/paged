@@ -9,7 +9,7 @@ applies. Paths are relative to the repository root.
 ## Layout and crates
 
 Two workspaces sit side by side at the root; there is no `crates/` or `packages/` folder.
-The Cargo workspace has ten crates (toolchain 1.93.0); the pnpm workspace has two packages,
+The Cargo workspace has ten crates (toolchain 1.99.1); the pnpm workspace has two packages,
 `glue/` and `manifest/`. `registry/` holds five YAML files that record sources, tolerances
 and tests per kernel, PSD block, codec, colour lane and brush-file block;
 `registry/kernels.yaml` is also build input. `references/` is gitignored (third-party

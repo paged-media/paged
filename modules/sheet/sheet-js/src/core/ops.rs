@@ -92,6 +92,16 @@ fn validate_sheet_name(name: &str) -> Result<(), SessionError> {
     Ok(())
 }
 
+/// [`drop_sheet_refs`] over every expression. Each one must be rewritten, so this does not
+/// stop at the first that reports a replaced reference.
+fn drop_sheet_refs_all<'a>(exprs: impl Iterator<Item = &'a mut Expr>, gone: SheetId) -> bool {
+    let mut replaced = false;
+    for e in exprs {
+        replaced |= drop_sheet_refs(e, gone);
+    }
+    replaced
+}
+
 /// Rewrite the sheet ids an expression references after sheet `gone` is
 /// deleted: references INTO it become `#REF!`, later sheets shift down.
 /// Returns whether a reference to the deleted sheet was replaced.
@@ -125,17 +135,11 @@ fn drop_sheet_refs(e: &mut Expr, gone: SheetId) -> bool {
             let x = drop_sheet_refs(a, gone);
             drop_sheet_refs(b, gone) || x
         }
-        Expr::Func(_, args) => args
-            .iter_mut()
-            .fold(false, |acc, a| drop_sheet_refs(a, gone) || acc),
-        Expr::Array(rows) => rows
-            .iter_mut()
-            .flatten()
-            .fold(false, |acc, a| drop_sheet_refs(a, gone) || acc),
+        Expr::Func(_, args) => drop_sheet_refs_all(args.iter_mut(), gone),
+        Expr::Array(rows) => drop_sheet_refs_all(rows.iter_mut().flatten(), gone),
         Expr::Call(callee, args) => {
             let x = drop_sheet_refs(callee, gone);
-            args.iter_mut()
-                .fold(x, |acc, a| drop_sheet_refs(a, gone) || acc)
+            drop_sheet_refs_all(args.iter_mut(), gone) || x
         }
         Expr::Lit(_) | Expr::Name(_) | Expr::StructuredRef(_) | Expr::Local(_) | Expr::Missing => {
             false

@@ -358,7 +358,7 @@ fn decode_planes(file: &PsdFile) -> Result<Vec<Vec<u8>>> {
                     } else {
                         // BIG-ENDIAN 16-bit samples; the high byte IS
                         // the 8-bit value.
-                        plane.chunks_exact(2).map(|s| s[0]).collect()
+                        plane.as_chunks::<2>().0.iter().map(|s| s[0]).collect()
                     }
                 })
                 .collect())

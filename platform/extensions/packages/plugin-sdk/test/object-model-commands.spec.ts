@@ -186,6 +186,37 @@ describe("core commands on the real engine", () => {
     expect(await h.objects.get(frame, "itemName")).toEqual(value("on the new page"));
   });
 
+  it("structure: two page inserts in one batch — each command names the page it made", async () => {
+    const { h } = await boot();
+    // Both go right after page 1, so the second one ends up FIRST in the
+    // document: the pages new since the batch, in document order, would
+    // hand each command the other's page.
+    const r = await h.objects.batch([
+      { op: "invoke", command: "core.insertPage", args: { afterPageId: "page:#1", handle: "a" } },
+      { op: "invoke", command: "core.insertPage", args: { afterPageId: "page:#1", handle: "b" } },
+    ]);
+    expect(r, r.reason).toMatchObject({ applied: true, undoSteps: 1 });
+    const pages = await h.objects.query("page");
+    expect(pages).toHaveLength(3);
+    expect(r.commands![0]!.created).toEqual([pages[2]]);
+    expect(r.commands![1]!.created).toEqual([pages[1]]);
+    // The outcome names them, in creation order.
+    const outcome = r.outcome!;
+    expect(outcome.applied && outcome.createdPages?.map((id) => `page:${id}`)).toEqual([pages[2], pages[1]]);
+  });
+
+  it("the host's mutate outcome names the pages a write created, and only then", async () => {
+    const { h } = await boot();
+    const [first] = (await h.host.document.collection<{ selfId: string }>("pages")).map((p) => p.selfId);
+    const made = await h.host.document.mutate({ op: "duplicatePage", args: { page: first! } });
+    expect(made.applied).toBe(true);
+    const pages = (await h.host.document.collection<{ selfId: string }>("pages")).map((p) => p.selfId);
+    expect(made.applied && made.createdPages).toEqual(pages.filter((p) => p !== first));
+    const moved = await h.host.document.mutate({ op: "movePage", args: { page: pages[1]!, after: null } });
+    expect(moved.applied).toBe(true);
+    expect(moved.applied && "createdPages" in moved, "a move creates nothing").toBe(false);
+  });
+
   it("structure: duplicate elements, group, z-order, layer insert — addresses in, addresses out", async () => {
     const { h, frame } = await boot();
     const dup = (await h.objects.invoke("core.duplicateElements", { elementIds: [frame, "rectangle:urect"], offset: [10, 10] })) as {

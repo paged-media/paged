@@ -105,7 +105,7 @@ impl Lcg {
 fn rand_tile(rng: &mut Lcg, seed: u64) -> Arc<[u8]> {
     let mut v = vec![0u8; TILE_BYTES];
     let base = (seed % 251) as f32 * 0.003;
-    for (i, px) in v.chunks_exact_mut(8).enumerate() {
+    for (i, px) in v.as_chunks_mut::<8>().0.iter_mut().enumerate() {
         // Per-texel value in [0,1); RGB vary, alpha kept at 1.0 so the
         // premultiplied compose path is well-conditioned.
         let f = half::f16::from_f32(((i as u64 % 89) as f32 / 89.0 + base + rng_bit(rng)).fract());

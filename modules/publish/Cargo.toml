@@ -7,7 +7,7 @@ members = ["crates/pdf-import"]
 [workspace.package]
 version = "0.0.0"
 edition = "2021"
-rust-version = "1.92"
+rust-version = "1.99"
 license = "AGPL-3.0-only OR LicenseRef-PMEL"
 publish = false
 

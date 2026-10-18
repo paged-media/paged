@@ -141,7 +141,12 @@ impl CmykTransform for MoxcmsCmyk8 {
         self.transform
             .transform(cmyk, &mut rgb)
             .expect("moxcms CMYK8→RGB8: caller-checked 4·n / 3·n lengths cannot fail");
-        for (px, src) in rgba.chunks_exact_mut(4).zip(rgb.chunks_exact(3)) {
+        for (px, src) in rgba
+            .as_chunks_mut::<4>()
+            .0
+            .iter_mut()
+            .zip(rgb.as_chunks::<3>().0)
+        {
             px[0] = src[0];
             px[1] = src[1];
             px[2] = src[2];

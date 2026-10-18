@@ -55,7 +55,9 @@ fn rgba8_to_f16(rgba: &[u8]) -> Vec<u8> {
 
 fn f16_to_rgba8(bytes: &[u8]) -> Vec<u8> {
     bytes
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|p| {
             let v = half::f16::from_le_bytes([p[0], p[1]]).to_f32();
             (v.clamp(0.0, 1.0) * 255.0).round() as u8
@@ -229,8 +231,10 @@ fn incremental_stroke_equals_from_scratch_over_seeded_tapes__feat__image_editor_
         let full = from_scratch(ctx, &t, &b);
         if inc != full {
             let bad = inc
-                .chunks_exact(4)
-                .zip(full.chunks_exact(4))
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .zip(full.as_chunks::<4>().0)
                 .filter(|(a, b)| a != b)
                 .count();
             let worst = inc

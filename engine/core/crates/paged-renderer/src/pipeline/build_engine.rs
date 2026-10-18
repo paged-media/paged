@@ -4364,7 +4364,7 @@ impl<'a> StoryEmitter<'a> {
                     .get(page)
                     .copied()
                     .flatten()
-                    .map_or(usize::MAX, |s| s),
+                    .unwrap_or(usize::MAX),
             ),
         }
     }
@@ -5655,7 +5655,7 @@ impl<'a> StoryEmitter<'a> {
                 .push((i, start, end, shape));
         }
         for (page_idx, mut entries) in per_page {
-            entries.sort_by(|a, b| b.1.cmp(&a.1));
+            entries.sort_by_key(|a| std::cmp::Reverse(a.1));
             for (frame_idx, start, end, shape) in entries {
                 let page = &mut pages[page_idx];
                 // Build a closed clip path: one MoveTo/LineTo*/Close
@@ -5748,7 +5748,7 @@ impl<'a> StoryEmitter<'a> {
             ));
         }
         for (page_idx, mut entries) in per_page {
-            entries.sort_by(|a, b| b.1.cmp(&a.1));
+            entries.sort_by_key(|a| std::cmp::Reverse(a.1));
             for (frame_idx, start, end, clips) in entries {
                 let page = &mut pages[page_idx];
                 // End-then-start splice order so the start inserts
@@ -5979,7 +5979,7 @@ impl<'a> StoryEmitter<'a> {
         // Splice in reverse start-order per page so earlier ranges
         // stay valid.
         for (page_idx, mut entries) in per_page {
-            entries.sort_by(|a, b| b.start.cmp(&a.start));
+            entries.sort_by_key(|a| std::cmp::Reverse(a.start));
             for e in entries {
                 let (start, end) = (e.start, e.end);
                 let page = &mut pages[page_idx];

@@ -123,7 +123,7 @@ pub fn stats_of(rgba: &[u8], channel: Channel) -> Option<ChannelStats> {
     let mut max = u8::MIN;
     let mut sum: u64 = 0;
     let mut count: u64 = 0;
-    for px in rgba.chunks_exact(4) {
+    for px in rgba.as_chunks::<4>().0 {
         let v = channel.value_at(px);
         min = min.min(v);
         max = max.max(v);
@@ -145,7 +145,9 @@ pub fn stats_of(rgba: &[u8], channel: Channel) -> Option<ChannelStats> {
 /// conversion or thresholding happens: a 50%-grey channel becomes a
 /// 50%-selected region, which is what a luminosity mask means.
 pub fn channel_bytes(rgba: &[u8], channel: Channel) -> Vec<u8> {
-    rgba.chunks_exact(4)
+    rgba.as_chunks::<4>()
+        .0
+        .iter()
         .map(|px| channel.value_at(px))
         .collect()
 }
@@ -189,7 +191,7 @@ pub fn readout(rgba: &[u8]) -> (image_gpu::RgbaLumaHistogram, String) {
     let mut hist = image_gpu::RgbaLumaHistogram::default();
     let mut alpha = [0u32; 256];
     let mut luma709 = [0u32; 256];
-    for px in rgba.chunks_exact(4) {
+    for px in rgba.as_chunks::<4>().0 {
         let (r, g, b) = (px[0], px[1], px[2]);
         hist.r[r as usize] += 1;
         hist.g[g as usize] += 1;

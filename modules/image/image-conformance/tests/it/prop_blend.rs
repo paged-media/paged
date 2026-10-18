@@ -259,7 +259,9 @@ fn gpu(def: &'static KernelDef, a: &[Px], b: &[Px], opacity: f32) -> Option<Vec<
     )
     .expect("compose dispatch");
     Some(
-        out.chunks_exact(8)
+        out.as_chunks::<8>()
+            .0
+            .iter()
             .map(|t| std::array::from_fn(|c| u16::from_le_bytes([t[c * 2], t[c * 2 + 1]])))
             .collect(),
     )
