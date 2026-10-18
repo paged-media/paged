@@ -1,0 +1,40 @@
+# Cargo settings for every Rust workspace in this repository (engine/core,
+# modules/*, apps/server, …). Cargo reads this file from the current directory
+# upwards, so it applies wherever a build starts below the root.
+# Why each setting is here, and how much it saves: docs/development/rust-builds.md.
+#
+# Linkers and wrappers are set with `linker` / `rustc-wrapper`, never with
+# `rustflags`: a RUSTFLAGS environment variable (CI sets `-Dwarnings`) replaces
+# config rustflags instead of adding to them, and would silently drop them.
+# Relative program paths here resolve against the repository root.
+
+[build]
+# sccache when it is installed, plain rustc otherwise.
+rustc-wrapper = "tooling/rust/rustc-wrapper"
+
+# macOS: link with the toolchain's own lld (ships with every rustup toolchain),
+# Apple's ld when it is missing. Linux: mold when installed (CI installs it).
+# wasm32 keeps rust-lld.
+[target.aarch64-apple-darwin]
+linker = "tooling/rust/cc-lld"
+
+[target.x86_64-apple-darwin]
+linker = "tooling/rust/cc-lld"
+
+[target.x86_64-unknown-linux-gnu]
+linker = "tooling/rust/cc-mold"
+
+[target.aarch64-unknown-linux-gnu]
+linker = "tooling/rust/cc-mold"
+
+# Debug and test builds. The opt-level and codegen-units values are Cargo's
+# defaults, stated so the whole profile reads in one place.
+[profile.dev]
+opt-level = 0
+debug = 1 # limited: line tables and functions, no variables; smaller, faster links
+codegen-units = 256
+
+# Dependencies are compiled once and then reused, so they get optimised; the
+# workspace's own crates stay at opt-level 0 for fast rebuilds.
+[profile.dev.package."*"]
+opt-level = 2

@@ -47,6 +47,9 @@ jobs:
         with:
           # Pinned from rust-toolchain.toml via the toolchain job (B21).
           toolchain: ${{ needs.toolchain.outputs.channel }}
+      - name: mold (the Rust linker on Linux, .cargo/config.toml)
+        if: runner.os == 'Linux'
+        uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: engine/core -> target

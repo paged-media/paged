@@ -349,6 +349,9 @@ jobs:
 
       - name: rust toolchain (for paged-gen)
         uses: dtolnay/rust-toolchain@stable
+      - name: mold (the Rust linker on Linux, .cargo/config.toml)
+        if: runner.os == 'Linux'
+        uses: rui314/setup-mold@v1
 
       # Covers BOTH rust builds this job does: paged-gen (fixtures) and the
       # paged.doc engine wasm. Without plugin-doc/target in here the doc
