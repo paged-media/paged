@@ -323,7 +323,9 @@ describe("12 — indexed paths", () => {
     expect(checkSchemaRows([{ path: "a..b", type: { kind: "number" } }])).toMatch(/not a row path/);
     expect(checkSchemaRows([{ path: "a[", type: { kind: "number" } }])).toMatch(/not a row path/);
     const cli = readFileSync(fileURLToPath(new URL("../../plugin-cli/bin/paged-plugin.mjs", import.meta.url)), "utf8");
-    expect(cli).toContain(`const ROW_PATH = /${ROW_PATH.source}/;`);
+    // The CLI's copy of the regex, whatever the line layout (the formatter
+    // may put a long literal on the line after the `=`).
+    expect(cli.replace(/const ROW_PATH =\s+\//, "const ROW_PATH = /")).toContain(`const ROW_PATH = /${ROW_PATH.source}/;`);
 
     const h = (live = await createHeadlessHost({ console: silent }));
     await h.load(minimalIdml());
