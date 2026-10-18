@@ -1,0 +1,64 @@
+{
+  "id": "media.paged.slide",
+  "name": "paged.slide",
+  "version": "0.1.0",
+  "apiVersion": "^0.2",
+  "publisher": "paged.media",
+  "capabilities": {
+    "document": {
+      "read": "broad",
+      "write": "broad",
+      "readNative": true,
+      "openNative": true
+    },
+    "clipboard": "none",
+    "assets": ["fonts"],
+    "wasm": [
+      {
+        "name": "slide-engine",
+        "path": "bin/slide_js_bg.wasm",
+        "purpose": "compute",
+        "maxBytes": 8388608
+      }
+    ],
+    "documents": { "open": true }
+  },
+  "contributes": {
+    "importers": ["media.paged.slide.importer.pptx"],
+    "exporters": ["media.paged.slide.exporter.pptx"],
+    "panels": [
+      "media.paged.slide.panel.slides",
+      "media.paged.slide.panel.notes",
+      "media.paged.slide.panel.slide",
+      "media.paged.slide.panel.transition",
+      "media.paged.slide.panel.placeholder",
+      "media.paged.slide.panel.deck"
+    ],
+    "partTypes": [
+      { "type": "pptx", "role": "source", "format": "opc", "linkable": false },
+      { "type": "slideImport", "role": "derived", "format": "json" }
+    ],
+    "objectModel": {
+      "kinds": [
+        { "kind": "deck", "title": "Deck", "schema": "schema/deck.json" },
+        { "kind": "slide", "title": "Slide", "schema": "schema/slide.json" },
+        { "kind": "layout", "title": "Slide layout", "schema": "schema/layout.json" },
+        { "kind": "placeholder", "title": "Placeholder", "schema": "schema/placeholder.json" }
+      ],
+      "commands": [
+        {
+          "id": "media.paged.slide.newSlide",
+          "title": "New slide",
+          "args": "schema/new-slide.args.json",
+          "result": "schema/new-slide.result.json"
+        },
+        {
+          "id": "media.paged.slide.importPptx",
+          "title": "Open a PowerPoint deck",
+          "args": "schema/import-pptx.args.json",
+          "result": "schema/import-pptx.result.json"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,223 @@
+/*
+ * This file is part of paged (https://paged.media).
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// The typed engine facade. The Rust wasm (slide-js) does all the PPTX work:
+// OPC and PresentationML reading, inheritance, geometry, the IDML package.
+// This file only boots it and types its JSON report (CLAUDE.md hard rule:
+// no PresentationML semantics in TypeScript).
+//
+// Boot: the artifact is the wasm-bindgen `--target web` glue
+// (bin/slide_js.js + bin/slide_js_bg.wasm, built by scripts/build-wasm.sh).
+// It is loaded in the bundle's realm like @paged-media/canvas-wasm, branching
+// browser and Node like plugin-sdk's wasm-loader; until it is built the
+// dynamic import rejects and boot says so.
+
+const ENGINE_NOT_BUILT = "paged.slide engine wasm not built: run scripts/build-wasm.sh";
+
+/** A DrawingML transition as the deck wrote it (pptx-core `Transition`). */
+export interface Transition {
+  xml: string;
+  kind: string | null;
+  dir: string | null;
+  speed: string | null;
+  duration_ms: number | null;
+  advance_on_click: boolean | null;
+  advance_after_ms: number | null;
+}
+
+/** A slide's top-level item: the page element it became. */
+export interface ItemReport {
+  name: string;
+  kind: "polygon" | "rectangle" | "textFrame" | "group";
+  id: string;
+  /** Page-space bounds of its outline (l, t, r, b), pt. */
+  bounds: [number, number, number, number];
+  shapeId: number;
+  placeholder: [string, number | null] | null;
+}
+
+/** One slide, by the page id it opened as. */
+export interface SlideReport {
+  pageId: string;
+  part: string;
+  hidden: boolean;
+  notes: string | null;
+  transition: Transition | null;
+  timingXml: string | null;
+  items: ItemReport[];
+}
+
+/** A face the deck embeds (slide-js `FaceReport`): a style of one of its
+ *  typefaces, and whether the document may use it (`editable`) or why not. */
+export interface EmbeddedFaceReport {
+  /** The typeface the deck's text names. */
+  family: string;
+  /** `Regular`, `Bold`, `Italic` or `Bold Italic` (a run's FontStyle). */
+  style: string;
+  part: string;
+  use: "editable" | "previewAndPrint" | "restricted" | "bitmapOnly" | "sitesOnly" | "unreadable" | "missing";
+  /** OS/2 fsType (the embedding permissions), when the part was read. */
+  fsType: number | null;
+  /** The face holds only the glyphs the deck uses. */
+  subset: boolean;
+  /** Where the decoded face sits in the fonts bytes (length 0: not used). */
+  offset: number;
+  length: number;
+}
+
+/** What an import produced beside the package (slide-js `Report`). */
+export interface ImportReport {
+  width: number;
+  height: number;
+  slides: SlideReport[];
+  fonts: string[];
+  embeddedFonts: EmbeddedFaceReport[];
+  diagnostics: string[];
+}
+
+export interface Imported {
+  idml: Uint8Array;
+  report: ImportReport;
+  /** The decoded embedded faces, one after the other (see
+   *  `EmbeddedFaceReport.offset`). */
+  fonts: Uint8Array;
+}
+
+/** A deck's embedded faces, decoded without importing it. */
+export interface DeckFonts {
+  faces: EmbeddedFaceReport[];
+  diagnostics: string[];
+  data: Uint8Array;
+}
+
+interface WasmImported {
+  readonly idml: Uint8Array;
+  readonly report: string;
+  readonly fonts: Uint8Array;
+  free(): void;
+}
+
+interface WasmDeckFonts {
+  readonly report: string;
+  readonly data: Uint8Array;
+  free(): void;
+}
+
+interface WasmExported {
+  readonly bytes: Uint8Array;
+  readonly diagnostics: string;
+  free(): void;
+}
+
+/** A written deck and what it could not carry (slide-js `ExportedDeck`). */
+export interface ExportedDeck {
+  bytes: Uint8Array;
+  diagnostics: string[];
+}
+
+/** One page of the document, as export sees it (pptx-export `SlidePlan`). */
+export interface SlidePlan {
+  sourcePart: string;
+  hidden: boolean;
+  notes: string | null;
+  contentEdited: boolean;
+}
+
+interface SlideWasmModule {
+  default(init: { module_or_path: string | URL | BufferSource | WebAssembly.Module }): Promise<unknown>;
+  initSync(module: { module: BufferSource | WebAssembly.Module }): unknown;
+  importPptx(bytes: Uint8Array, name: string): WasmImported;
+  embeddedFonts(bytes: Uint8Array): WasmDeckFonts;
+  exportPptx(original: Uint8Array, plan: string): WasmExported;
+}
+
+let booted: Promise<SlideWasmModule> | null = null;
+
+/** The engine, booted once per realm. */
+export async function slideEngine(): Promise<SlideEngine> {
+  booted ??= loadModule();
+  try {
+    return new SlideEngine(await booted);
+  } catch (err) {
+    booted = null;
+    throw err;
+  }
+}
+
+export class SlideEngine {
+  constructor(private readonly mod: SlideWasmModule) {}
+
+  /** Read a `.pptx` into the IDML package of its native slides. Throws with
+   *  the engine's message when the file is not a presentation. */
+  importPptx(bytes: Uint8Array, name: string): Imported {
+    const out = this.mod.importPptx(bytes, name);
+    try {
+      return { idml: out.idml, report: JSON.parse(out.report) as ImportReport, fonts: out.fonts };
+    } finally {
+      out.free();
+    }
+  }
+
+  /** Decode a deck's embedded faces without importing it (a document
+   *  reopened from the source deck it keeps). */
+  embeddedFonts(bytes: Uint8Array): DeckFonts {
+    const out = this.mod.embeddedFonts(bytes);
+    try {
+      const { faces, diagnostics } = JSON.parse(out.report) as Omit<DeckFonts, "data">;
+      return { faces, diagnostics, data: out.data };
+    } finally {
+      out.free();
+    }
+  }
+
+  /** Write a `.pptx` from the deck the document was imported from and its
+   *  slides in page order. */
+  exportPptx(original: Uint8Array, slides: readonly SlidePlan[]): ExportedDeck {
+    const out = this.mod.exportPptx(original, JSON.stringify({ slides }));
+    try {
+      return { bytes: out.bytes, diagnostics: JSON.parse(out.diagnostics) as string[] };
+    } finally {
+      out.free();
+    }
+  }
+}
+
+function isNode(): boolean {
+  return typeof process !== "undefined" && process.versions?.node != null;
+}
+
+async function loadModule(): Promise<SlideWasmModule> {
+  let mod: SlideWasmModule;
+  try {
+    // @ts-ignore: built by scripts/build-wasm.sh, absent from the source tree.
+    mod = (await import("../bin/slide_js.js")) as SlideWasmModule;
+  } catch (cause) {
+    throw new Error(ENGINE_NOT_BUILT, { cause });
+  }
+  if (isNode()) {
+    const { readFile } = await import("node:fs/promises");
+    const { fileURLToPath } = await import("node:url");
+    const bytes = await readFile(fileURLToPath(new URL("../bin/slide_js_bg.wasm", import.meta.url)));
+    mod.initSync({ module: new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength) });
+  } else {
+    // @ts-ignore: `?url` is a bundler affordance (the editor's wasm convention).
+    const wasmUrl = (await import("../bin/slide_js_bg.wasm?url")) as { default: string };
+    await mod.default({ module_or_path: wasmUrl.default });
+  }
+  return mod;
+}

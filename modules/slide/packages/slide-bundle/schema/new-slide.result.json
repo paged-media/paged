@@ -1,0 +1,1 @@
+{ "kind": "struct", "fields": { "slide": { "kind": "ref", "to": "plugin:media.paged.slide/slide" } } }

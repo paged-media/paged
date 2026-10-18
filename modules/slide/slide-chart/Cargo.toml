@@ -1,0 +1,15 @@
+[package]
+name = "slide-chart"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "paged.slide: DrawingML charts laid out as PowerPoint draws them, from their cached values."
+
+[lints]
+workspace = true
+
+[dependencies]
+pptx-core.workspace = true
+serde.workspace = true

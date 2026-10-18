@@ -1,0 +1,8 @@
+{
+  "kind": "struct",
+  "fields": {
+    "slides": { "kind": "list", "of": { "kind": "ref", "to": "plugin:media.paged.slide/slide" } },
+    "fonts": { "kind": "list", "of": { "kind": "text" } },
+    "diagnostics": { "kind": "list", "of": { "kind": "text" } }
+  }
+}

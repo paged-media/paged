@@ -1,0 +1,19 @@
+{
+  "name": "paged-media-plugin-slide",
+  "private": true,
+  "version": "0.0.0",
+  "license": "AGPL-3.0-only OR LicenseRef-PMEL",
+  "type": "module",
+  "packageManager": "pnpm@10.28.0",
+  "scripts": {
+    "typecheck": "pnpm -r run typecheck",
+    "lint:contract": "node scripts/check-contract-imports.mjs",
+    "test": "node scripts/check-contract-imports.mjs && pnpm -r run test",
+    "build:wasm": "bash scripts/build-wasm.sh",
+    "validate:manifest": "node ../plugin-sdk/packages/plugin-cli/bin/paged-plugin.mjs validate packages/slide-bundle/manifest.json"
+  },
+  "devDependencies": {
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
+  }
+}

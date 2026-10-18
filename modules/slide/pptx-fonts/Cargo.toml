@@ -1,0 +1,19 @@
+[package]
+name = "pptx-fonts"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "paged.slide: a deck's embedded fonts: the Embedded OpenType container, MicroType Express decompression and the embedding permissions."
+
+[lints]
+workspace = true
+
+[dependencies]
+thiserror.workspace = true
+
+[dev-dependencies]
+# Parses the decoded faces back in tests (never in the wasm).
+skrifa = "0.42"
+zip.workspace = true

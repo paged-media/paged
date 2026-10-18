@@ -1,0 +1,79 @@
+{
+ "slides": 1,
+ "powerpoint": "16.113.4",
+ "file": "fonts-full.pptx",
+ "shapes": {
+  "1": [
+   {
+    "index": 1,
+    "name": "Face 1",
+    "left": 30.0,
+    "top": 20.0,
+    "width": 900.0,
+    "height": 80.0,
+    "rotation": 0.0,
+    "type": "auto",
+    "autosize": "ppAutoSizeNone",
+    "word_wrap": "true",
+    "first_run_size_pt": 16.0,
+    "paragraphs": 3
+   },
+   {
+    "index": 2,
+    "name": "Face 2",
+    "left": 30.0,
+    "top": 105.0,
+    "width": 900.0,
+    "height": 80.0,
+    "rotation": 0.0,
+    "type": "auto",
+    "autosize": "ppAutoSizeNone",
+    "word_wrap": "true",
+    "first_run_size_pt": 16.0,
+    "paragraphs": 3
+   },
+   {
+    "index": 3,
+    "name": "Face 3",
+    "left": 30.0,
+    "top": 190.0,
+    "width": 900.0,
+    "height": 80.0,
+    "rotation": 0.0,
+    "type": "auto",
+    "autosize": "ppAutoSizeNone",
+    "word_wrap": "true",
+    "first_run_size_pt": 16.0,
+    "paragraphs": 3
+   },
+   {
+    "index": 4,
+    "name": "Face 4",
+    "left": 30.0,
+    "top": 275.0,
+    "width": 900.0,
+    "height": 80.0,
+    "rotation": 0.0,
+    "type": "auto",
+    "autosize": "ppAutoSizeNone",
+    "word_wrap": "true",
+    "first_run_size_pt": 16.0,
+    "paragraphs": 3
+   },
+   {
+    "index": 5,
+    "name": "Face 5",
+    "left": 30.0,
+    "top": 360.0,
+    "width": 900.0,
+    "height": 80.0,
+    "rotation": 0.0,
+    "type": "auto",
+    "autosize": "ppAutoSizeNone",
+    "word_wrap": "true",
+    "first_run_size_pt": 16.0,
+    "paragraphs": 3
+   }
+  ]
+ }
+}

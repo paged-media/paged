@@ -1,0 +1,62 @@
+# cargo-deny configuration for paged.slide.
+# Run:  cargo deny check          (CI runs `check licenses bans sources`)
+#
+# This doubles as the SDK-only rule's Rust half: [sources] denies unknown
+# registries/git, so a path/git reach-around into core/editor internals — or
+# into another plugin — cannot land silently. paged.slide has NO core dependency;
+# the only third-party OOXML code is the vendored `ooxmlsdk` (MIT OR Apache-2.0).
+
+[advisories]
+version = 2
+ignore = [
+    # zip 8.6.0 reaches this workspace only through `ooxmlsdk` 0.12.0 (its
+    # `parts` feature, which `mce` requires); no ooxmlsdk release has moved to
+    # zip >= 9 yet (0.13.2 still requires zip ^8.6). The workspace's own zip
+    # dependency is zip 9. All three advisories (2026-10-09/10) are about
+    # `ZipArchive::extract` / `ZipStreamReader::extract` writing an archive to
+    # the file system (SUID/SGID bits kept, symlinks escaping the destination,
+    # permissions applied through symlinks). Neither this workspace nor
+    # ooxmlsdk 0.12.0 calls either function: the workspace uses ooxmlsdk only
+    # for its typed part DOM, and ooxmlsdk's own package code reads entries
+    # one by one. Remove these three when ooxmlsdk depends on zip >= 9.
+    # Recorded 2026-10-17.
+    { id = "RUSTSEC-2026-0367", reason = "zip 8 via ooxmlsdk only; extract() is never called" },
+    { id = "RUSTSEC-2026-0368", reason = "zip 8 via ooxmlsdk only; extract() is never called" },
+    { id = "RUSTSEC-2026-0369", reason = "zip 8 via ooxmlsdk only; extract() is never called" },
+]
+
+[licenses]
+version = 2
+confidence-threshold = 0.9
+# Dependencies must be permissively licensed so `paged-ooxml` (MPL-2.0) can be
+# distributed as a shared embeddable library. ooxmlsdk + its deps are MIT /
+# Apache-2.0.
+allow = [
+    "MPL-2.0",
+    # Our own crates: paged-ooxml is MPL-2.0 OR PMEL; the pptx-* / slide-* plugin crates
+    # are AGPL-3.0-only OR PMEL. SPDX has no id for PMEL (the LicenseRef form).
+    "LicenseRef-PMEL",
+    "AGPL-3.0-only",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "MIT",
+    "MIT-0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "CC0-1.0",
+    "BSL-1.0",
+]
+exceptions = []
+
+[bans]
+multiple-versions = "warn"
+wildcards = "warn"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

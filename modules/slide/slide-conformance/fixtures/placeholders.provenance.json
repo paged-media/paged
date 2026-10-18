@@ -1,0 +1,12 @@
+{
+ "oracle": "Microsoft PowerPoint 16.113.3",
+ "recorded": "2026-10-05",
+ "authored_by": "scripts/fixtures/placeholders.applescript",
+ "slides": 10,
+ "fonts_in_pdf": [
+  "Aptos",
+  "Aptos-Bold",
+  "AptosDisplay",
+  "ArialMT"
+ ]
+}

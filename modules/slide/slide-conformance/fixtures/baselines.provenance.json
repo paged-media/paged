@@ -1,0 +1,13 @@
+{
+ "oracle": "Microsoft PowerPoint 16.113.3",
+ "recorded": "2026-10-05",
+ "authored_by": "scripts/fixtures/baselines.applescript",
+ "slides": 5,
+ "fonts_in_pdf": [
+  "Aptos",
+  "ArialMT",
+  "Calibri",
+  "Georgia",
+  "SpaceGrotesk-Light_Regular"
+ ]
+}

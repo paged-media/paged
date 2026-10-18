@@ -1,0 +1,10 @@
+{
+ "oracle": "Microsoft PowerPoint 16.113.3",
+ "recorded": "2026-10-06",
+ "authored_by": "scripts/fixtures/tables.applescript",
+ "slides": 6,
+ "fonts_in_pdf": [
+  "Aptos",
+  "Aptos-Bold"
+ ]
+}

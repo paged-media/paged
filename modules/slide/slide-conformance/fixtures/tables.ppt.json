@@ -1,0 +1,139 @@
+{
+ "slides": 6,
+ "powerpoint": "16.113.3",
+ "file": "tables.pptx",
+ "shapes": {
+  "1": [
+   {
+    "index": 1,
+    "name": "Medium Style 2 - Accent 1",
+    "left": 40.0,
+    "top": 120.0,
+    "width": 400.0,
+    "height": 120.0,
+    "rotation": 0.0,
+    "type": "table"
+   },
+   {
+    "index": 2,
+    "name": "Medium Style 2 - Accent 1 all",
+    "left": 500.0,
+    "top": 120.0,
+    "width": 400.0,
+    "height": 120.0,
+    "rotation": 0.0,
+    "type": "table"
+   }
+  ],
+  "2": [
+   {
+    "index": 1,
+    "name": "Light Style 1 - Accent 1",
+    "left": 40.0,
+    "top": 120.0,
+    "width": 400.0,
+    "height": 120.0,
+    "rotation": 0.0,
+    "type": "table"
+   },
+   {
+    "index": 2,
+    "name": "Light Style 3 - Accent 1",
+    "left": 500.0,
+    "top": 120.0,
+    "width": 400.0,
+    "height": 120.0,
+    "rotation": 0.0,
+    "type": "table"
+   }
+  ],
+  "3": [
+   {
+    "index": 1,
+    "name": "Medium Style 1 - Accent 1",
+    "left": 40.0,
+    "top": 120.0,
+    "width": 400.0,
+    "height": 120.0,
+    "rotation": 0.0,
+    "type": "table"
+   },
+   {
+    "index": 2,
+    "name": "Medium Style 3 - Accent 1",
+    "left": 500.0,
+    "top": 120.0,
+    "width": 400.0,
+    "height": 120.0,
+    "rotation": 0.0,
+    "type": "table"
+   }
+  ],
+  "4": [
+   {
+    "index": 1,
+    "name": "Medium Style 4 - Accent 1",
+    "left": 40.0,
+    "top": 120.0,
+    "width": 400.0,
+    "height": 120.0,
+    "rotation": 0.0,
+    "type": "table"
+   },
+   {
+    "index": 2,
+    "name": "Dark Style 1",
+    "left": 500.0,
+    "top": 120.0,
+    "width": 400.0,
+    "height": 120.0,
+    "rotation": 0.0,
+    "type": "table"
+   }
+  ],
+  "5": [
+   {
+    "index": 1,
+    "name": "Dark Style 2",
+    "left": 40.0,
+    "top": 120.0,
+    "width": 400.0,
+    "height": 120.0,
+    "rotation": 0.0,
+    "type": "table"
+   },
+   {
+    "index": 2,
+    "name": "No Style, Table Grid",
+    "left": 500.0,
+    "top": 120.0,
+    "width": 400.0,
+    "height": 120.0,
+    "rotation": 0.0,
+    "type": "table"
+   }
+  ],
+  "6": [
+   {
+    "index": 1,
+    "name": "Medium Style 2 - Accent 2 columns",
+    "left": 40.0,
+    "top": 120.0,
+    "width": 400.0,
+    "height": 120.0,
+    "rotation": 0.0,
+    "type": "table"
+   },
+   {
+    "index": 2,
+    "name": "Medium Style 2 no options",
+    "left": 500.0,
+    "top": 120.0,
+    "width": 400.0,
+    "height": 120.0,
+    "rotation": 0.0,
+    "type": "table"
+   }
+  ]
+ }
+}

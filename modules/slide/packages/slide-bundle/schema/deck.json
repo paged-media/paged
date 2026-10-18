@@ -1,0 +1,7 @@
+[
+  { "path": "name", "type": { "kind": "text" }, "access": "readOnly", "title": "Name", "summary": "The deck's name (its file name without the extension)." },
+  { "path": "slideWidth", "type": { "kind": "length" }, "access": "readOnly", "title": "Slide width" },
+  { "path": "slideHeight", "type": { "kind": "length" }, "access": "readOnly", "title": "Slide height" },
+  { "path": "slideCount", "type": { "kind": "number", "integer": true }, "access": "derived", "title": "Slides" },
+  { "path": "fonts", "type": { "kind": "list", "of": { "kind": "text" } }, "access": "readOnly", "title": "Fonts", "summary": "Font families the deck's text uses." }
+]

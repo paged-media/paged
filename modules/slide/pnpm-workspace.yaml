@@ -1,0 +1,4 @@
+# The TS side of paged.slide is glue only: every PresentationML rule lives in
+# the Rust crates compiled to one wasm module (slide-js).
+packages:
+  - "packages/*"

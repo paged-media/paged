@@ -1,0 +1,335 @@
+{
+ "quantum_pt": 0.96,
+ "boxes": [
+  {
+   "slide": 1,
+   "name": "Calibri 12 0,8",
+   "first_baseline": 9.04,
+   "pitch": 11.04
+  },
+  {
+   "slide": 1,
+   "name": "Calibri 12 1,0",
+   "first_baseline": 10.96,
+   "pitch": 15.12
+  },
+  {
+   "slide": 1,
+   "name": "Calibri 12 1,2",
+   "first_baseline": 12.88,
+   "pitch": 17.04
+  },
+  {
+   "slide": 1,
+   "name": "Calibri 12 1,5",
+   "first_baseline": 16.0,
+   "pitch": 22.08
+  },
+  {
+   "slide": 1,
+   "name": "Calibri 36 0,8",
+   "first_baseline": 26.08,
+   "pitch": 33.84
+  },
+  {
+   "slide": 1,
+   "name": "Calibri 36 1,0",
+   "first_baseline": 34.0,
+   "pitch": 42.96
+  },
+  {
+   "slide": 1,
+   "name": "Calibri 36 1,2",
+   "first_baseline": 39.04,
+   "pitch": 51.84
+  },
+  {
+   "slide": 1,
+   "name": "Calibri 36 1,5",
+   "first_baseline": 48.88,
+   "pitch": 64.08
+  },
+  {
+   "slide": 1,
+   "name": "Calibri 72 0,8",
+   "first_baseline": 51.92,
+   "pitch": 138.0
+  },
+  {
+   "slide": 1,
+   "name": "Calibri 72 1,0",
+   "first_baseline": 67.04,
+   "pitch": 173.04
+  },
+  {
+   "slide": 1,
+   "name": "Calibri 72 1,2",
+   "first_baseline": 78.08,
+   "pitch": 206.88
+  },
+  {
+   "slide": 2,
+   "name": "Aptos 12 0,8",
+   "first_baseline": 9.04,
+   "pitch": 11.04
+  },
+  {
+   "slide": 2,
+   "name": "Aptos 12 1,0",
+   "first_baseline": 10.96,
+   "pitch": 13.92
+  },
+  {
+   "slide": 2,
+   "name": "Aptos 12 1,2",
+   "first_baseline": 12.88,
+   "pitch": 17.04
+  },
+  {
+   "slide": 2,
+   "name": "Aptos 12 1,5",
+   "first_baseline": 16.0,
+   "pitch": 22.08
+  },
+  {
+   "slide": 2,
+   "name": "Aptos 36 0,8",
+   "first_baseline": 26.08,
+   "pitch": 33.84
+  },
+  {
+   "slide": 2,
+   "name": "Aptos 36 1,0",
+   "first_baseline": 33.04,
+   "pitch": 42.96
+  },
+  {
+   "slide": 2,
+   "name": "Aptos 36 1,2",
+   "first_baseline": 39.04,
+   "pitch": 51.84
+  },
+  {
+   "slide": 2,
+   "name": "Aptos 36 1,5",
+   "first_baseline": 48.88,
+   "pitch": 64.08
+  },
+  {
+   "slide": 2,
+   "name": "Aptos 72 0,8",
+   "first_baseline": 51.92,
+   "pitch": 138.0
+  },
+  {
+   "slide": 2,
+   "name": "Aptos 72 1,0",
+   "first_baseline": 66.08,
+   "pitch": 172.8
+  },
+  {
+   "slide": 2,
+   "name": "Aptos 72 1,2",
+   "first_baseline": 78.08,
+   "pitch": 206.88
+  },
+  {
+   "slide": 3,
+   "name": "Arial 12 0,8",
+   "first_baseline": 9.04,
+   "pitch": 11.04
+  },
+  {
+   "slide": 3,
+   "name": "Arial 12 1,0",
+   "first_baseline": 11.92,
+   "pitch": 14.16
+  },
+  {
+   "slide": 3,
+   "name": "Arial 12 1,2",
+   "first_baseline": 12.88,
+   "pitch": 17.04
+  },
+  {
+   "slide": 3,
+   "name": "Arial 12 1,5",
+   "first_baseline": 16.0,
+   "pitch": 22.08
+  },
+  {
+   "slide": 3,
+   "name": "Arial 36 0,8",
+   "first_baseline": 26.08,
+   "pitch": 34.8
+  },
+  {
+   "slide": 3,
+   "name": "Arial 36 1,0",
+   "first_baseline": 34.96,
+   "pitch": 42.96
+  },
+  {
+   "slide": 3,
+   "name": "Arial 36 1,2",
+   "first_baseline": 39.04,
+   "pitch": 51.84
+  },
+  {
+   "slide": 3,
+   "name": "Arial 36 1,5",
+   "first_baseline": 48.88,
+   "pitch": 64.08
+  },
+  {
+   "slide": 3,
+   "name": "Arial 72 0,8",
+   "first_baseline": 52.88,
+   "pitch": 138.0
+  },
+  {
+   "slide": 3,
+   "name": "Arial 72 1,0",
+   "first_baseline": 69.92,
+   "pitch": 173.04
+  },
+  {
+   "slide": 3,
+   "name": "Arial 72 1,2",
+   "first_baseline": 78.08,
+   "pitch": 206.88
+  },
+  {
+   "slide": 4,
+   "name": "Georgia 12 0,8",
+   "first_baseline": 9.04,
+   "pitch": 11.04
+  },
+  {
+   "slide": 4,
+   "name": "Georgia 12 1,0",
+   "first_baseline": 11.92,
+   "pitch": 14.16
+  },
+  {
+   "slide": 4,
+   "name": "Georgia 12 1,2",
+   "first_baseline": 12.88,
+   "pitch": 17.04
+  },
+  {
+   "slide": 4,
+   "name": "Georgia 12 1,5",
+   "first_baseline": 16.0,
+   "pitch": 22.08
+  },
+  {
+   "slide": 4,
+   "name": "Georgia 36 0,8",
+   "first_baseline": 26.08,
+   "pitch": 34.8
+  },
+  {
+   "slide": 4,
+   "name": "Georgia 36 1,0",
+   "first_baseline": 34.96,
+   "pitch": 42.96
+  },
+  {
+   "slide": 4,
+   "name": "Georgia 36 1,2",
+   "first_baseline": 39.04,
+   "pitch": 51.84
+  },
+  {
+   "slide": 4,
+   "name": "Georgia 36 1,5",
+   "first_baseline": 48.88,
+   "pitch": 64.08
+  },
+  {
+   "slide": 4,
+   "name": "Georgia 72 0,8",
+   "first_baseline": 51.92,
+   "pitch": 138.96
+  },
+  {
+   "slide": 4,
+   "name": "Georgia 72 1,0",
+   "first_baseline": 69.92,
+   "pitch": 173.04
+  },
+  {
+   "slide": 4,
+   "name": "Georgia 72 1,2",
+   "first_baseline": 78.08,
+   "pitch": 206.88
+  },
+  {
+   "slide": 5,
+   "name": "Space Grotesk 12 0,8",
+   "first_baseline": 9.04,
+   "pitch": 11.04
+  },
+  {
+   "slide": 5,
+   "name": "Space Grotesk 12 1,0",
+   "first_baseline": 10.96,
+   "pitch": 15.12
+  },
+  {
+   "slide": 5,
+   "name": "Space Grotesk 12 1,2",
+   "first_baseline": 12.88,
+   "pitch": 17.04
+  },
+  {
+   "slide": 5,
+   "name": "Space Grotesk 12 1,5",
+   "first_baseline": 16.0,
+   "pitch": 22.08
+  },
+  {
+   "slide": 5,
+   "name": "Space Grotesk 36 0,8",
+   "first_baseline": 26.08,
+   "pitch": 33.84
+  },
+  {
+   "slide": 5,
+   "name": "Space Grotesk 36 1,0",
+   "first_baseline": 33.04,
+   "pitch": 43.92
+  },
+  {
+   "slide": 5,
+   "name": "Space Grotesk 36 1,2",
+   "first_baseline": 39.04,
+   "pitch": 51.84
+  },
+  {
+   "slide": 5,
+   "name": "Space Grotesk 36 1,5",
+   "first_baseline": 48.88,
+   "pitch": 64.08
+  },
+  {
+   "slide": 5,
+   "name": "Space Grotesk 72 0,8",
+   "first_baseline": 51.92,
+   "pitch": 138.0
+  },
+  {
+   "slide": 5,
+   "name": "Space Grotesk 72 1,0",
+   "first_baseline": 67.04,
+   "pitch": 171.84
+  },
+  {
+   "slide": 5,
+   "name": "Space Grotesk 72 1,2",
+   "first_baseline": 78.08,
+   "pitch": 206.88
+  }
+ ]
+}
