@@ -44,13 +44,13 @@ repository records this as permanent scope, not as a backlog.
 
 - `README.md:8-9`, `CLAUDE.md:10-11`, `CLAUDE.md:119-122` — the premise and the rule
 - `registry/features/pivot.yaml:1-16`, `:29-37` — the pivot non-goal, its rationale, the ruling
-- `sheet-xlsx/src/parts/data_validation.rs:36-61`, `sheet-xlsx/src/lib.rs:156-165` —
+- `sheet-xlsx/src/parts/data_validation.rs:22-47`, `sheet-xlsx/src/lib.rs:142-151` —
   preserve, no enforcement, inventory only
 - `packages/sheet-bundle/src/panels/workbook-panel.tsx:596-625` — the inventory in the panel
-- `sheet-calc/src/external.rs:36-57`, `:109-111` — links never followed, no AST variant,
+- `sheet-calc/src/external.rs:22-43`, `:95-97` — links never followed, no AST variant,
   `#REF!` when the cache has no entry
-- `sheet-xlsx/src/opc.rs:59-61`, `sheet-conformance/tests/xlsx_roundtrip.rs:236-253`,
-  `:261-304` — pivot caches and VBA are opaque parts; both survive a save unchanged
+- `sheet-xlsx/src/opc.rs:45-47`, `sheet-conformance/tests/xlsx_roundtrip.rs:222-239`,
+  `:247-290` — pivot caches and VBA are opaque parts; both survive a save unchanged
 - `packages/sheet-bundle/manifest.json:13` — `network`
 
 ## Alternatives considered
@@ -58,7 +58,7 @@ repository records this as permanent scope, not as a backlog.
 - **A pivot engine.** Refused: "Do NOT "helpfully" implement a pivot engine"
   (`registry/features/pivot.yaml:15-16`).
 - **A dropdown for validated cells.** Not built: "we stop at the preserve-and-inventory
-  line — strictly less than a runtime dropdown" (`sheet-xlsx/src/parts/data_validation.rs:57-61`).
+  line — strictly less than a runtime dropdown" (`sheet-xlsx/src/parts/data_validation.rs:43-47`).
 - **Evaluating external references.** Left for later: "Full external-ref EVALUATION via an
   AST variant is a future versioned amendment" (`registry/features/extlink.yaml:45-47`).
 
@@ -72,7 +72,7 @@ the code today:
   `sheet-conformance/tests/extlink.rs`; the engine never resolves an external reference
   through the parsed cache. What a user sees is the value cached in the cell. A formula
   that fails to parse on load is counted in `unparsed_formulas` and keeps its raw text and
-  cached value (`sheet-js/src/core.rs:454-469`); no test runs an external-reference
+  cached value (`sheet-js/src/core.rs:440-455`); no test runs an external-reference
   formula through that path.
 - A validation rule is written back unchanged; edits to its cells are not checked against it.
 - `registry/features/pivot.yaml:35-37` says pivot caches are exercised in

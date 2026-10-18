@@ -176,8 +176,8 @@ Rules for every code change in this repo:
   artifacts; implementers never read it. **T0: references/ is NOT
   mounted** — implementation derives from ECMA-376 / ISO-IEC 29500,
   OpenFormula, public Microsoft documentation, and golden corpora.
-- **LICENSE ASYMMETRY.** Rust crates are dual MPL-2.0 OR PMEL — every
-  `.rs` carries the 13-line MPL/PMEL header (copy from
+- **LICENSE.** Rust crates are dual AGPL-3.0-only OR PMEL (ADR PM-0001) —
+  every `.rs` carries the AGPL/PMEL header, once (copy from
   `sheet-core/src/lib.rs`). TS files (`packages/`, `scripts/`) carry NO
   header (private-side convention, like plugin-draw/plugin-web).
 - **Interface freeze.** `sheet-core` types, the AST, the `sheet-fn`

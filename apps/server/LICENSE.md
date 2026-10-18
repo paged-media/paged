@@ -13,14 +13,14 @@
 Source files carry the license notice in their header; new files must include it (copy it
 from any existing source file).
 
-## Why AGPL for the server (and MPL for the engine)
+## Why AGPL
 
 The server is delivered over a network, so it uses the **AGPL** — whose §13 network clause
 requires anyone running a *modified* version as a hosted service to offer that service's
 complete source to its users. The repository format and the engine it builds on
-(`paged-media/core`: `paged-repo`, `paged-mcp`) are instead **MPL-2.0**, deliberately more
-permissive so they can be embedded broadly. Both are available under the commercial
-**PMEL** for users who need terms the open-source licenses don't provide.
+(`engine/core`: `paged-repo`, `paged-mcp`) are under the same terms (ADR PM-0001; they
+were MPL-2.0 OR PMEL before). All of it is available under the commercial **PMEL** for
+users who need terms the open-source license doesn't provide.
 
 ## GNU Affero General Public License v3 (open source)
 

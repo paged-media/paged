@@ -43,7 +43,7 @@ Work on this repository is split into two roles with different reading rights.
 - `.gitignore:1-3`, `Cargo.toml:1-3` — `references/` is ignored and "NEVER a member"
 - `CLAUDE.md:76-78`, `registry/kernels.yaml:23`, `:34-35` — the provenance rule, the
   `provenance` field in the row schema, and one row's entry
-- `image-psd/src/lib.rs:37-43`, `registry/psd-blocks.yaml:4-5` — the PSD crate's statement
+- `image-psd/src/lib.rs:23-29`, `registry/psd-blocks.yaml:4-5` — the PSD crate's statement
   of what it is derived from; block handlers record provenance
 - `image-conformance/fixtures/abr/README.md:9-44` — the published artifacts and their limit
 - `image-conformance/fixtures/abr/README.md:105-122`, `CLAUDE.md:155-163` — the two test lanes

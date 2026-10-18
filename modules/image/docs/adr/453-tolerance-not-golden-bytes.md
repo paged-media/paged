@@ -11,15 +11,15 @@ to define when a kernel's GPU output counts as correct.
 
 The rule is stated in three places: on the `Tolerance` type, where GPU output is checked
 against the reference by tolerance and not "byte-golden-tested"
-(`image-kernels/src/lib.rs:78`); in the test crate, "BY TOLERANCE, never byte-golden"
-(`image-conformance/src/lib.rs:36`); and in the per-kernel definition of done
+(`image-kernels/src/lib.rs:64`); in the test crate, "BY TOLERANCE, never byte-golden"
+(`image-conformance/src/lib.rs:22`); and in the per-kernel definition of done
 (`CLAUDE.md:79-82`). None of the three gives a reason. The repository does not record why.
 
 Two comments elsewhere describe the device dependence the rule has to live with. The
 shared helper set avoids `pow` and other transcendentals because their "WGSL precision is
-implementation-defined" (`image-kernels/src/abi.rs:70`). Test inputs exclude NaN and
+implementation-defined" (`image-kernels/src/abi.rs:56`). Test inputs exclude NaN and
 infinity because the masked store is "fast-math/driver-dependent" for them
-(`image-conformance/src/harness.rs:50`).
+(`image-conformance/src/harness.rs:36`).
 
 ## Decision
 
@@ -43,16 +43,16 @@ tolerance the kernel declares. GPU output is never compared with stored bytes.
 
 ## Evidence
 
-- `image-kernels/src/lib.rs:76-87` — `Tolerance` and the statement of the rule
-- `image-conformance/src/harness.rs:72-92`, `:106-153` — one quantised stimulus for both
+- `image-kernels/src/lib.rs:62-73` — `Tolerance` and the statement of the rule
+- `image-conformance/src/harness.rs:58-78`, `:92-139` — one quantised stimulus for both
   lanes; `parity` uploads, dispatches, reads back, runs the reference and diffs
-- `image-conformance/src/quantize.rs:47-69` — the f16 step distance and the NaN rule
-- `image-conformance/src/harness.rs:207-225` — `assert_within`; the ΔE arm is
+- `image-conformance/src/quantize.rs:33-55` — the f16 step distance and the NaN rule
+- `image-conformance/src/harness.rs:193-211` — `assert_within`; the ΔE arm is
   `unimplemented!`
-- `image-conformance/tests/gpu_module_kernels.rs:33-67` — the property checks for module
+- `image-conformance/tests/gpu_module_kernels.rs:19-53` — the property checks for module
   kernels
-- `image-gpu/src/test_support.rs:62-86` (at `f7d21e5`: `image-conformance/src/device.rs`),
-  `image-conformance/tests/gpu_module_kernels.rs:998-1013` — no adapter means the test
+- `image-gpu/src/test_support.rs:48-72` (at `f7d21e5`: `image-conformance/src/device.rs`),
+  `image-conformance/tests/gpu_module_kernels.rs:984-999` — no adapter means the test
   skips, with a printed notice
 - `.github/workflows/ci.yml:55-61` — the CI runner has no adapter
 
@@ -75,10 +75,10 @@ but no code reads the registry's `gpu_tolerance` field; the value enforced is th
 CI does not run the comparison: the workflow states that the GPU parity tests skip themselves on the runner, which has no adapter
 (`.github/workflows/ci.yml:55-59`). They execute only where an adapter exists; the commands section of the repository names the local Metal
 adapter (`CLAUDE.md:136-137`). `.github/workflows/ci.yml:57-59` names a pinned software-rasteriser lane as a follow-up. No workflow sets
-`WGPU_BACKEND` or `WGPU_FALLBACK`, although `image-gpu/src/device.rs:33-36` and `image-conformance/src/device.rs:33-37` describe CI as using them.
+`WGPU_BACKEND` or `WGPU_FALLBACK`, although `image-gpu/src/device.rs:19-22` and `image-conformance/src/device.rs:19-23` describe CI as using them.
 
 For kernels the scalar reference is the only standard: no test in the repository compares
-it with another implementation. `image-conformance/src/lib.rs:40-43` lists
+it with another implementation. `image-conformance/src/lib.rs:26-29` lists
 differential oracle runners that do not exist. The `gallery.*` family has no reference and
 rests on the property checks alone.
 
@@ -94,16 +94,16 @@ rests on the property checks alone.
 Three statements above no longer match the code.
 
 - The ΔE arm is implemented. `assert_within` bounds the mean CIEDE2000 between GPU output
-  and reference when a kernel declares `PerceptualDeltaE` (`image-conformance/src/harness.rs:249-257`),
+  and reference when a kernel declares `PerceptualDeltaE` (`image-conformance/src/harness.rs:235-243`),
   using `image-conformance/src/delta_e.rs`, whose unit test reproduces the published
   CIEDE2000 test pairs of Sharma, Wu and Dalal (2005). This supersedes "the ΔE arm is
   `unimplemented!`".
 - CI runs the comparison. The `gpu-sw` job runs the whole suite on a software Vulkan adapter
   for every pull request and the `gpu-metal` job on Apple silicon after merges to main, both
   with `REQUIRE_GPU=1`, which makes a missing adapter fail every device test instead of
-  skipping it (`.github/workflows/ci.yml`, `image-gpu/src/test_support.rs:78-85`). This
+  skipping it (`.github/workflows/ci.yml`, `image-gpu/src/test_support.rs:64-71`). This
   supersedes the paragraph beginning "CI does not run the comparison". The `rust` job still
   runs without an adapter, where the device tests skip.
 - The four per-crate device helpers became one, `image_gpu::test_support::device_or_skip`,
   and `WGPU_FALLBACK` forces the fallback adapter only when set to `1`
-  (`image-gpu/src/device.rs:63-68`).
+  (`image-gpu/src/device.rs:49-54`).

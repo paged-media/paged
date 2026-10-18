@@ -16,20 +16,6 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-/*
- * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at https://mozilla.org/MPL/2.0/.
- *
- * This file is part of paged (https://paged.media) and is additionally
- * available under the Paged Media Enterprise License (PMEL). Full
- * copyright and license information is available in LICENSE.md which is
- * distributed with this source code.
- *
- *  @copyright  Copyright (c) And The Next GmbH
- *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
- */
-
 //! Geometry family (T2, spec §11) — handwritten WGSL modules under the
 //! ABI v1.1 contract (`abi::assemble` docs). Flip, rotate-by-90°, and
 //! crop expressed as `KernelClass::Resample { support: 0.5 }` coordinate
@@ -105,7 +91,7 @@ pub static GEOM_FLIP_H: KernelDef = KernelDef {
 
 const GEOM_FLIP_H_WGSL: &str = "\
 // paged.image kernel `geom.flip_h` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     width: u32,
@@ -174,7 +160,7 @@ pub static GEOM_FLIP_V: KernelDef = KernelDef {
 
 const GEOM_FLIP_V_WGSL: &str = "\
 // paged.image kernel `geom.flip_v` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     height: u32,
@@ -258,7 +244,7 @@ pub static GEOM_ROTATE90_CW: KernelDef = KernelDef {
 
 const GEOM_ROTATE90_CW_WGSL: &str = "\
 // paged.image kernel `geom.rotate90_cw` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     src_w: u32,
@@ -297,7 +283,7 @@ pub static GEOM_ROTATE90_CCW: KernelDef = KernelDef {
 
 const GEOM_ROTATE90_CCW_WGSL: &str = "\
 // paged.image kernel `geom.rotate90_ccw` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     src_w: u32,
@@ -379,7 +365,7 @@ pub static GEOM_CROP: KernelDef = KernelDef {
 
 const GEOM_CROP_WGSL: &str = "\
 // paged.image kernel `geom.crop` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     off_x: i32,
@@ -538,7 +524,7 @@ pub static GEOM_ROTATE_BILINEAR: KernelDef = KernelDef {
 
 const GEOM_ROTATE_BILINEAR_WGSL: &str = "\
 // paged.image kernel `geom.rotate_bilinear` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     cos_t: f32,
@@ -720,7 +706,7 @@ pub static GEOM_WARP_BACKWARD: KernelDef = KernelDef {
 
 const GEOM_WARP_BACKWARD_WGSL: &str = "\
 // paged.image kernel `geom.warp_backward` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     kind: u32,
@@ -860,7 +846,7 @@ pub static GEOM_MOSAIC: KernelDef = KernelDef {
 
 const GEOM_MOSAIC_WGSL: &str = "\
 // paged.image kernel `geom.mosaic` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     cell_px: f32,
@@ -1092,7 +1078,7 @@ pub static GEOM_OFFSET: KernelDef = KernelDef {
 
 const GEOM_OFFSET_WGSL: &str = "\
 // paged.image kernel `geom.offset` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     dx: f32,
@@ -1291,7 +1277,7 @@ pub static GEOM_MOVE_SELECTION: KernelDef = KernelDef {
 
 const GEOM_MOVE_SELECTION_WGSL: &str = "\
 // paged.image kernel `geom.move_selection` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     dx: f32,

@@ -67,7 +67,7 @@ only the primary chain is flattened ([ADR 405](405-flow-chain-is-plugin-data.md)
 
 The flatten is not the only way web content can reach an export. The host engine builds
 its export from the same options as the live canvas, and those include the scene layers
-submitted in the session (`core: crates/paged-canvas/src/model.rs:8559`, in
+submitted in the session (`core: crates/paged-canvas/src/model.rs:8563`, in
 `pipeline_options`). A PDF exported in a session where a render command has run can
 therefore include the scene layer without a flatten. An IDML export, and anything done after a reload, cannot: the
 layer is not document content. This repository does not test that path.

@@ -115,7 +115,7 @@ export function buildHeader(version) {
   return (
     `// GENERATED — do not edit. Vendored verbatim from the published\n` +
     `// ${PKG} .d.ts (tsify output from paged-media/core,\n` +
-    `// MPL-2.0 OR PMEL). Sync: node scripts/sync-wire.mjs · Check: --check.\n` +
+    `// AGPL-3.0-only OR PMEL). Sync: node scripts/sync-wire.mjs · Check: --check.\n` +
     `${VERSION_PREFIX}${version}\n`
   );
 }

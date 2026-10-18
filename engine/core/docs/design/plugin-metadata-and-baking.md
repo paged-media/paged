@@ -21,7 +21,7 @@ writer it calls `paged-parse` and `paged-write` have moved to `plugin-publish`
 (crates `idml-import` and `idml-export`; see
 [ADR 022](https://github.com/paged-media/plugin-publish/blob/main/docs/adr/022-idml-relocates-to-plugin-publish.md)).
 The engine gate has gained an optional caller check
-(`crates/paged-mutate/src/apply/layer.rs:561`). And the host bake loop of §4 is
+(`crates/paged-mutate/src/apply/layer.rs:565`). And the host bake loop of §4 is
 still not built: what plugins leave in a document today is recorded in
 [ADR 316](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/316-native-content-and-baking.md)
 of plugin-sdk.*
@@ -79,13 +79,13 @@ We use it as-is — no schema invention, maximal foreign-tool survival:
 *Status note (2026-10-02): this section predates the implementation. As built,
 `PropertyPath::PluginMetadata` is a unit variant and the key travels in the
 value, `Value::PluginMetadata { key, value, caller, prev }`
-(`crates/paged-mutate/src/operation.rs:1251`, `:2093`); the wire op is
-`SetPluginMetadata` (`crates/paged-wire/src/lib.rs:1160`); the gate is
-`apply_plugin_metadata` (`crates/paged-mutate/src/apply/layer.rs:531`); labels
-are read by `crates/idml-import/src/spread.rs:1861` and written
-by `crates/idml-export/src/rewrite.rs:1229`. The SDK doors are
+(`crates/paged-mutate/src/operation.rs:1255`, `:2097`); the wire op is
+`SetPluginMetadata` (`crates/paged-wire/src/lib.rs:1164`); the gate is
+`apply_plugin_metadata` (`crates/paged-mutate/src/apply/layer.rs:535`); labels
+are read by `crates/idml-import/src/spread.rs:1865` and written
+by `crates/idml-export/src/rewrite.rs:1233`. The SDK doors are
 `getMetadata(id)` and `setMetadata(id, envelope)`, with the key implicit
-(`plugin-sdk: packages/plugin-api/src/host.ts:972`, `:980`).*
+(`plugin-sdk: packages/plugin-api/src/host.ts:976`, `:984`).*
 
 - Parse: `Label` already round-trips? **Verify first** — if
   `paged-parse` drops Labels today, carrying them through parse → scene
@@ -105,9 +105,9 @@ by `crates/idml-export/src/rewrite.rs:1229`. The SDK doors are
 *Status note (2026-10-02): this section predates the implementation and is only
 partly built. `contribute.objectType` is no longer reserved: the host adapter
 registers an object type and its matcher
-(`plugin-sdk: packages/plugin-sdk/src/host-impl.ts:1459`). It takes no baker.
+(`plugin-sdk: packages/plugin-sdk/src/host-impl.ts:1463`). It takes no baker.
 `ObjectTypeBaker` and `BakeContext` are exported types
-(`plugin-sdk: packages/plugin-api/src/host.ts:1011`, `:1015`) that no host code
+(`plugin-sdk: packages/plugin-api/src/host.ts:1015`, `:1019`) that no host code
 calls, so nothing below about when the host calls `bake()` happens today; see
 [ADR 316](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/316-native-content-and-baking.md)
 of plugin-sdk.*
@@ -131,7 +131,7 @@ interface ObjectTypeBaker {
 ## 5. Acceptance fixtures (the facility's definition of done)
 
 *Status note (2026-10-02): the metadata half of F1 is fixtured in
-`crates/paged-canvas/tests/idml_export_saveback.rs:740` and in
+`crates/paged-canvas/tests/idml_export_saveback.rs:744` and in
 `crates/idml-export/tests/label_roundtrip.rs`. The "derived
 children regenerated" half depends on the bake loop of §4, which is not built.*
 

@@ -41,10 +41,10 @@ not the absence of any code. Each section calls out the exact seam.
 
 *Status note (2026-10-02): "no vertical layout" below is incomplete. The
 renderer rotates the commands of a vertical story by 90° after laying it out
-horizontally (`crates/paged-renderer/src/pipeline/build_engine.rs:3251`,
-`crates/paged-renderer/src/pipeline/text_frame.rs:1253`); there is still no
+horizontally (`crates/paged-renderer/src/pipeline/build_engine.rs:3255`,
+`crates/paged-renderer/src/pipeline/text_frame.rs:1257`); there is still no
 vertical layout axis, and frame auto-sizing skips vertical stories
-(`crates/paged-renderer/src/pipeline/auto_size.rs:175`).*
+(`crates/paged-renderer/src/pipeline/auto_size.rs:179`).*
 
 **What IDML expresses.** `<Story StoryDirection="VerticalWritingDirection">`
 (tate-gaki). Paragraph attrs `KinsokuSet` / `KinsokuType` (line-break
@@ -57,30 +57,30 @@ plus the full `RubyAlignment` / `RubyXOffset` family. `KentenKind` /
 
 **What the engine does today.**
 - **Vertical writing** — `StoryDirection` (Horizontal/Vertical) is *parsed* and
-  stored on the story; no vertical layout. `crates/paged-model/src/lib.rs:4674`
-  (`enum StoryDirection`), `crates/idml-import/src/story.rs:532`
+  stored on the story; no vertical layout. `crates/paged-model/src/lib.rs:4678`
+  (`enum StoryDirection`), `crates/idml-import/src/story.rs:536`
   (attr read).
-- **Kinsoku** — parsed (`crates/idml-import/src/story.rs:692`,
-  `kinsoku_set`/`kinsoku_type`); cascaded (`crates/paged-scene/src/lib.rs:1222`);
+- **Kinsoku** — parsed (`crates/idml-import/src/story.rs:696`,
+  `kinsoku_set`/`kinsoku_type`); cascaded (`crates/paged-scene/src/lib.rs:1226`);
   the production renderer enables **hard-kinsoku enforcement keyed on presence
-  only** — `crates/paged-renderer/src/pipeline/compose_opts.rs:214`
+  only** — `crates/paged-renderer/src/pipeline/compose_opts.rs:218`
   (`lopts.compose.kinsoku_enforce = resolved.kinsoku_type.is_some()`); the
-  composer adds per-character breaks at `crates/paged-text/src/compose.rs:128`.
+  composer adds per-character breaks at `crates/paged-text/src/compose.rs:132`.
   Push-in/push-out *flavour* behaviour is not implemented.
-- **Mojikumi** — parsed (`crates/idml-import/src/story.rs:694`);
+- **Mojikumi** — parsed (`crates/idml-import/src/story.rs:698`);
   renderer enables a **uniform half-width tightening MVP** when a table/set
-  resolves — `crates/paged-renderer/src/pipeline/compose_opts.rs:220`; the pass
-  is `crates/paged-text/src/layout.rs:623` (`apply_mojikumi_half_width`).
+  resolves — `crates/paged-renderer/src/pipeline/compose_opts.rs:224`; the pass
+  is `crates/paged-text/src/layout.rs:627` (`apply_mojikumi_half_width`).
   Per-table per-adjacency lookups are not implemented.
-- **Ruby** — parsed (`crates/idml-import/src/story.rs:967`,
+- **Ruby** — parsed (`crates/idml-import/src/story.rs:971`,
   `ruby_flag`/`ruby_type`/`ruby_string`); cascaded
-  (`crates/paged-scene/src/lib.rs:949`); renderer **emits a GroupRuby MVP**
-  (`crates/paged-renderer/src/pipeline/decorations.rs:126`,
+  (`crates/paged-scene/src/lib.rs:953`); renderer **emits a GroupRuby MVP**
+  (`crates/paged-renderer/src/pipeline/decorations.rs:130`,
   `emit_ruby_for_line`); `PerCharacter` collapses to the same centred-group
   placement (no per-char distribution).
-- **Kenten** — parsed (`crates/idml-import/src/story.rs:970`);
+- **Kenten** — parsed (`crates/idml-import/src/story.rs:974`);
   renderer **emits a filled-circle emphasis mark** above each glyph
-  (`crates/paged-renderer/src/pipeline/decorations.rs:37`,
+  (`crates/paged-renderer/src/pipeline/decorations.rs:41`,
   `emit_kenten_for_line`); per-`KentenKind` glyph variants
   (Sesame/FisheyeDot/custom) collapse to the circle.
 
@@ -118,12 +118,12 @@ CJK exemplar. Until then this is the "CJK Stage 3/4" backlog.
 glyph *outlines* rather than the font's GPOS/`kern` table.
 
 **What the engine does today.** Parsed
-(`crates/idml-import/src/story.rs:991`, `kerning_method`); the
+(`crates/idml-import/src/story.rs:995`, `kerning_method`); the
 shaper recognises the enum but **falls through to Metrics**:
-`crates/paged-text/src/shape.rs:182` ("`Optical` falls through to Metrics for
-now") and `:302` (`Optical` variant comment: "fall back to Metrics until the
+`crates/paged-text/src/shape.rs:186` ("`Optical` falls through to Metrics for
+now") and `:306` (`Optical` variant comment: "fall back to Metrics until the
 outline-… pass"). NB: this is distinct from `OpticalMarginAlignment` (hanging
-punctuation), which **is** implemented (`crates/paged-text/src/shape.rs:520`,
+punctuation), which **is** implemented (`crates/paged-text/src/shape.rs:524`,
 `optical_margin_offset`).
 
 **Why deferred.** True optical kerning requires per-glyph outline analysis —
@@ -153,23 +153,23 @@ note "optical kerning → metrics fallback").
 
 *Status note (2026-10-02): this section predates two changes. The IDML element
 is `<EPS>`, not `<EPSImage>`, and the reader matches `<EPS>` since 2026-08-04
-(`crates/idml-import/src/spread.rs:2100`). And the frame no
+(`crates/idml-import/src/spread.rs:2104`). And the frame no
 longer gets the grey placeholder: an EPS whose bytes resolve is reported as
 `ImageDecodeFailed` with the frame's own fill left in place
-(`crates/paged-renderer/src/pipeline/images.rs:37`, `:138`), and an EPS embedded
+(`crates/paged-renderer/src/pipeline/images.rs:41`, `:142`), and an EPS embedded
 as inline content is flagged `has_inline_eps` and also keeps the frame's fill
-(`crates/paged-model/src/lib.rs:1171`,
-`crates/paged-renderer/src/pipeline/images.rs:140`). The EPS content is still
+(`crates/paged-model/src/lib.rs:1175`,
+`crates/paged-renderer/src/pipeline/images.rs:144`). The EPS content is still
 not decoded.*
 
 **What IDML expresses.** `<EPSImage>` nested in a page-item rectangle/oval (a
 placed `.eps` link), parallel to `<Image>` / `<PDF>` / `<ImportedPage>`.
 
 **What the engine does today.** The parser **recognises `<EPSImage>`** as an
-image-bearing child (`crates/idml-import/src/spread.rs:2107`);
+image-bearing child (`crates/idml-import/src/spread.rs:2111`);
 the renderer **sniffs the `%!PS-Adobe` magic and emits the missing-image
 placeholder** rather than decoding —
-`crates/paged-renderer/src/pipeline/image_decode.rs:33` (magic) and `:186`
+`crates/paged-renderer/src/pipeline/image_decode.rs:37` (magic) and `:190`
 ("EPS / PostScript image detected; emitting missing-image placeholder"). So the
 frame renders (grey + diagonal X + diagnostic), the EPS content does not.
 
@@ -201,12 +201,12 @@ swatch defined as percentages of two or more named spot inks (e.g. Pantone +
 process black), whose on-press appearance is a spectral blend.
 
 **What the engine does today.** The model **recognises** the colour model
-(`crates/paged-model/src/lib.rs:2267`, `ColorModel::MixedInk`) but
+(`crates/paged-model/src/lib.rs:2271`, `ColorModel::MixedInk`) but
 **treats it as `Unknown`** — "we don't ship the per-ink decomposition"
-(`crates/paged-model/src/lib.rs:2258`-`2262`); resolution falls back to the
+(`crates/paged-model/src/lib.rs:2262`-`2262`); resolution falls back to the
 swatch's CMYK/RGB preview value. (For contrast, the same
 `color-swatches.lab-mixed-ink` row's **Lab** half *is* shipped analytically —
-D50→D65 Bradford → linear sRGB, `crates/paged-color/src/cmm.rs:141`, `:255`.)
+D50→D65 Bradford → linear sRGB, `crates/paged-color/src/cmm.rs:145`, `:259`.)
 
 **Why deferred.** Faithful mixed-ink requires spectral ink modelling: per-ink
 spectral reflectance curves, a Neugebauer/Yule-Nielsen-style overprint model,
@@ -239,10 +239,10 @@ backing store.
 **What the engine does today.** **Not parsed.** No `<XMLElement>` / `<XMLStory>`
 consumer exists in the IDML reader (`crates/idml-import`). (The
 only `XMLStory` / `XMLTag` references in this repository are in the *fixture
-generator* `crates/paged-gen/src/builders/xml_folder.rs:32` — it *emits* a
+generator* `crates/paged-gen/src/builders/xml_folder.rs:36` — it *emits* a
 minimal XML folder for valid packages; nothing reads it back. The blank-package
-writers `crates/paged-store/src/package.rs:70` and
-`crates/paged-canvas/src/blank.rs:78` emit the same kind of stub.) The renderer
+writers `crates/paged-store/src/package.rs:74` and
+`crates/paged-canvas/src/blank.rs:82` emit the same kind of stub.) The renderer
 lays out the *visible* stories regardless; the XML structure layer is invisible
 to it.
 
@@ -277,10 +277,10 @@ story — a standalone exported story), and InDesign object libraries.
 **What the engine does today.** **Full-document entry only.** The IDML reader's
 `open_source_archive` confirms the IDML mimetype
 (`application/vnd.adobe.indesign-idml-package`) and locates the root
-`designmap.xml` — `crates/idml-import/src/lib.rs:112`-`150`.
+`designmap.xml` — `crates/idml-import/src/lib.rs:116`-`150`.
 There is no `.indb` / `.idms` / `.icml` entry point; no book-member resolution
 (the "from sibling book documents" flag, `IncludeBookDocuments`, is
-noted-but-not-followed at `crates/paged-model/src/lib.rs:3396`).
+noted-but-not-followed at `crates/paged-model/src/lib.rs:3400`).
 
 **Why deferred.** Each is a distinct container with its own root manifest and
 cross-document resolution (books especially: shared resources, synchronised
@@ -351,8 +351,8 @@ drag-and-drop text editing (an editor gesture, not an IDML element).
 **What the engine does today.**
 - **Hidden text** — the parser **recognises `<HiddenText>` and actively drops
   its content** (matches InDesign's default "hidden text not output"):
-  `crates/idml-import/src/story.rs:520`
-  (`matches!(name, b"HiddenText" | b"Note")` → suppress) and `:1437`; tested by
+  `crates/idml-import/src/story.rs:524`
+  (`matches!(name, b"HiddenText" | b"Note")` → suppress) and `:1441`; tested by
   `track5c_hidden_text_block_drops_content` (`story.rs:2222`). So it is *not*
   "treated as normal text" — it is correctly suppressed.
 - **Notes** — same suppression path; `<Note>` content is recognised and dropped
@@ -408,7 +408,7 @@ Deep rows the matrix never tracked, and which this record deliberately does
   `companion-formats.idms-icml` row covers snippets/InCopy; books are a distinct,
   larger workflow noted here under §companion-formats but not given a row until a
   book product line exists. (The book-document seam is flagged at
-  `crates/paged-model/src/lib.rs:3396`.)
+  `crates/paged-model/src/lib.rs:3400`.)
 - **Tate-chu-yoko / warichu / CJK frame grid** — sub-constructs of CJK vertical
   text; folded into §cjk-vertical-text rather than tracked individually.
 - **OpenType `vert`/`vrt2` vertical-glyph substitution** — a dependency of

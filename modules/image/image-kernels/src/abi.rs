@@ -16,20 +16,6 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-/*
- * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at https://mozilla.org/MPL/2.0/.
- *
- * This file is part of paged (https://paged.media) and is additionally
- * available under the Paged Media Enterprise License (PMEL). Full
- * copyright and license information is available in LICENSE.md which is
- * distributed with this source code.
- *
- *  @copyright  Copyright (c) And The Next GmbH
- *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
- */
-
 //! The frozen WGSL kernel ABI (spec §9.2, ABI v1 — M0 phase 0):
 //!
 //! ```text
@@ -168,7 +154,7 @@ pub fn assemble(def: &KernelDef) -> String {
         def.id,
         crate::ABI_VERSION
     ));
-    s.push_str("// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.\n\n");
+    s.push_str("// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.\n\n");
     s.push_str(&params_struct);
     s.push('\n');
     s.push_str("@group(0) @binding(0) var in0 : texture_2d<f32>;\n");

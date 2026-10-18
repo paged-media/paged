@@ -80,8 +80,8 @@ Rules for every code change in this repo:
   scalar reference + `parity(ref↔oracle)` where an oracle exists +
   `parity(gpu↔ref)` within declared tolerance + complete registry row.
   No green, no merge.
-- **LICENSE ASYMMETRY.** Rust crates are dual MPL-2.0 OR PMEL — every
-  `.rs` and `.wgsl` carries the 13-line MPL/PMEL header (copy from any
+- **LICENSE.** Rust crates are dual AGPL-3.0-only OR PMEL (ADR PM-0001) —
+  every `.rs` and `.wgsl` carries the AGPL/PMEL header, once (copy from any
   `image-*/src/*.rs`). TS files (`manifest/`, `glue/`, `scripts/`) carry
   NO header (private-side convention, like plugin-draw/plugin-web).
   Don't cross that line.

@@ -47,14 +47,14 @@ wasm, and the publish workflow fails when an editor crate appears in that graph.
 
 ## Evidence
 
-- `crates/paged-sdk/src/lib.rs:15-27` — crate docs: nothing from the editor, WebGPU-only
+- `crates/paged-sdk/src/lib.rs:19-31` — crate docs: nothing from the editor, WebGPU-only
 - `crates/paged-sdk/Cargo.toml:16-32` — the `gpu` feature and the dependency list
 - `.github/workflows/publish-wasm.yml:261-271` — "Subset audit — paged-sdk must not link editor crates"
-- `crates/paged-renderer/Cargo.toml:13-19`, `:41-44` — `mutate-roundtrip` is optional, and `paged-wire` is taken without default features, both for this boundary
-- `crates/paged-sdk/src/build.rs:15-38`, `crates/paged-sdk/tests/digest_equivalence.rs:15-23` — the single load path and its equivalence test
-- `web/idml-viewer/src/session.ts:15-22`, `:59-83` — `ViewerSessionLike` and why it exists
-- `web/idml-viewer/src/bootstrap.ts:17-40` — `createSessionFromBundledWasm` loads `../wasm/paged_sdk.js`, placed by the publish workflow
-- `web/idml-viewer/src/viewer.ts:209-222`, `web/idml-viewer/src/camera.ts:15-21` — the frame loop and the camera as pure functions
+- `crates/paged-renderer/Cargo.toml:13-19`, `:45-48` — `mutate-roundtrip` is optional, and `paged-wire` is taken without default features, both for this boundary
+- `crates/paged-sdk/src/build.rs:19-42`, `crates/paged-sdk/tests/digest_equivalence.rs:19-27` — the single load path and its equivalence test
+- `web/idml-viewer/src/session.ts:19-26`, `:63-87` — `ViewerSessionLike` and why it exists
+- `web/idml-viewer/src/bootstrap.ts:21-44` — `createSessionFromBundledWasm` loads `../wasm/paged_sdk.js`, placed by the publish workflow
+- `web/idml-viewer/src/viewer.ts:213-226`, `web/idml-viewer/src/camera.ts:19-25` — the frame loop and the camera as pure functions
 
 ## Alternatives considered
 

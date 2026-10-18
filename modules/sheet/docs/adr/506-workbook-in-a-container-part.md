@@ -46,7 +46,7 @@ part of the document container and, as a second copy, to the per-browser blob st
 - `packages/sheet-bundle/src/session.ts:827-862` — `restore`: part, then blob, then the one-time copy into the part
 - `packages/sheet-bundle/src/activate.ts:103` — `void session.restore()` at activation
 - `packages/sheet-bundle/manifest.json:18-21`, `:63-65` — blob storage with `quotaBytes` 33554432; the declared part type
-- `plugin-sdk: packages/plugin-sdk/src/host-impl.ts:2665`; `plugin-sdk: packages/plugin-api/src/host.ts:1282-1284` — the namespace prefix `paged/${manifest.id}/`; a written part is persisted on the next document save
+- `plugin-sdk: packages/plugin-sdk/src/host-impl.ts:2669`; `plugin-sdk: packages/plugin-api/src/host.ts:1286-1288` — the namespace prefix `paged/${manifest.id}/`; a written part is persisted on the next document save
 - `packages/sheet-host-model/src/binding.ts:51-59` — the binding data: `sheet`, `range`, `contentVersion`
 
 ## Alternatives considered
@@ -62,7 +62,7 @@ document is opened later. It reads the part first, so a document that is loaded 
 workbook in a browser whose blob store is empty; the comment at `packages/sheet-bundle/src/session.ts:828-830` states this as
 the intent, and no test in this repository runs it against a real host. When no part is found, the blob fallback loads whatever
 was last imported in that browser (`:839-851`); the blob is keyed per plugin, not per document. If no document is loaded, the
-part read answers nothing and a part write fails and is logged (`plugin-sdk: packages/plugin-sdk/src/host-impl.ts:2703-2717`).
+part read answers nothing and a part write fails and is logged (`plugin-sdk: packages/plugin-sdk/src/host-impl.ts:2707-2721`).
 
 Only an import persists. The following change the engine in memory and are written to
 neither the part nor the blob:

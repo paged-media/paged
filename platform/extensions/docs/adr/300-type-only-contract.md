@@ -36,17 +36,17 @@ registries, the logger, the document) is a member of the `BundleHost` object pas
 
 ## Evidence
 
-- `packages/plugin-api/src/index.ts:17-21` — the rule, stated at the package entry; `:34-186`
+- `packages/plugin-api/src/index.ts:21-25` — the rule, stated at the package entry; `:38-190`
   the export statements, all `export type`
 - `packages/plugin-api/package.json:37` — the build script: `tsc` declarations, copy of
-  `wire.d.ts`, `export {};` written to `dist/index.js`; `:40-42` the single dependency
+  `wire.d.ts`, `export {};` written to `dist/index.js`; `:44-46` the single dependency
 - `packages/plugin-api/tsconfig.build.json:5` — `emitDeclarationOnly`
-- `packages/plugin-api/src/bundle.ts:33-36` — `PagedBundle`: a manifest and `activate(host)`
-- `packages/plugin-api/src/host.ts:1553-1558` — `BundleHost`: types from the API package,
+- `packages/plugin-api/src/bundle.ts:37-40` — `PagedBundle`: a manifest and `activate(host)`
+- `packages/plugin-api/src/host.ts:1557-1562` — `BundleHost`: types from the API package,
   values from this object
-- `packages/plugin-sdk/src/version.ts:15-21` — `API_VERSION` lives in plugin-sdk because
+- `packages/plugin-sdk/src/version.ts:19-25` — `API_VERSION` lives in plugin-sdk because
   plugin-api "cannot carry a runtime constant"
-- `packages/plugin-api/src/mutations.ts:391-397` — a drift check written as a type
+- `packages/plugin-api/src/mutations.ts:395-401` — a drift check written as a type
   assertion, with the comment that even an unexported `const` would break the rule
 - `DESIGN.md:30-35` — the tenet and its two stated consequences
 
@@ -82,7 +82,7 @@ The host application has to construct the host object for each bundle
 The RPC host the rule prepares for is not built in this repo. `DESIGN.md:682-695` lists
 three `BundleHost` members that cannot cross such a boundary as they are: the `gesture()`
 factory of `contribute.tool`, the React component of `contribute.panel`, and `host.editor`,
-the raw editor handle (`packages/plugin-api/src/host.ts:1673-1679`).
+the raw editor handle (`packages/plugin-api/src/host.ts:1677-1683`).
 
 ## Related
 

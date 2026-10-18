@@ -4,7 +4,7 @@
 shipped in code).**
 
 **Sources:** `crates/paged-script/Cargo.toml:13` (`boa_engine = "0.21"`,
-`default-features = false`); `crates/paged-script/src/lib.rs:26` (comment: *"the
+`default-features = false`); `crates/paged-script/src/lib.rs:30` (comment: *"the
 previous rquickjs/QuickJS-in-C path"*); the original scripting-layer design
 document, §"Runtime Choice" + §"Why not Boa" (the reversed decision) + its
 2026-06-07 Status block; the plugin trust-gate checklist
@@ -21,7 +21,7 @@ right choice today." Code did the exact opposite, and ships Boa.
 
 The original doc never recorded the *why* of the reversal — this is a
 **reconstructed rationale**, inferred from the code comment at
-`crates/paged-script/src/lib.rs:26` and the toolchain facts, not from a prior written
+`crates/paged-script/src/lib.rs:30` and the toolchain facts, not from a prior written
 decision:
 
 - **wasm toolchain simplicity beat raw speed.** Boa compiles to
@@ -45,7 +45,7 @@ decision:
   (`plugin-sdk: docs/reference/trust-gate.md`).
 - **Sandbox is a metering ceiling, not a hard isolate.** The realized sandbox is
   the **RuntimeLimits budget surface** (`ScriptBudget { loop_iterations,
-  recursion_depth, stack_size, wall_clock_ms }`, `crates/paged-script/src/lib.rs:132`),
+  recursion_depth, stack_size, wall_clock_ms }`, `crates/paged-script/src/lib.rs:136`),
   mapping onto Boa's `RuntimeLimits` plus a bridge-level wall-clock deadline
   checked at host-call boundaries. Runaway scripts ARE killed (the runtime-budget
   item the crate's comments call B-09 is RESOLVED).
@@ -66,40 +66,40 @@ design documents is the separate doc-maintenance task, not this ADR.
 
 Checked against the code at `9f933f1`. The decision stands: `boa_engine` 0.21 is the only
 script runtime (`crates/paged-script/Cargo.toml:13`), and the comment cited in **Sources** is
-still at `crates/paged-script/src/lib.rs:26`. The second Consequences bullet describes the
+still at `crates/paged-script/src/lib.rs:30`. The second Consequences bullet describes the
 budget surface; two parts of it are not described there.
 
 **1. The budget is a wire parameter (protocol 63).** A host sets the ceilings per run in the
 `ExecuteScript` message instead of taking the crate's defaults.
 
-- `crates/paged-script/src/lib.rs:146-154` — `ScriptBudget`, the struct the ADR cites at
-  `:132`; the defaults are at `:160-174` (10,000,000 loop iterations, recursion depth 512, a
+- `crates/paged-script/src/lib.rs:150-158` — `ScriptBudget`, the struct the ADR cites at
+  `:136`; the defaults are at `:164-178` (10,000,000 loop iterations, recursion depth 512, a
   2,000 ms wall clock).
-- `crates/paged-canvas/src/channel.rs:512-534` — `ScriptBudgetWire`: four optional fields;
+- `crates/paged-canvas/src/channel.rs:516-538` — `ScriptBudgetWire`: four optional fields;
   `wall_clock_ms` of `0` disables the deadline.
-- `crates/paged-canvas/src/channel.rs:1170-1176` — `ExecuteScript { source, budget }`; an
+- `crates/paged-canvas/src/channel.rs:1174-1180` — `ExecuteScript { source, budget }`; an
   absent `budget` means the engine defaults.
-- `crates/paged-canvas-wasm/src/dispatch.rs:1204-1220` — the dispatcher starts from
+- `crates/paged-canvas-wasm/src/dispatch.rs:1208-1224` — the dispatcher starts from
   `ScriptBudget::default()`, overrides only the fields the message names, and calls
   `execute_script_with`.
-- `crates/paged-canvas/src/channel.rs:491-502` — the reason the comment gives: the command
+- `crates/paged-canvas/src/channel.rs:495-506` — the reason the comment gives: the command
   line needed a longer wall clock than the editor's REPL and had been calling
   `execute_script_with` directly, "a second door, for a parameter".
-- `crates/paged-cli/src/script.rs:86-98` — `paged script` builds its budget from
+- `crates/paged-cli/src/script.rs:90-102` — `paged script` builds its budget from
   `--timeout` and `--max-loop-iterations` and sends it in the message.
 
 **2. Exhaustion is a typed outcome.** A script stopped by a budget is reported with the budget
 that stopped it, separately from an ordinary script error.
 
-- `crates/paged-script/src/lib.rs:73-90` — `ScriptBudgetKind { Iterations, Recursion,
+- `crates/paged-script/src/lib.rs:77-94` — `ScriptBudgetKind { Iterations, Recursion,
   StackSize, WallClock }`.
-- `crates/paged-script/src/lib.rs:188-198` — `ScriptResult.budget_kind`, set together with
-  `error` when the abort was a budget; `:408-430` recovers the kind from Boa's message text
-  and the crate's own wall-clock sentinel (`:237`).
-- `crates/paged-canvas/src/channel.rs:1309-1321`, `:1851-1856` — the wire mirror of the enum
+- `crates/paged-script/src/lib.rs:192-202` — `ScriptResult.budget_kind`, set together with
+  `error` when the abort was a budget; `:412-434` recovers the kind from Boa's message text
+  and the crate's own wall-clock sentinel (`:241`).
+- `crates/paged-canvas/src/channel.rs:1313-1325`, `:1855-1860` — the wire mirror of the enum
   and the optional `budget_kind` field on the `ScriptResult` reply;
-  `crates/paged-canvas-wasm/src/dispatch.rs:49-60` maps one onto the other.
+  `crates/paged-canvas-wasm/src/dispatch.rs:53-64` maps one onto the other.
 
 The preemption limit in the third Consequences bullet still holds: the wall clock is checked
 only at the entry of a host function, so a loop that makes no host call is bounded by
-`loop_iterations` alone (`crates/paged-script/src/lib.rs:119-144`, `:245-259`).
+`loop_iterations` alone (`crates/paged-script/src/lib.rs:123-148`, `:249-263`).

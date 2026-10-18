@@ -51,7 +51,7 @@ arithmetic.
 
 | property            | finding |
 |---------------------|---------|
-| license             | **MIT** (transitive deps `arrayvec`, `num-traits`: MIT OR Apache-2.0) — clean for the dual MPL-2.0/PMEL repo |
+| license             | **MIT** (transitive deps `arrayvec`, `num-traits`: MIT OR Apache-2.0) — clean for the dual AGPL-3.0/PMEL repo |
 | purity / wasm       | pure Rust, ships a `cfg(target_arch = "wasm32")` shim, **no native/C deps** (`cargo tree -p sheet-fn --features exact-decimal` shows only `arrayvec` + `num-traits`) |
 | representation      | 96-bit integer significand × base-10 scale (0..=28) → **28-29 significant digits** |
 | headroom vs Excel   | comfortably wider than Excel's 15-significant-digit *display* budget (D-6) |

@@ -11,9 +11,9 @@ of it belongs to a page item, some to the document file, some to the user's brow
 
 The code records two reasons. The metadata key uses "the FULL manifest id (not a
 shortname) so third-party ids can never collide"
-(`packages/plugin-sdk/src/host-impl.ts:1012-1014`). Part types are declared by the plugin
+(`packages/plugin-sdk/src/host-impl.ts:1016-1018`). Part types are declared by the plugin
 "so third-party plugins persist namespaced parts WITHOUT central blessing of each data
-type" (`packages/plugin-api/src/manifest.ts:366-367`). For the key-value store and the
+type" (`packages/plugin-api/src/manifest.ts:370-371`). For the key-value store and the
 blob store the code shows the scoping and no reason. The repository does not record why.
 
 ## Decision
@@ -42,22 +42,22 @@ under another key is refused, also inside a `batch`. `document.setMetadata` and
 
 ## Evidence
 
-- `packages/plugin-sdk/src/host-impl.ts:1012-1015`, `:1946-1991`, `:1636-1647` — the
+- `packages/plugin-sdk/src/host-impl.ts:1016-1019`, `:1950-1995`, `:1640-1651` — the
   derived key; `getMetadata` and `setMetadata`; the foreign-key refusal
-- `packages/plugin-sdk/src/host-impl.ts:2665-2730` — `parts`: the prefix, the `..` check,
+- `packages/plugin-sdk/src/host-impl.ts:2669-2734` — `parts`: the prefix, the `..` check,
   the `caller` field
-- `packages/plugin-sdk/src/host-impl.ts:2150-2174`, `:247-270`, `:2602-2654`, `:333-336` —
+- `packages/plugin-sdk/src/host-impl.ts:2154-2178`, `:251-274`, `:2606-2658`, `:337-340` —
   `storage` and its default backing; `blob` and its quota
-- `packages/plugin-api/src/host.ts:965-996`, `:1264-1291` — the metadata doors and
+- `packages/plugin-api/src/host.ts:969-1000`, `:1268-1295` — the metadata doors and
   envelope; the parts door
-- `packages/plugin-api/src/manifest.ts:359-382` — `partTypes` and the three roles
-- `core: crates/paged-canvas/src/channel.rs:1215-1231` — the engine's `caller` on
+- `packages/plugin-api/src/manifest.ts:363-386` — `partTypes` and the three roles
+- `core: crates/paged-canvas/src/channel.rs:1219-1235` — the engine's `caller` on
   `WritePagedPart`
 
 ## Alternatives considered
 
 A short plugin name as the metadata key: set aside for the full id in the adapter's
-comment, though the contract's comment still describes it (`packages/plugin-api/src/host.ts:968`).
+comment, though the contract's comment still describes it (`packages/plugin-api/src/host.ts:972`).
 A central registry of part data types: ruled out in the `partTypes` comment quoted above.
 
 ## Consequences
@@ -67,22 +67,22 @@ into the document, so a bundle that changes its id no longer finds them.
 
 The scoping is done by the adapter. The code says so at the parts door: "a convention is
 not a boundary — a bundle reaching the raw handle bypasses it entirely"
-(`packages/plugin-sdk/src/host-impl.ts:2683-2685`). The engine's check runs only when the
+(`packages/plugin-sdk/src/host-impl.ts:2687-2689`). The engine's check runs only when the
 `caller` field is sent, and the engine comment calls it "not a boundary against a hostile
-one, which needs the isolate/RPC host" (`core: crates/paged-canvas/src/channel.rs:1225-1229`).
+one, which needs the isolate/RPC host" (`core: crates/paged-canvas/src/channel.rs:1229-1233`).
 
 `host.storage` has no capability gate. `host.parts` is scoped by path: the adapter prefixes
 `paged/<manifest.id>/`, rejects `..`, and names the caller to the engine on a write.
 `contributes.partTypes` is "Purely DECLARATIVE — no runtime behaviour rides on this"
-(`packages/plugin-api/src/manifest.ts:369`): the adapter does not compare a written path
+(`packages/plugin-api/src/manifest.ts:373`): the adapter does not compare a written path
 with the declared types. The four doors give a bundle no way to name another plugin's key,
 path or scope; data meant for another plugin goes through the separately declared
-`host.dataProviders` door (`packages/plugin-sdk/src/host-impl.ts:2239-2245`).
+`host.dataProviders` door (`packages/plugin-sdk/src/host-impl.ts:2243-2249`).
 
-Comments contradict the code. `packages/plugin-api/src/host.ts:968` gives the key with the
-manifest "shortname"; the adapter uses the full id. `packages/plugin-api/src/host.ts:1277-1279`
+Comments contradict the code. `packages/plugin-api/src/host.ts:972` gives the key with the
+manifest "shortname"; the adapter uses the full id. `packages/plugin-api/src/host.ts:1281-1283`
 says `supports("storage.parts@1")` is false when no container writer is wired; the adapter
-lists the feature statically (`packages/plugin-sdk/src/host-impl.ts:165-168`), so it is
+lists the feature statically (`packages/plugin-sdk/src/host-impl.ts:169-172`), so it is
 always true.
 
 ## Related

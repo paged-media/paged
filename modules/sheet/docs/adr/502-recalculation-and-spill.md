@@ -10,13 +10,13 @@ counter and a spill ledger. A write through `set_cell` replaces the cell's regis
 the graph, marks its dependents dirty and recalculates the dirty set.
 
 The module comments give reasons for single parts. A range is one node because "a
-`A1:A1000000` edge set would be ruinous" (`sheet-calc/src/graph.rs:41-42`). The order is
+`A1:A1000000` edge set would be ruinous" (`sheet-calc/src/graph.rs:27-28`). The order is
 stable so that "every computed value, never depends on hash iteration order"
-(`sheet-calc/src/topo.rs:36-40`); a registry row and a property test hold that. The loop
+(`sheet-calc/src/topo.rs:22-26`); a registry row and a property test hold that. The loop
 is "Capped so a pathological spill chain cannot loop forever"
-(`sheet-calc/src/lib.rs:400-401`). No error value exists for a circular reference because
+(`sheet-calc/src/lib.rs:386-387`). No error value exists for a circular reference because
 circularity "is a sheet-calc *diagnostic*, never a stored wire value"
-(`sheet-core/src/value.rs:55-58`).
+(`sheet-core/src/value.rs:41-44`).
 
 No place argues the design as a whole. Why a dynamic-array result is written into the
 model as cells, and why the cap is 64, is not stated. The repository does not record why.
@@ -48,38 +48,38 @@ into the model as cells, and the pass repeats until nothing is dirty, at most 64
 
 ## Evidence
 
-- `sheet-calc/src/graph.rs:39-47`, `:62-69`, `:236-250` — `RangeKey` nodes; the scan over
+- `sheet-calc/src/graph.rs:25-33`, `:48-55`, `:222-236` — `RangeKey` nodes; the scan over
   all range keys in `dependents_of`
-- `sheet-calc/src/dirty.rs:95-107`, `:121-125` — transitive marking; the volatile reseed
-- `sheet-calc/src/topo.rs:86-124` — the stable frontier; cells not emitted are the cycle
-- `sheet-calc/src/lib.rs:153-165`, `:389-469` — what `Engine` owns; `recalc_dirty` with
-  the cap (`:402`), the spill and scalar paths (`:418-431`), the cycle policies (`:439-455`)
-- `sheet-calc/src/lib.rs:663-729`, `sheet-calc/src/spill.rs:43-67` — `materialize_spill`;
+- `sheet-calc/src/dirty.rs:81-93`, `:107-111` — transitive marking; the volatile reseed
+- `sheet-calc/src/topo.rs:72-110` — the stable frontier; cells not emitted are the cycle
+- `sheet-calc/src/lib.rs:139-151`, `:375-455` — what `Engine` owns; `recalc_dirty` with
+  the cap (`:388`), the spill and scalar paths (`:404-417`), the cycle policies (`:425-441`)
+- `sheet-calc/src/lib.rs:649-715`, `sheet-calc/src/spill.rs:29-53` — `materialize_spill`;
   the rules of the ledger
-- `sheet-calc/src/lib.rs:536-582`, `sheet-core/src/calc_settings.rs:94-103` — iteration
-- `sheet-calc/src/volatile.rs:54-59`, `sheet-conformance/tests/calc_order.rs:161-190` —
+- `sheet-calc/src/lib.rs:522-568`, `sheet-core/src/calc_settings.rs:80-89` — iteration
+- `sheet-calc/src/volatile.rs:40-45`, `sheet-conformance/tests/calc_order.rs:147-176` —
   the seed; the order-independence property test
 
 ## Alternatives considered
 
-One edge per cell of a range was rejected (`sheet-calc/src/graph.rs:41-42`). An interval
+One edge per cell of a range was rejected (`sheet-calc/src/graph.rs:27-28`). An interval
 index for range invalidation is named as the upgrade over the linear scan
-(`sheet-calc/src/graph.rs:45-46`, `registry/features/calc.yaml:14-21`) and is not built.
+(`sheet-calc/src/graph.rs:31-32`, `registry/features/calc.yaml:14-21`) and is not built.
 
 ## Consequences
 
 Results do not depend on insertion or hash order. The golden corpora rely on that and
-compare without a tolerance (`sheet-conformance/src/lib.rs:61-62`). The `Engine` surface
-is declared frozen for `sheet-js` (`sheet-calc/src/lib.rs:44`). Limits of the code today:
+compare without a tolerance (`sheet-conformance/src/lib.rs:47-48`). The `Engine` surface
+is declared frozen for `sheet-js` (`sheet-calc/src/lib.rs:30`). Limits of the code today:
 
 - Two scans are linear: `dependents_of` visits every range key for each cell it expands,
-  and `precedents_in` (`sheet-calc/src/graph.rs:269-278`) every dirty cell per range key.
+  and `precedents_in` (`sheet-calc/src/graph.rs:255-264`) every dirty cell per range key.
 - When the 64-pass cap is reached, the cells still dirty are dropped
-  (`sheet-calc/src/lib.rs:458`); `RecalcResult` has no field that reports it.
+  (`sheet-calc/src/lib.rs:444`); `RecalcResult` has no field that reports it.
 - The `cycle` set is every dirty cell that never reaches in-degree zero, so it includes
   dirty cells that depend on a cycle without lying on it.
 - Function arguments are evaluated before dispatch, so `IF` and `IFERROR` evaluate the
-  branch they discard (`sheet-calc/src/eval.rs:53-64`).
+  branch they discard (`sheet-calc/src/eval.rs:39-50`).
 - Recalculation runs on the calling thread: no crate starts a thread, no worker is created.
 
 ## Related

@@ -48,8 +48,8 @@ package and version.
   `packages/pdf-bundle/manifest.json:2-3`, `:18-20` — two ids; what each contributes
 - `packages/publish-bundle/package.json:2-4`, `:17-27`;
   `packages/pdf-bundle/package.json:2-4`, `:18-32` — two packages; neither lists the other
-- `packages/publish-bundle/src/activate.ts:51-54`,
-  `packages/pdf-bundle/src/activate.ts:52-55` — one `defineBundle` each
+- `packages/publish-bundle/src/activate.ts:55-58`,
+  `packages/pdf-bundle/src/activate.ts:56-59` — one `defineBundle` each
 - `.github/workflows/ci.yml:57-65`, `.github/workflows/publish.yml:43-57` — the loops over
   all bundles
 - `editor: apps/canvas/src/main.tsx:96-97`, `:1332-1335`;

@@ -11,7 +11,7 @@ Testing a bundle needs a host. This repo tests its own adapter against a fake ed
 For bundles, the harness was first a reserved member that threw. Commit `4587e0d`
 (2026-06-07) replaced it. The reason is in the function's own comment: "the harness now
 stands on a real engine, so a bundle can no longer "pass against fiction""
-(`packages/plugin-sdk/src/harness.ts:519-521`). `DESIGN.md:614-635` says the same: "NOT a
+(`packages/plugin-sdk/src/harness.ts:523-525`). `DESIGN.md:614-635` says the same: "NOT a
 mock".
 
 ## Decision
@@ -36,12 +36,12 @@ engine; the contribution side is recorded; a host with no engine behind it is re
 
 ## Evidence
 
-- `packages/plugin-sdk/src/wasm-loader.ts:21-31`, `:230-245` — the Node boot through
+- `packages/plugin-sdk/src/wasm-loader.ts:25-35`, `:234-249` — the Node boot through
   `initSync`, and what it does without
-- `packages/plugin-sdk/src/wasm-loader.ts:144-167`, `:247-271`, `:186-222` — the stamp and
+- `packages/plugin-sdk/src/wasm-loader.ts:148-171`, `:251-275`, `:190-226` — the stamp and
   the derived protocol; the mismatch error; the resolution anchors and the refusal
-- `packages/plugin-sdk/src/harness.ts:332-340`, `:735-751` — the envelope dispatch; the load
-- `packages/plugin-sdk/src/harness.ts:459-467`, `:580-640`, `:766-776` — recording
+- `packages/plugin-sdk/src/harness.ts:336-344`, `:739-755` — the envelope dispatch; the load
+- `packages/plugin-sdk/src/harness.ts:463-471`, `:584-644`, `:770-780` — recording
   registries; the shared adapter; the enforced host for a loaded bundle
 - `packages/plugin-sdk/package.json:27-28`, `packages/plugin-api/src/wire.d.ts:4`,
   `.github/workflows/vitest.yml:58-59` — the engine as a devDependency at `0.64.0`, equal to
@@ -54,7 +54,7 @@ engine; the contribution side is recorded; a host with no engine behind it is re
 A mock host: the fake editor stays for adapter tests only. Skipping when no engine is
 installed: the loader "Throws (never warn-skips)", because "a headless host with no engine
 behind it is the exact fiction the harness exists to prevent"
-(`packages/plugin-sdk/src/wasm-loader.ts:171-173`).
+(`packages/plugin-sdk/src/wasm-loader.ts:175-177`).
 
 ## Consequences
 
@@ -72,19 +72,19 @@ names the engine package, so resolution there rests on the loader's remaining an
 
 The protocol pin depends on a file path. The loader reads the stamp from
 `../../plugin-api/src/wire.d.ts` relative to its own module
-(`packages/plugin-sdk/src/wasm-loader.ts:132-139`). plugin-api's `files` list names `dist`
+(`packages/plugin-sdk/src/wasm-loader.ts:136-143`). plugin-api's `files` list names `dist`
 and `src/manifest.schema.json`, and its build copies the wire types to `dist/wire.d.ts`
-(`packages/plugin-api/package.json:13-16`, `:37`). When the stamp file cannot be read the
+(`packages/plugin-api/package.json:13-16`, `:41`). When the stamp file cannot be read the
 reader returns `null`, and without a stamp or an `expectedProtocol` option the comparison is
-not made (`packages/plugin-sdk/src/wasm-loader.ts:149-154`, `:247-255`). Neither consumer
+not made (`packages/plugin-sdk/src/wasm-loader.ts:153-158`, `:251-259`). Neither consumer
 passes `expectedProtocol`.
 
 The harness does not replay a tool's gesture event by event and loads one bundle per host.
 It activates through its own `loadBundle` method, which checks the `apiVersion` range and
 calls `activate`; the exported `loadBundle` and its lifecycle are described in
 [ADR 304](304-bundle-lifecycle.md). A comment contradicts the code:
-`packages/plugin-sdk/src/harness.ts:45-46` lists edit contexts and object types as doors that
-throw; they are recorded (`packages/plugin-sdk/src/harness.ts:616-640`).
+`packages/plugin-sdk/src/harness.ts:49-50` lists edit contexts and object types as doors that
+throw; they are recorded (`packages/plugin-sdk/src/harness.ts:620-644`).
 
 ## Related
 

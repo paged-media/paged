@@ -3,8 +3,8 @@
 Presentations on the [paged](https://paged.media) engine: native slides, a PowerPoint `.pptx`
 reader and writer, and a slideshow with a presenter view in the paged editor.
 
-Dual-licensed AGPL-3.0-only OR the Paged Media Enterprise License (PMEL). The vendored
-`vendor/paged-ooxml` crate is MPL-2.0 OR PMEL.
+Dual-licensed AGPL-3.0-only OR the Paged Media Enterprise License (PMEL), the vendored
+`vendor/paged-ooxml` crate included.
 
 See [docs/](docs/README.md).
 

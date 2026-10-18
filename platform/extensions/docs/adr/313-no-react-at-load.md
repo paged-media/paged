@@ -12,7 +12,7 @@ package's single entry (`index → host-impl → widgets-fallback / schema-panel
 they import is loaded by every consumer, including one that only wants `loadBundle`.
 
 Each of two requirements was broken once by a fix for the other. Both are recorded in
-`packages/plugin-sdk/src/react-optional.ts:20-41` and `DESIGN.md:637-658`:
+`packages/plugin-sdk/src/react-optional.ts:24-45` and `DESIGN.md:637-658`:
 
 1. A static `import … from "react"` made the package fail with `ERR_MODULE_NOT_FOUND`
    wherever React is not installed. "That is what silently broke all 22 of plugin-draw's
@@ -43,17 +43,17 @@ target is pinned so that a top-level await cannot be emitted.
 
 ## Evidence
 
-- `packages/plugin-sdk/src/react-optional.ts:20-61`, `:65-80`, `:88-95` — the record; the
+- `packages/plugin-sdk/src/react-optional.ts:24-65`, `:69-84`, `:92-99` — the record; the
   cache and the floating import; `requireCreateElement`
-- `packages/plugin-sdk/src/schema-panel.tsx:48-55`,
-  `packages/plugin-sdk/src/widgets-fallback.tsx:36-46` — the two render paths
-- `packages/plugin-sdk/package.json:13`, `:19-26` — `--target es2020`; the optional peer
-- `packages/plugin-sdk/test/react-free-import.spec.ts:59-113` — the assertions on the
+- `packages/plugin-sdk/src/schema-panel.tsx:52-59`,
+  `packages/plugin-sdk/src/widgets-fallback.tsx:40-50` — the two render paths
+- `packages/plugin-sdk/package.json:13`, `:23-30` — `--target es2020`; the optional peer
+- `packages/plugin-sdk/test/react-free-import.spec.ts:63-117` — the assertions on the
   built artifact and on the build script
 - `.github/workflows/vitest.yml:50-56`, `.github/workflows/publish.yml:39-43` — both
   workflows build before running the suite
-- `packages/plugin-sdk/src/index.ts:76`, `:83` — the two public exports that render
-- `DESIGN.md:637-678`, `:721-740` — the section and the rejected alternatives
+- `packages/plugin-sdk/src/index.ts:80`, `:87` — the two public exports that render
+- `DESIGN.md:637-678`, `:725-744` — the section and the rejected alternatives
 
 ## Alternatives considered
 
@@ -72,13 +72,13 @@ the headless harness ([ADR 309](309-conformance-against-real-engine.md)).
 
 The render paths depend on a timing argument that the module states rather than enforces:
 an `import()` of an already-loaded module settles before React renders a plugin panel
-(`packages/plugin-sdk/src/react-optional.ts:48-57`). When that does not hold, the result is
+(`packages/plugin-sdk/src/react-optional.ts:52-61`). When that does not hold, the result is
 a thrown error naming the cause, not a wrong render.
 
 The gate is one flag in a build script. Raising the target to ES2022 or later removes it;
-the test fails in that case (`packages/plugin-sdk/test/react-free-import.spec.ts:61`,
-`:94-106`). The tests that read the built file return early when `dist` does not exist
-(`:65-70`, `:80`), so a local run without a prior build passes without checking it. The
+the test fails in that case (`packages/plugin-sdk/test/react-free-import.spec.ts:65`,
+`:98-110`). The tests that read the built file return early when `dist` does not exist
+(`:69-74`, `:84`), so a local run without a prior build passes without checking it. The
 two workflows build first for that reason.
 
 Type-only imports from React remain in plugin-api and in `schema-panel.tsx`. They produce

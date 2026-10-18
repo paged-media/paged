@@ -11,7 +11,7 @@ the shell as it was found, and this is to be "enforced by construction", not by 
 
 A host loads several bundles one after another. While the `activate` call in `loadBundle`
 was unguarded, a throw in one bundle prevented every later bundle from loading, with nothing
-naming the culprit (`packages/plugin-sdk/src/load.ts:89-95`).
+naming the culprit (`packages/plugin-sdk/src/load.ts:93-99`).
 
 ## Decision
 
@@ -39,26 +39,26 @@ throws. The bundle's own handle only has to release what it allocated outside th
 
 ## Evidence
 
-- `packages/plugin-api/src/bundle.ts:24-36` — `BundleHandle` and `PagedBundle`; a "no-op
+- `packages/plugin-api/src/bundle.ts:28-40` — `BundleHandle` and `PagedBundle`; a "no-op
   disposer is legitimate"
-- `packages/plugin-sdk/src/load.ts:62-83` — the three refusals; `:15-18` why they throw
-- `packages/plugin-sdk/src/load.ts:89-122` — guarded activation; `:128-144` the handle and
-  the `finally`; `:158-173` the inert handle
-- `packages/plugin-sdk/src/disposables.ts:22-53` — reverse order, idempotent, a failing
+- `packages/plugin-sdk/src/load.ts:66-87` — the three refusals; `:19-22` why they throw
+- `packages/plugin-sdk/src/load.ts:93-126` — guarded activation; `:132-148` the handle and
+  the `finally`; `:162-177` the inert handle
+- `packages/plugin-sdk/src/disposables.ts:26-57` — reverse order, idempotent, a failing
   teardown "must not strand the rest"
-- `packages/plugin-sdk/src/version.ts:21`, `:29-59` — `API_VERSION` and the range check
-- `packages/plugin-sdk/test/host-impl.spec.ts:390-409` — a bundle disposer that throws: the
+- `packages/plugin-sdk/src/version.ts:25`, `:33-63` — `API_VERSION` and the range check
+- `packages/plugin-sdk/test/host-impl.spec.ts:394-413` — a bundle disposer that throws: the
   error reaches the caller and the registered tool is gone
-- `packages/plugin-sdk/test/journal.spec.ts:152-165` — three bundles, the middle one throws
+- `packages/plugin-sdk/test/journal.spec.ts:156-169` — three bundles, the middle one throws
   in `activate`: `active` is `[true, false, true]`
 
 ## Alternatives considered
 
 - A bare `activate` call that lets the error escape: the state before commit `dd241f5`
   (2026-08-22). The comment that replaced it reads "Seven working plugins beat eight broken
-  ones." (`packages/plugin-sdk/src/load.ts:95`).
+  ones." (`packages/plugin-sdk/src/load.ts:99`).
 - A working-looking handle for a bundle that failed: rejected as a teardown "that lies about
-  having set anything up" (`packages/plugin-sdk/src/load.ts:160-161`).
+  having set anything up" (`packages/plugin-sdk/src/load.ts:164-165`).
 
 ## Consequences
 
@@ -79,7 +79,7 @@ apart; added doors are detected with `host.supports()`
 template declare `"^0.2"` (for example `plugin-draw: packages/draw-bundle/manifest.json:5`),
 so a contract `0.3.0` would refuse every one of them at load.
 
-`packages/plugin-sdk/src/version.ts:17-18` says full semver "arrives with publishing". The
+`packages/plugin-sdk/src/version.ts:21-22` says full semver "arrives with publishing". The
 packages are published and the grammar is still the minimal one.
 
 ## Related

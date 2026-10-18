@@ -75,14 +75,14 @@ workflow comment says no runner has it; without it a failing fixture ends the ga
 Ghostscript profile serves the colour tests and the PDF export diff, not this gate.
 
 The rule is not applied everywhere. Nine variants of the `images` sample link a photo by an
-absolute `file:` URI outside the repository (`crates/paged-gen/src/samples/images.rs:336-339`); the
+absolute `file:` URI outside the repository (`crates/paged-gen/src/samples/images.rs:340-343`); the
 file is not tracked. The contributor-agreement workflow records signatures in a separate
 repository that its setup comment says must be private (`.github/workflows/cla.yml:5-13`); it is
 not part of building or testing.
 - Also outside the repository: an `#[ignore]` test reads a private corpus checkout beside this one
-  when `PAGED_GRID_CORPUS` is set (`crates/paged-scene/tests/grid_matrix_corpus.rs:30-50`, `:112`);
-  colour profiles are probed at absolute Adobe paths (`crates/paged-color/src/profiles.rs:154-158`,
-  `crates/paged-export-pdf/tests/export_x4.rs:65`, `crates/paged-canvas/tests/export_pdf.rs:110`,
+  when `PAGED_GRID_CORPUS` is set (`crates/paged-scene/tests/grid_matrix_corpus.rs:34-54`, `:116`);
+  colour profiles are probed at absolute Adobe paths (`crates/paged-color/src/profiles.rs:158-162`,
+  `crates/paged-export-pdf/tests/export_x4.rs:69`, `crates/paged-canvas/tests/export_pdf.rs:114`,
   `corpus/generated/render-diff.sh:186`, `corpus/generated/export-diff.sh:99`); secrets are used by
   the docs dispatch, `.github/workflows/notify-docs.yml` (`DOCS_DISPATCH_TOKEN`), and the release,
   `.github/workflows/publish-wasm.yml` (`NPM_TOKEN`).

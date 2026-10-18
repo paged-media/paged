@@ -37,14 +37,14 @@ handle and a set of backends.
 
 ## Evidence
 
-- `packages/plugin-sdk/src/host-impl.ts:15-25` — the header: why it lives here; "no imports"
-  from the editor's packages at value level; `:27-104` the imports
-- `packages/plugin-sdk/src/host-impl.ts:1002-1006` — the signature; `:3184-3220` the object
+- `packages/plugin-sdk/src/host-impl.ts:19-29` — the header: why it lives here; "no imports"
+  from the editor's packages at value level; `:31-108` the imports
+- `packages/plugin-sdk/src/host-impl.ts:1006-1010` — the signature; `:3188-3224` the object
   literal with all 26 members, and the returned handle
-- `packages/plugin-sdk/src/host-impl.ts:843-994` — `CreateBundleHostOptions`
-- `packages/plugin-api/src/editor.ts:553-570`, `:573-666` — `PagedClient`, `PagedEditor`;
-  `:27-32` widening a handle type is an API addition
-- `packages/plugin-sdk/src/load.ts:84-88`, `packages/plugin-sdk/src/harness.ts:584` — the two
+- `packages/plugin-sdk/src/host-impl.ts:847-998` — `CreateBundleHostOptions`
+- `packages/plugin-api/src/editor.ts:557-574`, `:577-670` — `PagedClient`, `PagedEditor`;
+  `:31-36` widening a handle type is an API addition
+- `packages/plugin-sdk/src/load.ts:88-92`, `packages/plugin-sdk/src/harness.ts:588` — the two
   callers in this repo's source
 - `editor: apps/canvas/src/main.tsx:1251-1285` — the editor's side: one options object, one
   `loadBundle` call expression used for every bundle
@@ -67,19 +67,19 @@ answer, is decided by the plugin-sdk version the editor installs; the editor pin
 (`editor: apps/canvas/package.json:36-37`).
 
 The editor is obliged to keep its handle assignable to `PagedEditor` and to inject the
-backends. The adapter's header (`packages/plugin-sdk/src/host-impl.ts:18`) and
+backends. The adapter's header (`packages/plugin-sdk/src/host-impl.ts:22`) and
 `CLAUDE.md:48-49` say the editor's "only job is one `loadBundle()` call per bundle"; at the
 pinned editor commit that call is accompanied by 14 shared backends and a per-plugin console
 (`editor: apps/canvas/src/main.tsx:1251-1275`).
 
 The adapter is a single function of about 2200 lines
-(`packages/plugin-sdk/src/host-impl.ts:1002-3221`).
+(`packages/plugin-sdk/src/host-impl.ts:1006-3225`).
 
 The second implementation is not built: `createBundleHost` is the only code in this repo
 that constructs a `BundleHost`, and `createBundleHostProxy` occurs only in `DESIGN.md:93`.
 
 The adapter also returns the raw editor handle as `host.editor`
-(`packages/plugin-sdk/src/host-impl.ts:3210-3212`), which bypasses every facade
+(`packages/plugin-sdk/src/host-impl.ts:3214-3216`), which bypasses every facade
 ([ADR 010](010-raw-mutate-gate-capability-enforcement.md)).
 
 ## Related

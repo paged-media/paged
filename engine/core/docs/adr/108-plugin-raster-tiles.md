@@ -11,10 +11,10 @@ again on every commit. Two cases outgrew it, and the module docs say which.
 
 An interactive drag needs finer granularity: "a slider drag re-streams only the dirtied
 tiles onto the frame, not the whole image, every frame"
-(`crates/paged-compose/src/pixel_layer.rs:27-32`). And the native image lane is
+(`crates/paged-compose/src/pixel_layer.rs:31-36`). And the native image lane is
 whole-image, "one `DecodedImage` per placed asset", while a plugin that owns a tiled mip
 pyramid can serve any window of a large composition, "but core had no seam to ASK for
-tiles" (`crates/paged-renderer/src/resource_provider.rs:17-23`).
+tiles" (`crates/paged-renderer/src/resource_provider.rs:21-27`).
 
 A door that hands the engine a GPU texture is deferred
 ([ADR 018](018-stage-b-gpu-texture-defer-record-only.md)). In the crates, `GPUTexture`
@@ -46,14 +46,14 @@ Plugin pixels reach the page as CPU RGBA8 rectangles, and every form is lowered 
 
 ## Evidence
 
-- `crates/paged-renderer/src/resource_provider.rs:15-37`, `:43-62` — the pull contract ("compose NEVER blocks on a tile fetch") and the trait
-- `crates/paged-renderer/src/resource_provider.rs:182-236` — `assemble_resource_tiles`: one `DisplayCommand::Image` per returned tile, missing origins returned
-- `crates/paged-renderer/src/pipeline/text_frame.rs:1448-1508`, `crates/paged-renderer/src/pipeline/build_engine.rs:1565-1577` — the per-frame call, after the frame's native content
-- `crates/paged-compose/src/pixel_layer.rs:15-37`, `:88-112` — `PixelLayer` and its lowering
-- `crates/paged-compose/src/scene_layer.rs:76-87`, `:593-632` — `SceneItem::Image` and its lowering to `DisplayCommand::Image`
-- `crates/paged-canvas/src/channel.rs:258-277`, `:1059-1112` — the wire kinds for pixel layers, claims and tile submits
-- `crates/paged-canvas/src/resource_tiles.rs:15-41`, `:160-173` — the tile store, its budget, and the stale-reply guard
-- `plugin-sdk: packages/plugin-api/src/host.ts:533-574` — the plugin-facing `host.images.claimImageResource`
+- `crates/paged-renderer/src/resource_provider.rs:19-41`, `:47-66` — the pull contract ("compose NEVER blocks on a tile fetch") and the trait
+- `crates/paged-renderer/src/resource_provider.rs:186-240` — `assemble_resource_tiles`: one `DisplayCommand::Image` per returned tile, missing origins returned
+- `crates/paged-renderer/src/pipeline/text_frame.rs:1452-1512`, `crates/paged-renderer/src/pipeline/build_engine.rs:1569-1581` — the per-frame call, after the frame's native content
+- `crates/paged-compose/src/pixel_layer.rs:19-41`, `:92-116` — `PixelLayer` and its lowering
+- `crates/paged-compose/src/scene_layer.rs:80-91`, `:597-636` — `SceneItem::Image` and its lowering to `DisplayCommand::Image`
+- `crates/paged-canvas/src/channel.rs:262-281`, `:1063-1116` — the wire kinds for pixel layers, claims and tile submits
+- `crates/paged-canvas/src/resource_tiles.rs:19-45`, `:164-177` — the tile store, its budget, and the stale-reply guard
+- `plugin-sdk: packages/plugin-api/src/host.ts:537-578` — the plugin-facing `host.images.claimImageResource`
 
 ## Alternatives considered
 
@@ -61,7 +61,7 @@ Plugin pixels reach the page as CPU RGBA8 rectangles, and every form is lowered 
   it is not used during a drag (quoted above).
 - A shared GPU device and plugin textures: deferred, see ADR 018.
 - A blocking tile fetch: excluded by the provider contract; the trait returns `None` for a
-  tile the provider does not have "*yet*" (`crates/paged-renderer/src/resource_provider.rs:52-56`).
+  tile the provider does not have "*yet*" (`crates/paged-renderer/src/resource_provider.rs:56-60`).
 
 ## Consequences
 
@@ -77,10 +77,10 @@ Three parts of the pull lane are less complete than the comments say:
 - The module doc says a miss "assembles whatever coarser level IS cached", and the wire
   note says "the best cached level". `emit_frame_resource_tiles` assembles the chosen level
   only; where a tile is missing, what the frame drew before the tiles stays visible
-  (`crates/paged-renderer/src/resource_provider.rs:173-177`).
+  (`crates/paged-renderer/src/resource_provider.rs:177-181`).
 - The wire declares an unsolicited `ResourceTilesNeeded` message. The dispatcher never
   posts it; the missing tiles travel in the `needed` field of the `ResourceClaimApplied`
-  reply to a claim or a submit (`crates/paged-canvas-wasm/src/dispatch.rs:858-951`).
+  reply to a claim or a submit (`crates/paged-canvas-wasm/src/dispatch.rs:862-955`).
 
 ## Related
 

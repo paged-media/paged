@@ -12,7 +12,7 @@ A bundle that decodes images or runs queries wants to do that off the main threa
 `DESIGN.md:1246-1253` states the position taken: "A bundle never touches `new Worker()`
 directly — the SDK owns the primitive, the manifest gates it, the host budgets + tears it
 down (the same posture as every other door)". The contract repeats it where the door is
-typed (`packages/plugin-api/src/host.ts:582-590`): the host can budget and tear down, and
+typed (`packages/plugin-api/src/host.ts:586-594`): the host can budget and tear down, and
 tracks every worker for teardown when the bundle is disposed.
 
 The same passage of `DESIGN.md` says the door had been deferred under the rule that nothing
@@ -54,17 +54,17 @@ runs a worker, constructs it itself (see Consequences).
 ## Evidence
 
 - `packages/plugin-api/src/manifest.schema.json:147-169`,
-  `packages/plugin-api/src/manifest.ts:241-256`,
+  `packages/plugin-api/src/manifest.ts:245-260`,
   `packages/plugin-cli/bin/paged-plugin.mjs:72-75`, `:238-268` — the capability, three times
-- `packages/plugin-api/src/host.ts:599-659`, `:1644-1651` — `SpawnWorkerOptions`,
+- `packages/plugin-api/src/host.ts:603-663`, `:1648-1655` — `SpawnWorkerOptions`,
   `BundleWorker`, `WorkersSurface`; the member on `BundleHost`
-- `packages/plugin-sdk/src/host-impl.ts:340-348`, `:2852-2868` — the budgets; the grant and
+- `packages/plugin-sdk/src/host-impl.ts:344-352`, `:2856-2872` — the budgets; the grant and
   the byte budget
-- `packages/plugin-sdk/src/host-impl.ts:2893-2927`, `:2948-2993` — `allocateShared`; `spawn`
+- `packages/plugin-sdk/src/host-impl.ts:2897-2931`, `:2952-2997` — `allocateShared`; `spawn`
   with the gate, the cap, the reserved slot and the teardown registration
-- `packages/plugin-sdk/src/host-impl.ts:374-394`, `:3162-3167` — `SpawnedWorker`,
+- `packages/plugin-sdk/src/host-impl.ts:378-398`, `:3166-3171` — `SpawnedWorker`,
   `WorkerBackend`; the feature flag set only when a backend is injected
-- `packages/plugin-sdk/test/workers.spec.ts:129-255` — eleven tests against a mock backend
+- `packages/plugin-sdk/test/workers.spec.ts:133-259` — eleven tests against a mock backend
 - `editor: apps/canvas/src/plugin-worker.ts:72-99`, `editor: apps/canvas/src/main.tsx:103-108`,
   `:1177-1180` — the backend and its one resolver
 - `plugin-image: glue/manifest.json:23-26`, `plugin-image: glue/src/decode-pool.ts:92-136` —
@@ -86,7 +86,7 @@ comment gives the state it was written in: "no host worker capability yet; the b
 spawns the DuckDB worker from the vendored bundle"
 (`plugin-data: packages/data-bundle/src/query/duckdb.ts:19-22`, `:96`).
 
-The manifest does not list worker modules. `packages/plugin-api/src/manifest.ts:164-166`
+The manifest does not list worker modules. `packages/plugin-api/src/manifest.ts:168-170`
 says only modules "listed under a declared path" may be spawned, but `WorkersCapability`
 has three fields and none names a module. The adapter passes `module` to the backend
 unchecked; which paths resolve is decided by the host application's table.
@@ -97,7 +97,7 @@ its decode replies move a buffer with a transfer list
 
 The door is a budget and a lifecycle, not a sandbox. `DESIGN.md:1284-1290` calls it
 "Honesty + accident-prevention, not a security boundary" ([ADR 319](319-trust-line.md)).
-A headless host injects no backend (`packages/plugin-sdk/src/host-impl.ts:389-390`), so
+A headless host injects no backend (`packages/plugin-sdk/src/host-impl.ts:393-394`), so
 there `spawn` rejects and a bundle takes its fallback.
 
 ## Related

@@ -1,8 +1,8 @@
 # paged.slide — Cargo workspace.
 #
 # Crates live at REPO TOP LEVEL (as in plugin-doc). `vendor/paged-ooxml` is a
-# vendored copy of plugin-doc's shared MPL-2.0 OOXML foundation (ADR 701); every
-# pptx-* / slide-* crate is AGPL-3.0-only OR PMEL (the workspace default below).
+# vendored copy of plugin-doc's shared OOXML foundation (ADR 701); every crate
+# is AGPL-3.0-only OR PMEL (the workspace default below).
 [workspace]
 resolver = "2"
 members = [

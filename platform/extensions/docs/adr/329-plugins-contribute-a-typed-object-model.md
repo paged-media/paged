@@ -121,28 +121,28 @@ bindings, panel fields and the CLI reach plugin objects only through it.
 
 ## Evidence
 
-- `packages/plugin-api/src/object-model.ts:58-64` — `Address` and `Selector`; `:234-251` —
-  `ObjectValue` and `ObjectOp`; `:329-351` — `ObjectWrite`; `:379-430` — the kind, the typed
-  command and the contribution with its plugin-level `batch`; `:441-458` — `ObjectWriteResult`
-  with `created` and `commands`; `:494` — `ObjectsSurface`
-- `packages/plugin-api/src/host.ts:558` — `contribute.objectModel`; `:2295` — `BundleHost.objects`
-- `packages/plugin-api/src/manifest.ts:396-402`, `:418` — `contributes.objectModel`
-- `packages/plugin-api/src/panel-schema.ts:306-372` — the property row and the row union
-- `packages/plugin-sdk/src/object-registry.ts:206` — `createObjectRegistry`; `:488-510` — the
-  label-key rule and the refusal of conflicting state writes; `:544-563` — parts first, then one
+- `packages/plugin-api/src/object-model.ts:62-68` — `Address` and `Selector`; `:238-255` —
+  `ObjectValue` and `ObjectOp`; `:333-355` — `ObjectWrite`; `:383-434` — the kind, the typed
+  command and the contribution with its plugin-level `batch`; `:445-462` — `ObjectWriteResult`
+  with `created` and `commands`; `:498` — `ObjectsSurface`
+- `packages/plugin-api/src/host.ts:562` — `contribute.objectModel`; `:2299` — `BundleHost.objects`
+- `packages/plugin-api/src/manifest.ts:400-406`, `:422` — `contributes.objectModel`
+- `packages/plugin-api/src/panel-schema.ts:310-376` — the property row and the row union
+- `packages/plugin-sdk/src/object-registry.ts:210` — `createObjectRegistry`; `:492-514` — the
+  label-key rule and the refusal of conflicting state writes; `:548-567` — parts first, then one
   commit
-- `packages/plugin-sdk/src/object-address.ts:126`, `:200`, `:420` — `parseAddress`,
+- `packages/plugin-sdk/src/object-address.ts:130`, `:204`, `:424` — `parseAddress`,
   `formatAddress`, `parseSelector`
-- `packages/plugin-sdk/src/object-schema.ts:130`, `:329` — `validateValue`, `coerceValue`
-- `packages/plugin-sdk/src/core-objects.ts:16-30`, `:126` — the protocol-aware seam
-- `packages/plugin-sdk/src/core-commands.ts:54` — the operations that are not typed commands,
+- `packages/plugin-sdk/src/object-schema.ts:134`, `:333` — `validateValue`, `coerceValue`
+- `packages/plugin-sdk/src/core-objects.ts:20-34`, `:130` — the protocol-aware seam
+- `packages/plugin-sdk/src/core-commands.ts:58` — the operations that are not typed commands,
   each with its reason
-- `packages/plugin-sdk/src/script-bridge.ts:70-79`, `:94-158` — the host half of the script
+- `packages/plugin-sdk/src/script-bridge.ts:74-83`, `:98-162` — the host half of the script
   bridge and the calls it answers
-- `packages/plugin-sdk/src/host-impl.ts:199-200`, `:1985-2014`, `:4437-4457` — the flags, the
+- `packages/plugin-sdk/src/host-impl.ts:203-204`, `:1989-2018`, `:4441-4461` — the flags, the
   declaration gate and the read and write gates
-- `packages/plugin-sdk/src/panel-schema-check.ts:57`, `:258`; `object-list.ts:56`;
-  `value-edit.ts:166` — the panel helpers
+- `packages/plugin-sdk/src/panel-schema-check.ts:61`, `:262`; `object-list.ts:60`;
+  `value-edit.ts:170` — the panel helpers
 - `packages/plugin-cli/bin/paged-plugin.mjs:15-23`, `:175-190` — `validate` over
   `contributes.objectModel` and the untyped baseline
 - Specs in `packages/plugin-sdk/test`: `object-model.spec.ts`, `object-model-core.spec.ts`,

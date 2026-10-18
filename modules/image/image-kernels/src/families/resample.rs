@@ -16,20 +16,6 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-/*
- * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at https://mozilla.org/MPL/2.0/.
- *
- * This file is part of paged (https://paged.media) and is additionally
- * available under the Paged Media Enterprise License (PMEL). Full
- * copyright and license information is available in LICENSE.md which is
- * distributed with this source code.
- *
- *  @copyright  Copyright (c) And The Next GmbH
- *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
- */
-
 //! Resample family (T1, spec §11) — handwritten WGSL modules under the
 //! ABI v1.1 contract (`abi::assemble` docs). Three separable resamplers:
 //! `resample.nearest`, `resample.mitchell` (B=C=1/3), `resample.lanczos3`.
@@ -181,7 +167,7 @@ pub static RESAMPLE_LANCZOS3: KernelDef = KernelDef {
 /// tap, so the result is one exact texel fetch (tolerance 0).
 const RESAMPLE_NEAREST_WGSL: &str = "\
 // paged.image kernel `resample.nearest` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     inv_scale_x: f32,
@@ -218,7 +204,7 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
 ///   else  : 0
 const RESAMPLE_MITCHELL_WGSL: &str = "\
 // paged.image kernel `resample.mitchell` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     inv_scale_x: f32,
@@ -291,7 +277,7 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
 /// `sinc(u) = sin(pi u) / (pi u)` and `sinc(0) = 1`.
 const RESAMPLE_LANCZOS3_WGSL: &str = "\
 // paged.image kernel `resample.lanczos3` — handwritten under ABI v1.1.
-// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
 
 struct Params {
     inv_scale_x: f32,

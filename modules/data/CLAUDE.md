@@ -173,8 +173,8 @@ Rules for every code change in this repo:
   never read it. EasyCatalog is studied as a PRODUCT (features/UX), never as
   code. **M0: references/ is NOT mounted** — implementation derives from SQL
   standards, Arrow, public docs, and golden corpora.
-- **LICENSE.** The whole repo is dual AGPL-3.0-only OR PMEL (like the editor;
-  core and plugin-sdk are MPL-2.0 OR PMEL). Every `.rs` carries the AGPL/PMEL
+- **LICENSE.** The whole repo is dual AGPL-3.0-only OR PMEL (like the editor,
+  core and the SDK; ADR PM-0001). Every `.rs` carries the AGPL/PMEL
   header (copy from `data-core/src/lib.rs`). TS
   files (`packages/`, `scripts/`) carry NO header (private-side convention, like
   plugin-sheets/plugin-draw/plugin-web).

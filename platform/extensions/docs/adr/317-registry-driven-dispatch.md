@@ -15,14 +15,14 @@ that implements it, its status, a provenance note and the tests that cover it.
 
 The repositories state what the registry is for as an invariant, not as a comparison with
 another design: "An unregistered function has no row, hence no `FuncId`, hence no dispatch
-— uncallable by construction" (`plugin-sheets: sheet-core/build.rs:37-38`), and, for the
+— uncallable by construction" (`plugin-sheets: sheet-core/build.rs:23-24`), and, for the
 gate, "*every `implemented` row → real tests on disk*"
-(`plugin-sheets: sheet-conformance/src/bin/coverage_gate.rs:35-36`). Why a registry was
+(`plugin-sheets: sheet-conformance/src/bin/coverage_gate.rs:21-22`). Why a registry was
 chosen over a hand-written table is not argued. The repository does not record why.
 
 plugin-image records what its gate was written to stop: six kernels "were written,
 compiled, and passed the whole suite while absent from the registry"
-(`plugin-image: image-conformance/tests/registry_drift.rs:24-27`).
+(`plugin-image: image-conformance/tests/registry_drift.rs:28-31`).
 
 ## Decision
 
@@ -53,23 +53,23 @@ plugin-publish have no registry.
 
 ## Evidence
 
-- `plugin-sheets: sheet-core/build.rs:33-38`, `plugin-sheets: sheet-fn/build.rs:33-41`,
-  `plugin-sheets: sheet-parser/src/pratt.rs:322-324` — the two generators, the id sort, the
+- `plugin-sheets: sheet-core/build.rs:19-24`, `plugin-sheets: sheet-fn/build.rs:19-27`,
+  `plugin-sheets: sheet-parser/src/pratt.rs:308-310` — the two generators, the id sort, the
   parse-time lookup
 - `plugin-data: data-core/build.rs:33-39`, `plugin-data: data-expr/build.rs:33-40`,
   `plugin-data: data-expr/src/parser.rs:33-37` — the same in plugin-data
-- `plugin-sheets: sheet-conformance/src/bin/coverage_gate.rs:33-55`,
+- `plugin-sheets: sheet-conformance/src/bin/coverage_gate.rs:19-41`,
   `plugin-data: data-conformance/src/bin/coverage_gate.rs:33-49` — the gate's rules
 - `plugin-sheets: .github/workflows/rust.yml:51-52`,
   `plugin-data: .github/workflows/rust.yml:42-45` — the gate as a CI step
-- `plugin-image: image-kernels/build.rs:33-42`, `:54-65`;
-  `plugin-image: image-kernels/src/lib.rs:131-139` — the generated table and `lookup`
-- `plugin-image: image-kernels/src/lib.rs:155-166`,
-  `plugin-image: image-conformance/tests/registry_drift.rs:79-116`, `:34-37`,
+- `plugin-image: image-kernels/build.rs:19-28`, `:40-51`;
+  `plugin-image: image-kernels/src/lib.rs:117-125` — the generated table and `lookup`
+- `plugin-image: image-kernels/src/lib.rs:141-152`,
+  `plugin-image: image-conformance/tests/registry_drift.rs:83-120`, `:38-41`,
   `plugin-image: .github/workflows/ci.yml:60-61` — the set equality tests; why no YAML
   crate; the test step
-- `plugin-image: image-js/src/lib.rs:1738`, `plugin-image: image-js/src/stroke.rs:155-164`,
-  `plugin-image: image-js/src/lib.rs:84-86` — kernels named by Rust path or taken from a
+- `plugin-image: image-js/src/lib.rs:1724`, `plugin-image: image-js/src/stroke.rs:141-150`,
+  `plugin-image: image-js/src/lib.rs:70-72` — kernels named by Rust path or taken from a
   family list; the one use of `registry()` outside `image-kernels` and the tests, a count
 - `plugin-sheets: CLAUDE.md:95-102`, `plugin-data: CLAUDE.md:110-117`,
   `plugin-image: CLAUDE.md:76-78` — the rule as each repository states it

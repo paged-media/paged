@@ -44,12 +44,12 @@ grid computed in Rust for the visible cells and submitted as a scene layer on th
 
 ## Evidence
 
-- `sheet-lower/src/lib.rs:33-41`, `:377-384` — pure lowering from cached values; `lower_range` passes `NoStyles`
+- `sheet-lower/src/lib.rs:19-27`, `:363-370` — pure lowering from cached values; `lower_range` passes `NoStyles`
 - `packages/sheet-bundle/src/lower.ts:298-415` — the three steps; `:192-236` text per cell, then one decor batch; `:323-325`, `:380-401` the two ways into the tab-text lane
 - `packages/sheet-host-model/src/lower-to-table.ts:98-115` — the `insertTable` arguments; `packages/sheet-host-model/src/binding.ts:41`, `:51-59` — the key and the binding data
 - `packages/sheet-bundle/src/activate.ts:280-287`, `:288-349` — object type, edit context and its hooks, including `onExit`
 - `packages/sheet-bundle/src/session.ts:498-502`, `:622-644`, `:900-938` — the scene channel behind `supports("rendering.sceneLayer@1")`, the submit, sizing to the frame; `:524-567`, `:993-1017` — the journal, commit, hide
-- `sheet-grid/src/lib.rs:35-41`; `packages/sheet-host-model/src/grid.ts:575`, `:696` — the windowed scene; `gridSceneToSceneLayer`, `hitCell`
+- `sheet-grid/src/lib.rs:21-27`; `packages/sheet-host-model/src/grid.ts:575`, `:696` — the windowed scene; `gridSceneToSceneLayer`, `hitCell`
 - `packages/sheet-bundle/src/lower.ts:626-680`, `:692-732`; `packages/sheet-bundle/src/index.ts:87-93` — the chain functions and their only reference outside the tests
 
 ## Alternatives considered
@@ -74,9 +74,9 @@ that this gave up single-undo atomicity. Parts of the design are not built:
   predicate. The in-frame grid shows the session's active sheet from its first row and column
   (`packages/sheet-bundle/src/session.ts:727-750`, `:934`), whatever range the frame was lowered
   from. The chart lowering writes the same envelope (`packages/sheet-bundle/src/lower-chart.ts:104`).
-- `get_range_lowered` resolves no visual styles (`sheet-js/src/core.rs:1104`, `:1114-1122`)
-  and the grid scene carries the default style only (`sheet-grid/src/lib.rs:415-417`,
-  `:538-540`). Workbook fonts, fills and text colours reach neither surface.
+- `get_range_lowered` resolves no visual styles (`sheet-js/src/core.rs:1090`, `:1100-1108`)
+  and the grid scene carries the default style only (`sheet-grid/src/lib.rs:401-403`,
+  `:524-526`). Workbook fonts, fills and text colours reach neither surface.
 - A user cannot reach pagination across a frame chain: only tests call `lowerPaginatedToChain`
   and `subscribeChainReflow`, though `CLAUDE.md:37-38` lists live pagination as landed.
 - Comments contradict the code: `packages/sheet-bundle/src/lower.ts:32-34` calls step three one batch;

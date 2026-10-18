@@ -12,9 +12,9 @@ The CLI states the rule it was built on. Driving it through the editor's dispatc
 the CLI cannot apply a mutation the editor cannot, or load a document with options the
 editor cannot express — and it inherits fonts, colour profiles, PDF export, the
 container-parts door, scripting and undo without this crate implementing any of them"
-(`crates/paged-cli/src/engine.rs:19-23`). The headless session had broken that rule before
+(`crates/paged-cli/src/engine.rs:23-27`). The headless session had broken that rule before
 it was moved: "Two implementations of load, export and render lived in one crate, and only
-one of them was the door the editor uses" (`crates/paged-cli/src/session.rs:236-238`).
+one of them was the door the editor uses" (`crates/paged-cli/src/session.rs:240-242`).
 
 ## Decision
 
@@ -36,7 +36,7 @@ run inside it and write with the same operation vocabulary.
   binary whose `main` only calls `paged_cli::session::run()`.
 - A script changes the document by building `Mutation` values and passing them to
   `CanvasModel::apply_mutation`, the call the dispatcher's `Mutate` arm makes
-  (`crates/paged-canvas-wasm/src/dispatch.rs:288-301`).
+  (`crates/paged-canvas-wasm/src/dispatch.rs:292-305`).
 - Each surface's reach is a test. The CLI names 32 of the 62 message kinds; the 30 others
   are listed with a reason each. The script bridge names every wire operation except
   `BindCreated`. Both lists may only shrink.
@@ -45,28 +45,28 @@ run inside it and write with the same operation vocabulary.
   `web/idml-viewer/api-catalog.json` is written by hand; its test checks that every export
   of `src/index.ts` appears in it and that each member has a name, a signature and a
   summary, not that the entries match the code
-  (`web/idml-viewer/test/api-catalog.test.ts:15-19`, `:49-63`).
+  (`web/idml-viewer/test/api-catalog.test.ts:19-23`, `:53-67`).
 
 ## Evidence
 
-- `crates/paged-canvas-wasm/src/dispatch.rs:15-31`, `:172`, `:210-214` — the module doc, `handle_message`, `dispatch`
-- `crates/paged-canvas-wasm/src/lib.rs:25-31`, `:636-653` — the shell's remit; `handleMessage` forwards to the core and applies the effect
-- `crates/paged-canvas/src/lib.rs:17-19`, `crates/paged-canvas/src/channel.rs:49`, `crates/paged-canvas/src/resolve.rs:52` — "Pure Rust. No wasm-bindgen"; the two `typescript_custom_section` attributes
-- `crates/paged-cli/src/engine.rs:15-33`, `:72-88` — the rule, and `Session::send`
-- `crates/paged-cli/tests/cli_surface.rs:41-48`, `:59-61`, `:125`, `:259-262` — no `paged wire <json>`; the shrink-only list; the counts
-- `crates/paged-script/tests/script_surface.rs:50-59`, `crates/paged-script/src/lib.rs:1039-1386` — the script gate; the bridge's writes
-- `crates/paged-run/src/main.rs:15-36`, `crates/paged-run/Cargo.toml:14-22` — the shim and why it stays
-- `crates/paged-cli/src/cli.rs:15-26`, `:313-323`, `crates/paged-introspect/src/catalog.rs:1340-1352` — the committed artifacts and their is-current tests
+- `crates/paged-canvas-wasm/src/dispatch.rs:19-35`, `:176`, `:214-218` — the module doc, `handle_message`, `dispatch`
+- `crates/paged-canvas-wasm/src/lib.rs:29-35`, `:640-657` — the shell's remit; `handleMessage` forwards to the core and applies the effect
+- `crates/paged-canvas/src/lib.rs:21-23`, `crates/paged-canvas/src/channel.rs:53`, `crates/paged-canvas/src/resolve.rs:56` — "Pure Rust. No wasm-bindgen"; the two `typescript_custom_section` attributes
+- `crates/paged-cli/src/engine.rs:19-37`, `:76-92` — the rule, and `Session::send`
+- `crates/paged-cli/tests/cli_surface.rs:45-52`, `:63-65`, `:129`, `:263-266` — no `paged wire <json>`; the shrink-only list; the counts
+- `crates/paged-script/tests/script_surface.rs:54-63`, `crates/paged-script/src/lib.rs:1043-1390` — the script gate; the bridge's writes
+- `crates/paged-run/src/main.rs:19-40`, `crates/paged-run/Cargo.toml:14-22` — the shim and why it stays
+- `crates/paged-cli/src/cli.rs:19-30`, `:317-327`, `crates/paged-introspect/src/catalog.rs:1344-1356` — the committed artifacts and their is-current tests
 
 ## Alternatives considered
 
 - A raw `paged wire <json>` subcommand: refused, because "a raw-JSON escape hatch beside a
-  raw-JSON session is duplication" (`crates/paged-cli/tests/cli_surface.rs:45-46`).
+  raw-JSON session is duplication" (`crates/paged-cli/tests/cli_surface.rs:49-50`).
 - Renaming `paged-run` or giving it arguments: three consumers start it by name, and
   "anything it accepted would be a second, divergent surface for the same protocol"
-  (`crates/paged-run/src/main.rs:20-32`).
+  (`crates/paged-run/src/main.rs:24-36`).
 - Hand-written reference pages: "writing a second copy of this tree by hand, which drifts
-  the first time a flag is added" (`crates/paged-cli/src/cli.rs:19-21`).
+  the first time a flag is added" (`crates/paged-cli/src/cli.rs:23-25`).
 
 ## Consequences
 
@@ -78,11 +78,11 @@ The wasm shell exports more than `handleMessage`: direct calls for document byte
 deltas, geometry queries and rendering ([ADR 115](115-worker-boundary-transports.md)). One
 of them, `loadDocumentDirect`, calls `CanvasModel::load` in the shell and stores the model
 on the core, beside the dispatcher's `LoadDocument` arm
-(`crates/paged-canvas-wasm/src/lib.rs:260-298`).
+(`crates/paged-canvas-wasm/src/lib.rs:264-302`).
 
 The headless session does not accept wire messages. Its requests are twelve `cmd` forms
-(`crates/paged-cli/src/session.rs:97-175`) served through the same `Session`; the sentence at
-`crates/paged-cli/tests/cli_surface.rs:43-44` that it "already speaks the whole protocol" is
+(`crates/paged-cli/src/session.rs:101-179`) served through the same `Session`; the sentence at
+`crates/paged-cli/tests/cli_surface.rs:47-48` that it "already speaks the whole protocol" is
 wider than that.
 
 ## Related

@@ -7,10 +7,10 @@ most-exercised structural pattern).**
 enum + `label()` at `:1158`, exhaustiveness rationale at `:165`); `apply.rs`
 (per-path application); `invert.rs` (the operation algebra: `SetProperty(new) →
 SetProperty(prev)`, `Batch(ops) → Batch(rev.map(invert))`);
-`crates/paged-introspect/src/descriptor.rs:36-40` (`PropertyPathJson`, "kept in 1:1
+`crates/paged-introspect/src/descriptor.rs:40-44` (`PropertyPathJson`, "kept in 1:1
 sync with `PropertyPath`; the two `From` impls stay exhaustive, so a new
 variant fails to compile here until it is mirrored"); `crates/paged-script/src/lib.rs`
-(`parse_property_path` `:874`, `property_path_label` `:1061` — the script
+(`parse_property_path` `:878`, `property_path_label` `:1065` — the script
 string↔path map); `crates/paged-canvas/src/channel.rs` (`PROTOCOL_VERSION`);
 a completeness check in the capability registry, kept outside this repository.
 
@@ -73,16 +73,16 @@ a verified invariant, not a convention.
 ## Amendment — 2026-10-02
 
 Checked against the code at `9f933f1`. The core of the decision stands: `PropertyPath` is one
-closed enum with the same stated reason (`crates/paged-mutate/src/operation.rs:173-182`),
+closed enum with the same stated reason (`crates/paged-mutate/src/operation.rs:177-186`),
 paths are applied in `paged-mutate`'s apply layer, and the inverse of a `SetProperty` is a
-`SetProperty` carrying the previous value (`crates/paged-mutate/src/invert.rs:15-39`). The
+`SetProperty` carrying the previous value (`crates/paged-mutate/src/invert.rs:19-43`). The
 recipe has changed shape: obligations 4 and 5 no longer exist as written. The descriptor
 mirror is gone, and the two script-side maps are one table.
 
 **1. The descriptor mirror was deleted (obligation 4).** `PropertyPathJson` and its two `From`
 impls are gone; a descriptor carries `PropertyPath` directly.
 
-- `crates/paged-introspect/src/descriptor.rs:27-43` — the `path` field is a `PropertyPath`. Its
+- `crates/paged-introspect/src/descriptor.rs:31-47` — the `path` field is a `PropertyPath`. Its
   comment records the reason: the mirror and the enum "serialised to byte-identical JSON", and
   "What the mirror bought was the obligation to edit two enums for one capability."
 - The name `PropertyPathJson` occurs nowhere else in the repository.
@@ -93,45 +93,45 @@ exhaustive mirrors" in the rationale, and the `descriptor.rs:36-40` entry in **S
 **2. The two script-side maps became one table (obligation 5).** The names are written once,
 in a macro in `paged-introspect`, and the script bridge reads them from there.
 
-- `crates/paged-introspect/src/catalog.rs:476-547` — `property_paths!` generates the name table
+- `crates/paged-introspect/src/catalog.rs:480-551` — `property_paths!` generates the name table
   (`PROPERTY_PATHS`), the list of all paths, and `wire_name`, whose `match` has no wildcard arm
-  (`:521-526`), so a new `PropertyPath` variant does not compile until it is given a name. The
-  comment at `:479-491` records why: the two earlier lists agreed "by hand, with nothing
+  (`:525-530`), so a new `PropertyPath` variant does not compile until it is given a name. The
+  comment at `:483-495` records why: the two earlier lists agreed "by hand, with nothing
   checking it".
-- `crates/paged-introspect/src/catalog.rs:549`, `:812` — each variant is placed in `advertised`
+- `crates/paged-introspect/src/catalog.rs:553`, `:816` — each variant is placed in `advertised`
   (published as `settablePaths` in `crates/paged-introspect/catalog.json`) or in `hidden`,
   which requires a written reason. Tests pin the split at 219 advertised and 15 hidden
-  (`:1144`, `:1023`, `:1103-1107`).
-- `crates/paged-introspect/src/catalog.rs:150-167` — `lookup_path`, the one name → path lookup.
-  Eight paths also answer to their raw wire spelling, published as `pathAliases` (`:106-110`,
-  `:169-192`).
-- `crates/paged-script/src/lib.rs:3957-3973` — `parse_property_path` and `property_path_label`
+  (`:1148`, `:1027`, `:1107-1111`).
+- `crates/paged-introspect/src/catalog.rs:154-171` — `lookup_path`, the one name → path lookup.
+  Eight paths also answer to their raw wire spelling, published as `pathAliases` (`:110-114`,
+  `:173-196`).
+- `crates/paged-script/src/lib.rs:3961-3977` — `parse_property_path` and `property_path_label`
   remain as one-line wrappers over `lookup_path` and `wire_name`.
-- `crates/paged-mutate/src/operation.rs:1364` — `PropertyPath::label()` still exists and
+- `crates/paged-mutate/src/operation.rs:1368` — `PropertyPath::label()` still exists and
   returns dotted names (`"frame.bounds"`). Nothing in the repository calls it.
 
 This supersedes obligation 5, including "One label source (`PropertyPath::label()`) drives
-diagnostics, descriptors, and script names", and the `:874` / `:1061` references in
+diagnostics, descriptors, and script names", and the `:878` / `:1065` references in
 **Sources**. The catalog that the table feeds is the subject of
 [ADR 019](019-capability-catalog-one-contract.md).
 
 **3. Other locations in Sources.** `apply.rs` is now the directory
 `crates/paged-mutate/src/apply/`; `SetProperty` is applied in
-`crates/paged-mutate/src/apply/set_property.rs:28`. `label()` is at `operation.rs:1364` (was
-`:1158`) and the closed-enum comment at `:173-178` (was `:165`). The `Mutation` enum is defined
-in `crates/paged-wire/src/lib.rs:626` and re-exported from `paged-canvas`
-(`crates/paged-canvas/src/channel.rs:3356`); see
+`crates/paged-mutate/src/apply/set_property.rs:32`. `label()` is at `operation.rs:1368` (was
+`:1162`) and the closed-enum comment at `:177-182` (was `:169`). The `Mutation` enum is defined
+in `crates/paged-wire/src/lib.rs:630` and re-exported from `paged-canvas`
+(`crates/paged-canvas/src/channel.rs:3360`); see
 [ADR 111](111-wire-vocabulary-leaf-crate.md).
 
 **4. Guards in this repository.** "The mechanical guard" names the compiler and a check kept
 outside this repository. Three tests here now guard the published names:
 
-- `crates/paged-introspect/tests/catalog_apply_parity.rs:183-184` — every (element, settable
+- `crates/paged-introspect/tests/catalog_apply_parity.rs:187-188` — every (element, settable
   path) pair the catalog advertises on a page-item kind is applied to a fixture node and must
-  succeed; the list of known failures is empty (`:43-46`).
-- `crates/paged-script/tests/advertised_paths_apply.rs:61-62` — every advertised path must be
+  succeed; the list of known failures is empty (`:47-50`).
+- `crates/paged-script/tests/advertised_paths_apply.rs:65-66` — every advertised path must be
   named somewhere in the apply layer's source.
-- `crates/paged-introspect/src/catalog.rs:1343-1352` — the committed `catalog.json` must equal
+- `crates/paged-introspect/src/catalog.rs:1347-1356` — the committed `catalog.json` must equal
   the generated one.
 
 **5. The bump rule.** The first Consequences bullet says a new `PropertyPath` variant never

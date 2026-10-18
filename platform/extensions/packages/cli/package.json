@@ -2,7 +2,7 @@
   "name": "@paged-media/cli",
   "version": "0.1.0-canary.0",
   "description": "The paged Node CLI: get/set/query/schema/batch/run/export/apply/merge over core and every installed plugin bundle, through the headless host (ADR 324).",
-  "license": "MPL-2.0 OR LicenseRef-PMEL",
+  "license": "AGPL-3.0-only OR LicenseRef-PMEL",
   "type": "module",
   "bin": {
     "paged-node": "./dist/bin.js"

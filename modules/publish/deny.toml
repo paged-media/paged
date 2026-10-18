@@ -12,10 +12,18 @@ version = 2
 [licenses]
 version = 2
 confidence-threshold = 0.9
+# paged is AGPL-3.0-only OR PMEL (ADR PM-0001). Dependencies must be
+# permissively licensed (weak copyleft MPL-2.0 at most) so the whole work can
+# be distributed under both: the AGPL and the commercial PMEL. No GPL/AGPL
+# dependency can pass this gate.
 allow = [
     "MPL-2.0",
-    # Our own crates: dual MPL-2.0 OR PMEL (the Paged Media Engine License;
-    # SPDX has no id for it, hence the LicenseRef form).
+    # First-party crates this workspace reaches outside itself (from another
+    # workspace in this repository, or by git revision from a former
+    # repository) carry `AGPL-3.0-only OR LicenseRef-PMEL`, or
+    # `MPL-2.0 OR LicenseRef-PMEL` for revisions released before the
+    # relicense (ADR PM-0001). SPDX has no id for the Paged Media Enterprise
+    # License, hence the LicenseRef form; it satisfies either expression.
     "LicenseRef-PMEL",
     "Apache-2.0",
     "Apache-2.0 WITH LLVM-exception",
@@ -31,6 +39,13 @@ allow = [
     "BSL-1.0",
 ]
 exceptions = []
+
+# This workspace's own crates are AGPL-3.0-only OR LicenseRef-PMEL
+# (ADR PM-0001). The policy above is for dependencies, so the unpublished
+# ones (`publish = false`) are not checked against it; a published one
+# passes through LicenseRef-PMEL.
+[licenses.private]
+ignore = true
 
 [bans]
 multiple-versions = "warn"

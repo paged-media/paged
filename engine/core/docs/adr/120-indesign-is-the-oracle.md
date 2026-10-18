@@ -14,14 +14,14 @@ redistribution and run only as an advisory step (`.github/workflows/fidelity.yml
 
 The generator's module comment gives the reason for the shape of the set: each document is a
 multi-page file with one feature variant per page, so one InDesign export covers many test cases
-and a failure is attributed to a page by its name (`crates/paged-gen/src/lib.rs:17-21`). The
+and a failure is attributed to a page by its name (`crates/paged-gen/src/lib.rs:21-25`). The
 introducing commit (`e54a485`) sets this against "600+ atomic files". The comment points to
 `docs/idml-sample-generator.md` for the wider argument; that file is not in this repository.
 
 Two comments record what an unmeasured rule cost: shadow offsets negated on both axes, unseen
-because the fixtures carried explicit offsets (`crates/paged-renderer/src/module/effects.rs:240-245`),
+because the fixtures carried explicit offsets (`crates/paged-renderer/src/module/effects.rs:244-249`),
 and an effect's `Size` used as a Gaussian sigma when it is the width of the effect's band
-(`crates/paged-compose/src/mask.rs:634-647`).
+(`crates/paged-compose/src/mask.rs:638-651`).
 
 ## Decision
 
@@ -43,17 +43,17 @@ InDesign's own output is the reference for the engine's behaviour. It is obtaine
 
 ## Evidence
 
-- `crates/paged-gen/src/samples.rs:89-149`, `:238-245` — the sample list; its length pinned at 62
-- `crates/paged-gen/src/package.rs:25-33`, `crates/paged-gen/tests/snapshot.rs:41-46`,
+- `crates/paged-gen/src/samples.rs:93-153`, `:242-249` — the sample list; its length pinned at 62
+- `crates/paged-gen/src/package.rs:29-37`, `crates/paged-gen/tests/snapshot.rs:45-50`,
   `crates/paged-gen/Cargo.toml:13-22` — determinism, its test, and the dependencies
-- `tools/indesign-export/export-pdfs.jsx:113-138`, `corpus/generated/.gitignore:1-4` — the export
+- `tools/indesign-export/export-pdfs.jsx:117-142`, `corpus/generated/.gitignore:1-4` — the export
   loop and its metadata record; IDMLs ignored, PDFs committed
 - `corpus/generated/diff.sh:6-16` — the five steps of the gate
 - `tools/indesign-export/reflow-probe.jsx:1-14`,
-  `tools/indesign-export/inline-objects-probe.jsx:15-21` — the two probes;
-  `crates/paged-renderer/tests/reflow_pipeline.rs:15-24`,
-  `crates/paged-renderer/tests/inline_objects_pipeline.rs:15-18` — tests that pin their answers
-- `crates/paged-text/src/single_line.rs:18-21`, `crates/paged-renderer/src/pipeline/keeps.rs:24-25`
+  `tools/indesign-export/inline-objects-probe.jsx:19-25` — the two probes;
+  `crates/paged-renderer/tests/reflow_pipeline.rs:19-28`,
+  `crates/paged-renderer/tests/inline_objects_pipeline.rs:19-22` — tests that pin their answers
+- `crates/paged-text/src/single_line.rs:22-25`, `crates/paged-renderer/src/pipeline/keeps.rs:28-29`
   — measurement notes that name the fixture holding the rule
 
 ## Alternatives considered
@@ -66,7 +66,7 @@ the gate and say they do not replace it ("This is not the InDesign fidelity gate
 
 The gate runs wherever the Rust toolchain, poppler and python3 are installed
 (`corpus/generated/diff.sh:59-60`). Adding or re-measuring a reference needs InDesign, and the
-shell drivers are macOS-only (`tools/indesign-export/run-export.sh:19`). All 61 committed
+shell drivers are macOS-only (`tools/indesign-export/run-export.sh:23`). All 61 committed
 references record InDesign 20.0.1.32; the rule is to re-export one fixture at a time and to pin
 the version (`tools/indesign-export/README.md:56-67`). A reference also depends on the exporting machine's
 fonts (`CLAUDE.md:132-136`) and on a colour profile that may not be redistributed
@@ -75,7 +75,7 @@ fonts (`CLAUDE.md:132-136`) and on a colour profile that may not be redistribute
 Coverage is not complete. The sample `docx-pagination` has no reference PDF and no entry in
 `corpus/generated/fidelity-thresholds.json`; a fixture gates only its first `max_pages_with_pdf`
 pages (lines 10-12 of that file). The effect measurements name probes
-(`crates/paged-compose/src/mask.rs:1013`) that are not in `tools/indesign-export/`, which holds
+(`crates/paged-compose/src/mask.rs:1017`) that are not in `tools/indesign-export/`, which holds
 the export driver and two probes, so they cannot be repeated from this repository.
 `README.md:199-200` and `CONTRIBUTING.md:58-59` call the InDesign export harness internal and
 private; it is `tools/indesign-export/`. `README.md:73` and `CLAUDE.md:120` call it

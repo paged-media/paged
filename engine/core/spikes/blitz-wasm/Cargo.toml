@@ -16,7 +16,7 @@
 name = "spike-blitz-wasm"
 version = "0.0.0"
 edition = "2021"
-license = "MPL-2.0"
+license = "AGPL-3.0-only OR LicenseRef-PMEL"
 publish = false
 description = "W0 spike: Blitz (Stylo/Taffy/Parley) on wasm32 — compile feasibility + size + paint-path sanity."
 

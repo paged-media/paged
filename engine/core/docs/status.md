@@ -215,7 +215,7 @@ rendered. How the parts fit is in [`architecture.md`](architecture.md).
 - **The viewer reads IDML parts only.** `ViewerSession::load` calls the IDML importer and
   does not read the native model part of a `.paged` container. It has no write surface.
 - **A `.paged` save carries the document twice**: the IDML parts and the model part, which
-  is one JSON document (`crates/paged-canvas/src/model.rs:5122-5125`). A model part with
+  is one JSON document (`crates/paged-canvas/src/model.rs:5126-5129`). A model part with
   another format version is ignored on load, and the IDML parts are parsed instead.
 - **Hash and diamond stroke styles draw their marks with the default cap and join, and no gap
   colour.** The marks are laid out along the path as InDesign lays them out
@@ -307,11 +307,11 @@ The release order when core and the IDML adapter pin each other is in
   scene, the function that stores it as a part is called only by tests, and
   `paged-composition-render` (single page, page-relative positions) has no dependents.
 - `TextFlow`, the region-chain form of story layout, as the live path: per
-  `crates/paged-renderer/src/flow.rs:27-29` it does not replace `StoryEmitter`.
+  `crates/paged-renderer/src/flow.rs:31-33` it does not replace `StoryEmitter`.
 - A shared GPU device or texture for plugins
   ([ADR 018](adr/018-stage-b-gpu-texture-defer-record-only.md)).
 - A CPU or WebGL fallback in the viewer, and any editing in it.
 - A raw-JSON subcommand on the command line; `paged session` is the general door.
 - A digest comparison between the browser wasm and the native build; the equivalence test
-  runs natively (`crates/paged-sdk/tests/digest_equivalence.rs:20-22`).
+  runs natively (`crates/paged-sdk/tests/digest_equivalence.rs:24-26`).
 - A bundled typeface or ICC profile; crates on a Rust registry (`publish = false`).

@@ -1,23 +1,23 @@
 # Contributing to paged
 
 Thanks for your interest in the **paged** engine. This repository is the
-**open** render pipeline (MPL-2.0 OR PMEL); the editor and plugins live in
-separate, also-open repositories — the editor (`paged-media/editor`) is
-AGPL-3.0 OR PMEL.
+**open** render pipeline (AGPL-3.0-only OR PMEL, like the rest of the
+repository); the editor and plugins live in separate, also-open
+repositories under the same terms.
 
 ## License of contributions
 
-`paged` is dual-licensed — **MPL-2.0 OR the Paged Media Enterprise License
-(PMEL)**. By contributing you agree to the **Contributor License
+`paged` is dual-licensed — **AGPL-3.0-only OR the Paged Media Enterprise
+License (PMEL)**. By contributing you agree to the **Contributor License
 Agreement** ([`CLA.md`](./CLA.md)), which allows And The Next GmbH to
 distribute your contribution under **both** the open-source license
-(MPL-2.0) **and** the commercial license (PMEL). You retain copyright to
+(AGPL-3.0) **and** the commercial license (PMEL). You retain copyright to
 your contribution.
 
 A CLA bot will ask you to sign on your first pull request.
 
-New source files must carry the standard MPL-2.0 header — copy it verbatim
-from the top of any existing `crates/**/*.rs`.
+New source files must carry the standard AGPL-3.0 OR PMEL header — copy it
+verbatim from the top of any existing `crates/**/*.rs`.
 
 ## Building & testing
 
@@ -50,8 +50,8 @@ fix the regression first, then tighten the threshold.
 ## Dependency licensing
 
 CI runs `cargo deny check` (see [`deny.toml`](./deny.toml)). New
-dependencies must be permissively licensed so they can be combined into an
-MPL distribution.
+dependencies must be permissively licensed so the engine can be distributed
+under both the AGPL-3.0 and the commercial PMEL.
 
 ## Scope note
 

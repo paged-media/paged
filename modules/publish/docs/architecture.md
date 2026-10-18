@@ -75,28 +75,28 @@ editor  <-- workspace --  @paged-media/publish   TypeScript only
 
 1. `@paged-media/publish` registers an importer for the extension `.idml` and the MIME type
    `application/vnd.adobe.indesign-idml-package`. The importer passes the file's bytes to
-   `host.nativeDocument.open` (`packages/publish-bundle/src/io/idml.ts:55-70`).
+   `host.nativeDocument.open` (`packages/publish-bundle/src/io/idml.ts:59-74`).
 2. The engine opens the bytes with `open_source_archive`: every ZIP entry is decompressed
    into memory, the `mimetype` entry must be the IDML one, and `designmap.xml` must exist.
    If the archive carries a native model part (`paged/core/model/document.pgm`) that decodes,
    the engine uses it; otherwise it calls `import_idml_archive`
-   (`core: crates/paged-canvas/src/model.rs:1529-1561`).
+   (`core: crates/paged-canvas/src/model.rs:1533-1565`).
 3. `import_idml_archive` parses `designmap.xml`, then `Resources/Graphic.xml` and
    `Resources/Styles.xml` (each optional), reads conditions from both the designmap and the
    stylesheet, parses the master spreads, spreads and stories the designmap lists, and
    builds a `paged_scene::Document`. A listed part that the archive lacks is an error.
 4. The raw archive stays with the caller, beside the model. Its entries are excluded from
-   the model's serialisation (`crates/idml-import/src/lib.rs:89-107`).
+   the model's serialisation (`crates/idml-import/src/lib.rs:93-111`).
 
 ## Exporting IDML
 
 1. The exporter of `@paged-media/publish` sends the engine message `exportIdml` through the
    raw editor handle, `host.editor.client.send`, and returns the bytes of the `idmlExported`
-   reply as `document.idml` (`packages/publish-bundle/src/io/idml.ts:83-90`).
+   reply as `document.idml` (`packages/publish-bundle/src/io/idml.ts:87-94`).
 2. The engine calls `idml_export::write_idml_with` with its document, the source package
    bytes it kept at load, and the font faces it has registered
-   (`core: crates/paged-canvas/src/model.rs:4398-4408`, `:4477-4483`).
-3. `write_package` (`crates/idml-export/src/lib.rs:342-944`) builds a replacement body for
+   (`core: crates/paged-canvas/src/model.rs:4402-4412`, `:4481-4487`).
+3. `write_package` (`crates/idml-export/src/lib.rs:346-948`) builds a replacement body for
    each part the model can change, and keeps it only if it differs from the source:
    - a spread runs through the frame-preference, guide, page-item, image, text-wrap and
      transparency passes; a master spread through the same passes except transparency;
@@ -122,13 +122,13 @@ through unchanged. See [ADR 652](adr/652-idml-save-back-patches.md); what InDesi
 
 ## The `.paged` container
 
-`write_paged` (`crates/idml-export/src/paged.rs:200-280`) runs the same `write_package`
+`write_paged` (`crates/idml-export/src/paged.rs:204-284`) runs the same `write_package`
 with container parts kept, then rewrites `manifest.json`: it merges into the existing
 manifest the fields `v`, `format`, `pagedProtocol`, `idmlPartsHash` (FNV-1a over the IDML
 parts), `domVersion` and a `parts` index of every entry under `paged/` with its owning
 plugin, length and hash. `write_idml` is the same writer with those entries dropped. The
 engine calls `write_paged` on save and adds its native model part
-(`core: crates/paged-canvas/src/model.rs:4662-4682`). The format decision is recorded in
+(`core: crates/paged-canvas/src/model.rs:4666-4686`). The format decision is recorded in
 the engine repository as
 [ADR 118](https://github.com/paged-media/core/blob/main/docs/adr/118-paged-file-is-a-valid-idml-package.md).
 A second `.paged` writer exists in the engine, `paged_store::package::wrap_document`, for
@@ -137,7 +137,7 @@ documents that have no IDML source; the `pdf-import` crate source calls it.
 ## Opening a PDF
 
 1. `@paged-media/pdf` registers an importer for `.pdf` and `application/pdf`
-   (`packages/pdf-bundle/src/io/pdf.ts:117-139`).
+   (`packages/pdf-bundle/src/io/pdf.ts:121-143`).
 2. Editable path. `loadPdfMapper` loads the `pdf-import` wasm on first use and keeps it.
    `extractPdf` loads PDFium on first use and walks each page: path objects become vector
    shapes (consecutive paths with the same fill, stroke and width merge into one), image
@@ -192,7 +192,7 @@ declares one wasm module, `pdf-import` (at most 4 MiB). The PDFium module is not
 
 In the other direction this repository offers the engine a Rust API, not a door: the
 functions named above, the model re-exports of `idml-import`, and `PAGED_PREFIX`, which the
-engine uses for the plugin namespace of container parts (`core: crates/paged-canvas/src/model.rs:4606-4613`).
+engine uses for the plugin namespace of container parts (`core: crates/paged-canvas/src/model.rs:4610-4617`).
 
 ## Build and test
 

@@ -6,14 +6,14 @@
 ## Context
 
 Laying out a document needs bytes the document does not always carry: font files, linked
-images and an ICC profile for CMYK. `crates/paged-renderer/src/asset.rs:15-29` defines the
+images and an ICC profile for CMYK. `crates/paged-renderer/src/asset.rs:19-33` defines the
 seam: hosts pass font, image and profile lookups to the renderer through one trait, which
 is synchronous in Rust and returns `bytes::Bytes` "so cloning is a refcount bump, not a
 memcpy".
 
 For profiles the repository states a reason: "No profile ships with the engine: they are
 large and individually licensed by their issuers"
-(`crates/paged-color/src/profiles.rs:26-28`). For fonts the README states the fact, "Core
+(`crates/paged-color/src/profiles.rs:30-32`). For fonts the README states the fact, "Core
 ships **no fallback face**" (`README.md:161`). The repository does not record why.
 
 ## Decision
@@ -40,22 +40,22 @@ profile is compiled into any crate.
 
 ## Evidence
 
-- `crates/paged-renderer/src/asset.rs:51-77` — the `AssetResolver` trait
-- `crates/paged-renderer/src/pipeline/mod.rs:235-242`, `:263-267` — `font`, `assets` and `cmyk_icc_profile` on `PipelineOptions`
-- `crates/paged-renderer/src/pipeline/images.rs:683-702` — a linked image is resolved through `options.assets`; a miss is `LinkMissing`
-- `crates/paged-canvas-wasm/src/dispatch.rs:82-90`, `:561-608` — the registries on `WorkerCore`; `RegisterFont` and `RegisterColorProfile`
-- `crates/paged-canvas/src/model.rs:61-83`, `:1928-1947` — `CanvasOptions`; `SetColorSettings` rejecting an unregistered name
-- `crates/paged-cli/src/options.rs:15-34`, `:78-95` — the order a host must follow, and the warning when no run shaped a glyph
-- `crates/paged-renderer/src/diagnostics.rs:47-51`, `:66-73` — `ImageLinkMissing`, `FontSubstituted`
-- `crates/paged-color/src/profiles.rs:154-176`, `crates/paged-renderer/src/asset.rs:94-100`, `:198-213` — the opt-in file helpers
+- `crates/paged-renderer/src/asset.rs:55-81` — the `AssetResolver` trait
+- `crates/paged-renderer/src/pipeline/mod.rs:239-246`, `:267-271` — `font`, `assets` and `cmyk_icc_profile` on `PipelineOptions`
+- `crates/paged-renderer/src/pipeline/images.rs:687-706` — a linked image is resolved through `options.assets`; a miss is `LinkMissing`
+- `crates/paged-canvas-wasm/src/dispatch.rs:86-94`, `:565-612` — the registries on `WorkerCore`; `RegisterFont` and `RegisterColorProfile`
+- `crates/paged-canvas/src/model.rs:65-87`, `:1932-1951` — `CanvasOptions`; `SetColorSettings` rejecting an unregistered name
+- `crates/paged-cli/src/options.rs:19-38`, `:82-99` — the order a host must follow, and the warning when no run shaped a glyph
+- `crates/paged-renderer/src/diagnostics.rs:51-55`, `:70-77` — `ImageLinkMissing`, `FontSubstituted`
+- `crates/paged-color/src/profiles.rs:158-180`, `crates/paged-renderer/src/asset.rs:98-104`, `:202-217` — the opt-in file helpers
 
 ## Alternatives considered
 
 - An asynchronous resolver: the trait doc says the Rust surface is synchronous and that a
   Promise wrapper belongs at the JavaScript boundary
-  (`crates/paged-renderer/src/asset.rs:23-26`).
+  (`crates/paged-renderer/src/asset.rs:27-30`).
 - Reading linked images from disk in every host: only the `paged-inspect` binary sets
-  `link_dirs` (`crates/paged-renderer/src/bin/inspect.rs:476`). `README.md:167-170` says
+  `link_dirs` (`crates/paged-renderer/src/bin/inspect.rs:480`). `README.md:167-170` says
   this is something "the canvas model, and therefore the editor, cannot" do.
 
 ## Consequences
@@ -66,20 +66,20 @@ that skips a step gets a page that renders without error and looks wrong: unshap
 and naive CMYK have no diagnostic code, and the CLI prints its own warnings.
 
 `CanvasModel` builds its resolver from the font registry alone
-(`crates/paged-canvas/src/model.rs:9743-9758`), so on that path a linked image whose bytes
+(`crates/paged-canvas/src/model.rs:9747-9762`), so on that path a linked image whose bytes
 are not in the document cannot be resolved.
 
 "No assets" means fonts and profiles. Hyphenation patterns are compiled in
-(`crates/paged-text/src/hyphenate.rs:95`, [ADR 103](103-hyphenation-sources.md)); the fonts
+(`crates/paged-text/src/hyphenate.rs:99`, [ADR 103](103-hyphenation-sources.md)); the fonts
 under `corpus/fonts/` are test fixtures.
 
 Statements in the repository that are behind the code:
 
-- `crates/paged-cli/README.md:59-62` and `crates/paged-cli/src/options.rs:21-24` say a font
+- `crates/paged-cli/README.md:59-62` and `crates/paged-cli/src/options.rs:25-28` say a font
   registered after load changes nothing. `RegisterFont` now also reaches the live model,
   which lays out the affected stories again
-  (`crates/paged-canvas-wasm/src/dispatch.rs:571-583`,
-  `crates/paged-canvas/src/model.rs:9312-9327`).
+  (`crates/paged-canvas-wasm/src/dispatch.rs:575-587`,
+  `crates/paged-canvas/src/model.rs:9316-9331`).
 - `AssetResolver::resolve_icc` is declared, and nothing in the pipeline calls it. The
   Promise wrapper the trait doc places in `paged-sdk` does not exist there; the viewer
   session takes fonts through `register_font` before `load`.

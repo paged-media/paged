@@ -237,41 +237,41 @@ number }`. What the plugin contract does today:
 - `plugin-sdk: packages/plugin-cli/bin/paged-plugin.mjs:46-47`, `:288-309` — the CLI accepts
   `"bundle"`, rejects `"shared"` as reserved with a pointer to this ADR, and rejects any
   other key.
-- `plugin-sdk: packages/plugin-sdk/test/capability-manifest-cli.spec.ts:274-281` — a manifest
+- `plugin-sdk: packages/plugin-sdk/test/capability-manifest-cli.spec.ts:278-285` — a manifest
   with `gpu: { realm: "bundle", device: true }` is rejected.
-- `plugin-sdk: packages/plugin-api/src/manifest.ts:225-230` — the type is
+- `plugin-sdk: packages/plugin-api/src/manifest.ts:229-234` — the type is
   `realm: "bundle" | "shared"`.
-- `plugin-sdk: packages/plugin-sdk/src/host-impl.ts:1124`, `:3174-3182` — `supports("gpu@1")`
+- `plugin-sdk: packages/plugin-sdk/src/host-impl.ts:1128`, `:3178-3186` — `supports("gpu@1")`
   reflects the declaration; no backend is wired.
-- `plugin-sdk: packages/plugin-sdk/test/gpu.spec.ts:80-95` — the test that the host object has
+- `plugin-sdk: packages/plugin-sdk/test/gpu.spec.ts:84-99` — the test that the host object has
   no `gpu` or `requestGpuDevice` member.
 
 **2. The zero-copy path is still not built in the engine.** `SceneItem` has ten variants and
-none is a texture (`crates/paged-compose/src/scene_layer.rs:54-210`). The names
+none is a texture (`crates/paged-compose/src/scene_layer.rs:58-214`). The names
 `SceneItem::Texture`, `TextureHandle` and `requestGpuDevice` do not occur in this
 repository. `GPUTexture` occurs in three doc comments, each calling it a later stage
-(`crates/paged-compose/src/scene_layer.rs:31`, `crates/paged-compose/src/pixel_layer.rs:35`,
-`crates/paged-renderer/src/resource_provider.rs:36`).
+(`crates/paged-compose/src/scene_layer.rs:35`, `crates/paged-compose/src/pixel_layer.rs:39`,
+`crates/paged-renderer/src/resource_provider.rs:40`).
 
 **3. Plugin raster content enters as CPU tiles.** Besides the two lanes this ADR names (the
 whole-frame `SceneItem::Image` of Stage A and the C-6 pyramid-tile pull), protocol 50 added a
 push lane for tiles: `SubmitPixelLayer` / `ClearPixelLayer`, lowered to `SceneItem::Image`
-items in the same per-frame registry (`crates/paged-canvas/src/channel.rs:315-325`,
-`:1059-1079`; `crates/paged-compose/src/pixel_layer.rs:88-112`). All three end as
+items in the same per-frame registry (`crates/paged-canvas/src/channel.rs:319-329`,
+`:1063-1083`; `crates/paged-compose/src/pixel_layer.rs:92-116`). All three end as
 `DisplayCommand::Image`; [ADR 108](108-plugin-raster-tiles.md) records them. In the pinned
 plugin-sdk checkout the pixel layer occurs only in the vendored wire types
 (`plugin-sdk: packages/plugin-api/src/wire.d.ts:93`); the host contract there has no door
 for it.
 
 **4. "Stage B" names two things in the code.** Core comments label the protocol-50 pixel
-layer "C-1 Stage B" (`crates/paged-canvas/src/channel.rs:315`,
-`crates/paged-compose/src/pixel_layer.rs:15`, `crates/paged-canvas/src/model.rs:9044`). That
+layer "C-1 Stage B" (`crates/paged-canvas/src/channel.rs:319`,
+`crates/paged-compose/src/pixel_layer.rs:19`, `crates/paged-canvas/src/model.rs:9048`). That
 lane carries RGBA8 bytes and is not the Stage B of this ADR; the same module says it is
 "forward-compatible with the eventual zero-copy shared-`GPUTexture` Stage B"
-(`crates/paged-compose/src/pixel_layer.rs:34-35`). The comment at
-`crates/paged-renderer/src/resource_provider.rs:36-37` places the texture variant at
+(`crates/paged-compose/src/pixel_layer.rs:38-39`). The comment at
+`crates/paged-renderer/src/resource_provider.rs:40-41` places the texture variant at
 "Stage B (v45)"; protocol 45 carried the gradient fill
-(`crates/paged-canvas/src/channel.rs:278-283`), as the Consequences above say, and that
+(`crates/paged-canvas/src/channel.rs:282-287`), as the Consequences above say, and that
 comment is stale.
 
 **5. The Vello version moved.** The investigation above was made against Vello 0.9.0. The

@@ -86,17 +86,17 @@ The npm bin is `paged`. The Rust binary is also named `paged`; the proposal rena
 
 ## Evidence
 
-- `packages/cli/src/session.ts:15-19` — the CLI is a host; `:161-182` — boot on the engine it
-  finds; `:204-220` — the driver bundle; `:265-296` — export and save
-- `packages/cli/src/plugins.ts:15-24` — discovery; `:32-42` — the first-party bundles
-- `packages/cli/src/verbs.ts:795` — the verb table; `:355-362` — `run` is a JavaScript module;
-  `:484-500` — `export`
-- `packages/cli/src/values.ts:75` — values typed by their schema row
-- `packages/cli/src/errors.ts:15-17` — the exit codes
-- `packages/cli/src/data.ts:74`, `:192` — the paged.data session and `apply`
+- `packages/cli/src/session.ts:19-23` — the CLI is a host; `:165-186` — boot on the engine it
+  finds; `:208-224` — the driver bundle; `:269-300` — export and save
+- `packages/cli/src/plugins.ts:19-28` — discovery; `:36-46` — the first-party bundles
+- `packages/cli/src/verbs.ts:799` — the verb table; `:359-366` — `run` is a JavaScript module;
+  `:488-504` — `export`
+- `packages/cli/src/values.ts:79` — values typed by their schema row
+- `packages/cli/src/errors.ts:19-21` — the exit codes
+- `packages/cli/src/data.ts:78`, `:196` — the paged.data session and `apply`
 - `packages/cli/package.json` — bin `paged`, Node 22 or later, `@duckdb/duckdb-wasm` an optional
   peer
-- `packages/cli/test/cli-core.spec.ts:264-272` — every `host.objects` member is reached by a verb
+- `packages/cli/test/cli-core.spec.ts:268-276` — every `host.objects` member is reached by a verb
 - `.github/workflows/publish.yml` — `packages/cli` is in the publish loop
 
 ## Consequences

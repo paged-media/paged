@@ -11,7 +11,7 @@ output needs a PDF in which text is still text, vectors are still vectors, image
 their encoding, colours keep their spaces and transparency is not flattened.
 
 The crate documentation states what the exporter is and what it preserves
-(`crates/paged-export-pdf/src/lib.rs:17-26`). It does not say why the display list, and not
+(`crates/paged-export-pdf/src/lib.rs:21-30`). It does not say why the display list, and not
 the document model, is the exporter's input, or why the writer was built directly on
 `pdf-writer`; its one remark is that "`typst-pdf` is the reading reference, never a
 dependency". For both questions: The repository does not record why.
@@ -43,22 +43,22 @@ crate `paged-export-pdf`, written directly on `pdf-writer`, `subsetter` and `xmp
 
 ## Evidence
 
-- `crates/paged-export-pdf/src/lib.rs:17-26` — the design statement; `:28-30` determinism; `:45-54` the two conformance targets
-- `crates/paged-export-pdf/Cargo.toml:19-21`, `:33-36`, `:44` — `pdf-writer` 0.15, `subsetter` 0.2, `xmp-writer` 0.3; the `cli` feature that keeps `clap` out of wasm; `lopdf` as a test dependency
-- `crates/paged-renderer/src/pipeline/mod.rs:283-287`, `crates/paged-compose/src/display_list.rs:1378-1384` — the glyph-run side-channel and its default
-- `crates/paged-export-pdf/src/text.rs:15-19`, `crates/paged-export-pdf/src/image.rs:15-19` — text as text and the restricted-font rule; JPEG pass-through
-- `crates/paged-export-pdf/src/effects.rs:17-34` — effects ported from the CPU rasteriser and their PDF encoding
-- `crates/paged-canvas/src/export.rs:15-26` — the one-shot build and the per-page session; `crates/paged-canvas/src/channel.rs:1177-1191` the four messages
+- `crates/paged-export-pdf/src/lib.rs:21-30` — the design statement; `:32-34` determinism; `:49-58` the two conformance targets
+- `crates/paged-export-pdf/Cargo.toml:19-21`, `:37-40`, `:48` — `pdf-writer` 0.15, `subsetter` 0.2, `xmp-writer` 0.3; the `cli` feature that keeps `clap` out of wasm; `lopdf` as a test dependency
+- `crates/paged-renderer/src/pipeline/mod.rs:287-291`, `crates/paged-compose/src/display_list.rs:1382-1388` — the glyph-run side-channel and its default
+- `crates/paged-export-pdf/src/text.rs:19-23`, `crates/paged-export-pdf/src/image.rs:19-23` — text as text and the restricted-font rule; JPEG pass-through
+- `crates/paged-export-pdf/src/effects.rs:21-38` — effects ported from the CPU rasteriser and their PDF encoding
+- `crates/paged-canvas/src/export.rs:19-30` — the one-shot build and the per-page session; `crates/paged-canvas/src/channel.rs:1181-1195` the four messages
 - `corpus/generated/export-diff.sh:4-21`, `.github/workflows/ci.yml:334-339`, `:434-472` — the gate and its hard and advisory steps
-- `plugin-publish: packages/pdf-bundle/src/io/pdf.ts:114-121` — the PDF plugin registers an importer; its manifest lists no exporter
+- `plugin-publish: packages/pdf-bundle/src/io/pdf.ts:118-125` — the PDF plugin registers an importer; its manifest lists no exporter
 
 ## Alternatives considered
 
 - `typst-pdf` as a dependency: read as a reference, not linked (quoted above).
 - A transparency flattener: not built; "transparency stays LIVE (PDF/X-4 — no flattener)"
-  (`crates/paged-export-pdf/src/lib.rs:23-24`).
+  (`crates/paged-export-pdf/src/lib.rs:27-28`).
 - The glyph table on every build: not done; the live canvas build "never pays for it and
-  the command stream stays byte-identical" (`crates/paged-renderer/src/pipeline/mod.rs:285-286`).
+  the command stream stays byte-identical" (`crates/paged-renderer/src/pipeline/mod.rs:289-290`).
 
 ## Consequences
 
@@ -69,7 +69,7 @@ exported, rasterised by poppler and compared with the CPU render of the same sce
 self-consistency check, "NOT the InDesign fidelity gate".
 
 Export costs a second full build, because the live build's caches splice command ranges
-and would break the index the glyph table relies on (`crates/paged-canvas/src/export.rs:16-21`).
+and would break the index the glyph table relies on (`crates/paged-canvas/src/export.rs:20-25`).
 A new display command needs an arm in the exporter's walk as well as in the rasterisers,
 and an effect is implemented in the CPU rasteriser and again in the exporter. The PDF
 plugin in `plugin-publish` ships no writer and registers no exporter.
@@ -80,7 +80,7 @@ still says inner shadow, glows, bevel, satin and feather are not exported
 (`.github/workflows/ci.yml:361-363`); `crates/paged-export-pdf/src/effects.rs` exports them. Gradient shadings
 interpolate in `DeviceRGB` where the renderer interpolates in CMYK, so the `gradients`
 fixture has its own ceiling (`corpus/generated/export-diff.sh:40-44`). A ligature maps to
-its first character only (`crates/paged-compose/src/display_list.rs:1399-1402`). The gate
+its first character only (`crates/paged-compose/src/display_list.rs:1403-1406`). The gate
 degrades to advisory when CI cannot fetch a CMYK profile.
 
 ## Related

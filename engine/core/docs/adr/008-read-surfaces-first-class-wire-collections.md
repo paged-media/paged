@@ -63,15 +63,15 @@ collections, and the line numbers in **Sources** have moved.
 
 **1. `PreflightFinding` and `DocumentStats` do not travel as collections.** `CollectionName`
 has 26 variants and none is for preflight findings or document statistics
-(`crates/paged-canvas/src/channel.rs:2172-2224`; the dispatcher
-`crates/paged-canvas/src/model.rs:7684-7714` matches all 26).
+(`crates/paged-canvas/src/channel.rs:2176-2228`; the dispatcher
+`crates/paged-canvas/src/model.rs:7688-7718` matches all 26).
 
-- `crates/paged-canvas/src/channel.rs:1773-1779` — `PreflightFinding` values are the
+- `crates/paged-canvas/src/channel.rs:1777-1783` — `PreflightFinding` values are the
   `findings` field of the `PdfExported` reply, which ends a PDF export session; the type is at
-  `:652-658`.
-- `crates/paged-canvas/src/model.rs:174`, `:210` — `DocumentStats` is a field of the document
-  handle returned on load (`crates/paged-canvas/src/channel.rs:1433`) and is also sent as the
-  unsolicited `Stats` message (`:1458-1461`).
+  `:656-662`.
+- `crates/paged-canvas/src/model.rs:178`, `:214` — `DocumentStats` is a field of the document
+  handle returned on load (`crates/paged-canvas/src/channel.rs:1437`) and is also sent as the
+  unsolicited `Stats` message (`:1462-1465`).
 
 This supersedes the last Consequences bullet, and in the Decision the inclusion of "stats"
 and "preflight findings" among the collections and of `DocumentStats` and `PreflightFinding`
@@ -79,10 +79,10 @@ among the summaries "keyed by a `CollectionName`".
 
 **2. One collection is computed by rendering.** The first Consequences bullet calls
 collections "a *view*, not a cached snapshot". `InkCoverage` rasterises every page and is
-memoised until the next rebuild (`crates/paged-canvas/src/channel.rs:2211-2223`,
-`crates/paged-canvas/src/model.rs:7716-7724`); the comment there describes every other
+memoised until the next rebuild (`crates/paged-canvas/src/channel.rs:2215-2227`,
+`crates/paged-canvas/src/model.rs:7720-7728`); the comment there describes every other
 collection as "a cheap walk over parsed state".
 
 **3. Current locations in `crates/paged-canvas/src/channel.rs`.** `RequestCollection { name }`
-`:989`; the `CollectionReply` reply `:1636-1649`; `CollectionName` `:2172`, `as_str` `:2230`,
-`from_str` `:2264`; `FontSummary` `:2726`; `LinkSummary` `:2978`; `StorySummary` `:3069`.
+`:993`; the `CollectionReply` reply `:1640-1653`; `CollectionName` `:2176`, `as_str` `:2234`,
+`from_str` `:2268`; `FontSummary` `:2730`; `LinkSummary` `:2982`; `StorySummary` `:3073`.

@@ -18,7 +18,7 @@ record-only); `packages/web-render/src/lib.rs` (Option B lib doc + the single-fr
 `packages/web-model/src/engine.ts` (`ENGINE_PIN`; `anyrender_vello 0.11` = core's
 `vello ^0.9`/`wgpu ^29`); `core: crates/paged-compose/src/scene_layer.rs` (the C-1 seam paints
 through core's Vello + tiny-skia lanes, colour-managed/print-correct/CPU-testable);
-`core: crates/paged-canvas/src/channel.rs:336` (`PROTOCOL_VERSION = 51`); the internal gap
+`core: crates/paged-canvas/src/channel.rs:340` (`PROTOCOL_VERSION = 51`); the internal gap
 register, §6 W-01. Full reasoning: [`../design/native-engine-evaluation.md`](../design/native-engine-evaluation.md).
 
 ## The decision
@@ -201,8 +201,8 @@ For what ships in this repository this supersedes, in the options table, option 
 renderer-neutral `FlowId`/region model shared with IDML stories" and "a `FlowId` seam in core",
 and the Consequences bullet "One core-resident question, only if the spike passes". The core has
 since gained a content-agnostic
-`paged-flow` crate with `FlowId` and `RegionChain` (`core: crates/paged-flow/src/lib.rs:49`,
-`:175`, core at `9f933f1`); nothing in this repository uses it. The repository does not record
+`paged-flow` crate with `FlowId` and `RegionChain` (`core: crates/paged-flow/src/lib.rs:53`,
+`:179`, core at `9f933f1`); nothing in this repository uses it. The repository does not record
 why the chain was kept in the plugin.
 
 **4. The shipped engine links no Vello and no wgpu.** Reason 2 and the Sources entry for

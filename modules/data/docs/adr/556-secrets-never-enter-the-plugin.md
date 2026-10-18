@@ -67,7 +67,7 @@ source manifest (`data-sources/src/lib.rs:273-284`). `redact_credentials` change
 Authenticated sources are designed and not usable:
 
 - Nothing resolves a `credential_ref`. The host contract has a `secrets` surface
-  (`plugin-sdk: packages/plugin-api/src/host.ts:1660`); this plugin's manifest does not
+  (`plugin-sdk: packages/plugin-api/src/host.ts:1664`); this plugin's manifest does not
   declare that capability and no code calls it.
 - `attach_plan` is called only from tests. The bundle's session can add CSV and remote
   sources; it has no method to add a database source.
