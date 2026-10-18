@@ -1,0 +1,24 @@
+{
+  "name": "@paged-media/repository",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "The editor's local library: every document a repository (core ADR 180) kept in the origin-private file system; files are projections of it.",
+  "license": "AGPL-3.0-only OR LicenseRef-PMEL",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node --experimental-strip-types --test test/*.test.ts"
+  },
+  "dependencies": {
+    "@paged-media/repo-wasm": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:node25",
+    "typescript": "catalog:"
+  }
+}
