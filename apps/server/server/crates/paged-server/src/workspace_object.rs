@@ -40,7 +40,8 @@ use crate::problem::problem;
 use crate::{ACTOR_HEADER, ROUTE_HEADER};
 
 const SCHEMA: &str = "CREATE TABLE IF NOT EXISTS policy_log (seq INTEGER PRIMARY KEY,
-  policy TEXT NOT NULL, actor TEXT NOT NULL, ts INTEGER NOT NULL, prev TEXT, hash TEXT NOT NULL);";
+  policy TEXT NOT NULL, actor TEXT NOT NULL, ts INTEGER NOT NULL, prev TEXT, hash TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS repos (name TEXT PRIMARY KEY, created INTEGER NOT NULL, updated INTEGER NOT NULL);";
 
 /// The route a repository uses to read its workspace's policy. The Worker
 /// never forwards a client path under `internal/`.
@@ -109,6 +110,30 @@ impl WorkspaceObject {
     }
 }
 
+impl WorkspaceObject {
+    fn repos(&self) -> Result<Vec<Value>> {
+        Ok(self
+            .state
+            .storage()
+            .sql()
+            .exec(
+                "SELECT name, created, updated FROM repos ORDER BY updated DESC",
+                None,
+            )?
+            .raw()
+            .filter_map(|r| r.ok())
+            .map(|r| {
+                let v = |x: &V| match x {
+                    V::String(s) => json!(s),
+                    V::Integer(i) => json!(i),
+                    _ => Value::Null,
+                };
+                json!({ "name": v(&r[0]), "created": v(&r[1]), "updated": v(&r[2]) })
+            })
+            .collect())
+    }
+}
+
 impl DurableObject for WorkspaceObject {
     fn new(state: State, env: Env) -> Self {
         if let Err(e) = state.storage().sql().exec(SCHEMA, None) {
@@ -135,6 +160,20 @@ impl DurableObject for WorkspaceObject {
         // A repository reading the policy it must obey.
         if route == INTERNAL_POLICY {
             return Response::from_json(&json!({ "policy": latest.map(|e| e.policy) }));
+        }
+        // A repository noting itself in this directory (a workspace, or a person's home).
+        if route == "internal/register" {
+            let body: Value = req.json().await?;
+            let name = body["name"].as_str().unwrap_or("").to_string();
+            let ts = worker::Date::now().as_millis() as i64;
+            self.state.storage().sql().exec(
+                "INSERT INTO repos (name, created, updated) VALUES (?, ?, ?) ON CONFLICT(name) DO UPDATE SET updated = excluded.updated",
+                vec![V::String(name), V::Integer(ts), V::Integer(ts)],
+            )?;
+            return Response::from_json(&json!({ "ok": true }));
+        }
+        if route == "internal/repos" {
+            return Response::from_json(&self.repos()?);
         }
         if actor.is_empty() {
             return problem(401, "Unauthenticated", "no actor");
@@ -192,6 +231,12 @@ impl DurableObject for WorkspaceObject {
                 let seq = e.seq + 1;
                 let hash = self.append(seq, &canonical, &actor, Some(&e.hash))?;
                 Response::from_json(&json!({ "seq": seq, "hash": hash }))
+            }
+            (Method::Get, "repos") => {
+                if role.is_none() {
+                    return problem(404, "Not found", "no such workspace");
+                }
+                Response::from_json(&self.repos()?)
             }
             (Method::Get, "policy/log") => {
                 if role.is_none() {

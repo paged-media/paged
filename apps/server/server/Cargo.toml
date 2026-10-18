@@ -13,6 +13,7 @@ publish = false
 # CLI run (core ADR 180). A path into a sibling core checkout until core's
 # `feat/paged-repo` is on origin; then a git rev, like core's own pins.
 paged-repo = { path = "../../core-repo/crates/paged-repo" }
+paged-mcp = { path = "../../core-repo/crates/paged-mcp" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"

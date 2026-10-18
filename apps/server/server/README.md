@@ -72,6 +72,27 @@ provider.
 - Service tokens still work: the `PAGED_TOKENS` secret maps SHA-256(token) →
   actor id. With neither tokens nor sign-in configured, every request is refused.
 
+## MCP
+
+`POST /mcp` is paged.server as an MCP server (Streamable HTTP: one JSON answer per
+POST, no server-initiated stream; `GET` answers 405). The tools are core's
+`paged-mcp` catalog, the same one `paged mcp` (stdio, native engine) offers.
+
+- Sign-in: OAuth (a 401 names `/.well-known/oauth-protected-resource`). A service
+  token also works.
+- Every call is an agent's: `agent:<client>` acting for the signed-in person, in a
+  run named by the `Mcp-Session-Id` the server hands out at `initialize`.
+- Repositories check that person's role. The kernel confines the agent to
+  `agent/<run>/…` refs at the default autonomy and records provenance on each of
+  its versions. A model's change reaches `main` through `propose_change` and a
+  person's approval.
+- Store tools run here. Engine tools (`open_document`, `run_script`,
+  `render_page`, `save_document`) act in the person's open editor tab, relayed
+  through a Session Durable Object. `lookup_api` searches the embedded engine
+  catalog. `download_link` mints a ten-minute signed URL (`/v1/dl/…`).
+- Tools with a view declare `_meta.ui.resourceUri = ui://paged/view` (MCP Apps),
+  served by `resources/read`.
+
 ## Local
 
 ```bash
@@ -91,6 +112,5 @@ deliberate acts.
 
 ## Not yet
 
-The MCP endpoint;
-the Session DO relay to an open editor tab. `paged-repo` is a path dependency
+The Session DO relay to an open editor tab. `paged-repo` is a path dependency
 into a sibling core checkout until core's `feat/paged-repo` is on origin.

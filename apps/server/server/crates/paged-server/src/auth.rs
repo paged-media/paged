@@ -30,7 +30,17 @@ pub enum Denied {
     NotConfigured,
 }
 
+/// Who is calling, and through which OAuth client (empty for a service token).
+pub struct Principal {
+    pub id: String,
+    pub client: String,
+}
+
 pub fn actor(req: &Request, env: &Env) -> Result<String, Denied> {
+    principal(req, env).map(|p| p.id)
+}
+
+pub fn principal(req: &Request, env: &Env) -> Result<Principal, Denied> {
     let header = req
         .headers()
         .get("authorization")
@@ -43,8 +53,8 @@ pub fn actor(req: &Request, env: &Env) -> Result<String, Denied> {
     // A signed access token from sign-in, checked without a lookup.
     let signin = crate::oauth::Config::from(env);
     if let Some(cfg) = &signin {
-        if let Some(actor) = crate::oauth::verify_access(cfg, token) {
-            return Ok(actor);
+        if let Some((id, client)) = crate::oauth::verify_access(cfg, token) {
+            return Ok(Principal { id, client });
         }
     }
     // Otherwise a service token from the table.
@@ -66,5 +76,8 @@ pub fn actor(req: &Request, env: &Env) -> Result<String, Denied> {
     if !(id.starts_with("user:") || id.starts_with("svc:")) {
         return Err(Denied::NotConfigured);
     }
-    Ok(id.clone())
+    Ok(Principal {
+        id: id.clone(),
+        client: String::new(),
+    })
 }

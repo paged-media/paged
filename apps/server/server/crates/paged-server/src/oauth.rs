@@ -363,8 +363,8 @@ fn mint_access(cfg: &Config, actor: &str, client_id: &str, scope: &str) -> Strin
     format!("{TOKEN_PREFIX}{body}.{tag}")
 }
 
-/// The actor a signed access token names, if it is genuine and current.
-pub fn verify_access(cfg: &Config, token: &str) -> Option<String> {
+/// The actor and client a signed access token names, if it is genuine and current.
+pub fn verify_access(cfg: &Config, token: &str) -> Option<(String, String)> {
     let rest = token.strip_prefix(TOKEN_PREFIX)?;
     let (body, tag) = rest.split_once('.')?;
     if !hmac_ok(&cfg.secret, body.as_bytes(), &unb64(tag)?) {
@@ -374,7 +374,44 @@ pub fn verify_access(cfg: &Config, token: &str) -> Option<String> {
     if claims["exp"].as_i64()? <= now_s() {
         return None;
     }
-    claims["sub"].as_str().map(String::from)
+    Some((
+        claims["sub"].as_str()?.to_string(),
+        claims["cid"].as_str().unwrap_or("").to_string(),
+    ))
+}
+
+/// A signed, short-lived download link: `{origin}/v1/dl/<claims>.<hmac>`.
+pub fn mint_link(
+    cfg: &Config,
+    origin: &str,
+    object: &str,
+    workspace: Option<&str>,
+    reference: &str,
+    actor: &str,
+) -> String {
+    let claims =
+        json!({ "o": object, "w": workspace, "r": reference, "a": actor, "exp": now_s() + 600 });
+    let body = b64(claims.to_string().as_bytes());
+    let tag = b64(&hmac(&cfg.secret, format!("dl.{body}").as_bytes()));
+    format!("{origin}/v1/dl/{body}.{tag}")
+}
+
+/// What a download link names, if genuine and current: (object, workspace, ref, actor).
+pub fn verify_link(cfg: &Config, token: &str) -> Option<(String, Option<String>, String, String)> {
+    let (body, tag) = token.split_once('.')?;
+    if !hmac_ok(&cfg.secret, format!("dl.{body}").as_bytes(), &unb64(tag)?) {
+        return None;
+    }
+    let c: Value = serde_json::from_slice(&unb64(body)?).ok()?;
+    if c["exp"].as_i64()? <= now_s() {
+        return None;
+    }
+    Some((
+        c["o"].as_str()?.to_string(),
+        c["w"].as_str().map(String::from),
+        c["r"].as_str()?.to_string(),
+        c["a"].as_str()?.to_string(),
+    ))
 }
 
 async fn issue(

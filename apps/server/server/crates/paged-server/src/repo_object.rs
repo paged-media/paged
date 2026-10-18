@@ -35,7 +35,10 @@ use worker::{
 use crate::problem::problem;
 use crate::store::{DoStore, INLINE_MAX, SCHEMA};
 use crate::workspace_object::INTERNAL_POLICY;
-use crate::{ACTOR_HEADER, REPO_HEADER, ROUTE_HEADER, WORKSPACE_HEADER};
+use crate::{
+    ACTOR_HEADER, CLIENT_HEADER, ON_BEHALF_HEADER, REPO_HEADER, ROUTE_HEADER, RUN_HEADER,
+    WORKSPACE_HEADER,
+};
 
 #[durable_object]
 pub struct RepoObject {
@@ -80,6 +83,28 @@ impl RepoObject {
 
     fn policy(store: &DoStore) -> Option<std::result::Result<Policy, Refusal>> {
         store.meta("policy").map(|b| Policy::parse(&b))
+    }
+
+    /// Notes this repository in its directory — the workspace's, or the
+    /// writer's home — so `list_documents` can find it. Best effort.
+    async fn register(&self, workspace: Option<&str>, name: &str, principal: &str) {
+        let directory = match workspace {
+            Some(ws) => ws.to_string(),
+            None => format!("home:{principal}"),
+        };
+        let Ok(ns) = self.env.durable_object("WORKSPACE") else {
+            return;
+        };
+        let Ok(stub) = ns.id_from_name(&directory).and_then(|id| id.get_stub()) else {
+            return;
+        };
+        let mut init = worker::RequestInit::new();
+        init.with_method(Method::Post)
+            .with_body(Some(serde_json::json!({ "name": name }).to_string().into()));
+        let url = format!("https://workspace/v1/w/{directory}/internal/register");
+        if let Ok(req) = Request::new_with_init(&url, &init) {
+            let _ = stub.fetch_with_request(req).await;
+        }
     }
 
     async fn workspace_policy(&self, ws: &str) -> std::result::Result<Policy, Refusal> {
@@ -160,10 +185,32 @@ impl DurableObject for RepoObject {
         let Some(actor_id) = req.headers().get(ACTOR_HEADER)? else {
             return problem(401, "Unauthenticated", "no actor");
         };
-        let kind = if actor_id.starts_with("svc:") {
+        // An agent (a model through /mcp) acts for a person: its writes carry
+        // provenance, and what it may touch is that person's role, narrowed by
+        // the kernel to `agent/…` refs at the default autonomy.
+        let on_behalf = req.headers().get(ON_BEHALF_HEADER)?;
+        let principal = on_behalf.clone().unwrap_or_else(|| actor_id.clone());
+        let kind = if on_behalf.is_some() {
+            ActorKind::Agent
+        } else if actor_id.starts_with("svc:") {
             ActorKind::Service
         } else {
             ActorKind::Human
+        };
+        let provenance = match &on_behalf {
+            Some(human) => Some(paged_repo::Provenance {
+                client: req
+                    .headers()
+                    .get(CLIENT_HEADER)?
+                    .unwrap_or_else(|| "mcp".into()),
+                model: None,
+                run: req
+                    .headers()
+                    .get(RUN_HEADER)?
+                    .unwrap_or_else(|| "run".into()),
+                on_behalf_of: human.clone(),
+            }),
+            None => None,
         };
         let ctx = Ctx {
             actor: Actor {
@@ -171,7 +218,7 @@ impl DurableObject for RepoObject {
                 kind,
             },
             ts: now(),
-            provenance: None,
+            provenance,
         };
 
         let store = DoStore::new(self.state.storage().sql(), &name);
@@ -182,11 +229,11 @@ impl DurableObject for RepoObject {
             None => Self::policy(&store),
         };
         // Reading needs a role; a repository nobody has written yet has none to read.
-        let may_read = matches!(&policy, Some(Ok(p)) if p.role(&actor_id).is_some());
+        let may_read = matches!(&policy, Some(Ok(p)) if p.role(&principal).is_some());
         let may_write = match &policy {
             None => workspace.is_none(),
             Some(Ok(p)) => p
-                .role(&actor_id)
+                .role(&principal)
                 .is_some_and(|r| r >= paged_repo::Role::Editor),
             Some(Err(_)) => false,
         };
@@ -297,7 +344,7 @@ impl DurableObject for RepoObject {
                     Some(p) => p,
                     None if workspace.is_some() => Err(Refusal::PolicyInvalid("no policy".into())),
                     None => {
-                        let p = Policy::local(&actor_id);
+                        let p = Policy::local(&principal);
                         store.set_meta("policy", &serde_json::to_vec(&p).expect("serializes"));
                         Ok(p)
                     }
@@ -311,6 +358,7 @@ impl DurableObject for RepoObject {
                     .await?;
                 match r {
                     Ok(()) => {
+                        self.register(workspace.as_deref(), &name, &principal).await;
                         Response::from_json(&serde_json::json!({ "ref": ref_name, "at": mv.new }))
                     }
                     Err(e) => answer(e),
@@ -403,6 +451,227 @@ impl DurableObject for RepoObject {
                     .filter_map(|b| serde_json::from_slice(b).ok())
                     .collect();
                 Response::from_json(&entries)
+            }
+            (Method::Get, "tree") | (Method::Get, "part") | (Method::Get, "diff") => {
+                if !may_read {
+                    return problem(404, "Not found", "no such repository");
+                }
+                let q: BTreeMap<String, String> = url.query_pairs().into_owned().collect();
+                let at = |k: &str| -> Option<Hash> {
+                    let r = q.get(k).map_or("main", |s| s.as_str());
+                    store.get_ref(r).or_else(|| parse(r))
+                };
+                let tree_of = |c: Hash| -> std::result::Result<paged_repo::Tree, Error> {
+                    let commit: paged_repo::Commit =
+                        paged_repo::decode(&store.get(&c).ok_or(Error::Missing(c))?)?;
+                    let bytes = store.get(&commit.tree).ok_or(Error::Missing(commit.tree))?;
+                    let tree: paged_repo::Tree = paged_repo::decode(&bytes)?;
+                    Ok(tree)
+                };
+                match route.as_str() {
+                    "tree" => {
+                        let Some(c) = at("ref") else {
+                            return problem(404, "Not found", "no such ref");
+                        };
+                        match tree_of(c) {
+                            Ok(t) => {
+                                let refs: BTreeMap<String, String> = store
+                                    .refs()
+                                    .into_iter()
+                                    .map(|(k, v)| (k, v.to_hex()))
+                                    .collect();
+                                Response::from_json(&serde_json::json!({
+                                    "version": c.to_hex(),
+                                    "refs": refs,
+                                    "parts": t.entries.iter().map(|e| serde_json::json!({ "path": e.path, "size": e.size })).collect::<Vec<_>>(),
+                                }))
+                            }
+                            Err(e) => answer(e),
+                        }
+                    }
+                    "diff" => {
+                        let (Some(a), Some(b)) = (at("from"), at("to")) else {
+                            return problem(404, "Not found", "no such ref");
+                        };
+                        match (tree_of(a), tree_of(b)) {
+                            (Ok(ta), Ok(tb)) => {
+                                let changes: Vec<serde_json::Value> = paged_repo::diff_trees(&ta, &tb)
+                                    .into_iter()
+                                    .map(|c| serde_json::json!({ "path": c.path, "change": format!("{:?}", c.kind).to_lowercase() }))
+                                    .collect();
+                                Response::from_json(&changes)
+                            }
+                            (Err(e), _) | (_, Err(e)) => answer(e),
+                        }
+                    }
+                    _ => {
+                        let Some(c) = at("ref") else {
+                            return problem(404, "Not found", "no such ref");
+                        };
+                        let path = q.get("path").cloned().unwrap_or_default();
+                        let entry = match tree_of(c) {
+                            Ok(t) => t.get(&path).cloned(),
+                            Err(e) => return answer(e),
+                        };
+                        let Some(entry) = entry else {
+                            return problem(404, "Not found", "no such part");
+                        };
+                        let mut repo =
+                            Repo::new(store, Err(Refusal::PolicyInvalid("read only".into())));
+                        // Fetch the part's chunks first: a part may be many.
+                        let mut want = vec![entry.hash];
+                        if entry.kind == paged_repo::EntryKind::Chunks {
+                            if let Some(list) = repo.store.get(&entry.hash) {
+                                if let Ok(l) = paged_repo::decode::<paged_repo::ChunkList>(&list) {
+                                    want.extend(l.chunks);
+                                }
+                            }
+                        }
+                        self.fetch_r2(&repo.store, want).await?;
+                        match self
+                            .faulting(&mut repo, |r| paged_repo::read_part(&r.store, &entry))
+                            .await?
+                        {
+                            Ok(bytes) => Response::from_bytes(bytes),
+                            Err(e) => answer(e),
+                        }
+                    }
+                }
+            }
+            (Method::Post, "branch") => {
+                if !may_write {
+                    return problem(403, "Refused", "branching needs write access");
+                }
+                #[derive(Deserialize)]
+                struct B {
+                    from: String,
+                    to: String,
+                }
+                let b: B = req.json().await?;
+                let policy =
+                    policy.unwrap_or_else(|| Err(Refusal::PolicyInvalid("no policy".into())));
+                let mut repo = Repo::new(store, policy);
+                match repo.branch(&b.from, &b.to, &ctx) {
+                    Ok(h) => {
+                        Response::from_json(&serde_json::json!({ "ref": b.to, "at": h.to_hex() }))
+                    }
+                    Err(e) => answer(e),
+                }
+            }
+            (Method::Post, "commit") => {
+                if !may_write {
+                    return problem(403, "Refused", "writing needs write access");
+                }
+                #[derive(Deserialize)]
+                struct P {
+                    path: String,
+                    #[serde(default)]
+                    text: Option<String>,
+                    #[serde(default)]
+                    base64: Option<String>,
+                    #[serde(default)]
+                    delete: bool,
+                }
+                #[derive(Deserialize)]
+                struct C {
+                    branch: String,
+                    message: String,
+                    parts: Vec<P>,
+                }
+                let c: C = req.json().await?;
+                let Some(head) = store.get_ref(&c.branch) else {
+                    return problem(404, "Not found", "no such branch: start one first");
+                };
+                let base: paged_repo::Tree = match store
+                    .get(&head)
+                    .and_then(|b| paged_repo::decode::<paged_repo::Commit>(&b).ok())
+                    .and_then(|commit| store.get(&commit.tree))
+                    .and_then(|b| paged_repo::decode(&b).ok())
+                {
+                    Some(t) => t,
+                    None => {
+                        return problem(422, "Unreadable", "the branch's version could not be read")
+                    }
+                };
+                let mut entries: BTreeMap<String, paged_repo::TreeEntry> = base
+                    .entries
+                    .into_iter()
+                    .map(|e| (e.path.clone(), e))
+                    .collect();
+                let mut objects = BTreeMap::new();
+                for part in c.parts {
+                    if part.delete {
+                        entries.remove(&part.path);
+                        continue;
+                    }
+                    let bytes = match (part.text, part.base64) {
+                        (Some(t), _) => t.into_bytes(),
+                        (None, Some(b)) => match crate::crypto::unb64_std(&b) {
+                            Some(b) => b,
+                            None => {
+                                return problem(
+                                    400,
+                                    "Bad part",
+                                    &format!("`{}` is not base64", part.path),
+                                )
+                            }
+                        },
+                        _ => {
+                            return problem(
+                                400,
+                                "Bad part",
+                                &format!("`{}` needs text, base64 or delete", part.path),
+                            )
+                        }
+                    };
+                    let e = paged_repo::part_entry(part.path.clone(), bytes, &mut objects);
+                    entries.insert(part.path, e);
+                }
+                let tree = paged_repo::Tree {
+                    v: 1,
+                    entries: entries.into_values().collect(),
+                };
+                if let Err(e) = tree.validate() {
+                    return answer(e);
+                }
+                // Large blobs go to R2 before anything names them.
+                let bucket = self.bucket()?;
+                let mut small = BTreeMap::new();
+                for (h, (kind, bytes)) in objects {
+                    if kind == Kind::Blob && bytes.len() > INLINE_MAX {
+                        if !store.has(&h) {
+                            bucket
+                                .put(store.r2_key(&h), bytes.clone())
+                                .execute()
+                                .await?;
+                            store.record(kind, &h, None, bytes.len() as u64);
+                        }
+                    } else {
+                        small.insert(h, (kind, bytes));
+                    }
+                }
+                let tree_bytes = paged_repo::encode(&tree);
+                let tree_hash = paged_repo::address(Kind::Tree, &tree_bytes);
+                small.insert(tree_hash, (Kind::Tree, tree_bytes));
+                let policy =
+                    policy.unwrap_or_else(|| Err(Refusal::PolicyInvalid("no policy".into())));
+                let mut repo = Repo::new(store, policy);
+                let branch = c.branch.clone();
+                let message = c.message.clone();
+                let r = self
+                    .faulting(&mut repo, |r| {
+                        r.commit(small.clone(), tree_hash, &branch, &ctx, &message, None)
+                    })
+                    .await?;
+                match r {
+                    Ok(h) => {
+                        self.register(workspace.as_deref(), &name, &principal).await;
+                        Response::from_json(
+                            &serde_json::json!({ "ref": c.branch, "at": h.to_hex() }),
+                        )
+                    }
+                    Err(e) => answer(e),
+                }
             }
             (Method::Get, "cr") => {
                 if !may_read {

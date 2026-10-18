@@ -60,3 +60,14 @@ pub fn hmac_ok(key: &[u8], data: &[u8], tag: &[u8]) -> bool {
     m.update(data);
     m.verify_slice(tag).is_ok()
 }
+
+/// Standard (padded) base64, as a model writes it.
+pub fn unb64_std(s: &str) -> Option<Vec<u8>> {
+    base64::engine::general_purpose::STANDARD
+        .decode(s.trim())
+        .ok()
+}
+
+pub fn b64_std(bytes: &[u8]) -> String {
+    base64::engine::general_purpose::STANDARD.encode(bytes)
+}

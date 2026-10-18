@@ -41,10 +41,13 @@ mod auth;
 mod auth_object;
 mod cors;
 mod crypto;
+mod mcp;
 mod oauth;
 mod problem;
 mod repo_object;
+mod session;
 mod store;
+mod view;
 mod workspace_object;
 
 pub use auth_object::AuthObject;
@@ -62,6 +65,10 @@ pub(crate) const ACTOR_HEADER: &str = "x-paged-actor";
 pub(crate) const REPO_HEADER: &str = "x-paged-repo";
 pub(crate) const ROUTE_HEADER: &str = "x-paged-route";
 pub(crate) const WORKSPACE_HEADER: &str = "x-paged-workspace";
+/// Set only by the MCP host: the agent acts for this person, in this run, via this client.
+pub(crate) const ON_BEHALF_HEADER: &str = "x-paged-on-behalf-of";
+pub(crate) const RUN_HEADER: &str = "x-paged-run";
+pub(crate) const CLIENT_HEADER: &str = "x-paged-client";
 
 fn valid_repo(name: &str) -> bool {
     !name.is_empty()
@@ -93,6 +100,12 @@ async fn route(mut req: Request, env: Env) -> Result<Response> {
             return oauth::protected_resource_metadata(&url)
         }
         _ => {}
+    }
+    if path == "/mcp" {
+        return mcp::serve(req, &env).await;
+    }
+    if let Some(token) = path.strip_prefix("/v1/dl/") {
+        return download(token, &env).await;
     }
     if let Some(route) = path.strip_prefix("/oauth/") {
         let Some(cfg) = oauth::Config::from(&env) else {
@@ -202,4 +215,40 @@ async fn route(mut req: Request, env: Env) -> Result<Response> {
     let forwarded = Request::new_with_init(url.as_str(), &init)?;
     let stub = env.durable_object(ns)?.id_from_name(&object)?.get_stub()?;
     stub.fetch_with_request(forwarded).await
+}
+
+/// A signed download link (`download_link`): the person it was minted for may
+/// read that version, without a token, for ten minutes.
+async fn download(token: &str, env: &Env) -> Result<Response> {
+    let Some(cfg) = oauth::Config::from(env) else {
+        return problem(503, "Not configured", "this server signs no links");
+    };
+    let Some((object, workspace, reference, actor)) = oauth::verify_link(&cfg, token) else {
+        return problem(403, "Link expired or forged", "ask for a new one");
+    };
+    let headers = Headers::new();
+    headers.set(ACTOR_HEADER, &actor)?;
+    headers.set(ROUTE_HEADER, &format!("file/{reference}"))?;
+    headers.set(REPO_HEADER, &object)?;
+    if let Some(ws) = &workspace {
+        headers.set(WORKSPACE_HEADER, ws)?;
+    }
+    let mut init = RequestInit::new();
+    init.with_method(Method::Get).with_headers(headers);
+    let req = Request::new_with_init("https://repo/download", &init)?;
+    let stub = env
+        .durable_object("REPO")?
+        .id_from_name(&object)?
+        .get_stub()?;
+    let resp = stub.fetch_with_request(req).await?;
+    let name = object.rsplit('/').next().unwrap_or("document");
+    let headers = Headers::new();
+    for (k, v) in resp.headers().entries() {
+        headers.set(&k, &v)?;
+    }
+    headers.set(
+        "content-disposition",
+        &format!("attachment; filename=\"{name}.paged\""),
+    )?;
+    Ok(resp.with_headers(headers))
 }
