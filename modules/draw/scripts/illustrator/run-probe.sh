@@ -226,7 +226,7 @@ DOCS_AFTER="$(ping_app "String(app.documents.length)")" ||
 
 # --- 4 + 6. judge the artifact, then write the fixture ----------------------
 SHA="$(cat "$SRC" | shasum -a 256 | cut -d' ' -f1)"
-node "$WRITER" \
+bun "$WRITER" \
   "$RAW" "$OUT" "$NAME" "${PROBE#"$ROOT"/}" "$SHA" "$(sw_vers -productVersion)" ||
   die 4 "Illustrator's reply was refused; nothing was written to $OUT" \
     "Raw reply kept: $RAW"

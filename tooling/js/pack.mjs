@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // The publish tarball of one workspace package, as `pnpm pack` made it.
 //
-//   node tooling/js/pack.mjs <package dir> <destination dir>
+//   bun tooling/js/pack.mjs <package dir> <destination dir>
 //
 // Prints the tarball's path. `bun pm pack` turns `workspace:` and `catalog:`
 // specifiers into versions; what pnpm did besides, and Bun does not, happens
@@ -28,7 +28,7 @@ import { dirname, join, resolve } from "node:path";
 
 const [dirArg, destArg] = process.argv.slice(2);
 if (!dirArg || !destArg) {
-  console.error("usage: node tooling/js/pack.mjs <package dir> <destination dir>");
+  console.error("usage: bun tooling/js/pack.mjs <package dir> <destination dir>");
   process.exit(2);
 }
 const dir = resolve(dirArg);

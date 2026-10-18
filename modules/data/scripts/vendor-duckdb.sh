@@ -159,7 +159,7 @@ EOF
 # vendor/ keeps the full dist for local work and for the Node test lane
 # (duckdb-node-blocking.cjs), but it is never shipped.
 BUNDLE_BIN=packages/data-bundle/bin
-MAX_BYTES=$(node -e 'const m=require("./packages/data-bundle/manifest.json");const a=m.capabilities.wasm.find(w=>w.name==="duckdb-engine");process.stdout.write(String(a.maxBytes))')
+MAX_BYTES=$(bun -e 'const m=require("./packages/data-bundle/manifest.json");const a=m.capabilities.wasm.find(w=>w.name==="duckdb-engine");process.stdout.write(String(a.maxBytes))')
 mkdir -p "$BUNDLE_BIN"
 # Drop anything an older version of this script staged (the old layout put the
 # whole dist under bin/duckdb-wasm/), so exactly one variant can ship.
@@ -173,7 +173,7 @@ for f in duckdb-eh.wasm duckdb-browser-eh.worker.js duckdb-browser.mjs; do
 done
 cp "$DIST/duckdb-eh.wasm" "$BUNDLE_BIN/duckdb-engine.wasm"
 cp "$DIST/duckdb-browser-eh.worker.js" "$BUNDLE_BIN/duckdb-browser-eh.worker.js"
-node scripts/bundle-duckdb-api.mjs "$DIST/duckdb-browser.mjs" "$BUNDLE_BIN/duckdb-browser.mjs"
+bun scripts/bundle-duckdb-api.mjs "$DIST/duckdb-browser.mjs" "$BUNDLE_BIN/duckdb-browser.mjs"
 # The extensions, at the path DuckDB builds from the repository URL, each
 # within its manifest maxBytes.
 rm -rf "$BUNDLE_BIN/duckdb-ext"
@@ -181,7 +181,7 @@ mkdir -p "$BUNDLE_BIN/duckdb-ext/$DUCKDB_ENGINE_VERSION/$DUCKDB_EXT_PLATFORM"
 for name in $EXT_NAMES; do
   rel="duckdb-ext/$DUCKDB_ENGINE_VERSION/$DUCKDB_EXT_PLATFORM/$name.duckdb_extension.wasm"
   cp "$EXT_CACHE/$name.duckdb_extension.wasm" "$BUNDLE_BIN/$rel"
-  cap=$(REL="bin/$rel" node -e 'const m=require("./packages/data-bundle/manifest.json");const a=m.capabilities.wasm.find(w=>w.path===process.env.REL);if(!a)process.exit(3);process.stdout.write(String(a.maxBytes))') || {
+  cap=$(REL="bin/$rel" bun -e 'const m=require("./packages/data-bundle/manifest.json");const a=m.capabilities.wasm.find(w=>w.path===process.env.REL);if(!a)process.exit(3);process.stdout.write(String(a.maxBytes))') || {
     echo "error: the manifest declares no wasm artifact at bin/$rel" >&2
     exit 1
   }
