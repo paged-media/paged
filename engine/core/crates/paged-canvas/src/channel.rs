@@ -691,6 +691,12 @@ export type WorkerToMain = WorkerToMainKind & {
 // v73 — endnotes edited (ADR 174): insertEndnote, deleteEndnote,
 //   convertFootnoteToEndnote and the `endnotes` collection; the first
 //   endnote makes the endnote story on a page of its own.
+// v74 — tracked changes accepted and rejected (ADR 184):
+//   acceptTrackedChange, rejectTrackedChange.
+// Additive on 74, no bump (governance rule 1) — `MutationApplied.created_pages`:
+//   the pages a mutation created, in creation order (an insertPage, a
+//   duplicatePage's copy, each inside a batch). Optional: absent when no
+//   page was created.
 pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(74);
 
 /// A per-run script budget on the wire (v63). Every field is optional
@@ -1878,7 +1884,7 @@ pub enum WorkerToMainKind {
         /// uses it to select the fresh element. `None` for every
         /// other mutation kind — including `InsertPage`: pages are
         /// not elements (`ElementId` has no Page variant); the new
-        /// page is discoverable from `page_ids` + `page_sizes_pt`.
+        /// page is in `created_pages`.
         #[serde(default)]
         created_id: Option<crate::element_selection::ElementId>,
         /// Every element the mutation minted, in mint order, each with
@@ -1889,6 +1895,19 @@ pub enum WorkerToMainKind {
         /// worker, deserialises to empty.
         #[serde(default)]
         minted: Vec<MintedElement>,
+        /// The body pages the mutation created, in creation order: an
+        /// `insertPage`'s page and a `duplicatePage`'s copy, alone or
+        /// inside a `batch` (a page the same batch deleted again is not
+        /// listed). Pages are not elements, so neither `created_id` nor
+        /// `minted` names one, and a host used to find a new page by
+        /// reading the page list before and after the mutation and
+        /// diffing: two reads, and the new pages in DOCUMENT order, so
+        /// two inserts in one batch could not be told apart. Additive
+        /// (governance rule 1): omitted when the mutation created no
+        /// page, and by an older worker.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        #[tsify(optional)]
+        created_pages: Vec<PageId>,
         /// Editor-ops — `true` when the mutation changed the page
         /// LIST itself (insert/delete/resize page); the editor must
         /// refresh its page grid from `page_sizes_pt` + `page_ids`

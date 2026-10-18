@@ -247,10 +247,10 @@ pub struct MutationOutcome {
     pub applied_seq: u64,
     pub page_ids: Vec<PageId>,
     pub inverse: crate::mutate::TextOp,
-    /// Editor-ops — the element a structural insert created (or the
-    /// new page id for `InsertPage`); `None` for every other kind.
-    /// Threaded into the `MutationApplied` reply so the editor can
-    /// select the fresh element.
+    /// Editor-ops — the element a structural insert created; `None` for
+    /// every other kind. A page is not an element: the pages a mutation
+    /// created are [`Self::created_pages`]. Threaded into the
+    /// `MutationApplied` reply so the editor can select the fresh element.
     pub created_id: Option<crate::element_selection::ElementId>,
     /// Editor-ops — `true` when the page LIST changed (insert /
     /// delete / resize page); the reply then carries the refreshed
@@ -272,6 +272,11 @@ pub struct MutationOutcome {
     /// Threaded onto `MutationApplied::minted` so a caller that authors
     /// through batches can address what it just made.
     pub minted: Vec<crate::channel::MintedElement>,
+    /// The body pages this mutation created, in creation order: an
+    /// `InsertPage`'s page and a `DuplicatePage`'s copy, alone or inside
+    /// a `Batch`. A page the same batch deleted again is not listed.
+    /// Threaded onto `MutationApplied::created_pages`.
+    pub created_pages: Vec<PageId>,
 }
 
 /// S-13 — result of [`CanvasModel::measure_text`]. All fields in
@@ -359,6 +364,26 @@ fn created_element_ids(
             .collect();
     }
     created_element_id(doc, op).into_iter().collect()
+}
+
+/// The body pages an applied operation created, in creation order, read
+/// off its INVERSE: an `InsertPage` is undone by removing the page it
+/// minted, a `DuplicatePage` by removing its copy, and a batch's inverse
+/// is its children's inverses, newest first. The forward op cannot say:
+/// a fresh `InsertPage` carries the ids the caller gave (none), and a
+/// batch echoes its children as they were sent.
+fn created_page_ids(inverse: &paged_mutate::Operation, out: &mut Vec<PageId>) {
+    use paged_mutate::Operation;
+    match inverse {
+        Operation::Batch { ops } => {
+            for op in ops.iter().rev() {
+                created_page_ids(op, out);
+            }
+        }
+        Operation::RemovePage { page_id } => out.push(PageId(page_id.clone())),
+        Operation::RemovePageClone { cloned_page, .. } => out.push(PageId(cloned_page.clone())),
+        _ => {}
+    }
 }
 
 /// `NodeId` → wire `ElementId`, for the page-item kinds.
@@ -2632,6 +2657,7 @@ impl CanvasModel {
                         page_structure_changed: false,
                         reflow: None,
                         minted: Vec::new(),
+                        created_pages: Vec::new(),
                     })
                 }
             };
@@ -2665,6 +2691,7 @@ impl CanvasModel {
                 page_structure_changed: false,
                 reflow: None,
                 minted: Vec::new(),
+                created_pages: Vec::new(),
             });
         }
         // Concept 2 — colour-management settings: whole-state app
@@ -2728,6 +2755,7 @@ impl CanvasModel {
                 page_structure_changed: false,
                 reflow: None,
                 minted: Vec::new(),
+                created_pages: Vec::new(),
             });
         }
         // Concept 2 — soft-proof toggle/setup: swap the display
@@ -2782,6 +2810,7 @@ impl CanvasModel {
                 page_structure_changed: false,
                 reflow: None,
                 minted: Vec::new(),
+                created_pages: Vec::new(),
             });
         }
         // Concept 2 (Ink Manager) — output-time ink settings.
@@ -2825,6 +2854,7 @@ impl CanvasModel {
                 page_structure_changed: false,
                 reflow: None,
                 minted: Vec::new(),
+                created_pages: Vec::new(),
             });
         }
         if let Mutation::SetUseStandardLabForSpots { enabled } = mutation {
@@ -2857,6 +2887,7 @@ impl CanvasModel {
                 page_structure_changed: false,
                 reflow: None,
                 minted: Vec::new(),
+                created_pages: Vec::new(),
             });
         }
         // Phase B — route frame-shape mutations through the canonical
@@ -2915,6 +2946,11 @@ impl CanvasModel {
             } else {
                 Vec::new()
             };
+            // The pages it created, which no `created_id` / `minted` can
+            // name (pages are not elements).
+            let mut created_pages = Vec::new();
+            created_page_ids(&outcome.applied.inverse, &mut created_pages);
+            self.keep_existing_pages(&mut created_pages);
             // Page-list mutations (M7 extends this set with ResizePage)
             // require the editor to rebuild its page grid — a batch that
             // holds one too.
@@ -2958,6 +2994,7 @@ impl CanvasModel {
                 page_structure_changed,
                 reflow,
                 minted,
+                created_pages,
             });
         }
         // A Batch that reaches HERE could not translate as a whole: at
@@ -3081,6 +3118,7 @@ impl CanvasModel {
             page_structure_changed: false,
             reflow: None,
             minted: Vec::new(),
+            created_pages: Vec::new(),
         })
     }
 
@@ -3165,6 +3203,8 @@ impl CanvasModel {
         let mut created_id = None;
         // Every mint, in order — what `created_id` alone could not say.
         let mut minted: Vec<crate::channel::MintedElement> = Vec::new();
+        // Every page the children created, in order.
+        let mut created_pages: Vec<PageId> = Vec::new();
         let mut page_structure_changed = false;
         // C-15 — handle resolution is OFF unless the batch binds a
         // name. A batch that binds nothing takes byte-identical
@@ -3246,25 +3286,21 @@ impl CanvasModel {
                 continue;
             }
             // D-22 — a page-creating child mints a PAGE, which no
-            // `created_id` reports (pages are not elements). Read it off
-            // the scene: the one page id that was not there before.
-            let pages_before = (uses_handles
+            // `created_id` reports (pages are not elements); its outcome
+            // names it in `created_pages`.
+            let binds_page = uses_handles
                 && matches!(
                     child,
                     Mutation::InsertPage { .. } | Mutation::DuplicatePage { .. }
-                ))
-            .then(|| self.scene_page_ids());
+                );
             match self.apply_mutation(child) {
                 Ok(outcome) => {
-                    if let Some(before) = pages_before {
-                        if let Some(page) = self
-                            .scene_page_ids()
-                            .into_iter()
-                            .find(|p| !before.contains(p))
-                        {
-                            scope.set_created_page(page);
+                    if binds_page {
+                        if let Some(page) = outcome.created_pages.last() {
+                            scope.set_created_page(page.0.clone());
                         }
                     }
+                    created_pages.extend(outcome.created_pages.iter().cloned());
                     // The batch reports the LAST id minted by any child,
                     // matching the single-mutation contract (the editor
                     // selects the fresh element).
@@ -3323,6 +3359,8 @@ impl CanvasModel {
         }
         self.redo_log.clear();
 
+        // A page a later child deleted again was not created by the batch.
+        self.keep_existing_pages(&mut created_pages);
         let page_ids: Vec<PageId> = self.built.pages.iter().map(|p| p.id.clone()).collect();
         Ok(MutationOutcome {
             applied_seq,
@@ -3340,7 +3378,19 @@ impl CanvasModel {
             page_structure_changed,
             reflow: None,
             minted,
+            created_pages,
         })
+    }
+
+    /// Drop from `pages` every id the scene no longer holds: a batch that
+    /// creates a page and deletes it again created nothing a caller can
+    /// address.
+    fn keep_existing_pages(&self, pages: &mut Vec<PageId>) {
+        if pages.is_empty() {
+            return;
+        }
+        let existing = self.scene_page_ids();
+        pages.retain(|p| existing.contains(&p.0));
     }
 
     /// Reverse everything a batch has applied since `log_base` and
