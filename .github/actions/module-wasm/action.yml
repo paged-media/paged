@@ -117,6 +117,8 @@ runs:
       working-directory: modules/${{ inputs.module }}
       env:
         ARGS: ${{ steps.m.outputs.args }}
+        # The same flags in every job (the cache entry is shared; see engine-wasm).
+        RUSTFLAGS: ""
       run: |
         set -euo pipefail
         # shellcheck disable=SC2086 # ARGS is empty or one flag

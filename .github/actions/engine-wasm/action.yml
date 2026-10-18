@@ -100,10 +100,15 @@ runs:
 
     # Checks the CLI against Cargo.lock, and under CI refuses to run without
     # wasm-opt. Writes only the generated files; the committed ones stay.
+    # The same flags in every job: the cache entry is shared, and a
+    # workflow-level RUSTFLAGS (image-ci and publish-ci set -Dwarnings)
+    # would otherwise make the build depend on which job ran it.
     - name: engine wasm — build the four packages
       if: steps.restore.outputs.cache-hit != 'true'
       shell: bash
       working-directory: engine/core
+      env:
+        RUSTFLAGS: ""
       run: |
         set -euo pipefail
         wasm-bindgen --version
