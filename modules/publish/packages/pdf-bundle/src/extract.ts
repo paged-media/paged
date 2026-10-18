@@ -150,7 +150,10 @@ export function lineToParagraph(
     if (wantSpace) pendingSpace = true;
 
     if (cur && sameStyle(cur.item, item, opts)) {
-      const sep = pendingSpace && !endsWithSpace(cur.text) && !startsWithSpace(item.text) ? " " : "";
+      const sep =
+        pendingSpace && !endsWithSpace(cur.text) && !startsWithSpace(item.text)
+          ? " "
+          : "";
       cur.text += sep + item.text;
     } else {
       const hadPrev = cur !== null;

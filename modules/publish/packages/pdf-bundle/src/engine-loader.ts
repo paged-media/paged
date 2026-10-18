@@ -42,9 +42,7 @@ import type { DocumentIr } from "./ir";
  *  declared locally so typecheck never depends on the GENERATED (gitignored)
  *  `bin/pdf_import.d.ts`. `default` is `__wbg_init`. */
 interface PdfMapperGlue {
-  default: (
-    init?: { module_or_path: unknown } | unknown,
-  ) => Promise<unknown>;
+  default: (init?: { module_or_path: unknown } | unknown) => Promise<unknown>;
   /** `pdf_ir_to_paged_wasm(ir_json) -> Uint8Array` (throws a JS error on a
    *  malformed IR or a model-build failure). */
   pdf_ir_to_paged_wasm: (irJson: string) => Uint8Array;
@@ -77,14 +75,19 @@ async function importBundledGlue(): Promise<PdfMapperGlue> {
   // @ts-ignore — bin/pdf_import.js is the wasm-bindgen glue (build output of
   // scripts/build-wasm.sh from crates/pdf-import), its own module in the
   // editor's build. The type checker doesn't check the JS — typed via PdfMapperGlue.
-  const glue = (await import("../bin/pdf_import.js")) as unknown as PdfMapperGlue;
+  const glue =
+    (await import("../bin/pdf_import.js")) as unknown as PdfMapperGlue;
   if (isNode()) {
     // NODE (the headless host, the Node CLI): instantiate from the bytes
     // beside the glue — wasm-bindgen's own fetch of a file: URL fails here.
     const { readFile } = await import("node:fs/promises");
     const { fileURLToPath } = await import("node:url");
-    const b = await readFile(fileURLToPath(new URL("../bin/pdf_import_bg.wasm", import.meta.url)));
-    await glue.default({ module_or_path: new Uint8Array(b.buffer, b.byteOffset, b.byteLength) });
+    const b = await readFile(
+      fileURLToPath(new URL("../bin/pdf_import_bg.wasm", import.meta.url)),
+    );
+    await glue.default({
+      module_or_path: new Uint8Array(b.buffer, b.byteOffset, b.byteLength),
+    });
     return glue;
   }
   // @ts-ignore — `?url` is a bundler affordance (untyped); Vite resolves it

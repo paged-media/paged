@@ -252,7 +252,9 @@ export async function buildIdmlFromRasters(
   zip.file("designmap.xml", designmap(spreadSrcs), { compression: "DEFLATE" });
   zip.file("META-INF/container.xml", container(), { compression: "DEFLATE" });
   zip.file("Resources/Graphic.xml", graphic(), { compression: "DEFLATE" });
-  zip.file("Resources/Fonts.xml", emptyPkg("Fonts"), { compression: "DEFLATE" });
+  zip.file("Resources/Fonts.xml", emptyPkg("Fonts"), {
+    compression: "DEFLATE",
+  });
   zip.file("Resources/Styles.xml", styles(), { compression: "DEFLATE" });
   zip.file("Resources/Preferences.xml", emptyPkg("Preferences"), {
     compression: "DEFLATE",
