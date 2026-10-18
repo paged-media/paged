@@ -167,5 +167,5 @@ deliberate acts.
 
 ## Not yet
 
-`paged-repo` and `paged-mcp` are path dependencies into a sibling core checkout
-until core's `feat/paged-repo` is on origin. Nothing has been deployed.
+`paged-repo` and `paged-mcp` are pinned to a core rev in `server/Cargo.toml` (move both
+together). Nothing has been deployed.
