@@ -1,0 +1,75 @@
+name: rust
+
+# The web-render crate (packages/web-render): formatting, clippy and the Rust
+# test suite. Until this workflow the crate's tests (the lowering, the
+# real-Blitz capture and the whole flow-fragmentation ladder) ran in no
+# workflow at all: the vitest lane only BUILT the crate to wasm.
+#
+# The crate is its own workspace with its own Cargo.lock (the Blitz tree pins
+# its own kurbo/peniko/stylo), so every step runs inside it.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: packages/web-render
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.93.0
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/web-render
+      - run: cargo fmt --check
+      # Both feature sets: the default build is the pure lowering lane, the
+      # `blitz` build adds the capture layer and the flow fragmentation.
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo clippy --all-targets --features blitz -- -D warnings
+      - run: cargo clippy --all-targets --features blitz,perf-counters -- -D warnings
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.93.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/web-render
+      - uses: taiki-e/install-action@nextest
+      # No `|| true`: a red test reddens the job; the JUnit still uploads
+      # (the step below runs under !cancelled()). `--features blitz` is the
+      # superset — the default-feature tests run in it too.
+      - name: cargo nextest (blitz — lowering, capture, flow fragmentation)
+        run: cargo nextest run --features blitz --profile ci
+      - name: cargo test (default features — the pure lowering build)
+        run: cargo test --no-fail-fast
+      # Count budgets (docs/design/perf-baseline-2026-10-05.md): a pinned
+      # count that moves fails here; wall-clock is printed, never gated.
+      - name: cargo test (perf budgets — engine work counts)
+        run: cargo test --features blitz,perf-counters --test perf_budgets
+      - name: upload nextest results artifact
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextest-junit
+          path: packages/web-render/target/nextest/ci/junit.xml
+          if-no-files-found: error
+          retention-days: 14

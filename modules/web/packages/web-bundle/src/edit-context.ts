@@ -1,0 +1,182 @@
+/*
+ * This file is part of paged (https://paged.media).
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// W3.2 — the paged.web OBJECT TYPE + EDIT CONTEXT (closes W-03).
+//
+// A webFrame is an ordinary rectangle with attached `x-paged:media.paged
+// .web` SOURCE metadata (the §5 model). Before W3.2 the shell treated it
+// as a plain rectangle — hit-testing, selection chrome, and double-click
+// all descended into a group. W3.2 changes that:
+//
+//   · the OBJECT TYPE `webFrame` (matcher: the element carries a valid
+//     source envelope — `sourceFromEnvelope` non-null) routes a
+//     double-click to the `webFrame` EDIT CONTEXT instead of group
+//     descent (the metadata-claimed half of the registry);
+//   · the EDIT CONTEXT raises the source panel on enter (and re-raises
+//     it via `host.shell.openPanel` from the bundle's onEnter hook), so
+//     double-clicking a webFrame opens source editing.
+//
+// The matcher reads ONLY this plugin's own-namespace metadata envelope
+// (the host pre-resolves it from the host-stamped `x-paged:media.paged
+// .web` key and passes it as `candidate.metadata`). Validation reuses
+// web-model's `isWebFrameEnvelope` (an inline source, or a pointer to a
+// large source's container part) — no second predicate to drift.
+
+import type {
+  EditContextContribution,
+  ObjectTypeContribution,
+} from "@paged-media/plugin-api";
+import {
+  asFrameTarget,
+  isWebFrameEnvelope,
+  sourceKeyFor,
+  type WebSourceEnvelope,
+} from "../../web-model/src";
+
+import type { InFrameEditSession } from "./in-frame-edit";
+import type { DraftSession } from "./panels/draft-store";
+
+export const WEB_FRAME_TYPE = "webFrame";
+
+/** The object type — recognizes a webFrame by its source metadata and
+ *  routes the double-click to the source edit context. */
+export const webFrameObjectType: ObjectTypeContribution = {
+  type: WEB_FRAME_TYPE,
+  // Metadata-claimed: a rectangle carrying a loadable source envelope IS
+  // a webFrame. `candidate.metadata` is this plugin's own envelope,
+  // pre-resolved by the host.
+  // An inline source or a pointer to a large source's part both count.
+  matches: (candidate) =>
+    isWebFrameEnvelope(candidate.metadata as WebSourceEnvelope | null),
+  // A double-click enters the source edit context (NOT group descent).
+  editContextType: WEB_FRAME_TYPE,
+  // The baked IDML form is a rectangle (the manifest's declared fallback)
+  // — what the webFrame degrades to without the plugin.
+  bakedFallback: "rectangle",
+};
+
+/** The edit context — entering it raises the source panel. The factory
+ *  closes over the host + panel id so the onEnter hook can re-raise the
+ *  panel (the host also emphasizes declared `panelIds`, but the hook
+ *  makes the open explicit + survives a cockpit that ignores emphasis). */
+export function makeWebFrameEditContext(
+  panelId: string,
+  session?: DraftSession,
+  inFrame?: InFrameEditSession,
+): EditContextContribution {
+  // ADR 012 — while the context is active, the host routes Cmd+Z /
+  // Shift+Cmd+Z here: they step the source DRAFT of the frame the context
+  // was entered on (the panel's history, draft-store.ts), not the document.
+  // A save is the document step. When the draft history is exhausted the
+  // hooks answer false and Undo greys out (the host does not fall through
+  // to the document mid-context, by ADR 012); leaving the frame hands undo
+  // back to the document.
+  let active: string | null = null;
+  const undoHooks: Partial<EditContextContribution> = session
+    ? {
+        onEnter: (ctx) => {
+          const t = asFrameTarget(ctx.id);
+          active = t ? sourceKeyFor(t) : null;
+        },
+        onExit: () => {
+          active = null;
+        },
+        onUndo: () => (active ? session.undo(active) : false),
+        onRedo: () => (active ? session.redo(active) : false),
+        onCanUndo: () => (active ? session.canUndo(active) : false),
+        onCanRedo: () => (active ? session.canRedo(active) : false),
+        undoLabel: () => "Undo source edit",
+        redoLabel: () => "Redo source edit",
+      }
+    : {};
+  // In-frame text editing (in-frame-edit.ts): a click on rendered text opens
+  // an edit of that text node; while one is open the context is dirty, so
+  // the host routes every key here, and Cmd+Z steps the edit's keystrokes
+  // before the draft history. Enter commits, Esc cancels — the edit first,
+  // the context only when no edit is open. A press outside the frame
+  // commits the edit and leaves the context (the host's K-1 rule).
+  const inFrameHooks: Partial<EditContextContribution> = inFrame
+    ? {
+        onEnter: (ctx) => {
+          undoHooks.onEnter?.(ctx);
+          inFrame.enter(ctx.id);
+          // A pointer entry (a double-click on the frame) carries where the
+          // press landed, in content coordinates (`editContext.enterPoint@1`):
+          // the same gesture places the caret. A host that sends no point
+          // leaves it to the next click inside the context.
+          const at = ctx.contentPoint;
+          if (at) void inFrame.pointerDown(at[0], at[1]);
+        },
+        onExit: (ctx) => {
+          undoHooks.onExit?.(ctx);
+          inFrame.exit();
+        },
+        onContentPointerDown: (e) => {
+          if (e.button !== 0) return;
+          void inFrame.pointerDown(e.contentPoint[0], e.contentPoint[1]);
+        },
+        onContentKey: (e) => {
+          if (inFrame.key(e)) e.preventDefault?.();
+        },
+        isDirty: () => inFrame.isEditing(),
+        onCommit: () => {
+          void inFrame.commit();
+        },
+        onCancel: () => {
+          void inFrame.cancel();
+        },
+        onUndo: () => (inFrame.isEditing() ? inFrame.undo() : (undoHooks.onUndo?.() ?? false)),
+        onRedo: () => (inFrame.isEditing() ? inFrame.redo() : (undoHooks.onRedo?.() ?? false)),
+        onCanUndo: () => (inFrame.isEditing() ? inFrame.canUndo() : (undoHooks.onCanUndo?.() ?? false)),
+        onCanRedo: () => (inFrame.isEditing() ? inFrame.canRedo() : (undoHooks.onCanRedo?.() ?? false)),
+        undoLabel: () => (inFrame.isEditing() ? "Undo typing" : "Undo source edit"),
+        redoLabel: () => (inFrame.isEditing() ? "Redo typing" : "Redo source edit"),
+      }
+    : {};
+  return {
+    ...undoHooks,
+    ...inFrameHooks,
+    type: WEB_FRAME_TYPE,
+    entry: "doubleClick",
+    // No `matches` here: the OBJECT TYPE already routes the double-click
+    // to this context (path 1 of resolveDoubleClick). A bare-kind match
+    // would be wrong — every rectangle is not a webFrame. The context is
+    // reachable ONLY through the objectType claim.
+    // ADR 024 — NO CANVAS TOOL EDITS A WEB FRAME. Its content is
+    // HTML/CSS, authored in the source panel and laid out by the engine;
+    // a brush or a pen has nothing to act on here. Declared EMPTY rather
+    // than omitted, which are different facts: omitted reads as
+    // "unrestricted" and left the entire tool rail lit inside a web
+    // frame. The rail treats an out-of-set pick as an exit, so reaching
+    // for the pointer walks you out.
+    toolIds: [],
+    panelIds: [panelId],
+    // NO `onEnter` openPanel. It used to call `host.shell.openPanel`
+    // here IN ADDITION to declaring `panelIds`, and the extra call was
+    // actively harmful: the SDK's door takes no options, so it always
+    // RAISES — bypassing the ADR-023 rule where the host withholds a
+    // raise that would displace a panel this context's own binding
+    // providers serve. Harmless today only because paged.web registers
+    // no providers; it becomes a live defect the day it does.
+    //
+    // The declaration already opens the panel (the controller calls
+    // `openPanel(id, { activate: !serving })` for each declared id), and
+    // it is the only path that CAN withhold. So the declaration is the
+    // door and the hook is gone.
+  };
+}

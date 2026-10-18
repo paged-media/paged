@@ -1,0 +1,1710 @@
+/*
+ * This file is part of paged (https://paged.media).
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// The webFrame source panel — HTML + CSS editors, a sandboxed live
+// preview, frame options, and the diagnostics line (concept §8).
+//
+// W-04 (Phase 2c): the editors are the HOST code-editor widget when
+// `host.supports("widgets.codeEditor@1")` answers true (line numbers,
+// HTML/CSS highlighting, a diagnostics gutter), and the bundle's OWN
+// plain textarea when it answers false (headless/conformance/older
+// hosts) — `resolveEditorLane` is the explicit, testable branch and
+// `data-web-editor-lane` says which lane rendered. W-05: the linter
+// publishes through `host.diagnostics`, which the editor's Problems
+// panel consumes.
+//
+// Preview vs. persistence (Phase 2c task 2 — two separate lanes):
+//   · KEYSTROKES feed the sandboxed preview + the diagnostics LIVE,
+//     behind a ~300 ms trailing debounce (`PREVIEW_DEBOUNCE_MS`) —
+//     no document write happens while typing;
+//   · the explicit "Save to document" action is the panel's ONLY
+//     document write: ONE undoable metadata mutation per commit
+//     (`persistDraft`), never conflated with a preview refresh.
+//
+// Built from host surfaces + React ONLY: the component is created by
+// a factory that closes over the BundleHost, reads/writes through
+// host.selection / host.document metadata / host.diagnostics, and styles
+// itself with the design-system token layer (--pg-*, --status-*,
+// --font-mono, --space-*, --radius-*) so it reads as native in both
+// themes. No @paged-media/shell imports — selection reactivity comes
+// from host.selection.onDidChange, not React context hooks.
+
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactElement,
+  type ReactNode,
+} from "react";
+
+import type {
+  BundleHost,
+  CodeEditorDiagnostic,
+  ElementId,
+} from "@paged-media/plugin-api";
+import {
+  asFrameTarget,
+  boundNamesIn,
+  composeFontFaces,
+  composeSrcdoc,
+  DEFAULT_SOURCE,
+  diagnoseFonts,
+  diagnoseHtml,
+  flowThreadOptions,
+  fontParity,
+  namedFlowDiagnostics,
+  normalizeOverflow,
+  OVERFLOW_POLICIES,
+  type OverflowPolicy,
+  renderWebFrameSource,
+  sourceFromTemplate,
+  sourceKeyFor,
+  tagOutline,
+  TEMPLATE_FILTERS,
+  templateById,
+  WEB_TEMPLATES,
+  type ResolvedFontFace,
+  type TagOutlineEntry,
+  type FlowThreadOption,
+  type WebDiagnostic,
+  type WebFrameSource,
+} from "../../../web-model/src";
+
+import {
+  threadSelectedIntoFlow,
+  unthreadSelectedFromFlow,
+} from "../render-flow-command";
+import {
+  formatDeferred,
+  lastRenderReport,
+  subscribeRenderReport,
+} from "../render-report";
+import { autoRendererFor } from "../auto-render";
+import { resolveBindings, watchProviders, type Bindings } from "../bindings";
+import { clearOutlineHighlight, highlightOutlineEntry, onCanvasPick } from "../outline-highlight";
+import {
+  documentValuesNotify,
+  loadWebSource,
+  readDocumentValues,
+  writeDocumentValues,
+  writeWebSource,
+} from "../source-part";
+import { createDraftSession, type DraftSession, type DraftStore } from "./draft-store";
+
+import { createDebouncer } from "./debounce";
+import {
+  FallbackCodeEditor,
+  resolveEditorLane,
+  type EditorLane,
+} from "./editor-lane";
+import { resolvePreviewFontFaces } from "./font-resolution";
+import { watchDocumentFonts } from "./font-watch";
+import {
+  clipboardAvailable,
+  describeRemoval,
+  ingestFromClipboard,
+  ingestHtml,
+} from "./ingest";
+import { selectRange } from "./find-in-source";
+import { insertWebFrame } from "../insert";
+
+/** The source panel's id and title. "Web source" (HTML, CSS, preview) sits
+ *  beside "Web frame properties" (the schema panel), so each title says
+ *  which one it is. */
+export const SOURCE_PANEL_ID = "media.paged.web.panel.source";
+export const SOURCE_PANEL_TITLE = "Web source";
+
+/** Trailing-edge debounce between a keystroke and the preview/lint
+ *  refresh. Document writes do NOT ride this timer — see `persistDraft`. */
+export const PREVIEW_DEBOUNCE_MS = 300;
+
+// ---------------------------------------------------------------- styles
+// Token-layer styling per the brand system: sentence case labels,
+// UPPERCASE kicker labels with wide tracking, mono tabular code,
+// hairline borders, no hardcoded hexes in chrome.
+
+const kicker: CSSProperties = {
+  font: "700 10px var(--font-sans, sans-serif)",
+  letterSpacing: "var(--tracking-wide, 0.14em)",
+  textTransform: "uppercase",
+  color: "var(--pg-muted-fg)",
+  margin: "var(--space-3, 12px) 0 var(--space-1, 4px)",
+};
+
+const field: CSSProperties = {
+  font: "12px var(--font-sans, sans-serif)",
+  color: "var(--pg-fg)",
+  background: "var(--pg-bg)",
+  border: "1px solid var(--pg-border)",
+  borderRadius: "var(--radius-sm, 4px)",
+  padding: "2px 6px",
+};
+
+const optionRow: CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  alignItems: "center",
+  gap: "var(--space-1, 4px) var(--space-2, 8px)",
+  font: "12px var(--font-sans, sans-serif)",
+  color: "var(--pg-fg)",
+  margin: "0 0 var(--space-1, 4px)",
+};
+
+const mutedNote: CSSProperties = {
+  font: "10px var(--font-sans, sans-serif)",
+  color: "var(--pg-muted-fg)",
+};
+
+/** A note under the fields of a wrapping `optionRow`: it takes a line of
+ *  its own instead of squeezing beside the control. */
+const rowNote: CSSProperties = { ...mutedNote, flexBasis: "100%" };
+
+/** The panel's primary button (the theme's primary fill). */
+const primaryButton: CSSProperties = {
+  font: "500 12px var(--font-sans, sans-serif)",
+  color: "var(--pg-primary-fg)",
+  background: "var(--pg-primary)",
+  border: "none",
+  borderRadius: "var(--radius-md, 6px)",
+  padding: "6px 12px",
+  cursor: "pointer",
+};
+
+/** A collapsed "About" disclosure for detail a one-line note leaves out. */
+function About({ children }: { children: ReactNode }): ReactElement {
+  return (
+    <details data-web-about style={{ ...mutedNote, flexBasis: "100%", margin: "var(--space-1, 4px) 0 0" }}>
+      <summary style={{ cursor: "pointer" }}>About</summary>
+      <div style={{ margin: "var(--space-1, 4px) 0 0" }}>{children}</div>
+    </details>
+  );
+}
+
+const DOT: Record<WebDiagnostic["severity"], string> = {
+  error: "var(--status-error)",
+  warning: "var(--status-review)",
+  info: "var(--status-info)",
+};
+
+// ----------------------------------------------------------- badge state
+
+/** Pure derivation of the preview's font-substitution badge — split
+ *  out so it's unit-testable without rendering.
+ *
+ *  W-06 flip: when the host asset store serves a used family's BYTES,
+ *  the panel composes a real `@font-face` and the badge flips for that
+ *  family. `shown` carries the matched families whose bytes were
+ *  resolved and injected; those are removed from the substitution
+ *  story. The badge then has three states:
+ *    · hidden       — no (non-generic) family is used;
+ *    · "shown"      — every used+registered family was served (no
+ *                     substitution among document fonts; the badge
+ *                     CONFIRMS the document faces are shown — `state`
+ *                     `"shown"`, severity `info`);
+ *    · substituting — some used family is still substituted (a matched
+ *                     family the host had no bytes for, or an
+ *                     unregistered family that has no bytes by
+ *                     definition). */
+export interface PreviewFontBadge {
+  /** Whether to render the badge at all. */
+  show: boolean;
+  /** `"shown"` when every used+registered family was resolved to real
+   *  bytes (the W3.12 flip — "document fonts shown"); `"substituting"`
+   *  when at least one used family is still a browser substitute. */
+  state: "shown" | "substituting";
+  /** Families used by the source but NOT registered by the document. */
+  unregistered: string[];
+  /** Families the document registers and the source uses. */
+  matched: string[];
+  /** The subset of `matched` whose BYTES the host asset store served
+   *  and the panel composed into a real `@font-face` (now SHOWN). */
+  shown: string[];
+  /** "review" when any used family is missing from the document,
+   *  "info" otherwise (a preview-only caveat, or the all-shown flip). */
+  severity: "review" | "info";
+}
+
+export function previewFontBadge(
+  css: string,
+  registered: readonly string[],
+  shown: readonly string[] = [],
+): PreviewFontBadge {
+  const { matched, unregistered } = fontParity(css, registered);
+  const usedCount = matched.length + unregistered.length;
+  const show = usedCount > 0;
+  // A matched family is "shown" only if its bytes were served.
+  const shownLower = new Set(shown.map((f) => f.trim().toLowerCase()));
+  const shownMatched = matched.filter((f) =>
+    shownLower.has(f.trim().toLowerCase()),
+  );
+  // Still substituting if any unregistered family is used, OR any
+  // matched family was NOT served bytes.
+  const stillSubstituting =
+    unregistered.length > 0 || shownMatched.length < matched.length;
+  return {
+    show,
+    state: stillSubstituting ? "substituting" : "shown",
+    matched,
+    unregistered,
+    shown: shownMatched,
+    severity: unregistered.length > 0 ? "review" : "info",
+  };
+}
+
+// ----------------------------------------------------------- templates
+
+/** The starter-template picker — a vetted, offline, dependency-free seed
+ *  set (web-model's `WEB_TEMPLATES`). An empty frame is a poor first
+ *  run; the picker seeds the source HTML/CSS from a chosen template. */
+function TemplatePicker({
+  onSeed,
+}: {
+  onSeed(templateId: string): void;
+}): ReactElement {
+  return (
+    <div data-web-templates style={{ margin: "var(--space-1, 4px) 0" }}>
+      <div style={{ ...kicker, marginTop: 0 }}>Start from a template</div>
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "var(--space-1, 4px)",
+        }}
+      >
+        {WEB_TEMPLATES.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            data-web-template={t.id}
+            title={t.description}
+            onClick={() => onSeed(t.id)}
+            style={{
+              font: "500 11px var(--font-sans, sans-serif)",
+              color: "var(--pg-fg)",
+              background: "var(--pg-bg)",
+              border: "1px solid var(--pg-border)",
+              borderRadius: "var(--radius-sm, 4px)",
+              padding: "3px 9px",
+              cursor: "pointer",
+            }}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ------------------------------------------------------------ persistence
+
+/** Persist a draft as the element's source — the panel's ONLY document
+ *  write, fired by the explicit "Save to document" action (never by the
+ *  preview debounce). One call = one undoable metadata mutation (plus, for a
+ *  source too large for the label, one content-addressed container part —
+ *  see `writeWebSource`). Resolves to whether it applied and, when refused,
+ *  why. */
+export async function persistDraft(
+  host: Pick<BundleHost, "document" | "parts" | "supports">,
+  id: ElementId,
+  draft: WebFrameSource,
+): Promise<{ applied: boolean; reason?: string }> {
+  return writeWebSource(host, id, draft);
+}
+
+// ---------------------------------------------------------------- hooks
+
+/** The debounced shadow of a value: re-emits `value` `ms` after the
+ *  LAST change (trailing edge, via `createDebouncer` — the unit the
+ *  fake-timer spec covers). The first render emits immediately. */
+function useDebouncedValue<T>(value: T, ms: number): T {
+  const [debounced, setDebounced] = useState(value);
+  const debouncer = useMemo(() => createDebouncer(ms), [ms]);
+  useEffect(() => {
+    debouncer.schedule(() => setDebounced(value));
+  }, [value, debouncer]);
+  useEffect(() => () => debouncer.cancel(), [debouncer]);
+  return debounced;
+}
+
+// -------------------------------------------------------------- flow picker
+
+/**
+ * Phase D — the arbitrary named-flow picker. Shown when a web SOURCE frame
+ * plus one or more target frames are multi-selected: one button per flow the
+ * source declares (`flowThreadOptions` — the primary plus EVERY secondary), so
+ * an arbitrary named flow (the 3rd, 4th, …) is reachable — the commands only
+ * reach the primary (`threadWebFlow`) and the 2nd (`threadWebFlowNamed`).
+ * Clicking threads the OTHER selected frames into the chosen flow; "Unthread"
+ * removes them from whichever flow they are in. The picker is thin over the
+ * pure `flowThreadOptions` + the existing thread/unthread commands.
+ */
+function FlowPicker({
+  options,
+  targetCount,
+  onThread,
+  onUnthread,
+}: {
+  options: FlowThreadOption[];
+  targetCount: number;
+  onThread: (flowName: string | undefined) => void;
+  onUnthread: () => void;
+}): ReactElement {
+  const chip = primaryButton;
+  return (
+    <div
+      data-web-flow-picker
+      style={{ padding: "var(--space-3, 12px)", font: "12px var(--font-sans, sans-serif)" }}
+    >
+      <p style={{ margin: "0 0 var(--space-2, 8px)", color: "var(--pg-muted-fg)" }}>
+        Thread {targetCount} selected frame{targetCount === 1 ? "" : "s"} into a
+        flow:
+      </p>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-1, 4px)" }}>
+        {options.map((o) => (
+          <button
+            key={o.name}
+            type="button"
+            data-web-flow-thread={o.name}
+            onClick={() => onThread(o.flowName)}
+            style={chip}
+          >
+            {o.name}
+            {o.primary ? " (primary)" : ""}
+          </button>
+        ))}
+      </div>
+      <button
+        type="button"
+        data-web-flow-unthread
+        onClick={onUnthread}
+        style={{
+          ...chip,
+          marginTop: "var(--space-2, 8px)",
+          color: "var(--pg-fg)",
+          background: "transparent",
+          border: "1px solid var(--pg-border)",
+        }}
+      >
+        Unthread selected
+      </button>
+    </div>
+  );
+}
+
+/** Overflow policy labels and what each one does, in the panel's words. */
+const OVERFLOW_LABEL: Record<OverflowPolicy, string> = {
+  clip: "Clip",
+  shrink: "Shrink to fit",
+  grow: "Grow frame",
+  thread: "Continue into thread",
+};
+const OVERFLOW_NOTE: Record<OverflowPolicy, string> = {
+  clip: "Content past the frame is cut off.",
+  shrink: "The content is scaled down until it fits the frame.",
+  grow: "The frame's height follows the content.",
+  thread: "Content continues into the frames threaded after this one.",
+};
+
+// ----------------------------------------------------------------- panel
+
+export function makeWebSourcePanel(
+  host: BundleHost,
+  // Unsaved drafts per frame (they outlive the editor's remounts) and their
+  // undo history, shared with the web frame's edit context (ADR 012).
+  session: DraftSession = createDraftSession(),
+): () => ReactElement {
+  const drafts = session.drafts;
+  // The lane is stable for the host's lifetime — probe once.
+  const lane = resolveEditorLane(host);
+  return function WebSourcePanel(): ReactElement {
+    const [selection, setSelection] = useState<ElementId[]>(() =>
+      host.selection.get(),
+    );
+    // ADR-020 readout — re-render when a render/flow/bake command lands a
+    // new outcome (the report itself is read at render time).
+    const [, bumpReport] = useReducer((n: number) => n + 1, 0);
+    useEffect(() => subscribeRenderReport(bumpReport), []);
+    // The PERSISTED source for the selected target (document metadata
+    // truth). The editing draft lives in <SourceEditor>, which remounts
+    // per target + per undo/redo revert (the `generation` key).
+    const [source, setSource] = useState<WebFrameSource | null>(null);
+    const [generation, setGeneration] = useState(0);
+    // The document's registered font FAMILIES (the `fonts` collection,
+    // names only — no face bytes cross the door; W-06). Fed into
+    // web-model for parity checks + the substitution badge. Loaded
+    // once on mount and refreshed on document change.
+    const [fontFamilies, setFontFamilies] = useState<string[]>([]);
+    // Phase D — the source of selection[0] when a source frame + targets are
+    // MULTI-selected, so the flow picker can offer its named flows (the
+    // single-select `source` above is null then).
+    const [flowSource, setFlowSource] = useState<WebFrameSource | null>(null);
+    const sourceRef = useRef<WebFrameSource | null>(source);
+    sourceRef.current = source;
+    // Why the last insert / "Make web frame" was refused, shown inline.
+    const [panelError, setPanelError] = useState<string | null>(null);
+    useEffect(() => setPanelError(null), [selection]);
+
+    const target =
+      selection.length === 1 ? asFrameTarget(selection[0]) : null;
+    const key = target ? sourceKeyFor(target) : null;
+
+    // Selection → reload the source for the new target. The mount
+    // effect RE-READS the snapshot: the panel may mount after a
+    // selection event already passed (insert → select → open-panel),
+    // and the lazy useState initial races the same React commit that
+    // delivered the new selection through the host's live handle.
+    useEffect(() => {
+      setSelection(host.selection.get());
+      const sub = host.selection.onDidChange((ids) => setSelection(ids));
+      return () => sub.dispose();
+    }, []);
+    // Phase D — MULTI-select: load selection[0]'s source so the flow picker
+    // can offer its named flows (single-select `source` is null then). Skips
+    // for a single/empty selection.
+    useEffect(() => {
+      if (selection.length < 2 || !asFrameTarget(selection[0])) {
+        setFlowSource(null);
+        return;
+      }
+      let stale = false;
+      const first = selection[0];
+      void (async () => {
+        const src =
+          await loadWebSource(host, first);
+        if (!stale) setFlowSource(src);
+      })();
+      return () => {
+        stale = true;
+      };
+    }, [selection]);
+    // Document font registry → the parity check + badge. The `fonts`
+    // collection crosses family NAMES (FontSummary; no bytes). Refresh
+    // on any document change: registering/removing a document font
+    // changes which families resolve. Failures read as "no registry"
+    // (empty) — never a crash; parity then emits nothing (absence of a
+    // registry is not evidence a family is missing).
+    useEffect(() => {
+      const sub = watchDocumentFonts(host, setFontFamilies);
+      return () => sub.dispose();
+    }, []);
+    // The source lives as DOCUMENT METADATA (protocol v33). Reads are
+    // async; a stale flag guards out-of-order replies on fast
+    // selection changes. Pre-v33 documents migrate one-time from
+    // plugin storage (write-through, then the storage entry drops).
+    const loadFor = useCallback(
+      async (id: ElementId, storageKey: string) => {
+        // Prefer the portable .paged container part, then the metadata label,
+        // then the legacy host.storage entry below.
+        let src =
+          await loadWebSource(host, id);
+        if (!src) {
+          const legacy = host.storage.get<WebFrameSource>(storageKey);
+          if (legacy) {
+            src = legacy;
+            const out = await writeWebSource(host, id, legacy);
+            if (out.applied) host.storage.delete(storageKey);
+          }
+        }
+        return src;
+      },
+      [],
+    );
+    useEffect(() => {
+      let stale = false;
+      // Drop the PREVIOUS target's source synchronously so the editor
+      // never renders old content under the new key while the read is
+      // in flight.
+      setSource(null);
+      if (!target || !key) return;
+      const id = selection[0];
+      void loadFor(id, key).then((src) => {
+        if (!stale) setSource(src);
+      });
+      return () => {
+        stale = true;
+      };
+    }, [key]);
+    // Undo/redo can revert the metadata under the panel — re-read on
+    // those (NOT on mutationApplied: the panel's own explicit saves
+    // must not bounce the editor through a redundant async re-read).
+    // An UNRELATED undo leaves the source identical: keep the user's
+    // uncommitted draft then; only a real revert bumps `generation`
+    // (remounting the editor onto the reverted source).
+    useEffect(() => {
+      if (!target || !key) return;
+      const id = selection[0];
+      const sub = host.document.onDidChange((e) => {
+        if (e.kind === "undoApplied" || e.kind === "redoApplied") {
+          void loadFor(id, key).then((src) => {
+            if (JSON.stringify(sourceRef.current) === JSON.stringify(src))
+              return;
+            setSource(src);
+            setGeneration((g) => g + 1);
+          });
+        }
+      });
+      return () => sub.dispose();
+    }, [key, loadFor]);
+
+    // ---------------------------------------------------- empty states
+    if (!target || !key) {
+      // Phase D — a web SOURCE frame + target frames multi-selected: offer the
+      // flow picker (every declared named flow reachable) instead of the empty
+      // note. `flowSource` is selection[0]'s source (loaded above).
+      const flowOptions = flowSource ? flowThreadOptions(flowSource.css) : [];
+      if (selection.length >= 2 && flowOptions.length > 0) {
+        return (
+          <FlowPicker
+            options={flowOptions}
+            targetCount={selection.length - 1}
+            onThread={(flowName) =>
+              void threadSelectedIntoFlow(host, flowName, selection)
+            }
+            onUnthread={() => void unthreadSelectedFromFlow(host, selection)}
+          />
+        );
+      }
+      return (
+        <div data-web-panel="empty" style={{ padding: "var(--space-3, 12px)", font: "12px var(--font-sans, sans-serif)" }}>
+          <p style={{ margin: "0 0 var(--space-2, 8px)", color: "var(--pg-muted-fg)" }}>
+            Insert a web frame, or select one frame to edit its HTML and CSS.
+          </p>
+          <button
+            type="button"
+            data-web-insert
+            onClick={() =>
+              void insertWebFrame(host, SOURCE_PANEL_ID).then((refusal) => setPanelError(refusal))
+            }
+            style={primaryButton}
+          >
+            Insert web frame
+          </button>
+          {panelError && (
+            <p data-web-panel-error role="alert" style={{ ...mutedNote, margin: "var(--space-2, 8px) 0 0", color: "var(--status-error)" }}>
+              {panelError}
+            </p>
+          )}
+        </div>
+      );
+    }
+    if (!source) {
+      const makeFrom = (src: WebFrameSource): void => {
+        void writeWebSource(host, selection[0], src).then((out) => {
+          if (out.applied) {
+            setPanelError(null);
+            setSource(src);
+          } else {
+            const message = `Not made a web frame: ${out.reason ?? "the document refused the change"}`;
+            host.log.warn(message);
+            setPanelError(message);
+          }
+        });
+      };
+      return (
+        <div data-web-panel="convert" style={{ padding: "var(--space-3, 12px)", font: "12px var(--font-sans, sans-serif)" }}>
+          <p style={{ margin: "0 0 var(--space-2, 8px)", color: "var(--pg-muted-fg)" }}>
+            The selected {target.kind} is not a web frame yet.
+          </p>
+          <button
+            type="button"
+            data-web-make
+            onClick={() => makeFrom(DEFAULT_SOURCE)}
+            style={primaryButton}
+          >
+            Make web frame
+          </button>
+          {panelError && (
+            <p data-web-panel-error role="alert" style={{ ...mutedNote, margin: "var(--space-2, 8px) 0 0", color: "var(--status-error)" }}>
+              {panelError}
+            </p>
+          )}
+          {/* Seed the new frame from a vetted starter instead of the
+              default — an empty frame is a poor first run. */}
+          <TemplatePicker
+            onSeed={(id) => {
+              const t = templateById(id);
+              if (t) makeFrom(sourceFromTemplate(t, DEFAULT_SOURCE.options));
+            }}
+          />
+        </div>
+      );
+    }
+
+    return (
+      <SourceEditor
+        // Remount per target AND per undo/redo revert: a fresh draft
+        // + an immediate (un-debounced) first preview every time the
+        // persisted truth changes under the panel.
+        key={`${generation}:${key}`}
+        host={host}
+        lane={lane}
+        id={selection[0]}
+        sourceKey={key}
+        initial={source}
+        drafts={drafts}
+        session={session}
+        fontFamilies={fontFamilies}
+        onPersisted={setSource}
+      />
+    );
+  };
+}
+
+/** CSS px per point (1 pt = 1/72 in, 1 px = 1/96 in). */
+const PX_PER_PT = 96 / 72;
+
+/** The frame's content size in CSS px, or `null` when the host answers no
+ *  geometry. Follows resizes (a `resizeFrame`'s reflow, a gesture commit —
+ *  a resize by the handles, which carries no reflow — and a script run) and
+ *  undo/redo. */
+function useFrameSizePx(host: BundleHost, id: ElementId): { width: number; height: number } | null {
+  const [size, setSize] = useState<{ width: number; height: number } | null>(null);
+  const frameId = (id as { id?: unknown }).id;
+  useEffect(() => {
+    let stale = false;
+    const read = (): void => {
+      const doc = host.document as Partial<BundleHost["document"]>;
+      if (typeof doc.elementGeometry !== "function") return;
+      void doc
+        .elementGeometry([id])
+        .then(([g]) => {
+          if (stale || !g?.bounds) return;
+          const [top, left, bottom, right] = g.bounds;
+          setSize({
+            width: Math.round(Math.max(0, right - left) * PX_PER_PT),
+            height: Math.round(Math.max(0, bottom - top) * PX_PER_PT),
+          });
+        })
+        .catch(() => {});
+    };
+    read();
+    const sub = host.document.onDidChange((e) => {
+      if (e.reflow?.frameId === frameId || e.kind !== "mutationApplied") read();
+    });
+    return () => {
+      stale = true;
+      sub.dispose();
+    };
+  }, [frameId]);
+  return size;
+}
+
+// ---------------------------------------------------------- bound data
+
+const NO_BINDINGS: Bindings = { vars: {}, key: "" };
+
+/** The bound values `source` names, for frame `id`; re-read after document
+ *  changes and provider revisions. */
+function useBindings(
+  host: BundleHost,
+  id: ElementId,
+  source: WebFrameSource,
+): { bindings: Bindings; refresh(): void } {
+  const [bindings, setBindings] = useState<Bindings>(NO_BINDINGS);
+  const [tick, bump] = useReducer((n: number) => n + 1, 0);
+  useEffect(() => {
+    const docSub = host.document.onDidChange(() => bump());
+    const providers = watchProviders(host, () => bump());
+    return () => {
+      docSub.dispose();
+      providers.dispose();
+    };
+  }, []);
+  useEffect(() => {
+    let stale = false;
+    void resolveBindings(host, id, source)
+      .then((b) => {
+        if (!stale) setBindings((prev) => (prev.key === b.key ? prev : b));
+      })
+      .catch(() => {});
+    return () => {
+      stale = true;
+    };
+  }, [source.html, source.css, tick]);
+  return { bindings, refresh: bump };
+}
+
+/** The bound names the draft uses and their values; a `doc.<key>` with no
+ *  value can be set here (the document value map). */
+function BoundData({
+  host,
+  names,
+  bindings,
+  onChanged,
+}: {
+  host: BundleHost;
+  names: string[];
+  bindings: Bindings;
+  /** A document value was written to a host without the document metadata
+   *  door (a part write raises no document change; the metadata write does,
+   *  and that change refreshes the bindings and the canvas by itself). */
+  onChanged(): void;
+}): ReactElement | null {
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [note, setNote] = useState<string | null>(null);
+  if (names.length === 0) return null;
+  const docKey = (name: string) => {
+    const k = name.slice(4);
+    return name.startsWith("doc.") && k !== "title" && k !== "pages" ? k : null;
+  };
+  const save = async (key: string, value: string) => {
+    const current = await readDocumentValues(host);
+    const out = await writeDocumentValues(host, { ...current, [key]: value });
+    setNote(out.applied ? null : `not saved: ${out.reason ?? "refused"}`);
+    if (!out.applied || documentValuesNotify(host)) return;
+    onChanged();
+    // The canvas re-renders the frames that name the value.
+    void autoRendererFor(host)?.reconcile("change");
+  };
+  return (
+    <div data-web-bound>
+      {/* Part of the Variables section: the {{doc.…}}, {{frame.…}} and
+          {{data.…}} names the draft uses, and their values. */}
+      <div style={{ ...mutedNote, margin: "var(--space-2, 8px) 0 var(--space-1, 4px)" }}>From the document and data</div>
+      {names.map((name) => {
+        const value = bindings.vars[name];
+        const key = docKey(name);
+        return (
+          <div key={name} data-web-bound-row={name} style={optionRow}>
+            <code style={{ font: "11px var(--font-mono, monospace)", width: 120, overflow: "hidden" }}>{name}</code>
+            {key !== null ? (
+              <>
+                <input
+                  data-web-bound-input={name}
+                  aria-label={`Document value ${key}`}
+                  value={values[name] ?? value ?? ""}
+                  onChange={(e) => setValues({ ...values, [name]: e.target.value })}
+                  style={{ ...field, flex: 1 }}
+                />
+                <button
+                  type="button"
+                  data-web-bound-set={name}
+                  onClick={() => void save(key, values[name] ?? value ?? "")}
+                  style={{
+                    font: "500 11px var(--font-sans, sans-serif)",
+                    color: "var(--pg-fg)",
+                    background: "var(--pg-bg)",
+                    border: "1px solid var(--pg-border)",
+                    borderRadius: "var(--radius-sm, 4px)",
+                    padding: "2px 6px",
+                    cursor: "pointer",
+                  }}
+                >
+                  Set
+                </button>
+              </>
+            ) : (
+              <span data-web-bound-value={name} style={value === undefined ? mutedNote : { font: "12px var(--font-sans, sans-serif)" }}>
+                {value === undefined ? "No value" : value}
+              </span>
+            )}
+          </div>
+        );
+      })}
+      <About>
+        Names you can use: doc.title, doc.pages, doc.&lt;key&gt; (a document value you set here),
+        frame.page, and data.&lt;field&gt; (the first record of a data source). The same document
+        values are listed under Document values in Web frame properties.
+      </About>
+      {note && (
+        <span data-web-bound-note role="alert" style={{ ...mutedNote, color: "var(--status-error)" }}>
+          {note}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------- the editor
+
+interface SourceEditorProps {
+  host: BundleHost;
+  lane: EditorLane;
+  id: ElementId;
+  sourceKey: string;
+  /** The persisted source this editor session starts from. */
+  initial: WebFrameSource;
+  /** Unsaved drafts per frame — the editor starts from a kept one. */
+  drafts: DraftStore;
+  /** The draft history the host's undo steps while the frame's edit
+   *  context is active. */
+  session: DraftSession;
+  fontFamilies: string[];
+  /** Reports a successful save so the owner's persisted state tracks. */
+  onPersisted(next: WebFrameSource): void;
+}
+
+function SourceEditor({
+  host,
+  lane,
+  id,
+  sourceKey,
+  initial,
+  drafts,
+  session,
+  fontFamilies,
+  onPersisted,
+}: SourceEditorProps): ReactElement {
+  // The DRAFT is what the editors bind — it never touches the document
+  // by itself. `persisted` mirrors the last successful save for the
+  // dirty flag; `preview` is the draft's debounced shadow and drives
+  // the iframe + diagnostics (task 2: preview refresh ≠ document write).
+  // A draft kept from an earlier visit (or from before an undo remount)
+  // wins over the persisted source, and shows as unsaved.
+  const [draft, setDraft] = useState<WebFrameSource>(() => drafts.get(sourceKey) ?? initial);
+  const [persisted, setPersisted] = useState<WebFrameSource>(initial);
+  useEffect(() => {
+    drafts.track(sourceKey, draft, persisted);
+  }, [draft, persisted, sourceKey]);
+  // Every draft state goes into the frame's history (quick edits coalesce);
+  // a step the host's undo/redo takes comes back as the draft.
+  useEffect(() => {
+    session.record(sourceKey, draft);
+  }, [draft, sourceKey]);
+  useEffect(
+    () =>
+      session.onApply((key, next) => {
+        if (key === sourceKey) setDraft(next);
+      }),
+    [sourceKey],
+  );
+  // Why the last save was refused (shown beside the save button).
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const preview = useDebouncedValue(draft, PREVIEW_DEBOUNCE_MS);
+  // Preview = canvas: the preview lays out at the frame's content size,
+  // the box the engine lays out in. Re-read when the frame is resized (the
+  // reflow event) and after undo/redo (which can resize it back).
+  const frameSize = useFrameSizePx(host, id);
+  // The bundle-owned HTML <textarea> (fallback lane only) — the target
+  // the "Find in source" affordance drives the caret in. The host
+  // widget lane has no selection prop, so this stays null there and the
+  // affordance degrades to a "go to line N" hint (find-in-source.ts).
+  const htmlTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  // The paste-HTML box — a small ingest surface shown on demand. Filled
+  // by a paste; its content is SANITIZED before it can seed the source.
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [ingestNote, setIngestNote] = useState<string | null>(null);
+  // §6.2 deterministic slice — the template pass sits between the
+  // (debounced) source and EVERYTHING downstream: the srcdoc, the html
+  // lint, and the font parity all consume the RENDERED html/css. The
+  // pass only runs when the draft carries a `vars` map (additive
+  // opt-in); the scripted Boa transform lane is the W2 follow-on
+  // (W-08) — see web-model/src/transform.ts's seam comment. NOTE: when
+  // a substituted value contains newlines, gutter line numbers can
+  // drift against the editor's template text — the rendered output is
+  // the honest lint target (a variable could inject `<script>`; the
+  // policy error must fire on what actually previews).
+  // Bound data (bindings.ts): the values the draft names under `doc.`,
+  // `frame.` and `data.`, re-read when the document changes and when a data
+  // provider announces a new revision — the preview substitutes them as
+  // the canvas does.
+  const { bindings, refresh: refreshBindings } = useBindings(host, id, preview);
+  const rendered = useMemo(() => renderWebFrameSource(preview, bindings.vars), [preview, bindings]);
+  // W-06 — document faces the host asset store served BYTES for and we
+  // composed into real `@font-face` rules (data URLs — see
+  // font-resolution.ts for why data:, not blob:, in a sandboxed
+  // iframe). The preview shows these as the DOCUMENT's actual faces;
+  // the badge flips for them. `shownFamilies` are the matched families
+  // now shown.
+  const [resolvedFaces, setResolvedFaces] = useState<ResolvedFontFace[]>([]);
+  const [shownFamilies, setShownFamilies] = useState<string[]>([]);
+
+  // W-06 — resolve the BYTES of the document faces the RENDERED source
+  // uses through the capability-gated asset store
+  // (`resolvePreviewFontFaces` — the unit the spec exercises). When the
+  // host serves no bytes (null answers / no source injected), nothing
+  // resolves and the badge stays in its honest substitution state. The
+  // `@font-face` CSS lands in the srcdoc <style> — plain CSS with
+  // inline data-url src, NO script, so `sandbox=""` is unchanged.
+  // Keyed on the DEBOUNCED rendered css (no byte reads per keystroke).
+  const cssForFonts = rendered.css;
+  useEffect(() => {
+    let stale = false;
+    void resolvePreviewFontFaces(host, cssForFonts, fontFamilies).then(
+      ({ faces, shown }) => {
+        if (stale) return;
+        setResolvedFaces(faces);
+        setShownFamilies(shown);
+      },
+    );
+    return () => {
+      stale = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cssForFonts, fontFamilies.join(" ")]);
+
+  // The full diagnostic set: template-pass warnings (§6.2 slice) +
+  // HTML policy/balance + CSS↔document font parity (W1). All lanes
+  // share the same WebDiagnostic shape so the panel list, the Problems
+  // panel, and the gutter render them uniformly. Pure web-model calls
+  // over the DEBOUNCED, RENDERED draft — the lint lane rides the same
+  // ~300 ms cadence as the preview. W-06: a family whose bytes were
+  // SHOWN drops its "not previewable" info (it IS previewable now).
+  const diagnostics = useMemo<WebDiagnostic[]>(
+    () => [
+      ...rendered.diagnostics,
+      ...diagnoseHtml(rendered.html),
+      ...diagnoseFonts(rendered.css, fontFamilies, shownFamilies),
+      // Named-flow lint (flow-from without flow-into etc.) — built in
+      // web-model, wired here so it rides the same debounced cadence.
+      ...namedFlowDiagnostics(rendered.css),
+    ],
+    [rendered, fontFamilies, shownFamilies],
+  );
+  // Publish to the host problems lane on the same debounced cadence —
+  // linting is analysis, not a document write, so it stays LIVE while
+  // typing (unlike persistence, which waits for the explicit save).
+  useEffect(() => {
+    host.diagnostics.set(sourceKey, diagnostics);
+  }, [diagnostics, sourceKey]);
+
+  // Font badge state (W-06 flip): for families whose BYTES the host
+  // asset store served, the preview now shows the DOCUMENT's actual
+  // faces (composed `@font-face`), so the badge flips to "document
+  // fonts shown" once EVERY used+registered family is shown. Until
+  // then it stays the honest substitution badge (W1): `unregistered`
+  // families are missing from the engine document (substitute
+  // on-canvas too), and a matched family the host had no bytes for is
+  // still a browser substitute HERE.
+  const badge = useMemo(
+    () => previewFontBadge(rendered.css, fontFamilies, shownFamilies),
+    [rendered, fontFamilies, shownFamilies],
+  );
+  // Per-line markers for the HTML editor's gutter (the linter only
+  // diagnoses HTML today; line-less policy notes don't carry a
+  // gutter position so they're filtered out here but still show in
+  // the summary list + the Problems panel). Rendered only by the
+  // widget lane — the textarea fallback has no gutter and says so.
+  const htmlGutter = useMemo<CodeEditorDiagnostic[]>(
+    () =>
+      diagnostics
+        .filter((d): d is typeof d & { line: number } => d.line !== undefined)
+        .map((d) => ({ severity: d.severity, message: d.message, line: d.line })),
+    [diagnostics],
+  );
+  // W-06: the served document faces become a real `@font-face` prelude
+  // inside the srcdoc <style> (plain CSS + inline data-url src, NO
+  // script — sandbox="" unchanged). The preview then uses the
+  // document's actual faces for every resolved family. The srcdoc body
+  // is the RENDERED source (template pass applied).
+  const fontFaceCss = useMemo(
+    () => composeFontFaces(resolvedFaces),
+    [resolvedFaces],
+  );
+  const srcdoc = useMemo(
+    () =>
+      composeSrcdoc(
+        { html: rendered.html, css: rendered.css, options: preview.options },
+        fontFaceCss,
+      ),
+    [rendered, preview.options, fontFaceCss],
+  );
+
+  const dirty = useMemo(
+    () => JSON.stringify(draft) !== JSON.stringify(persisted),
+    [draft, persisted],
+  );
+  const commit = useCallback(() => {
+    const next = draft;
+    void persistDraft(host, id, next).then(({ applied, reason }) => {
+      if (!applied) {
+        const message = `Not saved: ${reason ?? "the document refused the change"}`;
+        setSaveError(message);
+        host.diagnostics.set(`${sourceKey}#save`, [
+          { severity: "error", message, source: "save" },
+        ]);
+        return;
+      }
+      setSaveError(null);
+      host.diagnostics.set(`${sourceKey}#save`, []);
+      setPersisted(next);
+      onPersisted(next);
+    });
+  }, [draft, id, onPersisted]);
+
+  // Seed the draft from a starter template — replaces html/css, keeps
+  // the author's current frame OPTIONS (media/viewport). A draft edit
+  // (not a document write): the explicit save still commits it.
+  const seedTemplate = useCallback((templateId: string) => {
+    const t = templateById(templateId);
+    if (!t) return;
+    setDraft((d) => sourceFromTemplate(t, d.options));
+    setIngestNote(null);
+  }, []);
+
+  // Paste-HTML ingestion — SANITIZE on the way in (§6.1: page JS never
+  // runs, so strip it, don't just diagnose). Sets the draft html to the
+  // cleaned markup and notes what was removed. Pure web-model strip via
+  // `ingestHtml`; the linter still runs over the result downstream.
+  const ingestInto = useCallback((raw: string) => {
+    const { html, removed } = ingestHtml(raw);
+    setDraft((d) => ({ ...d, html }));
+    setIngestNote(
+      describeRemoval(removed) ??
+        "Pasted HTML — nothing to clean (no scripts or handlers).",
+    );
+    setPasteOpen(false);
+  }, []);
+
+  // Read from the K-6 system clipboard when wired; else open the paste
+  // box (the affordance always available). Never throws.
+  const pasteFromClipboard = useCallback(() => {
+    void ingestFromClipboard(host).then((result) => {
+      if (!result) {
+        // No backend / empty clipboard → fall back to the paste box.
+        setPasteOpen(true);
+        setIngestNote(null);
+        return;
+      }
+      setDraft((d) => ({ ...d, html: result.html }));
+      setIngestNote(
+        describeRemoval(result.removed) ??
+          "Pasted from clipboard — nothing to clean.",
+      );
+    });
+  }, []);
+
+  // "Find in source" — the tag outline over the DRAFT html (the live
+  // editor text, not the debounced preview). Clicking a tag selects its
+  // source range in the bundle-owned textarea (fallback lane); in the
+  // host-widget lane there is no selection prop, so it cannot move the
+  // caret (the honest W-01 subset boundary — see find-in-source.ts).
+  const outline = useMemo<TagOutlineEntry[]>(
+    () => tagOutline(draft.html),
+    [draft.html],
+  );
+  // Outline ↔ canvas (outline-highlight.ts): a clicked tag also outlines
+  // its painted box on the canvas; a press on the canvas inside the frame's
+  // edit context marks the tag of the element under it.
+  const [activeTag, setActiveTag] = useState<number | null>(null);
+  const [highlightNote, setHighlightNote] = useState<string | null>(null);
+  const frameIdStr = (id as { id?: unknown }).id;
+  useEffect(
+    () =>
+      onCanvasPick(host, (fid, index) => {
+        if (fid === frameIdStr) setActiveTag(index >= 0 ? index : null);
+      }),
+    [frameIdStr],
+  );
+  useEffect(() => () => clearOutlineHighlight(host), []);
+  const findInSource = useCallback(
+    (entry: TagOutlineEntry, index: number) => {
+      setActiveTag(index);
+      void highlightOutlineEntry(host, id, { ...draft }, index).then((n) =>
+        setHighlightNote(n > 0 ? null : `<${entry.tag}> paints no box on the canvas`),
+      );
+      const el = htmlTextareaRef.current;
+      if (!el) return; // host-widget lane: no caret to drive
+      selectRange(el, entry.sourceStart, entry.sourceEnd);
+    },
+    [draft],
+  );
+
+  // §6.2 slice — the panel-edited variables map. Rows render in entry
+  // order; a key rename rebuilds the object (a rename ONTO an existing
+  // key keeps the later entry — Object.fromEntries semantics, fine for
+  // a hand-edited map). Removing the last row drops `vars` entirely,
+  // which DISABLES the pass (placeholders then stay verbatim and stop
+  // warning — the documented opt-in seam).
+  const varEntries = Object.entries(draft.vars ?? {});
+  const setVarEntries = useCallback(
+    (entries: Array<[string, string]>) => {
+      setDraft((d) => {
+        const next = { ...d };
+        if (entries.length === 0) delete next.vars;
+        else next.vars = Object.fromEntries(entries);
+        return next;
+      });
+    },
+    [],
+  );
+
+  const CodeEditor = lane.CodeEditor;
+  // The preview IFRAME takes the frame's content size — an iframe's element
+  // size IS the CSS viewport its content lays out (and media-queries)
+  // against, so the preview breaks lines where the canvas does. Without
+  // geometry (a host that answers none) it falls back to the panel width.
+  const viewportWidth = frameSize?.width;
+
+  return (
+    <div
+      data-web-panel="source"
+      data-web-editor-lane={lane.native ? "widget" : "textarea"}
+      style={{ padding: "var(--space-3, 12px)", display: "flex", flexDirection: "column" }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "baseline",
+          justifyContent: "space-between",
+        }}
+      >
+        <div style={{ ...kicker, marginTop: 0 }}>HTML</div>
+        {/* Paste-HTML ingest affordance: reads the K-6 system clipboard
+            when wired, else opens the paste box — either way the markup
+            is SANITIZED before it seeds the source (§6.1). */}
+        <button
+          type="button"
+          data-web-paste
+          onClick={pasteFromClipboard}
+          title={
+            clipboardAvailable(host)
+              ? "Read HTML from the clipboard and sanitize it"
+              : "Paste HTML and sanitize it"
+          }
+          style={{
+            font: "500 10px var(--font-sans, sans-serif)",
+            color: "var(--pg-fg)",
+            background: "var(--pg-bg)",
+            border: "1px solid var(--pg-border)",
+            borderRadius: "var(--radius-sm, 4px)",
+            padding: "2px 8px",
+            cursor: "pointer",
+          }}
+        >
+          Paste HTML
+        </button>
+      </div>
+      {pasteOpen && (
+        <div data-web-paste-box style={{ margin: "0 0 var(--space-1, 4px)" }}>
+          <textarea
+            data-web-paste-input
+            autoFocus
+            spellCheck={false}
+            placeholder="Paste HTML here — it is sanitized on insert"
+            aria-label="Paste HTML to ingest"
+            onPaste={(e) => {
+              const text = e.clipboardData.getData("text/html") ||
+                e.clipboardData.getData("text/plain");
+              if (text) {
+                e.preventDefault();
+                ingestInto(text);
+              }
+            }}
+            style={{
+              width: "100%",
+              minHeight: 56,
+              resize: "vertical",
+              font: "11px/1.5 var(--font-mono, monospace)",
+              color: "var(--pg-fg)",
+              background: "var(--pg-bg)",
+              border: "1px dashed var(--pg-border)",
+              borderRadius: "var(--radius-sm, 4px)",
+              padding: "var(--space-2, 8px)",
+              boxSizing: "border-box",
+            }}
+          />
+        </div>
+      )}
+      {ingestNote && (
+        <p
+          data-web-ingest-note
+          style={{ margin: "0 0 var(--space-1, 4px)", ...mutedNote }}
+        >
+          {ingestNote}
+        </p>
+      )}
+      <div data-web-html>
+        {lane.native ? (
+          <CodeEditor
+            language="html"
+            value={draft.html}
+            onChange={(html) => setDraft({ ...draft, html })}
+            diagnostics={htmlGutter}
+            minHeight={96}
+            ariaLabel="Web frame HTML"
+          />
+        ) : (
+          // Fallback lane — render the bundle's own textarea with a ref
+          // so "Find in source" can drive its caret.
+          <FallbackCodeEditor
+            ref={htmlTextareaRef}
+            language="html"
+            value={draft.html}
+            onChange={(html) => setDraft({ ...draft, html })}
+            diagnostics={htmlGutter}
+            minHeight={96}
+            ariaLabel="Web frame HTML"
+          />
+        )}
+      </div>
+      {/* Find in source — the markup's opening tags (the pure `tagOutline`
+          scan); clicking one selects its source range in the editor and
+          outlines the element's painted box on the canvas; a press on the
+          canvas inside the frame marks its tag here. */}
+      {outline.length > 0 && (
+        <details data-web-outline style={{ margin: "var(--space-1, 4px) 0 0" }}>
+          <summary
+            style={{
+              font: "700 10px var(--font-sans, sans-serif)",
+              letterSpacing: "var(--tracking-wide, 0.14em)",
+              textTransform: "uppercase",
+              color: "var(--pg-muted-fg)",
+              cursor: "pointer",
+            }}
+          >
+            {lane.native ? "Tags" : "Find in source"} ({outline.length})
+          </summary>
+          <ul
+            style={{
+              listStyle: "none",
+              margin: "var(--space-1, 4px) 0 0",
+              padding: 0,
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "var(--space-1, 4px)",
+            }}
+          >
+            {outline.map((entry, i) => (
+              <li key={i}>
+                <button
+                  type="button"
+                  data-web-outline-tag={entry.tag}
+                  data-web-outline-line={entry.line}
+                  data-web-outline-active={activeTag === i ? "true" : undefined}
+                  onClick={() => findInSource(entry, i)}
+                  title={
+                    lane.native
+                      ? `Outline <${entry.tag}> on the canvas (line ${entry.line} in the editor)`
+                      : `Select <${entry.tag}> at line ${entry.line}`
+                  }
+                  style={{
+                    font: "11px var(--font-mono, monospace)",
+                    color: "var(--pg-fg)",
+                    background: lane.native ? "transparent" : "var(--pg-bg)",
+                    border: `1px solid ${activeTag === i ? "var(--pg-primary)" : "var(--pg-border)"}`,
+                    borderRadius: "var(--radius-sm, 4px)",
+                    padding: "1px 6px",
+                    cursor: "pointer",
+                  }}
+                >
+                  {/* The host editor can't take a selection, so there the
+                      chip reads as a line label: the tag and its line. */}
+                  {entry.tag}
+                  <span style={{ color: "var(--pg-muted-fg)" }}>
+                    {lane.native ? ` line ${entry.line}` : `:${entry.line}`}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          {lane.native && (
+            <p data-web-outline-hint style={{ margin: "var(--space-1, 4px) 0 0", ...mutedNote }}>
+              Each tag shows its line in the editor; click one to outline it on the canvas.
+            </p>
+          )}
+          {highlightNote && (
+            <p data-web-outline-note style={{ margin: "var(--space-1, 4px) 0 0", ...mutedNote }}>
+              {highlightNote}
+            </p>
+          )}
+        </details>
+      )}
+      <div style={kicker}>CSS</div>
+      <div data-web-css>
+        <CodeEditor
+          language="css"
+          value={draft.css}
+          onChange={(css) => setDraft({ ...draft, css })}
+          minHeight={72}
+          ariaLabel="Web frame CSS"
+        />
+      </div>
+      {/* Replace the draft's HTML/CSS with a vetted starter (keeps the
+          current frame options). A draft edit — the explicit save still
+          commits it. */}
+      <details data-web-template-replace style={{ margin: "var(--space-1, 4px) 0 0" }}>
+        <summary
+          style={{
+            font: "700 10px var(--font-sans, sans-serif)",
+            letterSpacing: "var(--tracking-wide, 0.14em)",
+            textTransform: "uppercase",
+            color: "var(--pg-muted-fg)",
+            cursor: "pointer",
+          }}
+        >
+          Replace with template
+        </summary>
+        <TemplatePicker onSeed={seedTemplate} />
+      </details>
+      <div style={kicker}>Options</div>
+      <label style={optionRow}>
+        Media
+        <select
+          data-web-media
+          value={draft.options.media}
+          onChange={(e) =>
+            setDraft({
+              ...draft,
+              options: {
+                ...draft.options,
+                media: e.target.value as "print" | "screen",
+              },
+            })
+          }
+          style={field}
+        >
+          <option value="print">Print</option>
+          <option value="screen">Screen</option>
+        </select>
+        <span data-web-media-note style={rowNote}>
+          Adds the class media-{draft.options.media} to the body; @media queries still match screen.
+        </span>
+      </label>
+      <label style={optionRow}>
+        Overflow
+        {/* What the canvas does with content taller than the frame —
+            overflow.ts; the canvas re-renders on save. */}
+        <select
+          data-web-overflow
+          value={draft.options.overflow}
+          onChange={(e) =>
+            setDraft({
+              ...draft,
+              options: { ...draft.options, overflow: normalizeOverflow(e.target.value) },
+            })
+          }
+          style={field}
+        >
+          {OVERFLOW_POLICIES.map((p) => (
+            <option key={p} value={p}>
+              {OVERFLOW_LABEL[p]}
+            </option>
+          ))}
+        </select>
+        <span data-web-overflow-note style={rowNote}>
+          {OVERFLOW_NOTE[draft.options.overflow]}
+        </span>
+      </label>
+      <div style={kicker}>Variables</div>
+      {/* §6.2 — the DETERMINISTIC template slice: {{name}} substitution
+          plus a closed whitelist of pure filters, applied between the
+          source and the preview, and before every canvas render (the
+          persisted vars map). NOT a scripting surface: a Boa-powered
+          transform lane (W-08) is not built, and this panel never
+          pretends otherwise. */}
+      {varEntries.map(([name, value], i) => (
+        <div key={i} data-web-var-row style={optionRow}>
+          <input
+            data-web-var-name
+            value={name}
+            aria-label={`Variable ${i + 1} name`}
+            onChange={(e) => {
+              const entries = varEntries.slice() as Array<[string, string]>;
+              entries[i] = [e.target.value, value];
+              setVarEntries(entries);
+            }}
+            style={{ ...field, width: 96, fontFamily: "var(--font-mono, monospace)" }}
+          />
+          <input
+            data-web-var-value
+            value={value}
+            aria-label={`Variable ${i + 1} value`}
+            onChange={(e) => {
+              const entries = varEntries.slice() as Array<[string, string]>;
+              entries[i] = [name, e.target.value];
+              setVarEntries(entries);
+            }}
+            style={{ ...field, flex: 1 }}
+          />
+          <button
+            type="button"
+            data-web-var-remove
+            aria-label={`Remove variable ${name}`}
+            onClick={() =>
+              setVarEntries(
+                varEntries.filter((_, j) => j !== i) as Array<[string, string]>,
+              )
+            }
+            style={{
+              font: "500 11px var(--font-sans, sans-serif)",
+              color: "var(--pg-fg)",
+              background: "var(--pg-bg)",
+              border: "1px solid var(--pg-border)",
+              borderRadius: "var(--radius-sm, 4px)",
+              padding: "2px 6px",
+              cursor: "pointer",
+            }}
+          >
+            ×
+          </button>
+        </div>
+      ))}
+      <div style={optionRow}>
+        <button
+          type="button"
+          data-web-var-add
+          onClick={() => {
+            const used = new Set(varEntries.map(([k]) => k));
+            let n = varEntries.length + 1;
+            while (used.has(`var${n}`)) n += 1;
+            setVarEntries([...varEntries, [`var${n}`, ""]] as Array<
+              [string, string]
+            >);
+          }}
+          style={{
+            font: "500 11px var(--font-sans, sans-serif)",
+            color: "var(--pg-fg)",
+            background: "var(--pg-bg)",
+            border: "1px solid var(--pg-border)",
+            borderRadius: "var(--radius-sm, 4px)",
+            padding: "2px 8px",
+            cursor: "pointer",
+          }}
+        >
+          Add variable
+        </button>
+        <span style={rowNote}>
+          Write {"{{name}}"} in the HTML or CSS to insert a variable.
+        </span>
+        <About>
+          A variable can pass through a filter, as in {"{{name | upper}}"}. Filters:{" "}
+          {TEMPLATE_FILTERS.join(", ")}. Variables are plain text substitution; they run no scripts.
+        </About>
+      </div>
+      <BoundData host={host} names={boundNamesIn(draft)} bindings={bindings} onChanged={refreshBindings} />
+      <div style={kicker}>Preview</div>
+      {/* Font badge: W1 honesty + the W-06 flip. When the asset store
+          serves a used family's BYTES, the panel composes a real
+          `@font-face` (object URL) into the srcdoc and the badge flips
+          to "document fonts shown" for those families. While any used
+          family is still a browser substitute (no bytes served, or a
+          family missing from the document) the honest substitution
+          badge stays. `data-badge-state` exposes which for tests. */}
+      {badge.show && (
+        <div
+          data-web-font-badge
+          data-badge-severity={badge.severity}
+          data-badge-state={badge.state}
+          role="note"
+          style={{
+            display: "flex",
+            alignItems: "baseline",
+            gap: "var(--space-2, 8px)",
+            margin: "0 0 var(--space-1, 4px)",
+            padding: "4px 8px",
+            font: "10px/1.5 var(--font-sans, sans-serif)",
+            color: "var(--pg-fg)",
+            background: "var(--pg-muted)",
+            border: "1px solid var(--pg-border)",
+            borderRadius: "var(--radius-sm, 4px)",
+          }}
+        >
+          <span
+            aria-hidden
+            style={{
+              width: 7,
+              height: 7,
+              flex: "none",
+              borderRadius: "var(--radius-full, 999px)",
+              background:
+                badge.severity === "review"
+                  ? "var(--status-review)"
+                  : badge.state === "shown"
+                    ? "var(--status-approved)"
+                    : "var(--status-info)",
+              transform: "translateY(1px)",
+            }}
+          />
+          {badge.state === "shown" ? (
+            <span>
+              The preview uses the document’s fonts
+              {badge.shown.length > 0 ? `: ${badge.shown.join(", ")}.` : "."}
+            </span>
+          ) : (
+            <span
+              title={badge.shown.length > 0 ? `From the document: ${badge.shown.join(", ")}` : undefined}
+            >
+              Some fonts are browser substitutes in the preview.
+              {badge.unregistered.length > 0
+                ? ` Not in the document: ${badge.unregistered.join(", ")}.`
+                : ""}
+            </span>
+          )}
+        </div>
+      )}
+      {/* sandbox="" — no scripts, no same-origin: §6.1, page JS never
+          runs. Paper-white ground: the preview shows CONTENT, and
+          content colours stay literal by design. The stage scrolls
+          horizontally when a declared viewport is wider than the
+          panel. */}
+      <div
+        data-web-preview-stage
+        style={{ overflow: viewportWidth ? "auto" : "visible", maxHeight: 420 }}
+      >
+        <iframe
+          data-web-preview
+          title="Web frame preview"
+          sandbox=""
+          srcDoc={srcdoc}
+          style={{
+            width: viewportWidth ? `${viewportWidth}px` : "100%",
+            height: frameSize ? `${frameSize.height}px` : 180,
+            background: "#ffffff",
+            border: "1px solid var(--pg-border)",
+            borderRadius: "var(--radius-sm, 4px)",
+          }}
+        />
+      </div>
+      {/* The preview is the browser's rendering at the frame's size; the
+          canvas is the engine's, re-rendered when the saved source or the
+          frame's size changes (auto-render.ts). What still differs is said. */}
+      <p data-web-preview-note style={{ margin: "var(--space-1, 4px) 0 0", ...mutedNote }}>
+        The canvas shows this preview once you save.
+      </p>
+      <About>
+        The preview is the browser’s rendering at the frame’s size. The canvas lays text out in
+        its bundled typeface, and “Shrink to fit” scales only on the canvas.
+      </About>
+      {/* Persistence is EXPLICIT: one undoable metadata mutation per
+          save, never a side effect of typing (the preview above
+          refreshes live; the document does not). */}
+      <div
+        data-web-commit-row
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          alignItems: "center",
+          gap: "var(--space-2, 8px)",
+          margin: "var(--space-2, 8px) 0 0",
+        }}
+      >
+        <button
+          type="button"
+          data-web-commit
+          disabled={!dirty}
+          onClick={commit}
+          title={dirty ? undefined : "Nothing to save: the document has these edits"}
+          style={{
+            ...primaryButton,
+            padding: "4px 12px",
+            cursor: dirty ? "pointer" : "default",
+            opacity: dirty ? 1 : 0.5,
+          }}
+        >
+          Save to document
+        </button>
+        <span data-web-dirty={dirty ? "true" : "false"} style={mutedNote}>
+          {dirty
+            ? "Unsaved edits show only in the preview"
+            : "Saved to the document"}
+        </span>
+        {saveError && (
+          <span data-web-save-error role="alert" style={{ ...rowNote, color: "var(--status-error)" }}>
+            {saveError}
+          </span>
+        )}
+      </div>
+      {diagnostics.length > 0 && (
+        <>
+          <div style={kicker}>Diagnostics</div>
+          <ul data-web-diagnostics style={{ listStyle: "none", margin: 0, padding: 0 }}>
+            {diagnostics.map((d, i) => (
+              <li
+                key={i}
+                style={{
+                  display: "flex",
+                  alignItems: "baseline",
+                  gap: "var(--space-2, 8px)",
+                  font: "11px/1.6 var(--font-mono, monospace)",
+                  color: "var(--pg-fg)",
+                }}
+              >
+                <span
+                  aria-hidden
+                  style={{
+                    width: 7,
+                    height: 7,
+                    borderRadius: "var(--radius-full, 999px)",
+                    background: DOT[d.severity],
+                    flex: "none",
+                    transform: "translateY(-1px)",
+                  }}
+                />
+                <span>
+                  {d.line !== undefined ? `${d.line}: ` : ""}
+                  {d.message}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {(() => {
+        // ADR-020 readout — the last render/flow/bake outcome, previously
+        // visible only in the log + Problems lane. Honest numbers straight
+        // from the command outcome: frames submitted, the flow's overset
+        // flag, the bake's deferred-kind counts.
+        const report = lastRenderReport();
+        if (!report) return null;
+        const OP_LABEL: Record<string, string> = {
+          renderFrame: "Render frame",
+          renderFlow: "Render flow",
+          bake: "Bake to document",
+        };
+        const deferredLine = formatDeferred(report.deferred);
+        return (
+          <>
+            <div style={kicker}>Flow &amp; render</div>
+            <div
+              data-web-render-report={report.op}
+              style={{
+                font: "11px/1.6 var(--font-mono, monospace)",
+                color: "var(--pg-fg)",
+              }}
+            >
+              <div>
+                {OP_LABEL[report.op] ?? report.op} #{report.seq} —{" "}
+                {report.rendered
+                  ? `${report.submitted} ${
+                      report.op === "bake" ? "native item(s)" : "frame(s)"
+                    }`
+                  : "engine not loaded"}
+                {report.overset === true && (
+                  <span
+                    data-web-overset
+                    style={{ color: "var(--status-review)" }}
+                  >
+                    {" "}
+                    · overset
+                  </span>
+                )}
+                {report.overset === false && " · fits"}
+              </div>
+              {deferredLine && (
+                <div data-web-deferred style={{ color: "var(--pg-muted-fg)" }}>
+                  deferred: {deferredLine}
+                </div>
+              )}
+              {report.messages.map((m, i) => (
+                <div key={i} style={{ color: "var(--pg-muted-fg)" }}>
+                  {m}
+                </div>
+              ))}
+            </div>
+          </>
+        );
+      })()}
+    </div>
+  );
+}

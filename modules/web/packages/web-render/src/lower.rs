@@ -1,0 +1,2257 @@
+/*
+ * This file is part of paged (https://paged.media).
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+//! The lowering — `WebDisplayList` → C-1 [`SceneLayer`] (ADR-011 Option B).
+//!
+//! This is the crate's CORE DELIVERABLE: a pure, total function that walks
+//! a captured web display list and emits the C-1 wire items core composes
+//! inside a frame. It is unit-tested exhaustively on hand-built display
+//! lists (no live Blitz), so the mapping is proven independently of the
+//! engine that produces the input.
+//!
+//! Coverage today ("B2 vector + text + raster"):
+//!   · `FillRect`   → `SceneItem::FillPath` (closed 4-corner box)
+//!   · `FillPath`   → `SceneItem::FillPath` (1:1)
+//!   · `StrokePath` → `SceneItem::StrokePath` (1:1)
+//!   · `GlyphRun`   → `SceneItem::Text` (one item PER parley run — a
+//!     multi-run paragraph emits several text items in painter order)
+//!   · `DrawImage`  → `SceneItem::Image` (Stage A; straight RGBA8 +
+//!     axis-aligned dest box, the paint transform folded into the dest)
+//!   · `FillGradient` → `SceneItem::FillPathGradient` (C-1.3; linear/radial/
+//!     sweep gradient fills — endpoints/centre in content points, sRGB stops
+//!     1:1; sweep carries the start angle, a single full turn)
+//!   · `FillBlend`  → `SceneItem::FillPathBlend` (C-1.4; a solid
+//!     `mix-blend-mode` fill — path + paint + the 1:1-mapped blend mode)
+//!   · `DrawShadow` → `SceneItem::DropShadow` (C-1.5; an outset `box-shadow`
+//!     — the offset is baked into the path, so the item offset is 0 + blur)
+//!   · `DrawInsetShadow` → `SceneItem::InnerShadow` (C-1.6, v47; an inset
+//!     `box-shadow: inset` — the offset is baked into the path so the item
+//!     offset is 0, `choke` is 0 since blitz does not bake CSS `spread` into
+//!     the inset rect, + blur)
+//!   · `StrokeGradient` → `SceneItem::StrokePathGradient` (C-1.7, v48; a
+//!     linear/radial/sweep gradient STROKE — gradient endpoints/centre in
+//!     content points + the stroke width; ready-but-DORMANT for real HTML,
+//!     see below)
+//!   · `FillGradientBlend` → `SceneItem::FillPathGradientBlend` (C-1.8, v48; a
+//!     GRADIENT fill under a `mix-blend-mode` — the gradient + the 1:1-mapped
+//!     blend mode; ready-but-DORMANT for real HTML, see below)
+//!
+//! Deliberately DROPPED (counted + reported, never faked — the honest
+//! ceiling of C-1's current stages / Tier-B):
+//!   · image/pattern brushes + rotated/sheared image dests — the Stage-A
+//!     image item carries an axis-aligned box only (no per-image transform
+//!     yet), so a transformed image dest is counted unsupported, not faked.
+//!   · INSET CSS `spread` beyond the offset — blitz-paint bakes the inset
+//!     OFFSET into the rect but does NOT inflate it by `spread`, so inset
+//!     shadows render at the offset (covered) while their spread is the honest
+//!     follow-on. Outset spread IS covered (blitz bakes it — see below).
+//!   · IMAGE/text fills INSIDE a blend layer — a solid fill lowers to
+//!     `fillPathBlend`, a gradient fill to `fillPathGradientBlend`; an
+//!     image/glyph-run under a blend stays the plain item + the blend is
+//!     counted unsupported (no blended image/text lane on the C-1 wire).
+//!
+//! HONEST REACHABILITY of the v48 gradient-stroke / gradient-blend lanes
+//! (verified against blitz-paint 0.3.0-alpha.4 — see the capture tests):
+//!   · GRADIENT STROKE — blitz-paint never calls `PaintScene::stroke` with a
+//!     gradient brush. Every `scene.stroke` site passes a SOLID `Color` (text
+//!     underline/strikethrough = the decoration colour, form-control frames =
+//!     WHITE/accent, devtools overlay); CSS BORDERS are painted as FILLS
+//!     (`render.rs::draw_border` → `scene.fill` with a solid border colour),
+//!     and gradient borders (`border-image`) are not implemented. So the
+//!     `strokePathGradient` lane is contract-correct + unit-tested but DORMANT
+//!     for real HTML until a gradient-stroke producer (or a Blitz that emits
+//!     gradient borders) appears.
+//!   · GRADIENT-FILL-UNDER-A-BLEND — like the solid `fillPathBlend`, this is
+//!     DORMANT: blitz-paint 0.3.0-alpha.4 only pushes `Mix::Normal` layers (no
+//!     `mix-blend-mode` → non-Normal `push_layer`), so a gradient fill never
+//!     reaches the blend stack from real HTML. Contract-correct + unit-tested;
+//!     it lights up the moment the alpha emits a non-Normal layer.
+//! CSS fragmentation across linked frames is out of this slice (Tier-B);
+//! see docs/concept.md §4.3 (lowering-lane status).
+
+use crate::display_list::{
+    RunFace, WebBlendMode, WebDisplayList, WebDrawCmd, WebGlyphRun, WebGradient, WebImage,
+};
+use crate::wire::{
+    SceneBlendMode, SceneGradient, SceneGradientStop, SceneItem, SceneLayer, SceneTextItem,
+};
+
+/// What the lowering covered vs. dropped — surfaced to the bundle so the
+/// "Render to frame" affordance reports HONESTLY (a count of what didn't
+/// make it onto the page, by kind), never a silent partial render.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct LowerReport {
+    /// Scene items emitted (fills + strokes + text).
+    pub emitted: usize,
+    /// Fills emitted (rect + path).
+    pub fills: usize,
+    /// Strokes emitted.
+    pub strokes: usize,
+    /// Text runs emitted (one per parley run — multi-run paragraphs emit
+    /// one `text` item per run, preserving painter order).
+    pub text_runs: usize,
+    /// Raster images emitted as C-1 `image` items (Stage A).
+    pub images: usize,
+    /// Linear/radial gradient fills emitted as C-1 `fillPathGradient` items
+    /// (C-1.3). Sweep/conic gradients are counted in `sweep_gradients`.
+    pub gradients: usize,
+    /// Sweep/conic gradient fills emitted as C-1 `fillPathGradient` (sweep)
+    /// items (C-1.3, v46). Separated from linear/radial `gradients` so the
+    /// report names the conic coverage explicitly.
+    pub sweep_gradients: usize,
+    /// Solid `mix-blend-mode` fills emitted as C-1 `fillPathBlend` items
+    /// (C-1.4, v46).
+    pub blends: usize,
+    /// Linear/radial/sweep gradient STROKES emitted as C-1 `strokePathGradient`
+    /// items (C-1.7, v48). A gradient-stroked path is NO LONGER a dropped
+    /// (`dropped_non_solid`) case.
+    pub gradient_strokes: usize,
+    /// Gradient fills under a `mix-blend-mode` emitted as C-1
+    /// `fillPathGradientBlend` items (C-1.8, v48). A gradient fill inside a
+    /// non-`Normal` blend layer is NO LONGER an unblended `gradients` item +
+    /// a dropped blend — it lowers to the blended-gradient lane.
+    pub gradient_blends: usize,
+    /// Outset drop shadows emitted as C-1 `dropShadow` items (C-1.5, v46).
+    pub shadows: usize,
+    /// Inset (inner) shadows emitted as C-1 `innerShadow` items (C-1.6, v47).
+    /// Separated from outset `shadows` so the report names the inset coverage
+    /// explicitly; an inset shadow is NO LONGER a dropped/unsupported case.
+    pub inset_shadows: usize,
+    /// Primitives dropped because their paint is a non-solid the C-1 wire
+    /// can't carry today — image/pattern brushes, and rotated/sheared image
+    /// dests (no image transform on the wire yet). Axis-aligned raster images
+    /// are NOT dropped (→ `image` items); linear/radial/sweep gradients are
+    /// NOT dropped (→ `fillPathGradient` items).
+    pub dropped_non_solid: usize,
+    /// Box shadows / blurs dropped because they have no C-1 representation —
+    /// degenerate stamps, or an inset shadow whose padding-box fill colour the
+    /// capture couldn't recover. Outset drop shadows lower to `shadows`
+    /// (`dropShadow`); inset shadows lower to `inset_shadows` (`innerShadow`).
+    pub dropped_shadows: usize,
+    /// Empty/degenerate primitives skipped (zero-area rect, empty path,
+    /// empty text) — not a fidelity loss, just nothing to draw.
+    pub skipped_empty: usize,
+}
+
+impl LowerReport {
+    /// Total primitives that COULD NOT be expressed on the C-1 wire (the
+    /// honest "not everything rendered" signal). Excludes empty skips.
+    pub fn dropped(&self) -> usize {
+        self.dropped_non_solid + self.dropped_shadows
+    }
+
+    /// A short human note for the bundle's render diagnostic, or `None`
+    /// when everything expressible was expressed.
+    pub fn unsupported_note(&self) -> Option<String> {
+        if self.dropped() == 0 {
+            return None;
+        }
+        let mut parts = Vec::new();
+        if self.dropped_non_solid > 0 {
+            parts.push(format!(
+                "{} image-pattern/transformed-image paint(s)",
+                self.dropped_non_solid
+            ));
+        }
+        if self.dropped_shadows > 0 {
+            parts.push(format!("{} shadow(s)/blur(s)", self.dropped_shadows));
+        }
+        Some(format!(
+            "{} primitive(s) not yet renderable on the page: {} (vector + solid fill + multi-run text + axis-aligned raster images + linear/radial/sweep gradient fills + gradient strokes + mix-blend-mode fills + blended gradient fills + outset drop shadows + inset shadows are supported today)",
+            self.dropped(),
+            parts.join(", "),
+        ))
+    }
+}
+
+/// The lowering result: the C-1 layer to submit + the coverage report.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Lowered {
+    pub layer: SceneLayer,
+    pub report: LowerReport,
+    /// The shaped advance (content points) of each `text` item in `layer`,
+    /// in item order — what a native text frame baked from the run must
+    /// hold. Not part of the wire layer.
+    pub text_advances: Vec<f32>,
+}
+
+/// Lower a captured web display list to a C-1 [`SceneLayer`] + report.
+/// Pure + total: same input → same output, never panics. Items are emitted
+/// in painter's order (the order Blitz painted = the order core composes),
+/// so z-order is preserved by construction.
+pub fn lower(dl: &WebDisplayList) -> Lowered {
+    let mut layer = SceneLayer::default();
+    let mut report = LowerReport::default();
+    let mut text_advances = Vec::new();
+
+    for cmd in &dl.commands {
+        match cmd {
+            WebDrawCmd::FillRect { rect, paint } => {
+                if !rect.is_positive() {
+                    report.skipped_empty += 1;
+                    continue;
+                }
+                layer.items.push(SceneItem::FillPath {
+                    path: rect.to_closed_path(),
+                    paint: *paint,
+                });
+                report.fills += 1;
+            }
+            WebDrawCmd::FillPath { path, paint } => {
+                if path.is_empty() {
+                    report.skipped_empty += 1;
+                    continue;
+                }
+                layer.items.push(SceneItem::FillPath {
+                    path: path.clone(),
+                    paint: *paint,
+                });
+                report.fills += 1;
+            }
+            WebDrawCmd::StrokePath { path, paint, width } => {
+                if path.is_empty() || *width <= 0.0 {
+                    report.skipped_empty += 1;
+                    continue;
+                }
+                layer.items.push(SceneItem::StrokePath {
+                    path: path.clone(),
+                    paint: *paint,
+                    width: *width,
+                });
+                report.strokes += 1;
+            }
+            WebDrawCmd::GlyphRun(run) => match lower_text(run) {
+                Some(item) => {
+                    layer.items.push(item);
+                    text_advances.push(run.face.advance.unwrap_or(0.0));
+                    report.text_runs += 1;
+                }
+                None => report.skipped_empty += 1,
+            },
+            WebDrawCmd::DrawImage(img) => match lower_image(img) {
+                Some(item) => {
+                    layer.items.push(item);
+                    report.images += 1;
+                }
+                None => report.skipped_empty += 1,
+            },
+            WebDrawCmd::FillGradient { path, gradient } => match lower_gradient(path, gradient) {
+                Some(item) => {
+                    // A sweep gradient counts under `sweep_gradients`; a
+                    // linear/radial under `gradients`. Both emit the SAME
+                    // C-1 `fillPathGradient` item kind (the `gradient.type`
+                    // tag distinguishes them on the wire).
+                    if matches!(gradient, WebGradient::Sweep { .. }) {
+                        report.sweep_gradients += 1;
+                    } else {
+                        report.gradients += 1;
+                    }
+                    layer.items.push(item);
+                }
+                None => report.skipped_empty += 1,
+            },
+            WebDrawCmd::FillBlend { path, paint, blend } => {
+                if path.is_empty() {
+                    report.skipped_empty += 1;
+                    continue;
+                }
+                layer.items.push(SceneItem::FillPathBlend {
+                    path: path.clone(),
+                    paint: *paint,
+                    blend: map_blend(*blend),
+                });
+                report.blends += 1;
+            }
+            WebDrawCmd::StrokeGradient {
+                path,
+                gradient,
+                width,
+            } => {
+                // A gradient stroke (C-1.7, v48): same degenerate gates as a
+                // gradient FILL (empty path / <2 stops / non-positive radial
+                // radius — `map_gradient`), plus a non-positive width skip
+                // (core skips a `width <= 0.0` stroke). Maps to the
+                // `strokePathGradient` lane, NOT a dropped non-solid.
+                match map_gradient(path, gradient) {
+                    Some(scene) if *width > 0.0 => {
+                        layer.items.push(SceneItem::StrokePathGradient {
+                            path: path.clone(),
+                            gradient: scene,
+                            width: *width,
+                        });
+                        report.gradient_strokes += 1;
+                    }
+                    _ => report.skipped_empty += 1,
+                }
+            }
+            WebDrawCmd::FillGradientBlend {
+                path,
+                gradient,
+                blend,
+            } => {
+                // A gradient fill under a blend (C-1.8, v48): the gradient
+                // degenerate gates of `map_gradient` + the 1:1 blend map. Maps
+                // to the `fillPathGradientBlend` lane (a blended gradient is no
+                // longer an unblended gradient + a dropped blend).
+                match map_gradient(path, gradient) {
+                    Some(scene) => {
+                        layer.items.push(SceneItem::FillPathGradientBlend {
+                            path: path.clone(),
+                            gradient: scene,
+                            blend: map_blend(*blend),
+                        });
+                        report.gradient_blends += 1;
+                    }
+                    None => report.skipped_empty += 1,
+                }
+            }
+            WebDrawCmd::DrawShadow { path, colour, blur } => {
+                if path.is_empty() {
+                    report.skipped_empty += 1;
+                    continue;
+                }
+                // blitz-paint bakes the shadow offset into the path geometry
+                // (the offset rides in the paint transform the capture folds
+                // into the points), so the C-1 item's own offset is 0 — the
+                // path is already at the shadowed position. The colour's `a`
+                // rides as the shadow opacity (core keeps the colour opaque
+                // and multiplies `color.a * opacity`).
+                layer.items.push(SceneItem::DropShadow {
+                    path: path.clone(),
+                    offset_x: 0.0,
+                    offset_y: 0.0,
+                    blur_radius: blur.max(0.0),
+                    r: colour.r,
+                    g: colour.g,
+                    b: colour.b,
+                    a: colour.a,
+                });
+                report.shadows += 1;
+            }
+            WebDrawCmd::DrawInsetShadow { path, colour, blur } => {
+                if path.is_empty() {
+                    report.skipped_empty += 1;
+                    continue;
+                }
+                // blitz-paint bakes the inset offset into the path geometry
+                // (the offset rides in the `draw_box_shadow` paint transform the
+                // capture folds into the points), so the C-1 item's own offset
+                // is 0. `choke` is 0 — blitz does NOT inflate the inset rect by
+                // CSS `spread` (`box_shadow.rs::draw_inset_box_shadow` passes
+                // `border_box` un-inflated), so inset spread beyond the offset
+                // is the honest follow-on, never faked into `choke`. The
+                // colour's `a` rides as the shadow opacity (core keeps the
+                // colour opaque and multiplies `color.a * opacity`).
+                layer.items.push(SceneItem::InnerShadow {
+                    path: path.clone(),
+                    offset_x: 0.0,
+                    offset_y: 0.0,
+                    blur_radius: blur.max(0.0),
+                    choke: 0.0,
+                    r: colour.r,
+                    g: colour.g,
+                    b: colour.b,
+                    a: colour.a,
+                });
+                report.inset_shadows += 1;
+            }
+            WebDrawCmd::NonSolidPaint { what } => {
+                // Counted, never faked — the C-1 wire has no gradient/image
+                // brush. The label is carried for the diagnostic.
+                let _ = what.label();
+                report.dropped_non_solid += 1;
+            }
+            WebDrawCmd::BoxShadow => {
+                report.dropped_shadows += 1;
+            }
+        }
+    }
+
+    report.emitted = layer.items.len();
+    Lowered {
+        layer,
+        report,
+        text_advances,
+    }
+}
+
+/// Lower a captured text run to a C-1 `text` item, or `None` for an empty
+/// run (whitespace-only collapses to nothing — the honest skip; core also
+/// skips an empty `text`).
+fn lower_text(run: &WebGlyphRun) -> Option<SceneItem> {
+    if run.text.trim().is_empty() {
+        return None;
+    }
+    let weight = wire_weight(&run.face);
+    let italic = run.face.italic.filter(|i| *i);
+    count_face_bytes(weight, italic);
+    Some(SceneItem::Text(SceneTextItem {
+        x: run.baseline_x,
+        y: run.baseline_y,
+        text: run.text.clone(),
+        size: run.size,
+        paint: run.paint,
+        family: run.family.clone(),
+        style: None,
+        weight,
+        italic,
+    }))
+}
+
+/// Count the JSON bytes the face fields add to a text item
+/// (`,"weight":700.0`, `,"italic":true`) — the face budget.
+fn count_face_bytes(weight: Option<f32>, italic: Option<bool>) {
+    if !crate::perf::ENABLED {
+        return;
+    }
+    let mut n = 0u64;
+    if let Some(w) = weight {
+        n += (",\"weight\":".len() + serde_json::to_string(&w).map_or(0, |s| s.len())) as u64;
+    }
+    if italic.is_some() {
+        n += ",\"italic\":true".len() as u64;
+    }
+    crate::perf::bump(crate::perf::Counter::FaceBytesOut, n);
+}
+
+/// The weight a text item carries on the wire: the run's CSS weight, omitted
+/// when it is the regular weight (core resolves a run without one to the
+/// family's regular face, and the bytes stay what they were before faces).
+fn wire_weight(face: &RunFace) -> Option<f32> {
+    face.weight
+        .filter(|w| w.is_finite() && (w - 400.0).abs() >= 0.5)
+        .map(|w| w.clamp(1.0, 1000.0))
+}
+
+/// Lower a captured raster image to the EXISTING C-1 `SceneItem::Image`
+/// (Stage A, canvas-wasm v0.41+) — no core change. Returns `None` for a
+/// degenerate image (zero pixels, zero-area dest, or a byte buffer whose
+/// length doesn't match `width*height*4` — the honest skip, never a faked
+/// or truncated upload). The `rgba` bytes pass through 1:1 (straight RGBA8,
+/// the wire contract).
+fn lower_image(img: &WebImage) -> Option<SceneItem> {
+    if img.width == 0 || img.height == 0 || !img.dest.is_positive() {
+        return None;
+    }
+    let expected = (img.width as usize)
+        .checked_mul(img.height as usize)
+        .and_then(|px| px.checked_mul(4))?;
+    if img.rgba.len() != expected {
+        // A buffer that doesn't describe `w*h` RGBA8 pixels is not a fidelity
+        // loss we hide — skip it (counted as an empty/degenerate skip by the
+        // caller) rather than ship a malformed image upload.
+        return None;
+    }
+    Some(SceneItem::Image {
+        rgba: img.rgba.clone(),
+        width: img.width,
+        height: img.height,
+        x: img.dest.x,
+        y: img.dest.y,
+        w: img.dest.w,
+        h: img.dest.h,
+    })
+}
+
+/// Lower a captured linear/radial/sweep gradient fill to the C-1.3
+/// [`SceneItem::FillPathGradient`]. Returns `None` (the honest skip, counted
+/// by the caller as empty) for a degenerate gradient — an empty path, fewer
+/// than 2 stops, or a non-positive radial radius — matching core's own skips
+/// (`scene_layer.rs`: empty path / `<2` stops / `radius <= 0.0`; a sweep has
+/// no radius gate), so the lowering never emits an item core would silently
+/// drop. Stops pass through 1:1 as sRGB; the endpoints/centre are already in
+/// content points (the capture folded the paint transform in).
+fn lower_gradient(path: &[crate::wire::ScenePathSeg], gradient: &WebGradient) -> Option<SceneItem> {
+    let scene = map_gradient(path, gradient)?;
+    Some(SceneItem::FillPathGradient {
+        path: path.to_vec(),
+        gradient: scene,
+    })
+}
+
+/// Map a captured [`WebGradient`] to the C-1 wire [`SceneGradient`], applying
+/// the SAME degenerate gates core's `scene_layer.rs` applies (empty `path`,
+/// `<2` stops on any kind, a non-positive RADIAL radius; a sweep has no radius
+/// gate) so the lowering never emits an item core would silently drop. Shared
+/// by the gradient FILL (C-1.3), gradient STROKE (C-1.7), and blended-gradient
+/// fill (C-1.8) lanes — they differ only in which `SceneItem` wraps the result.
+/// Endpoints/centre are already in content points (the capture folded the paint
+/// transform in); stops pass through 1:1 as sRGB.
+fn map_gradient(
+    path: &[crate::wire::ScenePathSeg],
+    gradient: &WebGradient,
+) -> Option<SceneGradient> {
+    if path.is_empty() {
+        return None;
+    }
+    let scene = match gradient {
+        WebGradient::Linear {
+            x0,
+            y0,
+            x1,
+            y1,
+            stops,
+        } => {
+            if stops.len() < 2 {
+                return None;
+            }
+            SceneGradient::Linear {
+                x0: *x0,
+                y0: *y0,
+                x1: *x1,
+                y1: *y1,
+                stops: stops.iter().map(map_stop).collect(),
+            }
+        }
+        WebGradient::Radial {
+            cx,
+            cy,
+            radius,
+            stops,
+        } => {
+            if stops.len() < 2 || *radius <= 0.0 {
+                return None;
+            }
+            SceneGradient::Radial {
+                cx: *cx,
+                cy: *cy,
+                radius: *radius,
+                stops: stops.iter().map(map_stop).collect(),
+            }
+        }
+        WebGradient::Sweep {
+            cx,
+            cy,
+            start_angle,
+            stops,
+        } => {
+            // Core skips a sweep with <2 stops (`scene_layer.rs`); match it.
+            if stops.len() < 2 {
+                return None;
+            }
+            SceneGradient::Sweep {
+                cx: *cx,
+                cy: *cy,
+                start_angle: *start_angle,
+                stops: stops.iter().map(map_stop).collect(),
+            }
+        }
+    };
+    Some(scene)
+}
+
+/// Map a captured blend mode to the C-1.4 wire [`SceneBlendMode`] (1:1 — the
+/// CSS-relevant subset; `Normal` is unrepresentable on either side, so a
+/// normal-blend fill never reaches this path).
+fn map_blend(b: WebBlendMode) -> SceneBlendMode {
+    match b {
+        WebBlendMode::Multiply => SceneBlendMode::Multiply,
+        WebBlendMode::Screen => SceneBlendMode::Screen,
+        WebBlendMode::Overlay => SceneBlendMode::Overlay,
+        WebBlendMode::Darken => SceneBlendMode::Darken,
+        WebBlendMode::Lighten => SceneBlendMode::Lighten,
+        WebBlendMode::ColorDodge => SceneBlendMode::ColorDodge,
+        WebBlendMode::ColorBurn => SceneBlendMode::ColorBurn,
+        WebBlendMode::HardLight => SceneBlendMode::HardLight,
+        WebBlendMode::SoftLight => SceneBlendMode::SoftLight,
+        WebBlendMode::Difference => SceneBlendMode::Difference,
+        WebBlendMode::Exclusion => SceneBlendMode::Exclusion,
+        WebBlendMode::Hue => SceneBlendMode::Hue,
+        WebBlendMode::Saturation => SceneBlendMode::Saturation,
+        WebBlendMode::Color => SceneBlendMode::Color,
+        WebBlendMode::Luminosity => SceneBlendMode::Luminosity,
+    }
+}
+
+/// Map a captured gradient stop to the C-1 wire stop (1:1 — both carry a
+/// normalized offset + sRGB RGBA; core offset-sorts + linearises).
+fn map_stop(s: &crate::display_list::WebGradientStop) -> SceneGradientStop {
+    SceneGradientStop {
+        offset: s.offset,
+        r: s.r,
+        g: s.g,
+        b: s.b,
+        a: s.a,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::display_list::{LocalKey, UnsupportedKind};
+    use crate::wire::{RectPt, ScenePaint, ScenePathSeg};
+
+    fn blue() -> ScenePaint {
+        ScenePaint::rgba(0.0, 0.3, 0.8, 1.0)
+    }
+
+    #[test]
+    fn empty_display_list_lowers_to_an_empty_layer() {
+        let out = lower(&WebDisplayList::new());
+        assert!(out.layer.items.is_empty());
+        assert_eq!(out.report, LowerReport::default());
+        assert!(out.report.unsupported_note().is_none());
+    }
+
+    #[test]
+    fn fill_rect_lowers_to_a_closed_fill_path_box() {
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::FillRect {
+            rect: RectPt::new(10.0, 20.0, 64.0, 48.0),
+            paint: blue(),
+        });
+        let out = lower(&dl);
+        assert_eq!(out.report.fills, 1);
+        assert_eq!(out.report.emitted, 1);
+        let SceneItem::FillPath { path, paint } = &out.layer.items[0] else {
+            panic!("expected a fillPath, got {:?}", out.layer.items[0]);
+        };
+        assert_eq!(*paint, blue());
+        // Box corners, CW from top-left, closed: (10,20)(74,20)(74,68)(10,68).
+        assert_eq!(
+            path,
+            &vec![
+                ScenePathSeg::MoveTo { x: 10.0, y: 20.0 },
+                ScenePathSeg::LineTo { x: 74.0, y: 20.0 },
+                ScenePathSeg::LineTo { x: 74.0, y: 68.0 },
+                ScenePathSeg::LineTo { x: 10.0, y: 68.0 },
+                ScenePathSeg::Close,
+            ]
+        );
+    }
+
+    #[test]
+    fn zero_area_rect_is_skipped_not_emitted() {
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::FillRect {
+            rect: RectPt::new(0.0, 0.0, 0.0, 10.0),
+            paint: blue(),
+        });
+        let out = lower(&dl);
+        assert!(out.layer.items.is_empty());
+        assert_eq!(out.report.skipped_empty, 1);
+        assert_eq!(out.report.fills, 0);
+    }
+
+    #[test]
+    fn arbitrary_fill_path_lowers_one_to_one() {
+        let path = vec![
+            ScenePathSeg::MoveTo { x: 0.0, y: 0.0 },
+            ScenePathSeg::CubicTo {
+                cx1: 1.0,
+                cy1: 2.0,
+                cx2: 3.0,
+                cy2: 4.0,
+                x: 5.0,
+                y: 6.0,
+            },
+            ScenePathSeg::Close,
+        ];
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::FillPath {
+            path: path.clone(),
+            paint: ScenePaint::BLACK,
+        });
+        let out = lower(&dl);
+        assert_eq!(out.report.fills, 1);
+        let SceneItem::FillPath { path: got, .. } = &out.layer.items[0] else {
+            panic!("expected fillPath");
+        };
+        assert_eq!(got, &path);
+    }
+
+    #[test]
+    fn empty_fill_path_is_skipped() {
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::FillPath {
+            path: vec![],
+            paint: ScenePaint::BLACK,
+        });
+        let out = lower(&dl);
+        assert!(out.layer.items.is_empty());
+        assert_eq!(out.report.skipped_empty, 1);
+    }
+
+    #[test]
+    fn stroke_path_lowers_with_width() {
+        let path = vec![
+            ScenePathSeg::MoveTo { x: 0.0, y: 0.0 },
+            ScenePathSeg::LineTo { x: 100.0, y: 0.0 },
+        ];
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::StrokePath {
+            path: path.clone(),
+            paint: ScenePaint::BLACK,
+            width: 2.0,
+        });
+        let out = lower(&dl);
+        assert_eq!(out.report.strokes, 1);
+        let SceneItem::StrokePath { width, .. } = &out.layer.items[0] else {
+            panic!("expected strokePath");
+        };
+        assert_eq!(*width, 2.0);
+    }
+
+    #[test]
+    fn zero_width_stroke_is_skipped() {
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::StrokePath {
+            path: vec![ScenePathSeg::MoveTo { x: 0.0, y: 0.0 }],
+            paint: ScenePaint::BLACK,
+            width: 0.0,
+        });
+        let out = lower(&dl);
+        assert!(out.layer.items.is_empty());
+        assert_eq!(out.report.skipped_empty, 1);
+    }
+
+    #[test]
+    fn glyph_run_lowers_to_a_single_line_text_item() {
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::GlyphRun(WebGlyphRun {
+            face: RunFace::default(),
+            baseline_x: 12.0,
+            baseline_y: 34.0,
+            size: 13.0,
+            text: "paged.web".to_string(),
+            paint: ScenePaint::BLACK,
+            family: Some("Inter".to_string()),
+            local_key: LocalKey::default(),
+        }));
+        let out = lower(&dl);
+        assert_eq!(out.report.text_runs, 1);
+        let SceneItem::Text(t) = &out.layer.items[0] else {
+            panic!("expected text item");
+        };
+        assert_eq!(t.x, 12.0);
+        assert_eq!(t.y, 34.0);
+        assert_eq!(t.size, 13.0);
+        assert_eq!(t.text, "paged.web");
+        assert_eq!(t.family.as_deref(), Some("Inter"));
+        assert_eq!(t.style, None);
+    }
+
+    #[test]
+    fn multi_run_paragraph_lowers_to_one_text_item_per_run() {
+        // A paragraph that parley splits into several runs (font/style/bidi
+        // boundaries) is captured as one `GlyphRun` per run; each lowers to
+        // its OWN C-1 `text` item — distinct string + baseline — in painter
+        // order. Here a 2-run fragment (a regular word then a styled word on
+        // the same line, each its own run).
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::GlyphRun(WebGlyphRun {
+            face: RunFace::default(),
+            baseline_x: 10.0,
+            baseline_y: 20.0,
+            size: 12.0,
+            text: "alpha ".to_string(),
+            paint: ScenePaint::BLACK,
+            family: Some("Inter".to_string()),
+            local_key: LocalKey::new(10.0, 20.0),
+        }));
+        dl.push(WebDrawCmd::GlyphRun(WebGlyphRun {
+            face: RunFace::default(),
+            baseline_x: 48.0,
+            baseline_y: 20.0,
+            size: 12.0,
+            text: "BETA".to_string(),
+            paint: ScenePaint::rgba(0.8, 0.0, 0.0, 1.0),
+            family: Some("Inter".to_string()),
+            local_key: LocalKey::new(48.0, 20.0),
+        }));
+        let out = lower(&dl);
+        assert_eq!(out.report.text_runs, 2);
+        assert_eq!(out.report.emitted, 2);
+        let texts: Vec<(&str, f32)> = out
+            .layer
+            .items
+            .iter()
+            .filter_map(|it| match it {
+                SceneItem::Text(t) => Some((t.text.as_str(), t.x)),
+                _ => None,
+            })
+            .collect();
+        // Two items, distinct strings, distinct baselines, in painter order.
+        assert_eq!(texts, vec![("alpha ", 10.0), ("BETA", 48.0)]);
+        assert!(out.report.unsupported_note().is_none());
+    }
+
+    #[test]
+    fn whitespace_only_text_run_is_skipped() {
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::GlyphRun(WebGlyphRun {
+            face: RunFace::default(),
+            baseline_x: 0.0,
+            baseline_y: 0.0,
+            size: 12.0,
+            text: "   \n\t ".to_string(),
+            paint: ScenePaint::BLACK,
+            family: None,
+            local_key: LocalKey::default(),
+        }));
+        let out = lower(&dl);
+        assert!(out.layer.items.is_empty());
+        assert_eq!(out.report.skipped_empty, 1);
+        assert_eq!(out.report.text_runs, 0);
+    }
+
+    #[test]
+    fn raster_image_lowers_to_a_c1_image_item_with_the_right_dest() {
+        use crate::display_list::WebImage;
+        // A 2×2 RGBA8 image (16 bytes) painted into a 50×30 pt box at (10,20).
+        let rgba: Vec<u8> = (0..16).collect();
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::DrawImage(WebImage {
+            rgba: rgba.clone(),
+            width: 2,
+            height: 2,
+            dest: RectPt::new(10.0, 20.0, 50.0, 30.0),
+        }));
+        let out = lower(&dl);
+        assert_eq!(out.report.images, 1);
+        assert_eq!(out.report.emitted, 1);
+        // Images are NOT counted as unsupported anymore.
+        assert_eq!(out.report.dropped_non_solid, 0);
+        assert!(out.report.unsupported_note().is_none());
+        let SceneItem::Image {
+            rgba: got,
+            width,
+            height,
+            x,
+            y,
+            w,
+            h,
+        } = &out.layer.items[0]
+        else {
+            panic!("expected an image item, got {:?}", out.layer.items[0]);
+        };
+        assert_eq!(got, &rgba);
+        assert_eq!(*width, 2);
+        assert_eq!(*height, 2);
+        assert_eq!((*x, *y, *w, *h), (10.0, 20.0, 50.0, 30.0));
+    }
+
+    #[test]
+    fn image_with_mismatched_byte_length_is_skipped_not_shipped() {
+        use crate::display_list::WebImage;
+        // 2×2 claims 16 bytes but carries 4 — a malformed buffer is skipped,
+        // never uploaded truncated.
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::DrawImage(WebImage {
+            rgba: vec![1, 2, 3, 4],
+            width: 2,
+            height: 2,
+            dest: RectPt::new(0.0, 0.0, 10.0, 10.0),
+        }));
+        let out = lower(&dl);
+        assert!(out.layer.items.is_empty());
+        assert_eq!(out.report.images, 0);
+        assert_eq!(out.report.skipped_empty, 1);
+    }
+
+    #[test]
+    fn zero_area_image_dest_is_skipped() {
+        use crate::display_list::WebImage;
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::DrawImage(WebImage {
+            rgba: vec![0; 4],
+            width: 1,
+            height: 1,
+            dest: RectPt::new(0.0, 0.0, 0.0, 20.0),
+        }));
+        let out = lower(&dl);
+        assert!(out.layer.items.is_empty());
+        assert_eq!(out.report.skipped_empty, 1);
+        assert_eq!(out.report.images, 0);
+    }
+
+    #[test]
+    fn image_preserves_painters_order_among_fills_and_text() {
+        use crate::display_list::WebImage;
+        // background fill, then an image, then a caption text run.
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::FillRect {
+            rect: RectPt::new(0.0, 0.0, 100.0, 100.0),
+            paint: ScenePaint::rgba(1.0, 1.0, 1.0, 1.0),
+        });
+        dl.push(WebDrawCmd::DrawImage(WebImage {
+            rgba: vec![0; 4],
+            width: 1,
+            height: 1,
+            dest: RectPt::new(8.0, 8.0, 40.0, 40.0),
+        }));
+        dl.push(WebDrawCmd::GlyphRun(WebGlyphRun {
+            face: RunFace::default(),
+            baseline_x: 8.0,
+            baseline_y: 60.0,
+            size: 11.0,
+            text: "caption".to_string(),
+            paint: ScenePaint::BLACK,
+            family: None,
+            local_key: LocalKey::default(),
+        }));
+        let out = lower(&dl);
+        assert_eq!(out.report.emitted, 3);
+        assert_eq!(out.report.fills, 1);
+        assert_eq!(out.report.images, 1);
+        assert_eq!(out.report.text_runs, 1);
+        assert!(matches!(out.layer.items[0], SceneItem::FillPath { .. }));
+        assert!(matches!(out.layer.items[1], SceneItem::Image { .. }));
+        assert!(matches!(out.layer.items[2], SceneItem::Text(_)));
+        assert!(out.report.unsupported_note().is_none());
+    }
+
+    #[test]
+    fn non_solid_paint_is_dropped_and_reported_not_faked() {
+        let mut dl = WebDisplayList::new();
+        // An image/pattern brush fill (no C-1 equivalent — captured as a
+        // `GradientFill`/`ImageFill` drop) and a transformed/sheared image
+        // dest (recorded as an `ImageFill` drop by the capture) — both stay
+        // counted, never faked. Linear/radial/sweep gradients do NOT come
+        // through this path; they lower to `fillPathGradient`.
+        dl.push(WebDrawCmd::NonSolidPaint {
+            what: UnsupportedKind::GradientFill,
+        });
+        dl.push(WebDrawCmd::NonSolidPaint {
+            what: UnsupportedKind::ImageFill,
+        });
+        let out = lower(&dl);
+        assert!(
+            out.layer.items.is_empty(),
+            "a non-solid paint is NEVER faked into a solid"
+        );
+        assert_eq!(out.report.dropped_non_solid, 2);
+        assert_eq!(out.report.dropped(), 2);
+        let note = out
+            .report
+            .unsupported_note()
+            .expect("a note for dropped paint");
+        assert!(note.contains("image-pattern"), "note: {note}");
+    }
+
+    #[test]
+    fn box_shadow_is_dropped_and_reported() {
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::BoxShadow);
+        let out = lower(&dl);
+        assert!(out.layer.items.is_empty());
+        assert_eq!(out.report.dropped_shadows, 1);
+        let note = out.report.unsupported_note().expect("a note");
+        assert!(note.contains("shadow"), "note: {note}");
+    }
+
+    #[test]
+    fn painters_order_is_preserved() {
+        // A card: background rect, then a badge rect, then the heading text
+        // — must lower in exactly that z-order (core composes in order).
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::FillRect {
+            rect: RectPt::new(0.0, 0.0, 200.0, 100.0),
+            paint: ScenePaint::rgba(1.0, 1.0, 1.0, 1.0),
+        });
+        dl.push(WebDrawCmd::FillRect {
+            rect: RectPt::new(8.0, 8.0, 64.0, 64.0),
+            paint: blue(),
+        });
+        dl.push(WebDrawCmd::GlyphRun(WebGlyphRun {
+            face: RunFace::default(),
+            baseline_x: 84.0,
+            baseline_y: 28.0,
+            size: 20.0,
+            text: "Heading".to_string(),
+            paint: ScenePaint::BLACK,
+            family: None,
+            local_key: LocalKey::default(),
+        }));
+        let out = lower(&dl);
+        assert_eq!(out.report.emitted, 3);
+        assert_eq!(out.report.fills, 2);
+        assert_eq!(out.report.text_runs, 1);
+        assert!(matches!(out.layer.items[0], SceneItem::FillPath { .. }));
+        assert!(matches!(out.layer.items[1], SceneItem::FillPath { .. }));
+        assert!(matches!(out.layer.items[2], SceneItem::Text(_)));
+        // Everything expressible was expressed → no unsupported note.
+        assert!(out.report.unsupported_note().is_none());
+    }
+
+    #[test]
+    fn mixed_supported_and_dropped_reports_both() {
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::FillRect {
+            rect: RectPt::new(0.0, 0.0, 10.0, 10.0),
+            paint: blue(),
+        });
+        dl.push(WebDrawCmd::NonSolidPaint {
+            what: UnsupportedKind::GradientFill,
+        });
+        dl.push(WebDrawCmd::BoxShadow);
+        let out = lower(&dl);
+        assert_eq!(out.report.emitted, 1);
+        assert_eq!(out.report.fills, 1);
+        assert_eq!(out.report.dropped_non_solid, 1);
+        assert_eq!(out.report.dropped_shadows, 1);
+        assert_eq!(out.report.dropped(), 2);
+    }
+
+    use crate::display_list::{WebGradient, WebGradientStop};
+    use crate::wire::SceneGradient;
+
+    fn two_stops() -> Vec<WebGradientStop> {
+        vec![
+            WebGradientStop {
+                offset: 0.0,
+                r: 1.0,
+                g: 0.0,
+                b: 0.0,
+                a: 1.0,
+            },
+            WebGradientStop {
+                offset: 1.0,
+                r: 0.0,
+                g: 0.0,
+                b: 1.0,
+                a: 1.0,
+            },
+        ]
+    }
+
+    fn diag_path() -> Vec<ScenePathSeg> {
+        RectPt::new(0.0, 0.0, 100.0, 50.0).to_closed_path()
+    }
+
+    #[test]
+    fn linear_gradient_fill_lowers_to_a_fill_path_gradient() {
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::FillGradient {
+            path: diag_path(),
+            gradient: WebGradient::Linear {
+                x0: 0.0,
+                y0: 0.0,
+                x1: 100.0,
+                y1: 0.0,
+                stops: two_stops(),
+            },
+        });
+        let out = lower(&dl);
+        assert_eq!(out.report.gradients, 1);
+        assert_eq!(out.report.emitted, 1);
+        // A real gradient is NOT counted as an unsupported drop anymore.
+        assert_eq!(out.report.dropped_non_solid, 0);
+        assert!(out.report.unsupported_note().is_none());
+        let SceneItem::FillPathGradient { path, gradient } = &out.layer.items[0] else {
+            panic!("expected a fillPathGradient, got {:?}", out.layer.items[0]);
+        };
+        assert_eq!(path, &diag_path());
+        let SceneGradient::Linear {
+            x0,
+            y0,
+            x1,
+            y1,
+            stops,
+        } = gradient
+        else {
+            panic!("expected a linear gradient, got {gradient:?}");
+        };
+        assert_eq!((*x0, *y0, *x1, *y1), (0.0, 0.0, 100.0, 0.0));
+        assert_eq!(stops.len(), 2);
+        assert_eq!(stops[0].offset, 0.0);
+        assert_eq!(
+            (stops[0].r, stops[0].g, stops[0].b, stops[0].a),
+            (1.0, 0.0, 0.0, 1.0)
+        );
+        assert_eq!(stops[1].offset, 1.0);
+        assert_eq!(
+            (stops[1].r, stops[1].g, stops[1].b, stops[1].a),
+            (0.0, 0.0, 1.0, 1.0)
+        );
+    }
+
+    #[test]
+    fn radial_gradient_fill_lowers_to_a_fill_path_gradient() {
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::FillGradient {
+            path: diag_path(),
+            gradient: WebGradient::Radial {
+                cx: 50.0,
+                cy: 25.0,
+                radius: 40.0,
+                stops: two_stops(),
+            },
+        });
+        let out = lower(&dl);
+        assert_eq!(out.report.gradients, 1);
+        assert!(out.report.unsupported_note().is_none());
+        let SceneItem::FillPathGradient { gradient, .. } = &out.layer.items[0] else {
+            panic!("expected a fillPathGradient");
+        };
+        let SceneGradient::Radial {
+            cx,
+            cy,
+            radius,
+            stops,
+        } = gradient
+        else {
+            panic!("expected a radial gradient, got {gradient:?}");
+        };
+        assert_eq!((*cx, *cy, *radius), (50.0, 25.0, 40.0));
+        assert_eq!(stops.len(), 2);
+    }
+
+    #[test]
+    fn single_stop_gradient_is_skipped_not_emitted() {
+        // <2 stops can't ramp — core skips it, so the lowering skips it too
+        // (counted as an empty skip, never an item core would silently drop).
+        let one = vec![WebGradientStop {
+            offset: 0.0,
+            r: 0.5,
+            g: 0.5,
+            b: 0.5,
+            a: 1.0,
+        }];
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::FillGradient {
+            path: diag_path(),
+            gradient: WebGradient::Linear {
+                x0: 0.0,
+                y0: 0.0,
+                x1: 10.0,
+                y1: 0.0,
+                stops: one,
+            },
+        });
+        let out = lower(&dl);
+        assert!(out.layer.items.is_empty());
+        assert_eq!(out.report.gradients, 0);
+        assert_eq!(out.report.skipped_empty, 1);
+    }
+
+    #[test]
+    fn empty_path_gradient_is_skipped() {
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::FillGradient {
+            path: vec![],
+            gradient: WebGradient::Linear {
+                x0: 0.0,
+                y0: 0.0,
+                x1: 10.0,
+                y1: 0.0,
+                stops: two_stops(),
+            },
+        });
+        let out = lower(&dl);
+        assert!(out.layer.items.is_empty());
+        assert_eq!(out.report.skipped_empty, 1);
+        assert_eq!(out.report.gradients, 0);
+    }
+
+    #[test]
+    fn zero_radius_radial_gradient_is_skipped() {
+        // A non-positive radius can't ramp — core skips it (`radius <= 0.0`).
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::FillGradient {
+            path: diag_path(),
+            gradient: WebGradient::Radial {
+                cx: 0.0,
+                cy: 0.0,
+                radius: 0.0,
+                stops: two_stops(),
+            },
+        });
+        let out = lower(&dl);
+        assert!(out.layer.items.is_empty());
+        assert_eq!(out.report.gradients, 0);
+        assert_eq!(out.report.skipped_empty, 1);
+    }
+
+    #[test]
+    fn sweep_gradient_lowers_to_a_fill_path_gradient_sweep() {
+        // C-1.3 v46: a sweep/conic gradient lowers to a `fillPathGradient`
+        // whose `SceneGradient` is `Sweep` (centre + start angle + stops),
+        // counted under `sweep_gradients` (NOT `gradients`, NOT a drop).
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::FillGradient {
+            path: diag_path(),
+            gradient: WebGradient::Sweep {
+                cx: 50.0,
+                cy: 25.0,
+                start_angle: std::f32::consts::FRAC_PI_2,
+                stops: two_stops(),
+            },
+        });
+        let out = lower(&dl);
+        assert_eq!(out.report.sweep_gradients, 1);
+        assert_eq!(out.report.gradients, 0, "sweep is NOT a linear/radial");
+        assert_eq!(out.report.dropped_non_solid, 0);
+        assert_eq!(out.report.emitted, 1);
+        assert!(out.report.unsupported_note().is_none());
+        let SceneItem::FillPathGradient { path, gradient } = &out.layer.items[0] else {
+            panic!("expected a fillPathGradient, got {:?}", out.layer.items[0]);
+        };
+        assert_eq!(path, &diag_path());
+        let SceneGradient::Sweep {
+            cx,
+            cy,
+            start_angle,
+            stops,
+        } = gradient
+        else {
+            panic!("expected a sweep gradient, got {gradient:?}");
+        };
+        assert_eq!((*cx, *cy), (50.0, 25.0));
+        assert!((*start_angle - std::f32::consts::FRAC_PI_2).abs() < 1e-6);
+        assert_eq!(stops.len(), 2);
+    }
+
+    #[test]
+    fn single_stop_sweep_gradient_is_skipped_not_emitted() {
+        // <2 stops can't ramp — core skips a sweep too, so the lowering does.
+        let one = vec![WebGradientStop {
+            offset: 0.0,
+            r: 0.5,
+            g: 0.5,
+            b: 0.5,
+            a: 1.0,
+        }];
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::FillGradient {
+            path: diag_path(),
+            gradient: WebGradient::Sweep {
+                cx: 0.0,
+                cy: 0.0,
+                start_angle: 0.0,
+                stops: one,
+            },
+        });
+        let out = lower(&dl);
+        assert!(out.layer.items.is_empty());
+        assert_eq!(out.report.sweep_gradients, 0);
+        assert_eq!(out.report.skipped_empty, 1);
+    }
+
+    #[test]
+    fn blended_solid_fill_lowers_to_a_fill_path_blend_with_the_mapped_mode() {
+        // C-1.4 v46: a solid fill under a non-Normal blend layer lowers to a
+        // `fillPathBlend` carrying the 1:1-mapped mode (NOT a plain fillPath).
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::FillBlend {
+            path: diag_path(),
+            paint: blue(),
+            blend: WebBlendMode::Multiply,
+        });
+        let out = lower(&dl);
+        assert_eq!(out.report.blends, 1);
+        assert_eq!(out.report.fills, 0, "a blended fill is not a plain fill");
+        assert_eq!(out.report.emitted, 1);
+        assert!(out.report.unsupported_note().is_none());
+        let SceneItem::FillPathBlend { path, paint, blend } = &out.layer.items[0] else {
+            panic!("expected a fillPathBlend, got {:?}", out.layer.items[0]);
+        };
+        assert_eq!(path, &diag_path());
+        assert_eq!(*paint, blue());
+        assert_eq!(*blend, SceneBlendMode::Multiply);
+    }
+
+    #[test]
+    fn empty_path_blended_fill_is_skipped() {
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::FillBlend {
+            path: vec![],
+            paint: blue(),
+            blend: WebBlendMode::Screen,
+        });
+        let out = lower(&dl);
+        assert!(out.layer.items.is_empty());
+        assert_eq!(out.report.blends, 0);
+        assert_eq!(out.report.skipped_empty, 1);
+    }
+
+    #[test]
+    fn every_web_blend_mode_maps_one_to_one_to_a_scene_blend_mode() {
+        // The 15 CSS modes map 1:1 capture → wire (no Normal — a normal fill
+        // is a plain FillRect/FillPath, never a FillBlend).
+        let cases = [
+            (WebBlendMode::Multiply, SceneBlendMode::Multiply),
+            (WebBlendMode::Screen, SceneBlendMode::Screen),
+            (WebBlendMode::Overlay, SceneBlendMode::Overlay),
+            (WebBlendMode::Darken, SceneBlendMode::Darken),
+            (WebBlendMode::Lighten, SceneBlendMode::Lighten),
+            (WebBlendMode::ColorDodge, SceneBlendMode::ColorDodge),
+            (WebBlendMode::ColorBurn, SceneBlendMode::ColorBurn),
+            (WebBlendMode::HardLight, SceneBlendMode::HardLight),
+            (WebBlendMode::SoftLight, SceneBlendMode::SoftLight),
+            (WebBlendMode::Difference, SceneBlendMode::Difference),
+            (WebBlendMode::Exclusion, SceneBlendMode::Exclusion),
+            (WebBlendMode::Hue, SceneBlendMode::Hue),
+            (WebBlendMode::Saturation, SceneBlendMode::Saturation),
+            (WebBlendMode::Color, SceneBlendMode::Color),
+            (WebBlendMode::Luminosity, SceneBlendMode::Luminosity),
+        ];
+        for (web, want) in cases {
+            let mut dl = WebDisplayList::new();
+            dl.push(WebDrawCmd::FillBlend {
+                path: diag_path(),
+                paint: blue(),
+                blend: web,
+            });
+            let out = lower(&dl);
+            let SceneItem::FillPathBlend { blend, .. } = &out.layer.items[0] else {
+                panic!("expected a fillPathBlend for {web:?}");
+            };
+            assert_eq!(*blend, want, "{web:?} must map to {want:?}");
+        }
+    }
+
+    #[test]
+    fn gradient_stroke_lowers_to_a_stroke_path_gradient_with_width() {
+        // C-1.7 v48: a gradient STROKE lowers to a `strokePathGradient`
+        // carrying the gradient + the stroke width — NOT a dropped non-solid.
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::StrokeGradient {
+            path: diag_path(),
+            gradient: WebGradient::Linear {
+                x0: 0.0,
+                y0: 0.0,
+                x1: 100.0,
+                y1: 0.0,
+                stops: two_stops(),
+            },
+            width: 4.0,
+        });
+        let out = lower(&dl);
+        assert_eq!(out.report.gradient_strokes, 1);
+        assert_eq!(
+            out.report.strokes, 0,
+            "a gradient stroke is not a solid stroke"
+        );
+        assert_eq!(
+            out.report.dropped_non_solid, 0,
+            "a gradient stroke is NO LONGER a dropped non-solid"
+        );
+        assert_eq!(out.report.emitted, 1);
+        assert!(out.report.unsupported_note().is_none());
+        let SceneItem::StrokePathGradient {
+            path,
+            gradient,
+            width,
+        } = &out.layer.items[0]
+        else {
+            panic!(
+                "expected a strokePathGradient, got {:?}",
+                out.layer.items[0]
+            );
+        };
+        assert_eq!(path, &diag_path());
+        assert_eq!(*width, 4.0);
+        let SceneGradient::Linear { x0, x1, stops, .. } = gradient else {
+            panic!("expected a linear gradient, got {gradient:?}");
+        };
+        assert_eq!((*x0, *x1), (0.0, 100.0));
+        assert_eq!(stops.len(), 2);
+    }
+
+    #[test]
+    fn radial_and_sweep_gradient_strokes_lower_too() {
+        // The stroke lane carries every SceneGradient kind (radial + sweep),
+        // counted under `gradient_strokes` like the linear case.
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::StrokeGradient {
+            path: diag_path(),
+            gradient: WebGradient::Radial {
+                cx: 50.0,
+                cy: 25.0,
+                radius: 30.0,
+                stops: two_stops(),
+            },
+            width: 2.0,
+        });
+        dl.push(WebDrawCmd::StrokeGradient {
+            path: diag_path(),
+            gradient: WebGradient::Sweep {
+                cx: 50.0,
+                cy: 25.0,
+                start_angle: 0.5,
+                stops: two_stops(),
+            },
+            width: 2.0,
+        });
+        let out = lower(&dl);
+        assert_eq!(out.report.gradient_strokes, 2);
+        assert!(matches!(
+            &out.layer.items[0],
+            SceneItem::StrokePathGradient {
+                gradient: SceneGradient::Radial { .. },
+                ..
+            }
+        ));
+        assert!(matches!(
+            &out.layer.items[1],
+            SceneItem::StrokePathGradient {
+                gradient: SceneGradient::Sweep { .. },
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn degenerate_gradient_stroke_is_skipped_not_emitted() {
+        // The SAME degenerate gates as a gradient fill (empty path, <2 stops,
+        // non-positive radial radius) PLUS a non-positive width skip — none
+        // emit an item, all count as an empty skip (never a dropped non-solid).
+        let one = vec![WebGradientStop {
+            offset: 0.0,
+            r: 1.0,
+            g: 0.0,
+            b: 0.0,
+            a: 1.0,
+        }];
+        let cases = [
+            // empty path
+            WebDrawCmd::StrokeGradient {
+                path: vec![],
+                gradient: WebGradient::Linear {
+                    x0: 0.0,
+                    y0: 0.0,
+                    x1: 1.0,
+                    y1: 0.0,
+                    stops: two_stops(),
+                },
+                width: 2.0,
+            },
+            // <2 stops
+            WebDrawCmd::StrokeGradient {
+                path: diag_path(),
+                gradient: WebGradient::Linear {
+                    x0: 0.0,
+                    y0: 0.0,
+                    x1: 1.0,
+                    y1: 0.0,
+                    stops: one.clone(),
+                },
+                width: 2.0,
+            },
+            // non-positive radial radius
+            WebDrawCmd::StrokeGradient {
+                path: diag_path(),
+                gradient: WebGradient::Radial {
+                    cx: 0.0,
+                    cy: 0.0,
+                    radius: 0.0,
+                    stops: two_stops(),
+                },
+                width: 2.0,
+            },
+            // non-positive width
+            WebDrawCmd::StrokeGradient {
+                path: diag_path(),
+                gradient: WebGradient::Linear {
+                    x0: 0.0,
+                    y0: 0.0,
+                    x1: 1.0,
+                    y1: 0.0,
+                    stops: two_stops(),
+                },
+                width: 0.0,
+            },
+        ];
+        for cmd in cases {
+            let mut dl = WebDisplayList::new();
+            dl.push(cmd);
+            let out = lower(&dl);
+            assert!(out.layer.items.is_empty(), "degenerate stroke must skip");
+            assert_eq!(out.report.gradient_strokes, 0);
+            assert_eq!(out.report.dropped_non_solid, 0);
+            assert_eq!(out.report.skipped_empty, 1);
+        }
+    }
+
+    #[test]
+    fn gradient_fill_under_a_blend_lowers_to_a_fill_path_gradient_blend() {
+        // C-1.8 v48: a GRADIENT fill under a non-Normal blend lowers to a
+        // `fillPathGradientBlend` (the gradient + the 1:1-mapped mode), NOT a
+        // plain fillPathGradient and NOT a dropped blend.
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::FillGradientBlend {
+            path: diag_path(),
+            gradient: WebGradient::Linear {
+                x0: 0.0,
+                y0: 0.0,
+                x1: 100.0,
+                y1: 0.0,
+                stops: two_stops(),
+            },
+            blend: WebBlendMode::Multiply,
+        });
+        let out = lower(&dl);
+        assert_eq!(out.report.gradient_blends, 1);
+        assert_eq!(
+            out.report.gradients, 0,
+            "a blended gradient is not a plain gradient"
+        );
+        assert_eq!(
+            out.report.blends, 0,
+            "a gradient blend is not a solid blend"
+        );
+        assert_eq!(out.report.emitted, 1);
+        assert!(out.report.unsupported_note().is_none());
+        let SceneItem::FillPathGradientBlend {
+            path,
+            gradient,
+            blend,
+        } = &out.layer.items[0]
+        else {
+            panic!(
+                "expected a fillPathGradientBlend, got {:?}",
+                out.layer.items[0]
+            );
+        };
+        assert_eq!(path, &diag_path());
+        assert_eq!(*blend, SceneBlendMode::Multiply);
+        assert!(matches!(gradient, SceneGradient::Linear { .. }));
+    }
+
+    #[test]
+    fn every_blend_mode_maps_one_to_one_on_the_gradient_blend_lane() {
+        // The gradient-blend lane shares `map_blend`, so all 15 modes map 1:1
+        // (same coverage as the solid blend lane, on the gradient item).
+        let cases = [
+            (WebBlendMode::Multiply, SceneBlendMode::Multiply),
+            (WebBlendMode::Screen, SceneBlendMode::Screen),
+            (WebBlendMode::Overlay, SceneBlendMode::Overlay),
+            (WebBlendMode::Darken, SceneBlendMode::Darken),
+            (WebBlendMode::Lighten, SceneBlendMode::Lighten),
+            (WebBlendMode::ColorDodge, SceneBlendMode::ColorDodge),
+            (WebBlendMode::ColorBurn, SceneBlendMode::ColorBurn),
+            (WebBlendMode::HardLight, SceneBlendMode::HardLight),
+            (WebBlendMode::SoftLight, SceneBlendMode::SoftLight),
+            (WebBlendMode::Difference, SceneBlendMode::Difference),
+            (WebBlendMode::Exclusion, SceneBlendMode::Exclusion),
+            (WebBlendMode::Hue, SceneBlendMode::Hue),
+            (WebBlendMode::Saturation, SceneBlendMode::Saturation),
+            (WebBlendMode::Color, SceneBlendMode::Color),
+            (WebBlendMode::Luminosity, SceneBlendMode::Luminosity),
+        ];
+        for (web, want) in cases {
+            let mut dl = WebDisplayList::new();
+            dl.push(WebDrawCmd::FillGradientBlend {
+                path: diag_path(),
+                gradient: WebGradient::Radial {
+                    cx: 10.0,
+                    cy: 10.0,
+                    radius: 10.0,
+                    stops: two_stops(),
+                },
+                blend: web,
+            });
+            let out = lower(&dl);
+            let SceneItem::FillPathGradientBlend { blend, .. } = &out.layer.items[0] else {
+                panic!("expected a fillPathGradientBlend for {web:?}");
+            };
+            assert_eq!(*blend, want, "{web:?} must map to {want:?}");
+        }
+    }
+
+    #[test]
+    fn degenerate_gradient_blend_is_skipped_not_emitted() {
+        // <2 stops / empty path skip the blended-gradient lane too (matching
+        // core's gradient gates), counted as an empty skip.
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::FillGradientBlend {
+            path: vec![],
+            gradient: WebGradient::Linear {
+                x0: 0.0,
+                y0: 0.0,
+                x1: 1.0,
+                y1: 0.0,
+                stops: two_stops(),
+            },
+            blend: WebBlendMode::Screen,
+        });
+        let out = lower(&dl);
+        assert!(out.layer.items.is_empty());
+        assert_eq!(out.report.gradient_blends, 0);
+        assert_eq!(out.report.skipped_empty, 1);
+    }
+
+    #[test]
+    fn box_shadow_lowers_to_a_drop_shadow_with_baked_offset_and_blur() {
+        // C-1.5 v46: an outset box-shadow lowers to a `dropShadow`. The
+        // offset is BAKED into the path (the capture folds blitz-paint's
+        // offset transform into the points), so the item's own offset is 0;
+        // the blur rides as `blurRadius`, and the colour's `a` as the alpha.
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::DrawShadow {
+            path: diag_path(),
+            colour: ScenePaint::rgba(0.1, 0.1, 0.1, 0.5),
+            blur: 4.0,
+        });
+        let out = lower(&dl);
+        assert_eq!(out.report.shadows, 1);
+        assert_eq!(
+            out.report.dropped_shadows, 0,
+            "an outset shadow is NOT a drop"
+        );
+        assert_eq!(out.report.emitted, 1);
+        assert!(out.report.unsupported_note().is_none());
+        let SceneItem::DropShadow {
+            path,
+            offset_x,
+            offset_y,
+            blur_radius,
+            r,
+            g,
+            b,
+            a,
+        } = &out.layer.items[0]
+        else {
+            panic!("expected a dropShadow, got {:?}", out.layer.items[0]);
+        };
+        assert_eq!(path, &diag_path());
+        assert_eq!((*offset_x, *offset_y), (0.0, 0.0), "offset baked into path");
+        assert_eq!(*blur_radius, 4.0);
+        assert_eq!((*r, *g, *b, *a), (0.1, 0.1, 0.1, 0.5));
+    }
+
+    #[test]
+    fn empty_path_drop_shadow_is_skipped() {
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::DrawShadow {
+            path: vec![],
+            colour: ScenePaint::BLACK,
+            blur: 2.0,
+        });
+        let out = lower(&dl);
+        assert!(out.layer.items.is_empty());
+        assert_eq!(out.report.shadows, 0);
+        assert_eq!(out.report.skipped_empty, 1);
+    }
+
+    #[test]
+    fn negative_blur_drop_shadow_clamps_to_zero() {
+        // A negative blur is clamped (core's `blur_radius.max(0.0)`), never a
+        // panic or a negative Gaussian.
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::DrawShadow {
+            path: diag_path(),
+            colour: ScenePaint::BLACK,
+            blur: -3.0,
+        });
+        let out = lower(&dl);
+        let SceneItem::DropShadow { blur_radius, .. } = &out.layer.items[0] else {
+            panic!("expected a dropShadow");
+        };
+        assert_eq!(*blur_radius, 0.0);
+    }
+
+    #[test]
+    fn inset_box_shadow_lowers_to_an_inner_shadow_with_baked_offset_and_zero_choke() {
+        // C-1.6 v47: an inset box-shadow lowers to an `innerShadow`. The offset
+        // is BAKED into the path (the capture folds blitz-paint's inset offset
+        // transform into the points), so the item's own offset is 0; `choke` is
+        // 0 (blitz does not bake CSS spread into the inset rect); the blur rides
+        // as `blurRadius`, and the colour's `a` as the shadow alpha. The inset
+        // is counted under `inset_shadows`, NOT `dropped_shadows`.
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::DrawInsetShadow {
+            path: diag_path(),
+            colour: ScenePaint::rgba(0.2, 0.2, 0.2, 0.7),
+            blur: 5.0,
+        });
+        let out = lower(&dl);
+        assert_eq!(out.report.inset_shadows, 1);
+        assert_eq!(out.report.shadows, 0, "an inset shadow is not an outset");
+        assert_eq!(
+            out.report.dropped_shadows, 0,
+            "an inset shadow is not a drop"
+        );
+        assert_eq!(out.report.emitted, 1);
+        assert!(out.report.unsupported_note().is_none());
+        let SceneItem::InnerShadow {
+            path,
+            offset_x,
+            offset_y,
+            blur_radius,
+            choke,
+            r,
+            g,
+            b,
+            a,
+        } = &out.layer.items[0]
+        else {
+            panic!("expected an innerShadow, got {:?}", out.layer.items[0]);
+        };
+        assert_eq!(path, &diag_path());
+        assert_eq!((*offset_x, *offset_y), (0.0, 0.0), "offset baked into path");
+        assert_eq!(*choke, 0.0, "blitz does not bake inset spread → choke 0");
+        assert_eq!(*blur_radius, 5.0);
+        assert_eq!((*r, *g, *b, *a), (0.2, 0.2, 0.2, 0.7));
+    }
+
+    #[test]
+    fn empty_path_inset_shadow_is_skipped() {
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::DrawInsetShadow {
+            path: vec![],
+            colour: ScenePaint::BLACK,
+            blur: 2.0,
+        });
+        let out = lower(&dl);
+        assert!(out.layer.items.is_empty());
+        assert_eq!(out.report.inset_shadows, 0);
+        assert_eq!(out.report.skipped_empty, 1);
+    }
+
+    #[test]
+    fn negative_blur_inset_shadow_clamps_to_zero() {
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::DrawInsetShadow {
+            path: diag_path(),
+            colour: ScenePaint::BLACK,
+            blur: -4.0,
+        });
+        let out = lower(&dl);
+        let SceneItem::InnerShadow { blur_radius, .. } = &out.layer.items[0] else {
+            panic!("expected an innerShadow");
+        };
+        assert_eq!(*blur_radius, 0.0);
+    }
+
+    #[test]
+    fn outset_box_shadow_spread_is_carried_through_the_lowered_path_faithfully() {
+        // VERIFY + PIN that OUTSET CSS `spread` is already covered: blitz-paint
+        // inflates the border box by `spread` BEFORE calling `draw_box_shadow`
+        // (`box_shadow.rs::draw_outset_box_shadow`: `border_box.inflate(spread,
+        // spread)`), so the captured `DrawShadow` path is the SPREAD-INFLATED
+        // rect. The lowering passes the rect through faithfully — spread is
+        // geometry blitz already applied, not a separate wire field. This test
+        // proves the lowered `dropShadow` path covers the inflated rect: an
+        // inflated 100×50 box (border box) by spread 8 → a 116×66 path whose
+        // bounds are strictly LARGER than the un-inflated border box.
+        let border_box = RectPt::new(10.0, 10.0, 100.0, 50.0);
+        // Emulate blitz's inflate(spread, spread) on the border box: grow by
+        // `spread` on every side (the capture would flatten exactly this rect).
+        let spread = 8.0_f32;
+        let inflated = RectPt::new(
+            border_box.x - spread,
+            border_box.y - spread,
+            border_box.w + 2.0 * spread,
+            border_box.h + 2.0 * spread,
+        );
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::DrawShadow {
+            path: inflated.to_closed_path(),
+            colour: ScenePaint::rgba(0.0, 0.0, 0.0, 0.5),
+            blur: 4.0,
+        });
+        let out = lower(&dl);
+        assert_eq!(out.report.shadows, 1);
+        let SceneItem::DropShadow { path, .. } = &out.layer.items[0] else {
+            panic!("expected a dropShadow, got {:?}", out.layer.items[0]);
+        };
+        // The lowered path is the spread-inflated rect, byte-for-byte (spread is
+        // geometry, passed through — not a separate wire field core must know).
+        assert_eq!(path, &inflated.to_closed_path());
+        // And it is strictly LARGER than the un-inflated border box on each
+        // side (the spread really inflated the shadow path).
+        let (min_x, min_y, max_x, max_y) = path_bounds(path);
+        assert!(min_x < border_box.x, "spread grew the left edge");
+        assert!(min_y < border_box.y, "spread grew the top edge");
+        assert!(
+            max_x > border_box.x + border_box.w,
+            "spread grew the right edge"
+        );
+        assert!(
+            max_y > border_box.y + border_box.h,
+            "spread grew the bottom edge"
+        );
+        // Concretely: a 100×50 border box + spread 8 → a 116×66 shadow path.
+        assert!(((max_x - min_x) - 116.0).abs() < 1e-3, "width = 100 + 2*8");
+        assert!(((max_y - min_y) - 66.0).abs() < 1e-3, "height = 50 + 2*8");
+    }
+
+    /// Axis-aligned bounds of a flattened path (for the spread pin test).
+    fn path_bounds(path: &[ScenePathSeg]) -> (f32, f32, f32, f32) {
+        let mut min_x = f32::INFINITY;
+        let mut min_y = f32::INFINITY;
+        let mut max_x = f32::NEG_INFINITY;
+        let mut max_y = f32::NEG_INFINITY;
+        for s in path {
+            let pts: &[(f32, f32)] = &match *s {
+                ScenePathSeg::MoveTo { x, y } | ScenePathSeg::LineTo { x, y } => vec![(x, y)],
+                ScenePathSeg::CubicTo {
+                    cx1,
+                    cy1,
+                    cx2,
+                    cy2,
+                    x,
+                    y,
+                } => vec![(cx1, cy1), (cx2, cy2), (x, y)],
+                ScenePathSeg::Close => vec![],
+            };
+            for &(x, y) in pts {
+                min_x = min_x.min(x);
+                min_y = min_y.min(y);
+                max_x = max_x.max(x);
+                max_y = max_y.max(y);
+            }
+        }
+        (min_x, min_y, max_x, max_y)
+    }
+
+    #[test]
+    fn gradient_preserves_painters_order_among_fills_and_text() {
+        // background gradient, then a solid badge, then a caption.
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::FillGradient {
+            path: RectPt::new(0.0, 0.0, 200.0, 100.0).to_closed_path(),
+            gradient: WebGradient::Linear {
+                x0: 0.0,
+                y0: 0.0,
+                x1: 200.0,
+                y1: 0.0,
+                stops: two_stops(),
+            },
+        });
+        dl.push(WebDrawCmd::FillRect {
+            rect: RectPt::new(8.0, 8.0, 40.0, 40.0),
+            paint: blue(),
+        });
+        dl.push(WebDrawCmd::GlyphRun(WebGlyphRun {
+            face: RunFace::default(),
+            baseline_x: 8.0,
+            baseline_y: 60.0,
+            size: 11.0,
+            text: "caption".to_string(),
+            paint: ScenePaint::BLACK,
+            family: None,
+            local_key: LocalKey::default(),
+        }));
+        let out = lower(&dl);
+        assert_eq!(out.report.emitted, 3);
+        assert_eq!(out.report.gradients, 1);
+        assert_eq!(out.report.fills, 1);
+        assert_eq!(out.report.text_runs, 1);
+        assert!(matches!(
+            out.layer.items[0],
+            SceneItem::FillPathGradient { .. }
+        ));
+        assert!(matches!(out.layer.items[1], SceneItem::FillPath { .. }));
+        assert!(matches!(out.layer.items[2], SceneItem::Text(_)));
+        assert!(out.report.unsupported_note().is_none());
+    }
+}
+
+#[cfg(test)]
+mod wire_json_tests {
+    //! The lowered layer must serialize to the EXACT JSON core's
+    //! `paged_compose::SceneLayer` deserializes (the C-1 wire). These tests
+    //! pin the tag/field names so a drift from the contract fails here, not
+    //! silently at submit time.
+    use super::*;
+    use crate::display_list::LocalKey;
+    use crate::wire::{RectPt, ScenePaint};
+
+    #[test]
+    fn fill_path_serializes_to_the_c1_wire_shape() {
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::FillRect {
+            rect: RectPt::new(0.0, 0.0, 2.0, 2.0),
+            paint: ScenePaint::rgba(1.0, 0.0, 0.0, 1.0),
+        });
+        let out = lower(&dl);
+        let json = serde_json::to_value(&out.layer).unwrap();
+        let item = &json["items"][0];
+        assert_eq!(item["kind"], "fillPath");
+        assert_eq!(item["path"][0]["op"], "moveTo");
+        assert_eq!(item["path"][1]["op"], "lineTo");
+        assert_eq!(item["path"][4]["op"], "close");
+        assert_eq!(item["paint"]["r"], 1.0);
+        assert_eq!(item["paint"]["a"], 1.0);
+    }
+
+    #[test]
+    fn text_serializes_to_the_c1_wire_shape() {
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::GlyphRun(WebGlyphRun {
+            face: RunFace::default(),
+            baseline_x: 1.0,
+            baseline_y: 2.0,
+            size: 12.0,
+            text: "hi".to_string(),
+            paint: ScenePaint::BLACK,
+            family: None,
+            local_key: LocalKey::default(),
+        }));
+        let out = lower(&dl);
+        let json = serde_json::to_value(&out.layer).unwrap();
+        let item = &json["items"][0];
+        assert_eq!(item["kind"], "text");
+        assert_eq!(item["text"], "hi");
+        assert_eq!(item["size"], 12.0);
+        // `family: None` is skipped (skip_serializing_if), matching core.
+        assert!(item.get("family").is_none());
+    }
+
+    #[test]
+    fn image_serializes_to_the_c1_image_wire_shape() {
+        use crate::display_list::WebImage;
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::DrawImage(WebImage {
+            rgba: vec![0, 1, 2, 3],
+            width: 1,
+            height: 1,
+            dest: RectPt::new(4.0, 5.0, 6.0, 7.0),
+        }));
+        let out = lower(&dl);
+        let json = serde_json::to_value(&out.layer).unwrap();
+        let item = &json["items"][0];
+        assert_eq!(item["kind"], "image");
+        assert_eq!(item["width"], 1);
+        assert_eq!(item["height"], 1);
+        assert_eq!(item["x"], 4.0);
+        assert_eq!(item["y"], 5.0);
+        assert_eq!(item["w"], 6.0);
+        assert_eq!(item["h"], 7.0);
+        assert_eq!(item["rgba"], serde_json::json!([0, 1, 2, 3]));
+    }
+
+    #[test]
+    fn linear_gradient_lowers_and_serializes_to_the_c1_3_wire_shape() {
+        use crate::display_list::{WebGradient, WebGradientStop};
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::FillGradient {
+            path: RectPt::new(0.0, 0.0, 10.0, 10.0).to_closed_path(),
+            gradient: WebGradient::Linear {
+                x0: 0.0,
+                y0: 0.0,
+                x1: 10.0,
+                y1: 0.0,
+                stops: vec![
+                    WebGradientStop {
+                        offset: 0.0,
+                        r: 1.0,
+                        g: 0.0,
+                        b: 0.0,
+                        a: 1.0,
+                    },
+                    WebGradientStop {
+                        offset: 1.0,
+                        r: 0.0,
+                        g: 0.0,
+                        b: 1.0,
+                        a: 1.0,
+                    },
+                ],
+            },
+        });
+        let out = lower(&dl);
+        let json = serde_json::to_value(&out.layer).unwrap();
+        let item = &json["items"][0];
+        // The exact keys/tags core (`paged_compose::SceneLayer`) consumes.
+        assert_eq!(item["kind"], "fillPathGradient");
+        assert_eq!(item["path"][0]["op"], "moveTo");
+        assert_eq!(item["gradient"]["type"], "linear");
+        assert_eq!(item["gradient"]["x0"], 0.0);
+        assert_eq!(item["gradient"]["x1"], 10.0);
+        let s = &item["gradient"]["stops"][0];
+        assert_eq!(s["offset"], 0.0);
+        assert_eq!(s["r"], 1.0);
+        assert_eq!(s["g"], 0.0);
+        assert_eq!(s["b"], 0.0);
+        assert_eq!(s["a"], 1.0);
+    }
+
+    #[test]
+    fn radial_gradient_lowers_and_serializes_to_the_c1_3_wire_shape() {
+        use crate::display_list::{WebGradient, WebGradientStop};
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::FillGradient {
+            path: RectPt::new(0.0, 0.0, 10.0, 10.0).to_closed_path(),
+            gradient: WebGradient::Radial {
+                cx: 5.0,
+                cy: 5.0,
+                radius: 5.0,
+                stops: vec![
+                    WebGradientStop {
+                        offset: 0.0,
+                        r: 1.0,
+                        g: 1.0,
+                        b: 1.0,
+                        a: 1.0,
+                    },
+                    WebGradientStop {
+                        offset: 1.0,
+                        r: 0.0,
+                        g: 0.0,
+                        b: 0.0,
+                        a: 1.0,
+                    },
+                ],
+            },
+        });
+        let out = lower(&dl);
+        let json = serde_json::to_value(&out.layer).unwrap();
+        let g = &json["items"][0]["gradient"];
+        assert_eq!(g["type"], "radial");
+        assert_eq!(g["cx"], 5.0);
+        assert_eq!(g["cy"], 5.0);
+        assert_eq!(g["radius"], 5.0);
+        assert_eq!(g["stops"].as_array().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn sweep_gradient_lowers_and_serializes_to_the_v46_wire_shape() {
+        use crate::display_list::{WebGradient, WebGradientStop};
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::FillGradient {
+            path: RectPt::new(0.0, 0.0, 10.0, 10.0).to_closed_path(),
+            gradient: WebGradient::Sweep {
+                cx: 5.0,
+                cy: 5.0,
+                start_angle: 1.5,
+                stops: vec![
+                    WebGradientStop {
+                        offset: 0.0,
+                        r: 1.0,
+                        g: 0.0,
+                        b: 0.0,
+                        a: 1.0,
+                    },
+                    WebGradientStop {
+                        offset: 1.0,
+                        r: 0.0,
+                        g: 0.0,
+                        b: 1.0,
+                        a: 1.0,
+                    },
+                ],
+            },
+        });
+        let out = lower(&dl);
+        let json = serde_json::to_value(&out.layer).unwrap();
+        let item = &json["items"][0];
+        // The exact keys/tags core (`paged_compose::SceneLayer`, v46) consumes.
+        assert_eq!(item["kind"], "fillPathGradient");
+        let g = &item["gradient"];
+        assert_eq!(g["type"], "sweep");
+        assert_eq!(g["cx"], 5.0);
+        assert_eq!(g["cy"], 5.0);
+        // Snake_case `start_angle` is the real wire key (core's serde emits
+        // it; `rename_all` does not reach internally-tagged-variant fields).
+        assert_eq!(g["start_angle"], 1.5);
+        assert!(
+            g.get("startAngle").is_none(),
+            "core key is start_angle (snake)"
+        );
+        assert_eq!(g["stops"].as_array().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn blended_fill_lowers_and_serializes_to_the_v46_wire_shape() {
+        use crate::display_list::WebBlendMode;
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::FillBlend {
+            path: RectPt::new(0.0, 0.0, 4.0, 4.0).to_closed_path(),
+            paint: ScenePaint::rgba(0.2, 0.4, 0.6, 1.0),
+            blend: WebBlendMode::Screen,
+        });
+        let out = lower(&dl);
+        let json = serde_json::to_value(&out.layer).unwrap();
+        let item = &json["items"][0];
+        assert_eq!(item["kind"], "fillPathBlend");
+        assert_eq!(item["path"][0]["op"], "moveTo");
+        assert_eq!(item["paint"]["r"], 0.2_f32 as f64);
+        // The blend is a bare camelCase CSS string (core's SceneBlendMode).
+        assert_eq!(item["blend"], "screen");
+    }
+
+    #[test]
+    fn drop_shadow_lowers_and_serializes_to_the_v46_wire_shape() {
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::DrawShadow {
+            path: RectPt::new(0.0, 0.0, 8.0, 8.0).to_closed_path(),
+            colour: ScenePaint::rgba(0.0, 0.0, 0.0, 0.4),
+            blur: 2.5,
+        });
+        let out = lower(&dl);
+        let json = serde_json::to_value(&out.layer).unwrap();
+        let item = &json["items"][0];
+        assert_eq!(item["kind"], "dropShadow");
+        assert_eq!(item["path"][0]["op"], "moveTo");
+        // Snake_case offset/blur keys (core's wire); offset baked → 0.
+        assert_eq!(item["offset_x"], 0.0);
+        assert_eq!(item["offset_y"], 0.0);
+        assert_eq!(item["blur_radius"], 2.5);
+        assert!(
+            item.get("offsetX").is_none(),
+            "core key is offset_x (snake)"
+        );
+        assert!(item.get("blurRadius").is_none());
+        // Flat colour fields present (a/alpha rides as the shadow opacity).
+        assert_eq!(item["a"], 0.4_f32 as f64);
+    }
+
+    #[test]
+    fn inset_shadow_lowers_and_serializes_to_the_v47_wire_shape() {
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::DrawInsetShadow {
+            path: RectPt::new(0.0, 0.0, 8.0, 8.0).to_closed_path(),
+            colour: ScenePaint::rgba(0.0, 0.0, 0.0, 0.4),
+            blur: 2.5,
+        });
+        let out = lower(&dl);
+        let json = serde_json::to_value(&out.layer).unwrap();
+        let item = &json["items"][0];
+        assert_eq!(item["kind"], "innerShadow");
+        assert_eq!(item["path"][0]["op"], "moveTo");
+        // Snake_case offset/blur/choke keys (core's v47 wire); offset baked → 0,
+        // choke 0 (blitz doesn't bake inset spread).
+        assert_eq!(item["offset_x"], 0.0);
+        assert_eq!(item["offset_y"], 0.0);
+        assert_eq!(item["blur_radius"], 2.5);
+        assert_eq!(item["choke"], 0.0);
+        assert!(
+            item.get("offsetX").is_none(),
+            "core key is offset_x (snake)"
+        );
+        assert!(item.get("blurRadius").is_none());
+        // Flat colour fields present (a/alpha rides as the shadow opacity).
+        assert_eq!(item["a"], 0.4_f32 as f64);
+    }
+
+    #[test]
+    fn gradient_stroke_lowers_and_serializes_to_the_v48_wire_shape() {
+        // The end-to-end lower → JSON for the C-1.7 gradient stroke: the
+        // `strokePathGradient` kind + the tag = "type" gradient + a `width`.
+        use crate::display_list::{WebGradient, WebGradientStop};
+        let stops = vec![
+            WebGradientStop {
+                offset: 0.0,
+                r: 1.0,
+                g: 0.0,
+                b: 0.0,
+                a: 1.0,
+            },
+            WebGradientStop {
+                offset: 1.0,
+                r: 0.0,
+                g: 0.0,
+                b: 1.0,
+                a: 1.0,
+            },
+        ];
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::StrokeGradient {
+            path: RectPt::new(0.0, 0.0, 8.0, 8.0).to_closed_path(),
+            gradient: WebGradient::Linear {
+                x0: 0.0,
+                y0: 0.0,
+                x1: 8.0,
+                y1: 0.0,
+                stops,
+            },
+            width: 3.0,
+        });
+        let out = lower(&dl);
+        let json = serde_json::to_value(&out.layer).unwrap();
+        let item = &json["items"][0];
+        assert_eq!(item["kind"], "strokePathGradient");
+        assert_eq!(item["path"][0]["op"], "moveTo");
+        assert_eq!(item["gradient"]["type"], "linear");
+        assert_eq!(item["gradient"]["x1"], 8.0);
+        // `width` is a single-token field — the camelCase rename is identity.
+        assert_eq!(item["width"], 3.0);
+        assert!(
+            item.get("paint").is_none(),
+            "no solid paint on a gradient stroke"
+        );
+    }
+
+    #[test]
+    fn gradient_blend_lowers_and_serializes_to_the_v48_wire_shape() {
+        use crate::display_list::{WebBlendMode, WebGradient, WebGradientStop};
+        // The end-to-end lower → JSON for the C-1.8 blended gradient: the
+        // `fillPathGradientBlend` kind + the tag = "type" gradient + the bare
+        // camelCase blend string.
+        let stops = vec![
+            WebGradientStop {
+                offset: 0.0,
+                r: 1.0,
+                g: 0.0,
+                b: 0.0,
+                a: 1.0,
+            },
+            WebGradientStop {
+                offset: 1.0,
+                r: 0.0,
+                g: 0.0,
+                b: 1.0,
+                a: 1.0,
+            },
+        ];
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::FillGradientBlend {
+            path: RectPt::new(0.0, 0.0, 8.0, 8.0).to_closed_path(),
+            gradient: WebGradient::Radial {
+                cx: 4.0,
+                cy: 4.0,
+                radius: 4.0,
+                stops,
+            },
+            blend: WebBlendMode::Screen,
+        });
+        let out = lower(&dl);
+        let json = serde_json::to_value(&out.layer).unwrap();
+        let item = &json["items"][0];
+        assert_eq!(item["kind"], "fillPathGradientBlend");
+        assert_eq!(item["path"][0]["op"], "moveTo");
+        assert_eq!(item["gradient"]["type"], "radial");
+        assert_eq!(item["gradient"]["radius"], 4.0);
+        assert_eq!(item["blend"], "screen");
+        assert!(
+            item.get("paint").is_none(),
+            "no solid paint on a gradient blend"
+        );
+    }
+
+    #[test]
+    fn cubic_segment_serializes_with_control_point_fields() {
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::FillPath {
+            path: vec![
+                crate::wire::ScenePathSeg::MoveTo { x: 0.0, y: 0.0 },
+                crate::wire::ScenePathSeg::CubicTo {
+                    cx1: 1.0,
+                    cy1: 2.0,
+                    cx2: 3.0,
+                    cy2: 4.0,
+                    x: 5.0,
+                    y: 6.0,
+                },
+                crate::wire::ScenePathSeg::Close,
+            ],
+            paint: ScenePaint::BLACK,
+        });
+        let out = lower(&dl);
+        let json = serde_json::to_value(&out.layer).unwrap();
+        let cubic = &json["items"][0]["path"][1];
+        assert_eq!(cubic["op"], "cubicTo");
+        assert_eq!(cubic["cx1"], 1.0);
+        assert_eq!(cubic["cy2"], 4.0);
+        assert_eq!(cubic["x"], 5.0);
+    }
+}

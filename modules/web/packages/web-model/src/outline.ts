@@ -1,0 +1,84 @@
+/*
+ * This file is part of paged (https://paged.media).
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// The tag OUTLINE scan — the source-side subset of click-to-inspect.
+//
+// The outline is the SOURCE side: it scans the markup for its element tags
+// and exposes, per tag, the exact character range of its OPEN tag in the
+// source. The panel lists those tags; clicking one selects that range in
+// the code editor ("Find in source") and outlines the element's painted
+// box on the canvas — the box comes from the engine's inspected render
+// (inspect.ts), matched by tag and occurrence, the key this list implies.
+//
+// A scanner, not a parser (the `diagnose.ts` discipline): zero deps, no
+// DOM, never crashes on bad input. Void elements and close tags are not
+// emitted (there is no open-tag range to jump to for a `</div>`); each
+// emitted entry is one OPENING tag with its `[sourceStart, sourceEnd)`
+// half-open character offsets into the input string.
+
+/** Same tag grammar as the linter's TAG, so the outline and the
+ *  diagnostics agree on what counts as a tag. */
+const TAG = /<\s*(\/)?\s*([a-zA-Z][a-zA-Z0-9-]*)((?:"[^"]*"|'[^']*'|[^"'>])*?)(\/)?\s*>/g;
+
+export interface TagOutlineEntry {
+  /** Lowercased element tag name (`div`, `h1`, `img`). */
+  tag: string;
+  /** Character offset of the `<` that opens this tag (inclusive). */
+  sourceStart: number;
+  /** Character offset just past the `>` that closes this tag (exclusive)
+   *  — `html.slice(sourceStart, sourceEnd)` is exactly the open tag. */
+  sourceEnd: number;
+  /** 1-based source line of the opening `<` (for a list label / gutter
+   *  parity with the diagnostics lane). */
+  line: number;
+}
+
+function lineOf(html: string, index: number): number {
+  let line = 1;
+  for (let i = 0; i < index && i < html.length; i++) {
+    if (html[i] === "\n") line += 1;
+  }
+  return line;
+}
+
+/**
+ * Scan an HTML fragment for its OPENING element tags, in source order,
+ * each with the character range of the open tag. Close tags (`</div>`)
+ * are skipped (nothing to navigate to). `<script>` open tags ARE
+ * emitted — the author may want to find one to delete it (the linter
+ * flags it; the outline helps locate it). Pure and total: malformed
+ * input yields whatever well-formed tags it can find and never throws.
+ */
+export function tagOutline(html: string): TagOutlineEntry[] {
+  const out: TagOutlineEntry[] = [];
+  if (typeof html !== "string" || html.length === 0) return out;
+  TAG.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = TAG.exec(html)) !== null) {
+    const [whole, closing, rawTag] = m;
+    if (closing) continue; // a close tag has no open-tag range to jump to
+    const tag = rawTag.toLowerCase();
+    const sourceStart = m.index;
+    const sourceEnd = m.index + whole.length;
+    // A void/self-closing element is still ONE opening tag with a
+    // findable range — emitted like any other (the outline is about
+    // where a tag is, not whether it has a body).
+    out.push({ tag, sourceStart, sourceEnd, line: lineOf(html, sourceStart) });
+  }
+  return out;
+}

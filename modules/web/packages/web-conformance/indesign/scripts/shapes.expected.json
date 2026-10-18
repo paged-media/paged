@@ -1,0 +1,44 @@
+{
+ "items": [
+  {
+   "kind": "rectangle",
+   "bounds": [
+    43.5,
+    43.5,
+    73.5,
+    288.75
+   ],
+   "fill": "Color/wb-2a9d8f",
+   "cornerRadius": 9
+  },
+  {
+   "kind": "rectangle",
+   "bounds": [
+    81,
+    43.5,
+    118.5,
+    81
+   ],
+   "fill": "Color/wb-264653",
+   "cornerRadius": 18.75
+  }
+ ],
+ "swatches": [
+  {
+   "name": "Color/wb-2a9d8f",
+   "rgb": [
+    42,
+    157,
+    143
+   ]
+  },
+  {
+   "name": "Color/wb-264653",
+   "rgb": [
+    38,
+    70,
+    83
+   ]
+  }
+ ]
+}
