@@ -28,7 +28,11 @@
 // into its story with the shared pour.
 
 import type { LoweredDoc } from "@paged-media/doc-host-model";
-import { buildStoryBlocks, buildStyleMutations, sectionBlocks } from "@paged-media/doc-host-model";
+import {
+  buildStoryBlocks,
+  buildStyleMutations,
+  sectionBlocks,
+} from "@paged-media/doc-host-model";
 import type { BundleHost, ElementId, Mutation } from "@paged-media/plugin-api";
 
 import type { DocEngine } from "./engine.js";
@@ -81,12 +85,18 @@ export function growRuleOp(storyId: string): Mutation {
  * refuses it; the document stays open, it just does not grow, and the
  * refusal is reported (ADR-007). Returns the story ids that refused.
  */
-export async function setGrowRules(host: BundleHost, storyIds: readonly string[]): Promise<string[]> {
+export async function setGrowRules(
+  host: BundleHost,
+  storyIds: readonly string[],
+): Promise<string[]> {
   if (storyIds.length === 0) return [];
   const ops = storyIds.map(growRuleOp);
   const refused: string[] = [];
   let error: unknown = null;
-  const whole = await host.document.mutate({ op: "batch", args: { ops } } as Mutation);
+  const whole = await host.document.mutate({
+    op: "batch",
+    args: { ops },
+  } as Mutation);
   if (!whole.applied) {
     for (let k = 0; k < ops.length; k++) {
       const one = await host.document.mutate(ops[k]);

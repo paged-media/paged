@@ -10,18 +10,18 @@ The repo is a Cargo workspace and a pnpm workspace side by side. The eight crate
 repo root, not under `crates/`; the two TypeScript packages are under `packages/`. The list
 after the table gives the dependency direction.
 
-| Crate or package | What it owns |
-|---|---|
-| `paged-ooxml` | The format-mechanical OOXML layer; nothing in it is Word-specific. `OpcPackage` reads a package into an ordered list of parts, stored decompressed, and writes it back with every untouched part's bytes unchanged. Beside it: the content-type table, the relationship graph, and `parse_root`, the bridge to the typed part tree of the third-party crate `ooxmlsdk`. |
-| `docx-core` | Plain serde structs for what the plugin reads of a Word document: body blocks (paragraphs, runs, tables), the style catalogue, sections, notes, headers and footers, pictures. Lengths stay in Word's units. Depends on `serde` only. |
-| `docx-import` | `.docx` bytes to `docx-core`. Finds the main document, styles, numbering, settings, footnote, endnote, header and footer parts through the relationship graph, parses them with `ooxmlsdk`, and records where each paragraph and run came from in the source XML. |
-| `docx-lower` | A pure function from `docx-core` to `LoweredDoc` (`docx-lower/src/ir.rs`): swatches, a style catalogue ordered parents first, one story of blocks, the geometry of every section, diagnostics. `sections.rs` decides which Word sections share a native story; `line_height.rs` holds Word's line height per typeface. |
-| `docx-export` | Save-back: the provenance map (`bindings.rs`), the overlay of a read-back story onto the lowering (`overlay.rs`), the differ (`diff.rs`) and the byte patcher (`splice.rs`, `rpr.rs`). |
-| `docx-skeleton` | Writes a minimal IDML package for standalone open, with `zip` and string templates. |
-| `docx-js` | The one `cdylib`. `DocSession` (`docx-js/src/core.rs`) is plain Rust and does the work; `DocEngine` (`docx-js/src/lib.rs`) is compiled only for `wasm32` and forwards to it. |
-| `docx-conformance` | Test-only: builders that assemble `.docx` packages in memory, the recorded answers of Microsoft Word (`fixtures/*.word.json`), and the integration tests. |
-| `packages/doc-host-model` | `@paged-media/doc-host-model`, private. Pure TypeScript: `LoweredDoc` to host mutations (`src/mutations.ts`), and a hand-written TypeScript copy of the IR types (`src/lowered.ts`). |
-| `packages/doc-bundle` | `@paged-media/doc`. The manifest, `activate(host)`, the engine facade, the two entry points, the pour, the outline panel and the menu entry. The only package that touches the host. |
+| Crate or package          | What it owns                                                                                                                                                                                                                                                                                                                                                            |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `paged-ooxml`             | The format-mechanical OOXML layer; nothing in it is Word-specific. `OpcPackage` reads a package into an ordered list of parts, stored decompressed, and writes it back with every untouched part's bytes unchanged. Beside it: the content-type table, the relationship graph, and `parse_root`, the bridge to the typed part tree of the third-party crate `ooxmlsdk`. |
+| `docx-core`               | Plain serde structs for what the plugin reads of a Word document: body blocks (paragraphs, runs, tables), the style catalogue, sections, notes, headers and footers, pictures. Lengths stay in Word's units. Depends on `serde` only.                                                                                                                                   |
+| `docx-import`             | `.docx` bytes to `docx-core`. Finds the main document, styles, numbering, settings, footnote, endnote, header and footer parts through the relationship graph, parses them with `ooxmlsdk`, and records where each paragraph and run came from in the source XML.                                                                                                       |
+| `docx-lower`              | A pure function from `docx-core` to `LoweredDoc` (`docx-lower/src/ir.rs`): swatches, a style catalogue ordered parents first, one story of blocks, the geometry of every section, diagnostics. `sections.rs` decides which Word sections share a native story; `line_height.rs` holds Word's line height per typeface.                                                  |
+| `docx-export`             | Save-back: the provenance map (`bindings.rs`), the overlay of a read-back story onto the lowering (`overlay.rs`), the differ (`diff.rs`) and the byte patcher (`splice.rs`, `rpr.rs`).                                                                                                                                                                                  |
+| `docx-skeleton`           | Writes a minimal IDML package for standalone open, with `zip` and string templates.                                                                                                                                                                                                                                                                                     |
+| `docx-js`                 | The one `cdylib`. `DocSession` (`docx-js/src/core.rs`) is plain Rust and does the work; `DocEngine` (`docx-js/src/lib.rs`) is compiled only for `wasm32` and forwards to it.                                                                                                                                                                                            |
+| `docx-conformance`        | Test-only: builders that assemble `.docx` packages in memory, the recorded answers of Microsoft Word (`fixtures/*.word.json`), and the integration tests.                                                                                                                                                                                                               |
+| `packages/doc-host-model` | `@paged-media/doc-host-model`, private. Pure TypeScript: `LoweredDoc` to host mutations (`src/mutations.ts`), and a hand-written TypeScript copy of the IR types (`src/lowered.ts`).                                                                                                                                                                                    |
+| `packages/doc-bundle`     | `@paged-media/doc`. The manifest, `activate(host)`, the engine facade, the two entry points, the pour, the outline panel and the menu entry. The only package that touches the host.                                                                                                                                                                                    |
 
 - `docx-import` depends on `paged-ooxml` and `docx-core`; `docx-lower` on `docx-core`;
   `docx-export` on `docx-core`, `docx-lower` and `paged-ooxml`; `docx-skeleton` on
@@ -183,18 +183,18 @@ The exporter `media.paged.doc.exporter.docx` runs `exportDocx` in `activate.ts`
 
 ## Host doors
 
-| Door | What the plugin uses it for |
-|---|---|
-| `host.contribute.panel`, `.command`, `.menu` | the "Document outline" panel, one command, one menu entry (skipped when the host has no menu door) |
-| `host.contribute.importer`, `.exporter` | open a `.docx` or `.dotx`; save a `.docx` |
-| `host.contribute.objectType`, `.editContext` | the `wordDocument` type; its double-click edit context names the host's own tools `paged.tool.type` and `paged.tool.select` |
-| `host.document.mutate` | every write: styles, the pour, the text frame, grow rules |
-| `host.document.meta`, `.collection("pages")`, `.hitTest` | the page to place on; the story of the new frame |
-| `host.document.storyContent` | read the edited stories back for save-back |
-| `host.nativeDocument.open` | open the skeleton as the document |
-| `host.parts.write`, `host.document.setMetadata` | store the original file and bind it to a frame |
-| `host.diagnostics.set` | lowering diagnostics on a place (`media.paged.doc`), and the `/styles`, `/open`, `/columns`, `/save-back` keys |
-| `host.shell.pickFile`, `.openPanel`, `host.selection.set`, `host.supports`, `host.log` | pick a file; open the panel; the panel's "Select" button; probing optional doors; logging |
+| Door                                                                                   | What the plugin uses it for                                                                                                 |
+| -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `host.contribute.panel`, `.command`, `.menu`                                           | the "Document outline" panel, one command, one menu entry (skipped when the host has no menu door)                          |
+| `host.contribute.importer`, `.exporter`                                                | open a `.docx` or `.dotx`; save a `.docx`                                                                                   |
+| `host.contribute.objectType`, `.editContext`                                           | the `wordDocument` type; its double-click edit context names the host's own tools `paged.tool.type` and `paged.tool.select` |
+| `host.document.mutate`                                                                 | every write: styles, the pour, the text frame, grow rules                                                                   |
+| `host.document.meta`, `.collection("pages")`, `.hitTest`                               | the page to place on; the story of the new frame                                                                            |
+| `host.document.storyContent`                                                           | read the edited stories back for save-back                                                                                  |
+| `host.nativeDocument.open`                                                             | open the skeleton as the document                                                                                           |
+| `host.parts.write`, `host.document.setMetadata`                                        | store the original file and bind it to a frame                                                                              |
+| `host.diagnostics.set`                                                                 | lowering diagnostics on a place (`media.paged.doc`), and the `/styles`, `/open`, `/columns`, `/save-back` keys              |
+| `host.shell.pickFile`, `.openPanel`, `host.selection.set`, `host.supports`, `host.log` | pick a file; open the panel; the panel's "Select" button; probing optional doors; logging                                   |
 
 After a standalone open the lowering's diagnostics are shown in the panel but not sent to
 `host.diagnostics`. The manifest declares `document` (read `broad`, write `scoped`,
@@ -218,7 +218,7 @@ code uses `readNative` or the declared part type `docLowered`.
   engine ([ADR 604](adr/604-word-is-the-oracle.md)). Two lanes over real Word files are
   ignored by default (`#[ignore = "corpus: docx"]`) and need the private corpus:
   `real_word_corpus.rs` and `poi_corpus.rs`. `PAGED_CORPUS_DIR=<corpus root> cargo nextest
-  run --profile corpus --run-ignored only` runs them (`docs/development/testing.md` at the
+run --profile corpus --run-ignored only` runs them (`docs/development/testing.md` at the
   repository root).
 - TypeScript lane: `pnpm test` runs the import lint, then `bun test` in both packages;
   `.github/workflows/vitest.yml` adds a typecheck and a manifest check with the published
