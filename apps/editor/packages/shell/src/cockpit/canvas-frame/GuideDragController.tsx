@@ -400,7 +400,6 @@ export function GuideDragController() {
     // Listeners read the live drag / preview-resolver / settle through
     // refs, so they bind exactly once per drag (mount/unmount on
     // dragActive).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dragActive, updateDrag, clearDrag]);
 
   return null;

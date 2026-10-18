@@ -530,7 +530,6 @@ export function ThreadingController() {
     return off;
     // `elementGeometry` is read through `geomRef`; list it so a
     // selection change re-runs the resolve.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client, refreshOverset, refreshChain, elementGeometry]);
 
   return null;
