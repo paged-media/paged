@@ -100,7 +100,7 @@ jobs:
       # Fail BEFORE building when the sources changed but the version did
       # not: the publish below would skip it and ship nothing.
       - name: version bumped when the sources changed
-        run: node scripts/package-hash.mjs --check
+        run: bun scripts/package-hash.mjs --check
       - name: build wasm (stamps bin/SOURCE_HASH)
         run: bash scripts/build-wasm.sh --engine
       # One install for the whole root workspace (bun.lock).
@@ -116,7 +116,7 @@ jobs:
           REQUIRE_REAL_ENGINE: "1"
       - run: bun run --filter './packages/*' build
       - name: stamp bin/PACKAGE_HASH (read by the next run's bump check)
-        run: node scripts/package-hash.mjs --stamp
+        run: bun scripts/package-hash.mjs --stamp
       - name: publish via OIDC (canary)
         run: |
           set -e
@@ -127,7 +127,7 @@ jobs:
               echo "skip $name@$version (already published)"; continue
             fi
             tgz="$RUNNER_TEMP/$(echo "$name" | sed 's#@##; s#/#-#')-${version}.tgz"
-            node "$GITHUB_WORKSPACE/tooling/js/pack.mjs" "$dir" "$RUNNER_TEMP" >/dev/null
+            bun "$GITHUB_WORKSPACE/tooling/js/pack.mjs" "$dir" "$RUNNER_TEMP" >/dev/null
             echo "publish $name@$version via OIDC"
             npm publish "$tgz" --tag canary --access public
           done

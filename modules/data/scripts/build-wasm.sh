@@ -24,7 +24,7 @@ BUDGET=$((100 * 1000 * 1000))
 # Stamp the source hash into the wasm (option_env!, which cargo tracks)
 # and beside it, so packages/data-bundle/test/wasm-fresh.spec.ts can tell
 # a wasm built from these sources from one built from older ones.
-SOURCE_HASH=$(node scripts/source-hash.mjs)
+SOURCE_HASH=$(bun scripts/source-hash.mjs)
 DATA_JS_SOURCE_HASH=$SOURCE_HASH \
   cargo build --release --target wasm32-unknown-unknown -p data-js
 

@@ -36,10 +36,15 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, setDefaultTimeout } from "bun:test";
 
 // @ts-expect-error — a plain .mjs script with no type declarations.
 import { sourceHash } from "../../../scripts/source-hash.mjs";
+
+// The hash walks the module's Rust sources synchronously. Warm that is a few
+// milliseconds; the first read of a cold checkout, with every test worker
+// reading at once, has taken several seconds on a developer machine.
+setDefaultTimeout(30_000);
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BIN = join(HERE, "..", "bin");

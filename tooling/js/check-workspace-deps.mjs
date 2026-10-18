@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Every first-party dependency goes through the workspace.
 //
-//   node tooling/js/check-workspace-deps.mjs
+//   bun tooling/js/check-workspace-deps.mjs
 //
 // The packages of the root Bun workspace (/package.json `workspaces`) reach
 // each other through `workspace:` specifiers, and nothing first-party is

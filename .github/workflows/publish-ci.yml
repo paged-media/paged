@@ -173,7 +173,7 @@ jobs:
           set -e
           for m in packages/*/manifest.json; do
             echo "== validate $m =="
-            node "$GITHUB_WORKSPACE/platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs" validate "$m"
+            bun "$GITHUB_WORKSPACE/platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs" validate "$m"
           done
 
   # Test evidence — the suites this repo has always had and CI never ran.

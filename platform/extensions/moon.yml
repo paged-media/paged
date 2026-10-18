@@ -37,7 +37,7 @@ tasks:
   catalog-check:
     description: 'The vendored capability catalog matches engine/core (scripts/sync-catalog.mjs --check).'
     toolchains: ['system']
-    command: 'node scripts/sync-catalog.mjs --check'
+    command: 'bun scripts/sync-catalog.mjs --check'
     inputs:
       - 'scripts/sync-catalog.mjs'
       - 'packages/plugin-api/src/catalog.json'
