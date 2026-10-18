@@ -7,22 +7,18 @@ concurrency:
 
 # Editor Playwright surface → state-matrix evidence (W0.5).
 #
-# Decision-B model: the engine wasm ships in the published
-# `@paged-media/canvas-wasm` package, so `bun install` is the whole
-# engine setup — no `core` checkout, no build-from-source bridge. The
-# vite dev server (spawned by playwright.config's `webServer`) sets the
-# COOP/COEP headers SharedArrayBuffer needs; that middleware runs in the
-# server process and works headless, so the chromium runner gets a
+# Workspace model: the editor depends on the engine's wasm packages
+# (engine/core/packages/*), every module bundle, the extension contract and
+# ai through `workspace:*`, and consumes them from this checkout. Their build
+# outputs are gitignored, so the jobs build them first:
+# .github/actions/engine-wasm fills the engine's packages and
+# .github/actions/module-wasm the bundles whose engine wasm is a build output
+# (doc, slide, sheet, data, web; draw, image and pdf commit theirs). Both
+# restore from actions/cache when their sources are unchanged. The vite dev
+# server (spawned by playwright.config's `webServer`) sets the COOP/COEP
+# headers SharedArrayBuffer needs; that middleware runs in the server
+# process and works headless, so the chromium runner gets a
 # cross-origin-isolated context with no extra flags.
-#
-# Plugin bundles: `apps/canvas/package.json` consumes every plugin package
-# (@paged-media/plugin-api, plugin-sdk, draw, web, data, sheet, image,
-# publish, pdf) as PUBLISHED npm versions — the historical pnpm `link:`
-# sibling chain is gone, so `bun install` at the root alone resolves all
-# plugins with no sibling checkouts (doc and slide are workspace packages).
-# (The link:-era sibling checkout/install lattice — and the
-# build-image-wasm artifact lane — are gone: every published bundle is
-# self-contained, @paged-media/image ships its own wasm.)
 #
 # Scope: the behaviour surface (panels + gesture + e2e op-sandwiches),
 # NOT the Envato fidelity gate. That gate needs the 4.4 GB
@@ -71,11 +67,23 @@ on:
     branches: [main]
     paths:
       - "apps/editor/**"
-      - "modules/doc/**"
-      - "modules/slide/**"
-      - "engine/core/crates/paged-gen/**"
-      - ".github/actions/plugin-doc-from-source/**"
-      - ".github/actions/plugin-slide-from-source/**"
+      # Everything the editor consumes through the workspace: every module
+      # bundle (and the Rust it builds its wasm from), the extension
+      # contract and ai, and the engine's wasm packages with what builds
+      # them (paged-gen, the fixture generator, is under crates/ too).
+      - "modules/**"
+      - "platform/extensions/packages/**"
+      - "engine/core/crates/**"
+      - "engine/core/Cargo.*"
+      - "engine/core/rust-toolchain.toml"
+      - "engine/core/scripts/build-wasm-packages.sh"
+      - "engine/core/packages/**"
+      - ".cargo/config.toml"
+      - "tooling/bootstrap.sh"
+      - "tooling/js/check-workspace-deps.mjs"
+      - ".github/actions/engine-wasm/**"
+      - ".github/actions/module-wasm/**"
+      - ".github/actions/wasm-tools/**"
       - ".github/workflows/editor-tests.yml"
       - "bun.lock"
       - "bunfig.toml"
@@ -89,11 +97,23 @@ on:
       - "apps/editor/package.json"
       - "apps/editor/eslint.config.mjs"
       - "apps/editor/scripts/**"
-      - "modules/doc/**"
-      - "modules/slide/**"
-      - "engine/core/crates/paged-gen/**"
-      - ".github/actions/plugin-doc-from-source/**"
-      - ".github/actions/plugin-slide-from-source/**"
+      # Everything the editor consumes through the workspace: every module
+      # bundle (and the Rust it builds its wasm from), the extension
+      # contract and ai, and the engine's wasm packages with what builds
+      # them (paged-gen, the fixture generator, is under crates/ too).
+      - "modules/**"
+      - "platform/extensions/packages/**"
+      - "engine/core/crates/**"
+      - "engine/core/Cargo.*"
+      - "engine/core/rust-toolchain.toml"
+      - "engine/core/scripts/build-wasm-packages.sh"
+      - "engine/core/packages/**"
+      - ".cargo/config.toml"
+      - "tooling/bootstrap.sh"
+      - "tooling/js/check-workspace-deps.mjs"
+      - ".github/actions/engine-wasm/**"
+      - ".github/actions/module-wasm/**"
+      - ".github/actions/wasm-tools/**"
       - ".github/workflows/editor-tests.yml"
       - "bun.lock"
       - "bunfig.toml"
@@ -124,7 +144,9 @@ jobs:
   checks:
     name: checks (lint + boundaries + boot-coi + thresholds)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # Seconds of checks; a cold engine or module wasm build (a cache miss)
+    # takes the rest.
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
 
@@ -144,6 +166,52 @@ jobs:
       - name: bun install (root workspace)
         working-directory: .
         run: bun install --frozen-lockfile
+
+      # Nothing first-party resolves from npm: every manifest names the
+      # workspace packages with `workspace:`, and bun.lock resolves them to
+      # the workspace.
+      - name: first-party packages come from the workspace
+        working-directory: .
+        run: node tooling/js/check-workspace-deps.mjs
+
+      # The engine's wasm packages and the bundles' engine wasm: the
+      # typecheck reads canvas-wasm's .d.ts, and the wasm budget and the
+      # module door measure the wasm the app ships.
+      - name: engine wasm packages
+        uses: ./.github/actions/engine-wasm
+      - name: module wasm (doc)
+        uses: ./.github/actions/module-wasm
+        with: { module: doc }
+      - name: module wasm (slide)
+        uses: ./.github/actions/module-wasm
+        with: { module: slide }
+      - name: module wasm (sheet)
+        uses: ./.github/actions/module-wasm
+        with: { module: sheet }
+      - name: module wasm (data)
+        uses: ./.github/actions/module-wasm
+        with: { module: data }
+      - name: module wasm (web)
+        uses: ./.github/actions/module-wasm
+        with: { module: web }
+
+      # The editor's typecheck. It ran only in the Playwright job, after the
+      # private corpus checkout, which a missing repository secret stops;
+      # here it gates every run. The packages/* have no build step (they
+      # are consumed as workspace TS source).
+      - name: typecheck canvas app
+        run: bun run --filter ./apps/canvas typecheck
+
+      # The TEST TREE, which was outside every static gate until
+      # 2026-08-24. `apps/canvas/tsconfig.json` includes only `src` and
+      # `vite.config.ts`, so several hundred Playwright specs compiled
+      # nowhere and the first thing able to notice a broken one was the
+      # runner. That cost a red main: a CLEAN auto-merge (no conflict on
+      # either side) deleted a `const after = …` in one commit while
+      # another added a line that read it, and typecheck + build both
+      # passed on code that could not run.
+      - name: typecheck canvas tests
+        run: bun run --filter ./apps/canvas typecheck:tests
 
       # ESLint architecture boundaries (eslint.config.mjs is boundaries-only,
       # not style) + the fixtures proving each zone actually fires.
@@ -172,6 +240,12 @@ jobs:
       # from the page summaries (engine 0.71.13) or the older fallback.
       - name: pasteboard placement (spread pages)
         run: bun run test:spread-pages
+
+      # The local library (ADR 225) against the repository wasm of this
+      # revision: import, versions, restore, history in and out. Its
+      # server tests (remote.test.ts) skip without PAGED_SERVER_URL.
+      - name: local library (packages/repository)
+        run: bun run test:repository
 
       # Every gated fidelity pack must carry a threshold entry, or the
       # fidelity gate silently skips it.
@@ -343,9 +417,8 @@ jobs:
       #
       # Provision them by building the `paged-gen` fixture generator from
       # the in-tree engine (engine/core) and emitting every sample into
-      # corpus/idml/generated. It does NOT touch the Decision-B *wasm*
-      # boundary (the engine still arrives as the published npm package —
-      # this only generates test fixtures).
+      # corpus/idml/generated. It only generates test fixtures; the engine's
+      # wasm comes from the engine-wasm step below.
       #
       # Pre-monorepo this was an UNPINNED checkout of paged-media/core's
       # default branch, with an ordering coupling (a core change had to be
@@ -359,10 +432,8 @@ jobs:
         if: runner.os == 'Linux'
         uses: rui314/setup-mold@v1
 
-      # Covers BOTH rust builds this job does: paged-gen (fixtures) and the
-      # paged.doc engine wasm. Without plugin-doc/target in here the doc
-      # wasm is a cold release build of a vendored-ooxmlsdk workspace on
-      # every single run — the thing this cache exists to prevent.
+      # paged-gen's build. The engine and module wasm builds have caches of
+      # their own (the engine-wasm and module-wasm actions).
       - name: cache cargo + paged-gen build
         uses: actions/cache@v4
         with:
@@ -371,7 +442,6 @@ jobs:
             ~/.cargo/git
             ~/.cargo/bin
             engine/core/target
-            modules/doc/target
           key: paged-rust-${{ runner.os }}-${{ hashFiles('engine/core/Cargo.lock') }}
           restore-keys: paged-rust-${{ runner.os }}-
 
@@ -430,41 +500,35 @@ jobs:
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
           restore-keys: bun-${{ runner.os }}-
 
-      # The engine wasm and every plugin bundle resolve from npm, except
-      # @paged-media/doc and @paged-media/slide: the editor depends on the
-      # workspace packages modules/doc and modules/slide (`workspace:*`).
-      - name: install (root workspace; engine wasm + plugin bundles from npm)
+      # One install for the whole root workspace (bun.lock).
+      - name: install (root workspace)
         working-directory: .
         run: bun install --frozen-lockfile
 
-      # Their wasm is a build output (gitignored), so the shared stopgap
-      # actions build it. DROP them when the editor no longer consumes a
-      # build output of modules/doc and modules/slide.
-      - name: plugin-doc from source (in-tree modules/doc)
-        uses: ./.github/actions/plugin-doc-from-source
-      - name: plugin-slide from source (in-tree modules/slide)
-        uses: ./.github/actions/plugin-slide-from-source
-
-      # The Playwright surface runs against the vite DEV server
-      # (playwright.config `webServer: npx vite`), so no production build
-      # is needed — but typecheck the canvas app so a wire/type break
-      # fails fast here rather than as an opaque runtime error mid-suite.
-      # (`bun run build` is avoided: the `packages/*` have no build step
-      # — they're consumed as workspace TS source — and `apps/devtools`
-      # would pull in the unrelated introspect-wasm build.)
-      - name: typecheck canvas app
-        run: bun run --filter ./apps/canvas typecheck
-
-      # The TEST TREE, which was outside every static gate until
-      # 2026-08-24. `apps/canvas/tsconfig.json` includes only `src` and
-      # `vite.config.ts`, so several hundred Playwright specs compiled
-      # nowhere and the first thing able to notice a broken one was the
-      # runner. That cost a red main: a CLEAN auto-merge (no conflict on
-      # either side) deleted a `const after = …` in one commit while
-      # another added a line that read it, and typecheck + build both
-      # passed on code that could not run.
-      - name: typecheck canvas tests
-        run: bun run --filter ./apps/canvas typecheck:tests
+      # The engine and the bundles' engine wasm, as in `checks` (restored
+      # from the cache that job, or an earlier run, saved). The Playwright
+      # surface runs against the vite DEV server (playwright.config
+      # `webServer: npx vite`), whose import analysis resolves sheet's,
+      # web's and doc's `../bin/<glue>.js` at transform time. The typecheck
+      # runs in `checks`.
+      - name: engine wasm packages
+        uses: ./.github/actions/engine-wasm
+        with: { artifact: "false" }
+      - name: module wasm (doc)
+        uses: ./.github/actions/module-wasm
+        with: { module: doc }
+      - name: module wasm (slide)
+        uses: ./.github/actions/module-wasm
+        with: { module: slide }
+      - name: module wasm (sheet)
+        uses: ./.github/actions/module-wasm
+        with: { module: sheet }
+      - name: module wasm (data)
+        uses: ./.github/actions/module-wasm
+        with: { module: data }
+      - name: module wasm (web)
+        uses: ./.github/actions/module-wasm
+        with: { module: web }
 
       # NO `--with-deps`. That flag shells out to `apt-get update` as root,
       # and on the ubuntu-24.04 runner that hangs: azure.archive.ubuntu.com

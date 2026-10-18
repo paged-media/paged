@@ -40,6 +40,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [222](222-code-split-plugin-bundles.md) | Plugin bundles are code-split; PDF loads on first import | Accepted 2026-10-11 |
 | [223](223-the-module-door.md) | The editor answers the module door from a build-time module manifest | Accepted 2026-10-11 |
 | [224](224-films-are-recorded-by-the-editor.md) | The paged.media films are recorded by the editor's own test runner | Accepted 2026-10-12 |
+| [225](225-the-local-library.md) | The local library: open is an import, save is a version | Proposed 2026-10-17 |
 
 Decisions made in other repositories that this editor's code rests on are listed in
 [`../README.md`](../README.md). Comments in the source also cite ADR 025 (the journal) and

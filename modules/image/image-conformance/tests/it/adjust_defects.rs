@@ -47,7 +47,7 @@ fn constant(w: u32, h: u32) -> DecodedImage {
 /// Worst per-channel distance from the constant colour, and where.
 fn worst(out: &[u8], w: u32) -> (u8, u32, u32) {
     let mut worst = (0u8, 0u32, 0u32);
-    for (i, p) in out.chunks_exact(4).enumerate() {
+    for (i, p) in out.as_chunks::<4>().0.iter().enumerate() {
         let d = (0..4).map(|c| p[c].abs_diff(COLOUR[c])).max().unwrap_or(0);
         if d > worst.0 {
             worst = (d, i as u32 % w, i as u32 / w);

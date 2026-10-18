@@ -268,7 +268,9 @@ impl PaintMode<'_> {
 /// tolerance to get wrong.
 pub fn window_is_opaque(f16_bytes: &[u8]) -> bool {
     f16_bytes
-        .chunks_exact(8)
+        .as_chunks::<8>()
+        .0
+        .iter()
         .all(|t| f16::from_le_bytes([t[6], t[7]]).to_f32() == 1.0)
 }
 

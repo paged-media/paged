@@ -9,27 +9,33 @@ concurrency:
 # Cloudflare Pages at play.paged.media — the real editor that the docs and
 # paged.media embed.
 #
-# The editor consumes the engine and the plugin bundles as PUBLISHED
-# @paged-media packages — except @paged-media/doc and @paged-media/slide, the
-# workspace packages modules/doc and modules/slide. So, like editor-tests.yml,
-# the shared stopgap actions build their wasm. Without that every
-# deploy since July failed on
-# "Cannot find module '@paged-media/doc'". DROP the stopgap once the package
-# publishes and a pin replaces the link.
+# The editor consumes the engine and every plugin bundle as workspace
+# packages (`workspace:*`), so the engine-wasm and module-wasm actions build
+# their wasm (or restore it from the cache) before the build.
 #
 # MONOREPO (step A3): ported from paged-media/editor .github/workflows/
-# playground.yml. One repository checkout at the root; the doc/slide link
-# targets are the in-tree modules/doc and modules/slide, built by the two
-# composite actions — so a change there redeploys the playground too.
+# playground.yml. One repository checkout at the root; a change to anything
+# the editor consumes redeploys the playground too.
 on:
   push:
     branches: [main]
     paths:
       - "apps/editor/**"
-      - "modules/doc/**"
-      - "modules/slide/**"
-      - ".github/actions/plugin-doc-from-source/**"
-      - ".github/actions/plugin-slide-from-source/**"
+      # Everything the editor consumes through the workspace (see
+      # editor-tests.yml): the module bundles, the extension contract and
+      # ai, and the engine's wasm packages with what builds them.
+      - "modules/**"
+      - "platform/extensions/packages/**"
+      - "engine/core/crates/**"
+      - "engine/core/Cargo.*"
+      - "engine/core/rust-toolchain.toml"
+      - "engine/core/scripts/build-wasm-packages.sh"
+      - "engine/core/packages/**"
+      - ".cargo/config.toml"
+      - "tooling/bootstrap.sh"
+      - ".github/actions/engine-wasm/**"
+      - ".github/actions/module-wasm/**"
+      - ".github/actions/wasm-tools/**"
       - ".github/workflows/editor-playground.yml"
       - "bun.lock"
       - "bunfig.toml"
@@ -53,20 +59,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: rust toolchain (for the paged.doc engine wasm)
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: cache cargo + plugin-doc build
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            ~/.cargo/bin
-            modules/doc/target
-          key: playground-rust-${{ runner.os }}-${{ github.sha }}
-          restore-keys: playground-rust-${{ runner.os }}-
-
       # Bun and Node at the versions in /.prototools, installed by proto.
       - uses: moonrepo/setup-toolchain@v0.6.4
         with:
@@ -83,10 +75,27 @@ jobs:
         working-directory: .
         run: bun install --frozen-lockfile
 
-      - name: plugin-doc from source (in-tree modules/doc)
-        uses: ./.github/actions/plugin-doc-from-source
-      - name: plugin-slide from source (in-tree modules/slide)
-        uses: ./.github/actions/plugin-slide-from-source
+      # The engine's wasm packages and the bundles' engine wasm (build
+      # outputs; the editor consumes the workspace packages). Vite resolves
+      # sheet's, web's and doc's `../bin/<glue>.js` at build time.
+      - name: engine wasm packages
+        uses: ./.github/actions/engine-wasm
+        with: { artifact: "false" }
+      - name: module wasm (doc)
+        uses: ./.github/actions/module-wasm
+        with: { module: doc }
+      - name: module wasm (slide)
+        uses: ./.github/actions/module-wasm
+        with: { module: slide }
+      - name: module wasm (sheet)
+        uses: ./.github/actions/module-wasm
+        with: { module: sheet }
+      - name: module wasm (data)
+        uses: ./.github/actions/module-wasm
+        with: { module: data }
+      - name: module wasm (web)
+        uses: ./.github/actions/module-wasm
+        with: { module: web }
 
       # PAGED_MODULES_HOSTED: the module door (ADR 223) answers the module
       # host, because the next step hosts every module the build lists.

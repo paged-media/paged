@@ -345,25 +345,22 @@ fn scan(xml: &[u8]) -> Result<Vec<Node>, quick_xml::Error> {
             }
             Event::End(_) => {
                 enclosing.pop();
-                if open.last().is_some_and(|f| f.depth == depth) {
-                    let mut frame = open.pop().expect("guarded by is_some_and");
+                if let Some(mut frame) = open.pop_if(|f| f.depth == depth) {
                     frame.node.end = after;
                     attach(&mut open, &mut roots, frame.node);
                 }
                 depth = depth.saturating_sub(1);
             }
-            Event::Empty(e) => {
-                if is_page_item_name(e.name().as_ref()) {
-                    let node = Node {
-                        id: attr_value(&e, b"Self"),
-                        is_group: e.name().as_ref() == b"Group",
-                        start: pos,
-                        end: after,
-                        parent: enclosing.last().copied().unwrap_or(usize::MAX),
-                        children: Vec::new(),
-                    };
-                    attach(&mut open, &mut roots, node);
-                }
+            Event::Empty(e) if is_page_item_name(e.name().as_ref()) => {
+                let node = Node {
+                    id: attr_value(&e, b"Self"),
+                    is_group: e.name().as_ref() == b"Group",
+                    start: pos,
+                    end: after,
+                    parent: enclosing.last().copied().unwrap_or(usize::MAX),
+                    children: Vec::new(),
+                };
+                attach(&mut open, &mut roots, node);
             }
             _ => {}
         }
@@ -411,10 +408,8 @@ mod tests {
             let event = reader.read_event_into(&mut buf).expect("well-formed");
             match event {
                 Event::Eof => break,
-                Event::Start(e) | Event::Empty(e) => {
-                    if is_page_item_name(e.name().as_ref()) {
-                        out.push(attr_value(&e, b"Self").unwrap_or_else(|| "<anon>".to_string()));
-                    }
+                Event::Start(e) | Event::Empty(e) if is_page_item_name(e.name().as_ref()) => {
+                    out.push(attr_value(&e, b"Self").unwrap_or_else(|| "<anon>".to_string()));
                 }
                 _ => {}
             }

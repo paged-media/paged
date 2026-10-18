@@ -497,7 +497,7 @@ impl AdjustParams {
         ];
         w.extend(
             self.curve_lut
-                .map_or([0u8; 256], |l| l)
+                .unwrap_or([0u8; 256])
                 .iter()
                 .map(|&v| f32::from(v)),
         );
@@ -660,7 +660,7 @@ impl DecodedImage {
                 let dst = &mut out[row * len..(row + 1) * len];
                 for (d, s) in dst
                     .iter_mut()
-                    .zip(raw[src_off..src_off + len * 2].chunks_exact(2))
+                    .zip(raw[src_off..src_off + len * 2].as_chunks::<2>().0)
                 {
                     *d = u16::from_ne_bytes([s[0], s[1]]).to_be_bytes()[0];
                 }
@@ -773,7 +773,7 @@ fn decode_psd_cmyk(file: &PsdFile) -> Result<DecodedImage, image_psd::PsdError> 
     let ink = psd_ink_transform(file);
     let mut rgba = ink.to_rgba8(&composite.cmyk);
     if let Some(alpha) = &composite.alpha {
-        for (px, &a) in rgba.chunks_exact_mut(4).zip(alpha) {
+        for (px, &a) in rgba.as_chunks_mut::<4>().0.iter_mut().zip(alpha) {
             px[3] = a;
         }
     }
@@ -871,7 +871,9 @@ fn decode_source<S: ImageSource>(
         // Straight through: `buf` already holds native-endian u16
         // pairs, which is exactly what `Pixels` stores at `U16`.
         let samples: Vec<u16> = buf
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .map(|p| u16::from_ne_bytes([p[0], p[1]]))
             .collect();
         let px = crate::pixels::Pixels::from_rgba16(&samples);
@@ -905,7 +907,7 @@ fn decode_source<S: ImageSource>(
         }
         ChannelLayout::GrayA => {
             let mut v = Vec::with_capacity(n * 4);
-            for px in buf.chunks_exact(2) {
+            for px in buf.as_chunks::<2>().0 {
                 v.extend_from_slice(&[px[0], px[0], px[0], px[1]]);
             }
             v
@@ -1128,7 +1130,7 @@ fn apply_curve_lut_f16(
     width: u32,
     height: u32,
 ) {
-    for (i, texel) in pixels.chunks_exact_mut(8).enumerate() {
+    for (i, texel) in pixels.as_chunks_mut::<8>().0.iter_mut().enumerate() {
         let cov = match selection {
             Some(c) => {
                 let x = (i as u32) % width;
@@ -1453,7 +1455,7 @@ pub fn apply_curve_lut(pixels: &mut [u8], lut: &[u8; 256]) {
 
 /// [`apply_curve_lut`] with one table per channel (red, green, blue).
 pub fn apply_curve_luts(pixels: &mut [u8], luts: &[[u8; 256]; 3]) {
-    for px in pixels.chunks_exact_mut(4) {
+    for px in pixels.as_chunks_mut::<4>().0 {
         px[0] = luts[0][px[0] as usize];
         px[1] = luts[1][px[1] as usize];
         px[2] = luts[2][px[2] as usize];
@@ -1482,7 +1484,7 @@ pub fn apply_curve_luts_masked(
         apply_curve_luts(pixels, luts);
         return;
     }
-    for (i, px) in pixels.chunks_exact_mut(4).enumerate() {
+    for (i, px) in pixels.as_chunks_mut::<4>().0.iter_mut().enumerate() {
         let m = coverage.data()[i] as u16;
         if m == 0 {
             continue;

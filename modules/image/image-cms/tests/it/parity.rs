@@ -156,8 +156,10 @@ fn image_cms_core_consistency_identity_srgb_near_identity() {
 
     let mut max_rgb_dev: u8 = 0;
     for (i, (out, inp)) in pixels
-        .chunks_exact(4)
-        .zip(original.chunks_exact(4))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(original.as_chunks::<4>().0)
         .enumerate()
     {
         for c in 0..3 {
@@ -220,11 +222,22 @@ fn image_cms_core_consistency_lcms2_qcms_per_channel() {
         .expect("lcms2 transform");
 
         let ramp = patch_ramp();
-        let rgb_in: Vec<[u8; 3]> = ramp.chunks_exact(4).map(|p| [p[0], p[1], p[2]]).collect();
+        let rgb_in: Vec<[u8; 3]> = ramp
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|p| [p[0], p[1], p[2]])
+            .collect();
         let mut rgb_out = vec![[0u8; 3]; rgb_in.len()];
         lt.transform_pixels(&rgb_in, &mut rgb_out);
 
-        for (i, (q, l)) in qcms_out.chunks_exact(4).zip(rgb_out.iter()).enumerate() {
+        for (i, (q, l)) in qcms_out
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .zip(rgb_out.iter())
+            .enumerate()
+        {
             for c in 0..3 {
                 let dev = q[c].abs_diff(l[c]);
                 if dev > worst.0 {

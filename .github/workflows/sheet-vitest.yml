@@ -16,6 +16,20 @@ on:
     branches: [main]
     paths:
       - "modules/sheet/**"
+      # The extension contract the bundle builds against (workspace:*).
+      - "platform/extensions/packages/plugin-api/**"
+      - "platform/extensions/packages/plugin-sdk/**"
+      # The engine wasm packages this workflow builds against (workspace:*),
+      # and what builds them, so an engine change re-tests its consumers.
+      - "engine/core/crates/**"
+      - "engine/core/Cargo.*"
+      - "engine/core/rust-toolchain.toml"
+      - "engine/core/scripts/build-wasm-packages.sh"
+      - "engine/core/packages/**"
+      - ".cargo/config.toml"
+      - "tooling/bootstrap.sh"
+      - ".github/actions/engine-wasm/**"
+      - ".github/actions/wasm-tools/**"
       - ".github/workflows/sheet-vitest.yml"
       - "bun.lock"
       - "bunfig.toml"
@@ -27,6 +41,20 @@ on:
   pull_request:
     paths:
       - "modules/sheet/**"
+      # The extension contract the bundle builds against (workspace:*).
+      - "platform/extensions/packages/plugin-api/**"
+      - "platform/extensions/packages/plugin-sdk/**"
+      # The engine wasm packages this workflow builds against (workspace:*),
+      # and what builds them, so an engine change re-tests its consumers.
+      - "engine/core/crates/**"
+      - "engine/core/Cargo.*"
+      - "engine/core/rust-toolchain.toml"
+      - "engine/core/scripts/build-wasm-packages.sh"
+      - "engine/core/packages/**"
+      - ".cargo/config.toml"
+      - "tooling/bootstrap.sh"
+      - ".github/actions/engine-wasm/**"
+      - ".github/actions/wasm-tools/**"
       - ".github/workflows/sheet-vitest.yml"
       - "bun.lock"
       - "bunfig.toml"
@@ -62,7 +90,7 @@ jobs:
       # REQUIRE_REAL_ENGINE=1 below makes a missing artifact FAIL, not skip.
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.93.0
+          toolchain: 1.99.1
           targets: wasm32-unknown-unknown
       - name: mold (the Rust linker on Linux, .cargo/config.toml)
         if: runner.os == 'Linux'
@@ -88,6 +116,10 @@ jobs:
       - name: real-engine artifact guard (fail, never skip)
         run: test -f packages/sheet-bundle/bin/sheet_js_bg.wasm
       # ------------------------------------------------------------------
+      # The engine's wasm packages (canvas-wasm and the rest, workspace:*),
+      # which the real-engine specs boot.
+      - name: engine wasm packages
+        uses: ./.github/actions/engine-wasm
       # One install for the whole root workspace (bun.lock).
       - name: bun install (root workspace)
         working-directory: .

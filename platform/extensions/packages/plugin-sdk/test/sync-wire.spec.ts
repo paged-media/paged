@@ -169,6 +169,30 @@ describe("sync-wire: --check", () => {
     expect(res.reason).toMatch(/not resolvable|--source/);
   });
 
+  it("a build on another host (closure trampoline names) is not drift; a changed signature is", () => {
+    // wasm-bindgen names its closure trampolines after rustc symbol hashes,
+    // which differ between a macOS and a Linux build of one revision, and so
+    // does their order.
+    const trampoline = (hash: string, sig: string) =>
+      `    readonly wasm_bindgen__convert__closures_____invoke__h${hash}: ${sig};\n`;
+    const initOutput = (...lines: string[]) => `export interface InitOutput {\n${lines.join("")}}\n`;
+    const two = "(a: number, b: number) => void";
+    const one = "(a: number) => void";
+    writePackage("0.34.0", DTS_BODY + initOutput(trampoline("1111111111111111", two), trampoline("2222222222222222", one)));
+    const target = join(tmp, "wire.d.ts");
+    writeFileSync(target, buildVendored(resolveSource({ resolveFrom: tmp })));
+
+    // Same signatures under other hashes, in another order: in sync.
+    writePackage("0.34.0", DTS_BODY + initOutput(trampoline("bbbbbbbbbbbbbbbb", one), trampoline("aaaaaaaaaaaaaaaa", two)));
+    expect(checkVendored({ resolveFrom: tmp, target }).ok).toBe(true);
+
+    // A trampoline whose signature changed is drift.
+    writePackage("0.34.0", DTS_BODY + initOutput(trampoline("aaaaaaaaaaaaaaaa", "(a: number, b: number, c: any) => void"), trampoline("bbbbbbbbbbbbbbbb", one)));
+    const res = checkVendored({ resolveFrom: tmp, target });
+    expect(res.ok).toBe(false);
+    expect(res.reason).toMatch(/drift/);
+  });
+
   it("VERSION-stamp drift FAILS even when the body is byte-identical", () => {
     // Vendor against 0.34.0, then bump the installed package to 0.35.0
     // with the SAME .d.ts body — the protocol-coupling stamp must catch

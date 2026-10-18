@@ -1,6 +1,7 @@
-# Pinned for reproducible local + CI builds — the paged.image pin, so the
-# two plugin wasm lanes build on the same toolchain.
+# Pinned for reproducible local + CI builds. Every Cargo workspace in this
+# repository pins the same stable toolchain. The CI workflows name it too
+# (dtolnay/rust-toolchain does not read this file), so bump them together.
 [toolchain]
-channel = "1.93.0"
+channel = "1.99.1"
 targets = ["wasm32-unknown-unknown"]
 components = ["rustfmt", "clippy"]

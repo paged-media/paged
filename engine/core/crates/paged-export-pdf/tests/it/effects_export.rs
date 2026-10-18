@@ -83,7 +83,7 @@ fn all_content(doc: &lopdf::Document) -> String {
     for (_, page_id) in doc.get_pages() {
         out.extend(doc.get_page_content(page_id).unwrap_or_default());
     }
-    for (_, obj) in doc.objects.iter() {
+    for obj in doc.objects.values() {
         if let Ok(stream) = obj.as_stream() {
             if let Ok(data) = stream.decompressed_content() {
                 out.extend(data);

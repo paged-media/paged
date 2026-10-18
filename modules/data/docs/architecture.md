@@ -9,7 +9,7 @@ except that `src/…` is short for `packages/data-bundle/src/…`.
 ## Layout
 
 - A Cargo workspace of 13 crates. They sit at the repo root, not under `crates/`. The
-  toolchain is pinned to Rust 1.93.0 (`rust-toolchain.toml`); no crate is published.
+  toolchain is pinned to Rust 1.99.1 (`rust-toolchain.toml`); no crate is published.
 - A pnpm workspace with two TypeScript packages under `packages/`.
 - `registry/`: YAML. The 42 rows in `functions/`, one per expression function, are read by
   the two `build.rs` scripts. The 73 rows in `features/` are read by the `coverage-gate`

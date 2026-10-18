@@ -57,7 +57,7 @@
     }
   },
   "peerDependencies": {
-    "@paged-media/plugin-api": ">=0.2.48-canary.0"
+    "@paged-media/plugin-api": "workspace:*"
   },
   "peerDependenciesMeta": {
     "@paged-media/plugin-api": {

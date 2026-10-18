@@ -21,6 +21,11 @@ on:
     paths:
       - "engine/core/crates/**"
       - "engine/core/corpus/**"
+      # A toolchain or dependency update can change rendered output without
+      # touching a crate.
+      - "engine/core/rust-toolchain.toml"
+      - "engine/core/Cargo.toml"
+      - "engine/core/Cargo.lock"
       - ".github/workflows/core-fidelity.yml"
       # The root Cargo config and its linker/wrapper scripts apply to every build.
       - ".cargo/config.toml"

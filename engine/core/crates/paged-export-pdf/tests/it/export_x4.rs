@@ -253,7 +253,7 @@ fn x4_export_validates_with_lopdf() {
     }
 
     // Embedded fonts: every Type0 font's descendant has a FontFile.
-    for (_, obj) in doc.objects.iter() {
+    for obj in doc.objects.values() {
         let Ok(dict) = obj.as_dict() else { continue };
         if dict.get(b"Type").and_then(|t| t.as_name()).ok() != Some(b"Font".as_slice()) {
             continue;
@@ -302,7 +302,7 @@ fn effects_fixture_exports_transparency_groups() {
     // The effects fixture carries blend modes/opacity — expect at
     // least one transparency-group form XObject in the output.
     let mut groups = 0;
-    for (_, obj) in doc.objects.iter() {
+    for obj in doc.objects.values() {
         let Ok(stream) = obj.as_stream() else {
             continue;
         };

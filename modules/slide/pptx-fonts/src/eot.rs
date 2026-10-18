@@ -166,7 +166,9 @@ impl<'a> Le<'a> {
         let n = self.u16(what)? as usize;
         let s = self.take(n, what)?;
         let units: Vec<u16> = s
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .map(|c| u16::from_le_bytes([c[0], c[1]]))
             .collect();
         Ok(String::from_utf16_lossy(&units)

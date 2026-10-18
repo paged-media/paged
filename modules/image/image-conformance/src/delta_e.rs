@@ -168,8 +168,10 @@ pub fn delta_e_rgba8(a: &[u8], b: &[u8], background: [u8; 3]) -> DeltaEStats {
         })
     };
     let mut d: Vec<f64> = a
-        .chunks_exact(4)
-        .zip(b.chunks_exact(4))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(b.as_chunks::<4>().0)
         .map(|(pa, pb)| ciede2000(srgb8_to_lab(over(pa)), srgb8_to_lab(over(pb))))
         .collect();
     let count = d.len();

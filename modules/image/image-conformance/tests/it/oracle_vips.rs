@@ -102,7 +102,9 @@ fn read_v(id: &str) -> (u32, u32, Vec<[f32; 4]>) {
     );
     let n = (w * h * 4) as usize;
     let px = b[64..64 + n * 4]
-        .chunks_exact(16)
+        .as_chunks::<16>()
+        .0
+        .iter()
         .map(|p| {
             std::array::from_fn(|c| f32::from_le_bytes(p[c * 4..c * 4 + 4].try_into().unwrap()))
         })
@@ -456,7 +458,9 @@ fn run_gpu(r: &Row) -> Option<(u32, u32, Vec<[f32; 4]>)> {
     };
     let out = out.unwrap_or_else(|e| panic!("{}: {e}", r.def.id));
     let px = out
-        .chunks_exact(8)
+        .as_chunks::<8>()
+        .0
+        .iter()
         .map(|t| std::array::from_fn(|c| f16::from_le_bytes([t[c * 2], t[c * 2 + 1]]).to_f32()))
         .collect();
     Some((w, h, px))

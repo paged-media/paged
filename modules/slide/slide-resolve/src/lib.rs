@@ -361,10 +361,7 @@ fn shape_stroke(props: &ShapeProps, style: Option<&ShapeStyle>, ctx: &Ctx) -> Op
         .and_then(|l| l.fill.clone())
         .or_else(|| base.and_then(|l| l.fill.clone()));
     let ph = style_color(ctx, &style.and_then(|s| s.line_ref.clone()));
-    let p = match &fill {
-        Some(f) => paint(f, ctx, ph),
-        None => return None,
-    };
+    let p = paint(fill.as_ref()?, ctx, ph);
     if matches!(p, Paint::None) {
         return None;
     }

@@ -474,7 +474,7 @@ fn image_editor_adjust_black_white_runs_through_the_chain_on_gpu() {
         ..AdjustParams::default()
     };
     let out = pollster::block_on(adjust_rgba8(ctx, &img, &params, None)).expect("black&white");
-    for px in out.chunks_exact(4) {
+    for px in out.as_chunks::<4>().0 {
         assert!(
             (px[0] as i32 - px[1] as i32).abs() <= 1 && (px[1] as i32 - px[2] as i32).abs() <= 1,
             "the six-weight mix splats one gray, got {px:?}"
@@ -561,7 +561,8 @@ fn image_editor_generate_noise_fills_the_whole_image_without_a_selection() {
     };
     let out =
         pollster::block_on(image_js::fill::fill_rgba8(ctx, &img, &spec, None)).expect("noise fill");
-    let distinct: std::collections::BTreeSet<u8> = out.chunks_exact(4).map(|p| p[0]).collect();
+    let distinct: std::collections::BTreeSet<u8> =
+        out.as_chunks::<4>().0.iter().map(|p| p[0]).collect();
     assert!(
         distinct.len() > 4,
         "deterministic noise must vary across texels, saw {} values",

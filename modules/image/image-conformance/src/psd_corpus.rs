@@ -166,7 +166,10 @@ const VECTOR_MASK_KEYS: [&[u8; 4]; 2] = [b"vmsk", b"vsms"];
 /// Each channel pair is `src black-lo, black-hi, white-lo, white-hi`,
 /// then the same for the destination; default is `00 00 FF FF`.
 fn blend_ranges_default(raw: &[u8]) -> bool {
-    raw.chunks_exact(4).all(|r| r == [0x00, 0x00, 0xFF, 0xFF])
+    raw.as_chunks::<4>()
+        .0
+        .iter()
+        .all(|r| *r == [0x00, 0x00, 0xFF, 0xFF])
 }
 
 pub fn classify(psd: &PsdFile) -> Features {
@@ -308,7 +311,12 @@ pub fn compare_rgba8(ours: &[u8], theirs: &[u8], reference: Reference) -> Compos
         ((p[c] as u32 * a + 255 * (255 - a) + 127) / 255) as i32
     };
     let mut hist = [[0u64; 256]; 4];
-    for (a, b) in ours.chunks_exact(4).zip(theirs.chunks_exact(4)) {
+    for (a, b) in ours
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(theirs.as_chunks::<4>().0)
+    {
         for c in 0..3 {
             let t = match reference {
                 Reference::Straight => over_white(b, c),
@@ -351,7 +359,9 @@ pub fn compare_rgba8(ours: &[u8], theirs: &[u8], reference: Reference) -> Compos
         Reference::Straight => std::borrow::Cow::Borrowed(theirs),
         Reference::MattedWhite => std::borrow::Cow::Owned(
             theirs
-                .chunks_exact(4)
+                .as_chunks::<4>()
+                .0
+                .iter()
                 .flat_map(|p| [p[0], p[1], p[2], 255])
                 .collect(),
         ),
@@ -361,7 +371,9 @@ pub fn compare_rgba8(ours: &[u8], theirs: &[u8], reference: Reference) -> Compos
         (ours.to_vec(), theirs.to_vec())
     } else {
         let pick = |buf: &[u8]| -> Vec<u8> {
-            buf.chunks_exact(4)
+            buf.as_chunks::<4>()
+                .0
+                .iter()
                 .step_by(stride)
                 .flatten()
                 .copied()

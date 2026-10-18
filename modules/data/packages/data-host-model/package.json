@@ -15,7 +15,7 @@
     "prepublishOnly": "bun run build"
   },
   "dependencies": {
-    "@paged-media/plugin-api": "0.2.58-canary.0"
+    "@paged-media/plugin-api": "workspace:*"
   },
   "devDependencies": {
     "typescript": "catalog:",
