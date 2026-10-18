@@ -91,6 +91,8 @@ on:
       - "package.json"
       # Prose under docs/ builds and tests nothing (test inputs are not .md there).
       - "!apps/editor/docs/**/*.md"
+      # Module prose (B3a made every module an editor input).
+      - "!modules/*/docs/**/*.md"
   pull_request:
     paths:
       - "apps/editor/apps/canvas/**"
@@ -119,6 +121,8 @@ on:
       - "bun.lock"
       - "bunfig.toml"
       - "package.json"
+      # Module prose (B3a made every module an editor input).
+      - "!modules/*/docs/**/*.md"
   workflow_dispatch:
 
 permissions:
