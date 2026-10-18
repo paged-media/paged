@@ -21,6 +21,7 @@ mod cell_text;
 mod color_settings;
 mod composition_part;
 mod content_gesture;
+mod created_pages;
 mod data_merge_pages;
 mod data_relower_one_batch;
 mod default_face_fonts;

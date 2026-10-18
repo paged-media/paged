@@ -770,6 +770,7 @@ export function createCoreObjectsV70(getEditor: () => PagedEditor): CoreObjects 
             createdId: p.createdId ?? null,
             pageIds: p.pageIds,
             ...(p.minted ? { minted: p.minted } : {}),
+            ...(p.createdPages ? { createdPages: p.createdPages } : {}),
             ...(typeof p.appliedSeq === "number" ? { appliedSeq: p.appliedSeq } : {}),
           };
         }

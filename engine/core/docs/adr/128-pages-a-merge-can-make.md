@@ -1,6 +1,8 @@
 # ADR 128 — Pages a merge can make: page handles, copied stories, margins
 
 - **Status:** Accepted 2026-10-06.
+- **Amended by:** [ADR 186](186-a-mutation-names-the-pages-it-created.md): the reply names the pages a
+  mutation created, and the sequential lane takes a page handle from the child's outcome.
 - **Scope:** `crates/paged-canvas/src/batch_handles.rs`, `crates/paged-canvas/src/model.rs`
   (the mixed batch lane, `page_insert_context`), `crates/paged-mutate/src/apply/duplicate_page.rs`,
   `crates/paged-mutate/src/apply/duplicate_nodes.rs`, `crates/paged-mutate/src/apply/batch_page.rs`,

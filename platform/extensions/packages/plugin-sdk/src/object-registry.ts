@@ -581,7 +581,7 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
         result.created = names.map((n) => n ?? "");
       }
       if (fresh) {
-        const take = await fresh();
+        const take = await fresh(outcome);
         const minted = (outcome.applied ? outcome.minted : undefined) ?? [];
         result.commands = [];
         for (const c of commandPlans) {

@@ -458,6 +458,10 @@ impl WorkerCore {
                             // mint order. Empty for a single mutation,
                             // whose one mint `created_id` names.
                             minted: outcome.minted,
+                            // The pages it created, in creation order
+                            // (pages are not elements, so `minted` never
+                            // names one).
+                            created_pages: outcome.created_pages,
                         }
                     }
                     Err(error) => WorkerToMainKind::MutationFailed { error },
