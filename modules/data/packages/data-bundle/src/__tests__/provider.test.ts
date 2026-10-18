@@ -56,6 +56,8 @@ function fakeHost(
   return {
     manifest: { id: "media.paged.data", name: "d", version: "0.0.1", apiVersion: "^0.2" },
     log: { debug() {}, info: (m: string) => logs.push(m), warn() {}, error() {} },
+    // The document doors every host has; nothing here fires them.
+    document: { onWillSave: () => ({ dispose() {} }), onDidChange: () => ({ dispose() {} }), onDidOpen: () => ({ dispose() {} }) },
     supports: (f: string) => supportsRegistry && f === "dataProviders@1",
     dataProviders: {
       register: (reg: { id: string; category: string }) => {

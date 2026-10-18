@@ -24,7 +24,6 @@ import type {
   BundleHost,
   Disposable,
   ObjectKindContribution,
-  ObjectModelContribution,
   ObjectOp,
   ObjectValue,
   ObjectWrite,
@@ -382,7 +381,7 @@ export async function defineBinding(
   const kind = `plugin:${PLUGIN_ID}/binding`;
   let registered = false;
   try {
-    registered = !!objects && typeof objects.batch === "function" && (await objects.kinds()).some((k) => k.kind === kind);
+    registered = !!objects && (await objects.kinds()).some((k) => k.kind === kind);
   } catch {
     registered = false;
   }
@@ -466,8 +465,6 @@ export function contributeObjectModel(
   session: DataSourceSession,
   panels: { bindings: string },
 ): Disposable | null {
-  const contribute = host.contribute as { objectModel?: (m: ObjectModelContribution) => Disposable };
-  if (typeof contribute.objectModel !== "function" || !host.supports("contribute.objectModel@1")) return null;
-  void objectsOf;
-  return contribute.objectModel({ kinds: kinds(host, session), commands: commands(host, session, panels) });
+  if (!host.supports("contribute.objectModel@1")) return null;
+  return host.contribute.objectModel({ kinds: kinds(host, session), commands: commands(host, session, panels) });
 }
