@@ -91,6 +91,7 @@ dependencies = [
  "docx-js",
  "docx-lower",
  "paged-ooxml",
+ "paged-test-resources",
  "serde_json",
  "zip 9.0.5",
 ]
@@ -330,6 +331,10 @@ dependencies = [
  "thiserror",
  "zip 9.0.5",
 ]
+
+[[package]]
+name = "paged-test-resources"
+version = "0.0.0"
 
 [[package]]
 name = "pin-project-lite"

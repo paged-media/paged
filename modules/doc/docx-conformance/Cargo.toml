@@ -18,6 +18,7 @@ paged-ooxml.workspace = true
 zip.workspace = true
 
 [dev-dependencies]
+paged-test-resources.workspace = true
 docx-js.workspace = true
 docx-export.workspace = true
 serde_json.workspace = true
