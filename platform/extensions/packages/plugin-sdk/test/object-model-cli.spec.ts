@@ -50,15 +50,25 @@ function run(args: string[]) {
   return { code: r.status ?? -1, out: r.stdout, err: r.stderr };
 }
 
-function validate(manifest: unknown, files: Record<string, unknown> = {}, extra: string[] = []) {
+function validate(
+  manifest: unknown,
+  files: Record<string, unknown> = {},
+  extra: string[] = [],
+) {
   dir = mkdtempSync(join(tmpdir(), "paged-om-"));
-  for (const [name, content] of Object.entries(files)) writeFileSync(join(dir, name), JSON.stringify(content));
+  for (const [name, content] of Object.entries(files))
+    writeFileSync(join(dir, name), JSON.stringify(content));
   const path = join(dir, "manifest.json");
   writeFileSync(path, JSON.stringify(manifest));
   return run(["validate", path, ...extra]);
 }
 
-const base = { id: "media.paged.om", name: "om", version: "1.0.0", apiVersion: "^0.2" };
+const base = {
+  id: "media.paged.om",
+  name: "om",
+  version: "1.0.0",
+  apiVersion: "^0.2",
+};
 const om = (objectModel: unknown, commands?: string[]) => ({
   ...base,
   contributes: { objectModel, ...(commands ? { commands } : {}) },
@@ -75,10 +85,18 @@ describe("plugin-cli validate — contributes.objectModel (ADR 323)", () => {
     const r = validate(
       om({
         kinds: [{ kind: "layer", title: "Layer", schema: "layer.schema.json" }],
-        commands: [{ id: "media.paged.om.go", title: "Go", args: "go.args.json" }],
+        commands: [
+          { id: "media.paged.om.go", title: "Go", args: "go.args.json" },
+        ],
       }),
       {
-        "layer.schema.json": [{ path: "opacity", type: { kind: "number", unit: "percent" }, range: { min: 0, max: 100 } }],
+        "layer.schema.json": [
+          {
+            path: "opacity",
+            type: { kind: "number", unit: "percent" },
+            range: { min: 0, max: 100 },
+          },
+        ],
         "go.args.json": { kind: "struct", fields: { n: { kind: "number" } } },
       },
     );
@@ -86,25 +104,61 @@ describe("plugin-cli validate — contributes.objectModel (ADR 323)", () => {
   });
 
   it("fails a kind with no schema rows, or no schema at all", () => {
-    expect(validate(om({ kinds: [{ kind: "layer", title: "Layer", schema: [] }] })).err).toMatch(/has no schema rows/);
-    expect(validate(om({ kinds: [{ kind: "layer", title: "Layer" }] })).err).toMatch(/has no schema/);
-    const r = validate(om({ kinds: [{ kind: "layer", title: "Layer", schema: "missing.json" }] }));
+    expect(
+      validate(om({ kinds: [{ kind: "layer", title: "Layer", schema: [] }] }))
+        .err,
+    ).toMatch(/has no schema rows/);
+    expect(
+      validate(om({ kinds: [{ kind: "layer", title: "Layer" }] })).err,
+    ).toMatch(/has no schema/);
+    const r = validate(
+      om({
+        kinds: [{ kind: "layer", title: "Layer", schema: "missing.json" }],
+      }),
+    );
     expect(r.code).toBe(1);
     expect(r.err).toMatch(/file not found: missing\.json/);
   });
 
   it("fails a row whose type is not a ValueType, and a repeated path", () => {
-    const bad = validate(om({ kinds: [{ kind: "k", title: "K", schema: [{ path: "a", type: { kind: "float" } }] }] }));
+    const bad = validate(
+      om({
+        kinds: [
+          {
+            kind: "k",
+            title: "K",
+            schema: [{ path: "a", type: { kind: "float" } }],
+          },
+        ],
+      }),
+    );
     expect(bad.code).toBe(1);
     expect(bad.err).toMatch(/"float" is not a ValueType/);
     expect(
-      validate(om({ kinds: [{ kind: "k", title: "K", schema: [{ path: "a", type: { kind: "enum", members: [] } }] }] })).err,
+      validate(
+        om({
+          kinds: [
+            {
+              kind: "k",
+              title: "K",
+              schema: [{ path: "a", type: { kind: "enum", members: [] } }],
+            },
+          ],
+        }),
+      ).err,
     ).toMatch(/enum needs/);
     expect(
       validate(
         om({
           kinds: [
-            { kind: "k", title: "K", schema: [{ path: "a", type: { kind: "bool" } }, { path: "a", type: { kind: "bool" } }] },
+            {
+              kind: "k",
+              title: "K",
+              schema: [
+                { path: "a", type: { kind: "bool" } },
+                { path: "a", type: { kind: "bool" } },
+              ],
+            },
           ],
         }),
       ).err,
@@ -112,57 +166,114 @@ describe("plugin-cli validate — contributes.objectModel (ADR 323)", () => {
   });
 
   it("fails a typed command with no args schema, or outside the namespace", () => {
-    const k = { kind: "k", title: "K", schema: [{ path: "a", type: { kind: "bool" } }] };
-    expect(validate(om({ kinds: [k], commands: [{ id: "media.paged.om.x", title: "X" }] })).err).toMatch(/has no args schema/);
+    const k = {
+      kind: "k",
+      title: "K",
+      schema: [{ path: "a", type: { kind: "bool" } }],
+    };
     expect(
-      validate(om({ kinds: [k], commands: [{ id: "other.x", title: "X", args: { kind: "struct", fields: {} } }] })).err,
+      validate(
+        om({ kinds: [k], commands: [{ id: "media.paged.om.x", title: "X" }] }),
+      ).err,
+    ).toMatch(/has no args schema/);
+    expect(
+      validate(
+        om({
+          kinds: [k],
+          commands: [
+            { id: "other.x", title: "X", args: { kind: "struct", fields: {} } },
+          ],
+        }),
+      ).err,
     ).toMatch(/namespaced/);
   });
 });
 
 describe("plugin-cli — the untyped-command baseline (shrink-only)", () => {
-  const k = { kind: "k", title: "K", schema: [{ path: "a", type: { kind: "bool" } }] };
-  const baselineFile = (plugins: Record<string, string[]>) => ({ "baseline.json": { adr: "323", plugins } });
+  const k = {
+    kind: "k",
+    title: "K",
+    schema: [{ path: "a", type: { kind: "bool" } }],
+  };
+  const baselineFile = (plugins: Record<string, string[]>) => ({
+    "baseline.json": { adr: "323", plugins },
+  });
 
   it("a plugin NOT in the baseline: untyped commands only warn", () => {
-    const r = validate(om({ kinds: [k] }, ["media.paged.om.a"]), baselineFile({}), []);
+    const r = validate(
+      om({ kinds: [k] }, ["media.paged.om.a"]),
+      baselineFile({}),
+      [],
+    );
     expect(r.code).toBe(0);
   });
 
   it("a plugin in the baseline: a NEW untyped command fails; a typed twin clears it; stale entries warn", () => {
-    const files = baselineFile({ "media.paged.om": ["media.paged.om.a", "media.paged.om.gone"] });
+    const files = baselineFile({
+      "media.paged.om": ["media.paged.om.a", "media.paged.om.gone"],
+    });
     const args = () => ["--untyped-baseline", join(dir!, "baseline.json")];
     // writes the files first, then validates with the baseline flag
     dir = mkdtempSync(join(tmpdir(), "paged-om-"));
-    for (const [n, c] of Object.entries(files)) writeFileSync(join(dir, n), JSON.stringify(c));
+    for (const [n, c] of Object.entries(files))
+      writeFileSync(join(dir, n), JSON.stringify(c));
     const write = (m: unknown) => {
       const p = join(dir!, "manifest.json");
       writeFileSync(p, JSON.stringify(m));
       return run(["validate", p, ...args()]);
     };
-    const grown = write(om({ kinds: [k] }, ["media.paged.om.a", "media.paged.om.b"]));
+    const grown = write(
+      om({ kinds: [k] }, ["media.paged.om.a", "media.paged.om.b"]),
+    );
     expect(grown.code).toBe(1);
-    expect(grown.err).toMatch(/"media\.paged\.om\.b" is untyped and not in the baseline/);
-    expect(grown.err).toMatch(/warning: baseline lists "media\.paged\.om\.gone"/);
+    expect(grown.err).toMatch(
+      /"media\.paged\.om\.b" is untyped and not in the baseline/,
+    );
+    expect(grown.err).toMatch(
+      /warning: baseline lists "media\.paged\.om\.gone"/,
+    );
 
     const typed = write(
-      om({ kinds: [k], commands: [{ id: "media.paged.om.b", title: "B", args: { kind: "struct", fields: {} } }] }, [
-        "media.paged.om.a",
-        "media.paged.om.b",
-      ]),
+      om(
+        {
+          kinds: [k],
+          commands: [
+            {
+              id: "media.paged.om.b",
+              title: "B",
+              args: { kind: "struct", fields: {} },
+            },
+          ],
+        },
+        ["media.paged.om.a", "media.paged.om.b"],
+      ),
     );
     expect(typed.code).toBe(0);
   });
 
   it("the shipped baseline is well formed and the untyped generator reproduces a plugin's list", () => {
-    const shipped = JSON.parse(readFileSync(resolve(here, "../../plugin-cli/untyped-commands.baseline.json"), "utf8"));
+    const shipped = JSON.parse(
+      readFileSync(
+        resolve(here, "../../plugin-cli/untyped-commands.baseline.json"),
+        "utf8",
+      ),
+    );
     expect(shipped.adr).toBe("323");
-    expect(Object.keys(shipped.plugins)).toEqual(expect.arrayContaining(["media.paged.draw", "media.paged.image"]));
+    expect(Object.keys(shipped.plugins)).toEqual(
+      expect.arrayContaining(["media.paged.draw", "media.paged.image"]),
+    );
     dir = mkdtempSync(join(tmpdir(), "paged-om-"));
     const p = join(dir, "m.json");
-    writeFileSync(p, JSON.stringify(om({ kinds: [k] }, ["media.paged.om.z", "media.paged.om.a"])));
+    writeFileSync(
+      p,
+      JSON.stringify(
+        om({ kinds: [k] }, ["media.paged.om.z", "media.paged.om.a"]),
+      ),
+    );
     const r = run(["untyped", p]);
-    expect(JSON.parse(r.out).plugins).toEqual({ "media.paged.om": ["media.paged.om.a", "media.paged.om.z"] });
+    expect(JSON.parse(r.out).plugins).toEqual({
+      "media.paged.om": ["media.paged.om.a", "media.paged.om.z"],
+    });
   });
 });
 
@@ -172,8 +283,16 @@ describe("hand mirrors stay in sync", () => {
     const m = /const VALUE_TYPE_KINDS = new Set\(\[([\s\S]*?)\]\)/.exec(cli);
     const cliKinds = [...m![1]!.matchAll(/"([a-z]+)"/g)].map((x) => x[1]);
     expect(cliKinds.sort()).toEqual([...VALUE_TYPE_KINDS].sort());
-    const schema = JSON.parse(readFileSync(resolve(here, "../../plugin-api/src/manifest.schema.json"), "utf8"));
-    const kinds = schema.properties.contributes.properties.objectModel.properties.kinds.items.properties.schema.oneOf[1].items.properties.type.properties.kind.enum;
+    const schema = JSON.parse(
+      readFileSync(
+        resolve(here, "../../plugin-api/src/manifest.schema.json"),
+        "utf8",
+      ),
+    );
+    const kinds =
+      schema.properties.contributes.properties.objectModel.properties.kinds
+        .items.properties.schema.oneOf[1].items.properties.type.properties.kind
+        .enum;
     expect([...kinds].sort()).toEqual([...VALUE_TYPE_KINDS].sort());
   });
 });

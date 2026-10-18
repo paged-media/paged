@@ -39,10 +39,15 @@ export interface ParsedArgs {
   rest: string[];
 }
 
-export function parseArgs(argv: readonly string[], specs: readonly OptionSpec[]): ParsedArgs {
+export function parseArgs(
+  argv: readonly string[],
+  specs: readonly OptionSpec[],
+): ParsedArgs {
   const out: ParsedArgs = { positionals: [], flags: {}, rest: [] };
   const byLong = new Map(specs.map((s) => [s.name, s]));
-  const byShort = new Map(specs.filter((s) => s.short).map((s) => [s.short!, s]));
+  const byShort = new Map(
+    specs.filter((s) => s.short).map((s) => [s.short!, s]),
+  );
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
     if (a === "--") {
@@ -52,7 +57,10 @@ export function parseArgs(argv: readonly string[], specs: readonly OptionSpec[])
     let spec: OptionSpec | undefined;
     let inline: string | undefined;
     if (a.startsWith("--")) {
-      const [name, v] = a.slice(2).split(/=(.*)/s, 2) as [string, string | undefined];
+      const [name, v] = a.slice(2).split(/=(.*)/s, 2) as [
+        string,
+        string | undefined,
+      ];
       spec = byLong.get(name);
       inline = v;
       if (!spec) throw new CliError(EXIT.usage, `unknown option --${name}`);
@@ -64,12 +72,17 @@ export function parseArgs(argv: readonly string[], specs: readonly OptionSpec[])
       continue;
     }
     if (!spec.value) {
-      if (inline !== undefined) throw new CliError(EXIT.usage, `--${spec.name} takes no value`);
+      if (inline !== undefined)
+        throw new CliError(EXIT.usage, `--${spec.name} takes no value`);
       out.flags[spec.name] = true;
       continue;
     }
     const value = inline ?? argv[++i];
-    if (value === undefined) throw new CliError(EXIT.usage, `--${spec.name} needs a value (${spec.value})`);
+    if (value === undefined)
+      throw new CliError(
+        EXIT.usage,
+        `--${spec.name} needs a value (${spec.value})`,
+      );
     if (spec.repeat) {
       const prev = out.flags[spec.name];
       out.flags[spec.name] = [...(Array.isArray(prev) ? prev : []), value];
@@ -84,15 +97,21 @@ export const flagStr = (a: ParsedArgs, name: string): string | undefined => {
   const v = a.flags[name];
   return typeof v === "string" ? v : undefined;
 };
-export const flagBool = (a: ParsedArgs, name: string): boolean => a.flags[name] === true;
+export const flagBool = (a: ParsedArgs, name: string): boolean =>
+  a.flags[name] === true;
 export const flagList = (a: ParsedArgs, name: string): string[] => {
   const v = a.flags[name];
   return Array.isArray(v) ? v : typeof v === "string" ? [v] : [];
 };
-export function flagNumber(a: ParsedArgs, name: string, fallback: number): number {
+export function flagNumber(
+  a: ParsedArgs,
+  name: string,
+  fallback: number,
+): number {
   const v = flagStr(a, name);
   if (v === undefined) return fallback;
   const n = Number(v);
-  if (v.trim() === "" || !Number.isFinite(n)) throw new CliError(EXIT.usage, `--${name}: "${v}" is not a number`);
+  if (v.trim() === "" || !Number.isFinite(n))
+    throw new CliError(EXIT.usage, `--${name}: "${v}" is not a number`);
   return n;
 }

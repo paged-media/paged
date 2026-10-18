@@ -85,9 +85,7 @@ export interface PluginCapabilities {
    *  the renderer pyramid-tile door `host.images.claimImageResource`
    *  (C-6 / I-06). Declaring a surface is the prerequisite for the
    *  matching door (the host gate throws on an undeclared use). */
-  rendering?: Array<
-    "sceneLayer" | "overlay" | "hitTest" | "resourceProvider"
-  >;
+  rendering?: Array<"sceneLayer" | "overlay" | "hitTest" | "resourceProvider">;
   /** The bundle registers keybindings directly via
    *  `contribute.keybinding`. Keybindings have no id to list under
    *  `contributes`, so this boolean is their declaration. v0 first-

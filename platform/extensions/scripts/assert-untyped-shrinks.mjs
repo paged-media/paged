@@ -22,7 +22,11 @@ const FILE = "packages/plugin-cli/untyped-commands.baseline.json";
 const ZERO = "0000000000000000000000000000000000000000";
 
 const git = (args) =>
-  execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+  execFileSync("git", args, {
+    cwd: root,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  }).trim();
 
 let base = (process.argv[2] || process.env.CONTRACT_BASE || "").trim();
 if (!base || base === ZERO) {
@@ -40,7 +44,9 @@ try {
   // root — a bare path never resolves in the monorepo and read as "absent".
   before = JSON.parse(git(["show", `${base}:./${FILE}`]));
 } catch {
-  console.log(`untyped baseline: absent at ${base} — first introduction, nothing to compare`);
+  console.log(
+    `untyped baseline: absent at ${base} — first introduction, nothing to compare`,
+  );
   process.exit(0);
 }
 const after = JSON.parse(readFileSync(join(root, FILE), "utf8"));
@@ -51,9 +57,14 @@ for (const [plugin, ids] of Object.entries(after.plugins ?? {})) {
   for (const id of ids) if (!prev.has(id)) grown.push(`${plugin}: ${id}`);
 }
 if (grown.length > 0) {
-  console.error(`✗ ${FILE} grew (it may only shrink — type the command instead, ADR 323):`);
+  console.error(
+    `✗ ${FILE} grew (it may only shrink — type the command instead, ADR 323):`,
+  );
   for (const g of grown) console.error(`  + ${g}`);
   process.exit(1);
 }
-const count = (b) => Object.values(b.plugins ?? {}).reduce((n, l) => n + l.length, 0);
-console.log(`✓ untyped baseline ${count(before)} → ${count(after)} (shrink-only holds)`);
+const count = (b) =>
+  Object.values(b.plugins ?? {}).reduce((n, l) => n + l.length, 0);
+console.log(
+  `✓ untyped baseline ${count(before)} → ${count(after)} (shrink-only holds)`,
+);

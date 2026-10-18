@@ -65,8 +65,18 @@ import type {
 import type { CoreObjects, CorePlan } from "./core-objects.js";
 import { planCoreDelete } from "./core-ops.js";
 import { documentChangeOf } from "./document-change.js";
-import { CORE_PATHS, corePathRange, coreSchema71, type CorePathRow, type CorePathScope } from "./core-schema.js";
-import { formatAddress, fromElementId, type SelectorStep } from "./object-address.js";
+import {
+  CORE_PATHS,
+  corePathRange,
+  coreSchema71,
+  type CorePathRow,
+  type CorePathScope,
+} from "./core-schema.js";
+import {
+  formatAddress,
+  fromElementId,
+  type SelectorStep,
+} from "./object-address.js";
 
 /** One core object as the selector engine sees it. */
 interface CoreNode {
@@ -77,12 +87,21 @@ interface CoreNode {
   attrs: Record<string, string>;
 }
 
-const refuse = (code: ObjectErrorCode, reason: string): ObjectValue => ({ kind: "refused", code, reason });
+const refuse = (code: ObjectErrorCode, reason: string): ObjectValue => ({
+  kind: "refused",
+  code,
+  reason,
+});
 const val = (value: unknown): ObjectValue => ({ kind: "value", value });
 
 // ------------------------------------------------------------- schemas
 
-const ro = (path: string, type: ValueType, summary?: string, access: "readOnly" | "derived" = "readOnly"): PropertySchema => ({
+const ro = (
+  path: string,
+  type: ValueType,
+  summary?: string,
+  access: "readOnly" | "derived" = "readOnly",
+): PropertySchema => ({
   path,
   type,
   access,
@@ -97,10 +116,16 @@ function rowsOf(scope: CorePathScope, addressKind: string): PropertySchema[] {
   const rows: PropertySchema[] = [];
   const typed = coreSchema71().get(scope);
   for (const [path, row] of Object.entries(CORE_PATHS)) {
-    if ("op" in row || "since" in row || row.scope !== scope || !row.type) continue;
+    if ("op" in row || "since" in row || row.scope !== scope || !row.type)
+      continue;
     const core = typed?.get(path);
     const fromCore = core && !core.inferred ? core.schema : null;
-    const r: PropertySchema = { addressKind, path, type: fromCore?.type ?? row.type, nullable: true };
+    const r: PropertySchema = {
+      addressKind,
+      path,
+      type: fromCore?.type ?? row.type,
+      nullable: true,
+    };
     const range = fromCore ? fromCore.range : corePathRange(path);
     if (range) r.range = range;
     if (fromCore?.default !== undefined) r.default = fromCore.default;
@@ -125,60 +150,167 @@ const VIRTUAL: Record<string, PropertySchema[]> = {
   frame: [LABELS_ROW],
   doc: [
     LABELS_ROW,
-    ro("pageCount", { kind: "number", integer: true }, "Number of pages.", "derived"),
+    ro(
+      "pageCount",
+      { kind: "number", integer: true },
+      "Number of pages.",
+      "derived",
+    ),
     ro("documentName", { kind: "text" }),
     ro("dirty", { kind: "bool" }, "Unsaved edits.", "derived"),
-    { path: "defaultFillColor", type: { kind: "color" }, nullable: true, virtual: { op: "setDocumentDefaults", field: "fillColor" } },
-    { path: "defaultStrokeColor", type: { kind: "color" }, nullable: true, virtual: { op: "setDocumentDefaults", field: "strokeColor" } },
-    { path: "defaultStrokeWeight", type: { kind: "length" }, nullable: true, virtual: { op: "setDocumentDefaults", field: "strokeWeight" } },
+    {
+      path: "defaultFillColor",
+      type: { kind: "color" },
+      nullable: true,
+      virtual: { op: "setDocumentDefaults", field: "fillColor" },
+    },
+    {
+      path: "defaultStrokeColor",
+      type: { kind: "color" },
+      nullable: true,
+      virtual: { op: "setDocumentDefaults", field: "strokeColor" },
+    },
+    {
+      path: "defaultStrokeWeight",
+      type: { kind: "length" },
+      nullable: true,
+      virtual: { op: "setDocumentDefaults", field: "strokeWeight" },
+    },
   ],
   page: [
     LABELS_ROW,
-    ro("index", { kind: "number", integer: true }, "1-based page number.", "derived"),
+    ro(
+      "index",
+      { kind: "number", integer: true },
+      "1-based page number.",
+      "derived",
+    ),
     ro("marginTop", { kind: "length" }),
     ro("marginLeft", { kind: "length" }),
     ro("marginBottom", { kind: "length" }),
     ro("marginRight", { kind: "length" }),
     ro("columnCount", { kind: "number", integer: true }),
     ro("columnGutter", { kind: "length" }),
-    { path: "appliedMaster", type: { kind: "ref", to: "master" }, nullable: true, virtual: { op: "applyMasterToPage" } },
+    {
+      path: "appliedMaster",
+      type: { kind: "ref", to: "master" },
+      nullable: true,
+      virtual: { op: "applyMasterToPage" },
+    },
   ],
   story: [
-    ro("characterCount", { kind: "number", integer: true }, undefined, "derived"),
-    ro("paragraphCount", { kind: "number", integer: true }, undefined, "derived"),
+    ro(
+      "characterCount",
+      { kind: "number", integer: true },
+      undefined,
+      "derived",
+    ),
+    ro(
+      "paragraphCount",
+      { kind: "number", integer: true },
+      undefined,
+      "derived",
+    ),
     ro("overset", { kind: "bool" }, undefined, "derived"),
-    { path: "content", type: { kind: "text", multiline: true }, heavy: true, summary: "The story's plain text; \\n splits paragraphs." },
+    {
+      path: "content",
+      type: { kind: "text", multiline: true },
+      heavy: true,
+      summary: "The story's plain text; \\n splits paragraphs.",
+    },
   ],
   swatch: [
     ro("name", { kind: "text" }),
     ro("swatchKind", { kind: "text" }),
-    { path: "space", type: { kind: "enum", members: SWATCH_SPACES }, virtual: { op: "editSwatch", field: "space" } },
-    { path: "value", type: { kind: "list", of: { kind: "number" } }, virtual: { op: "editSwatch", field: "value" } },
+    {
+      path: "space",
+      type: { kind: "enum", members: SWATCH_SPACES },
+      virtual: { op: "editSwatch", field: "space" },
+    },
+    {
+      path: "value",
+      type: { kind: "list", of: { kind: "number" } },
+      virtual: { op: "editSwatch", field: "value" },
+    },
   ],
-  style: [ro("name", { kind: "text" }), ro("basedOn", { kind: "ref", to: "style" })],
-  spread: [ro("label", { kind: "text" }), ro("pageCount", { kind: "number", integer: true }, undefined, "derived")],
-  master: [ro("label", { kind: "text" }), ro("pageCount", { kind: "number", integer: true }, undefined, "derived")],
+  style: [
+    ro("name", { kind: "text" }),
+    ro("basedOn", { kind: "ref", to: "style" }),
+  ],
+  spread: [
+    ro("label", { kind: "text" }),
+    ro("pageCount", { kind: "number", integer: true }, undefined, "derived"),
+  ],
+  master: [
+    ro("label", { kind: "text" }),
+    ro("pageCount", { kind: "number", integer: true }, undefined, "derived"),
+  ],
 };
 
 /** The layer rows are PropertyPaths, but written through dedicated ops. */
-const LAYER_OPS: Record<string, { op: "layerSetVisible" | "layerSetLocked" | "layerSetPrintable" | "layerSetName"; field: keyof LayerSummary; arg: string }> = {
+const LAYER_OPS: Record<
+  string,
+  {
+    op:
+      | "layerSetVisible"
+      | "layerSetLocked"
+      | "layerSetPrintable"
+      | "layerSetName";
+    field: keyof LayerSummary;
+    arg: string;
+  }
+> = {
   layerVisible: { op: "layerSetVisible", field: "visible", arg: "visible" },
   layerLocked: { op: "layerSetLocked", field: "locked", arg: "locked" },
-  layerPrintable: { op: "layerSetPrintable", field: "printable", arg: "printable" },
+  layerPrintable: {
+    op: "layerSetPrintable",
+    field: "printable",
+    arg: "printable",
+  },
   layerName: { op: "layerSetName", field: "name", arg: "name" },
 };
 
-const CORE_KINDS: Array<{ kind: string; title: string; addressForm: string; scope?: CorePathScope }> = [
+const CORE_KINDS: Array<{
+  kind: string;
+  title: string;
+  addressForm: string;
+  scope?: CorePathScope;
+}> = [
   { kind: "doc", title: "Document", addressForm: "doc" },
-  { kind: "frame", title: "Page item", addressForm: "<textFrame|rectangle|oval|polygon|graphicLine|group>:<id>", scope: "frame" },
-  { kind: "story", title: "Story", addressForm: "story:<id> · storyRange:<id>@<start>..<end>", scope: "story" },
-  { kind: "page", title: "Page", addressForm: "page:<id> · page:#<n>", scope: "page" },
+  {
+    kind: "frame",
+    title: "Page item",
+    addressForm: "<textFrame|rectangle|oval|polygon|graphicLine|group>:<id>",
+    scope: "frame",
+  },
+  {
+    kind: "story",
+    title: "Story",
+    addressForm: "story:<id> · storyRange:<id>@<start>..<end>",
+    scope: "story",
+  },
+  {
+    kind: "page",
+    title: "Page",
+    addressForm: "page:<id> · page:#<n>",
+    scope: "page",
+  },
   { kind: "spread", title: "Spread", addressForm: "spread:<id>" },
   { kind: "master", title: "Master spread", addressForm: "master:<id>" },
   { kind: "layer", title: "Layer", addressForm: "layer:<id>", scope: "layer" },
   { kind: "table", title: "Table", addressForm: "table:<id>", scope: "table" },
-  { kind: "cell", title: "Table cell", addressForm: "cell:<table>/<row>,<col>", scope: "cell" },
-  { kind: "style", title: "Style", addressForm: "style:<family>/<self id or name>", scope: "story" },
+  {
+    kind: "cell",
+    title: "Table cell",
+    addressForm: "cell:<table>/<row>,<col>",
+    scope: "cell",
+  },
+  {
+    kind: "style",
+    title: "Style",
+    addressForm: "style:<family>/<self id or name>",
+    scope: "story",
+  },
   { kind: "swatch", title: "Swatch", addressForm: "swatch:<self id or name>" },
 ];
 
@@ -212,13 +344,19 @@ const STYLE_COLLECTION: Record<StyleFamily, CollectionName> = {
 /** The pre-71 core seam. `tableStories` maps a table id to its story (the
  *  `cell:` / `table:` address carries no story; the wire's `TableCell`
  *  needs it) — fed by `noteTableStory`. */
-export function createCoreObjectsV70(getEditor: () => PagedEditor): CoreObjects & { kindOf(a: ParsedAddress): string } {
+export function createCoreObjectsV70(
+  getEditor: () => PagedEditor,
+): CoreObjects & { kindOf(a: ParsedAddress): string } {
   const client = () => getEditor().client;
 
   // The derived caches (tree index, node list) are rebuilt after ANY engine
   // change. One tree read per edit, not per call (host-call budget).
   let generation = 0;
-  let nodesCache: { gen: number; nodes: CoreNode[]; items: Map<string, ElementId> } | null = null;
+  let nodesCache: {
+    gen: number;
+    nodes: CoreNode[];
+    items: Map<string, ElementId>;
+  } | null = null;
   const listeners = new Set<() => void>();
   let subscribed = false;
   /** False when the host offers no change subscription: no caching. */
@@ -249,7 +387,10 @@ export function createCoreObjectsV70(getEditor: () => PagedEditor): CoreObjects 
     }
   }
 
-  async function send(kind: string, payload: unknown): Promise<{ kind: string; payload: any } | null> {
+  async function send(
+    kind: string,
+    payload: unknown,
+  ): Promise<{ kind: string; payload: any } | null> {
     try {
       return (await client().send({ kind, payload } as never)) as never;
     } catch {
@@ -257,21 +398,28 @@ export function createCoreObjectsV70(getEditor: () => PagedEditor): CoreObjects 
     }
   }
 
-  async function nodes(): Promise<{ nodes: CoreNode[]; items: Map<string, ElementId> }> {
+  async function nodes(): Promise<{
+    nodes: CoreNode[];
+    items: Map<string, ElementId>;
+  }> {
     ensureSubscribed();
     if (live && nodesCache && nodesCache.gen === generation) return nodesCache;
-    const out: CoreNode[] = [{ address: "doc", kinds: ["doc"], parent: null, attrs: {} }];
+    const out: CoreNode[] = [
+      { address: "doc", kinds: ["doc"], parent: null, attrs: {} },
+    ];
     const items = new Map<string, ElementId>();
-    const [spreads, pages, layers, stories, swatches, masters] = await Promise.all([
-      collection<{ selfId: string; label: string }>("spreads"),
-      collection<PageSummary>("pages"),
-      collection<LayerSummary>("layers"),
-      collection<{ selfId: string }>("stories"),
-      collection<{ selfId: string; name: string; kind: string }>("swatches"),
-      collection<{ selfId: string; label: string }>("masterPages"),
-    ]);
+    const [spreads, pages, layers, stories, swatches, masters] =
+      await Promise.all([
+        collection<{ selfId: string; label: string }>("spreads"),
+        collection<PageSummary>("pages"),
+        collection<LayerSummary>("layers"),
+        collection<{ selfId: string }>("stories"),
+        collection<{ selfId: string; name: string; kind: string }>("swatches"),
+        collection<{ selfId: string; label: string }>("masterPages"),
+      ]);
     const reply = await send("requestSceneTree", undefined);
-    const roots: SceneTreeNode[] = reply?.kind === "sceneTree" ? reply.payload.roots : [];
+    const roots: SceneTreeNode[] =
+      reply?.kind === "sceneTree" ? reply.payload.roots : [];
     let spreadIx = 0;
     let pageIx = 0;
     const walk = (list: readonly SceneTreeNode[], parent: string): void => {
@@ -280,18 +428,30 @@ export function createCoreObjectsV70(getEditor: () => PagedEditor): CoreObjects 
           const address = fromElementId(n.id);
           items.set(n.id.id, n.id);
           const attrs: Record<string, string> = { kind: n.id.kind };
-          for (const e of n.pluginMetadata ?? []) attrs[`label.${e.key}`] = e.value;
+          for (const e of n.pluginMetadata ?? [])
+            attrs[`label.${e.key}`] = e.value;
           out.push({ address, kinds: ["frame", n.id.kind], parent, attrs });
           walk(n.children ?? [], address);
         } else if (n.kind === "Spread") {
           const s = spreads[spreadIx++];
-          const address = s ? formatAddress({ kind: "spread", id: s.selfId }) : parent;
-          if (s) out.push({ address, kinds: ["spread"], parent: "doc", attrs: { name: s.label, label: s.label } });
+          const address = s
+            ? formatAddress({ kind: "spread", id: s.selfId })
+            : parent;
+          if (s)
+            out.push({
+              address,
+              kinds: ["spread"],
+              parent: "doc",
+              attrs: { name: s.label, label: s.label },
+            });
           walk(n.children ?? [], address);
         } else if (n.kind === "Page") {
           const p = pages[pageIx++];
-          const address = p ? formatAddress({ kind: "page", id: p.selfId }) : parent;
-          if (p) out.push({ address, kinds: ["page"], parent, attrs: pageAttrs(p) });
+          const address = p
+            ? formatAddress({ kind: "page", id: p.selfId })
+            : parent;
+          if (p)
+            out.push({ address, kinds: ["page"], parent, attrs: pageAttrs(p) });
           walk(n.children ?? [], address);
         } else {
           walk(n.children ?? [], parent);
@@ -301,22 +461,49 @@ export function createCoreObjectsV70(getEditor: () => PagedEditor): CoreObjects 
     walk(roots, "doc");
     // Pages the tree did not reach (no spread rows) still answer `page`.
     for (const p of pages.slice(pageIx)) {
-      out.push({ address: formatAddress({ kind: "page", id: p.selfId }), kinds: ["page"], parent: "doc", attrs: pageAttrs(p) });
+      out.push({
+        address: formatAddress({ kind: "page", id: p.selfId }),
+        kinds: ["page"],
+        parent: "doc",
+        attrs: pageAttrs(p),
+      });
     }
     for (const l of layers) {
-      out.push({ address: formatAddress({ kind: "layer", id: l.selfId }), kinds: ["layer"], parent: "doc", attrs: { name: l.name ?? "" } });
+      out.push({
+        address: formatAddress({ kind: "layer", id: l.selfId }),
+        kinds: ["layer"],
+        parent: "doc",
+        attrs: { name: l.name ?? "" },
+      });
     }
     for (const s of stories) {
-      out.push({ address: formatAddress({ kind: "story", id: s.selfId }), kinds: ["story"], parent: "doc", attrs: {} });
+      out.push({
+        address: formatAddress({ kind: "story", id: s.selfId }),
+        kinds: ["story"],
+        parent: "doc",
+        attrs: {},
+      });
     }
     for (const s of swatches) {
-      out.push({ address: formatAddress({ kind: "swatch", name: s.selfId }), kinds: ["swatch"], parent: "doc", attrs: { name: s.name, kind: s.kind } });
+      out.push({
+        address: formatAddress({ kind: "swatch", name: s.selfId }),
+        kinds: ["swatch"],
+        parent: "doc",
+        attrs: { name: s.name, kind: s.kind },
+      });
     }
     for (const m of masters) {
-      out.push({ address: formatAddress({ kind: "master", id: m.selfId }), kinds: ["master"], parent: "doc", attrs: { name: m.label, label: m.label } });
+      out.push({
+        address: formatAddress({ kind: "master", id: m.selfId }),
+        kinds: ["master"],
+        parent: "doc",
+        attrs: { name: m.label, label: m.label },
+      });
     }
     for (const family of Object.keys(STYLE_COLLECTION) as StyleFamily[]) {
-      for (const s of await collection<{ selfId: string; name: string }>(STYLE_COLLECTION[family])) {
+      for (const s of await collection<{ selfId: string; name: string }>(
+        STYLE_COLLECTION[family],
+      )) {
         out.push({
           address: formatAddress({ kind: "style", family, name: s.selfId }),
           kinds: ["style", `style:${family}`],
@@ -331,33 +518,58 @@ export function createCoreObjectsV70(getEditor: () => PagedEditor): CoreObjects 
 
   /** A page node's selector attributes, with its v70 labels. */
   function pageAttrs(p: PageSummary): Record<string, string> {
-    const attrs: Record<string, string> = { name: String(p.index), index: String(p.index) };
-    for (const e of (p as { pluginMetadata?: { key: string; value: string }[] }).pluginMetadata ?? []) attrs[`label.${e.key}`] = e.value;
+    const attrs: Record<string, string> = {
+      name: String(p.index),
+      index: String(p.index),
+    };
+    for (const e of (p as { pluginMetadata?: { key: string; value: string }[] })
+      .pluginMetadata ?? [])
+      attrs[`label.${e.key}`] = e.value;
     return attrs;
   }
 
-  async function labelsOf(a: ParsedAddress): Promise<Record<string, string> | null> {
-    const fromEntries = (list: readonly { key: string; value: string }[] | undefined) =>
-      Object.fromEntries((list ?? []).map((e) => [e.key, e.value]));
+  async function labelsOf(
+    a: ParsedAddress,
+  ): Promise<Record<string, string> | null> {
+    const fromEntries = (
+      list: readonly { key: string; value: string }[] | undefined,
+    ) => Object.fromEntries((list ?? []).map((e) => [e.key, e.value]));
     if (a.kind === "doc") {
       try {
-        return fromEntries(((await client().documentMeta()) as { pluginMetadata?: { key: string; value: string }[] }).pluginMetadata);
+        return fromEntries(
+          (
+            (await client().documentMeta()) as {
+              pluginMetadata?: { key: string; value: string }[];
+            }
+          ).pluginMetadata,
+        );
       } catch {
         return null;
       }
     }
     if (a.kind === "page" || a.kind === "pageIndex") {
       const p = await resolvePage(a);
-      return p ? fromEntries((p as { pluginMetadata?: { key: string; value: string }[] }).pluginMetadata) : null;
+      return p
+        ? fromEntries(
+            (p as { pluginMetadata?: { key: string; value: string }[] })
+              .pluginMetadata,
+          )
+        : null;
     }
     const id = await propertyTarget(a);
     if (!id) return null;
     const r = await send("requestElementProperties", { id });
     if (r?.kind !== "elementProperties" || !r.payload.result) return null;
     const out: Record<string, string> = {};
-    for (const e of r.payload.result.entries as { value?: { type: string; value: { key: string; value?: string | null } } | null }[]) {
+    for (const e of r.payload.result.entries as {
+      value?: {
+        type: string;
+        value: { key: string; value?: string | null };
+      } | null;
+    }[]) {
       const v = e.value;
-      if (v && v.type === "pluginMetadata" && typeof v.value.value === "string") out[v.value.key] = v.value.value;
+      if (v && v.type === "pluginMetadata" && typeof v.value.value === "string")
+        out[v.value.key] = v.value.value;
     }
     return out;
   }
@@ -372,35 +584,74 @@ export function createCoreObjectsV70(getEditor: () => PagedEditor): CoreObjects 
   }
 
   async function storyLength(id: string): Promise<number | null> {
-    const s = (await collection<{ selfId: string; characterCount: number }>("stories")).find((x) => x.selfId === id);
+    const s = (
+      await collection<{ selfId: string; characterCount: number }>("stories")
+    ).find((x) => x.selfId === id);
     return s ? s.characterCount : null;
   }
 
   /** The ElementId a frame/story PropertyPath reads/writes through. */
   async function propertyTarget(a: ParsedAddress): Promise<ElementId | null> {
     if (a.kind === "item" || a.kind === "frame") return itemId(a);
-    if (a.kind === "storyRange") return { kind: "storyRange", id: { story_id: a.story, start: a.start, end: a.end } };
+    if (a.kind === "storyRange")
+      return {
+        kind: "storyRange",
+        id: { story_id: a.story, start: a.start, end: a.end },
+      };
     if (a.kind === "story") {
       const len = await storyLength(a.id);
-      return len === null ? null : { kind: "storyRange", id: { story_id: a.id, start: 0, end: Math.max(len, 0) } };
+      return len === null
+        ? null
+        : {
+            kind: "storyRange",
+            id: { story_id: a.id, start: 0, end: Math.max(len, 0) },
+          };
     }
     return null;
   }
 
-  async function readEntries(id: ElementId): Promise<Map<string, unknown> | null> {
+  async function readEntries(
+    id: ElementId,
+  ): Promise<Map<string, unknown> | null> {
     const r = await send("requestElementProperties", { id });
     if (r?.kind !== "elementProperties" || !r.payload.result) return null;
-    return new Map((r.payload.result.entries as { path: string; value?: { value: unknown } | null }[]).map((e) => [e.path, e.value]));
+    return new Map(
+      (
+        r.payload.result.entries as {
+          path: string;
+          value?: { value: unknown } | null;
+        }[]
+      ).map((e) => [e.path, e.value]),
+    );
   }
 
-  async function resolveStyle(a: Extract<ParsedAddress, { kind: "style" }>): Promise<string | null> {
-    const list = await collection<{ selfId: string; name: string }>(STYLE_COLLECTION[a.family]);
-    return (list.find((s) => s.selfId === a.name) ?? list.find((s) => s.name === a.name))?.selfId ?? null;
+  async function resolveStyle(
+    a: Extract<ParsedAddress, { kind: "style" }>,
+  ): Promise<string | null> {
+    const list = await collection<{ selfId: string; name: string }>(
+      STYLE_COLLECTION[a.family],
+    );
+    return (
+      (
+        list.find((s) => s.selfId === a.name) ??
+        list.find((s) => s.name === a.name)
+      )?.selfId ?? null
+    );
   }
 
-  async function resolveSwatch(name: string): Promise<{ selfId: string; name: string; kind: string } | null> {
-    const list = await collection<{ selfId: string; name: string; kind: string }>("swatches");
-    return list.find((s) => s.selfId === name) ?? list.find((s) => s.name === name) ?? null;
+  async function resolveSwatch(
+    name: string,
+  ): Promise<{ selfId: string; name: string; kind: string } | null> {
+    const list = await collection<{
+      selfId: string;
+      name: string;
+      kind: string;
+    }>("swatches");
+    return (
+      list.find((s) => s.selfId === name) ??
+      list.find((s) => s.name === name) ??
+      null
+    );
   }
 
   async function resolvePage(a: ParsedAddress): Promise<PageSummary | null> {
@@ -411,8 +662,12 @@ export function createCoreObjectsV70(getEditor: () => PagedEditor): CoreObjects 
   }
 
   const pathRow = (path: string, scope: CorePathScope): CorePathRow | null => {
-    const row = (CORE_PATHS as Record<string, CorePathRow | { op: true } | { since: 71 }>)[path];
-    return row && !("op" in row) && !("since" in row) && row.scope === scope ? row : null;
+    const row = (
+      CORE_PATHS as Record<string, CorePathRow | { op: true } | { since: 71 }>
+    )[path];
+    return row && !("op" in row) && !("since" in row) && row.scope === scope
+      ? row
+      : null;
   };
 
   const kindOf = (a: ParsedAddress): string =>
@@ -430,17 +685,27 @@ export function createCoreObjectsV70(getEditor: () => PagedEditor): CoreObjects 
   const tableTarget = (a: ParsedAddress): ElementId | null => {
     if (a.kind === "cell") {
       const story = tableStories.get(a.table);
-      return story ? { kind: "tableCell", id: { story_id: story, table_id: a.table, row: a.row, col: a.col } } : null;
+      return story
+        ? {
+            kind: "tableCell",
+            id: { story_id: story, table_id: a.table, row: a.row, col: a.col },
+          }
+        : null;
     }
     if (a.kind === "table") {
       const story = tableStories.get(a.id);
-      return story ? { kind: "table", id: { story_id: story, table_id: a.id } } : null;
+      return story
+        ? { kind: "table", id: { story_id: story, table_id: a.id } }
+        : null;
     }
     return null;
   };
 
   const unmapped = (a: ParsedAddress): ObjectValue =>
-    refuse("unmapped", `${formatAddress(a)}: the protocol-70 wire has no form for this address; it needs engine protocol 71 (core's Get/Set, ADR 132)`);
+    refuse(
+      "unmapped",
+      `${formatAddress(a)}: the protocol-70 wire has no form for this address; it needs engine protocol 71 (core's Get/Set, ADR 132)`,
+    );
 
   return {
     kindOf,
@@ -454,7 +719,12 @@ export function createCoreObjectsV70(getEditor: () => PagedEditor): CoreObjects 
     },
 
     kinds() {
-      return CORE_KINDS.map(({ kind, title, addressForm }) => ({ owner: "core", kind, title, addressForm }));
+      return CORE_KINDS.map(({ kind, title, addressForm }) => ({
+        owner: "core",
+        kind,
+        title,
+        addressForm,
+      }));
     },
 
     schema(kind) {
@@ -462,7 +732,10 @@ export function createCoreObjectsV70(getEditor: () => PagedEditor): CoreObjects 
       const spec = CORE_KINDS.find((k) => k.kind === base);
       if (!spec) return [];
       const rows = spec.scope ? rowsOf(spec.scope, base) : [];
-      return [...rows, ...(VIRTUAL[base] ?? []).map((r) => ({ addressKind: base, ...r }))];
+      return [
+        ...rows,
+        ...(VIRTUAL[base] ?? []).map((r) => ({ addressKind: base, ...r })),
+      ];
     },
 
     async get(a, path) {
@@ -472,47 +745,80 @@ export function createCoreObjectsV70(getEditor: () => PagedEditor): CoreObjects 
         case "story": {
           if (a.kind === "onMaster") return unmapped(a);
           if (kind === "story") {
-            const story = a.kind === "story" ? a.id : a.kind === "storyRange" ? a.story : "";
-            const s = (await collection<{ selfId: string; characterCount: number; paragraphCount: number; overset?: boolean }>("stories")).find((x) => x.selfId === story);
+            const story =
+              a.kind === "story"
+                ? a.id
+                : a.kind === "storyRange"
+                  ? a.story
+                  : "";
+            const s = (
+              await collection<{
+                selfId: string;
+                characterCount: number;
+                paragraphCount: number;
+                overset?: boolean;
+              }>("stories")
+            ).find((x) => x.selfId === story);
             if (!s) return refuse("unknownAddress", `no story ${story}`);
             if (path === "characterCount") return val(s.characterCount);
             if (path === "paragraphCount") return val(s.paragraphCount);
             if (path === "overset") return val(s.overset ?? false);
             if (path === "content") {
               const r = await send("requestStoryContent", { storyId: story });
-              const content = r?.kind === "storyContentResult" ? r.payload.content : null;
-              if (!content) return refuse("failed", `story ${story}: no content`);
-              const text = (content.paragraphs as { runs: { text: string }[] }[])
+              const content =
+                r?.kind === "storyContentResult" ? r.payload.content : null;
+              if (!content)
+                return refuse("failed", `story ${story}: no content`);
+              const text = (
+                content.paragraphs as { runs: { text: string }[] }[]
+              )
                 .map((p) => p.runs.map((x) => x.text).join(""))
                 .join("\n");
-              return val(a.kind === "storyRange" ? text.slice(a.start, a.end) : text);
+              return val(
+                a.kind === "storyRange" ? text.slice(a.start, a.end) : text,
+              );
             }
           }
           if (kind === "frame" && path === "labels") {
             const labels = await labelsOf(a);
-            return labels ? val(labels) : refuse("unknownAddress", `no frame ${formatAddress(a)}`);
+            return labels
+              ? val(labels)
+              : refuse("unknownAddress", `no frame ${formatAddress(a)}`);
           }
-          if (!pathRow(path, kind)) return refuse("unknownPath", `${kind} has no path "${path}"`);
+          if (!pathRow(path, kind))
+            return refuse("unknownPath", `${kind} has no path "${path}"`);
           const id = await propertyTarget(a);
-          if (!id) return refuse("unknownAddress", `no ${kind} ${formatAddress(a)}`);
+          if (!id)
+            return refuse("unknownAddress", `no ${kind} ${formatAddress(a)}`);
           const entries = await readEntries(id);
-          if (!entries) return refuse("unknownAddress", `no ${kind} ${formatAddress(a)}`);
+          if (!entries)
+            return refuse("unknownAddress", `no ${kind} ${formatAddress(a)}`);
           if (!entries.has(path)) return { kind: "absent" };
           const v = entries.get(path) as { value: unknown } | null | undefined;
           return v == null ? { kind: "mixed" } : val(v.value);
         }
         case "layer": {
           if (a.kind !== "layer") return unmapped(a);
-          const l = (await collection<LayerSummary>("layers")).find((x) => x.selfId === a.id);
+          const l = (await collection<LayerSummary>("layers")).find(
+            (x) => x.selfId === a.id,
+          );
           if (!l) return refuse("unknownAddress", `no layer ${a.id}`);
           const op = LAYER_OPS[path];
-          return op ? val(l[op.field] ?? null) : refuse("unknownPath", `layer has no path "${path}"`);
+          return op
+            ? val(l[op.field] ?? null)
+            : refuse("unknownPath", `layer has no path "${path}"`);
         }
         case "page": {
           const p = await resolvePage(a);
-          if (!p) return refuse("unknownAddress", `no page ${formatAddress(a)}`);
+          if (!p)
+            return refuse("unknownAddress", `no page ${formatAddress(a)}`);
           const map: Record<string, unknown> = {
-            labels: Object.fromEntries(((p as { pluginMetadata?: { key: string; value: string }[] }).pluginMetadata ?? []).map((e) => [e.key, e.value])),
+            labels: Object.fromEntries(
+              (
+                (p as { pluginMetadata?: { key: string; value: string }[] })
+                  .pluginMetadata ?? []
+              ).map((e) => [e.key, e.value]),
+            ),
             pageBounds: [0, 0, p.sizePt[1], p.sizePt[0]],
             index: p.index,
             marginTop: p.marginTopPt ?? null,
@@ -523,17 +829,25 @@ export function createCoreObjectsV70(getEditor: () => PagedEditor): CoreObjects 
             columnGutter: p.columnGutterPt ?? null,
           };
           if (path === "appliedMaster") return { kind: "absent" };
-          return path in map ? val(map[path]) : refuse("unknownPath", `page has no path "${path}"`);
+          return path in map
+            ? val(map[path])
+            : refuse("unknownPath", `page has no path "${path}"`);
         }
         case "doc": {
           let meta: Record<string, unknown>;
           try {
-            meta = (await client().documentMeta()) as unknown as Record<string, unknown>;
+            meta = (await client().documentMeta()) as unknown as Record<
+              string,
+              unknown
+            >;
           } catch {
             return refuse("unknownAddress", "no document loaded");
           }
           if (path === "labels") {
-            const list = (meta["pluginMetadata"] ?? []) as { key: string; value: string }[];
+            const list = (meta["pluginMetadata"] ?? []) as {
+              key: string;
+              value: string;
+            }[];
             return val(Object.fromEntries(list.map((e) => [e.key, e.value])));
           }
           return VIRTUAL["doc"]!.some((r) => r.path === path)
@@ -556,23 +870,34 @@ export function createCoreObjectsV70(getEditor: () => PagedEditor): CoreObjects 
         case "style": {
           if (a.kind !== "style") return unmapped(a);
           const styleId = await resolveStyle(a);
-          if (!styleId) return refuse("unknownAddress", `no ${a.family} style ${a.name}`);
-          const r = await send("requestStyleProperties", { collection: a.family, styleId });
+          if (!styleId)
+            return refuse("unknownAddress", `no ${a.family} style ${a.name}`);
+          const r = await send("requestStyleProperties", {
+            collection: a.family,
+            styleId,
+          });
           const res = r?.kind === "styleProperties" ? r.payload.result : null;
           if (!res) return refuse("failed", `style ${styleId}: no properties`);
           if (path === "name") return val(res.name ?? null);
           if (path === "basedOn") return val(res.basedOn ?? null);
-          const e = (res.entries as { path: string; value?: { value: unknown } | null }[]).find((x) => x.path === path);
-          if (!e) return pathRow(path, "story") ? { kind: "absent" } : refuse("unknownPath", `style has no path "${path}"`);
+          const e = (
+            res.entries as { path: string; value?: { value: unknown } | null }[]
+          ).find((x) => x.path === path);
+          if (!e)
+            return pathRow(path, "story")
+              ? { kind: "absent" }
+              : refuse("unknownPath", `style has no path "${path}"`);
           return e.value == null ? { kind: "absent" } : val(e.value.value);
         }
         case "cell":
         case "table": {
-          if (!pathRow(path, kind)) return refuse("unknownPath", `${kind} has no path "${path}"`);
+          if (!pathRow(path, kind))
+            return refuse("unknownPath", `${kind} has no path "${path}"`);
           const id = tableTarget(a);
           if (!id) return unmapped(a);
           const entries = await readEntries(id);
-          if (!entries) return refuse("unknownAddress", `no ${kind} ${formatAddress(a)}`);
+          if (!entries)
+            return refuse("unknownAddress", `no ${kind} ${formatAddress(a)}`);
           if (!entries.has(path)) return { kind: "absent" };
           const v = entries.get(path) as { value: unknown } | null | undefined;
           return v == null ? { kind: "mixed" } : val(v.value);
@@ -580,10 +905,16 @@ export function createCoreObjectsV70(getEditor: () => PagedEditor): CoreObjects 
         case "spread":
         case "master": {
           const id = (a as { id: string }).id;
-          const list = await collection<{ selfId: string; label: string; pageCount: number }>(kind === "spread" ? "spreads" : "masterPages");
+          const list = await collection<{
+            selfId: string;
+            label: string;
+            pageCount: number;
+          }>(kind === "spread" ? "spreads" : "masterPages");
           const s = list.find((x) => x.selfId === id);
           if (!s) return refuse("unknownAddress", `no ${kind} ${id}`);
-          return path === "label" || path === "pageCount" ? val(s[path]) : refuse("unknownPath", `${kind} has no path "${path}"`);
+          return path === "label" || path === "pageCount"
+            ? val(s[path])
+            : refuse("unknownPath", `${kind} has no path "${path}"`);
         }
         default:
           return unmapped(a);
@@ -591,52 +922,109 @@ export function createCoreObjectsV70(getEditor: () => PagedEditor): CoreObjects 
     },
 
     async planSet(a, path, value) {
-      const no = (code: ObjectErrorCode, reason: string): CorePlan => ({ ok: false, code, reason });
-      const ok = (...mutations: MutationInput[]): CorePlan => ({ ok: true, mutations });
+      const no = (code: ObjectErrorCode, reason: string): CorePlan => ({
+        ok: false,
+        code,
+        reason,
+      });
+      const ok = (...mutations: MutationInput[]): CorePlan => ({
+        ok: true,
+        mutations,
+      });
       const kind = kindOf(a);
       switch (kind) {
         case "frame":
         case "story": {
-          if (a.kind === "onMaster") return no("unmapped", "items on masters land with core's Set (ADR 131)");
+          if (a.kind === "onMaster")
+            return no(
+              "unmapped",
+              "items on masters land with core's Set (ADR 131)",
+            );
           if (kind === "story" && path === "content") {
-            const story = a.kind === "story" ? a.id : a.kind === "storyRange" ? a.story : "";
+            const story =
+              a.kind === "story"
+                ? a.id
+                : a.kind === "storyRange"
+                  ? a.story
+                  : "";
             const len = await storyLength(story);
             if (len === null) return no("unknownAddress", `no story ${story}`);
-            const [start, end] = a.kind === "storyRange" ? [a.start, a.end] : [0, len];
+            const [start, end] =
+              a.kind === "storyRange" ? [a.start, a.end] : [0, len];
             const ops: MutationInput[] = [];
-            if (end > start) ops.push({ op: "deleteRange", args: { storyId: story, start, end } });
+            if (end > start)
+              ops.push({
+                op: "deleteRange",
+                args: { storyId: story, start, end },
+              });
             if (typeof value === "string" && value.length > 0) {
-              ops.push({ op: "insertText", args: { storyId: story, offset: start, text: value } });
+              ops.push({
+                op: "insertText",
+                args: { storyId: story, offset: start, text: value },
+              });
             }
             return ok(...ops);
           }
           const row = pathRow(path, kind);
           if (!row) return no("unknownPath", `${kind} has no path "${path}"`);
           const id = await propertyTarget(a);
-          if (!id) return no("unknownAddress", `no ${kind} ${formatAddress(a)}`);
-          return ok({ op: "setElementProperty", args: { elementId: id, path: path as never, value: toWire(row, value) as never } });
+          if (!id)
+            return no("unknownAddress", `no ${kind} ${formatAddress(a)}`);
+          return ok({
+            op: "setElementProperty",
+            args: {
+              elementId: id,
+              path: path as never,
+              value: toWire(row, value) as never,
+            },
+          });
         }
         case "layer": {
           if (a.kind !== "layer") return no("unmapped", "");
           const op = LAYER_OPS[path];
           if (!op) return no("unknownPath", `layer has no path "${path}"`);
-          if (!(await collection<LayerSummary>("layers")).some((l) => l.selfId === a.id)) {
+          if (
+            !(await collection<LayerSummary>("layers")).some(
+              (l) => l.selfId === a.id,
+            )
+          ) {
             return no("unknownAddress", `no layer ${a.id}`);
           }
-          return ok({ op: op.op, args: { layerId: a.id, [op.arg]: value } } as MutationInput);
+          return ok({
+            op: op.op,
+            args: { layerId: a.id, [op.arg]: value },
+          } as MutationInput);
         }
         case "page": {
           const p = await resolvePage(a);
           if (!p) return no("unknownAddress", `no page ${formatAddress(a)}`);
-          if (path === "pageBounds") return ok({ op: "resizePage", args: { pageId: p.selfId, bounds: value as [number, number, number, number] } });
+          if (path === "pageBounds")
+            return ok({
+              op: "resizePage",
+              args: {
+                pageId: p.selfId,
+                bounds: value as [number, number, number, number],
+              },
+            });
           if (path === "appliedMaster") {
-            return ok({ op: "applyMasterToPage", args: { page: p.selfId, master: (value as string | null) ?? null } });
+            return ok({
+              op: "applyMasterToPage",
+              args: {
+                page: p.selfId,
+                master: (value as string | null) ?? null,
+              },
+            });
           }
           return no("unknownPath", `page has no writable path "${path}"`);
         }
         case "doc": {
-          const field = { defaultFillColor: "fillColor", defaultStrokeColor: "strokeColor", defaultStrokeWeight: "strokeWeight" }[path];
-          if (!field) return no("unknownPath", `doc has no writable path "${path}"`);
+          const field = {
+            defaultFillColor: "fillColor",
+            defaultStrokeColor: "strokeColor",
+            defaultStrokeWeight: "strokeWeight",
+          }[path];
+          if (!field)
+            return no("unknownPath", `doc has no writable path "${path}"`);
           // WHOLE-STATE op: read the triple, change one field, write back.
           const meta = await client().documentMeta();
           const args = {
@@ -648,10 +1036,12 @@ export function createCoreObjectsV70(getEditor: () => PagedEditor): CoreObjects 
           return ok({ op: "setDocumentDefaults", args } as MutationInput);
         }
         case "swatch": {
-          if (a.kind !== "swatch") return no("unmapped", `${formatAddress(a)} lands with core's Set`);
+          if (a.kind !== "swatch")
+            return no("unmapped", `${formatAddress(a)} lands with core's Set`);
           const s = await resolveSwatch(a.name);
           if (!s) return no("unknownAddress", `no swatch ${a.name}`);
-          if (path !== "space" && path !== "value") return no("unknownPath", `swatch has no writable path "${path}"`);
+          if (path !== "space" && path !== "value")
+            return no("unknownPath", `swatch has no writable path "${path}"`);
           const r = await send("requestColorPreview", { swatchId: s.selfId });
           const c = r?.kind === "colorPreviewReply" ? r.payload.result : null;
           if (!c) return no("failed", `swatch ${s.selfId}: no colour to edit`);
@@ -659,18 +1049,34 @@ export function createCoreObjectsV70(getEditor: () => PagedEditor): CoreObjects 
             selfId: s.selfId,
             name: s.name,
             space: path === "space" ? (value as string) : (c.space ?? "CMYK"),
-            value: path === "value" ? (value as number[]) : (c.value ?? c.cmyk ?? []),
+            value:
+              path === "value"
+                ? (value as number[])
+                : (c.value ?? c.cmyk ?? []),
             model: c.model ?? null,
           };
-          return ok({ op: "editSwatch", args: { swatchId: s.selfId, spec } } as MutationInput);
+          return ok({
+            op: "editSwatch",
+            args: { swatchId: s.selfId, spec },
+          } as MutationInput);
         }
         case "style": {
           if (a.kind !== "style") return no("unmapped", "");
           const row = pathRow(path, "story");
-          if (!row) return no("unknownPath", `style has no writable path "${path}"`);
+          if (!row)
+            return no("unknownPath", `style has no writable path "${path}"`);
           const styleId = await resolveStyle(a);
-          if (!styleId) return no("unknownAddress", `no ${a.family} style ${a.name}`);
-          return ok({ op: "setStyleProperty", args: { collection: a.family, styleId, path: path as never, value: toWire(row, value) as never } });
+          if (!styleId)
+            return no("unknownAddress", `no ${a.family} style ${a.name}`);
+          return ok({
+            op: "setStyleProperty",
+            args: {
+              collection: a.family,
+              styleId,
+              path: path as never,
+              value: toWire(row, value) as never,
+            },
+          });
         }
         case "cell":
         case "table": {
@@ -678,36 +1084,80 @@ export function createCoreObjectsV70(getEditor: () => PagedEditor): CoreObjects 
           if (!row) return no("unknownPath", `${kind} has no path "${path}"`);
           if (row.readOnly) return no("readOnly", `${path} is read-only`);
           const id = tableTarget(a);
-          if (!id) return no("unmapped", `${formatAddress(a)}: the table's story is unknown (noteTableStory) — engine protocol 71 addresses cells directly`);
-          return ok({ op: "setElementProperty", args: { elementId: id, path: path as never, value: toWire(row, value) as never } });
+          if (!id)
+            return no(
+              "unmapped",
+              `${formatAddress(a)}: the table's story is unknown (noteTableStory) — engine protocol 71 addresses cells directly`,
+            );
+          return ok({
+            op: "setElementProperty",
+            args: {
+              elementId: id,
+              path: path as never,
+              value: toWire(row, value) as never,
+            },
+          });
         }
         default:
-          return no("unmapped", `${formatAddress(a)}: no write on the protocol-70 wire; needs engine protocol 71 (core's Set, ADR 132)`);
+          return no(
+            "unmapped",
+            `${formatAddress(a)}: no write on the protocol-70 wire; needs engine protocol 71 (core's Set, ADR 132)`,
+          );
       }
     },
 
     labelsOf,
 
     async planLabel(a, key, value, caller) {
-      if (a.kind === "doc") return { op: "setDocumentMetadata", args: { key, value, caller } };
+      if (a.kind === "doc")
+        return { op: "setDocumentMetadata", args: { key, value, caller } };
       if (a.kind === "page" || a.kind === "pageIndex") {
         const p = await resolvePage(a);
-        return p ? { op: "setPageMetadata", args: { page: p.selfId, key, value, caller } } : null;
+        return p
+          ? {
+              op: "setPageMetadata",
+              args: { page: p.selfId, key, value, caller },
+            }
+          : null;
       }
-      const id = a.kind === "item" || a.kind === "frame" || a.kind === "story" || a.kind === "storyRange" ? await propertyTarget(a) : null;
-      return id ? { op: "setPluginMetadata", args: { elementId: id, key, value, caller } } : null;
+      const id =
+        a.kind === "item" ||
+        a.kind === "frame" ||
+        a.kind === "story" ||
+        a.kind === "storyRange"
+          ? await propertyTarget(a)
+          : null;
+      return id
+        ? {
+            op: "setPluginMetadata",
+            args: { elementId: id, key, value, caller },
+          }
+        : null;
     },
 
     async planCreate(op) {
-      return { ok: false, code: "unmapped", reason: `create "${op.kind}": core creates need engine protocol 71 (this engine is older)` };
+      return {
+        ok: false,
+        code: "unmapped",
+        reason: `create "${op.kind}": core creates need engine protocol 71 (this engine is older)`,
+      };
     },
 
     async planDelete(a) {
-      return planCoreDelete(a, async (name) => (await resolveSwatch(name))?.selfId ?? null, async (p) => (await resolvePage(p))?.selfId ?? null, 70);
+      return planCoreDelete(
+        a,
+        async (name) => (await resolveSwatch(name))?.selfId ?? null,
+        async (p) => (await resolvePage(p))?.selfId ?? null,
+        70,
+      );
     },
 
     async elementIdOf(a) {
-      return a.kind === "item" || a.kind === "frame" ? itemId(a) : a.kind === "storyRange" ? propertyTarget(a) : null;
+      return a.kind === "item" || a.kind === "frame"
+        ? itemId(a)
+        : a.kind === "storyRange"
+          ? propertyTarget(a)
+          : null;
     },
 
     async query(steps) {
@@ -721,7 +1171,8 @@ export function createCoreObjectsV70(getEditor: () => PagedEditor): CoreObjects 
       const matches = (n: CoreNode, step: SelectorStep): boolean => {
         const h = step.head;
         if (h.type === "kind" && !n.kinds.includes(h.kind)) return false;
-        if (h.type === "address" && n.address !== wantOf(h.address)) return false;
+        if (h.type === "address" && n.address !== wantOf(h.address))
+          return false;
         return step.predicates.every((p) => {
           const v = n.attrs[p.key];
           if (v === undefined) return p.op === "!=";
@@ -731,7 +1182,11 @@ export function createCoreObjectsV70(getEditor: () => PagedEditor): CoreObjects 
           return v.includes(p.value);
         });
       };
-      const isAncestor = (anc: string, n: CoreNode, direct: boolean): boolean => {
+      const isAncestor = (
+        anc: string,
+        n: CoreNode,
+        direct: boolean,
+      ): boolean => {
         let p = n.parent;
         while (p !== null) {
           if (p === anc) return true;
@@ -745,12 +1200,25 @@ export function createCoreObjectsV70(getEditor: () => PagedEditor): CoreObjects 
         let next = all.filter((n) => matches(n, step));
         if (current !== null) {
           const prev = current;
-          next = next.filter((n) => prev.some((c) => isAncestor(c.address, n, step.combinator === "child")));
+          next = next.filter((n) =>
+            prev.some((c) =>
+              isAncestor(c.address, n, step.combinator === "child"),
+            ),
+          );
         }
         // `page:#n` resolves by index.
-        if (step.head.type === "address" && step.head.address.kind === "pageIndex") {
+        if (
+          step.head.type === "address" &&
+          step.head.address.kind === "pageIndex"
+        ) {
           const page = await resolvePage(step.head.address);
-          next = page ? all.filter((n) => n.address === formatAddress({ kind: "page", id: page.selfId })) : [];
+          next = page
+            ? all.filter(
+                (n) =>
+                  n.address ===
+                  formatAddress({ kind: "page", id: page.selfId }),
+              )
+            : [];
         }
         if (step.nth !== undefined) next = next.slice(step.nth - 1, step.nth);
         current = next;
@@ -759,8 +1227,12 @@ export function createCoreObjectsV70(getEditor: () => PagedEditor): CoreObjects 
     },
 
     async commit(mutations) {
-      if (mutations.length === 0) return { applied: true, createdId: null, pageIds: [] };
-      const m = mutations.length === 1 ? mutations[0]! : ({ op: "batch", args: { ops: mutations } } as MutationInput);
+      if (mutations.length === 0)
+        return { applied: true, createdId: null, pageIds: [] };
+      const m =
+        mutations.length === 1
+          ? mutations[0]!
+          : ({ op: "batch", args: { ops: mutations } } as MutationInput);
       try {
         const reply = await client().mutate(m as never);
         if (reply.kind === "mutationApplied") {
@@ -771,10 +1243,15 @@ export function createCoreObjectsV70(getEditor: () => PagedEditor): CoreObjects 
             pageIds: p.pageIds,
             ...(p.minted ? { minted: p.minted } : {}),
             ...(p.createdPages ? { createdPages: p.createdPages } : {}),
-            ...(typeof p.appliedSeq === "number" ? { appliedSeq: p.appliedSeq } : {}),
+            ...(typeof p.appliedSeq === "number"
+              ? { appliedSeq: p.appliedSeq }
+              : {}),
           };
         }
-        return { applied: false, error: reply.kind === "mutationFailed" ? reply.payload : reply };
+        return {
+          applied: false,
+          error: reply.kind === "mutationFailed" ? reply.payload : reply,
+        };
       } catch (error) {
         return { applied: false, error };
       }

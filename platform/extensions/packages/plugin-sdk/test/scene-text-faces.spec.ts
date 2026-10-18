@@ -24,7 +24,11 @@
 
 import { describe, expect, it } from "bun:test";
 
-import type { PagedEditor, PluginManifest, SceneLayer } from "@paged-media/plugin-api";
+import type {
+  PagedEditor,
+  PluginManifest,
+  SceneLayer,
+} from "@paged-media/plugin-api";
 
 import { createBundleHost } from "../src/host-impl";
 import { makeFakeEditor } from "./fake-editor";
@@ -67,9 +71,12 @@ function host(reply: "v68" | "older" | "none") {
     async clear() {},
   };
   if (reply !== "none") {
-    (fake.editor as unknown as { sceneLayers: unknown }).sceneLayers = sceneLayers;
+    (fake.editor as unknown as { sceneLayers: unknown }).sceneLayers =
+      sceneLayers;
   }
-  const { host } = createBundleHost(() => fake.editor, MANIFEST, { console: silent });
+  const { host } = createBundleHost(() => fake.editor, MANIFEST, {
+    console: silent,
+  });
   return { host, sent };
 }
 
@@ -79,7 +86,11 @@ describe("sceneLayer text faces (protocol 68)", () => {
     expect(h.supports("rendering.sceneLayer.faces@1")).toBe(true);
     const result = await h.contribute.sceneLayer().submit("tf1", LAYER);
     expect(result.fontFallbacks).toEqual(["Inter Bold Italic"]);
-    expect(sent[0].items[0]).toMatchObject({ family: "Inter", weight: 700, italic: true });
+    expect(sent[0].items[0]).toMatchObject({
+      family: "Inter",
+      weight: 700,
+      italic: true,
+    });
   });
 
   it("reads an older host's void reply as no report, never a guess", async () => {

@@ -47,8 +47,16 @@ import type {
 } from "@paged-media/plugin-api";
 
 import type { CoreObjects } from "./core-objects.js";
-import { CORE_WIRE_OPS, type CoreWireOpRow } from "./core-commands.generated.js";
-import { formatAddress, fromElementId, parseAddress, parseSelector } from "./object-address.js";
+import {
+  CORE_WIRE_OPS,
+  type CoreWireOpRow,
+} from "./core-commands.generated.js";
+import {
+  formatAddress,
+  fromElementId,
+  parseAddress,
+  parseSelector,
+} from "./object-address.js";
 import { validateValue } from "./object-schema.js";
 
 /** The command id prefix: `core.insertTable`. */
@@ -56,15 +64,21 @@ export const CORE_COMMAND_PREFIX = "core.";
 
 /** Wire ops that are NOT typed commands, each with the reason. */
 export const CORE_COMMAND_EXCLUSIONS: Readonly<Record<string, string>> = {
-  batch: "the composition itself: host.objects.batch runs commands, sets, creates and deletes as ONE undo step",
-  bindCreated: "a batch handle, not an operation: a creating command takes `handle` and binds what it made",
+  batch:
+    "the composition itself: host.objects.batch runs commands, sets, creates and deletes as ONE undo step",
+  bindCreated:
+    "a batch handle, not an operation: a creating command takes `handle` and binds what it made",
   set: "host.objects.set / a batch `set` op (ADR 132 Set) on the object's address",
-  setElementProperty: "superseded by Set: host.objects.set on the item's address",
+  setElementProperty:
+    "superseded by Set: host.objects.set on the item's address",
   setPluginMetadata:
     "labels are written by the registry's label-hash pattern under the caller's own x-paged:<pluginId> key (caller-checked); a free-form command would bypass that check",
-  setPageMetadata: "labels: as setPluginMetadata (a plugin's page-hosted state write)",
-  setDocumentMetadata: "labels: as setPluginMetadata (a plugin's doc-hosted state write)",
-  onMaster: "wraps a raw Mutation; typed commands carry no raw wire (address a master's items as master:<id> > <item>)",
+  setPageMetadata:
+    "labels: as setPluginMetadata (a plugin's page-hosted state write)",
+  setDocumentMetadata:
+    "labels: as setPluginMetadata (a plugin's doc-hosted state write)",
+  onMaster:
+    "wraps a raw Mutation; typed commands carry no raw wire (address a master's items as master:<id> > <item>)",
 };
 
 /** What a creating command makes. `element`: the engine mints it (reported
@@ -83,7 +97,9 @@ const selfOfSpec = (prefix: string) => (a: Record<string, unknown>) => {
   return typeof id === "string" && id ? `${prefix}:${id}` : null;
 };
 const styleNamed = (family: string) => (a: Record<string, unknown>) =>
-  typeof a["selfId"] === "string" && a["selfId"] ? `style:${family}/${a["selfId"] as string}` : null;
+  typeof a["selfId"] === "string" && a["selfId"]
+    ? `style:${family}/${a["selfId"] as string}`
+    : null;
 
 export const CORE_COMMAND_CREATES: Readonly<Record<string, Creates>> = {
   insertFrame: { by: "element", kind: "frame" },
@@ -107,12 +123,24 @@ export const CORE_COMMAND_CREATES: Readonly<Record<string, Creates>> = {
   createObjectStyle: { by: "named", address: styleNamed("object") },
   createCellStyle: { by: "named", address: styleNamed("cell") },
   createTableStyle: { by: "named", address: styleNamed("table") },
-  createMaster: { by: "named", address: (a) => (typeof a["master"] === "string" ? `master:${a["master"]}` : null) },
-  createTextVariable: { by: "named", address: (a) => (typeof a["name"] === "string" ? `textVariable:dTextVariablen${a["name"]}` : null) },
+  createMaster: {
+    by: "named",
+    address: (a) =>
+      typeof a["master"] === "string" ? `master:${a["master"]}` : null,
+  },
+  createTextVariable: {
+    by: "named",
+    address: (a) =>
+      typeof a["name"] === "string"
+        ? `textVariable:dTextVariablen${a["name"]}`
+        : null,
+  },
 };
 
 /** The ops that are typed commands, in wire order. */
-export const CORE_COMMAND_OPS: readonly string[] = Object.keys(CORE_WIRE_OPS).filter((op) => !(op in CORE_COMMAND_EXCLUSIONS));
+export const CORE_COMMAND_OPS: readonly string[] = Object.keys(
+  CORE_WIRE_OPS,
+).filter((op) => !(op in CORE_COMMAND_EXCLUSIONS));
 
 const HANDLE_FIELD: StructField = { kind: "text", optional: true };
 
@@ -123,7 +151,15 @@ const titleOf = (op: string): string => {
 
 function resultType(op: string): ValueType {
   const c = CORE_COMMAND_CREATES[op];
-  const to = !c ? "object" : c.by === "element" ? (c.kind === "table" ? "table" : "item") : c.by === "named" ? "object" : c.by;
+  const to = !c
+    ? "object"
+    : c.by === "element"
+      ? c.kind === "table"
+        ? "table"
+        : "item"
+      : c.by === "named"
+        ? "object"
+        : c.by;
   return {
     kind: "struct",
     fields: {
@@ -137,14 +173,25 @@ function resultType(op: string): ValueType {
 export function coreCommandInfos(): ObjectCommandInfo[] {
   return CORE_COMMAND_OPS.map((op) => {
     const row = CORE_WIRE_OPS[op]!;
-    const bindable = CORE_COMMAND_CREATES[op]?.by === "element" || CORE_COMMAND_CREATES[op]?.by === "page";
-    const args: ValueType = bindable ? { ...row.args, fields: { ...row.args.fields, handle: HANDLE_FIELD } } : row.args;
-    return { id: `${CORE_COMMAND_PREFIX}${op}`, title: titleOf(op), owner: "core", args, result: resultType(op) };
+    const bindable =
+      CORE_COMMAND_CREATES[op]?.by === "element" ||
+      CORE_COMMAND_CREATES[op]?.by === "page";
+    const args: ValueType = bindable
+      ? { ...row.args, fields: { ...row.args.fields, handle: HANDLE_FIELD } }
+      : row.args;
+    return {
+      id: `${CORE_COMMAND_PREFIX}${op}`,
+      title: titleOf(op),
+      owner: "core",
+      args,
+      result: resultType(op),
+    };
   });
 }
 
 export const isCoreCommand = (id: string): boolean =>
-  id.startsWith(CORE_COMMAND_PREFIX) && CORE_COMMAND_OPS.includes(id.slice(CORE_COMMAND_PREFIX.length));
+  id.startsWith(CORE_COMMAND_PREFIX) &&
+  CORE_COMMAND_OPS.includes(id.slice(CORE_COMMAND_PREFIX.length));
 
 export class CommandRefusal extends Error {
   constructor(
@@ -172,18 +219,27 @@ export interface ResolveContext {
   take(list: "page" | "layer"): Promise<string | null>;
 }
 
-const isOpaque = (t: ValueType): boolean => t.kind === "struct" && Object.keys(t.fields).length === 0;
+const isOpaque = (t: ValueType): boolean =>
+  t.kind === "struct" && Object.keys(t.fields).length === 0;
 
 /** Validate a converted value: null where optional, opaque structs passed
  *  to core, nested structs field by field. */
-function check(t: StructField | ValueType, v: unknown, at: string): string | null {
-  if (v === null || v === undefined) return (t as StructField).optional ? null : `${at} is missing`;
+function check(
+  t: StructField | ValueType,
+  v: unknown,
+  at: string,
+): string | null {
+  if (v === null || v === undefined)
+    return (t as StructField).optional ? null : `${at} is missing`;
   if (t.kind === "ref") {
-    return typeof v === "string" || (typeof v === "object" && v !== null) ? null : `${at} must be a ${t.to} id or address`;
+    return typeof v === "string" || (typeof v === "object" && v !== null)
+      ? null
+      : `${at} must be a ${t.to} id or address`;
   }
   if (t.kind === "struct") {
     if (isOpaque(t)) return null;
-    if (typeof v !== "object" || Array.isArray(v)) return `${at} must be a record`;
+    if (typeof v !== "object" || Array.isArray(v))
+      return `${at} must be a record`;
     const rec = v as Record<string, unknown>;
     for (const [k, ft] of Object.entries(t.fields)) {
       const e = check(ft, rec[k], `${at}.${k}`);
@@ -205,16 +261,24 @@ function check(t: StructField | ValueType, v: unknown, at: string): string | nul
 export interface CoreCommands {
   list(): ObjectCommandInfo[];
   /** Plan one command. `handles` are the batch's live `$h:` names. */
-  plan(id: string, args: unknown, handles: ReadonlySet<string>, autoHandle: () => string): Promise<CoreCommandPlan>;
+  plan(
+    id: string,
+    args: unknown,
+    handles: ReadonlySet<string>,
+    autoHandle: () => string,
+  ): Promise<CoreCommandPlan>;
   /** Taken before the commit. Its answer, given the commit's outcome,
    *  shares out what the commands created that `minted` does not name:
    *  the outcome's `createdPages`, and the layers that are new since the
    *  snapshot. */
-  snapshot(plans: readonly CoreCommandPlan[]): Promise<(outcome: MutationOutcome) => Promise<ResolveContext["take"]>>;
+  snapshot(
+    plans: readonly CoreCommandPlan[],
+  ): Promise<(outcome: MutationOutcome) => Promise<ResolveContext["take"]>>;
 }
 
 export function createCoreCommands(core: CoreObjects): CoreCommands {
-  const list = async (kind: "page" | "layer"): Promise<string[]> => core.query(parseSelector(kind)!.steps);
+  const list = async (kind: "page" | "layer"): Promise<string[]> =>
+    core.query(parseSelector(kind)!.steps);
 
   /** A string id position: a raw wire id passes; an address becomes its id. */
   async function toId(v: string, at: string): Promise<string> {
@@ -225,9 +289,12 @@ export function createCoreCommands(core: CoreObjects): CoreCommands {
       case "handle":
         return `$h:${p.name}`;
       case "pageIndex": {
-        const [a] = await core.query([{ head: { type: "address", address: p }, predicates: [] }]);
+        const [a] = await core.query([
+          { head: { type: "address", address: p }, predicates: [] },
+        ]);
         const page = a ? parseAddress(a) : null;
-        if (!page || page.kind !== "page") throw new CommandRefusal("unknownAddress", `${at}: no page ${v}`);
+        if (!page || page.kind !== "page")
+          throw new CommandRefusal("unknownAddress", `${at}: no page ${v}`);
         return page.id;
       }
       case "storyRange":
@@ -237,9 +304,15 @@ export function createCoreCommands(core: CoreObjects): CoreCommands {
         return p.table;
       case "onMaster":
       case "doc":
-        throw new CommandRefusal("invalidValue", `${at}: ${v} is not an id position's object`);
+        throw new CommandRefusal(
+          "invalidValue",
+          `${at}: ${v} is not an id position's object`,
+        );
       case "plugin":
-        throw new CommandRefusal("invalidValue", `${at}: ${v} is a plugin object, not a core one`);
+        throw new CommandRefusal(
+          "invalidValue",
+          `${at}: ${v} is a plugin object, not a core one`,
+        );
       case "style":
       case "swatch":
       case "gradient":
@@ -255,18 +328,36 @@ export function createCoreCommands(core: CoreObjects): CoreCommands {
 
   /** An `ElementId` position: an address, a `$h:` handle, or the wire object. */
   async function toElementId(v: unknown, at: string): Promise<ElementId> {
-    if (typeof v === "object" && v !== null && "kind" in v && "id" in v) return v as ElementId;
-    if (typeof v !== "string") throw new CommandRefusal("invalidValue", `${at} must be an item address (rectangle:<id>, frame:<id>, $h:<name>)`);
-    if (v.startsWith("$h:") || v === "$created") return { kind: "rectangle", id: v };
+    if (typeof v === "object" && v !== null && "kind" in v && "id" in v)
+      return v as ElementId;
+    if (typeof v !== "string")
+      throw new CommandRefusal(
+        "invalidValue",
+        `${at} must be an item address (rectangle:<id>, frame:<id>, $h:<name>)`,
+      );
+    if (v.startsWith("$h:") || v === "$created")
+      return { kind: "rectangle", id: v };
     const p = parseAddress(v);
-    if (!p) throw new CommandRefusal("invalidValue", `${at}: "${v}" is not an address`);
+    if (!p)
+      throw new CommandRefusal(
+        "invalidValue",
+        `${at}: "${v}" is not an address`,
+      );
     if (p.kind === "handle") return { kind: "rectangle", id: `$h:${p.name}` };
     const id = await core.elementIdOf(p);
-    if (!id) throw new CommandRefusal("unknownAddress", `${at}: ${v} names no page item`);
+    if (!id)
+      throw new CommandRefusal(
+        "unknownAddress",
+        `${at}: ${v} names no page item`,
+      );
     return id;
   }
 
-  async function convert(field: StructField, v: unknown, at: string): Promise<unknown> {
+  async function convert(
+    field: StructField,
+    v: unknown,
+    at: string,
+  ): Promise<unknown> {
     if (v === null || v === undefined) return v;
     if (field.kind === "ref") {
       if (field.to === "item") return toElementId(v, at);
@@ -274,12 +365,18 @@ export function createCoreCommands(core: CoreObjects): CoreCommands {
     }
     if (field.kind === "list" && field.of.kind === "ref" && Array.isArray(v)) {
       const of = field.of;
-      return Promise.all(v.map((x, i) => convert(of as StructField, x, `${at}[${i}]`)));
+      return Promise.all(
+        v.map((x, i) => convert(of as StructField, x, `${at}[${i}]`)),
+      );
     }
     return v;
   }
 
-  async function wireArgs(op: string, row: CoreWireOpRow, args: Record<string, unknown>): Promise<Record<string, unknown>> {
+  async function wireArgs(
+    op: string,
+    row: CoreWireOpRow,
+    args: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
     const out: Record<string, unknown> = {};
     for (const [k, field] of Object.entries(row.args.fields)) {
       const raw = args[k];
@@ -302,29 +399,50 @@ export function createCoreCommands(core: CoreObjects): CoreCommands {
     async plan(id, rawArgs, handles, autoHandle) {
       const op = id.slice(CORE_COMMAND_PREFIX.length);
       const row = CORE_WIRE_OPS[op];
-      if (!row || !CORE_COMMAND_OPS.includes(op)) throw new CommandRefusal("unknownCommand", `no typed command "${id}"`);
+      if (!row || !CORE_COMMAND_OPS.includes(op))
+        throw new CommandRefusal("unknownCommand", `no typed command "${id}"`);
       const args = (rawArgs ?? {}) as Record<string, unknown>;
-      if (typeof args !== "object" || Array.isArray(args)) throw new CommandRefusal("invalidValue", `${id}: args must be a record`);
+      if (typeof args !== "object" || Array.isArray(args))
+        throw new CommandRefusal(
+          "invalidValue",
+          `${id}: args must be a record`,
+        );
       const creates = CORE_COMMAND_CREATES[op];
       const bindable = creates?.by === "element" || creates?.by === "page";
       for (const k of Object.keys(args)) {
         if (!(k in row.args.fields) && !(k === "handle" && bindable)) {
-          throw new CommandRefusal("invalidValue", `${id}: no argument "${k}"${k === "handle" ? " (this command creates nothing to bind)" : ""}`);
+          throw new CommandRefusal(
+            "invalidValue",
+            `${id}: no argument "${k}"${k === "handle" ? " (this command creates nothing to bind)" : ""}`,
+          );
         }
       }
       const given = args["handle"];
-      if (given !== undefined && (typeof given !== "string" || !/^[A-Za-z0-9_]+$/.test(given) || handles.has(given))) {
-        throw new CommandRefusal("invalidValue", `${id}: handle "${String(given)}" is repeated or not [A-Za-z0-9_]+`);
+      if (
+        given !== undefined &&
+        (typeof given !== "string" ||
+          !/^[A-Za-z0-9_]+$/.test(given) ||
+          handles.has(given))
+      ) {
+        throw new CommandRefusal(
+          "invalidValue",
+          `${id}: handle "${String(given)}" is repeated or not [A-Za-z0-9_]+`,
+        );
       }
       const wire = await wireArgs(id, row, args);
-      const mutations: MutationInput[] = [{ op, args: wire } as unknown as MutationInput];
+      const mutations: MutationInput[] = [
+        { op, args: wire } as unknown as MutationInput,
+      ];
       let handle: CoreCommandPlan["handle"] = null;
       if (bindable) {
         const name = (given as string | undefined) ?? autoHandle();
         mutations.push({ op: "bindCreated", args: { handle: name } });
         handle = { name, kind: creates.by === "page" ? "page" : creates.kind };
       }
-      const count = op === "duplicateElements" ? ((wire["elementIds"] as unknown[] | undefined)?.length ?? 1) : 1;
+      const count =
+        op === "duplicateElements"
+          ? ((wire["elementIds"] as unknown[] | undefined)?.length ?? 1)
+          : 1;
       return {
         op,
         mutations,
@@ -342,7 +460,9 @@ export function createCoreCommands(core: CoreObjects): CoreCommands {
           const at = ctx.minted.findIndex((m) => m.handle === handle!.name);
           if (at < 0) return [];
           const from = creates.multi ? Math.max(0, at - (count - 1)) : at;
-          return ctx.minted.slice(from, at + 1).map((m) => fromElementId(m.element));
+          return ctx.minted
+            .slice(from, at + 1)
+            .map((m) => fromElementId(m.element));
         },
       };
     },
@@ -351,13 +471,22 @@ export function createCoreCommands(core: CoreObjects): CoreCommands {
       // Pages come off the outcome (`createdPages`, in creation order, so
       // each command takes the page it made). Layers are still diffed: the
       // engine does not report the layers a mutation created.
-      const layers = plans.some((p) => CORE_COMMAND_CREATES[p.op]?.by === "layer");
+      const layers = plans.some(
+        (p) => CORE_COMMAND_CREATES[p.op]?.by === "layer",
+      );
       const before = layers ? new Set(await list("layer")) : null;
       return async (outcome) => {
         const fresh = new Map<"page" | "layer", string[]>();
         const pages = outcome.applied ? (outcome.createdPages ?? []) : [];
-        fresh.set("page", pages.map((id) => formatAddress({ kind: "page", id })));
-        if (before) fresh.set("layer", (await list("layer")).filter((a) => !before.has(a)));
+        fresh.set(
+          "page",
+          pages.map((id) => formatAddress({ kind: "page", id })),
+        );
+        if (before)
+          fresh.set(
+            "layer",
+            (await list("layer")).filter((a) => !before.has(a)),
+          );
         return async (k) => fresh.get(k)?.shift() ?? null;
       };
     },

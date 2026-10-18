@@ -49,20 +49,16 @@ function isPrerelease(v) {
 /** @param {string} name */
 function distTags(name) {
   // `npm view <name> dist-tags --json` — empty/absent package yields ''.
-  const out = execFileSync(
-    "npm",
-    ["view", name, "dist-tags", "--json"],
-    { encoding: "utf8" },
-  ).trim();
+  const out = execFileSync("npm", ["view", name, "dist-tags", "--json"], {
+    encoding: "utf8",
+  }).trim();
   return out ? JSON.parse(out) : {};
 }
 
 const failures = [];
 
 for (const dir of PACKAGES) {
-  const pkg = JSON.parse(
-    readFileSync(join(root, dir, "package.json"), "utf8"),
-  );
+  const pkg = JSON.parse(readFileSync(join(root, dir, "package.json"), "utf8"));
   const { name, version } = pkg;
   const tags = distTags(name);
   console.log(`${name}: dist-tags=${JSON.stringify(tags)} (repo ${version})`);

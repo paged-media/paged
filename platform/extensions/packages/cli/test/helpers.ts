@@ -31,10 +31,17 @@ export const silent = { debug() {}, info() {}, warn() {}, error() {} };
 export const FIXTURES = fileURLToPath(new URL("./fixtures/", import.meta.url));
 
 /** Run the CLI in-process; stdout parsed as JSON when it is JSON. */
-export async function cli(argv: string[], cwd?: string): Promise<{ code: number; json: any; out: string; err: string }> {
+export async function cli(
+  argv: string[],
+  cwd?: string,
+): Promise<{ code: number; json: any; out: string; err: string }> {
   const out: string[] = [];
   const err: string[] = [];
-  const code = await main(argv, { stdout: (t) => out.push(t), stderr: (t) => err.push(t), ...(cwd ? { cwd } : {}) });
+  const code = await main(argv, {
+    stdout: (t) => out.push(t),
+    stderr: (t) => err.push(t),
+    ...(cwd ? { cwd } : {}),
+  });
   const text = out.join("\n");
   let json: unknown = null;
   try {
@@ -47,9 +54,15 @@ export async function cli(argv: string[], cwd?: string): Promise<{ code: number;
 
 /** Harness options that boot the INSTALLED engine (70 or 71 lane), the way
  *  the CLI's session does. */
-export async function engineOptions(): Promise<{ resolveFrom: string; expectedProtocol: number }> {
+export async function engineOptions(): Promise<{
+  resolveFrom: string;
+  expectedProtocol: number;
+}> {
   const resolveFrom = packageRoot();
-  return { resolveFrom, expectedProtocol: (await engineProtocolOnDisk(resolveFrom)).protocol };
+  return {
+    resolveFrom,
+    expectedProtocol: (await engineProtocolOnDisk(resolveFrom)).protocol,
+  };
 }
 
 /** The installed engine's protocol (the lane this run is on). */
@@ -64,31 +77,51 @@ export function tempDir(): { dir: string; done(): void } {
 
 /** The SDK's minimal fixture (one page "usp", one black rectangle "urect")
  *  with a text frame ("Hello") and a label on the rectangle, saved as .paged. */
-export async function writeFixture(dir: string): Promise<{ idml: string; paged: string; story: string; frame: string }> {
+export async function writeFixture(
+  dir: string,
+): Promise<{ idml: string; paged: string; story: string; frame: string }> {
   const idml = join(dir, "min.idml");
   writeFileSync(idml, minimalIdml());
-  const h = await createHeadlessHost({ console: silent, ...(await engineOptions()) });
+  const h = await createHeadlessHost({
+    console: silent,
+    ...(await engineOptions()),
+  });
   try {
     const [pageId] = await h.load(minimalIdml());
     const made = await h.host.document.mutate({
       op: "batch",
       args: {
         ops: [
-          { op: "insertTextFrame", args: { pageId: pageId!, bounds: [10, 10, 100, 200] } },
+          {
+            op: "insertTextFrame",
+            args: { pageId: pageId!, bounds: [10, 10, 100, 200] },
+          },
           { op: "bindCreated", args: { handle: "t" } },
-          { op: "insertText", args: { storyId: "$h:t", offset: 0, text: "Hello" } },
+          {
+            op: "insertText",
+            args: { storyId: "$h:t", offset: 0, text: "Hello" },
+          },
         ],
       },
     } as never);
     if (!made.applied) throw new Error("fixture: text frame refused");
-    const minted = made.minted?.[0] as { storyId: string; id?: { id: string } } | undefined;
-    const labelled = await h.host.document.setMetadata({ kind: "rectangle", id: "urect" } as never, { v: 1, data: { role: "hero" } });
+    const minted = made.minted?.[0] as
+      { storyId: string; id?: { id: string } } | undefined;
+    const labelled = await h.host.document.setMetadata(
+      { kind: "rectangle", id: "urect" } as never,
+      { v: 1, data: { role: "hero" } },
+    );
     if (!labelled.applied) throw new Error("fixture: label refused");
     const { bytes } = await h.exportDocument("paged");
     const paged = join(dir, "fixture.paged");
     writeFileSync(paged, bytes);
     const frames = await h.objects.query("textFrame");
-    return { idml, paged, story: (await h.objects.query("story"))[0]!, frame: frames[0]! ?? String(minted?.id?.id) };
+    return {
+      idml,
+      paged,
+      story: (await h.objects.query("story"))[0]!,
+      frame: frames[0]! ?? String(minted?.id?.id),
+    };
   } finally {
     h.dispose();
   }
