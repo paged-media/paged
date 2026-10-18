@@ -14,7 +14,7 @@ name: slide / publish
 # Manual until the package exists: trusted publishing cannot create a
 # package, so the first version is published by hand (`bun run build` in
 # packages/slide-bundle after scripts/build-wasm.sh, then `npm publish
-# --tag canary --access public` of the tarball `node tooling/js/pack.mjs
+# --tag canary --access public` of the tarball `bun tooling/js/pack.mjs
 # packages/slide-bundle <dir>` makes) and the trusted publisher configured on
 # npm. Then
 # add `push: branches: [main]` here.
@@ -79,6 +79,6 @@ jobs:
             # The packed tarball, not the directory: npm does not apply
             # publishConfig (main/types/exports -> dist/) nor resolve
             # workspace:/catalog: specifiers; tooling/js/pack.mjs does.
-            tgz=$(node "$GITHUB_WORKSPACE/tooling/js/pack.mjs" "$dir" "$RUNNER_TEMP")
+            tgz=$(bun "$GITHUB_WORKSPACE/tooling/js/pack.mjs" "$dir" "$RUNNER_TEMP")
             npm publish "$tgz" --provenance --tag canary --access public
           done

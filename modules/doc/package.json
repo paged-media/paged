@@ -8,7 +8,7 @@
     "typecheck": "bun run --filter './packages/*' typecheck",
     "build": "bun run --filter './packages/*' typecheck",
     "test": "bun run --filter './packages/*' test",
-    "validate:manifest": "node ../../platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs validate packages/doc-bundle/manifest.json"
+    "validate:manifest": "bun ../../platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs validate packages/doc-bundle/manifest.json"
   },
   "devDependencies": {
     "tsup": "^8.5.1",

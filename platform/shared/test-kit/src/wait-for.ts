@@ -61,7 +61,10 @@ class WaitForTimeout extends Error {}
 function within<T>(p: Promise<T>, ms: number): Promise<T> {
   let id: ReturnType<typeof setTimeout> | undefined;
   const timer = new Promise<never>((_, reject) => {
-    id = realSetTimeout(() => reject(new WaitForTimeout(`waitFor: timed out in ${ms}ms`)), ms);
+    id = realSetTimeout(
+      () => reject(new WaitForTimeout(`waitFor: timed out in ${ms}ms`)),
+      ms,
+    );
   });
   return Promise.race([p, timer]).finally(() => realClearTimeout(id));
 }
@@ -70,8 +73,11 @@ export async function waitFor<T>(
   callback: () => T | Promise<T>,
   options: number | WaitForOptions = {},
 ): Promise<T> {
-  const { timeout = 1000, interval = 50, clock } =
-    typeof options === "number" ? { timeout: options } : options;
+  const {
+    timeout = 1000,
+    interval = 50,
+    clock,
+  } = typeof options === "number" ? { timeout: options } : options;
   const start = Date.now();
   let waited = 0;
   let lastError: unknown = new Error(`waitFor: timed out in ${timeout}ms`);
@@ -79,13 +85,19 @@ export async function waitFor<T>(
     const fake = clock?.isFakeTimers() === true;
     try {
       const result = callback();
-      if (result instanceof Promise || (result && typeof (result as { then?: unknown }).then === "function")) {
+      if (
+        result instanceof Promise ||
+        (result && typeof (result as { then?: unknown }).then === "function")
+      ) {
         const remaining = Math.max(1, timeout - (Date.now() - start));
-        return await (fake ? (result as Promise<T>) : within(Promise.resolve(result), remaining));
+        return await (fake
+          ? (result as Promise<T>)
+          : within(Promise.resolve(result), remaining));
       }
       return result as T;
     } catch (e) {
-      if (e instanceof WaitForTimeout) throw lastError instanceof Error ? lastError : e;
+      if (e instanceof WaitForTimeout)
+        throw lastError instanceof Error ? lastError : e;
       lastError = e;
     }
     const elapsed = fake ? waited : Date.now() - start;

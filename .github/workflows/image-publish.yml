@@ -94,7 +94,7 @@ jobs:
               echo "skip $name@$version (already published)"; continue
             fi
             tgz="$RUNNER_TEMP/$(echo "$name" | sed 's#@##; s#/#-#')-${version}.tgz"
-            node "$GITHUB_WORKSPACE/tooling/js/pack.mjs" "$dir" "$RUNNER_TEMP" >/dev/null
+            bun "$GITHUB_WORKSPACE/tooling/js/pack.mjs" "$dir" "$RUNNER_TEMP" >/dev/null
             echo "publish $name@$version via OIDC"
             npm publish "$tgz" --tag canary --access public
           done
