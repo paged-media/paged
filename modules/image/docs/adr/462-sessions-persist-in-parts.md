@@ -39,7 +39,7 @@ one layer, with the reason stated.
 - `glue/src/session.ts` (`MAX_BAKED_BYTES`) — the bake is capped at 8 MB only on the JSON lane
 - `glue/src/session.ts` (`commitToDocument`) and `glue/src/activate.ts` (`onWillSave`) — the binary
   mutation lane, part deletion and the will-save hook (until B3b these went through a probing
-  module, `glue/src/host66.ts`; see `docs/migration/seams.md` at the repository root)
+  module; see `docs/migration/seams.md` at the repository root)
 
 ## Alternatives considered
 

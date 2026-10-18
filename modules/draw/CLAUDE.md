@@ -398,14 +398,10 @@ the two — 2–3 whole-document reads per command. The engine's raw
 `mutationApplied` already lists every element a batch minted, in mint
 order (`minted`); plugin-sdk's `host.document.mutate` dropped it before
 0.2.38 (RFI K-15) and carries it on the outcome since.
-`mutateMinting(host, mutation)` answers it through three lanes and a flow
-never knows which it got: `outcome.minted` (plugin-sdk ≥ 0.2.38 — the
-headless host and the editor both take this one, 0 tree reads), the raw
-reply HEARD on `host.editor.client.subscribe` while the facade writes (an
-older SDK with the hatch — 0 tree reads), and the tree diff (a host with
-neither). The conformance `LANES` reach the two older lanes through
-`withoutMintedOutcome` (`test/conformance/one-batch.ts`). The write
-itself always goes through `host.document.mutate`: `client.send({ kind: "mutate" })` would skip the
+`mutateMinting(host, mutation)` answers it off `outcome.minted` (the
+headless host and the editor both carry it, 0 tree reads); the raw-reply
+and tree-diff lanes it kept for older SDKs went in B3b. The write itself
+always goes through `host.document.mutate`: `client.send({ kind: "mutate" })` would skip the
 facade's gates, and the headless host does not fan a `send` reply out, so
 no `onDidChange` listener would hear the write. What `minted` contains is
 measured and pinned in `minted.spec.ts`: one entry per CREATING child in
@@ -413,7 +409,7 @@ batch order, a `createGroup` listed as a group, an element the same batch
 deletes again STILL listed, `createSwatch` not listed, and `handle` named
 on some batches and `null` on others — ORDER is the contract. A flow
 never indexes the list by hand: `bindMinted(minting, batch)` reads the
-batch it sent and answers handle → id, the same in every lane.
+batch it sent and answers handle → id, and refuses when the two disagree.
 
 **THE `frameTransform` DOOR, and three things measured about it** (the
 §16.3 lane rides it; protocol 60):
