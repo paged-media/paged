@@ -1,0 +1,25 @@
+// paged.server — local dev: `npx wrangler dev`. Nothing here is deployed by
+// running it; deploying (and creating the bucket) is a separate, deliberate act.
+{
+  "name": "paged-server",
+  "main": "build/worker/shim.mjs",
+  "compatibility_date": "2026-09-01",
+  "build": { "command": "worker-build --release" },
+  "durable_objects": {
+    "bindings": [
+      { "name": "REPO", "class_name": "RepoObject" },
+      { "name": "AUTH", "class_name": "AuthObject" },
+      { "name": "WORKSPACE", "class_name": "WorkspaceObject" },
+      { "name": "SESSION", "class_name": "SessionObject" },
+      { "name": "ENGINE", "class_name": "EngineObject" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["RepoObject"] },
+    { "tag": "v2", "new_sqlite_classes": ["AuthObject"] },
+    { "tag": "v3", "new_sqlite_classes": ["WorkspaceObject"] },
+    { "tag": "v4", "new_sqlite_classes": ["SessionObject"] },
+    { "tag": "v5", "new_sqlite_classes": ["EngineObject"] }
+  ],
+  "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "paged-objects" }]
+}
