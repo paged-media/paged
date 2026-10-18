@@ -75,14 +75,20 @@ export function oidOfSelector(selector: string): string | null {
 }
 
 /** The selector string a target ref resolves through (`host` → the oid). */
-export function targetSelector(target: TargetRef, hostOid?: string | null): string | null {
+export function targetSelector(
+  target: TargetRef,
+  hostOid?: string | null,
+): string | null {
   if (target === "host") return hostOid ? oidSelector(hostOid) : null;
   return target.selector;
 }
 
 /** Find the swatch a colour intent names: by self id, by name, or as
  *  `Color/<name>` (InDesign's `Self` for a named colour). */
-export function findSwatch(intent: ColorIntent, swatches: readonly SwatchRow[]): SwatchRow | null {
+export function findSwatch(
+  intent: ColorIntent,
+  swatches: readonly SwatchRow[],
+): SwatchRow | null {
   return (
     swatches.find((s) => s.selfId === intent.name) ??
     swatches.find((s) => s.name === intent.name) ??
@@ -122,7 +128,13 @@ export function planProperties(
   swatches: readonly SwatchRow[],
   hostOids: Readonly<Record<string, string>> = {},
 ): PropertyPlan {
-  const plan: PropertyPlan = { ops: [], bindings: [], mint: [], skipped: {}, written: {} };
+  const plan: PropertyPlan = {
+    ops: [],
+    bindings: [],
+    mint: [],
+    skipped: {},
+    written: {},
+  };
   const minted = new Set<string>();
   const known = [...swatches];
   for (const { binding, property } of applies) {
@@ -142,7 +154,8 @@ export function planProperties(
       continue;
     }
     if (addresses.length === 0) {
-      plan.skipped[binding] = `the target ${selector} names no object in this document`;
+      plan.skipped[binding] =
+        `the target ${selector} names no object in this document`;
       continue;
     }
     let value: unknown = o.value;
@@ -153,7 +166,8 @@ export function planProperties(
       } else {
         const create = mintSwatch(o.color);
         if (!create) {
-          plan.skipped[binding] = `no swatch named "${o.color.name}" in this document`;
+          plan.skipped[binding] =
+            `no swatch named "${o.color.name}" in this document`;
           continue;
         }
         const selfId = `Color/${o.color.name}`;
@@ -181,21 +195,33 @@ export function planProperties(
  *  as `<?AID xxxx?>` processing text; an ASCII-only value comes back
  *  byte-exact (the 2026-10-06 round-trip survey). */
 export function asciiJson(value: unknown): string {
-  return JSON.stringify(value).replace(/[\u0080-￿]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`);
+  return JSON.stringify(value).replace(
+    /[\u0080-￿]/g,
+    (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`,
+  );
 }
 
 /** Undo InDesign's label re-encoding: every `<?AID xxxx?>` (one UTF-16 code
  *  unit, hex) back to its character. Safe on any text. */
 export function decodeAid(text: string): string {
-  return text.replace(/<\?AID ([0-9a-fA-F]{4})\?>/g, (_, hex: string) => String.fromCharCode(parseInt(hex, 16)));
+  return text.replace(/<\?AID ([0-9a-fA-F]{4})\?>/g, (_, hex: string) =>
+    String.fromCharCode(parseInt(hex, 16)),
+  );
 }
 
 /** The `data` object of one of our label values, or null. */
-export function labelData(value: string | null | undefined): Record<string, unknown> | null {
+export function labelData(
+  value: string | null | undefined,
+): Record<string, unknown> | null {
   if (!value) return null;
   try {
-    const parsed = JSON.parse(decodeAid(value)) as { v?: unknown; data?: unknown };
-    return typeof parsed.v === "number" && parsed.data && typeof parsed.data === "object"
+    const parsed = JSON.parse(decodeAid(value)) as {
+      v?: unknown;
+      data?: unknown;
+    };
+    return typeof parsed.v === "number" &&
+      parsed.data &&
+      typeof parsed.data === "object"
       ? (parsed.data as Record<string, unknown>)
       : null;
   } catch {
@@ -205,7 +231,13 @@ export function labelData(value: string | null | undefined): Record<string, unkn
 
 /** The keys the binding persistence owns in an element label; every other
  *  key (a lowered content's `kind` / `binding` / `def` / `session`) is kept. */
-export const PERSIST_KEYS = ["oid", "bind", "queries", "sources", "extra"] as const;
+export const PERSIST_KEYS = [
+  "oid",
+  "bind",
+  "queries",
+  "sources",
+  "extra",
+] as const;
 
 /** Merge the persistence keys into an existing label's data (one label per
  *  element — ADR 559 point 3), or remove them (`patch` null). Returns the

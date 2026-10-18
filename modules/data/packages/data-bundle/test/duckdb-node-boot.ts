@@ -6,14 +6,26 @@ import { createRequire } from "node:module";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { DUCKDB_ARTIFACTS, duckdbHandle, type DuckDBHandle } from "../src/query/duckdb";
+import {
+  DUCKDB_ARTIFACTS,
+  duckdbHandle,
+  type DuckDBHandle,
+} from "../src/query/duckdb";
 import { nodeBootSql } from "./duckdb-node-ext";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 export const PKG = join(HERE, "..");
 export const BIN = join(PKG, "bin");
 export const ENGINE_WASM = join(BIN, DUCKDB_ARTIFACTS.module);
-export const NODE_API = join(PKG, "..", "..", "vendor", "duckdb-wasm", "dist", "duckdb-node-blocking.cjs");
+export const NODE_API = join(
+  PKG,
+  "..",
+  "..",
+  "vendor",
+  "duckdb-wasm",
+  "dist",
+  "duckdb-node-blocking.cjs",
+);
 
 // The vendored CJS requires apache-arrow, which resolves from modules/data's own
 // node_modules (a devDependency there for this). It used to come from this
@@ -29,16 +41,26 @@ export interface NodeDuckDB {
   raw(sql: string): Array<Record<string, unknown>>;
 }
 
-export async function tryBootNodeDuckDB(): Promise<{ duck?: NodeDuckDB; error?: string }> {
+export async function tryBootNodeDuckDB(): Promise<{
+  duck?: NodeDuckDB;
+  error?: string;
+}> {
   if (!existsSync(ENGINE_WASM))
-    return { error: `${ENGINE_WASM} is missing — run \`bash scripts/vendor-duckdb.sh\`` };
+    return {
+      error: `${ENGINE_WASM} is missing — run \`bash scripts/vendor-duckdb.sh\``,
+    };
   if (!existsSync(NODE_API))
-    return { error: `${NODE_API} is missing — run \`bash scripts/vendor-duckdb.sh\`` };
+    return {
+      error: `${NODE_API} is missing — run \`bash scripts/vendor-duckdb.sh\``,
+    };
   try {
     const duckdb = requireNodeDuckDB();
     const db = await duckdb.createDuckDB(
       {
-        mvp: { mainModule: join(BIN, "duckdb-mvp.NOT-SHIPPED.wasm"), mainWorker: "" },
+        mvp: {
+          mainModule: join(BIN, "duckdb-mvp.NOT-SHIPPED.wasm"),
+          mainWorker: "",
+        },
         eh: { mainModule: ENGINE_WASM, mainWorker: "" },
       },
       new duckdb.VoidLogger(),
@@ -50,10 +72,16 @@ export async function tryBootNodeDuckDB(): Promise<{ duck?: NodeDuckDB; error?: 
     return {
       duck: {
         handle: duckdbHandle(db, conn, () => db.reset?.()),
-        raw: (sql) => conn.query(sql).toArray().map((r: { toJSON(): Record<string, unknown> }) => r.toJSON()),
+        raw: (sql) =>
+          conn
+            .query(sql)
+            .toArray()
+            .map((r: { toJSON(): Record<string, unknown> }) => r.toJSON()),
       },
     };
   } catch (err) {
-    return { error: `DuckDB failed to boot: ${err instanceof Error ? err.message : String(err)}` };
+    return {
+      error: `DuckDB failed to boot: ${err instanceof Error ? err.message : String(err)}`,
+    };
   }
 }

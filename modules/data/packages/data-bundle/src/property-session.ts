@@ -5,9 +5,20 @@
 // spreads these methods into the session (like `reviewMethods`); the state
 // they touch is the session's own, passed in by reference.
 
-import type { BundleHost, ElementId, Mutation, PropertySchema } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  ElementId,
+  Mutation,
+  PropertySchema,
+} from "@paged-media/plugin-api";
 
-import { DATA_LABEL_KEY, labelData, oidOfSelector, oidSelector, type PropertyApply } from "../../data-host-model/src";
+import {
+  DATA_LABEL_KEY,
+  labelData,
+  oidOfSelector,
+  oidSelector,
+  type PropertyApply,
+} from "../../data-host-model/src";
 import type { DataEngineLike } from "./engine";
 import {
   labelledElements,
@@ -18,7 +29,12 @@ import {
   type HostFacts,
   type PayloadJson,
 } from "./labels";
-import { commitProperties, NO_OBJECT_MODEL, objectsOf, type PropertyLaneResult } from "./property-lane";
+import {
+  commitProperties,
+  NO_OBJECT_MODEL,
+  objectsOf,
+  type PropertyLaneResult,
+} from "./property-lane";
 import { textVariablesOn } from "./text-variables";
 
 type Diagnostic = {
@@ -49,7 +65,13 @@ export interface PropertyContext {
   imageTargets: Map<string, { elementId: string; fit?: string }>;
   barcodeTargets: Map<string, { elementId: string }>;
   loweredInto: Map<string, ElementId>;
-  ruleTargets: Map<string, { query: string; target: { kind: string; storyId: string; [k: string]: unknown } }>;
+  ruleTargets: Map<
+    string,
+    {
+      query: string;
+      target: { kind: string; storyId: string; [k: string]: unknown };
+    }
+  >;
   /** Property bindings carried by an element: binding → oid. */
   hostOids: Map<string, string>;
   /** …and the element (raw `Self`) while this session knows it. */
@@ -109,20 +131,27 @@ export function elementOfAddress(address: string): ElementId | null {
 }
 
 /** A selector that already names its target durably (name / label based). */
-const durable = (s: string) => /\[(name|label)[.=*^!]/.test(s) || s.startsWith("plugin:");
+const durable = (s: string) =>
+  /\[(name|label)[.=*^!]/.test(s) || s.startsWith("plugin:");
 
-const errText = (err: unknown) => (err instanceof Error ? err.message : String(err));
+const errText = (err: unknown) =>
+  err instanceof Error ? err.message : String(err);
 
 /** The oid another surface (the editor) gave an element: `x-paged:oid`. */
-function sharedOid(meta: readonly { key: string; value: string }[] | undefined): string | null {
+function sharedOid(
+  meta: readonly { key: string; value: string }[] | undefined,
+): string | null {
   const entry = meta?.find((m) => m.key === "x-paged:oid");
   if (!entry) return null;
   try {
     const parsed = JSON.parse(entry.value) as { data?: unknown } | string;
-    const v = typeof parsed === "string" ? parsed : (parsed as { data?: unknown }).data;
+    const v =
+      typeof parsed === "string" ? parsed : (parsed as { data?: unknown }).data;
     if (typeof v === "string" && /^[A-Za-z0-9_-]{2,64}$/.test(v)) return v;
     const nested = (v as { oid?: unknown } | null)?.oid;
-    return typeof nested === "string" && /^[A-Za-z0-9_-]{2,64}$/.test(nested) ? nested : null;
+    return typeof nested === "string" && /^[A-Za-z0-9_-]{2,64}$/.test(nested)
+      ? nested
+      : null;
   } catch {
     return /^[A-Za-z0-9_-]{2,64}$/.test(entry.value) ? entry.value : null;
   }
@@ -171,12 +200,18 @@ export function propertyMethods(ctx: PropertyContext) {
     }
   }
 
-  async function storyHosted(payload: PayloadJson): Promise<HostFacts["storyHosted"]> {
+  async function storyHosted(
+    payload: PayloadJson,
+  ): Promise<HostFacts["storyHosted"]> {
     const out = new Map<string, { frame: string; extra?: unknown }>();
-    const variables = (payload.bindings ?? []).filter((b) => b.kind === "variable").map((b) => b.id);
+    const variables = (payload.bindings ?? [])
+      .filter((b) => b.kind === "variable")
+      .map((b) => b.id);
     if (variables.length > 0 && host.supports("document.placeholders@1")) {
       try {
-        const fields = (await host.document.placeholders()).filter((p) => p.plugin === "media.paged.data");
+        const fields = (await host.document.placeholders()).filter(
+          (p) => p.plugin === "media.paged.data",
+        );
         for (const id of variables) {
           const f = fields.find((x) => x.key === id);
           const frame = f ? await firstFrame(f.storyId) : null;
@@ -193,10 +228,20 @@ export function propertyMethods(ctx: PropertyContext) {
       // renumbers the table's `Self`, so the label names the table by its
       // place in the story (protocol 71: `story:<id> > table`). The label
       // stays on the story's frame — never on a cell.
-      const target: Record<string, unknown> = { ...t.target, storyId: "$story" };
-      if (t.target.kind === "tableColumn" && typeof t.target.tableId === "string") {
-        const index = await tableIndexInStory(t.target.storyId, t.target.tableId);
-        if (index !== null) Object.assign(target, { tableId: "$table", tableIndex: index });
+      const target: Record<string, unknown> = {
+        ...t.target,
+        storyId: "$story",
+      };
+      if (
+        t.target.kind === "tableColumn" &&
+        typeof t.target.tableId === "string"
+      ) {
+        const index = await tableIndexInStory(
+          t.target.storyId,
+          t.target.tableId,
+        );
+        if (index !== null)
+          Object.assign(target, { tableId: "$table", tableIndex: index });
       }
       out.set(id, { frame, extra: { query: t.query, target } });
     }
@@ -205,11 +250,16 @@ export function propertyMethods(ctx: PropertyContext) {
 
   /** The place of table `tableId` among the tables of story `storyId`
    *  (protocol 71 query), or null when the host cannot say. */
-  async function tableIndexInStory(storyId: string, tableId: string): Promise<number | null> {
+  async function tableIndexInStory(
+    storyId: string,
+    tableId: string,
+  ): Promise<number | null> {
     const objects = objectsOf(host);
     if (!objects || !(await textVariablesOn(host))) return null;
     try {
-      const i = (await objects.query(`story:${storyId} > table`)).indexOf(`table:${tableId}`);
+      const i = (await objects.query(`story:${storyId} > table`)).indexOf(
+        `table:${tableId}`,
+      );
       return i >= 0 ? i : null;
     } catch {
       return null;
@@ -217,7 +267,10 @@ export function propertyMethods(ctx: PropertyContext) {
   }
 
   /** The table at `index` in story `storyId` today, or null. */
-  async function tableInStory(storyId: string, index: number): Promise<string | null> {
+  async function tableInStory(
+    storyId: string,
+    index: number,
+  ): Promise<string | null> {
     const objects = objectsOf(host);
     if (!objects) return null;
     try {
@@ -242,7 +295,8 @@ export function propertyMethods(ctx: PropertyContext) {
       lowered: ctx.loweredInto,
       storyHosted: await storyHosted(payload),
     };
-    return planLabels(payload, facts, labelledElements(await tree())).ops as Mutation[];
+    return planLabels(payload, facts, labelledElements(await tree()))
+      .ops as Mutation[];
   }
 
   /** Write the element labels the recipe asks for (one mutate, or none).
@@ -252,9 +306,16 @@ export function propertyMethods(ctx: PropertyContext) {
   async function syncLabels(): Promise<{ written: number }> {
     const ops = await planLabelOps();
     if (ops.length === 0) return { written: 0 };
-    const out = await host.document.mutate({ op: "batch", args: { ops } } as never);
+    const out = await host.document.mutate({
+      op: "batch",
+      args: { ops },
+    } as never);
     if (!out.applied) {
-      ctx.report({ level: "warn", source: "persist", message: `the binding labels were not written: ${errText(out.error)}` });
+      ctx.report({
+        level: "warn",
+        source: "persist",
+        message: `the binding labels were not written: ${errText(out.error)}`,
+      });
       return { written: 0 };
     }
     return { written: ops.length };
@@ -277,7 +338,11 @@ export function propertyMethods(ctx: PropertyContext) {
     try {
       // The open already read the document label (labelledSession); read it
       // here only when it did not.
-      const doc = (documentLabel !== undefined ? documentLabel : await host.document.getDocumentMetadata()) as {
+      const doc = (
+        documentLabel !== undefined
+          ? documentLabel
+          : await host.document.getDocumentMetadata()
+      ) as {
         data?: { recipe?: PayloadJson };
       } | null;
       recipe = doc?.data?.recipe ?? null;
@@ -286,7 +351,10 @@ export function propertyMethods(ctx: PropertyContext) {
     }
     const restored = restoreFromLabels(elements, recipe);
     const bindings = restored.payload.bindings ?? [];
-    if (bindings.length === 0 && (restored.payload.queries ?? []).length === 0) {
+    if (
+      bindings.length === 0 &&
+      (restored.payload.queries ?? []).length === 0
+    ) {
       if (elements.some((x) => x.data !== null)) {
         ctx.report({
           level: "info",
@@ -298,12 +366,17 @@ export function propertyMethods(ctx: PropertyContext) {
       return false;
     }
     // Rules point into a story: today's story id of the frame they live in.
-    const rules = [...restored.facts.storyHosted].filter(([id]) => bindings.some((b) => b.id === id && b.kind === "rule"));
+    const rules = [...restored.facts.storyHosted].filter(([id]) =>
+      bindings.some((b) => b.id === id && b.kind === "rule"),
+    );
     const frameStory = new Map<string, string>();
     if (rules.length > 0) {
       try {
-        for (const s of await host.document.collection<{ selfId: string }>("stories")) {
-          for (const link of await host.document.frameChain(s.selfId)) frameStory.set(link.frameId, s.selfId);
+        for (const s of await host.document.collection<{ selfId: string }>(
+          "stories",
+        )) {
+          for (const link of await host.document.frameChain(s.selfId))
+            frameStory.set(link.frameId, s.selfId);
         }
       } catch {
         // no story read: the rules report below
@@ -314,20 +387,41 @@ export function propertyMethods(ctx: PropertyContext) {
       ctx.bindingKinds.set(b.id, b.kind);
       if (!ctx.bindingIds.includes(b.id)) ctx.bindingIds.push(b.id);
     }
-    for (const q of restored.payload.queries ?? []) ctx.queries.set(q.id, { id: q.id, sql: String(q.sql ?? "") });
+    for (const q of restored.payload.queries ?? [])
+      ctx.queries.set(q.id, { id: q.id, sql: String(q.sql ?? "") });
     for (const [id, oid] of restored.facts.hostOids) ctx.hostOids.set(id, oid);
-    for (const [id, el] of restored.facts.hostElements) ctx.hostElements.set(id, el);
-    for (const [id, t] of restored.facts.visibility) ctx.visibilityTargets.set(id, t);
+    for (const [id, el] of restored.facts.hostElements)
+      ctx.hostElements.set(id, el);
+    for (const [id, t] of restored.facts.visibility)
+      ctx.visibilityTargets.set(id, t);
     for (const [id, t] of restored.facts.image) ctx.imageTargets.set(id, t);
     for (const [id, t] of restored.facts.barcode) ctx.barcodeTargets.set(id, t);
     for (const [id, el] of restored.facts.lowered) ctx.loweredInto.set(id, el);
     for (const [id, h] of rules) {
-      const extra = h.extra as { query?: string; target?: { kind: string; storyId: string; tableId?: string; tableIndex?: number } } | undefined;
+      const extra = h.extra as
+        | {
+            query?: string;
+            target?: {
+              kind: string;
+              storyId: string;
+              tableId?: string;
+              tableIndex?: number;
+            };
+          }
+        | undefined;
       const story = frameStory.get(h.frame);
-      let target: { kind: string; storyId: string; [k: string]: unknown } | null = extra?.target && story ? { ...extra.target, storyId: story } : null;
+      let target: {
+        kind: string;
+        storyId: string;
+        [k: string]: unknown;
+      } | null =
+        extra?.target && story ? { ...extra.target, storyId: story } : null;
       if (target && extra?.target?.tableId === "$table") {
         // The table by its place in the story (its `Self` is today's).
-        const tableId = await tableInStory(story!, extra.target.tableIndex ?? 0);
+        const tableId = await tableInStory(
+          story!,
+          extra.target.tableIndex ?? 0,
+        );
         if (tableId) {
           const { tableIndex: _i, ...rest } = target;
           target = { ...rest, tableId };
@@ -338,7 +432,13 @@ export function propertyMethods(ctx: PropertyContext) {
       if (extra?.query && target) {
         ctx.ruleTargets.set(id, { query: extra.query, target });
       } else {
-        ctx.report({ level: "warn", source: "restore", binding: id, message: "the rule's target could not be found again — pick it in the Bindings panel" });
+        ctx.report({
+          level: "warn",
+          source: "restore",
+          binding: id,
+          message:
+            "the rule's target could not be found again — pick it in the Bindings panel",
+        });
       }
     }
     for (const s of sourcesToRelink(restored.payload)) {
@@ -368,42 +468,71 @@ export function propertyMethods(ctx: PropertyContext) {
     planLabelOps,
     restoreLabels,
 
-    async addPropertyBinding(id: string, spec: PropertyBindingSpec, mode?: LabelMode): Promise<DefineResult> {
+    async addPropertyBinding(
+      id: string,
+      spec: PropertyBindingSpec,
+      mode?: LabelMode,
+    ): Promise<DefineResult> {
       const objects = objectsOf(host);
       if (!objects) return { ok: false, reason: NO_OBJECT_MODEL };
       let addresses: string[];
       try {
         addresses = await objects.query(spec.target);
       } catch (err) {
-        return { ok: false, reason: `the target ${spec.target} is not an address or a selector (${errText(err)})` };
+        return {
+          ok: false,
+          reason: `the target ${spec.target} is not an address or a selector (${errText(err)})`,
+        };
       }
-      if (addresses.length === 0) return { ok: false, reason: `the target ${spec.target} names nothing in this document` };
+      if (addresses.length === 0)
+        return {
+          ok: false,
+          reason: `the target ${spec.target} names nothing in this document`,
+        };
       // The schema row the value coerces to.
       let row: PropertySchema | null = null;
       if (spec.schema) {
         try {
-          row = typeof spec.schema === "string" ? (JSON.parse(spec.schema) as PropertySchema) : spec.schema;
+          row =
+            typeof spec.schema === "string"
+              ? (JSON.parse(spec.schema) as PropertySchema)
+              : spec.schema;
         } catch {
           return { ok: false, reason: "the schema row is not JSON" };
         }
       } else {
-        row = (await objects.schema(addresses[0]!)).find((r) => r.path === spec.path) ?? null;
+        row =
+          (await objects.schema(addresses[0]!)).find(
+            (r) => r.path === spec.path,
+          ) ?? null;
       }
-      if (!row || row.path !== spec.path) return { ok: false, reason: `${addresses[0]} has no property "${spec.path}"` };
-      if (row.access === "readOnly" || row.access === "derived") return { ok: false, reason: `"${spec.path}" is ${row.access}` };
+      if (!row || row.path !== spec.path)
+        return {
+          ok: false,
+          reason: `${addresses[0]} has no property "${spec.path}"`,
+        };
+      if (row.access === "readOnly" || row.access === "derived")
+        return { ok: false, reason: `"${spec.path}" is ${row.access}` };
       // A single page item named by a raw id becomes durable: its label
       // carries the binding and its oid (shared with `x-paged:oid` when
       // another surface already gave it one).
       let selector = spec.target;
-      const element = addresses.length === 1 ? elementOfAddress(addresses[0]!) : null;
+      const element =
+        addresses.length === 1 ? elementOfAddress(addresses[0]!) : null;
       const givenOid = oidOfSelector(spec.target);
       if (element && (givenOid || !durable(spec.target))) {
         // A single page item by a raw id (or by its oid already) is carried
         // by its own label and targeted by its oid (shared with
         // `x-paged:oid` when another surface gave it one).
         const node = findNode(await tree(), element.id as string);
-        const ours = labelData(node?.pluginMetadata?.find((m) => m.key === DATA_LABEL_KEY)?.value);
-        const oid = givenOid ?? (typeof ours?.oid === "string" ? ours.oid : null) ?? sharedOid(node?.pluginMetadata) ?? mintOid();
+        const ours = labelData(
+          node?.pluginMetadata?.find((m) => m.key === DATA_LABEL_KEY)?.value,
+        );
+        const oid =
+          givenOid ??
+          (typeof ours?.oid === "string" ? ours.oid : null) ??
+          sharedOid(node?.pluginMetadata) ??
+          mintOid();
         selector = oidSelector(oid);
         ctx.hostOids.set(id, oid);
         ctx.hostElements.set(id, element);
@@ -420,7 +549,11 @@ export function propertyMethods(ctx: PropertyContext) {
       const schema = {
         type: row.type,
         ...(row.nullable ? { nullable: true } : {}),
-        ...(row.range ? { range: { min: row.range.min ?? null, max: row.range.max ?? null } } : {}),
+        ...(row.range
+          ? {
+              range: { min: row.range.min ?? null, max: row.range.max ?? null },
+            }
+          : {}),
         ...(row.default !== undefined ? { default: row.default } : {}),
       };
       const e = await ctx.ensureEngine();
@@ -437,7 +570,10 @@ export function propertyMethods(ctx: PropertyContext) {
           missing: spec.missing ?? "keepLast",
         });
       } catch (err) {
-        return { ok: false, reason: `the engine refused the definition: ${errText(err)}` };
+        return {
+          ok: false,
+          reason: `the engine refused the definition: ${errText(err)}`,
+        };
       }
       ctx.bindingKinds.set(id, "property");
       if (!ctx.bindingIds.includes(id)) ctx.bindingIds.push(id);
@@ -448,11 +584,22 @@ export function propertyMethods(ctx: PropertyContext) {
 
     async removeBinding(id: string, mode?: LabelMode): Promise<boolean> {
       const e = ctx.engineIfUp();
-      const removed = e && typeof e.remove_binding === "function" ? e.remove_binding(id) : false;
+      const removed =
+        e && typeof e.remove_binding === "function"
+          ? e.remove_binding(id)
+          : false;
       const i = ctx.bindingIds.indexOf(id);
       if (i >= 0) ctx.bindingIds.splice(i, 1);
       ctx.bindingKinds.delete(id);
-      for (const m of [ctx.visibilityTargets, ctx.imageTargets, ctx.barcodeTargets, ctx.loweredInto, ctx.ruleTargets, ctx.hostOids, ctx.hostElements]) {
+      for (const m of [
+        ctx.visibilityTargets,
+        ctx.imageTargets,
+        ctx.barcodeTargets,
+        ctx.loweredInto,
+        ctx.ruleTargets,
+        ctx.hostOids,
+        ctx.hostElements,
+      ]) {
         (m as Map<string, unknown>).delete(id);
       }
       await definitionChanged(mode);
@@ -464,24 +611,44 @@ export function propertyMethods(ctx: PropertyContext) {
      *  `host.objects.batch`; with `withVisibility`, visibility bindings too
      *  (re-expressed as `elementVisible`). */
     async applyProperties(
-      opts: { record?: number; ids?: readonly string[]; withVisibility?: boolean } = {},
+      opts: {
+        record?: number;
+        ids?: readonly string[];
+        withVisibility?: boolean;
+      } = {},
     ): Promise<PropertyLaneResult> {
       const e = await ctx.ensureEngine();
       if (typeof e.resolve_properties_at !== "function") {
         return { applied: 0, undoSteps: 0, skipped: {}, written: {}, calls: 0 };
       }
-      const applies = (e.resolve_properties_at(opts.record ?? 0, opts.withVisibility ?? false, opts.ids ? [...opts.ids] : undefined) ??
-        []) as PropertyApply[];
-      const result = await commitProperties(host, applies, Object.fromEntries(ctx.hostOids));
+      const applies = (e.resolve_properties_at(
+        opts.record ?? 0,
+        opts.withVisibility ?? false,
+        opts.ids ? [...opts.ids] : undefined,
+      ) ?? []) as PropertyApply[];
+      const result = await commitProperties(
+        host,
+        applies,
+        Object.fromEntries(ctx.hostOids),
+      );
       for (const [binding, reason] of Object.entries(result.skipped)) {
-        const failed = applies.find((a) => a.binding === binding)?.property.outcome.outcome === "fail";
-        ctx.report({ level: failed ? "error" : "info", source: "binding", binding, message: reason });
+        const failed =
+          applies.find((a) => a.binding === binding)?.property.outcome
+            .outcome === "fail";
+        ctx.report({
+          level: failed ? "error" : "info",
+          source: "binding",
+          binding,
+          message: reason,
+        });
       }
       return result;
     },
 
     /** The property bindings on `address` (and `path`), for a badge. */
-    async propertyBindings(filter: { address?: string; path?: string } = {}): Promise<PropertyBindingInfo[]> {
+    async propertyBindings(
+      filter: { address?: string; path?: string } = {},
+    ): Promise<PropertyBindingInfo[]> {
       const e = ctx.engineIfUp();
       if (!e) return [];
       const objects = objectsOf(host);
@@ -491,7 +658,8 @@ export function propertyMethods(ctx: PropertyContext) {
         if (b.kind !== "property") continue;
         const path = String(b.path ?? "");
         if (filter.path && filter.path !== path) continue;
-        const selector = (b.target as { selector?: string } | null)?.selector ?? "";
+        const selector =
+          (b.target as { selector?: string } | null)?.selector ?? "";
         let addresses: string[] = [];
         if (objects && selector) {
           try {
@@ -503,7 +671,8 @@ export function propertyMethods(ctx: PropertyContext) {
         if (filter.address && !addresses.includes(filter.address)) continue;
         let status: string | null = null;
         try {
-          status = ((e.sync_state(b.id) as { status?: string } | null)?.status ?? null) as string | null;
+          status = ((e.sync_state(b.id) as { status?: string } | null)
+            ?.status ?? null) as string | null;
         } catch {
           status = null;
         }
@@ -516,28 +685,54 @@ export function propertyMethods(ctx: PropertyContext) {
      *  A property binding goes through `addPropertyBinding` (its target is
      *  resolved and its schema read again); any other kind replaces its
      *  engine definition and keeps its host-side target. */
-    async redefineBinding(def: Record<string, unknown>, mode?: LabelMode): Promise<DefineResult> {
+    async redefineBinding(
+      def: Record<string, unknown>,
+      mode?: LabelMode,
+    ): Promise<DefineResult> {
       const id = typeof def.id === "string" ? def.id : "";
-      if (!id || typeof def.kind !== "string") return { ok: false, reason: "a definition needs an id and a kind" };
+      if (!id || typeof def.kind !== "string")
+        return { ok: false, reason: "a definition needs an id and a kind" };
       if (def.kind === "property") {
         const target = (def.target as { selector?: string } | null)?.selector;
-        if (!target) return { ok: false, reason: "a property binding needs { target: { selector } }" };
-        return this.addPropertyBinding(id, {
-          target,
-          path: String(def.path ?? ""),
-          query: String(def.query ?? ""),
-          expr: String(def.expr ?? ""),
-          ...(def.coerce ? { coerce: def.coerce as "strict" } : {}),
-          ...(def.missing ? { missing: def.missing as "keepLast" } : {}),
-          ...(def.schema ? { schema: { path: String(def.path ?? ""), ...(def.schema as object) } as PropertySchema } : {}),
-        }, mode);
+        if (!target)
+          return {
+            ok: false,
+            reason: "a property binding needs { target: { selector } }",
+          };
+        return this.addPropertyBinding(
+          id,
+          {
+            target,
+            path: String(def.path ?? ""),
+            query: String(def.query ?? ""),
+            expr: String(def.expr ?? ""),
+            ...(def.coerce ? { coerce: def.coerce as "strict" } : {}),
+            ...(def.missing ? { missing: def.missing as "keepLast" } : {}),
+            ...(def.schema
+              ? {
+                  schema: {
+                    path: String(def.path ?? ""),
+                    ...(def.schema as object),
+                  } as PropertySchema,
+                }
+              : {}),
+          },
+          mode,
+        );
       }
-      if (!ctx.bindingKinds.has(id)) return { ok: false, reason: `no ${def.kind} binding "${id}" to redefine (define it in the Bindings panel)` };
+      if (!ctx.bindingKinds.has(id))
+        return {
+          ok: false,
+          reason: `no ${def.kind} binding "${id}" to redefine (define it in the Bindings panel)`,
+        };
       const e = await ctx.ensureEngine();
       try {
         e.define_binding(def);
       } catch (err) {
-        return { ok: false, reason: `the engine refused the definition: ${errText(err)}` };
+        return {
+          ok: false,
+          reason: `the engine refused the definition: ${errText(err)}`,
+        };
       }
       ctx.bindingKinds.set(id, def.kind);
       await definitionChanged(mode);
@@ -546,9 +741,13 @@ export function propertyMethods(ctx: PropertyContext) {
     },
 
     /** One binding's definition (`{ id, kind, … }`), or null. */
-    async bindingDefinition(id: string): Promise<Record<string, unknown> | null> {
+    async bindingDefinition(
+      id: string,
+    ): Promise<Record<string, unknown> | null> {
       const e = ctx.engineIfUp();
-      const def = ((e?.payload() ?? {}) as PayloadJson).bindings?.find((b) => b.id === id);
+      const def = ((e?.payload() ?? {}) as PayloadJson).bindings?.find(
+        (b) => b.id === id,
+      );
       return def ? { ...def } : null;
     },
 

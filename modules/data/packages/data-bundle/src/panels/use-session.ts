@@ -7,7 +7,9 @@ import { useEffect, useState } from "react";
 
 import type { DataSourceSession, SessionState } from "../session";
 
-export function useSessionSnapshot(session: DataSourceSession): [SessionState, () => void] {
+export function useSessionSnapshot(
+  session: DataSourceSession,
+): [SessionState, () => void] {
   const [snapshot, setSnapshot] = useState(session.getState());
   useEffect(() => {
     const sub = session.onDidChange(() => setSnapshot(session.getState()));

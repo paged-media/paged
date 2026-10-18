@@ -47,18 +47,30 @@ const silent = { debug() {}, info() {}, warn() {}, error() {} };
  *  previous child minted, and a `$h:` story address resolved to its story. */
 async function applyBatch(
   m: Mutation,
-  one: (m: Mutation) => Promise<{ applied: boolean; createdId?: unknown; error?: unknown }>,
+  one: (
+    m: Mutation,
+  ) => Promise<{ applied: boolean; createdId?: unknown; error?: unknown }>,
 ) {
   const ops = m.op === "batch" ? (m.args as { ops: Mutation[] }).ops : [];
   if (!ops.some((o) => o.op === "bindCreated")) return one(m);
-  const minted: { handle: string | null; element: unknown; storyId: string | null }[] = [];
+  const minted: {
+    handle: string | null;
+    element: unknown;
+    storyId: string | null;
+  }[] = [];
   let last: unknown = null;
   for (const raw of ops) {
     if (raw.op === "bindCreated") {
-      minted.push({ handle: (raw.args as { handle: string }).handle, element: last, storyId: "story-new" });
+      minted.push({
+        handle: (raw.args as { handle: string }).handle,
+        element: last,
+        storyId: "story-new",
+      });
       continue;
     }
-    const child = JSON.parse(JSON.stringify(raw).replace(/"\$h:frame"/g, '"story-new"')) as Mutation;
+    const child = JSON.parse(
+      JSON.stringify(raw).replace(/"\$h:frame"/g, '"story-new"'),
+    ) as Mutation;
     const out = await one(child);
     if (!out.applied) return out;
     if (out.createdId) last = out.createdId;
@@ -68,8 +80,18 @@ async function applyBatch(
 
 function fakeHost(opts?: {
   supports?: (f: string) => boolean;
-  placeholders?: () => { storyId: string; offset: number; plugin: string; key: string; value: string | null }[];
-  frameChain?: () => { frameId: string; next: string | null; overflow: boolean }[];
+  placeholders?: () => {
+    storyId: string;
+    offset: number;
+    plugin: string;
+    key: string;
+    value: string | null;
+  }[];
+  frameChain?: () => {
+    frameId: string;
+    next: string | null;
+    overflow: boolean;
+  }[];
   geometry?: (id: string) => [number, number, number, number];
 }) {
   const mutations: Mutation[] = [];
@@ -79,18 +101,26 @@ function fakeHost(opts?: {
     log: silent,
     supports: (f: string) => (opts?.supports ? opts.supports(f) : true),
     selection: { get: () => [], set: async () => [] },
-    network: { consentedOrigins: () => [], requestConsent: async () => ({ granted: [], denied: [] }) },
+    network: {
+      consentedOrigins: () => [],
+      requestConsent: async () => ({ granted: [], denied: [] }),
+    },
     document: {
       onWillSave: () => ({ dispose() {} }),
-      mutate: async (batch: Mutation) => applyBatch(batch, async (m: Mutation) => {
-        mutations.push(m);
-        // A freshly inserted frame mints a createdId so commitLoweredVariable can
-        // resolve a story from a new frame when selection is empty.
-        if (m.op === "insertTextFrame") {
-          return { applied: true, createdId: { kind: "textFrame", id: "frame-new" }, pageIds: [] };
-        }
-        return { applied: true, createdId: null, pageIds: [] };
-      }),
+      mutate: async (batch: Mutation) =>
+        applyBatch(batch, async (m: Mutation) => {
+          mutations.push(m);
+          // A freshly inserted frame mints a createdId so commitLoweredVariable can
+          // resolve a story from a new frame when selection is empty.
+          if (m.op === "insertTextFrame") {
+            return {
+              applied: true,
+              createdId: { kind: "textFrame", id: "frame-new" },
+              pageIds: [],
+            };
+          }
+          return { applied: true, createdId: null, pageIds: [] };
+        }),
       placeholders: async () => opts?.placeholders?.() ?? [],
       frameChain: async () => opts?.frameChain?.() ?? [],
       elementGeometry: async (ids: { id: string }[]) =>
@@ -104,14 +134,19 @@ function fakeHost(opts?: {
       collection: async () => [{ selfId: "p1" }],
       onDidChange: (l: (e: { reflow?: unknown }) => void) => {
         changeListener = l;
-        return { dispose() { changeListener = null; } };
+        return {
+          dispose() {
+            changeListener = null;
+          },
+        };
       },
     },
   } as unknown as BundleHost;
   return {
     host,
     mutations,
-    fireReflow: (frameId = "f0") => changeListener?.({ reflow: { frameId, contentBox: [0, 0, 80, 200] } }),
+    fireReflow: (frameId = "f0") =>
+      changeListener?.({ reflow: { frameId, contentBox: [0, 0, 80, 200] } }),
     fireTransformOnly: () => changeListener?.({}),
   };
 }
@@ -131,8 +166,18 @@ function fakeEngine(over?: Partial<DataEngineLike>): DataEngineLike {
     governed_catalog: () => ({}),
     plan_batch: () => ({}),
     run_record_flow_batch: () => [],
-    evaluate_rule: () => ({ scope: "x", fires: [], apply: { action: "tableStyle", name: "s" }, total: 0 }),
-    lower_record_flow: () => ({ frames: [], overflow: false, placed: 0, total: 0 }),
+    evaluate_rule: () => ({
+      scope: "x",
+      fires: [],
+      apply: { action: "tableStyle", name: "s" },
+      total: 0,
+    }),
+    lower_record_flow: () => ({
+      frames: [],
+      overflow: false,
+      placed: 0,
+      total: 0,
+    }),
     sync_state: () => ({}),
     pin() {},
     mark_overridden() {},
@@ -155,7 +200,11 @@ async function sessionWith(host: BundleHost, engine: DataEngineLike) {
   }));
   mock.module("../query/duckdb", () => ({
     ...actualDuckdb,
-    bootDuckDB: async () => ({ registerCsv: async () => {}, query: async () => ({}), close: async () => {} }),
+    bootDuckDB: async () => ({
+      registerCsv: async () => {},
+      query: async () => ({}),
+      close: async () => {},
+    }),
   }));
   const { createSession: make } = await import("../session");
   return make(host, 20613);
@@ -164,27 +213,38 @@ async function sessionWith(host: BundleHost, engine: DataEngineLike) {
 describe("data_lower_variable_field session lane (D-01)", () => {
   it("places a variable field once, then refresh re-resolves only changed values", async () => {
     const fields = [
-      { storyId: "s1", offset: 0, plugin: "media.paged.data", key: "v_price", value: "old" },
+      {
+        storyId: "s1",
+        offset: 0,
+        plugin: "media.paged.data",
+        key: "v_price",
+        value: "old",
+      },
     ];
     const fake = fakeHost({ placeholders: () => fields });
     const engine = fakeEngine({
       resolve_lowered: (id: string) =>
-        id === "v_price" ? { kind: "variable", text: "€ 9,99", hidden: false } : null,
+        id === "v_price"
+          ? { kind: "variable", text: "€ 9,99", hidden: false }
+          : null,
     });
     const s = await sessionWith(fake.host, engine);
     s.addVariableBinding("v_price", "anchor", "q1", "CURRENCY(price)");
     await s.lowerBinding("v_price"); // first lower → insertField
     const inserted = fake.mutations.find((m) => m.op === "insertField");
     expect(inserted).toBeDefined();
-    expect((inserted as { args: { field: { placeholder: { key: string } } } }).args.field.placeholder.key).toBe(
-      "v_price",
-    );
+    expect(
+      (inserted as { args: { field: { placeholder: { key: string } } } }).args
+        .field.placeholder.key,
+    ).toBe("v_price");
 
     // Refresh: the resolved value (€ 9,99) differs from the field value (old) → setFieldValue.
     const written = await s.refreshFields();
     expect(written).toBe(1);
     const set = fake.mutations.find((m) => m.op === "setFieldValue");
-    expect((set as { args: { value: string | null } }).args.value).toBe("€ 9,99");
+    expect((set as { args: { value: string | null } }).args.value).toBe(
+      "€ 9,99",
+    );
   });
 
   it("refreshFields is a no-op when the host lacks document.placeholders@1", async () => {
@@ -207,10 +267,14 @@ describe("data_lower_image_place session lane (D-14)", () => {
       }),
     });
     const s = await sessionWith(fake.host, engine);
-    s.addImageBinding("img1", "urect", "q1", "photo", { fit: "FillProportionally" });
+    s.addImageBinding("img1", "urect", "q1", "photo", {
+      fit: "FillProportionally",
+    });
     await s.lowerBinding("img1");
     const place = fake.mutations.find((m) => m.op === "placeImage");
-    expect((place as { args: { elementId: string; uri: string; fit: string } }).args).toEqual({
+    expect(
+      (place as { args: { elementId: string; uri: string; fit: string } }).args,
+    ).toEqual({
       elementId: "urect",
       uri: "https://x/y.png",
       fit: "FillProportionally",
@@ -248,7 +312,12 @@ describe("data_lower_recordflow_live session lane (D-12)", () => {
     const engine = fakeEngine({
       lower_record_flow: (_b: string, chain: unknown) => {
         chainSeen.push(chain);
-        return { frames: [{ frame: "f0", page: "p1", blocks: [], usedPt: 0 }], overflow: false, placed: 1, total: 1 };
+        return {
+          frames: [{ frame: "f0", page: "p1", blocks: [], usedPt: 0 }],
+          overflow: false,
+          placed: 1,
+          total: 1,
+        };
       },
     });
     const s = await sessionWith(fake.host, engine);
@@ -268,11 +337,21 @@ describe("data_lower_recordflow_live session lane (D-12)", () => {
       geometry: () => [0, 0, 100, 200],
     });
     const engine = fakeEngine({
-      lower_record_flow: () => ({ frames: [], overflow: false, placed: 0, total: 0 }),
+      lower_record_flow: () => ({
+        frames: [],
+        overflow: false,
+        placed: 0,
+        total: 0,
+      }),
     });
     const s = await sessionWith(fake.host, engine);
     const clock = manualClock();
-    const sub = s.subscribeChainReflow("rf1", "story-1", (f) => repaginations.push(f), { timers: clock });
+    const sub = s.subscribeChainReflow(
+      "rf1",
+      "story-1",
+      (f) => repaginations.push(f),
+      { timers: clock },
+    );
     fake.fireTransformOnly(); // no reflow → ignored
     await clock.flush();
     expect(repaginations).toHaveLength(0);
@@ -294,11 +373,21 @@ describe("data_lower_recordflow_live session lane (D-12)", () => {
     });
     let flows = 0;
     const engine = fakeEngine({
-      lower_record_flow: () => ({ frames: [], overflow: false, placed: ++flows, total: 0 }),
+      lower_record_flow: () => ({
+        frames: [],
+        overflow: false,
+        placed: ++flows,
+        total: 0,
+      }),
     });
     const s = await sessionWith(fake.host, engine);
     const clock = manualClock();
-    const sub = s.subscribeChainReflow("rf1", "story-1", (f) => repaginations.push(f), { timers: clock });
+    const sub = s.subscribeChainReflow(
+      "rf1",
+      "story-1",
+      (f) => repaginations.push(f),
+      { timers: clock },
+    );
     for (let i = 0; i < 50; i++) fake.fireReflow(); // a drag-resize stream
     expect(repaginations).toHaveLength(0); // nothing until the burst is quiet
     await clock.flush();
@@ -363,18 +452,28 @@ describe("data_lower_rule session lane (D-13)", () => {
       "q1",
       "stock < 5",
       { action: "tableStyle", name: "low-stock" },
-      { kind: "tableColumn", storyId: "s1", tableId: "t1", col: 1, headerRows: 1 },
+      {
+        kind: "tableColumn",
+        storyId: "s1",
+        tableId: "t1",
+        col: 1,
+        headerRows: 1,
+      },
     );
     const applied = await s.applyRule("r1");
     expect(applied).toBe(2);
     // createCellStyle once + a batch of 2 appliedCellStyle setElementProperty ops.
-    expect(fake.mutations.find((m) => m.op === "createCellStyle")).toBeDefined();
+    expect(
+      fake.mutations.find((m) => m.op === "createCellStyle"),
+    ).toBeDefined();
     const batch = fake.mutations.find((m) => m.op === "batch") as
-      | { args: { ops: { op: string; args: { path: string } }[] } }
-      | undefined;
+      { args: { ops: { op: string; args: { path: string } }[] } } | undefined;
     expect(batch?.args.ops).toHaveLength(2);
-    expect(batch?.args.ops.every((o) => o.op === "setElementProperty" && o.args.path === "appliedCellStyle")).toBe(
-      true,
-    );
+    expect(
+      batch?.args.ops.every(
+        (o) =>
+          o.op === "setElementProperty" && o.args.path === "appliedCellStyle",
+      ),
+    ).toBe(true);
   });
 });

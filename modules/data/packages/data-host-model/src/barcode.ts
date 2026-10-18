@@ -47,7 +47,11 @@ function rectAnchors(
   y: number,
   w: number,
   h: number,
-): { anchor: [number, number]; left: [number, number]; right: [number, number] }[] {
+): {
+  anchor: [number, number];
+  left: [number, number];
+  right: [number, number];
+}[] {
   const corners: [number, number][] = [
     [x, y],
     [x + w, y],
@@ -59,7 +63,10 @@ function rectAnchors(
 
 /** The path a batch just minted: core resolves the `$created` sentinel to the
  *  last element created in the batch (`insertPath` mints a Polygon). */
-const CREATED_PATH: ElementId = { kind: "polygon", id: "$created" } as ElementId;
+const CREATED_PATH: ElementId = {
+  kind: "polygon",
+  id: "$created",
+} as ElementId;
 
 /** The swatches a module is painted with. A barcode is black on the paper it
  *  sits on: `Color/Black` is in every IDML document's swatch list (never
@@ -73,7 +80,9 @@ export const BARCODE_STROKE_SWATCH = "Swatch/None";
 /** The paint ops for the module path just created: the IR's paint triples
  *  (ADR 558 §4 — the engine owns the constants since `paint` exists), else
  *  the same constants for an IR written before it. */
-function modulePaint(paint?: readonly { path: string; value: unknown }[]): Mutation[] {
+function modulePaint(
+  paint?: readonly { path: string; value: unknown }[],
+): Mutation[] {
   const triples =
     paint && paint.length > 0
       ? paint

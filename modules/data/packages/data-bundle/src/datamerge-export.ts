@@ -76,27 +76,41 @@ const enc = new TextEncoder();
 const dec = new TextDecoder();
 
 const escAttr = (s: string) =>
-  s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-const escText = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  s
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+const escText = (s: string) =>
+  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const unescText = (s: string) =>
   s
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
     .replace(/&apos;/g, "'")
-    .replace(/&#x([0-9a-fA-F]+);/g, (_, h: string) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, h: string) =>
+      String.fromCodePoint(parseInt(h, 16)),
+    )
     .replace(/&#(\d+);/g, (_, d: string) => String.fromCodePoint(Number(d)))
     .replace(/&amp;/g, "&");
 
 /** The story part a story id lives in (`Story/u0` → `Stories/Story_Story_u0.xml`
  *  on paged's writer, `Stories/Story_u0.xml` on InDesign's). */
-function storyPart(entries: readonly ZipEntry[], storyId: string): ZipEntry | undefined {
+function storyPart(
+  entries: readonly ZipEntry[],
+  storyId: string,
+): ZipEntry | undefined {
   const flat = storyId.replace(/\//g, "_");
   const bare = storyId.replace(/^Story\//, "");
   return (
     entries.find((e) => e.name === `Stories/Story_${flat}.xml`) ??
     entries.find((e) => e.name === `Stories/Story_${bare}.xml`) ??
-    entries.find((e) => e.name.startsWith("Stories/") && dec.decode(e.bytes).includes(`Self="${flat}"`))
+    entries.find(
+      (e) =>
+        e.name.startsWith("Stories/") &&
+        dec.decode(e.bytes).includes(`Self="${flat}"`),
+    )
   );
 }
 
@@ -116,7 +130,9 @@ function rewriteStory(
   const sources: { self: string; field: string }[] = [];
   // 0. text variable instances of our variables (protocol 71).
   if (variables.length > 0) {
-    const fieldOf = new Map(variables.map((v) => [escAttr(v.variable), v.field]));
+    const fieldOf = new Map(
+      variables.map((v) => [escAttr(v.variable), v.field]),
+    );
     xml = xml.replace(/<TextVariableInstance [^>]*\/>/g, (whole) => {
       const id = /AssociatedTextVariable="([^"]*)"/.exec(whole)?.[1];
       const field = id !== undefined ? fieldOf.get(id) : undefined;
@@ -127,25 +143,28 @@ function rewriteStory(
     });
   }
   // 1. literal <<field>> in a Content node (not already a source).
-  let out = xml.replace(/<Content>([^<]*)<\/Content>/g, (whole, body: string, at: number) => {
-    const before = xml.slice(Math.max(0, at - 200), at);
-    if (/<HyperlinkTextSource[^>]*>\s*$/.test(before)) return whole;
-    if (!/&lt;&lt;[^&<]+?&gt;&gt;/.test(body)) return whole;
-    const parts: string[] = [];
-    let last = 0;
-    for (const m of body.matchAll(/&lt;&lt;([^&<]+?)&gt;&gt;/g)) {
-      const pre = body.slice(last, m.index);
-      if (pre) parts.push(`<Content>${pre}</Content>`);
-      const self = nextSelf();
-      const field = unescText(m[1]!).trim();
-      sources.push({ self, field });
-      parts.push(source(self, field));
-      last = m.index! + m[0].length;
-    }
-    const rest = body.slice(last);
-    if (rest) parts.push(`<Content>${rest}</Content>`);
-    return parts.join("");
-  });
+  let out = xml.replace(
+    /<Content>([^<]*)<\/Content>/g,
+    (whole, body: string, at: number) => {
+      const before = xml.slice(Math.max(0, at - 200), at);
+      if (/<HyperlinkTextSource[^>]*>\s*$/.test(before)) return whole;
+      if (!/&lt;&lt;[^&<]+?&gt;&gt;/.test(body)) return whole;
+      const parts: string[] = [];
+      let last = 0;
+      for (const m of body.matchAll(/&lt;&lt;([^&<]+?)&gt;&gt;/g)) {
+        const pre = body.slice(last, m.index);
+        if (pre) parts.push(`<Content>${pre}</Content>`);
+        const self = nextSelf();
+        const field = unescText(m[1]!).trim();
+        sources.push({ self, field });
+        parts.push(source(self, field));
+        last = m.index! + m[0].length;
+      }
+      const rest = body.slice(last);
+      if (rest) parts.push(`<Content>${rest}</Content>`);
+      return parts.join("");
+    },
+  );
   // 2. placed fields by offset, last first so earlier offsets stay valid.
   for (const f of [...fields].sort((a, b) => b.offset - a.offset)) {
     let pos = 0;
@@ -165,16 +184,25 @@ function rewriteStory(
       done = true;
       return `${pre ? `<Content>${escText(pre)}</Content>` : ""}${source(self, f.field)}${post ? `<Content>${escText(post)}</Content>` : ""}`;
     });
-    if (!done) skipped.push(`${f.field}: no text at ${f.storyId}@${f.offset} in the exported story`);
+    if (!done)
+      skipped.push(
+        `${f.field}: no text at ${f.storyId}@${f.offset} in the exported story`,
+      );
   }
   return { xml: out, sources };
 }
 
 /** Rewrite an IDML package (as entries) into a Data Merge template. */
-export function dataMergeTemplate(entries: readonly ZipEntry[], spec: MergeTemplateSpec): MergeTemplateResult {
+export function dataMergeTemplate(
+  entries: readonly ZipEntry[],
+  spec: MergeTemplateSpec,
+): MergeTemplateResult {
   const skipped: string[] = [];
   const kept = entries.filter(
-    (e) => !e.name.startsWith("paged/") && !e.name.startsWith("data/") && e.name !== "manifest.json",
+    (e) =>
+      !e.name.startsWith("paged/") &&
+      !e.name.startsWith("data/") &&
+      e.name !== "manifest.json",
   );
   const all = kept.map((e) => dec.decode(e.bytes)).join("\n");
   let n = 0;
@@ -197,7 +225,13 @@ export function dataMergeTemplate(entries: readonly ZipEntry[], spec: MergeTempl
   const out: ZipEntry[] = kept.map((e) => {
     if (!e.name.startsWith("Stories/")) return e;
     const xml = dec.decode(e.bytes);
-    const r = rewriteStory(xml, byStory.get(e) ?? [], nextSelf, skipped, spec.variables ?? []);
+    const r = rewriteStory(
+      xml,
+      byStory.get(e) ?? [],
+      nextSelf,
+      skipped,
+      spec.variables ?? [],
+    );
     sources.push(...r.sources);
     return r.xml === xml ? e : { name: e.name, bytes: enc.encode(r.xml) };
   });
@@ -220,7 +254,9 @@ export function dataMergeTemplate(entries: readonly ZipEntry[], spec: MergeTempl
       ),
     ].join("\n");
     const lastStory = [...xml.matchAll(/<idPkg:Story [^>]*\/>/g)].pop();
-    const at = lastStory ? lastStory.index! + lastStory[0].length : xml.lastIndexOf("</Document>");
+    const at = lastStory
+      ? lastStory.index! + lastStory[0].length
+      : xml.lastIndexOf("</Document>");
     xml = `${xml.slice(0, at)}\n${links}${xml.slice(at)}`;
     const images = imageFields
       .map(
@@ -247,17 +283,25 @@ export function dataMergeTemplate(entries: readonly ZipEntry[], spec: MergeTempl
     }
     out[pf] = { name: "Resources/Preferences.xml", bytes: enc.encode(xml) };
   }
-  return { entries: out, fields: [...textFields, ...imageFields.map((i) => `@${i.field}`)], skipped };
+  return {
+    entries: out,
+    fields: [...textFields, ...imageFields.map((i) => `@${i.field}`)],
+    skipped,
+  };
 }
 
 /** The data source InDesign merges: CSV, UTF-16LE with a BOM. `header`
  *  names image columns `@field`. */
-export function utf16Csv(header: readonly string[], rows: readonly (readonly (string | null)[])[]): Uint8Array {
+export function utf16Csv(
+  header: readonly string[],
+  rows: readonly (readonly (string | null)[])[],
+): Uint8Array {
   const cell = (v: string | null) => {
     const s = v ?? "";
     return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  const text = [header, ...rows].map((r) => r.map(cell).join(",")).join("\r\n") + "\r\n";
+  const text =
+    [header, ...rows].map((r) => r.map(cell).join(",")).join("\r\n") + "\r\n";
   const out = new Uint8Array(2 + text.length * 2);
   out[0] = 0xff;
   out[1] = 0xfe;
@@ -282,12 +326,25 @@ function crc32(bytes: Uint8Array): number {
     }
   }
   let c = 0xffffffff;
-  for (let i = 0; i < bytes.length; i++) c = crcTable[(c ^ bytes[i]!) & 0xff]! ^ (c >>> 8);
+  for (let i = 0; i < bytes.length; i++)
+    c = crcTable[(c ^ bytes[i]!) & 0xff]! ^ (c >>> 8);
   return (c ^ 0xffffffff) >>> 0;
 }
 
-async function pipe(bytes: Uint8Array, stream: { readable: ReadableStream<Uint8Array>; writable: WritableStream<BufferSource> }): Promise<Uint8Array> {
-  const out = new Response(new Blob([bytes as BlobPart]).stream().pipeThrough(stream as unknown as TransformStream<Uint8Array, Uint8Array>));
+async function pipe(
+  bytes: Uint8Array,
+  stream: {
+    readable: ReadableStream<Uint8Array>;
+    writable: WritableStream<BufferSource>;
+  },
+): Promise<Uint8Array> {
+  const out = new Response(
+    new Blob([bytes as BlobPart])
+      .stream()
+      .pipeThrough(
+        stream as unknown as TransformStream<Uint8Array, Uint8Array>,
+      ),
+  );
   return new Uint8Array(await out.arrayBuffer());
 }
 
@@ -313,11 +370,21 @@ export async function readZip(zip: Uint8Array): Promise<ZipEntry[]> {
     const comment = view.getUint16(p + 32, true);
     const local = view.getUint32(p + 42, true);
     const name = dec.decode(zip.subarray(p + 46, p + 46 + nameLen));
-    const start = local + 30 + view.getUint16(local + 26, true) + view.getUint16(local + 28, true);
+    const start =
+      local +
+      30 +
+      view.getUint16(local + 26, true) +
+      view.getUint16(local + 28, true);
     const raw = zip.subarray(start, start + size);
     out.push({
       name,
-      bytes: method === 0 ? raw.slice() : await pipe(raw, new DecompressionStream("deflate-raw" as CompressionFormat)),
+      bytes:
+        method === 0
+          ? raw.slice()
+          : await pipe(
+              raw,
+              new DecompressionStream("deflate-raw" as CompressionFormat),
+            ),
     });
     p += 46 + nameLen + extra + comment;
   }
@@ -325,15 +392,24 @@ export async function readZip(zip: Uint8Array): Promise<ZipEntry[]> {
 }
 
 /** Write a zip: `mimetype` first and stored (IDML requires it), the rest deflated. */
-export async function writeZip(entries: readonly ZipEntry[]): Promise<Uint8Array> {
-  const ordered = [...entries].sort((a, b) => (a.name === "mimetype" ? -1 : b.name === "mimetype" ? 1 : 0));
+export async function writeZip(
+  entries: readonly ZipEntry[],
+): Promise<Uint8Array> {
+  const ordered = [...entries].sort((a, b) =>
+    a.name === "mimetype" ? -1 : b.name === "mimetype" ? 1 : 0,
+  );
   const local: Uint8Array[] = [];
   const central: Uint8Array[] = [];
   let offset = 0;
   for (const e of ordered) {
     const name = enc.encode(e.name);
     const store = e.name === "mimetype";
-    const data = store ? e.bytes : await pipe(e.bytes, new CompressionStream("deflate-raw" as CompressionFormat));
+    const data = store
+      ? e.bytes
+      : await pipe(
+          e.bytes,
+          new CompressionStream("deflate-raw" as CompressionFormat),
+        );
     const crc = crc32(e.bytes);
     const h = new DataView(new ArrayBuffer(30));
     h.setUint32(0, 0x04034b50, true);

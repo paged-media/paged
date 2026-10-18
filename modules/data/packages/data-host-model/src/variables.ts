@@ -23,15 +23,13 @@ import type { LoweredVisibility } from "./lowered";
  *  the selection that created the binding. There is no "id only" form of the op
  *  and inventing one here would be a lie about the wire. */
 export type VisibilityTargetKind =
-  | "textFrame"
-  | "rectangle"
-  | "oval"
-  | "polygon"
-  | "graphicLine"
-  | "group";
+  "textFrame" | "rectangle" | "oval" | "polygon" | "graphicLine" | "group";
 
 /** Address a raw Self id as a typed `ElementId` of a known kind. */
-export function visibilityTarget(kind: VisibilityTargetKind, id: string): ElementId {
+export function visibilityTarget(
+  kind: VisibilityTargetKind,
+  id: string,
+): ElementId {
   return { kind, id } as ElementId;
 }
 
@@ -40,7 +38,10 @@ export function visibilityTarget(kind: VisibilityTargetKind, id: string): Elemen
  *  the same one the Layers panel and the IDML `Visible` attribute drive. Never a
  *  parallel visibility system, never a delete-and-reinsert (which would destroy
  *  the element identity every other binding is anchored to). */
-export function visibilityMutation(target: ElementId, visible: boolean): Mutation {
+export function visibilityMutation(
+  target: ElementId,
+  visible: boolean,
+): Mutation {
   return {
     op: "setElementProperty",
     args: {
@@ -84,7 +85,10 @@ export interface DataSetApply {
 export interface DataSetTargets {
   /** `variable → {storyId, offset}` of its placeholder field (text variables),
    *  or, from protocol 71, its custom text variable (`variable` = its `Self`). */
-  fields?: Record<string, { storyId: string; offset: number; variable?: string }>;
+  fields?: Record<
+    string,
+    { storyId: string; offset: number; variable?: string }
+  >;
   /** `variable → the bound rectangle's raw Self id` (image variables). */
   frames?: Record<string, string>;
   /** `variable → the bound element` (visibility variables). */
@@ -139,7 +143,9 @@ export function dataSetPlan(
             "(place the variable once, then data sets drive it)";
           continue;
         }
-        ops.push(fieldWriteMutation({ ...field, key: a.variable }, a.text ?? null));
+        ops.push(
+          fieldWriteMutation({ ...field, key: a.variable }, a.text ?? null),
+        );
         break;
       }
       case "image": {
@@ -152,7 +158,10 @@ export function dataSetPlan(
           skipped[a.variable] = "the captured reference is not URI-addressable";
           continue;
         }
-        ops.push({ op: "placeImage", args: { elementId: frameId, uri: a.href, fit } });
+        ops.push({
+          op: "placeImage",
+          args: { elementId: frameId, uri: a.href, fit },
+        });
         break;
       }
       case "visibility": {
@@ -173,7 +182,8 @@ export function dataSetPlan(
         break;
       case "graphData":
         skipped[a.variable] =
-          a.note ?? "graph-data variables are carried through the library, never applied";
+          a.note ??
+          "graph-data variables are carried through the library, never applied";
         break;
     }
   }

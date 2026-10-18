@@ -20,12 +20,14 @@ const actualReact = await importActual(() => import("react"));
 const slots: unknown[] = [];
 let cursor = 0;
 mock.module("react", () => ({
-    ...actualReact,
+  ...actualReact,
   useState: (init: unknown) => {
     const i = cursor++;
-    if (!(i in slots)) slots[i] = typeof init === "function" ? (init as () => unknown)() : init;
+    if (!(i in slots))
+      slots[i] = typeof init === "function" ? (init as () => unknown)() : init;
     const set = (v: unknown) => {
-      slots[i] = typeof v === "function" ? (v as (p: unknown) => unknown)(slots[i]) : v;
+      slots[i] =
+        typeof v === "function" ? (v as (p: unknown) => unknown)(slots[i]) : v;
     };
     return [slots[i], set];
   },
@@ -33,16 +35,26 @@ mock.module("react", () => ({
   useEffect: () => {},
 }));
 
-type El = { type: unknown; props: Record<string, unknown> & { children?: unknown } };
+type El = {
+  type: unknown;
+  props: Record<string, unknown> & { children?: unknown };
+};
 
 function render(component: () => unknown): El[] {
   cursor = 0;
   const out: El[] = [];
   const walk = (n: unknown): void => {
-    if (n == null || typeof n === "boolean" || typeof n === "string" || typeof n === "number") return;
+    if (
+      n == null ||
+      typeof n === "boolean" ||
+      typeof n === "string" ||
+      typeof n === "number"
+    )
+      return;
     if (Array.isArray(n)) return n.forEach(walk);
     const el = n as El;
-    if (typeof el.type === "function") return walk((el.type as (p: unknown) => unknown)(el.props));
+    if (typeof el.type === "function")
+      return walk((el.type as (p: unknown) => unknown)(el.props));
     out.push(el);
     walk(el.props?.children);
   };
@@ -61,7 +73,10 @@ const text = (n: unknown): string =>
 
 const silent = { debug() {}, info() {}, warn() {}, error() {} };
 
-function stubSession(over: Partial<DataSourceSession>, state?: Partial<SessionState>): DataSourceSession {
+function stubSession(
+  over: Partial<DataSourceSession>,
+  state?: Partial<SessionState>,
+): DataSourceSession {
   const base: SessionState = {
     status: "ready",
     message: "",
@@ -78,7 +93,8 @@ function stubSession(over: Partial<DataSourceSession>, state?: Partial<SessionSt
   };
   return new Proxy(over as DataSourceSession, {
     get(target, key) {
-      if (key in target) return (target as unknown as Record<string | symbol, unknown>)[key];
+      if (key in target)
+        return (target as unknown as Record<string | symbol, unknown>)[key];
       if (key === "getState") return () => base;
       return () => undefined;
     },
@@ -103,18 +119,33 @@ const press = async (tree: El[], attr: string) => {
   await tick();
 };
 const change = (tree: El[], attr: string, value: string) =>
-  (find(tree, attr)!.props.onChange as (e: unknown) => void)({ target: { value } });
+  (find(tree, attr)!.props.onChange as (e: unknown) => void)({
+    target: { value },
+  });
 
-async function panel(over: Partial<DataSourceSession>, state?: Partial<SessionState>, hostOver = {}) {
+async function panel(
+  over: Partial<DataSourceSession>,
+  state?: Partial<SessionState>,
+  hostOver = {},
+) {
   const session = stubSession(over, state);
   const { makeBindingsPanel } = await import("../panels/bindings-panel");
-  return makeBindingsPanel({ ...host, ...hostOver } as unknown as BundleHost, session);
+  return makeBindingsPanel(
+    { ...host, ...hostOver } as unknown as BundleHost,
+    session,
+  );
 }
 
 describe("bindings panel — sync states and decisions [data.bind.sync-review]", () => {
   const rows: BindingSync[] = [
     { id: "v", kind: "variable", status: "pinned", locale: null, format: null },
-    { id: "t", kind: "table", status: "overridden", locale: null, format: null },
+    {
+      id: "t",
+      kind: "table",
+      status: "overridden",
+      locale: null,
+      format: null,
+    },
     { id: "e", kind: "variable", status: "error", locale: "fr", format: null },
     { id: "s", kind: "image", status: "linked", locale: null, format: null },
   ];
@@ -136,7 +167,9 @@ describe("bindings panel — sync states and decisions [data.bind.sync-review]",
     let tree = render(Panel);
     await press(tree, "data-data-sync-reload");
     tree = render(Panel);
-    const items = tree.filter((e) => e.type === "li" && "data-binding-kind" in e.props);
+    const items = tree.filter(
+      (e) => e.type === "li" && "data-binding-kind" in e.props,
+    );
     const statusOf = (li: El) => {
       const inner: El[] = [];
       const walk = (n: unknown): void => {
@@ -147,7 +180,9 @@ describe("bindings panel — sync states and decisions [data.bind.sync-review]",
       };
       walk(li.props.children);
       return {
-        status: inner.find((e) => "data-sync-status" in e.props)?.props["data-sync-status"],
+        status: inner.find((e) => "data-sync-status" in e.props)?.props[
+          "data-sync-status"
+        ],
         buttons: inner.filter((e) => e.type === "button").map((e) => text(e)),
       };
     };
@@ -184,12 +219,28 @@ describe("bindings panel — sync states and decisions [data.bind.sync-review]",
           },
         ],
         locales: async () => [
-          { tag: "en", name: "English", number: "", currency: "$1.00", date: "" },
-          { tag: "fr", name: "Français", number: "", currency: "1,00 €", date: "" },
+          {
+            tag: "en",
+            name: "English",
+            number: "",
+            currency: "$1.00",
+            date: "",
+          },
+          {
+            tag: "fr",
+            name: "Français",
+            number: "",
+            currency: "1,00 €",
+            date: "",
+          },
         ],
         getLocale: () => "de",
-        setBindingFormat: async (...a: unknown[]) => (calls.push(["format", ...a]), true),
-        setBindingLocale: async (...a: unknown[]) => void calls.push(["locale", ...a]),
+        setBindingFormat: async (...a: unknown[]) => (
+          calls.push(["format", ...a]),
+          true
+        ),
+        setBindingLocale: async (...a: unknown[]) =>
+          void calls.push(["locale", ...a]),
         previewBinding: async () => "1 234 €",
       },
       { bindings: ["v"] },
@@ -205,7 +256,9 @@ describe("bindings panel — sync states and decisions [data.bind.sync-review]",
     tree = render(Panel);
     change(tree, "data-data-format-locale", "fr");
     tree = render(Panel);
-    expect(text(find(tree, "data-data-format-locale"))).toContain("session locale (de)");
+    expect(text(find(tree, "data-data-format-locale"))).toContain(
+      "session locale (de)",
+    );
     await press(tree, "data-data-format-apply");
     tree = render(Panel);
     expect(calls).toEqual([
@@ -228,35 +281,61 @@ describe("bindings panel — the row diff view [data.bind.row-diff]", () => {
     unchanged: 4,
     inserted: [{ index: 5, key: "d4", values: ["d4", "Dates", "2"] }],
     removed: [{ index: 2, key: "c3", values: ["c3", "Cheese", "9"] }],
-    updated: [{ index: 1, key: "b2", changes: [{ column: "price", before: "4", after: "6.5" }] }],
+    updated: [
+      {
+        index: 1,
+        key: "b2",
+        changes: [{ column: "price", before: "4", after: "6.5" }],
+      },
+    ],
     changedColumns: ["price"],
-    affected: [{ binding: "v_price", kind: "variable", reason: "reads price which changed" }],
+    affected: [
+      {
+        binding: "v_price",
+        kind: "variable",
+        reason: "reads price which changed",
+      },
+    ],
   };
 
   it("lists added, removed and changed rows and the bindings they reach [data.bind.row-diff]", async () => {
     const keys: unknown[][] = [];
     const Panel = await panel({
       refreshData: async () => {},
-      refreshDiff: async () => ({ entries: [], changed: 0, unchanged: 0, added: 0, removed: 0 }),
+      refreshDiff: async () => ({
+        entries: [],
+        changed: 0,
+        unchanged: 0,
+        added: 0,
+        removed: 0,
+      }),
       rowDiff: async () => [diff],
       bindingSync: async () => [],
       locales: async () => [],
       setDiffKey: (...a: unknown[]) => void keys.push(a),
     });
     let tree = render(Panel);
-    const what = tree.find((e) => e.type === "button" && text(e) === "What changed?")!;
+    const what = tree.find(
+      (e) => e.type === "button" && text(e) === "What changed?",
+    )!;
     (what.props.onClick as () => void)();
     await tick();
     tree = render(Panel);
     const q = find(tree, "data-row-diff-query")!;
-    expect(text(q)).toContain("+1 added · −1 removed · 1 changed · 4 unchanged");
-    const lines = tree.filter((e) => "data-row-change" in e.props).map((e) => [e.props["data-row-change"], text(e)]);
+    expect(text(q)).toContain(
+      "+1 added · −1 removed · 1 changed · 4 unchanged",
+    );
+    const lines = tree
+      .filter((e) => "data-row-change" in e.props)
+      .map((e) => [e.props["data-row-change"], text(e)]);
     expect(lines).toEqual([
       ["updated", "~ b2: price 4 → 6.5"],
       ["inserted", "+ d4: d4 · Dates · 2"],
       ["removed", "− c3: c3 · Cheese · 9"],
     ]);
-    expect(text(find(tree, "data-row-affected"))).toBe("v_price (variable) — reads price which changed");
+    expect(text(find(tree, "data-row-affected"))).toBe(
+      "v_price (variable) — reads price which changed",
+    );
     // Re-keying asks the session to match rows by another column.
     change(tree, "data-row-diff-key", "name");
     await tick();
@@ -279,7 +358,12 @@ describe("bindings panel — the rule editor [data.rule.authoring]", () => {
       checkExpression: async () =>
         ok
           ? { ok: true, fields: ["price"], unknownFields: [] }
-          : { ok: false, error: "unexpected end of expression", fields: [], unknownFields: [] },
+          : {
+              ok: false,
+              error: "unexpected end of expression",
+              fields: [],
+              unknownFields: [],
+            },
       previewCondition: async () => ({ fires: [0, 2], total: 3 }),
     });
     let tree = render(Panel);
@@ -287,13 +371,17 @@ describe("bindings panel — the rule editor [data.rule.authoring]", () => {
     tree = render(Panel);
     await press(tree, "data-data-rule-preview");
     tree = render(Panel);
-    expect(text(find(tree, "data-data-rule-preview-out"))).toBe("unexpected end of expression");
+    expect(text(find(tree, "data-data-rule-preview-out"))).toBe(
+      "unexpected end of expression",
+    );
     ok = true;
     change(tree, "data-data-bind-field", "price < 5");
     tree = render(Panel);
     await press(tree, "data-data-rule-preview");
     tree = render(Panel);
-    expect(text(find(tree, "data-data-rule-preview-out"))).toBe("fires on 2 of 3 records: #1, #3");
+    expect(text(find(tree, "data-data-rule-preview-out"))).toBe(
+      "fires on 2 of 3 records: #1, #3",
+    );
   });
 
   it("does not define a rule whose condition reads a field the data lacks [data.rule.authoring]", async () => {
@@ -310,7 +398,12 @@ describe("bindings panel — the rule editor [data.rule.authoring]", () => {
       },
       {
         text: { caret: () => ({ storyId: "s1", offset: 0 }) },
-        document: { storyContent: async () => ({ selfId: "s1", paragraphs: [{ runs: [{ text: "x" }] }] }) },
+        document: {
+          storyContent: async () => ({
+            selfId: "s1",
+            paragraphs: [{ runs: [{ text: "x" }] }],
+          }),
+        },
       },
     );
     let tree = render(Panel);
@@ -320,7 +413,9 @@ describe("bindings panel — the rule editor [data.rule.authoring]", () => {
     await press(tree, "data-data-bind-add");
     tree = render(Panel);
     expect(calls).toEqual([]);
-    expect(text(find(tree, "data-data-bind-msg"))).toMatch(/no such field: stock/);
+    expect(text(find(tree, "data-data-bind-msg"))).toMatch(
+      /no such field: stock/,
+    );
   });
 
   it("picks a paragraph style from the document and styles one paragraph per record [data.rule.authoring]", async () => {
@@ -335,7 +430,11 @@ describe("bindings panel — the rule editor [data.rule.authoring]", () => {
             { selfId: "ParagraphStyle/Low", name: "Low stock" },
           ];
         },
-        checkExpression: async () => ({ ok: true, fields: ["stock"], unknownFields: [] }),
+        checkExpression: async () => ({
+          ok: true,
+          fields: ["stock"],
+          unknownFields: [],
+        }),
         addRuleBinding: (...a: unknown[]) => void calls.push(a),
       },
       {
@@ -344,7 +443,11 @@ describe("bindings panel — the rule editor [data.rule.authoring]", () => {
         document: {
           storyContent: async () => ({
             selfId: "s1",
-            paragraphs: [{ runs: [{ text: "Aa" }] }, { runs: [{ text: "Bbb" }] }, { runs: [{ text: "Cc" }] }],
+            paragraphs: [
+              { runs: [{ text: "Aa" }] },
+              { runs: [{ text: "Bbb" }] },
+              { runs: [{ text: "Cc" }] },
+            ],
           }),
         },
       },
@@ -370,6 +473,8 @@ describe("bindings panel — the rule editor [data.rule.authoring]", () => {
       { action: "paragraphStyle", name: "ParagraphStyle/Low" },
       { kind: "storyParagraphs", storyId: "s1", firstParagraph: 1 },
     ]);
-    expect(text(find(tree, "data-data-bind-msg"))).toMatch(/Low stock on the paragraph of each record/);
+    expect(text(find(tree, "data-data-bind-msg"))).toMatch(
+      /Low stock on the paragraph of each record/,
+    );
   });
 });

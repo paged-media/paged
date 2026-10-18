@@ -32,7 +32,13 @@ export const FILTER_OPS: readonly FilterOp[] = [
 ];
 
 export type AggregateFn = "count" | "sum" | "avg" | "min" | "max";
-export const AGGREGATE_FNS: readonly AggregateFn[] = ["count", "sum", "avg", "min", "max"];
+export const AGGREGATE_FNS: readonly AggregateFn[] = [
+  "count",
+  "sum",
+  "avg",
+  "min",
+  "max",
+];
 
 export interface QueryFilter {
   column: string;
@@ -110,14 +116,19 @@ export function buildSql(spec: QuerySpec): string {
   const grouped = groupBy.length > 0;
   let select: string;
   if (grouped) {
-    const aggs = spec.aggregates?.length ? spec.aggregates : [{ fn: "count" as const }];
+    const aggs = spec.aggregates?.length
+      ? spec.aggregates
+      : [{ fn: "count" as const }];
     select = [...groupBy.map(quoteIdent), ...aggs.map(aggregate)].join(", ");
   } else {
-    select = spec.columns?.length ? spec.columns.map(quoteIdent).join(", ") : "*";
+    select = spec.columns?.length
+      ? spec.columns.map(quoteIdent).join(", ")
+      : "*";
   }
   const parts = [`SELECT ${select}`, `FROM ${quoteIdent(spec.source)}`];
   const filters = (spec.filters ?? []).filter((f) => f.column !== "");
-  if (filters.length) parts.push(`WHERE ${filters.map(condition).join(" AND ")}`);
+  if (filters.length)
+    parts.push(`WHERE ${filters.map(condition).join(" AND ")}`);
   if (grouped) parts.push(`GROUP BY ${groupBy.map(quoteIdent).join(", ")}`);
   const sort = (spec.sort ?? []).filter((s) => s.column !== "");
   if (sort.length) {
@@ -125,6 +136,7 @@ export function buildSql(spec: QuerySpec): string {
       `ORDER BY ${sort.map((s) => `${quoteIdent(s.column)} ${s.dir === "desc" ? "DESC" : "ASC"}`).join(", ")}`,
     );
   }
-  if (spec.limit !== undefined && spec.limit >= 0) parts.push(`LIMIT ${Math.floor(spec.limit)}`);
+  if (spec.limit !== undefined && spec.limit >= 0)
+    parts.push(`LIMIT ${Math.floor(spec.limit)}`);
   return parts.join("\n");
 }

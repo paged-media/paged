@@ -13,11 +13,11 @@ reference tool. Where we disagree with the reference today, the test pins the di
 a numbered defect. A pinned defect stays green while the defect exists and fails the day the
 behaviour changes, so the fix and the pin change land in the same commit.
 
-| Lane | Reference | Recorded in | Replayed by |
-|---|---|---|---|
-| DuckDB SQL | `duckdb` CLI v1.1.1 | `conformance/duckdb-sql/recorded/results.json` | `packages/data-bundle/test/duckdb-sql-oracle.spec.ts` |
-| Data Merge | InDesign 2025 (20.0.1) | `conformance/indesign-merge/recorded/*.json` | `data-conformance/tests/it/oracle.rs`, `packages/data-bundle/test/indesign-merge-duckdb.spec.ts` |
-| Properties | generated inputs, `rqrr`, GS1 tables | (nothing to record) | `data-conformance/tests/it/oracle_props.rs` |
+| Lane       | Reference                            | Recorded in                                    | Replayed by                                                                                      |
+| ---------- | ------------------------------------ | ---------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| DuckDB SQL | `duckdb` CLI v1.1.1                  | `conformance/duckdb-sql/recorded/results.json` | `packages/data-bundle/test/duckdb-sql-oracle.spec.ts`                                            |
+| Data Merge | InDesign 2025 (20.0.1)               | `conformance/indesign-merge/recorded/*.json`   | `data-conformance/tests/it/oracle.rs`, `packages/data-bundle/test/indesign-merge-duckdb.spec.ts` |
+| Properties | generated inputs, `rqrr`, GS1 tables | (nothing to record)                            | `data-conformance/tests/it/oracle_props.rs`                                                      |
 
 ## 1. DuckDB SQL lane
 
@@ -45,15 +45,15 @@ recorded too.
 
 **Comparison.** The expected cell is derived from (type, text) by the data-core contract:
 
-| DuckDB type | Expected cell |
-|---|---|
-| integer types | `number` (f64) |
-| DOUBLE, FLOAT, DECIMAL | `number` |
-| DATE | `date`, as days since 1970-01-01 |
-| TIMESTAMP | `datetime`, as milliseconds UTC (sub-millisecond truncated) |
-| BOOLEAN | `bool` |
-| BLOB | `bytes` |
-| anything else | `text`, in DuckDB's rendering |
+| DuckDB type            | Expected cell                                               |
+| ---------------------- | ----------------------------------------------------------- |
+| integer types          | `number` (f64)                                              |
+| DOUBLE, FLOAT, DECIMAL | `number`                                                    |
+| DATE                   | `date`, as days since 1970-01-01                            |
+| TIMESTAMP              | `datetime`, as milliseconds UTC (sub-millisecond truncated) |
+| BOOLEAN                | `bool`                                                      |
+| BLOB                   | `bytes`                                                     |
+| anything else          | `text`, in DuckDB's rendering                               |
 
 Numbers are compared bit for bit with `Object.is`, so NaN equals NaN and −0 differs from 0. The
 tolerance is zero. The lane also checks the following, all exactly:
@@ -104,16 +104,16 @@ produce, and how close is our record flow?
 `csv/<id>.csv` and `images/`. The page is US Letter with 36 pt margins, set in Minion Pro
 10/12.
 
-| Fixture | Checks |
-|---|---|
-| `single-record` | one record per page |
-| `multi-record-column` | Multiple Records, one column, 12 pt row spacing, 12 records over 2 pages |
-| `multi-record-grid` | two columns, rows first |
-| `long-record-set` | 57 records in no column's sort order, two columns, columns first, 3 pages |
-| `empty-field-lines` | Remove Blank Lines for Empty Fields |
-| `overset` | a record whose text does not fit its frame |
-| `number-text` | en/de numbers, leading zeros, signs, exponents |
-| `image-field` | an `@photo` image field, fitted proportionally and centred |
+| Fixture               | Checks                                                                    |
+| --------------------- | ------------------------------------------------------------------------- |
+| `single-record`       | one record per page                                                       |
+| `multi-record-column` | Multiple Records, one column, 12 pt row spacing, 12 records over 2 pages  |
+| `multi-record-grid`   | two columns, rows first                                                   |
+| `long-record-set`     | 57 records in no column's sort order, two columns, columns first, 3 pages |
+| `empty-field-lines`   | Remove Blank Lines for Empty Fields                                       |
+| `overset`             | a record whose text does not fit its frame                                |
+| `number-text`         | en/de numbers, leading zeros, signs, exponents                            |
+| `image-field`         | an `@photo` image field, fitted proportionally and centred                |
 
 **Recording.** `record.sh` drives the local InDesign through `record.jsx`. The script builds
 each template from the fixture spec, then turns every `<<field>>` into a real Data Merge text
@@ -139,7 +139,7 @@ rewriting all of them at once hides which answer changed.
 1. **The rule.** This closed form reproduces all 8 recordings exactly:
    - records per column = ⌊(H + row spacing) / (h + row spacing)⌋;
    - columns = ⌊(W + column spacing) / (w + column spacing)⌋;
-   - record *k* goes on page ⌊*k* / (rows·columns)⌋, in CSV order, placed rows first or
+   - record _k_ goes on page ⌊_k_ / (rows·columns)⌋, in CSV order, placed rows first or
      columns first;
    - each frame sits at margin + (column·(w + column spacing), row·(h + row spacing)).
 
@@ -167,7 +167,7 @@ rewriting all of them at once hides which answer changed.
   grid, and match the template frame's size, within **±0.5 pt**.
 - Text is compared exactly after normalisation: `\r` becomes `\n`, and U+FEFF is removed (InDesign
   leaves these marks where an empty placeholder was).
-- InDesign's text for an overset frame is only the part that fits, so ours must *start with*
+- InDesign's text for an overset frame is only the part that fits, so ours must _start with_
   it.
 - The score reports:
   - pages, ours against InDesign's;
@@ -186,16 +186,16 @@ The record flow and the paginator are reference lanes (flow / paginator, placeme
 of records). The record flow is EasyCatalog-style continuous flow, not Data Merge, so its
 divergences are what it is:
 
-| Fixture | Pages (ours/InDesign) | Placements | Texts |
-|---|---|---|---|
-| single-record | 2/3 · 3/3 | 0 · 3 of 3 | 3 · 3 |
-| multi-record-column | 1/2 · 2/2 | 10 · 12 of 12 | 12 · 12 |
-| multi-record-grid | 1/1 · 1/1 | 1 · 1 of 7 | 7 · 7 |
-| long-record-set | 2/3 · 3/3 | 0 · 57 of 57 | 57 · 57 |
-| empty-field-lines | 2/3 · 3/3 | 1 · 3 of 3 | 2 · 3 |
-| overset | 2/2 · 2/2 | 0 · 2 of 2 | 2 · 2 (overset flag 1/2 in both) |
-| number-text | 2/3 · 3/3 | 1 · 3 of 3 | 3 · 3 |
-| image-field | 2/3 · 3/3 | 0 · 3 of 3 | 3 · 3 (images 0/3) |
+| Fixture             | Pages (ours/InDesign) | Placements    | Texts                            |
+| ------------------- | --------------------- | ------------- | -------------------------------- |
+| single-record       | 2/3 · 3/3             | 0 · 3 of 3    | 3 · 3                            |
+| multi-record-column | 1/2 · 2/2             | 10 · 12 of 12 | 12 · 12                          |
+| multi-record-grid   | 1/1 · 1/1             | 1 · 1 of 7    | 7 · 7                            |
+| long-record-set     | 2/3 · 3/3             | 0 · 57 of 57  | 57 · 57                          |
+| empty-field-lines   | 2/3 · 3/3             | 1 · 3 of 3    | 2 · 3                            |
+| overset             | 2/2 · 2/2             | 0 · 2 of 2    | 2 · 2 (overset flag 1/2 in both) |
+| number-text         | 2/3 · 3/3             | 1 · 3 of 3    | 3 · 3                            |
+| image-field         | 2/3 · 3/3             | 0 · 3 of 3    | 3 · 3 (images 0/3)               |
 
 Over the text ingest, the engine's record texts agree with InDesign's except where blank-line
 removal (DM-5) applies. Its placement agrees only by accident. The paginator's packing
@@ -247,16 +247,16 @@ lane still shows them, by design):
 
 `oracle_props.rs` uses proptest with 256 cases per property.
 
-| Property | Feature |
-|---|---|
-| `stabilize` gives the same result for any shuffle of mixed-kind rows (NaN, ±0, ±∞, text, dates), keyed or not | `data.query.seam` |
-| `stabilize` returns a permutation, is idempotent, and follows value order within a kind | `data.query.seam` |
-| `diff(old, new)` applied to old yields new | `data.bind.engine` |
-| the payload survives save → JSON → load → save unchanged | `data.plugin.bundle` |
-| a second resolve and a second change report without a data change are no-ops | `data.bind.change-report` |
-| EAN-13 (every first digit) and UPC-A decode back with independent GS1 tables | `data.barcode.symbology` |
-| Code-128 (printable ASCII and digit runs that switch B↔C) decodes back | `data.barcode.symbology` |
-| QR (byte mode, level M, 1–213 bytes, so versions 1–10) decodes back with `rqrr` | `data.barcode.symbology` |
+| Property                                                                                                      | Feature                   |
+| ------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| `stabilize` gives the same result for any shuffle of mixed-kind rows (NaN, ±0, ±∞, text, dates), keyed or not | `data.query.seam`         |
+| `stabilize` returns a permutation, is idempotent, and follows value order within a kind                       | `data.query.seam`         |
+| `diff(old, new)` applied to old yields new                                                                    | `data.bind.engine`        |
+| the payload survives save → JSON → load → save unchanged                                                      | `data.plugin.bundle`      |
+| a second resolve and a second change report without a data change are no-ops                                  | `data.bind.change-report` |
+| EAN-13 (every first digit) and UPC-A decode back with independent GS1 tables                                  | `data.barcode.symbology`  |
+| Code-128 (printable ASCII and digit runs that switch B↔C) decodes back                                        | `data.barcode.symbology`  |
+| QR (byte mode, level M, 1–213 bytes, so versions 1–10) decodes back with `rqrr`                               | `data.barcode.symbology`  |
 
 QR is decoded with `rqrr`, an independent decoder (MIT OR Apache-2.0, a dev-dependency only).
 The harness was first validated on a reference matrix from python `qrcode`. Code-128 has no
