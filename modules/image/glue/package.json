@@ -11,7 +11,7 @@
     "./decode-worker": "./src/decode-worker.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck": "bun check -p tsconfig.json",
     "test": "bun test --parallel",
     "build": "tsup",
     "prepublishOnly": "cp ../NOTICE.md ./NOTICE.md && bun run build"

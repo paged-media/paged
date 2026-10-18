@@ -33,7 +33,7 @@
     }
   },
   "scripts": {
-    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck": "bun check -p tsconfig.json",
     "build": "rm -rf dist && tsc -p tsconfig.build.json && cp src/wire.d.ts dist/wire.d.ts && printf 'export {};\\n' > dist/index.js",
     "prepublishOnly": "bun run build"
   },
