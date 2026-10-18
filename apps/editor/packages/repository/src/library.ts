@@ -55,6 +55,18 @@ export interface WasmRepository {
   locateMany(addresses: string): string;
   packOf(objects: string): Uint8Array;
   receivePack(pack: Uint8Array, ref: string, expected: string, next: string, actor: string, ts: number): void;
+  saveAgent(
+    file: Uint8Array,
+    branch: string,
+    base: string,
+    agent: string,
+    client: string,
+    run: string,
+    onBehalfOf: string,
+    message: string,
+    ts: number,
+  ): string;
+  merge(source: string, target: string, actor: string, approvers: string[], ts: number): string;
   save(file: Uint8Array, ref: string, actor: string, message: string, ts: number): string;
   export(target: string, withHistory: boolean, actor: string, ts: number): Uint8Array;
   log(ref: string): string;
@@ -468,6 +480,37 @@ export class Library {
       await this.persist(o);
       this.open.set(meta.id, o);
       return o.meta;
+    });
+  }
+
+  /** Keeps a file a model saved as an agent's version on `agent/<run>/live`,
+   *  started at main, naming this library's person as the one it acted for.
+   *  Main does not move: the person merges it (`mergeBranch`) after review. */
+  saveAgent(
+    id: string,
+    bytes: Uint8Array,
+    who: { agent: string; client: string; run: string },
+    message: string,
+  ): Promise<{ branch: string; head: string }> {
+    return this.serial(async () => {
+      const o = await this.load(id);
+      const run = who.run.toLowerCase().replace(/[^a-z0-9-]/g, "-") || "run";
+      const branch = `agent/${run}/live`;
+      const head = await this.faulting(o, () =>
+        o.repo.saveAgent(bytes, branch, MAIN, who.agent, who.client, run, this.owner, message, this.now()),
+      );
+      await this.persist(o);
+      return { branch, head };
+    });
+  }
+
+  /** Merges `source` into main, approved by this library's person. */
+  mergeBranch(id: string, source: string): Promise<string> {
+    return this.serial(async () => {
+      const o = await this.load(id);
+      const head = await this.faulting(o, () => o.repo.merge(source, MAIN, this.owner, [this.owner], this.now()));
+      await this.persist(o);
+      return head;
     });
   }
 

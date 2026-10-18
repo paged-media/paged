@@ -188,3 +188,16 @@ test("calls run one at a time", async () => {
   await Promise.all(saves);
   assert.equal((await lib.log(id)).length, 4);
 });
+
+test("a model's save is an agent's version on its branch, merged by the person", async () => {
+  const { lib } = library();
+  const { id } = await lib.importFile(doc(noise(10, 20)), "d.paged");
+  const saved = await lib.saveAgent(id, doc(noise(10, 21)), { agent: "agent:claude", client: "claude", run: "R1" }, "Claude's edit");
+  assert.equal(saved.branch, "agent/r1/live");
+  assert.equal((await lib.log(id)).length, 1, "main does not move");
+  const branch = await lib.log(id, saved.branch);
+  assert.equal(branch[0].agent, true);
+  assert.equal(branch[0].author, "agent:claude");
+  await lib.mergeBranch(id, saved.branch);
+  assert.equal((await lib.log(id))[0].hash, saved.head, "a fast-forward");
+});

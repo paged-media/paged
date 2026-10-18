@@ -34,3 +34,4 @@ export {
 } from "./library.ts";
 export { connectLibrary, serveLibrary, type LibraryClient } from "./rpc.ts";
 export { accessToken, OAUTH_CHANNEL, signedInAs, signIn, signOut } from "./signin.ts";
+export { connectLive, type LiveCall, type LiveConnection, type LiveState, type ToolContent, type ToolResult } from "./live.ts";

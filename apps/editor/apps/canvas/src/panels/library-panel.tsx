@@ -39,6 +39,7 @@ import {
 import { accessToken, signedInAs, signIn, signOut } from "@paged-media/repository";
 import type { CommitInfo, DocumentEntry } from "@paged-media/repository";
 
+import { connect as connectLive, disconnect as disconnectLive, live } from "../live-bridge";
 import { downloadBytes } from "../shell-file-saver";
 
 const mono = { fontFamily: "var(--font-mono, monospace)", fontSize: 11 } as const;
@@ -88,6 +89,9 @@ export function LibraryPanel() {
   const [tick, setTick] = useState(0);
   const [who, setWho] = useState<string | null>(() => (SERVER ? signedInAs(SERVER) : null));
   const [syncNote, setSyncNote] = useState<string | null>(null);
+  // A live save adds a branch: the refs below are read again when the relay moves.
+  const liveVersion = useSyncExternalStore(live.subscribe, live.version, live.version);
+  const [branches, setBranches] = useState<string[]>([]);
   const refresh = () => setTick((t) => t + 1);
 
   useEffect(() => {
@@ -106,6 +110,7 @@ export function LibraryPanel() {
           if (ref.startsWith("releases/")) named[hash] = [named[hash], ref.slice(9)].filter(Boolean).join(", ");
         }
         setReleases(named);
+        setBranches(Object.keys(refs).filter((r) => r.startsWith("agent/")));
         setError(null);
       } catch (err) {
         if (live) setError(err instanceof Error ? err.message : String(err));
@@ -114,7 +119,7 @@ export function LibraryPanel() {
     return () => {
       live = false;
     };
-  }, [library, current, version, tick]);
+  }, [library, current, version, tick, liveVersion]);
 
   const open = useCallback(
     async (entry: DocumentEntry, target = "main") => {
@@ -334,6 +339,99 @@ export function LibraryPanel() {
             >
               Open from server…
             </button>
+          )}
+          {who && (
+            <div data-library-claude style={{ marginTop: 10 }}>
+              <div style={kicker}>Claude</div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                {live.state() === "open" ? (
+                  <>
+                    <span style={{ ...mono, color: "var(--pg-muted-fg)" }} data-library-live-state>
+                      Connected · Claude can use this tab
+                    </span>
+                    <button type="button" data-library-live-disconnect style={button} onClick={() => disconnectLive()}>
+                      Disconnect
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    data-library-live-connect
+                    style={button}
+                    disabled={live.state() === "connecting"}
+                    title="Let Claude (signed in to this server as you) run scripts, render pages and save versions in this tab"
+                    onClick={act(() => connectLive(SERVER, editor.client))}
+                  >
+                    {live.state() === "connecting" ? "Connecting…" : "Connect to Claude"}
+                  </button>
+                )}
+                <label style={{ ...mono, display: "flex", gap: 4, alignItems: "center" }}>
+                  <input
+                    type="checkbox"
+                    data-library-live-ask
+                    checked={live.ask()}
+                    onChange={(e) => live.setAsk(e.target.checked)}
+                  />
+                  Ask before each change
+                </label>
+              </div>
+              {live.pending().map((call) => (
+                <div
+                  key={call.id}
+                  data-library-live-pending={call.tool}
+                  style={{ border: "1px solid var(--status-warn, #c90)", borderRadius: 4, padding: 6, marginTop: 6 }}
+                >
+                  <div style={mono}>
+                    Claude wants to {call.tool === "save_document" ? "save a version on its own branch" : "run a script"}
+                  </div>
+                  {typeof call.args.source === "string" && (
+                    <pre style={{ ...mono, maxHeight: 120, overflow: "auto", margin: "4px 0" }}>{call.args.source}</pre>
+                  )}
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button type="button" data-library-live-allow style={button} onClick={() => live.answer(call.id, true)}>
+                      Allow
+                    </button>
+                    <button type="button" data-library-live-decline style={button} onClick={() => live.answer(call.id, false)}>
+                      Decline
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {live.log().length > 0 && (
+                <ul data-library-live-log style={{ listStyle: "none", margin: "6px 0 0", padding: 0 }}>
+                  {live.log().slice(0, 8).map((e) => (
+                    <li key={e.id} data-library-live-entry={e.outcome} style={{ ...mono, display: "flex", justifyContent: "space-between", gap: 6 }}>
+                      <span>
+                        {e.tool} <span style={{ color: "var(--pg-muted-fg)" }}>{e.summary}</span>
+                      </span>
+                      <span style={{ color: e.outcome === "done" ? "var(--pg-muted-fg)" : "var(--status-warn)" }}>{e.outcome}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+          {current && branches.length > 0 && (
+            <div data-library-agent-branches style={{ marginTop: 8 }}>
+              <div style={kicker}>Claude's branches</div>
+              {branches.map((b) => (
+                <div key={b} style={{ display: "flex", justifyContent: "space-between", gap: 6, alignItems: "center" }}>
+                  <span style={{ ...mono }}>{b}</span>
+                  <button
+                    type="button"
+                    data-library-merge={b}
+                    style={button}
+                    title="Approve and merge into main; Claude cannot do this itself"
+                    onClick={act(async () => {
+                      await library.mergeBranch(current.id, b);
+                      await open(current);
+                    })}
+                  >
+                    Merge into main
+                  </button>
+                </div>
+              ))}
+            </div>
           )}
           {syncNote && (
             <p data-library-sync-note style={{ ...mono, margin: "6px 0 0", color: "var(--pg-muted-fg)" }}>

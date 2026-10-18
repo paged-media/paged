@@ -48,6 +48,14 @@ the wrong edit could not be undone across sessions.
    lacks, pulls through the local kernel (a document that moved apart is refused, not
    merged), and opens a server repository as a new library document.
 
+9. **Claude can use a connected tab.** "Connect to Claude" opens the tab's end of
+   paged.server's live relay. A model's engine tools run here through the editor's own
+   doors: scripts through the undoable Script-panel path, renders through the page
+   snapshot. Every call is logged in the panel. While "Ask before each change" is on (the
+   default), a script or a save waits for the person's Allow. A save becomes an agent's
+   version on `agent/<run>/live` with provenance naming the person, and only the person
+   merges it into main ("Merge into main").
+
 ## Consequences
 
 - The editor now holds data the user did not explicitly save to disk: every opened file is
@@ -57,8 +65,9 @@ the wrong edit could not be undone across sessions.
   the document it came from is a follow-up.
 - Tokens are kept in `localStorage` per server: an hour-long signed access token and a
   rotating refresh token. Anything that can run script on the editor's origin can read them.
-- Saves made by Claude in the live tab are commits by the human, as before. Agent provenance
-  for in-tab edits arrives with the server's relay.
+- A script Claude runs in the tab changes the working document like any script: it is
+  undoable, and the person's next Save commits it as theirs. A version is Claude's only when
+  Claude saves it (`save_document`).
 - The repository package is new on npm and reaches the editor once core publishes it.
   Until then the editor builds against a local package (`~/paged/.local-wasm/repo-wasm` via a
   `file:` override that is not committed).
