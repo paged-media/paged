@@ -1,7 +1,7 @@
 // GENERATED — do not edit. Vendored verbatim from the published
 // @paged-media/canvas-wasm .d.ts (tsify output from paged-media/core,
 // MPL-2.0 OR PMEL). Sync: node scripts/sync-wire.mjs · Check: --check.
-// Synced from @paged-media/canvas-wasm@0.73.1
+// Synced from @paged-media/canvas-wasm@0.73.3
 /* tslint:disable */
 /* eslint-disable */
 
@@ -3257,6 +3257,12 @@ export interface ExportPdfWireOptions {
      * print presets.
      */
     bookmarks?: boolean;
+    /**
+     * ADR 182 — Create Tagged PDF: the document\'s logical structure
+     * (stories and their paragraphs) with `/MarkInfo` and `/Lang`. Off
+     * by default, as in InDesign\'s print presets.
+     */
+    tagged?: boolean;
 }
 
 export interface FrameBounds {
