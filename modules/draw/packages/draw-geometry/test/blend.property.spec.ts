@@ -19,7 +19,7 @@
 // Property tests for blend.ts — anchor-run interpolation and the sRGB
 // colour mix of the blend command.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   interpolateAnchors,

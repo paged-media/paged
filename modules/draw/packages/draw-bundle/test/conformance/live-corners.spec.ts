@@ -31,7 +31,7 @@
 //       C-18 closed both arms), proven against the real engine on the
 //       polygon, not just asserted about the gate.
 
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 import type { ElementId, Mutation } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";

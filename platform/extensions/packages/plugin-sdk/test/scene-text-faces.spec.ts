@@ -22,7 +22,7 @@
 // default font on the `sceneLayerApplied` reply. The SDK forwards the item
 // fields untouched and hands the report back from `submit`.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { PagedEditor, PluginManifest, SceneLayer } from "@paged-media/plugin-api";
 

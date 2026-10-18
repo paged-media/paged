@@ -24,7 +24,7 @@
 // engine-side semantics are proven in Rust (data-conformance/tests/it/provider.rs);
 // here we prove the bundle reaches the engine and does not fake a registration.
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "bun:test";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 

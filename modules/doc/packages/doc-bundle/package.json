@@ -27,8 +27,8 @@
     }
   },
   "scripts": {
-    "typecheck": "tsc --noEmit",
-    "test": "bun test --parallel",
+    "typecheck": "bun check",
+    "test": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts",
     "build": "tsup src/index.ts --format esm --dts"
   },
   "peerDependencies": {

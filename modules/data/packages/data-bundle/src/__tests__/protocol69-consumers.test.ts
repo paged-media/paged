@@ -10,7 +10,8 @@
 //  4. overset measured in one `measureStrings` call per face, else per word;
 //  5. a merge that adds pages as ONE batch (in-batch page handles), else two.
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, mock } from "bun:test";
+import { waitFor, importActual } from "@paged-media/test-kit";
 
 import type { BundleHost, Mutation } from "@paged-media/plugin-api";
 
@@ -25,6 +26,13 @@ import {
   type MergePlan,
   type MergeTemplate,
 } from "../merge";
+
+// bun:test hoists no vi.mock and has no vi.doMock / vi.resetModules: the
+// real exports are taken once, before anything is mocked, and mock.module
+// patches the loaded module in place (every importer sees the change).
+const actualEngine = await importActual(() => import("../engine"));
+const actualDuckdb = await importActual(() => import("../query/duckdb"));
+const actualMerge = await importActual(() => import("../merge"));
 
 const silent = { debug() {}, info() {}, warn() {}, error() {} };
 
@@ -121,13 +129,12 @@ function fakeEngine(over?: Partial<DataEngineLike>): DataEngineLike {
 }
 
 async function sessionWith(host: BundleHost, engine: DataEngineLike, mergeMock?: Record<string, unknown>) {
-  vi.resetModules();
-  vi.doMock("../engine", async (orig) => ({
-    ...(await orig<typeof import("../engine")>()),
+  mock.module("../engine", () => ({
+    ...actualEngine,
     bootEngine: async () => engine,
   }));
-  vi.doMock("../query/duckdb", async (orig) => ({
-    ...(await orig<typeof import("../query/duckdb")>()),
+  mock.module("../query/duckdb", () => ({
+    ...actualDuckdb,
     bootDuckDB: async () => ({
       registerCsv: async () => {},
       registerFileBuffer: async () => {},
@@ -136,7 +143,8 @@ async function sessionWith(host: BundleHost, engine: DataEngineLike, mergeMock?:
     }),
   }));
   if (mergeMock) {
-    vi.doMock("../merge", async (orig) => ({ ...(await orig<typeof import("../merge")>()), ...mergeMock }));
+    mock.module("../merge", () => ({
+    ...actualMerge, ...mergeMock }));
   }
   const { createSession } = await import("../session");
   return createSession(host, 20613);
@@ -283,7 +291,7 @@ describe("the session version is named in the document label (protocol 69) [data
     h.setLabel(first);
     h.reads.length = 0;
     h.undo();
-    await vi.waitFor(() => expect(h.reads).toContain(sessionVersionPath(first)));
+    await waitFor(() => expect(h.reads).toContain(sessionVersionPath(first)));
     await s.whenRestored();
     // The data engine took the version's recipe; neither engine rebooted.
     expect(loaded).toHaveLength(1);

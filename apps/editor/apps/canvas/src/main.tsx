@@ -1713,7 +1713,6 @@ function PluginBundles() {
         .__loadTestBundle;
     };
     // Mount-once by design; the ref keeps the handle live.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return null;
 }

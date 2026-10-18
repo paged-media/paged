@@ -43,7 +43,7 @@
 //       source with no readable geometry is skipped, nothing selected
 //       is a no-op.
 
-import { describe, expect, it, beforeAll, afterAll, beforeEach } from "vitest";
+import { describe, expect, it, beforeAll, afterAll, beforeEach } from "bun:test";
 
 import type {
   BundleHost,

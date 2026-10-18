@@ -1,7 +1,7 @@
 // ADR 559 (engine protocol 71): a variable binding as a custom text variable,
 // and the core-71 address spellings the binding writes. Pure: ops out.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   cellAddress,

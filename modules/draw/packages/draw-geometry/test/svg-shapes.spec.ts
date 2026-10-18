@@ -22,7 +22,7 @@
 // through the cardinal points and stays within tolerance of the true
 // conic on a dense sample.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   rectToPath,

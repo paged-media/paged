@@ -13,13 +13,34 @@ $schema: '../cache/schemas/tasks.json'
 
 tasks:
   fmt:
-    description: 'Formatting checks (rust-fmt).'
+    description: 'Formatting checks (rust-fmt, js-fmt).'
     toolchains: ['system']
     deps:
       - target: '~:rust-fmt'
         optional: true
+      - target: '~:js-fmt'
+        optional: true
     inputs: []
     options:
+      runInCI: false
+
+  # bun fmt over the project directory: JS/TS, JSON, CSS, HTML, Markdown and
+  # YAML (bunfig.toml [fmt], /.prettierignore). Every project has such
+  # files, so this is not limited to the `node` projects. tooling/js/fmt.sh
+  # runs the pinned Bun canary from the repository root over git's file list.
+  js-fmt:
+    description: 'bun fmt --check over the project (tooling/js/fmt.sh).'
+    toolchains: ['system']
+    script: 'bash "$workspaceRoot/tooling/js/fmt.sh" --check .'
+    inputs:
+      - '**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs,json,jsonc,css,html,md,yml,yaml}'
+      - '/bunfig.toml'
+      - '/.prettierignore'
+      - '/tooling/js/bun-canary-version'
+      - '/tooling/js/fmt.sh'
+    options:
+      # CI checks the whole repository, root files included, in its own job
+      # (.github/workflows/fmt.yml); `moon ci` does not run it a second time.
       runInCI: false
 
   check:

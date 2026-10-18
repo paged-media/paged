@@ -157,7 +157,7 @@ the draw-plugin e2e (`editor` `apps/canvas/tests/e2e/draw-plugin.spec.ts`)
 and a DTP journey (`tests/journey/plugins/draw.journey.spec.ts`) author a
 path with the built-in Pen, then refine its anchors (add/delete/convert)
 and stroke through the bundle. The three TS packages carry 2 652 passing
-vitest against engine 0.71.8 (geometry 681, tools 337, bundle 1 634; 34
+tests (vitest then, bun test since B7) against engine 0.71.8 (geometry 681, tools 337, bundle 1 634; 34
 skipped — 27 of them the InDesign round-trip generator, which runs only
 with `PAGED_ROUNDTRIP_WRITE`, 3 the opt-in real SVG corpus, 3 the
 page-only cases of the spread-space fake engine, 1 the older-engine
@@ -531,7 +531,7 @@ over a set of items. The `GroupSpec` has no clip flag and core's parsed
   with a pointer when host/core work lands.
 - **Machines stay pure + unit-tested.** Page-local pt in, snapshots/plans
   out; tolerances are passed in (the host converts px→pt at zoom). Every
-  behavior change lands with a vitest case (`packages/*/test/`).
+  behavior change lands with a unit test (`packages/*/test/`).
 - **Wire compatibility is the contract's type.** The machines' `*Wire`
   shapes (`draw-tools/src/path-edit-ops.ts`, `scissors.ts`) are the
   contract's `Mutation` variants, so a protocol break fails

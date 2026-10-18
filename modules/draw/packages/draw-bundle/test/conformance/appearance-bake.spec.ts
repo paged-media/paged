@@ -55,7 +55,7 @@
 //           unchanged by the C-19 work.
 
 import { inflateSync } from "node:zlib";
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 import type {
   CommandContribution,

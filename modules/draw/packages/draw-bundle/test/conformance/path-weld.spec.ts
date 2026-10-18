@@ -33,7 +33,7 @@
 //       degrades to the pathPointSet coincide plan — both elements
 //       survive, endpoints merely coincide.
 
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 import type {
   BundleHost,

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   asciiJson,
@@ -95,6 +95,7 @@ describe("labels — ADR 559 [data.persist.labels]", () => {
 
   it("label values are ASCII; InDesign's <?AID?> re-encoding decodes back [data.persist.labels]", () => {
     const json = asciiJson({ v: 1, data: { note: "Grüße 😀" } });
+    // eslint-disable-next-line no-control-regex -- an ASCII check: the range starts at NUL on purpose
     expect(json).toMatch(/^[\x00-\x7f]*$/);
     expect(JSON.parse(json).data.note).toBe("Grüße 😀");
     // What InDesign writes for a raw-UTF-8 emoji after one save.

@@ -22,7 +22,7 @@
 // proven in Rust (data-conformance/tests/it/governed.rs + data-sources unit tests);
 // here we prove the bundle reaches the engine and passes the sidecar through.
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "bun:test";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 

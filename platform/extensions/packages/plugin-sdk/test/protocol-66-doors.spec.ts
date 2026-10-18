@@ -28,7 +28,7 @@
 //   · document.mutateWithBytes: the binary commit lane when the host wires
 //     it, the `number[]` splice into the first empty slot when it does not.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type {
   ColorPickerProps,

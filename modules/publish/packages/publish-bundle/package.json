@@ -11,9 +11,9 @@
     "./manifest.json": "./manifest.json"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck": "bun check -p tsconfig.json",
     "build": "tsup",
-    "test": "bun test --parallel"
+    "test": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts"
   },
   "peerDependencies": {
     "@paged-media/plugin-api": "workspace:*",

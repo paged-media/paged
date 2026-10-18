@@ -24,7 +24,7 @@
 // axis, all through `host.document.mutate` against the real published
 // engine. It is the wire-path proof the fill panel (Phase 2d) builds on.
 
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 

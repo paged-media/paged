@@ -26,7 +26,7 @@
 // the document goes through the RAW host, the way another command — or
 // another plugin, or the user — would.
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
 
 import type { BundleHost, DocumentOpenedEvent, ElementId, Mutation } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";

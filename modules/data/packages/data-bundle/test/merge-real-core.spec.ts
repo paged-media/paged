@@ -23,7 +23,7 @@
 // Gate: skips without canvas-wasm or the data-js wasm, EXCEPT under
 // REQUIRE_REAL_CORE=1, where a missing piece is a failure.
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -95,7 +95,7 @@ function textRecordSet(id: string) {
   };
 }
 
-const normalise = (s: string) => s.replace(/\r/g, "\n").replace(/﻿/g, "");
+const normalise = (s: string) => s.replace(/\r/g, "\n").replace(/\uFEFF/g, "");
 const near = (a: number[], b: number[]) => a.every((v, i) => Math.abs(v - b[i]) <= TOL);
 
 /** A host in this plugin's namespace (labels go under x-paged:media.paged.data). */

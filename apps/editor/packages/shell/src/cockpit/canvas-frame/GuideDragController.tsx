@@ -53,7 +53,6 @@
 
 import { useCallback, useEffect, useRef } from "react";
 
-// eslint-disable-next-line import/no-relative-parent-imports
 import type {
   GuideSummary,
   Mutation,
@@ -401,7 +400,6 @@ export function GuideDragController() {
     // Listeners read the live drag / preview-resolver / settle through
     // refs, so they bind exactly once per drag (mount/unmount on
     // dragActive).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dragActive, updateDrag, clearDrag]);
 
   return null;

@@ -28,7 +28,7 @@
 //
 // Every difference is CLASSIFIED in `findings.ts` (defect / convention /
 // expected loss, with both values). An unclassified one fails; so does a
-// classified one that stops occurring. A DEFECT is also an `it.fails`, so
+// classified one that stops occurring. A DEFECT is also an `it.failing`, so
 // it turns red the day it is fixed.
 //
 // STALENESS is checked, not trusted: the committed IDML must be what the
@@ -42,7 +42,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
 import { BOUNDS_ABS_TOL, pathBounds } from "../oracle/oracle";
 import { ROUNDTRIP_CASES, authorCase, type AuthoredCase } from "./author";
@@ -148,7 +148,7 @@ for (const c of ROUNDTRIP_CASES) {
 
     it("InDesign reported no unresolved font, broken link or overset story but the classified ones", () => {
       // A known warning is the symptom of a classified finding (its DEFECT
-      // is an `it.fails` below); one that stops occurring fails here.
+      // is an `it.failing` below); one that stops occurring fails here.
       expect(rec.warnings).toEqual((KNOWN_WARNINGS[c.id] ?? []).map((w) => w.warning));
     });
 
@@ -171,7 +171,7 @@ for (const c of ROUNDTRIP_CASES) {
 
     for (const [finding, entries] of defectsOf(known)) {
       const f = FINDINGS[finding];
-      it.fails(`DEFECT (${f.owner}) — ${f.title}: ${bothValues(entries)}`, () => {
+      it.failing(`DEFECT (${f.owner}) — ${f.title}: ${bothValues(entries)}`, () => {
         for (const k of entries) {
           expect(diffs.find((d) => d.at === k.at && d.field === k.field)).toBeUndefined();
         }
@@ -192,14 +192,14 @@ for (const c of ROUNDTRIP_CASES) {
     const refusals = KNOWN_REFUSALS[c.id] ?? [];
     if (refusals.length > 0) {
       const f = REFUSAL_FINDINGS[refusals[0].finding];
-      it.fails(`DEFECT (${f.owner}) — ${f.title}: refused ${refusals.map((r) => r.what).join(", ")}`, () => {
+      it.failing(`DEFECT (${f.owner}) — ${f.title}: refused ${refusals.map((r) => r.what).join(", ")}`, () => {
         expect(authored.refusals).toEqual([]);
       });
     }
 
     const missing = MISSING_LOST[c.id];
     if (missing) {
-      it.fails(`DEFECT (${FINDINGS[missing.finding].owner}) — the lost list does not name what the export drops: ours [], want an entry matching ${missing.pattern}`, () => {
+      it.failing(`DEFECT (${FINDINGS[missing.finding].owner}) — the lost list does not name what the export drops: ours [], want an entry matching ${missing.pattern}`, () => {
         expect(authored.lost.some((l) => missing.pattern.test(l))).toBe(true);
       });
     }

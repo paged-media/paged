@@ -22,19 +22,19 @@
 // binding → ingest a CSV-shaped RecordSet → resolve → lower, with the DSL
 // kernels (CURRENCY/UPPER/CONCAT/IF/DATEFMT/TODAY/LEN) evaluated by the
 // Rust engine, not a mock. Every other bundle test runs against fake
-// hosts/engines; before this spec the wasm booted on NOBODY's vitest.
+// hosts/engines; before this spec the wasm booted on NOBODY's unit lane.
 //
 // DUAL-GATED (the plugin-sheets engine-real pattern): when
 // packages/data-bundle/bin/data_js_bg.wasm has not been built
-// (scripts/build-wasm.sh), the suite SKIPS locally — the pure-TS vitest
-// lane stays green without a Rust toolchain. In CI the vitest workflow
+// (scripts/build-wasm.sh), the suite SKIPS locally — the pure-TS unit
+// lane stays green without a Rust toolchain. In CI the unit-test workflow
 // BUILDS the artifact and sets REQUIRE_REAL_ENGINE=1, under which a
 // missing artifact FAILS the suite instead of skipping it — the skip gate
 // can never silently drop the real boot out of CI.
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BIN = join(HERE, "..", "bin");
@@ -99,7 +99,7 @@ if (process.env.REQUIRE_REAL_ENGINE === "1" && !built) {
       throw new Error(
         `REQUIRE_REAL_ENGINE=1 but ${WASM} is missing — ` +
           "build it with `bash scripts/build-wasm.sh` (CI must build the " +
-          "artifact before running vitest; skipping is not allowed here)",
+          "artifact before running bun test; skipping is not allowed here)",
       );
     });
   });

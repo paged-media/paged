@@ -23,7 +23,7 @@
 // distribution rules, and the easing curve whose ZERO STRENGTH must be
 // the identity (otherwise "the default changes nothing" is not true).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   distributeAlongPath,

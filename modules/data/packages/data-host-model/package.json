@@ -9,8 +9,8 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run",
+    "typecheck": "bun check -p tsconfig.json",
+    "test": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts",
     "build": "tsup src/index.ts --format esm --dts --out-dir dist --clean",
     "prepublishOnly": "bun run build"
   },
@@ -19,7 +19,7 @@
   },
   "devDependencies": {
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "@types/bun": "catalog:"
   },
   "files": [
     "dist"

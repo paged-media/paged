@@ -14,11 +14,12 @@
     "./manifest.json": "./manifest.json"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run",
+    "typecheck": "bun check -p tsconfig.json",
+    "test": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts --path-ignore-patterns '**/*.dom.test.*'",
+    "test:dom": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts --preload ./test/happydom.ts .dom.test.",
     "build": "tsup",
     "prepublishOnly": "bun run build",
-    "bench": "vitest bench --run"
+    "bench": "bun ./test/perf/doors.bench.ts"
   },
   "devDependencies": {
     "@paged-media/canvas-wasm": "workspace:*",
@@ -31,11 +32,14 @@
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
-    "jsdom": "^30.1.1",
     "react": "catalog:",
     "react-dom": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "@happy-dom/global-registrator": "^21.0.3",
+    "@paged-media/test-kit": "workspace:*",
+    "@types/bun": "catalog:",
+    "happy-dom": "^21.0.3",
+    "mitata": "^1.0.34"
   },
   "files": [
     "dist",

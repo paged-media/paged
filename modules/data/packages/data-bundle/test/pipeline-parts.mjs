@@ -1,7 +1,7 @@
 // The real-wasm pipeline parts (spec §12.4) — the seam the unit tests cannot
 // prove: the REAL data-js wasm engine driven through its serde-wasm-bindgen
 // boundary. Formerly test-integration/pipeline.e2e.mjs, a standalone script
-// that nothing ran; its parts are now called by vitest:
+// that nothing ran; its parts are now called by bun test:
 //
 //   test/pipeline-real.spec.ts  Parts A, C, D, E (REQUIRE_REAL_ENGINE gate)
 //   test/duckdb-real.spec.ts    Part B: real DuckDB → Arrow → recordset.ts →
