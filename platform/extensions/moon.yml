@@ -19,8 +19,13 @@ dependsOn:
     scope: 'development'
 
 tasks:
+  # The npm builds: plugin-api's declarations, plugin-sdk's bun build plus
+  # declarations (TypeScript 7), and the CLI's plain-Node bin.
   js-build:
-    description: 'Every package `build` script (tsup/tsc to dist/). extensions-vitest builds before testing.'
+    description: 'Every package `build` script (bun build / tsc to dist/). extensions-vitest builds before testing.'
+    command: "bun run --filter './packages/*' build"
+    inputs:
+      - '@group(js-sources)'
     outputs:
       - 'packages/*/dist/**/*'
     options:

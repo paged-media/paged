@@ -53,12 +53,12 @@ import type {
   ValueType,
 } from "@paged-media/plugin-api";
 
-import type { CoreCreatePlan, CoreObjects, CorePlan } from "./core-objects";
-import type { createCoreObjectsV70 } from "./core-objects-v70";
-import { planCoreDelete } from "./core-ops";
-import { CORE_OPERATION_PATHS, coreSchema71, type CoreRow71 } from "./core-schema";
-import { formatAddress, fromElementId, parseAddress, type SelectorStep } from "./object-address";
-import { rowPathOf } from "./object-schema";
+import type { CoreCreatePlan, CoreObjects, CorePlan } from "./core-objects.js";
+import type { createCoreObjectsV70 } from "./core-objects-v70.js";
+import { planCoreDelete } from "./core-ops.js";
+import { CORE_OPERATION_PATHS, coreSchema71, type CoreRow71 } from "./core-schema.js";
+import { formatAddress, fromElementId, parseAddress, type SelectorStep } from "./object-address.js";
+import { rowPathOf } from "./object-schema.js";
 
 type V70 = ReturnType<typeof createCoreObjectsV70>;
 

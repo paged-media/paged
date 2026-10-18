@@ -36,8 +36,8 @@ import type {
   ValueType,
 } from "@paged-media/plugin-api";
 
-import { parseAddress, parseSelector } from "./object-address";
-import { findRow, validateValue } from "./object-schema";
+import { parseAddress, parseSelector } from "./object-address.js";
+import { findRow, validateValue } from "./object-schema.js";
 
 /** Is this row an object-model property row (the property row)? */
 export function isPropertyRow(row: PanelSchemaRow): row is PanelSchemaPropertyRow {

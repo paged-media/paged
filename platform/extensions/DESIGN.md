@@ -717,7 +717,7 @@ once by a fix for the other:
   `peerDependenciesMeta.react.optional` is a manifest claim; this is the
   runtime one.
 - **No top-level await in the emitted bundle.** The fix for the above
-  was a top-level `await import("react")`. tsup emits it verbatim, and
+  was a top-level `await import("react")`. The bundler emits it verbatim, and
   Vite's dep-optimizer compiles pre-bundled dependencies down to its
   ES2020 floor, where top-level await does not exist — so pre-bundling
   the published package fails a consuming dev server outright. The
@@ -738,11 +738,14 @@ rule: a visible seam, never fake UI). The module is internal — it is not
 re-exported from `index.ts`, because how the two members obtain
 `createElement` is not contract surface.
 
-The build pins `--target es2020`, Vite's own dep-optimizer floor.
-esbuild cannot LOWER top-level await, so that target makes it
-unemittable: a future one fails `pnpm build` here instead of a
-consumer's dev server. That is the gate, not the fix — the fix is the
-source shape above. Do not raise the target without reading this.
+The declaration build (`tsconfig.build.json`) compiles at
+`"module": "ES2020"`, Vite's own dep-optimizer floor. TypeScript rejects
+a top-level await there (TS1378), so a future one fails `bun run build`
+here instead of a consumer's dev server. That is the gate, not the fix —
+the fix is the source shape above. Do not raise the module setting
+without reading this. (Until TypeScript 7 the gate was tsup's
+`--target es2020`; `bun build`, which bundles the JavaScript now, has no
+syntax target.)
 
 ## 6. RPC-readiness audit (the isolate migration debt, stated)
 

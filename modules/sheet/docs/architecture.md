@@ -69,8 +69,8 @@ session (`src/session.ts`), three React panels (`src/panels/`), the engine facad
 part (`src/workbook-part.ts`) and two binding providers (`src/binding-provider/`). It is the
 only package that touches the host.
 
-The bundle imports the model by relative source path (`../../sheet-host-model/src`) and
-`tsup` inlines it, so the published package does not depend on the private one.
+The bundle imports the model by relative source path (`../../sheet-host-model/src`). Both
+are private workspace packages (PM-0008); the editor builds them from source.
 `@paged-media/plugin-api`, `@paged-media/plugin-sdk` and `react` are peer dependencies, and
 `scripts/check-contract-imports.mjs` fails on a package import in `packages/*/src` that is none of
 these and not one of this repo's own `@paged-media/sheet-*` packages ([ADR 315](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/315-isolation-contract.md)).
@@ -87,7 +87,7 @@ addresses as integers, ranges as A1 strings, and structured results as serde val
 `packages/sheet-bundle/src/engine.ts` wraps the snake_case methods in a camelCase facade
 and loads the module itself: it imports the `wasm-bindgen --target web` glue
 `bin/sheet_js.js`, then in a browser passes the URL of `bin/sheet_js_bg.wasm` (a `?url`
-import that `tsup` leaves to the consuming bundler) to the init function, and in Node reads
+import the consuming bundler resolves) to the init function, and in Node reads
 the file and calls `initSync`. No types are generated across the boundary: the TypeScript
 interfaces are kept in step with the Rust structs by hand, and
 `packages/sheet-bundle/test/engine-real.spec.ts` runs against the built wasm.
@@ -208,8 +208,8 @@ The manifest declares `document` (read `broad`, write `scoped`), `rendering` (`h
   mode, checks that the installed `wasm-bindgen` CLI has the version in `Cargo.lock`, runs
   `wasm-bindgen --target web` into `packages/sheet-bundle/bin/` (gitignored) and, if
   installed, `wasm-opt -Oz`. It fails above 100 MB; the manifest declares 8 MiB for the same
-  file. `.github/workflows/publish.yml` runs it, then `pnpm -r build` (`tsup`), and
-  publishes `@paged-media/sheet` under the `canary` tag.
+  file. The bundle has no build step of its own; `.github/workflows/sheet-publish.yml`
+  stays, dispatch-only, until the npm deprecation.
 - Rust lane (`.github/workflows/rust.yml`, on pull requests and on `main`): `cargo fmt`,
   `clippy` with warnings denied, the dependency guards, `cargo deny`, `cargo nextest`, then
   `coverage-gate`, which fails when a registry row marked `implemented` names no test or

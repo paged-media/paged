@@ -1,6 +1,6 @@
 {
   "name": "@paged-media/pdf",
-  "private": false,
+  "private": true,
   "version": "0.2.6-canary.0",
   "type": "module",
   "main": "./src/index.ts",
@@ -12,7 +12,6 @@
   },
   "scripts": {
     "typecheck": "bun check -p tsconfig.json",
-    "build": "tsup",
     "test": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts"
   },
   "dependencies": {
@@ -24,7 +23,6 @@
   },
   "devDependencies": {
     "@types/node": "catalog:",
-    "tsup": "^8.3.5",
     "typescript": "catalog:",
     "@types/bun": "catalog:",
     "@paged-media/plugin-api": "workspace:*",
@@ -37,19 +35,6 @@
     "schema",
     "manifest.json"
   ],
-  "publishConfig": {
-    "access": "public",
-    "tag": "canary",
-    "main": "./dist/index.js",
-    "types": "./dist/index.d.ts",
-    "exports": {
-      ".": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.js"
-      },
-      "./manifest.json": "./manifest.json"
-    }
-  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/paged-media/paged.git",

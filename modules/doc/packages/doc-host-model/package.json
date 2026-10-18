@@ -10,14 +10,12 @@
   },
   "scripts": {
     "typecheck": "bun check",
-    "test": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts",
-    "build": "tsup src/index.ts --format esm --dts"
+    "test": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts"
   },
   "dependencies": {
     "@paged-media/plugin-api": "workspace:*"
   },
   "devDependencies": {
-    "tsup": "^8.5.1",
     "typescript": "catalog:",
     "@types/bun": "catalog:"
   }
