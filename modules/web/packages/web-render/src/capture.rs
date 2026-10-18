@@ -40,7 +40,9 @@
 //! (Gated `#[cfg(feature = "blitz")]` at the `mod capture` declaration in
 //! `lib.rs`, so this whole module only compiles with the engine stack.)
 
-use anyrender::{Glyph, NormalizedCoord, PaintRef, PaintScene, RenderContext};
+use std::sync::Arc;
+
+use anyrender::{Filter, Glyph, NormalizedCoord, PaintRef, PaintScene, RenderContext};
 use blitz_dom::node::TextBrush;
 use blitz_dom::BaseDocument;
 use blitz_html::HtmlDocument;
@@ -523,12 +525,19 @@ impl PaintScene for CapturingScene {
     // image/text lane) — such a primitive stays its plain item; the blend is
     // the honest follow-on (visible as the layer was pushed but no blended
     // image/text emitted).
+    //
+    // KNOWN LIMIT: a CSS `filter` / `backdrop-filter` (passed with the layer
+    // since blitz-paint 0.3.0-alpha.5) is not lowered — the C-1 wire has no
+    // filter item — so the layer's content paints unfiltered, as it did when
+    // Blitz itself ignored those properties.
     fn push_layer(
         &mut self,
         blend: impl Into<BlendMode>,
         _alpha: f32,
         _transform: Affine,
         _clip: &impl Shape,
+        _filter: Option<Arc<Filter>>,
+        _backdrop_filter: Option<Arc<Filter>>,
     ) {
         self.blend_stack.push(blend.into());
     }
@@ -1862,7 +1871,7 @@ mod tests {
         // inside a `push_layer(Mix::Multiply, …)` bracket → `FillBlend`.
         let mut scene = CapturingScene::new();
         let clip = kurbo::Rect::new(0.0, 0.0, 100.0, 100.0);
-        scene.push_layer(Mix::Multiply, 1.0, Affine::IDENTITY, &clip);
+        scene.push_layer(Mix::Multiply, 1.0, Affine::IDENTITY, &clip, None, None);
         scene.fill(
             Fill::NonZero,
             Affine::IDENTITY,
@@ -1901,7 +1910,7 @@ mod tests {
         // active blend (the innermost NON-Normal mix wins).
         let mut scene = CapturingScene::new();
         let clip = kurbo::Rect::new(0.0, 0.0, 100.0, 100.0);
-        scene.push_layer(Mix::Screen, 1.0, Affine::IDENTITY, &clip);
+        scene.push_layer(Mix::Screen, 1.0, Affine::IDENTITY, &clip, None, None);
         scene.push_clip_layer(Affine::IDENTITY, &clip); // Normal/SrcOver
         scene.fill(
             Fill::NonZero,
@@ -2003,7 +2012,7 @@ mod tests {
         let pad = kurbo::Rect::new(0.0, 0.0, 64.0, 64.0);
         // 1) push the Mix::Normal padding-box layer, 2) fill it with the shadow
         // colour, 3) push the DestOut layer, 4) the white punch-out stamp.
-        scene.push_layer(Mix::Normal, 1.0, Affine::IDENTITY, &pad);
+        scene.push_layer(Mix::Normal, 1.0, Affine::IDENTITY, &pad, None, None);
         scene.fill(
             Fill::NonZero,
             Affine::IDENTITY,
@@ -2011,7 +2020,14 @@ mod tests {
             None,
             &pad,
         );
-        scene.push_layer(peniko::Compose::DestOut, 1.0, Affine::IDENTITY, &pad);
+        scene.push_layer(
+            peniko::Compose::DestOut,
+            1.0,
+            Affine::IDENTITY,
+            &pad,
+            None,
+            None,
+        );
         scene.draw_box_shadow(
             Affine::IDENTITY,
             pad,
@@ -2051,7 +2067,14 @@ mod tests {
         // colour.
         let mut scene = CapturingScene::new();
         let pad = kurbo::Rect::new(0.0, 0.0, 64.0, 64.0);
-        scene.push_layer(peniko::Compose::DestOut, 1.0, Affine::IDENTITY, &pad);
+        scene.push_layer(
+            peniko::Compose::DestOut,
+            1.0,
+            Affine::IDENTITY,
+            &pad,
+            None,
+            None,
+        );
         scene.draw_box_shadow(Affine::IDENTITY, pad, Color::WHITE, 8.0, 4.0);
         scene.pop_layer();
         let out = lower(&scene.into_display_list());
@@ -2297,7 +2320,7 @@ mod tests {
                 Color::new([1.0, 0.0, 0.0, 1.0]),
                 Color::new([0.0, 0.0, 1.0, 1.0]),
             ]);
-        scene.push_layer(Mix::Screen, 1.0, Affine::IDENTITY, &clip);
+        scene.push_layer(Mix::Screen, 1.0, Affine::IDENTITY, &clip, None, None);
         scene.fill(
             Fill::NonZero,
             Affine::IDENTITY,
