@@ -1,4 +1,4 @@
-name: publish-wasm
+name: core / publish-wasm
 
 # Builds the engine's wasm-bindgen surfaces and publishes them as
 # versioned npm packages that the (private) editor consumes across the
@@ -34,6 +34,14 @@ name: publish-wasm
 #   2. In the editor repo, point `packages/client` at the published
 #      `@paged-media/canvas-wasm` (and devtools at
 #      `@paged-media/introspect-wasm`) instead of `build-wasm.sh` output.
+#
+# MONOREPO (step A3): ported from paged-media/core
+# .github/workflows/publish-wasm.yml. Release tags stay `v0.<P>.<n>` at the
+# repository root (the imported core tags live there too). The OIDC claims
+# this workflow presents are now repository paged-media/paged and workflow
+# core-publish-wasm.yml — so any Trusted Publisher entry created for the old
+# repo/filename will NOT match. Token auth (NPM_TOKEN) is unaffected, but the
+# secret must exist on paged-media/paged.
 
 on:
   push:
@@ -45,6 +53,10 @@ on:
 permissions:
   id-token: write # the OIDC token trusted publishing exchanges
   contents: read
+
+defaults:
+  run:
+    working-directory: engine/core
 
 jobs:
   publish:
@@ -145,7 +157,7 @@ jobs:
           done
           if [ "$FAILED" = "1" ]; then
             echo "::notice::Still on token auth. Each package needs its OWN Trusted Publisher entry"
-            echo "::notice::(org 'paged-media', repo 'core', workflow 'publish-wasm.yml', no environment)."
+            echo "::notice::(org 'paged-media', repo 'paged', workflow 'core-publish-wasm.yml', no environment)."
           else
             echo "::notice::All five packages authenticate via OIDC — the NPM_TOKEN can be retired."
           fi

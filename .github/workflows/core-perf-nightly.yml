@@ -11,12 +11,18 @@
 # macos-latest: the same runner class as the gpu lane, kept fixed so runs
 # compare like with like.
 
-name: perf-nightly
+# Ported from paged-media/core .github/workflows/perf-nightly.yml (step A3).
+
+name: core / perf-nightly
 
 on:
   schedule:
     - cron: "41 2 * * *"
   workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: engine/core
 
 env:
   CARGO_TERM_COLOR: always
@@ -43,12 +49,15 @@ jobs:
         with:
           toolchain: ${{ needs.toolchain.outputs.channel }}
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: engine/core -> target
+          prefix-key: v0-rust-core
 
       - name: previous results
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          id=$(gh run list --workflow perf-nightly.yml --status success -L 1 --json databaseId --jq '.[0].databaseId // empty')
+          id=$(gh run list --workflow core-perf-nightly.yml --status success -L 1 --json databaseId --jq '.[0].databaseId // empty')
           if [ -n "$id" ]; then
             gh run download "$id" -n perf-results -D previous || echo "no previous results"
           fi
@@ -64,5 +73,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: perf-results
-          path: perf-results.json
+          path: engine/core/perf-results.json
           retention-days: 90

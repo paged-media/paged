@@ -1,13 +1,21 @@
-name: fidelity
+name: core / fidelity
 
+# Ported from paged-media/core .github/workflows/fidelity.yml (step A3).
 on:
   push:
     branches: [main]
+    paths:
+      - "engine/core/**"
+      - ".github/workflows/core-fidelity.yml"
   pull_request:
     paths:
-      - 'crates/**'
-      - 'corpus/**'
-      - '.github/workflows/fidelity.yml'
+      - "engine/core/crates/**"
+      - "engine/core/corpus/**"
+      - ".github/workflows/core-fidelity.yml"
+
+defaults:
+  run:
+    working-directory: engine/core
 
 env:
   CARGO_TERM_COLOR: always
@@ -40,6 +48,9 @@ jobs:
           # Pinned from rust-toolchain.toml via the toolchain job (B21).
           toolchain: ${{ needs.toolchain.outputs.channel }}
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: engine/core -> target
+          prefix-key: v0-rust-core
 
       - name: install poppler-utils (pdftoppm) — Ubuntu
         if: runner.os == 'Linux'

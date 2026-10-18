@@ -1,4 +1,4 @@
-name: notify-docs
+name: core / notify-docs
 
 # When the engine CATALOG (paged-introspect/catalog.json — the source docs.paged.media
 # generates its scripting reference from) changes on main, ping the docs site to
@@ -7,11 +7,16 @@ name: notify-docs
 #
 # Needs DOCS_DISPATCH_TOKEN (a PAT with Contents:write on paged-media/docs; an ORG
 # secret covers every sender repo at once). Unset → the step skips (no failure).
+#
+# Ported from paged-media/core .github/workflows/notify-docs.yml (step A3).
+# The path filter stays the one file docs consumes (now under engine/core);
+# the job checks nothing out, so it carries no working-directory default.
+# The payload still says repo "core": docs keys its rebuild reason on it.
 on:
   push:
     branches: [main]
     paths:
-      - "crates/paged-introspect/catalog.json"
+      - "engine/core/crates/paged-introspect/catalog.json"
   workflow_dispatch:
 
 permissions:

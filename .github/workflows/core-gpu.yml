@@ -1,4 +1,4 @@
-name: gpu
+name: core / gpu
 
 # W0.7 GPU lane (audit B14): exercise the Vello/wgpu rasterizer headlessly
 # on a software Vulkan stack (Mesa lavapipe) so the GPU code path gets CI
@@ -21,20 +21,29 @@ name: gpu
 # After the observation week, the deliberate second flip is marking
 # this check required in branch protection — that flip happens in the
 # repo settings, not in this file.
+#
+# Ported from paged-media/core .github/workflows/gpu.yml (step A3).
 
 on:
   push:
     branches: [main]
+    paths:
+      - "engine/core/**"
+      - ".github/workflows/core-gpu.yml"
   pull_request:
     paths:
-      - 'crates/paged-gpu/**'
-      - 'crates/paged-compose/**'
+      - "engine/core/crates/paged-gpu/**"
+      - "engine/core/crates/paged-compose/**"
       # The parity step below renders the generated corpus, so what
       # builds the display list and what the fixtures are reach it too.
-      - 'crates/paged-renderer/**'
-      - 'corpus/generated/**'
-      - '.github/workflows/gpu.yml'
+      - "engine/core/crates/paged-renderer/**"
+      - "engine/core/corpus/generated/**"
+      - ".github/workflows/core-gpu.yml"
   workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: engine/core
 
 env:
   CARGO_TERM_COLOR: always
@@ -71,6 +80,9 @@ jobs:
         with:
           toolchain: ${{ needs.toolchain.outputs.channel }}
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: engine/core -> target
+          prefix-key: v0-rust-core
 
       - name: install Mesa lavapipe (software Vulkan) + vulkan tools
         # Bounded: unlike the poppler/brotli cases this genuinely needs
@@ -177,7 +189,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: vello-junit
-          path: target/nextest/ci/junit.xml
+          path: engine/core/target/nextest/ci/junit.xml
           if-no-files-found: warn
           retention-days: 14
 
