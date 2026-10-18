@@ -27,6 +27,10 @@ from anywhere in the repository. One project per Cargo workspace and JS componen
   everywhere. The language halves are `rust-*` and `js-*` (`moon tasks <project>`).
 - `moon ci --base origin/main --head HEAD` — only what a change affects.
 - The component's own commands (cargo, `bun run`) still work in its directory.
+- Formatting: `cargo fmt` for Rust; `tooling/js/fmt.sh` (`bun fmt` on the
+  pinned canary, Prettier 3 defaults, `/.prettierignore`) for everything
+  else, checked in CI by `.github/workflows/fmt.yml`. Never format a file
+  `/.prettierignore` lists; regenerate it instead.
 - Moon must not modify tracked files (package.json, lockfiles, tsconfig.json,
   rust-toolchain.toml). A change in `git status` after a Moon run is a bug in `.moon/`.
 
