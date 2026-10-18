@@ -21,6 +21,11 @@ defaults:
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -Dwarnings
+  # The workspace builds several hundred debug test binaries; with full debug
+  # info they filled a 72 GB runner even after the disk cleanup below
+  # (2026-10-18, once the IDML crates joined the workspace). Line tables keep
+  # file:line in backtraces at a fraction of the size.
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
 
 jobs:
   # Resolve the pinned toolchain ONCE from rust-toolchain.toml (audit B21)
