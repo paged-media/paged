@@ -244,7 +244,7 @@ export function scanTextNodes(html: string): SourceTextNode[] {
 
 /** Escape text for an HTML text position. */
 export function escapeText(text: string): string {
-  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/ /g, "&nbsp;");
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\u00A0/g, "&nbsp;");
 }
 
 /**
