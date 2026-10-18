@@ -13,6 +13,13 @@
 // `package.json` version MUST also change in the same range. Otherwise
 // the change can never reach npm.
 //
+// Reformat commits are exempt: a commit tooling/js/mass-format.sh made
+// (subject `fmt: <component> (bun fmt, no other change)`) or one that
+// .git-blame-ignore-revs lists changes no behaviour, so a range whose only
+// src/ changes come from such commits needs no release. Without this, the
+// mass format to `bun fmt` (docs/migration/bun-fmt.md) would have to publish
+// canaries that differ from the last ones by whitespace alone.
+//
 // Base of the range:
 //   * CONTRACT_BASE env (CI passes the PR base sha or `github.event.before`)
 //   * else HEAD~1 (the previous trunk tip — this repo is push-to-main)
@@ -79,6 +86,26 @@ if (!base) {
   process.exit(0);
 }
 
+// The reformat commits (see the rule above), by full hash.
+const FORMAT_SUBJECT = /^fmt: \S+ \(bun fmt, no other change\)$/;
+function isReformat(sha) {
+  if (FORMAT_SUBJECT.test(git(["log", "-1", "--format=%s", sha]))) return true;
+  return blameIgnored.has(sha);
+}
+const blameIgnored = new Set(
+  (() => {
+    try {
+      // A bare `<rev>:<path>` resolves from the repository root, where the
+      // file lives.
+      return git(["show", "HEAD:.git-blame-ignore-revs"]).split("\n");
+    } catch {
+      return [];
+    }
+  })()
+    .map((l) => l.trim())
+    .filter((l) => /^[0-9a-f]{40}$/.test(l)),
+);
+
 const violations = [];
 for (const pkg of PACKAGES) {
   const changed = git([
@@ -92,6 +119,16 @@ for (const pkg of PACKAGES) {
     .split("\n")
     .filter(Boolean);
   if (changed.length === 0) continue;
+
+  const touching = git(["rev-list", `${base}..HEAD`, "--", `${pkg}/src`])
+    .split("\n")
+    .filter(Boolean);
+  if (touching.length > 0 && touching.every(isReformat)) {
+    console.log(
+      `contract-guard: ${pkg}/src changed in reformat commits only (${touching.length}) — no bump needed.`,
+    );
+    continue;
+  }
 
   const before = versionAt(base, pkg);
   const after = versionAtHead(pkg);
@@ -115,5 +152,5 @@ if (violations.length > 0) {
 }
 
 console.log(
-  `contract-guard OK — every package with src changes in ${base}..HEAD bumped its version.`,
+  `contract-guard OK — every package with src changes in ${base}..HEAD bumped its version (reformat-only changes need none).`,
 );
