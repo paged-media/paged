@@ -20,8 +20,19 @@ const nativeToMatchObject = Object.getPrototypeOf(expect(0)).toMatchObject as (
   expected: unknown,
 ) => void;
 
-function remember(received: unknown, expected: unknown, out: Saved[], seen: Set<object>): void {
-  if (!received || typeof received !== "object" || !expected || typeof expected !== "object") return;
+function remember(
+  received: unknown,
+  expected: unknown,
+  out: Saved[],
+  seen: Set<object>,
+): void {
+  if (
+    !received ||
+    typeof received !== "object" ||
+    !expected ||
+    typeof expected !== "object"
+  )
+    return;
   if (seen.has(expected)) return;
   seen.add(expected);
   for (const key of Reflect.ownKeys(expected)) {
@@ -38,9 +49,15 @@ expect.extend({
     remember(received, expected, saved, new Set());
     try {
       nativeToMatchObject.call(expect(received), expected);
-      return { pass: true, message: () => "expected the value not to match the object" };
+      return {
+        pass: true,
+        message: () => "expected the value not to match the object",
+      };
     } catch (err) {
-      return { pass: false, message: () => (err instanceof Error ? err.message : String(err)) };
+      return {
+        pass: false,
+        message: () => (err instanceof Error ? err.message : String(err)),
+      };
     } finally {
       for (const [obj, key, value] of saved) {
         const rec = obj as Record<PropertyKey, unknown>;

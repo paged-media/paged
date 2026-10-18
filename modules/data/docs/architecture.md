@@ -69,8 +69,8 @@ TypeScript copy of the lowered types (`lowered.ts`), and the metadata envelope
 (`src/query/duckdb.ts`), the Arrow converter (`src/query/recordset.ts`) and the functions
 that write to the document (`src/lower.ts`).
 
-- The bundle imports the host model by relative path (`../../data-host-model/src`), and
-  tsup inlines it, so the published package does not depend on the private one.
+- The bundle imports the host model by relative path (`../../data-host-model/src`). Both
+  are private workspace packages (PM-0008); the editor builds them from source.
 - `@paged-media/plugin-api`, `@paged-media/plugin-sdk` and `react` are peer dependencies.
   The contract-import lint rule (`/bunfig.toml`, PM-0003) fails on a package import outside its
   allow-list:

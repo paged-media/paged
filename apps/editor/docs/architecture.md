@@ -172,7 +172,9 @@ application on the main thread; no bundle is discovered or loaded from a URL at 
   saver, blob store, clipboard, text-caret reader, worker backend, consent and secret
   stores with their dialogs, the native-document door, a font asset source, a diagnostics
   sink, the schema-panel renderer, and the data-provider and binding-provider registries.
-  `apps/canvas/src/plugin-api-compat.ts` asserts at type level that the editor's types
+  The shell's registry types are the contract's contribution types, used as is or extended
+  with editor-only optional fields ([ADR 226](adr/226-contribution-types-have-one-definition.md));
+  `apps/canvas/src/plugin-api-compat.ts` asserts at type level that the editor's handles
   still fit the published contract.
 - Each load is wrapped by `apps/canvas/src/plugin-load-guard.ts`: a bundle that throws
   during activation is reported to the journal and the Problems panel, and the rest load.

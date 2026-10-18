@@ -90,3 +90,15 @@ throw; they are recorded (`packages/plugin-sdk/src/harness.ts:620-644`).
 
 - [ADR 301](301-host-adapter-lives-in-plugin-sdk.md), [ADR 302](302-vendored-wire-types.md), [ADR 305](305-doors-always-present.md) — the adapter the harness reuses; the stamp the pin reads; why recorded doors still answer
 - [ADR 200](https://github.com/paged-media/editor/blob/main/docs/adr/200-engine-as-npm-wasm-packages.md), [ADR 006](https://github.com/paged-media/core/blob/main/docs/adr/006-protocol-coupled-versioning.md) — the published engine package and its version scheme
+
+## Amendment, 2026-10-18
+
+The comment noted above is corrected. The harness now lists edit contexts, object types,
+importers, exporters and schema panels as recorded doors. It also gains the other half of the
+manifest gate. `checkManifestConformance(bundle, options)` activates a bundle in `'warn'` mode
+and returns, per contribution category, what the manifest declares that was never registered
+and what was registered without being declared. Its `drive` step plays the trigger a lazy
+registration waits on. An allowance excuses a gap only if it gives a reason, and an unused
+allowance fails the check. `diffManifestContributions` exposes the comparison on its own.
+`HarnessOptions` also gains `pages`, so a test can answer `viewport.pages@1`. The editor runs
+the check over all nine built-in bundles (editor ADR 226).

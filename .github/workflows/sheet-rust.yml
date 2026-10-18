@@ -17,6 +17,8 @@ on:
       # The root Cargo config and its linker/wrapper scripts apply to every build.
       - ".cargo/config.toml"
       - "tooling/rust/**"
+      # The test-resources dev-dependency (the skip convention).
+      - "platform/shared/test-resources/**"
       # Prose under docs/ builds and tests nothing (test inputs are not .md there).
       - "!modules/sheet/docs/**/*.md"
   # Pre-merge gate (audit finding: this lane was push-main-only, so a PR
@@ -28,6 +30,8 @@ on:
       # The root Cargo config and its linker/wrapper scripts apply to every build.
       - ".cargo/config.toml"
       - "tooling/rust/**"
+      # The test-resources dev-dependency (the skip convention).
+      - "platform/shared/test-resources/**"
       # Prose under docs/ builds and tests nothing (test inputs are not .md there).
       - "!modules/sheet/docs/**/*.md"
   workflow_dispatch:
@@ -98,7 +102,17 @@ jobs:
       # below runs under `if: ${{ !cancelled() }}`, so state still ingests
       # red results.
       - name: nextest (junit; red results still publish via !cancelled upload)
-        run: cargo nextest run --workspace --profile ci
+        id: nextest
+        # Tests that miss a resource append `unavailable: …` to the skip
+        # log; the lane report marks them <skipped> in the JUnit and fails a
+        # run that executed nothing (docs/development/testing.md).
+        run: |
+          echo "PAGED_SKIP_LOG=$RUNNER_TEMP/paged-skips.tsv" >> "$GITHUB_ENV"
+          PAGED_SKIP_LOG="$RUNNER_TEMP/paged-skips.tsv" \
+            cargo nextest run --workspace --profile ci --no-tests=fail
+      - name: lane report
+        if: ${{ !cancelled() && steps.nextest.outcome != 'skipped' }}
+        run: python3 ../../tooling/rust/skip-report.py --lane "sheet nextest" --junit target/nextest/ci/junit.xml
       - name: coverage gate (the §12.2 verification invariant)
         run: cargo run -p sheet-conformance --bin coverage-gate
       # Evidence hand-off, INVERTED (2026-07-25). This step used to call
@@ -154,5 +168,10 @@ jobs:
         run: |
           curl -sL https://github.com/WebAssembly/binaryen/releases/download/version_126/binaryen-version_126-x86_64-linux.tar.gz | tar xz
           echo "$PWD/binaryen-version_126/bin" >> "$GITHUB_PATH"
+      # Bun at the version in /.prototools (build-wasm.sh runs source-hash.mjs on it).
+      - uses: moonrepo/setup-toolchain@v0.6.4
+        with:
+          auto-install: true
+          proto-version: "0.63.1"
       - name: build + budget gate (100 MB app-wide)
         run: bash scripts/build-wasm.sh

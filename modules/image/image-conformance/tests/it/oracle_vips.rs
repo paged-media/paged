@@ -27,7 +27,7 @@
 //!   kernels that have one in `image-kernels` (the `kernel_family!`
 //!   point kernels);
 //! * the GPU kernel with libvips — every row, under the shared test
-//!   device (`REQUIRE_GPU=1` turns a missing adapter into a failure).
+//!   device (`PAGED_REQUIRE_GPU=1` turns a missing adapter into a failure).
 //!
 //! Each row's tolerance is MEASURED, recorded in `registry/vips-oracle.
 //! yaml` (`oracle_tolerance` for the reference, `gpu_tolerance_measured`

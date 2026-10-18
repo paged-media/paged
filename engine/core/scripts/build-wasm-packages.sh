@@ -103,7 +103,7 @@ build() {
     rm -rf "$out"
     mkdir -p "$out"
     cp "$shell/package.json" "$shell/README.md" "$shell/LICENSE" "$shell/LICENSE.md" "$out/"
-    node -e '
+    bun -e '
       const fs = require("fs");
       const file = process.argv[1];
       const pkg = JSON.parse(fs.readFileSync(file, "utf8"));
@@ -115,7 +115,7 @@ build() {
   rm -rf "$gen"
 
   # Every file the manifest publishes must now exist.
-  node -e '
+  bun -e '
     const fs = require("fs");
     const dir = process.argv[1];
     const pkg = JSON.parse(fs.readFileSync(dir + "/package.json", "utf8"));

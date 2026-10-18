@@ -46,13 +46,14 @@
 //! compares that multiset against the names psd-tools reports from its tree.
 //!
 //! SKIPPED BY DEFAULT (plan decision 7). The test is `#[ignore]`, AND its
-//! body additionally no-ops with a clean `eprintln!` skip unless BOTH
-//! `PAGED_PSD_ORACLE=1` is set in the environment AND the repo-local
-//! `.venv/bin/python` (with psd-tools installed) is present. Run it with:
+//! body additionally reports `unavailable: external tool: …` (and returns)
+//! unless BOTH `PAGED_PSD_ORACLE=1` is set in the environment AND the
+//! repo-local `.venv/bin/python` (with psd-tools installed) is present;
+//! `PAGED_REQUIRE_TOOLS=1` makes that a failure. Run it with:
 //!
 //! ```text
-//! PAGED_PSD_ORACLE=1 cargo test -p image-conformance \
-//!     --test psd_ecosystem -- --ignored --nocapture
+//! PAGED_PSD_ORACLE=1 cargo nextest run -p image-conformance --run-ignored only \
+//!     psd_ecosystem::
 //! ```
 //!
 //! Setup (once):
@@ -326,7 +327,7 @@ fn check_oracle(out: &OracleOutput, want: &OracleExpect, ctx: &str) {
 }
 
 /// SKIPPED BY DEFAULT. `#[ignore]` keeps it out of the normal run; the body
-/// additionally no-ops (clean `eprintln!` skip) unless `PAGED_PSD_ORACLE=1`
+/// additionally reports `unavailable: external tool` unless `PAGED_PSD_ORACLE=1`
 /// AND the repo-local venv python are both present. Enable with:
 /// `PAGED_PSD_ORACLE=1 cargo test -p image-conformance --test psd_ecosystem
 /// -- --ignored --nocapture`.
@@ -334,20 +335,20 @@ fn check_oracle(out: &OracleOutput, want: &OracleExpect, ctx: &str) {
 #[ignore = "psd-tools ecosystem oracle: opt-in (PAGED_PSD_ORACLE=1 + .venv); plan decision 7"]
 fn image_psd_roundtrip_psd_tools_ecosystem_oracle() {
     if std::env::var_os("PAGED_PSD_ORACLE").as_deref() != Some(std::ffi::OsStr::new("1")) {
-        eprintln!(
-            "SKIP psd-tools ecosystem oracle: PAGED_PSD_ORACLE != 1 \
+        paged_test_resources::skip!(
+            paged_test_resources::Resource::Tools,
+            "psd-tools ecosystem oracle: PAGED_PSD_ORACLE != 1 \
              (set it and run with --ignored to enable)"
         );
-        return;
     }
     let python = venv_python();
     if !python.exists() {
-        eprintln!(
-            "SKIP psd-tools ecosystem oracle: {} not found \
+        paged_test_resources::skip!(
+            paged_test_resources::Resource::Tools,
+            "psd-tools ecosystem oracle: {} not found \
              (run: python3 -m venv .venv && .venv/bin/pip install psd-tools)",
             python.display()
         );
-        return;
     }
 
     let mut reported_version: Option<String> = None;

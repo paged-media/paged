@@ -40,6 +40,7 @@ name = "paged-export"
 required-features = ["cli"]
 
 [dev-dependencies]
+paged-test-resources.workspace = true
 anyhow = { workspace = true }
 lopdf = "0.42"
 paged-scene = { path = "../paged-scene" }

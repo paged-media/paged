@@ -26,37 +26,23 @@
 // variant — it's the handler returning one of the two concrete
 // shapes below per position.
 //
-// `resolveCursorCss` (the spec → `element.style.cursor` string) and
-// the small SVG cursor set land in Phase 3; this file pins the type
-// so the registry + handler contract can reference it now.
+// The two types are the contract's (`@paged-media/plugin-api`, ADR 226):
+// a bundle's tool and a built-in tool name cursors in one vocabulary.
+// `resolveCursorCss` (the spec → `element.style.cursor` string) is the
+// shell's.
+
+import type * as Api from "@paged-media/plugin-api";
 
 /** CSS cursor keywords we use. Cheapest option — no asset, DPR-free. */
-export type CssCursorToken =
-  | "default"
-  | "crosshair"
-  | "grab"
-  | "grabbing"
-  | "move"
-  | "text"
-  | "pointer"
-  | "not-allowed"
-  | "copy"
-  | "cell"
-  | "zoom-in"
-  | "zoom-out"
-  | "nwse-resize"
-  | "nesw-resize"
-  | "ew-resize"
-  | "ns-resize";
+export type CssCursorToken = Api.CssCursorToken;
 
 /**
- * A cursor is either a CSS keyword, or a custom SVG image with an
- * explicit hotspot. SVG (not PNG) so it scales with device pixel
- * ratio. Keep the custom set small — most tools use a CSS token.
+ * A cursor is either a CSS keyword, or a custom SVG image (an inline
+ * data-URI) with an explicit hotspot. SVG (not PNG) so it scales with
+ * device pixel ratio. Keep the custom set small — most tools use a CSS
+ * token.
  */
-export type CursorSpec =
-  | { kind: "css"; token: CssCursorToken }
-  | { kind: "svg"; /** inline data-URI of an SVG */ src: string; hotspot: { x: number; y: number } };
+export type CursorSpec = Api.CursorSpec;
 
 /**
  * Turn a `CursorSpec` into the value for `element.style.cursor`. SVG

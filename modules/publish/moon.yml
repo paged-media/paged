@@ -69,13 +69,6 @@ tasks:
     # pdf-bundle's mapper specs load bin/pdf_import*; publish-ci builds it.
     deps: ['~:wasm']
 
-  js-build:
-    command: "bun run --filter './packages/*' build"
-    outputs:
-      - 'packages/*/dist/**/*'
-    options:
-      runInCI: true
-
   wasm:
     description: 'pdf-import mapper wasm into packages/pdf-bundle/bin/ (scripts/build-wasm.sh).'
     toolchains: ['rust']

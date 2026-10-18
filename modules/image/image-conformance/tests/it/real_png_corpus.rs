@@ -39,10 +39,13 @@
 //! which is what a failed scan looks like when the decoder still reports
 //! success.
 //!
-//! OPT-IN — the assets live in the private corpus checkout:
+//! OPT-IN — the assets live in the private corpus checkout (`#[ignore]`d;
+//! the lane walks every `<group>/packs` and `raster/` under the corpus
+//! root). Without the corpus the tests report `unavailable`, and
+//! `PAGED_REQUIRE_CORPUS=1` makes that a failure:
 //!
 //! ```text
-//! PAGED_PNG_CORPUS=1 cargo test -p image-conformance --test real_png_corpus -- --ignored --nocapture
+//! PAGED_CORPUS_DIR=<corpus root> cargo nextest run --profile corpus --run-ignored only real_png_corpus::
 //! ```
 
 use std::path::PathBuf;
@@ -50,7 +53,8 @@ use std::path::PathBuf;
 use image_codecs::{ImageSource, MemoryByteSource, PngSource, SourceInfo};
 use image_core::{ChannelLayout, Region, TileSliceMut};
 
-const ENV_SWITCH: &str = "PAGED_PNG_CORPUS";
+/// The lane's old opt-in switch, still read for one deprecation period.
+const LEGACY_SWITCH: &str = "PAGED_PNG_CORPUS";
 const LANE: &str = "png";
 
 /// PNG magic, JPEG SOI, and the RIFF/WEBP container — enough to tell
@@ -83,21 +87,10 @@ fn sniff(path: &std::path::Path) -> &'static str {
 }
 
 /// Every `assets/image/*` file across every group, with what it really
-/// is. Returns `None` (printing why) when the corpus is not mounted.
+/// is. Returns `None` (reporting the corpus as unavailable) when it is
+/// not mounted.
 fn corpus_images() -> Option<Vec<(std::path::PathBuf, &'static str)>> {
-    let Some(switch) = std::env::var_os(ENV_SWITCH) else {
-        eprintln!(
-            "SKIP {LANE} corpus lane: {ENV_SWITCH} unset \
-             (set it to 1, or to a corpus root, and run with --ignored)"
-        );
-        return None;
-    };
-    let switch = switch.to_string_lossy().into_owned();
-    let root = if switch == "1" || switch.is_empty() {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../corpus")
-    } else {
-        PathBuf::from(switch)
-    };
+    let root = image_conformance::corpus::root(LANE, LEGACY_SWITCH)?;
     let mut out = Vec::new();
     let mut any_group = false;
     for group in ["idml", "docx", "psd", "html", "vector", "pptx"] {
@@ -153,9 +146,9 @@ fn corpus_images() -> Option<Vec<(std::path::PathBuf, &'static str)>> {
     }
 
     if !any_group {
-        eprintln!(
-            "SKIP {LANE} corpus lane: no <group>/packs or raster/ under {}",
-            root.display()
+        image_conformance::corpus::missing(
+            LANE,
+            format_args!("no <group>/packs or raster/ under {}", root.display()),
         );
         return None;
     }
@@ -172,7 +165,10 @@ fn corpus_of_kind(kind: &str) -> Option<Vec<PathBuf>> {
         .map(|(p, _)| p.clone())
         .collect();
     if out.is_empty() {
-        eprintln!("SKIP {LANE} corpus lane: no {kind} content — run corpus/harness/unpack.sh");
+        image_conformance::corpus::missing(
+            LANE,
+            format_args!("no {kind} content — run corpus/harness/unpack.sh"),
+        );
         return None;
     }
     Some(out)
@@ -235,7 +231,7 @@ fn decode_full(path: &std::path::Path) -> Option<(SourceInfo, Vec<u8>)> {
 }
 
 #[test]
-#[ignore = "png corpus lane: opt-in (PAGED_PNG_CORPUS=1 + the private corpus mount)"]
+#[ignore = "corpus: png (every <group>/packs and raster/)"]
 fn every_real_png_decodes_to_a_full_plausible_image() {
     let Some(files) = corpus_pngs() else {
         return;
@@ -298,7 +294,7 @@ fn every_real_png_decodes_to_a_full_plausible_image() {
 }
 
 #[test]
-#[ignore = "png corpus lane: opt-in (PAGED_PNG_CORPUS=1 + the private corpus mount)"]
+#[ignore = "corpus: png (every <group>/packs and raster/)"]
 fn the_corpus_covers_png_colour_types_the_encoder_never_emits() {
     let Some(files) = corpus_pngs() else {
         return;
@@ -339,11 +335,11 @@ fn the_corpus_covers_png_colour_types_the_encoder_never_emits() {
 }
 
 #[test]
-#[ignore = "png corpus lane: opt-in (PAGED_PNG_CORPUS=1 + the private corpus mount)"]
+#[ignore = "corpus: png (every <group>/packs and raster/)"]
 fn a_file_called_png_that_is_not_one_is_refused_by_name() {
     let misnamed = corpus_misnamed(&["png"], "png");
     if misnamed.is_empty() {
-        eprintln!("SKIP: no misnamed .png in the corpus");
+        image_conformance::corpus::missing(LANE, "no misnamed .png in the corpus");
         return;
     }
 

@@ -11,8 +11,6 @@
   "scripts": {
     "typecheck": "bun check -p tsconfig.json",
     "test": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts",
-    "build": "tsup src/index.ts --format esm --dts --out-dir dist --clean",
-    "prepublishOnly": "bun run build",
     "bench": "bun ./test/bezier.bench.ts && bun ./test/compound.bench.ts && bun ./test/polygon.bench.ts && bun ./test/rdp.bench.ts && bun ./test/svg-doc.bench.ts"
   },
   "devDependencies": {

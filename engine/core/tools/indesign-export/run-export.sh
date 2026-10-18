@@ -32,12 +32,14 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 JSX="$ROOT/tools/indesign-export/export-pdfs.jsx"
 APP="${INDESIGN_APP:-Adobe InDesign 2025}"
 
-# The driver reads both of these from the environment. `PAGED_CORPUS_DIR`
-# defaults to this repo's corpus/generated; `PAGED_EXPORT_ONLY=<stem>`
+# The driver reads both of these from the environment. `PAGED_EXPORT_DIR`
+# defaults to this repo's corpus/generated (it was `PAGED_CORPUS_DIR`
+# until that name became the private corpus root for every test lane,
+# docs/development/testing.md); `PAGED_EXPORT_ONLY=<stem>`
 # re-exports a single fixture, which is what you want when one
 # reference is wrong — rewriting every PDF rebaselines every threshold
 # at once.
-CORPUS_DIR="${PAGED_CORPUS_DIR:-$ROOT/corpus/generated}"
+CORPUS_DIR="${PAGED_EXPORT_DIR:-$ROOT/corpus/generated}"
 ONLY="${PAGED_EXPORT_ONLY:-}"
 
 if [ ! -f "$JSX" ]; then
@@ -51,7 +53,7 @@ fi
 SHIM="$(mktemp -t paged-export-shim).jsx"
 trap 'rm -f "$SHIM"' EXIT
 cat > "$SHIM" <<JSX
-var PAGED_CORPUS_DIR = "$CORPUS_DIR";
+var PAGED_EXPORT_DIR = "$CORPUS_DIR";
 var PAGED_EXPORT_ONLY = "$ONLY";
 \$.evalFile(File("$JSX"));
 JSX

@@ -88,3 +88,13 @@ describe a docking substrate that is no longer a dependency (ADR 002).
 - [ADR 002](002-cockpit-over-dockview.md), [ADR 023](023-shared-panels-binding-providers.md), [ADR 024](024-context-sensitivity-is-a-core-concept.md) — the cockpit layout; binding providers; edit contexts
 - [ADR 201](201-plugins-as-pinned-packages.md), [ADR 204](204-declarative-property-panels.md), [ADR 208](208-tools-are-data-plus-gesture-handler.md), [ADR 209](209-command-is-the-action-primitive.md) — the bundles; the panel catalogue; the tool and command registries
 - [ADR 008](https://github.com/paged-media/core/blob/main/docs/adr/008-read-surfaces-first-class-wire-collections.md), [ADR 301](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/301-host-adapter-lives-in-plugin-sdk.md), [ADR 017](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/017-importer-exporter-door-shape.md) — the collections the panels read; the adapter the backends are passed to; the importer and exporter door
+
+## Amendment, 2026-10-18
+
+The shell now depends on the type-only `@paged-media/plugin-api`. Its registry types are the
+contract's contribution types, used as they are or extended with editor-only optional
+fields, so the shell no longer keeps a mirror of them. The contribution assertions left
+`plugin-api-compat.ts`; the handle assertions are still there. See
+[ADR 226](226-contribution-types-have-one-definition.md). "Only `apps/canvas` imports the
+plugin contract packages" no longer holds for the contract. It still holds for plugin-sdk,
+which is why the structural mirrors in `packages/shell/src/catalog/` remain.

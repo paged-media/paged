@@ -37,10 +37,11 @@ fn corpus_fonts() -> PathBuf {
 #[test]
 fn a_fonts_directory_names_the_families_the_editor_hardcodes() {
     let dir = corpus_fonts();
-    if !dir.is_dir() {
-        eprintln!("skipping: {} absent", dir.display());
-        return;
-    }
+    assert!(
+        dir.is_dir(),
+        "{} is committed at engine/core/corpus/fonts; a partial checkout?",
+        dir.display()
+    );
     let registry = font_registry_from_paths(&[dir]);
     assert!(!registry.is_empty(), "the corpus directory has faces in it");
 
@@ -83,10 +84,11 @@ fn an_upright_face_answers_a_styled_request_and_the_italic_one_does_not() {
     // keeps a separate file from answering for the upright one. Get
     // that backwards and a document sets its whole body copy in italic.
     let dir = corpus_fonts();
-    if !dir.is_dir() {
-        eprintln!("skipping: {} absent", dir.display());
-        return;
-    }
+    assert!(
+        dir.is_dir(),
+        "{} is committed at engine/core/corpus/fonts; a partial checkout?",
+        dir.display()
+    );
     let registry = font_registry_from_paths(&[dir]);
 
     let bold = font_face_lookup(&registry, "Fraunces", Some("Bold"))
@@ -106,10 +108,11 @@ fn an_upright_face_answers_a_styled_request_and_the_italic_one_does_not() {
 fn licences_and_readmes_are_skipped_not_fatal() {
     // A real fonts directory holds OFL texts and a checksum manifest.
     let dir = corpus_fonts();
-    if !dir.is_dir() {
-        eprintln!("skipping: {} absent", dir.display());
-        return;
-    }
+    assert!(
+        dir.is_dir(),
+        "{} is committed at engine/core/corpus/fonts; a partial checkout?",
+        dir.display()
+    );
     let registry = font_registry_from_paths(&[dir]);
     assert!(
         registry.iter().all(|e| !e.family.is_empty()),
@@ -134,10 +137,11 @@ fn licences_and_readmes_are_skipped_not_fatal() {
 #[test]
 fn a_single_file_path_is_a_registry_of_one() {
     let file = corpus_fonts().join("Inter.ttf");
-    if !file.is_file() {
-        eprintln!("skipping: {} absent", file.display());
-        return;
-    }
+    assert!(
+        file.is_file(),
+        "{} is committed at engine/core/corpus/fonts; a partial checkout?",
+        file.display()
+    );
     let registry = font_registry_from_paths(&[file]);
     assert_eq!(registry.len(), 1);
     assert_eq!(registry[0].family, "Inter");

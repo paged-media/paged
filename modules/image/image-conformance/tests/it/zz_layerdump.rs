@@ -1,6 +1,6 @@
 use image_psd::PsdFile;
 #[test]
-#[ignore]
+#[ignore = "tool: dumps the named layer of one PSD (PAGED_FILE, PAGED_LAYER)"]
 fn layerdump() {
     let path = std::env::var("PAGED_FILE").unwrap();
     let want = std::env::var("PAGED_LAYER").unwrap();

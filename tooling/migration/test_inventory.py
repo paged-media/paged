@@ -6,6 +6,7 @@
         [--nextest-lists DIR] [--test-map FILE] [--test-map-after FILE] \
         [--test-ids FILE] [--merge-report FILE] [--features DIR] [--cockpit-config FILE]
     python3 tooling/migration/test_inventory.py tables FILE.json --out TABLES.md
+    python3 tooling/migration/test_inventory.py skips [--out FILE.json]
 
 `history` reads GitHub Actions data with read-only `gh api` GETs: the last N
 runs of every test workflow, in the old per-component repositories and in the
@@ -30,7 +31,9 @@ parity_counts.py, so its cache can seed this one).
   and test ids from these private inputs reach the output.
 
 It writes one JSON document (--out); `tables` renders the Markdown tables used
-in docs/migration/test-inventory.md from it. Logs missing from the cache are
+in docs/migration/test-inventory.md from it. `skips` is the source scan alone
+(no cache, no network): the Rust silent skips, the skips reported through
+paged-test-resources (T3), and the `#[ignore]`d tests. Logs missing from the cache are
 fetched read-only on first use.
 
 The source scans are heuristics (regex over comment- and string-stripped
@@ -580,7 +583,21 @@ RUST_FN = re.compile(r"\bfn\s+([A-Za-z_][A-Za-z0-9_]*)")
 RUST_IGNORE = re.compile(r"#\[ignore(?:\s*=\s*\"((?:[^\"\\]|\\.)*)\")?\s*\]|#\[cfg_attr\([^\]]*\bignore\b[^\]]*\]", re.S)
 RUST_RETURN = re.compile(r"\breturn\b")
 SILENT_ARM = re.compile(r"\b(?:None|Err\s*\([^)]*\))\s*=>\s*(?:\{\s*\}|\(\s*\)|\{?\s*e?println!)")
+# T3: a guard that goes through platform/shared/test-resources prints
+# `unavailable: …` and fails under PAGED_REQUIRE_<X>=1, so it is a reported
+# skip, not a silent one. So is a guard that calls a function which does
+# (filled by rust_scan's first pass: HONEST_FNS by name where every
+# definition reports, HONEST_LOCAL as (file, name) for the rest).
+HONEST = re.compile(r"paged_test_resources|\bskip!\s*\(|\bunavailable\s*\(")
+HONEST_FNS: set = set()
+HONEST_LOCAL: set = set()
+CALLED = re.compile(r"(?<![.\w])([A-Za-z_][A-Za-z0-9_]*)\s*(?:::<[^>]*>)?\s*\(")
 MACRO_RULES = re.compile(r"\bmacro_rules!\s*([A-Za-z_][A-Za-z0-9_]*)\s*\{")
+
+
+def honest_guard(text, file=None):
+    return bool(HONEST.search(text)) or any(
+        n in HONEST_FNS or (file, n) in HONEST_LOCAL for n in CALLED.findall(text))
 
 
 def classify_guard(text):
@@ -629,9 +646,11 @@ def is_closure_block(stripped, open_at):
     return bool(re.search(r"(\|[^|]*\|\s*(->\s*[^{]+)?|\bmove)$|=>$", before)) and not before.endswith("=>")
 
 
-def rust_body_reasons(orig, st, b0, b1, nested):
-    """Resource reasons for which the body st[b0:b1] passes without testing anything."""
+def rust_body_reasons(orig, st, b0, b1, nested, reported=None, file=None):
+    """Resource reasons for which the body st[b0:b1] passes without testing anything.
+    Guards that report through paged-test-resources go to `reported` instead."""
     reasons, msgs = [], False
+    reported = [] if reported is None else reported
     for r in RUST_RETURN.finditer(st, b0, b1):
         if any(n0 < r.start() < n1 for n0, n1 in nested):
             continue  # a return of a nested fn
@@ -642,7 +661,18 @@ def rust_body_reasons(orig, st, b0, b1, nested):
         if lb > b0 and is_closure_block(st, lb):
             continue  # `|x| { … return … }` returns from the closure
         reason = classify_guard(ctx)
-        if reason:
+        probe = ctx
+        if "=>" in ctx:  # a match arm: the probe is in the match head
+            head = st.rfind("match", b0, r.start())
+            if head >= 0:
+                probe = orig[head:st.find("{", head) + 1] + " " + ctx
+        elif re.search(r"\belse\b", ctx):  # `let … = probe(…) else`: the whole `let`
+            let_at = st.rfind("let ", b0, r.start())
+            if let_at >= 0:
+                probe = orig[let_at:r.start()]
+        if reason and honest_guard(probe, file):
+            reported.append(reason)
+        elif reason:
             reasons.append(reason)
             msgs = msgs or bool(SKIP_WORDS.search(ctx))
     # `match device() { Some(d) => …, None => eprintln!("SKIP …") }`: an arm that
@@ -657,7 +687,9 @@ def rust_body_reasons(orig, st, b0, b1, nested):
             continue
         ctx = orig[head:st.find("{", head) + 1] + " " + arm_text
         reason = classify_guard(ctx)
-        if reason:
+        if reason and honest_guard(ctx, file):
+            reported.append(reason)
+        elif reason:
             reasons.append(reason)
             msgs = msgs or bool(SKIP_WORDS.search(ctx))
     # `if let Some(dev) = device() { …the whole test… }` with no else.
@@ -668,9 +700,10 @@ def rust_body_reasons(orig, st, b0, b1, nested):
             close = match_brace(st, open_at)
             covers = (close - open_at) / max(1, b1 - b0)
             tail = st[close:b1].lstrip()
-            reason = classify_guard(orig[b0 + if_let.start(1):b0 + if_let.end(1)])
+            cond = orig[b0 + if_let.start(1):b0 + if_let.end(1)]
+            reason = classify_guard(cond)
             if reason and covers > 0.5 and not tail.startswith("else"):
-                reasons.append(reason)
+                (reported if honest_guard(cond, file) else reasons).append(reason)
     return sorted(set(reasons)), msgs
 
 
@@ -678,9 +711,50 @@ def crate_of(path):
     return path.split("/src/")[0].split("/tests/")[0].split("/benches/")[0]
 
 
+def honest_functions(root, files):
+    """The functions that report a skip through paged-test-resources, directly or
+    through another such function (a few rounds). Returns (names whose every
+    definition reports, the (file, name) pairs of the other reporting ones)."""
+    bodies = {}
+    for f in files:
+        if not f.endswith(".rs") or "/target/" in f or f.startswith("tooling/"):
+            continue
+        try:
+            orig = open(os.path.join(root, f), encoding="utf-8", errors="replace").read()
+        except OSError:
+            continue
+        st = strip_code(orig, "rust")
+        for m in RUST_FN.finditer(st):
+            brace = st.find("{", m.end())
+            semi = st.find(";", m.end())
+            if brace < 0 or (0 <= semi < brace):
+                continue
+            body = orig[brace:match_brace(st, brace)]
+            bodies.setdefault(m.group(1), []).append((f, body))
+    honest = {(f, n) for n, defs in bodies.items() for f, b in defs if HONEST.search(b)}
+
+    def everywhere(n):
+        return all((f, n) in honest for f, _ in bodies[n])
+
+    for _ in range(4):
+        names = {n for n in bodies if everywhere(n)}
+        grown = {(f, n) for n, defs in bodies.items() for f, b in defs if (f, n) not in honest
+                 and any(c in names or (f, c) in honest for c in CALLED.findall(b))}
+        if not grown:
+            break
+        honest |= grown
+    names = {n for n in bodies if everywhere(n)}
+    return names, {(f, n) for f, n in honest if n not in names}
+
+
 def rust_scan(root, files):
     """Every Rust test function (macro-generated ones counted per invocation), its
     `#[ignore]`, and whether it passes silently when a resource is missing."""
+    names, local = honest_functions(root, files)
+    HONEST_FNS.clear()
+    HONEST_FNS.update(names)
+    HONEST_LOCAL.clear()
+    HONEST_LOCAL.update(local)
     tests, helpers = [], {}
     for f in files:
         if not f.endswith(".rs") or "/target/" in f or f.startswith("tooling/"):
@@ -713,9 +787,10 @@ def rust_scan(root, files):
         for fn in fns:
             b0, b1 = fn["body"]
             nested = [o["body"] for o in fns if o is not fn and b0 < o["start"] < b1]
-            reasons, msgs = rust_body_reasons(orig, st, b0, b1, nested)
+            reported = []
+            reasons, msgs = rust_body_reasons(orig, st, b0, b1, nested, reported, f)
             entry = dict(file=f, name=fn["name"], line=orig.count("\n", 0, fn["start"]) + 1,
-                         reasons=reasons, message=msgs,
+                         reasons=reasons, message=msgs, reported=sorted(set(reported)),
                          calls=set(re.findall(r"(?<![.\w])([a-z_][a-z0-9_]*)\s*\(", st[b0:b1])))
             if fn["test"]:
                 ig = RUST_IGNORE.search(fn["attrs"])
@@ -737,7 +812,9 @@ def rust_scan(root, files):
             if not t_at:
                 continue
             fb = body.find("{", body.find("fn ", t_at.end()))
-            reasons, msgs = (rust_body_reasons(orig, st, m0 + fb, match_brace(st, m0 + fb), [])
+            reported = []
+            reasons, msgs = (rust_body_reasons(orig, st, m0 + fb, match_brace(st, m0 + fb), [],
+                                               reported, f)
                              if fb > 0 else ([], False))
             ig = RUST_IGNORE.search(body[:fb if fb > 0 else len(body)])
             for inv in re.finditer(r"\b" + re.escape(name) + r"!\s*[({\[]\s*([A-Za-z_][A-Za-z0-9_]*)?", st):
@@ -745,7 +822,8 @@ def rust_scan(root, files):
                     continue
                 tests.append(dict(file=f, name=inv.group(1) or f"{name}!", macro=name,
                                   line=orig.count("\n", 0, inv.start()) + 1, reasons=reasons,
-                                  message=msgs, calls=set(), ignored=bool(ig),
+                                  message=msgs, reported=sorted(set(reported)), calls=set(),
+                                  ignored=bool(ig),
                                   ignore_reason=ig.group(1) if ig and ig.group(1) else None))
     # one level of helper indirection (same crate)
     for t in tests:
@@ -1772,6 +1850,33 @@ def history_snapshot(cache):
             if ts else None)
 
 
+def skips(args):
+    """The source scan alone: silent skips, reported skips and ignores (T3)."""
+    files = git_files(ROOT)
+    rust = rust_scan(ROOT, files)
+    run = [t for t in rust if not t["ignored"]]
+    silent = [t for t in run if t["reasons"]]
+    reported = [t for t in run if not t["reasons"] and t.get("reported")]
+    ignored = [t for t in rust if t["ignored"]]
+    doc = dict(
+        rust_tests_scanned=len(rust),
+        silent_rust=dict(total=len(silent),
+                         by_module_reason=counts_by(silent, lambda t: f"{module_of(t['file'])} | {t['reasons'][0]}"),
+                         tests=[dict(file=t["file"], name=t["name"], reasons=t["reasons"]) for t in silent]),
+        reported_rust=dict(total=len(reported),
+                           by_module_reason=counts_by(reported, lambda t: f"{module_of(t['file'])} | {t['reported'][0]}")),
+        ignored_rust=dict(total=len(ignored),
+                          by_module_reason=counts_by(ignored, lambda t: f"{module_of(t['file'])} | "
+                                                     f"{(t.get('ignore_reason') or 'no reason').split(':')[0]}")),
+    )
+    text = json.dumps(doc, indent=1, sort_keys=True)
+    if args.out:
+        with open(args.out, "w") as fh:
+            fh.write(text + "\n")
+    else:
+        print(text)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -1794,6 +1899,8 @@ def main():
     t = sub.add_parser("tables", help="render the Markdown tables from a report JSON")
     t.add_argument("json")
     t.add_argument("--out", required=True)
+    k = sub.add_parser("skips", help="the source scan alone: silent, reported and ignored Rust tests")
+    k.add_argument("--out", help="write the JSON here instead of stdout")
     args = ap.parse_args()
     if args.cmd == "history":
         history(args)
@@ -1802,6 +1909,8 @@ def main():
     elif args.cmd == "tables":
         with open(args.out, "w") as fh:
             fh.write(tables(load_json(args.json)))
+    elif args.cmd == "skips":
+        skips(args)
 
 
 if __name__ == "__main__":

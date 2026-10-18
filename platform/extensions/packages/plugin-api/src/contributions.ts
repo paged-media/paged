@@ -18,9 +18,10 @@
 
 // The contribution surface a bundle registers against — OWNED by
 // this package since the M1.1(a) vendoring pass (2026-06-06): the
-// shapes live in ./editor (hand-written, narrow handles + 1:1
-// contribution mirrors); the EDITOR asserts compatibility against
-// them through its dev link (apps/canvas/src/plugin-api-compat.ts).
+// shapes live in ./editor (hand-written narrow handles, and the one
+// definition of each contribution type, which the editor's shell
+// registries use or extend — editor ADR 226; the handles are asserted
+// in apps/canvas/src/plugin-api-compat.ts).
 // Nothing enters this surface speculatively — additions cite a real
 // bundle's need and get API review.
 

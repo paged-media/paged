@@ -155,8 +155,14 @@ An editor tab connects so a model's engine tools act in it:
 cd crates/paged-server
 printf 'PAGED_TOKENS={"%s":"user:dev"}\n' "$(printf %s dev-token | shasum -a 256 | cut -d' ' -f1)" > .dev.vars
 npx wrangler dev --port 8791            # builds with worker-build; local workerd, R2 and DOs
-cd ../.. && PAGED_SERVER_URL=http://127.0.0.1:8791 cargo test -p paged-sync
+cd ../.. && PAGED_SERVER_URL=http://127.0.0.1:8791 PAGED_REQUIRE_SERVER=1 \
+  cargo nextest run --profile server --run-ignored only
 ```
+
+The integration tests are `#[ignore = "server: …"]`: a plain `cargo test`
+skips them, and an ignored run without `PAGED_SERVER_URL` reports
+`unavailable: running server` (a failure under `PAGED_REQUIRE_SERVER=1`;
+`docs/development/testing.md` at the repository root).
 
 The tests also want `other-token` → `user:other` in `PAGED_TOKENS`, and for
 `tests/oauth.rs` (which plays the identity provider on 127.0.0.1:8792):

@@ -359,11 +359,11 @@ const KNOWN_RUN_MISALIGNMENT: [&str; 0] = [];
 /// absent.
 ///
 /// ```text
-/// PAGED_IDML_CORPUS=1 cargo test -p idml-export --test story_precision \
-///     -- --ignored --nocapture
+/// PAGED_CORPUS_DIR=<corpus root> cargo test -p idml-export --test it -- \
+///     --ignored --nocapture story_precision::
 /// ```
 #[test]
-#[ignore = "private corpus: opt-in (PAGED_IDML_CORPUS=1 + the corpus mount)"]
+#[ignore = "corpus: idml"]
 fn corpus_stories_keep_their_numbers_and_stay_well_formed() {
     let Some(root) = corpus::root() else { return };
     // `line-sheet` is where the seven MALFORMED rewrites lived (anchored

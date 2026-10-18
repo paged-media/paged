@@ -21,8 +21,8 @@
 // thread that asked for it (`trace-engine.ts`, "the worker lane", is the
 // other half and carries the protocol).
 //
-// It is its OWN entry of the build (`tsup.config.ts`) and its own export
-// of the package (`./trace-worker`), because the host cannot spawn a
+// It is its OWN export of the package (`./trace-worker`), because the
+// host cannot spawn a
 // module out of the middle of `index.js`: the editor resolves a bundle's
 // declared worker module to a URL its bundler built as a worker chunk
 // (`…/trace-worker?worker&url`) — the paged.image decode-worker shape.
@@ -33,7 +33,7 @@
 // it imports is `trace-engine.ts`, which imports nothing of the bundle.
 //
 // THIS MODULE MUST STAY AT `src/` DEPTH 1, for `trace-engine.ts`'s
-// reason: the wasm is reached as `../wasm/…`, and tsup's `dist/` is flat.
+// reason: the wasm is reached as `../wasm/…`.
 
 import {
   answerTraceRequest,

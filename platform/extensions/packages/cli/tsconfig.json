@@ -4,5 +4,5 @@
     "types": ["node", "bun"],
     "lib": ["ES2022", "DOM", "DOM.Iterable"]
   },
-  "include": ["src", "test", "tsup.config.ts", "../../../../tooling/js/bun-test-matchers.d.ts"]
+  "include": ["src", "test", "../../../../tooling/js/bun-test-matchers.d.ts"]
 }

@@ -626,8 +626,10 @@ mod tests {
         let Some(face) = system_face() else {
             // Loudly. A quiet pass would read as coverage this machine
             // cannot actually provide.
-            eprintln!("no system font available — skipping the layout assertions");
-            return;
+            paged_test_resources::skip!(
+                paged_test_resources::Resource::Fonts,
+                "no system font (Arial, Helvetica, DejaVu Sans or Liberation Sans) for the layout assertions"
+            );
         };
         let plain = RunStyle::default();
 
@@ -693,8 +695,10 @@ mod tests {
     #[test]
     fn image_editor_raster_type_every_style_axis_changes_the_geometry() {
         let Some(face) = system_face() else {
-            eprintln!("no system font available — skipping the style-axis assertions");
-            return;
+            paged_test_resources::skip!(
+                paged_test_resources::Resource::Fonts,
+                "no system font (Arial, Helvetica, DejaVu Sans or Liberation Sans) for the style-axis assertions"
+            );
         };
         let base = RunStyle::default();
         let plain = rasterize_run(&face, "AB", 32.0, base).expect("base");

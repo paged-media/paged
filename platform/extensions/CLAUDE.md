@@ -39,7 +39,9 @@ cites its proposal number, "ADR 323".
   (a hard gate in CI, see `publish.yml`) fails on content drift OR a
   stale stamp. The EDITOR asserts compat through its dev link
   (`apps/canvas/src/plugin-api-compat.ts`) — widen a handle type only
-  with API review. The workspace builds STANDALONE; sibling checkouts
+  with API review. Its shell extends the contribution types instead of
+  copying them (editor ADR 226), so an editor-only field never needs to
+  enter this package. The workspace builds STANDALONE; sibling checkouts
   are a dev-time luxury.
 - **Naming:** the plugin runtime is `@paged-media/plugin-sdk`;
   `@paged-media/sdk` is the core repo's WebGPU `ViewerSession` and must
@@ -62,8 +64,10 @@ cites its proposal number, "ADR 323".
   feeding a sync cache the render paths read. A static react import
   makes the barrel unloadable without React; a top-level `await` makes
   the published bundle un-pre-bundleable by Vite (its dep-optimizer
-  floor is ES2020). Both have shipped and broken consumers. The build
-  pins `--target es2020` as the gate — do not raise it. DESIGN.md §5.1.
+  floor is ES2020). Both have shipped and broken consumers. The
+  declaration build compiles at `"module": "ES2020"` as the gate
+  (TypeScript rejects a top-level await there) — do not raise it.
+  DESIGN.md §5.1.
 
 ## Commands
 
