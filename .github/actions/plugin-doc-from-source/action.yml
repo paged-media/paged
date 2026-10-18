@@ -54,8 +54,8 @@ runs:
           macOS-X64)   T=x86_64-macos ;;
           *) echo "::error::no binaryen build for ${{ runner.os }}-${{ runner.arch }}"; exit 1 ;;
         esac
-        curl -fsSL "https://github.com/WebAssembly/binaryen/releases/download/version_119/binaryen-version_119-$T.tar.gz" | tar xz
-        echo "$PWD/binaryen-version_119/bin" >> "$GITHUB_PATH"
+        curl -fsSL "https://github.com/WebAssembly/binaryen/releases/download/version_126/binaryen-version_126-$T.tar.gz" | tar xz
+        echo "$PWD/binaryen-version_126/bin" >> "$GITHUB_PATH"
 
     - name: build the paged.doc engine wasm
       shell: bash
