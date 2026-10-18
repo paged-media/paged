@@ -27,7 +27,7 @@ import { dirname, resolve } from "node:path";
 import { describe, expect, it } from "bun:test";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const CLI = resolve(here, "../../plugin-cli/bin/paged-plugin.mjs");
+const CLI = resolve(here, "../bin/paged-plugin.mjs");
 const FIX = (name: string) => resolve(here, "fixtures/wasm-manifests", name);
 
 function validate(manifest: string): {

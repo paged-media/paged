@@ -6,11 +6,11 @@ like the rest of the repository (ADR PM-0001; it was MPL-2.0 OR PMEL before).
 
 ## What this is
 
-Five packages of the repository's root Bun workspace (see README for the tier table):
+Four packages of the repository's root Bun workspace (see README for the tier table):
 `packages/plugin-api` (the contract, **type-only**), `packages/plugin-sdk`
 (the runtime: in-process `BundleHost` adapter, loader, gesture kit,
-object registry, headless host), `packages/plugin-cli` (zero-dep ESM CLI,
-no build step), `packages/cli` (`@paged-media/cli`, bin `paged-node`: the Node
+object registry, headless host; and `bin/paged-plugin.mjs`, the zero-dep ESM
+manifest CLI with no build step, which was `packages/plugin-cli`, PM-0008), `packages/cli` (`@paged-media/cli`, bin `paged-node`: the Node
 CLI over the headless host, ADR 324) and `packages/ai` (`@paged-media/ai`,
 ADR 325). **`DESIGN.md` is the deliberation record** — when code and
 DESIGN.md disagree, fix one of them in the same change. Decision records
@@ -74,5 +74,5 @@ cites its proposal number, "ADR 323".
 
 ```bash
 bun install && bun run typecheck
-node packages/plugin-cli/bin/paged-plugin.mjs validate <manifest.json>
+node packages/plugin-sdk/bin/paged-plugin.mjs validate <manifest.json>
 ```

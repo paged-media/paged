@@ -11,7 +11,7 @@ project:
   title: "modules/data"
   description: "Database publishing module: DSL, bindings, DuckDB-WASM query engine."
 
-# validate:manifest runs the in-tree plugin-cli.
+# validate:manifest runs the in-tree paged-plugin bin (plugin-sdk).
 dependsOn:
   - id: "extensions"
     scope: "development"

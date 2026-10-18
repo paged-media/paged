@@ -521,9 +521,7 @@ describe("12 — indexed paths", () => {
       /not a row path/,
     );
     const cli = readFileSync(
-      fileURLToPath(
-        new URL("../../plugin-cli/bin/paged-plugin.mjs", import.meta.url),
-      ),
+      fileURLToPath(new URL("../bin/paged-plugin.mjs", import.meta.url)),
       "utf8",
     );
     // The CLI's copy of the regex, whatever the line layout (the formatter
