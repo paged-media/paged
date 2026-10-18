@@ -62,6 +62,8 @@ jobs:
         with:
           workspaces: apps/server/server -> target
           prefix-key: v0-rust-server
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       # The engine patches flo_curves (engine/core/Cargo.toml, C-21), and a
       # [patch] applies only in the workspace that declares it. Depending on

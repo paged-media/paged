@@ -228,6 +228,42 @@ groupless workflows ran (18 % of the window's 6,695), and none of the 143
 `main` runs would have been cancelled. The demonstration push is in [This pull request's CI
 run](#this-pull-requests-ci-run).
 
+## Lever 3: Rust caching
+
+**What the numbers say.** Restore time is not the problem: a hit costs 1–24 s
+(median 1–4 s per job, 962 s over 251 jobs, 1 % of their run time), and saves
+1–8 min of compiling. The hit rate is: 20 %, down from 97 %, because
+pull-request caches evict each other within half an hour and `main` held no
+core cache (measurement 2). Switching the backend does not change that: sccache's
+GitHub backend writes to the same 10 GB, with the same pull-request scoping.
+
+**Change.** Every rust-cache step in a pull-request workflow (31 steps in 16
+workflows; image ci's wasm build is left to B3b, which replaces that step with
+the cached `module-wasm` action) gets
+`save-if: ${{ github.ref == 'refs/heads/main' }}`. Only `main`
+writes caches; a pull request restores `main`'s (a partial match when its
+`Cargo.lock` differs) and writes nothing, so pull requests no longer evict
+`main`'s caches or each other's. The publish, nightly and `main`-only
+workflows already run on `main`.
+
+| Measure | Before | After | How measured |
+|---|---|---|---|
+| Cache entries written by pull requests | 36 of 67 entries, 6.8 GB (15:48 UTC) | none | Actions cache list |
+| Core caches on `main` | 0 | one per core job, written by the first green `main` run | Actions cache list |
+| rust-cache hit rate on pull requests | 20 % (201 misses of 251) | expected near 100 % once `main` has a cache; this PR's run shows the first sample | job logs |
+| Footprint of `main`'s caches | 5.8 GB of module caches, no core | about 11 GB when every Rust job has one (core ≈ 4.7 GB over 8 jobs, after lever 4 drops one): still above 10 GB, so the least recently used entries (the rarely run lanes) will be evicted | sizes from the cache list |
+
+**sccache, measured on one job.** `.github/workflows/ci-sccache-trial.yml`
+builds core's test binaries (the build of core-ci's Linux `check + test` job)
+twice through sccache with the GitHub backend: cold, in a namespace of its own,
+then warm after deleting `target/`. It runs only when its own file changes or
+on dispatch. The comparison is with rust-cache's numbers for the same build: a
+miss compiles in 7m42s–10m23s, a hit in about 6 min (old runs: 6m04s–6m13s).
+sccache cannot cache what links (test harnesses, build scripts, proc macros),
+which is most of a test build. The result is in [This pull request's CI
+run](#this-pull-requests-ci-run); nothing switches to sccache unless the warm
+build beats rust-cache's hit.
+
 ## Reproduce
 
 ```sh

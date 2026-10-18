@@ -87,6 +87,8 @@ jobs:
         with:
           workspaces: engine/core -> target
           prefix-key: v0-rust-core
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: fmt
         run: cargo fmt --all --check
@@ -170,6 +172,8 @@ jobs:
         with:
           workspaces: engine/core -> target
           prefix-key: v0-rust-core
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: install cargo-nextest
         uses: taiki-e/install-action@nextest
@@ -250,6 +254,8 @@ jobs:
         with:
           workspaces: engine/core -> target
           prefix-key: v0-rust-core
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       # The wasm shells, paged-sdk's session and paged-gpu's Vello surface
       # are `#[cfg(target_arch = "wasm32")]`, so the native clippy in
       # `check` never sees them and their lints piled up unseen. Lint them
@@ -328,6 +334,8 @@ jobs:
         with:
           workspaces: engine/core -> target
           prefix-key: v0-rust-core
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       # Pin binaryen (NOT apt's — ubuntu ships v108, too old to validate
       # wasm-bindgen's reference-types output: "error validating input").
       # Same pin publish-wasm.yml uses. brotli from apt is fine.
@@ -539,6 +547,8 @@ jobs:
         with:
           workspaces: engine/core -> target
           prefix-key: v0-rust-core
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: install poppler-utils (pdftoppm)
         # Bounded, and apt only when the tool is actually absent.

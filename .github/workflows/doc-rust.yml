@@ -54,6 +54,8 @@ jobs:
         with:
           workspaces: modules/doc -> target
           prefix-key: v0-rust-doc
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - name: isolation guard (no core/plugin reach-around into docx-js wasm)
@@ -77,6 +79,8 @@ jobs:
         with:
           workspaces: modules/doc -> target
           prefix-key: v0-rust-doc
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: taiki-e/install-action@nextest
       # Red results must still upload (the state matrix wants the ✗), so the
       # run does not abort here — the gate at the end fails the job once the
@@ -130,6 +134,8 @@ jobs:
         with:
           workspaces: modules/doc -> target
           prefix-key: v0-rust-doc
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: install pinned wasm-bindgen-cli (Cargo.lock version)
         run: |
           V=$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock | grep version | head -1 | cut -d'"' -f2)
