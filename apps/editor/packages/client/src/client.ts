@@ -78,6 +78,16 @@ import { CameraBuffer, type Camera } from "./sab/camera";
 import { GestureBuffer } from "./sab/gesture";
 import type { JournalEntry, UncapturedLedger } from "./journal";
 
+/** What {@link CanvasClient.snapshotBackendInfo} reports. */
+export interface SnapshotBackendInfo {
+  /** The policy {@link CanvasClient.setSnapshotBackend} set. */
+  requested: "auto" | "gpu" | "cpu";
+  /** The worker has a WebGPU device (Vello can draw snapshots). */
+  gpuReady: boolean;
+  /** The rasterizer that drew the last snapshot; null before the first. */
+  last: "gpu" | "cpu" | null;
+}
+
 /** ADR 025 — what one worker-journal drain hands back. */
 export interface JournalDrain {
   entries: JournalEntry[];
@@ -2074,6 +2084,48 @@ export class CanvasClient {
     });
   }
 
+  /**
+   * Choose the rasterizer that answers {@link requestSnapshot} — the
+   * eyedropper, PNG export, AI page images and document thumbnails all
+   * read pixels through it. `auto` (the default) draws with Vello on the
+   * worker's WebGPU device when it has one, which is exactly what the
+   * screen shows, and with the CPU rasterizer otherwise; `gpu` and `cpu` force
+   * one, so a test can compare the two. A worker-side host option: it
+   * changes no document and no engine wire.
+   */
+  setSnapshotBackend(backend: "auto" | "gpu" | "cpu"): void {
+    this.worker.postMessage({ kind: "setSnapshotBackend", backend });
+  }
+
+  /**
+   * The snapshot backend the worker was asked for, whether it has a
+   * WebGPU device, and which rasterizer drew the last snapshot (`null`
+   * before the first). Resolves to null if the worker does not answer
+   * within `timeoutMs`.
+   */
+  async snapshotBackendInfo(
+    timeoutMs = 2000,
+  ): Promise<SnapshotBackendInfo | null> {
+    const seq = this.nextBackendInfoSeq++;
+    return new Promise<SnapshotBackendInfo | null>((resolve) => {
+      const timer = setTimeout(() => {
+        this.backendInfoPending.delete(seq);
+        resolve(null);
+      }, timeoutMs);
+      this.backendInfoPending.set(seq, (info) => {
+        clearTimeout(timer);
+        resolve(info);
+      });
+      this.worker.postMessage({ kind: "snapshotBackendInfo", seq });
+    });
+  }
+
+  private nextBackendInfoSeq = 1;
+  private readonly backendInfoPending = new Map<
+    number,
+    (info: SnapshotBackendInfo | null) => void
+  >();
+
   private nextJournalSeq = 1;
   private readonly journalPending = new Map<
     number,
@@ -2138,7 +2190,7 @@ export class CanvasClient {
 
   /**
    * Settle everything still waiting: `send` and `loadDocument` callers are
-   * rejected; journal and Vello readbacks resolve `null`, which is their
+   * rejected; journal, Vello readbacks and backend queries resolve `null`, which is their
    * documented failure value. With `fatal`, later requests reject at once.
    */
   private failAll(err: Error, fatal: boolean): void {
@@ -2147,6 +2199,7 @@ export class CanvasClient {
     const loads = [...this.loadDocPending.values()];
     const journals = [...this.journalPending.values()];
     const vellos = [...this.velloPending.values()];
+    const backendInfos = [...this.backendInfoPending.values()];
     const byteReads = [...this.bytesPending.values()];
     this.bytesPending.clear();
     for (const p of byteReads) p.reject(err);
@@ -2154,10 +2207,12 @@ export class CanvasClient {
     this.loadDocPending.clear();
     this.journalPending.clear();
     this.velloPending.clear();
+    this.backendInfoPending.clear();
     for (const p of sends) p.reject(err);
     for (const p of loads) p.reject(err);
     for (const cb of journals) cb(null);
     for (const cb of vellos) cb(null);
+    for (const cb of backendInfos) cb(null);
   }
 
   /** An uncaught error in the worker scope, or the worker script failing to
@@ -2268,6 +2323,19 @@ export class CanvasClient {
       if (p) {
         this.bytesPending.delete(r.seq);
         p.resolve("asset" in r ? (r.asset ?? null) : (r.bytes ?? null));
+      }
+      return;
+    }
+    if (raw && raw.kind === "snapshotBackendInfoReply") {
+      const reply = event.data as SnapshotBackendInfo & { seq: number };
+      const cb = this.backendInfoPending.get(reply.seq);
+      if (cb) {
+        this.backendInfoPending.delete(reply.seq);
+        cb({
+          requested: reply.requested,
+          gpuReady: reply.gpuReady,
+          last: reply.last,
+        });
       }
       return;
     }
