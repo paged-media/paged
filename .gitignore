@@ -1,6 +1,10 @@
 # OS / editor
 .DS_Store
 .vscode/
+# ...except the shared rust-analyzer settings at the root (all Cargo workspaces).
+!/.vscode/
+/.vscode/*
+!/.vscode/settings.json
 .idea/
 
 # Local symlinks to private resources (corpus, shared build targets).
