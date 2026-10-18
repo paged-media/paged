@@ -26,3 +26,103 @@ export { waitFor, type FakeClock, type WaitForOptions } from "./wait-for.ts";
 export { stubGlobal, unstubAllGlobals } from "./globals.ts";
 export { importActual } from "./modules.ts";
 export { advanceTimersByTimeAsync, settle, type TimerClock } from "./timers.ts";
+
+// The gesture kit (apps/editor/docs/reference/gestures.md, "How gestures
+// are tested"). The public half lives in the plugin-sdk (the fake editor,
+// the DSL's unit backend, tapes, invariants) and is re-exported here, so
+// a suite has one import; the editor-only half is below it.
+export {
+  checkCancel,
+  checkUndoRedo,
+  commitsSince,
+  createFakeEditor,
+  createGestureDsl,
+  engineModelChannel,
+  expectNoCommit,
+  expectOneCommit,
+  expectOneUndoStep,
+  flattenMutation,
+  gestures,
+  InvariantError,
+  keyboardEventLike,
+  parseTape,
+  replayTape,
+  serializeTape,
+  stableJson,
+  unitBackend,
+  validateTape,
+  type FakeEditor,
+  type FakeEditorEvent,
+  type FakeEditorOptions,
+  type FakePage,
+  type GestureBackend,
+  type GestureDsl,
+  type GesturePoint,
+  type ModelChannel,
+  type ModifierName,
+  type PointerTape,
+  type TapeSample,
+} from "@paged-media/plugin-sdk";
+export {
+  createFakeShellEditor,
+  type ShellEditorLike,
+  type ShellFakeEditor,
+  type ShellFakeOptions,
+  type ToolSettingValue,
+} from "./gestures/shell-editor.ts";
+export {
+  browserBackend,
+  browserGestures,
+  commitsDuring,
+  type BrowserBackendOptions,
+  type BrowserPage,
+} from "./gestures/browser.ts";
+export {
+  buildFixtureIdml,
+  gestureFixture,
+  group,
+  line,
+  oval,
+  polygon,
+  rect,
+  storedZip,
+  GESTURE_TARGETS,
+  type FixturePageSpec,
+  type FixtureSpec,
+  type GestureFixtureName,
+} from "./gestures/fixture-idml.ts";
+export {
+  compareDigests,
+  fuzzSequenceCount,
+  geometryDigest,
+  runGestureFuzz,
+  sceneElementIds,
+  scenePageIds,
+  seededRandom,
+  type FuzzFailure,
+  type FuzzReport,
+  type FuzzStep,
+  type GeometryDigest,
+  type GestureFuzzOptions,
+  type KnownFinding,
+} from "./gestures/fuzz.ts";
+export {
+  cellId,
+  expandMatrix,
+  matrixCoverage,
+  matrixModifierKeys,
+  validateMatrix,
+  MATRIX_MODIFIERS,
+  MATRIX_TARGETS,
+  MATRIX_ZOOMS,
+  type GestureMatrix,
+  type MatrixCell,
+  type MatrixCoverage,
+  type MatrixGesture,
+  type MatrixModifier,
+  type MatrixOutcome,
+  type MatrixRow,
+  type MatrixTarget,
+  type MatrixTool,
+  type MatrixZoom,
+} from "./gestures/matrix.ts";

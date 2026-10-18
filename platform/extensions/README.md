@@ -4,19 +4,37 @@ Plugin contract + tooling for the Paged editor. Five packages: the contract,
 its runtime and the manifest CLI in three stability tiers, and two packages
 built on them.
 
-| Package                   | Contents                                                                                                                                                                                                                                                          | Tier                      |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
-| `@paged-media/plugin-api` | the contract: manifest types + schema, bundle lifecycle (`PagedBundle` / `BundleHandle`), the full `BundleHost` surface, the object model's types, curated type re-exports of the contribution + wire surface. **Type-only.**                                     | frozen at v1 (v0.2 today) |
-| `@paged-media/plugin-sdk` | the runtime: `createBundleHost` (in-process host adapter), `loadBundle` (apiVersion negotiation + teardown), the object registry behind `host.objects`, the headless host `createHeadlessHost`, the gesture kit, `DisposableStore`, `API_VERSION`, `defineBundle` | stable, faster-moving     |
-| `@paged-media/plugin-cli` | `paged-plugin validate <manifest.json>` (manifest schema, namespace and object-model checks), `untyped`, `integrity`, `modules-upload`                                                                                                                            | tooling cadence           |
-| `@paged-media/cli`        | `paged-node`: get, set, query, batch, export and more over core and every installed bundle, through the headless host ([ADR 324](./docs/adr/324-node-cli-over-the-headless-host.md)). A private workspace package (PM-0008).                                      | tooling cadence           |
-| `@paged-media/ai`         | Claude for paged: the model, prompt, tools and loop behind `paged-node ai` ([ADR 325](./docs/adr/325-claude-agent-package.md)). A private workspace package (PM-0008).                                                                                            | tooling cadence           |
+| Package                   | Contents                                                                                                                                                                                                                                                                                                                                                                          | Tier                      |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| `@paged-media/plugin-api` | the contract: manifest types + schema, bundle lifecycle (`PagedBundle` / `BundleHandle`), the full `BundleHost` surface, the object model's types, curated type re-exports of the contribution + wire surface. **Type-only.**                                                                                                                                                     | frozen at v1 (v0.2 today) |
+| `@paged-media/plugin-sdk` | the runtime: `createBundleHost` (in-process host adapter), `loadBundle` (apiVersion negotiation + teardown), the object registry behind `host.objects`, the headless host `createHeadlessHost`, the gesture kit, the gesture TEST kit (`createFakeEditor`, the gesture DSL `gestures()`, pointer tapes, the gesture invariants), `DisposableStore`, `API_VERSION`, `defineBundle` | stable, faster-moving     |
+| `@paged-media/plugin-cli` | `paged-plugin validate <manifest.json>` (manifest schema, namespace and object-model checks), `untyped`, `integrity`, `modules-upload`                                                                                                                                                                                                                                            | tooling cadence           |
+| `@paged-media/cli`        | `paged-node`: get, set, query, batch, export and more over core and every installed bundle, through the headless host ([ADR 324](./docs/adr/324-node-cli-over-the-headless-host.md)). A private workspace package (PM-0008).                                                                                                                                                      | tooling cadence           |
+| `@paged-media/ai`         | Claude for paged: the model, prompt, tools and loop behind `paged-node ai` ([ADR 325](./docs/adr/325-claude-agent-package.md)). A private workspace package (PM-0008).                                                                                                                                                                                                            | tooling cadence           |
 
 **Declarations.** From 0.2.71 the published declarations of `plugin-api` and `plugin-sdk`
 are emitted by TypeScript 7 (`tsc --emitDeclarationOnly`). `plugin-sdk` ships one `.d.ts`
 per module instead of a single bundled `index.d.ts`, with the same exported types; its
 JavaScript is bundled by `bun build`
 ([the migration note](../../docs/migration/typescript-7.md)).
+
+**Testing a tool.** A tool's `gesture()` handler is tested without an editor:
+`createFakeEditor()` records everything a handler does (registrations, mutations,
+the gesture channel, overlay previews, selection, commands), and the gesture DSL
+drives the handler in document points, as the editor's gesture spine would.
+The same DSL drives the handler against the real engine through the headless
+host (`gestures({ editor: headless.host.editor, pages })`), where
+`checkUndoRedo` / `checkCancel` compare model dumps. Every DSL run is also a
+replayable pointer tape (`g.tape()`, `replayTape`).
+
+```ts
+const fake = createFakeEditor();
+const mark = fake.mark();
+await gestures(fake)
+  .tool(myTool)
+  .drag({ from: [72, 72], to: [216, 144], mods: ["shift"] });
+expectOneCommit(fake, mark); // INV-1: one gesture, one commit
+```
 
 The full API deliberation — tenets, area-by-area rationale, RPC-readiness
 audit, rejected alternatives, freeze policy — is in **`DESIGN.md`**.
