@@ -176,6 +176,28 @@ export async function partitionByPage(
   return { here, elsewhere };
 }
 
+/** Nothing selected, as a plugin reads it. A bundle that places beside
+ *  (or at) the selection, as paged.sheet does, then takes the active
+ *  page's default spot instead of following what it placed and selected
+ *  last. Both halves: the worker's selection, and the main-thread mirror
+ *  a plugin's `selection.get()` answers from. Clearing only the worker
+ *  left the last chart selected for the bundle, and the chart wall's
+ *  recto charts went beside it, on the verso. */
+export async function clearSelection(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    const c = (
+      globalThis as unknown as {
+        __canvas: {
+          client: { setElementSelection: (ids: unknown[], mode: string) => Promise<unknown> };
+          setElementSelection?: (ids: unknown[], mode: string) => void;
+        };
+      }
+    ).__canvas;
+    await c.client.setElementSelection([], "replace");
+    c.setElementSelection?.([], "replace");
+  });
+}
+
 /** Remove page items as ONE undo step. No-op for an empty list.
  *
  *  Core has no delete for a group: `deleteFrame` on one refuses, and the

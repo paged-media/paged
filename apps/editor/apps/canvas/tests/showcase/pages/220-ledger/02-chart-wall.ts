@@ -51,7 +51,7 @@ import { openPanel } from "../../../fidelity/canvas-driver";
 import { withActivePage } from "../../active-page";
 import { proseFrame, specLabel } from "../../annual-support";
 import { STYLE, p } from "../../names-annual";
-import { geometryOf, partitionByPage, removeRefs } from "../../plugin-support";
+import { clearSelection, geometryOf, partitionByPage, removeRefs } from "../../plugin-support";
 import type { PageContext, PageReport } from "../../types";
 import {
   SHEET_CMD,
@@ -80,28 +80,6 @@ const SLOT_W = 210;
 interface ChartRow {
   index: number;
   kind: string;
-}
-
-/** Nothing selected, as the bundle reads it: its next chart then takes
- *  the active page's margin-box corner instead of a place beside the
- *  chart it placed (and selected) last. Both halves: the worker's
- *  selection, and the main-thread mirror a plugin's `selection.get()`
- *  answers from — clearing only the worker left the last chart
- *  selected for the bundle, and the recto's charts went beside it, on
- *  the verso. */
-async function clearSelection(page: PageContext["page"]): Promise<void> {
-  await page.evaluate(async () => {
-    const c = (
-      globalThis as unknown as {
-        __canvas: {
-          client: { setElementSelection: (ids: unknown[], mode: string) => Promise<unknown> };
-          setElementSelection?: (ids: unknown[], mode: string) => void;
-        };
-      }
-    ).__canvas;
-    await c.client.setElementSelection([], "replace");
-    c.setElementSelection?.([], "replace");
-  });
 }
 
 /** The top-left of a lowered chart in its own content space: the least
