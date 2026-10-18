@@ -44,7 +44,7 @@ import type {
   SelectionMode,
   SnapPointQuery,
   SnapPointResult,
-} from "./wire";
+} from "./wire.js";
 import type {
   CommandContribution,
   ExporterContribution,
@@ -55,24 +55,24 @@ import type {
   PanelContribution,
   ToolContribution,
   ToolPreviewShape,
-} from "./editor";
-import type { SceneLayer } from "./wire";
+} from "./editor.js";
+import type { SceneLayer } from "./wire.js";
 
-import type { AssetSurface } from "./assets";
+import type { AssetSurface } from "./assets.js";
 import type {
   BindingProvider,
   BindingProviderHandle,
-} from "./binding-provider";
-import type { ClipboardSurface } from "./clipboard";
-import type { MutationInput } from "./mutations";
-import type { PluginManifest, WasmArtifact } from "./manifest";
-import type { SchemaPanelContribution } from "./panel-schema";
-import type { WidgetSurface } from "./widgets";
+} from "./binding-provider.js";
+import type { ClipboardSurface } from "./clipboard.js";
+import type { MutationInput } from "./mutations.js";
+import type { PluginManifest, WasmArtifact } from "./manifest.js";
+import type { SchemaPanelContribution } from "./panel-schema.js";
+import type { WidgetSurface } from "./widgets.js";
 import type {
   ObjectModelContribution,
   ObjectModelHandle,
   ObjectsSurface,
-} from "./object-model";
+} from "./object-model.js";
 
 // ---------------------------------------------------------------- core
 

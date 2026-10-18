@@ -143,9 +143,9 @@
 // implementation, not a contract change. Same exit as tool gesture
 // factories.
 
-import type { Disposable, MutationOutcome } from "./host";
-import type { MutationInput } from "./mutations";
-import type { CollectionName, ElementId, PropertyPath, Value } from "./wire";
+import type { Disposable, MutationOutcome } from "./host.js";
+import type { MutationInput } from "./mutations.js";
+import type { CollectionName, ElementId, PropertyPath, Value } from "./wire.js";
 
 // ---------------------------------------------------------------- targets
 

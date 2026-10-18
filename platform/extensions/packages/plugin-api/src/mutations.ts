@@ -23,7 +23,7 @@
 // curation rule as contributions.ts: a type joins this list when a
 // bundle actually uses it.
 
-import type { Mutation } from "./wire";
+import type { Mutation } from "./wire.js";
 
 export type {
   // Identity + addressing.
@@ -76,7 +76,7 @@ export type {
   // ADR 323 — the object registry's core seam reads pages and stories.
   PageSummary,
   StorySummary,
-} from "./wire";
+} from "./wire.js";
 
 // ------------------------------------------------- protocol-ahead ops
 //

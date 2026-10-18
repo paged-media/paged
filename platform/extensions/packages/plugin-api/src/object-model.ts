@@ -32,8 +32,8 @@
 // `@paged-media/plugin-sdk` (`parseAddress`, `formatAddress`,
 // `parseSelector`, `validateValue`, `coerceValue`).
 
-import type { MutationInput } from "./mutations";
-import type { Disposable, MutationOutcome } from "./host";
+import type { MutationInput } from "./mutations.js";
+import type { Disposable, MutationOutcome } from "./host.js";
 
 // ------------------------------------------------------------ addresses
 
