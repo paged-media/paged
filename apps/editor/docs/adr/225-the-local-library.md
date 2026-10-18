@@ -41,6 +41,14 @@ the wrong edit could not be undone across sessions.
    evict it under storage pressure. A refused request is not fatal: the file on disk, or
    Export with history, is the backup.
 
+8. **A server is opt-in at build time.** `PAGED_SERVER_URL` names the paged.server a build
+   syncs with; its origin joins the network wall (`connect-src`) exactly as a data origin
+   does. Without it the panel has no server controls. With it, the panel signs in with an
+   OAuth 2.1 popup (PKCE; the callback answers over a same-origin `BroadcastChannel`,
+   because the cross-origin-isolated editor's popup has no opener), pushes what the server
+   lacks, pulls through the local kernel (a document that moved apart is refused, not
+   merged), and opens a server repository as a new library document.
+
 ## Consequences
 
 - The editor now holds data the user did not explicitly save to disk: every opened file is
@@ -48,6 +56,8 @@ the wrong edit could not be undone across sessions.
   change.
 - A document opened again from disk becomes a second library document. Matching a file to
   the document it came from is a follow-up.
+- Tokens are kept in `localStorage` per server: an hour-long signed access token and a
+  rotating refresh token. Anything that can run script on the editor's origin can read them.
 - Saves made by Claude in the live tab are commits by the human, as before. Agent provenance
   for in-tab edits arrives with the server's relay.
 - The repository package is new on npm and reaches the editor once core publishes it.

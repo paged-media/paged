@@ -36,6 +36,7 @@ import {
   subscribeLibrary,
   usePaged,
 } from "@paged-media/shell";
+import { accessToken, signedInAs, signIn, signOut } from "@paged-media/repository";
 import type { CommitInfo, DocumentEntry } from "@paged-media/repository";
 
 import { downloadBytes } from "../shell-file-saver";
@@ -58,6 +59,19 @@ const button = {
   padding: "1px 6px",
 } as const;
 
+// ADR 225 — the paged.server this build syncs with (`PAGED_SERVER_URL` at build
+// time, which also admits it through the network wall). Empty: no server, and
+// the panel shows no server controls.
+declare const __PAGED_SERVER__: string | undefined;
+const SERVER = typeof __PAGED_SERVER__ === "undefined" ? "" : __PAGED_SERVER__;
+
+/** The server repository a document syncs with: its own, or one named after it. */
+function remoteRepo(d: DocumentEntry): string {
+  if (d.remote?.repo) return d.remote.repo;
+  const slug = d.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
+  return `${slug || "document"}-${d.id.replace(/[^a-z0-9]/gi, "").slice(0, 8).toLowerCase()}`;
+}
+
 function when(ts: number): string {
   return new Date(ts).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
 }
@@ -72,6 +86,8 @@ export function LibraryPanel() {
   const [releases, setReleases] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
+  const [who, setWho] = useState<string | null>(() => (SERVER ? signedInAs(SERVER) : null));
+  const [syncNote, setSyncNote] = useState<string | null>(null);
   const refresh = () => setTick((t) => t + 1);
 
   useEffect(() => {
@@ -125,6 +141,15 @@ export function LibraryPanel() {
     f()
       .then(refresh)
       .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
+  };
+
+  const remoteFor = async (d: DocumentEntry) => {
+    const token = await accessToken(SERVER);
+    if (!token) {
+      setWho(null);
+      throw new Error("Sign in to the server first.");
+    }
+    return { url: SERVER, repo: remoteRepo(d), token };
   };
 
   if (!library) {
@@ -229,6 +254,93 @@ export function LibraryPanel() {
             ))}
           </ul>
         </>
+      )}
+
+      {SERVER && (
+        <div data-library-server>
+          <div style={kicker}>Server</div>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <span style={{ ...mono, color: "var(--pg-muted-fg)" }} data-library-who>
+              {who ? `${new URL(SERVER).host} · ${who}` : `${new URL(SERVER).host} · signed out`}
+            </span>
+            {who ? (
+              <button
+                type="button"
+                data-library-signout
+                style={button}
+                onClick={() => {
+                  signOut(SERVER);
+                  setWho(null);
+                }}
+              >
+                Sign out
+              </button>
+            ) : (
+              <button
+                type="button"
+                data-library-signin
+                style={button}
+                onClick={act(async () => {
+                  await signIn(SERVER);
+                  setWho(signedInAs(SERVER));
+                })}
+              >
+                Sign in
+              </button>
+            )}
+          </div>
+          {who && current && (
+            <div style={{ display: "flex", gap: 6, marginTop: 6, alignItems: "center", flexWrap: "wrap" }}>
+              <span style={{ ...mono, color: "var(--pg-muted-fg)" }}>{remoteRepo(current)}</span>
+              <button
+                type="button"
+                data-library-push
+                style={button}
+                title="Send this document's versions the server lacks"
+                onClick={act(async () => {
+                  const r = await library.push(current.id, await remoteFor(current));
+                  setSyncNote(r.sent ? `Pushed ${r.sent} object${r.sent === 1 ? "" : "s"} (${r.bytes.toLocaleString()} bytes)` : "Up to date");
+                })}
+              >
+                Push
+              </button>
+              <button
+                type="button"
+                data-library-pull
+                style={button}
+                title="Take the server's newer versions; a document that moved apart is refused, not merged"
+                onClick={act(async () => {
+                  const r = await library.pull(current.id, await remoteFor(current));
+                  setSyncNote(r.changed ? "Pulled newer versions" : "Up to date");
+                  if (r.changed) await open(current);
+                })}
+              >
+                Pull
+              </button>
+            </div>
+          )}
+          {who && (
+            <button
+              type="button"
+              data-library-clone
+              style={{ ...button, marginTop: 6 }}
+              onClick={act(async () => {
+                const repo = globalThis.prompt("Server repository to open:", "")?.trim();
+                if (!repo) return;
+                const token = await accessToken(SERVER);
+                if (!token) throw new Error("Sign in to the server first.");
+                await open(await library.clone({ url: SERVER, repo, token }, repo));
+              })}
+            >
+              Open from server…
+            </button>
+          )}
+          {syncNote && (
+            <p data-library-sync-note style={{ ...mono, margin: "6px 0 0", color: "var(--pg-muted-fg)" }}>
+              {syncNote}
+            </p>
+          )}
+        </div>
       )}
 
       <div style={kicker}>Library</div>

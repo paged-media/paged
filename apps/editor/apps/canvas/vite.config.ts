@@ -119,7 +119,13 @@ const crossOriginIsolation = {
 // img execution is untouched — minimal blast radius, just the egress wall. The
 // floor, the parsing and the `_headers` rewrite live in
 // src/boot/network-policy.ts (tested by scripts/network-policy.test.mjs).
-const DATA_ORIGINS = parseDataOrigins(process.env[DATA_ORIGINS_ENV]);
+// ADR 225 — the paged.server this build syncs with, if any. Its origin joins
+// the wall exactly like a data origin (same parser: exact https, or http on
+// loopback); without it the editor has no server and stays browser-only.
+const PAGED_SERVER = parseDataOrigins(process.env.PAGED_SERVER_URL)[0] ?? "";
+const DATA_ORIGINS = [
+  ...new Set([...parseDataOrigins(process.env[DATA_ORIGINS_ENV]), ...(PAGED_SERVER ? [PAGED_SERVER] : [])]),
+];
 const CONNECT_SRC = connectSrc(DATA_ORIGINS);
 // Dev adds the Vite HMR WebSocket (client live-reload) — without it `pnpm dev`
 // and the Playwright runs lose hot updates.
@@ -614,6 +620,7 @@ export default defineConfig({
   // dialog can say when a consented origin stays unreachable (ADR 218).
   define: {
     __PAGED_DATA_ORIGINS__: JSON.stringify(DATA_ORIGINS),
+    __PAGED_SERVER__: JSON.stringify(PAGED_SERVER),
   },
   // apps/canvas/ lives one extra level deep than web/ — adjust the
   // workspace root so node_modules + the Cargo target dir resolve.
