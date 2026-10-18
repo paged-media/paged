@@ -1,0 +1,29 @@
+[package]
+name = "image-gpu"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "paged.image GPU execution layer (spec §9) — wgpu device mgmt, tile residency, dispatch batching. The ONLY execution layer; kernels run as WGSL compute."
+
+[lints]
+workspace = true
+
+[dependencies]
+image-core = { path = "../image-core" }
+image-kernels = { path = "../image-kernels" }
+wgpu = { workspace = true }
+thiserror = { workspace = true }
+# T2 reductions (reduce.rs) decode rgba16float tile bytes on the CPU
+# (the M2 correctness path; M3 moves the reduce to a compute shader).
+half = { workspace = true }
+pollster = { workspace = true, optional = true }
+
+[features]
+# The shared test device (src/test_support.rs). Enabled ONLY from
+# dev-dependencies, so it never reaches the shipped wasm.
+test-support = ["dep:pollster"]
+
+[dev-dependencies]
+pollster = { workspace = true }

@@ -1,0 +1,4228 @@
+/*
+ * This file is part of paged (https://paged.media).
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// The M4 ingest-slice session: select a placed image frame → read its
+// ORIGINAL bytes (C-5 host.assets.getPlacedImage) → decode in the
+// engine wasm (codec/PSD CPU lanes) → run the committed adjustments
+// (Engine A, GPU-only) → composite the RGBA8 result back IN-FRAME via
+// the C-1 Stage-A image scene item (host.contribute.sceneLayer).
+//
+// The in-frame layer is a preview: sliders preview live on a proxy and
+// at full resolution once they rest; it clears on deselect and Reset.
+// The DOCUMENT changes only on a COMMIT (`commitToDocument`, ADR 462):
+// the layers go into the document's parts and their composite replaces
+// the frame's placed image, as one document undo step.
+
+import type {
+  BundleHost,
+  Disposable,
+  ElementId,
+} from "@paged-media/plugin-api";
+
+import { latestWins } from "./coalesce";
+import {
+  binaryMutations,
+  hostColorPicker,
+  imageScene,
+  mutateWithBytes,
+  partsDelete,
+  type ColorPickerProps,
+} from "./host66";
+import { parseCube, toKernelCube } from "./cube";
+import {
+  readSession,
+  sha256Hex,
+  writeSession,
+  type CommittedMarker,
+} from "./session-store";
+import {
+  averageRgba8,
+  freshColors,
+  swapped,
+  toHex,
+  type ColorPair,
+  type SampleSize,
+} from "./color-state";
+import {
+  bootEngine,
+  DEFAULT_BRUSH_PARAMS,
+  EMPTY_LAYER_STACK,
+  freshIdentityParams,
+  isIdentity,
+  type AdjustParams,
+  type BrushLibraryInfo,
+  type ChannelStatsInfo,
+  type BrushParams,
+  type BrushStats,
+  type DecodedInfo,
+  type DisplayTreatment,
+  type WarpKindName,
+  displayTreatmentOf,
+  type GradientKind,
+  type ImageEngine,
+  type ImageHistogram,
+  type LayerHistory,
+  type LayerStackInfo,
+  type EditTarget,
+  type PsdLayerInfo,
+  type RasterFormat,
+  type ResampleFilter,
+  type CanvasOpKind,
+  type SelectionModifyOp,
+  type Rgba01,
+  SAMPLING_TOOLS,
+  TONE_TOOLS,
+  DEFAULT_TONE,
+  type ToneOptions,
+  type LevelsParams,
+  type SelectionStats,
+  type StrokeTool,
+} from "./engine";
+import {
+  imageToPage,
+  pageToImage,
+  resolveFrameFit,
+} from "./frame-fit";
+import { claimImageTiles } from "./tile-provider";
+import { readPgil } from "./object-model/pgil";
+import { collectGarbage } from "./session-store";
+import { createDecodePool, type DecodePool } from "./decode-pool";
+import { createCropMachine, type CropMachine } from "./crop-machine";
+import {
+  createSelectionMachine,
+  type SelectionMachine,
+  WAND_CONTIGUOUS_DEFAULT,
+  WAND_TOLERANCE_DEFAULT,
+  type WandOptions,
+} from "./selection-machine";
+import {
+  createBrushMachine,
+  type BrushMachine,
+  type BrushSample,
+} from "./brush-machine";
+
+/** The fixed v0 feather sigma (px) the `featherSelection` command uses
+ *  when the caller passes none (a slider is a follow-up). */
+export const FEATHER_SIGMA_DEFAULT = 4;
+
+/** The fixed v0 noise seed the `fillSelection` command uses when the
+ *  caller passes none (a seed field is a follow-up). */
+export const FILL_NOISE_SEED_DEFAULT = 1;
+
+/**
+ * What `geom.offset` does with the pixels a move exposes at the edge.
+ *
+ * These three values are the kernel's FROZEN wire encoding, not a UI
+ * convenience — the Rust `EdgePolicy` and the WGSL branch both read the
+ * same integers out of the params block, so renumbering here silently
+ * changes what a stored effect does.
+ */
+/**
+ * What a Move does with the region the selected pixels came FROM.
+ *
+ * Frozen wire encoding shared with the Rust `VacateMode` and the WGSL
+ * branch, so renumbering here changes what a stored effect does.
+ */
+/** Which curve a curve edit addresses. */
+export type CurveChannel = "rgb" | "r" | "g" | "b";
+
+export const VacateMode = {
+  /** Plain drag: the pixels leave and the source becomes transparent. */
+  Transparent: 0,
+  /** Alt-drag: the pixels are copied and the source keeps what it had. */
+  Copy: 1,
+} as const;
+export type VacateMode = (typeof VacateMode)[keyof typeof VacateMode];
+
+export const EdgePolicy = {
+  /** Photoshop "Set to Transparent" — the vacated region is cleared. */
+  Transparent: 0,
+  /** Photoshop "Repeat Edge Pixels" — the border smears outward. */
+  Clamp: 1,
+  /** Photoshop "Wrap Around" — the period is the image; makes tiles seamless. */
+  Wrap: 2,
+} as const;
+export type EdgePolicy = (typeof EdgePolicy)[keyof typeof EdgePolicy];
+
+/** What to paint into the selection (the `gen.*` family's editor
+ *  reach). Colours are straight RGBA in [0,1]. */
+export type FillRequest =
+  | { kind: "gradient"; gradient: GradientKind; c0: Rgba01; c1: Rgba01 }
+  | { kind: "noise"; amount: number; seed?: number }
+  /** CONTENT-AWARE: synthesise the selection from the rest of the image.
+   *  The only fill that is a SEARCH rather than a generator, and the
+   *  only one that needs no parameters — the image is the parameter. */
+  | { kind: "contentAware" };
+
+/** Save-back bytes staged by `applyToFile` — what the exporters hand
+ *  out and what the panel reports. */
+export interface SaveBackResult {
+  bytes: Uint8Array;
+  fileName: string;
+  mimeType: string;
+  /** The HONEST one-liner (which lane ran, what it did to the layer
+   *  structure). Shown in the panel verbatim. */
+  note: string;
+}
+
+/** The ingested source image (engine-held pixels behind `handle`). */
+export interface SourceImage {
+  /** Display name — the resolved link URI or the imported file name. */
+  name: string;
+  width: number;
+  height: number;
+  handle: number;
+  origin: "selection" | "import";
+  /** The frame to composite into (null for an import until Apply
+   *  targets the current selection). */
+  elementId: string | null;
+  /** CMS rung 1 — how the ingest lane treated this source's colour.
+   *  Reported in the panel because "sRGB assumed" is a real state a
+   *  colour-critical user needs to see, not a default to hide. */
+  display: DisplayTreatment;
+  /** The source was 16 bits per channel and was reduced to 8 at ingest.
+   *  A stated lossy step, not a hidden one — and a file that opens,
+   *  where a 16-bit PSD used to be refused outright. */
+  depthReduced: boolean;
+}
+
+export type EngineStatus = "idle" | "booting" | "ready" | "unavailable";
+
+export interface ImageSessionState {
+  engine: EngineStatus;
+  /** The honest boot/GPU detail when something is off. */
+  engineDetail: string | null;
+  /** WebGPU device acquired (kernels are GPU-only; false ⇒ only
+   *  identity composites work). */
+  gpu: boolean;
+  source: SourceImage | null;
+  params: AdjustParams;
+  /** The active image's RGB + luma histogram (the levels/curves panel
+   *  readout), or null until an image is ingested. Recomputed on ingest
+   *  and after a crop commit (it follows the engine-held pixels). */
+  histogram: ImageHistogram | null;
+  /** A scene layer is currently submitted for `compositedFrame`. */
+  compositedFrame: string | null;
+  busy: boolean;
+  /** One-line panel status (honest, never fake-progress). */
+  status: string;
+  /** PSD structural session (the mutatable tier): present when the
+   *  imported source is a PSD/PSB. Edits accumulate on the retained
+   *  parse; `psdExport` re-emits with full preservation. The canvas
+   *  composite stays the import-time flatten (re-flatten after record
+   *  edits is a follow-up). */
+  psd: { name: string; layers: PsdLayerInfo[] } | null;
+  /** The active SELECTION readout (engine-side coverage; §6.1), or null
+   *  when no explicit selection exists — adjustments then apply to the
+   *  whole image. When set, the committed Apply masks every GPU
+   *  adjust/filter dispatch (and the CPU curves pass) by the coverage. */
+  selection: SelectionStats | null;
+  /** The defined pattern (`definePattern`), or null. */
+  pattern: { width: number; height: number } | null;
+  /** Foreground / background colour (`color-state.ts`). The brush paints
+   *  the foreground; gradients run foreground → background. */
+  colors: ColorPair;
+  /** Adjustment sliders update the frame as they move (on by default). */
+  livePreview: boolean;
+  /** Magic wand + paint bucket tolerance / contiguity. */
+  wand: WandOptions;
+  /** The gradient tool's shape. */
+  gradientKind: GradientKind;
+  /** The adjustment layer the panel's sliders are bound to, or null when
+   *  they drive the preview/Apply chain. Selecting an adjustment layer
+   *  this session created binds it; selecting any other layer unbinds. */
+  editingAdjustment: { index: number; id: number } | null;
+  /** The last revision committed to the document for this frame (the
+   *  marker's `rev`), or null before the first commit. */
+  committedRev: number | null;
+  /** Pixel edits since ingest, reopen or the last commit — what a
+   *  commit would write. */
+  uncommitted: boolean;
+  /** The SAVE-BACK bytes staged by `applyToFile` (null until asked
+   *  for). The panel reports them; the Export Center delivers them —
+   *  the host wires no save-FILE door (`shell.pickFile` reads, it does
+   *  not write), so the exporter registry is the whole delivery lane. */
+  saveBack: SaveBackResult | null;
+  /** The brush/pencil/eraser parameters, FROZEN into each stroke at
+   *  `brushBegin` (the engine refuses a stroke whose size changes
+   *  mid-drag — it would not be replayable). */
+  brush: BrushParams;
+  /** Every blend mode a stroke can paint through, read from the engine's
+   *  `compose.*` registry at boot (empty until the engine is up — the
+   *  panel's picker is never a hardcoded list). */
+  blendModes: string[];
+  /** A stroke is in progress (the tools' pointer-down → up window). */
+  strokeActive: boolean;
+  /** The in-flight stroke's dab count + bounds, or null before the
+   *  first dab lands on the canvas. */
+  strokeStats: BrushStats | null;
+  /** THE LAYER GRAPH — the engine's layer stack for the ingested image,
+   *  BOTTOM-first (the panel renders it reversed, as a layers palette
+   *  reads). Opened automatically on ingest, so painting always lands in
+   *  a layer rather than in the one flat image. */
+  layers: LayerStackInfo;
+  /** The undo readout — depth, redo depth, and the BOUND the journal
+   *  holds to. Null until a stack is open. */
+  history: LayerHistory | null;
+  /** How the stack was opened, in the panel's words: the PSD's own N
+   *  layers, or the honest reason the layered import was DECLINED and
+   *  the flattened composite kept. Null for non-PSD sources. */
+  layersNote: string | null;
+  /** RASTER TYPE settings. Session state rather than tool state: the
+   *  string and face survive between clicks, which is what makes setting
+   *  several runs of the same type usable. */
+  type: {
+    text: string;
+    family: string;
+    sizePx: number;
+    /** The style axis within the family — "Bold", "Italic", "Bold
+     *  Italic", … — or null for the family's DEFAULT face.
+     *
+     *  It is a request, not a resolution: the HOST owns face matching
+     *  (`getFontFace(family, style)` → the document's own embedded
+     *  faces), so this plugin asks and takes what comes back. Asking
+     *  for a style the document does not embed answers null, which is
+     *  the same honest miss as an unknown family. */
+    style: string | null;
+    /** Letter spacing in 1/1000 em — IDML's unit, and UNITLESS, so it
+     *  crosses the px/pt boundary unchanged (unlike size and leading). */
+    trackingPerMille: number;
+    /** Baseline offset in IMAGE PX, positive = UP. Superscript and
+     *  subscript are this plus a scale, not a separate mode. */
+    baselineShiftPx: number;
+    /** Horizontal / vertical scale as a PERCENT (100 = natural), which
+     *  is the unit both the IDML property and the panel use. */
+    hScalePct: number;
+    vScalePct: number;
+    /** FAUX ITALIC slant in degrees. A shear, not a face — a real
+     *  italic is a different design and lives on `style`. */
+    skewDeg: number;
+    underline: boolean;
+    strikethrough: boolean;
+    /** Standard ligatures. ON is the face's own intent. */
+    ligatures: boolean;
+    /** How the lines of a multi-line run sit relative to each other. */
+    align: "left" | "center" | "right";
+    /** CASE, applied to the string before shaping. Upper/lower are
+     *  plain Unicode mappings and always available. SMALL CAPS is
+     *  deliberately NOT here: it is a font FEATURE (`smcp`), a face
+     *  without it would silently render full caps, and faking it by
+     *  scaling capitals is the kind of forgery this plugin does not
+     *  do. */
+    textCase: "none" | "upper" | "lower";
+    /** Baseline-to-baseline distance in IMAGE PX, or null for AUTO —
+     *  the face's own line height. Auto is not `1.2 × size`: a face
+     *  carries its own ascent/descent/gap, and honouring them is what
+     *  makes two faces at one size lead correctly. */
+    leadingPx: number | null;
+  };
+  /** POINTS PER IMAGE PIXEL for the frame this session last composited
+   *  into, or null before the first composite.
+   *
+   *  It is CACHED here rather than computed on demand, and that is the
+   *  point: `submitLayer` already derives this exact number to lay the
+   *  image out (`min(box.w/width, box.h/height)`), so reading the cache
+   *  guarantees a converted size agrees with the pixels actually on
+   *  screen. Recomputing would let the two drift the moment a frame is
+   *  resized between a composite and a panel read.
+   *
+   *  Null is meaningful: nothing has been laid out, so no conversion is
+   *  possible and callers must say so rather than assume 1. */
+  ptPerPx: number | null;
+  /** The clone/heal source anchor in IMAGE px, or null before one is
+   *  set. Session state rather than stroke state: the anchor SURVIVES a
+   *  stroke, which is what makes repeated retouching strokes usable. */
+  cloneSource: { x: number; y: number; aligned: boolean } | null;
+  /** The dodge / burn / sponge options, frozen into each such stroke. */
+  tone: ToneOptions;
+  /** The per-channel readout for the ingested source (R/G/B/A + luma),
+   *  or null before an ingest. Refreshed alongside the histogram, from
+   *  the same buffer, so the two never disagree. */
+  channels: ChannelStatsInfo[] | null;
+  /** A loaded `.abr` brush library, or null before one is opened. The
+   *  presets are PARAMETERS, not pixels — loading one changes nothing
+   *  until the designer applies a row. */
+  brushLibrary: BrushLibraryInfo | null;
+  /** The library file's name, for the panel's header. */
+  brushLibraryName: string | null;
+  /** The applied preset's index, so the panel can mark the active row.
+   *  Cleared the moment a slider moves — the brush no longer IS the
+   *  preset once it is edited, and pretending otherwise would mislabel
+   *  a stroke's provenance. */
+  brushPreset: number | null;
+}
+
+export interface ImageSession {
+  state(): ImageSessionState;
+  onDidChange(listener: () => void): Disposable;
+  /** Ingest the single selected element's placed image via C-5. */
+  ingestSelection(): Promise<boolean>;
+  /** The ingested frame's element (what an edit context is entered on),
+   *  or null for an imported file. */
+  sourceElement(): ElementId | null;
+  /** The host's colour picker widget, or null (the panel then uses the
+   *  browser's colour input). */
+  colorPicker(): import("react").ComponentType<ColorPickerProps> | null;
+  /** Ingest opened/dropped file bytes (the K-2 importer path). */
+  importBytes(name: string, bytes: Uint8Array): Promise<boolean>;
+  /** RESAMPLE the engine-held source to a new pixel size (GPU-only —
+   *  rejects honestly without a device). Swaps the source like a crop
+   *  commit: document unchanged until Apply re-composites. */
+  resizeTo(w: number, h: number, filter: ResampleFilter): Promise<boolean>;
+  /** PSD layer-record edits (only when `state().psd` is set). Each
+   *  applies to the retained parse and refreshes the layer list. */
+  psdSetLayerOpacity(index: number, opacity: number): boolean;
+  psdRenameLayer(index: number, name: string): boolean;
+  psdRemoveLayer(index: number): boolean;
+  /** The edited PSD, preservation-safe (zero-edit ⇒ byte-identical).
+   *  Null when no PSD is loaded / the engine is gone. */
+  psdExport(): { bytes: Uint8Array; fileName: string } | null;
+  /** Hand the STAGED save-back bytes to the host's saver (K-10). Stages
+   *  them first when nothing is staged yet, so the panel button is one
+   *  action rather than two.
+   *
+   *  Resolves false when no saver is wired, when there is nothing to
+   *  save, or when the host refused. HONEST CEILING, inherited from the
+   *  door: a host backed by the browser's anchor-download cannot observe
+   *  a user cancel, so `true` means "handed to the download path", not
+   *  "a file exists on disk". The status text says which of those the
+   *  answer is. */
+  saveToFile(): Promise<boolean>;
+  /** SAVE-BACK: composite the current adjustments at FULL resolution and
+   *  bake them into the source file's bytes.
+   *
+   *  * PSD source → `replace_channel_pixels` on the single canvas-sized
+   *    content layer when there is one, else the composite is FLATTENED
+   *    into a new single-layer PSD (announced in `note`, never silent);
+   *    then `psd_save` (full carry-through preservation).
+   *  * PNG/JPEG source → re-encode through `image-codecs` (PNG by
+   *    default; JPEG when the ingested source was a JPEG, fixed v0
+   *    quality).
+   *
+   *  Stages the result on `state().saveBack` and returns it; null (with
+   *  an honest status) when there is nothing to save or the lane is
+   *  unsupported. The DOCUMENT is untouched either way — this produces
+   *  bytes, it does not write files (the host wires no save-file door). */
+  applyToFile(): Promise<SaveBackResult | null>;
+  /** What the PSD exporter hands out: the ADJUSTED save-back when the
+   *  panel is off identity or the pixels were edited since ingest, else
+   *  the preservation-safe re-emit (zero-edit ⇒ BYTE-IDENTICAL — the
+   *  §10.4 invariant survives; a plain export never rewrites the
+   *  composite). Null when no PSD is loaded, and null (with the reason
+   *  as the status) when the save-back declines an edited file. */
+  psdExportBytes(): Promise<{ bytes: Uint8Array; fileName: string } | null>;
+  /** What the PNG / JPEG exporters hand out: the adjusted result
+   *  re-encoded in the REQUESTED format (whatever the source was). */
+  rasterExportBytes(
+    format: RasterFormat,
+  ): Promise<{ bytes: Uint8Array; fileName: string } | null>;
+  /** FILL the current selection (the whole image when none) with a
+   *  generator, composited through the coverage mask. DESTRUCTIVE: it
+   *  swaps the engine-held source like a crop commit (the document and
+   *  the placed file are still untouched; re-ingest restores). */
+  fillSelection(req: FillRequest): Promise<boolean>;
+  /** Run a whole-image effect kernel and land it like a fill. */
+  applyEffect(
+    label: string,
+    run: (handle: number) => Promise<DecodedInfo>,
+  ): Promise<boolean>;
+  /** Luminance through a two-stop colour ramp (adjust.gradient_map). */
+  applyGradientMap(
+    shadow: readonly [number, number, number],
+    highlight: readonly [number, number, number],
+  ): Promise<boolean>;
+  /** A parametric distortion (geom.warp_backward). */
+  applyWarp(
+    kind: WarpKindName,
+    amount: number,
+    frequency?: number,
+  ): Promise<boolean>;
+  /** STYLIZE — directional relief. `height` 0 is the identity. */
+  applyEmboss(angleDeg: number, height: number): Promise<boolean>;
+  /** STYLIZE — inverted Sobel: dark lines on white. */
+  applyFindEdges(strength: number): Promise<boolean>;
+  /** BLUR GALLERY — motion. `lengthPx` 0 is the identity. */
+  applyMotionBlur(angleDeg: number, lengthPx: number): Promise<boolean>;
+  /** BLUR GALLERY — radial spin/zoom about a NORMALISED centre. */
+  applyRadialBlur(
+    cx: number,
+    cy: number,
+    amount: number,
+    spin: boolean,
+  ): Promise<boolean>;
+  /** PIXELATE — mosaic. `cellPx` <= 1 is the identity. */
+  applyMosaic(cellPx: number): Promise<boolean>;
+  /**
+   * BLUR with an arbitrary SHAPE — Filter ▸ Blur ▸ Shape Blur.
+   *
+   * `shapeHandle` is an ordinary decoded image, so any file the plugin
+   * can open is a blur shape. Coverage is read from RED rather than
+   * alpha, which is correct for both ways shape libraries ship
+   * (white-on-black, where alpha is identically 1, and
+   * white-on-transparent, where premultiplied red equals alpha).
+   *
+   * `radiusPx` is the HALF-extent; below 0.5 it is the identity, as is
+   * `amount` 0.
+   */
+  applyShapeBlur(
+    shapeHandle: number,
+    radiusPx?: number,
+    amount?: number,
+  ): Promise<boolean>;
+  /**
+   * FILL with a PATTERN — Edit ▸ Fill ▸ Pattern.
+   *
+   * The tile is an ordinary decoded image, so any file the plugin can
+   * open is a pattern. There is deliberately no pattern SWATCH: that
+   * is the vector paint type walled by RFI C-31, and tiling pixels
+   * into a raster layer needs none of it.
+   *
+   * Selection-scoped like every fill, so "fill the selection with a
+   * pattern" comes free. `opacity` 0 is the identity.
+   */
+  fillPattern(
+    tileHandle: number,
+    scale?: number,
+    angleDeg?: number,
+    offsetX?: number,
+    offsetY?: number,
+    opacity?: number,
+  ): Promise<boolean>;
+  /**
+   * Edit ▸ Define Pattern: copy the selection's bounding box (the whole
+   * image when nothing is selected) into an image of its own, held by
+   * the session as THE pattern. It is also the shape Shape Blur uses.
+   * Replaces the previous pattern. CPU only (a window copy).
+   */
+  definePattern(): boolean;
+  /**
+   * Write the image's layers into the document and put their composite
+   * in the frame, as ONE document undo step: the layer data is stored in
+   * the document's parts first, then the frame's image bytes and its
+   * marker change together. Reopening the frame restores the layers.
+   */
+  commitToDocument(): Promise<boolean>;
+  /** RED-EYE removal inside the ellipse that fits the box `(x, y, w, h)`
+   *  (image px); `darken` 0–1 (default 0.5). */
+  applyRedEye(box: { x: number; y: number; w: number; h: number }, darken?: number): Promise<boolean>;
+  /** PATCH: replace the selection with the region (dx, dy) image px away,
+   *  healed so it blends. Needs a selection. */
+  patchSelection(dx: number, dy: number): Promise<boolean>;
+  /** NOISE ▸ Median (3×3). */
+  applyMedian(): Promise<boolean>;
+  /** OTHER ▸ Maximum ("max") / Minimum ("min"), 3×3. */
+  applyMorph(kind: "max" | "min"): Promise<boolean>;
+  /** ADJUST ▸ Color Lookup from a .cube file's text. */
+  applyColorLookup(cubeText: string, name?: string): Promise<boolean>;
+  /** The GRADIENT TOOL: foreground → background along the dragged line
+   *  (image px), in `state().gradientKind`. */
+  fillGradientLine(from: [number, number], to: [number, number]): Promise<boolean>;
+  setGradientKind(kind: GradientKind): void;
+  /** Edit ▸ Fill with the foreground colour (the selection, or everything). */
+  fillForeground(): Promise<boolean>;
+  /** The paint bucket at image px `at`, in the foreground colour, using
+   *  `state().wand` tolerance / contiguity. */
+  bucketFill(at: [number, number]): Promise<boolean>;
+  /** Image ▸ Rotate / Flip / Canvas Size (whole stack; clears history). */
+  canvasOp(
+    op: CanvasOpKind,
+    size?: { width: number; height: number; anchorX: number; anchorY: number },
+  ): Promise<boolean>;
+  /** Select ▸ Modify by `radius` px. */
+  modifySelection(op: SelectionModifyOp, radius: number): boolean;
+  /** Wand / bucket options. */
+  setWandOptions(o: Partial<WandOptions>): void;
+  /** Live preview on/off (`state().livePreview`). */
+  setLivePreview(on: boolean): void;
+  /** Set the foreground colour; the brush paints it from the next stroke. */
+  setForeground(c: Rgba01): void;
+  setBackground(c: Rgba01): void;
+  /** Photoshop X: swap foreground and background. */
+  swapColors(): void;
+  /** Photoshop D: black foreground, white background. */
+  resetColors(): void;
+  /**
+   * The eyedropper: average the COMPOSITE around image pixel `at`
+   * (1 = that pixel, 3 = 3×3, 5 = 5×5, clipped at the edges) and make it
+   * the foreground (or the background). Returns the colour, or null when
+   * nothing is ingested or `at` is outside the image.
+   */
+  sampleColor(at: [number, number], size?: SampleSize, target?: "fg" | "bg"): Rgba01 | null;
+  /** Fill the selection with the defined pattern (Edit ▸ Fill ▸ Pattern). */
+  fillWithPattern(scale?: number, opacity?: number): Promise<boolean>;
+  /** Shape blur with the defined pattern as the blur's shape. */
+  shapeBlurWithPattern(radiusPx?: number): Promise<boolean>;
+  /**
+   * MOVE the SELECTED pixels. This is what the Move tool does when a
+   * selection is live, and it is NOT `offsetLayer` — that moves the
+   * whole layer. With a selection, the selected pixels relocate and
+   * the region they came from is vacated.
+   */
+  moveSelection(dx: number, dy: number, vacate?: VacateMode): Promise<boolean>;
+  // FILTER GALLERY — twelve primitives spanning the six families.
+  // `amount` 0 is the identity on every one of them.
+  galleryKuwahara(radiusPx: number, amount: number): Promise<boolean>;
+  galleryPosterizeEdges(levels: number, edgeAmount: number, edgeThreshold: number, amount: number): Promise<boolean>;
+  galleryGlowingEdges(intensity: number, smoothness: number, amount: number): Promise<boolean>;
+  galleryHalftone(cellPx: number, angleDeg: number, contrast: number, amount: number): Promise<boolean>;
+  galleryGrain(seed: number, sizePx: number, mono: boolean, amount: number): Promise<boolean>;
+  galleryDiffuse(seed: number, radiusPx: number, angleDeg: number, anisotropy: number, amount: number): Promise<boolean>;
+  galleryCrosshatch(angleDeg: number, spacingPx: number, strength: number, sets: number, amount: number): Promise<boolean>;
+  galleryBasRelief(angleDeg: number, elevationDeg: number, height: number, amount: number): Promise<boolean>;
+  galleryThresholdInk(threshold: number, softness: number, amount: number): Promise<boolean>;
+  galleryStainedGlass(seed: number, cellPx: number, border: number, amount: number): Promise<boolean>;
+  galleryGlass(seed: number, scalePx: number, distortion: number, amount: number): Promise<boolean>;
+  galleryTexturizer(seed: number, kind: number, scalePx: number, relief: number, angleDeg: number, amount: number): Promise<boolean>;
+  /** NOISE — despeckle; `amount` 0 is the identity. */
+  applyDespeckle(edgeThreshold: number, amount: number): Promise<boolean>;
+  /**
+   * NOISE — dust & scratches. `radius` above the kernel maximum is
+   * REJECTED rather than clamped: asking for a wider radius is asking
+   * for a different filter, and quietly narrowing it reads as the
+   * kernel being weak.
+   */
+  applyDustScratches(radius: number, threshold: number): Promise<boolean>;
+  /**
+   * MOVE the active layer's pixels. The host Selection tool moves the
+   * FRAME on the page; this moves what is inside it.
+   *
+   * Whole-pixel offsets are bit-exact (single tap, no interpolation),
+   * so repeated integer moves never degrade the layer. Sub-pixel ones
+   * resample, which is the right trade for a drag that must track the
+   * pointer at any zoom rather than stutter between whole pixels.
+   */
+  offsetLayer(dx: number, dy: number, edge?: EdgePolicy): Promise<boolean>;
+  /**
+   * Filter > Other > Offset — the SAME kernel with the edge policy
+   * fixed to wrap, which is what makes a tile seamless.
+   */
+  offsetFilter(dx: number, dy: number): Promise<boolean>;
+  /** BLUR — lens/bokeh; `radiusPx` below 0.5 is the identity. */
+  applyLensBlur(
+    radiusPx: number,
+    threshold: number,
+    boost: number,
+  ): Promise<boolean>;
+  /** NOISE — bilateral denoise; `amount` 0 is the identity. */
+  applyReduceNoise(
+    radiusPx: number,
+    sigmaRange: number,
+    amount: number,
+  ): Promise<boolean>;
+  /** SHARPEN — smart sharpen; `amount` 0 is the identity. */
+  applySmartSharpen(
+    radiusPx: number,
+    amount: number,
+    threshold: number,
+    clampHi: number,
+  ): Promise<boolean>;
+  /** Per-range CMYK shift (0 reds .. 8 blacks). */
+  applySelectiveColor(
+    range: number,
+    cmyk: readonly [number, number, number, number],
+    absolute: boolean,
+  ): Promise<boolean>;
+  setParams(p: Partial<AdjustParams>): void;
+  /** Set the composite levels (merged into params.levels). */
+  setLevels(l: Partial<LevelsParams>): void;
+  /** Build + set the curves tone LUT from `(input, output)` control points
+   *  in [0,1] (an empty / identity set clears the curve). */
+  /** Set a curve from control points: the composite ("rgb", default) or
+   *  one channel's ("r", "g", "b"). */
+  setCurvePoints(points: Array<[number, number]>, channel?: CurveChannel): void;
+  /** Auto-enhance: derive levels (in black/white) + white balance
+   *  (temp/tint) from the ingested image's histogram and set them on the
+   *  params (PREVIEW-only — the user commits with Apply, like every other
+   *  edit). A no-op estimate (flat/neutral image) leaves the result
+   *  identity. */
+  autoEnhance(): void;
+  /** The crop interaction machine for the ingested image (null until an
+   *  image is ingested + the engine is ready). The crop tool's gesture and
+   *  the panel's crop controls drive it. */
+  cropMachine(): CropMachine | null;
+  /** The SELECTION interaction machine (null until an image is
+   *  ingested). The marquee/lasso/wand tools drive it; the selection
+   *  itself is engine state bound to the live source handle. */
+  selectionMachine(): SelectionMachine | null;
+  /** Re-read the engine's selection stats into `state().selection` and
+   *  notify (the machines call this after every committed change). */
+  refreshSelection(): void;
+  /** Select the whole image (an explicit full-extent selection). */
+  selectAll(): boolean;
+  /** Deselect (back to "no selection" — adjust applies everywhere). */
+  deselect(): boolean;
+  /** Invert the selection ("everything" inverts to the empty selection). */
+  invertSelection(): boolean;
+  /** Gaussian-feather the selection edge (σ px; the fixed v0 default
+   *  when omitted). False when there is no selection to feather. */
+  featherSelection(sigma?: number): boolean;
+  /** The PAINT interaction machine (null until an image is ingested).
+   *  The brush / pencil / eraser tools drive it; it holds the pointer
+   *  sampling only — the stroke's pixels are engine state. */
+  brushMachine(): BrushMachine | null;
+  /** Merge into the brush parameters (the panel's Brush section). Takes
+   *  effect on the NEXT stroke — the in-flight one is frozen. */
+  /** Turn a channel into the selection — `red`|`green`|`blue`|`alpha`|
+   *  `luma`. Replaces the current selection (the panel's other combine
+   *  modes belong to the marquee tools, not to a channel load). */
+  selectionFromChannel(channel: string): boolean;
+  /** SELECTION → PATH: trace the selection and insert the result as real
+   *  vector polygons on the page, in DOCUMENT coordinates. The first
+   *  document mutation this bundle makes — everything else it does lands
+   *  in the engine or on the scene channel — so it is undoable through
+   *  the host's own history, not the image journal. */
+  selectionToPath(threshold?: number, tolerance?: number): Promise<boolean>;
+  /** PATH → SELECTION: read the selected vector element's anchors through
+   *  the host, flatten its curves, and make it the selection. */
+  selectionFromPath(): Promise<boolean>;
+  /** Update the type settings the tool reads on its next click. */
+  setType(
+    p: Partial<{
+      text: string;
+      family: string;
+      sizePx: number;
+      style: string | null;
+      baselineShiftPx: number;
+      hScalePct: number;
+      vScalePct: number;
+      skewDeg: number;
+      underline: boolean;
+      strikethrough: boolean;
+      ligatures: boolean;
+      align: "left" | "center" | "right";
+      textCase: "none" | "upper" | "lower";
+      trackingPerMille: number;
+      leadingPx: number | null;
+    }>,
+  ): void;
+  /** RASTER TYPE: paint shaped, rasterized text into the active layer at
+   *  the BASELINE origin `point` (image px).
+   *
+   *  The font comes from the HOST — `assets.getFontFace` serves bytes the
+   *  document already embeds, never a network fetch — so a bundle
+   *  renders exactly the faces the document has and stays offline by
+   *  construction. */
+  paintText(
+    point: [number, number],
+    text: string,
+    family: string,
+    sizePx: number,
+  ): Promise<boolean>;
+  /** Set the clone/heal anchor (the alt-click). Image px. */
+  setCloneSource(point: [number, number]): void;
+  /** Aligned: the source keeps a fixed offset from the cursor and tracks
+   *  the brush. Unaligned restarts from the anchor on every stroke,
+   *  which is how a motif is stamped repeatedly. */
+  setCloneAligned(aligned: boolean): void;
+  /** Merge into the dodge / burn / sponge options. */
+  setTone(patch: Partial<ToneOptions>): void;
+  setBrushParams(p: Partial<BrushParams>): void;
+  /** Load a Photoshop `.abr` brush library. Parses only — nothing about
+   *  the current brush changes until `applyBrushPreset`. Resolves false
+   *  (with the reader's own reason in `status`) when the bytes are not
+   *  an `.abr`.
+   *
+   *  ASYNC because it BOOTS the engine if needed: presets are
+   *  parameters, so a designer can pick a brush library before there is
+   *  any image to paint on, and refusing until after an ingest would be
+   *  an implementation detail leaking into the workflow. */
+  loadBrushLibrary(name: string, bytes: Uint8Array): Promise<boolean>;
+  /** Open the host picker for a `.abr` and load what comes back. Resolves
+   *  false when the user cancels OR no picker is wired — `pickFile`
+   *  answers `[]` for both, so the two are reported apart by probing
+   *  `shell.pickFile@1`. */
+  pickBrushLibrary(): Promise<boolean>;
+  /** Adopt a preset's parameters into the live brush. Applies ONLY what
+   *  the engine's tip has — size, hardness, spacing — and says in
+   *  `status` what the preset carried that could not be applied
+   *  (roundness/angle: the tip is circular; a non-pixel diameter). */
+  applyBrushPreset(index: number): boolean;
+  /** Forget the loaded library (the panel's Close). */
+  closeBrushLibrary(): void;
+  /** OPEN a stroke on the engine-held source with the current brush
+   *  params + the bound selection (both frozen for its duration).
+   *  GPU-only: false with an honest status when there is no device,
+   *  nothing ingested, or the engine refuses. */
+  brushBegin(tool: StrokeTool): Promise<boolean>;
+  /** Feed one pointer sample and re-submit the in-frame preview from the
+   *  painted pixels. False when no stroke is open. */
+  brushExtend(sample: BrushSample): Promise<boolean>;
+  /** CLOSE the stroke: the painted pixels become a NEW engine-held
+   *  source (the crop / fill commit pattern — DESTRUCTIVE into the
+   *  engine's working image; the document and the source file are
+   *  untouched, and re-ingesting the frame is the only restore this
+   *  plugin owns). Carries the selection over (the result is the same
+   *  size) and re-composites through the adjust chain. */
+  brushCommit(): Promise<boolean>;
+  /** ABANDON the stroke — the engine-held source was never mutated, so
+   *  this restores it exactly (and re-composites the frame). */
+  brushCancel(): void;
+  // ── THE LAYER GRAPH ───────────────────────────────────────────────
+  /** Add an empty transparent layer above the active one (it becomes
+   *  active) and re-composite. */
+  addLayer(name?: string): Promise<boolean>;
+  duplicateLayer(index: number): Promise<boolean>;
+  /** Remove a layer. Refused for the last one; NOT undoable (the
+   *  journal is a pixel log — stated in the panel). */
+  removeLayer(index: number): Promise<boolean>;
+  /** Move a layer in stack order (0 = bottom). */
+  reorderLayer(from: number, to: number): Promise<boolean>;
+  /** Choose the layer that paint / fill / bake land in. */
+  setActiveLayer(index: number): boolean;
+  setLayerVisible(index: number, visible: boolean): Promise<boolean>;
+  setLayerOpacity(index: number, opacity: number): Promise<boolean>;
+  setLayerBlend(index: number, blend: string): Promise<boolean>;
+  setLayerLocked(index: number, locked: boolean): boolean;
+  /** Make the current selection this layer's mask, then re-composite —
+   *  a mask changes what the page shows, unlike a lock. */
+  layerMaskFromSelection(index: number): Promise<boolean>;
+  /** Toggle whether the mask applies; the coverage is retained. */
+  setLayerMaskEnabled(index: number, enabled: boolean): Promise<boolean>;
+  /** Clip a layer to the one beneath it (or release it). Confines it to
+   *  the base's ALPHA, multiplied with any mask it already has. */
+  setLayerClipped(index: number, clipped: boolean): Promise<boolean>;
+  /** Group the CONTIGUOUS run `from..=to`. */
+  groupLayers(from: number, to: number, name?: string): Promise<boolean>;
+  /** Dissolve a group; its layers stay. */
+  ungroupLayers(id: number): Promise<boolean>;
+  setGroupVisible(id: number, visible: boolean): Promise<boolean>;
+  setGroupOpacity(id: number, opacity: number): Promise<boolean>;
+  setGroupName(id: number, name: string): Promise<boolean>;
+  setGroupBlend(id: number, blend: string): Promise<boolean>;
+  /** Pass-through (members reach the stack below) vs isolated. */
+  setGroupPassThrough(id: number, passThrough: boolean): Promise<boolean>;
+  /** Delete the mask outright. */
+  clearLayerMask(index: number): Promise<boolean>;
+  /** ADD LAYER MASK to `index` — reveal all (white, nothing changes until
+   *  it is painted) or hide all (black). The mask becomes the paint
+   *  tools' target, so the next stroke paints it. One undo step. */
+  addLayerMask(index: number, revealAll: boolean): Promise<boolean>;
+  /** Point the paint tools at `index`'s pixels or at its layer MASK (and
+   *  make it active). On the mask the brush paints the foreground's grey
+   *  and the eraser paints white (reveals). */
+  setEditTarget(index: number, target: EditTarget): boolean;
+  /** Convert a pixel layer into a smart object (one-way — the source is
+   *  preserved and going back would discard it). */
+  makeLayerSmart(index: number): Promise<boolean>;
+  /** Re-render a smart object at `scale` from its preserved source. */
+  renderLayerSmart(index: number, scale: number): Promise<boolean>;
+  setLayerName(index: number, name: string): boolean;
+  /** BAKE the panel's adjustment chain destructively into the ACTIVE
+   *  layer (journaled, so undoable). The chain is otherwise a
+   *  re-runnable preview that never mutates a pixel. */
+  bakeAdjustToLayer(): Promise<boolean>;
+  /** Stack the panel's chain as an ADJUSTMENT LAYER — the
+   *  non-destructive counterpart of {@link bakeAdjustToLayer}. No pixel
+   *  is written, so deleting the layer restores the original exactly. */
+  addAdjustmentLayer(): Promise<boolean>;
+  /** Undo / redo the newest journaled PIXEL edit (paint, fill, bake).
+   *  Layer STRUCTURE changes are not journaled. */
+  undo(): Promise<boolean>;
+  /** Walk BACK `n` journal steps — the History panel's "jump to here".
+   *  The journal is a stack, not a random-access log, so this is n
+   *  undos; holding every intermediate state to make it O(1) would cost
+   *  exactly what the byte budget exists to bound. */
+  undoSteps(n: number): Promise<boolean>;
+  /** Walk FORWARD `n` journal steps. */
+  redoSteps(n: number): Promise<boolean>;
+  redo(): Promise<boolean>;
+  /** Commit the crop: cut the machine's rect out of the source image, swap
+   *  the engine-held source to the cropped result, recompute the
+   *  histogram, and re-composite in-frame. Returns false when there is
+   *  nothing to crop or the rect is empty. */
+  commitCrop(): Promise<boolean>;
+  /** COMMITTED apply: adjust on the GPU + submit the in-frame layer. */
+  apply(): Promise<boolean>;
+  /** C-6 — claim the ingested image's tile resource so the renderer
+   *  pulls level-0 tiles for it (the v44 wire). Returns false when there
+   *  is nothing ingested, no target frame, or the host wires no resource
+   *  channel. Disposing the session (or re-ingesting) releases the claim. */
+  claimTiles(): boolean;
+  /** True while a tile resource is claimed (the panel reflects it). */
+  tilesClaimed(): boolean;
+  /** Clear the layer + return to identity params. */
+  reset(): Promise<void>;
+  dispose(): void;
+}
+
+/** The raw id string of an `ElementId`-ish value (wire ids carry a
+ *  string `id`; tolerate a plain string). Structural — no wire import. */
+export function elementIdOf(value: unknown): string | null {
+  if (typeof value === "string") return value;
+  if (typeof value === "object" && value !== null) {
+    const e = value as { id?: unknown };
+    if (typeof e.id === "string") return e.id;
+  }
+  return null;
+}
+
+/** Subdivisions per cubic segment when flattening a host path into the
+ *  pixel mask. The target is a per-pixel coverage, so more precision
+ *  than this buys nothing measurable and the cost stays bounded. */
+const CURVE_STEPS = 16;
+
+/** A cubic bezier at `t`. */
+function cubicAt(
+  p0: readonly [number, number],
+  p1: readonly [number, number],
+  p2: readonly [number, number],
+  p3: readonly [number, number],
+  t: number,
+): [number, number] {
+  const u = 1 - t;
+  const a = u * u * u;
+  const b = 3 * u * u * t;
+  const c = 3 * u * t * t;
+  const d = t * t * t;
+  return [
+    a * p0[0] + b * p1[0] + c * p2[0] + d * p3[0],
+    a * p0[1] + b * p1[1] + c * p2[1] + d * p3[1],
+  ];
+}
+
+export function createImageSession(host: BundleHost): ImageSession {
+  const listeners = new Set<() => void>();
+  let engine: ImageEngine | null = null;
+  let bootPromise: Promise<ImageEngine | null> | null = null;
+  let sceneSurface: ReturnType<typeof host.contribute.sceneLayer> | null = null;
+  // C-6 — the active tile-resource claim (null when nothing is claimed).
+  let tileClaim: { elementId: string; dispose(): void; bump(): void } | null =
+    null;
+  // K-3 — the decode worker pool (null when the host wires no workers /
+  // grants none → the session decodes on the main thread instead).
+  let decodePool: DecodePool | null = null;
+  let decodePoolPromise: Promise<DecodePool | null> | null = null;
+  // The crop interaction machine for the live source (rebuilt on ingest).
+  let cropMachineRef: CropMachine | null = null;
+  // The selection interaction machine (rebuilt alongside the crop
+  // machine; the selection itself is ENGINE state keyed to the handle).
+  let selectionMachineRef: SelectionMachine | null = null;
+  // The paint interaction machine (pointer sampling only — the stroke's
+  // base snapshot + coverage live engine-side).
+  let brushMachineRef: BrushMachine | null = null;
+  // The frame the IN-FLIGHT stroke previews into, resolved once at
+  // begin: per-sample geometry reads would put an async round-trip in
+  // the middle of a drag.
+  let strokeTarget: string | null = null;
+  let strokeBox: { w: number; h: number } | null = null;
+  let disposed = false;
+
+  const state: ImageSessionState = {
+    engine: "idle",
+    engineDetail: null,
+    gpu: false,
+    source: null,
+    params: freshIdentityParams(),
+    histogram: null,
+    compositedFrame: null,
+    busy: false,
+    status: "Select a placed image on the page, then choose Use selected frame.",
+    psd: null,
+    selection: null,
+    pattern: null,
+    colors: freshColors(),
+    livePreview: true,
+    wand: { tolerance: WAND_TOLERANCE_DEFAULT, contiguous: WAND_CONTIGUOUS_DEFAULT },
+    editingAdjustment: null,
+    gradientKind: "linear",
+    committedRev: null,
+    uncommitted: false,
+    saveBack: null,
+    brush: { ...DEFAULT_BRUSH_PARAMS, color: [...DEFAULT_BRUSH_PARAMS.color] },
+    blendModes: [],
+    strokeActive: false,
+    strokeStats: null,
+    layers: EMPTY_LAYER_STACK,
+    history: null,
+    layersNote: null,
+    type: {
+      text: "",
+      family: "Helvetica",
+      sizePx: 48,
+      style: null,
+      baselineShiftPx: 0,
+      hScalePct: 100,
+      vScalePct: 100,
+      skewDeg: 0,
+      underline: false,
+      strikethrough: false,
+      ligatures: true,
+      align: "left",
+      textCase: "none",
+      trackingPerMille: 0,
+      leadingPx: null,
+    },
+    ptPerPx: null,
+    cloneSource: null,
+    tone: { ...DEFAULT_TONE },
+    channels: null,
+    brushLibrary: null,
+    brushLibraryName: null,
+    brushPreset: null,
+  };
+  /** The retained PSD parse handle (wasm-side), when state.psd is set. */
+  let psdHandle: number | null = null;
+  /** The ingested source's container, for the PNG/JPEG save-back lane
+   *  ("jpeg" only when the ORIGINAL bytes were a JPEG — a re-encode
+   *  never invents a lossy format). */
+  let sourceFormat: RasterFormat | "psd" | null = null;
+  /** Pixel edits since the last ingest (layer ops, strokes, fills,
+   *  filters, crop, resize, undo/redo). The PSD exporter reads it: the
+   *  byte-identical re-emit is only correct while it is 0, because the
+   *  retained parse never sees an edit that lands in the layer stack. */
+  let pixelEdits = 0;
+  /** The chain of every adjustment layer this session created, by layer
+   *  id — the panel's own parameters, so selecting the layer can show
+   *  them again. (Layers opened from a PSD have no entry; their chain is
+   *  read-only here.) */
+  const adjustmentParams = new Map<number, AdjustParams>();
+  /** The panel chain to restore when the sliders unbind from a layer. */
+  let paramsBeforeBinding: AdjustParams | null = null;
+
+  /** Edit the bound adjustment layer: write the chain, recomposite
+   *  (coalesced), keep the mirror. */
+  const editBoundAdjustment = () => {
+    const bound = state.editingAdjustment;
+    if (!bound || !engine) return false;
+    // By id: a reorder or a removal moves indexes under the binding.
+    const index = state.layers.layers.findIndex((l) => l.id === bound.id);
+    if (index < 0) {
+      state.editingAdjustment = null;
+      return false;
+    }
+    bound.index = index;
+    try {
+      engine.layersSetAdjustment(index, state.params);
+    } catch (err) {
+      setStatus(`Adjustment edit failed: ${err instanceof Error ? err.message : err}`);
+      emit();
+      return true;
+    }
+    adjustmentParams.set(bound.id, structuredClone(state.params));
+    void recomposite();
+    return true;
+  };
+
+  /** The ingested frame's element id (the object form the metadata and
+   *  mutation doors need), or null for an import. */
+  let sourceRef: ElementId | null = null;
+
+  /** The largest PNG the bake sends over the JSON lane, where the image
+   *  travels as a number array and past this the transfer itself is the
+   *  problem. A host that takes mutation bytes as bytes
+   *  (`document.mutateBinary@1`) has no such limit. */
+  const MAX_BAKED_BYTES = 8 * 1024 * 1024;
+  /** Committed revisions kept per frame once old ones can be deleted. */
+  const KEEP_REVISIONS = 8;
+
+  /** Reopen a committed frame: when the frame's image is EXACTLY what the
+   *  last commit baked, restore that commit's layers; otherwise the image
+   *  was changed outside this plugin and opens flat, saying so. */
+  const reopenFromDocument = async (ref: ElementId, placed: Uint8Array) => {
+    if (!engine) return;
+    type Marker = { v?: number; data?: Partial<CommittedMarker> } | null;
+    const marker = (await host.document.getMetadata(ref).catch(() => null)) as unknown as Marker;
+    if (marker?.v !== 2) return;
+    // The frame HAS committed revisions whether or not their layers can be
+    // restored below, so the next commit continues their numbering. Every
+    // branch that opens flat used to leave this unset, and that commit
+    // then rewrote r1.json, a record the document's undo can still reach.
+    if (typeof marker.data?.rev === "number") state.committedRev = marker.data.rev;
+    if (!marker.data?.record) return;
+    const data = marker.data as CommittedMarker;
+    if ((await sha256Hex(placed)) !== data.baked) {
+      state.layersNote =
+        "This frame's image was changed outside paged.image since its layers " +
+        "were stored, so it opens as one layer.";
+      return;
+    }
+    const stored = await readSession(host.parts, data.record);
+    if (!stored.ok) {
+      state.layersNote = `Stored layers could not be read (${stored.reason}); opened as one layer.`;
+      return;
+    }
+    try {
+      await engine.layersImport(stored.manifest, stored.buffers);
+    } catch (err) {
+      state.layersNote = `Stored layers could not be restored (${err instanceof Error ? err.message : err}); opened as one layer.`;
+      return;
+    }
+    state.uncommitted = false;
+    // A revision written through the OBJECT MODEL in a realm without a
+    // GPU (object-model/image-objects.ts): smart objects whose source was
+    // replaced still carry the old render, and the frame still shows the
+    // previous composite. This realm has the device — finish both, and
+    // leave the result to be committed like any other edit.
+    const record = stored.record as { pending?: boolean; pendingRender?: number[] };
+    let finished = false;
+    if (record.pendingRender?.length) {
+      const smart = readPgil(stored.manifest, stored.buffers).layers;
+      for (const id of record.pendingRender) {
+        const index = engine.layers().layers.findIndex((l) => l.id === id);
+        const scale = smart.find((l) => l.id === id)?.smart?.scale ?? 1;
+        if (index < 0) continue;
+        try {
+          await engine.layerRenderSmart(index, scale);
+          finished = true;
+        } catch (err) {
+          host.log.warn(`image: re-rendering smart object ${id} failed: ${err}`);
+        }
+      }
+      if (finished) await engine.layersComposite();
+    }
+    if (record.pending || (data as { pending?: boolean }).pending || finished) state.uncommitted = true;
+    refreshLayers();
+    refreshHistogram();
+    bumpTiles();
+    state.layersNote = `Reopened ${state.layers.layers.length} stored layer${
+      state.layers.layers.length === 1 ? "" : "s"
+    } (revision ${data.rev}${state.uncommitted ? "; its composite is new and will be committed" : ""}).`;
+  };
+
+  /** True when the frame holds no placed image: an empty frame, or one
+   *  whose link no longer resolves. False when it holds one, and false
+   *  when this host cannot say — a frame we cannot read is never
+   *  overwritten on a guess. */
+  const frameIsEmpty = async (id: string): Promise<boolean> => {
+    if (!host.supports("assets.images@1")) return false;
+    try {
+      return (await host.assets.getPlacedImage(id)) === null;
+    } catch {
+      return false;
+    }
+  };
+
+  /** The revision the frame's marker names, or null when it carries no
+   *  committed session. A commit into a frame that already has one
+   *  continues its numbering: revision records are never rewritten, and
+   *  the document's undo can still land on the old one. */
+  const markerRevision = async (ref: ElementId): Promise<number | null> => {
+    type Marker = { v?: number; data?: { rev?: unknown } } | null;
+    const marker = (await host.document.getMetadata(ref).catch(() => null)) as unknown as Marker;
+    return marker?.v === 2 && typeof marker.data?.rev === "number" ? marker.data.rev : null;
+  };
+
+  /** The engine handle of the defined pattern (`definePattern`). */
+  let patternHandle: number | null = null;
+
+  const emit = () => {
+    for (const l of [...listeners]) l();
+  };
+  const setStatus = (s: string) => {
+    state.status = s;
+    emit();
+  };
+
+  // C-1 — the scene channel (lazy; warns once via supports()).
+  const scene = () => {
+    if (!host.supports("rendering.sceneLayer@1")) return null;
+    if (!sceneSurface) sceneSurface = host.contribute.sceneLayer();
+    return sceneSurface;
+  };
+
+  /** Boot the engine + GPU once, on first need. */
+  const ensureEngine = async (): Promise<ImageEngine | null> => {
+    if (engine) return engine;
+    if (!bootPromise) {
+      state.engine = "booting";
+      emit();
+      bootPromise = (async () => {
+        try {
+          const e = await bootEngine();
+          const gpu = await e.initGpu();
+          if (disposed) return null;
+          engine = e;
+          state.engine = "ready";
+          state.gpu = gpu;
+          try {
+            // The blend picker's options come from the kernel registry,
+            // never from a list this side could let drift.
+            state.blendModes = e.brushBlendModes();
+          } catch (err) {
+            host.log.debug("blend-mode registry read failed", err);
+            state.blendModes = [];
+          }
+          state.engineDetail = gpu
+            ? null
+            : "WebGPU unavailable — adjustments disabled (kernels are " +
+              "GPU-only; identity composite still works)";
+          emit();
+          return e;
+        } catch (err) {
+          state.engine = "unavailable";
+          state.engineDetail = err instanceof Error ? err.message : String(err);
+          emit();
+          return null;
+        }
+      })();
+    }
+    return bootPromise;
+  };
+
+  // K-3 — boot the decode worker pool once, on first ingest. The pool is
+  // an OPTIONAL accelerator: when the host wires no workers (or grants
+  // none) createDecodePool returns null and decode falls back to the
+  // main-thread engine — same pixels, just on-thread (the honest
+  // degradation; never fake parallelism).
+  const ensureDecodePool = async (): Promise<DecodePool | null> => {
+    if (decodePool) return decodePool;
+    if (!decodePoolPromise) {
+      decodePoolPromise = createDecodePool(host).then((pool) => {
+        if (disposed) {
+          pool?.dispose();
+          return null;
+        }
+        decodePool = pool;
+        return pool;
+      });
+    }
+    return decodePoolPromise;
+  };
+
+  /** Decode bytes to an engine-held handle. K-3 fast path: when the worker
+   *  pool is available, the codec/PSD CPU decode runs OFF the main thread
+   *  and the raw RGBA is registered into the engine here; otherwise the
+   *  engine decodes on the main thread. Both yield the same handle the
+   *  adjust + tile paths consume. */
+  const decodeToHandle = async (bytes: Uint8Array): Promise<DecodedInfo> => {
+    if (!engine) throw new Error("engine not booted");
+    const pool = await ensureDecodePool();
+    if (pool) {
+      // The pool transfers the input buffer — copy first so the caller's
+      // bytes survive (the importer may reuse them).
+      const copy = bytes.slice();
+      const decoded = await pool.decode(copy);
+      const info = engine.ingestRgba8(
+        decoded.width,
+        decoded.height,
+        decoded.rgba,
+      );
+      // The worker already ran the display transform inside its own
+      // `decode_image`; `ingestRgba8` takes raw pixels and so reports
+      // "sRGB assumed". Restore the treatment the worker measured, or the
+      // panel would understate what happened on the K-3 fast path.
+      return { ...info, display: displayTreatmentOf(decoded.display) };
+    }
+    return engine.decode(bytes);
+  };
+
+  const releaseTiles = () => {
+    if (tileClaim) {
+      tileClaim.dispose();
+      tileClaim = null;
+    }
+  };
+
+  /** The pixels behind the live handle changed IN PLACE (a layer edit
+   *  re-composites into the same handle), so the renderer's cached tiles
+   *  are stale — bump the claim's revision to make it re-pull. */
+  const bumpTiles = () => {
+    tileClaim?.bump();
+  };
+
+  /** The source pixels changed after ingest. A staged save-back now
+   *  describes pixels that no longer exist, so it goes too. */
+  const markPixelsEdited = () => {
+    pixelEdits += 1;
+    state.saveBack = null;
+    state.uncommitted = true;
+  };
+
+  /** Re-read the engine's layer stack + undo readout into state. */
+  const refreshLayers = () => {
+    if (!engine || !state.source) {
+      state.layers = EMPTY_LAYER_STACK;
+      state.history = null;
+      return;
+    }
+    try {
+      state.layers = engine.layers();
+      state.history = engine.layersHistory();
+    } catch (err) {
+      host.log.debug("layer readout failed", err);
+      state.layers = EMPTY_LAYER_STACK;
+      state.history = null;
+    }
+  };
+
+  /** Fold the stack into the bound engine-held image, re-read the
+   *  readouts, and put the adjusted composite back in-frame. Every layer
+   *  mutation ends here so the canvas and the panel can never disagree.
+   *  A one-layer stack short-circuits engine-side (no GPU, no dispatch). */
+  const recomposite = (): Promise<boolean> => recompositeLatest();
+
+  /** The fold itself. Coalesced latest-wins (`coalesce.ts`): a burst of
+   *  slider steps costs at most two folds, each of the CURRENT stack. */
+  const recompositeNow = async (): Promise<boolean> => {
+    if (!engine || !state.source) return false;
+    try {
+      await engine.layersComposite();
+    } catch (err) {
+      // The stack DID change even though the fold could not run (no
+      // device); show the truth rather than a stale palette.
+      refreshLayers();
+      setStatus(
+        `Composite failed: ${err instanceof Error ? err.message : err}`,
+      );
+      emit();
+      return false;
+    }
+    bumpTiles();
+    markPixelsEdited();
+    refreshLayers();
+    refreshHistogram();
+    if (state.source.elementId) await api.apply();
+    else emit();
+    return true;
+  };
+
+  const recompositeLatest = latestWins(recompositeNow);
+
+  /** Adopt a commit's result. When the engine handed back the SAME
+   *  handle it edited in place (the layer lane) — the pixels changed but
+   *  the handle did not, so freeing it would destroy the live document
+   *  and the tile claim only needs a revision bump. A DIFFERENT handle
+   *  is the pre-layer destructive commit: release the claim, free the
+   *  old pixels, adopt the new. */
+  const swapSource = (
+    src: SourceImage,
+    next: { handle: number; width: number; height: number },
+  ) => {
+    markPixelsEdited();
+    if (next.handle === src.handle) {
+      bumpTiles();
+    } else {
+      releaseTiles();
+      engine?.freeImage(src.handle);
+      src.handle = next.handle;
+    }
+    src.width = next.width;
+    src.height = next.height;
+  };
+
+  /** The layer-mutation sandwich: run `mutate` engine-side, then
+   *  re-composite. A refusal (locked layer, last layer, unknown blend)
+   *  becomes the panel's status verbatim — the engine owns the reason. */
+  const layerOp = async (
+    what: string,
+    mutate: () => void,
+  ): Promise<boolean> => {
+    if (!engine || !state.source) {
+      setStatus("Nothing ingested — ingest a placed image first.");
+      return false;
+    }
+    try {
+      mutate();
+    } catch (err) {
+      setStatus(`${what} failed: ${err instanceof Error ? err.message : err}`);
+      refreshLayers();
+      emit();
+      return false;
+    }
+    return recomposite();
+  };
+
+  /** After a mask edit: the stack changed what it SHOWS, so re-read the
+   *  rows and re-composite. A mask is unlike a lock in exactly this way —
+   *  it changes pixels on the page without changing any layer's pixels. */
+  const finishMaskEdit = async (): Promise<boolean> => {
+    refreshLayers();
+    return recomposite();
+  };
+
+  /** One shape for the four group-property setters: they differ only in
+   *  which door they call, and duplicating the guard and the recomposite
+   *  four times is how they drift apart. */
+  const groupEdit = async (run: () => void): Promise<boolean> => {
+    if (!engine || !state.source) return false;
+    try {
+      run();
+    } catch (err) {
+      setStatus(`Group edit failed: ${err instanceof Error ? err.message : err}`);
+      return false;
+    }
+    return finishMaskEdit();
+  };
+
+  /** Undo/redo one journaled PIXEL edit. An empty label means the
+   *  journal had nothing — said plainly rather than as a silent no-op,
+   *  since a bounded journal CAN run out earlier than the user expects. */
+  const historyStep = async (undo: boolean): Promise<boolean> => {
+    if (!engine || !state.source) {
+      setStatus("Nothing ingested — ingest a placed image first.");
+      return false;
+    }
+    // An in-flight stroke holds a base snapshot of the active layer;
+    // undoing under it would commit into pixels that no longer exist.
+    discardStroke();
+    let label: string;
+    try {
+      label = undo ? await engine.layersUndo() : await engine.layersRedo();
+    } catch (err) {
+      setStatus(
+        `${undo ? "Undo" : "Redo"} failed: ${err instanceof Error ? err.message : err}`,
+      );
+      return false;
+    }
+    if (!label) {
+      const h = state.history;
+      setStatus(
+        `Nothing to ${undo ? "undo" : "redo"}.` +
+          (undo && h?.dropped
+            ? ` ${h.dropped} older edit${h.dropped === 1 ? " is" : "s are"} past the ` +
+              "undo budget and permanent."
+            : ""),
+      );
+      emit();
+      return false;
+    }
+    const ok = await recomposite();
+    if (ok) setStatus(`${undo ? "Undid" : "Redid"} “${label}”.`);
+    return ok;
+  };
+
+  /** Drop an in-flight stroke engine-side (the base pixels were never
+   *  mutated, so this is a true restore). Shared by the explicit cancel
+   *  and by every path that pulls the source out from under a stroke. */
+  const discardStroke = () => {
+    if (engine && state.strokeActive) {
+      try {
+        engine.brushCancel();
+      } catch (err) {
+        host.log.debug("stroke cancel failed", err);
+      }
+    }
+    state.strokeActive = false;
+    state.strokeStats = null;
+    strokeTarget = null;
+    strokeBox = null;
+    brushMachineRef?.cancel();
+  };
+
+  const freeSource = () => {
+    // A stroke holds the OLD handle's base snapshot — a re-ingest under
+    // one would commit into pixels that no longer exist.
+    discardStroke();
+    // A claim points at THIS source's handle — release it before the
+    // pixels go (the renderer drops to the whole-image fallback lane).
+    releaseTiles();
+    // The stack composites INTO the source handle, so it goes with it
+    // (the engine drops it on free_image too — this keeps the mirror).
+    if (engine) engine.layersClose();
+    state.layers = EMPTY_LAYER_STACK;
+    state.history = null;
+    state.layersNote = null;
+    if (state.source && engine) engine.freeImage(state.source.handle);
+    state.source = null;
+    state.histogram = null;
+    state.channels = null;
+    cropMachineRef = null;
+    selectionMachineRef = null;
+    brushMachineRef = null;
+    state.selection = null;
+    if (psdHandle !== null && engine) engine.psdClose(psdHandle);
+    psdHandle = null;
+    state.psd = null;
+    sourceFormat = null;
+    state.saveBack = null;
+    pixelEdits = 0;
+    sourceRef = null;
+    state.committedRev = null;
+    state.uncommitted = false;
+    // What was SET ON this image goes with it, so the next image starts
+    // clean. The panel's values used to survive a re-ingest: a PSD opened
+    // after a photo's auto-enhance inherited its temperature, tint and
+    // levels, and with them the PSD export took the flattening lane and
+    // wrote one "Adjusted" layer instead of the file's own. The slider
+    // binding and the chains behind it are keyed by LAYER ID, which the
+    // next stack reuses; the healing source is in this image's pixels;
+    // the pt-per-px scale is this image's layout.
+    state.params = freshIdentityParams();
+    state.editingAdjustment = null;
+    paramsBeforeBinding = null;
+    adjustmentParams.clear();
+    state.cloneSource = null;
+    state.ptPerPx = null;
+    freeProxy();
+  };
+
+  /** "8BPS" — the PSD/PSB magic. */
+  const isPsd = (bytes: Uint8Array): boolean =>
+    bytes.length >= 4 &&
+    bytes[0] === 0x38 &&
+    bytes[1] === 0x42 &&
+    bytes[2] === 0x50 &&
+    bytes[3] === 0x53;
+
+  /** Sniff the ORIGINAL container so the save-back lane re-encodes into
+   *  the format the file already was (never inventing a lossy one).
+   *  Unknown containers fall to PNG — the lossless default. */
+  const sniffFormat = (bytes: Uint8Array): RasterFormat | "psd" => {
+    if (isPsd(bytes)) return "psd";
+    if (
+      bytes.length >= 3 &&
+      bytes[0] === 0xff &&
+      bytes[1] === 0xd8 &&
+      bytes[2] === 0xff
+    )
+      return "jpeg";
+    return "png";
+  };
+
+  /** Strip the extension off a display name (a link URI or file name) so
+   *  the save-back can stamp its own. */
+  const baseName = (name: string): string => {
+    const leaf = name.split(/[\\/]/).pop() || "image";
+    const dot = leaf.lastIndexOf(".");
+    return dot > 0 ? leaf.slice(0, dot) : leaf;
+  };
+
+  /** Open the PSD structural session for an imported PSD (the mutatable
+   *  tier's editor reach). Failure is honest-null — the raster lane
+   *  (composite decode) is unaffected. */
+  const openPsdSession = (name: string, bytes: Uint8Array): void => {
+    if (!engine || !isPsd(bytes)) return;
+    try {
+      psdHandle = engine.psdOpen(bytes);
+      state.psd = { name, layers: engine.psdLayers(psdHandle) };
+    } catch {
+      psdHandle = null;
+      state.psd = null;
+    }
+  };
+
+  /** Open the layer stack from the retained PSD parse — the file's own
+   *  layer tree instead of its merged composite.
+   *
+   *  The engine DECLINES for every PSD whose structure the layer model
+   *  does not reproduce, and for smart objects whose stored render the
+   *  file's composite does not vouch for. That refusal is not a failure: it is the correct answer,
+   *  because a layered open replaces Photoshop's OWN composite with
+   *  ours. Either way `state.layersNote` says what happened, so the
+   *  flatten is never silent. */
+  const openLayersFromPsd = async (): Promise<void> => {
+    state.layersNote = null;
+    if (!engine || !state.source || psdHandle === null) return;
+    try {
+      const n = await engine.layersOpenFromPsd(state.source.handle, psdHandle);
+      // Our composite of the layer tree, not the file's merged one.
+      await engine.layersComposite();
+      state.layersNote = `Opened the PSD's own ${n} layer${n === 1 ? "" : "s"}.`;
+    } catch (err) {
+      const why = err instanceof Error ? err.message : String(err);
+      state.layersNote = `Layered PSD import declined — ${why}`;
+    }
+  };
+
+  const refreshPsdLayers = (): void => {
+    if (psdHandle === null || !engine || !state.psd) return;
+    try {
+      state.psd = { ...state.psd, layers: engine.psdLayers(psdHandle) };
+    } catch {
+      // A failed refresh leaves the last-known list; edits still saved.
+    }
+  };
+
+  /** Recompute the histogram + the CHANNELS readout + (re)build the crop
+   *  machine for the live engine-held source. Called after a decode/
+   *  ingest and after a crop commit (both change the source pixels).
+   *  Both readouts come from the SAME buffer in ONE pass
+   *  (`image_readout`), which is why the Channels panel's means can never
+   *  disagree with the histogram it sits under. A read failure is non-fatal (the panel
+   *  just shows no readout). */
+  const refreshHistogram = () => {
+    if (!engine || !state.source) return;
+    // One pass for both readouts where the engine has it.
+    if (typeof engine.readout === "function") {
+      try {
+        const r = engine.readout(state.source.handle);
+        state.histogram = r.histogram;
+        state.channels = r.channels;
+        return;
+      } catch (err) {
+        host.log.debug("readout failed", err);
+      }
+    }
+    try {
+      state.histogram = engine.histogram(state.source.handle);
+    } catch (err) {
+      host.log.debug("histogram read failed", err);
+      state.histogram = null;
+    }
+    try {
+      state.channels = engine.channelStats(state.source.handle);
+    } catch (err) {
+      host.log.debug("channel stats read failed", err);
+      state.channels = null;
+    }
+  };
+
+  const refreshSourceReadout = () => {
+    if (!engine || !state.source) return;
+    refreshHistogram();
+    // THE LAYER GRAPH — bind a stack to the LIVE handle so painting
+    // always lands in a layer. Re-opening on the same handle keeps the
+    // stack (and its undo history); a crop / resize / straighten
+    // registers a DIFFERENT handle, so those commits re-open over the
+    // result — i.e. they FLATTEN, which the panel says.
+    try {
+      engine.layersOpen(state.source.handle);
+    } catch (err) {
+      host.log.debug("layer stack open failed", err);
+    }
+    refreshLayers();
+    cropMachineRef = createCropMachine(
+      engine,
+      state.source.width,
+      state.source.height,
+    );
+    // Bind the engine selection to the LIVE handle (a crop/resize swap
+    // is a different handle, so the old selection drops engine-side —
+    // honest: a selection is meaningless across resolutions) and rebuild
+    // the machine + readout.
+    try {
+      engine.selectionBind(state.source.handle);
+    } catch (err) {
+      host.log.debug("selection bind failed", err);
+    }
+    // The third argument is what makes Quick Selection more than an
+    // inert tool: no engine door reports which handle a selection is
+    // bound to, so the grower needs the source handed to it or it has
+    // no pixels to read and honestly does nothing.
+    selectionMachineRef = createSelectionMachine(
+      engine,
+      () => api.refreshSelection(),
+      () =>
+        state.source
+          ? {
+              handle: state.source.handle,
+              width: state.source.width,
+              height: state.source.height,
+            }
+          : null,
+      {},
+      () => state.wand,
+    );
+    state.selection = engine.selectionStats();
+    // The paint machine is pure pointer bookkeeping, but it is rebuilt
+    // with the source so a stale sample queue can never leak across a
+    // crop / resize / fill / paint handle swap.
+    brushMachineRef = createBrushMachine();
+  };
+
+  /** The frame's content box in page pt (falls back to the image's own
+   *  extent when the geometry read misses — an honest 1:1 rather than a
+   *  throw). */
+  const frameBox = async (
+    target: string,
+  ): Promise<{ w: number; h: number }> => {
+    const src = state.source;
+    const fallback = { w: src?.width ?? 1, h: src?.height ?? 1 };
+    try {
+      const geom = await host.document.elementGeometry([
+        host.selection.get().find((i) => elementIdOf(i) === target) ??
+          ({ kind: "rectangle", id: target } as never),
+      ]);
+      const bounds = geom[0]?.bounds;
+      if (!bounds) return fallback;
+      const [top, left, bottom, right] = bounds;
+      return { w: Math.max(right - left, 1), h: Math.max(bottom - top, 1) };
+    } catch (err) {
+      host.log.debug("frame geometry read failed", err);
+      return fallback;
+    }
+  };
+
+  /** Submit one whole-image RGBA8 payload as the C-1 Stage-A image scene
+   *  item, aspect-fit + centered in the frame's content box (the layer is
+   *  clipped + transformed by core; §8.5 — the plugin never compensates).
+   *  The ONE composite path: the committed Apply and the live stroke
+   *  preview both land here, so they cannot lay pixels out differently. */
+  /** What the frame's scene image last was, when it went through the
+   *  image door — a brush sample may then patch only its tiles. */
+  let submitted: { target: string; width: number; height: number } | null = null;
+
+  /** Patch the rectangle a brush sample changed instead of resending the
+   *  image. False when the host or the last submission does not allow it
+   *  (the caller then resends the whole image). */
+  const submitDirty = async (target: string, rgba: Uint8Array, width: number, height: number) => {
+    const surface = scene();
+    const images = surface && imageScene(surface);
+    const rect = engine?.brushDirtyRect();
+    if (
+      !images ||
+      !rect ||
+      !submitted ||
+      submitted.target !== target ||
+      submitted.width !== width ||
+      submitted.height !== height
+    ) {
+      return false;
+    }
+    const tile = new Uint8Array(rect.w * rect.h * 4);
+    for (let row = 0; row < rect.h; row++) {
+      const from = ((rect.y + row) * width + rect.x) * 4;
+      tile.set(rgba.subarray(from, from + rect.w * 4), row * rect.w * 4);
+    }
+    await images.submitImageTiles(
+      target,
+      [{ x: rect.x, y: rect.y, width: rect.w, height: rect.h, rgba: tile }],
+      { transfer: true },
+    );
+    return true;
+  };
+
+  const submitLayer = async (
+    target: string,
+    rgba: Uint8Array,
+    width: number,
+    height: number,
+    box: { w: number; h: number },
+    // The size the image is LAID OUT at, when the pixels are a smaller
+    // preview proxy of it. The layout (and `ptPerPx`) always follows the
+    // full-resolution image, so a proxy lands exactly where the final
+    // pixels will.
+    layoutWidth = width,
+    layoutHeight = height,
+  ): Promise<boolean> => {
+    const surface = scene();
+    if (!surface) return false;
+    const scale = Math.min(box.w / layoutWidth, box.h / layoutHeight);
+    // The SAME number the layout uses — see `state.ptPerPx`. Recorded
+    // here so a panel converting image px to points cannot disagree
+    // with what was drawn.
+    state.ptPerPx = scale;
+    const w = layoutWidth * scale;
+    const h = layoutHeight * scale;
+    // Protocol 66: the image crosses as bytes, and the frame's pages
+    // alone repaint. The `number[]` item below is the older host's lane.
+    const images = imageScene(surface);
+    if (images) {
+      await images.submitImage(target, {
+        rgba,
+        width,
+        height,
+        dest: [(box.w - w) / 2, (box.h - h) / 2, w, h],
+      });
+      submitted = { target, width, height };
+      state.compositedFrame = target;
+      return true;
+    }
+    submitted = null;
+    await surface.submit(target, {
+      items: [
+        {
+          kind: "image",
+          rgba: Array.from(rgba),
+          width,
+          height,
+          x: (box.w - w) / 2,
+          y: (box.h - h) / 2,
+          w,
+          h,
+        },
+      ],
+    });
+    state.compositedFrame = target;
+    return true;
+  };
+
+  // ── LIVE PREVIEW ────────────────────────────────────────────────────
+  //
+  // A slider change re-runs the adjustment chain on a PROXY — the source
+  // resampled (Lanczos) to about what the frame shows — and puts it in
+  // the frame at once; the full-resolution result follows when the
+  // sliders rest. Before this, nothing moved on the page until Apply.
+  // Latest-wins (`coalesce.ts`): a drag costs at most one preview in
+  // flight and one trailing preview of the final values.
+
+  /** The resampled source the preview runs on, or null. Rebuilt when the
+   *  source pixels or the wanted size change. */
+  let proxy: { handle: number; width: number; height: number; key: string } | null = null;
+
+  const freeProxy = () => {
+    if (proxy && engine) engine.freeImage(proxy.handle);
+    proxy = null;
+  };
+
+  /** Proxy size: the frame box at 2 px per pt (a HiDPI screen at 100 %),
+   *  never larger than the source. */
+  const proxySize = (box: { w: number; h: number }, src: SourceImage) => {
+    const fit = Math.min(1, (2 * box.w) / src.width, (2 * box.h) / src.height);
+    return {
+      w: Math.max(1, Math.round(src.width * fit)),
+      h: Math.max(1, Math.round(src.height * fit)),
+    };
+  };
+
+  /** Full resolution after the sliders rest this long (ms). */
+  const PREVIEW_SETTLE_MS = 400;
+  let settleTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const previewNow = async (): Promise<boolean> => {
+    const src = state.source;
+    const target = src?.elementId;
+    if (!src || !engine || !target || !state.gpu || !scene()) return false;
+    const box = await frameBox(target);
+    const { w, h } = proxySize(box, src);
+    // A selection is bound at SOURCE resolution, so a masked chain cannot
+    // run on the proxy; and a proxy as large as the source is the source.
+    const direct = !!state.selection || (w === src.width && h === src.height);
+    try {
+      let handle = src.handle;
+      let pw = src.width;
+      let ph = src.height;
+      if (!direct) {
+        const key = `${src.handle}:${pixelEdits}:${w}x${h}`;
+        if (proxy?.key !== key) {
+          freeProxy();
+          const r = await engine.resize(src.handle, w, h, "lanczos3");
+          proxy = { handle: r.handle, width: r.width, height: r.height, key };
+        }
+        ({ handle, width: pw, height: ph } = proxy!);
+      }
+      const rgba = await engine.adjust(handle, state.params);
+      await submitLayer(target, rgba, pw, ph, box, src.width, src.height);
+      return true;
+    } catch (err) {
+      host.log.debug("live preview failed", err);
+      return false;
+    }
+  };
+  const previewLatest = latestWins(previewNow);
+
+  /** Called by every parameter setter. */
+  let lastPreview: Promise<boolean> = Promise.resolve(false);
+  const schedulePreview = () => {
+    if (editBoundAdjustment()) return;
+    if (!state.livePreview || !state.source?.elementId || !state.gpu) return;
+    lastPreview = previewLatest();
+    if (settleTimer) clearTimeout(settleTimer);
+    settleTimer = setTimeout(() => {
+      settleTimer = null;
+      // After the last preview has landed, so the proxy can never be the
+      // image left in the frame. (A change during the full-resolution
+      // pass schedules another settle, which re-runs it.)
+      void lastPreview.then(() => api.apply());
+    }, PREVIEW_SETTLE_MS);
+  };
+
+  const clearLayer = async () => {
+    if (state.compositedFrame) {
+      await scene()?.clear(state.compositedFrame);
+      state.compositedFrame = null;
+      emit();
+    }
+  };
+
+  /**
+   * The `x-paged:media.paged.image` marker that makes a frame
+   * double-click-enterable (ADR-023 / K-13). Version 1; `data`
+   * deliberately carries NO state — the marker says who owns the
+   * frame's pixels and nothing else, so it can never disagree with the
+   * engine about them.
+   *
+   * Takes the real `ElementId`, not the string id the session stores:
+   * `ElementId` is a discriminated union over element KIND, so a bare
+   * id cannot reconstruct one, and inventing a kind here would be a
+   * guess the document would have to live with.
+   */
+  const stampOwnership = async (id: ElementId): Promise<void> => {
+    try {
+      // Already marked — do NOT write. A no-op write is still a
+      // MUTATION, so re-selecting the same frame would push an undo
+      // step for something the user never did.
+      if (await host.document.getMetadata(id)) return;
+      await host.document.setMetadata(id, { v: 1, data: { owns: "pixels" } });
+    } catch (err) {
+      host.log.debug("ownership marker not written", err);
+    }
+  };
+
+  const decodeInto = async (
+    name: string,
+    bytes: Uint8Array,
+    origin: "selection" | "import",
+    elementId: string | null,
+  ): Promise<boolean> => {
+    if (!engine) return false;
+    try {
+      // K-3 — off-main-thread decode when the worker pool is available;
+      // honest main-thread fallback otherwise.
+      const info = await decodeToHandle(bytes);
+      freeSource();
+      state.source = {
+        name,
+        width: info.width,
+        height: info.height,
+        handle: info.handle,
+        origin,
+        elementId,
+        display: info.display,
+        depthReduced: info.depthReduced,
+      };
+      sourceFormat = sniffFormat(bytes);
+      state.saveBack = null;
+      // The PSD structural session rides EVERY PSD ingest (the K-2
+      // import AND the C-5 selection lane) — it is what the PSD
+      // save-back writes into.
+      openPsdSession(name, bytes);
+      // A PSD carries a LAYER TREE; open the stack from it rather than
+      // from the flattened composite when — and only when — the layer
+      // model reproduces it faithfully. The engine refuses (with its
+      // reason) otherwise and we keep the flatten, saying so.
+      await openLayersFromPsd();
+      // Compute the levels/curves histogram, bind the stack + selection,
+      // and build the crop machine.
+      refreshSourceReadout();
+      const lane = decodePool ? " (off-thread)" : "";
+      setStatus(
+        `${name} — ${info.width}×${info.height} decoded${lane}.` +
+          (state.layersNote ? ` ${state.layersNote}` : ""),
+      );
+      return true;
+    } catch (err) {
+      // The engine's honest unsupported/decode message (16-bit, CMYK, …).
+      setStatus(`Decode failed: ${err instanceof Error ? err.message : err}`);
+      return false;
+    }
+  };
+
+  // Clear-on-deselect (the M4 contract): when the composited frame
+  // leaves the selection, the in-frame layer clears — the preview is
+  // session-scoped, the document untouched.
+  const selectionSub = host.selection.onDidChange((ids) => {
+    if (!state.compositedFrame) return;
+    const still = ids.some((id) => elementIdOf(id) === state.compositedFrame);
+    if (!still) {
+      // Edits the document has not been given yet go into it first: a
+      // deselect must not be the moment work quietly stops existing.
+      if (state.uncommitted && sourceRef) {
+        void api.commitToDocument().then(() => clearLayer());
+        return;
+      }
+      void clearLayer();
+      setStatus("Frame deselected — in-frame preview cleared.");
+    }
+  });
+
+  const api: ImageSession = {
+    state: () => state,
+
+    onDidChange(listener) {
+      listeners.add(listener);
+      return {
+        dispose() {
+          listeners.delete(listener);
+        },
+      };
+    },
+
+    async ingestSelection() {
+      const ids = host.selection.get();
+      if (ids.length !== 1) {
+        setStatus("Select exactly one placed image frame.");
+        return false;
+      }
+      const id = elementIdOf(ids[0]);
+      if (!id) {
+        setStatus("Selection carries no element id.");
+        return false;
+      }
+      if (!host.supports("assets.images@1")) {
+        setStatus(
+          "Host serves no placed-image bytes (assets.images@1 is false).",
+        );
+        return false;
+      }
+      if (!(await ensureEngine())) {
+        setStatus(`Engine unavailable: ${state.engineDetail ?? "unknown"}`);
+        return false;
+      }
+      state.busy = true;
+      setStatus("Reading placed bytes…");
+      try {
+        const asset = await host.assets.getPlacedImage(id);
+        if (!asset) {
+          setStatus(
+            "No placed image on this frame (or the link is unresolved).",
+          );
+          return false;
+        }
+        const ok = await decodeInto(
+          asset.uri || "placed image",
+          asset.bytes,
+          "selection",
+          id,
+        );
+        if (ok) {
+          // ADR-023 / K-13 — MARK THE FRAME AS OURS, so double-clicking
+          // it enters the `rasterImage` context and the host Layers /
+          // Character panels retarget here.
+          //
+          // The context matcher is a PURE PREDICATE over a snapshot
+          // carrying only id / kind / groupChain / this plugin's own
+          // metadata. It cannot ask the document "does this rectangle
+          // hold placed raster bytes?" — which is the condition we
+          // actually claim on — and matching by KIND instead would
+          // claim every rectangle in the document and hijack a gesture
+          // that belongs to the host. So we do what the contract
+          // intends and paged.web already does: a bundle matches on the
+          // namespace it owns.
+          //
+          // FIRE-AND-FORGET, and after the `ok` gate rather than before
+          // it: a marker on a frame we failed to read would claim a
+          // context that then has nothing to show. This is a
+          // convenience marker and not part of the ingest contract — a
+          // host with no metadata door, or an engine that refuses the
+          // write, leaves the image fully editable through the panel
+          // exactly as before. It only ever costs the double-click.
+          sourceRef = ids[0] as ElementId;
+          // A frame committed by an earlier session: reopen its layers.
+          // Before the marker write, which must not replace a v2 marker
+          // (stampOwnership writes only where there is none).
+          await reopenFromDocument(sourceRef, asset.bytes);
+          void stampOwnership(ids[0]);
+        }
+        return ok;
+      } finally {
+        state.busy = false;
+        emit();
+      }
+    },
+
+    async importBytes(name, bytes) {
+      if (!(await ensureEngine())) {
+        setStatus(`Engine unavailable: ${state.engineDetail ?? "unknown"}`);
+        return false;
+      }
+      state.busy = true;
+      emit();
+      try {
+        // BIND THE SELECTED FRAME when there is exactly one, the same way
+        // `ingestSelection` does. Without an `elementId` the session holds
+        // pixels that no page element owns, and every frame-fit tool —
+        // brush, pencil, eraser, crop — is dead on arrival:
+        // `resolveFrameFit` returns null without the id, so the gesture's
+        // `onPointerDown` returns before opening a stroke. That failed
+        // SILENTLY (no error, no dab, an unchanged composite), which is
+        // how it survived: import an image, reach for the brush, and
+        // nothing happens for a reason nothing reports.
+        //
+        // Binding is a strict improvement and never a lie: with no
+        // selection, or an ambiguous multi-selection, the id stays null
+        // and the status line keeps asking for a frame — exactly as
+        // before.
+        const selected = host.selection.get();
+        const boundTo = selected.length === 1 ? elementIdOf(selected[0]) : null;
+        const ok = await decodeInto(name, bytes, "import", boundTo);
+        if (!ok) return false;
+        const decoded = `${name} — ${state.source?.width}×${state.source?.height} decoded`;
+        if (!boundTo) {
+          setStatus(`${decoded}. Select an image frame and Apply to composite.`);
+          return true;
+        }
+        // AN EMPTY FRAME RECEIVES THE IMAGE: it is placed there the way a
+        // commit places an edited one — the composite baked into the
+        // frame, the layers stored with it (ADR 462) — so the page shows
+        // it at once, keeps it, and a double-click reopens the layers.
+        // Before, the frame stayed empty: the import could never be
+        // committed (no frame reference), and the preview an Apply put up
+        // vanished with the selection. A frame that already holds an
+        // image keeps it; the file is only previewed there.
+        if (await frameIsEmpty(boundTo)) {
+          sourceRef = selected[0] as ElementId;
+          state.committedRev = await markerRevision(sourceRef);
+          if (await api.commitToDocument()) {
+            const n = state.layers.layers.length;
+            setStatus(
+              `${decoded} and placed in the selected frame, ${n} layer${n === 1 ? "" : "s"} ` +
+                `stored with it (revision ${state.committedRev}). Double-click the frame ` +
+                "to edit the layers; undo in the document removes it.",
+            );
+            return true;
+          }
+          // Not placed (the host keeps no plugin data, or refused the
+          // write): the commit's reason, and the import stays a preview.
+          const reason = state.status;
+          sourceRef = null;
+          state.committedRev = null;
+          setStatus(`${decoded} into the selected frame, but not placed in it: ${reason}`);
+          return true;
+        }
+        setStatus(`${decoded} into the selected frame. Apply to composite, or paint on it.`);
+        return true;
+      } finally {
+        state.busy = false;
+        emit();
+      }
+    },
+
+    setParams(p) {
+      state.params = { ...state.params, ...p };
+      emit();
+      schedulePreview();
+    },
+
+    setLivePreview(on) {
+      state.livePreview = on;
+      emit();
+    },
+
+    setWandOptions(o) {
+      state.wand = { ...state.wand, ...o };
+      emit();
+    },
+
+    async applyRedEye(box, darken = 0.5) {
+      if (box.w < 1 || box.h < 1) return false;
+      return api.applyEffect("Red eye", (h) =>
+        engine!.applyRedEye(h, box.x + box.w / 2, box.y + box.h / 2, box.w / 2, box.h / 2, darken),
+      );
+    },
+
+    async patchSelection(dx, dy) {
+      if (!state.selection) {
+        setStatus("Patch needs a selection — select the area to replace, then drag it onto the source.");
+        return false;
+      }
+      if (Math.round(dx) === 0 && Math.round(dy) === 0) return false;
+      return api.applyEffect("Patch", (h) => engine!.patchSelection(h, dx, dy));
+    },
+
+    async applyMedian() {
+      return api.applyEffect("Median", (h) => engine!.applyMedian(h));
+    },
+
+    async applyMorph(kind) {
+      return api.applyEffect(kind === "max" ? "Maximum" : "Minimum", (h) =>
+        engine!.applyMorph(h, kind),
+      );
+    },
+
+    async applyColorLookup(cubeText, name = "Color lookup") {
+      let cube: Float32Array;
+      try {
+        cube = toKernelCube(parseCube(cubeText));
+      } catch (err) {
+        setStatus(`${name}: ${err instanceof Error ? err.message : err}`);
+        emit();
+        return false;
+      }
+      return api.applyEffect(name, (h) => engine!.applyLut3d(h, cube));
+    },
+
+    async fillGradientLine(from, to) {
+      const { fg, bg } = state.colors;
+      const kind = state.gradientKind;
+      return api.applyEffect("Gradient", (h) =>
+        engine!.fillGradientLine(h, kind, fg, bg, from, to),
+      );
+    },
+
+    setGradientKind(kind) {
+      state.gradientKind = kind;
+      emit();
+    },
+
+    async fillForeground() {
+      const fg = state.colors.fg;
+      return api.applyEffect("Fill", (h) => engine!.fillSolid(h, fg));
+    },
+
+    async bucketFill(at) {
+      const src = state.source;
+      if (!src) {
+        setStatus("Nothing ingested — ingest a placed image first.");
+        return false;
+      }
+      const [x, y] = [Math.floor(at[0]), Math.floor(at[1])];
+      if (x < 0 || y < 0 || x >= src.width || y >= src.height) return false;
+      const { tolerance, contiguous } = state.wand;
+      const fg = state.colors.fg;
+      return api.applyEffect("Paint bucket", (h) =>
+        engine!.bucketFill(h, x, y, tolerance, contiguous, fg),
+      );
+    },
+
+    async canvasOp(op, size) {
+      const src = state.source;
+      if (!src || !engine) {
+        setStatus("Nothing ingested — ingest a placed image first.");
+        return false;
+      }
+      discardStroke();
+      let wh: { width: number; height: number };
+      try {
+        wh = await engine.layersCanvasOp(
+          op,
+          size?.width,
+          size?.height,
+          size?.anchorX,
+          size?.anchorY,
+        );
+      } catch (err) {
+        setStatus(`${op} failed: ${err instanceof Error ? err.message : err}`);
+        emit();
+        return false;
+      }
+      // Same handle, new extent: the tile claim and every readout
+      // addressed the old one.
+      releaseTiles();
+      src.width = wh.width;
+      src.height = wh.height;
+      markPixelsEdited();
+      refreshSourceReadout();
+      // Composite first: Apply writes its own status line, and this one
+      // (what the operation did) is the one to keep.
+      if (src.elementId) await api.apply();
+      setStatus(
+        `${op === "canvas" ? "Canvas size" : "Canvas"} → ${wh.width}×${wh.height}. ` +
+          "One undo step.",
+      );
+      emit();
+      return true;
+    },
+
+    modifySelection(op, radius) {
+      if (!engine || !state.source) {
+        setStatus("Nothing ingested — ingest a placed image first.");
+        return false;
+      }
+      try {
+        engine.selectionModify(op, radius);
+      } catch (err) {
+        setStatus(`Modify failed: ${err instanceof Error ? err.message : err}`);
+        emit();
+        return false;
+      }
+      api.refreshSelection();
+      setStatus(`Selection ${op === "border" ? "bordered" : `${op}ed`} by ${radius} px.`);
+      return true;
+    },
+
+    psdSetLayerOpacity(index, opacity) {
+      if (psdHandle === null || !engine) return false;
+      try {
+        engine.psdSetLayerOpacity(
+          psdHandle,
+          index,
+          Math.max(0, Math.min(255, Math.round(opacity))),
+        );
+        refreshPsdLayers();
+        emit();
+        return true;
+      } catch (err) {
+        setStatus(
+          `PSD edit failed: ${err instanceof Error ? err.message : err}`,
+        );
+        emit();
+        return false;
+      }
+    },
+
+    psdRenameLayer(index, name) {
+      if (psdHandle === null || !engine) return false;
+      try {
+        engine.psdSetLayerName(psdHandle, index, name);
+        refreshPsdLayers();
+        emit();
+        return true;
+      } catch (err) {
+        setStatus(
+          `PSD rename failed: ${err instanceof Error ? err.message : err}`,
+        );
+        emit();
+        return false;
+      }
+    },
+
+    psdRemoveLayer(index) {
+      if (psdHandle === null || !engine) return false;
+      try {
+        engine.psdRemoveLayer(psdHandle, index);
+        refreshPsdLayers();
+        emit();
+        return true;
+      } catch (err) {
+        setStatus(
+          `PSD remove failed: ${err instanceof Error ? err.message : err}`,
+        );
+        emit();
+        return false;
+      }
+    },
+
+    psdExport() {
+      if (psdHandle === null || !engine || !state.psd) return null;
+      try {
+        return { bytes: engine.psdSave(psdHandle), fileName: state.psd.name };
+      } catch (err) {
+        setStatus(
+          `PSD save failed: ${err instanceof Error ? err.message : err}`,
+        );
+        emit();
+        return null;
+      }
+    },
+
+    async applyToFile() {
+      const src = state.source;
+      if (!src || !engine) {
+        setStatus("Nothing ingested — ingest a placed image first.");
+        return null;
+      }
+      if (!state.gpu && !isIdentity(state.params)) {
+        setStatus(
+          "WebGPU unavailable — the adjusted save-back needs a device.",
+        );
+        return null;
+      }
+      state.busy = true;
+      setStatus("Compositing the full-resolution result…");
+      try {
+        // The SAME chain the canvas preview runs, at full resolution and
+        // through the same selection mask — the file gets exactly what
+        // the user saw.
+        const rgba = await engine.adjust(src.handle, state.params);
+        const stem = baseName(src.name);
+        let result: SaveBackResult;
+        if (sourceFormat === "psd" && psdHandle !== null) {
+          const shape = engine.psdApplyAdjusted(
+            psdHandle,
+            src.width,
+            src.height,
+            rgba,
+          );
+          refreshPsdLayers();
+          result = {
+            bytes: engine.psdSave(psdHandle),
+            fileName: `${stem}.psd`,
+            mimeType: "image/vnd.adobe.photoshop",
+            note: `PSD save-back — ${shape}.`,
+          };
+        } else if (sourceFormat === "psd") {
+          // A PSD whose structural parse failed (the raster lane still
+          // decoded it) — say so instead of silently writing a PNG.
+          setStatus(
+            "PSD save-back unavailable — the structural parse failed on this file " +
+              "(the adjusted PNG lane is still available via Export).",
+          );
+          return null;
+        } else {
+          const fmt: RasterFormat = sourceFormat === "jpeg" ? "jpeg" : "png";
+          result = {
+            bytes: engine.encode(rgba, src.width, src.height, fmt),
+            fileName: `${stem}${fmt === "jpeg" ? ".jpg" : ".png"}`,
+            mimeType: fmt === "jpeg" ? "image/jpeg" : "image/png",
+            note:
+              fmt === "jpeg"
+                ? "JPEG save-back — re-encoded at the fixed v0 quality (the source was a JPEG)."
+                : "PNG save-back — lossless re-encode of the adjusted pixels.",
+          };
+        }
+        state.saveBack = result;
+        setStatus(
+          `${result.note} ${result.fileName}, ${result.bytes.length} bytes — ready. ` +
+            (host.supports("shell.saveFile@1")
+              ? "Save it from the panel, or deliver it from the Export Center."
+              : "This editor version cannot save files from a panel — deliver it from the Export Center."),
+        );
+        return result;
+      } catch (err) {
+        setStatus(
+          `Save-back failed: ${err instanceof Error ? err.message : err}`,
+        );
+        return null;
+      } finally {
+        state.busy = false;
+        emit();
+      }
+    },
+
+    async saveToFile() {
+      if (!host.supports("shell.saveFile@1")) {
+        // Probed, not assumed. Without this the door's `false` would be
+        // indistinguishable from a user cancel.
+        setStatus(
+          "This editor version cannot save files from a panel — use the " +
+            "Export Center.",
+        );
+        return false;
+      }
+      const staged = state.saveBack ?? (await api.applyToFile());
+      if (!staged) return false;
+      const accepted = await host.shell.saveFile({
+        suggestedName: staged.fileName,
+        bytes: staged.bytes,
+        mimeType: staged.mimeType,
+      });
+      setStatus(
+        accepted
+          ? `${staged.fileName} handed to the host's save path ` +
+            "(a browser download cannot report a cancel, so this is " +
+            "delivery, not proof of a file on disk)."
+          : `The host declined to save ${staged.fileName}.`,
+      );
+      return accepted;
+    },
+
+    async psdExportBytes() {
+      if (psdHandle === null || !engine || !state.psd) return null;
+      // PRESERVATION FIRST: an unedited export must stay byte-identical,
+      // so the save-back only runs when the panel is off identity OR the
+      // pixels changed since ingest. Identity alone is not enough: a
+      // stroke, a layer edit, a crop all land in the layer stack, which
+      // the retained parse never sees — re-emitting it would hand back
+      // the original file with every one of those edits missing.
+      if (isIdentity(state.params) && pixelEdits === 0) return api.psdExport();
+      // LAYERED save when the stack has more than its one layer and no
+      // pending panel adjustments (those only exist as a chain over the
+      // composite, which only the flattened save can apply).
+      let layeredRefusal: string | null = null;
+      if (isIdentity(state.params) && state.layers.layers.length > 1) {
+        try {
+          const note = engine.psdSaveLayers(psdHandle);
+          refreshPsdLayers();
+          setStatus(`PSD export — ${note}.`);
+          emit();
+          return api.psdExport();
+        } catch (err) {
+          layeredRefusal = err instanceof Error ? err.message : String(err);
+        }
+      }
+      const back = await api.applyToFile();
+      if (back && layeredRefusal) {
+        setStatus(`PSD export flattened: ${layeredRefusal}. ${state.status}`);
+        emit();
+      }
+      if (back && back.mimeType === "image/vnd.adobe.photoshop") {
+        return { bytes: back.bytes, fileName: back.fileName };
+      }
+      // The save-back lane declined (unsupported mode or size; its reason
+      // is already the status). Exporting the original instead would
+      // look like success and drop the edits, so export nothing.
+      return null;
+    },
+
+    async rasterExportBytes(format) {
+      const src = state.source;
+      if (!src || !engine) return null;
+      if (!state.gpu && !isIdentity(state.params)) {
+        setStatus("WebGPU unavailable — the adjusted export needs a device.");
+        return null;
+      }
+      try {
+        const rgba = await engine.adjust(src.handle, state.params);
+        const bytes = engine.encode(rgba, src.width, src.height, format);
+        return {
+          bytes,
+          fileName: `${baseName(src.name)}${format === "jpeg" ? ".jpg" : ".png"}`,
+        };
+      } catch (err) {
+        setStatus(`Export failed: ${err instanceof Error ? err.message : err}`);
+        emit();
+        return null;
+      }
+    },
+
+    /** Apply a whole-image EFFECT kernel and land it exactly the way a
+     *  fill lands: into the active layer when a stack is bound (journaled
+     *  and re-composited into the same handle), destructively otherwise.
+     *  Sharing this is what stops a new effect from quietly acquiring
+     *  different semantics from the fills. */
+    async applyEffect(label, run) {
+      const src = state.source;
+      if (!src || !engine) {
+        setStatus("Nothing ingested — ingest a placed image first.");
+        return false;
+      }
+      if (!state.gpu) {
+        setStatus(`WebGPU unavailable — ${label} is a GPU-only kernel.`);
+        return false;
+      }
+      state.busy = true;
+      emit();
+      let out: DecodedInfo;
+      try {
+        out = await run(src.handle);
+      } catch (err) {
+        setStatus(
+          `${label} failed: ${err instanceof Error ? err.message : err}`,
+        );
+        state.busy = false;
+        emit();
+        return false;
+      }
+      const layered = out.handle === src.handle;
+      swapSource(src, out);
+      state.saveBack = null;
+      if (!layered) {
+        try {
+          engine.selectionTransfer(out.handle);
+        } catch (err) {
+          host.log.debug("selection transfer failed", err);
+        }
+      }
+      state.busy = false;
+      const ok = await recomposite();
+      if (ok) setStatus(`${label} applied.`);
+      return ok;
+    },
+
+    async applyGradientMap(shadow, highlight) {
+      return this.applyEffect("Gradient map", (h) =>
+        engine!.applyGradientMap(h, shadow, highlight),
+      );
+    },
+
+    async applyWarp(kind, amount, frequency = 1) {
+      return this.applyEffect(`Distort (${kind})`, (h) =>
+        engine!.applyWarp(h, kind, amount, frequency),
+      );
+    },
+    // All six ride `applyEffect`, so they inherit the SAME journal
+    // entry, status line and layered-vs-flat landing every other effect
+    // has. A new effect that reached the engine directly would acquire
+    // different undo semantics without anyone deciding that.
+    async applyEmboss(angleDeg, height) {
+      return this.applyEffect("Emboss", (h) =>
+        engine!.applyEmboss(h, angleDeg, height),
+      );
+    },
+    async applyFindEdges(strength) {
+      return this.applyEffect("Find edges", (h) =>
+        engine!.applyFindEdges(h, strength),
+      );
+    },
+    async applyMotionBlur(angleDeg, lengthPx) {
+      return this.applyEffect("Motion blur", (h) =>
+        engine!.applyMotionBlur(h, angleDeg, lengthPx),
+      );
+    },
+    async applyRadialBlur(cx, cy, amount, spin) {
+      return this.applyEffect(spin ? "Spin blur" : "Zoom blur", (h) =>
+        engine!.applyRadialBlur(h, cx, cy, amount, spin),
+      );
+    },
+    async applyMosaic(cellPx) {
+      return this.applyEffect("Mosaic", (h) => engine!.applyMosaic(h, cellPx));
+    },
+    async applyShapeBlur(shapeHandle, radiusPx = 8, amount = 1) {
+      return this.applyEffect("Shape blur", (h) =>
+        engine!.applyShapeBlur(h, shapeHandle, radiusPx, amount),
+      );
+    },
+    async fillPattern(
+      tileHandle,
+      scale = 1,
+      angleDeg = 0,
+      offsetX = 0,
+      offsetY = 0,
+      opacity = 1,
+    ) {
+      return this.applyEffect("Pattern fill", (h) =>
+        engine!.fillPattern(
+          h,
+          tileHandle,
+          scale,
+          angleDeg,
+          offsetX,
+          offsetY,
+          opacity,
+        ),
+      );
+    },
+    setForeground(c) {
+      state.colors = { ...state.colors, fg: [...c] };
+      state.brush = { ...state.brush, color: [...c] };
+      emit();
+    },
+
+    setBackground(c) {
+      state.colors = { ...state.colors, bg: [...c] };
+      emit();
+    },
+
+    swapColors() {
+      state.colors = swapped(state.colors);
+      state.brush = { ...state.brush, color: [...state.colors.fg] };
+      emit();
+    },
+
+    resetColors() {
+      const c = freshColors();
+      api.setForeground(c.fg);
+      api.setBackground(c.bg);
+    },
+
+    sampleColor(at, size = 1, target = "fg") {
+      const src = state.source;
+      if (!src || !engine) return null;
+      const [px, py] = [Math.floor(at[0]), Math.floor(at[1])];
+      if (px < 0 || py < 0 || px >= src.width || py >= src.height) return null;
+      const r = (size - 1) / 2;
+      const x0 = Math.max(0, px - r);
+      const y0 = Math.max(0, py - r);
+      const x1 = Math.min(src.width, px + r + 1);
+      const y1 = Math.min(src.height, py + r + 1);
+      let c: Rgba01 | null;
+      try {
+        c = averageRgba8(engine.tile(src.handle, x0, y0, x1 - x0, y1 - y0));
+      } catch (err) {
+        host.log.debug("colour sample failed", err);
+        return null;
+      }
+      if (!c) return null;
+      if (target === "fg") api.setForeground(c);
+      else api.setBackground(c);
+      setStatus(`Sampled ${toHex(c)} at ${px}, ${py}${size > 1 ? ` (${size}×${size} average)` : ""}.`);
+      emit();
+      return c;
+    },
+
+    sourceElement: () => sourceRef,
+    colorPicker: () => hostColorPicker(host),
+
+    async commitToDocument() {
+      const src = state.source;
+      if (!src || !engine || !src.elementId || !sourceRef) {
+        setStatus("Commit needs an image ingested from a frame in the document.");
+        emit();
+        return false;
+      }
+      if (!host.supports("storage.parts@1")) {
+        setStatus(
+          "This host stores no plugin data in the document (storage.parts@1 " +
+            "is false) — the layers cannot be kept, so nothing was committed.",
+        );
+        emit();
+        return false;
+      }
+      state.busy = true;
+      setStatus("Committing the image to the document…");
+      emit();
+      try {
+        // The STACK's composite — what the layers show. Pending panel
+        // adjustments that were never applied are not part of it.
+        const rgba = engine.tile(src.handle, 0, 0, src.width, src.height);
+        const png = engine.encode(rgba, src.width, src.height, "png");
+        if (png.length > MAX_BAKED_BYTES && !binaryMutations(host)) {
+          setStatus(
+            `The baked image is ${(png.length / 1048576).toFixed(1)} MB; the ` +
+              "host takes at most 8 MB per image until it accepts binary " +
+              "transfers. Nothing was committed.",
+          );
+          return false;
+        }
+        const baked = await sha256Hex(png);
+        const rev = (state.committedRev ?? 0) + 1;
+        const { path, written } = await writeSession(
+          host.parts,
+          src.elementId,
+          rev,
+          engine.layersExport(),
+          { width: src.width, height: src.height },
+          baked,
+        );
+        const marker: CommittedMarker = { owns: "pixels", rev, record: path, baked };
+        // The PNG crosses as bytes where the host takes them, else as the
+        // JSON lane's number[] (`mutateWithBytes` splices it in).
+        await mutateWithBytes(host, {
+          op: "batch",
+          args: {
+            ops: [
+              { op: "replaceImageBytes", args: { elementId: src.elementId, bytes: [] } },
+              {
+                op: "setPluginMetadata",
+                args: {
+                  elementId: sourceRef,
+                  key: "x-paged:media.paged.image",
+                  value: JSON.stringify({ v: 2, data: marker }),
+                  caller: "media.paged.image",
+                },
+              },
+            ],
+          },
+        }, png);
+        state.committedRev = rev;
+        state.uncommitted = false;
+        // Old revisions and the layer data only they used go, where the
+        // host can delete parts (the document's undo can reach the last
+        // KEEP_REVISIONS commits; older ones are unreachable anyway).
+        const del = partsDelete(host);
+        // Awaited, not fired off: a collection overlapping the next
+        // commit could delete buffers written before their record.
+        if (del) {
+          await collectGarbage(host.parts, del, src.elementId, rev, KEEP_REVISIONS).catch((err) =>
+            host.log.warn(`image: clearing old revisions failed: ${err}`),
+          );
+        }
+        setStatus(
+          `Committed revision ${rev}: ${state.layers.layers.length} layer` +
+            `${state.layers.layers.length === 1 ? "" : "s"} stored in the document ` +
+            `(${written} new piece${written === 1 ? "" : "s"} of layer data), the ` +
+            "composite placed in the frame. Undo in the document reverts it.",
+        );
+        return true;
+      } catch (err) {
+        setStatus(`Commit failed: ${err instanceof Error ? err.message : err}`);
+        return false;
+      } finally {
+        state.busy = false;
+        emit();
+      }
+    },
+
+    definePattern() {
+      const src = state.source;
+      if (!src || !engine) {
+        setStatus("Nothing ingested — ingest a placed image first.");
+        return false;
+      }
+      const sel = state.selection;
+      const box =
+        sel && sel.w > 0 && sel.h > 0
+          ? sel
+          : { x: 0, y: 0, w: src.width, h: src.height };
+      try {
+        const rgba = engine.tile(src.handle, box.x, box.y, box.w, box.h);
+        const info = engine.ingestRgba8(box.w, box.h, rgba);
+        if (patternHandle !== null) engine.freeImage(patternHandle);
+        patternHandle = info.handle;
+        state.pattern = { width: box.w, height: box.h };
+        setStatus(
+          `Pattern defined — ${box.w}×${box.h} px from the ` +
+            `${sel && sel.w > 0 ? "selection's bounds" : "whole image"}.`,
+        );
+        emit();
+        return true;
+      } catch (err) {
+        setStatus(`Define pattern failed: ${err instanceof Error ? err.message : err}`);
+        emit();
+        return false;
+      }
+    },
+
+    async fillWithPattern(scale = 1, opacity = 1) {
+      if (patternHandle === null) {
+        setStatus("No pattern defined — use Define pattern first.");
+        emit();
+        return false;
+      }
+      return api.fillPattern(patternHandle, scale, 0, 0, 0, opacity);
+    },
+
+    async shapeBlurWithPattern(radiusPx = 8) {
+      if (patternHandle === null) {
+        setStatus("Shape blur uses the defined pattern as its shape — define one first.");
+        emit();
+        return false;
+      }
+      return api.applyShapeBlur(patternHandle, radiusPx, 1);
+    },
+
+    async moveSelection(dx, dy, vacate = VacateMode.Transparent) {
+      return this.applyEffect("Move selection", (h) =>
+        engine!.applyMoveSelection(h, dx, dy, vacate),
+      );
+    },
+    async galleryKuwahara(radiusPx, amount) {
+      return this.applyEffect("Paint daubs", (h) =>
+        engine!.galleryKuwahara(h, radiusPx, amount),
+      );
+    },
+    async galleryPosterizeEdges(levels, edgeAmount, edgeThreshold, amount) {
+      return this.applyEffect("Poster edges", (h) =>
+        engine!.galleryPosterizeEdges(h, levels, edgeAmount, edgeThreshold, amount),
+      );
+    },
+    async galleryGlowingEdges(intensity, smoothness, amount) {
+      return this.applyEffect("Glowing edges", (h) =>
+        engine!.galleryGlowingEdges(h, intensity, smoothness, amount),
+      );
+    },
+    async galleryHalftone(cellPx, angleDeg, contrast, amount) {
+      return this.applyEffect("Halftone", (h) =>
+        engine!.galleryHalftone(h, cellPx, angleDeg, contrast, amount),
+      );
+    },
+    async galleryGrain(seed, sizePx, mono, amount) {
+      return this.applyEffect("Film grain", (h) =>
+        engine!.galleryGrain(h, seed, sizePx, mono, amount),
+      );
+    },
+    async galleryDiffuse(seed, radiusPx, angleDeg, anisotropy, amount) {
+      return this.applyEffect("Spatter", (h) =>
+        engine!.galleryDiffuse(h, seed, radiusPx, angleDeg, anisotropy, amount),
+      );
+    },
+    async galleryCrosshatch(angleDeg, spacingPx, strength, sets, amount) {
+      return this.applyEffect("Crosshatch", (h) =>
+        engine!.galleryCrosshatch(h, angleDeg, spacingPx, strength, sets, amount),
+      );
+    },
+    async galleryBasRelief(angleDeg, elevationDeg, height, amount) {
+      return this.applyEffect("Bas relief", (h) =>
+        engine!.galleryBasRelief(h, angleDeg, elevationDeg, height, amount),
+      );
+    },
+    async galleryThresholdInk(threshold, softness, amount) {
+      return this.applyEffect("Photocopy", (h) =>
+        engine!.galleryThresholdInk(h, threshold, softness, amount),
+      );
+    },
+    async galleryStainedGlass(seed, cellPx, border, amount) {
+      return this.applyEffect("Stained glass", (h) =>
+        engine!.galleryStainedGlass(h, seed, cellPx, border, amount),
+      );
+    },
+    async galleryGlass(seed, scalePx, distortion, amount) {
+      return this.applyEffect("Glass", (h) =>
+        engine!.galleryGlass(h, seed, scalePx, distortion, amount),
+      );
+    },
+    async galleryTexturizer(seed, kind, scalePx, relief, angleDeg, amount) {
+      return this.applyEffect("Texturizer", (h) =>
+        engine!.galleryTexturizer(h, seed, kind, scalePx, relief, angleDeg, amount),
+      );
+    },
+    async applyDespeckle(edgeThreshold, amount) {
+      return this.applyEffect("Despeckle", (h) =>
+        engine!.applyDespeckle(h, edgeThreshold, amount),
+      );
+    },
+    async applyDustScratches(radius, threshold) {
+      return this.applyEffect("Dust & scratches", (h) =>
+        engine!.applyDustScratches(h, radius, threshold),
+      );
+    },
+    async offsetLayer(dx, dy, edge = EdgePolicy.Transparent) {
+      return this.applyEffect("Move", (h) => engine!.applyOffset(h, dx, dy, edge));
+    },
+    async offsetFilter(dx, dy) {
+      return this.applyEffect("Offset", (h) =>
+        engine!.applyOffset(h, dx, dy, EdgePolicy.Wrap),
+      );
+    },
+    async applyLensBlur(radiusPx, threshold, boost) {
+      return this.applyEffect("Lens blur", (h) =>
+        engine!.applyLensBlur(h, radiusPx, threshold, boost),
+      );
+    },
+    async applyReduceNoise(radiusPx, sigmaRange, amount) {
+      return this.applyEffect("Reduce noise", (h) =>
+        engine!.applyReduceNoise(h, radiusPx, sigmaRange, amount),
+      );
+    },
+    async applySmartSharpen(radiusPx, amount, threshold, clampHi) {
+      return this.applyEffect("Smart sharpen", (h) =>
+        engine!.applySmartSharpen(h, radiusPx, amount, threshold, clampHi),
+      );
+    },
+    async applySelectiveColor(range, cmyk, absolute) {
+      return this.applyEffect("Selective colour", (h) =>
+        engine!.applySelectiveColor(h, range, cmyk, absolute),
+      );
+    },
+
+    async fillSelection(req) {
+      const src = state.source;
+      if (!src || !engine) {
+        setStatus("Nothing ingested — ingest a placed image first.");
+        return false;
+      }
+      // Content-aware fill is a CPU search, so it works with no device —
+      // the generators do not. Gating it on WebGPU would refuse a fill
+      // that has no GPU work in it.
+      if (req.kind !== "contentAware" && !state.gpu) {
+        setStatus("WebGPU unavailable — the generators are GPU-only kernels.");
+        return false;
+      }
+      if (req.kind === "contentAware" && !state.selection) {
+        setStatus(
+          "Select the area to fill first — content-aware fill synthesises " +
+            "the SELECTION from the rest of the image.",
+        );
+        return false;
+      }
+      state.busy = true;
+      emit();
+      let filled: { handle: number; width: number; height: number };
+      try {
+        filled =
+          req.kind === "gradient"
+            ? await engine.fillGradient(
+                src.handle,
+                req.gradient,
+                req.c0,
+                req.c1,
+              )
+            : req.kind === "contentAware"
+              ? await engine.fillContentAware(src.handle)
+              : await engine.fillNoise(
+                  src.handle,
+                  req.amount,
+                  req.seed ?? FILL_NOISE_SEED_DEFAULT,
+                );
+      } catch (err) {
+        setStatus(`Fill failed: ${err instanceof Error ? err.message : err}`);
+        state.busy = false;
+        emit();
+        return false;
+      }
+      // With a layer stack bound the fill went INTO the active layer
+      // (journaled) and re-composited into the SAME handle; without one
+      // it is the pre-layer destructive commit (see fill.rs).
+      const layerName = state.layers.layers[state.layers.active]?.name ?? null;
+      const layered = filled.handle === src.handle;
+      swapSource(src, filled);
+      state.saveBack = null;
+      if (!layered) {
+        // The fill is same-size, so the SELECTION is still meaningful on
+        // the result — carry it over instead of making the user
+        // reselect (a crop/resize swap still drops it).
+        try {
+          engine.selectionTransfer(filled.handle);
+        } catch (err) {
+          host.log.debug("selection transfer failed", err);
+        }
+      }
+      refreshSourceReadout();
+      const where = state.selection ? "the selection" : "the whole image";
+      setStatus(
+        `Filled ${where} with ${
+          req.kind === "gradient" ? `a ${req.gradient} gradient` : "noise"
+        }` +
+          (layered && layerName
+            ? ` on layer “${layerName}” — undoable.`
+            : " (destructive, no layer stack bound).") +
+          " Document unchanged; Apply to recomposite.",
+      );
+      state.busy = false;
+      emit();
+      return true;
+    },
+
+    setLevels(l) {
+      state.params = {
+        ...state.params,
+        levels: { ...state.params.levels, ...l },
+      };
+      emit();
+      schedulePreview();
+    },
+
+    setCurvePoints(points, channel = "rgb") {
+      if (!engine) return;
+      // The identity curve [(0,0),(1,1)] clears the LUT (no curve pass).
+      const isIdentityCurve =
+        points.length === 2 &&
+        points[0][0] === 0 &&
+        points[0][1] === 0 &&
+        points[1][0] === 1 &&
+        points[1][1] === 1;
+      const table = isIdentityCurve ? null : engine.curveLut(points);
+      if (channel === "rgb") {
+        state.params = { ...state.params, curveLut: table };
+      } else {
+        const rgb = [...state.params.curveLutRgb] as AdjustParams["curveLutRgb"];
+        rgb[{ r: 0, g: 1, b: 2 }[channel]] = table;
+        state.params = { ...state.params, curveLutRgb: rgb };
+      }
+      emit();
+      schedulePreview();
+    },
+
+    autoEnhance() {
+      const src = state.source;
+      if (!src || !engine) {
+        setStatus("Nothing ingested — ingest a placed image first.");
+        return;
+      }
+      try {
+        // Pure CPU readout (no GPU needed) — derive auto-levels + gray-world
+        // WB from the histogram and merge into the SAME params the sliders
+        // drive. The composite still waits for the explicit Apply.
+        const a = engine.autoEnhanceParams(src.handle);
+        state.params = {
+          ...state.params,
+          temp: a.temp,
+          tint: a.tint,
+          levels: {
+            ...state.params.levels,
+            inBlack: a.inBlack,
+            inWhite: a.inWhite,
+          },
+        };
+        emit();
+        setStatus(
+          "Auto-enhance set levels + white balance — click Apply to composite " +
+            "(document unchanged).",
+        );
+      } catch (err) {
+        setStatus(
+          `Auto-enhance failed: ${err instanceof Error ? err.message : err}`,
+        );
+      }
+    },
+
+    cropMachine() {
+      return cropMachineRef;
+    },
+
+    selectionMachine() {
+      return selectionMachineRef;
+    },
+
+    refreshSelection() {
+      if (!engine || !state.source) return;
+      state.selection = engine.selectionStats();
+      emit();
+    },
+
+    selectAll() {
+      if (!engine || !state.source) {
+        setStatus("Nothing ingested — ingest a placed image first.");
+        return false;
+      }
+      try {
+        engine.selectionSelectAll();
+      } catch (err) {
+        setStatus(
+          `Select all failed: ${err instanceof Error ? err.message : err}`,
+        );
+        return false;
+      }
+      api.refreshSelection();
+      setStatus("Selected all — adjustments apply to the whole image.");
+      return true;
+    },
+
+    deselect() {
+      if (!engine || !state.source) return false;
+      engine.selectionClear();
+      api.refreshSelection();
+      setStatus("Deselected — adjustments apply to the whole image.");
+      return true;
+    },
+
+    invertSelection() {
+      if (!engine || !state.source) {
+        setStatus("Nothing ingested — ingest a placed image first.");
+        return false;
+      }
+      try {
+        engine.selectionInvert();
+      } catch (err) {
+        setStatus(
+          `Invert selection failed: ${err instanceof Error ? err.message : err}`,
+        );
+        return false;
+      }
+      api.refreshSelection();
+      setStatus("Selection inverted.");
+      return true;
+    },
+
+    featherSelection(sigma = FEATHER_SIGMA_DEFAULT) {
+      if (!engine || !state.source) {
+        setStatus("Nothing ingested — ingest a placed image first.");
+        return false;
+      }
+      try {
+        engine.selectionFeather(sigma);
+      } catch (err) {
+        // The honest miss: feather needs an explicit selection.
+        setStatus(
+          `Feather failed: ${err instanceof Error ? err.message : err}`,
+        );
+        return false;
+      }
+      api.refreshSelection();
+      setStatus(`Selection feathered (σ ${sigma}px).`);
+      return true;
+    },
+
+    async resizeTo(w, h, filter) {
+      const src = state.source;
+      if (!src || !engine) {
+        setStatus("Nothing to resize — ingest an image first.");
+        return false;
+      }
+      let resized: { handle: number; width: number; height: number };
+      try {
+        resized = await engine.resize(src.handle, w, h, filter);
+      } catch (err) {
+        setStatus(`Resize failed: ${err instanceof Error ? err.message : err}`);
+        emit();
+        return false;
+      }
+      // Swap the engine-held source (the crop-commit pattern): release
+      // the tile claim on the old handle, free it, adopt the new.
+      releaseTiles();
+      engine.freeImage(src.handle);
+      markPixelsEdited();
+      src.handle = resized.handle;
+      src.width = resized.width;
+      src.height = resized.height;
+      refreshSourceReadout();
+      setStatus(
+        `Resampled to ${resized.width}×${resized.height} (${filter}) — ` +
+          "document unchanged; Apply to recomposite.",
+      );
+      emit();
+      return true;
+    },
+
+    brushMachine() {
+      return brushMachineRef;
+    },
+
+    selectionFromChannel(channel) {
+      const src = state.source;
+      if (!engine || !src) {
+        setStatus("Nothing ingested — ingest a placed image first.");
+        return false;
+      }
+      try {
+        engine.selectionFromChannel(src.handle, channel, "replace");
+      } catch (err) {
+        // The engine names the channel it refused; a generic failure
+        // would hide a typo'd channel behind "could not select".
+        setStatus(
+          `Channel selection failed: ${err instanceof Error ? err.message : err}`,
+        );
+        return false;
+      }
+      api.refreshSelection();
+      setStatus(
+        `Selection loaded from the ${channel} channel — its values ARE the ` +
+          "coverage, so mid-tones select partially.",
+      );
+      return true;
+    },
+
+    async selectionToPath(threshold = 128, tolerance = 0.5) {
+      const src = state.source;
+      if (!engine || !src) {
+        setStatus("Nothing ingested — ingest a placed image first.");
+        return false;
+      }
+      if (!state.selection) {
+        setStatus("Nothing selected — select a region first.");
+        return false;
+      }
+      const contours = engine.selectionToPaths(threshold, tolerance);
+      if (contours.length === 0) {
+        // A selection that exists but covers nothing at this threshold is
+        // a real state, and raising the threshold is the fix — so say
+        // which threshold produced nothing rather than "no paths".
+        setStatus(
+          `Nothing traced at coverage ≥ ${threshold} — the selection is ` +
+            "empty at that cut.",
+        );
+        return false;
+      }
+      // Image px → page pt, through the SAME fit the paint tools use, so
+      // a traced path lands exactly on top of what it traced.
+      const fit = await resolveFrameFit(host, src, "selectionToPath");
+      if (!fit) {
+        setStatus(
+          "The frame's geometry could not be read, so the path would land " +
+            "in the wrong place. Nothing was inserted.",
+        );
+        return false;
+      }
+      let inserted = 0;
+      let lastError: string | null = null;
+      for (const contour of contours) {
+        // Straight segments: each anchor's handles sit ON the anchor,
+        // which is how a bezier path expresses a corner. Fitting curves
+        // to a traced staircase would invent smoothness the mask does
+        // not have — so `smooth: false`, and the Pen is right there for
+        // anyone who wants curves.
+        const anchors = contour.points.map((pt) => {
+          const [x, y] = imageToPage(fit, pt);
+          return {
+            anchor: [x, y] as [number, number],
+            left: [x, y] as [number, number],
+            right: [x, y] as [number, number],
+          };
+        });
+        try {
+          // `MutationOutcome` is a discriminated union and a REFUSAL is a
+          // resolved value, not a throw — so truthiness proves nothing.
+          // Counting on it once produced "Traced 1 path" over a document
+          // that had gained no path at all.
+          const outcome = await host.document.mutate({
+            op: "insertPath",
+            args: {
+              pageId: fit.pageId,
+              anchors,
+              open: false,
+              smooth: false,
+            },
+          });
+          if (outcome.applied) {
+            inserted += 1;
+          } else {
+            lastError = String(outcome.error ?? "the host refused the insert");
+            host.log.debug("path insert refused", outcome.error);
+          }
+        } catch (err) {
+          lastError = err instanceof Error ? err.message : String(err);
+          host.log.debug("path insert failed", err);
+        }
+      }
+      if (inserted === 0) {
+        setStatus(
+          `The host refused the path insert${lastError ? `: ${lastError}` : "."}`,
+        );
+        return false;
+      }
+      const holes = contours.filter((c) => !c.outer).length;
+      setStatus(
+        `Traced ${inserted} path${inserted === 1 ? "" : "s"} from the ` +
+          `selection` +
+          (holes > 0
+            ? ` (${holes} of them hole${holes === 1 ? "" : "s"}, inserted ` +
+              "separately — this engine emits one polygon per contour)"
+            : ""),
+      );
+      return true;
+    },
+
+    async selectionFromPath() {
+      const src = state.source;
+      if (!engine || !src) {
+        setStatus("Nothing ingested — ingest a placed image first.");
+        return false;
+      }
+      const picked = host.selection
+        .get()
+        .filter((i) => elementIdOf(i) !== src.elementId);
+      if (picked.length !== 1) {
+        setStatus(
+          "Select exactly ONE vector element (other than the image frame) " +
+            "to load its path as the selection.",
+        );
+        return false;
+      }
+      let result;
+      try {
+        result = await host.document.pathAnchors(picked[0]);
+      } catch (err) {
+        setStatus(
+          `Path read failed: ${err instanceof Error ? err.message : err}`,
+        );
+        return false;
+      }
+      if (!result || result.anchors.length < 3) {
+        // A rectangle can legitimately carry NO PathGeometry, which the
+        // contract documents as "nothing to draw" — reporting that is
+        // more useful than an error the designer cannot act on.
+        setStatus(
+          "That element exposes no path with at least three anchors " +
+            "(a plain rectangle often carries none).",
+        );
+        return false;
+      }
+      const fit = await resolveFrameFit(host, src, "selectionFromPath");
+      if (!fit) {
+        setStatus("The image frame's geometry could not be read.");
+        return false;
+      }
+      // Flatten each cubic segment. A fixed subdivision is honest here:
+      // the target is a PIXEL mask, so more than a pixel's worth of
+      // precision buys nothing and the cost is bounded.
+      const flat: Array<[number, number]> = [];
+      const a = result.anchors;
+      for (let i = 0; i < a.length; i += 1) {
+        const cur = a[i];
+        const nxt = a[(i + 1) % a.length];
+        flat.push(pageToImage(fit, cur.anchor as [number, number]));
+        const straight =
+          cur.anchor[0] === cur.right[0] &&
+          cur.anchor[1] === cur.right[1] &&
+          nxt.anchor[0] === nxt.left[0] &&
+          nxt.anchor[1] === nxt.left[1];
+        if (straight) continue;
+        for (let step = 1; step < CURVE_STEPS; step += 1) {
+          const t = step / CURVE_STEPS;
+          flat.push(
+            pageToImage(
+              fit,
+              cubicAt(cur.anchor, cur.right, nxt.left, nxt.anchor, t),
+            ),
+          );
+        }
+      }
+      try {
+        engine.selectionSetPolygon(flat, "replace");
+      } catch (err) {
+        setStatus(
+          `Path selection failed: ${err instanceof Error ? err.message : err}`,
+        );
+        return false;
+      }
+      api.refreshSelection();
+      setStatus(
+        `Selection loaded from a ${a.length}-anchor path ` +
+          `(${flat.length} points after flattening).`,
+      );
+      return true;
+    },
+
+    setType(p) {
+      state.type = { ...state.type, ...p };
+      emit();
+    },
+
+    async paintText([x, y], text, family, sizePx) {
+      const src = state.source;
+      if (!engine || !src) {
+        setStatus("Nothing ingested — ingest a placed image first.");
+        return false;
+      }
+      if (!host.supports("assets.fonts@1")) {
+        // PROBED, not assumed. Without the probe an unwired asset door
+        // and a font the document does not carry look identical, and
+        // they need different sentences.
+        setStatus("This host serves no fonts (assets.fonts@1).");
+        return false;
+      }
+      // The STYLE axis rides the same door — the contract has taken
+      // `style?` all along, so this needed no SDK change. Null asks for
+      // the family's default face.
+      const face = await host.assets.getFontFace(
+        family,
+        state.type.style ?? undefined,
+      );
+      if (!face) {
+        const asked = state.type.style ? ` ${state.type.style}` : "";
+        setStatus(
+          `The document carries no bytes for "${family}${asked}" — type ` +
+            "renders the faces the document already embeds, never a web " +
+            "fetch.",
+        );
+        return false;
+      }
+      // WHAT CAME BACK, not what was asked for. A host may resolve a
+      // request for Bold to the family's regular face, and a designer
+      // who typed Bold and got Regular should be told rather than left
+      // to notice. `face.style` is the host's own answer.
+      const resolvedStyle = face.style ?? null;
+      const styleDrift =
+        state.type.style !== null &&
+        resolvedStyle !== null &&
+        resolvedStyle.toLowerCase() !== state.type.style.toLowerCase();
+      state.busy = true;
+      emit();
+      let missing = 0;
+      try {
+        // CASE is applied to the STRING, before shaping — it is a
+        // different text, not a different rendering, and shaping the
+        // mapped string is what makes locale-aware casing (and the
+        // ligatures that follow from it) come out right.
+        const cased =
+          state.type.textCase === "upper"
+            ? text.toUpperCase()
+            : state.type.textCase === "lower"
+              ? text.toLowerCase()
+              : text;
+        missing = await engine.textPaint(
+          src.handle,
+          face.bytes,
+          cased,
+          sizePx,
+          x,
+          y,
+          state.brush.color,
+          state.type.trackingPerMille,
+          // The wasm reads non-positive as AUTO, so null passes through
+          // as 0 rather than needing a second parameter to mean "unset".
+          state.type.leadingPx ?? 0,
+          state.type.baselineShiftPx,
+          // PERCENT here, MULTIPLE across the boundary — converted once,
+          // at the seam, rather than letting two units travel together.
+          state.type.hScalePct / 100,
+          state.type.vScalePct / 100,
+          state.type.skewDeg,
+          state.type.underline ? 1 : 0,
+          state.type.strikethrough ? 1 : 0,
+          state.type.ligatures ? 1 : 0,
+          state.type.align === "center" ? 1 : state.type.align === "right" ? 2 : 0,
+        );
+      } catch (err) {
+        setStatus(`Type failed: ${err instanceof Error ? err.message : err}`);
+        state.busy = false;
+        emit();
+        return false;
+      }
+      refreshSourceReadout();
+      state.busy = false;
+      setStatus(
+        missing > 0
+          ? `Type set in ${family} — ${missing} character${
+              missing === 1 ? " has" : "s have"
+            } no glyph in this font and ${missing === 1 ? "was" : "were"} not drawn.`
+          : styleDrift
+            ? `Type set in ${family} — the document embeds no ` +
+              `"${state.type.style}" face, so "${resolvedStyle}" was used.`
+            : `Type set in ${family}${resolvedStyle ? ` ${resolvedStyle}` : ""}.`,
+      );
+      return true;
+    },
+
+    setCloneSource([x, y]) {
+      const aligned = state.cloneSource?.aligned ?? true;
+      state.cloneSource = { x, y, aligned };
+      setStatus(
+        `Clone source set at ${Math.round(x)}, ${Math.round(y)} — ` +
+          "paint to copy from there.",
+      );
+    },
+
+    setTone(patch) {
+      state.tone = { ...state.tone, ...patch };
+      state.tone.exposure = Math.min(1, Math.max(0, state.tone.exposure));
+      emit();
+    },
+
+    setCloneAligned(aligned) {
+      state.cloneSource = state.cloneSource
+        ? { ...state.cloneSource, aligned }
+        : null;
+      emit();
+    },
+
+    setBrushParams(p) {
+      state.brush = { ...state.brush, ...p };
+      // The brush paints the FOREGROUND: one colour, two names for it.
+      if (p.color) state.colors = { ...state.colors, fg: [...p.color] };
+      // Editing any parameter means the brush is no longer the preset.
+      // Keeping the row highlighted would claim a provenance the stroke
+      // does not have.
+      state.brushPreset = null;
+      emit();
+    },
+
+    async loadBrushLibrary(name, bytes) {
+      const eng = await ensureEngine();
+      if (!eng) {
+        setStatus("The image engine could not start.");
+        return false;
+      }
+      let library: BrushLibraryInfo;
+      try {
+        library = eng.abrPresets(bytes);
+      } catch (e) {
+        // The reader's message names WHAT it refused (legacy version,
+        // bad signature); a generic "could not load" would throw that
+        // away. "Not an .abr" and "an .abr with no presets" are
+        // different answers and the panel shows both.
+        setStatus(`${name}: ${e instanceof Error ? e.message : String(e)}`);
+        return false;
+      }
+      state.brushLibrary = library;
+      state.brushLibraryName = name;
+      state.brushPreset = null;
+      const warned = library.warnings.length;
+      setStatus(
+        `${name}: ${library.presetCount} brush preset${
+          library.presetCount === 1 ? "" : "s"
+        }` +
+          (library.sampleCount > 0
+            ? `, ${library.sampleCount} sampled tip${
+                library.sampleCount === 1 ? "" : "s"
+              } (bitmap tips are not painted — the engine's tip is parametric)`
+            : "") +
+          (warned > 0 ? `, ${warned} reader warning${warned === 1 ? "" : "s"}` : ""),
+      );
+      return true;
+    },
+
+    async pickBrushLibrary() {
+      if (!host.supports("shell.pickFile@1")) {
+        // `pickFile` resolves `[]` both when the user cancels and when no
+        // picker is wired at all. Probing keeps "you cancelled" from
+        // masquerading as "this host cannot open files".
+        setStatus("This host wires no file picker (shell.pickFile@1).");
+        return false;
+      }
+      const picked = await host.shell.pickFile({ accept: [".abr"] });
+      const file = picked[0];
+      if (!file) {
+        setStatus("No brush library chosen.");
+        return false;
+      }
+      return await this.loadBrushLibrary(file.name, file.bytes);
+    },
+
+    applyBrushPreset(index) {
+      const preset = state.brushLibrary?.presets.find((p) => p.index === index);
+      if (!preset) {
+        setStatus("No such brush preset.");
+        return false;
+      }
+      // Apply only what the engine's tip HAS. Everything else is
+      // reported rather than silently dropped — a designer who picks a
+      // 45°-angled elliptical brush and gets a circle should be told.
+      const patch: Partial<BrushParams> = {};
+      const unapplied: string[] = [];
+      if (preset.diameter !== null && preset.diameterUnit === "#Pxl") {
+        patch.size = Math.max(1, Math.round(preset.diameter));
+      } else if (preset.diameter !== null) {
+        unapplied.push(`diameter in ${preset.diameterUnit ?? "an unknown unit"}`);
+      }
+      if (preset.hardness !== null) {
+        patch.hardness = Math.min(1, Math.max(0, preset.hardness));
+      } else {
+        // A sampled tip's softness lives in its BITMAP, which this
+        // engine does not stamp; saying so beats leaving the previous
+        // brush's hardness silently in force.
+        unapplied.push("hardness (the file carries none for this tip kind)");
+      }
+      if (preset.spacing !== null && preset.spacingEnabled !== false) {
+        patch.spacing = Math.max(0.01, preset.spacing);
+      } else if (preset.spacing !== null) {
+        unapplied.push("spacing (disabled in the preset)");
+      }
+      if (preset.roundness !== null && Math.abs(preset.roundness - 1) > 0.001) {
+        unapplied.push("roundness — the tip is circular");
+      }
+      if (preset.angle !== null && Math.abs(preset.angle) > 0.001) {
+        unapplied.push("angle — the tip is circular");
+      }
+      state.brush = { ...state.brush, ...patch };
+      state.brushPreset = index;
+      setStatus(
+        `Brush: ${preset.name}` +
+          (unapplied.length > 0 ? ` — not applied: ${unapplied.join("; ")}` : ""),
+      );
+      return true;
+    },
+
+    closeBrushLibrary() {
+      state.brushLibrary = null;
+      state.brushLibraryName = null;
+      state.brushPreset = null;
+      emit();
+    },
+
+    async brushBegin(tool) {
+      const src = state.source;
+      if (!src || !engine) {
+        setStatus("Nothing to paint on — ingest a placed image first.");
+        return false;
+      }
+      if (!state.gpu) {
+        // No CPU blend path ships (spec §6) — the dab composite IS a
+        // registered WGSL dispatch.
+        setStatus("WebGPU unavailable — painting is GPU-only.");
+        return false;
+      }
+      if (state.strokeActive) return false;
+      // A sampling tool with no anchor would paint NOTHING and look
+      // broken, so it declines with the instruction instead. Photoshop
+      // says the same thing in a modal; this says it in the status line.
+      if (SAMPLING_TOOLS.includes(tool) && !state.cloneSource) {
+        setStatus(
+          "Alt-click to set the clone source first — a clone with no " +
+            "source has nothing to copy.",
+        );
+        return false;
+      }
+      try {
+        engine.brushBegin(src.handle, tool, state.brush);
+        if (SAMPLING_TOOLS.includes(tool) && state.cloneSource) {
+          // BEFORE the first extend: the offset is fixed at the first
+          // dab, and an anchor arriving later would be ignored silently.
+          engine.brushSetSource(
+            state.cloneSource.x,
+            state.cloneSource.y,
+            state.cloneSource.aligned,
+          );
+        }
+        if (TONE_TOOLS.includes(tool)) engine.brushSetTone(state.tone);
+      } catch (err) {
+        setStatus(`Paint failed: ${err instanceof Error ? err.message : err}`);
+        return false;
+      }
+      state.strokeActive = true;
+      state.strokeStats = null;
+      // Resolve the preview frame ONCE — a geometry read per pointer
+      // sample would put an async round-trip inside the drag.
+      strokeTarget = src.elementId;
+      if (!strokeTarget) {
+        const ids = host.selection.get();
+        strokeTarget = ids.length === 1 ? elementIdOf(ids[0]) : null;
+        if (strokeTarget) src.elementId = strokeTarget;
+      }
+      strokeBox = strokeTarget ? await frameBox(strokeTarget) : null;
+      if (!strokeTarget) {
+        // The stroke still paints into the engine image — say why nothing
+        // shows on the canvas rather than letting it look broken.
+        setStatus(
+          "Painting into the engine image — select the target frame to see " +
+            "the stroke in-frame.",
+        );
+      }
+      emit();
+      return true;
+    },
+
+    async brushExtend(sample) {
+      const src = state.source;
+      if (!src || !engine || !state.strokeActive) return false;
+      let rgba: Uint8Array;
+      try {
+        rgba = await engine.brushExtend(sample.x, sample.y, sample.pressure);
+      } catch (err) {
+        setStatus(`Paint failed: ${err instanceof Error ? err.message : err}`);
+        discardStroke();
+        emit();
+        return false;
+      }
+      state.strokeStats = engine.brushStats();
+      // The LIVE preview is the painted pixels themselves — NOT the
+      // adjust chain's output. The chain is a function of the source, so
+      // re-running it per sample would double the GPU work in the middle
+      // of a drag; the committed Apply (which brushCommit triggers) puts
+      // the adjusted composite back. Stated in the panel.
+      if (strokeTarget && strokeBox) {
+        // Only the dabs' rectangle crosses when the host takes tiles.
+        const patched = await submitDirty(strokeTarget, rgba, src.width, src.height);
+        if (!patched) await submitLayer(strokeTarget, rgba, src.width, src.height, strokeBox);
+      }
+      emit();
+      return true;
+    },
+
+    async brushCommit() {
+      const src = state.source;
+      if (!src || !engine || !state.strokeActive) return false;
+      const dabs = state.strokeStats?.dabs ?? 0;
+      const layerName = state.layers.layers[state.layers.active]?.name ?? null;
+      let painted: { handle: number; width: number; height: number };
+      try {
+        painted = await engine.brushCommit();
+      } catch (err) {
+        setStatus(
+          `Paint commit failed: ${err instanceof Error ? err.message : err}`,
+        );
+        discardStroke();
+        emit();
+        return false;
+      }
+      state.strokeActive = false;
+      state.strokeStats = null;
+      strokeTarget = null;
+      strokeBox = null;
+      brushMachineRef?.cancel();
+      // With a layer stack bound the engine wrote the stroke INTO the
+      // active layer (journaled) and re-composited into the SAME handle
+      // — so there is nothing to swap and the old handle must NOT be
+      // freed. Without one it is the pre-layer destructive commit.
+      const layered = painted.handle === src.handle;
+      swapSource(src, painted);
+      state.saveBack = null;
+      if (!layered) {
+        // Same size, so the SELECTION is still meaningful on the result.
+        try {
+          engine.selectionTransfer(painted.handle);
+        } catch (err) {
+          host.log.debug("selection transfer failed", err);
+        }
+      }
+      refreshSourceReadout();
+      // Put the ADJUSTED composite back over the raw stroke preview.
+      if (src.elementId) await api.apply();
+      const where = layerName ? `layer “${layerName}”` : "the engine image";
+      setStatus(
+        `Painted ${dabs} dab${dabs === 1 ? "" : "s"} into ${where}` +
+          (layered
+            ? " — undoable (the stroke's tiles are journaled). The document " +
+              "and the source file are unchanged."
+            : " (destructive, no layer stack bound — re-ingest to restore).") +
+          (state.history?.dropped
+            ? ` History window: ${state.history.depth} step${
+                state.history.depth === 1 ? "" : "s"
+              }, ${state.history.dropped} older edit${
+                state.history.dropped === 1 ? "" : "s"
+              } past the undo budget and now permanent.`
+            : ""),
+      );
+      return true;
+    },
+
+    // ── THE LAYER GRAPH ─────────────────────────────────────────────
+
+    async addLayer(name = "") {
+      const ok = await layerOp("Add layer", () => engine!.layerAdd(name));
+      if (ok) {
+        const l = state.layers.layers[state.layers.active];
+        setStatus(
+          `Added layer “${l?.name ?? name}” — paint, fills and bakes land ` +
+            "there until you pick another.",
+        );
+      }
+      return ok;
+    },
+
+    duplicateLayer(index) {
+      return layerOp("Duplicate layer", () => engine!.layerDuplicate(index));
+    },
+
+    async removeLayer(index) {
+      const name = state.layers.layers[index]?.name ?? `layer ${index}`;
+      const ok = await layerOp("Remove layer", () =>
+        engine!.layerRemove(index),
+      );
+      if (ok) {
+        setStatus(`Removed “${name}” — Undo brings it back.`);
+      }
+      return ok;
+    },
+
+    reorderLayer(from, to) {
+      return layerOp("Reorder layers", () => engine!.layerReorder(from, to));
+    },
+
+    setActiveLayer(index) {
+      if (!engine || !state.source) return false;
+      try {
+        engine.layerSetActive(index);
+      } catch (err) {
+        setStatus(
+          `Select layer failed: ${err instanceof Error ? err.message : err}`,
+        );
+        return false;
+      }
+      refreshLayers();
+      const row = state.layers.layers[index];
+      const params = row ? adjustmentParams.get(row.id) : undefined;
+      if (row && row.kind === "adjustment" && params) {
+        if (!state.editingAdjustment) paramsBeforeBinding = state.params;
+        state.editingAdjustment = { index, id: row.id };
+        state.params = structuredClone(params);
+        setStatus(`Editing adjustment layer “${row.name}” — the sliders change it directly.`);
+      } else if (state.editingAdjustment) {
+        state.editingAdjustment = null;
+        state.params = paramsBeforeBinding ?? freshIdentityParams();
+        paramsBeforeBinding = null;
+      }
+      emit();
+      return true;
+    },
+
+    setLayerVisible(index, visible) {
+      return layerOp("Layer visibility", () =>
+        engine!.layerSetVisible(index, visible),
+      );
+    },
+
+    setLayerOpacity(index, opacity) {
+      return layerOp("Layer opacity", () =>
+        engine!.layerSetOpacity(index, opacity),
+      );
+    },
+
+    setLayerBlend(index, blend) {
+      return layerOp("Layer blend", () => engine!.layerSetBlend(index, blend));
+    },
+
+    async layerMaskFromSelection(index) {
+      if (!engine || !state.source) return false;
+      try {
+        engine.layerMaskFromSelection(index);
+      } catch (err) {
+        // The engine refuses with no selection rather than attaching an
+        // all-one mask that would look like success and mask nothing.
+        setStatus(
+          `Layer mask failed: ${err instanceof Error ? err.message : err}`,
+        );
+        return false;
+      }
+      return finishMaskEdit();
+    },
+
+    async setLayerMaskEnabled(index, enabled) {
+      if (!engine || !state.source) return false;
+      try {
+        engine.layerSetMaskEnabled(index, enabled);
+      } catch (err) {
+        setStatus(
+          `Layer mask toggle failed: ${err instanceof Error ? err.message : err}`,
+        );
+        return false;
+      }
+      return finishMaskEdit();
+    },
+
+    async setLayerClipped(index, clipped) {
+      if (!engine || !state.source) return false;
+      try {
+        engine.layerSetClipped(index, clipped);
+      } catch (err) {
+        setStatus(
+          `Clip failed: ${err instanceof Error ? err.message : err}`,
+        );
+        return false;
+      }
+      return finishMaskEdit();
+    },
+
+    async groupLayers(from, to, name = "Group") {
+      if (!engine || !state.source) return false;
+      try {
+        engine.layersGroup(from, to, name);
+      } catch (err) {
+        // The engine's refusal names its reason (out of range, already
+        // grouped) — a generic message would hide which.
+        setStatus(`Group failed: ${err instanceof Error ? err.message : err}`);
+        return false;
+      }
+      return finishMaskEdit();
+    },
+
+    async ungroupLayers(id) {
+      if (!engine || !state.source) return false;
+      try {
+        engine.layersUngroup(id);
+      } catch (err) {
+        setStatus(`Ungroup failed: ${err instanceof Error ? err.message : err}`);
+        return false;
+      }
+      return finishMaskEdit();
+    },
+
+    async setGroupVisible(id, visible) {
+      return groupEdit(() => engine!.layerSetGroupVisible(id, visible));
+    },
+    async setGroupOpacity(id, opacity) {
+      return groupEdit(() => engine!.layerSetGroupOpacity(id, opacity));
+    },
+    async setGroupName(id, name) {
+      return groupEdit(() => engine!.layerSetGroupName(id, name));
+    },
+    async setGroupBlend(id, blend) {
+      return groupEdit(() => engine!.layerSetGroupBlend(id, blend));
+    },
+    async setGroupPassThrough(id, passThrough) {
+      return groupEdit(() => engine!.layerSetGroupPassThrough(id, passThrough));
+    },
+
+    async makeLayerSmart(index) {
+      if (!engine || !state.source) return false;
+      try {
+        engine.layerMakeSmart(index);
+      } catch (err) {
+        setStatus(
+          `Convert to smart object failed: ${err instanceof Error ? err.message : err}`,
+        );
+        return false;
+      }
+      refreshLayers();
+      emit();
+      // Converting alone changes no pixel, so there is nothing to
+      // re-composite — unlike a mask edit.
+      return true;
+    },
+
+    async renderLayerSmart(index, scale) {
+      if (!engine || !state.source) return false;
+      state.busy = true;
+      emit();
+      try {
+        await engine.layerRenderSmart(index, scale);
+      } catch (err) {
+        setStatus(
+          `Smart re-render failed: ${err instanceof Error ? err.message : err}`,
+        );
+        state.busy = false;
+        emit();
+        return false;
+      }
+      state.busy = false;
+      const ok = await finishMaskEdit();
+      if (ok) {
+        setStatus(
+          `Re-rendered from the preserved source at ${Math.round(scale * 100)}% — ` +
+            "scaling a smart object never loses the original.",
+        );
+      }
+      return ok;
+    },
+
+    async addLayerMask(index, revealAll) {
+      if (!engine || !state.source) return false;
+      try {
+        engine.layerAddMask(index, revealAll);
+      } catch (err) {
+        setStatus(`Add layer mask failed: ${err instanceof Error ? err.message : err}`);
+        return false;
+      }
+      const ok = await finishMaskEdit();
+      if (ok) {
+        setStatus(
+          (revealAll
+            ? "Added a reveal-all mask"
+            : "Added a hide-all mask — the layer is hidden until you paint it back in") +
+            ". Paint tools now edit the mask: the brush paints the foreground's grey, " +
+            "the eraser reveals.",
+        );
+      }
+      return ok;
+    },
+
+    setEditTarget(index, target) {
+      if (!engine || !state.source) return false;
+      try {
+        engine.layerSetEditTarget(index, target);
+      } catch (err) {
+        setStatus(`Edit target failed: ${err instanceof Error ? err.message : err}`);
+        return false;
+      }
+      refreshLayers();
+      emit();
+      return true;
+    },
+
+    async clearLayerMask(index) {
+      if (!engine || !state.source) return false;
+      try {
+        engine.layerClearMask(index);
+      } catch (err) {
+        setStatus(
+          `Layer mask clear failed: ${err instanceof Error ? err.message : err}`,
+        );
+        return false;
+      }
+      return finishMaskEdit();
+    },
+
+    setLayerLocked(index, locked) {
+      // A lock changes no pixel, so it does not re-composite.
+      if (!engine || !state.source) return false;
+      try {
+        engine.layerSetLocked(index, locked);
+      } catch (err) {
+        setStatus(
+          `Layer lock failed: ${err instanceof Error ? err.message : err}`,
+        );
+        return false;
+      }
+      refreshLayers();
+      emit();
+      return true;
+    },
+
+    setLayerName(index, name) {
+      if (!engine || !state.source) return false;
+      try {
+        engine.layerSetName(index, name);
+      } catch (err) {
+        setStatus(`Rename failed: ${err instanceof Error ? err.message : err}`);
+        return false;
+      }
+      refreshLayers();
+      emit();
+      return true;
+    },
+
+    async addAdjustmentLayer() {
+      if (!engine || !state.source) {
+        setStatus("Nothing ingested — ingest a placed image first.");
+        return false;
+      }
+      state.busy = true;
+      emit();
+      try {
+        const at = engine.layersAddAdjustment("", state.params);
+        const id = engine.layers().layers[at]?.id;
+        if (id !== undefined) adjustmentParams.set(id, structuredClone(state.params));
+      } catch (err) {
+        // Identity is the common refusal, and it is honest: a row that
+        // adjusts nothing would just be clutter that looks like work.
+        setStatus(
+          `Adjustment layer failed: ${err instanceof Error ? err.message : err}`,
+        );
+        state.busy = false;
+        emit();
+        return false;
+      }
+      state.busy = false;
+      const ok = await finishMaskEdit();
+      if (ok) {
+        setStatus(
+          "Adjustment layer added — it transforms everything beneath it, " +
+            "and deleting it restores the original exactly.",
+        );
+      }
+      return ok;
+    },
+
+    async bakeAdjustToLayer() {
+      if (!engine || !state.source) {
+        setStatus("Nothing ingested — ingest a placed image first.");
+        return false;
+      }
+      state.busy = true;
+      emit();
+      try {
+        await engine.layersBakeAdjust(state.params);
+      } catch (err) {
+        // Identity, a locked layer, or no device — the engine's reason.
+        setStatus(`Bake failed: ${err instanceof Error ? err.message : err}`);
+        state.busy = false;
+        emit();
+        return false;
+      }
+      const name =
+        state.layers.layers[state.layers.active]?.name ?? "the active layer";
+      state.busy = false;
+      // The chain is now IN the pixels, so the panel returns to identity
+      // — leaving the sliders up would apply it a second time on Apply.
+      state.params = freshIdentityParams();
+      state.saveBack = null;
+      const ok = await recomposite();
+      if (ok) {
+        setStatus(
+          `Baked the adjustments into layer “${name}” (undoable) and reset ` +
+            "the panel to identity — the chain now lives in those pixels.",
+        );
+      }
+      return ok;
+    },
+
+    undo() {
+      return historyStep(true);
+    },
+
+    async undoSteps(n) {
+      let ok = true;
+      for (let i = 0; i < n && ok; i++) ok = await historyStep(true);
+      return ok;
+    },
+
+    async redoSteps(n) {
+      let ok = true;
+      for (let i = 0; i < n && ok; i++) ok = await historyStep(false);
+      return ok;
+    },
+
+    redo() {
+      return historyStep(false);
+    },
+
+    brushCancel() {
+      if (!state.strokeActive) return;
+      discardStroke();
+      setStatus(
+        "Stroke cancelled — the engine pixels are exactly as they were.",
+      );
+      // The frame is still showing the abandoned preview; put the
+      // committed composite back.
+      if (state.compositedFrame && state.source?.elementId) void api.apply();
+      else emit();
+    },
+
+    async commitCrop() {
+      const src = state.source;
+      if (!src || !engine || !cropMachineRef) {
+        setStatus("Nothing to crop — ingest a placed image first.");
+        return false;
+      }
+      let cropped: { handle: number; width: number; height: number };
+      try {
+        // The commit carries the STRAIGHTEN angle: at 0° it is the pure
+        // axis-aligned cut, otherwise the engine rotates first
+        // (geom.rotate_bilinear) so the rotated frame lands upright.
+        cropped = await cropMachineRef.commit(engine, src.handle);
+      } catch (err) {
+        setStatus(`Crop failed: ${err instanceof Error ? err.message : err}`);
+        return false;
+      }
+      // Swap the engine-held source to the cropped image (free the old
+      // pixels; a tile claim points at the old handle, so release it).
+      releaseTiles();
+      engine.freeImage(src.handle);
+      markPixelsEdited();
+      src.handle = cropped.handle;
+      src.width = cropped.width;
+      src.height = cropped.height;
+      refreshSourceReadout();
+      const straightened = cropMachineRef.state().angle !== 0;
+      setStatus(
+        `Cropped to ${cropped.width}×${cropped.height}` +
+          (straightened
+            ? ` (straightened ${cropMachineRef.state().angle}° — bilinear resample)`
+            : "") +
+          " (document unchanged — engine source only; Apply to recomposite).",
+      );
+      // Re-composite the cropped pixels in-frame when a frame is targeted.
+      if (src.elementId) await api.apply();
+      else emit();
+      return true;
+    },
+
+    async apply() {
+      const src = state.source;
+      if (!src || !engine) {
+        setStatus("Nothing ingested — select an image frame and ingest first.");
+        return false;
+      }
+      // An import targets the currently selected frame at Apply time.
+      let target = src.elementId;
+      if (!target) {
+        const ids = host.selection.get();
+        target = ids.length === 1 ? elementIdOf(ids[0]) : null;
+        if (!target) {
+          setStatus("Select the target frame to composite the import into.");
+          return false;
+        }
+        src.elementId = target;
+      }
+      const surface = scene();
+      if (!surface) {
+        setStatus("No scene channel (rendering.sceneLayer@1 is false).");
+        return false;
+      }
+      if (!state.gpu && !isIdentity(state.params)) {
+        setStatus("WebGPU unavailable — only the identity composite works.");
+        return false;
+      }
+
+      state.busy = true;
+      setStatus("Adjusting…");
+      try {
+        const rgba = await engine.adjust(src.handle, state.params);
+        await submitLayer(
+          target,
+          rgba,
+          src.width,
+          src.height,
+          await frameBox(target),
+        );
+        // The engine masked the chain by the bound selection (if any) —
+        // say so, honestly.
+        const sel = state.selection
+          ? " (adjustments masked to the selection)"
+          : "";
+        setStatus(
+          `Composited ${src.width}×${src.height} into the frame` +
+            `${sel} (document unchanged — preview layer only).`,
+        );
+        return true;
+      } catch (err) {
+        setStatus(`Adjust failed: ${err instanceof Error ? err.message : err}`);
+        return false;
+      } finally {
+        state.busy = false;
+        emit();
+      }
+    },
+
+    claimTiles() {
+      const src = state.source;
+      if (!src || !engine) {
+        setStatus("Nothing ingested — ingest a placed image first.");
+        return false;
+      }
+      // An import claims the frame it was (or will be) composited into; a
+      // selection ingest already carries its frame.
+      let target = src.elementId;
+      if (!target) {
+        const ids = host.selection.get();
+        target = ids.length === 1 ? elementIdOf(ids[0]) : null;
+        if (!target) {
+          setStatus("Select the frame to claim tiles for.");
+          return false;
+        }
+        src.elementId = target;
+      }
+      if (!host.supports("rendering.resourceProvider@1")) {
+        setStatus(
+          "Host serves no tile resource (rendering.resourceProvider@1 is false).",
+        );
+        return false;
+      }
+      releaseTiles();
+      // The provider reads the LIVE handle on each pull — a re-ingest of
+      // the same frame is picked up without re-claiming.
+      const claim = claimImageTiles(
+        host,
+        {
+          elementId: target,
+          handle: src.handle,
+          width: src.width,
+          height: src.height,
+        },
+        engine,
+        () => (state.source ? state.source.handle : null),
+      );
+      tileClaim = {
+        elementId: target,
+        dispose: () => claim.dispose(),
+        bump: () => claim.bump(),
+      };
+      setStatus(
+        `Claimed tile resource for the frame (level-0 lane; ${src.width}×${src.height}). ` +
+          "The renderer pulls tiles at its current scale.",
+      );
+      return true;
+    },
+
+    tilesClaimed() {
+      return tileClaim !== null;
+    },
+
+    async reset() {
+      state.params = freshIdentityParams();
+      state.saveBack = null;
+      cropMachineRef?.reset(
+        state.source?.width ?? 0,
+        state.source?.height ?? 0,
+      );
+      await clearLayer();
+      setStatus("Reset — in-frame preview cleared.");
+    },
+
+    dispose() {
+      disposed = true;
+      if (settleTimer) clearTimeout(settleTimer);
+      selectionSub.dispose();
+      discardStroke();
+      releaseTiles();
+      // K-3 — terminate the decode pool's workers (the host ALSO
+      // auto-terminates them on bundle dispose; this is the explicit,
+      // earlier teardown, and terminate is idempotent).
+      decodePool?.dispose();
+      decodePool = null;
+      if (patternHandle !== null && engine) engine.freeImage(patternHandle);
+      patternHandle = null;
+      freeSource();
+      // The host tears the scene surface down (contribute-tracked); its
+      // dispose clears every submitted layer.
+      listeners.clear();
+    },
+  };
+  return api;
+}

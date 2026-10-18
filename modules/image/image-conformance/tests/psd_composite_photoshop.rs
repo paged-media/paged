@@ -1,0 +1,259 @@
+/*
+ * This file is part of paged (https://paged.media).
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * This file is part of paged (https://paged.media) and is additionally
+ * available under the Paged Media Enterprise License (PMEL). Full
+ * copyright and license information is available in LICENSE.md which is
+ * distributed with this source code.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
+ */
+
+//! PHOTOSHOP-WRITTEN LAYERED PSDs, replayed in CI. `layer-stacks.jsx`
+//! had Photoshop build small RGB documents (transparency, opacity and
+//! blend stacks, clipping, a layer mask, groups) and save each as a PSD
+//! with REAL merged data, plus a PNG of the same document as the
+//! straight-alpha colour reference. These are public fixtures, so the
+//! private corpus oracle's findings can be pinned where CI sees them.
+//!
+//! For each PSD: resource 0x0421 must vouch for the merged composite;
+//! the layers go through the shipping import (`layer_plates_rgba8` →
+//! `LayerStack::from_psd_plates`) and the GPU fold; the result is
+//! compared with Photoshop's merged composite. [`EXPECT`] holds the
+//! outcome and the measured distance of every case — an improvement
+//! passes, a regression fails, and a changed refusal is a diff to
+//! review. The defects this file found (the merged-composite matte, the
+//! clipping group) are fixed and their tests kept.
+
+use std::path::{Path, PathBuf};
+
+use image_conformance::psd_corpus::{classify, compare_rgba8, merged_data, MergedData, Reference};
+use image_js::layers::LayerStack;
+use image_psd::PsdFile;
+use zune_core::bytestream::ZCursor;
+use zune_png::PngDecoder;
+
+fn dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/photoshop/layer-stacks")
+}
+
+/// What a case is expected to do: `Ok(max_levels)` = compared, at most
+/// that far from Photoshop's merged composite (8-bit levels, RGB over
+/// white); `Err(category)` = refused for that reason.
+///
+/// Recorded 2026-10 against Photoshop 27.10:
+/// * `transparent-soft` and `opacity-blend-stack` AGREE;
+/// * `clip-base-100` / `clip-base-50` AGREE since the fold composites a
+///   clip base and its clipped layers as a group (they were 27 and 64
+///   levels off while the clipped layers blended against everything
+///   below); `clipping_groups_match_photoshop` below keeps it;
+/// * `group-isolated-50`, `group-pass-through` and `layer-mask` AGREE
+///   since the import reads groups (divider + folder records) and user
+///   masks (they were refused before).
+const EXPECT: &[(&str, Result<u8, &str>)] = &[
+    ("clip-base-100", Ok(1)),
+    ("clip-base-50", Ok(1)),
+    ("group-isolated-50", Ok(0)),
+    ("group-pass-through", Ok(0)),
+    ("layer-mask", Ok(1)),
+    ("opacity-blend-stack", Ok(1)),
+    ("transparent-soft", Ok(0)),
+];
+
+fn psd(id: &str) -> PsdFile {
+    let bytes = std::fs::read(dir().join(format!("{id}.psd"))).expect("read fixture PSD");
+    PsdFile::parse(&bytes).expect("parse")
+}
+
+/// Photoshop's PNG export of the document: straight RGBA8.
+fn png_rgba8(path: &Path) -> Vec<u8> {
+    let bytes = std::fs::read(path).expect("read PNG");
+    let mut dec = PngDecoder::new(ZCursor::new(&bytes));
+    let px = dec.decode_raw().expect("decode PNG");
+    let ch = dec.colorspace().expect("colorspace").num_components();
+    match ch {
+        4 => px,
+        3 => px
+            .chunks_exact(3)
+            .flat_map(|p| [p[0], p[1], p[2], 255])
+            .collect(),
+        n => panic!("{n}-channel PNG"),
+    }
+}
+
+/// Our flatten, or the engine's refusal reduced to a category.
+fn flatten(file: &PsdFile) -> Result<Vec<u8>, String> {
+    let import = file.layer_plates_rgba8().map_err(|e| {
+        let s = e.to_string();
+        if s.contains("GROUPED") {
+            "groups".into()
+        } else if s.contains("LAYER MASK") {
+            "layer-mask".into()
+        } else {
+            s
+        }
+    })?;
+    let ctx = image_conformance::device::test_device().ok_or("no-gpu")?;
+    let stack = LayerStack::from_psd_plates(&import).map_err(|e| e.to_string())?;
+    pollster::block_on(stack.composite(Some(ctx), None))
+        .map(|p| p.to_vec())
+        .map_err(|e| e.to_string())
+}
+
+fn ids() -> Vec<String> {
+    let mut v: Vec<String> = std::fs::read_dir(dir())
+        .expect("fixtures dir")
+        .flatten()
+        .filter_map(|e| {
+            let n = e.file_name().to_string_lossy().into_owned();
+            n.strip_suffix(".psd").map(str::to_string)
+        })
+        .collect();
+    v.sort();
+    v
+}
+
+#[test]
+#[allow(non_snake_case)]
+fn photoshop_layer_stacks_flatten_as_recorded__feat__image_psd_layer_import() {
+    let have_gpu = image_conformance::device::test_device().is_some();
+    let mut report = Vec::new();
+    let mut problems = Vec::new();
+    for id in ids() {
+        let file = psd(&id);
+        assert_eq!(
+            merged_data(&file),
+            MergedData::Real,
+            "{id}: Photoshop wrote it with maximize compatibility, so 0x0421 must vouch"
+        );
+        let theirs = file.composite_rgba8().expect("merged composite decodes");
+        // The decoder un-mattes, so the merged composite is straight.
+        let reference = Reference::Straight;
+        let got: Result<u8, String> = match flatten(&file) {
+            Ok(ours) => Ok(compare_rgba8(&ours, &theirs.rgba, reference).channels[..3]
+                .iter()
+                .map(|c| c.max)
+                .max()
+                .unwrap_or(0)),
+            Err(e) if e == "no-gpu" => {
+                eprintln!("SKIP {id}: no GPU adapter");
+                continue;
+            }
+            Err(e) => Err(e),
+        };
+        report.push(format!(
+            "{id:<22} [{}] {got:?}",
+            classify(&file).tags().join(",")
+        ));
+        match EXPECT.iter().find(|(e, _)| *e == id) {
+            None => problems.push(format!("{id}: no expectation recorded ({got:?})")),
+            Some((_, want)) => match (want, &got) {
+                (Ok(w), Ok(g)) if g <= w => {}
+                (Err(w), Err(g)) if g == w => {}
+                _ => problems.push(format!("{id}: expected {want:?}, got {got:?}")),
+            },
+        }
+    }
+    println!("{}", report.join("\n"));
+    if have_gpu {
+        assert!(problems.is_empty(), "{}", problems.join("\n"));
+    }
+}
+
+/// MERGED-COMPOSITE MATTE. A transparent document's merged composite
+/// stores its colour MATTED against white (`c·α + 255·(1 − α)`) — the
+/// corpus shows it on every transparent file, and Photoshop's own PNG
+/// export of the same document, which is straight, confirms it. The
+/// decoder (`PsdFile::composite_rgba8`, the flattened-ingest path)
+/// un-mattes; left matted, every semi-transparent edge of a placed PSD
+/// came in lightened toward white (up to ~255 levels as α → 0).
+///
+/// The stored value is 8-bit, so un-matting divides its rounding error
+/// by α: the bound is `1 + 128/α` levels (2 when opaque, 9 at α = 16).
+#[test]
+#[allow(non_snake_case)]
+fn merged_composite_of_a_transparent_psd_decodes_to_straight_colour__feat__image_psd_rendered() {
+    let file = psd("transparent-soft");
+    assert!(
+        file.layer_mask.transparency_in_merged,
+        "fixture is transparent"
+    );
+    let ours = file.composite_rgba8().expect("decode").rgba;
+    let theirs = png_rgba8(&dir().join("transparent-soft.png"));
+    let mut over = Vec::new();
+    for (a, b) in ours.chunks_exact(4).zip(theirs.chunks_exact(4)) {
+        if b[3] < 16 {
+            continue; // colour is ill-conditioned this close to clear
+        }
+        let bound = 1 + 128 / u32::from(b[3]);
+        let d = (0..3).map(|c| a[c].abs_diff(b[c])).max().unwrap_or(0);
+        if u32::from(d) > bound {
+            over.push((d, b[3]));
+        }
+    }
+    assert!(
+        over.is_empty(),
+        "{} pixels beyond the 8-bit bound, e.g. {:?} (levels, alpha)",
+        over.len(),
+        &over[..over.len().min(5)]
+    );
+}
+
+/// Opaque pixels are not touched by the un-matte (α = 255 is the identity),
+/// and alpha itself decodes exactly.
+#[test]
+#[allow(non_snake_case)]
+fn unmatting_leaves_alpha_and_opaque_pixels_exact__feat__image_psd_rendered() {
+    let file = psd("transparent-soft");
+    let ours = file.composite_rgba8().expect("decode").rgba;
+    let theirs = png_rgba8(&dir().join("transparent-soft.png"));
+    for (a, b) in ours.chunks_exact(4).zip(theirs.chunks_exact(4)) {
+        assert_eq!(a[3], b[3], "alpha decodes exactly");
+        if b[3] == 255 {
+            assert!(
+                (0..3).all(|c| a[c].abs_diff(b[c]) <= 1),
+                "opaque pixel changed"
+            );
+        }
+    }
+}
+
+#[test]
+#[allow(non_snake_case)]
+fn clipping_groups_match_photoshop__feat__image_layers_clipping() {
+    for id in ["clip-base-100", "clip-base-50"] {
+        let file = psd(id);
+        let theirs = file.composite_rgba8().expect("merged").rgba;
+        let Ok(ours) = flatten(&file) else {
+            eprintln!("SKIP {id}: no GPU adapter or refused");
+            return;
+        };
+        let d = compare_rgba8(&ours, &theirs, Reference::Straight);
+        let max = d.channels[..3].iter().map(|c| c.max).max().unwrap_or(0);
+        assert!(
+            max <= 2,
+            "{id}: {max} levels from Photoshop's merged composite"
+        );
+    }
+}

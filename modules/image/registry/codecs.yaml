@@ -1,0 +1,263 @@
+# paged.image LOCAL codec registry (spec §10.3 format matrix; M0 lands
+# the traits + the M0 adapters, the matrix fills through M1). state_row
+# joins onto paged-media/state rows.
+
+- id: image.codec.traits
+  state_row: image.codec.traits
+  tier: shipped          # M0: frozen + exercised by raw/png adapters
+  provenance:
+    - "spec §10.2 verbatim trait surface; sans-IO design"
+  tests:
+    rust: ["image-codecs/src/raw.rs (unit)", "image-conformance/tests/codec_traits.rs"]
+
+- id: image.codec.raw
+  state_row: image.codec.traits
+  tier: shipped          # M0: decode (in-memory test/bring-up source); M4: RawTarget encode (strip-assembled packed pixels — the to_encoder_async readback the image-js ingest slice hands to the C-1 image scene item)
+  provenance:
+    - "trivial interleaved buffer adapter; no container"
+  tests:
+    rust: ["image-codecs/src/raw.rs (unit)", "image-conformance/tests/pipeline_async.rs", "image-js/tests/ingest.rs"]
+
+- id: image.codec.png
+  state_row: image.codec.traits
+  tier: shipped          # M0: decode+encode (PngSource/PngTarget; 8-bit; limits below)
+  # D-4 RESOLVED → zune-png (0.5). criterion bench
+  # image-conformance/benches/png_d4.rs (synthetic 256²/1024², RGBA8 +
+  # RGB8, gradient+checkerboard so filters do real work). Measured
+  # (Apple M-series, --quick, median):
+  #   decode 1024² RGBA8 : zune 0.66 ms  vs image/png 5.50 ms  (~8.4×)
+  #   decode 1024² RGB8  : zune 0.31 ms  vs image/png 4.22 ms  (~13.6×)
+  #   decode  256² RGBA8 : zune 36.6 µs  vs image/png  354 µs  (~9.7×)
+  #   encode 1024² RGBA8 : zune 2.69 ms  vs image/png 6.78 ms  (~2.5×)
+  #   encode 1024² RGB8  : zune 2.03 ms  vs image/png 4.56 ms  (~2.3×)
+  #   encode  256² RGBA8 : zune  142 µs  vs image/png  527 µs  (~3.7×)
+  # zune-png wins every cell, decode and encode. Provisional until the
+  # Links corpus audit (pre-M1 freeze, spec §10.3 corpus rule).
+  decision: "D-4 RESOLVED → zune-png (wins every decode+encode cell, 2.3×–13.6×); bench image-conformance/benches/png_d4.rs; provisional until the Links corpus audit (pre-M1 freeze)"
+  # M0 adapter limits (decode.rs/encode.rs): 8-bit only (U16 errors
+  # Unsupported, M1 lane); RGB widened to Rgba (alpha=255) at the slice
+  # boundary; PNG-without-gamma → Transfer::Gamma(Srgb)/space Srgb/
+  # AlphaMode::Straight; native_shrink == [1]; whole-decode-then-window
+  # (row-streaming is M1); ICC embed NOT supported by zune-png 0.5 (no
+  # iCCP writer) — TargetInfo.icc is dropped on encode (M1 follow-up).
+  provenance:
+    - "PNG (RFC 2083 / W3C PNG 3rd ed.) via zune-png 0.5 (pure-Rust, no_std-capable decode+encode)"
+  tests:
+    rust: ["image-conformance/tests/codec_png.rs"]
+
+- id: image.codec.jpeg
+  state_row: image.codec.traits
+  tier: shipped          # M0: decode (incl. CMYK/YCCK + APP14) + encode (RGB/Gray); limits below
+  # Decode = zune-jpeg 0.5.15 (baseline + progressive, pure-Rust); encode
+  # = jpeg-encoder 0.7.0 (RGB/Gray, 4:2:0 default). Both pinned by explicit
+  # version in image-codecs/Cargo.toml (no other workspace consumer); zune-
+  # jpeg pins zune-core 0.5.1 so no duplicate zune-core lands.
+  # M0 adapter limits (jpeg/decode.rs, jpeg/encode.rs):
+  #  - 8-bit only.
+  #  - DECODE channel map (zune *input* colorspace, post-APP14):
+  #      Luma→Gray (native_format gray8); YCbCr→Rgba (ycbcr8) & RGB→Rgba
+  #      (rgb8), both widened alpha=255; CMYK→Cmyk (cmyk8+adobe-app14);
+  #      YCCK→Cmyk (ycck8+adobe-app14).
+  #  - ADOBE CMYK INVERSION RULE (spec §10.3): Adobe-authored CMYK/YCCK
+  #      JPEGs store inverted ink (stored = 255 - ink). The adapter
+  #      re-inverts (ink = 255 - stored) for the CMYK/YCCK paths; YCCK is
+  #      first taken to stored-CMY via the inverse JFIF YCbCr→RGB matrix
+  #      then inverted (CMY + K). zune-jpeg exposes no APP14-presence flag,
+  #      so a (rare) non-inverted 4-component JPEG without APP14 would
+  #      decode inverted — documented limitation pending an upstream flag.
+  #  - ICC read = APP2 ICC_PROFILE markers concatenated by zune-jpeg's
+  #      icc_profile() (sequence-ordered) — no M1.5 follow-up on the read
+  #      path. EXIF surfaced via SourceInfo.exif.
+  #  - native_shrink == [1]: zune-jpeg 0.5.15 has no public DCT-scaled
+  #      (1/2,1/4,1/8) decode → the shrink-on-load planner (§7.2) resamples
+  #      post-decode, paying a full-resolution IDCT even for an 1/8 request
+  #      (DCT-scaled fast path is a follow-up gated on a zune-jpeg API).
+  #  - whole-decode-then-window (like PNG); row-streaming is M1.
+  #  - ENCODE: RGB + Gray only (Rgba strips drop alpha — JPEG has no alpha;
+  #      Gray→Luma). Quality is the JpegTarget::new(quality) constructor
+  #      param (frozen TargetInfo carries no codec options). 4:2:0 default.
+  #      CMYK/GrayA encode = Unsupported (no CMYK strip producer at M0).
+  #  - Measured fidelity (image-conformance/tests/codec_jpeg.rs, smooth
+  #      gradient, mean abs error /255): RGB q90 ~1.64; Gray q90 ~0.18;
+  #      RGB q50 ~3.52 vs q95 ~1.48. Bound asserted: MAE < 4/255 @ q90.
+  #  - CMYK round-trip NOT corpus-tested (jpeg-encoder emits RGB/Gray here,
+  #      no CMYK JPEG synthesizable through the adapter); the Adobe APP14
+  #      inversion math is unit-tested directly (hand-built stored-sample
+  #      fixtures in jpeg/decode.rs). Real-CMYK-corpus decode = needs-real-
+  #      corpus follow-up (spec §10.3 corpus rule).
+  # NOTE: jpeg-encoder license is `(MIT OR Apache-2.0) AND IJG`; the IJG
+  # term is not yet in deny.toml's allow-list (cargo-deny follow-up).
+  provenance:
+    - "ITU T.81 / JFIF / Adobe APP14 via zune-jpeg + jpeg-encoder"
+  tests:
+    rust: ["image-conformance/tests/codec_jpeg.rs", "image-codecs/src/jpeg/decode.rs (unit: Adobe inversion)"]
+
+- id: image.codec.exif
+  state_row: image.codec.exif
+  tier: shipped          # decode-side: orientation + DPI + color-space tag, applied at ingest
+  # A tiny dependency-free EXIF/TIFF reader (image-codecs/src/exif.rs) over
+  # the raw payload codecs already capture (SourceInfo.exif, which starts at
+  # the TIFF header — zune-jpeg strips the `Exif\0\0` APP1 prefix). Reads
+  # exactly three facts off IFD0 (+ the Exif sub-IFD): Orientation (0x0112),
+  # XResolution/YResolution/ResolutionUnit → DPI (0x011A/0x011B/0x0128, cm
+  # converted ×2.54, unit "none" → no DPI), and ColorSpace (0xA001: sRGB /
+  # Uncalibrated / Other). Both byte orders (II/MM). Lenient by design: any
+  # malformed / truncated / unknown structure yields None for that field,
+  # never an error — EXIF is advisory and must not fail an otherwise-valid
+  # decode.
+  #
+  # WHY HAND-ROLLED (not kamadak-exif): three tags need a ~150-line bounded
+  # IFD walk; a full EXIF crate drags a dependency + a second TIFF reader
+  # into a workspace that pins codec deps tightly (§10.3) and watches an
+  # 8 MiB wasm budget (I-07). The hand-rolled reader keeps the codec crate
+  # dependency-flat and #![forbid(unsafe_code)].
+  #
+  # APPLY SITE: the decode-to-RGBA bridge in image-js (ingest.rs
+  # apply_orientation) auto-orients on the straight-RGBA8 buffer BEFORE the
+  # GPU adjustment pipeline. This is the architecturally honest spot: it is
+  # a CPU memory reshuffle (transpose/flip) inherent to ingest, not GPU
+  # kernel work, and the adjustments + the C-1 composite must see upright,
+  # correctly-dimensioned pixels. JPEG/TIFF carry orientation; PNG/PSD
+  # don't (parses to None → no-op). The eight CIPA transforms are unit- and
+  # e2e-tested (a JPEG with a spliced APP1 Orientation=6 ingests 16×8→8×16).
+  #
+  # EXPORT-SIDE RULING — N/A (strip-by-construction). The frozen TargetInfo
+  # (image-codecs target.rs) carries NO EXIF/orientation channel, and
+  # neither encoder writes EXIF. Because ingest auto-orients to canonical
+  # upright (TopLeft) pixels, a re-export is ALREADY in the identity
+  # orientation — there is nothing to preserve and no tag to strip. The
+  # "strip vs preserve" question is therefore moot for orientation on the
+  # current export lane; if a future export lane gains an EXIF writer, it
+  # must emit Orientation=1 (the pixels are upright), never copy a stale
+  # source tag. DPI/color-space round-trip on export is a separate
+  # TargetInfo-amendment follow-up (not in scope here).
+  provenance:
+    - "Exif 2.3 / TIFF 6.0 IFD structure (public spec); tags 0x0112/0x011A/0x011B/0x0128/0x8769/0xA001"
+    - "CIPA orientation transform table (the eight values)"
+    - "hand-rolled bounded reader — no EXIF crate dependency (8 MiB wasm budget, I-07)"
+  tests:
+    rust: ["image-codecs/src/exif.rs (unit: 10 tags/endianness/garbage)", "image-js/src/ingest.rs (unit: 6 orientation geometries)", "image-js/tests/ingest.rs (e2e: APP1 orientation auto-rotate)"]
+
+- id: image.codec.avif
+  state_row: image.codec.avif
+  tier: planned          # DECODE blocked (no permissive pure-Rust AV1 *library* decoder, 2026-06-13); ENCODE license-clean (ravif/rav1e BSD) but wasm-budget-deferred
+  # VERDICT (Phase 4e dependency audit, decode-only adapter): SKIPPED, no
+  # code landed. The spec §10.3 matrix names "rav1d / rav1e" for AVIF and
+  # "wasm build of rav1d validated in M1", but the dependency landscape as
+  # of 2026-06 does not admit a clean adapter under this repo's rules
+  # (pure-Rust, no vendored C, cargo-deny-permissive):
+  #   - avif-decode → aom-decode → requires a C compiler (libaom). REJECTED
+  #     (the plugin's no-C-in-default-build rule, §1.1; "do NOT vendor C").
+  #   - dav1d-rs → bindings to the C libdav1d. REJECTED (C dependency).
+  #   - rav1d (memorysafety, BSD-2-Clause) → a Rust port, BUT exposes only a
+  #     C API (dav1d_* FFI symbols; "a Rust API is planned for the future")
+  #     and builds librav1d.a as a C-library replacement (+ optional nasm
+  #     assembly). Not consumable as a pure-Rust *library* dependency
+  #     without going through a C-shaped FFI surface — defeats the
+  #     pure-Rust requirement. NOT USABLE as a crate dep today.
+  #   - rav1d-safe (imazen, safe-SIMD fork with a real Rust decode API) →
+  #     dual-licensed AGPL-3.0 OR commercial. REJECTED: AGPL-3.0 is NOT in
+  #     deny.toml's allow-list and is incompatible with the MPL-2.0/PMEL
+  #     distribution posture (would fail `cargo deny check licenses`).
+  # RE-AUDIT (Phase 9 Tier-B sweep, 2026-06-13): the DECODE verdict STANDS
+  # but the ENCODE side has changed — recording the split honestly.
+  #
+  # DECODE — still blocked. Re-checked rav1d (memorysafety) on 2026-06-13:
+  #   its README still says "A Rust API is planned for addition in the
+  #   future" and it exposes only the C-compatible dav1d_* surface (+ nasm
+  #   for x86 asm). NOT consumable as a pure-Rust *library*. avif-decode/
+  #   aom-decode (libaom C) and dav1d-rs (libdav1d C) remain C. rav1d-safe
+  #   (imazen) remains AGPL-3.0 OR commercial → fails cargo deny. So there
+  #   is still NO pure-Rust, permissive, library-API AV1 *decoder* that
+  #   passes cargo deny. Decode stays deferred; no code landed.
+  #
+  # ENCODE — now LICENSE-UNBLOCKED, deferred ONLY on the wasm budget.
+  #   Verified 2026-06-13: `ravif` (encode-only, `encode_rgba()`) is
+  #   BSD-3-Clause pure-Rust over `rav1e` (BSD-2-Clause, no mandatory C;
+  #   the default `asm`/nasm path is x86-only and disableable via
+  #   default-features / RAV1E_CPU_TARGET=rust). Both BSD variants are on
+  #   deny.toml's allow-list, so an AVIF *encode* adapter is no longer
+  #   license-blocked. NOT BUILT here, deliberately, for two reasons:
+  #     (1) WASM BUDGET (I-07): rav1e is ~257k SLoC of AV1 entropy coding +
+  #         transform + a deep dep tree (crossbeam/rayon/…); pulling it into
+  #         image-js would very likely blow the 8 MiB budget (the current
+  #         artifact is ~0.5 MiB — see scripts/build-wasm.sh). Encode-only
+  #         AVIF does not earn that cost on the editable-RGBA lane today.
+  #     (2) NO ROUND-TRIP PROOF: with no permissive decoder, an encode
+  #         adapter cannot be conformance-tested by encode→decode identity
+  #         (only "valid ISOBMFF container header" assertions) — a weak gate
+  #         for a frozen codec trait. Pairs poorly with the budget cost.
+  #   Re-open encode when the budget has headroom (a code-split / lazy AVIF
+  #   encode module, native-only encode, or a slimmer pure-Rust AV1 encoder)
+  #   AND a permissive decoder lands to close the round-trip loop.
+  decision: "DEFERRED — DECODE still blocked (rav1d C-API-only as of 2026-06-13; avif-decode/dav1d-rs C; rav1d-safe AGPL). ENCODE now license-clean via ravif BSD-3 + rav1e BSD-2 but deferred on the 8 MiB wasm budget (I-07, ~257k-SLoC rav1e) + no round-trip oracle. Re-open encode on budget headroom + a permissive decoder."
+  provenance:
+    - "AV1 / ISOBMFF (AVIF) — decode pending a permissive pure-Rust library-API decoder; encode candidate = ravif (BSD-3) over rav1e (BSD-2), deferred on the wasm budget"
+  tests:
+    rust: []
+
+- id: image.codec.jxl
+  state_row: image.codec.avif   # no dedicated state row yet; the v2-format slot tracks beside AVIF until split
+  tier: planned          # v2 (spec §10.3); DECODE license-clean (jxl-oxide) but budget+scope-deferred; ENCODE blocked-on-ecosystem (AGPL)
+  # VERDICT (Phase 9 Tier-B sweep, 2026-06-13): SCOPED NON-GOAL for v1, with
+  # an honest decode/encode split. No code landed — NO build (the format is
+  # explicitly v2 in the §10.3 matrix), but the dependency landscape is
+  # recorded so the re-open trigger is precise.
+  #
+  # DECODE — now license-clean, deferred on budget + v2 scope.
+  #   `jxl-oxide` (tirr-c) is a pure-Rust JPEG XL DECODER, dual MIT OR
+  #   Apache-2.0 — both on deny.toml's allow-list (verified 2026-06-13,
+  #   latest 0.12.x). It is genuinely consumable as a Rust library
+  #   (`JxlImage::builder()…render_frame()` → a FrameBuffer). So a JXL
+  #   *decode* adapter is no longer license-blocked. NOT BUILT here because:
+  #     (1) v2 SCOPE — the format matrix (§10.3) lists JPEG XL as ⏸/v2; this
+  #         conservative sweep does not pull a v2 format forward.
+  #     (2) WASM BUDGET (I-07) — jxl-oxide is a stack of ~10 jxl-* crates +
+  #         brotli-decompressor; a full JXL decode path is a non-trivial
+  #         size add against the 8 MiB budget, unjustified for a v2 format
+  #         on the editable-RGBA lane.
+  #
+  # ENCODE — BLOCKED ON ECOSYSTEM (no permissive pure-Rust encoder).
+  #   The only pure-Rust JPEG XL *encoder* (`jxl-encoder` / the jxl_encoder
+  #   crate, imazen, 0.3.x) is licensed AGPL-3.0-only OR a commercial
+  #   Imazen license. AGPL-3.0 is NOT on deny.toml's allow-list and is
+  #   incompatible with the MPL-2.0/PMEL distribution posture — it would
+  #   fail `cargo deny check licenses`. There is no BSD/MIT/Apache pure-Rust
+  #   JXL encoder as of 2026-06-13 (libjxl itself is C++ — rejected by the
+  #   no-C-in-default-build rule). JXL encode is therefore a genuine
+  #   blocked-on-ecosystem item, exactly the honest state.
+  #
+  # RE-OPEN when JXL is promoted to v1 scope AND (decode) the budget has
+  # headroom for the jxl-oxide stack, and (encode) a permissively-licensed
+  # pure-Rust JXL encoder matures. Do NOT vendor libjxl (C++).
+  decision: "v2 NON-GOAL (2026-06-13). DECODE license-clean via jxl-oxide (MIT OR Apache-2.0, pure-Rust) but deferred on v2 scope + the 8 MiB wasm budget (~10 jxl-* crates + brotli). ENCODE blocked-on-ecosystem: the only pure-Rust JXL encoder (jxl-encoder) is AGPL-3.0/commercial → fails cargo deny; libjxl is C++. No build."
+  provenance:
+    - "JPEG XL (ISO/IEC 18181) — decode candidate jxl-oxide (MIT OR Apache-2.0); encode blocked (jxl-encoder is AGPL-3.0/commercial; libjxl is C++)"
+  tests:
+    rust: []
+
+- id: image.codec.raw_heic
+  state_row: image.codec.avif   # placeholder; explicit-NON-GOAL marker, no own state row
+  tier: out-of-scope     # explicit NON-GOAL (Phase 9, 2026-06-13) — see base-idea §1.1
+  # VERDICT: EXPLICIT NON-GOAL, not a deferral. Camera-RAW (CR2/CR3/NEF/ARW/
+  # DNG/…) and HEIC/HEIF are OUT OF paged.image's lane by design, and the
+  # dependency landscape confirms it would also break the constitution:
+  #   - RAW developing (demosaic, per-sensor color science, highlight
+  #     recovery) is a whole subsystem, not a codec. The ecosystem decoders
+  #     are libraw (C++, LGPL-2.1/CDDL) and rawloader/rawler (pure-Rust but
+  #     LGPL-2.1) — LGPL is NOT on deny.toml's allow-list, and RAW is a
+  #     camera-developer product, not an editable-RGBA/PSD lane.
+  #   - HEIC/HEIF decode needs libheif (C, LGPL-3) over an HEVC decoder
+  #     (libde265 C, or the same AV1 wall as AVIF). C + LGPL → rejected twice
+  #     over (no-C-in-default-build §1.1; allow-list).
+  # paged.image's lane is the EDITABLE RGBA/PSD pipeline (the published-
+  # design raster surface), not a RAW developer or a HEVC/HEIF container
+  # reader. If a placed-RAW/HEIC asset must be ingested, that is a
+  # DOCUMENT-LINK / external-rasterize concern (a host/native pre-rasterize
+  # step handing RGBA in), NOT a codec adapter this crate ships. No build,
+  # no dependency, ever — recorded so the question stays closed.
+  decision: "EXPLICIT NON-GOAL (2026-06-13). Camera-RAW + HEIC/HEIF are out of the editable-RGBA/PSD lane and need heavy/non-permissive decoders (libraw/rawler LGPL; libheif C/LGPL-3 over HEVC). Not a codec this crate ships; at most a host-side document-link rasterize into RGBA. No build. See base-idea §1.1."
+  provenance:
+    - "camera-RAW developing + HEIC/HEIF — out of scope (LGPL/C decoders; a developer/container concern, not the editable-RGBA lane)"
+  tests:
+    rust: []

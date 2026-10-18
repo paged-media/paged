@@ -1,0 +1,315 @@
+# paged.image LOCAL PSD block registry — fidelity-ladder tracking per
+# block family (spec §10.4): parsed → preserved → rendered → mutatable
+# → round-trips. state_row joins onto the aggregating status row in
+# paged-media/state (image.psd.roundtrip). Every block handler records
+# its provenance here (spec §3); the preservation invariant means
+# UNLISTED blocks are still safe — they ride the opaque-verbatim path.
+#
+# Tiers claimed here are CI-checked against the test pointers (the
+# coverage gate, M0 fan-out).
+
+- id: image.psd.header
+  state_row: image.psd.roundtrip
+  tier: preserved        # M0 green (fixtures + proptest); target was: round-trips (typed re-encode, byte-identical)
+  oracle: byte_roundtrip
+  provenance:
+    - "Adobe Photoshop File Format specification — File Header Section"
+  tests:
+    rust: ["image-psd/tests/roundtrip.rs", "image-conformance/tests/psd_fixtures.rs"]
+
+- id: image.psd.color-mode-data
+  state_row: image.psd.roundtrip
+  tier: preserved        # M0 green (fixtures + proptest); target was: preserved (opaque-verbatim)
+  oracle: byte_roundtrip
+  provenance:
+    - "Adobe Photoshop File Format specification — Color Mode Data Section"
+  tests:
+    rust: ["image-psd/tests/roundtrip.rs"]
+
+- id: image.psd.resource.icc
+  state_row: image.psd.roundtrip
+  tier: preserved        # M0 green (fixtures + proptest); target was: preserved + typed view (id 1039)
+  oracle: byte_roundtrip
+  provenance:
+    - "Adobe Photoshop File Format specification — Image Resources Section, id 1039"
+  # READ (2026-10): `ImageResources::icc_profile` feeds the CMYK ingest
+  # conversion (image-js `psd_ink_transform`) — the merged composite and
+  # every layer plate go through the profile it holds. An RGB document's
+  # profile is not applied yet (it would have to transform the layer
+  # plates too, or the layered and flattened opens would disagree).
+  tests:
+    rust: ["image-conformance/tests/psd_fixtures.rs", "image-conformance/tests/psd_cmyk_photoshop.rs"]
+
+- id: image.psd.resource.resolution
+  state_row: image.psd.roundtrip
+  tier: preserved        # M0 green (fixtures + proptest); target was: preserved + typed view (id 1005)
+  oracle: byte_roundtrip
+  provenance:
+    - "Adobe Photoshop File Format specification — Image Resources Section, id 1005 (ResolutionInfo)"
+  tests:
+    rust: ["image-conformance/tests/psd_fixtures.rs"]
+
+- id: image.psd.resource.opaque
+  state_row: image.psd.roundtrip
+  tier: preserved        # M0 green (fixtures + proptest); target was: preserved (the invariant itself)
+  oracle: byte_roundtrip
+  provenance:
+    - "preservation invariant (spec §10.4) — black-box: synthesized unknown-id fixture"
+  tests:
+    rust: ["image-conformance/tests/psd_fixtures.rs"]
+
+- id: image.psd.layer.records
+  state_row: image.psd.roundtrip
+  tier: preserved        # M0 green (fixtures + proptest); target was: preserved (scalars typed; extra-data verbatim)
+  oracle: byte_roundtrip
+  provenance:
+    - "Adobe Photoshop File Format specification — Layer Records"
+  tests:
+    rust: ["image-psd/tests/roundtrip.rs", "image-conformance/tests/psd_fixtures.rs"]
+
+- id: image.psd.layer.channel-data.raw-rle
+  state_row: image.psd.roundtrip
+  tier: preserved        # M0 green (fixtures + proptest); target was: preserved + RAW/RLE decode↔encode
+  oracle: byte_roundtrip
+  provenance:
+    - "Adobe Photoshop File Format specification — Channel Image Data"
+    - "TIFF 6.0 specification — PackBits appendix"
+  tests:
+    rust: ["image-psd/src/compression/packbits.rs (unit matrix)", "image-conformance/tests/psd_fixtures.rs"]
+
+- id: image.psd.layer.channel-data.zip
+  state_row: image.psd.roundtrip
+  tier: preserved        # inflate landed (M1) — decode-on-demand to planar; verbatim bytes still canonical
+  oracle: byte_roundtrip
+  provenance:
+    - "Adobe Photoshop File Format specification — Channel Image Data, compression 2/3"
+  tests:
+    rust: ["image-psd/tests/roundtrip.rs", "image-psd/tests/channel_decode.rs"]
+
+- id: image.psd.addl.lsct
+  state_row: image.psd.roundtrip
+  tier: preserved        # M0 green (fixtures + proptest); target was: preserved + typed (group tree derives from it)
+  oracle: byte_roundtrip
+  provenance:
+    - "Adobe Photoshop File Format specification — Additional Layer Information, lsct"
+  tests:
+    rust: ["image-conformance/tests/psd_fixtures.rs (multilayer_groups)"]
+
+- id: image.psd.addl.luni
+  state_row: image.psd.roundtrip
+  tier: preserved        # M0 green (fixtures + proptest); target was: preserved + typed (count/padding variants pinned)
+  oracle: byte_roundtrip
+  provenance:
+    - "Adobe Photoshop File Format specification — Additional Layer Information, luni"
+    - "black-box: trailing-null-in-count producer variance, synthesized both ways"
+  tests:
+    rust: ["image-conformance/tests/psd_fixtures.rs (unicode_names)"]
+
+- id: image.psd.addl.lyid
+  state_row: image.psd.roundtrip
+  tier: preserved        # M0 green (fixtures + proptest); target was: preserved + typed
+  oracle: byte_roundtrip
+  provenance:
+    - "Adobe Photoshop File Format specification — Additional Layer Information, lyid"
+  tests:
+    rust: ["image-conformance/tests/psd_fixtures.rs (layer_ids)"]
+
+- id: image.psd.addl.opaque
+  state_row: image.psd.roundtrip
+  tier: preserved        # M0 green (fixtures + proptest); target was: preserved (Adobe-private/undocumented blocks)
+  oracle: byte_roundtrip
+  provenance:
+    - "preservation invariant (spec §10.4) — synthesized unknown-key fixture"
+  tests:
+    rust: ["image-conformance/tests/psd_fixtures.rs (unknown_addl)"]
+
+- id: image.psd.layer.mask.raster
+  state_row: image.psd.roundtrip
+  tier: preserved        # M0 green (fixtures + proptest); target was: preserved (typed view + verbatim payload)
+  oracle: byte_roundtrip
+  provenance:
+    - "Adobe Photoshop File Format specification — Layer Mask / Adjustment Layer Data"
+  tests:
+    rust: ["image-conformance/tests/psd_fixtures.rs (raster_masks)"]
+
+- id: image.psd.global.merged-composite
+  state_row: image.psd.roundtrip
+  tier: rendered         # M0: preserved opaque-verbatim; M4: DECODED (composite.rs) — RGB[A]/Gray[+A] to RGBA8, and CMYK[+A] to INK (composite_cmyk8; image-js converts through the file's profile), 8- and 16-bit (reduced, reported), RAW + RLE (16-bit RLE still refused), PSD/PSB count widths, transparency-in-merged honored and un-matted; 1/32-bit, Lab/Indexed/Duotone, ZIP answer Unsupported. Preservation untouched: decode is a pure read.
+  oracle: byte_roundtrip + decoded-plane equality (synthesized fixtures) + Photoshop-written CMYK fixtures (known ink patches, transparent document)
+  provenance:
+    - "Adobe Photoshop File Format specification — Image Data Section"
+    - "Adobe Photoshop File Format specification — Layer Info (negative layer count = first alpha is merged transparency)"
+    - "black-box observation, Photoshop 27.10 (scripts/photoshop/probes/cmyk-stacks.jsx): CMYK planes are stored INVERTED (255 = no ink; known-ink patches read back within 1 level); a saved alpha channel beyond the inks is not transparency; a transparent CMYK composite is matted against the paper (stored 255), the same formula as RGB; a 16-bit document's composite is written RAW [OBS]"
+  tests:
+    rust: ["image-psd/tests/roundtrip.rs", "image-psd/tests/composite.rs", "image-js/tests/ingest.rs", "image-psd/tests/annual_fixture.rs", "image-conformance/tests/psd_cmyk_photoshop.rs"]
+
+- id: image.psd.container.psb
+  state_row: image.psd.roundtrip
+  tier: preserved        # M0 green (fixtures + proptest); target was: preserved (one writer, two containers)
+  oracle: byte_roundtrip
+  provenance:
+    - "Adobe Photoshop File Format specification — PSB notes (widened length fields)"
+  tests:
+    rust: ["image-psd/tests/psb.rs", "image-conformance/tests/psd_fixtures.rs (psb_wide)"]
+
+- id: image.psd.mutatable
+  state_row: image.psd.roundtrip
+  tier: mutatable        # M2: edits re-encode through the writer — set_layer_opacity/name, replace_channel_pixels (RAW/RLE), remove_layer; touched subtree dirties its Raw guard, everything else stays verbatim
+  oracle: byte_roundtrip + reparse-stability   # per edit: (1) the edit took on reparse, (2) untouched layers unchanged, (3) write→reparse→write is byte-stable (canonical form idempotent)
+  provenance:
+    - "spec §10.4 — write semantics under editing (the lazy-verbatim guard nulls only the edited subtree)"
+    - "Adobe Photoshop File Format specification — Layer Records (opacity), Additional Layer Information (luni name, lsct divider), Channel Image Data (RAW/RLE re-encode)"
+  tests:
+    rust: ["image-psd/tests/mutatable.rs"]
+
+- id: image.psd.render.flatten
+  state_row: image.psd.roundtrip
+  tier: rendered         # M1: flatten layered PSD through Engine A + compose.* kernels; gpu↔ref within channel_eps_f16 6 (M3 Max Metal: 0 ULP on the layered fixtures)
+  oracle: psd_composite + reference   # scalar flatten_reference is the golden; the embedded merged-composite oracle joins at the M1.5 real-PSD corpus step
+  provenance:
+    - "W3C Compositing and Blending Level 1 — https://www.w3.org/TR/compositing-1/ (the blend/source-over math, shared with compose_ref)"
+    - "Adobe Photoshop File Format specification — Layer Records (blend-mode key) + Channel Image Data (decode) + lsct group markers (skipped: no pixels)"
+  tests:
+    rust: ["image-conformance/tests/psd_render.rs", "image-conformance/src/psd_render.rs"]
+
+- id: image.psd.layer.pixel-import
+  state_row: image.psd.roundtrip
+  tier: rendered         # the PRODUCTION layer-pixel decode (image-psd layer_pixels.rs): a parsed PSD's layer tree as canvas-extent straight-RGBA8 plates, feeding the editor's LAYER GRAPH instead of only the merged composite. Pure READ — the preservation model is untouched, so a layered open still re-emits byte-identically.
+  oracle: reference      # folding the plates with compose_ref reproduces flatten_reference EXACTLY (the M1 render oracle's own stimulus), so a mis-decoded channel / mis-placed rect / dropped alpha shows up as a pixel difference
+  provenance:
+    - "Adobe Photoshop File Format specification — Layer Records (bounds T/L/B/R, blend-mode key, opacity, flags bit 1 = hidden)"
+    - "Adobe Photoshop File Format specification — Channel Image Data (per-channel decode; ids 0/1/2 = R/G/B, -1 = transparency; a layer with no transparency channel is opaque inside its rect)"
+    - "Adobe Photoshop File Format specification — Additional Layer Information: lsct section dividers (group markers refuse the import), luni (canonical name)"
+    - "spec §10.4 — decode-on-demand read over the retained parse; no re-encode, no mutation"
+    - "Smart objects (SoLd/PlLd/SoLE) import as their STORED render, accepted only where the file's merged composite (0x0421 real) agrees inside each smart object's footprint (image-js smart_renders_agree: <= 1% of it more than 8 levels off). Photoshop's live render of three disputed corpus files equals the stored composite exactly, so the composite is a sound judge; a stale cache (corpus Letter Head: logo and text moved) declines [OBS]"
+    - "Photoshop-written fixtures: image-conformance/fixtures/photoshop/layer-stacks/ and adjustment-layers/ (scripts/photoshop/probes/*.jsx), replayed by psd_composite_photoshop.rs and psd_adjustment_layers.rs"
+    - "Group masks (a folder record's -2 channel), measured against Photoshop (group-masks fixtures): an isolated group blends its composite through its mask; a masked PASS-THROUGH group stays pass-through, each member composited through the mask (isolating it was 25 levels off); within 1-3 levels [OBS]"
+    - "black-box observation, Photoshop 27.10 (scripts/photoshop/probes/cmyk-stacks.jsx): CMYK layer channels are ids 0-3 = C/M/Y/K stored inverted like the composite; Photoshop blends a CMYK document in CMYK, so RGB blending of converted plates was MEASURED per blend mode against our conversion of its composite (non-normal: dE00 p95 9.9-50 -> blocker cmyk-blend; normal: exact when opaque, off where colours mix -> judged per file against the composite) [OBS]"
+  # Imported: pixel layers, groups (lsct, nested, pass-through) and their
+  # masks, clipping, user masks (-2), fill opacity, smart objects as
+  # vouched-for stored renders, the adjustment layers and effects below.
+  # DECLINED, each with a stated reason (PsdFile::layer_import_blockers
+  # lists every one): group vector masks and undrawable vector masks (vector
+  # masks import since image.psd.addl.vmsk), drawn effects other
+  # than Color Overlay, other adjustment keys, artboards, mask
+  # density/feather, fill opacity on special modes and groups, Lab and
+  # indexed modes, and an over-budget canvas (MAX_IMPORT_BYTES — plates
+  # are canvas-extent). CMYK imports through `layer_plates_rgba8_via` with
+  # the caller's ink transform, declining non-normal blends (`cmyk-blend`),
+  # files without real merged data (`cmyk-unverified`) and — in image-js —
+  # files whose RGB flatten disagrees with the converted composite
+  # (`cmyk-composite`, the smart-object bar: >1 % of pixels more than 8
+  # levels off).
+  tests:
+    rust: ["image-conformance/tests/psd_layer_import.rs", "image-conformance/tests/psd_adjustment_layers.rs", "image-conformance/tests/psd_group_masks.rs", "image-psd/src/layer_pixels.rs", "image-psd/tests/annual_fixture.rs", "image-psd/tests/composite.rs", "image-conformance/tests/psd_cmyk_photoshop.rs"]
+
+- id: image.psd.addl.effects
+  state_row: image.psd.layer-import
+  tier: parsed           # READ (image-psd/src/effects.rs): which effects an lfx2 block DRAWS, and the Color Overlay's parameters; the block stays preserved-opaque
+  oracle: photoshop      # effects Photoshop 27.10 wrote, composited by our stack vs its merged composite (psd_layer_effects.rs EXPECT)
+  provenance:
+    - "Adobe Photoshop File Formats specification — Object-based effects layer info (lfx2: version, then a versioned descriptor) [PUB]"
+    - "Effect keys SoFi/FrFX/GrFl/DrSh/IrSh/OrGl/IrGl/ebbl/ChFX and their *Multi list forms, per-effect `enab`, `masterFXSwitch`; the overlay's Md (BlnM in BOTH dialects: corpus 'Nrml'/'Mltp', Photoshop 27.10 'normal'/'multiply'), Opct (#Prc), Clr (RGBC Rd/Grn/Bl) [OBS]"
+    - "Rendering, measured against Photoshop: a Color Overlay is drawn over the layer's content AND over the layers clipped to it, inside the layer's shape, before the clipping group blends — a solid layer clipped to the base after its clipped layers; every overlay case within 1 level. An effects block with nothing enabled draws nothing (183 corpus layers) [OBS]"
+  # DECLINED: every other drawn effect, legacy lrFX without lfx2, an overlay
+  # on a group / clipped layer / adjustment layer / under fill opacity /
+  # with knockout or blend-interior-effects, a non-RGB overlay colour.
+  tests:
+    rust: ["image-conformance/tests/psd_layer_effects.rs"]
+
+- id: image.psd.addl.adjustment
+  state_row: image.psd.layer-import
+  tier: parsed           # READ (image-psd/src/adjustment.rs) into the layer stack's adjust chain; the block bytes stay preserved-opaque for re-emission
+  oracle: photoshop      # adjustment layers Photoshop 27.10 wrote, composited by our stack vs its merged composite (psd_adjustment_layers.rs EXPECT)
+  provenance:
+    - "Adobe Photoshop File Formats specification — Adjustment Layers: Levels (`levl`: version, 29 records of in-floor/in-ceiling/out-floor/out-ceiling/gamma×100, composite then channels, optional `Lvls` extension), Curves (`curv`), Exposure (`expA`: version, exposure, offset, gamma as f32), Invert (`nvrt`, empty), Hue/Saturation (`hue2`: version, colorize flag, colorize/master triples, six ranges of four bounds + a triple) [PUB]"
+    - "Curves layout checked on Photoshop-written blocks: a pad byte, a u16 version, a u32 map of the curves present (bit 0 composite, then the channels), points stored as (OUTPUT, INPUT); the `Crv ` extension repeats them keyed by channel index [OBS]"
+    - "Rendering, measured against Photoshop 27.10: Curves is a NATURAL cubic spline (image_core::curve_lut_natural, 0 levels apart) with channel curves before the composite one; Levels per channel then composite (other order 13 off), as tables within 1-3 levels; Exposure with offset/gamma = ((lin(x)·2^e + offset)^(1/gamma)) in 2.2-gamma light, within 1; an adjustment layer's OPACITY scales its coverage (60 % moves each pixel 60 % of the way) [OBS]"
+  # DECLINED: Levels records past R/G/B, Hue/Saturation ranges moved off
+  # their default bounds, a non-normal blend mode on an adjustment layer.
+  tests:
+    rust: ["image-psd/src/adjustment.rs (unit)", "image-conformance/tests/psd_adjustment_layers.rs"]
+
+- id: image.psd.addl.vmsk
+  state_row: image.psd.roundtrip
+  tier: rendered         # vmsk/vsms parsed to paths (image-psd/src/vector_mask.rs) and DRAWN the way Photoshop draws them (image-js/src/psd_vector_mask.rs) into the layer import's one mask; the block itself still re-emits verbatim (preservation untouched)
+  oracle: photoshop      # probes/vector-masks.jsx fixtures (merged composite + the render Photoshop caches in channel -2), and the corpus lane psd_vector_mask_corpus.rs (314 cached renders)
+  provenance:
+    - "Adobe Photoshop File Formats Specification — Additional Layer Information, Vector mask setting (vmsk / vsms): version, flags bit 0 invert / bit 1 not link / bit 2 disable, then path records [PUB]"
+    - "Adobe Photoshop File Formats Specification — Path resource format: 26-byte records, selectors 0/3 subpath length, 1/2 closed and 4/5 open Bezier knots (preceding control, anchor, leaving control; each vertical then horizontal, signed fixed 8.24 of the document height / width), 6 fill rule, 7 clipboard, 8 initial fill [PUB]"
+    - "Adobe Photoshop File Formats Specification — Layer Mask / Adjustment Layer Data: the REAL user mask fields (flags, background, rectangle) after the mask parameters; parameter presence bits 0-3 = user density / user feather / vector density / vector feather [PUB]"
+    - "Photoshop 27.10, masks built with each choice and the saved bytes diffed: the subpath length record carries the per-COMPONENT path operation at bytes 4-5 (0 exclude, 1 combine, 2 subtract, 3 intersect; 0xFFFF = this subpath continues the previous component) and the component index at bytes 14-15 [OBS]"
+    - "Photoshop 27.10, single fields of its own files patched and re-opened: bytes 6-7 are the component's fill rule (2 non-zero; 1, and 0 on a head, even-odd — a self-intersecting star and an inner subpath of the same component are holes under 1, filled under 2); the initial-fill record (selector 8) changes nothing when set to 1; flag bit 0 inverts, bit 2 disables, bit 1 changes no pixel; an OPEN subpath fills as if closed by a straight line, whatever its end handles [OBS]"
+    - "Photoshop 27.10 renders: components fold in order; a FIRST component that subtracts starts from a full mask, any other first operation adds; the booleans are per SAMPLE (two triangles sharing an anti-aliased diagonal leave no seam; an intersect of edges 1/2 px apart keeps exactly the samples between them) [OBS]"
+    - "Photoshop 27.10 renders: coverage is a count over 17 x 15 point samples per pixel (edges at every 1/16 px: left edges step 15 levels with one 30-level step at .5, top edges step 17); sample offsets 31/64 of a sample cell (pinned to (7/16, 1/2] by the ramp, chosen by the diagonals and the corpus) [OBS]"
+    - "Photoshop 27.10 + corpus: channel -2 of a layer with an enabled vector mask is Photoshop's cached RENDER (mask flags bit 3 'came from rendering other data'), the vector mask times the user mask; beside a vector mask the user mask moves to channel -3 with the real-mask fields; a disabled vector mask gets no render and -2 is the plain user mask; the render excludes vector feather / density, which Photoshop applies live [OBS]"
+    - "Photoshop 27.10 + corpus: a fill/shape layer's (SoCo / GdFl / PtFl / vscg) stored transparency already IS the shape's render (1,603 of 1,783 corpus shape layers match it, 58 more carry strokes outside the path) and its composite applies it once — the vector mask is not applied a second time [OBS]"
+  # DECLINED, with a stated reason: vector masks on GROUPS (category
+  # group-mask, like group user masks), vector feather / density
+  # (mask-parameters), a version other than 3, an unknown operation or
+  # fill rule, records that do not frame (vector-mask). MEASURED GAP:
+  # Photoshop's Bezier flattening is matched on average (its circles are
+  # ~0.02 px small), not chord for chord — curved edge pixels up to ~18
+  # levels, 0.0004 % of corpus mask pixels more than 2 levels off.
+  tests:
+    rust:
+      - "image-psd/src/vector_mask.rs (unit: vector_mask_records_parse_to_canvas_pixels, _flags_and_operations_decode, _continuation_subpaths_join_their_component, _refuses_what_it_cannot_frame)"
+      - "image-js/src/psd_vector_mask.rs (unit: edges_count_samples_on_photoshops_17_by_15_grid, fill_rule_decides_a_self_intersecting_star, components_fold_per_sample_in_order, invert_open_subpaths_and_the_user_mask_product)"
+      - "image-conformance/tests/psd_vector_masks_photoshop.rs (photoshop_vector_masks_import_as_recorded)"
+      - "image-conformance/tests/psd_vector_mask_corpus.rs (opt-in corpus lane: vector_masks_draw_as_photoshops_cached_renders)"
+
+# ── PSD descriptor-family primitives ─────────────────────────────────
+# Neither of these is a top-level PSD *block*; they are the two
+# structures descriptor-carrying blocks are BUILT FROM. They live here
+# because they are `image-psd` components with the same provenance
+# discipline, and because the day adjustment layers / layer effects /
+# the text engine stop being preserved-opaque and start being modelled,
+# they are what those blocks will be read with. The ABR lane that
+# motivated them has its own registry: registry/abr.yaml.
+
+- id: image.psd.descriptor
+  state_row: image.psd.roundtrip
+  tier: parsed           # READ-ONLY view. There is no descriptor WRITER: the preservation invariant keeps the opaque-bytes path authoritative for re-emission (§10.4), and a decoded tree is a derived view. Promoting this to `mutatable` means writing a descriptor emitter, which is a separate decision.
+  oracle: independent-emitter   # image-conformance/src/abr_builder emits descriptor bytes with its own big-endian sink; the reader never shares code with it
+  provenance:
+    - "Adobe Photoshop File Formats Specification — Descriptor structure (class name + class id + item count + items; the key-or-4cc length-0 convention; the OSType table Objc/VlLs/doub/UntF/TEXT/enum/long/comp/bool/type/GlbC/GlbO/alis/tdta; unit codes #Ang/#Prc/#Pxl/#Rsl/#Rlt/#Nne/#Pnt/#Mlm) [PUB]"
+    - "thoughts/docs/paged/plugin-image/abr-brush-format-spec.md §4.1 — the DUAL DIALECT: 45,706 long-form item keys vs 36,220 4-byte ones, and 16,202 long-form class ids vs 409 4-byte, IN THE SAME FILES [OBS]. A reader that handles one form fails on every fixture."
+    - "abr-brush-format-spec.md §9 — enum values are TWO independent key-or-4cc fields and there is no `.` in the bytes (zero literal dots in the whole corpus); the dotted `BlnM.Nrml` form is a third-party reader's RENDERING, not the wire form [OBS]"
+    - "abr-brush-format-spec.md §6.4 — Adobe's `$$$/path/key=Default English` localisable-string form; the unwrap rule lives in one place (descriptor::localized_display) and the raw value is preserved [OBS]"
+    - "abr-brush-format-spec.md §4.3 — FINDING: image-psd had NO descriptor parser; this is new work, not reuse, and it is the bulk of the ABR job"
+    - "Adobe Photoshop File Formats Specification — Reference structure (`obj `: item count, then per item an OSType form prop/Clss/Enmr/rele/Idnt/indx/name and its payload) [PUB]"
+    - "PSD corpus smart objects (2026-10-05): `ObAr` = u32 version (16 observed) + a descriptor (class `rationalPoint`, items `Hrzn`/`Vrtc`); `UnFl` = unit code + u32 count + count big-endian doubles (a warp's `customEnvelopeWarp.meshPoints`, 16 per axis); `Pth ` = u32 length + opaque bytes (a Displace smart filter's map path, `txtu` + UTF-16LE). Each framing consumes exactly the bytes before the next item key; 194 corpus SoLd blocks that were undecodable now decode to the end [OBS]"
+  # Any OSType outside these is still refused by name: a descriptor item
+  # is NOT length-delimited, so a value that cannot be decoded also
+  # cannot be stepped over.
+  tests:
+    rust:
+      - "image-psd/src/descriptor.rs (unit: image_psd_descriptor_key_accepts_both_dialects, _key_equality_ignores_dialect, _trailing_spaces_are_significant, _key_length_guard, _item_count_is_bounded, _localized_display_strips_the_token, _unsupported_ostype_is_named_not_skipped, _object_array_of_unit_floats, _reference_items)"
+      - "image-conformance/tests/abr_reader.rs (image_psd_descriptor_reads_every_framable_ostype, image_psd_descriptor_accepts_both_key_dialects_in_one_descriptor, image_psd_descriptor_trailing_spaces_in_keys_are_significant, image_psd_descriptor_localisation_token_is_unwrapped_but_the_raw_survives, image_psd_descriptor_unknown_ostype_is_refused_by_name_not_skipped)"
+
+- id: image.psd.vm-array-list
+  state_row: image.psd.roundtrip
+  tier: parsed           # READ-ONLY, like the descriptor tree above
+  oracle: independent-emitter + structural-self-check   # a correct parse leaves ZERO bytes unaccounted for in a record; the emitter can vary array_count and the written slot to break the 264 constant deliberately
+  provenance:
+    - "abr-brush-format-spec.md §2.2 — the corrected sampled-tip record layout, decoded byte-exactly from 3,202 records in 7 files, every internal length field reconciling to the byte [OBS]. CONTRADICTS every public source AND revision 1 of that document, which describe the region as an opaque 264-byte skip."
+    - "abr-brush-format-spec.md §2.2 — 264 is arithmetic, not a format fact: 4+4+4+16+4 header, 55 empty slots x 4, then 12 bytes of the written slot's own prefix, given array_count 56 and the plane in slot 55. The loop runs array_count+2 times, and the two extra empty slots written AFTER the pixel data are the '8 unexplained trailing bytes' of every public description."
+    - "abr-brush-format-spec.md §2.2 — bounds are stored Y-FIRST (top, left, bottom, right); the rectangle appears TWICE and the per-array one dimensions its pixel data [OBS]"
+    - "abr-brush-format-spec.md §2.3/§2.4 — raw (w*h bytes, no row padding; 19 records observed) and PackBits with an UP-FRONT h-entry u16 row-length table, ALL rows first (3,183 records / ~1.1M rows) [OBS]"
+    - "Adobe Photoshop File Formats Specification — the pattern record that embeds this same container [PUB]; TIFF 6.0 PackBits appendix (via image-psd's existing decoder, reused UNCHANGED)"
+  # The PackBits decoder is image-psd's existing ERRORING one, reused as
+  # is. The behaviour spec DOWNGRADED the claim that real files emit
+  # over-long runs: 3,183 RLE records / ~1.1M rows produced ZERO
+  # overruns and ZERO short rows, so the erroring decoder would have
+  # accepted every record in the corpus. It was not loosened.
+  #
+  # DECLINED: 16-bit RLE. Whether the row table counts compressed bytes
+  # of 16-bit samples or Photoshop splits high/low byte planes as PSD
+  # does is unknown — no 16-bit tip exists in the corpus at all. It
+  # returns Unsupported with that diagnostic instead of guessing. 16-bit
+  # RAW is implemented to the layout the spec states but is UNVERIFIED
+  # against any real file, and says so via AbrWarning.
+  tests:
+    rust:
+      - "image-psd/src/vm_array.rs (unit: image_psd_vm_array_list_the_264_constant_is_arithmetic_not_a_format_fact, _a_different_slot_would_break_the_constant, _a_different_array_count_would_break_the_constant, _bounds_are_y_first, _non_positive_bounds_are_refused, _rle_row_table_is_up_front_not_per_row, _rle_expansion_bound_rejects_absurd_dimensions, _sixteen_bit_rle_is_refused_by_name, _sixteen_bit_raw_keeps_full_precision)"
+      - "image-conformance/tests/abr_reader.rs (image_abr_samp_record_is_a_vm_array_list_not_a_264_byte_skip)"

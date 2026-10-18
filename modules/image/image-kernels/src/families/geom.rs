@@ -1,0 +1,1431 @@
+/*
+ * This file is part of paged (https://paged.media).
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * This file is part of paged (https://paged.media) and is additionally
+ * available under the Paged Media Enterprise License (PMEL). Full
+ * copyright and license information is available in LICENSE.md which is
+ * distributed with this source code.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
+ */
+
+//! Geometry family (T2, spec §11) — handwritten WGSL modules under the
+//! ABI v1.1 contract (`abi::assemble` docs). Flip, rotate-by-90°, and
+//! crop expressed as `KernelClass::Resample { support: 0.5 }` coordinate
+//! remaps: every output texel reads exactly ONE source texel by integer
+//! index — no interpolation, no weighting ⇒ `Tolerance::Exact`.
+//!
+//! # Coordinate model (frozen for this family)
+//!
+//! `in0` is the full source window; window texel `(i, j)` carries source
+//! coordinate `(i, j)` directly (window origin = source origin 0). The
+//! mask is RESERVED for resample (M3) — each module writes its single
+//! source texel directly, exactly like the `resample.*` modules. The
+//! remap dimensions / offset travel in each kernel's params:
+//!
+//! - `geom.flip_h`     params `{ width }`            → out(x,y)=in(width-1-x, y)
+//! - `geom.flip_v`     params `{ height }`           → out(x,y)=in(x, height-1-y)
+//! - `geom.rotate90_cw`  params `{ src_w, src_h }`   → out(x,y)=in(y, src_h-1-x)
+//! - `geom.rotate90_ccw` params `{ src_w, src_h }`   → out(x,y)=in(src_w-1-y, x)
+//! - `geom.crop`       params `{ off_x, off_y }`     → out(x,y)=in(x+off_x, y+off_y) clamp-to-edge
+//!
+//! `mip_exact: false` — a coordinate remap composes with mip selection
+//! only at level 0 (the remap dims are level-0 dims); like `resample.*`
+//! it runs at the full resolution.
+//!
+//! Provenance: flip / 90°-rotation / crop are trivial integer
+//! coordinate remaps — affine index math, standard and self-evident; no
+//! reference reading. (vips oracle: `flip`/`rot90`/`extract_area`.)
+
+use crate::{KernelClass, KernelDef, ParamField, ParamsLayout, Tolerance};
+
+// ───────────────────────────── flip_h ──────────────────────────────
+
+/// Horizontal flip params: the source/output width (they are equal —
+/// a flip preserves dims). `out(x, y) = in(width - 1 - x, y)`.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, ::bytemuck::Pod, ::bytemuck::Zeroable)]
+pub struct FlipHParams {
+    pub width: u32,
+    pub _abi_pad: u32,
+}
+
+#[allow(clippy::new_without_default)]
+impl FlipHParams {
+    pub fn new(width: u32) -> Self {
+        Self { width, _abi_pad: 0 }
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        ::bytemuck::bytes_of(self)
+    }
+}
+
+const FLIP_H_FIELDS: &[ParamField] = &[ParamField {
+    name: "width",
+    wgsl_ty: "u32",
+}];
+
+/// `out(x, y) = in(width - 1 - x, y)`. One exact source texel per
+/// output texel ⇒ `Tolerance::Exact`.
+pub static GEOM_FLIP_H: KernelDef = KernelDef {
+    id: "geom.flip_h",
+    class: KernelClass::Resample { support: 0.5 },
+    inputs: 1,
+    params: ParamsLayout {
+        size: ::core::mem::size_of::<FlipHParams>(),
+        fields: FLIP_H_FIELDS,
+    },
+    wgsl: GEOM_FLIP_H_WGSL,
+    module: true,
+    mip_exact: false,
+    gpu_tolerance: Tolerance::Exact,
+};
+
+const GEOM_FLIP_H_WGSL: &str = "\
+// paged.image kernel `geom.flip_h` — handwritten under ABI v1.1.
+// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+
+struct Params {
+    width: u32,
+    _abi_pad: u32,
+}
+
+@group(0) @binding(0) var in0 : texture_2d<f32>;
+@group(1) @binding(0) var<uniform> params : Params;
+@group(2) @binding(0) var mask : texture_2d<f32>;
+@group(3) @binding(0) var outp : texture_storage_2d<rgba16float, write>;
+
+@compute @workgroup_size(16, 16, 1)
+fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
+    let dims = textureDimensions(outp);
+    if (gid.x >= dims.x || gid.y >= dims.y) { return; }
+    let xy = vec2<i32>(i32(gid.x), i32(gid.y));
+    let sx = i32(params.width) - 1 - xy.x;
+    textureStore(outp, xy, textureLoad(in0, vec2<i32>(sx, xy.y), 0));
+}
+";
+
+// ───────────────────────────── flip_v ──────────────────────────────
+
+/// Vertical flip params: the source/output height. `out(x, y) =
+/// in(x, height - 1 - y)`.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, ::bytemuck::Pod, ::bytemuck::Zeroable)]
+pub struct FlipVParams {
+    pub height: u32,
+    pub _abi_pad: u32,
+}
+
+#[allow(clippy::new_without_default)]
+impl FlipVParams {
+    pub fn new(height: u32) -> Self {
+        Self {
+            height,
+            _abi_pad: 0,
+        }
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        ::bytemuck::bytes_of(self)
+    }
+}
+
+const FLIP_V_FIELDS: &[ParamField] = &[ParamField {
+    name: "height",
+    wgsl_ty: "u32",
+}];
+
+/// `out(x, y) = in(x, height - 1 - y)`. Exact single-texel remap.
+pub static GEOM_FLIP_V: KernelDef = KernelDef {
+    id: "geom.flip_v",
+    class: KernelClass::Resample { support: 0.5 },
+    inputs: 1,
+    params: ParamsLayout {
+        size: ::core::mem::size_of::<FlipVParams>(),
+        fields: FLIP_V_FIELDS,
+    },
+    wgsl: GEOM_FLIP_V_WGSL,
+    module: true,
+    mip_exact: false,
+    gpu_tolerance: Tolerance::Exact,
+};
+
+const GEOM_FLIP_V_WGSL: &str = "\
+// paged.image kernel `geom.flip_v` — handwritten under ABI v1.1.
+// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+
+struct Params {
+    height: u32,
+    _abi_pad: u32,
+}
+
+@group(0) @binding(0) var in0 : texture_2d<f32>;
+@group(1) @binding(0) var<uniform> params : Params;
+@group(2) @binding(0) var mask : texture_2d<f32>;
+@group(3) @binding(0) var outp : texture_storage_2d<rgba16float, write>;
+
+@compute @workgroup_size(16, 16, 1)
+fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
+    let dims = textureDimensions(outp);
+    if (gid.x >= dims.x || gid.y >= dims.y) { return; }
+    let xy = vec2<i32>(i32(gid.x), i32(gid.y));
+    let sy = i32(params.height) - 1 - xy.y;
+    textureStore(outp, xy, textureLoad(in0, vec2<i32>(xy.x, sy), 0));
+}
+";
+
+// ──────────────────────────── rotate90 ─────────────────────────────
+//
+// A 90° rotation transposes the dims: a `src_w × src_h` source yields a
+// `src_h × src_w` output. `src_w`/`src_h` are the SOURCE dims; the
+// output dims (which the dispatch sizes) are their transpose.
+
+/// 90° rotation params: the SOURCE dims (`src_w`, `src_h`). Shared by
+/// the cw and ccw kernels — the rotation direction is the kernel, not a
+/// param.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, ::bytemuck::Pod, ::bytemuck::Zeroable)]
+pub struct Rotate90Params {
+    pub src_w: u32,
+    pub src_h: u32,
+    pub _abi_pad: u32,
+}
+
+#[allow(clippy::new_without_default)]
+impl Rotate90Params {
+    pub fn new(src_w: u32, src_h: u32) -> Self {
+        Self {
+            src_w,
+            src_h,
+            _abi_pad: 0,
+        }
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        ::bytemuck::bytes_of(self)
+    }
+}
+
+const ROTATE90_FIELDS: &[ParamField] = &[
+    ParamField {
+        name: "src_w",
+        wgsl_ty: "u32",
+    },
+    ParamField {
+        name: "src_h",
+        wgsl_ty: "u32",
+    },
+];
+
+const ROTATE90_LAYOUT: ParamsLayout = ParamsLayout {
+    size: ::core::mem::size_of::<Rotate90Params>(),
+    fields: ROTATE90_FIELDS,
+};
+
+/// Clockwise 90°: `out(x, y) = in(y, src_h - 1 - x)`. Exact remap.
+pub static GEOM_ROTATE90_CW: KernelDef = KernelDef {
+    id: "geom.rotate90_cw",
+    class: KernelClass::Resample { support: 0.5 },
+    inputs: 1,
+    params: ROTATE90_LAYOUT,
+    wgsl: GEOM_ROTATE90_CW_WGSL,
+    module: true,
+    mip_exact: false,
+    gpu_tolerance: Tolerance::Exact,
+};
+
+const GEOM_ROTATE90_CW_WGSL: &str = "\
+// paged.image kernel `geom.rotate90_cw` — handwritten under ABI v1.1.
+// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+
+struct Params {
+    src_w: u32,
+    src_h: u32,
+    _abi_pad: u32,
+}
+
+@group(0) @binding(0) var in0 : texture_2d<f32>;
+@group(1) @binding(0) var<uniform> params : Params;
+@group(2) @binding(0) var mask : texture_2d<f32>;
+@group(3) @binding(0) var outp : texture_storage_2d<rgba16float, write>;
+
+@compute @workgroup_size(16, 16, 1)
+fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
+    let dims = textureDimensions(outp);
+    if (gid.x >= dims.x || gid.y >= dims.y) { return; }
+    let xy = vec2<i32>(i32(gid.x), i32(gid.y));
+    let sx = xy.y;
+    let sy = i32(params.src_h) - 1 - xy.x;
+    textureStore(outp, xy, textureLoad(in0, vec2<i32>(sx, sy), 0));
+}
+";
+
+/// Counter-clockwise 90°: `out(x, y) = in(src_w - 1 - y, x)`. Exact
+/// remap; the inverse of `geom.rotate90_cw`.
+pub static GEOM_ROTATE90_CCW: KernelDef = KernelDef {
+    id: "geom.rotate90_ccw",
+    class: KernelClass::Resample { support: 0.5 },
+    inputs: 1,
+    params: ROTATE90_LAYOUT,
+    wgsl: GEOM_ROTATE90_CCW_WGSL,
+    module: true,
+    mip_exact: false,
+    gpu_tolerance: Tolerance::Exact,
+};
+
+const GEOM_ROTATE90_CCW_WGSL: &str = "\
+// paged.image kernel `geom.rotate90_ccw` — handwritten under ABI v1.1.
+// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+
+struct Params {
+    src_w: u32,
+    src_h: u32,
+    _abi_pad: u32,
+}
+
+@group(0) @binding(0) var in0 : texture_2d<f32>;
+@group(1) @binding(0) var<uniform> params : Params;
+@group(2) @binding(0) var mask : texture_2d<f32>;
+@group(3) @binding(0) var outp : texture_storage_2d<rgba16float, write>;
+
+@compute @workgroup_size(16, 16, 1)
+fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
+    let dims = textureDimensions(outp);
+    if (gid.x >= dims.x || gid.y >= dims.y) { return; }
+    let xy = vec2<i32>(i32(gid.x), i32(gid.y));
+    let sx = i32(params.src_w) - 1 - xy.y;
+    let sy = xy.x;
+    textureStore(outp, xy, textureLoad(in0, vec2<i32>(sx, sy), 0));
+}
+";
+
+// ────────────────────────────── crop ───────────────────────────────
+
+/// Crop params: signed source offset (`off_x`, `off_y`) added to the
+/// output coord. `out(x, y) = in(x + off_x, y + off_y)` clamped to the
+/// source edge (clamp-to-edge). Signed so a crop window may start at a
+/// negative source coord (the clamp replicates the edge texel).
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, ::bytemuck::Pod, ::bytemuck::Zeroable)]
+pub struct CropParams {
+    pub off_x: i32,
+    pub off_y: i32,
+    pub _abi_pad: u32,
+}
+
+#[allow(clippy::new_without_default)]
+impl CropParams {
+    pub fn new(off_x: i32, off_y: i32) -> Self {
+        Self {
+            off_x,
+            off_y,
+            _abi_pad: 0,
+        }
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        ::bytemuck::bytes_of(self)
+    }
+}
+
+const CROP_FIELDS: &[ParamField] = &[
+    ParamField {
+        name: "off_x",
+        wgsl_ty: "i32",
+    },
+    ParamField {
+        name: "off_y",
+        wgsl_ty: "i32",
+    },
+];
+
+/// `out(x, y) = in(x + off_x, y + off_y)` clamp-to-edge. Exact remap;
+/// the clamp to `[0, dim-1]` IS the edge rule (sample replication).
+pub static GEOM_CROP: KernelDef = KernelDef {
+    id: "geom.crop",
+    class: KernelClass::Resample { support: 0.5 },
+    inputs: 1,
+    params: ParamsLayout {
+        size: ::core::mem::size_of::<CropParams>(),
+        fields: CROP_FIELDS,
+    },
+    wgsl: GEOM_CROP_WGSL,
+    module: true,
+    mip_exact: false,
+    gpu_tolerance: Tolerance::Exact,
+};
+
+const GEOM_CROP_WGSL: &str = "\
+// paged.image kernel `geom.crop` — handwritten under ABI v1.1.
+// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+
+struct Params {
+    off_x: i32,
+    off_y: i32,
+    _abi_pad: u32,
+}
+
+@group(0) @binding(0) var in0 : texture_2d<f32>;
+@group(1) @binding(0) var<uniform> params : Params;
+@group(2) @binding(0) var mask : texture_2d<f32>;
+@group(3) @binding(0) var outp : texture_storage_2d<rgba16float, write>;
+
+@compute @workgroup_size(16, 16, 1)
+fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
+    let dims = textureDimensions(outp);
+    if (gid.x >= dims.x || gid.y >= dims.y) { return; }
+    let xy = vec2<i32>(i32(gid.x), i32(gid.y));
+    let wdims = vec2<i32>(textureDimensions(in0));
+    let sx = clamp(xy.x + params.off_x, 0, wdims.x - 1);
+    let sy = clamp(xy.y + params.off_y, 0, wdims.y - 1);
+    textureStore(outp, xy, textureLoad(in0, vec2<i32>(sx, sy), 0));
+}
+";
+
+// ─────────────────────── rotate_bilinear ──────────────────────────
+//
+// ARBITRARY-ANGLE rotation — the STRAIGHTEN commit's resample (the
+// crop tool previewed a rotated frame long before anything could
+// commit it). Unlike the rest of this family it INTERPOLATES, so it is
+// `KernelClass::Resample { support: 1.0 }` (a 2×2 bilinear footprint)
+// with a f16 tolerance rather than `Exact`.
+//
+// # Coordinate model (frozen)
+//
+// Output texel `(x, y)` is the CONTINUOUS point `(x + 0.5, y + 0.5)`
+// in destination space. The forward map "rotate the source by θ about
+// `src_c`, landing its centre on `dst_c`" is
+//
+//     dst = R(θ)·(src − src_c) + dst_c ,  R(θ) = [[cos, −sin], [sin, cos]]
+//
+// so the BACKWARD map this kernel evaluates (one source point per
+// output texel, no scatter) is
+//
+//     src = R(−θ)·(dst − dst_c) + src_c
+//         = ( cos·dx + sin·dy + src_cx ,  −sin·dx + cos·dy + src_cy )
+//
+// with `dx = x + 0.5 − dst_cx`, `dy = y + 0.5 − dst_cy`. Subtracting
+// 0.5 converts the continuous source point back to texel-index space.
+// Screen convention: y grows DOWN, so a positive θ reads as a
+// clockwise rotation of the image.
+//
+// # Edge rule + summation order (determinism, §6.3)
+//
+// The four taps are `clamp`ed to `[0, dim−1]` — clamp-to-edge, the
+// same rule `resample.*` and `geom.crop` use, so the corners the
+// rotation swings past the source repeat the border instead of going
+// transparent (the straighten flow then CROPS the valid interior; a
+// transparent-outside variant would need an alpha-aware second kernel
+// and is NOT this one). The blend is the FIXED order
+// `mix(mix(p00, p10, fx), mix(p01, p11, fx), fy)` — x first, then y —
+// mirrored term-for-term by the scalar reference.
+//
+// `mip_exact: false` — like every coordinate remap it runs at level 0.
+//
+// Provenance: backward-mapped affine resampling with bilinear
+// reconstruction is textbook (Wolberg, *Digital Image Warping*, IEEE CS
+// Press 1990, §3–§5: inverse mapping + bilinear interpolation). No
+// reference reading. (vips oracle: `similarity`/`rotate` at
+// `interpolate=bilinear`.)
+
+/// Rotation params: `cos_t`/`sin_t` of the angle, the SOURCE centre the
+/// rotation pivots on, and the DESTINATION centre it lands on (the two
+/// differ whenever the output canvas grows to hold the rotated bounds).
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, ::bytemuck::Pod, ::bytemuck::Zeroable)]
+pub struct RotateBilinearParams {
+    pub cos_t: f32,
+    pub sin_t: f32,
+    pub src_cx: f32,
+    pub src_cy: f32,
+    pub dst_cx: f32,
+    pub dst_cy: f32,
+    /// Explicit pad → a 32-byte (16-aligned) uniform block.
+    pub _pad0: u32,
+    pub _abi_pad: u32,
+}
+
+#[allow(clippy::new_without_default)]
+impl RotateBilinearParams {
+    /// Build from `degrees` (positive = clockwise on screen) plus the
+    /// source and destination centres in continuous pixel coordinates.
+    pub fn new(degrees: f32, src_c: (f32, f32), dst_c: (f32, f32)) -> Self {
+        let t = degrees.to_radians();
+        Self {
+            cos_t: t.cos(),
+            sin_t: t.sin(),
+            src_cx: src_c.0,
+            src_cy: src_c.1,
+            dst_cx: dst_c.0,
+            dst_cy: dst_c.1,
+            _pad0: 0,
+            _abi_pad: 0,
+        }
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        ::bytemuck::bytes_of(self)
+    }
+}
+
+const ROTATE_BILINEAR_FIELDS: &[ParamField] = &[
+    ParamField {
+        name: "cos_t",
+        wgsl_ty: "f32",
+    },
+    ParamField {
+        name: "sin_t",
+        wgsl_ty: "f32",
+    },
+    ParamField {
+        name: "src_cx",
+        wgsl_ty: "f32",
+    },
+    ParamField {
+        name: "src_cy",
+        wgsl_ty: "f32",
+    },
+    ParamField {
+        name: "dst_cx",
+        wgsl_ty: "f32",
+    },
+    ParamField {
+        name: "dst_cy",
+        wgsl_ty: "f32",
+    },
+];
+
+/// Backward-mapped arbitrary-angle rotation with bilinear
+/// reconstruction, clamp-to-edge. One 2×2 tap footprint per output
+/// texel ⇒ `Resample { support: 1.0 }`; the two `mix` levels are
+/// correctly rounded on both lanes, so the f16 output quantisation
+/// absorbs the last-ulp trig divergence — `ChannelEpsF16(4)`.
+pub static GEOM_ROTATE_BILINEAR: KernelDef = KernelDef {
+    id: "geom.rotate_bilinear",
+    class: KernelClass::Resample { support: 1.0 },
+    inputs: 1,
+    params: ParamsLayout {
+        size: ::core::mem::size_of::<RotateBilinearParams>(),
+        fields: ROTATE_BILINEAR_FIELDS,
+    },
+    wgsl: GEOM_ROTATE_BILINEAR_WGSL,
+    module: true,
+    mip_exact: false,
+    gpu_tolerance: Tolerance::ChannelEpsF16(4),
+};
+
+const GEOM_ROTATE_BILINEAR_WGSL: &str = "\
+// paged.image kernel `geom.rotate_bilinear` — handwritten under ABI v1.1.
+// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+
+struct Params {
+    cos_t: f32,
+    sin_t: f32,
+    src_cx: f32,
+    src_cy: f32,
+    dst_cx: f32,
+    dst_cy: f32,
+    _pad0: u32,
+    _abi_pad: u32,
+}
+
+@group(0) @binding(0) var in0 : texture_2d<f32>;
+@group(1) @binding(0) var<uniform> params : Params;
+@group(2) @binding(0) var mask : texture_2d<f32>;
+@group(3) @binding(0) var outp : texture_storage_2d<rgba16float, write>;
+
+fn tap(p: vec2<i32>, dims: vec2<i32>) -> vec4<f32> {
+    let c = clamp(p, vec2<i32>(0, 0), dims - vec2<i32>(1, 1));
+    return textureLoad(in0, c, 0);
+}
+
+@compute @workgroup_size(16, 16, 1)
+fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
+    let dims = textureDimensions(outp);
+    if (gid.x >= dims.x || gid.y >= dims.y) { return; }
+    let xy = vec2<i32>(i32(gid.x), i32(gid.y));
+    let wdims = vec2<i32>(textureDimensions(in0));
+
+    let dx = f32(xy.x) + 0.5 - params.dst_cx;
+    let dy = f32(xy.y) + 0.5 - params.dst_cy;
+    let sx = params.cos_t * dx + params.sin_t * dy + params.src_cx - 0.5;
+    let sy = -params.sin_t * dx + params.cos_t * dy + params.src_cy - 0.5;
+
+    let x0 = floor(sx);
+    let y0 = floor(sy);
+    let fx = sx - x0;
+    let fy = sy - y0;
+    let i0 = vec2<i32>(i32(x0), i32(y0));
+
+    let p00 = tap(i0, wdims);
+    let p10 = tap(i0 + vec2<i32>(1, 0), wdims);
+    let p01 = tap(i0 + vec2<i32>(0, 1), wdims);
+    let p11 = tap(i0 + vec2<i32>(1, 1), wdims);
+
+    let top = mix(p00, p10, fx);
+    let bot = mix(p01, p11, fx);
+    textureStore(outp, xy, mix(top, bot, fy));
+}
+";
+
+// ─────────────────────────── warp_backward ─────────────────────────
+//
+// THE GENERAL BACKWARD-MAP WARP — one kernel, one sampler, a family of
+// distortions selected by `kind`.
+//
+// `geom.rotate_bilinear` was the only warp in the engine, which is why
+// the entire Distort family (Pinch, Spherize, Twirl, Ripple, Wave,
+// ZigZag, Polar Coordinates, Shear, Displace) was listed as unbuilt in
+// the catalog's §36.4: they are not nine independent effects, they are
+// nine source-coordinate functions over the same backward map. Sharing
+// the sampler is not a shortcut — it is the only way the reconstruction
+// filter, the edge rule and the parity tolerance stay identical across
+// all of them, which is what makes them comparable.
+//
+// BACKWARD, not forward: for each OUTPUT texel compute where it came
+// from and sample there. A forward map scatters and leaves holes; a
+// backward map is total by construction. Bilinear reconstruction with
+// clamp-to-edge, exactly as the rotation already does — one 2x2 tap
+// footprint, so `Resample { support: 1.0 }`.
+//
+// Amount is normalized so 0 is the IDENTITY for every kind. That is
+// what lets a UI expose one slider per distortion without special
+// cases, and it makes the identity parity test meaningful for all of
+// them at once.
+
+/// Which source-coordinate function the warp applies.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u32)]
+pub enum WarpKind {
+    /// Pull toward (amount > 0) or push away from the centre.
+    Pinch = 0,
+    /// Spherical bulge (amount > 0) or dent.
+    Spherize = 1,
+    /// Rotate by an angle that falls off with radius.
+    Twirl = 2,
+    /// Sinusoidal displacement along x, by y.
+    Wave = 3,
+}
+
+impl WarpKind {
+    pub fn as_u32(self) -> u32 {
+        self as u32
+    }
+}
+
+/// Warp params: the kind, the normalized amount, the centre, and a
+/// frequency the periodic kinds use (ignored by the others).
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, ::bytemuck::Pod, ::bytemuck::Zeroable)]
+pub struct WarpBackwardParams {
+    pub kind: u32,
+    pub amount: f32,
+    pub cx: f32,
+    pub cy: f32,
+    pub radius: f32,
+    pub frequency: f32,
+    pub _pad0: u32,
+    pub _abi_pad: u32,
+}
+
+impl WarpBackwardParams {
+    pub fn new(kind: WarpKind, amount: f32, cx: f32, cy: f32, radius: f32) -> Self {
+        Self {
+            kind: kind.as_u32(),
+            amount,
+            cx,
+            cy,
+            radius,
+            frequency: 1.0,
+            _pad0: 0,
+            _abi_pad: 0,
+        }
+    }
+
+    /// Periodic kinds (Wave) read this; the others ignore it.
+    pub fn with_frequency(mut self, frequency: f32) -> Self {
+        self.frequency = frequency;
+        self
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        ::bytemuck::bytes_of(self)
+    }
+}
+
+const WARP_BACKWARD_FIELDS: &[ParamField] = &[
+    ParamField {
+        name: "kind",
+        wgsl_ty: "u32",
+    },
+    ParamField {
+        name: "amount",
+        wgsl_ty: "f32",
+    },
+    ParamField {
+        name: "cx",
+        wgsl_ty: "f32",
+    },
+    ParamField {
+        name: "cy",
+        wgsl_ty: "f32",
+    },
+    ParamField {
+        name: "radius",
+        wgsl_ty: "f32",
+    },
+    ParamField {
+        name: "frequency",
+        wgsl_ty: "f32",
+    },
+];
+
+/// Backward-mapped parametric distortion, bilinear, clamp-to-edge.
+/// `amount == 0` is the identity for every kind.
+pub static GEOM_WARP_BACKWARD: KernelDef = KernelDef {
+    id: "geom.warp_backward",
+    class: KernelClass::Resample { support: 1.0 },
+    inputs: 1,
+    params: ParamsLayout {
+        size: ::core::mem::size_of::<WarpBackwardParams>(),
+        fields: WARP_BACKWARD_FIELDS,
+    },
+    wgsl: GEOM_WARP_BACKWARD_WGSL,
+    module: true,
+    mip_exact: false,
+    gpu_tolerance: Tolerance::ChannelEpsF16(4),
+};
+
+const GEOM_WARP_BACKWARD_WGSL: &str = "\
+// paged.image kernel `geom.warp_backward` — handwritten under ABI v1.1.
+// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+
+struct Params {
+    kind: u32,
+    amount: f32,
+    cx: f32,
+    cy: f32,
+    radius: f32,
+    frequency: f32,
+    _pad0: u32,
+    _abi_pad: u32,
+}
+
+@group(0) @binding(0) var in0 : texture_2d<f32>;
+@group(1) @binding(0) var<uniform> params : Params;
+@group(2) @binding(0) var mask : texture_2d<f32>;
+@group(3) @binding(0) var outp : texture_storage_2d<rgba16float, write>;
+
+fn tap(p: vec2<i32>, dims: vec2<i32>) -> vec4<f32> {
+    let c = clamp(p, vec2<i32>(0, 0), dims - vec2<i32>(1, 1));
+    return textureLoad(in0, c, 0);
+}
+
+// Where output point `d` (centre-relative) READ FROM. Returns a
+// centre-relative source offset. `t` is the normalized radius.
+fn source_offset(d: vec2<f32>, t: f32) -> vec2<f32> {
+    let a = params.amount;
+    if (params.kind == 0u) {
+        // PINCH: scale radius by (1 + a·(1 − t)), so the effect is
+        // strongest at the centre and vanishes at the rim.
+        return d * (1.0 + a * (1.0 - t));
+    }
+    if (params.kind == 1u) {
+        // SPHERIZE: a smooth radial remap, zero at centre and rim.
+        let k = 1.0 + a * sin(3.14159265 * clamp(t, 0.0, 1.0));
+        return d * k;
+    }
+    if (params.kind == 2u) {
+        // TWIRL: rotate by an angle that falls off linearly with radius.
+        let ang = a * (1.0 - clamp(t, 0.0, 1.0));
+        let cs = cos(ang);
+        let sn = sin(ang);
+        return vec2<f32>(cs * d.x - sn * d.y, sn * d.x + cs * d.y);
+    }
+    // WAVE: displace x by a sinusoid of y.
+    let phase = params.frequency * 6.28318531 * (d.y / max(params.radius, 1.0));
+    return vec2<f32>(d.x + a * params.radius * 0.05 * sin(phase), d.y);
+}
+
+@compute @workgroup_size(16, 16, 1)
+fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
+    let dims = textureDimensions(outp);
+    if (gid.x >= dims.x || gid.y >= dims.y) { return; }
+    let xy = vec2<i32>(i32(gid.x), i32(gid.y));
+    let wdims = vec2<i32>(textureDimensions(in0));
+
+    let d = vec2<f32>(f32(xy.x) + 0.5 - params.cx, f32(xy.y) + 0.5 - params.cy);
+    let r = length(d);
+    let t = r / max(params.radius, 1.0);
+    let src = source_offset(d, t) + vec2<f32>(params.cx, params.cy) - vec2<f32>(0.5, 0.5);
+
+    let x0 = floor(src.x);
+    let y0 = floor(src.y);
+    let fx = src.x - x0;
+    let fy = src.y - y0;
+    let i0 = vec2<i32>(i32(x0), i32(y0));
+
+    let p00 = tap(i0, wdims);
+    let p10 = tap(i0 + vec2<i32>(1, 0), wdims);
+    let p01 = tap(i0 + vec2<i32>(0, 1), wdims);
+    let p11 = tap(i0 + vec2<i32>(1, 1), wdims);
+
+    let top = mix(p00, p10, fx);
+    let bot = mix(p01, p11, fx);
+    let result = mix(top, bot, fy);
+
+    let m = textureLoad(mask, xy, 0).r;
+    let a = textureLoad(in0, clamp(xy, vec2<i32>(0, 0), wdims - vec2<i32>(1, 1)), 0);
+    textureStore(outp, xy, mix(a, result, vec4<f32>(m)));
+}
+";
+
+// ── Pixelate: mosaic ───────────────────────────────────────────────
+//
+// Photoshop's Pixelate family is several effects over one idea: quantize
+// the SOURCE COORDINATE, then sample. Mosaic is the square-cell case and
+// the one everything else varies (Crystallize uses Voronoi cells,
+// Fragment offsets four copies) — so this lands in `geom` beside the
+// warp rather than in `conv`, because it is a coordinate function, not a
+// neighbourhood average.
+//
+// SAMPLING THE CELL CENTRE, not averaging the cell, is deliberate: it is
+// what Photoshop does, it is O(1) per texel instead of O(cell²), and the
+// difference shows on a gradient — an average produces smooth steps, a
+// centre sample produces the hard posterized blocks people expect.
+
+/// Mosaic params: cell size in PIXELS. 1 is the identity.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, ::bytemuck::Pod, ::bytemuck::Zeroable)]
+pub struct MosaicParams {
+    pub cell_px: f32,
+    pub _abi_pad0: u32,
+    pub _abi_pad1: u32,
+}
+
+#[allow(clippy::new_without_default)]
+impl MosaicParams {
+    pub fn new(cell_px: f32) -> Self {
+        Self {
+            cell_px,
+            _abi_pad0: 0,
+            _abi_pad1: 0,
+        }
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        ::bytemuck::bytes_of(self)
+    }
+}
+
+/// Square-cell pixelation by source-coordinate quantization.
+pub static GEOM_MOSAIC: KernelDef = KernelDef {
+    id: "geom.mosaic",
+    class: KernelClass::Resample { support: 1.0 },
+    inputs: 1,
+    params: ParamsLayout {
+        size: ::core::mem::size_of::<MosaicParams>(),
+        fields: &[ParamField {
+            name: "cell_px",
+            wgsl_ty: "f32",
+        }],
+    },
+    wgsl: GEOM_MOSAIC_WGSL,
+    module: true,
+    mip_exact: false,
+    gpu_tolerance: Tolerance::ChannelEpsF16(4),
+};
+
+const GEOM_MOSAIC_WGSL: &str = "\
+// paged.image kernel `geom.mosaic` — handwritten under ABI v1.1.
+// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+
+struct Params {
+    cell_px: f32,
+    _abi_pad0: u32,
+    _abi_pad1: u32,
+}
+
+@group(0) @binding(0) var in0 : texture_2d<f32>;
+@group(1) @binding(0) var<uniform> params : Params;
+@group(2) @binding(0) var mask : texture_2d<f32>;
+@group(3) @binding(0) var outp : texture_storage_2d<rgba16float, write>;
+
+@compute @workgroup_size(16, 16, 1)
+fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
+    let d = textureDimensions(outp);
+    if (gid.x >= d.x || gid.y >= d.y) { return; }
+    let dims = vec2<i32>(i32(d.x), i32(d.y));
+    let xy = vec2<i32>(i32(gid.x), i32(gid.y));
+    let a = textureLoad(in0, xy, 0);
+
+    // max(1) makes cell 0 and cell 1 both the IDENTITY rather than a
+    // divide by zero — a slider that starts at its minimum must not
+    // produce NaN before the user has touched it.
+    let cell = max(params.cell_px, 1.0);
+    let cx = floor(f32(xy.x) / cell) * cell + cell * 0.5;
+    let cy = floor(f32(xy.y) / cell) * cell + cell * 0.5;
+    let c = clamp(vec2<i32>(i32(cx), i32(cy)),
+                  vec2<i32>(0, 0), dims - vec2<i32>(1, 1));
+    let result = textureLoad(in0, c, 0);
+    let m = textureLoad(mask, xy, 0).r;
+    textureStore(outp, xy, mix(a, result, vec4<f32>(m)));
+}
+";
+
+// ── Offset: the Move tool's kernel ────────────────────────────────
+//
+// TRANSLATE THE PIXELS OF A LAYER, which is not the same operation as
+// moving its FRAME on the page. The host's Selection tool already moves
+// the frame; nothing moved the CONTENT inside it. Photoshop's Move tool
+// (V) is this kernel, and Photoshop's Offset filter (Filter ▸ Other ▸
+// Offset) is the SAME kernel with the wrap edge policy — one
+// implementation, two surfaces.
+//
+// # Why this is not `geom.warp_backward` with a fifth `kind`
+//
+// It looks subsumed and is not, for three independent reasons:
+//
+// 1. NO TRANSLATION IS EXPRESSIBLE. `warp_backward`'s four kinds are
+//    Pinch/Spherize (radial SCALE of the centre-relative vector), Twirl
+//    (radius-dependent ROTATION) and Wave (an x displacement that is a
+//    sinusoid OF y). Every one is a function of the centre-relative
+//    coordinate `d` that fixes the centre; a translation moves the
+//    centre. Wave degenerates to the identity at `frequency == 0`, not
+//    to a constant shift. Its param block has no `dx`/`dy` — adding
+//    them would change `WarpBackwardParams`' size and `ParamsLayout`,
+//    i.e. re-cut a shipped kernel's frozen uniform block.
+// 2. THE EDGE RULE IS HARDCODED THERE. `warp_backward`'s `tap()` is
+//    clamp-to-edge and only clamp-to-edge, as is every other warp in
+//    this family. Offset needs all three of Photoshop's edge rules —
+//    transparent, edge-extend, wrap — and wrap is not a variation on a
+//    clamp, it is a different function of the same coordinate.
+// 3. COST PER TEXEL, AND THIS ONE IS DRAGGED. The Move tool re-runs
+//    this on every pointer-move over the whole layer. `warp_backward`
+//    pays a `length()`, a divide and a four-way branch per texel to
+//    decide it wanted an add.
+//
+// # Sub-pixel offsets are BILINEAR, deliberately, not rounded
+//
+// A drag at any zoom other than 100% produces fractional deltas. Round
+// them and the layer stutters — it sits still while the pointer travels
+// half a pixel, then jumps — which reads as the tool being broken.
+// Bilinear reconstruction makes the content track the pointer
+// continuously. The 2×2 footprint is why this is
+// `Resample { support: 1.0 }` and not the family's exact-remap class.
+//
+// The cost normally charged against resampling — that repeated
+// application softens the image — is NOT charged here for whole-pixel
+// moves: an integer `dx` gives `fx == 0.0` exactly, and `mix(p00, p10,
+// 0.0)` is bit-exactly `p00`. Integer moves are lossless no matter how
+// many of them you make; only a fractional move ever filters.
+//
+// # Transparent is exact because the working space is premultiplied
+//
+// `PixelFormat::GPU_WORKING` is premultiplied (image-core §5.2), so
+// `vec4(0)` IS transparent black and interpolating toward it is the
+// correct alpha-weighted result. On a straight-alpha buffer the same
+// blend would drag RGB toward black and fringe the moved edge; here it
+// does not, and that is a property of the working space rather than of
+// this kernel being careful.
+//
+// Provenance: integer translation with bilinear reconstruction under a
+// selectable boundary extension is textbook (Wolberg, *Digital Image
+// Warping*, IEEE CS Press 1990, §3 inverse mapping / §5 bilinear
+// interpolation; boundary extension per Gonzalez & Woods, *Digital
+// Image Processing*, "padding"). No reference reading.
+
+/// What a sample outside the source reads as. The wire encoding is
+/// frozen: it is what crosses the uniform block and the wasm boundary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u32)]
+pub enum EdgePolicy {
+    /// Outside → premultiplied transparent black. Photoshop's "Set to
+    /// Transparent"; the Move tool's default (moving a layer must
+    /// expose emptiness, not smear its border).
+    Transparent = 0,
+    /// Outside → the nearest edge texel. Photoshop's "Repeat Edge
+    /// Pixels"; the rule the rest of this family already uses.
+    Clamp = 1,
+    /// Outside → the opposite side, period = the source dims. Photoshop's
+    /// "Wrap Around"; this is what makes the kernel double as the Offset
+    /// filter and as the standard way to check a texture tiles.
+    Wrap = 2,
+}
+
+impl EdgePolicy {
+    pub fn as_u32(self) -> u32 {
+        self as u32
+    }
+
+    /// Decode a wire value, REJECTING anything unrecognised. This is the
+    /// boundary check for values arriving from JS/wasm, where the param
+    /// is just a number.
+    pub fn from_u32(v: u32) -> Option<Self> {
+        match v {
+            0 => Some(Self::Transparent),
+            1 => Some(Self::Clamp),
+            2 => Some(Self::Wrap),
+            _ => None,
+        }
+    }
+
+    /// Decode a wire value, CLAMPING anything unrecognised to `Clamp`.
+    /// This mirrors the shader term-for-term: the WGSL tests for `Wrap`
+    /// and `Transparent` and treats every other bit pattern as `Clamp`,
+    /// so a caller that would rather degrade than fail gets exactly the
+    /// pixels the GPU would produce. `from_u32` is the right choice at a
+    /// UI boundary; this is the right choice when reproducing a stored
+    /// param block whose producer may be newer.
+    pub fn from_u32_or_clamp(v: u32) -> Self {
+        Self::from_u32(v).unwrap_or(Self::Clamp)
+    }
+}
+
+/// Offset params: the translation in PIXELS (positive `dx` moves the
+/// content right, positive `dy` moves it down — screen convention, y
+/// grows down) and the edge policy.
+///
+/// IDENTITY: `dx == 0.0 && dy == 0.0` returns the input unchanged, for
+/// EVERY edge policy and under EVERY mask. The zero offset makes both
+/// bilinear fractions exactly zero, so the blend collapses to `p00` —
+/// the texel under the output — and the mask epilogue then mixes that
+/// value with itself. No special case in the shader implements this; it
+/// falls out of the arithmetic, which is why it cannot rot.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, ::bytemuck::Pod, ::bytemuck::Zeroable)]
+pub struct OffsetParams {
+    pub dx: f32,
+    pub dy: f32,
+    /// An [`EdgePolicy`] as `u32` (see its docs for the frozen encoding).
+    pub edge: u32,
+    pub _abi_pad: u32,
+}
+
+#[allow(clippy::new_without_default)]
+impl OffsetParams {
+    /// The typed constructor — an out-of-range policy is unrepresentable
+    /// here by construction. Decode untyped wire values with
+    /// [`EdgePolicy::from_u32`] (rejecting) or
+    /// [`EdgePolicy::from_u32_or_clamp`] (shader-matching).
+    pub fn new(dx: f32, dy: f32, edge: EdgePolicy) -> Self {
+        Self {
+            dx,
+            dy,
+            edge: edge.as_u32(),
+            _abi_pad: 0,
+        }
+    }
+
+    /// The identity offset under `edge` — a zero translation.
+    pub fn identity(edge: EdgePolicy) -> Self {
+        Self::new(0.0, 0.0, edge)
+    }
+
+    /// True when this param block is the identity (see the type docs).
+    pub fn is_identity(&self) -> bool {
+        self.dx == 0.0 && self.dy == 0.0
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        ::bytemuck::bytes_of(self)
+    }
+}
+
+const OFFSET_FIELDS: &[ParamField] = &[
+    ParamField {
+        name: "dx",
+        wgsl_ty: "f32",
+    },
+    ParamField {
+        name: "dy",
+        wgsl_ty: "f32",
+    },
+    ParamField {
+        name: "edge",
+        wgsl_ty: "u32",
+    },
+];
+
+/// Translate the layer content by `(dx, dy)` pixels with a selectable
+/// edge policy — the Move tool's kernel, and Photoshop's Offset filter
+/// at `edge == Wrap`. Backward-mapped and bilinear, so sub-pixel
+/// offsets are smooth; integer offsets are bit-exact.
+///
+/// IDENTITY: `dx == 0.0 && dy == 0.0` returns the input unchanged under
+/// every edge policy and every mask.
+pub static GEOM_OFFSET: KernelDef = KernelDef {
+    id: "geom.offset",
+    class: KernelClass::Resample { support: 1.0 },
+    inputs: 1,
+    params: ParamsLayout {
+        size: ::core::mem::size_of::<OffsetParams>(),
+        fields: OFFSET_FIELDS,
+    },
+    wgsl: GEOM_OFFSET_WGSL,
+    module: true,
+    mip_exact: false,
+    gpu_tolerance: Tolerance::ChannelEpsF16(4),
+};
+
+const GEOM_OFFSET_WGSL: &str = "\
+// paged.image kernel `geom.offset` — handwritten under ABI v1.1.
+// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+
+struct Params {
+    dx: f32,
+    dy: f32,
+    edge: u32,
+    _abi_pad: u32,
+}
+
+@group(0) @binding(0) var in0 : texture_2d<f32>;
+@group(1) @binding(0) var<uniform> params : Params;
+@group(2) @binding(0) var mask : texture_2d<f32>;
+@group(3) @binding(0) var outp : texture_storage_2d<rgba16float, write>;
+
+// One tap under the selected edge policy. The FALLBACK IS CLAMP: any
+// unrecognised policy value degrades to the family's existing rule
+// rather than reading garbage or branching into undefined behaviour.
+// `EdgePolicy::from_u32_or_clamp` mirrors this on the Rust side.
+fn tap(p: vec2<i32>, dims: vec2<i32>) -> vec4<f32> {
+    if (params.edge == 2u) {
+        // WRAP. Two mods, because WGSL's `%` takes the sign of the
+        // dividend, so a negative coordinate needs the bias to land in
+        // [0, dim). max(1) keeps a degenerate 0-dim binding from
+        // dividing by zero.
+        let d = max(dims, vec2<i32>(1, 1));
+        return textureLoad(in0, ((p % d) + d) % d, 0);
+    }
+    if (params.edge == 0u) {
+        // TRANSPARENT. vec4(0) is transparent black in the
+        // PREMULTIPLIED working space, so interpolating toward it is
+        // the correct alpha-weighted edge — no dark fringe.
+        if (p.x < 0 || p.y < 0 || p.x >= dims.x || p.y >= dims.y) {
+            return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+        }
+        return textureLoad(in0, p, 0);
+    }
+    // CLAMP (edge extend) — and the fallback for any other value.
+    return textureLoad(in0, clamp(p, vec2<i32>(0, 0), dims - vec2<i32>(1, 1)), 0);
+}
+
+@compute @workgroup_size(16, 16, 1)
+fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
+    let dims = textureDimensions(outp);
+    if (gid.x >= dims.x || gid.y >= dims.y) { return; }
+    let xy = vec2<i32>(i32(gid.x), i32(gid.y));
+    let wdims = vec2<i32>(textureDimensions(in0));
+
+    // Backward map: the output texel asks where it CAME FROM. The
+    // output texel centre is (x + 0.5, y + 0.5) and the source point is
+    // that minus the translation; converting back to texel-index space
+    // subtracts 0.5 again, so the halves cancel exactly. That exact
+    // cancellation is what makes an integer offset land on fx == fy ==
+    // 0.0 and stay bit-exact.
+    let sx = f32(xy.x) - params.dx;
+    let sy = f32(xy.y) - params.dy;
+
+    let x0 = floor(sx);
+    let y0 = floor(sy);
+    let fx = sx - x0;
+    let fy = sy - y0;
+    let i0 = vec2<i32>(i32(x0), i32(y0));
+
+    let p00 = tap(i0, wdims);
+    let p10 = tap(i0 + vec2<i32>(1, 0), wdims);
+    let p01 = tap(i0 + vec2<i32>(0, 1), wdims);
+    let p11 = tap(i0 + vec2<i32>(1, 1), wdims);
+
+    // Fixed blend order — x first, then y — mirrored term-for-term by
+    // any scalar reference, exactly as rotate_bilinear/warp_backward do.
+    let top = mix(p00, p10, fx);
+    let bot = mix(p01, p11, fx);
+    let result = mix(top, bot, fy);
+
+    let m = textureLoad(mask, xy, 0).r;
+    let a = textureLoad(in0, clamp(xy, vec2<i32>(0, 0), wdims - vec2<i32>(1, 1)), 0);
+    textureStore(outp, xy, mix(a, result, vec4<f32>(m)));
+}
+";
+
+/// How the region a move VACATES is left behind.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VacateMode {
+    /// Photoshop's plain Move: the pixels leave, and what they leave is
+    /// transparent.
+    Transparent = 0,
+    /// Photoshop's alt-drag: the pixels are COPIED, so the source keeps
+    /// what it had. This is the behaviour `geom.offset` under a mask
+    /// accidentally approximated, now available deliberately.
+    Copy = 1,
+}
+
+impl VacateMode {
+    /// Rejecting decoder for the JS boundary.
+    pub fn from_u32(v: u32) -> Option<Self> {
+        match v {
+            0 => Some(Self::Transparent),
+            1 => Some(Self::Copy),
+            _ => None,
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, ::bytemuck::Pod, ::bytemuck::Zeroable)]
+pub struct MoveSelectionParams {
+    pub dx: f32,
+    pub dy: f32,
+    pub vacate: u32,
+    pub _abi_pad: u32,
+}
+
+#[allow(clippy::new_without_default)]
+impl MoveSelectionParams {
+    pub fn new(dx: f32, dy: f32, vacate: VacateMode) -> Self {
+        Self {
+            dx,
+            dy,
+            vacate: vacate as u32,
+            _abi_pad: 0,
+        }
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        ::bytemuck::bytes_of(self)
+    }
+}
+
+/// MOVE the SELECTED pixels — Photoshop's Move tool with an active
+/// selection, which is a different operation from `geom.offset`.
+///
+/// The distinction is worth stating because the naive version is
+/// subtly wrong in a way that looks plausible. `geom.offset` under the
+/// standard ABI mask computes `out(p) = mix(in(p), in(p − d), m(p))`:
+/// the mask is read at the DESTINATION only, so the selection behaves
+/// as a fixed WINDOW through which shifted content scrolls. The
+/// selected pixels never actually go anywhere — content slides past a
+/// stationary hole. That is not a move, and it is not a duplicate
+/// either.
+///
+/// A real move reads the mask TWICE:
+///
+/// ```text
+/// m_src = m(p − d)   // was the pixel that lands here selected?
+/// m_dst = m(p)       // is this pixel part of the region being vacated?
+/// out   = in(p)*(1 − m_dst) + in(p − d)*m_src
+/// ```
+///
+/// That is ADDITIVE — the unselected part of the layer stays put and
+/// the selected part translates — and not the sequential
+/// clear-then-land it is tempting to write. Clearing first and blending
+/// over double-counts at fractional mask values: it comes out as
+/// `a*(1 − m + m²)`, right at 0 and 1 and wrong at every feathered
+/// edge. This was written the wrong way first and a soft-mask identity
+/// test caught it.
+///
+/// Both reads matter independently: `m_src` decides what ARRIVES,
+/// `m_dst` decides what LEAVES, and where the selection overlaps its
+/// own translate both fire on the same pixel — which is exactly the
+/// case a single-mask formulation cannot express at all.
+///
+/// Because it consumes the mask itself rather than through the ABI's
+/// pointwise epilogue, this kernel writes `result` directly, the same
+/// licence `Resample` kernels already take.
+///
+/// IDENTITY: `dx == 0 && dy == 0`. At zero offset `m_src == m_dst`, so
+/// the expression is `a*(1 − m) + a*m = a` exactly, for every mask
+/// value including soft ones, under either vacate mode. Not
+/// special-cased; it falls out of the algebra — which is the reason to
+/// insist on algebra that actually has the property.
+pub static GEOM_MOVE_SELECTION: KernelDef = KernelDef {
+    id: "geom.move_selection",
+    class: KernelClass::Resample { support: 1.0 },
+    inputs: 1,
+    params: ParamsLayout {
+        size: ::core::mem::size_of::<MoveSelectionParams>(),
+        fields: &[
+            ParamField {
+                name: "dx",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "dy",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "vacate",
+                wgsl_ty: "u32",
+            },
+        ],
+    },
+    wgsl: GEOM_MOVE_SELECTION_WGSL,
+    module: true,
+    mip_exact: false,
+    gpu_tolerance: Tolerance::ChannelEpsF16(4),
+};
+
+const GEOM_MOVE_SELECTION_WGSL: &str = "\
+// paged.image kernel `geom.move_selection` — handwritten under ABI v1.1.
+// MPL-2.0 OR LicenseRef-PMEL; (c) And The Next GmbH.
+
+struct Params {
+    dx: f32,
+    dy: f32,
+    vacate: u32,
+    _abi_pad: u32,
+}
+
+@group(0) @binding(0) var in0 : texture_2d<f32>;
+@group(1) @binding(0) var<uniform> params : Params;
+@group(2) @binding(0) var mask : texture_2d<f32>;
+@group(3) @binding(0) var outp : texture_storage_2d<rgba16float, write>;
+
+fn tap(p: vec2<i32>, dims: vec2<i32>) -> vec4<f32> {
+    let c = clamp(p, vec2<i32>(0, 0), dims - vec2<i32>(1, 1));
+    return textureLoad(in0, c, 0);
+}
+
+fn maskAt(p: vec2<i32>, dims: vec2<i32>) -> f32 {
+    // OUTSIDE the image is unselected, not edge-extended. Clamping the
+    // mask would smear the selection's border rows outward and a move
+    // near an edge would drag a stripe with it.
+    if (p.x < 0 || p.y < 0 || p.x >= dims.x || p.y >= dims.y) {
+        return 0.0;
+    }
+    return textureLoad(mask, p, 0).r;
+}
+
+@compute @workgroup_size(16, 16, 1)
+fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
+    let d = textureDimensions(outp);
+    if (gid.x >= d.x || gid.y >= d.y) { return; }
+    let dims = vec2<i32>(i32(d.x), i32(d.y));
+    let xy = vec2<i32>(i32(gid.x), i32(gid.y));
+    let a = textureLoad(in0, xy, 0);
+
+    // Backward map: what lands at p came from p - d.
+    let sx = f32(xy.x) - params.dx;
+    let sy = f32(xy.y) - params.dy;
+    let x0 = i32(floor(sx));
+    let y0 = i32(floor(sy));
+    let fx = sx - f32(x0);
+    let fy = sy - f32(y0);
+
+    // BILINEAR, for the same reason geom.offset is: a drag at any zoom
+    // produces fractional deltas, and rounding makes the moved pixels
+    // sit still and then jump. Integer offsets give fx == fy == 0
+    // exactly, so a whole-pixel move stays bit-exact.
+    let p00 = tap(vec2<i32>(x0,     y0    ), dims);
+    let p10 = tap(vec2<i32>(x0 + 1, y0    ), dims);
+    let p01 = tap(vec2<i32>(x0,     y0 + 1), dims);
+    let p11 = tap(vec2<i32>(x0 + 1, y0 + 1), dims);
+    let moved = mix(mix(p00, p10, fx), mix(p01, p11, fx), fy);
+
+    // The ARRIVING coverage is the mask sampled at the source, filtered
+    // the same way the colour is — otherwise a soft-edged selection
+    // moves with a hard edge and the feather is lost on the first drag.
+    let m00 = maskAt(vec2<i32>(x0,     y0    ), dims);
+    let m10 = maskAt(vec2<i32>(x0 + 1, y0    ), dims);
+    let m01 = maskAt(vec2<i32>(x0,     y0 + 1), dims);
+    let m11 = maskAt(vec2<i32>(x0 + 1, y0 + 1), dims);
+    let m_src = mix(mix(m00, m10, fx), mix(m01, m11, fx), fy);
+
+    let m_dst = textureLoad(mask, xy, 0).r;
+
+    // ADDITIVE composition, not a sequential clear-then-land. The
+    // obvious formulation — empty the source region, then blend the
+    // arriving pixels over it — double-counts wherever the mask is
+    // FRACTIONAL: it evaluates to a*(1 - m + m^2), which is correct
+    // only at m = 0 and m = 1 and wrong at every feathered edge. A test
+    // caught exactly that, having been written against a doc-comment
+    // that claimed the identity held.
+    //
+    // Split the layer instead. The unselected part stays where it is;
+    // the selected part is what translates:
+    //
+    //   out = a(p)*(1 - leaving) + a(p-d)*m_src
+    //
+    // At d = 0, m_src == m_dst, so this is a*(1-m) + a*m = a exactly,
+    // for every mask value including soft ones.
+    //
+    // This is premultiplied-alpha compositing. NOTE the family-wide
+    // caveat: the current upload path does not premultiply, so a
+    // SUB-PIXEL move can darken an RGB fringe where alpha varies. It
+    // never arises for the integer offsets a whole-pixel drag produces,
+    // and the fix (if it ever bites) is to sandwich the dispatch
+    // between the existing cast.premultiply / cast.unpremultiply.
+    //
+    // `leaving` is what distinguishes the two modes, and it is the ONLY
+    // difference between them: a plain Move empties what it left
+    // (m_dst), while an alt-drag copy leaves the source alone and only
+    // overwrites where content arrives (m_src).
+    var leaving = m_dst;
+    if (params.vacate == 1u) {
+        leaving = m_src;
+    }
+    let result = a * (1.0 - leaving) + moved * m_src;
+    textureStore(outp, xy, result);
+}
+";
+
+pub static FAMILY: &[&KernelDef] = &[
+    &GEOM_MOVE_SELECTION,
+    &GEOM_FLIP_H,
+    &GEOM_FLIP_V,
+    &GEOM_ROTATE90_CW,
+    &GEOM_ROTATE90_CCW,
+    &GEOM_CROP,
+    &GEOM_ROTATE_BILINEAR,
+    &GEOM_WARP_BACKWARD,
+    &GEOM_MOSAIC,
+    &GEOM_OFFSET,
+];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Naga-validate just this family's modules (independent of the
+    /// shared `wgsl_validate` suite, which only sees a family once the
+    /// orchestrator lands `geom::FAMILY` in `families/mod.rs`).
+    #[test]
+    fn geom_modules_naga_validate() {
+        for def in FAMILY {
+            let src = crate::abi::assemble(def);
+            let module = naga::front::wgsl::parse_str(&src)
+                .unwrap_or_else(|e| panic!("{}: WGSL parse failed: {e}\n{src}", def.id));
+            let mut validator = naga::valid::Validator::new(
+                naga::valid::ValidationFlags::all(),
+                naga::valid::Capabilities::default(),
+            );
+            validator
+                .validate(&module)
+                .unwrap_or_else(|e| panic!("{}: WGSL validation failed: {e:?}\n{src}", def.id));
+        }
+    }
+}

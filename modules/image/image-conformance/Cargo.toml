@@ -1,0 +1,49 @@
+[package]
+name = "image-conformance"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "TEST-ONLY (spec §4): scalar reference kernels, gpu↔ref parity harness, oracle runners, PSD fixture builder, perf gates. Never shipped; never reachable from wasm32 release builds."
+
+[lints]
+workspace = true
+
+[dependencies]
+# This crate IS the dev-dependency tree: it's the only crate allowed to
+# activate image-kernels' `reference` feature (spec §4 dep rule 2; CI
+# proves no production crate reaches it via cargo-tree).
+image-core = { path = "../image-core" }
+image-kernels = { path = "../image-kernels", features = ["reference"] }
+image-gpu = { path = "../image-gpu", features = ["test-support"] }
+image-pipeline = { path = "../image-pipeline" }
+image-codecs = { path = "../image-codecs" }
+image-psd = { path = "../image-psd" }
+image-graph = { path = "../image-graph" }
+half = { workspace = true }
+pollster = { workspace = true }
+bytemuck = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+# The oracle lanes (PSD composite, Photoshop replay, journal properties)
+# drive the LAYER STACK the bundle ships, and the layer fold's cache
+# property test compares the resident fold with the reference one, so
+# they need the crate that owns it. Dev-only: image-js never depends back
+# on this crate, and the wasm32 cargo-tree guard is about image-js's own
+# tree.
+image-js = { path = "../image-js", features = ["reference-fold"] }
+# Colour-conversion properties (prop_colour.rs) round-trip both CMS backends.
+image-cms = { path = "../image-cms" }
+criterion = { workspace = true }
+# D-4 bench (png_d4): zune-png is the chosen adapter; image/png is the
+# loser kept here ONLY as the bench comparison baseline (dev-dep, never
+# reachable from a production crate).
+zune-png = { workspace = true }
+zune-core = { workspace = true }
+png = { workspace = true }
+
+[[bench]]
+name = "png_d4"
+harness = false

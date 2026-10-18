@@ -1,0 +1,69 @@
+[package]
+name = "image-js"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "paged.image wasm-bindgen surface — the bundle's compute artifact. The GPU device is created in the bundle realm (BREAKAGE I-07); pixels never cross into plugin JS."
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[lints]
+workspace = true
+
+[dependencies]
+image-core = { path = "../image-core" }
+image-kernels = { path = "../image-kernels" }
+image-pipeline = { path = "../image-pipeline" }
+# The M4 ingest slice: codec decode (inherently-CPU work) + the PSD
+# merged-composite decode + the GPU context the async sink drives.
+image-codecs = { path = "../image-codecs" }
+image-gpu = { path = "../image-gpu" }
+image-psd = { path = "../image-psd" }
+# CMS print lane (D-11): the moxcms CMYK→RGBA8 ingest cast. CPU transform
+# *compilation* + apply is inherently-CPU work (spec §6), so this rides
+# the ingest slice's decode lane, not the GPU kernel path.
+image-cms = { path = "../image-cms" }
+# Engine B: the tiled buffer-graph mip evaluation (the `image_tile_rgba8_level`
+# window path). rgba16float source tiles + the f16→u8 downconvert.
+image-graph = { path = "../image-graph" }
+half = { workspace = true }
+thiserror = { workspace = true }
+harfrust = "0.6"
+skrifa = "0.42"
+ab_glyph_rasterizer = "0.1"
+
+[features]
+# The pre-residency layer fold, kept as the byte-equality reference for
+# the resident one. Enabled only by image-conformance's dev-dependency.
+reference-fold = []
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = { workspace = true }
+wasm-bindgen-futures = { workspace = true }
+js-sys = { workspace = true }
+console_error_panic_hook = { workspace = true }
+getrandom = { workspace = true }
+
+[dev-dependencies]
+# Fixture builders only — the 16-bit ingest test encodes its own PNG
+# rather than committing a binary. Dev-only, so the wasm32 release
+# build is untouched (the cargo-tree guard still holds).
+zune-png = { workspace = true }
+zune-core = { workspace = true }
+pollster = { workspace = true }
+# The shared test device (REQUIRE_GPU=1 turns its skip into a failure).
+# Dev-only: the shipped wasm never sees the feature.
+image-gpu = { path = "../image-gpu", features = ["test-support"] }
+# CMYK-JPEG fixture builder for the ingest cast test (the codec adapter
+# only encodes RGB/Gray; jpeg-encoder writes the Adobe-APP14 CMYK form
+# zune-jpeg re-inverts on decode). Dev-only — never in the wasm artifact.
+jpeg-encoder = "0.7.0"
+criterion = { workspace = true }
+
+# Wall-clock trend (reported, never gated): `cargo bench --bench ops`.
+[[bench]]
+name = "ops"
+harness = false
