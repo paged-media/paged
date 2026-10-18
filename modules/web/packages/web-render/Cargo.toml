@@ -110,7 +110,7 @@ required-features = ["blitz"]
 wasm-bindgen = "0.2"
 
 [dev-dependencies]
-criterion = { version = "0.5", default-features = false }
+criterion = { version = "0.8", default-features = false }
 
 # Count budgets — run with `--features blitz,perf-counters`.
 [[test]]
