@@ -43,12 +43,18 @@ function run(inDir) {
     process.execPath,
     [
       SCRIPT,
-      "--in", inDir,
-      "--out-dir", outDir,
-      "--commit", "deadbeef",
-      "--branch", "main",
-      "--os", "ubuntu-latest",
-      "--finished-at", "2026-08-22T18:00:00Z",
+      "--in",
+      inDir,
+      "--out-dir",
+      outDir,
+      "--commit",
+      "deadbeef",
+      "--branch",
+      "main",
+      "--os",
+      "ubuntu-latest",
+      "--finished-at",
+      "2026-08-22T18:00:00Z",
     ],
     { stdio: "pipe" },
   );
@@ -86,7 +92,11 @@ test("aggregates are the WORST page, and only aggregates are emitted", () => {
   );
   assert.equal(by["fidelity.worst_mean_de"].value, 0.11, "max of the means");
   assert.equal(by["fidelity.worst_p99_de"].value, 0.4, "max of the p99s");
-  assert.equal(by["fidelity.worst_ssim"].value, 0.991, "MIN ssim — lower is worse");
+  assert.equal(
+    by["fidelity.worst_ssim"].value,
+    0.991,
+    "MIN ssim — lower is worse",
+  );
   assert.equal(by["fidelity.pages_checked"].value, 3);
 
   // Four aggregates for one fixture — never one row per page.
@@ -198,7 +208,11 @@ test("a fixture that produced NO gate is reported, never silently dropped", () =
   fixture(root, "broken", { pages: PASSING_PAGES }); // render died: no gate.json
   const { results } = run(root);
 
-  assert.equal(results.results.length, 2, "the broken fixture must still appear");
+  assert.equal(
+    results.results.length,
+    2,
+    "the broken fixture must still appear",
+  );
   const broken = results.results.find((r) => r.test_id === "fidelity/broken");
   assert.equal(broken.status, "failed");
   assert.match(broken.note, /no gate\.json/);

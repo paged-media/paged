@@ -31,7 +31,7 @@ genuinely ships, note-cited), with a `note:` back-pointing at the matching
 
 **House note on "partial".** Several CJK rows are honestly `partial`, not
 `planned`: the parser already captures the IDML attributes and the renderer has
-an MVP emit/enforce path. The deferral is the *full* layout engine (vertical
+an MVP emit/enforce path. The deferral is the _full_ layout engine (vertical
 writing, per-character ruby, table-driven mojikumi, flavour-specific kinsoku) —
 not the absence of any code. Each section calls out the exact seam.
 
@@ -39,12 +39,12 @@ not the absence of any code. Each section calls out the exact seam.
 
 ## §cjk-vertical-text — CJK vertical writing, kinsoku, mojikumi, ruby, kenten
 
-*Status note (2026-10-02): "no vertical layout" below is incomplete. The
+_Status note (2026-10-02): "no vertical layout" below is incomplete. The
 renderer rotates the commands of a vertical story by 90° after laying it out
 horizontally (`crates/paged-renderer/src/pipeline/build_engine.rs:3255`,
 `crates/paged-renderer/src/pipeline/text_frame.rs:1257`); there is still no
 vertical layout axis, and frame auto-sizing skips vertical stories
-(`crates/paged-renderer/src/pipeline/auto_size.rs:179`).*
+(`crates/paged-renderer/src/pipeline/auto_size.rs:179`)._
 
 **What IDML expresses.** `<Story StoryDirection="VerticalWritingDirection">`
 (tate-gaki). Paragraph attrs `KinsokuSet` / `KinsokuType` (line-break
@@ -56,7 +56,8 @@ plus the full `RubyAlignment` / `RubyXOffset` family. `KentenKind` /
 (tate-chu-yoko), and CJK-grid frames are further constructs.
 
 **What the engine does today.**
-- **Vertical writing** — `StoryDirection` (Horizontal/Vertical) is *parsed* and
+
+- **Vertical writing** — `StoryDirection` (Horizontal/Vertical) is _parsed_ and
   stored on the story; no vertical layout. `crates/paged-model/src/lib.rs:4678`
   (`enum StoryDirection`), `crates/idml-import/src/story.rs:536`
   (attr read).
@@ -66,7 +67,7 @@ plus the full `RubyAlignment` / `RubyXOffset` family. `KentenKind` /
   only** — `crates/paged-renderer/src/pipeline/compose_opts.rs:218`
   (`lopts.compose.kinsoku_enforce = resolved.kinsoku_type.is_some()`); the
   composer adds per-character breaks at `crates/paged-text/src/compose.rs:132`.
-  Push-in/push-out *flavour* behaviour is not implemented.
+  Push-in/push-out _flavour_ behaviour is not implemented.
 - **Mojikumi** — parsed (`crates/idml-import/src/story.rs:698`);
   renderer enables a **uniform half-width tightening MVP** when a table/set
   resolves — `crates/paged-renderer/src/pipeline/compose_opts.rs:224`; the pass
@@ -93,6 +94,7 @@ layout-axis rewrite, not an attribute pass. Demand is low in the Western-print
 corpus that drives the fidelity gate.
 
 **What "done" looks like.**
+
 - Vertical inline-progression axis end-to-end (compose → layout → emit), glyphs
   rotated/substituted per writing mode.
 - Per-character ruby aligned over its base run, contributing to line height.
@@ -115,7 +117,7 @@ CJK exemplar. Until then this is the "CJK Stage 3/4" backlog.
 
 **What IDML expresses.** `KerningMethod="Optical"` on a `<CharacterStyleRange>`
 (also `"Metrics"` | `"None"`). Optical kerning derives inter-glyph spacing from
-glyph *outlines* rather than the font's GPOS/`kern` table.
+glyph _outlines_ rather than the font's GPOS/`kern` table.
 
 **What the engine does today.** Parsed
 (`crates/idml-import/src/story.rs:995`, `kerning_method`); the
@@ -134,6 +136,7 @@ metrics kerning is a faithful-enough fallback for the vast majority of fonts
 that ship real `kern`/GPOS data.
 
 **What "done" looks like.**
+
 - Glyph-outline sampling (area or distance-field) per adjacent pair.
 - A spacing solver matching InDesign's optical output within the fidelity
   tolerance.
@@ -142,7 +145,7 @@ that ship real `kern`/GPOS data.
 
 **Trigger to re-prioritise.** A corpus sample sets `KerningMethod="Optical"` and
 fails the fidelity gate visibly, or a customer authoring with optical kerning
-asks. Metrics fallback keeps these documents *rendering* meanwhile.
+asks. Metrics fallback keeps these documents _rendering_ meanwhile.
 
 **Registry alignment.** `typography.tracking-kerning` (renderer `partial`,
 note "optical kerning → metrics fallback").
@@ -151,7 +154,7 @@ note "optical kerning → metrics fallback").
 
 ## §eps-import — EPS / PostScript image decode
 
-*Status note (2026-10-02): this section predates two changes. The IDML element
+_Status note (2026-10-02): this section predates two changes. The IDML element
 is `<EPS>`, not `<EPSImage>`, and the reader matches `<EPS>` since 2026-08-04
 (`crates/idml-import/src/spread.rs:2104`). And the frame no
 longer gets the grey placeholder: an EPS whose bytes resolve is reported as
@@ -160,7 +163,7 @@ longer gets the grey placeholder: an EPS whose bytes resolve is reported as
 as inline content is flagged `has_inline_eps` and also keeps the frame's fill
 (`crates/paged-model/src/lib.rs:1175`,
 `crates/paged-renderer/src/pipeline/images.rs:144`). The EPS content is still
-not decoded.*
+not decoded._
 
 **What IDML expresses.** `<EPSImage>` nested in a page-item rectangle/oval (a
 placed `.eps` link), parallel to `<Image>` / `<PDF>` / `<ImportedPage>`.
@@ -180,6 +183,7 @@ PDF/AI placement. The placeholder + diagnostic is honest and keeps the rest of
 the page faithful.
 
 **What "done" looks like.**
+
 - A sandboxed PS/EPS rasteriser (or vectoriser) producing a raster or display
   list for the frame.
 - Bounding-box (`%%BoundingBox`) honoured for fit/crop.
@@ -205,7 +209,7 @@ process black), whose on-press appearance is a spectral blend.
 **treats it as `Unknown`** — "we don't ship the per-ink decomposition"
 (`crates/paged-model/src/lib.rs:2262`-`2262`); resolution falls back to the
 swatch's CMYK/RGB preview value. (For contrast, the same
-`color-swatches.lab-mixed-ink` row's **Lab** half *is* shipped analytically —
+`color-swatches.lab-mixed-ink` row's **Lab** half _is_ shipped analytically —
 D50→D65 Bradford → linear sRGB, `crates/paged-color/src/cmm.rs:145`, `:259`.)
 
 **Why deferred.** Faithful mixed-ink requires spectral ink modelling: per-ink
@@ -215,6 +219,7 @@ fallback preview matches what InDesign shows for un-spotted output, so documents
 render with a defensible approximation.
 
 **What "done" looks like.**
+
 - Per-ink spectral curves (measured or from an ink library).
 - A spectral overprint/mixing model with illuminant.
 - Decomposition of `MixedInkGroup` master + variant swatches.
@@ -238,12 +243,12 @@ backing store.
 
 **What the engine does today.** **Not parsed.** No `<XMLElement>` / `<XMLStory>`
 consumer exists in the IDML reader (`crates/idml-import`). (The
-only `XMLStory` / `XMLTag` references in this repository are in the *fixture
-generator* `crates/paged-gen/src/builders/xml_folder.rs:36` — it *emits* a
+only `XMLStory` / `XMLTag` references in this repository are in the _fixture
+generator_ `crates/paged-gen/src/builders/xml_folder.rs:36` — it _emits_ a
 minimal XML folder for valid packages; nothing reads it back. The blank-package
 writers `crates/paged-store/src/package.rs:74` and
 `crates/paged-canvas/src/blank.rs:82` emit the same kind of stub.) The renderer
-lays out the *visible* stories regardless; the XML structure layer is invisible
+lays out the _visible_ stories regardless; the XML structure layer is invisible
 to it.
 
 **Why deferred.** The tagged-XML backing store is a parallel data model
@@ -253,6 +258,7 @@ structure pane. Building it is an editor/data-workflow feature, not a fidelity
 one.
 
 **What "done" looks like.**
+
 - Parse `<XMLElement>` tree + `<XMLTag>` / `<XMLAttribute>` + `AppliedXMLTag`.
 - Tag-to-style and style-to-tag mapping tables.
 - XML import (merge into structure) and export (round-trip).
@@ -289,6 +295,7 @@ is "one IDML package → faithful pages"; multi-document and fragment entry are
 orchestration above that contract.
 
 **What "done" looks like.**
+
 - `.idms` / `.icml` fragment entry (parse a partial story / page-item set).
 - `.indb` book manifest parse + ordered member resolution.
 - Book-level page/chapter numbering across members.
@@ -328,11 +335,12 @@ event model, a media pipeline, and a timeline, none of which the page renderer
 has or should grow.
 
 **What "done" looks like.**
+
 - Parse button multi-state + behaviors; render the default (Up) state for print.
 - Media poster-frame rendering for print fallback.
 - (Beyond print) an interactive runtime — explicitly out of the engine's charter.
 
-**Trigger to re-prioritise.** A fixed-layout-EPUB or interactive-PDF *export*
+**Trigger to re-prioritise.** A fixed-layout-EPUB or interactive-PDF _export_
 product line — a different product surface, not the print renderer.
 
 **Registry alignment.** `interactive-dynamic.buttons` / `.behaviors` / `.media`
@@ -349,11 +357,12 @@ endnotes (`<Endnote>` / endnote story), `<HiddenText>` (author-hidden runs), and
 drag-and-drop text editing (an editor gesture, not an IDML element).
 
 **What the engine does today.**
+
 - **Hidden text** — the parser **recognises `<HiddenText>` and actively drops
   its content** (matches InDesign's default "hidden text not output"):
   `crates/idml-import/src/story.rs:524`
   (`matches!(name, b"HiddenText" | b"Note")` → suppress) and `:1441`; tested by
-  `track5c_hidden_text_block_drops_content` (`story.rs:2222`). So it is *not*
+  `track5c_hidden_text_block_drops_content` (`story.rs:2222`). So it is _not_
   "treated as normal text" — it is correctly suppressed.
 - **Notes** — same suppression path; `<Note>` content is recognised and dropped
   (correct: editorial notes never render). Tested by `track5c_note_skipped`
@@ -368,21 +377,22 @@ drag-and-drop text editing (an editor gesture, not an IDML element).
   ranges derailed the story and only the deleted words were drawn. Changes are not
   modelled: no review, accept or reject, and a rewritten story drops them.
 - **Endnotes** — **not parsed.** No `<Endnote>` / endnote-story consumer. (NB:
-  *footnotes* are a separate, partially-shipped feature — not in this family.)
+  _footnotes_ are a separate, partially-shipped feature — not in this family.)
 - **Drag-and-drop text** — **not implemented** (editor gesture; no wire path).
 
 **Why deferred.** Tracked changes and endnotes are authoring/review data with no
 faithful-render obligation for the print product (changes render as their
 accepted state; endnotes are a layout feature behind footnotes in priority).
-Hidden text and notes are *already handled correctly* by suppression. Drag-drop
+Hidden text and notes are _already handled correctly_ by suppression. Drag-drop
 text is an editor-ergonomics gesture gated behind the caret/selection model.
 
 **What "done" looks like.**
+
 - Tracked-changes: parse `<Change>` spans; an editor mode to show/accept/reject;
   render accepted state for print.
 - Endnotes: parse the endnote story + markers; lay out endnote bodies at story/
   document end.
-- Hidden text / notes: a read surface to *list* them (already correctly hidden
+- Hidden text / notes: a read surface to _list_ them (already correctly hidden
   from layout) — an editor affordance, not a render change.
 - Drag-drop text: a gesture that moves a selected range (cut+insert) with undo.
 
