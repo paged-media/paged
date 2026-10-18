@@ -5,7 +5,7 @@
   `/bunfig.toml` and `tooling/js/lint-selftest.mjs`); platform/extensions ADR 315 and
   modules/draw ADR 350 (the contract-import check is a lint rule, not a script per module).
 - **Scope:** `/bunfig.toml` `[lint]`, `/eslint-suppressions.json`, `tooling/js/bun-canary.sh`
-  and `bun-canary.version`, `tooling/js/lint-selftest.mjs`, `tooling/git/hooks/pre-commit`,
+  and `bun-canary-version` (shared with `bun fmt`), `tooling/js/lint-selftest.mjs`, `tooling/git/hooks/pre-commit`,
   `.github/workflows/lint.yml`, the Moon `js-lint` task.
 
 ## Context
@@ -52,7 +52,7 @@
   the count only goes down.
 - **One pinned canary.** `bun lint` is in no stable Bun release yet, so
   `tooling/js/bun-canary.sh` runs `bunx bun@<version>`, with the exact, immutable npm canary
-  named in `tooling/js/bun-canary.version`. The runtime and package manager stay on the Bun in
+  named in `tooling/js/bun-canary-version`. The runtime and package manager stay on the Bun in
   `.prototools`. Bun is deliberately not a dependency: a `node_modules/.bin/bun` would shadow
   the runtime inside every `bun run` script. When the first stable Bun with `bun lint` (and
   `bun fmt`) is released, pin it in `.prototools`, call `bun lint` directly, and delete the
@@ -69,7 +69,8 @@
   - **CI:** `lint.yml` lints the whole repository (GitHub annotations, plus a JUnit artifact)
     and runs the self-test. It needs no install.
   - **Moon:** a `js-lint` task in every node project.
-  - **Pre-commit:** an opt-in hook runs `bun lint --staged --fix`.
+  - **Pre-commit:** the opt-in hook that `bun fmt` uses too runs `bun lint --staged --fix`
+    first.
 - **Type-aware linting is not on.** It was measured and left for a separate decision. Its
   results depend on build outputs (the engine's wasm type declarations) that the lint job does
   not build.

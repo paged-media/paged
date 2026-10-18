@@ -16,7 +16,7 @@ bun run lint:fix                   # the same, with --fix
 bun run lint:selftest              # every boundary fires, every allowed import stays allowed
 tooling/js/bun-canary.sh lint --no-script modules/draw   # one directory
 moon run draw:lint                 # Moon's js-lint task, from anywhere
-git config core.hooksPath tooling/git/hooks   # opt in to the pre-commit hook (bun lint --staged --fix)
+git config core.hooksPath tooling/git/hooks   # opt in to the pre-commit hook (bun lint --staged --fix, then bun fmt)
 ```
 
 After fixing a recorded Rules-of-React finding, prune the record in the same commit:
@@ -26,8 +26,8 @@ no longer occurs, so the file cannot drift.
 ## The pinned canary
 
 `bun lint` is in Bun's canary builds only, not in the stable 1.4.3 that `.prototools` pins as the
-runtime and package manager. `tooling/js/bun-canary.sh` runs `bunx bun@<version>`, with the
-version in `tooling/js/bun-canary.version`: `1.4.3-canary.20261018.1`, an exact, immutable npm
+runtime and package manager. `tooling/js/bun-canary.sh`, which `bun fmt` uses too (B9), runs
+`bunx bun@<version>`, with the version in `tooling/js/bun-canary-version`: `1.4.3-canary.20261018.1`, an exact, immutable npm
 version. Bun is not added as a dependency, because `node_modules/.bin/bun` would shadow the
 runtime inside every `bun run` script.
 
@@ -89,6 +89,18 @@ src`) ran the same config. Both tools list the same 1,040 files.
 | `apps/editor` | violations seeded into 3 files of each zone (see below) | 30 | 1,299 | 1,299 | yes |
 | rest of the repository (ESLint run with the editor's config) | as it is | 1,064 | 4 | 4 | yes |
 | rest of the repository | inline config ignored | 1,064 | 10 | 10 | yes |
+
+The gate ran again on the final tree, after the last merge of main and with the findings below
+fixed. ESLint 9.39.4 was installed outside the repository, with the removed config taken from git
+history:
+
+| Tree | Run | Files | ESLint | bun lint | Same set |
+|---|---|---:|---:|---:|---|
+| `apps/editor` | as it is | 1,040 | 0 | 0 | yes |
+| `apps/editor` | inline config ignored | 1,040 | 1 | 1 | yes |
+| `apps/editor` | seeded | 30 | 1,299 | 1,299 | yes |
+| rest of the repository | as it is | 1,058 | 0 | 0 | yes |
+| rest of the repository | inline config ignored | 1,058 | 6 | 6 | yes |
 
 The clean editor run, per sub-package. Both tools report 0 findings in each:
 
@@ -211,7 +223,8 @@ The same machine (16 cores) and the same tree; wall time, including bunx's start
 | self-test (293 cases) | — | 1.2 s |
 
 Before B8, the step's own measurement on the editor was ESLint 76.8 s against bun lint 2.9 s,
-both first runs.
+both first runs. In the final parity run, with other work running on the same machine, ESLint took
+48.0 s for the editor (115.7 s with inline config ignored) and bun lint 1.5 s (0.3 s).
 
 ## Type-aware linting (evaluated, not enabled)
 
