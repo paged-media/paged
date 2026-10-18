@@ -1,27 +1,25 @@
 name: plugin-doc from source
 description: >-
-  STOPGAP until @paged-media/doc is published. The editor consumes it through a
-  pnpm `link:` to ../plugins/plugin-doc, so every workflow that installs the
-  editor needs the repo checked out there, its deps installed and its engine
-  wasm built. DELETE this action (and every `uses:` of it) once the package
-  publishes and a version pin replaces the link.
+  STOPGAP until @paged-media/doc is consumed without a link. The editor reaches
+  it through a pnpm `link:` override to the in-tree modules/doc bundle, so
+  every workflow that installs the editor needs modules/doc's deps installed
+  and its engine wasm built. DELETE this action (and every `uses:` of it) once
+  the editor stops consuming a build output of modules/doc.
 
-# Expects the multi-repo layout: the editor checked out at `editor/`, so the
-# link target lands at `plugins/plugin-doc` under the runner workspace. Needs
-# rustup + pnpm + node on PATH (every caller already has them).
+# Monorepo layout (step A3): modules/doc is part of this repository, so there
+# is no checkout here; the caller's `actions/checkout` of the repository root
+# already put it in place. (Pre-monorepo this action checked out
+# paged-media/plugin-doc at plugins/plugin-doc beside an editor under editor/.)
+# Composite steps do not inherit the caller's `defaults.run.working-directory`,
+# so every step names its directory. Needs rustup + pnpm + node on PATH (every
+# caller already has them).
 
 runs:
   using: composite
   steps:
-    - name: checkout plugin-doc (the one link-consumed bundle)
-      uses: actions/checkout@v4
-      with:
-        repository: paged-media/plugin-doc
-        path: plugins/plugin-doc
-
-    - name: install plugin-doc (the link target needs its own deps)
+    - name: install modules/doc (the link target needs its own deps)
       shell: bash
-      working-directory: plugins/plugin-doc
+      working-directory: modules/doc
       run: pnpm install --frozen-lockfile
 
     # The wasm is not produced by `pnpm install`, and
@@ -30,9 +28,9 @@ runs:
     # at TRANSFORM time, so without the build the whole app fails to boot
     # (engine.ts's runtime guard cannot fire). The published package will
     # ship exactly this artifact, so CI reproduces production.
-    - name: install pinned wasm-bindgen-cli (plugin-doc Cargo.lock version)
+    - name: install pinned wasm-bindgen-cli (modules/doc Cargo.lock version)
       shell: bash
-      working-directory: plugins/plugin-doc
+      working-directory: modules/doc
       run: |
         V=$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock | grep version | head -1 | cut -d'"' -f2)
         # A cached ~/.cargo/bin may already hold it; a plain install would die
@@ -45,11 +43,10 @@ runs:
 
     # build-wasm.sh has a hard 8 MiB gate and only runs wasm-opt when it is on
     # PATH. Pinned, not apt: an old binaryen miscompiles wasm-bindgen's
-    # externref table grow ("Table.grow failed"). Same pin as plugin-doc's
-    # rust.yml.
+    # externref table grow ("Table.grow failed"). Same pin as doc-rust.yml.
     - name: install pinned binaryen (reftypes-safe wasm-opt)
       shell: bash
-      # tests.yml runs on ubuntu (x64), showcase-nightly on macos-14 (arm64).
+      # editor-tests.yml runs on ubuntu (x64), editor-showcase-nightly on macos-14 (arm64).
       run: |
         case "${{ runner.os }}-${{ runner.arch }}" in
           Linux-X64)   T=x86_64-linux ;;
@@ -62,7 +59,7 @@ runs:
 
     - name: build the paged.doc engine wasm
       shell: bash
-      working-directory: plugins/plugin-doc
+      working-directory: modules/doc
       run: |
         rustup target add wasm32-unknown-unknown
         bash scripts/build-wasm.sh

@@ -1,4 +1,4 @@
-name: tests
+name: editor / tests
 
 # Editor Playwright surface → state-matrix evidence (W0.5).
 #
@@ -39,6 +39,15 @@ name: tests
 # `ingest/test-map.yaml` plus the journeys' inline `@feat:` tags, and
 # gates feature ids against the registry. See the step comment at the
 # hand-off for why the direction is inverted.
+#
+# MONOREPO (step A3): ported from paged-media/editor .github/workflows/
+# tests.yml. The repository is checked out at the workspace root, so the
+# editor is apps/editor (the default working directory below); core's
+# paged-gen and the doc/slide link targets are in-tree (engine/core,
+# modules/doc, modules/slide) instead of sibling checkouts. The path filters
+# therefore also name the in-tree inputs the jobs build from: modules/doc and
+# modules/slide (the two composite actions build them for the link
+# overrides) and engine/core/crates/paged-gen (the fixture generator).
 
 on:
   push:
@@ -54,23 +63,40 @@ on:
     # stale pin had become the thing starving the lane it was added to
     # feed, because the puller kept looking at a branch nothing pushed to.
     branches: [main]
+    paths:
+      - "apps/editor/**"
+      - "modules/doc/**"
+      - "modules/slide/**"
+      - "engine/core/crates/paged-gen/**"
+      - ".github/actions/plugin-doc-from-source/**"
+      - ".github/actions/plugin-slide-from-source/**"
+      - ".github/workflows/editor-tests.yml"
   pull_request:
     paths:
-      - "apps/canvas/**"
-      - "packages/**"
-      - "pnpm-lock.yaml"
-      - "package.json"
-      - "eslint.config.mjs"
-      - "scripts/**"
-      - ".github/workflows/tests.yml"
+      - "apps/editor/apps/canvas/**"
+      - "apps/editor/packages/**"
+      - "apps/editor/pnpm-lock.yaml"
+      - "apps/editor/package.json"
+      - "apps/editor/eslint.config.mjs"
+      - "apps/editor/scripts/**"
+      - "modules/doc/**"
+      - "modules/slide/**"
+      - "engine/core/crates/paged-gen/**"
+      - ".github/actions/plugin-doc-from-source/**"
+      - ".github/actions/plugin-slide-from-source/**"
+      - ".github/workflows/editor-tests.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: tests-${{ github.ref }}
+  group: editor-tests-${{ github.ref }}
   cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: apps/editor
 
 env:
   SHARDS: 3
@@ -93,21 +119,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # The editor is checked out at the workspace ROOT here, so
-      # action-setup reads its `packageManager: pnpm@9.0.0` directly. Do
-      # NOT also pass a `version:` input — pnpm/action-setup@v4 errors
-      # ("Multiple versions of pnpm specified: ERR_PNPM_BAD_PM_VERSION")
-      # when both a `version` input and a readable `packageManager` field
-      # are present. The playwright/publish jobs below DO pass `version: 9`
-      # precisely because they check the editor out under `editor/`, where
-      # the workspace root has no package.json to read.
+      # action-setup reads the editor's `packageManager: pnpm@9.0.0` from
+      # apps/editor/package.json (the monorepo root has no package.json, and
+      # `uses:` steps ignore the working-directory default). Do NOT also pass
+      # a `version:` input — pnpm/action-setup@v4 errors ("Multiple versions
+      # of pnpm specified: ERR_PNPM_BAD_PM_VERSION") when both a `version`
+      # input and a readable `packageManager` field are present. The
+      # playwright/publish jobs below pass `version: 9` instead, as before.
       - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: apps/editor/package.json
 
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
+          cache-dependency-path: apps/editor/pnpm-lock.yaml
 
       - name: install (editor root)
         run: pnpm install --frozen-lockfile
@@ -237,20 +264,21 @@ jobs:
       matrix:
         shard: [1, 2, 3]
     steps:
-      # The editor goes under `editor/` (not the workspace root) so the
-      # corpus checkout below can land at `editor/corpus` — the colocated
-      # path the vite config prefers — and for path parity with the
-      # publish job.
-      - name: checkout editor
+      # The whole repository at the workspace root: the editor is
+      # apps/editor, core's paged-gen is engine/core, and the doc/slide link
+      # targets are modules/doc + modules/slide — no sibling checkouts.
+      - name: checkout repository
         uses: actions/checkout@v4
-        with:
-          path: editor
 
       # License-clear fixtures the harness loads (corpus/idml/generated/*.idml
       # + corpus/fonts). Sparse + LFS so we pull ~25 MB, not the 4.4 GB
       # envato tier. The editor's vite config + tests resolve the corpus
-      # as a sibling of the repo root (`editor/corpus`), so check it out
-      # there. `STATE_DISPATCH_TOKEN` already has read scope on the
+      # colocated in the editor first (`<editor>/corpus`, then
+      # `<editor>/../corpus`), so it is checked out at apps/editor/corpus.
+      # That path also stays valid once the editor's default moves to
+      # `<repo root>/corpus` (step A4): the colocated copy is kept as the
+      # fallback there. (It is the PRIVATE corpus repo, hence the token.)
+      # `STATE_DISPATCH_TOKEN` already has read scope on the
       # private paged-media siblings (used by plugin-draw for the sdk
       # checkout); fall back to github.token for same-org runs.
       #
@@ -276,7 +304,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: paged-media/corpus
-          path: editor/corpus
+          path: apps/editor/corpus
           token: ${{ secrets.STATE_DISPATCH_TOKEN || github.token }}
           lfs: true
           # Cone entries are TOP-LEVEL directory names and a stale one
@@ -308,28 +336,16 @@ jobs:
       # absent) or "invalid Zip: Could not find EOCD" (LFS-pointer parse).
       #
       # Provision them by building the `paged-gen` fixture generator from
-      # a `core` checkout and emitting every sample into
-      # corpus/idml/generated. This is the same build-from-core pattern the
-      # `viewer`/`docs` repos use (their `core.pin`); it does NOT touch
-      # the Decision-B *wasm* boundary (the engine still arrives as the
-      # published npm package — this only generates test fixtures).
-      - name: checkout core (for the paged-gen fixture generator)
-        uses: actions/checkout@v4
-        with:
-          repository: paged-media/core
-          path: core
-          token: ${{ secrets.STATE_DISPATCH_TOKEN || github.token }}
-          # NOT pinned — this deliberately follows core's default branch, so
-          # a new paged-gen sample reaches these fixtures without a bump
-          # here. (The comment above used to call it "a pinned core
-          # checkout"; there has never been a `ref:`.) The cost is a real
-          # ordering coupling: a core change this step depends on must be
-          # PUSHED BEFORE the editor change that uses it, or the run picks
-          # up the older core and fails. That happened on 2026-08-19 with
-          # `emit-all` — editor pushed first, and all three shards died on
-          # "unrecognized subcommand". If this ever needs to stop moving
-          # under the editor, adopt the `core.pin` file docs/viewer use
-          # rather than hand-editing a ref here.
+      # the in-tree engine (engine/core) and emitting every sample into
+      # corpus/idml/generated. It does NOT touch the Decision-B *wasm*
+      # boundary (the engine still arrives as the published npm package —
+      # this only generates test fixtures).
+      #
+      # Pre-monorepo this was an UNPINNED checkout of paged-media/core's
+      # default branch, with an ordering coupling (a core change had to be
+      # pushed before the editor change that used it — the 2026-08-19
+      # `emit-all` breakage). In the monorepo paged-gen comes from the same
+      # revision as the editor, so that coupling is gone.
 
       - name: rust toolchain (for paged-gen)
         uses: dtolnay/rust-toolchain@stable
@@ -345,16 +361,16 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             ~/.cargo/bin
-            core/target
-            plugins/plugin-doc/target
-          key: paged-rust-${{ runner.os }}-${{ hashFiles('core/Cargo.lock') }}
+            engine/core/target
+            modules/doc/target
+          key: paged-rust-${{ runner.os }}-${{ hashFiles('engine/core/Cargo.lock') }}
           restore-keys: paged-rust-${{ runner.os }}-
 
       - name: generate corpus/idml/generated/*.idml from paged-gen
-        working-directory: core
+        working-directory: engine/core
         run: |
           cargo build --release -p paged-gen --bin paged-gen
-          GEN="$GITHUB_WORKSPACE/editor/corpus/idml/generated"
+          GEN="$GITHUB_WORKSPACE/apps/editor/corpus/idml/generated"
           mkdir -p "$GEN"
           # `emit-all`, NOT a hand-copied name list. This step used to
           # carry its own copy of paged-gen's sample names — the fourth
@@ -371,7 +387,7 @@ jobs:
       # Fail fast here (existence AND not-a-pointer) if provisioning
       # didn't land.
       - name: verify corpus fixtures are materialized
-        working-directory: editor/corpus
+        working-directory: apps/editor/corpus
         run: |
           # Paths are corpus-root-relative. They said `generated/…` until
           # 2026-08-19, when assets were grouped by format under `idml/`
@@ -393,10 +409,9 @@ jobs:
           done
           echo "corpus fixtures materialized OK"
 
-      # Pin pnpm: with the editor checked out under editor/ (not at the
-      # workspace root), action-setup can't read `packageManager` from a
-      # root package.json — match the editor's pnpm@9.0.0 explicitly. v9
-      # reads every repo's lockfile-v9 natively.
+      # Pin pnpm: the monorepo root has no package.json for action-setup to
+      # read `packageManager` from — match the editor's pnpm@9.0.0
+      # explicitly. v9 reads every component's lockfile-v9 natively.
       - uses: pnpm/action-setup@v4
         with:
           version: 9
@@ -405,19 +420,19 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: editor/pnpm-lock.yaml
+          cache-dependency-path: apps/editor/pnpm-lock.yaml
 
-      # @paged-media/doc is still consumed via a pnpm `link:` (first publish
-      # pending: a USER action). The shared stopgap checks plugin-doc out
-      # next to the editor, installs it and builds its wasm. DROP it when
-      # the package publishes and a pin replaces the link.
-      - name: plugin-doc from source (stopgap until @paged-media/doc publishes)
-        uses: ./editor/.github/actions/plugin-doc-from-source
-      - name: plugin-slide from source (stopgap until @paged-media/slide publishes)
-        uses: ./editor/.github/actions/plugin-slide-from-source
+      # @paged-media/doc and @paged-media/slide are consumed via pnpm
+      # `link:` overrides to the in-tree modules/doc and modules/slide
+      # bundles. The shared stopgap actions install those modules and build
+      # their wasm (no checkout: they are part of this repository). DROP
+      # them when the editor no longer links a build output.
+      - name: plugin-doc from source (in-tree modules/doc)
+        uses: ./.github/actions/plugin-doc-from-source
+      - name: plugin-slide from source (in-tree modules/slide)
+        uses: ./.github/actions/plugin-slide-from-source
 
       - name: install editor (engine wasm + all plugin bundles resolve from npm)
-        working-directory: editor
         run: pnpm install --frozen-lockfile
 
       # The Playwright surface runs against the vite DEV server
@@ -428,7 +443,6 @@ jobs:
       # — they're consumed as workspace TS source — and `apps/devtools`
       # would pull in the unrelated introspect-wasm build.)
       - name: typecheck canvas app
-        working-directory: editor
         run: pnpm --filter ./apps/canvas run typecheck
 
       # The TEST TREE, which was outside every static gate until
@@ -440,7 +454,6 @@ jobs:
       # another added a line that read it, and typecheck + build both
       # passed on code that could not run.
       - name: typecheck canvas tests
-        working-directory: editor
         run: pnpm --filter ./apps/canvas run typecheck:tests
 
       # NO `--with-deps`. That flag shells out to `apt-get update` as root,
@@ -463,7 +476,6 @@ jobs:
       # launch with a named error in seconds instead of a silent 50-minute
       # stall — strictly better feedback either way.
       - name: install chromium
-        working-directory: editor
         # A browser download is ~1 minute. Bounding the step means a future
         # stall here is reported AS a stall, in ten minutes, instead of
         # eating the job's whole 50-minute budget and surfacing as
@@ -488,7 +500,7 @@ jobs:
       # because the ingest test-map unions them onto every journey spec).
       # Naming the two real gating projects fixes all of it.
       - name: playwright (lean surface, shard ${{ matrix.shard }})
-        working-directory: editor/apps/canvas
+        working-directory: apps/editor/apps/canvas
         env:
           CI: "1"
           PAGED_CI_LEAN: "1"
@@ -508,7 +520,7 @@ jobs:
       - name: journeys (GPU, advisory)
         if: ${{ github.event_name == 'workflow_dispatch' && matrix.shard == 1 }}
         continue-on-error: true
-        working-directory: editor/apps/canvas
+        working-directory: apps/editor/apps/canvas
         env:
           CI: "1"
           PAGED_CI_LEAN: "1"
@@ -534,7 +546,7 @@ jobs:
       - name: seed journey visual baselines (Linux, advisory)
         if: ${{ always() && github.event_name == 'workflow_dispatch' && matrix.shard == 1 }}
         continue-on-error: true
-        working-directory: editor/apps/canvas
+        working-directory: apps/editor/apps/canvas
         env:
           CI: "1"
           PAGED_CI_LEAN: "1"
@@ -550,7 +562,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: journey-baselines-linux
-          path: "editor/apps/canvas/tests/journey/__screenshots__/**/*-linux.png"
+          path: "apps/editor/apps/canvas/tests/journey/__screenshots__/**/*-linux.png"
           retention-days: 14
           if-no-files-found: warn
 
@@ -559,7 +571,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: blob-report-${{ matrix.shard }}
-          path: editor/apps/canvas/blob-report
+          path: apps/editor/apps/canvas/blob-report
           retention-days: 7
 
   publish:
@@ -568,13 +580,10 @@ jobs:
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
-      # merge-reports only needs apps/canvas's @playwright/test, so the
-      # editor checkout alone suffices here. Keep it under `editor/` for
-      # path parity with the playwright job.
-      - name: checkout editor
+      # merge-reports only needs apps/canvas's @playwright/test; the
+      # repository checkout carries it under apps/editor.
+      - name: checkout repository
         uses: actions/checkout@v4
-        with:
-          path: editor
 
       - uses: pnpm/action-setup@v4
         with:
@@ -584,13 +593,14 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: editor/pnpm-lock.yaml
+          cache-dependency-path: apps/editor/pnpm-lock.yaml
 
       # Only the canvas app's @playwright/test is needed for merge-reports.
       - name: install (apps/canvas only)
-        working-directory: editor
         run: pnpm install --frozen-lockfile --filter ./apps/canvas
 
+      # all-blobs/ and playwright-results.json stay at the WORKSPACE root:
+      # the merge step addresses both through ${{ github.workspace }}.
       - name: download shard blobs
         uses: actions/download-artifact@v4
         with:
@@ -599,7 +609,6 @@ jobs:
           merge-multiple: true
 
       - name: merge shards → single Playwright JSON
-        working-directory: editor
         env:
           PLAYWRIGHT_JSON_OUTPUT_NAME: ${{ github.workspace }}/playwright-results.json
         run: |

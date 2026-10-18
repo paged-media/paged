@@ -1,19 +1,31 @@
-name: playground
+name: editor / playground
 
 # Build the live-demo PLAYGROUND (apps/canvas `demo` build) and deploy it to
 # Cloudflare Pages at play.paged.media — the real editor that the docs and
 # paged.media embed.
 #
 # The editor consumes the engine and the plugin bundles as PUBLISHED
-# @paged-media packages — except @paged-media/doc, still a pnpm `link:` to
-# ../plugins/plugin-doc until its first publish. So, like tests.yml, the editor
-# is checked out under editor/ and the shared stopgap action builds plugin-doc
-# beside it. Without it every deploy since July failed on
-# "Cannot find module '@paged-media/doc'". DROP the stopgap (and go back to a
-# root checkout) once the package publishes and a pin replaces the link.
+# @paged-media packages — except @paged-media/doc and @paged-media/slide, still
+# pnpm `link:`s to their bundles. So, like editor-tests.yml, the shared stopgap
+# actions build those bundles before the editor installs. Without that every
+# deploy since July failed on
+# "Cannot find module '@paged-media/doc'". DROP the stopgap once the package
+# publishes and a pin replaces the link.
+#
+# MONOREPO (step A3): ported from paged-media/editor .github/workflows/
+# playground.yml. One repository checkout at the root; the doc/slide link
+# targets are the in-tree modules/doc and modules/slide, built by the two
+# composite actions — so a change there redeploys the playground too.
 on:
   push:
     branches: [main]
+    paths:
+      - "apps/editor/**"
+      - "modules/doc/**"
+      - "modules/slide/**"
+      - ".github/actions/plugin-doc-from-source/**"
+      - ".github/actions/plugin-slide-from-source/**"
+      - ".github/workflows/editor-playground.yml"
   workflow_dispatch:
   repository_dispatch:
     types: [engine-updated]
@@ -22,16 +34,18 @@ permissions:
   contents: read
 
 concurrency:
-  group: playground
+  group: editor-playground
   cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: apps/editor
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          path: editor
 
       - name: rust toolchain (for the paged.doc engine wasm)
         uses: dtolnay/rust-toolchain@stable
@@ -43,11 +57,11 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             ~/.cargo/bin
-            plugins/plugin-doc/target
+            modules/doc/target
           key: playground-rust-${{ runner.os }}-${{ github.sha }}
           restore-keys: playground-rust-${{ runner.os }}-
 
-      # The editor is not at the workspace root, so action-setup cannot read
+      # The monorepo root has no package.json, so action-setup cannot read
       # `packageManager`: pin the editor's pnpm major explicitly.
       - uses: pnpm/action-setup@v4
         with:
@@ -57,21 +71,19 @@ jobs:
         with:
           node-version: 20
           cache: pnpm
-          cache-dependency-path: editor/pnpm-lock.yaml
+          cache-dependency-path: apps/editor/pnpm-lock.yaml
 
-      - name: plugin-doc from source (stopgap until @paged-media/doc publishes)
-        uses: ./editor/.github/actions/plugin-doc-from-source
-      - name: plugin-slide from source (stopgap until @paged-media/slide publishes)
-        uses: ./editor/.github/actions/plugin-slide-from-source
+      - name: plugin-doc from source (in-tree modules/doc)
+        uses: ./.github/actions/plugin-doc-from-source
+      - name: plugin-slide from source (in-tree modules/slide)
+        uses: ./.github/actions/plugin-slide-from-source
 
       - name: install editor
-        working-directory: editor
         run: pnpm install --frozen-lockfile
 
       # PAGED_MODULES_HOSTED: the module door (ADR 223) answers the module
       # host, because the next step hosts every module the build lists.
       - name: build the demo
-        working-directory: editor
         env:
           PAGED_MODULES_HOSTED: "1"
         run: pnpm --filter paged-canvas build:demo
@@ -83,14 +95,14 @@ jobs:
       # Cloudflare Pages' 25 MiB limit — the engine (~27 MiB) and DuckDB
       # (~34 MiB) are not.
       - name: host the wasm modules
-        working-directory: editor/apps/canvas
+        working-directory: apps/editor/apps/canvas
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: node scripts/modules-sync.mjs dist-demo
 
       - name: every file fits the Pages size limit
-        working-directory: editor/apps/canvas/dist-demo
+        working-directory: apps/editor/apps/canvas/dist-demo
         run: |
           big=$(find . -type f -size +25M)
           if [ -n "$big" ]; then echo "::error::over Cloudflare Pages' 25 MiB limit: $big"; exit 1; fi
@@ -100,7 +112,7 @@ jobs:
         # Deployed from apps/canvas so wrangler picks up apps/canvas/functions:
         # the same-origin Claude proxy at /api/ai (ADR 221). Its secret and
         # KV binding live on the Pages project, not here.
-        working-directory: editor/apps/canvas
+        working-directory: apps/editor/apps/canvas
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

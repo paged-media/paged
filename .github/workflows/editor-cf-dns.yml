@@ -1,9 +1,12 @@
-name: cf-dns
+name: editor / cf-dns
 
 # One-shot: create the proxied CNAME records that activate the Pages custom
 # domains, via the Cloudflare API using CLOUDFLARE_API_TOKEN. Needs the token to
 # have Zone:Read + DNS:Edit on paged.media (the Pages-only token will fail at the
 # zone lookup — that's the signal to broaden the token's scope). Idempotent.
+#
+# MONOREPO (step A3): ported from paged-media/editor .github/workflows/
+# cf-dns.yml. It checks nothing out, so it carries no working-directory.
 on:
   workflow_dispatch:
 

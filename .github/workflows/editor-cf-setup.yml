@@ -1,10 +1,13 @@
-name: cf-setup
+name: editor / cf-setup
 
 # One-shot Cloudflare Pages configuration via the CF API, run in CI with the
 # CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID org secrets. Sets each project's
 # production branch to `main` and registers its custom domain. DNS records are
 # added separately (by a human) — registering the domain here just tells CF to
 # expect it. Idempotent: re-running is safe (domain add 409s harmlessly).
+#
+# MONOREPO (step A3): ported from paged-media/editor .github/workflows/
+# cf-setup.yml. It checks nothing out, so it carries no working-directory.
 on:
   workflow_dispatch:
 

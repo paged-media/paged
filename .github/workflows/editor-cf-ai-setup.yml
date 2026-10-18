@@ -1,4 +1,4 @@
-name: cf-ai-setup
+name: editor / cf-ai-setup
 
 # One-shot setup of the Claude proxy's Cloudflare side (ADR 221), run in CI
 # with the CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID org secrets, like
@@ -14,6 +14,9 @@ name: cf-ai-setup
 #      secret is not set (the proxy then keeps answering 503).
 #
 # Bindings apply to NEW deployments: the last step redeploys the playground.
+#
+# MONOREPO (step A3): ported from paged-media/editor .github/workflows/
+# cf-ai-setup.yml. It checks nothing out, so it carries no working-directory.
 on:
   workflow_dispatch:
     inputs:
@@ -74,7 +77,7 @@ jobs:
           print(json.dumps({"deployment_configs": {"production": cfg, "preview": cfg}}))
           PY
           )
-          if [ -n "$KEY" ]; then echo "== ANTHROPIC_API_KEY: set from the repository secret"; else echo "::warning::ANTHROPIC_API_KEY repository secret is not set — the proxy will answer 503 until it is (gh secret set ANTHROPIC_API_KEY -R paged-media/editor), then re-run this workflow"; fi
+          if [ -n "$KEY" ]; then echo "== ANTHROPIC_API_KEY: set from the repository secret"; else echo "::warning::ANTHROPIC_API_KEY repository secret is not set — the proxy will answer 503 until it is (gh secret set ANTHROPIC_API_KEY -R paged-media/paged), then re-run this workflow"; fi
 
           echo "== PATCH paged-playground deployment_configs"
           curl -fsS -X PATCH "$api/pages/projects/paged-playground" -H "Authorization: Bearer $T" \
@@ -84,4 +87,4 @@ jobs:
       - name: redeploy the playground (bindings apply to new deployments)
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run playground.yml -R "$GITHUB_REPOSITORY" --ref main
+        run: gh workflow run editor-playground.yml -R "$GITHUB_REPOSITORY" --ref main

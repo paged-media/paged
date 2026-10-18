@@ -1,4 +1,4 @@
-name: protocol-version
+name: editor / protocol-version
 
 # Decision-B package-boundary model.
 #
@@ -11,17 +11,24 @@ name: protocol-version
 # side READS `PROTOCOL_VERSION` from the installed canvas-wasm version
 # (convention `0.<protocol>.<patch>`, packages/client/src/protocol.ts), so
 # there is one number. What is left here is the plugin-pin check.
+#
+# MONOREPO (step A3): ported from paged-media/editor .github/workflows/
+# protocol-version.yml; paths prefixed with apps/editor.
 
 on:
   pull_request:
     paths:
-      - "packages/client/src/protocol.ts"
-      - "packages/client/package.json"
-      - "apps/canvas/package.json"
-      - "pnpm-lock.yaml"
-      - "scripts/check-plugin-pins.mjs"
-      - ".github/workflows/protocol-version.yml"
+      - "apps/editor/packages/client/src/protocol.ts"
+      - "apps/editor/packages/client/package.json"
+      - "apps/editor/apps/canvas/package.json"
+      - "apps/editor/pnpm-lock.yaml"
+      - "apps/editor/scripts/check-plugin-pins.mjs"
+      - ".github/workflows/editor-protocol-version.yml"
   workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: apps/editor
 
 jobs:
   protocol-version:
@@ -29,7 +36,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The editor's packageManager (pnpm@9.0.0) lives in apps/editor; the
+      # monorepo root has no package.json.
       - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: apps/editor/package.json
 
       - uses: actions/setup-node@v4
         with:
