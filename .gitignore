@@ -7,3 +7,7 @@
 # Private assets never live in this public repository.
 /corpus
 /target
+
+# Moon: local cache and generated Docker contexts (the config in .moon/ is tracked).
+/.moon/cache/
+/.moon/docker/
