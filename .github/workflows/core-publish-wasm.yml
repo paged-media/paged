@@ -166,7 +166,7 @@ jobs:
       # publish. `workflow_dispatch` accepts any ref: dispatched from main
       # this used to resolve `version=main`, build for eleven minutes, and
       # offer npm a package versioned "main". Dispatch against a TAG ref
-      # (`gh workflow run publish-wasm.yml --ref v0.61.0`) still works.
+      # (`gh workflow run core-publish-wasm.yml --ref v0.61.0`) still works.
       - name: Resolve version from tag
         id: ver
         run: |
