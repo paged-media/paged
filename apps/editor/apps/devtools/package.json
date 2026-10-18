@@ -17,7 +17,7 @@
     "@types/node": "catalog:node25",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
-    "@vitejs/plugin-react": "^4.7.0",
+    "@vitejs/plugin-react": "^5.2.0",
     "typescript": "catalog:",
     "vite": "catalog:"
   }
