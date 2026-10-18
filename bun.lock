@@ -602,7 +602,7 @@
     },
     "platform/extensions/packages/plugin-api": {
       "name": "@paged-media/plugin-api",
-      "version": "0.2.75-canary.0",
+      "version": "0.2.76-canary.0",
       "dependencies": {
         "@types/react": "catalog:",
       },
@@ -612,7 +612,7 @@
     },
     "platform/extensions/packages/plugin-sdk": {
       "name": "@paged-media/plugin-sdk",
-      "version": "0.2.75-canary.0",
+      "version": "0.2.76-canary.0",
       "bin": {
         "paged-plugin": "./bin/paged-plugin.mjs",
       },
