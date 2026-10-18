@@ -47,3 +47,4 @@ package. It is gated on
 |---|---|---|---|---|
 | publish-bundle | 13 | 13 | yes | codemod only |
 | pdf-bundle | 26 | 26 | yes | codemod only |
+| idml-viewer | 27 | 27 | yes | codemod only |

@@ -11,5 +11,5 @@
     "outDir": "dist",
     "skipLibCheck": true
   },
-  "include": ["src", "test"]
+  "include": ["src", "test", "../../../../tooling/js/bun-test-matchers.d.ts"]
 }
