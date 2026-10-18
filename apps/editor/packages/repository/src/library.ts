@@ -55,6 +55,8 @@ export interface WasmRepository {
   locateMany(addresses: string): string;
   packOf(objects: string): Uint8Array;
   receivePack(pack: Uint8Array, ref: string, expected: string, next: string, actor: string, ts: number): void;
+  importParts(manifest: string, bytes: Uint8Array, ref: string, actor: string, message: string, ts: number): string;
+  readPart(target: string, path: string): Uint8Array;
   saveAgent(
     file: Uint8Array,
     branch: string,
@@ -87,6 +89,41 @@ export interface DocumentEntry {
   head: string | null;
   /** The paged.server repository this document syncs with, when it has one. */
   remote?: { url: string; repo: string };
+  /** `data` for a dataset: a repository of data parts rather than a page document. */
+  kind?: "document" | "data";
+}
+
+/** One part of one version of a repository: `paged://[<ws>.]<repo>/<path>[?ref=<ref>]`. */
+export interface PagedRef {
+  workspace: string | null;
+  repository: string;
+  path: string;
+  ref: string;
+}
+
+const NAME = /^[a-z0-9-]{1,64}$/;
+
+/** Parses a `paged://` reference (core's `PagedRef`, the same grammar). */
+export function parsePagedRef(url: string): PagedRef | null {
+  if (!url.startsWith("paged://")) return null;
+  const rest = url.slice("paged://".length);
+  const [main, query = ""] = rest.split("?", 2);
+  const slash = main.indexOf("/");
+  if (slash < 0) return null;
+  const authority = main.slice(0, slash);
+  let path: string;
+  try {
+    path = decodeURIComponent(main.slice(slash + 1));
+  } catch {
+    return null;
+  }
+  const dot = authority.indexOf(".");
+  const workspace = dot < 0 ? null : authority.slice(0, dot);
+  const repository = dot < 0 ? authority : authority.slice(dot + 1);
+  if (!NAME.test(repository) || (workspace !== null && !NAME.test(workspace))) return null;
+  if (!path || path.split("/").some((s) => !s || s === "." || s === "..")) return null;
+  const ref = new URLSearchParams(query).get("ref") || "main";
+  return { workspace, repository, path, ref };
 }
 
 /** A paged.server repository and the bearer token to reach it with. */
@@ -346,7 +383,10 @@ export class Library {
   }
 
   private async remoteCall(r: Remote, route: string, init: RequestInit = {}): Promise<Response> {
-    const url = `${r.url.replace(/\/$/, "")}/v1/r/${encodeURIComponent(r.repo)}/${route}`;
+    // `repo` or `workspace/repo`: a workspace's repository has its own prefix.
+    const [first, second] = r.repo.split("/", 2);
+    const prefix = second ? `w/${first}/r/${second}` : `r/${first}`;
+    const url = `${r.url.replace(/\/$/, "")}/v1/${prefix}/${route}`;
     const resp = await fetch(url, {
       ...init,
       headers: { ...(init.headers as Record<string, string>), authorization: `Bearer ${r.token}` },
@@ -512,6 +552,53 @@ export class Library {
       await this.persist(o);
       return head;
     });
+  }
+
+  /** Opens a set of data files as a new dataset: a repository of data parts,
+   *  versioned like any document and named by `paged://` references. */
+  importDataset(name: string, files: { path: string; bytes: Uint8Array }[]): Promise<DocumentEntry> {
+    return this.serial(async () => {
+      const total = files.reduce((n, f) => n + f.bytes.length, 0);
+      const bytes = new Uint8Array(total);
+      const manifest: { path: string; offset: number; len: number }[] = [];
+      let at = 0;
+      for (const f of files) {
+        bytes.set(f.bytes, at);
+        manifest.push({ path: f.path, offset: at, len: f.bytes.length });
+        at += f.bytes.length;
+      }
+      const now = this.now();
+      const meta: DocumentEntry = { id: this.newId(), name, createdAt: now, updatedAt: now, head: null, kind: "data" };
+      const o: Open = { repo: this.options.createRepository(this.owner), meta };
+      o.repo.importParts(JSON.stringify(manifest), bytes, MAIN, this.owner, `Open ${name}`, now);
+      await this.persist(o);
+      this.open.set(meta.id, o);
+      return o.meta;
+    });
+  }
+
+  /** One part of a version (a ref or a commit address). */
+  readPart(id: string, path: string, ref = MAIN): Promise<Uint8Array> {
+    return this.serial(async () => {
+      const o = await this.load(id);
+      const bytes = await this.faulting(o, () => o.repo.readPart(ref, path));
+      o.repo.evictBlobs();
+      return bytes;
+    });
+  }
+
+  /** The bytes a `paged://` reference names: from this library when it holds
+   *  that repository (by its server name, or its own), else from `remote`. */
+  async resolve(url: string, remote?: { url: string; token: string }): Promise<Uint8Array> {
+    const r = parsePagedRef(url);
+    if (!r) throw new Error(`not a paged:// reference: ${url}`);
+    const wanted = r.workspace ? `${r.workspace}/${r.repository}` : r.repository;
+    const local = (await this.list()).find((d) => d.remote?.repo === wanted || (!r.workspace && d.name === r.repository));
+    if (local) return this.readPart(local.id, r.path, r.ref);
+    if (!remote) throw new Error(`${wanted} is not in this library, and there is no server to ask`);
+    const q = `ref=${encodeURIComponent(r.ref)}&path=${encodeURIComponent(r.path)}`;
+    const resp = await this.remoteCall({ url: remote.url, repo: wanted, token: remote.token }, `part?${q}`);
+    return new Uint8Array(await resp.arrayBuffer());
   }
 
   rename(id: string, name: string): Promise<DocumentEntry> {

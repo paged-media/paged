@@ -201,3 +201,16 @@ test("a model's save is an agent's version on its branch, merged by the person",
   await lib.mergeBranch(id, saved.branch);
   assert.equal((await lib.log(id))[0].hash, saved.head, "a fast-forward");
 });
+
+test("a dataset is a repository of data parts, named by paged:// references", async () => {
+  const { lib } = library();
+  const csv = new TextEncoder().encode("sku,price\nA1,9.90\nB2,12.50\n");
+  const ds = await lib.importDataset("products", [
+    { path: "data/products.csv", bytes: csv },
+    { path: "schema.json", bytes: new TextEncoder().encode('{"sku":"string","price":"number"}') },
+  ]);
+  assert.equal(ds.kind, "data");
+  assert.deepEqual(await lib.resolve("paged://products/data/products.csv"), csv);
+  await assert.rejects(lib.resolve("paged://acme.products/data/products.csv"), /not in this library/);
+  await assert.rejects(lib.resolve("http://x/y"), /not a paged/);
+});

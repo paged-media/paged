@@ -24,7 +24,9 @@
 export { memoryFs, opfsFs, type RepoFs } from "./fs.ts";
 export {
   Library,
+  parsePagedRef,
   RemoteError,
+  type PagedRef,
   type CommitInfo,
   type Remote,
   type DocumentEntry,

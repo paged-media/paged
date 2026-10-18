@@ -151,3 +151,14 @@ test("push, clone, edit, pull: two browsers through one server", { skip: !URL_ }
   await assert.rejects(b.push(copy.id, remote), (e) => e instanceof RemoteError && [403, 409].includes(e.status));
   await assert.rejects(b.pull(copy.id, remote), /forward/);
 });
+
+test("a paged:// reference resolves through the server when the library lacks it", { skip: !URL_ }, async () => {
+  const repo = `ds-${Date.now().toString(36)}`;
+  const csv = enc.encode("sku,price\nA1,9.90\n");
+  const a = library();
+  const ds = await a.importDataset("products", [{ path: "data/products.csv", bytes: csv }]);
+  await a.push(ds.id, { url: URL_!, repo, token: "dev-token" });
+  const b = library();
+  const got = await b.resolve(`paged://${repo}/data/products.csv`, { url: URL_!, token: "dev-token" });
+  assert.deepEqual(got, csv);
+});
