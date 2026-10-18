@@ -58,7 +58,8 @@ fn r2_keys(url: &str, prefix: &str) -> Vec<String> {
     .query("prefix", prefix)
     .call()
     .unwrap()
-    .into_json()
+    .into_body()
+    .read_json()
     .unwrap();
     listed["result"]
         .as_array()
@@ -78,6 +79,7 @@ fn r2_raw(url: &str, key: &str) -> Vec<u8> {
     ))
     .call()
     .unwrap()
+    .into_body()
     .into_reader()
     .read_to_end(&mut out)
     .unwrap();

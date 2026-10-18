@@ -26,10 +26,11 @@ use tungstenite::{stream::MaybeTlsStream, Message, WebSocket};
 
 fn mcp(url: &str, token: &str, method: &str, params: Value) -> Value {
     ureq::post(&format!("{url}/mcp"))
-        .set("authorization", &format!("Bearer {token}"))
+        .header("authorization", &format!("Bearer {token}"))
         .send_json(json!({ "jsonrpc": "2.0", "id": 1, "method": method, "params": params }))
         .unwrap()
-        .into_json()
+        .into_body()
+        .read_json()
         .unwrap()
 }
 
@@ -46,10 +47,11 @@ fn tool(url: &str, token: &str, name: &str, args: Value) -> Value {
 /// A tab that answers every call by echoing it (an image for render_page).
 fn tab(url: &str) -> (String, thread::JoinHandle<Vec<Value>>) {
     let r: Value = ureq::post(&format!("{url}/v1/live"))
-        .set("authorization", "Bearer dev-token")
+        .header("authorization", "Bearer dev-token")
         .send_json(json!({ "document": "brochure", "title": "Brochure" }))
         .unwrap()
-        .into_json()
+        .into_body()
+        .read_json()
         .unwrap();
     let session = r["session"].as_str().unwrap().to_string();
     let ws_url = format!(
@@ -73,7 +75,9 @@ fn tab(url: &str) -> (String, thread::JoinHandle<Vec<Value>>) {
                 json!({ "content": [{ "type": "text", "text": "ok" }], "structuredContent": { "tool": m["tool"], "args": m["args"], "agent": m["agent"] }, "isError": false })
             };
             ws.send(Message::Text(
-                json!({ "type": "result", "id": m["id"], "result": result }).to_string(),
+                json!({ "type": "result", "id": m["id"], "result": result })
+                    .to_string()
+                    .into(),
             ))
             .unwrap();
             seen.push(m.clone());
