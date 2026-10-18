@@ -253,6 +253,13 @@ jobs:
       - name: local library (packages/repository)
         run: bun run test:repository
 
+      # The built-in tools' gesture handlers, driven through the gesture
+      # DSL against the test kit's recording fake editor (no engine, no
+      # browser): previews, modifier semantics, the exact mutation, the
+      # one-gesture-one-commit and cancel invariants.
+      - name: tool gesture handlers (packages/tools)
+        run: bun run test:tools
+
       # Every gated fidelity pack must carry a threshold entry, or the
       # fidelity gate silently skips it.
       - name: fidelity thresholds schema
