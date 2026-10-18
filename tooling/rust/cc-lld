@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 # macOS link driver (.cargo/config.toml): clang with the active toolchain's
 # lld (`gcc-ld/ld64.lld`, shipped with every rustup toolchain and matched to
 # its LLVM), Apple's ld when that is missing. PAGED_LINKER=ld forces Apple's ld.

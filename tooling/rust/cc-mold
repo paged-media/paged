@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 # Linux link driver (.cargo/config.toml): the C compiler with mold when mold is
 # installed, rustc's default otherwise (rust-lld on x86_64 since Rust 1.90).
 # PAGED_LINKER=ld forces the default. `-fuse-ld=mold` goes LAST: rustc passes
