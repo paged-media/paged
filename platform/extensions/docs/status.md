@@ -1,10 +1,10 @@
 # Status
 
 What the plugin contract ships and what it does not, read from the code on `main`
-(2026-10-18): `@paged-media/plugin-api` and `@paged-media/plugin-sdk` 0.2.62-canary.0,
+(2026-10-18): `@paged-media/plugin-api` and `@paged-media/plugin-sdk` 0.2.63-canary.0,
 `@paged-media/plugin-cli` 0.1.6, `@paged-media/ai` 0.1.0-canary.4, `@paged-media/cli`
 0.1.0-canary.0, API version 0.2.0. The engine wire types and the capability catalog are
-vendored from `@paged-media/canvas-wasm` and `@paged-media/introspect-wasm` 0.73.3
+vendored from `@paged-media/canvas-wasm` and `@paged-media/introspect-wasm` 0.73.4
 (protocol 73). How the parts fit is in
 [`architecture.md`](architecture.md).
 

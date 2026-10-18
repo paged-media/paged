@@ -1,9 +1,9 @@
 {
   "$comment": "Where the vendored catalog.json came from, and \u2014 when it leads the published engine \u2014 why that is allowed. `sync-catalog.mjs --check` enforces every claim in this file, in both directions: an unexplained difference fails, and so does an `aheadOfPublished` marker that the publish has since caught up with.",
   "source": "core",
-  "rev": "a8dce53",
+  "rev": "8eb9e21",
   "targetsProtocol": 73,
   "publishedPackage": "@paged-media/introspect-wasm",
   "aheadOfPublished": false,
-  "why": "IN SYNC as of introspect-wasm@0.73.3 (core@a8dce53, tag v0.73.3; protocol 73, a patch): no catalog change. The wire gains ExportPdfWireOptions.tagged (ADR 182, Create Tagged PDF). Prior: in sync as of introspect-wasm@0.73.1 (core@7a257bb)."
+  "why": "IN SYNC as of introspect-wasm@0.73.4 (core@8eb9e21, tag v0.73.4; protocol 73, a patch): no catalog or wire change. Prior: in sync as of introspect-wasm@0.73.3 (core@a8dce53)."
 }
