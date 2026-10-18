@@ -90,7 +90,7 @@ const FLATTEN_TOL: f64 = 0.1;
 /// non-`Normal` top-of-stack blend, it is emitted as a blended fill
 /// ([`WebDrawCmd::FillBlend`]) so a CSS `mix-blend-mode` lowers to the C-1.4
 /// `fillPathBlend`. Normal-blend layers (the only kind blitz-paint
-/// 0.3.0-alpha.4 emits — see the capture tests) leave fills plain, so the
+/// 0.3.0-alpha.6 emits — see the capture tests) leave fills plain, so the
 /// existing clip/opacity-layer behaviour is unchanged.
 #[derive(Default)]
 pub struct CapturingScene {
@@ -1865,7 +1865,7 @@ mod tests {
     #[test]
     fn solid_fill_under_a_multiply_layer_captures_a_blended_fill() {
         // The STATEFUL blend path, driven directly via the PaintScene trait
-        // (blitz-paint 0.3.0-alpha.4 only pushes Normal layers — see
+        // (blitz-paint 0.3.0-alpha.6 only pushes Normal layers — see
         // `blitz_paint_pushes_only_normal_layers` — so this exercises the
         // sink contract that any non-Normal producer triggers). A solid fill
         // inside a `push_layer(Mix::Multiply, …)` bracket → `FillBlend`.
@@ -2110,11 +2110,11 @@ mod tests {
             let json = serde_json::to_string(&out.layer).unwrap();
             assert!(json.contains("\"kind\":\"innerShadow\""), "json: {json}");
         } else {
-            // blitz-paint 0.3.0-alpha.4 may route inset shadows differently (or
+            // blitz-paint 0.3.0-alpha.6 may route inset shadows differently (or
             // not at all) on this alpha. The inset lowering is proven by the
             // trait-driven unit test above; document the engine-side reality.
             eprintln!(
-                "note: blitz-paint 0.3.0-alpha.4 did not emit a DestOut inset \
+                "note: blitz-paint 0.3.0-alpha.6 did not emit a DestOut inset \
                  box-shadow we could capture ({} inset cmds); inset lowering \
                  proven by the trait unit tests",
                 inset_cmds
@@ -2194,7 +2194,7 @@ mod tests {
 
     #[test]
     fn blitz_paint_pushes_only_normal_layers_for_this_alpha_version() {
-        // HONEST CAPTURE-COVERAGE NOTE, asserted: blitz-paint 0.3.0-alpha.4
+        // HONEST CAPTURE-COVERAGE NOTE, asserted: blitz-paint 0.3.0-alpha.6
         // only ever pushes `Mix::Normal` layers (opacity/clip) — it has NO
         // `mix-blend-mode` → non-Normal `push_layer` path. So a real-HTML
         // `mix-blend-mode` does NOT yet reach the blend capture; the stateful
@@ -2217,7 +2217,7 @@ mod tests {
             .count();
         assert_eq!(
             blends, 0,
-            "blitz-paint 0.3.0-alpha.4 emits no non-Normal layer for \
+            "blitz-paint 0.3.0-alpha.6 emits no non-Normal layer for \
              mix-blend-mode (capture coverage is via the trait unit tests); \
              if this fires, add a real-HTML blend capture test"
         );
@@ -2308,7 +2308,7 @@ mod tests {
     #[test]
     fn gradient_fill_under_a_multiply_layer_captures_a_gradient_blend() {
         // C-1.8 v48 capture, driven directly via the PaintScene trait
-        // (blitz-paint 0.3.0-alpha.4 only pushes Normal layers — see
+        // (blitz-paint 0.3.0-alpha.6 only pushes Normal layers — see
         // `blitz_paint_pushes_only_normal_layers` — so this exercises the
         // sink contract any non-Normal producer triggers). A GRADIENT fill
         // inside a `push_layer(Mix::Screen, …)` bracket → `FillGradientBlend`;
@@ -2362,7 +2362,7 @@ mod tests {
     #[test]
     fn blitz_paint_never_strokes_with_a_gradient_brush_for_this_alpha_version() {
         // HONEST REACHABILITY NOTE, asserted (the v48 gradient-STROKE twin of
-        // `blitz_paint_pushes_only_normal_layers`): blitz-paint 0.3.0-alpha.4
+        // `blitz_paint_pushes_only_normal_layers`): blitz-paint 0.3.0-alpha.6
         // never calls `PaintScene::stroke` with a gradient brush. Every
         // `scene.stroke` site passes a SOLID Color (text decoration colour,
         // form-control WHITE/accent, devtools overlay); CSS BORDERS are painted
@@ -2389,7 +2389,7 @@ mod tests {
             .count();
         assert_eq!(
             gradient_strokes, 0,
-            "blitz-paint 0.3.0-alpha.4 never strokes with a gradient brush \
+            "blitz-paint 0.3.0-alpha.6 never strokes with a gradient brush \
              (borders are fills, decorations + outlines are solid); gradient-\
              stroke capture coverage is via the trait unit tests. If this fires, \
              add a real-HTML gradient-stroke capture test."
@@ -2468,7 +2468,7 @@ mod tests {
             // by this alpha. Not a failure of the lowering (the unit tests
             // cover Sweep); this documents the engine-side gap.
             eprintln!(
-                "note: blitz-paint 0.3.0-alpha.4 did not paint conic-gradient as a \
+                "note: blitz-paint 0.3.0-alpha.6 did not paint conic-gradient as a \
                  Sweep brush (captured {} sweep cmds); sweep lowering proven by unit tests",
                 sweep_cmds
             );

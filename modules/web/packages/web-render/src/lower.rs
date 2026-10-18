@@ -66,7 +66,7 @@
 //!     counted unsupported (no blended image/text lane on the C-1 wire).
 //!
 //! HONEST REACHABILITY of the v48 gradient-stroke / gradient-blend lanes
-//! (verified against blitz-paint 0.3.0-alpha.4 — see the capture tests):
+//! (verified against blitz-paint 0.3.0-alpha.6 — see the capture tests):
 //!   · GRADIENT STROKE — blitz-paint never calls `PaintScene::stroke` with a
 //!     gradient brush. Every `scene.stroke` site passes a SOLID `Color` (text
 //!     underline/strikethrough = the decoration colour, form-control frames =
@@ -77,7 +77,7 @@
 //!     for real HTML until a gradient-stroke producer (or a Blitz that emits
 //!     gradient borders) appears.
 //!   · GRADIENT-FILL-UNDER-A-BLEND — like the solid `fillPathBlend`, this is
-//!     DORMANT: blitz-paint 0.3.0-alpha.4 only pushes `Mix::Normal` layers (no
+//!     DORMANT: blitz-paint 0.3.0-alpha.6 only pushes `Mix::Normal` layers (no
 //!     `mix-blend-mode` → non-Normal `push_layer`), so a gradient fill never
 //!     reaches the blend stack from real HTML. Contract-correct + unit-tested;
 //!     it lights up the moment the alpha emits a non-Normal layer.

@@ -46,8 +46,8 @@ without a browser.
 ## Defects (pinned)
 
 Ordered by what a reader of the canvas sees first. Numbers are at width 240 unless noted. Every
-open defect is in the pinned upstream layout stack (Blitz 0.3.0-alpha.4, Taffy
-0.11.0-experimental-cache-fix.3, Parley 0.9; ADR 401 keeps the pin); the cause column names the
+open defect is in the pinned upstream layout stack (Blitz 0.3.0-alpha.6, Taffy
+0.11.0-experimental-cache-fix.3, Parley 0.10; ADR 401 keeps the pin); the cause column names the
 code. Drafted upstream reports, each with a minimal reproduction, are in
 [`UPSTREAM.md`](UPSTREAM.md).
 
