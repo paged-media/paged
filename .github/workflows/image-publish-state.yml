@@ -10,37 +10,41 @@
 # (using the registered name is load-bearing). Both suites' junit carries
 # no @feat: tags yet, so state applies its ingest/test-map.yaml bridge at
 # convert time.
-name: publish-state
+#
+# MONOREPO (step A3): ported from paged-media/plugin-image
+# .github/workflows/publish-state.yml. It publishes evidence ARTIFACTS only
+# (nothing to npm), so it stays enabled. The vitest job's sibling
+# paged-media/plugin-sdk checkout is gone: only the manifest package's
+# scripts read the plugin-cli, and this job runs `vitest` directly.
+name: image / publish-state
 
 on:
   push:
     branches: [main]
+    paths:
+      - "modules/image/**"
+      - ".github/workflows/image-publish-state.yml"
 
 permissions:
   contents: read
 
 concurrency:
-  group: publish-state-${{ github.ref }}
+  group: image-publish-state-${{ github.ref }}
   cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: modules/image
 
 jobs:
   # TS unit evidence: vitest with the JUnit reporter, per workspace package,
-  # concatenated into one report. The link: chain (glue/manifest →
-  # ../../plugin-sdk/packages/*) needs plugin-sdk as a sibling, so both
-  # repos are nested checkouts (this repo at plugin-image/, the SDK at
-  # plugin-sdk/) — mirrors plugin-draw's vitest.yml.
+  # concatenated into one report. (Pre-monorepo: nested plugin-image/ +
+  # plugin-sdk/ checkouts; now one checkout, run in modules/image.)
   vitest:
     name: vitest evidence
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          path: plugin-image
-      - uses: actions/checkout@v4
-        with:
-          repository: paged-media/plugin-sdk
-          path: plugin-sdk
-          token: ${{ secrets.STATE_DISPATCH_TOKEN || github.token }}
       - uses: pnpm/action-setup@v4
         with:
           version: 10
@@ -48,7 +52,7 @@ jobs:
         with:
           node-version: 22
       - name: install (plugin-sdk sibling satisfies the link chain)
-        run: pnpm install --frozen-lockfile --dir plugin-image
+        run: pnpm install --frozen-lockfile
 
       - name: vitest (junit per package; red results still publish)
         # The state matrix wants every red row, so don't let a failing
@@ -58,9 +62,9 @@ jobs:
         # absence of junit.xml is fine, the concat globs whatever exists.
         run: |
           set -uo pipefail
-          pnpm -r --no-bail --dir plugin-image exec \
+          pnpm -r --no-bail exec \
             vitest run --reporter=junit --outputFile=junit.xml || true
-          cat plugin-image/*/junit.xml > junit-all.xml 2>/dev/null || true
+          cat ./*/junit.xml > junit-all.xml 2>/dev/null || true
           [ -s junit-all.xml ] # at least one package must have produced results
         env:
           # wasm-exec.spec.ts must run against the committed artifact
@@ -83,7 +87,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: vitest-junit
-          path: junit-all.xml
+          path: modules/image/junit-all.xml
           if-no-files-found: error
           retention-days: 14
 
@@ -103,6 +107,9 @@ jobs:
         with:
           toolchain: "1.93.0" # mirrors rust-toolchain.toml
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: modules/image -> target
+          prefix-key: v0-rust-image
       - name: install cargo-nextest
         uses: taiki-e/install-action@nextest
 
@@ -127,6 +134,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: nextest-junit
-          path: target/nextest/ci/junit.xml
+          path: modules/image/target/nextest/ci/junit.xml
           if-no-files-found: error
           retention-days: 14

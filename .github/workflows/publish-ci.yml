@@ -1,9 +1,21 @@
-name: ci
+name: publish / ci
 
+# MONOREPO (step A3): ported from paged-media/plugin-publish
+# .github/workflows/ci.yml; runs in modules/publish.
 on:
   push:
     branches: [main]
+    paths:
+      - "modules/publish/**"
+      - ".github/workflows/publish-ci.yml"
   pull_request:
+    paths:
+      - "modules/publish/**"
+      - ".github/workflows/publish-ci.yml"
+
+defaults:
+  run:
+    working-directory: modules/publish
 
 env:
   CARGO_TERM_COLOR: always
@@ -24,6 +36,9 @@ jobs:
           components: rustfmt, clippy
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: modules/publish -> target
+          prefix-key: v0-rust-publish
 
       - name: fmt
         run: cargo fmt --all --check
@@ -53,6 +68,7 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+          cache-dependency-path: modules/publish/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r --filter "./packages/*" typecheck
       - run: pnpm -r --filter "./packages/*" build
@@ -85,6 +101,9 @@ jobs:
           # file and hard-fails without an explicit toolchain.
           toolchain: stable
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: modules/publish -> target
+          prefix-key: v0-rust-publish
       - uses: taiki-e/install-action@nextest
 
       # idml-coverage reads `cargo metadata --offline`, which needs every crate
@@ -107,7 +126,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: nextest-junit
-          path: target/nextest/ci/junit.xml
+          path: modules/publish/target/nextest/ci/junit.xml
           if-no-files-found: error
           retention-days: 14
 
@@ -118,6 +137,7 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+          cache-dependency-path: modules/publish/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
 
       # Only packages that DECLARE a test script. `pnpm -r exec vitest run`
@@ -149,7 +169,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: vitest-junit-pdf-bundle
-          path: packages/pdf-bundle/junit.xml
+          path: modules/publish/packages/pdf-bundle/junit.xml
           if-no-files-found: error
           retention-days: 14
 
@@ -161,7 +181,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: vitest-junit-publish-bundle
-          path: packages/publish-bundle/junit.xml
+          path: modules/publish/packages/publish-bundle/junit.xml
           if-no-files-found: warn
           retention-days: 14
 

@@ -2,12 +2,25 @@
 # (ts job). Evidence publishing to paged-media/state lives in the sibling
 # publish-state.yml; this file is the merge gate — every step here is
 # `-D warnings`-strict and must be green before a PR lands.
-name: ci
+#
+# MONOREPO (step A3): ported from paged-media/plugin-image
+# .github/workflows/ci.yml; runs in modules/image. The ts job's sibling
+# paged-media/plugin-sdk checkout is gone: the manifest validate runs the
+# in-tree platform/extensions plugin-cli, so its sources join the filters.
+name: image / ci
 
 on:
   push:
     branches: [main]
+    paths:
+      - "modules/image/**"
+      - "platform/extensions/packages/plugin-cli/**"
+      - ".github/workflows/image-ci.yml"
   pull_request:
+    paths:
+      - "modules/image/**"
+      - "platform/extensions/packages/plugin-cli/**"
+      - ".github/workflows/image-ci.yml"
   workflow_dispatch:
 
 env:
@@ -18,8 +31,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: image-ci-${{ github.ref }}
   cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: modules/image
 
 jobs:
   # The Rust engine: fmt + clippy + test, the three isolation-contract
@@ -46,6 +63,9 @@ jobs:
           components: rustfmt, clippy
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: modules/image -> target
+          prefix-key: v0-rust-image
 
       - name: fmt
         run: cargo fmt --all --check
@@ -168,6 +188,8 @@ jobs:
           toolchain: "1.93.0" # mirrors rust-toolchain.toml
       - uses: Swatinem/rust-cache@v2
         with:
+          workspaces: modules/image -> target
+          prefix-key: v0-rust-image
           key: gpu-sw
       - name: install lavapipe (Mesa software Vulkan)
         # Bounded, and off the Azure mirror first (the brotli step above
@@ -203,6 +225,8 @@ jobs:
           toolchain: "1.93.0" # mirrors rust-toolchain.toml
       - uses: Swatinem/rust-cache@v2
         with:
+          workspaces: modules/image -> target
+          prefix-key: v0-rust-image
           key: gpu-metal
       - name: adapter
         run: cargo test -p image-gpu --features test-support --lib test_support -- --nocapture
@@ -210,24 +234,15 @@ jobs:
         run: cargo test --workspace --no-fail-fast
 
   # The TS bundle: the contract-import lint (isolation §2.1), typecheck,
-  # vitest, and manifest validation. The link: chain (glue/manifest →
-  # ../../plugin-sdk/packages/*) requires plugin-sdk as a SIBLING under the
-  # workspace, so both repos are nested checkouts: this repo at
-  # plugin-image/, the SDK at plugin-sdk/ — matching the link: paths in
-  # glue/package.json (link:../../plugin-sdk/...). Mirrors plugin-draw's
-  # vitest.yml sibling-checkout pattern.
+  # vitest, and manifest validation. Pre-monorepo this nested two checkouts
+  # (plugin-image/ + a plugin-sdk/ sibling) because the manifest package's
+  # scripts reach the plugin-cli by a relative path; the plugin-cli is now
+  # in-tree at platform/extensions/packages/plugin-cli, so one checkout.
   ts:
     name: ts bundle
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          path: plugin-image
-      - uses: actions/checkout@v4
-        with:
-          repository: paged-media/plugin-sdk
-          path: plugin-sdk
-          token: ${{ secrets.STATE_DISPATCH_TOKEN || github.token }}
       - uses: pnpm/action-setup@v4
         with:
           version: 10
@@ -236,7 +251,7 @@ jobs:
           node-version: 22
 
       - name: install (plugin-sdk sibling satisfies the link chain)
-        run: pnpm install --frozen-lockfile --dir plugin-image
+        run: pnpm install --frozen-lockfile
 
       # Build the engine wasm from THIS commit before the specs boot it.
       # The committed glue/wasm is whatever was last rebuilt by hand;
@@ -249,10 +264,10 @@ jobs:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: plugin-image
+          workspaces: modules/image -> target
+          prefix-key: v0-rust-image
           key: wasm
       - name: wasm-bindgen (prebuilt; version from Cargo.lock)
-        working-directory: plugin-image
         run: |
           set -euo pipefail
           WB=$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock | grep version | head -1 | cut -d'"' -f2)
@@ -265,18 +280,15 @@ jobs:
           echo "$RUNNER_TEMP/binaryen-version_119/bin" >> "$GITHUB_PATH"
       - name: build wasm
         run: bash scripts/build-wasm.sh
-        working-directory: plugin-image
 
       # Isolation contract, TS half: every import must come through the
       # sanctioned contract surface (spec §2.1). An editor-internal import
       # fails here with a pointer to BREAKAGE_LOG.md.
       - name: contract-import lint
         run: node scripts/check-contract-imports.mjs
-        working-directory: plugin-image
 
       - name: typecheck
         run: pnpm -r typecheck
-        working-directory: plugin-image
 
       # REQUIRE_REAL_WASM turns wasm-exec.spec.ts's "artifact missing"
       # skip into a hard failure: the artifact was just built (and is
@@ -284,14 +296,12 @@ jobs:
       # real-execution lane must never silently drop back to skip.
       - name: test
         run: pnpm -r test
-        working-directory: plugin-image
         env:
           REQUIRE_REAL_WASM: "1"
 
-      # Validate the bundle manifest with the sibling plugin-cli (the same
+      # Validate the bundle manifest with the in-tree plugin-cli (the same
       # binary the package.json validate:manifest script invokes).
       - name: validate manifest
         run: >-
-          node ../plugin-sdk/packages/plugin-cli/bin/paged-plugin.mjs
+          node "$GITHUB_WORKSPACE/platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs"
           validate manifest/manifest.json
-        working-directory: plugin-image

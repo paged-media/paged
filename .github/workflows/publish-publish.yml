@@ -1,6 +1,14 @@
 # Canary publish of the paged.publish plugin bundles (@paged-media/publish +
 # @paged-media/pdf).
 #
+# Disabled in the monorepo: built-in modules are no longer published separately (PM-0008). Kept for reference until wave D.
+#
+# MONOREPO (step A3): ported from paged-media/plugin-publish .github/workflows/
+# publish.yml with `on: workflow_dispatch` only. Paths are ported so the
+# file stays readable as a reference; the npm Trusted Publisher it names is
+# bound to the OLD repo and file name, so a dispatch could not publish anyway.
+#
+#
 # AUTH: OIDC TRUSTED PUBLISHING (tokenless) — same lane as plugin-image/
 # plugin-web/plugin-sdk. Requires a Trusted Publisher on npm for EACH
 # package: org paged-media, this repo, workflow publish.yml. Until that
@@ -14,14 +22,18 @@
 # Pre-1.0: every version is a -canary.N prerelease under the `canary`
 # dist-tag. An unchanged version skips; bump a bundle's package.json to
 # release.
+name: publish / publish
+
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
   id-token: write   # OIDC token for trusted publishing
   contents: read
+
+defaults:
+  run:
+    working-directory: modules/publish
 
 jobs:
   publish:

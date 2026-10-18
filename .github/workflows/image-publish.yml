@@ -1,5 +1,12 @@
-name: publish
+name: image / publish
 
+# Disabled in the monorepo: built-in modules are no longer published separately (PM-0008). Kept for reference until wave D.
+#
+# MONOREPO (step A3): ported from paged-media/plugin-image .github/workflows/
+# publish.yml with `on: workflow_dispatch` only (its workflow_run trigger on `ci` is removed). Paths are ported so the
+# file stays readable as a reference; the npm Trusted Publisher it names is
+# bound to the OLD repo and file name, so a dispatch could not publish anyway.
+#
 # Publish @paged-media/image to npm via OIDC TRUSTED PUBLISHING (tokenless).
 # Requires a Trusted Publisher on npm: org paged-media, this repo, workflow
 # publish.yml (keep this FILE NAME: the trusted publisher is bound to it).
@@ -10,15 +17,15 @@ name: publish
 # It used to run on every push in parallel with ci and test nothing, so a
 # commit that failed ci could still reach npm.
 on:
-  workflow_run:
-    workflows: [ci]
-    types: [completed]
-    branches: [main]
   workflow_dispatch:
 
 permissions:
   id-token: write   # OIDC token for trusted publishing
   contents: read
+
+defaults:
+  run:
+    working-directory: modules/image
 
 jobs:
   publish:
@@ -33,6 +40,9 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - run: rustup target add wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: modules/image -> target
+          prefix-key: v0-rust-image
       # The version is READ FROM Cargo.lock, not written here. It used to
       # be hardcoded three times in this step with a comment saying it
       # "must match Cargo.lock", which is a rule a comment cannot keep:
