@@ -93,6 +93,8 @@ runs:
         workspaces: engine/core -> target
         prefix-key: v0-rust-core-wasm
         shared-key: engine-wasm
+        # Only main writes the cache; pull requests restore main's (A10).
+        save-if: ${{ github.ref == 'refs/heads/main' }}
 
     - name: engine wasm — wasm-bindgen-cli and binaryen (pinned)
       if: steps.restore.outputs.cache-hit != 'true'

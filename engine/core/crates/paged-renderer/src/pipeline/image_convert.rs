@@ -45,7 +45,7 @@ pub(super) fn l16_to_rgba(src: &[u8], w: u32, h: u32) -> Option<Vec<u8>> {
         return None;
     }
     let mut rgba = Vec::with_capacity(pixels.checked_mul(4)?);
-    for chunk in src.chunks_exact(2) {
+    for chunk in src.as_chunks::<2>().0 {
         // jpeg-decoder writes L16 big-endian.
         let g16 = u16::from_be_bytes([chunk[0], chunk[1]]);
         let g8 = (g16 >> 8) as u8;
@@ -60,7 +60,7 @@ pub(super) fn rgb24_to_rgba(src: &[u8], w: u32, h: u32) -> Option<Vec<u8>> {
         return None;
     }
     let mut rgba = Vec::with_capacity(pixels.checked_mul(4)?);
-    for chunk in src.chunks_exact(3) {
+    for chunk in src.as_chunks::<3>().0 {
         rgba.extend_from_slice(&[chunk[0], chunk[1], chunk[2], 255]);
     }
     Some(rgba)
@@ -153,7 +153,7 @@ fn cmyk32_to_rgba_naive(src: &[u8], w: u32, h: u32) -> Option<Vec<u8>> {
         return None;
     }
     let mut rgba = Vec::with_capacity(pixels.checked_mul(4)?);
-    for chunk in src.chunks_exact(4) {
+    for chunk in src.as_chunks::<4>().0 {
         let c = chunk[0] as u32;
         let m = chunk[1] as u32;
         let y = chunk[2] as u32;

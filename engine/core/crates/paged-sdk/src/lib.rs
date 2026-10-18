@@ -135,11 +135,13 @@ mod wasm {
     }
 
     /// Headless readback result. `rgba` is tightly-packed RGBA8
-    /// (`width * height * 4`), surfaced to JS as a `Uint8Array`.
-    #[wasm_bindgen(getter_with_clone)]
+    /// (`width * height * 4`), surfaced to JS as a `Uint8Array`. Only the
+    /// buffer needs a cloning getter; the dimensions are `Copy`.
+    #[wasm_bindgen]
     pub struct RenderedRaster {
         pub width: u32,
         pub height: u32,
+        #[wasm_bindgen(getter_with_clone)]
         pub rgba: Vec<u8>,
     }
 

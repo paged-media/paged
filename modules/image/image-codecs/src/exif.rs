@@ -227,11 +227,9 @@ fn parse_tiff(buf: &[u8]) -> Option<Exif> {
                     res_unit = r.u16(entry.value_off);
                 }
             }
-            0x8769 => {
-                // Exif IFD pointer (LONG).
-                if entry.field_type == TYPE_LONG {
-                    exif_ifd_ptr = r.u32(entry.value_off).map(|v| v as usize);
-                }
+            // Exif IFD pointer (LONG).
+            0x8769 if entry.field_type == TYPE_LONG => {
+                exif_ifd_ptr = r.u32(entry.value_off).map(|v| v as usize);
             }
             _ => {}
         }

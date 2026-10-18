@@ -157,7 +157,7 @@ impl ChannelData {
         if sample_bytes == 1 {
             return Ok(self.bytes.clone());
         }
-        Ok(self.bytes.chunks_exact(2).map(|s| s[0]).collect())
+        Ok(self.bytes.as_chunks::<2>().0.iter().map(|s| s[0]).collect())
     }
 
     fn decode_rle(

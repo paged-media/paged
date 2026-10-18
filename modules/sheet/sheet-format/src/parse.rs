@@ -454,10 +454,9 @@ fn parse_condition(body: &str) -> Option<Condition> {
         (CompareOp::Lt, r)
     } else if let Some(r) = b.strip_prefix('>') {
         (CompareOp::Gt, r)
-    } else if let Some(r) = b.strip_prefix('=') {
-        (CompareOp::Eq, r)
     } else {
-        return None;
+        let r = b.strip_prefix('=')?;
+        (CompareOp::Eq, r)
     };
     let rhs: f64 = rest.trim().parse().ok()?;
     Some(Condition { op, rhs })

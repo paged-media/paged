@@ -57,7 +57,8 @@ tasks:
       cargo build --workspace --all-targets
       && cargo build -p pdf-import --target wasm32-unknown-unknown
     options:
-      runInCI: true
+      # publish-ci.yml builds the same; `moon ci` runs no Rust task.
+      runInCI: false
 
   js-check:
     command: "bun run --filter './packages/*' typecheck"

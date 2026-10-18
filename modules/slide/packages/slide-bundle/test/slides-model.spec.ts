@@ -248,4 +248,41 @@ describe("a new slide from a layout", () => {
       h.dispose();
     }
   }, 60_000);
+
+  it("takes the new slide's page from the engine's outcome, reading the page list once", async () => {
+    const { h, host, store } = await open("geometry");
+    try {
+      const before = store.list();
+      const [layout] = await layouts(host, before);
+      // Count what newSlide asks of the page list, and keep what the
+      // duplicate answered.
+      let pageReads = 0;
+      let reported: string[] | undefined;
+      const doc = host.document;
+      const counted: BundleHost = {
+        ...host,
+        document: {
+          ...doc,
+          collection: ((name: string) => {
+            if (name === "pages") pageReads += 1;
+            return doc.collection(name as never);
+          }) as typeof doc.collection,
+          mutate: async (m) => {
+            const outcome = await doc.mutate(m);
+            if (outcome.applied && m.op === "duplicatePage") reported = outcome.createdPages;
+            return outcome;
+          },
+        },
+      };
+      const id = await newSlide(counted, layout, before[0].pageId);
+      expect(reported, "the engine named the copy").toHaveLength(1);
+      expect(id).toBe(reported![0]);
+      expect(pageReads, "one read, for where the copy landed; no before/after diff").toBe(1);
+      await store.refresh();
+      expect(store.list()[1].pageId).toBe(id);
+    } finally {
+      store.dispose();
+      h.dispose();
+    }
+  }, 60_000);
 });

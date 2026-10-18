@@ -483,10 +483,9 @@ pub(crate) fn write_table(
     for (i, cell) in t.cells.iter().enumerate() {
         let name = cell.name.clone().unwrap_or_else(|| {
             // Column-major document order.
-            let (c, r) = if rows > 0 {
-                (i / rows, i % rows)
-            } else {
-                (0, i)
+            let (c, r) = match i.checked_div(rows) {
+                Some(c) => (c, i % rows),
+                None => (0, i),
             };
             format!("{c}:{r}")
         });

@@ -296,8 +296,10 @@ fn image_cms_print_lane_moxcms_srgb_near_identity() {
 
     let mut max_rgb_dev: u8 = 0;
     for (i, (out, inp)) in pixels
-        .chunks_exact(4)
-        .zip(original.chunks_exact(4))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(original.as_chunks::<4>().0)
         .enumerate()
     {
         for c in 0..3 {
@@ -364,11 +366,22 @@ fn image_cms_print_lane_moxcms_lcms2_oracle_per_channel() {
         .expect("lcms2 transform");
 
         let ramp = patch_ramp();
-        let rgb_in: Vec<[u8; 3]> = ramp.chunks_exact(4).map(|p| [p[0], p[1], p[2]]).collect();
+        let rgb_in: Vec<[u8; 3]> = ramp
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|p| [p[0], p[1], p[2]])
+            .collect();
         let mut rgb_out = vec![[0u8; 3]; rgb_in.len()];
         lt.transform_pixels(&rgb_in, &mut rgb_out);
 
-        for (i, (m, l)) in mox_out.chunks_exact(4).zip(rgb_out.iter()).enumerate() {
+        for (i, (m, l)) in mox_out
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .zip(rgb_out.iter())
+            .enumerate()
+        {
             for c in 0..3 {
                 let dev = m[c].abs_diff(l[c]);
                 if dev > worst.0 {
@@ -460,7 +473,12 @@ fn image_cms_print_lane_moxcms_bpc_documented_degradation() {
     .expect("lcms2 bpc transform");
 
     let ramp = patch_ramp();
-    let rgb_in: Vec<[u8; 3]> = ramp.chunks_exact(4).map(|p| [p[0], p[1], p[2]]).collect();
+    let rgb_in: Vec<[u8; 3]> = ramp
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|p| [p[0], p[1], p[2]])
+        .collect();
     let mut a = vec![[0u8; 3]; rgb_in.len()];
     let mut b = vec![[0u8; 3]; rgb_in.len()];
     no_bpc.transform_pixels(&rgb_in, &mut a);
@@ -507,8 +525,10 @@ fn image_cms_print_lane_moxcms_intents_not_ignored() {
     abs.apply_rgba8(&mut a_out);
 
     let max_dev = p_out
-        .chunks_exact(4)
-        .zip(a_out.chunks_exact(4))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(a_out.as_chunks::<4>().0)
         .flat_map(|(p, a)| (0..3).map(move |c| p[c].abs_diff(a[c])))
         .max()
         .unwrap_or(0);
@@ -533,8 +553,10 @@ fn image_cms_print_lane_moxcms_intents_not_ignored() {
         qp.apply_rgba8(&mut qp_out);
         qa.apply_rgba8(&mut qa_out);
         let q_dev = qp_out
-            .chunks_exact(4)
-            .zip(qa_out.chunks_exact(4))
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .zip(qa_out.as_chunks::<4>().0)
             .flat_map(|(p, a)| (0..3).map(move |c| p[c].abs_diff(a[c])))
             .max()
             .unwrap_or(0);

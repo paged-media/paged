@@ -1,4 +1,9 @@
 name: core / ci
+concurrency:
+  # A newer push to a pull request cancels the older run. Every other run
+  # (main, dispatch) has a group of its own: never cancelled, never queued.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Ported from paged-media/core .github/workflows/ci.yml (monorepo step A3).
 # Every `run:` step executes in engine/core (defaults below); `uses:` steps do
@@ -9,10 +14,20 @@ on:
     paths:
       - "engine/core/**"
       - ".github/workflows/core-ci.yml"
+      # The root Cargo config and its linker/wrapper scripts apply to every build.
+      - ".cargo/config.toml"
+      - "tooling/rust/**"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!engine/core/docs/**/*.md"
   pull_request:
     paths:
       - "engine/core/**"
       - ".github/workflows/core-ci.yml"
+      # The root Cargo config and its linker/wrapper scripts apply to every build.
+      - ".cargo/config.toml"
+      - "tooling/rust/**"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!engine/core/docs/**/*.md"
 
 defaults:
   run:
@@ -28,22 +43,14 @@ env:
   CARGO_PROFILE_DEV_DEBUG: line-tables-only
 
 jobs:
-  # Resolve the pinned toolchain ONCE from rust-toolchain.toml (audit B21)
-  # so every downstream job installs the same version the file pins
-  # (channel = "1.94.1") instead of drifting on `@stable`.
-  toolchain:
-    name: resolve pinned toolchain
-    runs-on: ubuntu-latest
-    outputs:
-      channel: ${{ steps.pin.outputs.channel }}
-    steps:
-      - uses: actions/checkout@v4
-      - id: pin
-        run: echo "channel=$(bash scripts/rust-channel.sh)" >> "$GITHUB_OUTPUT"
-
+  # Linux runs the workspace tests ONCE (step A10): nextest gates and writes
+  # the JUnit evidence, `cargo test --doc` adds the doctests nextest does not
+  # run. Together they are the same tests `cargo test --workspace` ran, which
+  # this leg ran as well until then (a second, identical Linux run). macOS
+  # keeps `cargo test`: the native arm64 build and its linker are what that
+  # leg checks (docs/migration/ci-speed.md).
   check:
     name: check + test
-    needs: toolchain
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -59,10 +66,13 @@ jobs:
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
           df -h /
+      # The pinned toolchain, read from rust-toolchain.toml in this job (audit
+      # B21) rather than in a job of its own that every job had to wait for.
+      - id: pin
+        run: echo "channel=$(bash scripts/rust-channel.sh)" >> "$GITHUB_OUTPUT"
       - uses: dtolnay/rust-toolchain@master
         with:
-          # Pinned from rust-toolchain.toml via the toolchain job (B21).
-          toolchain: ${{ needs.toolchain.outputs.channel }}
+          toolchain: ${{ steps.pin.outputs.channel }}
           components: rustfmt, clippy
           targets: wasm32-unknown-unknown
       - name: mold (the Rust linker on Linux, .cargo/config.toml)
@@ -72,6 +82,11 @@ jobs:
         with:
           workspaces: engine/core -> target
           prefix-key: v0-rust-core
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: install cargo-nextest
+        if: runner.os == 'Linux'
+        uses: taiki-e/install-action@nextest
 
       - name: fmt
         run: cargo fmt --all --check
@@ -100,9 +115,11 @@ jobs:
       # .icc existed anywhere in the workspace and ~8 tests across the qcms
       # engine, CMYK export, PDF/X-4, ink coverage and soft-proofing printed
       # "skipping" and passed. Fetching one here is what makes them assert on
-      # a runner (a designer's Mac finds Adobe's profiles instead). Not a hard
-      # failure: if the fetch dies the tests degrade to the loud skip they had
-      # before, rather than turning an upstream outage into a red build.
+      # a runner (a designer's Mac finds Adobe's profiles instead). Without it
+      # paged-canvas/tests/it/render_effect_sweep.rs panics reading
+      # corpus/profiles/default_cmyk.icc. Not a hard failure: if the fetch
+      # dies the tests degrade to the loud skip they had before, rather than
+      # turning an upstream outage into a red build.
       - name: fetch CMYK profile for the colour tests
         run: bash scripts/fetch-profiles.sh || echo "::warning title=colour tests degraded::profile fetch failed — colour tests will skip this run"
 
@@ -119,64 +136,12 @@ jobs:
       # 2026-08-18 (coverage campaign, suite-integrity rule). The step's own
       # exit code is the gate; never pipe this through tail/grep.
       - name: test
+        if: runner.os == 'macOS'
         run: cargo test --workspace --no-fail-fast
 
-  # W0.6 evidence (audit V26): run the workspace suite under cargo-nextest
-  # with JUnit output and publish normalized results to paged-media/state
-  # via the shared publish-results action (mirrors plugin-draw's vitest.yml
-  # + editor's tests.yml: source `core`, junit format, map:true against the
-  # state repo's test-map). The suite name `nextest-unit` is the one the
-  # state repo registers for (source=core) in ingest/suites.yaml — using
-  # the registered name is load-bearing: publish-results' convert step
-  # requires the (source,suite) pair to exist there. Degrades gracefully
-  # when STATE_DISPATCH_TOKEN is unset — the suite still runs and the JUnit
-  # uploads; only the cross-repo dispatch is skipped.
-  nextest:
-    name: nextest evidence
-    needs: toolchain
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      # The workspace's debug test binaries outgrew the hosted Linux
-      # runner's free disk ("No space left on device" in the test step,
-      # 2026-10-16). The preinstalled SDKs nothing here uses free ~25 GB.
-      - name: free runner disk
-        if: runner.os == 'Linux'
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
-          df -h /
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ needs.toolchain.outputs.channel }}
-      - name: mold (the Rust linker on Linux, .cargo/config.toml)
-        if: runner.os == 'Linux'
-        uses: rui314/setup-mold@v1
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: engine/core -> target
-          prefix-key: v0-rust-core
-
-      - name: install cargo-nextest
-        uses: taiki-e/install-action@nextest
-
-      # Same fixture dependency as the `test` job above — the nextest run
-      # reads the gitignored generated IDMLs, so regenerate first.
-      - name: regenerate fixtures
-        run: bash scripts/regen-fixtures.sh
-
-      # …and the same gitignored CMYK profile. Without it
-      # paged-canvas/tests/it/render_effect_sweep.rs panics reading
-      # corpus/profiles/default_cmyk.icc. That went unseen while this step
-      # ran `|| true`; the `test` job above always fetched it.
-      - name: fetch CMYK profile for the colour tests
-        run: bash scripts/fetch-profiles.sh || echo "::warning title=colour tests degraded::profile fetch failed — colour tests will skip this run"
-
-      # Same as the `check` job: idml-coverage's tests need the whole graph
-      # on disk for `cargo metadata --offline`.
-      - name: fetch the dependency graph
-        run: cargo fetch --locked
-
       - name: nextest (workspace) → JUnit
+        id: nextest
+        if: runner.os == 'Linux'
         # nextest writes target/nextest/ci/junit.xml when [profile.ci]
         # carries `junit.path` (see .config/nextest.toml). A red run must
         # still publish its ✗ (cockpit reads the `nextest-junit` artifact),
@@ -184,8 +149,16 @@ jobs:
         # FAILS on a failing test instead of `|| true` reporting green.
         run: cargo nextest run --workspace --profile ci --no-fail-fast
 
+      # After a red nextest too, so a run reports both; not after a red lint.
+      - name: doctests
+        if: ${{ !cancelled() && steps.nextest.outcome != 'skipped' && runner.os == 'Linux' }}
+        run: cargo test --workspace --doc --no-fail-fast
+
+      # The hand-off to the evidence ingest: core is public, so the private
+      # side pulls this artifact through the API instead of this workflow
+      # pushing results to it.
       - name: upload JUnit artifact
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.nextest.outcome != 'skipped' && runner.os == 'Linux' }}
         uses: actions/upload-artifact@v4
         with:
           name: nextest-junit
@@ -193,21 +166,6 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      # NOTE: core is a PUBLIC repo; the publish-results action lives in the
-      # PRIVATE state repo, and GitHub blocks a public workflow from
-      # resolving a private repo's action (it would leak private action code
-      # into public logs) — "Unable to resolve action paged-media/state".
-      # So core evidence is NOT pushed from here; the `nextest-junit`
-      # artifact above is the hand-off. Private state CAN read this public
-      # repo's artifacts, so the ingest direction is inverted: a state-side
-      # job pulls the latest core `nextest-junit` artifact (gh API) and runs
-      # convert/gate/ingest there. (Editor + plugin repos are private, so
-      # they keep using the action directly.) Tracked as a state follow-up.
-
-  # Wasm-lane placeholder (W0.8 substance lands crate-side): invoke the
-  # Makefile `test-wasm` target, which calls scripts/test-wasm.sh. That
-  # script is a STUB exiting 0 (pending W0.8) until the sibling replaces
-  # it with the real headless wasm-test runner.
       # A silent fallback to the default linker fails here: mold stamps
       # the .comment section of what it links.
       - name: mold linked the test binaries
@@ -217,15 +175,29 @@ jobs:
           test -n "$bin" || { echo "::error::no test binary in target/debug/deps"; exit 1; }
           readelf -p .comment "$bin" | grep -q mold || { echo "::error::$bin was not linked by mold"; exit 1; }
           echo "mold linked $bin"
+
+      # The free-disk margin the clean-up step above leaves once clippy and
+      # every test binary are built (docs/migration/ci-speed.md, lever 7).
+      - name: disk at end of job
+        if: ${{ !cancelled() && runner.os == 'Linux' }}
+        run: |
+          df -h /
+          du -sh "${CARGO_TARGET_DIR:-target}" || true
+
+  # Wasm-lane placeholder (W0.8 substance lands crate-side): invoke the
+  # Makefile `test-wasm` target, which calls scripts/test-wasm.sh. That
+  # script is a STUB exiting 0 (pending W0.8) until the sibling replaces
+  # it with the real headless wasm-test runner.
   test-wasm:
     name: wasm test lane (stub, pending W0.8)
-    needs: toolchain
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - id: pin
+        run: echo "channel=$(bash scripts/rust-channel.sh)" >> "$GITHUB_OUTPUT"
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: ${{ needs.toolchain.outputs.channel }}
+          toolchain: ${{ steps.pin.outputs.channel }}
           components: clippy
           targets: wasm32-unknown-unknown
       - name: mold (the Rust linker on Linux, .cargo/config.toml)
@@ -235,6 +207,8 @@ jobs:
         with:
           workspaces: engine/core -> target
           prefix-key: v0-rust-core
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       # The wasm shells, paged-sdk's session and paged-gpu's Vello surface
       # are `#[cfg(target_arch = "wasm32")]`, so the native clippy in
       # `check` never sees them and their lints piled up unseen. Lint them
@@ -309,18 +283,21 @@ jobs:
 
   wasm-size:
     name: wasm-size gate (Spike C)
-    needs: [toolchain, check]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - id: pin
+        run: echo "channel=$(bash scripts/rust-channel.sh)" >> "$GITHUB_OUTPUT"
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: ${{ needs.toolchain.outputs.channel }}
+          toolchain: ${{ steps.pin.outputs.channel }}
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: engine/core -> target
           prefix-key: v0-rust-core
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       # Pin binaryen (NOT apt's — ubuntu ships v108, too old to validate
       # wasm-bindgen's reference-types output: "error validating input").
       # Same pin publish-wasm.yml uses. brotli from apt is fine.
@@ -521,17 +498,20 @@ jobs:
   #   the strokes masked at SSIM 0.998, see min_ssim_for in the script).
   export-diff:
     name: pdf export-diff gate
-    needs: toolchain
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - id: pin
+        run: echo "channel=$(bash scripts/rust-channel.sh)" >> "$GITHUB_OUTPUT"
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: ${{ needs.toolchain.outputs.channel }}
+          toolchain: ${{ steps.pin.outputs.channel }}
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: engine/core -> target
           prefix-key: v0-rust-core
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: install poppler-utils (pdftoppm)
         # Bounded, and apt only when the tool is actually absent.

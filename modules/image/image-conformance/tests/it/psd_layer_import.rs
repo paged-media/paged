@@ -45,7 +45,9 @@ fn parse(bytes: &[u8]) -> PsdFile {
 /// Straight RGBA8 → premultiplied `Px` (the working-space convention the
 /// flatten reference composites in).
 fn premultiplied(rgba: &[u8]) -> Vec<Px> {
-    rgba.chunks_exact(4)
+    rgba.as_chunks::<4>()
+        .0
+        .iter()
         .map(|t| {
             let a = t[3] as f32 / 255.0;
             Px([

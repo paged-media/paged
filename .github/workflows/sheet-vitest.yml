@@ -1,4 +1,10 @@
 name: sheet / bun test
+concurrency:
+  # A newer push to a pull request cancels the older run. Every other run
+  # (main, dispatch) has a group of its own: never cancelled, never queued.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 # MONOREPO (step A3): ported from paged-media/plugin-sheets
 # .github/workflows/vitest.yml. The old lane checked the repo out under
 # plugin-sheets/ beside a paged-media/sdk checkout and ran from their parent.
@@ -28,6 +34,8 @@ on:
       - "bun.lock"
       - "bunfig.toml"
       - "package.json"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!modules/sheet/docs/**/*.md"
   # Pre-merge gate: a PR that breaks the bundle goes red BEFORE it lands
   # (this lane used to run on push to main only).
   pull_request:
@@ -51,14 +59,12 @@ on:
       - "bun.lock"
       - "bunfig.toml"
       - "package.json"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!modules/sheet/docs/**/*.md"
   workflow_dispatch:
 
 permissions:
   contents: read
-
-concurrency:
-  group: sheet-vitest-${{ github.ref }}
-  cancel-in-progress: true
 
 defaults:
   run:
@@ -85,7 +91,7 @@ jobs:
       # REQUIRE_REAL_ENGINE=1 below makes a missing artifact FAIL, not skip.
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.93.0
+          toolchain: 1.99.1
           targets: wasm32-unknown-unknown
       - name: mold (the Rust linker on Linux, .cargo/config.toml)
         if: runner.os == 'Linux'
@@ -94,6 +100,8 @@ jobs:
         with:
           workspaces: modules/sheet -> target
           prefix-key: v0-rust-sheet
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: install pinned wasm-bindgen-cli (Cargo.lock version)
         run: |
           V=$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock | grep version | head -1 | cut -d'"' -f2)

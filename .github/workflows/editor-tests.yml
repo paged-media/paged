@@ -1,4 +1,9 @@
 name: editor / tests
+concurrency:
+  # A newer push to a pull request cancels the older run. Every other run
+  # (main, dispatch) has a group of its own: never cancelled, never queued.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Editor Playwright surface → state-matrix evidence (W0.5).
 #
@@ -84,6 +89,10 @@ on:
       - "bun.lock"
       - "bunfig.toml"
       - "package.json"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!apps/editor/docs/**/*.md"
+      # Module prose (B3a made every module an editor input).
+      - "!modules/*/docs/**/*.md"
   pull_request:
     paths:
       - "apps/editor/apps/canvas/**"
@@ -112,14 +121,12 @@ on:
       - "bun.lock"
       - "bunfig.toml"
       - "package.json"
+      # Module prose (B3a made every module an editor input).
+      - "!modules/*/docs/**/*.md"
   workflow_dispatch:
 
 permissions:
   contents: read
-
-concurrency:
-  group: editor-tests-${{ github.ref }}
-  cancel-in-progress: true
 
 defaults:
   run:
@@ -247,6 +254,12 @@ jobs:
       # from the page summaries (engine 0.71.13) or the older fallback.
       - name: pasteboard placement (spread pages)
         run: bun run test:spread-pages
+
+      # The local library (ADR 225) against the repository wasm of this
+      # revision: import, versions, restore, history in and out. Its
+      # server tests (remote.test.ts) skip without PAGED_SERVER_URL.
+      - name: local library (packages/repository)
+        run: bun run test:repository
 
       # Every gated fidelity pack must carry a threshold entry, or the
       # fidelity gate silently skips it.

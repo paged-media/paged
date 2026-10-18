@@ -3,17 +3,19 @@
 #
 # Single source of truth for the toolchain version (audit B21): every CI
 # workflow reads THIS instead of hardcoding `@stable`, so the pin in
-# rust-toolchain.toml (`channel = "1.94.1"`) is honoured uniformly and a
+# rust-toolchain.toml (`channel = "1.99.1"`) is honoured uniformly and a
 # bump is a one-line change in one file.
 #
-# Emits just the channel string (e.g. `1.94.1`) on stdout. In a workflow:
+# Emits just the channel string (e.g. `1.99.1`) on stdout. In a workflow:
 #   echo "channel=$(scripts/rust-channel.sh)" >> "$GITHUB_OUTPUT"
+# An optional argument names another workspace directory whose
+# rust-toolchain.toml to read instead of the engine's (the server uses this).
 # then feed ${{ steps.<id>.outputs.channel }} to dtolnay/rust-toolchain's
 # `toolchain:` input.
 
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "${1:-$(dirname "$0")/..}" && pwd)"
 FILE="$ROOT/rust-toolchain.toml"
 
 [ -f "$FILE" ] || { echo "rust-toolchain.toml not found at $FILE" >&2; exit 1; }

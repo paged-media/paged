@@ -109,7 +109,9 @@ fn image_codec_png_16bit_byte_order_is_measured_not_assumed() {
     // it is now EXACT rather than a comparison of narrowed high bytes,
     // because nothing is narrowed any more.
     let got: Vec<u16> = buf
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|p| u16::from_ne_bytes([p[0], p[1]]))
         .collect();
     assert_eq!(
@@ -135,7 +137,9 @@ fn image_codec_png_16bit_extremes_survive_intact() {
     let png = encode_rgba16(1, 1, &samples);
     let (_, buf) = decode_full(png);
     let got: Vec<u16> = buf
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|p| u16::from_ne_bytes([p[0], p[1]]))
         .collect();
     assert_eq!(got, samples.to_vec());

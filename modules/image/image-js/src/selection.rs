@@ -297,7 +297,9 @@ fn distance_to(cov: &SelectionCoverage, inside: impl Fn(u8) -> bool) -> Vec<f32>
         ..DistanceParams::default()
     };
     distance_transform(&mask, cov.width(), cov.height(), params)
-        .chunks_exact(8)
+        .as_chunks::<8>()
+        .0
+        .iter()
         .map(|t| half::f16::from_bits(u16::from_le_bytes([t[0], t[1]])).to_f32())
         .collect()
 }

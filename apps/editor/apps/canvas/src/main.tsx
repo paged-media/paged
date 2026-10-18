@@ -58,6 +58,8 @@ import {
   type PanelContribution,
   type ShellSchemaPanelRendererProps,
   writeToOpenFile,
+  commitSave,
+  setLibrary,
   setChromeStorageScope,
   ALWAYS_IN_PALETTE,
   AI_ASK_COMMAND,
@@ -75,6 +77,8 @@ import { CanvasClient, type DocumentHandle } from "@paged-media/client";
 // prod dist shipped a raw un-transpiled `worker.ts` and no wasm (audit D6/E8).
 // See CanvasClientOptions for the full rationale.
 import CanvasRenderWorker from "./worker/worker.ts?worker";
+import LibraryWorker from "./library-worker.ts?worker";
+import { connectLibrary } from "@paged-media/repository";
 import { BUILT_IN_TOOLS } from "@paged-media/tools";
 import {
   loadBundle,
@@ -295,6 +299,7 @@ import { ScriptEditorPanel } from "./panels/script-editor";
 import { KeyboardShortcutsPanel } from "./panels/keyboard-shortcuts-panel";
 import { ProblemsPanel } from "./panels/problems-panel";
 import { JournalPanel } from "./panels/journal-panel";
+import { LibraryPanel } from "./panels/library-panel";
 import { problemsSink } from "./panels/problems-store";
 import { TreePanel } from "./panels/tree-panel";
 import { ExportCenterPanel } from "./panels/cockpit/export-center-panel";
@@ -1101,6 +1106,15 @@ const BUILT_IN_PANELS: PanelContribution[] = [
     component: JournalPanel,
     defaultDock: "bottom",
     defaultGroup: "console",
+  },
+  {
+    // ADR 180 — the local library: this document's versions (save = a
+    // version; restore commits an old one again on top) and every document
+    // kept in the browser's private file system.
+    id: "paged.library",
+    title: "Library",
+    component: LibraryPanel,
+    defaultDock: "right",
   },
   // ── Panel-gallery pass — CONCEPT panels (INDESIGN_PARITY.md).
   //    The four ●●● parity surfaces + the two in-scope output/a11y
@@ -2085,6 +2099,14 @@ function CanvasAppIntegration() {
           } catch {
             /* meta unavailable — keep the fallback name */
           }
+          // ADR 180 — the save is a commit in the local library, alongside
+          // (never instead of) the file write below. A library failure is
+          // reported and the file still gets written.
+          try {
+            await commitSave(bytes.slice(), baseName);
+          } catch (err) {
+            console.warn("Save (.paged): the library did not take this save:", err);
+          }
           // A5 — write BACK to the file the document was opened from,
           // when there is one. Until now every save minted a download,
           // so a second Cmd+S produced "document (1).paged" and the file
@@ -2534,6 +2556,23 @@ const SOLO_SURFACES = SOLO
       };
     })()
   : null;
+
+// ADR 180 — the local library (every document a repository in the
+// origin-private file system). Optional: without OPFS, or with
+// `localStorage["paged.library"] = "off"`, the editor runs exactly as before.
+function startLibrary(): void {
+  try {
+    if (globalThis.localStorage?.getItem("paged.library") === "off") return;
+  } catch {
+    /* storage blocked — the library needs it no more than the check does */
+  }
+  const storage = navigator.storage as StorageManager & { getDirectory?: unknown };
+  if (typeof storage?.getDirectory !== "function") return;
+  setLibrary(connectLibrary(new LibraryWorker()));
+  // Ask the browser not to evict the library under storage pressure.
+  void storage.persist?.().catch(() => false);
+}
+startLibrary();
 
 const root = document.getElementById("root");
 if (!root) {

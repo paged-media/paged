@@ -29,7 +29,7 @@ fn layerdump() {
             l.clipping,
             l.channels.iter().map(|c| c.id).collect::<Vec<_>>(),
             l.mask.as_ref().map(|m| (m.flags, m.parameters())),
-            &l.blend_ranges.raw.iter().take(16).collect::<Vec<_>>(),
+            l.blend_ranges.raw.iter().take(16).collect::<Vec<_>>(),
             keys
         );
         for a in &l.addl {

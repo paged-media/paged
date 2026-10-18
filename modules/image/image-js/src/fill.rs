@@ -244,7 +244,7 @@ pub(crate) fn rgba8_to_f16(rgba: &[u8]) -> Vec<u8> {
 /// downconvert). Shared with the straighten lane.
 pub(crate) fn f16_to_rgba8(bytes: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(bytes.len() / 2);
-    for pair in bytes.chunks_exact(2) {
+    for pair in bytes.as_chunks::<2>().0 {
         let v = f16::from_le_bytes([pair[0], pair[1]]).to_f32();
         out.push((v.clamp(0.0, 1.0) * 255.0).round() as u8);
     }

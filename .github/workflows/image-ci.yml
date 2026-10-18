@@ -8,6 +8,11 @@
 # paged-media/plugin-sdk checkout is gone: the manifest validate runs the
 # in-tree platform/extensions plugin-cli, so its sources join the filters.
 name: image / ci
+concurrency:
+  # A newer push to a pull request cancels the older run. Every other run
+  # (main, dispatch) has a group of its own: never cancelled, never queued.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 on:
   push:
@@ -34,6 +39,11 @@ on:
       - "bun.lock"
       - "bunfig.toml"
       - "package.json"
+      # The root Cargo config and its linker/wrapper scripts apply to every build.
+      - ".cargo/config.toml"
+      - "tooling/rust/**"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!modules/image/docs/**/*.md"
   pull_request:
     paths:
       - "modules/image/**"
@@ -57,6 +67,11 @@ on:
       - "bun.lock"
       - "bunfig.toml"
       - "package.json"
+      # The root Cargo config and its linker/wrapper scripts apply to every build.
+      - ".cargo/config.toml"
+      - "tooling/rust/**"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!modules/image/docs/**/*.md"
   workflow_dispatch:
 
 env:
@@ -65,10 +80,6 @@ env:
 
 permissions:
   contents: read
-
-concurrency:
-  group: image-ci-${{ github.ref }}
-  cancel-in-progress: true
 
 defaults:
   run:
@@ -105,6 +116,8 @@ jobs:
         with:
           workspaces: modules/image -> target
           prefix-key: v0-rust-image
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: fmt
         run: cargo fmt --all --check
@@ -242,6 +255,8 @@ jobs:
           workspaces: modules/image -> target
           prefix-key: v0-rust-image
           key: gpu-sw
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: install lavapipe (Mesa software Vulkan)
         # Bounded, and off the Azure mirror first (the brotli step above
         # explains why both are needed).
@@ -279,6 +294,8 @@ jobs:
           workspaces: modules/image -> target
           prefix-key: v0-rust-image
           key: gpu-metal
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: adapter
         run: cargo test -p image-gpu --features test-support --lib test_support -- --nocapture
       - name: test (REQUIRE_GPU=1)
