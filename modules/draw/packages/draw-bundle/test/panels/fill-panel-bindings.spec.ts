@@ -30,9 +30,20 @@
 // the driver is not running beside it and every publish is the one under
 // test.
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from "bun:test";
 
-import type { BundleHost, Disposable, ElementId } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  Disposable,
+  ElementId,
+} from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import {
@@ -82,7 +93,9 @@ describe("installFillPanelBindings — what it publishes, and what that costs", 
 
   beforeAll(async () => {
     h = await openHost();
-    await h.load(panelDocument(rectItem("r0", 40, 40) + rectItem("r1", 140, 40)));
+    await h.load(
+      panelDocument(rectItem("r0", 40, 40) + rectItem("r1", 140, 40)),
+    );
     // The manifest without the bundle's own drivers (see the header).
     h.loadBundle({
       manifest: drawBundle.manifest,
@@ -261,7 +274,10 @@ describe("installFillPanelBindings — what it publishes, and what that costs", 
     };
     const elementProperties = raw.elementProperties;
     let held = 0;
-    raw.elementProperties = async function heldOpen(this: unknown, id: ElementId) {
+    raw.elementProperties = async function heldOpen(
+      this: unknown,
+      id: ElementId,
+    ) {
       const props = await elementProperties.call(this, id);
       held += 1;
       await new Promise((r) => setTimeout(r, 20));
@@ -286,6 +302,9 @@ describe("installFillPanelBindings — what it publishes, and what that costs", 
       publishes: 0,
       reads: 0,
     });
-    expect(await costOf(() => plainChange(h, 2))).toEqual({ publishes: 0, reads: 0 });
+    expect(await costOf(() => plainChange(h, 2))).toEqual({
+      publishes: 0,
+      reads: 0,
+    });
   });
 });

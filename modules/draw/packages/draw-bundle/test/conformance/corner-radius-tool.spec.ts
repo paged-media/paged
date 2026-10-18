@@ -31,11 +31,22 @@
 //   (4) a text frame is a box like a rectangle; an oval is not a target;
 //       Escape writes nothing.
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from "bun:test";
 
 import type { ElementId, ToolPreviewPolyline } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
-import { affineRotate, applyAffine, type Affine } from "@paged-media/draw-geometry";
+import {
+  affineRotate,
+  applyAffine,
+  type Affine,
+} from "@paged-media/draw-geometry";
 
 import { createCornerRadiusHandler, drawBundle } from "../../src";
 import { packageWithSpread, pathItem } from "../fixtures/build-idml";
@@ -66,7 +77,10 @@ const RADIUS_PATHS = [
   "frameCornerRadiusBottomLeft",
 ] as const;
 
-async function radii(h: HeadlessHost, id: ElementId): Promise<(number | null)[]> {
+async function radii(
+  h: HeadlessHost,
+  id: ElementId,
+): Promise<(number | null)[]> {
   const props = await h.host.document.elementProperties(id);
   return RADIUS_PATHS.map((path) => {
     const e = props?.entries.find((x) => x.path === path);
@@ -74,10 +88,18 @@ async function radii(h: HeadlessHost, id: ElementId): Promise<(number | null)[]>
   });
 }
 
-async function transform(h: HeadlessHost, id: ElementId, m: Affine): Promise<void> {
+async function transform(
+  h: HeadlessHost,
+  id: ElementId,
+  m: Affine,
+): Promise<void> {
   const out = await h.host.document.mutate({
     op: "setElementProperty",
-    args: { elementId: id, path: "frameTransform", value: { type: "transform", value: [...m] } },
+    args: {
+      elementId: id,
+      path: "frameTransform",
+      value: { type: "transform", value: [...m] },
+    },
   });
   if (!out.applied) throw new Error("transform setup refused");
 }
@@ -136,7 +158,12 @@ describe("draw conformance — the corner-radius tool, in the element's own spac
     await transform(h, RECT, m);
     await h.host.selection.set([RECT]);
     // The own-space BOTTOM-RIGHT corner (200, 200), wherever it lands.
-    const preview = await dragCorner(h, h.host, page(m, 199, 199), page(m, 180, 185));
+    const preview = await dragCorner(
+      h,
+      h.host,
+      page(m, 199, 199),
+      page(m, 180, 185),
+    );
     const after = await radii(h, RECT);
     expect(after[2]).toBeCloseTo(15, 4);
     // The preview's middle point IS the corner on the page.
@@ -160,7 +187,9 @@ describe("draw conformance — the corner-radius tool, in the element's own spac
     const { host, work } = countingHost(h.host);
     await dragCorner(h, host, [301, 101], [314, 318 - 200]);
     expect(work.mutations).toEqual([{ op: "batch", ops: 8 }]);
-    expect(await radii(h, TRI)).toEqual([14, 14, 14, 14].map(() => expect.closeTo(14, 4)));
+    expect(await radii(h, TRI)).toEqual(
+      [14, 14, 14, 14].map(() => expect.closeTo(14, 4)),
+    );
     await h.host.document.undo();
     expect(await radii(h, TRI)).toEqual(before);
   });

@@ -63,18 +63,20 @@ export const FINDINGS = {
   dashImpliesDashedType: {
     verdict: "convention",
     owner: "engine",
-    title: "a dash is the dash array alone in the model; IDML also names the Dashed stroke type",
+    title:
+      "a dash is the dash array alone in the model; IDML also names the Dashed stroke type",
     why:
       "draw's dash presets write `frameStrokeDashArray` and leave `frameStrokeType` " +
       "unset, which reads back as InDesign's default Solid. IDML only honours " +
-      "`StrokeDashAndGap` under `StrokeType=\"StrokeStyle/$ID/Dashed\"`, so the exporter " +
+      '`StrokeDashAndGap` under `StrokeType="StrokeStyle/$ID/Dashed"`, so the exporter ' +
       "writes that type whenever a dash array is present, and InDesign answers Dashed. " +
       "The same dashed stroke (the dash arrays agree) — pinned with both values.",
   },
   absentStrokeReadAsNone: {
     verdict: "defect",
     owner: "engine",
-    title: "a <Rectangle> with no StrokeColor is read as unstroked; InDesign strokes it",
+    title:
+      "a <Rectangle> with no StrokeColor is read as unstroked; InDesign strokes it",
     why:
       "The source rectangle states no StrokeColor / StrokeWeight. The engine models " +
       "that as no stroke; InDesign applies its default (Black, 1 pt). The export keeps " +
@@ -83,19 +85,21 @@ export const FINDINGS = {
   gradientLengthDerived: {
     verdict: "convention",
     owner: "indesign",
-    title: "an unset gradient length is unset in the model; InDesign derives one from the item",
+    title:
+      "an unset gradient length is unset in the model; InDesign derives one from the item",
     why:
       "The radial-gradient command sets no axis, so the model reads " +
       "`frameGradientFillLength` back as unset (null — the read door is there since " +
       "0.66.0) and the export writes no `GradientFillLength`. InDesign does not answer a " +
       "constant default for the absence: it DERIVES a length from the item (the circle's " +
       "radius plus half its stroke), so it cannot sit in INDESIGN_DEFAULTS. Both say " +
-      "\"no explicit axis\" — pinned with both values.",
+      '"no explicit axis" — pinned with both values.',
   },
   bevelSpelling: {
     verdict: "convention",
     owner: "engine",
-    title: "the bevel corner is BeveledCorner in the model, BevelCorner in IDML",
+    title:
+      "the bevel corner is BeveledCorner in the model, BevelCorner in IDML",
     why:
       "draw's preset writes the engine token `BeveledCorner` and the model reads it " +
       "back so; IDML (and InDesign's enum) spell it `BevelCorner`, and the exporter " +
@@ -104,7 +108,8 @@ export const FINDINGS = {
   opacityMaskLost: {
     verdict: "loss",
     owner: "exporter",
-    title: "an opacity mask is not IDML — the mask artwork exports as an ordinary item",
+    title:
+      "an opacity mask is not IDML — the mask artwork exports as an ordinary item",
     why:
       "IDML has no opacity-mask element. The export says so in `lost`; the mask " +
       "artwork, which the model keeps OUT of the scene tree, is written as a plain " +
@@ -115,14 +120,15 @@ export const FINDINGS = {
   itemTransformIsSpreadRelative: {
     verdict: "defect",
     owner: "engine",
-    title: "`itemTransform` composes against the SPREAD on a page that is not at the spread origin",
+    title:
+      "`itemTransform` composes against the SPREAD on a page that is not at the spread origin",
     why:
       "InDesign writes its single page at ItemTransform `1 0 0 1 -612 -396` and each " +
       "item with the same transform. The engine's bounds and hitTest are page-local " +
       "(the polygon hits at its page coordinates), but `pathAnchors`/`elementGeometry` " +
       "hand back the item's raw transform, so inner → page through it lands every " +
       "path 612 pt left and 396 pt up — against the contract's own convention " +
-      "(\"`bounds` + `item_transform` compose against the SPREAD origin\" ONLY for a " +
+      '("`bounds` + `item_transform` compose against the SPREAD origin" ONLY for a ' +
       "pageless item). Every draw tool that maps anchors through it is off on an " +
       "InDesign-authored file. Core's page-space geometry (paged-media/core#70) " +
       "fixes it and reports `pageOrigin`; `reimport.spec.ts` asserts the defect " +
@@ -238,12 +244,24 @@ export const KNOWN: Record<string, readonly Known[]> = {
   "gradient-radial": [
     // 120.5 = the circle's radius (120) + half its 1 pt stroke: InDesign's
     // derived length for an axis the file does not state.
-    { at: "0", field: "gradientLength", ours: null, theirs: 120.5, finding: "gradientLengthDerived" },
+    {
+      at: "0",
+      field: "gradientLength",
+      ours: null,
+      theirs: 120.5,
+      finding: "gradientLengthDerived",
+    },
   ],
   // `appearance-bake` has none since 0.70.0: Color/Paper is declared.
   // `text-on-path` has none since 0.71.1: EndBracket is exported.
   "opacity-mask": [
-    { at: "page", field: "children", ours: ["polygon"], theirs: ["polygon", "polygon"], finding: "opacityMaskLost" },
+    {
+      at: "page",
+      field: "children",
+      ours: ["polygon"],
+      theirs: ["polygon", "polygon"],
+      finding: "opacityMaskLost",
+    },
   ],
 };
 
@@ -253,16 +271,24 @@ export const KNOWN_REFUSALS: Record<string, readonly KnownRefusal[]> = {};
 
 /** The engine's `lost` list per case: one pattern per entry, in order. */
 export const KNOWN_LOST: Record<string, readonly RegExp[]> = {
-  "opacity-mask": [/^opacity mask on `u1` \(artwork `u2`\) is a paged-native construct — IDML has no opacity-mask element/],
+  "opacity-mask": [
+    /^opacity mask on `u1` \(artwork `u2`\) is a paged-native construct — IDML has no opacity-mask element/,
+  ],
 };
 
 /** The cases whose `lost` list SHOULD name something and does not. None
  *  since 0.70.0: Type on a Path is exported, so nothing is silently lost. */
-export const MISSING_LOST: Record<string, { pattern: RegExp; finding: FindingId }> = {};
+export const MISSING_LOST: Record<
+  string,
+  { pattern: RegExp; finding: FindingId }
+> = {};
 
 /** The warnings InDesign raised when it opened a case's IDML, per case,
  *  each one the symptom of a classified finding. */
-export const KNOWN_WARNINGS: Record<string, readonly { warning: unknown; finding: FindingId }[]> = {};
+export const KNOWN_WARNINGS: Record<
+  string,
+  readonly { warning: unknown; finding: FindingId }[]
+> = {};
 
 /** Differences between the model as authored and the same document after
  *  InDesign opened it, re-exported it as IDML, and the ENGINE re-imported
@@ -276,8 +302,20 @@ export const KNOWN_REIMPORT: Record<string, readonly Known[]> = {
       theirs: "tolerance 0.01 pt",
       finding: "itemTransformIsSpreadRelative",
     },
-    { at: "0", field: "stroke", ours: "Black", theirs: "None", finding: "objectStyleNotInherited" },
-    { at: "0", field: "strokeWeight", ours: 1, theirs: null, finding: "objectStyleNotInherited" },
+    {
+      at: "0",
+      field: "stroke",
+      ours: "Black",
+      theirs: "None",
+      finding: "objectStyleNotInherited",
+    },
+    {
+      at: "0",
+      field: "strokeWeight",
+      ours: 1,
+      theirs: null,
+      finding: "objectStyleNotInherited",
+    },
   ],
   "live-corners-rectangle": CORNER_OPTIONS.map((option, i) => ({
     at: String(i),
@@ -294,9 +332,27 @@ export const KNOWN_REIMPORT: Record<string, readonly Known[]> = {
       theirs: "tolerance 0.01 pt",
       finding: "itemTransformIsSpreadRelative" as const,
     })),
-    { at: "0/1", field: "strokeWeight", ours: 1, theirs: null, finding: "objectStyleNotInherited" },
-    { at: "0/2", field: "strokeWeight", ours: 1, theirs: null, finding: "objectStyleNotInherited" },
-    { at: "0/3", field: "stroke", ours: "Black", theirs: "None", finding: "objectStyleNotInherited" },
+    {
+      at: "0/1",
+      field: "strokeWeight",
+      ours: 1,
+      theirs: null,
+      finding: "objectStyleNotInherited",
+    },
+    {
+      at: "0/2",
+      field: "strokeWeight",
+      ours: 1,
+      theirs: null,
+      finding: "objectStyleNotInherited",
+    },
+    {
+      at: "0/3",
+      field: "stroke",
+      ours: "Black",
+      theirs: "None",
+      finding: "objectStyleNotInherited",
+    },
   ],
 };
 

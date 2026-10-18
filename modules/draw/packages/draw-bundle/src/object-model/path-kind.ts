@@ -82,11 +82,21 @@ export const PATH_SCHEMA: readonly PropertySchema[] = [
   ),
   row("points[]", ANCHOR, {
     title: "Point",
-    summary: "One anchor with its two direction handles (`points[3]`); a write replaces that point only.",
+    summary:
+      "One anchor with its two direction handles (`points[3]`); a write replaces that point only.",
   }),
-  row("points[].anchor", POINT, { title: "Anchor", summary: "One point's anchor (`points[3].anchor`)." }),
-  row("points[].left", POINT, { title: "Left handle", summary: "One point's incoming direction handle." }),
-  row("points[].right", POINT, { title: "Right handle", summary: "One point's outgoing direction handle." }),
+  row("points[].anchor", POINT, {
+    title: "Anchor",
+    summary: "One point's anchor (`points[3].anchor`).",
+  }),
+  row("points[].left", POINT, {
+    title: "Left handle",
+    summary: "One point's incoming direction handle.",
+  }),
+  row("points[].right", POINT, {
+    title: "Right handle",
+    summary: "One point's outgoing direction handle.",
+  }),
   row(
     "subpathStarts",
     { kind: "list", of: INT },
@@ -96,7 +106,11 @@ export const PATH_SCHEMA: readonly PropertySchema[] = [
         "Index of each contour's first point; empty = one contour. A compound path has more than one.",
     },
   ),
-  ro("subpathOpen", { kind: "list", of: BOOL }, "Per contour: true = open. Write through Join / Close (pathOpenAt / closePath)."),
+  ro(
+    "subpathOpen",
+    { kind: "list", of: BOOL },
+    "Per contour: true = open. Write through Join / Close (pathOpenAt / closePath).",
+  ),
   derived("pointCount", INT, "How many points the table holds."),
   derived("contourCount", INT, "How many contours (1 + compound holes)."),
   ro(
@@ -109,7 +123,11 @@ export const PATH_SCHEMA: readonly PropertySchema[] = [
 /** The page-item kinds that carry an anchor table. */
 const PATH_BEARING = new Set(["polygon", "graphicLine", "rectangle", "oval"]);
 
-type Triple = { anchor: [number, number]; left: [number, number]; right: [number, number] };
+type Triple = {
+  anchor: [number, number];
+  left: [number, number];
+  right: [number, number];
+};
 
 interface Table {
   anchors: Triple[];
@@ -121,17 +139,29 @@ interface Table {
 const pair = (p: readonly number[]): [number, number] => [p[0]!, p[1]!];
 
 /** `points[3]` → { index: 3 }, `points[3].left` → { index: 3, field: "left" }. */
-export function pointPathOf(path: string): { index: number; field?: "anchor" | "left" | "right" } | null {
+export function pointPathOf(
+  path: string,
+): { index: number; field?: "anchor" | "left" | "right" } | null {
   const m = /^points\[(\d+)\](?:\.(anchor|left|right))?$/.exec(path);
   if (!m) return null;
-  return { index: Number(m[1]), ...(m[2] ? { field: m[2] as "anchor" | "left" | "right" } : {}) };
+  return {
+    index: Number(m[1]),
+    ...(m[2] ? { field: m[2] as "anchor" | "left" | "right" } : {}),
+  };
 }
 
-async function readTable(host: BundleHost, id: ElementId): Promise<Table | null> {
+async function readTable(
+  host: BundleHost,
+  id: ElementId,
+): Promise<Table | null> {
   const r = await host.document.pathAnchors(id);
   if (!r) return null;
   return {
-    anchors: r.anchors.map((a) => ({ anchor: pair(a.anchor), left: pair(a.left), right: pair(a.right) })),
+    anchors: r.anchors.map((a) => ({
+      anchor: pair(a.anchor),
+      left: pair(a.left),
+      right: pair(a.right),
+    })),
     subpathStarts: [...r.subpathStarts],
     subpathOpen: [...(r.subpathOpen ?? [])],
     itemTransform: r.itemTransform ? [...r.itemTransform] : null,
@@ -140,7 +170,10 @@ async function readTable(host: BundleHost, id: ElementId): Promise<Table | null>
 
 /** A contour list is valid for N points when it is strictly ascending,
  *  in range, and does not start a contour at 0 twice. Pure. */
-export function validSubpathStarts(starts: readonly number[], n: number): boolean {
+export function validSubpathStarts(
+  starts: readonly number[],
+  n: number,
+): boolean {
   let last = -1;
   for (const s of starts) {
     if (!Number.isInteger(s) || s <= last || s < 0 || s >= n) return false;
@@ -149,7 +182,9 @@ export function validSubpathStarts(starts: readonly number[], n: number): boolea
   return true;
 }
 
-export function makePathKind(host: BundleHost): ObjectKindContribution & Planner {
+export function makePathKind(
+  host: BundleHost,
+): ObjectKindContribution & Planner {
   const elementOf = (address: string): ElementId | null => {
     const id = localIdOf(address, PATH_KIND);
     const el = id ? elementOfId(id) : null;
@@ -177,13 +212,25 @@ export function makePathKind(host: BundleHost): ObjectKindContribution & Planner
     },
     async get(address, path): Promise<ObjectValue> {
       const el = elementOf(address);
-      if (!el) return refuse("unknownAddress", `${address} is not a path-bearing page item`);
+      if (!el)
+        return refuse(
+          "unknownAddress",
+          `${address} is not a path-bearing page item`,
+        );
       const t = await readTable(host, el);
-      if (!t) return refuse("unknownAddress", `${address}: the engine answered no anchor table`);
+      if (!t)
+        return refuse(
+          "unknownAddress",
+          `${address}: the engine answered no anchor table`,
+        );
       const one = pointPathOf(path);
       if (one) {
         const p = t.anchors[one.index];
-        if (!p) return refuse("unknownPath", `${address} has ${t.anchors.length} points, no ${path}`);
+        if (!p)
+          return refuse(
+            "unknownPath",
+            `${address} has ${t.anchors.length} points, no ${path}`,
+          );
         return val(one.field ? p[one.field] : p);
       }
       switch (path) {
@@ -209,72 +256,94 @@ export function makePathKind(host: BundleHost): ObjectKindContribution & Planner
   };
 
   async function planPath(ops: readonly ObjectOp[]): Promise<ObjectWrite> {
-      // Fold every op per element onto its table, then ONE framePath each.
-      const tables = new Map<string, { el: ElementId; t: Table; starts: boolean }>();
-      for (const op of ops) {
-        if (op.op !== "set") {
+    // Fold every op per element onto its table, then ONE framePath each.
+    const tables = new Map<
+      string,
+      { el: ElementId; t: Table; starts: boolean }
+    >();
+    for (const op of ops) {
+      if (op.op !== "set") {
+        return {
+          kind: "rejected",
+          reason:
+            `path ${op.op}: a path is a core page item — create it with insertPath ` +
+            "(draw's tools / insert commands) and delete it as a core item",
+        };
+      }
+      const el = elementOf(op.address);
+      if (!el)
+        return {
+          kind: "rejected",
+          reason: `${op.address} is not a path-bearing page item`,
+        };
+      const key = `${el.kind}:${String(el.id)}`;
+      let entry = tables.get(key);
+      if (!entry) {
+        const t = await readTable(host, el);
+        if (!t)
           return {
             kind: "rejected",
-            reason:
-              `path ${op.op}: a path is a core page item — create it with insertPath ` +
-              "(draw's tools / insert commands) and delete it as a core item",
+            reason: `${op.address}: no anchor table to edit`,
+          };
+        entry = { el, t, starts: false };
+        tables.set(key, entry);
+      }
+      if (op.path === "points" || op.path === "content") {
+        entry.t.anchors = (op.value as Triple[]).map((p) => ({
+          anchor: pair(p.anchor),
+          left: pair(p.left),
+          right: pair(p.right),
+        }));
+      } else if (pointPathOf(op.path)) {
+        const one = pointPathOf(op.path)!;
+        const p = entry.t.anchors[one.index];
+        if (!p) {
+          return {
+            kind: "rejected",
+            reason: `${op.address} has ${entry.t.anchors.length} points, no ${op.path} (set points to add one)`,
           };
         }
-        const el = elementOf(op.address);
-        if (!el) return { kind: "rejected", reason: `${op.address} is not a path-bearing page item` };
-        const key = `${el.kind}:${String(el.id)}`;
-        let entry = tables.get(key);
-        if (!entry) {
-          const t = await readTable(host, el);
-          if (!t) return { kind: "rejected", reason: `${op.address}: no anchor table to edit` };
-          entry = { el, t, starts: false };
-          tables.set(key, entry);
-        }
-        if (op.path === "points" || op.path === "content") {
-          entry.t.anchors = (op.value as Triple[]).map((p) => ({
-            anchor: pair(p.anchor),
-            left: pair(p.left),
-            right: pair(p.right),
-          }));
-        } else if (pointPathOf(op.path)) {
-          const one = pointPathOf(op.path)!;
-          const p = entry.t.anchors[one.index];
-          if (!p) {
-            return {
-              kind: "rejected",
-              reason: `${op.address} has ${entry.t.anchors.length} points, no ${op.path} (set points to add one)`,
-            };
-          }
-          if (one.field) {
-            p[one.field] = pair(op.value as number[]);
-          } else {
-            const v = op.value as Triple;
-            entry.t.anchors[one.index] = { anchor: pair(v.anchor), left: pair(v.left), right: pair(v.right) };
-          }
-        } else if (op.path === "subpathStarts") {
-          entry.t.subpathStarts = [...(op.value as number[])];
-          entry.starts = true;
+        if (one.field) {
+          p[one.field] = pair(op.value as number[]);
         } else {
-          return { kind: "rejected", reason: `path has no writable "${op.path}"` };
+          const v = op.value as Triple;
+          entry.t.anchors[one.index] = {
+            anchor: pair(v.anchor),
+            left: pair(v.left),
+            right: pair(v.right),
+          };
         }
+      } else if (op.path === "subpathStarts") {
+        entry.t.subpathStarts = [...(op.value as number[])];
+        entry.starts = true;
+      } else {
+        return {
+          kind: "rejected",
+          reason: `path has no writable "${op.path}"`,
+        };
       }
-      const mutations: MutationInput[] = [];
-      for (const { el, t, starts } of tables.values()) {
-        if (t.anchors.length === 0) return { kind: "rejected", reason: "a path needs at least one point" };
-        if (!validSubpathStarts(t.subpathStarts, t.anchors.length)) {
-          if (starts) {
-            return {
-              kind: "rejected",
-              reason: `subpathStarts ${JSON.stringify(t.subpathStarts)} is not ascending within 0..${t.anchors.length - 1}`,
-            };
-          }
-          // A new point list the old contours no longer fit: one contour.
-          t.subpathStarts = [];
+    }
+    const mutations: MutationInput[] = [];
+    for (const { el, t, starts } of tables.values()) {
+      if (t.anchors.length === 0)
+        return { kind: "rejected", reason: "a path needs at least one point" };
+      if (!validSubpathStarts(t.subpathStarts, t.anchors.length)) {
+        if (starts) {
+          return {
+            kind: "rejected",
+            reason: `subpathStarts ${JSON.stringify(t.subpathStarts)} is not ascending within 0..${t.anchors.length - 1}`,
+          };
         }
-        mutations.push(
-          framePathMutationFor(el, { anchors: t.anchors, subpathStarts: t.subpathStarts }),
-        );
+        // A new point list the old contours no longer fit: one contour.
+        t.subpathStarts = [];
       }
-      return { kind: "mutations", mutations };
+      mutations.push(
+        framePathMutationFor(el, {
+          anchors: t.anchors,
+          subpathStarts: t.subpathStarts,
+        }),
+      );
+    }
+    return { kind: "mutations", mutations };
   }
 }

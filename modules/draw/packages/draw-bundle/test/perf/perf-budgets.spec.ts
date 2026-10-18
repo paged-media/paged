@@ -113,7 +113,10 @@ describe("perf budgets — work counted at the host doors", () => {
       await settle();
       const counted = work.snapshot();
       handler.onDeactivate("switch" as never);
-      show(`shape builder drag (${selection.length} selected), ${pacing}`, counted);
+      show(
+        `shape builder drag (${selection.length} selected), ${pacing}`,
+        counted,
+      );
       return counted;
     };
 

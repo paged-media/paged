@@ -35,12 +35,7 @@ import {
 import { refWindingNumber } from "./property-kit";
 
 /** A corner-anchor quad (both handles collapsed onto the anchor). */
-const quad = (
-  x0: number,
-  y0: number,
-  x1: number,
-  y1: number,
-): AnchorTriple[] =>
+const quad = (x0: number, y0: number, x1: number, y1: number): AnchorTriple[] =>
   (
     [
       [x0, y0],
@@ -125,18 +120,20 @@ describe("draw-geometry — compound-path contour algebra", () => {
 
   describe("contourDepths", () => {
     it("reports 0 for an outer boundary and 1 for a contour inside it", () => {
-      expect(contourDepths(mergeCompound([table(OUTER), table(INNER)]))).toEqual(
-        [0, 1],
-      );
+      expect(
+        contourDepths(mergeCompound([table(OUTER), table(INNER)])),
+      ).toEqual([0, 1]);
       // Order-independent: nesting is a relation, not a position.
-      expect(contourDepths(mergeCompound([table(INNER), table(OUTER)]))).toEqual(
-        [1, 0],
-      );
+      expect(
+        contourDepths(mergeCompound([table(INNER), table(OUTER)])),
+      ).toEqual([1, 0]);
     });
 
     it("reports 0 for both when the contours are merely DISJOINT", () => {
       expect(
-        contourDepths(mergeCompound([table(OUTER), table(quad(500, 500, 600, 600))])),
+        contourDepths(
+          mergeCompound([table(OUTER), table(quad(500, 500, 600, 600))]),
+        ),
       ).toEqual([0, 0]);
     });
 
@@ -165,12 +162,15 @@ describe("draw-geometry — compound-path contour algebra", () => {
     });
 
     it("never flips contour 0 — the survivor keeps its authored direction", () => {
-      const merged = mergeCompound([table(reverseContour(OUTER)), table(INNER)]);
+      const merged = mergeCompound([
+        table(reverseContour(OUTER)),
+        table(INNER),
+      ]);
       const ring = orientForNonZeroHoles(merged);
       expect(ring.anchors.slice(0, 4)).toEqual(merged.anchors.slice(0, 4));
-      expect(
-        Math.sign(contourSignedArea(ring.anchors.slice(4, 8))),
-      ).toBe(-Math.sign(contourSignedArea(ring.anchors.slice(0, 4))));
+      expect(Math.sign(contourSignedArea(ring.anchors.slice(4, 8)))).toBe(
+        -Math.sign(contourSignedArea(ring.anchors.slice(0, 4))),
+      );
     });
 
     it("leaves an ALREADY-correct pair untouched (idempotent)", () => {
@@ -272,12 +272,18 @@ describe("draw-geometry — compound-path contour algebra", () => {
       return Math.sign(contourSignedArea(t.anchors.slice(from, to)));
     };
     const signs = (t: AnchorTable): number[] =>
-      contourRanges(t.anchors.length, t.subpathStarts).map((_, i) => signAt(t, i));
+      contourRanges(t.anchors.length, t.subpathStarts).map((_, i) =>
+        signAt(t, i),
+      );
     /** Non-zero winding at `p` (angle summation over the corner rings). */
     const windingAt = (t: AnchorTable, p: [number, number]): number =>
       contourRanges(t.anchors.length, t.subpathStarts).reduce(
         (sum, [from, to]) =>
-          sum + refWindingNumber(p, t.anchors.slice(from, to).map((a) => a.anchor)),
+          sum +
+          refWindingNumber(
+            p,
+            t.anchors.slice(from, to).map((a) => a.anchor),
+          ),
         0,
       );
 
@@ -311,7 +317,10 @@ describe("draw-geometry — compound-path contour algebra", () => {
         [BACK, reverseContour(FRONT)],
         [reverseContour(BACK), FRONT],
       ]) {
-        const paint = orientByPaintOrder(mergeCompound([table(back), table(front)]), 0);
+        const paint = orientByPaintOrder(
+          mergeCompound([table(back), table(front)]),
+          0,
+        );
         expect(windingAt(paint, [175, 160])).toBe(0); // in both
         expect(windingAt(paint, [120, 120])).not.toBe(0); // back only
         expect(windingAt(paint, [240, 200])).not.toBe(0); // front only
@@ -320,7 +329,10 @@ describe("draw-geometry — compound-path contour algebra", () => {
 
     it("the backmost need not be contour 0: a hole BEHIND its outer shape keeps its direction, and the outer one turns", () => {
       // The survivor (OUTER) is merged first; the hole is the path behind.
-      const paint = orientByPaintOrder(mergeCompound([table(OUTER), table(INNER)]), 1);
+      const paint = orientByPaintOrder(
+        mergeCompound([table(OUTER), table(INNER)]),
+        1,
+      );
       expect(paint.anchors.slice(4)).toEqual(INNER);
       expect(paint.anchors.slice(0, 4)).toEqual(reverseContour(OUTER));
       // Still a hole.
@@ -330,7 +342,10 @@ describe("draw-geometry — compound-path contour algebra", () => {
 
     it("make → release → make keeps every direction, even when the release RESTACKS the pieces", () => {
       // Hole behind its outer shape: the hole (contour 1) is backmost.
-      const made = orientByPaintOrder(mergeCompound([table(OUTER), table(INNER)]), 1);
+      const made = orientByPaintOrder(
+        mergeCompound([table(OUTER), table(INNER)]),
+        1,
+      );
       // A release inserts the hole's piece ON TOP, so the second make
       // finds the OUTER shape behind — contour 0 is the backmost now.
       const again = orientByPaintOrder(mergeCompound(splitCompound(made)), 0);
@@ -339,18 +354,27 @@ describe("draw-geometry — compound-path contour algebra", () => {
 
     it("keeps the backmost path's OWN direction (Illustrator makes it clockwise; no pixel differs)", () => {
       const paint = orientByPaintOrder(
-        mergeCompound([table(reverseContour(OUTER)), table(reverseContour(INNER))]),
+        mergeCompound([
+          table(reverseContour(OUTER)),
+          table(reverseContour(INNER)),
+        ]),
         0,
       );
       expect(signs(paint)).toEqual([-1, 1]);
     });
 
     it("an OPEN contour that turns is reversed as an open run — its endpoints swap, its flag stays", () => {
-      const open: AnchorTable = { anchors: INNER, subpathStarts: [0], subpathOpen: [true] };
+      const open: AnchorTable = {
+        anchors: INNER,
+        subpathStarts: [0],
+        subpathOpen: [true],
+      };
       const paint = orientByPaintOrder(mergeCompound([table(OUTER), open]), 0);
       expect(paint.subpathOpen).toEqual([false, true]);
       expect(paint.anchors.slice(0, 4)).toEqual(OUTER);
-      expect(paint.anchors.slice(4)).toEqual(reverseContour(INNER, { closed: false }));
+      expect(paint.anchors.slice(4)).toEqual(
+        reverseContour(INNER, { closed: false }),
+      );
     });
 
     it("an EMPTY contour is dropped, and `backmost` counts the contours that remain", () => {

@@ -54,7 +54,11 @@ import {
   type PenSnapshot,
 } from "@paged-media/draw-tools";
 
-import { OPEN_THEN_CLOSED, PATH_EDIT_PAGE, PEN_PAIR } from "../fixtures/path-edit";
+import {
+  OPEN_THEN_CLOSED,
+  PATH_EDIT_PAGE,
+  PEN_PAIR,
+} from "../fixtures/path-edit";
 import { openHost } from "./host";
 
 type P = [number, number];
@@ -77,7 +81,11 @@ describe("draw conformance — Pen plans on existing paths, through the real eng
   async function tableOf(el: ElementId) {
     const r = await read(el);
     if (!r) throw new Error(`no path anchors for ${JSON.stringify(el)}`);
-    return { anchors: r.anchors, subpathStarts: r.subpathStarts, subpathOpen: r.subpathOpen };
+    return {
+      anchors: r.anchors,
+      subpathStarts: r.subpathStarts,
+      subpathOpen: r.subpathOpen,
+    };
   }
 
   /** The path as the host would hand it to the machine: the engine's
@@ -88,7 +96,11 @@ describe("draw conformance — Pen plans on existing paths, through the real eng
     return { id: el, table: r, transform: r.itemTransform ?? null, selected };
   }
 
-  const anchorHit = (path: PenPath, index: number): PenHit => ({ kind: "anchor", path, index });
+  const anchorHit = (path: PenPath, index: number): PenHit => ({
+    kind: "anchor",
+    path,
+    index,
+  });
 
   const pen = () => new PenMachine({ closeTolerance: 4, dragThreshold: 2 });
 
@@ -99,12 +111,15 @@ describe("draw conformance — Pen plans on existing paths, through the real eng
 
   async function send(plan: PenPlan | null): Promise<MutationOutcome> {
     expect(plan, "the gesture committed a plan").not.toBeNull();
-    const outcome = await h.host.document.mutate(penPlanMutation(plan!, PATH_EDIT_PAGE));
+    const outcome = await h.host.document.mutate(
+      penPlanMutation(plan!, PATH_EDIT_PAGE),
+    );
     expect(outcome.applied, JSON.stringify(outcome)).toBe(true);
     return outcome;
   }
 
-  const positions = (t: { anchors: PathAnchorsResult["anchors"] }) => t.anchors.map((a) => a.anchor);
+  const positions = (t: { anchors: PathAnchorsResult["anchors"] }) =>
+    t.anchors.map((a) => a.anchor);
 
   describe("continue / close — two open paths", () => {
     beforeAll(async () => {
@@ -165,7 +180,11 @@ describe("draw conformance — Pen plans on existing paths, through the real eng
       ]);
       // The path now runs (20,200) → (50,300) → (100,400): the handle
       // that led ONWARD while drawing is the anchor's INCOMING one.
-      expect(after.anchors[1]).toEqual({ anchor: [50, 300], left: [30, 280], right: [70, 320] });
+      expect(after.anchors[1]).toEqual({
+        anchor: [50, 300],
+        left: [30, 280],
+        right: [70, 320],
+      });
       expect(after.anchors.slice(2)).toEqual(before.anchors);
       await h.host.document.undo();
       expect(await tableOf(A)).toEqual(before);
@@ -174,13 +193,22 @@ describe("draw conformance — Pen plans on existing paths, through the real eng
     it("a handle pulled off the picked-up endpoint is written with the inserts, in one step", async () => {
       const before = await tableOf(A);
       const m = pen();
-      m.handle({ type: "down", point: [400, 400], modifiers: NONE, hit: anchorHit(await pathOf(A), 2) });
+      m.handle({
+        type: "down",
+        point: [400, 400],
+        modifiers: NONE,
+        hit: anchorHit(await pathOf(A), 2),
+      });
       m.handle({ type: "move", point: [440, 380], modifiers: NONE });
       m.handle({ type: "up", point: [440, 380], modifiers: NONE });
       click(m, [500, 350]);
       await send(m.handle({ type: "key", key: "Enter" }).plan);
       const after = await tableOf(A);
-      expect(after.anchors[2]).toEqual({ anchor: [400, 400], left: [400, 400], right: [440, 380] });
+      expect(after.anchors[2]).toEqual({
+        anchor: [400, 400],
+        left: [400, 400],
+        right: [440, 380],
+      });
       expect(after.anchors[3].anchor).toEqual([500, 350]);
       await h.host.document.undo();
       expect(await tableOf(A)).toEqual(before);
@@ -234,7 +262,12 @@ describe("draw conformance — Pen plans on existing paths, through the real eng
       const before = await tableOf(A);
       const m = pen();
       const selected = await pathOf(A, true);
-      const added = click(m, [175, 500], { kind: "segment", path: selected, index: 0, t: 0.5 });
+      const added = click(m, [175, 500], {
+        kind: "segment",
+        path: selected,
+        index: 0,
+        t: 0.5,
+      });
       expect(added.plan!.kind).toBe("addAnchor");
       await send(added.plan);
       const grown = await tableOf(A);
@@ -261,7 +294,8 @@ describe("draw conformance — Pen plans on existing paths, through the real eng
       const snap = m.handle({ type: "key", key: "Enter" });
       expect(snap.plan!.kind).toBe("insertPath");
       const outcome = await send(snap.plan);
-      const created = (outcome as Extract<MutationOutcome, { applied: true }>).createdId;
+      const created = (outcome as Extract<MutationOutcome, { applied: true }>)
+        .createdId;
       expect(created).not.toBeNull();
       expect(positions((await read(created!))!)).toEqual([
         [500, 500],
@@ -297,7 +331,15 @@ describe("draw conformance — Pen plans on existing paths, through the real eng
           ops: [
             {
               op: "pathPointInsert",
-              args: { elementId: A, index: 3, anchor: { anchor: [120, 500], left: [120, 500], right: [120, 500] } },
+              args: {
+                elementId: A,
+                index: 3,
+                anchor: {
+                  anchor: [120, 500],
+                  left: [120, 500],
+                  right: [120, 500],
+                },
+              },
             },
             { op: "joinPaths", args: { elementId: A, otherId: B } },
           ],
@@ -339,8 +381,16 @@ describe("draw conformance — Pen plans on existing paths, through the real eng
       expect(joined.subpathOpen?.[0]).toBe(true);
       // The welded anchor is B's endpoint as it was, seen the other way
       // round: the handle it dangled now faces the bridge.
-      expect(joined.anchors[4]).toEqual({ anchor: [400, 700], left: [420, 710], right: [400, 700] });
-      expect(joined.anchors[5]).toEqual({ anchor: [100, 650], left: [100, 650], right: [80, 640] });
+      expect(joined.anchors[4]).toEqual({
+        anchor: [400, 700],
+        left: [420, 710],
+        right: [400, 700],
+      });
+      expect(joined.anchors[5]).toEqual({
+        anchor: [100, 650],
+        left: [100, 650],
+        right: [80, 640],
+      });
       // B is gone as an element.
       expect(await read(B)).toBeNull();
 
@@ -363,7 +413,9 @@ describe("draw conformance — Pen plans on existing paths, through the real eng
       // either way round it is A, the new anchor, then B from its START.
       const forward = positions(joined);
       const sequence =
-        forward[0][0] === 400 && forward[0][1] === 400 ? forward : [...forward].reverse();
+        forward[0][0] === 400 && forward[0][1] === 400
+          ? forward
+          : [...forward].reverse();
       expect(sequence).toEqual([
         [400, 400],
         [250, 600],
@@ -380,7 +432,10 @@ describe("draw conformance — Pen plans on existing paths, through the real eng
   });
 
   describe("subpaths — appending at a contour boundary", () => {
-    const el: ElementId = { kind: "polygon", id: OPEN_THEN_CLOSED.id } as ElementId;
+    const el: ElementId = {
+      kind: "polygon",
+      id: OPEN_THEN_CLOSED.id,
+    } as ElementId;
     beforeAll(async () => {
       await h.load(OPEN_THEN_CLOSED.bytes());
     });
@@ -395,7 +450,11 @@ describe("draw conformance — Pen plans on existing paths, through the real eng
       const before = await tableOf(el);
       const outcome = await h.host.document.mutate({
         op: "pathPointInsert",
-        args: { elementId: el, index: 3, anchor: { anchor: [350, 450], left: [350, 450], right: [350, 450] } },
+        args: {
+          elementId: el,
+          index: 3,
+          anchor: { anchor: [350, 450], left: [350, 450], right: [350, 450] },
+        },
       } as Mutation);
       expect(outcome.applied).toBe(true);
       const after = await tableOf(el);

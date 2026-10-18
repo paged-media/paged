@@ -344,14 +344,18 @@ export const releaseHandle = (element: number, piece: number): string =>
  * step however many compounds are selected. Nothing is deleted, so the
  * delete-then-insert rule does not bind.
  */
-export function releaseBatchForAll(plans: readonly ReleasePlan[]): MutationInput {
+export function releaseBatchForAll(
+  plans: readonly ReleasePlan[],
+): MutationInput {
   const ops: MutationInput[] = [];
   plans.forEach((plan, e) => {
     const [framePath, ...inserts] = (
-      releaseInsertBatchFor(plan.id, plan.pageId, plan.kept, plan.rest) as Extract<
-        Mutation,
-        { op: "batch" }
-      >
+      releaseInsertBatchFor(
+        plan.id,
+        plan.pageId,
+        plan.kept,
+        plan.rest,
+      ) as Extract<Mutation, { op: "batch" }>
     ).args.ops;
     ops.push(framePath!);
     const pieces: ElementId[] = [];
@@ -468,7 +472,11 @@ export async function compoundSourceOf(
     table: {
       anchors: corners.map((c) => {
         const p = toPage(m, c);
-        return { anchor: p, left: [...p] as [number, number], right: [...p] as [number, number] };
+        return {
+          anchor: p,
+          left: [...p] as [number, number],
+          right: [...p] as [number, number],
+        };
       }),
       subpathStarts: [0],
       subpathOpen: [false],
@@ -487,7 +495,8 @@ export async function compoundPaintOf(
     for (const e of props?.entries ?? []) {
       const v = e.value;
       if (!v) continue;
-      if (e.path === "frameFillColor" && v.type === "colorRef") out.fill = v.value;
+      if (e.path === "frameFillColor" && v.type === "colorRef")
+        out.fill = v.value;
       else if (e.path === "frameStrokeColor" && v.type === "colorRef") {
         out.stroke = v.value;
       } else if (e.path === "frameStrokeWeight" && v.type === "length") {
@@ -518,13 +527,15 @@ export function backmostContourOf(
   const table = tables[backmost];
   let best = -1;
   let bestArea = -1;
-  contourRanges(table.anchors.length, table.subpathStarts).forEach(([from, to], k) => {
-    const area = Math.abs(contourSignedArea(table.anchors.slice(from, to)));
-    if (area > bestArea) {
-      best = k;
-      bestArea = area;
-    }
-  });
+  contourRanges(table.anchors.length, table.subpathStarts).forEach(
+    ([from, to], k) => {
+      const area = Math.abs(contourSignedArea(table.anchors.slice(from, to)));
+      if (area > bestArea) {
+        best = k;
+        bestArea = area;
+      }
+    },
+  );
   // An input with no contour at all cannot stand for anything; the
   // survivor's first contour does (compoundSourceOf never yields one).
   return best < 0 ? 0 : offset + best;
@@ -537,7 +548,10 @@ export function makeCompoundTableByPaintOrder(
   tables: readonly AnchorTable[],
   backmost: number,
 ): AnchorTable {
-  return orientByPaintOrder(mergeCompound(tables), backmostContourOf(tables, backmost));
+  return orientByPaintOrder(
+    mergeCompound(tables),
+    backmostContourOf(tables, backmost),
+  );
 }
 
 /** Which of `sources` is BACKMOST in the scene tree's paint order — an
@@ -614,7 +628,9 @@ export async function applyMakeCompoundPath(
   // hence 2 undo steps in this case, and only in this case.
   let keptSource = await compoundSourceOf(host, kept);
   if (!keptSource) {
-    host.log.warn(`${label}: the survivor exposes no readable geometry — no-op`);
+    host.log.warn(
+      `${label}: the survivor exposes no readable geometry — no-op`,
+    );
     return null;
   }
   if (keptSource.table.subpathOpen?.some((o) => o)) {
@@ -665,9 +681,7 @@ export async function applyMakeCompoundPath(
   );
   const inner = tableInInnerSpace(merged, keptSource.itemTransform);
   if (!inner) {
-    host.log.warn(
-      `${label}: the survivor's ItemTransform is singular — no-op`,
-    );
+    host.log.warn(`${label}: the survivor's ItemTransform is singular — no-op`);
     return null;
   }
   const outcome = await host.document.mutate(
@@ -724,7 +738,8 @@ export async function applyReleaseCompoundPath(
         "batches per element",
     );
     created = [];
-    for (const plan of plans) created.push(...(await releaseStepwise(host, plan)));
+    for (const plan of plans)
+      created.push(...(await releaseStepwise(host, plan)));
   }
   if (created.length > 0) {
     await host.selection.set([...selection, ...created]);
@@ -753,7 +768,9 @@ async function releasePlanFor(
   }
   const kept = tableInInnerSpace(parts[0], source.itemTransform);
   if (!kept) {
-    host.log.warn(`${label}: ${String(id.id)}'s ItemTransform is singular — no-op`);
+    host.log.warn(
+      `${label}: ${String(id.id)}'s ItemTransform is singular — no-op`,
+    );
     return null;
   }
   return {

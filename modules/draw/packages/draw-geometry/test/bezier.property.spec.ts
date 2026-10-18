@@ -252,20 +252,16 @@ describe("bezier — closestTOnCubic (properties)", () => {
     // A click at B(k/30) is found by the coarse scan with distance ~0,
     // and the refinement has nothing left to correct.
     fc.assert(
-      fc.property(
-        cubic,
-        fc.integer({ min: 0, max: COARSE }),
-        (c, k) => {
-          const click = refEvalCubic(c, k / COARSE);
-          const t = closestTOnCubic(c[0], c[1], c[2], c[3], click);
-          assertClose(
-            dist(evalCubic(c[0], c[1], c[2], c[3], t), click),
-            0,
-            1e-7 * magnitude(...c),
-            "distance to an on-sample click",
-          );
-        },
-      ),
+      fc.property(cubic, fc.integer({ min: 0, max: COARSE }), (c, k) => {
+        const click = refEvalCubic(c, k / COARSE);
+        const t = closestTOnCubic(c[0], c[1], c[2], c[3], click);
+        assertClose(
+          dist(evalCubic(c[0], c[1], c[2], c[3], t), click),
+          0,
+          1e-7 * magnitude(...c),
+          "distance to an on-sample click",
+        );
+      }),
     );
   });
 
@@ -284,7 +280,8 @@ describe("bezier — closestTOnCubic (properties)", () => {
         ];
         const t = closestTOnCubic(a, third(1), third(2), b, click);
         const projected =
-          ((click[0] - a[0]) * (b[0] - a[0]) + (click[1] - a[1]) * (b[1] - a[1])) /
+          ((click[0] - a[0]) * (b[0] - a[0]) +
+            (click[1] - a[1]) * (b[1] - a[1])) /
           (len * len);
         assertClose(t, Math.min(1, Math.max(0, projected)), 1e-7, "t");
       }),
@@ -471,79 +468,67 @@ describe("bezier — closestTOnCubic (properties)", () => {
     );
   });
 
-  it(
-    "FIXED DEFECT: is no worse than a dense brute-force scan (tolerance: the coarse-grid bound)",
-    () => {
-      fc.assert(
-        fc.property(smallCubic, smallVec2, (c, click) => {
-          const t = closestTOnCubic(c[0], c[1], c[2], c[3], click);
-          const d = dist(evalCubic(c[0], c[1], c[2], c[3], t), click);
-          const best = bruteForceDistance(c, click);
-          assertTrue(
-            d <= best + coarseBound(c) + FP * magnitude(...c, click),
-            `answered t=${t} at distance ${d}; brute force finds ${best} ` +
-              `(+ coarse bound ${coarseBound(c)})`,
-          );
-        }),
-      );
-    },
-  );
+  it("FIXED DEFECT: is no worse than a dense brute-force scan (tolerance: the coarse-grid bound)", () => {
+    fc.assert(
+      fc.property(smallCubic, smallVec2, (c, click) => {
+        const t = closestTOnCubic(c[0], c[1], c[2], c[3], click);
+        const d = dist(evalCubic(c[0], c[1], c[2], c[3], t), click);
+        const best = bruteForceDistance(c, click);
+        assertTrue(
+          d <= best + coarseBound(c) + FP * magnitude(...c, click),
+          `answered t=${t} at distance ${d}; brute force finds ${best} ` +
+            `(+ coarse bound ${coarseBound(c)})`,
+        );
+      }),
+    );
+  });
 
-  it(
-    "FIXED DEFECT (minimal counterexample): the refinement is not worse than the coarse scan it started from",
-    () => {
-      const c: Cubic = [
-        [1, -1],
-        [0, 0],
-        [0, 0],
-        [0, -1],
-      ];
-      const click: Vec2 = [0, 1];
-      const t = closestTOnCubic(c[0], c[1], c[2], c[3], click);
-      const d = dist(evalCubic(c[0], c[1], c[2], c[3], t), click);
-      // coarse 1.2562 (t = 0.5); it answered t = 2/3 at 1.3338.
-      expect(d).toBeLessThanOrEqual(coarseBest(c, click) + 1e-9);
-      expect(Math.abs(t - 0.5)).toBeLessThanOrEqual(1 / COARSE + 1e-12);
-    },
-  );
+  it("FIXED DEFECT (minimal counterexample): the refinement is not worse than the coarse scan it started from", () => {
+    const c: Cubic = [
+      [1, -1],
+      [0, 0],
+      [0, 0],
+      [0, -1],
+    ];
+    const click: Vec2 = [0, 1];
+    const t = closestTOnCubic(c[0], c[1], c[2], c[3], click);
+    const d = dist(evalCubic(c[0], c[1], c[2], c[3], t), click);
+    // coarse 1.2562 (t = 0.5); it answered t = 2/3 at 1.3338.
+    expect(d).toBeLessThanOrEqual(coarseBest(c, click) + 1e-9);
+    expect(Math.abs(t - 0.5)).toBeLessThanOrEqual(1 / COARSE + 1e-12);
+  });
 
-  it(
-    "FIXED DEFECT (on-curve counterexample): a click ON the curve is found to within the coarse-grid bound",
-    () => {
-      const c: Cubic = [
-        [5, 7],
-        [-2, -8],
-        [6, 10],
-        [7, 8],
-      ];
-      const click = refEvalCubic(c, 0.3225334362697478);
-      const t = closestTOnCubic(c[0], c[1], c[2], c[3], click);
-      const d = dist(evalCubic(c[0], c[1], c[2], c[3], t), click);
-      // coarse bound 0.985, coarse best 0.031; it answered t ≈ 0.583 at
-      // 3.27. Now no further than the coarse best itself.
-      expect(d).toBeLessThanOrEqual(coarseBound(c));
-      expect(d).toBeLessThanOrEqual(coarseBest(c, click) + 1e-9);
-    },
-  );
+  it("FIXED DEFECT (on-curve counterexample): a click ON the curve is found to within the coarse-grid bound", () => {
+    const c: Cubic = [
+      [5, 7],
+      [-2, -8],
+      [6, 10],
+      [7, 8],
+    ];
+    const click = refEvalCubic(c, 0.3225334362697478);
+    const t = closestTOnCubic(c[0], c[1], c[2], c[3], click);
+    const d = dist(evalCubic(c[0], c[1], c[2], c[3], t), click);
+    // coarse bound 0.985, coarse best 0.031; it answered t ≈ 0.583 at
+    // 3.27. Now no further than the coarse best itself.
+    expect(d).toBeLessThanOrEqual(coarseBound(c));
+    expect(d).toBeLessThanOrEqual(coarseBest(c, click) + 1e-9);
+  });
 
-  it(
-    "FIXED DEFECT (large counterexample): a far click is not sent to the wrong end of the curve",
-    () => {
-      const c: Cubic = [
-        [-1, 5],
-        [-7, 9],
-        [6, 7],
-        [7, -6],
-      ];
-      const click: Vec2 = [-11, 12];
-      const t = closestTOnCubic(c[0], c[1], c[2], c[3], click);
-      const d = dist(evalCubic(c[0], c[1], c[2], c[3], t), click);
-      // coarse 9.99 (t = 0.2, where the curve bulges toward the click);
-      // it answered t ≈ 0.913 at 22.94.
-      expect(d).toBeLessThanOrEqual(coarseBest(c, click) + 1e-9);
-      expect(Math.abs(t - 0.2)).toBeLessThanOrEqual(1 / COARSE + 1e-12);
-    },
-  );
+  it("FIXED DEFECT (large counterexample): a far click is not sent to the wrong end of the curve", () => {
+    const c: Cubic = [
+      [-1, 5],
+      [-7, 9],
+      [6, 7],
+      [7, -6],
+    ];
+    const click: Vec2 = [-11, 12];
+    const t = closestTOnCubic(c[0], c[1], c[2], c[3], click);
+    const d = dist(evalCubic(c[0], c[1], c[2], c[3], t), click);
+    // coarse 9.99 (t = 0.2, where the curve bulges toward the click);
+    // it answered t ≈ 0.913 at 22.94.
+    expect(d).toBeLessThanOrEqual(coarseBest(c, click) + 1e-9);
+    expect(Math.abs(t - 0.2)).toBeLessThanOrEqual(1 / COARSE + 1e-12);
+  });
 });
 
 describe("bezier — flattenAnchorRun (properties)", () => {
@@ -557,57 +542,78 @@ describe("bezier — flattenAnchorRun (properties)", () => {
 
   it("starts on the first anchor and ends on the last (open) / first (closed)", () => {
     fc.assert(
-      fc.property(anchorRun(1, 8), fc.boolean(), samples, (anchors, close, n) => {
-        const out = flattenAnchorRun(anchors, { close, samplesPerSegment: n });
-        assertVecClose(out[0], anchors[0].anchor, 0, "first point");
-        const last = close ? anchors[0] : anchors[anchors.length - 1];
-        assertVecClose(out[out.length - 1], last.anchor, 0, "last point");
-      }),
+      fc.property(
+        anchorRun(1, 8),
+        fc.boolean(),
+        samples,
+        (anchors, close, n) => {
+          const out = flattenAnchorRun(anchors, {
+            close,
+            samplesPerSegment: n,
+          });
+          assertVecClose(out[0], anchors[0].anchor, 0, "first point");
+          const last = close ? anchors[0] : anchors[anchors.length - 1];
+          assertVecClose(out[out.length - 1], last.anchor, 0, "last point");
+        },
+      ),
     );
   });
 
   it("emits 1 point per straight segment and `samplesPerSegment` per curved one", () => {
     fc.assert(
-      fc.property(anchorRun(1, 8), fc.boolean(), samples, (anchors, close, n) => {
-        const count = close ? anchors.length : anchors.length - 1;
-        let expected = 1;
-        for (let i = 0; i < count; i++) {
-          const a = anchors[i];
-          const b = anchors[(i + 1) % anchors.length];
-          expected += isStraight(a, b) ? 1 : n;
-        }
-        expect(
-          flattenAnchorRun(anchors, { close, samplesPerSegment: n }),
-        ).toHaveLength(expected);
-      }),
+      fc.property(
+        anchorRun(1, 8),
+        fc.boolean(),
+        samples,
+        (anchors, close, n) => {
+          const count = close ? anchors.length : anchors.length - 1;
+          let expected = 1;
+          for (let i = 0; i < count; i++) {
+            const a = anchors[i];
+            const b = anchors[(i + 1) % anchors.length];
+            expected += isStraight(a, b) ? 1 : n;
+          }
+          expect(
+            flattenAnchorRun(anchors, { close, samplesPerSegment: n }),
+          ).toHaveLength(expected);
+        },
+      ),
     );
   });
 
   it("every emitted point lies on its segment's cubic at k / samples", () => {
     fc.assert(
-      fc.property(anchorRun(2, 6), fc.boolean(), samples, (anchors, close, n) => {
-        const out = flattenAnchorRun(anchors, { close, samplesPerSegment: n });
-        const count = close ? anchors.length : anchors.length - 1;
-        let at = 1;
-        for (let i = 0; i < count; i++) {
-          const a = anchors[i];
-          const b = anchors[(i + 1) % anchors.length];
-          const c: Cubic = [a.anchor, a.right, b.left, b.anchor];
-          if (isStraight(a, b)) {
-            assertVecClose(out[at++], b.anchor, 0, `straight segment ${i}`);
-            continue;
+      fc.property(
+        anchorRun(2, 6),
+        fc.boolean(),
+        samples,
+        (anchors, close, n) => {
+          const out = flattenAnchorRun(anchors, {
+            close,
+            samplesPerSegment: n,
+          });
+          const count = close ? anchors.length : anchors.length - 1;
+          let at = 1;
+          for (let i = 0; i < count; i++) {
+            const a = anchors[i];
+            const b = anchors[(i + 1) % anchors.length];
+            const c: Cubic = [a.anchor, a.right, b.left, b.anchor];
+            if (isStraight(a, b)) {
+              assertVecClose(out[at++], b.anchor, 0, `straight segment ${i}`);
+              continue;
+            }
+            for (let k = 1; k <= n; k++) {
+              assertVecClose(
+                out[at++],
+                refEvalCubic(c, k / n),
+                FP * magnitude(...c),
+                `segment ${i}, sample ${k}`,
+              );
+            }
           }
-          for (let k = 1; k <= n; k++) {
-            assertVecClose(
-              out[at++],
-              refEvalCubic(c, k / n),
-              FP * magnitude(...c),
-              `segment ${i}, sample ${k}`,
-            );
-          }
-        }
-        expect(at).toBe(out.length);
-      }),
+          expect(at).toBe(out.length);
+        },
+      ),
     );
   });
 

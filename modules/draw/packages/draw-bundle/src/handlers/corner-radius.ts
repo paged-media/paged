@@ -81,18 +81,36 @@ const CORNER_TOL_PX = 8;
 
 /** One drag in flight, in the element's own space. */
 type CornerDrag =
-  | { kind: "box"; target: ElementId; m: Affine | null; bounds: Bounds; corner: CornerIndex }
-  | { kind: "polygon"; target: ElementId; m: Affine | null; corner: PolygonCorner };
+  | {
+      kind: "box";
+      target: ElementId;
+      m: Affine | null;
+      bounds: Bounds;
+      corner: CornerIndex;
+    }
+  | {
+      kind: "polygon";
+      target: ElementId;
+      m: Affine | null;
+      corner: PolygonCorner;
+    };
 
 /** What a finished drag writes: a box corner's two writes, or a
  *  polygon's uniform radius in all four slots. One batch either way.
  *  Exported for the spec. */
 export function cornerDragMutationFor(
-  drag: Pick<CornerDrag, "kind" | "target"> & { corner?: CornerIndex | PolygonCorner },
+  drag: Pick<CornerDrag, "kind" | "target"> & {
+    corner?: CornerIndex | PolygonCorner;
+  },
   radius: number,
 ): Mutation {
   if (drag.kind === "box") {
-    return cornerRadiiMutationFor(drag.target, drag.corner as CornerIndex, "RoundedCorner", radius);
+    return cornerRadiiMutationFor(
+      drag.target,
+      drag.corner as CornerIndex,
+      "RoundedCorner",
+      radius,
+    );
   }
   return cornerStyleMutationFor(drag.target, {
     id: "",
@@ -114,7 +132,8 @@ export function createCornerRadiusHandler(host: BundleHost): GestureHandler {
     host.overlay.setToolPreview(null);
   };
 
-  const toInner = (m: Affine | null, p: Vec2): Vec2 | null => inverseApplyAffine(m, p[0], p[1]);
+  const toInner = (m: Affine | null, p: Vec2): Vec2 | null =>
+    inverseApplyAffine(m, p[0], p[1]);
 
   /** Follow the pointer: the radius, then the preview mapped to the page. */
   const follow = (d: CornerDrag, page: string, pointer: Vec2) => {
@@ -125,7 +144,9 @@ export function createCornerRadiusHandler(host: BundleHost): GestureHandler {
         ? radiusFromDrag(d.bounds, d.corner, inner)
         : polygonRadiusFromDrag(d.corner, inner);
     const preview =
-      d.kind === "box" ? cornerPreview(d.bounds, d.corner, radius) : polygonCornerPreview(d.corner, radius);
+      d.kind === "box"
+        ? cornerPreview(d.bounds, d.corner, radius)
+        : polygonCornerPreview(d.corner, radius);
     host.overlay.setToolPreview({
       pageId: page,
       points: preview.map((p) => {
@@ -136,7 +157,11 @@ export function createCornerRadiusHandler(host: BundleHost): GestureHandler {
   };
 
   /** Resolve a press on `target` into a drag, or null (no corner hit). */
-  const grab = async (target: ElementId, page: string, pointer: Vec2): Promise<CornerDrag | null> => {
+  const grab = async (
+    target: ElementId,
+    page: string,
+    pointer: Vec2,
+  ): Promise<CornerDrag | null> => {
     const tolPx = host.viewport.pxToPt(CORNER_TOL_PX);
     if (target.kind === "polygon") {
       const read = await host.document.pathAnchors(target).catch(() => null);
@@ -155,7 +180,9 @@ export function createCornerRadiusHandler(host: BundleHost): GestureHandler {
       );
       return corner ? { kind: "polygon", target, m, corner } : null;
     }
-    const [geom] = await host.document.elementGeometry([target]).catch(() => []);
+    const [geom] = await host.document
+      .elementGeometry([target])
+      .catch(() => []);
     if (!geom?.bounds || geom.pageId !== page) return null;
     const m = (geom.itemTransform ?? null) as Affine | null;
     const inner = toInner(m, pointer);
@@ -208,7 +235,9 @@ export function createCornerRadiusHandler(host: BundleHost): GestureHandler {
         .mutate(cornerDragMutationFor(d, r))
         .then((outcome) => {
           if (!outcome.applied) {
-            host.log.warn(`cornerRadius rejected by engine: ${JSON.stringify(outcome.error)}`);
+            host.log.warn(
+              `cornerRadius rejected by engine: ${JSON.stringify(outcome.error)}`,
+            );
           }
         })
         .catch((err) => host.log.warn(`cornerRadius commit failed: ${err}`));

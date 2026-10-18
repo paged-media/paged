@@ -62,8 +62,14 @@ const editorClientAnchor = (): string | undefined => {
   // proved without a pnpm override in a committed manifest.
   const local = process.env.PAGED_ENGINE_FROM;
   if (local) {
-    if (!existsSync(join(local, "node_modules/@paged-media/canvas-wasm/package.json"))) {
-      throw new Error(`PAGED_ENGINE_FROM=${local} has no node_modules/@paged-media/canvas-wasm`);
+    if (
+      !existsSync(
+        join(local, "node_modules/@paged-media/canvas-wasm/package.json"),
+      )
+    ) {
+      throw new Error(
+        `PAGED_ENGINE_FROM=${local} has no node_modules/@paged-media/canvas-wasm`,
+      );
     }
     return local;
   }

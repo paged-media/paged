@@ -112,7 +112,10 @@ export function rectPath(x: number, y: number, w: number, h: number): PathSpec {
 
 /** An open two-anchor line. */
 export function linePath(from: Pt, to: Pt): PathSpec {
-  return { anchors: [corner(from[0], from[1]), corner(to[0], to[1])], open: true };
+  return {
+    anchors: [corner(from[0], from[1]), corner(to[0], to[1])],
+    open: true,
+  };
 }
 
 /** A closed SAWTOOTH with exactly `anchors` anchors: two bottom corners
@@ -122,7 +125,13 @@ export function linePath(from: Pt, to: Pt): PathSpec {
  *  how a TWO-input selection gets past the engine's 256-face cap. */
 export function combPath(
   anchors: number,
-  box: { x0: number; x1: number; yTip: number; yValley: number; yBottom: number },
+  box: {
+    x0: number;
+    x1: number;
+    yTip: number;
+    yValley: number;
+    yBottom: number;
+  },
 ): PathSpec {
   const zig = anchors - 2;
   const out: AnchorTriple[] = [corner(box.x0, box.yBottom)];
@@ -161,25 +170,39 @@ export const WORKLOAD_FILL = "Color/Black";
 
 const PLAIN = { x: 300, y: 16, columns: 25, pitch: 12, size: 8 } as const;
 const ARRANGEMENT = { x: 20, y: 16, size: 180, step: 5 } as const;
-const COMB = { x0: 20, x1: 592, yTip: 268, yValley: 290, yBottom: 296 } as const;
-const FACE_CAP_COMB = { x0: 20, x1: 190, yTip: 500, yValley: 520, yBottom: 526 } as const;
+const COMB = {
+  x0: 20,
+  x1: 592,
+  yTip: 268,
+  yValley: 290,
+  yBottom: 296,
+} as const;
+const FACE_CAP_COMB = {
+  x0: 20,
+  x1: 190,
+  yTip: 500,
+  yValley: 520,
+  yBottom: 526,
+} as const;
 const FACE_CAP_BAR = { x: 16, y: 506, w: 178, h: 8 } as const;
 const SPIRAL = {
   centre: [105, 395] as Pt,
   radius: { from: 4, to: 84 },
   turns: 20,
 } as const;
-const CELLS = { x: 200, y: 300, w: 39, h: 16, perRow: 10, rowsPerFeature: 5 } as const;
+const CELLS = {
+  x: 200,
+  y: 300,
+  w: 39,
+  h: 16,
+  perRow: 10,
+  rowsPerFeature: 5,
+} as const;
 
 /** The features whose records are LINKS — a `.paged` container part plus
  *  a metadata stamp on every participating leaf. */
 export type LinkedFeature =
-  | "blend"
-  | "repeat"
-  | "pattern"
-  | "symbols"
-  | "objectsOnPath"
-  | "livePaint";
+  "blend" | "repeat" | "pattern" | "symbols" | "objectsOnPath" | "livePaint";
 
 export const LINKED_FEATURES: readonly LinkedFeature[] = [
   "blend",
@@ -199,7 +222,8 @@ export function cellOrigin(feature: LinkedFeature, index: number): Pt {
   return [
     CELLS.x + (index % CELLS.perRow) * CELLS.w,
     CELLS.y +
-      (band * CELLS.rowsPerFeature + Math.floor(index / CELLS.perRow)) * CELLS.h,
+      (band * CELLS.rowsPerFeature + Math.floor(index / CELLS.perRow)) *
+        CELLS.h,
   ];
 }
 
@@ -375,7 +399,12 @@ export async function addArrangement(
   for (let i = 0; i < inputs; i++) {
     const o = i * ARRANGEMENT.step;
     paths.push(
-      rectPath(ARRANGEMENT.x + o, ARRANGEMENT.y + o, ARRANGEMENT.size, ARRANGEMENT.size),
+      rectPath(
+        ARRANGEMENT.x + o,
+        ARRANGEMENT.y + o,
+        ARRANGEMENT.size,
+        ARRANGEMENT.size,
+      ),
     );
   }
   const made = await insertPaths(w, `${inputs}-input arrangement`, paths);
@@ -393,7 +422,10 @@ export const COMB_BODY_POINT: Pt = [306, 293];
 /** The 1 000-anchor closed comb — the "long path" a real illustration
  *  has plenty of (a traced outline, a pencil stroke simplified too
  *  little). ONE batch. */
-export async function addComb(w: Workload, anchors = COMB_ANCHORS): Promise<void> {
+export async function addComb(
+  w: Workload,
+  anchors = COMB_ANCHORS,
+): Promise<void> {
   const made = await insertPaths(w, `${anchors}-anchor comb`, [
     combPath(anchors, COMB),
   ]);
@@ -445,7 +477,10 @@ export function spiralEnd(anchors = SPIRAL_ANCHORS): Pt {
 }
 
 /** The 10 000-anchor open spiral. ONE batch. */
-export async function addSpiral(w: Workload, anchors = SPIRAL_ANCHORS): Promise<void> {
+export async function addSpiral(
+  w: Workload,
+  anchors = SPIRAL_ANCHORS,
+): Promise<void> {
   const made = await insertPaths(w, `${anchors}-anchor spiral`, [
     spiralPath(anchors, SPIRAL.centre, SPIRAL.radius, SPIRAL.turns),
   ]);
@@ -491,14 +526,21 @@ export async function addLinkedRecords(
       `${feature}: the band holds ${MAX_LINKED_RECORDS} records, asked for ${count}`,
     );
   }
-  const out: LinkedRecords = { feature, wanted: count, records: [], handles: [] };
+  const out: LinkedRecords = {
+    feature,
+    wanted: count,
+    records: [],
+    handles: [],
+  };
   w.linked[feature] = out;
   const warnings: string[] = [];
   const host = withRecordedLog(w.h.host, warnings);
   const refuse = (what: string): void => {
     w.refusals.push({
       what,
-      reason: warnings[warnings.length - 1] ?? "the command returned nothing and logged no warning",
+      reason:
+        warnings[warnings.length - 1] ??
+        "the command returned nothing and logged no warning",
     });
   };
   const cells = Array.from({ length: count }, (_, i) => cellOrigin(feature, i));
@@ -800,5 +842,7 @@ export async function undoStepsSince(
       );
     }
   }
-  throw new Error(`undoStepsSince: the mark did not come back in ${limit} undos`);
+  throw new Error(
+    `undoStepsSince: the mark did not come back in ${limit} undos`,
+  );
 }

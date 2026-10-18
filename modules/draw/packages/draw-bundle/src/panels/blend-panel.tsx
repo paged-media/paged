@@ -176,27 +176,31 @@ export function makeBlendPanel(host: BundleHost): {
     // per document REVISION — one unfiltered `blendLinks`, tallied for
     // every record at once, out of the walk every panel shares. It used
     // to walk the whole document once per RECORD, on every event.
-    const reload = usePanelReload(host, "blend", async ({ live, selection }) => {
-      const library = await readBlendLibrary(host);
-      if (!live()) return;
-      const id = await resolveBlend(host, undefined, library);
-      if (!live()) return;
-      const links = await blendLinks(host);
-      if (!live()) return;
-      const tally: Record<string, number> = {};
-      for (const step of links.steps) {
-        tally[step.ref.blend] = (tally[step.ref.blend] ?? 0) + 1;
-      }
-      // Everything is known; show it in one go, so the panel never
-      // renders half of one reload and half of another.
-      setPortable(host.supports(BLEND_FEATURE));
-      setRecords(library.blends);
-      setSelected(selection.length);
-      setActive(id);
-      setPlaced(tally);
-      const saved = library.blends.find((r) => r.id === id);
-      if (saved) followDraft(saved.id, saved.params);
-    });
+    const reload = usePanelReload(
+      host,
+      "blend",
+      async ({ live, selection }) => {
+        const library = await readBlendLibrary(host);
+        if (!live()) return;
+        const id = await resolveBlend(host, undefined, library);
+        if (!live()) return;
+        const links = await blendLinks(host);
+        if (!live()) return;
+        const tally: Record<string, number> = {};
+        for (const step of links.steps) {
+          tally[step.ref.blend] = (tally[step.ref.blend] ?? 0) + 1;
+        }
+        // Everything is known; show it in one go, so the panel never
+        // renders half of one reload and half of another.
+        setPortable(host.supports(BLEND_FEATURE));
+        setRecords(library.blends);
+        setSelected(selection.length);
+        setActive(id);
+        setPlaced(tally);
+        const saved = library.blends.find((r) => r.id === id);
+        if (saved) followDraft(saved.id, saved.params);
+      },
+    );
 
     const { refusal, run } = useActionFeedback(host, reload);
 
@@ -268,7 +272,9 @@ export function makeBlendPanel(host: BundleHost): {
           <button
             type="button"
             style={iconBtn}
-            title={blendMakeBlocker(selected) ?? "Blend the two selected objects"}
+            title={
+              blendMakeBlocker(selected) ?? "Blend the two selected objects"
+            }
             data-draw-blend-make
             disabled={blendMakeBlocker(selected) !== null}
             onClick={() => void run(() => applyMakeBlend(host, { ...draft }))}
@@ -396,7 +402,10 @@ export function makeBlendPanel(host: BundleHost): {
                 data-draw-blend-color-easing
                 value={draft.colorEasing}
                 onChange={(e) =>
-                  setDraft({ ...draft, colorEasing: e.target.value as EaseKind })
+                  setDraft({
+                    ...draft,
+                    colorEasing: e.target.value as EaseKind,
+                  })
                 }
               >
                 {EASE_KINDS.map((k) => (
@@ -462,7 +471,8 @@ export function makeBlendPanel(host: BundleHost): {
                   title="Rebuild with the settings above and the key objects' current shapes"
                   data-draw-blend-update
                   onClick={() =>
-                    void run(() => applyUpdateBlend(host, { blendId: record.id, ...draft }),
+                    void run(() =>
+                      applyUpdateBlend(host, { blendId: record.id, ...draft }),
                     )
                   }
                 >
@@ -474,7 +484,8 @@ export function makeBlendPanel(host: BundleHost): {
                   title="Use the selected path (not part of this blend) as the spine"
                   data-draw-blend-spine
                   onClick={() =>
-                    void run(() => applyReplaceBlendSpine(host, { blendId: record.id }),
+                    void run(() =>
+                      applyReplaceBlendSpine(host, { blendId: record.id }),
                     )
                   }
                 >
@@ -486,7 +497,8 @@ export function makeBlendPanel(host: BundleHost): {
                   title="Travel the spine the other way (geometry moves)"
                   data-draw-blend-reverse-spine
                   onClick={() =>
-                    void run(() => applyReverseBlendSpine(host, { blendId: record.id }),
+                    void run(() =>
+                      applyReverseBlendSpine(host, { blendId: record.id }),
                     )
                   }
                 >
@@ -498,7 +510,8 @@ export function makeBlendPanel(host: BundleHost): {
                   title="Flip paint order (nothing moves)"
                   data-draw-blend-reverse-order
                   onClick={() =>
-                    void run(() => applyReverseBlendOrder(host, { blendId: record.id }),
+                    void run(() =>
+                      applyReverseBlendOrder(host, { blendId: record.id }),
                     )
                   }
                 >
@@ -510,7 +523,8 @@ export function makeBlendPanel(host: BundleHost): {
                   title="Select the key objects — edit them, then Update"
                   data-draw-blend-select
                   onClick={() =>
-                    void run(() => applySelectBlendObjects(host, { blendId: record.id }),
+                    void run(() =>
+                      applySelectBlendObjects(host, { blendId: record.id }),
                     )
                   }
                 >
@@ -522,7 +536,9 @@ export function makeBlendPanel(host: BundleHost): {
                   title="Stop tracking and keep every intermediate as ordinary artwork"
                   data-draw-blend-expand
                   onClick={() =>
-                    void run(() => applyExpandBlend(host, { blendId: record.id }))
+                    void run(() =>
+                      applyExpandBlend(host, { blendId: record.id }),
+                    )
                   }
                 >
                   Expand
@@ -533,7 +549,9 @@ export function makeBlendPanel(host: BundleHost): {
                   title="Remove the intermediates and keep the key objects"
                   data-draw-blend-release
                   onClick={() =>
-                    void run(() => applyReleaseBlend(host, { blendId: record.id }))
+                    void run(() =>
+                      applyReleaseBlend(host, { blendId: record.id }),
+                    )
                   }
                 >
                   Release

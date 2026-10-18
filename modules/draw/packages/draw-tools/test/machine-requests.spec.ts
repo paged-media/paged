@@ -70,13 +70,21 @@ const QUAD: AnchorTable = {
   subpathOpen: [false],
 };
 
-const anchorHit = (index: number): DirectSelectHit => ({ kind: "anchor", index });
+const anchorHit = (index: number): DirectSelectHit => ({
+  kind: "anchor",
+  index,
+});
 
 describe("1 — setOptions: the zoom-dependent tolerances, changed in place", () => {
   it("DirectSelect: a wider slop turns a 5 pt travel back into a CLICK; the selection survives the change", () => {
     const m = new DirectSelectMachine({ table: QUAD, slop: 2, nudgeStep: 1 });
     // At slop 2 a 5 pt travel is a drag.
-    m.handle({ type: "down", point: [0, 0], hit: anchorHit(0), modifiers: NONE });
+    m.handle({
+      type: "down",
+      point: [0, 0],
+      hit: anchorHit(0),
+      modifiers: NONE,
+    });
     const dragged = m.handle({ type: "up", point: [5, 0], modifiers: NONE });
     expect(dragged.commit?.kind).toBe("move");
     expect(dragged.click).toBeNull();
@@ -87,14 +95,24 @@ describe("1 — setOptions: the zoom-dependent tolerances, changed in place", ()
     const after = m.setOptions({ slop: 8 });
     expect(after.selected).toEqual([2]);
     expect(m.currentOptions().slop).toBe(8);
-    m.handle({ type: "down", point: [0, 0], hit: anchorHit(0), modifiers: NONE });
+    m.handle({
+      type: "down",
+      point: [0, 0],
+      hit: anchorHit(0),
+      modifiers: NONE,
+    });
     const clicked = m.handle({ type: "up", point: [5, 0], modifiers: NONE });
     expect(clicked.commit).toBeNull();
     expect(clicked.click).toEqual(anchorHit(0));
   });
 
   it("DirectSelect: the nudge step follows the zoom too", () => {
-    const m = new DirectSelectMachine({ table: QUAD, slop: 2, nudgeStep: 1, selection: [0] });
+    const m = new DirectSelectMachine({
+      table: QUAD,
+      slop: 2,
+      nudgeStep: 1,
+      selection: [0],
+    });
     m.setOptions({ nudgeStep: 4 });
     const snap = m.handle({ type: "key", key: "ArrowRight", modifiers: NONE });
     expect(snap.commit?.ops).toEqual([
@@ -110,9 +128,17 @@ describe("1 — setOptions: the zoom-dependent tolerances, changed in place", ()
       smoothTolerance: 0.1,
     });
     m.setOptions({ slop: Number.NaN, nudgeStep: -3 });
-    expect(m.currentOptions()).toMatchObject({ slop: 2, nudgeStep: 1, smoothTolerance: 0.1 });
+    expect(m.currentOptions()).toMatchObject({
+      slop: 2,
+      nudgeStep: 1,
+      smoothTolerance: 0.1,
+    });
     m.setOptions({ smoothTolerance: 0.2 });
-    expect(m.currentOptions()).toMatchObject({ slop: 2, nudgeStep: 1, smoothTolerance: 0.2 });
+    expect(m.currentOptions()).toMatchObject({
+      slop: 2,
+      nudgeStep: 1,
+      smoothTolerance: 0.2,
+    });
   });
 
   it("Pen: a larger close tolerance brings the first anchor into reach MID-RUN, without losing the run", () => {
@@ -144,17 +170,28 @@ describe("1 — setOptions: the zoom-dependent tolerances, changed in place", ()
     const m = new PenMachine({ closeTolerance: 4, dragThreshold: 2 });
     m.setOptions({ dragThreshold: 10 });
     m.handle({ type: "down", point: [0, 0], modifiers: PEN_NONE });
-    const short = m.handle({ type: "move", point: [6, 0], modifiers: PEN_NONE });
+    const short = m.handle({
+      type: "move",
+      point: [6, 0],
+      modifiers: PEN_NONE,
+    });
     // Within the new threshold: still a corner.
     expect(short.anchors[0]).toEqual(corner(0, 0));
-    const long = m.handle({ type: "move", point: [12, 0], modifiers: PEN_NONE });
+    const long = m.handle({
+      type: "move",
+      point: [12, 0],
+      modifiers: PEN_NONE,
+    });
     expect(long.anchors[0].right).toEqual([12, 0]);
   });
 
   it("Pen: the options object passed in is never written to", () => {
     const given = { closeTolerance: 4, dragThreshold: 2 };
     const m = new PenMachine(given);
-    m.setOptions({ closeTolerance: 9, dragThreshold: Number.POSITIVE_INFINITY });
+    m.setOptions({
+      closeTolerance: 9,
+      dragThreshold: Number.POSITIVE_INFINITY,
+    });
     expect(given).toEqual({ closeTolerance: 4, dragThreshold: 2 });
     expect(m.currentOptions()).toEqual({ closeTolerance: 9, dragThreshold: 2 });
   });
@@ -179,7 +216,11 @@ describe("2 — hits: several paths under the pointer, ranked by the machine", (
     id: id("b"),
     table: openPath([corner(0, 0), corner(0, -80)]),
   };
-  const anchor = (path: PenPath, index: number): PenHit => ({ kind: "anchor", path, index });
+  const anchor = (path: PenPath, index: number): PenHit => ({
+    kind: "anchor",
+    path,
+    index,
+  });
   const segment = (path: PenPath, index: number, t: number): PenHit => ({
     kind: "segment",
     path,
@@ -191,7 +232,11 @@ describe("2 — hits: several paths under the pointer, ranked by the machine", (
     m.handle({ type: "move", point: [0, 0], modifiers: PEN_NONE, hits });
 
   it("penEndpointAt is the endpoint test the ranking uses", () => {
-    expect(penEndpointAt(A, 0)).toMatchObject({ index: 0, end: "start", contour: 0 });
+    expect(penEndpointAt(A, 0)).toMatchObject({
+      index: 0,
+      end: "start",
+      contour: 0,
+    });
     expect(penEndpointAt(A, 2)).toMatchObject({ index: 2, end: "end" });
     expect(penEndpointAt(A, 1)).toBeNull(); // interior
     expect(penEndpointAt(S, 0)).toBeNull(); // a closed contour has no ends
@@ -219,14 +264,23 @@ describe("2 — hits: several paths under the pointer, ranked by the machine", (
   });
 
   it("all else equal, the host's order is the last word", () => {
-    expect(hover(pen(), [anchor(A, 0), anchor(B, 0)]).hit).toEqual(anchor(A, 0));
-    expect(hover(pen(), [anchor(B, 0), anchor(A, 0)]).hit).toEqual(anchor(B, 0));
+    expect(hover(pen(), [anchor(A, 0), anchor(B, 0)]).hit).toEqual(
+      anchor(A, 0),
+    );
+    expect(hover(pen(), [anchor(B, 0), anchor(A, 0)]).hit).toEqual(
+      anchor(B, 0),
+    );
   });
 
   it("mid-run, a CLOSE onto the origin's other end beats a JOIN onto a third path", () => {
     const m = pen();
     // Pick A up at its end (100, 0) and add one anchor.
-    m.handle({ type: "down", point: [100, 0], modifiers: PEN_NONE, hit: anchor(A, 2) });
+    m.handle({
+      type: "down",
+      point: [100, 0],
+      modifiers: PEN_NONE,
+      hit: anchor(A, 2),
+    });
     m.handle({ type: "up", point: [100, 0], modifiers: PEN_NONE });
     m.handle({ type: "down", point: [50, 60], modifiers: PEN_NONE });
     m.handle({ type: "up", point: [50, 60], modifiers: PEN_NONE });
@@ -262,7 +316,9 @@ describe("2 — hits: several paths under the pointer, ranked by the machine", (
     });
     expect(both.intent).toBe("continue");
     // Empty space and no hits: no hit reported.
-    expect(pen().handle({ type: "move", point: [9, 9], modifiers: PEN_NONE }).hit).toBeNull();
+    expect(
+      pen().handle({ type: "move", point: [9, 9], modifiers: PEN_NONE }).hit,
+    ).toBeNull();
     expect(hover(pen(), [{ kind: "empty" }]).hit).toBeNull();
   });
 });
@@ -338,7 +394,12 @@ describe("4 — the click COUNT: a double-click without a second clock", () => {
     const m = ds();
     const a = clickAt(m, [0, 0], anchorHit(0));
     const b = clickAt(m, [0, 0], anchorHit(0));
-    expect([a.clickCount, a.doubleClick, b.clickCount, b.doubleClick]).toEqual([1, false, 1, false]);
+    expect([a.clickCount, a.doubleClick, b.clickCount, b.doubleClick]).toEqual([
+      1,
+      false,
+      1,
+      false,
+    ]);
     press(m, [0, 0], anchorHit(0));
     const dragged = release(m, [20, 0], { clickCount: 2 });
     expect(dragged.click).toBeNull();
@@ -349,58 +410,84 @@ describe("4 — the click COUNT: a double-click without a second clock", () => {
 
   it("a host-supplied count IS the answer", () => {
     const m = ds();
-    expect(clickAt(m, [0, 0], anchorHit(0), { clickCount: 1 }).doubleClick).toBe(false);
+    expect(
+      clickAt(m, [0, 0], anchorHit(0), { clickCount: 1 }).doubleClick,
+    ).toBe(false);
     const second = clickAt(m, [0, 0], anchorHit(0), { clickCount: 2 });
     expect(second.clickCount).toBe(2);
     expect(second.doubleClick).toBe(true);
     expect(second.click).toEqual(anchorHit(0));
-    expect(clickAt(m, [0, 0], anchorHit(0), { clickCount: 3 }).clickCount).toBe(3);
+    expect(clickAt(m, [0, 0], anchorHit(0), { clickCount: 3 }).clickCount).toBe(
+      3,
+    );
   });
 
   it("from timestamps: the same target, inside the interval and the slop, counts on — 1, 2, 3", () => {
     const m = ds();
-    expect(clickAt(m, [0, 0], anchorHit(0), { timeStamp: 1000 }).clickCount).toBe(1);
+    expect(
+      clickAt(m, [0, 0], anchorHit(0), { timeStamp: 1000 }).clickCount,
+    ).toBe(1);
     const two = clickAt(m, [1, 0], anchorHit(0), { timeStamp: 1300 });
     expect(two.clickCount).toBe(2);
     expect(two.doubleClick).toBe(true);
-    expect(clickAt(m, [1, 1], anchorHit(0), { timeStamp: 1600 }).clickCount).toBe(3);
+    expect(
+      clickAt(m, [1, 1], anchorHit(0), { timeStamp: 1600 }).clickCount,
+    ).toBe(3);
   });
 
   it("from timestamps: too slow, too far, another target, or a drag / key in between starts over", () => {
     const slow = ds();
     clickAt(slow, [0, 0], anchorHit(0), { timeStamp: 0 });
-    expect(clickAt(slow, [0, 0], anchorHit(0), { timeStamp: 501 }).clickCount).toBe(1);
+    expect(
+      clickAt(slow, [0, 0], anchorHit(0), { timeStamp: 501 }).clickCount,
+    ).toBe(1);
 
     const far = ds();
     clickAt(far, [0, 0], anchorHit(0), { timeStamp: 0 });
-    expect(clickAt(far, [5, 0], anchorHit(0), { timeStamp: 100 }).clickCount).toBe(1);
+    expect(
+      clickAt(far, [5, 0], anchorHit(0), { timeStamp: 100 }).clickCount,
+    ).toBe(1);
 
     const other = ds();
     clickAt(other, [0, 0], anchorHit(0), { timeStamp: 0 });
-    expect(clickAt(other, [0, 0], anchorHit(1), { timeStamp: 100 }).clickCount).toBe(1);
+    expect(
+      clickAt(other, [0, 0], anchorHit(1), { timeStamp: 100 }).clickCount,
+    ).toBe(1);
 
     const dragged = ds();
     clickAt(dragged, [0, 0], anchorHit(0), { timeStamp: 0 });
     press(dragged, [0, 0], anchorHit(0));
     release(dragged, [30, 0], { timeStamp: 50 });
     dragged.sync(QUAD);
-    expect(clickAt(dragged, [0, 0], anchorHit(0), { timeStamp: 100 }).clickCount).toBe(1);
+    expect(
+      clickAt(dragged, [0, 0], anchorHit(0), { timeStamp: 100 }).clickCount,
+    ).toBe(1);
 
     const keyed = ds();
     clickAt(keyed, [0, 0], anchorHit(0), { timeStamp: 0 });
     keyed.handle({ type: "key", key: "ArrowRight", modifiers: NONE });
     keyed.sync(QUAD);
-    expect(clickAt(keyed, [0, 0], anchorHit(0), { timeStamp: 100 }).clickCount).toBe(1);
+    expect(
+      clickAt(keyed, [0, 0], anchorHit(0), { timeStamp: 100 }).clickCount,
+    ).toBe(1);
   });
 
   it("a segment double-click chains whatever `t` each click found; the interval is an option", () => {
     const m = ds({ doubleClickInterval: 200 });
-    const seg = (t: number): DirectSelectHit => ({ kind: "segment", index: 0, t });
+    const seg = (t: number): DirectSelectHit => ({
+      kind: "segment",
+      index: 0,
+      t,
+    });
     clickAt(m, [50, 0], seg(0.5), { timeStamp: 0 });
-    expect(clickAt(m, [51, 0], seg(0.51), { timeStamp: 150 }).doubleClick).toBe(true);
+    expect(clickAt(m, [51, 0], seg(0.51), { timeStamp: 150 }).doubleClick).toBe(
+      true,
+    );
     m.setOptions({ doubleClickInterval: 100 });
     clickAt(m, [50, 0], seg(0.5), { timeStamp: 1000 });
-    expect(clickAt(m, [50, 0], seg(0.5), { timeStamp: 1150 }).doubleClick).toBe(false);
+    expect(clickAt(m, [50, 0], seg(0.5), { timeStamp: 1150 }).doubleClick).toBe(
+      false,
+    );
     expect(m.currentOptions().doubleClickInterval).toBe(100);
   });
 });
@@ -411,8 +498,13 @@ describe("5 — apply(ops): an insert or a convert previewed on the machine's ow
     subpathStarts: [0],
     subpathOpen: [true],
   };
-  const ds = (table: AnchorTable, extra: { transform?: [number, number, number, number, number, number]; selection?: number[] } = {}) =>
-    new DirectSelectMachine({ table, slop: 2, nudgeStep: 1, ...extra });
+  const ds = (
+    table: AnchorTable,
+    extra: {
+      transform?: [number, number, number, number, number, number];
+      selection?: number[];
+    } = {},
+  ) => new DirectSelectMachine({ table, slop: 2, nudgeStep: 1, ...extra });
 
   it("a segment-click INSERT: the anchor appears at once, and the selection follows its anchor to its new index", () => {
     const m = ds(QUAD, { selection: [2] });
@@ -445,9 +537,13 @@ describe("5 — apply(ops): an insert or a convert previewed on the machine's ow
   });
 
   it("a convert at an OPEN contour's end stays a corner; a CLOSED contour wraps (first and last are neighbours)", () => {
-    const open = ds(ARCH).apply([{ op: "pathPointCurveType", index: 0, smooth: true }]);
+    const open = ds(ARCH).apply([
+      { op: "pathPointCurveType", index: 0, smooth: true },
+    ]);
     expect(open.table.anchors[0]).toEqual(corner(0, 0));
-    const closed = ds(QUAD).apply([{ op: "pathPointCurveType", index: 0, smooth: true }]);
+    const closed = ds(QUAD).apply([
+      { op: "pathPointCurveType", index: 0, smooth: true },
+    ]);
     // prev = (0, 100), next = (100, 0): tangent (1, -1)/√2, each handle a
     // third of 100 along it.
     const h = 100 / 3 / Math.SQRT2;
@@ -458,8 +554,12 @@ describe("5 — apply(ops): an insert or a convert previewed on the machine's ow
     expect(a.right[0]).toBeCloseTo(h, 9);
     expect(a.right[1]).toBeCloseTo(-h, 9);
     // …and the last anchor wraps the other way.
-    const last = ds(QUAD).apply([{ op: "pathPointCurveType", index: 3, smooth: true }]);
-    expect(last.table.anchors[3].left).not.toEqual(last.table.anchors[3].anchor);
+    const last = ds(QUAD).apply([
+      { op: "pathPointCurveType", index: 3, smooth: true },
+    ]);
+    expect(last.table.anchors[3].left).not.toEqual(
+      last.table.anchors[3].anchor,
+    );
   });
 
   it("ops are INNER space: through a transform the preview lands where the pointer sees it", () => {
@@ -471,7 +571,12 @@ describe("5 — apply(ops): an insert or a convert previewed on the machine's ow
   it("the machine keeps editing on the applied table: the next drag plans against the NEW indices", () => {
     const m = ds(QUAD);
     m.apply(anchorEditOps(planAnchorAddAt(QUAD, 0, 0.5)!));
-    m.handle({ type: "down", point: [50, 0], hit: anchorHit(1), modifiers: NONE });
+    m.handle({
+      type: "down",
+      point: [50, 0],
+      hit: anchorHit(1),
+      modifiers: NONE,
+    });
     m.handle({ type: "move", point: [50, -20], modifiers: NONE });
     const snap = m.handle({ type: "up", point: [50, -20], modifiers: NONE });
     expect(snap.commit?.ops).toEqual([
@@ -481,7 +586,12 @@ describe("5 — apply(ops): an insert or a convert previewed on the machine's ow
 
   it("an apply after a DRAG is written against the table the drag left (the machine tracks it in inner space)", () => {
     const m = ds(QUAD, { transform: [1, 0, 0, 1, 5, 5] });
-    m.handle({ type: "down", point: [105, 5], hit: anchorHit(1), modifiers: NONE });
+    m.handle({
+      type: "down",
+      point: [105, 5],
+      hit: anchorHit(1),
+      modifiers: NONE,
+    });
     m.handle({ type: "move", point: [125, 5], modifiers: NONE });
     const dragged = m.handle({ type: "up", point: [125, 5], modifiers: NONE });
     const afterDrag = applyPathOps(QUAD, dragged.commit!.ops);
@@ -501,21 +611,34 @@ describe("5 — apply(ops): an insert or a convert previewed on the machine's ow
 
   it("drops a gesture in flight, as sync does", () => {
     const m = ds(QUAD);
-    m.handle({ type: "down", point: [0, 0], hit: anchorHit(0), modifiers: NONE });
+    m.handle({
+      type: "down",
+      point: [0, 0],
+      hit: anchorHit(0),
+      modifiers: NONE,
+    });
     m.handle({ type: "move", point: [30, 0], modifiers: NONE });
-    const snap = m.apply([{ op: "pathPointCurveType", index: 2, smooth: false }]);
+    const snap = m.apply([
+      { op: "pathPointCurveType", index: 2, smooth: false },
+    ]);
     expect(snap.mode).toBe("idle");
     // The trailing `up` of the dropped gesture commits nothing.
-    expect(m.handle({ type: "up", point: [30, 0], modifiers: NONE }).commit).toBeNull();
+    expect(
+      m.handle({ type: "up", point: [30, 0], modifiers: NONE }).commit,
+    ).toBeNull();
     expect(snap.table.anchors[0]).toEqual(corner(0, 0));
   });
 
   it("refuses — THROWS and changes nothing — an out-of-range index or a joinPaths", () => {
     const m = ds(QUAD, { selection: [1] });
     const before = m.snapshot();
-    expect(() => m.apply([{ op: "pathPointRemove", index: 9 }])).toThrow(RangeError);
+    expect(() => m.apply([{ op: "pathPointRemove", index: 9 }])).toThrow(
+      RangeError,
+    );
     expect(() =>
-      m.apply([{ op: "joinPaths", otherId: { kind: "polygon", id: "x" } as ElementId }]),
+      m.apply([
+        { op: "joinPaths", otherId: { kind: "polygon", id: "x" } as ElementId },
+      ]),
     ).toThrow(/not an edit of one table/);
     expect(m.snapshot().table).toEqual(before.table);
     expect(m.snapshot().selected).toEqual([1]);

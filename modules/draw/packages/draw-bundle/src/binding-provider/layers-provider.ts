@@ -92,7 +92,10 @@ import type {
  * deliberately not pre-clamped here, because a stale row set should
  * produce a loud refusal rather than a plausible wrong move.
  */
-export function reorderElementMutationFor(elementId: ElementId, index: number): Mutation {
+export function reorderElementMutationFor(
+  elementId: ElementId,
+  index: number,
+): Mutation {
   return { op: "reorderElement", args: { elementId, to: { index } } };
 }
 

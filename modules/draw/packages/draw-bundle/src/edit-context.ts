@@ -41,7 +41,12 @@ export const VECTOR_GRAPHIC_CONTEXT = "vectorGraphic";
 
 /** The engine kinds that carry path anchors (the Track-J fan-out). A
  *  double-click on any of these enters anchor-editing. */
-const PATH_KINDS = new Set(["polygon", "graphicLine", "rectangle", "textFrame"]);
+const PATH_KINDS = new Set([
+  "polygon",
+  "graphicLine",
+  "rectangle",
+  "textFrame",
+]);
 
 export const vectorGraphicEditContext: EditContextContribution = {
   type: VECTOR_GRAPHIC_CONTEXT,

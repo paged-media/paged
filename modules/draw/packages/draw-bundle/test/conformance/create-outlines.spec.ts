@@ -36,7 +36,14 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from "bun:test";
 
 import type { CommandContribution, ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
@@ -62,7 +69,11 @@ const square = (x: number, y: number, s: number) =>
     [x + s, y],
     [x + s, y + s],
     [x, y + s],
-  ].map(([px, py]) => ({ anchor: [px, py] as [number, number], left: [px, py] as [number, number], right: [px, py] as [number, number] }));
+  ].map(([px, py]) => ({
+    anchor: [px, py] as [number, number],
+    left: [px, py] as [number, number],
+    right: [px, py] as [number, number],
+  }));
 
 /** Two runs: black "o" (outer + inner contour) and a red bar. */
 const RESULT: TextOutlinesWire = {
@@ -77,7 +88,13 @@ const RESULT: TextOutlinesWire = {
       subpathStarts: [0, 4],
       glyphs: 1,
     },
-    { rgb: [1, 0, 0], cmyk: null, anchors: square(20, 0, 5), subpathStarts: [0], glyphs: 1 },
+    {
+      rgb: [1, 0, 0],
+      cmyk: null,
+      anchors: square(20, 0, 5),
+      subpathStarts: [0],
+      glyphs: 1,
+    },
   ],
 };
 
@@ -92,7 +109,11 @@ const LORA = readFileSync(
 /** One page; a text frame whose story is "Ho" in black then "o" in red,
  *  set in Lora — two colours, and two rings (each "o" has a hole). */
 const TEXT_DOC = buildIdml([
-  { name: "mimetype", data: "application/vnd.adobe.indesign-idml-package", store: true },
+  {
+    name: "mimetype",
+    data: "application/vnd.adobe.indesign-idml-package",
+    store: true,
+  },
   {
     name: "designmap.xml",
     data: `<?xml version="1.0" encoding="UTF-8"?>
@@ -146,7 +167,12 @@ const V66 = await (async () => {
       payload: { family: "Lora", style: null, bytes: Array.from(LORA) },
     } as never);
     await p.load(TEXT_DOC);
-    return (await rawTextOutlines(p.host, { kind: "textFrame", id: "tf" } as ElementId)) !== null;
+    return (
+      (await rawTextOutlines(p.host, {
+        kind: "textFrame",
+        id: "tf",
+      } as ElementId)) !== null
+    );
   } finally {
     p.dispose();
   }
@@ -156,7 +182,9 @@ describe("draw conformance — create outlines (C-69, protocol 66)", () => {
   describe("the pure batch", () => {
     it("one path per colour, first contour inserted then re-merged, grouped, the frame deleted LAST", () => {
       const existing = new Map([["Color/Black", "Color/Black"]]);
-      const ops = opsOf(createOutlinesBatchFor({ frame: RESULT.id, result: RESULT, existing }));
+      const ops = opsOf(
+        createOutlinesBatchFor({ frame: RESULT.id, result: RESULT, existing }),
+      );
       expect(ops.map((o) => o.op)).toEqual([
         // black: no swatch (process black → Color/Black)
         "insertPath",
@@ -176,22 +204,36 @@ describe("draw conformance — create outlines (C-69, protocol 66)", () => {
       const firstInsert = ops[0].args as { anchors: unknown[]; open: boolean };
       expect(firstInsert.anchors).toHaveLength(4);
       expect(firstInsert.open).toBe(false);
-      const merge = ops[2].args as { path: string; value: { value: { subpathStarts: number[]; anchors: unknown[] } } };
+      const merge = ops[2].args as {
+        path: string;
+        value: { value: { subpathStarts: number[]; anchors: unknown[] } };
+      };
       expect(merge.path).toBe("framePath");
       expect(merge.value.value.subpathStarts).toEqual([0, 4]);
       expect(merge.value.value.anchors).toHaveLength(8);
-      expect((ops[3].args as { value: { value: string } }).value.value).toBe("Color/Black");
-      const swatch = (ops[5].args as { spec: { name: string; selfId: string } }).spec;
+      expect((ops[3].args as { value: { value: string } }).value.value).toBe(
+        "Color/Black",
+      );
+      const swatch = (ops[5].args as { spec: { name: string; selfId: string } })
+        .spec;
       expect(swatch.name.toLowerCase()).toBe("#ff0000");
-      expect((ops[8].args as { value: { value: string } }).value.value).toBe(swatch.selfId);
-      expect((ops[9].args as { value: { value: string | null } }).value.value).toBeNull();
+      expect((ops[8].args as { value: { value: string } }).value.value).toBe(
+        swatch.selfId,
+      );
+      expect(
+        (ops[9].args as { value: { value: string | null } }).value.value,
+      ).toBeNull();
       expect(ops[11].args).toEqual({ frameId: "tf1" });
     });
 
     it("an existing swatch named with the hex is reused; a single colour is not grouped", () => {
       const one: TextOutlinesWire = { ...RESULT, runs: [RESULT.runs[1]] };
       const ops = opsOf(
-        createOutlinesBatchFor({ frame: RESULT.id, result: one, existing: new Map([["#FF0000", "Color/u9"]]) }),
+        createOutlinesBatchFor({
+          frame: RESULT.id,
+          result: one,
+          existing: new Map([["#FF0000", "Color/u9"]]),
+        }),
       );
       expect(ops.some((o) => o.op === "createSwatch")).toBe(false);
       expect(ops.some((o) => o.op === "createGroup")).toBe(false);
@@ -202,7 +244,11 @@ describe("draw conformance — create outlines (C-69, protocol 66)", () => {
       const plan = outlineSwatchFor(RESULT.runs[0], new Map());
       expect(plan.create?.name.toLowerCase()).toBe("#000000");
       expect(
-        createOutlinesBatchFor({ frame: RESULT.id, result: { ...RESULT, runs: [] }, existing: new Map() }),
+        createOutlinesBatchFor({
+          frame: RESULT.id,
+          result: { ...RESULT, runs: [] },
+          existing: new Map(),
+        }),
       ).toBeNull();
     });
   });
@@ -213,14 +259,18 @@ describe("draw conformance — create outlines (C-69, protocol 66)", () => {
     let v66 = false;
 
     const commandFor = (id: string): CommandContribution => {
-      const rec = h.contributions.find((c) => c.kind === "command" && c.id === id);
+      const rec = h.contributions.find(
+        (c) => c.kind === "command" && c.id === id,
+      );
       if (!rec) throw new Error(`no command recorded for ${id}`);
       return rec.value as CommandContribution;
     };
 
     const leafKinds = async (): Promise<string[]> => {
       const out: string[] = [];
-      const walk = (nodes: { id?: { kind?: string; id?: string }; children?: unknown[] }[]) => {
+      const walk = (
+        nodes: { id?: { kind?: string; id?: string }; children?: unknown[] }[],
+      ) => {
         for (const n of nodes) {
           if (n.id?.id) out.push(`${n.id.kind}:${n.id.id}`);
           if (n.children) walk(n.children as never);
@@ -245,63 +295,87 @@ describe("draw conformance — create outlines (C-69, protocol 66)", () => {
     });
     afterAll(() => h?.dispose());
 
-    it.skipIf(!V66 && process.env.PAGED_REQUIRE_V66 !== "1")("protocol 66: the frame becomes paths inside its own box, in ONE batch; one undo brings the frame back", async () => {
-      if (!v66) throw new Error("PAGED_REQUIRE_V66=1 but the engine does not answer requestTextOutlines");
-      const read = (await rawTextOutlines(h.host, frame))!;
-      expect(read.runs.reduce((n, r) => n + r.glyphs, 0)).toBe(3);
-      expect(read.runs).toHaveLength(2);
-      const [geom] = await h.host.document.elementGeometry([frame]);
-      const m = (geom.itemTransform ?? null) as Affine | null;
-      const [top, left, bottom, right] = m ? transformBounds(geom.bounds, m) : geom.bounds;
-      const before = await leafKinds();
-      await h.host.selection.set([frame]);
-      const counted = countingHost(h.host);
-      expect(await applyCreateOutlines(counted.host)).toEqual([frame]);
-      expect(counted.work.mutations).toHaveLength(1);
+    it.skipIf(!V66 && process.env.PAGED_REQUIRE_V66 !== "1")(
+      "protocol 66: the frame becomes paths inside its own box, in ONE batch; one undo brings the frame back",
+      async () => {
+        if (!v66)
+          throw new Error(
+            "PAGED_REQUIRE_V66=1 but the engine does not answer requestTextOutlines",
+          );
+        const read = (await rawTextOutlines(h.host, frame))!;
+        expect(read.runs.reduce((n, r) => n + r.glyphs, 0)).toBe(3);
+        expect(read.runs).toHaveLength(2);
+        const [geom] = await h.host.document.elementGeometry([frame]);
+        const m = (geom.itemTransform ?? null) as Affine | null;
+        const [top, left, bottom, right] = m
+          ? transformBounds(geom.bounds, m)
+          : geom.bounds;
+        const before = await leafKinds();
+        await h.host.selection.set([frame]);
+        const counted = countingHost(h.host);
+        expect(await applyCreateOutlines(counted.host)).toEqual([frame]);
+        expect(counted.work.mutations).toHaveLength(1);
 
-      const after = await leafKinds();
-      const frameKey = `${frame.kind}:${String(frame.id)}`;
-      expect(after).not.toContain(frameKey);
-      const added = after.filter((k) => !before.includes(k));
-      expect(added.length).toBeGreaterThanOrEqual(1);
-      for (const key of added.filter((k) => k.startsWith("polygon:"))) {
-        const id = { kind: "polygon", id: key.slice("polygon:".length) } as ElementId;
-        const anchors = (await h.host.document.pathAnchors(id))!;
-        expect(anchors.subpathStarts.length).toBeGreaterThanOrEqual(1);
-        // Inside the frame's page-space box (pathAnchors answers the
-        // path's own space, and an inserted path has no transform).
-        for (const a of anchors.anchors) {
-          expect(a.anchor[0]).toBeGreaterThan(left - 1);
-          expect(a.anchor[0]).toBeLessThan(right + 1);
-          expect(a.anchor[1]).toBeGreaterThan(top - 1);
-          expect(a.anchor[1]).toBeLessThan(bottom + 1);
+        const after = await leafKinds();
+        const frameKey = `${frame.kind}:${String(frame.id)}`;
+        expect(after).not.toContain(frameKey);
+        const added = after.filter((k) => !before.includes(k));
+        expect(added.length).toBeGreaterThanOrEqual(1);
+        for (const key of added.filter((k) => k.startsWith("polygon:"))) {
+          const id = {
+            kind: "polygon",
+            id: key.slice("polygon:".length),
+          } as ElementId;
+          const anchors = (await h.host.document.pathAnchors(id))!;
+          expect(anchors.subpathStarts.length).toBeGreaterThanOrEqual(1);
+          // Inside the frame's page-space box (pathAnchors answers the
+          // path's own space, and an inserted path has no transform).
+          for (const a of anchors.anchors) {
+            expect(a.anchor[0]).toBeGreaterThan(left - 1);
+            expect(a.anchor[0]).toBeLessThan(right + 1);
+            expect(a.anchor[1]).toBeGreaterThan(top - 1);
+            expect(a.anchor[1]).toBeLessThan(bottom + 1);
+          }
         }
-      }
-      // Two colours → two compound paths, grouped. "o" is a ring, so the
-      // red path (one "o") has two contours and the black one ("H" + "o")
-      // at least three.
-      const holes = await Promise.all(
-        added
-          .filter((k) => k.startsWith("polygon:"))
-          .map(async (k) => (await h.host.document.pathAnchors({ kind: "polygon", id: k.slice(8) } as ElementId))!.subpathStarts.length),
-      );
-      expect(holes.sort((a, b) => a - b)).toHaveLength(2);
-      expect(holes[0]).toBe(2);
-      expect(holes[1]).toBeGreaterThanOrEqual(3);
-      expect(added.some((k) => k.startsWith("group:"))).toBe(true);
-      // The red one is painted with a swatch named by its hex.
-      const swatches = (await h.host.document.collection("swatches")) as { name: string }[];
-      expect(swatches.some((sw) => sw.name.toLowerCase() === "#ff0000")).toBe(true);
+        // Two colours → two compound paths, grouped. "o" is a ring, so the
+        // red path (one "o") has two contours and the black one ("H" + "o")
+        // at least three.
+        const holes = await Promise.all(
+          added
+            .filter((k) => k.startsWith("polygon:"))
+            .map(
+              async (k) =>
+                (await h.host.document.pathAnchors({
+                  kind: "polygon",
+                  id: k.slice(8),
+                } as ElementId))!.subpathStarts.length,
+            ),
+        );
+        expect(holes.sort((a, b) => a - b)).toHaveLength(2);
+        expect(holes[0]).toBe(2);
+        expect(holes[1]).toBeGreaterThanOrEqual(3);
+        expect(added.some((k) => k.startsWith("group:"))).toBe(true);
+        // The red one is painted with a swatch named by its hex.
+        const swatches = (await h.host.document.collection("swatches")) as {
+          name: string;
+        }[];
+        expect(swatches.some((sw) => sw.name.toLowerCase() === "#ff0000")).toBe(
+          true,
+        );
 
-      await h.host.document.undo();
-      expect(await leafKinds()).toEqual(before);
-    });
+        await h.host.document.undo();
+        expect(await leafKinds()).toEqual(before);
+      },
+    );
 
-    it.skipIf(V66)("an OLDER engine: the command refuses and the frame is left as text", async () => {
-      const before = await leafKinds();
-      await h.host.selection.set([frame]);
-      await commandFor(CREATE_OUTLINES_COMMAND_ID).handler(undefined);
-      expect(await leafKinds()).toEqual(before);
-    });
+    it.skipIf(V66)(
+      "an OLDER engine: the command refuses and the frame is left as text",
+      async () => {
+        const before = await leafKinds();
+        await h.host.selection.set([frame]);
+        await commandFor(CREATE_OUTLINES_COMMAND_ID).handler(undefined);
+        expect(await leafKinds()).toEqual(before);
+      },
+    );
   });
 });

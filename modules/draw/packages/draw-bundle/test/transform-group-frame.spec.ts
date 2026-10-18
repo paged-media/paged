@@ -65,10 +65,18 @@ const groupId = (id: string): ElementId => ({ kind: "group", id }) as ElementId;
 
 /** The smallest host a reflect reaches, answering for `groups` only and
  *  recording every mutation it is sent. */
-function groupHost(groups: GroupFixture[]): { host: BundleHost; sent: unknown[] } {
+function groupHost(groups: GroupFixture[]): {
+  host: BundleHost;
+  sent: unknown[];
+} {
   const sent: unknown[] = [];
   const byId = new Map(groups.map((g) => [g.id, g]));
-  const quiet = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
+  const quiet = {
+    debug: () => {},
+    info: () => {},
+    warn: () => {},
+    error: () => {},
+  };
   const host = {
     log: quiet,
     supports: () => false,
@@ -80,7 +88,10 @@ function groupHost(groups: GroupFixture[]): { host: BundleHost; sent: unknown[] 
         return {
           entries: [
             { path: "frameBounds", value: { type: "bounds", value: g.box } },
-            { path: "frameTransform", value: { type: "transform", value: g.stored } },
+            {
+              path: "frameTransform",
+              value: { type: "transform", value: g.stored },
+            },
           ],
         };
       },
@@ -95,7 +106,9 @@ function groupHost(groups: GroupFixture[]): { host: BundleHost; sent: unknown[] 
               spreadId: "s",
               bounds: [0, 0, 1, 1],
               itemTransform: g.geometry.itemTransform,
-              ...(g.geometry.pageOrigin ? { pageOrigin: g.geometry.pageOrigin } : {}),
+              ...(g.geometry.pageOrigin
+                ? { pageOrigin: g.geometry.pageOrigin }
+                : {}),
               hasImage: false,
             },
           ];
@@ -112,14 +125,28 @@ function groupHost(groups: GroupFixture[]): { host: BundleHost; sent: unknown[] 
 /** The `transform` each `setGroupTransform` of the one batch wrote. */
 function groupWrites(sent: unknown[]): Record<string, number[]> {
   expect(sent).toHaveLength(1);
-  const ops = (sent[0] as { args: { ops: { op: string; args: { groupId: string; transform: number[] } }[] } }).args.ops;
+  const ops = (
+    sent[0] as {
+      args: {
+        ops: { op: string; args: { groupId: string; transform: number[] } }[];
+      };
+    }
+  ).args.ops;
   return Object.fromEntries(
-    ops.filter((o) => o.op === "setGroupTransform").map((o) => [o.args.groupId, o.args.transform]),
+    ops
+      .filter((o) => o.op === "setGroupTransform")
+      .map((o) => [o.args.groupId, o.args.transform]),
   );
 }
 
-const expectAffine = (got: readonly number[] | null | undefined, want: Affine) => {
-  expect(got, `got ${JSON.stringify(got)}, want ${JSON.stringify(want)}`).toHaveLength(6);
+const expectAffine = (
+  got: readonly number[] | null | undefined,
+  want: Affine,
+) => {
+  expect(
+    got,
+    `got ${JSON.stringify(got)}, want ${JSON.stringify(want)}`,
+  ).toHaveLength(6);
   got!.forEach((v, i) => expect(v).toBeCloseTo(want[i]!, 9));
 };
 
@@ -137,9 +164,18 @@ describe("Reflect a group in its parent's frame", () => {
     // The engine answers page space: the composed transform less the
     // page's origin, which it reports beside it.
     const origin: [number, number] = [50, 20];
-    const pageLocal: Affine = [...COMPOSED.slice(0, 4), COMPOSED[4] - origin[0], COMPOSED[5] - origin[1]] as unknown as Affine;
+    const pageLocal: Affine = [
+      ...COMPOSED.slice(0, 4),
+      COMPOSED[4] - origin[0],
+      COMPOSED[5] - origin[1],
+    ] as unknown as Affine;
     const { host, sent } = groupHost([
-      { id: "inner", stored: INNER, box: BOX, geometry: { itemTransform: pageLocal, pageOrigin: origin } },
+      {
+        id: "inner",
+        stored: INNER,
+        box: BOX,
+        geometry: { itemTransform: pageLocal, pageOrigin: origin },
+      },
     ]);
     const done = await applyReflect(host, 90);
     expect(done.applied).toBe(true);
@@ -150,12 +186,18 @@ describe("Reflect a group in its parent's frame", () => {
     // (x, y) → (x + 10, 500 − y) in the group's own coordinates — where
     // writing R ∘ G would have written a left ↔ right one.
     expectAffine(written, [1, 0, 0, -1, 10, 500]);
-    expect(written[0]).not.toBeCloseTo(composeAffine(affineReflect(90, [150, 130]), INNER)[0], 3);
+    expect(written[0]).not.toBeCloseTo(
+      composeAffine(affineReflect(90, [150, 130]), INNER)[0],
+      3,
+    );
 
     // What the user sees: every point of the group, through its parent,
     // lands mirrored about the page's vertical axis through the centre.
     const nowComposed = composeAffine(PARENT, written as unknown as Affine);
-    expectAffine(nowComposed, composeAffine(affineReflect(90, [150, 130]), COMPOSED));
+    expectAffine(
+      nowComposed,
+      composeAffine(affineReflect(90, [150, 130]), COMPOSED),
+    );
     for (const [x, y] of [
       [0, 0],
       [40, 0],
@@ -173,7 +215,9 @@ describe("Reflect a group in its parent's frame", () => {
     // A stored transform the way the engine keeps it (single precision),
     // and the page-space answer it rounds once more on a facing spread's
     // verso: E − G is noise, not a parent frame.
-    const stored = affineRotate(30, [-300, 130]).map(Math.fround) as unknown as Affine;
+    const stored = affineRotate(30, [-300, 130]).map(
+      Math.fround,
+    ) as unknown as Affine;
     const origin: [number, number] = [-612, -396];
     const pageLocal = [
       ...stored.slice(0, 4),
@@ -182,21 +226,37 @@ describe("Reflect a group in its parent's frame", () => {
     ] as unknown as Affine;
     const box: Box = [100, -360, 160, -240];
     const { host, sent } = groupHost([
-      { id: "g", stored, box, geometry: { itemTransform: pageLocal, pageOrigin: origin } },
+      {
+        id: "g",
+        stored,
+        box,
+        geometry: { itemTransform: pageLocal, pageOrigin: origin },
+      },
     ]);
     await applyReflect(host, 0);
-    expect(groupWrites(sent).g).toEqual([...composeAffine(affineReflect(0, [-300, 130]), stored)]);
+    expect(groupWrites(sent).g).toEqual([
+      ...composeAffine(affineReflect(0, [-300, 130]), stored),
+    ]);
   });
 
   it("an engine that answers NO group geometry (0.71.x): exactly today's write, R ∘ G — nested or not", async () => {
-    const { host, sent } = groupHost([{ id: "inner", stored: INNER, box: BOX }]);
+    const { host, sent } = groupHost([
+      { id: "inner", stored: INNER, box: BOX },
+    ]);
     await applyReflect(host, 90);
-    expect(groupWrites(sent).inner).toEqual([...composeAffine(affineReflect(90, [150, 130]), INNER)]);
+    expect(groupWrites(sent).inner).toEqual([
+      ...composeAffine(affineReflect(90, [150, 130]), INNER),
+    ]);
   });
 
   it("a group with NO stored transform reads as the identity: its parent frame is its composed transform", async () => {
     const { host, sent } = groupHost([
-      { id: "inner", stored: null, box: BOX, geometry: { itemTransform: PARENT } },
+      {
+        id: "inner",
+        stored: null,
+        box: BOX,
+        geometry: { itemTransform: PARENT },
+      },
     ]);
     await applyReflect(host, 90);
     const written = groupWrites(sent).inner!;
@@ -232,12 +292,22 @@ describe("transformBatchFor — a target with a parent frame", () => {
     const R = affineReflect(90, [150, 130]);
     const batch = transformBatchFor(
       [
-        { id: groupId("inner"), matrix: INNER, box: BOX, group: true, frame: PARENT },
+        {
+          id: groupId("inner"),
+          matrix: INNER,
+          box: BOX,
+          group: true,
+          frame: PARENT,
+        },
         { id: groupId("top"), matrix: INNER, box: BOX, group: true },
       ],
       R,
       false,
-    ) as { args: { ops: { op: string; args: { groupId: string; transform: number[] } }[] } };
+    ) as {
+      args: {
+        ops: { op: string; args: { groupId: string; transform: number[] } }[];
+      };
+    };
     const [inner, top] = batch.args.ops;
     expectAffine(inner!.args.transform, [1, 0, 0, -1, 10, 500]);
     expect(top!.args.transform).toEqual([...composeAffine(R, INNER)]);
@@ -246,10 +316,20 @@ describe("transformBatchFor — a target with a parent frame", () => {
   it("a SINGULAR parent frame cannot be divided out: R ∘ G, as before", () => {
     const R = affineReflect(90, [150, 130]);
     const batch = transformBatchFor(
-      [{ id: groupId("inner"), matrix: INNER, box: BOX, group: true, frame: [0, 0, 0, 0, 5, 5] }],
+      [
+        {
+          id: groupId("inner"),
+          matrix: INNER,
+          box: BOX,
+          group: true,
+          frame: [0, 0, 0, 0, 5, 5],
+        },
+      ],
       R,
       false,
     ) as { args: { ops: { args: { transform: number[] } }[] } };
-    expect(batch.args.ops[0]!.args.transform).toEqual([...composeAffine(R, INNER)]);
+    expect(batch.args.ops[0]!.args.transform).toEqual([
+      ...composeAffine(R, INNER),
+    ]);
   });
 });

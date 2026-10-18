@@ -68,7 +68,10 @@
 // or one only commands ever wrote, does not survive an InDesign save —
 // recorded as a gap.
 
-import type { BundleHost, PluginMetadataEnvelope } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  PluginMetadataEnvelope,
+} from "@paged-media/plugin-api";
 
 import manifest from "../manifest.json";
 
@@ -77,7 +80,10 @@ import manifest from "../manifest.json";
 export type RecipeHost = Pick<BundleHost, "parts" | "supports" | "log"> & {
   bindings?: BundleHost["bindings"];
   document?: Partial<
-    Pick<BundleHost["document"], "getDocumentMetadata" | "setDocumentMetadata" | "onDidChange">
+    Pick<
+      BundleHost["document"],
+      "getDocumentMetadata" | "setDocumentMetadata" | "onDidChange"
+    >
   >;
 };
 
@@ -134,7 +140,10 @@ export function recipeHash(text: string): string {
 /** Non-ASCII → `\uXXXX` (still valid JSON), the form InDesign keeps a
  *  label value in byte-exact (round-trip survey, 2026-10-06). */
 const asciiJson = (text: string): string =>
-  text.replace(/[\u0080-￿]/g, (c) => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"));
+  text.replace(
+    /[\u0080-￿]/g,
+    (c) => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"),
+  );
 
 /** Does this host carry the undoable label lane? */
 export function labelled(host: RecipeHost): boolean {
@@ -159,7 +168,9 @@ export function recipeEntriesOf(
   return out;
 }
 
-async function readLabel(host: RecipeHost): Promise<PluginMetadataEnvelope | null> {
+async function readLabel(
+  host: RecipeHost,
+): Promise<PluginMetadataEnvelope | null> {
   try {
     return (await host.document!.getDocumentMetadata!()) ?? null;
   } catch {
@@ -180,14 +191,21 @@ interface LegacyRead {
  *  host like the link index; a stale entry can only drop a stamp, which
  *  makes the part read as current (the command lane's own semantics). */
 const lastBase = new WeakMap<object, Map<string, string | null>>();
-const rememberBase = (host: object, legacyPart: string, base: string | null): void => {
+const rememberBase = (
+  host: object,
+  legacyPart: string,
+  base: string | null,
+): void => {
   let m = lastBase.get(host);
   if (!m) lastBase.set(host, (m = new Map()));
   m.set(legacyPart, base);
 };
 
 /** Read the fixed-name part and split off its `_base` stamp. */
-async function readLegacy(host: RecipeHost, legacyPart: string): Promise<LegacyRead> {
+async function readLegacy(
+  host: RecipeHost,
+  legacyPart: string,
+): Promise<LegacyRead> {
   const raw = await host.parts.read(legacyPart);
   const out = splitLegacy(raw);
   rememberBase(host, legacyPart, out.base);
@@ -213,14 +231,17 @@ export function stampBase(bytes: Uint8Array, base: string | null): Uint8Array {
   if (base === null) return bytes;
   try {
     const obj = JSON.parse(decoder.decode(bytes)) as Record<string, unknown>;
-    return encoder.encode(`${JSON.stringify({ _base: base, ...obj }, null, 2)}\n`);
+    return encoder.encode(
+      `${JSON.stringify({ _base: base, ...obj }, null, 2)}\n`,
+    );
   } catch {
     return bytes;
   }
 }
 
 /** The state before the first labelled write. */
-export const recipeOriginPath = (name: string): string => `recipes/${name}/origin.json`;
+export const recipeOriginPath = (name: string): string =>
+  `recipes/${name}/origin.json`;
 
 const nonEmpty = (b: Uint8Array | null): Uint8Array | null =>
   b && b.byteLength > 0 ? b : null;
@@ -240,7 +261,9 @@ export async function readRecipeBytes(
   if (legacy.bytes && legacy.base === current) return legacy.bytes;
   if (!legacy.bytes && !entry) return null;
   if (entry) {
-    const bytes = nonEmpty(await host.parts.read(recipePartPath(name, entry.h)).catch(() => null));
+    const bytes = nonEmpty(
+      await host.parts.read(recipePartPath(name, entry.h)).catch(() => null),
+    );
     if (bytes) return bytes;
     if (entry.inline !== undefined) return encoder.encode(entry.inline);
     host.log.warn(
@@ -250,7 +273,9 @@ export async function readRecipeBytes(
     return null;
   }
   // The label lost its entry (the first labelled write was undone).
-  return nonEmpty(await host.parts.read(recipeOriginPath(name)).catch(() => null));
+  return nonEmpty(
+    await host.parts.read(recipeOriginPath(name)).catch(() => null),
+  );
 }
 
 /** The label envelope after setting `name` to `bytes` (pure). Every other
@@ -273,14 +298,25 @@ export function withRecipeEntry(
   const next: Record<string, RecipeLabelEntry> = {};
   for (const [n, e] of Object.entries(entries)) next[n] = { h: e.h };
   next[name] = { h };
-  const order = [name, ...Object.keys(next).filter((n) => n !== name).sort()];
+  const order = [
+    name,
+    ...Object.keys(next)
+      .filter((n) => n !== name)
+      .sort(),
+  ];
   const sizeOf = (r: Record<string, RecipeLabelEntry>) =>
-    asciiJson(JSON.stringify({ v: prev?.v ?? 1, data: { ...(prev?.data ?? {}), recipes: r } })).length;
+    asciiJson(
+      JSON.stringify({
+        v: prev?.v ?? 1,
+        data: { ...(prev?.data ?? {}), recipes: r },
+      }),
+    ).length;
   for (const n of order) {
     const inline = full[n];
     if (inline === undefined) continue;
     const candidate = { ...next, [n]: { h: next[n]!.h, inline } };
-    if (sizeOf(candidate) <= INLINE_BUDGET) Object.assign(next, { [n]: candidate[n] });
+    if (sizeOf(candidate) <= INLINE_BUDGET)
+      Object.assign(next, { [n]: candidate[n] });
   }
   return {
     envelope: {
@@ -307,9 +343,12 @@ export async function writeRecipeBytes(
   let base: string | null = null;
   if (labelled(host)) {
     const known = lastBase.get(host)?.get(legacyPart);
-    const stamped = known !== undefined ? known : (await readLegacy(host, legacyPart)).base;
+    const stamped =
+      known !== undefined ? known : (await readLegacy(host, legacyPart)).base;
     if (stamped !== null) {
-      const entry = recipeEntriesOf(await readLabel(host))[recipeNameOf(legacyPart)];
+      const entry = recipeEntriesOf(await readLabel(host))[
+        recipeNameOf(legacyPart)
+      ];
       base = entry?.h ?? null;
     }
   }
@@ -375,7 +414,10 @@ export async function planRecipeWrites(
     if (!prior[name]) {
       // The state the label falls back to if this write is undone.
       const before = await readRecipeBytes(host, legacyPart);
-      parts.push({ path: recipeOriginPath(name), bytes: before ?? new Uint8Array() });
+      parts.push({
+        path: recipeOriginPath(name),
+        bytes: before ?? new Uint8Array(),
+      });
     }
     const next = withRecipeEntry(envelope, name, bytes);
     envelope = next.envelope;
@@ -401,4 +443,5 @@ export const planRecipeWrite = (
   host: RecipeHost,
   legacyPart: string,
   bytes: Uint8Array,
-): Promise<RecipeStatePlan | string> => planRecipeWrites(host, [{ legacyPart, bytes }]);
+): Promise<RecipeStatePlan | string> =>
+  planRecipeWrites(host, [{ legacyPart, bytes }]);

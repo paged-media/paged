@@ -157,7 +157,11 @@ const OUTLINE_STROKE_CASES: OutlineCase[] = [
 // segment — (102,194),(86,182) — and the end to x = 270; a round cap is a
 // disc of radius 10 about each end. SHARP's miter tip is (160, 100 − 50/3);
 // bevelled, its top is y = 94.
-const JOIN_AREA = { miter: 4000, round: 3950 + 50 * Math.atan2(4, 3), bevel: 3990 };
+const JOIN_AREA = {
+  miter: 4000,
+  round: 3950 + 50 * Math.atan2(4, 3),
+  bevel: 3990,
+};
 const CAP_AREA = { butt: 0, round: 100 * Math.PI, square: 400 };
 const CAP_BOUNDS: Record<Cap, [number, number, number, number]> = {
   butt: [92, 90, 260, 186],
@@ -176,8 +180,14 @@ const BY_DEFINITION: Record<
       ]),
     ),
   ),
-  "sharp-butt-miter-limit1_5": { area: 4000 - 400 / 3 + 48, bounds: [92, 94, 228, 186] },
-  "sharp-butt-miter-limit2": { area: 4000, bounds: [92, 100 - 50 / 3, 228, 186] },
+  "sharp-butt-miter-limit1_5": {
+    area: 4000 - 400 / 3 + 48,
+    bounds: [92, 94, 228, 186],
+  },
+  "sharp-butt-miter-limit2": {
+    area: 4000,
+    bounds: [92, 100 - 50 / 3, 228, 186],
+  },
 };
 
 /** CONVENTION — anchor count, `[engine, Illustrator]`. The engine keeps the
@@ -198,15 +208,20 @@ const ENGINE_VS_ILLUSTRATOR_ANCHORS: Record<string, [number, number]> = {
 };
 
 /** CONVENTION — the area the engine's inner-join loop covers twice. */
-const ENGINE_LOOP_AREA = (id: string): number => (id.startsWith("sharp") ? 256 / 3 : 10);
+const ENGINE_LOOP_AREA = (id: string): number =>
+  id.startsWith("sharp") ? 256 / 3 : 10;
 
 const FIXTURE = loadOracle<OutlineParameters>("outline-stroke");
 const RECORDED = new Map(FIXTURE.cases.map((c) => [c.id, c]));
-const theirs = (id: string): ShapeSummary => summarize(RECORDED.get(id)!.measured.paths);
+const theirs = (id: string): ShapeSummary =>
+  summarize(RECORDED.get(id)!.measured.paths);
 
 describe("oracle — outline stroke", () => {
   let h: HeadlessHost;
-  const engineResults = new Map<string, { paths: OraclePath[]; shape: ShapeSummary }>();
+  const engineResults = new Map<
+    string,
+    { paths: OraclePath[]; shape: ShapeSummary }
+  >();
 
   beforeAll(async () => {
     h = await openOracleHost();
@@ -253,10 +268,14 @@ describe("oracle — outline stroke", () => {
         expect(c.measured.paths, c.id).toHaveLength(1);
         for (const p of c.measured.paths) {
           const signed = signedArea(p);
-          expect(relDiff(Math.abs(signed), p.area), `${c.id} area`).toBeLessThan(AREA_REL_TOL);
-          expect(boundsDiff(pathBounds(p), p.bounds), `${c.id} bounds`).toBeLessThan(
-            BOUNDS_ABS_TOL,
-          );
+          expect(
+            relDiff(Math.abs(signed), p.area),
+            `${c.id} area`,
+          ).toBeLessThan(AREA_REL_TOL);
+          expect(
+            boundsDiff(pathBounds(p), p.bounds),
+            `${c.id} bounds`,
+          ).toBeLessThan(BOUNDS_ABS_TOL);
           expect(windingOf(signed), `${c.id} winding`).toBe(p.winding);
         }
       }
@@ -268,10 +287,13 @@ describe("oracle — outline stroke", () => {
       for (const c of FIXTURE.cases) {
         const got = theirs(c.id);
         const want = BY_DEFINITION[c.id];
-        expect(relDiff(got.netArea, want.area), `${c.id} area`).toBeLessThan(AREA_REL_TOL);
-        expect(boundsDiff(got.bounds, want.bounds), `${c.id} bounds`).toBeLessThan(
-          BOUNDS_ABS_TOL,
+        expect(relDiff(got.netArea, want.area), `${c.id} area`).toBeLessThan(
+          AREA_REL_TOL,
         );
+        expect(
+          boundsDiff(got.bounds, want.bounds),
+          `${c.id} bounds`,
+        ).toBeLessThan(BOUNDS_ABS_TOL);
       }
     });
 
@@ -284,10 +306,10 @@ describe("oracle — outline stroke", () => {
         // Simple: what it paints is what it encloses. (0.2 pt² is far
         // above the flattening error of two round caps, about 0.01.)
         expect(Math.abs(got.netArea - got.fillArea), c.id).toBeLessThan(0.2);
-        expect(paintedArea(RECORDED.get(c.id)!.measured.paths, "evenodd"), c.id).toBeCloseTo(
-          got.fillArea,
-          6,
-        );
+        expect(
+          paintedArea(RECORDED.get(c.id)!.measured.paths, "evenodd"),
+          c.id,
+        ).toBeCloseTo(got.fillArea, 6);
       }
     });
 
@@ -298,7 +320,9 @@ describe("oracle — outline stroke", () => {
 
     it("what the definition does not predict: arc bulge, and a coarse grid on the sharp corner", () => {
       // A round cap pair measures 314.247, not π·100 = 314.159.
-      expect(theirs("round-miter").area - theirs("butt-miter").area).toBeCloseTo(314.247, 2);
+      expect(
+        theirs("round-miter").area - theirs("butt-miter").area,
+      ).toBeCloseTo(314.247, 2);
       // One cubic for the 53.13° round join; two per semicircular cap, and
       // one arc split at the path's start point: 5 curved segments, not 4.
       expect(theirs("butt-round").curvedSegments).toBe(1);
@@ -319,7 +343,9 @@ describe("oracle — outline stroke", () => {
         expect(ours.paths).toBe(1);
         expect(ours.allClosed).toBe(true);
         expect(relDiff(ours.fillArea, want.area)).toBeLessThan(AREA_REL_TOL);
-        expect(boundsDiff(ours.bounds, want.bounds)).toBeLessThan(BOUNDS_ABS_TOL);
+        expect(boundsDiff(ours.bounds, want.bounds)).toBeLessThan(
+          BOUNDS_ABS_TOL,
+        );
       });
     }
   });
@@ -331,8 +357,12 @@ describe("oracle — outline stroke", () => {
         const want = theirs(c.id);
         expect(ours.paths).toBe(want.paths);
         expect(ours.allClosed).toBe(want.allClosed);
-        expect(relDiff(ours.fillArea, want.fillArea)).toBeLessThan(AREA_REL_TOL);
-        expect(boundsDiff(ours.bounds, want.bounds)).toBeLessThan(BOUNDS_ABS_TOL);
+        expect(relDiff(ours.fillArea, want.fillArea)).toBeLessThan(
+          AREA_REL_TOL,
+        );
+        expect(boundsDiff(ours.bounds, want.bounds)).toBeLessThan(
+          BOUNDS_ABS_TOL,
+        );
         expect(ours.windings).toEqual(want.windings);
       });
     }
@@ -343,9 +373,18 @@ describe("oracle — outline stroke", () => {
         const want = theirs(c.id);
         const loop = ENGINE_LOOP_AREA(c.id);
         // Signed area counts the inner-join loop twice…
-        expect(ours.netArea - ours.fillArea, `${c.id}: engine loop`).toBeGreaterThan(loop - 0.2);
-        expect(ours.netArea - ours.fillArea, `${c.id}: engine loop`).toBeLessThan(loop + 0.2);
-        expect(Math.abs(want.netArea - want.fillArea), `${c.id}: Illustrator`).toBeLessThan(0.2);
+        expect(
+          ours.netArea - ours.fillArea,
+          `${c.id}: engine loop`,
+        ).toBeGreaterThan(loop - 0.2);
+        expect(
+          ours.netArea - ours.fillArea,
+          `${c.id}: engine loop`,
+        ).toBeLessThan(loop + 0.2);
+        expect(
+          Math.abs(want.netArea - want.fillArea),
+          `${c.id}: Illustrator`,
+        ).toBeLessThan(0.2);
         // …and an even-odd fill turns it into a hole.
         expect(
           ours.fillArea - paintedArea(paths, "evenodd"),
@@ -357,7 +396,9 @@ describe("oracle — outline stroke", () => {
     it("CONVENTION — anchor count: the raw expansion carries more anchors than Illustrator's outline", async () => {
       for (const c of OUTLINE_STROKE_CASES) {
         const [oursWant, theirsWant] = ENGINE_VS_ILLUSTRATOR_ANCHORS[c.id];
-        expect((await engine(c)).shape.anchors, `${c.id}: engine`).toBe(oursWant);
+        expect((await engine(c)).shape.anchors, `${c.id}: engine`).toBe(
+          oursWant,
+        );
         expect(theirs(c.id).anchors, `${c.id}: Illustrator`).toBe(theirsWant);
         expect(oursWant, c.id).toBeGreaterThan(theirsWant);
       }

@@ -372,7 +372,8 @@ function reportRefusal(
   error: unknown,
 ): string {
   const reason =
-    maskOrPathRefusalReason(error) ?? "the engine refused the opacity-mask operation";
+    maskOrPathRefusalReason(error) ??
+    "the engine refused the opacity-mask operation";
   host.log.warn(`${label}: ${reason}`);
   host.bindings.publish(BIND_OPACITY_MASK_STATUS, reason);
   return reason;

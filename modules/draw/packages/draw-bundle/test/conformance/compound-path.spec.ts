@@ -46,7 +46,14 @@
 //       its direction, every other one is wound against it.
 
 import { inflateSync } from "node:zlib";
-import { describe, expect, it, beforeAll, afterAll, beforeEach } from "bun:test";
+import {
+  describe,
+  expect,
+  it,
+  beforeAll,
+  afterAll,
+  beforeEach,
+} from "bun:test";
 
 import type {
   CommandContribution,
@@ -256,13 +263,16 @@ describe("draw conformance — COMPOUND PATHS (make / release)", () => {
     });
 
     it("makeCompoundBatchFor = framePath on the survivor + deleteFrame per consumed", () => {
-      const batch = makeCompoundBatchFor(OUTER, [INNER], RING as never) as Extract<
-        Mutation,
-        { op: "batch" }
-      >;
+      const batch = makeCompoundBatchFor(
+        OUTER,
+        [INNER],
+        RING as never,
+      ) as Extract<Mutation, { op: "batch" }>;
       expect(batch.op).toBe("batch");
       expect(batch.args.ops).toHaveLength(2);
-      expect(batch.args.ops[0]).toEqual(framePathMutationFor(OUTER, RING as never));
+      expect(batch.args.ops[0]).toEqual(
+        framePathMutationFor(OUTER, RING as never),
+      );
       expect(batch.args.ops[1]).toEqual({
         op: "deleteFrame",
         args: { frameId: F6_RING_PAIR.innerId },
@@ -276,14 +286,13 @@ describe("draw conformance — COMPOUND PATHS (make / release)", () => {
         subpathStarts: [0],
         subpathOpen: [false],
       };
-      const batch = releaseInsertBatchFor(
-        OUTER,
-        "usp",
-        one as never,
-        [two as never],
-      ) as Extract<Mutation, { op: "batch" }>;
+      const batch = releaseInsertBatchFor(OUTER, "usp", one as never, [
+        two as never,
+      ]) as Extract<Mutation, { op: "batch" }>;
       expect(batch.args.ops).toHaveLength(2);
-      expect(batch.args.ops[0]).toEqual(framePathMutationFor(OUTER, one as never));
+      expect(batch.args.ops[0]).toEqual(
+        framePathMutationFor(OUTER, one as never),
+      );
       expect(batch.args.ops[1]).toEqual({
         op: "insertPath",
         args: {
@@ -372,7 +381,9 @@ describe("draw conformance — COMPOUND PATHS (make / release)", () => {
       const outer = quad(100, 100, 400, 400) as never;
       const made = makeCompoundTableByPaintOrder([inner, outer], 1);
       expect(made.subpathStarts).toEqual([0, 4]);
-      expect(made.anchors.slice(4)).toEqual((outer as { anchors: unknown[] }).anchors);
+      expect(made.anchors.slice(4)).toEqual(
+        (outer as { anchors: unknown[] }).anchors,
+      );
       expect(Math.sign(contourSignedArea(made.anchors.slice(0, 4)))).toBe(
         -Math.sign(contourSignedArea(made.anchors.slice(4))),
       );
@@ -479,7 +490,9 @@ describe("draw conformance — COMPOUND PATHS (make / release)", () => {
       // The engine fills NON-ZERO (`paged-export-pdf` emits `f`, never
       // `f*`), so opposite windings are what carves the hole. Same sign
       // here would mean a solid coin.
-      expect(Math.sign(ringArea(outerRing))).toBe(-Math.sign(ringArea(innerRing)));
+      expect(Math.sign(ringArea(outerRing))).toBe(
+        -Math.sign(ringArea(innerRing)),
+      );
       expect(Math.abs(ringArea(outerRing))).toBeCloseTo(90000, 0);
       expect(Math.abs(ringArea(innerRing))).toBeCloseTo(10000, 0);
       // Two filled paths remain: the ring (2 contours) and the open
@@ -557,9 +570,9 @@ describe("draw conformance — COMPOUND PATHS (make / release)", () => {
       await h.host.document.undo();
       await h.host.document.undo();
       expect(await leafIds(h)).toEqual(["uinner", "uopen", "uouter"]);
-      expect(
-        (await compoundSourceOf(h.host, OPEN))!.table.subpathOpen,
-      ).toEqual([true]);
+      expect((await compoundSourceOf(h.host, OPEN))!.table.subpathOpen).toEqual(
+        [true],
+      );
     });
 
     it("a SINGLE selected element is a no-op (a compound path is made FROM several)", async () => {
@@ -592,11 +605,15 @@ describe("draw conformance — COMPOUND PATHS (make / release)", () => {
 
       await h.host.selection.set([OUTER, INNER]);
       await make.handler({} as never, undefined as never);
-      expect(contourCountOf((await compoundSourceOf(h.host, OUTER))!.table)).toBe(2);
+      expect(
+        contourCountOf((await compoundSourceOf(h.host, OUTER))!.table),
+      ).toBe(2);
 
       await h.host.selection.set([OUTER]);
       await release.handler({} as never, undefined as never);
-      expect(contourCountOf((await compoundSourceOf(h.host, OUTER))!.table)).toBe(1);
+      expect(
+        contourCountOf((await compoundSourceOf(h.host, OUTER))!.table),
+      ).toBe(1);
       expect(await leafIds(h)).toHaveLength(3);
 
       // make (1) + release (1).
@@ -625,7 +642,11 @@ describe("draw conformance — COMPOUND PATHS (make / release)", () => {
             anchors: [
               { anchor: [x, y], left: [x, y], right: [x, y] },
               { anchor: [x + s, y], left: [x + s, y], right: [x + s, y] },
-              { anchor: [x + s, y + s], left: [x + s, y + s], right: [x + s, y + s] },
+              {
+                anchor: [x + s, y + s],
+                left: [x + s, y + s],
+                right: [x + s, y + s],
+              },
               { anchor: [x, y + s], left: [x, y + s], right: [x, y + s] },
             ],
             open: false,
@@ -745,15 +766,18 @@ describe("draw conformance — COMPOUND PATHS (make / release)", () => {
           "setElementProperty",
         ]);
         expect(ops[2]!.args).toEqual({ handle: releaseHandle(0, 0) });
-        expect(ops[3]!.args.elementId).toEqual({ kind: "polygon", id: "$h:rc0_0" });
+        expect(ops[3]!.args.elementId).toEqual({
+          kind: "polygon",
+          id: "$h:rc0_0",
+        });
         expect(ops[8]!.args).toEqual({ handle: releaseHandle(1, 0) });
         // The paint is the stepwise lane's batch 2, word for word.
         expect(ops.slice(3, 6)).toEqual(
           (
-            releasePaintBatchFor([{ kind: "polygon", id: "$h:rc0_0" } as ElementId], plan.paint) as Extract<
-              Mutation,
-              { op: "batch" }
-            >
+            releasePaintBatchFor(
+              [{ kind: "polygon", id: "$h:rc0_0" } as ElementId],
+              plan.paint,
+            ) as Extract<Mutation, { op: "batch" }>
           ).args.ops,
         );
       });

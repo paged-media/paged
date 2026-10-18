@@ -54,7 +54,8 @@ export const STROKE_PANEL_ID = "media.paged.draw.panel.stroke";
  *  computes these from real state and publishes them; the host looks
  *  them up (no expression language). */
 export const BIND_HAS_SELECTION = "media.paged.draw.hasSelection";
-export const BIND_DASH_CONTROLS_VISIBLE = "media.paged.draw.dashControlsVisible";
+export const BIND_DASH_CONTROLS_VISIBLE =
+  "media.paged.draw.dashControlsVisible";
 /** Phase 4c — gates the Line ends (arrowheads) section: true when the
  *  FIRST selected element is a GraphicLine (the v43 properties are
  *  GraphicLine-only — the engine rejects them on any other kind, so the
@@ -92,7 +93,9 @@ export const ARROWHEAD_OPTIONS = [
  *  `frameStroke*Arrowhead` row is an enum whose "no arrowhead" member is
  *  `None` (the schema validates the write; `""` is not a member). */
 export const ARROWHEAD_PROPERTY_OPTIONS = ARROWHEAD_OPTIONS.map((o) =>
-  o.value === "" ? { value: "None", label: o.label } : { value: o.value, label: o.label },
+  o.value === ""
+    ? { value: "None", label: o.label }
+    : { value: o.value, label: o.label },
 );
 
 /** The panel's title: the host has its own "Stroke" panel, and this one
@@ -154,7 +157,11 @@ export const strokePanel: SchemaPanelContribution = {
             path: "frameStrokeEndCap",
             label: "Cap",
             style: "segments",
-            options: [{ value: "ButtEndCap", label: "Butt" }, { value: "RoundEndCap", label: "Round" }, { value: "ProjectingEndCap", label: "Project" } ],
+            options: [
+              { value: "ButtEndCap", label: "Butt" },
+              { value: "RoundEndCap", label: "Round" },
+              { value: "ProjectingEndCap", label: "Project" },
+            ],
             enabled: { bind: BIND_HAS_SELECTION },
           },
         ],

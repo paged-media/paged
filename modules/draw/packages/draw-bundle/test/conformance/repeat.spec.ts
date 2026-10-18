@@ -44,7 +44,14 @@
 //       wording and the registration surface (including the tool that
 //       deliberately carries NO shortcut).
 
-import { describe, expect, it, beforeAll, afterAll, beforeEach } from "bun:test";
+import {
+  describe,
+  expect,
+  it,
+  beforeAll,
+  afterAll,
+  beforeEach,
+} from "bun:test";
 
 import type {
   BundleHost,
@@ -558,7 +565,8 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
     it("the engine speaks C-15 and B-18 — the two doors this row is built on", async () => {
       const vocab = await engineOpVocabulary(h.host);
       expect(vocab).not.toBeNull();
-      for (const op of ["bindCreated", "pasteInto", "releaseFrom"]) expect(vocab!.has(op)).toBe(true);
+      for (const op of ["bindCreated", "pasteInto", "releaseFrom"])
+        expect(vocab!.has(op)).toBe(true);
     });
 
     it("C-15 RULE 1 — a bind BEFORE its creating child is refused BY NAME", async () => {
@@ -728,7 +736,11 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
         "make",
         async () => h.host.selection.set([INNER]),
         (host: BundleHost) =>
-          applyMakeRepeat(host, "radial", { count: 4, radiusPt: 120, startDeg: -90 }),
+          applyMakeRepeat(host, "radial", {
+            count: 4,
+            radiusPt: 120,
+            startDeg: -90,
+          }),
         1,
         0,
         [REPEAT_PART],
@@ -752,7 +764,11 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
         async () => {
           await h.host.selection.set([INNER]);
           expect(
-            await applyMakeRepeat(h.host, "radial", { count: 3, radiusPt: 120, startDeg: -90 }),
+            await applyMakeRepeat(h.host, "radial", {
+              count: 3,
+              radiusPt: 120,
+              startDeg: -90,
+            }),
           ).toHaveLength(2);
         },
         (host: BundleHost) => applyUpdateRepeat(host, { count: 5 }),
@@ -1370,7 +1386,9 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
         "Editing the original does not move the copies until you choose Update",
       );
       expect(REPEAT_PANEL_NOTE).toContain("a clipped repeat cannot be grouped");
-      expect(REPEAT_PANEL_NOTE).toContain("one undo step, or two when it is clipped");
+      expect(REPEAT_PANEL_NOTE).toContain(
+        "one undo step, or two when it is clipped",
+      );
     });
 
     it("registers the Repeat Options panel", () => {

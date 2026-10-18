@@ -147,8 +147,12 @@ export function outlineOfPath(read: PathAnchorsResult): LassoOutline | null {
     const to = i + 1 < starts.length ? starts[i + 1] : n;
     if (to <= from) continue;
     const isClosed = read.subpathOpen?.[i] !== true;
-    const flat = flattenAnchorRun(read.anchors.slice(from, to), { close: isClosed });
-    rings.push(flat.map(([x, y]) => (m ? (applyAffine(m, x, y) as Vec2) : [x, y])));
+    const flat = flattenAnchorRun(read.anchors.slice(from, to), {
+      close: isClosed,
+    });
+    rings.push(
+      flat.map(([x, y]) => (m ? (applyAffine(m, x, y) as Vec2) : [x, y])),
+    );
     closed.push(isClosed);
   }
   return rings.length > 0 ? { rings, closed } : null;
@@ -166,7 +170,9 @@ export function outlineOfBounds(item: ElementGeometryItem): LassoOutline {
     [left, bottom],
   ];
   return {
-    rings: [corners.map(([x, y]) => (m ? (applyAffine(m, x, y) as Vec2) : [x, y]))],
+    rings: [
+      corners.map(([x, y]) => (m ? (applyAffine(m, x, y) as Vec2) : [x, y])),
+    ],
     closed: [true],
   };
 }
@@ -286,7 +292,11 @@ export function createLassoSelectHandler(host: BundleHost): GestureHandler {
     const matches =
       rule === "centre"
         ? lassoMatches(items, polygon)
-        : lassoIntersections(items, await readLassoOutlines(host, items), polygon);
+        : lassoIntersections(
+            items,
+            await readLassoOutlines(host, items),
+            polygon,
+          );
     // Empty region ⇒ selection clears (the marquee convention).
     await host.selection.set(matches);
   };

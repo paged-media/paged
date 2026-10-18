@@ -67,13 +67,22 @@
 // in place (it has no path to rewrite), its pieces are inserted and it is
 // deleted (`planShapeBuild`'s `canRewrite`).
 
-import type { BundleHost, ElementId, MutationInput } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  ElementId,
+  MutationInput,
+} from "@paged-media/plugin-api";
 import { ovalToPath, type Affine } from "@paged-media/draw-geometry";
 
 import { bindMinted, mutateMinting } from "../commands/minted";
 import { insertRawPathOps } from "../commands/shape-build";
 import { batchMutationFor, handleElementId } from "../commands/batch-handles";
-import { pageOriginOf, SPREAD_ORIGIN, storedTransformOf, type PageOrigin } from "../page-origin";
+import {
+  pageOriginOf,
+  SPREAD_ORIGIN,
+  storedTransformOf,
+  type PageOrigin,
+} from "../page-origin";
 
 /** A live stand-in probe: the ids to ask the arrangement about (the
  *  caller's order, each oval replaced by its stand-in), and the withdrawal
@@ -84,7 +93,8 @@ export interface StandInProbe {
 }
 
 /** Whether `ids` holds an input the engine reads as its bounding box. */
-export const hasOval = (ids: readonly ElementId[]): boolean => ids.some((id) => id.kind === "oval");
+export const hasOval = (ids: readonly ElementId[]): boolean =>
+  ids.some((id) => id.kind === "oval");
 
 const standInHandle = (k: number): string => `sb-oval-${k}`;
 
@@ -106,7 +116,10 @@ export function ovalStandInBatchFor(
     if (!g.pageId) return null;
     const table = ovalToPath(g.bounds);
     if (table.anchors.length === 0) return null;
-    const stored = storedTransformOf(g.itemTransform, g.pageOrigin ?? SPREAD_ORIGIN);
+    const stored = storedTransformOf(
+      g.itemTransform,
+      g.pageOrigin ?? SPREAD_ORIGIN,
+    );
     const handle = standInHandle(k);
     ops.push(
       ...insertRawPathOps(g.pageId, table, handle, stored),
@@ -114,11 +127,19 @@ export function ovalStandInBatchFor(
       // flash a 1 pt black outline (`insertPath`'s default stroke).
       {
         op: "setElementProperty",
-        args: { elementId: handleElementId(handle), path: "frameStrokeColor", value: { type: "colorRef", value: null } },
+        args: {
+          elementId: handleElementId(handle),
+          path: "frameStrokeColor",
+          value: { type: "colorRef", value: null },
+        },
       },
       {
         op: "setElementProperty",
-        args: { elementId: handleElementId(handle), path: "frameFillColor", value: { type: "colorRef", value: null } },
+        args: {
+          elementId: handleElementId(handle),
+          path: "frameFillColor",
+          value: { type: "colorRef", value: null },
+        },
       },
     );
   }
@@ -154,11 +175,15 @@ export async function ovalStandIns(
   if (!probe) return null;
   const made = await mutateMinting(host, probe);
   if (!made.outcome.applied) {
-    host.log.warn(`${label}: the oval stand-ins were refused: ${JSON.stringify(made.outcome.error)}`);
+    host.log.warn(
+      `${label}: the oval stand-ins were refused: ${JSON.stringify(made.outcome.error)}`,
+    );
     return null;
   }
   const named = bindMinted(made, probe);
-  const standIns = at.map((_, k) => named?.byHandle.get(standInHandle(k)) ?? null);
+  const standIns = at.map(
+    (_, k) => named?.byHandle.get(standInHandle(k)) ?? null,
+  );
   if (standIns.some((s) => s === null)) {
     // Applied, but the stand-ins cannot be named: take them back out.
     await host.document.undo();
@@ -174,13 +199,19 @@ export async function ovalStandIns(
       await host.document.undo();
       const lingering: ElementId[] = [];
       for (const s of standIns) {
-        if (await host.document.pathAnchors(s!).catch(() => null)) lingering.push(s!);
+        if (await host.document.pathAnchors(s!).catch(() => null))
+          lingering.push(s!);
       }
       if (lingering.length === 0) return;
       // Something else was undone instead: put it back, remove the probe.
       await host.document.redo();
       await host.document.mutate(
-        batchMutationFor(lingering.map((s) => ({ op: "deleteFrame", args: { frameId: String(s.id) } }))),
+        batchMutationFor(
+          lingering.map((s) => ({
+            op: "deleteFrame",
+            args: { frameId: String(s.id) },
+          })),
+        ),
       );
       host.log.warn(
         `${label}: another change landed while the ovals were being measured — it was kept, ` +

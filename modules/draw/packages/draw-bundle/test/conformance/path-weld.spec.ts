@@ -67,10 +67,15 @@ function commandFor(h: HeadlessHost, id: string): CommandContribution {
 async function leafIds(h: HeadlessHost): Promise<string[]> {
   const roots = await h.host.document.tree();
   const out: string[] = [];
-  const walk = (nodes: { id?: { id?: unknown } | null; children?: unknown[] }[]) => {
+  const walk = (
+    nodes: { id?: { id?: unknown } | null; children?: unknown[] }[],
+  ) => {
     for (const node of nodes) {
       const raw = node.id?.id;
-      if (typeof raw === "string" && (!node.children || node.children.length === 0)) {
+      if (
+        typeof raw === "string" &&
+        (!node.children || node.children.length === 0)
+      ) {
         out.push(raw);
       }
       if (node.children) walk(node.children as never);
@@ -225,7 +230,9 @@ describe("draw conformance — true join (protocol v56 closePath / joinPaths)", 
         [500, 400],
         [500, 500],
       ]);
-      expect((await h.host.document.pathAnchors(c))!.subpathOpen?.[0]).toBe(true);
+      expect((await h.host.document.pathAnchors(c))!.subpathOpen?.[0]).toBe(
+        true,
+      );
 
       await h.host.selection.set([c]);
       await commandFor(h, CLOSE_PATH_COMMAND_ID).handler(undefined);
@@ -237,7 +244,9 @@ describe("draw conformance — true join (protocol v56 closePath / joinPaths)", 
       expect(closed!.anchors).toHaveLength(3);
 
       await h.host.document.undo();
-      expect((await h.host.document.pathAnchors(c))!.subpathOpen?.[0]).toBe(true);
+      expect((await h.host.document.pathAnchors(c))!.subpathOpen?.[0]).toBe(
+        true,
+      );
     });
 
     it("a 1-element Join CLOSES the path too (the same v56 op)", async () => {
@@ -248,9 +257,13 @@ describe("draw conformance — true join (protocol v56 closePath / joinPaths)", 
       ]);
       await h.host.selection.set([d]);
       await commandFor(h, JOIN_COMMAND_ID).handler(undefined);
-      expect((await h.host.document.pathAnchors(d))!.subpathOpen?.[0]).toBe(false);
+      expect((await h.host.document.pathAnchors(d))!.subpathOpen?.[0]).toBe(
+        false,
+      );
       await h.host.document.undo();
-      expect((await h.host.document.pathAnchors(d))!.subpathOpen?.[0]).toBe(true);
+      expect((await h.host.document.pathAnchors(d))!.subpathOpen?.[0]).toBe(
+        true,
+      );
     });
 
     it("an honest engine REFUSAL is a no-op, never a silent coincide fallback", async () => {
