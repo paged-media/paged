@@ -24,7 +24,7 @@
 // shape, on a file small enough to run in a test and regular enough to
 // do the arithmetic by eye.
 
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import type { ElementId } from "@paged-media/plugin-api";
 
@@ -167,7 +167,7 @@ function expected50(): { at: [number, number]; fill: string; stroke: string; wei
   return rows as { at: [number, number]; fill: string; stroke: string; weight: number }[];
 }
 
-vi.setConfig({ testTimeout: BUDGET_TIMEOUT_MS });
+setDefaultTimeout(BUDGET_TIMEOUT_MS);
 
 describe("perf budgets — interchange", () => {
   // COVERS: the SVG import lane in `io/svg.ts` — `commitSvgImport`, what

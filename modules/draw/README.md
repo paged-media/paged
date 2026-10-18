@@ -42,7 +42,7 @@ No sibling checkout is needed: the plugin contract
 
 ```bash
 bun install
-bun run test           # contract-import lint + vitest in every package
+bun run test           # contract-import lint + bun test in every package (+ draw-bundle's DOM task)
 bun run typecheck      # the machines' wire shapes are the contract's Mutation variants
 bun run bench          # geometry benches (trended, never gated)
 node ../../platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs validate packages/draw-bundle/manifest.json
@@ -63,7 +63,7 @@ node ../../platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs validate
   parses the private corpus's SVGs and checks `.ai` / `.eps` are refused
   rather than half-read.
 
-CI (`.github/workflows/vitest.yml`) runs all of it on every pull request
+CI (`.github/workflows/draw-vitest.yml`) runs all of it on every pull request
 and fails on red; nothing publishes from a red suite.
 
 ## License

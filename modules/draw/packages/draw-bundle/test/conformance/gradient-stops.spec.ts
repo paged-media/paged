@@ -28,7 +28,7 @@
 //       too, and the commit says so;
 //   (5) a host without the raw hatch shows the bare axis, as before.
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
 
 import type {
   BundleHost,

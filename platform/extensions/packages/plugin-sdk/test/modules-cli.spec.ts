@@ -28,7 +28,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const CLI = resolve(here, "../../plugin-cli/bin/paged-plugin.mjs");

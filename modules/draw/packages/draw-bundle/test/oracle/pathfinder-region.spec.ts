@@ -66,7 +66,7 @@
 //   are RED in the engine (the edge's owner) and BLUE in Illustrator (what
 //   is on top there).
 
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 

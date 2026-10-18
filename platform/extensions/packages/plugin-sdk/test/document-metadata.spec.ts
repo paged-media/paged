@@ -23,7 +23,7 @@
 // real engine: the write is one undoable step that fires `onDidChange`,
 // and the engine refuses a value that is not an envelope.
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "bun:test";
 
 import type { PluginManifest } from "@paged-media/plugin-api";
 

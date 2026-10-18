@@ -25,13 +25,20 @@
 // the real engine. Skips when no canvas-wasm is reachable; REQUIRE_REAL_CORE=1
 // turns the skip into a failure.
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, mock } from "bun:test";
+import { importActual } from "@paged-media/test-kit";
 
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import type { DataEngineLike } from "../src/engine";
 import { dataFields, ENGINE_ANCHOR, fixedFrom, openRealHost, REQUIRE_REAL_CORE } from "./real-core";
 import { undoMark, undoSteps } from "./perf/harness";
+
+// bun:test hoists no vi.mock and has no vi.doMock / vi.resetModules: the
+// real exports are taken once, before anything is mocked, and mock.module
+// patches the loaded module in place (every importer sees the change).
+const actualEngine = await importActual(() => import("../src/engine"));
+const actualDuckdb = await importActual(() => import("../src/query/duckdb"));
 
 const run = ENGINE_ANCHOR !== null || REQUIRE_REAL_CORE;
 const PLUGIN = "media.paged.data";
@@ -68,13 +75,12 @@ function fakeEngine(over: Partial<DataEngineLike>): DataEngineLike {
 }
 
 async function sessionOver(h: HeadlessHost, engine: DataEngineLike) {
-  vi.resetModules();
-  vi.doMock("../src/engine", async (orig) => ({
-    ...(await orig<typeof import("../src/engine")>()),
+  mock.module("../src/engine", () => ({
+    ...actualEngine,
     bootEngine: async () => engine,
   }));
-  vi.doMock("../src/query/duckdb", async (orig) => ({
-    ...(await orig<typeof import("../src/query/duckdb")>()),
+  mock.module("../src/query/duckdb", () => ({
+    ...actualDuckdb,
     bootDuckDB: async () => ({
       registerCsv: async () => {},
       registerFileBuffer: async () => {},

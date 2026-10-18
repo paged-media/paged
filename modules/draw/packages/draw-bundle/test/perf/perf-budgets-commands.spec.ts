@@ -46,7 +46,7 @@
 //    `createdId`, so a flow that inserts several paths reads the whole
 //    scene tree before the batch and again after it, and diffs.
 
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import { metadataReadsPerLeaf } from "../engine-reads";
 
@@ -200,7 +200,7 @@ function nodesOf(roots: readonly SceneTreeNode[]): ElementId[] {
 const nodeIds = (roots: readonly SceneTreeNode[]): string[] =>
   nodesOf(roots).map((id) => String(id.id));
 
-vi.setConfig({ testTimeout: BUDGET_TIMEOUT_MS });
+setDefaultTimeout(BUDGET_TIMEOUT_MS);
 
 describe("perf budgets — commands over a busy document", () => {
   let w: Workload;

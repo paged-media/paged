@@ -57,7 +57,7 @@
 //   that the engine keeps both pieces in ONE element (a compound path)
 //   where Illustrator leaves two objects a user can move apart.
 
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 

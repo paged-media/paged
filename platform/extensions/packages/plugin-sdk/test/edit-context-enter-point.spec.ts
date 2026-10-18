@@ -22,7 +22,7 @@
 // binding-provider wrapping of `onEnter`) and to advertise
 // `editContext.enterPoint@1` only when the host vouches for delivery.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type {
   EditContextContribution,

@@ -39,7 +39,7 @@
 // group is NOT representable end-to-end, so nothing here fakes one
 // (commands/group.ts names the RFI gap).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { ElementId, Mutation } from "@paged-media/plugin-api";
 

@@ -142,7 +142,7 @@ export function makeRepeatPanel(host: BundleHost): {
     const [draft, setDraft, followDraft] =
       useFollowedDraft<RepeatParams>(REPEAT_DEFAULTS);
 
-    // WHAT A RELOAD COSTS (`test/panels/repeat-panel.spec.tsx`, and it
+    // WHAT A RELOAD COSTS (`test/panels/repeat-panel.dom.test.tsx`, and it
     // may only go down): the recipe part once, and the document's links
     // once per document REVISION, tallied for every record in one pass.
     // It used to walk the whole document — and re-read the recipe — once

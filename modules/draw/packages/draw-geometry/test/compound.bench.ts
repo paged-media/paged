@@ -27,7 +27,8 @@
 // contour against every other (and slices the anchor table to do it),
 // so ten times the contours is a hundred times the tests.
 
-import { bench, describe } from "vitest";
+// mitata (not a test runner): `bun <this file>` runs the benches.
+import { bench, group as describe, run } from "mitata";
 
 import { contourDepths } from "../src/compound";
 import { nestedContours } from "./bench-data";
@@ -44,3 +45,5 @@ describe("contourDepths — nested contours in one table", () => {
     contourDepths(threeHundred);
   });
 });
+
+await run();

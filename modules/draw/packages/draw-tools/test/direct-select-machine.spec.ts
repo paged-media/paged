@@ -17,7 +17,7 @@
  */
 
 import fc from "fast-check";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   applyAffine,

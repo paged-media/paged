@@ -36,7 +36,7 @@
 // Both have a "this is what happens WITHOUT the plan's workaround" test
 // next to the "this is what the plan does" test.
 
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 import type {
   ElementId,

@@ -11,6 +11,7 @@
     "validate:manifest": "node ../../platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs validate packages/data-bundle/manifest.json"
   },
   "devDependencies": {
+    "apache-arrow": "^17.0.0",
     "tsup": "^8.5.1",
     "typescript": "catalog:"
   }

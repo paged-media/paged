@@ -25,7 +25,7 @@
 // plugin-draw's test files against the published canary, and nobody saw it
 // because that repo's CI was failing at set-up for an unrelated reason.
 //
-// A unit test importing the SOURCE cannot catch this (vitest resolves React
+// A unit test importing the SOURCE cannot catch this (the test runner resolves React
 // from the workspace root), so this asserts on the shipped artifact: no
 // top-level react import may survive the bundle.
 //
@@ -43,7 +43,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST = resolve(HERE, "../dist/index.js");

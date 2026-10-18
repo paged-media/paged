@@ -34,7 +34,8 @@
 //      user's creation defaults (and leaves them alone), one undo takes
 //      the whole file back, and a refused contour costs that contour only.
 
-import { describe, expect, it, beforeAll, afterAll, vi } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "bun:test";
+import { waitFor } from "@paged-media/test-kit";
 
 import type { ElementId, Mutation, MutationInput } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
@@ -609,7 +610,7 @@ describe("draw conformance — SVG import/export (Phase 8, K-2)", () => {
     // The contribution does not hand its promise back; wait for the
     // batch to land.
     void importer!.import(file("open.svg", FIXTURE_SVG));
-    await vi.waitFor(async () => expect(await leafCount(h)).toBe(before + 3));
+    await waitFor(async () => expect(await leafCount(h)).toBe(before + 3));
     await h.host.document.undo();
     expect(await leafCount(h)).toBe(before);
   });

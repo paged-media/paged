@@ -63,7 +63,8 @@ def drop_unused_vi(src: str) -> str:
         return src
     rest = src[: m.start()] + src[m.end():]
     names = [n.strip() for n in m.group(1).split(",") if n.strip()]
-    if "vi" not in names or re.search(r"\bvi\b", rest):
+    code = re.sub(r"/\*[\s\S]*?\*/|//[^\n]*", "", rest)
+    if "vi" not in names or re.search(r"\bvi\b", code):
         return src
     names.remove("vi")
     multiline = "\n" in m.group(1)

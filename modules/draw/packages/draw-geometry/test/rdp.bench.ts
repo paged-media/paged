@@ -27,7 +27,8 @@
 // not; ten times the samples for much more than ten times the time is
 // the quadratic showing.
 
-import { bench, describe } from "vitest";
+// mitata (not a test runner): `bun <this file>` runs the benches.
+import { bench, group as describe, run } from "mitata";
 
 import { simplifyRdp } from "../src/rdp";
 import { freehandStroke, spiralStroke } from "./bench-data";
@@ -56,3 +57,5 @@ describe("simplifyRdp", () => {
     simplifyRdp(spiral20k, TOLERANCE);
   });
 });
+
+await run();

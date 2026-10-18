@@ -3,7 +3,7 @@
 // frame's story as `$h:v<i>`. A refused batch falls back to one mutate per
 // variable, so one bad field cannot lose the rest.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { BundleHost, Mutation } from "@paged-media/plugin-api";
 

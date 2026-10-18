@@ -5,7 +5,7 @@
 // to it (packages/data-bundle/bin/SOURCE_HASH);
 // packages/data-bundle/test/wasm-fresh.spec.ts recomputes it and fails
 // when the wasm in bin/ was built from different sources. Without that
-// check every vitest run exercises whatever wasm was last built, and
+// check every unit-test run exercises whatever wasm was last built, and
 // nothing says when that build is older than the checkout.
 //
 // Inputs: data-js and every crate it reaches through `path = "../…"`

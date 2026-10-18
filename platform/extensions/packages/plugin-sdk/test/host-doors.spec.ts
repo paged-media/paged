@@ -22,7 +22,7 @@
 // asserts the door's honest behaviour (estimate / empty / fallback /
 // gated registration) so the plugin.api claim is certified.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { PluginManifest } from "@paged-media/plugin-api";
 

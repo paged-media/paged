@@ -272,7 +272,7 @@ exports of `@paged-media/data`, among them `createSession`, `bootEngine` and `bo
   above 100 MB, and when the installed `wasm-bindgen` differs from the one in `Cargo.lock`.
 - Rust: `cargo test --workspace`; `cargo run -p data-conformance --bin coverage-gate`.
   `deny.toml` allows crates.io as the only source and a fixed list of licences.
-- TypeScript: `pnpm test` runs the import lint, then vitest in both packages. The bundle's
+- TypeScript: `pnpm test` runs the import lint, then `bun test` in both packages. The bundle's
   unit tests use hand-written fake hosts and fake engines. `test/engine-real.spec.ts` loads
   the built wasm; when the file is absent it is skipped, or fails if `REQUIRE_REAL_ENGINE=1`.
   `test/pipeline-real.spec.ts` and `test/duckdb-real.spec.ts` (`pnpm --filter @paged-media/data

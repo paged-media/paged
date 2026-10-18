@@ -29,7 +29,7 @@
 // centre all show up as "the midpoint of slice i is not where the ellipse
 // is at that angle".
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { arcToCubics, type ArcCubic, type Vec2 } from "../src";
 import {
