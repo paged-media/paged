@@ -1,4 +1,9 @@
 name: core / gpu
+concurrency:
+  # A newer push to a pull request cancels the older run. Every other run
+  # (main, dispatch) has a group of its own: never cancelled, never queued.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # W0.7 GPU lane (audit B14): exercise the Vello/wgpu rasterizer headlessly
 # on a software Vulkan stack (Mesa lavapipe) so the GPU code path gets CI

@@ -1,4 +1,9 @@
 name: editor / playground
+concurrency:
+  # Deploys run one at a time and are never cancelled; a newer deploy that
+  # arrives while one runs waits, and replaces any older one still waiting.
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
 
 # Build the live-demo PLAYGROUND (apps/canvas `demo` build) and deploy it to
 # Cloudflare Pages at play.paged.media — the real editor that the docs and
@@ -37,10 +42,6 @@ on:
 
 permissions:
   contents: read
-
-concurrency:
-  group: editor-playground
-  cancel-in-progress: true
 
 defaults:
   run:

@@ -1,4 +1,9 @@
 name: core / licenses
+concurrency:
+  # A newer push to a pull request cancels the older run. Every other run
+  # (main, dispatch) has a group of its own: never cancelled, never queued.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Dependency-license + supply-chain audit. paged is AGPL-3.0-only OR PMEL
 # (ADR PM-0001); the commercial PMEL side means every transitive dependency

@@ -173,6 +173,61 @@ Left as they are, with reasons:
   where this lever goes next; until then its duplicate core run is the largest
   avoidable cost left in this lever.
 
+## Lever 2: `concurrency`
+
+Every pull-request workflow now has, directly after its `name:`:
+
+```yaml
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+```
+
+The group falls back to `github.run_id`, not `github.ref`. GitHub keeps one
+running and one pending run per group and cancels any older pending run when a
+newer one arrives. With `github.ref`, pushes to `main` would share one group:
+they would run one at a time, and in a burst of merges the middle ones would be
+cancelled while pending. With the run id every push to `main` (and every
+dispatch) has a group of its own and is never cancelled or held back. Pull
+requests share a group per pull request, so a newer push cancels the older run,
+queued or running.
+
+| Workflow kind | Before | After |
+|---|---|---|
+| Pull-request workflows (22: core ci, fidelity, gpu, licenses; data, doc, draw, sheet, slide, web lanes; editor tests; extensions vitest and contract guard; image ci; moon; publish ci; server rust) | 16 had `group: <name>-${{ github.ref }}` with `cancel-in-progress: true`, which also cancels pushes to `main`; 6 (the core four, publish ci, contract guard) had none, so superseded runs ran to the end | the block above |
+| Push-only lanes with that ref group (doc vitest, image publish-state) | cancelled each other on `main` | the block above (no pull-request trigger, so it never cancels) |
+| Deploy (editor playground: push to main, dispatch, `repository_dispatch`) | `cancel-in-progress: true`: a newer deploy cancelled one in progress | one group, `cancel-in-progress: false`: deploys run one at a time and are never cancelled; a newer deploy arriving meanwhile waits, and replaces any older one still waiting (that one would only deploy an older state) |
+| Release and publish (core publish-wasm: tags; the module and extension publishers: dispatch only) | no group | unchanged: never cancelled |
+| Schedule and dispatch only (core perf-nightly, sheet fuzz, editor showcase-nightly) | showcase-nightly: one group, cancels | unchanged: not pull-request workflows |
+| CLA (`pull_request_target`, `issue_comment`) | none | unchanged: it records signatures and must not be cancelled |
+| editor protocol-version | none | unchanged here: B3a (#14) deletes the workflow |
+
+No workflow uses `workflow_run`.
+
+**Before**, from the runs API over the window (942 runs):
+
+| Measure | Value |
+|---|---|
+| Superseded runs (a newer run of the same workflow on the same branch was created before it finished) | 297 |
+| … of them ran to the end anyway | 111, with 1,543 job-minutes run after the newer run existed; 1,186 of them in the workflows without a group |
+| … of them cancelled | 186 |
+| Duplicate runs (same workflow, event and commit; two `pull_request` runs for one force-push of a stacked branch, and re-runs when a base branch was retargeted) | 114, 798 job-minutes |
+| Runs on `main` cancelled | 143: 108 in the 19 workflows whose group cancels them by design (18 `github.ref` groups and the playground's), 35 in the others (cancelled by hand) |
+
+Of the 1,186 job-minutes in workflows without a group, core ci ran 755,
+fidelity 237, gpu 142, publish ci 43, licenses 7, contract guard 1 and CLA 1.
+The other 357 are mostly the pairs of `pull_request` runs GitHub created in
+the same second for one force-push of a stacked branch: neither run cancelled
+the other although both workflows had a ref group, so the after-state of those
+pairs is not predicted here.
+
+**After**: from the configuration, a superseded run of any pull-request
+workflow is cancelled when the newer run for the same pull request is
+created. Over the window that would have cancelled the 1,186 job-minutes the
+groupless workflows ran (18 % of the window's 6,695), and none of the 143
+`main` runs would have been cancelled. The demonstration push is in [This pull request's CI
+run](#this-pull-requests-ci-run).
+
 ## Reproduce
 
 ```sh

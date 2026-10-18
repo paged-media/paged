@@ -1,4 +1,9 @@
 name: server / rust
+concurrency:
+  # A newer push to a pull request cancels the older run. Every other run
+  # (main, dispatch) has a group of its own: never cancelled, never queued.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # paged.server's Rust workspace (apps/server/server: the Worker crate and the
 # sync client). It path-depends on the engine's paged-repo and paged-mcp
@@ -28,10 +33,6 @@ on:
 
 permissions:
   contents: read
-
-concurrency:
-  group: server-rust-${{ github.ref }}
-  cancel-in-progress: true
 
 defaults:
   run:

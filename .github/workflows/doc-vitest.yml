@@ -1,4 +1,10 @@
 name: doc / vitest
+concurrency:
+  # A newer push to a pull request cancels the older run. Every other run
+  # (main, dispatch) has a group of its own: never cancelled, never queued.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 # MONOREPO (step A3): ported from paged-media/plugin-doc
 # .github/workflows/vitest.yml; runs in modules/doc. Push-only, as before.
 on:
@@ -16,10 +22,6 @@ on:
 
 permissions:
   contents: read
-
-concurrency:
-  group: doc-vitest-${{ github.ref }}
-  cancel-in-progress: true
 
 defaults:
   run:

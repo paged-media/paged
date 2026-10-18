@@ -6,6 +6,12 @@
 # from npm (exact devDependency pins, asserted by test/sdk-pin.spec.ts), so
 # no sibling repository is needed.
 name: web / vitest
+concurrency:
+  # A newer push to a pull request cancels the older run. Every other run
+  # (main, dispatch) has a group of its own: never cancelled, never queued.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 # MONOREPO (step A3): ported from paged-media/plugin-web
 # .github/workflows/vitest.yml; runs in modules/web.
 on:
@@ -33,10 +39,6 @@ on:
 
 permissions:
   contents: read
-
-concurrency:
-  group: web-vitest-${{ github.ref }}
-  cancel-in-progress: true
 
 defaults:
   run:

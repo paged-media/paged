@@ -1,4 +1,9 @@
 name: moon / ci
+concurrency:
+  # A newer push to a pull request cancels the older run. Every other run
+  # (main, dispatch) has a group of its own: never cancelled, never queued.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # `moon ci` over the projects a pull request affects (see .moon/ and
 # docs/adr/PM-0006-proto-moon-mcp.md).
@@ -16,10 +21,6 @@ on:
 
 permissions:
   contents: read
-
-concurrency:
-  group: moon-ci-${{ github.ref }}
-  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always

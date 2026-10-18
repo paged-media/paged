@@ -17,6 +17,11 @@
 # MONOREPO (step A3): ported from paged-media/plugin-sdk
 # .github/workflows/vitest.yml; runs in platform/extensions.
 name: extensions / vitest
+concurrency:
+  # A newer push to a pull request cancels the older run. Every other run
+  # (main, dispatch) has a group of its own: never cancelled, never queued.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 on:
   push:
@@ -42,10 +47,6 @@ on:
 
 permissions:
   contents: read
-
-concurrency:
-  group: extensions-vitest-${{ github.ref }}
-  cancel-in-progress: true
 
 defaults:
   run:

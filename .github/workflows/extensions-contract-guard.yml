@@ -12,6 +12,12 @@
 # the bare `<rev>:<path>` they used resolved from the repository root, which
 # in the monorepo made every lookup fail and the guard pass vacuously.
 name: extensions / contract-guard
+concurrency:
+  # A newer push to a pull request cancels the older run. Every other run
+  # (main, dispatch) has a group of its own: never cancelled, never queued.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 on:
   push:
     branches: [main]
