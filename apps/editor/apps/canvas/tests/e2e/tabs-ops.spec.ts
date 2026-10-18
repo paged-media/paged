@@ -112,8 +112,18 @@ test.describe("E2E tabs ops", () => {
     // default `text` fixture paragraph carries no tab stops, so undo
     // restores the empty list.
     const stops: TabStopSpec[] = [
-      { position: 36, alignment: "LeftAlign", leader: null, alignmentCharacter: null },
-      { position: 144, alignment: "RightAlign", leader: ".", alignmentCharacter: null },
+      {
+        position: 36,
+        alignment: "LeftAlign",
+        leader: null,
+        alignmentCharacter: null,
+      },
+      {
+        position: 144,
+        alignment: "RightAlign",
+        leader: ".",
+        alignmentCharacter: null,
+      },
     ];
     await opSandwich(page, {
       pageId: pageInfo.pageId,

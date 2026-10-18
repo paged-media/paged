@@ -29,27 +29,38 @@ import type { PageContext, PageReport } from "../../types";
 export async function build(ctx: PageContext): Promise<PageReport> {
   const page = p(103);
 
-  const number = await proseFrame(ctx, page, [48, 100, 220, 196], [
-    { text: "17", style: STYLE.chapterNumber },
-  ]);
-  const title = await proseFrame(ctx, page, [48, 200, 480, 252], [
-    { text: "The Long Read", style: STYLE.chapterTitle },
-  ]);
-  const deck = await proseFrame(ctx, page, [48, 264, 448, 434], [
-    {
-      text:
-        "HTML and CSS are a writing system for documents, and this chapter " +
-        "treats them as content: an article authored as markup, placed in a " +
-        "frame, laid out by a real browser engine, and printed here beside " +
-        "its own source. The pages that follow thread one source across " +
-        "many frames — including a named sidebar flow — break a forty-row " +
-        "table across three frames with its two-row header repeating, and " +
-        "close on the honest asymmetry of the whole affair: a live render " +
-        "is session state, and only what is baked to native content " +
-        "survives the file being closed.",
-      style: STYLE.deck,
-    },
-  ]);
+  const number = await proseFrame(
+    ctx,
+    page,
+    [48, 100, 220, 196],
+    [{ text: "17", style: STYLE.chapterNumber }],
+  );
+  const title = await proseFrame(
+    ctx,
+    page,
+    [48, 200, 480, 252],
+    [{ text: "The Long Read", style: STYLE.chapterTitle }],
+  );
+  const deck = await proseFrame(
+    ctx,
+    page,
+    [48, 264, 448, 434],
+    [
+      {
+        text:
+          "HTML and CSS are a writing system for documents, and this chapter " +
+          "treats them as content: an article authored as markup, placed in a " +
+          "frame, laid out by a real browser engine, and printed here beside " +
+          "its own source. The pages that follow thread one source across " +
+          "many frames — including a named sidebar flow — break a forty-row " +
+          "table across three frames with its two-row header repeating, and " +
+          "close on the honest asymmetry of the whole affair: a live render " +
+          "is session state, and only what is baked to native content " +
+          "survives the file being closed.",
+        style: STYLE.deck,
+      },
+    ],
+  );
   const rule = await plate(ctx, page, [48, 444, 300, 446], SWATCH.vermilion);
 
   const label = await specLabel(ctx, page, [

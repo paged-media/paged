@@ -96,7 +96,9 @@ export function createWidthHandler(host: BundleHost): GestureHandler {
     if (!e.pageId || !e.pagePoint) return null;
     const target = host.selection.get().find(supportsPathOps) ?? null;
     if (!target) {
-      host.log.debug("width: no path-bearing selection — select an open path first");
+      host.log.debug(
+        "width: no path-bearing selection — select an open path first",
+      );
       return null;
     }
     const table = await host.document.pathAnchors(target).catch(() => null);
@@ -194,8 +196,7 @@ export function createWidthHandler(host: BundleHost): GestureHandler {
     gesture = chain.then((g) => {
       if (!g) return null;
       const onPage = "pageId" in event ? event.pageId === g.pageId : true;
-      const local =
-        "point" in event && onPage ? g.toLocal(event.point) : null;
+      const local = "point" in event && onPage ? g.toLocal(event.point) : null;
       const snap =
         event.type === "key"
           ? g.machine.handle({ type: "key", key: event.key })

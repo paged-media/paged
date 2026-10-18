@@ -54,7 +54,9 @@ interface CanvasGlobal {
     elementGeometry: Array<{ id: Ref }>;
     client: {
       elementGeometry: (ids: Ref[]) => Promise<Array<{ id: Ref }>>;
-      executeScript: (s: string) => Promise<{ output: string[]; error: string | null }>;
+      executeScript: (
+        s: string,
+      ) => Promise<{ output: string[]; error: string | null }>;
     };
   };
 }
@@ -122,17 +124,23 @@ test.describe("selection box follows a programmatic selection", () => {
     const b = await filledRect(designer, { x0: 220, y0: 60, x1: 320, y1: 140 });
 
     await clickAt(page, 110, 100);
-    await expect.poll(async () => (await selectionState(page)).box).toEqual([key(a)]);
+    await expect
+      .poll(async () => (await selectionState(page)).box)
+      .toEqual([key(a)]);
     await expect(drawnBoxes(page)).toHaveCount(1);
 
     // paged.draw's Select same ▸ Fill selects through host.selection.set,
     // and selects nothing else: no mutation follows to refresh the box.
     await designer.runCommand("media.paged.draw.command.selectSameFill");
-    await expect.poll(async () => (await selectionState(page)).engine).toEqual(keys([a, b]));
+    await expect
+      .poll(async () => (await selectionState(page)).engine)
+      .toEqual(keys([a, b]));
 
     const state = await selectionState(page);
     expect(state.shell).toEqual(keys([a, b]));
-    await expect.poll(async () => (await selectionState(page)).box).toEqual(keys([a, b]));
+    await expect
+      .poll(async () => (await selectionState(page)).box)
+      .toEqual(keys([a, b]));
     expect((await selectionState(page)).box).toEqual(await clickGeometry(page));
     await expect(drawnBoxes(page)).toHaveCount(2);
   });
@@ -146,10 +154,17 @@ test.describe("selection box follows a programmatic selection", () => {
     // Low on the page, as the showcase has it: the chart lands under the
     // selected frame and hangs off the page. Its box and handles are
     // drawn on the pasteboard.
-    const table = await filledRect(designer, { x0: 60, y0: 600, x1: 200, y1: 700 });
+    const table = await filledRect(designer, {
+      x0: 60,
+      y0: 600,
+      x1: 200,
+      y1: 700,
+    });
 
     await clickAt(page, 130, 650);
-    await expect.poll(async () => (await selectionState(page)).box).toEqual([key(table)]);
+    await expect
+      .poll(async () => (await selectionState(page)).box)
+      .toEqual([key(table)]);
     await expect(drawnBoxes(page)).toHaveCount(1);
 
     await openPanel(page, "media.paged.sheet.panel.workbook");
@@ -158,7 +173,9 @@ test.describe("selection box follows a programmatic selection", () => {
     const chooser = page.waitForEvent("filechooser");
     await pick.click();
     await (await chooser).setFiles(CHART_FIXTURE);
-    await expect(page.locator("[data-sheet-range]")).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator("[data-sheet-range]")).toBeVisible({
+      timeout: 30_000,
+    });
 
     // Lowering ends in host.selection.set([the chart's group]).
     await designer.runCommand("media.paged.sheet.command.lowerChartToFrame");
@@ -169,7 +186,9 @@ test.describe("selection box follows a programmatic selection", () => {
     const state = await selectionState(page);
     expect(state.engine).toEqual(state.shell);
     // The box reads what a click on the chart reads — and never the table.
-    await expect.poll(async () => (await selectionState(page)).box).toEqual(await clickGeometry(page));
+    await expect
+      .poll(async () => (await selectionState(page)).box)
+      .toEqual(await clickGeometry(page));
     expect((await selectionState(page)).box).not.toContain(key(table));
     await expect(drawnBoxes(page)).toHaveCount(1);
     await expect(page.locator("[data-selection-handle]")).toHaveCount(8);
@@ -194,16 +213,28 @@ globalThis.__selectProbe = b.payload.createdId;
     );
     const designer = new Designer(page);
     await designer.open({ search: "?script=select-probe" });
-    await expect(page.locator("[data-playground-play]")).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator("[data-playground-play]")).toBeVisible({
+      timeout: 15_000,
+    });
     await page.locator("[data-playground-play]").click();
     await expect
-      .poll(() => page.evaluate(() => (globalThis as { __selectProbe?: Ref }).__selectProbe ?? null), {
-        timeout: 20_000,
-      })
+      .poll(
+        () =>
+          page.evaluate(
+            () => (globalThis as { __selectProbe?: Ref }).__selectProbe ?? null,
+          ),
+        {
+          timeout: 20_000,
+        },
+      )
       .not.toBeNull();
-    const b = await page.evaluate(() => (globalThis as unknown as { __selectProbe: Ref }).__selectProbe);
+    const b = await page.evaluate(
+      () => (globalThis as unknown as { __selectProbe: Ref }).__selectProbe,
+    );
 
-    await expect.poll(async () => (await selectionState(page)).box).toEqual([key(b)]);
+    await expect
+      .poll(async () => (await selectionState(page)).box)
+      .toEqual([key(b)]);
     const state = await selectionState(page);
     expect(state.shell).toEqual([key(b)]);
     expect(state.engine).toEqual([key(b)]);

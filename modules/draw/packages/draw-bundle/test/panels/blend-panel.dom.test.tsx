@@ -16,7 +16,6 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-
 // The BLEND OPTIONS panel, RENDERED (happy-dom) against the real engine.
 //
 // Three parts, a host each:
@@ -83,7 +82,6 @@ const keyPairs = (count: number): string =>
   seedRow("a", count) + seedRow("b", count, { x: 100 });
 
 const PANEL = "[data-draw-blend-panel]";
-
 
 /** Per-leaf `getMetadata` one link walk costs on this engine (RFI C-65:
  *  1 before tree rows carried metadata, 0 after), and what a walk over
@@ -157,14 +155,14 @@ describe("Blend options panel — rendered against the engine", () => {
 
     it("the form previews the PLAN as it is typed, and writes nothing", async () => {
       const panel = await mountPanel(h, makeBlendPanel);
-      expect(panel.attr("[data-draw-blend-preview]", "data-draw-blend-preview")).toBe(
-        String(BLEND_DEFAULTS.steps),
-      );
+      expect(
+        panel.attr("[data-draw-blend-preview]", "data-draw-blend-preview"),
+      ).toBe(String(BLEND_DEFAULTS.steps));
       panel.reset();
       panel.change('[data-draw-blend-field="steps"]', "7");
-      expect(panel.attr("[data-draw-blend-preview]", "data-draw-blend-preview")).toBe(
-        "7",
-      );
+      expect(
+        panel.attr("[data-draw-blend-preview]", "data-draw-blend-preview"),
+      ).toBe("7");
       // Specified Distance swaps the Steps field for a distance one.
       panel.change("[data-draw-blend-spacing]", "distance");
       expect(panel.count('[data-draw-blend-field="steps"]')).toBe(0);
@@ -177,7 +175,10 @@ describe("Blend options panel — rendered against the engine", () => {
 
     it("+ Blend builds, through the engine, what the form holds", async () => {
       const panel = await mountPanel(h, makeBlendPanel);
-      await drive(() => h.host.selection.set([poly("a0"), poly("b0")]), panel.work);
+      await drive(
+        () => h.host.selection.set([poly("a0"), poly("b0")]),
+        panel.work,
+      );
       expect(panel.disabled("[data-draw-blend-make]")).toBe(false);
       panel.change('[data-draw-blend-field="steps"]', "2");
 
@@ -187,12 +188,12 @@ describe("Blend options panel — rendered against the engine", () => {
       // THE DOCUMENT: two intermediates, the keys linked, the recipe saved.
       expect(await leafIds(h)).toHaveLength(PRISTINE + 2);
       const library = await readBlendLibrary(h.host);
-      expect(library.blends.map((b) => [b.id, b.params.steps, b.steps.length])).toEqual(
-        [["bl-1", 2, 2]],
-      );
-      expect(blendKeyOf(await h.host.document.getMetadata(poly("a0")))?.blend).toBe(
-        "bl-1",
-      );
+      expect(
+        library.blends.map((b) => [b.id, b.params.steps, b.steps.length]),
+      ).toEqual([["bl-1", 2, 2]]);
+      expect(
+        blendKeyOf(await h.host.document.getMetadata(poly("a0")))?.blend,
+      ).toBe("bl-1");
       for (const step of library.blends[0]!.steps) {
         expect(
           blendStepOf(await h.host.document.getMetadata(poly(step.id)))?.blend,
@@ -239,23 +240,23 @@ describe("Blend options panel — rendered against the engine", () => {
     // FOLLOWS the record (`useFollowedDraft`): it takes the saved options
     // when the record it follows, or what is saved for it, changes — not
     // on every reload.
-    it(
-      "typed options survive the selection change that + Blend needs (one record in the library)",
-      async () => {
-        expect((await readBlendLibrary(h.host)).blends).toHaveLength(1);
-        const panel = await mountPanel(h, makeBlendPanel);
-        const steps = () =>
-          panel.get<HTMLInputElement>('[data-draw-blend-field="steps"]').value;
-        await drive(() => h.host.selection.set([]), panel.work);
-        panel.change('[data-draw-blend-field="steps"]', "9");
-        expect(steps()).toBe("9");
-        await drive(() => h.host.selection.set([poly("a1"), poly("b1")]), panel.work);
-        expect(steps()).toBe("9");
-        // A document change that touches no record leaves it alone too.
-        await drive(() => plainChange(h, 3), panel.work);
-        expect(steps()).toBe("9");
-      },
-    );
+    it("typed options survive the selection change that + Blend needs (one record in the library)", async () => {
+      expect((await readBlendLibrary(h.host)).blends).toHaveLength(1);
+      const panel = await mountPanel(h, makeBlendPanel);
+      const steps = () =>
+        panel.get<HTMLInputElement>('[data-draw-blend-field="steps"]').value;
+      await drive(() => h.host.selection.set([]), panel.work);
+      panel.change('[data-draw-blend-field="steps"]', "9");
+      expect(steps()).toBe("9");
+      await drive(
+        () => h.host.selection.set([poly("a1"), poly("b1")]),
+        panel.work,
+      );
+      expect(steps()).toBe("9");
+      // A document change that touches no record leaves it alone too.
+      await drive(() => plainChange(h, 3), panel.work);
+      expect(steps()).toBe("9");
+    });
 
     it("the form still takes the saved options when what is SAVED changes", async () => {
       const panel = await mountPanel(h, makeBlendPanel);
@@ -283,7 +284,9 @@ describe("Blend options panel — rendered against the engine", () => {
 
       expect((await readBlendLibrary(h.host)).blends).toEqual([]);
       expect(await leafIds(h)).toHaveLength(PRISTINE);
-      expect(blendKeyOf(await h.host.document.getMetadata(poly("a0")))).toBeNull();
+      expect(
+        blendKeyOf(await h.host.document.getMetadata(poly("a0"))),
+      ).toBeNull();
       expect(panel.count("[data-draw-blend-row]")).toBe(0);
       expect(panel.attr(PANEL, "data-draw-blend-panel")).toBe("0");
     });
@@ -300,21 +303,21 @@ describe("Blend options panel — rendered against the engine", () => {
     // along. A recipe write now ANNOUNCES itself (`announceRecipeChange`,
     // called by `writeBlendLibrary`), and the panel reloads on that as it
     // does on a document event.
-    it(
-      "an OPEN panel shows a blend built by the COMMAND, not only by its own button",
-      async () => {
-        await h.host.selection.set([poly("a2"), poly("b2")]);
-        const panel = await mountPanel(h, makeBlendPanel);
-        await drive(async () => {
-          const made = await applyMakeBlend(h.host, { spacing: "steps", steps: 1 });
-          if (made.length !== 1) throw new Error("the blend was not built");
-        }, panel.work);
-        // The document has it…
-        expect((await readBlendLibrary(h.host)).blends).toHaveLength(1);
-        // …and so does the panel.
-        expect(panel.count("[data-draw-blend-row]")).toBe(1);
-      },
-    );
+    it("an OPEN panel shows a blend built by the COMMAND, not only by its own button", async () => {
+      await h.host.selection.set([poly("a2"), poly("b2")]);
+      const panel = await mountPanel(h, makeBlendPanel);
+      await drive(async () => {
+        const made = await applyMakeBlend(h.host, {
+          spacing: "steps",
+          steps: 1,
+        });
+        if (made.length !== 1) throw new Error("the blend was not built");
+      }, panel.work);
+      // The document has it…
+      expect((await readBlendLibrary(h.host)).blends).toHaveLength(1);
+      // …and so does the panel.
+      expect(panel.count("[data-draw-blend-row]")).toBe(1);
+    });
 
     // The case above cannot tell the announcement from luck: the headless
     // engine answers synchronously, so the whole command — recipe write
@@ -366,12 +369,17 @@ describe("Blend options panel — rendered against the engine", () => {
         if (k > 0) {
           await drive(async () => {
             await h.host.selection.set([poly(`a${k - 1}`), poly(`b${k - 1}`)]);
-            const made = await applyMakeBlend(h.host, { spacing: "steps", steps: 1 });
+            const made = await applyMakeBlend(h.host, {
+              spacing: "steps",
+              steps: 1,
+            });
             if (made.length !== 1) throw new Error(`blend ${k} was not built`);
             await h.host.selection.set([]);
           }, panel.work);
         }
-        walksByRecords.push((await panel.costOf(() => plainChange(h, k))).walks);
+        walksByRecords.push(
+          (await panel.costOf(() => plainChange(h, k))).walks,
+        );
       }
       unmountAll();
     });
@@ -466,19 +474,16 @@ describe("Blend options panel — rendered against the engine", () => {
     // reload. In the editor every read is a worker round trip, so the
     // window is the walk's duration. A reload now holds a ticket and shows
     // nothing once a newer one has started (`src/panels/reload.ts`).
-    it(
-      "the panel ends on the LATEST selection when a slower, older reload is still in flight",
-      async () => {
-        const panel = await mountPanel(h, makeBlendPanel);
-        expect(panel.attr(PANEL, "data-draw-blend-active")).toBe("");
-        // Reload A (nothing selected) is walking when a key of bl-1 is
-        // selected and reload B starts.
-        await selectDuringWalk(h, panel, [poly("a0")]);
-        expect(panel.attr(PANEL, "data-draw-blend-active")).toBe("bl-1");
-        // Both reloads started, and they shared ONE walk: B asked for the
-        // links while A's walk was out, and got the same one.
-        expect(panel.cost()).toMatchObject({ reloads: 2, walks: 1 });
-      },
-    );
+    it("the panel ends on the LATEST selection when a slower, older reload is still in flight", async () => {
+      const panel = await mountPanel(h, makeBlendPanel);
+      expect(panel.attr(PANEL, "data-draw-blend-active")).toBe("");
+      // Reload A (nothing selected) is walking when a key of bl-1 is
+      // selected and reload B starts.
+      await selectDuringWalk(h, panel, [poly("a0")]);
+      expect(panel.attr(PANEL, "data-draw-blend-active")).toBe("bl-1");
+      // Both reloads started, and they shared ONE walk: B asked for the
+      // links while A's walk was out, and got the same one.
+      expect(panel.cost()).toMatchObject({ reloads: 2, walks: 1 });
+    });
   });
 });

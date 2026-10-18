@@ -104,7 +104,10 @@ export function FrameFittingPanel() {
         data-frame-fitting-panel="ready"
       >
         <CompositionRenderer composition={frameFittingFitComposition} />
-        <ObjectFieldFrame field={refPoint} className="relative my-[2px] flex items-center gap-[14px]">
+        <ObjectFieldFrame
+          field={refPoint}
+          className="relative my-[2px] flex items-center gap-[14px]"
+        >
           <ReferencePointGrid
             value={index ?? 0}
             disabled={refPoint.onCommit == null}

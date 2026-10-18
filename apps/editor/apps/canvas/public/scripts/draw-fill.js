@@ -29,12 +29,20 @@ await demo.showInfo(
 
 await editor.mutate({
   op: "setElementProperty",
-  args: { elementId: frame, path: "frameFillColor", value: { type: "colorRef", value: "Color/Black" } },
+  args: {
+    elementId: frame,
+    path: "frameFillColor",
+    value: { type: "colorRef", value: "Color/Black" },
+  },
 });
-await demo.showInfo("Filled it", "A property write — the same channel the Swatches panel uses.", {
-  index: 3,
-  total: 4,
-});
+await demo.showInfo(
+  "Filled it",
+  "A property write — the same channel the Swatches panel uses.",
+  {
+    index: 3,
+    total: 4,
+  },
+);
 
 await editor.mutate({
   op: "setElementProperty",

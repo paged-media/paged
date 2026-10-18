@@ -68,7 +68,9 @@ export interface SectionSpec {
 }
 
 /** The schema rows of an address (empty while loading or without a model). */
-export function useSchemaRows(address: string | null): readonly ShellPropertySchema[] {
+export function useSchemaRows(
+  address: string | null,
+): readonly ShellPropertySchema[] {
   const model = useObjectModel();
   const [rows, setRows] = useState<readonly ShellPropertySchema[]>([]);
   useEffect(() => {
@@ -135,10 +137,16 @@ export function SchemaSections({
   const rows = useSchemaRows(schemaKind ?? null);
   const more = targets ? unlaidRows(rows, sections, family) : [];
   return (
-    <div data-schema-sections={testId ?? ""} data-target={targets?.join(" ") ?? "selection"}>
+    <div
+      data-schema-sections={testId ?? ""}
+      data-target={targets?.join(" ") ?? "selection"}
+    >
       {sections.map((section) => (
         <CockpitSection key={section.title} title={section.title}>
-          <div className="flex flex-col gap-1.5 pb-2" data-options-section={section.title}>
+          <div
+            className="flex flex-col gap-1.5 pb-2"
+            data-options-section={section.title}
+          >
             {section.fields.map((f) => (
               <PropertyField
                 key={f.path}
@@ -158,7 +166,10 @@ export function SchemaSections({
       ))}
       {more.length > 0 && (
         <CockpitSection title="More" defaultOpen={false}>
-          <div className="flex flex-col gap-1.5 pb-2" data-options-section="More">
+          <div
+            className="flex flex-col gap-1.5 pb-2"
+            data-options-section="More"
+          >
             {more.map((r) => (
               <PropertyField
                 key={r.path}

@@ -8,12 +8,13 @@
 
 **Status:** implemented in `src/lib.rs` as `ViewerSession` (the legacy
 `render_to_png`/`render_pages`/`parse_summary` free functions are gone).
-CPU/tiny-skia as a *page rasterizer* is excluded from this crate
+CPU/tiny-skia as a _page rasterizer_ is excluded from this crate
 (`paged-renderer` is linked `default-features = false`, dropping
-`paged-gpu/cpu`); it stays only as core's *internal* headless CI fidelity
+`paged-gpu/cpu`); it stays only as core's _internal_ headless CI fidelity
 backend (`corpus/generated/diff.sh`). This note is the design spec.
 
 **Deviations from the sketch below, as built:**
+
 - `new()` is a static async method (`ViewerSession.new(): Promise<…>`), not a
   JS `constructor` (wasm-bindgen constructors can't be async). It probes
   `navigator.gpu` for early rejection; the wgpu **device is acquired lazily**
@@ -42,14 +43,14 @@ backend (`corpus/generated/diff.sh`). This note is the design spec.
   turn the `<live preview>` embedded by the docs site (`paged-media/docs`).
 
 It is distinct from `paged-canvas-wasm`, which is the editor's GPU surface and
-*does* pull the mutation/canvas crates. Keeping `paged-sdk` renderer-core-only is
+_does_ pull the mutation/canvas crates. Keeping `paged-sdk` renderer-core-only is
 the whole point — it is the "sibling, not a shrunk app" boundary.
 
 ## Why the change
 
 - **WebGPU-first, CPU is legacy.** All forward rendering is WebGPU (wgpu / Vello),
   the same GPU path the editor ships. No WebGL and no CPU fallback on the forward
-  surface. When `navigator.gpu` is absent, the *consumer* (viewer/docs) shows a
+  surface. When `navigator.gpu` is absent, the _consumer_ (viewer/docs) shows a
   one-line "requires WebGPU" message — the SDK does not carry a second renderer.
 - **Diagnostics as teaching.** Readers break the XML on purpose; the render call
   must return structured diagnostics alongside the result, not throw an opaque

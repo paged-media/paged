@@ -33,7 +33,12 @@ export type AgentEvent =
   | { type: "turn"; turn: number }
   | { type: "text"; delta: string }
   | { type: "script"; source: string }
-  | { type: "scriptResult"; source: string; run: ScriptRun; overset: string[] | null }
+  | {
+      type: "scriptResult";
+      source: string;
+      run: ScriptRun;
+      overset: string[] | null;
+    }
   | { type: "lookup"; query: string }
   | { type: "render"; page: number };
 
@@ -78,12 +83,15 @@ const RESULT_CHAR_LIMIT = 12_000;
 const MAX_BAD_INPUT_TURNS = 2;
 
 function clip(text: string): string {
-  return text.length <= RESULT_CHAR_LIMIT ? text : `${text.slice(0, RESULT_CHAR_LIMIT)}\n… (${text.length - RESULT_CHAR_LIMIT} more characters cut)`;
+  return text.length <= RESULT_CHAR_LIMIT
+    ? text
+    : `${text.slice(0, RESULT_CHAR_LIMIT)}\n… (${text.length - RESULT_CHAR_LIMIT} more characters cut)`;
 }
 
 function base64(bytes: Uint8Array): string {
   let binary = "";
-  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  for (let i = 0; i < bytes.length; i += 0x8000)
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
   return btoa(binary);
 }
 
@@ -97,14 +105,23 @@ function lastText(message: Anthropic.Message): string {
 
 export async function runAgent(options: AgentOptions): Promise<AgentResult> {
   const { transport, engine, catalog, mode, onEvent, signal } = options;
-  const turnCap = Math.min(options.maxTurns ?? Infinity, MODE_SPECS[mode].maxTurns);
-  const messages: Anthropic.MessageParam[] = [{ role: "user", content: options.prompt }];
+  const turnCap = Math.min(
+    options.maxTurns ?? Infinity,
+    MODE_SPECS[mode].maxTurns,
+  );
+  const messages: Anthropic.MessageParam[] = [
+    { role: "user", content: options.prompt },
+  ];
   const scripts: AgentResult["scripts"] = [];
   const usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0 };
   let summary = "";
   let badInputTurns = 0;
 
-  const finish = (outcome: AgentResult["outcome"], turns: number, refusal?: AgentRefusal): AgentResult => ({
+  const finish = (
+    outcome: AgentResult["outcome"],
+    turns: number,
+    refusal?: AgentRefusal,
+  ): AgentResult => ({
     summary,
     scripts,
     outcome,
@@ -117,7 +134,10 @@ export async function runAgent(options: AgentOptions): Promise<AgentResult> {
   for (let turn = 1; turn <= turnCap; turn++) {
     signal?.throwIfAborted();
     onEvent?.({ type: "turn", turn });
-    const message = await transport.turn({ mode, messages }, { onText: (delta) => onEvent?.({ type: "text", delta }), signal });
+    const message = await transport.turn(
+      { mode, messages },
+      { onText: (delta) => onEvent?.({ type: "text", delta }), signal },
+    );
     usage.inputTokens += message.usage.input_tokens;
     usage.outputTokens += message.usage.output_tokens;
     usage.cacheReadTokens += message.usage.cache_read_input_tokens ?? 0;
@@ -133,7 +153,9 @@ export async function runAgent(options: AgentOptions): Promise<AgentResult> {
       });
     }
 
-    const toolUses = message.content.filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
+    const toolUses = message.content.filter(
+      (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
+    );
     // The assistant turn goes back whole — thinking blocks included and
     // unmodified, or the next turn's thinking is invalidated.
     messages.push({ role: "assistant", content: message.content });
@@ -160,24 +182,58 @@ export async function runAgent(options: AgentOptions): Promise<AgentResult> {
         const run = await engine.runScript(input.source);
         const health = await readStoryHealth(engine);
         scripts.push({ source: input.source, run });
-        onEvent?.({ type: "scriptResult", source: input.source, run, overset: health?.overset ?? null });
+        onEvent?.({
+          type: "scriptResult",
+          source: input.source,
+          run,
+          overset: health?.overset ?? null,
+        });
         const report = {
           error: run.error,
           ...(run.budgetKind ? { budget: run.budgetKind } : {}),
           output: run.output,
           oversetStories: health ? health.overset : "unknown",
         };
-        results.push({ type: "tool_result", tool_use_id: use.id, is_error: run.error !== null, content: clip(JSON.stringify(report, null, 1)) });
+        results.push({
+          type: "tool_result",
+          tool_use_id: use.id,
+          is_error: run.error !== null,
+          content: clip(JSON.stringify(report, null, 1)),
+        });
       } else if (input.name === LOOKUP_API) {
         onEvent?.({ type: "lookup", query: input.query });
-        results.push({ type: "tool_result", tool_use_id: use.id, content: clip(lookupApi(catalog, input.query)) });
+        results.push({
+          type: "tool_result",
+          tool_use_id: use.id,
+          content: clip(lookupApi(catalog, input.query)),
+        });
       } else if (input.name === RENDER_PAGE) {
         onEvent?.({ type: "render", page: input.page });
-        const png = engine.renderPage ? await engine.renderPage(input.page) : null;
+        const png = engine.renderPage
+          ? await engine.renderPage(input.page)
+          : null;
         results.push(
           png
-            ? { type: "tool_result", tool_use_id: use.id, content: [{ type: "image", source: { type: "base64", media_type: "image/png", data: base64(png) } }] }
-            : { type: "tool_result", tool_use_id: use.id, is_error: true, content: `Page ${input.page} could not be rendered here. Judge the result from the script output instead.` },
+            ? {
+                type: "tool_result",
+                tool_use_id: use.id,
+                content: [
+                  {
+                    type: "image",
+                    source: {
+                      type: "base64",
+                      media_type: "image/png",
+                      data: base64(png),
+                    },
+                  },
+                ],
+              }
+            : {
+                type: "tool_result",
+                tool_use_id: use.id,
+                is_error: true,
+                content: `Page ${input.page} could not be rendered here. Judge the result from the script output instead.`,
+              },
         );
       }
     }
@@ -195,9 +251,18 @@ export async function complete(
   prompt: string,
   hooks?: { signal?: AbortSignal },
 ): Promise<{ text: string; refusal?: AgentRefusal }> {
-  const message = await transport.turn({ mode: "complete", messages: [{ role: "user", content: prompt }] }, hooks);
+  const message = await transport.turn(
+    { mode: "complete", messages: [{ role: "user", content: prompt }] },
+    hooks,
+  );
   if (message.stop_reason === "refusal") {
-    return { text: "", refusal: { category: message.stop_details?.category ?? null, explanation: message.stop_details?.explanation ?? null } };
+    return {
+      text: "",
+      refusal: {
+        category: message.stop_details?.category ?? null,
+        explanation: message.stop_details?.explanation ?? null,
+      },
+    };
   }
   return { text: lastText(message) };
 }

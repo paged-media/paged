@@ -28,10 +28,7 @@ import { describe, expect, it, vi } from "bun:test";
 
 import type { PagedEditor, PluginManifest } from "@paged-media/plugin-api";
 
-import {
-  createBundleHost,
-  type SecretStoreBackend,
-} from "../src/host-impl";
+import { createBundleHost, type SecretStoreBackend } from "../src/host-impl";
 
 const silent = { debug() {}, info() {}, warn() {}, error() {} };
 const mapBacking = () => {
@@ -112,9 +109,9 @@ describe("host.secrets (D-11, mock backend)", () => {
     ]);
     // …carrying the material the host will inject (test-only side table; the
     // SURFACE can never read it — see the no-get test below).
-    expect(mock.held.get(mock.key("media.paged.d11", "keychain:source-4"))).toBe(
-      "postgres://u:p@db.host/sales",
-    );
+    expect(
+      mock.held.get(mock.key("media.paged.d11", "keychain:source-4")),
+    ).toBe("postgres://u:p@db.host/sales");
 
     await host.secrets.forget("keychain:source-4");
     expect(await host.secrets.exists("keychain:source-4")).toBe(false);
@@ -136,9 +133,9 @@ describe("host.secrets (D-11, mock backend)", () => {
 
   it("gates on capabilities.secrets (undeclared set/exists/forget reject)", async () => {
     const { host } = makeHost(false, true);
-    await expect(
-      host.secrets.set("keychain:x", "s"),
-    ).rejects.toThrow(/capabilities\.secrets/);
+    await expect(host.secrets.set("keychain:x", "s")).rejects.toThrow(
+      /capabilities\.secrets/,
+    );
     await expect(host.secrets.exists("keychain:x")).rejects.toThrow(
       /capabilities\.secrets/,
     );
@@ -150,9 +147,9 @@ describe("host.secrets (D-11, mock backend)", () => {
   it("no backend wired → set rejects honestly, exists is false, forget is a no-op", async () => {
     const { host } = makeHost(true, false);
     expect(host.supports("secrets@1")).toBe(false);
-    await expect(
-      host.secrets.set("keychain:x", "s"),
-    ).rejects.toThrow(/no secret-store backend wired/);
+    await expect(host.secrets.set("keychain:x", "s")).rejects.toThrow(
+      /no secret-store backend wired/,
+    );
     // exists answers the honest "nothing held" without a backend.
     expect(await host.secrets.exists("keychain:x")).toBe(false);
     // forget is a no-op (the gate already passed; nothing to remove).
@@ -165,7 +162,9 @@ describe("host.secrets (D-11, mock backend)", () => {
     expect(mock.held.has(mock.key("media.paged.d11", "source-1"))).toBe(true);
     // A different plugin id would key differently — the backing never
     // collides one bundle's ref with another's.
-    expect(mock.held.has(mock.key("media.paged.other", "source-1"))).toBe(false);
+    expect(mock.held.has(mock.key("media.paged.other", "source-1"))).toBe(
+      false,
+    );
   });
 });
 

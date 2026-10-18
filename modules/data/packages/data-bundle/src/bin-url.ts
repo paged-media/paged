@@ -22,7 +22,9 @@ export function binUrl(file: string): string {
 
 /** Resolves a declared `capabilities.wasm` artifact name to the host's copy,
  *  or null (the bundle then loads its own). */
-export type WasmResolver = (name: string) => Promise<Pick<HostedModule, "url" | "integrity"> | null>;
+export type WasmResolver = (
+  name: string,
+) => Promise<Pick<HostedModule, "url" | "integrity"> | null>;
 
 /** The manifest's artifact names this bundle resolves through the module door. */
 export const WASM_ARTIFACTS = {
@@ -34,5 +36,8 @@ export const WASM_ARTIFACTS = {
  *  Subresource Integrity for a declared artifact. `null` without a module
  *  backend (`modules@1` false), and the door is then not called. */
 export function hostWasm(host: BundleHost): WasmResolver {
-  return (name) => (host.supports("modules@1") ? host.modules.resolve(name) : Promise.resolve(null));
+  return (name) =>
+    host.supports("modules@1")
+      ? host.modules.resolve(name)
+      : Promise.resolve(null);
 }

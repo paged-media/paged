@@ -23,7 +23,12 @@
 // to support it, it degrades to the spec §2.2 fallback (tab-aligned text +
 // drawn rules) into the same frame.
 
-import type { BundleHost, ElementId, Mutation, PageId } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  ElementId,
+  Mutation,
+  PageId,
+} from "@paged-media/plugin-api";
 import {
   barcodeToMutations,
   bindingMetadata,
@@ -95,7 +100,13 @@ function pageFor(host: BundleHost, ctx?: LowerContext): Promise<PageId | null> {
  *  text frame. (Core 0.67 reports `handle: null` even for a named element,
  *  so the name alone cannot find it; every batch here mints one frame.) */
 function mintedFrame(
-  outcome: { minted?: readonly { handle: string | null; element: ElementId; storyId: string | null }[] },
+  outcome: {
+    minted?: readonly {
+      handle: string | null;
+      element: ElementId;
+      storyId: string | null;
+    }[];
+  },
   handle: string,
 ): { element: ElementId; storyId: string | null } | null {
   const minted = outcome.minted ?? [];
@@ -110,7 +121,8 @@ function mintedFrame(
 function tableIdOf(created: ElementId): string {
   const id = created.id as unknown;
   if (typeof id === "string") return id;
-  if (id && typeof id === "object" && "table_id" in id) return String((id as { table_id: unknown }).table_id);
+  if (id && typeof id === "object" && "table_id" in id)
+    return String((id as { table_id: unknown }).table_id);
   return "";
 }
 
@@ -124,7 +136,8 @@ async function activePageId(host: BundleHost): Promise<PageId | null> {
 
 /** Raw frame id from a created ElementId. */
 function frameIdOf(id: ElementId): string | null {
-  if (id.kind === "textFrame" || id.kind === "rectangle") return id.id as string;
+  if (id.kind === "textFrame" || id.kind === "rectangle")
+    return id.id as string;
   return null;
 }
 
@@ -173,7 +186,11 @@ export async function commitLoweredTable(
   ctx?: LowerContext,
   replace?: TableReplace,
 ): Promise<string | null> {
-  const envelopeEarly = makeEnvelope({ kind: "table", region: table.region, ...(stamp ?? {}) });
+  const envelopeEarly = makeEnvelope({
+    kind: "table",
+    region: table.region,
+    ...(stamp ?? {}),
+  });
   // UPDATE IN PLACE (Wave 5): the table this binding lowered before is
   // swapped inside its own frame and story — deleteTable, insertTable, cells,
   // label — as one batch, so the user's frame (moved, resized) stays and no
@@ -190,12 +207,16 @@ export async function commitLoweredTable(
     ];
     const outcome = await host.document.mutate({ op: "batch", args: { ops } });
     if (outcome.applied) {
-      const t = (outcome.minted ?? []).find((m) => m.element.kind === "table")?.element;
+      const t = (outcome.minted ?? []).find(
+        (m) => m.element.kind === "table",
+      )?.element;
       const id = t ? tableIdOf(t) : "";
       if (id) replace.onTable?.({ frame, storyId, tableId: id });
       return frame.id as string;
     }
-    host.log.warn(`lower: replacing the table in place was refused (${String(errorText(outcome.error))}) — placing it afresh`);
+    host.log.warn(
+      `lower: replacing the table in place was refused (${String(errorText(outcome.error))}) — placing it afresh`,
+    );
   }
   const pageId = await pageFor(host, ctx);
   if (!pageId) {
@@ -203,7 +224,11 @@ export async function commitLoweredTable(
     return null;
   }
   const placement = defaultPlacement(pageId, table.bounds);
-  const envelope = makeEnvelope({ kind: "table", region: table.region, ...(stamp ?? {}) });
+  const envelope = makeEnvelope({
+    kind: "table",
+    region: table.region,
+    ...(stamp ?? {}),
+  });
   const [top, left] = placement.bounds;
   const FRAME = "$h:frame";
   const frameRef = { kind: "textFrame", id: FRAME } as unknown as ElementId;
@@ -224,36 +249,51 @@ export async function commitLoweredTable(
   ];
   if (replace?.clear?.length) native.unshift(...replace.clear);
   const tableChild = TABLE_CHILD + (replace?.clear?.length ?? 0);
-  let outcome = await host.document.mutate({ op: "batch", args: { ops: native } });
+  let outcome = await host.document.mutate({
+    op: "batch",
+    args: { ops: native },
+  });
   if (!outcome.applied) {
     const child = failedBatchChild(outcome.error);
     if (child !== tableChild) {
-      host.log.warn(`lower: the table batch was rejected (${String(errorText(outcome.error))})`);
+      host.log.warn(
+        `lower: the table batch was rejected (${String(errorText(outcome.error))})`,
+      );
       return null;
     }
     // FALLBACK — no native table: the §2.2 degradation (D-02 fallback).
-    host.log.info("lower: insertTable unsupported — degrading to tab-text + drawn rules (D-02)");
+    host.log.info(
+      "lower: insertTable unsupported — degrading to tab-text + drawn rules (D-02)",
+    );
     const degraded: Mutation[] = [
       ...(replace?.clear ?? []),
       ...head,
-      ...table.rules.map(
-        (r): Mutation => ({
-          op: "insertLine",
-          args: {
-            pageId,
-            start: [left + r.x1Pt, top + r.y1Pt] as [number, number],
-            end: [left + r.x2Pt, top + r.y2Pt] as [number, number],
-          },
-        }),
-      ),
+      ...table.rules.map((r): Mutation => ({
+        op: "insertLine",
+        args: {
+          pageId,
+          start: [left + r.x1Pt, top + r.y1Pt] as [number, number],
+          end: [left + r.x2Pt, top + r.y2Pt] as [number, number],
+        },
+      })),
       ...(table.text.length > 0
-        ? [{ op: "insertText", args: { storyId: FRAME, offset: 0, text: table.text } } as Mutation]
+        ? [
+            {
+              op: "insertText",
+              args: { storyId: FRAME, offset: 0, text: table.text },
+            } as Mutation,
+          ]
         : []),
       label,
     ];
-    outcome = await host.document.mutate({ op: "batch", args: { ops: degraded } });
+    outcome = await host.document.mutate({
+      op: "batch",
+      args: { ops: degraded },
+    });
     if (!outcome.applied) {
-      host.log.warn(`lower: the degraded table batch was rejected (${String(errorText(outcome.error))})`);
+      host.log.warn(
+        `lower: the degraded table batch was rejected (${String(errorText(outcome.error))})`,
+      );
       return null;
     }
   }
@@ -261,12 +301,17 @@ export async function commitLoweredTable(
   const frame = minted?.element ?? null;
   const frameId = frame ? frameIdOf(frame) : null;
   if (!frame || !frameId) {
-    host.log.warn("lower: the batch applied but did not report the frame it minted");
+    host.log.warn(
+      "lower: the batch applied but did not report the frame it minted",
+    );
     return null;
   }
-  const t = (outcome.minted ?? []).find((m) => m.element.kind === "table")?.element;
+  const t = (outcome.minted ?? []).find(
+    (m) => m.element.kind === "table",
+  )?.element;
   const tableId = t ? tableIdOf(t) : "";
-  if (tableId && minted?.storyId) replace?.onTable?.({ frame, storyId: minted.storyId, tableId });
+  if (tableId && minted?.storyId)
+    replace?.onTable?.({ frame, storyId: minted.storyId, tableId });
   await host.selection.set([frame]);
   return frameId;
 }
@@ -304,7 +349,9 @@ function errorText(error: unknown): string {
  *  `insertField.contentOffset` and converts it, so a caret point is sent as
  *  both (`insertFieldMutation`): a v69 engine lands it in any paragraph, an
  *  older one ignores `contentOffset` and lands early past the first. */
-function readCaret(host: BundleHost): { storyId: string; offset: number } | null {
+function readCaret(
+  host: BundleHost,
+): { storyId: string; offset: number } | null {
   try {
     if (!host.supports("text.caret@1")) return null;
     return host.text.caret() ?? null;
@@ -370,14 +417,21 @@ async function variableInsertionPoint(
 
 /** Resolve an EXISTING frame's story via the hitTest read door (the frame's
  *  center, on the frame's own page). */
-async function frameStory(host: BundleHost, frameId: string): Promise<string | null> {
+async function frameStory(
+  host: BundleHost,
+  frameId: string,
+): Promise<string | null> {
   const geom = await host.document.elementGeometry([
     { kind: "textFrame", id: frameId } as ElementId,
   ]);
-  const g = geom[0] as { bounds?: [number, number, number, number]; pageId?: string } | undefined;
+  const g = geom[0] as
+    { bounds?: [number, number, number, number]; pageId?: string } | undefined;
   if (!g?.bounds || !g.pageId) return null;
   const [top, left, bottom, right] = g.bounds;
-  const hit = await host.document.hitTest(g.pageId as PageId, [(left + right) / 2, (top + bottom) / 2]);
+  const hit = await host.document.hitTest(g.pageId as PageId, [
+    (left + right) / 2,
+    (top + bottom) / 2,
+  ]);
   return hit?.storyId ?? null;
 }
 
@@ -395,7 +449,8 @@ interface VariableCarrier {
  *  protocol 71 (the detection answers from the object model's probe); one
  *  text-variable query from it on. */
 async function variableCarrier(host: BundleHost): Promise<VariableCarrier> {
-  if (!(await textVariablesOn(host))) return { textVariables: false, existing: new Map() };
+  if (!(await textVariablesOn(host)))
+    return { textVariables: false, existing: new Map() };
   try {
     return { textVariables: true, existing: await ownTextVariables(host) };
   } catch {
@@ -414,10 +469,13 @@ function placeVariableOps(
   value: string | null,
   contentOffset?: number,
 ): Mutation[] {
-  if (!carrier.textVariables) return [insertFieldMutation(storyId, offset, key, value, contentOffset)];
+  if (!carrier.textVariables)
+    return [insertFieldMutation(storyId, offset, key, value, contentOffset)];
   const known = carrier.existing.get(key);
   const id = known ?? textVariableId(key);
-  const head = known ? setTextVariableMutation(id, key, value) : createTextVariableMutation(key, value);
+  const head = known
+    ? setTextVariableMutation(id, key, value)
+    : createTextVariableMutation(key, value);
   carrier.existing.set(key, id);
   return [head, insertTextVariableMutation(storyId, offset, id, contentOffset)];
 }
@@ -455,12 +513,18 @@ export async function commitLoweredVariable(
     // insert at an arbitrary point in the pinned one.
     const caret = readCaret(host);
     const inStory = !!caret && caret.storyId === targetStoryId;
-    point = { storyId: targetStoryId, offset: inStory ? caret!.offset : 0, caret: inStory };
+    point = {
+      storyId: targetStoryId,
+      offset: inStory ? caret!.offset : 0,
+      caret: inStory,
+    };
   } else {
     point = await variableInsertionPoint(host, ctx);
   }
   if (!point) {
-    host.log.warn(`variable "${variable.target}": no target story to place the field into`);
+    host.log.warn(
+      `variable "${variable.target}": no target story to place the field into`,
+    );
     return null;
   }
   // The HideParagraph missing policy resolves to a null value (the field shows
@@ -468,33 +532,56 @@ export async function commitLoweredVariable(
   const value = variable.hidden ? null : variable.text;
   const carrier = await variableCarrier(host);
   if ("mint" in point) {
-    const placement = defaultPlacement(point.mint, { widthPt: 160, heightPt: 60 });
+    const placement = defaultPlacement(point.mint, {
+      widthPt: 160,
+      heightPt: 60,
+    });
     const outcome = await host.document.mutate({
       op: "batch",
       args: {
         ops: [
-          { op: "insertTextFrame", args: { pageId: point.mint, bounds: placement.bounds } },
+          {
+            op: "insertTextFrame",
+            args: { pageId: point.mint, bounds: placement.bounds },
+          },
           { op: "bindCreated", args: { handle: "frame" } } as Mutation,
           ...placeVariableOps(carrier, "$h:frame", 0, bindingKey, value),
         ],
       },
     });
-    const storyId = outcome.applied ? (mintedFrame(outcome, "frame")?.storyId ?? null) : null;
+    const storyId = outcome.applied
+      ? (mintedFrame(outcome, "frame")?.storyId ?? null)
+      : null;
     if (!storyId) {
-      host.log.warn(`variable "${variable.target}": the frame + field batch was rejected`);
+      host.log.warn(
+        `variable "${variable.target}": the frame + field batch was rejected`,
+      );
       return null;
     }
-    host.log.info(`variable "${variable.target}" placed as field "${bindingKey}" in a new frame (story ${storyId})`);
+    host.log.info(
+      `variable "${variable.target}" placed as field "${bindingKey}" in a new frame (story ${storyId})`,
+    );
     return { storyId, offset: 0 };
   }
   const { storyId, offset } = point;
-  const ops = placeVariableOps(carrier, storyId, offset, bindingKey, value, point.caret ? offset : undefined);
-  const outcome = await host.document.mutate(ops.length === 1 ? ops[0]! : { op: "batch", args: { ops } });
+  const ops = placeVariableOps(
+    carrier,
+    storyId,
+    offset,
+    bindingKey,
+    value,
+    point.caret ? offset : undefined,
+  );
+  const outcome = await host.document.mutate(
+    ops.length === 1 ? ops[0]! : { op: "batch", args: { ops } },
+  );
   if (!outcome.applied) {
     host.log.warn(`variable "${variable.target}": insertField rejected`);
     return null;
   }
-  host.log.info(`variable "${variable.target}" placed as field "${bindingKey}" in story ${storyId}`);
+  host.log.info(
+    `variable "${variable.target}" placed as field "${bindingKey}" in story ${storyId}`,
+  );
   return { storyId, offset };
 }
 
@@ -517,7 +604,13 @@ export async function commitLoweredVariables(
   const placed = new Map<string, { storyId: string; offset: number }>();
   if (items.length === 0) return placed;
   if (items.length === 1) {
-    const one = await commitLoweredVariable(host, items[0]!.variable, items[0]!.key, null, ctx);
+    const one = await commitLoweredVariable(
+      host,
+      items[0]!.variable,
+      items[0]!.key,
+      null,
+      ctx,
+    );
     if (one) placed.set(items[0]!.key, one);
     return placed;
   }
@@ -530,7 +623,9 @@ export async function commitLoweredVariables(
   }
   const point = await variableInsertionPoint(host, ctx);
   if (!point) {
-    host.log.warn(`${items.length} variables: no target story to place the fields into`);
+    host.log.warn(
+      `${items.length} variables: no target story to place the fields into`,
+    );
     return placed;
   }
   const ops: Mutation[] = [];
@@ -538,14 +633,29 @@ export async function commitLoweredVariables(
   items.forEach((it, i) => {
     const value = it.variable.hidden ? null : it.variable.text;
     if ("mint" in point) {
-      const placement = defaultPlacement(point.mint, { widthPt: 160, heightPt: 60 });
+      const placement = defaultPlacement(point.mint, {
+        widthPt: 160,
+        heightPt: 60,
+      });
       ops.push(
-        { op: "insertTextFrame", args: { pageId: point.mint, bounds: placement.bounds } },
+        {
+          op: "insertTextFrame",
+          args: { pageId: point.mint, bounds: placement.bounds },
+        },
         { op: "bindCreated", args: { handle: `v${i}` } } as Mutation,
         ...placeVariableOps(carrier, `$h:v${i}`, 0, it.key, value),
       );
     } else {
-      ops.push(...placeVariableOps(carrier, point.storyId, point.offset, it.key, value, point.caret ? point.offset : undefined));
+      ops.push(
+        ...placeVariableOps(
+          carrier,
+          point.storyId,
+          point.offset,
+          it.key,
+          value,
+          point.caret ? point.offset : undefined,
+        ),
+      );
     }
   });
   const outcome = await host.document.mutate({ op: "batch", args: { ops } });
@@ -554,7 +664,13 @@ export async function commitLoweredVariables(
       `lower: the ${items.length}-variable batch was refused (${String(errorText(outcome.error))}) — placing each on its own`,
     );
     for (const it of items) {
-      const one = await commitLoweredVariable(host, it.variable, it.key, null, ctx);
+      const one = await commitLoweredVariable(
+        host,
+        it.variable,
+        it.key,
+        null,
+        ctx,
+      );
       if (one) placed.set(it.key, one);
     }
     return placed;
@@ -562,15 +678,21 @@ export async function commitLoweredVariables(
   if ("mint" in point) {
     // Core may report `handle: null` for a named element; the frames were
     // minted in item order, so the i-th text frame is the i-th variable's.
-    const frames = (outcome.minted ?? []).filter((m) => m.element.kind === "textFrame");
+    const frames = (outcome.minted ?? []).filter(
+      (m) => m.element.kind === "textFrame",
+    );
     items.forEach((it, i) => {
-      const m = (outcome.minted ?? []).find((x) => x.handle === `v${i}`) ?? frames[i];
+      const m =
+        (outcome.minted ?? []).find((x) => x.handle === `v${i}`) ?? frames[i];
       if (m?.storyId) placed.set(it.key, { storyId: m.storyId, offset: 0 });
     });
   } else {
-    for (const it of items) placed.set(it.key, { storyId: point.storyId, offset: point.offset });
+    for (const it of items)
+      placed.set(it.key, { storyId: point.storyId, offset: point.offset });
   }
-  host.log.info(`lower: ${placed.size} variable(s) placed as fields in one batch`);
+  host.log.info(
+    `lower: ${placed.size} variable(s) placed as fields in one batch`,
+  );
   return placed;
 }
 
@@ -586,13 +708,17 @@ export async function resolveElementId(
   rawId: string,
   ctx?: LowerContext,
 ): Promise<ElementId | null> {
-  const index = await (ctx ? (ctx.scene ??= sceneIndex(host)) : sceneIndex(host));
+  const index = await (ctx
+    ? (ctx.scene ??= sceneIndex(host))
+    : sceneIndex(host));
   return index?.get(rawId) ?? null;
 }
 
 /** One pass over the live scene tree: every element by its raw id (the first
  *  occurrence wins), or null when the host has no tree. */
-export async function sceneIndex(host: BundleHost): Promise<Map<string, ElementId> | null> {
+export async function sceneIndex(
+  host: BundleHost,
+): Promise<Map<string, ElementId> | null> {
   let roots: SceneNode[] = [];
   try {
     roots = (await host.document.tree()) as SceneNode[];
@@ -604,8 +730,11 @@ export async function sceneIndex(host: BundleHost): Promise<Map<string, ElementI
   while (stack.length > 0) {
     const node = stack.pop()!;
     const id = node.id;
-    if (id && typeof id.id === "string" && !index.has(id.id)) index.set(id.id, id as ElementId);
-    if (node.children) for (let i = node.children.length - 1; i >= 0; i--) stack.push(node.children[i]!);
+    if (id && typeof id.id === "string" && !index.has(id.id))
+      index.set(id.id, id as ElementId);
+    if (node.children)
+      for (let i = node.children.length - 1; i >= 0; i--)
+        stack.push(node.children[i]!);
   }
   return index;
 }
@@ -642,7 +771,8 @@ export async function commitLoweredVisibility(
     );
     return false;
   }
-  const target = elementId ?? (await resolveElementId(host, lowered.target, ctx));
+  const target =
+    elementId ?? (await resolveElementId(host, lowered.target, ctx));
   if (!target) {
     host.log.warn(
       `visibility "${lowered.target}": the bound element is not in the document ` +
@@ -654,7 +784,9 @@ export async function commitLoweredVisibility(
   if (muts.length === 0) return false;
   const outcome = await host.document.mutate(muts[0]);
   if (!outcome.applied) {
-    host.log.warn(`visibility "${lowered.target}": setElementProperty rejected`);
+    host.log.warn(
+      `visibility "${lowered.target}": setElementProperty rejected`,
+    );
     return false;
   }
   host.log.info(
@@ -726,7 +858,9 @@ export async function commitLoweredImage(
   fitOverride?: IdmlFit,
 ): Promise<boolean> {
   if (image.status !== "present") {
-    host.log.info(`image "${image.target}": ${image.status} (missing policy applied — nothing placed)`);
+    host.log.info(
+      `image "${image.target}": ${image.status} (missing policy applied — nothing placed)`,
+    );
     return false;
   }
   const uri = placeableUri(image.reference);
@@ -739,12 +873,18 @@ export async function commitLoweredImage(
     return false;
   }
   const fit = fitOverride ?? idmlFit(image.fit);
-  const outcome = await host.document.mutate(placeImageMutation(elementId, uri, fit));
+  const outcome = await host.document.mutate(
+    placeImageMutation(elementId, uri, fit),
+  );
   if (!outcome.applied) {
-    host.log.warn(`image "${image.target}": placeImage rejected on ${elementId}`);
+    host.log.warn(
+      `image "${image.target}": placeImage rejected on ${elementId}`,
+    );
     return false;
   }
-  host.log.info(`image "${image.target}" placed on ${elementId} (uri ${uri}, fit ${fit})`);
+  host.log.info(
+    `image "${image.target}" placed on ${elementId} (uri ${uri}, fit ${fit})`,
+  );
   return true;
 }
 
@@ -768,7 +908,10 @@ export async function commitLoweredBarcode(
   if (barcode.modules.length === 0) {
     // An empty value still takes the old symbol away.
     if (replace?.clear?.length) {
-      const o = await host.document.mutate({ op: "batch", args: { ops: replace.clear } });
+      const o = await host.document.mutate({
+        op: "batch",
+        args: { ops: replace.clear },
+      });
       if (o.applied) replace.onMinted?.([]);
     }
     host.log.info(
@@ -790,7 +933,8 @@ export async function commitLoweredBarcode(
     const geom = await host.document.elementGeometry([
       { kind: "rectangle", id: elementId } as ElementId,
     ]);
-    const bounds = geom[0]?.bounds as [number, number, number, number] | undefined;
+    const bounds = geom[0]?.bounds as
+      [number, number, number, number] | undefined;
     if (bounds) {
       [topPt, leftPt] = bounds;
     }
@@ -810,12 +954,17 @@ export async function commitLoweredBarcode(
   // ("position N out of range for parent Spread … (len 0)"), so a re-lower or
   // a preview step left the old symbol standing. The label still lands on the
   // last new module (`$created`); the removals follow it.
-  const ops = [...barcodeToMutations(barcode, placement, envelope), ...(replace?.clear ?? [])];
+  const ops = [
+    ...barcodeToMutations(barcode, placement, envelope),
+    ...(replace?.clear ?? []),
+  ];
   if (ops.length === 0) return 0;
 
   const outcome = await host.document.mutate({ op: "batch", args: { ops } });
   if (!outcome.applied) {
-    host.log.warn(`barcode "${barcode.target}": insertPath batch rejected: ${JSON.stringify(outcome.error ?? null)}`);
+    host.log.warn(
+      `barcode "${barcode.target}": insertPath batch rejected: ${JSON.stringify(outcome.error ?? null)}`,
+    );
     return 0;
   }
   replace?.onMinted?.((outcome.minted ?? []).map((m) => m.element));
@@ -856,10 +1005,18 @@ export async function commitRule(
     let existing: string | null = null;
     let exactSelf = false;
     try {
-      const styles = await host.document.collection<{ selfId: string; name?: string }>("cellStyles");
+      const styles = await host.document.collection<{
+        selfId: string;
+        name?: string;
+      }>("cellStyles");
       const name = application.apply.name;
       existing =
-        styles.find((st) => st.selfId === name || st.selfId === cellStyleSelf(name) || st.name === name)?.selfId ?? null;
+        styles.find(
+          (st) =>
+            st.selfId === name ||
+            st.selfId === cellStyleSelf(name) ||
+            st.name === name,
+        )?.selfId ?? null;
       exactSelf = styles.some((st) => st.selfId === name);
     } catch {
       // no collection read: mint it (idempotent at the host)
@@ -868,18 +1025,32 @@ export async function commitRule(
     // `appliedCellStyle` — `cell:` addresses need no story id — and a missing
     // style is created in the same host.objects batch: ONE undo step.
     if (await textVariablesOn(host)) {
-      const ops = ruleCellOps(target.tableId, target.col, target.headerRows, result.fires, application.apply.name, existing);
+      const ops = ruleCellOps(
+        target.tableId,
+        target.col,
+        target.headerRows,
+        result.fires,
+        application.apply.name,
+        existing,
+      );
       if (ops.length === 0) return 0;
-      const out = await objectsOf(host)!.batch(ops, { label: `Rule "${result.scope}"` });
+      const out = await objectsOf(host)!.batch(ops, {
+        label: `Rule "${result.scope}"`,
+      });
       if (!out.applied) {
-        host.log.warn(`rule (scope "${result.scope}"): style application batch rejected (${out.reason ?? out.code})`);
+        host.log.warn(
+          `rule (scope "${result.scope}"): style application batch rejected (${out.reason ?? out.code})`,
+        );
         return 0;
       }
       const sets = ops.filter((o) => o.op === "set").length;
-      host.log.info(`rule (scope "${result.scope}") applied cell style "${application.apply.name}" to ${sets} cell(s)`);
+      host.log.info(
+        `rule (scope "${result.scope}") applied cell style "${application.apply.name}" to ${sets} cell(s)`,
+      );
       return sets;
     }
-    if (!exactSelf) await host.document.mutate(createRuleCellStyle(application.apply.name));
+    if (!exactSelf)
+      await host.document.mutate(createRuleCellStyle(application.apply.name));
   }
   // A per-record paragraph rule addresses paragraphs by their live ranges.
   let paragraphs: ReturnType<typeof paragraphRanges> = [];
@@ -888,7 +1059,9 @@ export async function commitRule(
       const story = await host.document.storyContent(target.storyId);
       paragraphs = story ? paragraphRanges(story.paragraphs) : [];
     } catch (err) {
-      host.log.warn(`rule (scope "${result.scope}"): the story could not be read (${String(err)})`);
+      host.log.warn(
+        `rule (scope "${result.scope}"): the story could not be read (${String(err)})`,
+      );
     }
   }
   const muts = ruleMutations(application, target, paragraphs);
@@ -899,9 +1072,14 @@ export async function commitRule(
     );
     return 0;
   }
-  const outcome = await host.document.mutate({ op: "batch", args: { ops: muts } });
+  const outcome = await host.document.mutate({
+    op: "batch",
+    args: { ops: muts },
+  });
   if (!outcome.applied) {
-    host.log.warn(`rule (scope "${result.scope}"): style application batch rejected`);
+    host.log.warn(
+      `rule (scope "${result.scope}"): style application batch rejected`,
+    );
     return 0;
   }
   host.log.info(

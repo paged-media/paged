@@ -97,16 +97,23 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const slate = await doc.swatch(SWATCH.slate);
   const layerContent = await doc.layerId(LAYER.content);
 
-  const head = await proseFrame(ctx, page, [left, 54, right, 82], [
-    { text: "The drafting instruments", style: STYLE.head1 },
-  ]);
-  const intro = await proseFrame(ctx, page, [left, 86, right, 124], [
-    {
-      text:
-        "Four parametric generators, the pen, the anchor editors and the path surgery, all committing through the one insertPath lane. Every shape below is a native polygon the moment it exists.",
-      style: STYLE.bodyFirst,
-    },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    page,
+    [left, 54, right, 82],
+    [{ text: "The drafting instruments", style: STYLE.head1 }],
+  );
+  const intro = await proseFrame(
+    ctx,
+    page,
+    [left, 86, right, 124],
+    [
+      {
+        text: "Four parametric generators, the pen, the anchor editors and the path surgery, all committing through the one insertPath lane. Every shape below is a native polygon the moment it exists.",
+        style: STYLE.bodyFirst,
+      },
+    ],
+  );
   elements.push(head.frameId, intro.frameId);
 
   // ── BAND A — the four insert commands, re-seated into tiles ──────
@@ -163,20 +170,28 @@ export async function build(ctx: PageContext): Promise<PageReport> {
         },
         {
           op: "setElementProperty",
-          args: { ...el, path: "itemLayer", value: { type: "text", value: layerContent } },
+          args: {
+            ...el,
+            path: "itemLayer",
+            value: { type: "text", value: layerContent },
+          },
         },
       );
       elements.push(ref.id);
     }
     await doc.batch(ops);
   }
-  const bandACaption = await proseFrame(ctx, page, [left, 246, right, 278], [
-    {
-      text:
-        "Left to right: Insert arc, Insert spiral, Insert rectangular grid, Insert polar grid — the wave-2 parametric generators at their v0 defaults, each re-seated into its tile by one frameTransform batch. The arc and spiral carry real cubic handles from the bezier kernel; the grids are independent sibling lines.",
-      style: STYLE.caption,
-    },
-  ]);
+  const bandACaption = await proseFrame(
+    ctx,
+    page,
+    [left, 246, right, 278],
+    [
+      {
+        text: "Left to right: Insert arc, Insert spiral, Insert rectangular grid, Insert polar grid — the wave-2 parametric generators at their v0 defaults, each re-seated into its tile by one frameTransform batch. The arc and spiral carry real cubic handles from the bezier kernel; the grids are independent sibling lines.",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(bandACaption.frameId);
 
   // ── BAND B — the pen + anchor editors, as real pointer input ─────
@@ -230,7 +245,11 @@ export async function build(ctx: PageContext): Promise<PageReport> {
           },
           {
             op: "setElementProperty",
-            args: { elementId: pen, path: "itemLayer", value: { type: "text", value: layerContent } },
+            args: {
+              elementId: pen,
+              path: "itemLayer",
+              value: { type: "text", value: layerContent },
+            },
           },
         ]);
       }
@@ -254,7 +273,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   // measured through the engine, scratch out. Same seam as the
   // planner re-homes, recorded in Appendix A.
   if (penWorked) {
-    const runT = <T,>(fn: () => Promise<T>): Promise<T> =>
+    const runT = <T>(fn: () => Promise<T>): Promise<T> =>
       ctx.doc.ledger ? ctx.doc.ledger.transient(fn) : fn();
     try {
       await runT(async () => {
@@ -279,7 +298,9 @@ export async function build(ctx: PageContext): Promise<PageReport> {
           8_000,
         );
         if (!committed) {
-          notes.push("the scratch pen path never committed — anchor tools not claimed");
+          notes.push(
+            "the scratch pen path never committed — anchor tools not claimed",
+          );
           return;
         }
         const scratch = (await newRefs(ctx.page, "polygon", before))[0];
@@ -301,20 +322,26 @@ export async function build(ctx: PageContext): Promise<PageReport> {
             8_000,
           );
           if (added) covers.push("plugin-draw.anchor-add");
-          else notes.push("add-anchor click did not split the segment — not claimed");
+          else
+            notes.push(
+              "add-anchor click did not split the segment — not claimed",
+            );
 
           if (added) {
             // The ADDED anchor's LIVE position (fresh read — the split
             // may not land exactly on the request point), then the
             // Delete tool armed through the registry AND its key.
             const afterAdd = await anchorsOf(ctx, scratch);
-            const near = afterAdd!.anchors.reduce((best, a) => {
-              const d = Math.hypot(
-                a.anchor[0] - (mid[0] + rectoOffset[0]),
-                a.anchor[1] - (mid[1] + rectoOffset[1]),
-              );
-              return d < best.d ? { d, a: a.anchor } : best;
-            }, { d: Infinity, a: afterAdd!.anchors[0].anchor });
+            const near = afterAdd!.anchors.reduce(
+              (best, a) => {
+                const d = Math.hypot(
+                  a.anchor[0] - (mid[0] + rectoOffset[0]),
+                  a.anchor[1] - (mid[1] + rectoOffset[1]),
+                );
+                return d < best.d ? { d, a: a.anchor } : best;
+              },
+              { d: Infinity, a: afterAdd!.anchors[0].anchor },
+            );
             await doc.select(scratch.kind, scratch.id);
             await doc.runCommand(
               "paged.tool.activate.media.paged.draw.tool.deleteAnchor",
@@ -335,8 +362,11 @@ export async function build(ctx: PageContext): Promise<PageReport> {
             else {
               const tool = await ctx.page.evaluate(
                 () =>
-                  (globalThis as unknown as { __canvas: { activeTool?: unknown } })
-                    .__canvas.activeTool,
+                  (
+                    globalThis as unknown as {
+                      __canvas: { activeTool?: unknown };
+                    }
+                  ).__canvas.activeTool,
               );
               notes.push(
                 `delete-anchor click left the anchor — not claimed (activeTool=${String(tool)}, target=[${near.a.join(",")}])`,
@@ -363,10 +393,8 @@ export async function build(ctx: PageContext): Promise<PageReport> {
               const a = s?.anchors[1];
               if (!a) return false;
               return (
-                Math.hypot(
-                  a.right[0] - a.anchor[0],
-                  a.right[1] - a.anchor[1],
-                ) > 0.5
+                Math.hypot(a.right[0] - a.anchor[0], a.right[1] - a.anchor[1]) >
+                0.5
               );
             },
             8_000,
@@ -375,8 +403,11 @@ export async function build(ctx: PageContext): Promise<PageReport> {
           else {
             const tool = await ctx.page.evaluate(
               () =>
-                (globalThis as unknown as { __canvas: { activeTool?: unknown } })
-                  .__canvas.activeTool,
+                (
+                  globalThis as unknown as {
+                    __canvas: { activeTool?: unknown };
+                  }
+                ).__canvas.activeTool,
             );
             notes.push(
               `convert-anchor click left a corner — not claimed (activeTool=${String(tool)}, target=[${v.join(",")}])`,
@@ -461,20 +492,23 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     await draw(ctx, "closePath");
     const closed = await settle(
       ctx.page,
-      async () =>
-        (await anchorsOf(ctx, survivor))?.subpathOpen?.[0] === false,
+      async () => (await anchorsOf(ctx, survivor))?.subpathOpen?.[0] === false,
       10_000,
     );
     expect(closed, "closePath sealed the welded path").toBe(true);
   }
 
-  const bandCCaption = await proseFrame(ctx, page, [left, 420, right, 470], [
-    {
-      text:
-        "Band two, left: three pen clicks committed the open vermilion path - real pointer input through the live camera. The anchor editors then split, removed and smoothed a scratch path's anchors on the facing recto, every position read back from the engine between steps (the margin note says why not here). Right: the same jittery polyline twice, the second simplified at 3 pt tolerance; below, two open angles welded by Join and sealed by Close path.",
-      style: STYLE.caption,
-    },
-  ]);
+  const bandCCaption = await proseFrame(
+    ctx,
+    page,
+    [left, 420, right, 470],
+    [
+      {
+        text: "Band two, left: three pen clicks committed the open vermilion path - real pointer input through the live camera. The anchor editors then split, removed and smoothed a scratch path's anchors on the facing recto, every position read back from the engine between steps (the margin note says why not here). Right: the same jittery polyline twice, the second simplified at 3 pt tolerance; below, two open angles welded by Join and sealed by Close path.",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(bandCCaption.frameId);
 
   elements.push(

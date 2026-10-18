@@ -129,9 +129,11 @@ async function addLayer(page: Page, name: string): Promise<void> {
 
 /** The panel's rendered row ids, top to bottom. */
 async function renderedRowIds(list: Locator): Promise<string[]> {
-  return list.locator("[data-list-row]").evaluateAll((els) =>
-    els.map((e) => e.getAttribute("data-list-row") ?? ""),
-  );
+  return list
+    .locator("[data-list-row]")
+    .evaluateAll((els) =>
+      els.map((e) => e.getAttribute("data-list-row") ?? ""),
+    );
 }
 
 test.describe("E2E schema-tree-panel (v1.2 tree rows / drag-reorder / inline rename)", () => {
@@ -230,7 +232,11 @@ test.describe("E2E schema-tree-panel (v1.2 tree rows / drag-reorder / inline ren
 
     await collapsed.locator("[data-list-twisty]").nth(0).click();
     await expect(collapsed.locator("[data-list-row]")).toHaveCount(2);
-    await collapsed.locator("[data-list-row]").nth(1).locator("[data-list-twisty]").click();
+    await collapsed
+      .locator("[data-list-row]")
+      .nth(1)
+      .locator("[data-list-twisty]")
+      .click();
     const order = await frameOrder(page);
     await expect(collapsed.locator("[data-list-row]")).toHaveCount(
       2 + order.length,

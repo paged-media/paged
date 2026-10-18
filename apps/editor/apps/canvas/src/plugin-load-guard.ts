@@ -17,7 +17,6 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-
 // Guarded bundle loading (ADR 025 §4a).
 //
 // The editor loads its eight first-party bundles in one array literal over

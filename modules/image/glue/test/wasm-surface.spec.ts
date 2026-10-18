@@ -66,13 +66,18 @@ const UNMODELLED_ON_PURPOSE = new Map([
 function declaredInTs(): string[] {
   const src = readFileSync(ENGINE_TS, "utf8");
   const block = /export interface ImageWasmModule \{(.*?)\n\}/s.exec(src);
-  if (!block) throw new Error("ImageWasmModule interface not found in engine.ts");
-  return [...block[1].matchAll(/^ {2}([a-z_][A-Za-z0-9_]*)\(/gm)].map((m) => m[1]);
+  if (!block)
+    throw new Error("ImageWasmModule interface not found in engine.ts");
+  return [...block[1].matchAll(/^ {2}([a-z_][A-Za-z0-9_]*)\(/gm)].map(
+    (m) => m[1],
+  );
 }
 
 function exportedByWasm(): string[] {
   const dts = readFileSync(WASM_DTS, "utf8");
-  return [...dts.matchAll(/^export function ([A-Za-z0-9_]+)\(/gm)].map((m) => m[1]);
+  return [...dts.matchAll(/^export function ([A-Za-z0-9_]+)\(/gm)].map(
+    (m) => m[1],
+  );
 }
 
 // The artifact is gitignored and built by scripts/build-wasm.sh, so it

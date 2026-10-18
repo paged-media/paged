@@ -52,7 +52,10 @@ import {
   type StrokeLayer,
 } from "../commands/appearance";
 import { formatAddress, parseAddress } from "@paged-media/plugin-sdk";
-import { appearanceBakeOf, stampDrawMetadata } from "../commands/appearance-bake";
+import {
+  appearanceBakeOf,
+  stampDrawMetadata,
+} from "../commands/appearance-bake";
 import {
   applyGraphicStyleBatchFor,
   findGraphicStyle,
@@ -62,7 +65,14 @@ import {
   readGraphicStyleLibrary,
   withGraphicStyleRef,
 } from "../commands/graphic-styles";
-import { kindBatch, plan, rejected, type Planned, type Planner, type StackStamp } from "./plan";
+import {
+  kindBatch,
+  plan,
+  rejected,
+  type Planned,
+  type Planner,
+  type StackStamp,
+} from "./plan";
 import {
   BOOL,
   FILL_LAYER,
@@ -109,15 +119,30 @@ export const APPEARANCE_SCHEMA: readonly PropertySchema[] = [
     {
       title: "Graphic style",
       nullable: true,
-      summary: "The linked graphic style; setting it applies the style, null breaks the link (keeps the look).",
+      summary:
+        "The linked graphic style; setting it applies the style, null breaks the link (keeps the look).",
     },
   ),
-  derived("graphicStyleOverridden", BOOL, "True when the element was edited directly since its style was applied."),
-  ro("baked", BOOL, "True when the stack is baked into a group of real page items (release it to edit here)."),
+  derived(
+    "graphicStyleOverridden",
+    BOOL,
+    "True when the element was edited directly since its style was applied.",
+  ),
+  ro(
+    "baked",
+    BOOL,
+    "True when the stack is baked into a group of real page items (release it to edit here).",
+  ),
 ];
 
 /** The kinds that can carry an appearance envelope. */
-const CARRIERS = new Set(["polygon", "graphicLine", "rectangle", "oval", "textFrame"]);
+const CARRIERS = new Set([
+  "polygon",
+  "graphicLine",
+  "rectangle",
+  "oval",
+  "textFrame",
+]);
 
 const DEFAULT_TINT = 100;
 const DEFAULT_OPACITY = 100;
@@ -153,18 +178,24 @@ const storedStroke = (s: ReturnType<typeof fullStroke>): StrokeLayer => ({
   ...(s.blendMode !== DEFAULT_BLEND ? { blendMode: s.blendMode } : {}),
 });
 
-async function supportedPaths(host: BundleHost, id: ElementId): Promise<Set<string>> {
+async function supportedPaths(
+  host: BundleHost,
+  id: ElementId,
+): Promise<Set<string>> {
   const props = await host.document.elementProperties(id).catch(() => null);
   return new Set((props?.entries ?? []).map((e) => e.path));
 }
 
-export function makeAppearanceKind(host: BundleHost): ObjectKindContribution & Planner {
+export function makeAppearanceKind(
+  host: BundleHost,
+): ObjectKindContribution & Planner {
   const elementOf = (address: string): ElementId | null => {
     const id = localIdOf(address, APPEARANCE_KIND);
     const el = id ? elementOfId(id) : null;
     return el && CARRIERS.has(el.kind) ? el : null;
   };
-  const envelopeOf = (id: ElementId) => host.document.getMetadata(id).catch(() => null);
+  const envelopeOf = (id: ElementId) =>
+    host.document.getMetadata(id).catch(() => null);
 
   return {
     kind: APPEARANCE_KIND,
@@ -188,7 +219,11 @@ export function makeAppearanceKind(host: BundleHost): ObjectKindContribution & P
     },
     async get(address, path): Promise<ObjectValue> {
       const el = elementOf(address);
-      if (!el) return refuse("unknownAddress", `${address} cannot carry an appearance`);
+      if (!el)
+        return refuse(
+          "unknownAddress",
+          `${address} cannot carry an appearance`,
+        );
       const env = await envelopeOf(el);
       const stack = appearanceOf(env);
       switch (path) {
@@ -203,7 +238,12 @@ export function makeAppearanceKind(host: BundleHost): ObjectKindContribution & P
         case "graphicStyleOverridden": {
           const ref = graphicStyleRefOf(env);
           if (!ref) return { kind: "absent" };
-          return val(graphicStyleOverridden(ref, (await readGraphicAppearance(host, el)).appearance));
+          return val(
+            graphicStyleOverridden(
+              ref,
+              (await readGraphicAppearance(host, el)).appearance,
+            ),
+          );
         }
         case "baked":
           return val(appearanceBakeOf(env) !== null);
@@ -216,67 +256,84 @@ export function makeAppearanceKind(host: BundleHost): ObjectKindContribution & P
   };
 
   async function planOps(ops: readonly ObjectOp[]): Promise<Planned> {
-      const byElement = new Map<string, { el: ElementId; ops: ObjectOp[] }>();
-      for (const op of ops) {
-        if (op.op !== "set") {
-          return rejected(`appearance ${op.op}: an appearance belongs to its element — set its fills / strokes`);
-        }
-        const el = elementOf(op.address);
-        if (!el) return rejected(`${op.address} cannot carry an appearance`);
-        const key = `${el.kind}:${String(el.id)}`;
-        const entry = byElement.get(key) ?? { el, ops: [] };
-        entry.ops.push(op);
-        byElement.set(key, entry);
-      }
-      const mutations: MutationInput[] = [];
-      const stamps: StackStamp[] = [];
-      for (const { el, ops: own } of byElement.values()) {
-        const env: PluginMetadataEnvelope | null = await envelopeOf(el);
-        if (appearanceBakeOf(env)) {
-          return rejected(`${coreAddressOf(el)}: the appearance is BAKED into a group of page items — release it first`);
-        }
-        const styleOps = own.filter((o) => o.op === "set" && o.path === "graphicStyle");
-        if (styleOps.length > 0 && own.length > styleOps.length) {
-          return rejected("set graphicStyle in its own batch: a style replaces the whole stack");
-        }
-        const supported = await supportedPaths(host, el);
-        if (styleOps.length > 0) {
-          const target = (styleOps.at(-1) as { value: unknown }).value;
-          if (target === null) {
-            mutations.push(stampDrawMetadata(el, withGraphicStyleRef(env, null)));
-            continue;
-          }
-          const id = bareIdOf(String(target), "graphicStyle");
-          const style = findGraphicStyle(await readGraphicStyleLibrary(host), id);
-          if (!style) return rejected(`no graphic style "${id}"`);
-          const batch = applyGraphicStyleBatchFor({ elementId: el, style, supported, prev: env });
-          mutations.push(...(batch.op === "batch" ? batch.args.ops : [batch]));
-          continue;
-        }
-        const stack: AppearanceStack = appearanceOf(env);
-        for (const op of own) {
-          if (op.op !== "set") continue;
-          if (op.path === "fills") {
-            stack.fills = (op.value as ReturnType<typeof fullFill>[]).map(storedFill);
-          } else if (op.path === "strokes") {
-            stack.strokes = (op.value as ReturnType<typeof fullStroke>[]).map(storedStroke);
-          } else {
-            return rejected(`appearance has no writable "${op.path}"`);
-          }
-        }
-        // The stack itself goes to the element's label — a sub-key write
-        // the registry merges into the envelope when it is the batch's
-        // only label (plan.ts), a full-envelope stamp otherwise.
-        stamps.push({ el, prev: env, stack });
-        // The bake, filtered to the element's own vocabulary: a refused
-        // property would roll the WHOLE atomic batch back (a GraphicLine
-        // has no fill slot).
-        mutations.push(
-          ...bakeAppearanceMutations(el, stack).filter(
-            (m) => m.op !== "setElementProperty" || supported.has(m.args.path),
-          ),
+    const byElement = new Map<string, { el: ElementId; ops: ObjectOp[] }>();
+    for (const op of ops) {
+      if (op.op !== "set") {
+        return rejected(
+          `appearance ${op.op}: an appearance belongs to its element — set its fills / strokes`,
         );
       }
-      return plan({ mutations, stamps });
+      const el = elementOf(op.address);
+      if (!el) return rejected(`${op.address} cannot carry an appearance`);
+      const key = `${el.kind}:${String(el.id)}`;
+      const entry = byElement.get(key) ?? { el, ops: [] };
+      entry.ops.push(op);
+      byElement.set(key, entry);
+    }
+    const mutations: MutationInput[] = [];
+    const stamps: StackStamp[] = [];
+    for (const { el, ops: own } of byElement.values()) {
+      const env: PluginMetadataEnvelope | null = await envelopeOf(el);
+      if (appearanceBakeOf(env)) {
+        return rejected(
+          `${coreAddressOf(el)}: the appearance is BAKED into a group of page items — release it first`,
+        );
+      }
+      const styleOps = own.filter(
+        (o) => o.op === "set" && o.path === "graphicStyle",
+      );
+      if (styleOps.length > 0 && own.length > styleOps.length) {
+        return rejected(
+          "set graphicStyle in its own batch: a style replaces the whole stack",
+        );
+      }
+      const supported = await supportedPaths(host, el);
+      if (styleOps.length > 0) {
+        const target = (styleOps.at(-1) as { value: unknown }).value;
+        if (target === null) {
+          mutations.push(stampDrawMetadata(el, withGraphicStyleRef(env, null)));
+          continue;
+        }
+        const id = bareIdOf(String(target), "graphicStyle");
+        const style = findGraphicStyle(await readGraphicStyleLibrary(host), id);
+        if (!style) return rejected(`no graphic style "${id}"`);
+        const batch = applyGraphicStyleBatchFor({
+          elementId: el,
+          style,
+          supported,
+          prev: env,
+        });
+        mutations.push(...(batch.op === "batch" ? batch.args.ops : [batch]));
+        continue;
+      }
+      const stack: AppearanceStack = appearanceOf(env);
+      for (const op of own) {
+        if (op.op !== "set") continue;
+        if (op.path === "fills") {
+          stack.fills = (op.value as ReturnType<typeof fullFill>[]).map(
+            storedFill,
+          );
+        } else if (op.path === "strokes") {
+          stack.strokes = (op.value as ReturnType<typeof fullStroke>[]).map(
+            storedStroke,
+          );
+        } else {
+          return rejected(`appearance has no writable "${op.path}"`);
+        }
+      }
+      // The stack itself goes to the element's label — a sub-key write
+      // the registry merges into the envelope when it is the batch's
+      // only label (plan.ts), a full-envelope stamp otherwise.
+      stamps.push({ el, prev: env, stack });
+      // The bake, filtered to the element's own vocabulary: a refused
+      // property would roll the WHOLE atomic batch back (a GraphicLine
+      // has no fill slot).
+      mutations.push(
+        ...bakeAppearanceMutations(el, stack).filter(
+          (m) => m.op !== "setElementProperty" || supported.has(m.args.path),
+        ),
+      );
+    }
+    return plan({ mutations, stamps });
   }
 }

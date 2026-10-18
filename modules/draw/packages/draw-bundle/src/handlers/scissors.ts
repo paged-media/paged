@@ -37,7 +37,11 @@ import type {
 } from "@paged-media/plugin-api";
 import { CLICK_DRAG_THRESHOLD_PX } from "@paged-media/plugin-sdk";
 
-import { affineScale, inverseApplyAffine, type Affine } from "@paged-media/draw-geometry";
+import {
+  affineScale,
+  inverseApplyAffine,
+  type Affine,
+} from "@paged-media/draw-geometry";
 import {
   planScissorsAt,
   scissorsMutation,
@@ -86,7 +90,9 @@ export async function applyScissorsAt(
   if (!plan) return null;
   const outcome = await host.document.mutate(scissorsMutation(plan, target));
   if (!outcome.applied) {
-    host.log.warn(`scissors: the cut was refused: ${JSON.stringify(outcome.error)}`);
+    host.log.warn(
+      `scissors: the cut was refused: ${JSON.stringify(outcome.error)}`,
+    );
     return null;
   }
   return { target, plan };
@@ -128,7 +134,9 @@ export function createScissorsHandler(
       if (e.button !== 0 || e.maxDelta > CLICK_DRAG_THRESHOLD_PX) return;
       void act(e)
         .then((r) => options.onCut?.(r))
-        .catch((err) => host.log.warn(`scissors: the cut failed: ${String(err)}`));
+        .catch((err) =>
+          host.log.warn(`scissors: the cut failed: ${String(err)}`),
+        );
     },
   };
 }

@@ -38,7 +38,11 @@ vi.mock("../engine", () => ({
         totalRecords: 2,
       };
     },
-    run_record_flow_batch(_binding: string, mode: { mode: string }, chain: unknown[]) {
+    run_record_flow_batch(
+      _binding: string,
+      mode: { mode: string },
+      chain: unknown[],
+    ) {
       return [{ label: mode.mode, flow: { frames: [], total: chain.length } }];
     },
     free() {},
@@ -49,10 +53,19 @@ import { createSession } from "../session";
 
 function fakeHost(): BundleHost {
   return {
-    manifest: { id: "media.paged.data", name: "d", version: "0.0.1", apiVersion: "^0.2" },
+    manifest: {
+      id: "media.paged.data",
+      name: "d",
+      version: "0.0.1",
+      apiVersion: "^0.2",
+    },
     log: { debug() {}, info() {}, warn() {}, error() {} },
     // The document doors every host has; nothing here fires them.
-    document: { onWillSave: () => ({ dispose() {} }), onDidChange: () => ({ dispose() {} }), onDidOpen: () => ({ dispose() {} }) },
+    document: {
+      onWillSave: () => ({ dispose() {} }),
+      onDidChange: () => ({ dispose() {} }),
+      onDidOpen: () => ({ dispose() {} }),
+    },
     supports: () => false,
   } as unknown as BundleHost;
 }
@@ -68,9 +81,11 @@ describe("session.planBatch (§10)", () => {
 
   it("runRecordFlowBatch executes a plan and returns one BatchRun per unit", async () => {
     const session = createSession(fakeHost(), 0);
-    const runs = await session.runRecordFlowBatch("rf", { mode: "perGroup", by: ["region"] }, [
-      { frame: "f0", page: "p0", heightPt: 200 },
-    ]);
+    const runs = await session.runRecordFlowBatch(
+      "rf",
+      { mode: "perGroup", by: ["region"] },
+      [{ frame: "f0", page: "p0", heightPt: 200 }],
+    );
     expect(runs).toHaveLength(1);
     expect(runs[0].label).toBe("perGroup");
   });

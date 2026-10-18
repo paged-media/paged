@@ -304,7 +304,8 @@ export async function readFields(page: Page): Promise<FieldRecord[]> {
         key,
         storyId: v.address,
         offset: 0,
-        value: v.contents === null || v.contents === `<${key}>` ? null : v.contents,
+        value:
+          v.contents === null || v.contents === `<${key}>` ? null : v.contents,
       };
     });
   return [...fromPlaceholders, ...fromVariables].filter((f) =>
@@ -367,9 +368,10 @@ export async function importOrders(
   await doc.runCommand(`${DATA_CMD}.importData`);
   await openPanel(page, SOURCES_PANEL);
   const importButton = page.locator("[data-data-import-csv]");
-  await expect(importButton, "the paged.data sources panel mounted").toBeVisible(
-    { timeout: 120_000 },
-  );
+  await expect(
+    importButton,
+    "the paged.data sources panel mounted",
+  ).toBeVisible({ timeout: 120_000 });
   const chooser = page.waitForEvent("filechooser");
   await importButton.click();
   // The DERIVED order book (order_date withheld) — see csvWithoutDates
@@ -435,8 +437,12 @@ export async function wizardMapSingle(
   let found = false;
   for (let i = 0; i < n; i += 1) {
     const label = labels.nth(i);
-    const expr = (await label.locator("code").textContent().catch(() => null))
-      ?.trim();
+    const expr = (
+      await label
+        .locator("code")
+        .textContent()
+        .catch(() => null)
+    )?.trim();
     const box = label.locator('input[type="checkbox"]');
     if (expr === column) {
       found = true;

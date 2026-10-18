@@ -35,7 +35,9 @@ describe("isCornerAnchor — IDML's zero-handle corner convention", () => {
   });
 
   it("a smooth anchor (mirrored handles) is not a corner", () => {
-    expect(isCornerAnchor(smoothAnchorFromDrag([10, 20], [15, 20]))).toBe(false);
+    expect(isCornerAnchor(smoothAnchorFromDrag([10, 20], [15, 20]))).toBe(
+      false,
+    );
   });
 
   it("ONE extended handle is enough to stop it being a corner", () => {
@@ -118,13 +120,20 @@ describe("isCornerAnchor — IDML's zero-handle corner convention", () => {
     expect(isCornerAnchor(cornerAnchor([1, 1]), 0)).toBe(true);
     // Zero tolerance means zero: the smallest handle there is stops it.
     expect(
-      isCornerAnchor({ anchor: [1, 1], left: [1, 1], right: [1 + 2 ** -52, 1] }, 0),
+      isCornerAnchor(
+        { anchor: [1, 1], left: [1, 1], right: [1 + 2 ** -52, 1] },
+        0,
+      ),
     ).toBe(false);
   });
 
   it("FIXED DEFECT (boundary): a handle EXACTLY the tolerance long is collapsed — for both tests", () => {
     // 0.5 is exactly representable, so the distance IS the tolerance.
-    const onTheLine: AnchorTriple = { anchor: [0, 0], left: [-0.5, 0], right: [0.5, 0] };
+    const onTheLine: AnchorTriple = {
+      anchor: [0, 0],
+      left: [-0.5, 0],
+      right: [0.5, 0],
+    };
     expect(isCornerAnchor(onTheLine, 0.5)).toBe(true);
     // The same anchor, the same tolerance: collapsed handles are not the
     // two EXTENDED handles a smooth anchor needs. Before the bound was
@@ -133,7 +142,11 @@ describe("isCornerAnchor — IDML's zero-handle corner convention", () => {
     // neighbour called zero-length.
     expect(isSmoothAnchor(onTheLine, 0.5)).toBe(false);
     // A hair longer, and it is a real (smooth) handle pair again.
-    const longer: AnchorTriple = { anchor: [0, 0], left: [-0.75, 0], right: [0.75, 0] };
+    const longer: AnchorTriple = {
+      anchor: [0, 0],
+      left: [-0.75, 0],
+      right: [0.75, 0],
+    };
     expect(isCornerAnchor(longer, 0.5)).toBe(false);
     expect(isSmoothAnchor(longer, 0.5)).toBe(true);
   });

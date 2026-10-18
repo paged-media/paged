@@ -157,7 +157,9 @@ test.describe("journey · paged.web plugin", () => {
         timeout: 6_000,
       });
     } catch {
-      failures.push("preview: sandboxed iframe did not render the <h1> snippet");
+      failures.push(
+        "preview: sandboxed iframe did not render the <h1> snippet",
+      );
     }
 
     // Style it through the CSS lane — the second source channel of the

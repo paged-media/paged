@@ -70,7 +70,8 @@ const ACKNOWLEDGED = Object.freeze({
   // vocabulary lives outside this repository, so the row is added there;
   // once the re-published vocabulary carries it, this entry fails as
   // STALE and goes.
-  "editor-shell.panels.library": "the Library panel (ADR 225) awaits its feature row",
+  "editor-shell.panels.library":
+    "the Library panel (ADR 225) awaits its feature row",
 });
 
 const TAG = /@feat:([A-Za-z0-9_.-]+)/g;
@@ -181,7 +182,8 @@ function main() {
       .forEach((line, i) => {
         if (!DEFECT_MARKERS.some((re) => re.test(line))) return;
         const claimed = [...line.matchAll(TAG)].map((m) => m[1]);
-        if (claimed.length) overclaims.push(`${rel}:${i + 1} claims ${claimed.join(", ")}`);
+        if (claimed.length)
+          overclaims.push(`${rel}:${i + 1} claims ${claimed.join(", ")}`);
       });
   }
   for (const o of overclaims) {
@@ -190,11 +192,14 @@ function main() {
 
   const unknown = [...claims.keys()].filter((id) => !known.has(id)).sort();
   const unexplained = unknown.filter((id) => !(id in ACKNOWLEDGED));
-  const rotted = Object.keys(ACKNOWLEDGED).filter((id) => known.has(id)).sort();
+  const rotted = Object.keys(ACKNOWLEDGED)
+    .filter((id) => known.has(id))
+    .sort();
 
   for (const id of unexplained) {
     console.error(`[feat-vocabulary] UNKNOWN  ${id}`);
-    for (const at of claims.get(id).slice(0, 4)) console.error(`               ${at}`);
+    for (const at of claims.get(id).slice(0, 4))
+      console.error(`               ${at}`);
   }
   for (const id of rotted) {
     console.error(
@@ -203,7 +208,10 @@ function main() {
     );
   }
 
-  const vendoredAt = String(vocabulary.generated_from?.commit ?? "?").slice(0, 8);
+  const vendoredAt = String(vocabulary.generated_from?.commit ?? "?").slice(
+    0,
+    8,
+  );
   console.log(
     `[feat-vocabulary] ${claims.size} distinct ids claimed across ` +
       `${new Set([...claims.values()].flat().map((s) => s.split(":")[0])).size} spec files; ` +

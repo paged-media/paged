@@ -112,8 +112,9 @@ test.describe("W2.12 — Publication health", () => {
     const overset = panel.locator('[data-risk-row="overset"]');
     await expect(overset).not.toHaveAttribute("data-seam", /.*/);
     await expect
-      .poll(async () =>
-        Number((await overset.getAttribute("data-risk-count")) ?? "0"),
+      .poll(
+        async () =>
+          Number((await overset.getAttribute("data-risk-count")) ?? "0"),
         { timeout: 8_000 },
       )
       .toBeGreaterThan(0);

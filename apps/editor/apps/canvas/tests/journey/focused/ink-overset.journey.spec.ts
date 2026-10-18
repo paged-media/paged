@@ -77,7 +77,11 @@ test.describe("journey · ink + overset", () => {
         op: "setInkSetting",
         args: { spotId, convertToProcess: true },
       })) as { kind?: string };
-      if (created.kind !== "mutationApplied" || !spotId || r.kind !== "mutationApplied")
+      if (
+        created.kind !== "mutationApplied" ||
+        !spotId ||
+        r.kind !== "mutationApplied"
+      )
         fail.push("color-swatches.ink-manager");
     } catch (e) {
       fail.push(`color-swatches.ink-manager (${String(e).slice(0, 50)})`);
@@ -86,7 +90,12 @@ test.describe("journey · ink + overset", () => {
     // OVERSET — a tiny frame can't hold a long paragraph; the story reports
     // overset (StorySummary.overset is live-readable).
     try {
-      const { storyId } = await designer.addTextFrame({ x0: 70, y0: 90, x1: 150, y1: 130 });
+      const { storyId } = await designer.addTextFrame({
+        x0: 70,
+        y0: 90,
+        x1: 150,
+        y1: 130,
+      });
       await designer.placeCaret(storyId!, 0);
       await designer.typeText(
         "This sentence is far longer than the small frame can possibly hold, so the story must overflow into overset.",
@@ -94,7 +103,10 @@ test.describe("journey · ink + overset", () => {
       await expect
         .poll(
           async () => {
-            const stories = await collection<{ selfId: string; overset?: boolean }>(page, "stories");
+            const stories = await collection<{
+              selfId: string;
+              overset?: boolean;
+            }>(page, "stories");
             return stories.find((s) => s.selfId === storyId)?.overset ?? false;
           },
           { timeout: 8000 },
@@ -104,6 +116,9 @@ test.describe("journey · ink + overset", () => {
       fail.push(`stories-text.overset (${String(e).slice(0, 50)})`);
     }
 
-    expect(fail, `prep aspects that did not verify: ${fail.join(" | ")}`).toEqual([]);
+    expect(
+      fail,
+      `prep aspects that did not verify: ${fail.join(" | ")}`,
+    ).toEqual([]);
   });
 });

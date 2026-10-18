@@ -24,7 +24,10 @@
 // in-place entries (Masters, Pages, Text Variables, Gradients, Cell /
 // Table Styles, Conditions, Table, the Path section).
 
-import type { CommandContribution, MenuItemContribution } from "@paged-media/shell";
+import type {
+  CommandContribution,
+  MenuItemContribution,
+} from "@paged-media/shell";
 
 import { openCoreCommand } from "./core-command-dialog";
 
@@ -45,34 +48,174 @@ export const RUN_CORE_COMMAND = "paged.core.runCommand";
 
 export const CORE_COMMAND_ENTRIES: readonly CoreCommandEntry[] = [
   // Insert (Object menu, text-anchored inserts).
-  { op: "insertField", title: "Insert field…", menu: "Object/Insert field…", group: "insert-text", order: 20, prefill: { field: "pageNumber" } },
-  { op: "insertHyperlink", title: "Insert hyperlink…", menu: "Object/Insert hyperlink…", group: "insert-text", order: 21, prefill: { url: "https://" } },
-  { op: "insertAnchoredFrame", title: "Insert anchored frame…", menu: "Object/Insert anchored frame…", group: "insert-text", order: 22, prefill: { width: 72, height: 72 } },
-  { op: "setFieldValue", title: "Set field value…", menu: "Type/Set field value…", group: "insert", order: 32 },
+  {
+    op: "insertField",
+    title: "Insert field…",
+    menu: "Object/Insert field…",
+    group: "insert-text",
+    order: 20,
+    prefill: { field: "pageNumber" },
+  },
+  {
+    op: "insertHyperlink",
+    title: "Insert hyperlink…",
+    menu: "Object/Insert hyperlink…",
+    group: "insert-text",
+    order: 21,
+    prefill: { url: "https://" },
+  },
+  {
+    op: "insertAnchoredFrame",
+    title: "Insert anchored frame…",
+    menu: "Object/Insert anchored frame…",
+    group: "insert-text",
+    order: 22,
+    prefill: { width: 72, height: 72 },
+  },
+  {
+    op: "setFieldValue",
+    title: "Set field value…",
+    menu: "Type/Set field value…",
+    group: "insert",
+    order: 32,
+  },
   // Path (Object menu): point edits, construction, masks, type on a path.
-  { op: "pathPointInsert", title: "Path: insert point…", menu: "Object/Path/Insert point…", group: "path", order: 60, prefill: { index: 1, anchor: { anchor: [0, 0], left: [0, 0], right: [0, 0] } } },
-  { op: "pathPointRemove", title: "Path: remove point…", menu: "Object/Path/Remove point…", group: "path", order: 61, prefill: { index: 0 } },
-  { op: "pathPointSet", title: "Path: move point…", menu: "Object/Path/Move point…", group: "path", order: 62, prefill: { index: 0, role: "anchor" } },
-  { op: "closePath", title: "Path: close path", menu: "Object/Path/Close path", group: "path", order: 63 },
-  { op: "joinPaths", title: "Path: join paths", menu: "Object/Path/Join paths", group: "path", order: 64 },
-  { op: "outlineStroke", title: "Path: outline stroke", menu: "Object/Path/Outline stroke…", group: "path", order: 65, prefill: { width: 1, cap: "butt", join: "miter", miterLimit: 4 } },
-  { op: "offsetPath", title: "Path: offset path", menu: "Object/Path/Offset path…", group: "path", order: 66, prefill: { delta: 6, join: "miter", miterLimit: 4 } },
-  { op: "pathfinderFaces", title: "Pathfinder: keep / remove faces…", menu: "Object/Pathfinder/Keep or remove faces…", group: "path", order: 67, prefill: { mode: "keep", faces: [] } },
-  { op: "attachTextToPath", title: "Type on a path: attach…", menu: "Object/Type on a path/Attach…", group: "path", order: 68 },
-  { op: "detachTextFromPath", title: "Type on a path: detach", menu: "Object/Type on a path/Detach", group: "path", order: 69 },
-  { op: "applyOpacityMask", title: "Opacity mask: make…", menu: "Object/Opacity mask/Make…", group: "clip", order: 70 },
-  { op: "releaseOpacityMask", title: "Opacity mask: release", menu: "Object/Opacity mask/Release", group: "clip", order: 71 },
-  { op: "duplicateElements", title: "Step and repeat…", menu: "Object/Step and repeat…", group: "duplicate", order: 72, prefill: { offset: [12, 12] } },
+  {
+    op: "pathPointInsert",
+    title: "Path: insert point…",
+    menu: "Object/Path/Insert point…",
+    group: "path",
+    order: 60,
+    prefill: {
+      index: 1,
+      anchor: { anchor: [0, 0], left: [0, 0], right: [0, 0] },
+    },
+  },
+  {
+    op: "pathPointRemove",
+    title: "Path: remove point…",
+    menu: "Object/Path/Remove point…",
+    group: "path",
+    order: 61,
+    prefill: { index: 0 },
+  },
+  {
+    op: "pathPointSet",
+    title: "Path: move point…",
+    menu: "Object/Path/Move point…",
+    group: "path",
+    order: 62,
+    prefill: { index: 0, role: "anchor" },
+  },
+  {
+    op: "closePath",
+    title: "Path: close path",
+    menu: "Object/Path/Close path",
+    group: "path",
+    order: 63,
+  },
+  {
+    op: "joinPaths",
+    title: "Path: join paths",
+    menu: "Object/Path/Join paths",
+    group: "path",
+    order: 64,
+  },
+  {
+    op: "outlineStroke",
+    title: "Path: outline stroke",
+    menu: "Object/Path/Outline stroke…",
+    group: "path",
+    order: 65,
+    prefill: { width: 1, cap: "butt", join: "miter", miterLimit: 4 },
+  },
+  {
+    op: "offsetPath",
+    title: "Path: offset path",
+    menu: "Object/Path/Offset path…",
+    group: "path",
+    order: 66,
+    prefill: { delta: 6, join: "miter", miterLimit: 4 },
+  },
+  {
+    op: "pathfinderFaces",
+    title: "Pathfinder: keep / remove faces…",
+    menu: "Object/Pathfinder/Keep or remove faces…",
+    group: "path",
+    order: 67,
+    prefill: { mode: "keep", faces: [] },
+  },
+  {
+    op: "attachTextToPath",
+    title: "Type on a path: attach…",
+    menu: "Object/Type on a path/Attach…",
+    group: "path",
+    order: 68,
+  },
+  {
+    op: "detachTextFromPath",
+    title: "Type on a path: detach",
+    menu: "Object/Type on a path/Detach",
+    group: "path",
+    order: 69,
+  },
+  {
+    op: "applyOpacityMask",
+    title: "Opacity mask: make…",
+    menu: "Object/Opacity mask/Make…",
+    group: "clip",
+    order: 70,
+  },
+  {
+    op: "releaseOpacityMask",
+    title: "Opacity mask: release",
+    menu: "Object/Opacity mask/Release",
+    group: "clip",
+    order: 71,
+  },
+  {
+    op: "duplicateElements",
+    title: "Step and repeat…",
+    menu: "Object/Step and repeat…",
+    group: "duplicate",
+    order: 72,
+    prefill: { offset: [12, 12] },
+  },
   // Layout: pages, masters, sections.
-  { op: "movePage", title: "Move page…", menu: "Layout/Move page…", group: "pages", order: 7 },
-  { op: "createMaster", title: "New master…", menu: "Layout/New master…", group: "masters", order: 10 },
+  {
+    op: "movePage",
+    title: "Move page…",
+    menu: "Layout/Move page…",
+    group: "pages",
+    order: 7,
+  },
+  {
+    op: "createMaster",
+    title: "New master…",
+    menu: "Layout/New master…",
+    group: "masters",
+    order: 10,
+  },
   { op: "renameMaster", title: "Rename master…", order: 9 },
   { op: "deleteMaster", title: "Delete master…", order: 10 },
   { op: "deleteSection", title: "Delete section…", order: 11 },
   // Named document objects (their panels carry the in-place buttons).
   { op: "createTextVariable", title: "New text variable…" },
   { op: "deleteTextVariable", title: "Delete text variable…" },
-  { op: "createGradient", title: "New gradient…", prefill: { spec: { name: "New gradient", kind: "Linear", stops: [{ stopColor: "Color/Paper", locationPct: 0 }, { stopColor: "Color/Black", locationPct: 100 }] } } },
+  {
+    op: "createGradient",
+    title: "New gradient…",
+    prefill: {
+      spec: {
+        name: "New gradient",
+        kind: "Linear",
+        stops: [
+          { stopColor: "Color/Paper", locationPct: 0 },
+          { stopColor: "Color/Black", locationPct: 100 },
+        ],
+      },
+    },
+  },
   { op: "deleteGradient", title: "Delete gradient…" },
   { op: "createCellStyle", title: "New cell style…" },
   { op: "deleteCellStyle", title: "Delete cell style…" },
@@ -102,7 +245,12 @@ export function buildCoreCommandEntries(): CommandContribution[] {
 }
 
 export const CORE_COMMAND_MENU_ITEMS: MenuItemContribution[] = [
-  { path: "Edit/Run command…", command: RUN_CORE_COMMAND, order: 90, group: "commands" },
+  {
+    path: "Edit/Run command…",
+    command: RUN_CORE_COMMAND,
+    order: 90,
+    group: "commands",
+  },
   ...CORE_COMMAND_ENTRIES.filter((e) => e.menu).map((e) => ({
     path: e.menu!,
     command: entryCommandId(e.op),

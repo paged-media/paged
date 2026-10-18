@@ -35,7 +35,13 @@
 
 import { useCallback, useRef, useState } from "react";
 
-import { describeAiError, plainSummary, PoweredByClaude, runEditorAgent, useCanvasClient } from "@paged-media/shell";
+import {
+  describeAiError,
+  plainSummary,
+  PoweredByClaude,
+  runEditorAgent,
+  useCanvasClient,
+} from "@paged-media/shell";
 
 interface LogEntry {
   source: string;
@@ -66,42 +72,68 @@ export function ScriptEditorPanel(_: PanelProps) {
 
   const scrollLog = useCallback(() => {
     requestAnimationFrame(() => {
-      logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: "smooth" });
+      logRef.current?.scrollTo({
+        top: logRef.current.scrollHeight,
+        behavior: "smooth",
+      });
     });
   }, []);
 
-  const askClaude = useCallback(async (requested?: string) => {
-    const prompt = (requested ?? ask).trim();
-    if (!prompt || asking || running) return;
-    const controller = new AbortController();
-    setAsking(controller);
-    const append = (entry: LogEntry) => {
-      setLog((prev) => [...prev, entry]);
-      scrollLog();
-    };
-    append({ source: "", output: [], error: null, note: `You: ${prompt}` });
-    try {
-      const result = await runEditorAgent(client, {
-        mode: "script",
-        prompt,
-        signal: controller.signal,
-        onEvent: (event) => {
-          if (event.type === "script") setSource(event.source);
-          else if (event.type === "scriptResult") append({ source: event.source, output: event.run.output, error: event.run.error });
-        },
-      });
-      if (result.outcome === "refused") append({ source: "", output: [], error: "Claude declined this request." });
-      else {
-        const stopped = result.outcome === "turnLimit" ? " (stopped at the turn limit)" : result.outcome === "truncated" ? " (the reply was cut off)" : "";
-        append({ source: "", output: [], error: null, note: `Claude: ${plainSummary(result.summary) || "Done."}${stopped}` });
+  const askClaude = useCallback(
+    async (requested?: string) => {
+      const prompt = (requested ?? ask).trim();
+      if (!prompt || asking || running) return;
+      const controller = new AbortController();
+      setAsking(controller);
+      const append = (entry: LogEntry) => {
+        setLog((prev) => [...prev, entry]);
+        scrollLog();
+      };
+      append({ source: "", output: [], error: null, note: `You: ${prompt}` });
+      try {
+        const result = await runEditorAgent(client, {
+          mode: "script",
+          prompt,
+          signal: controller.signal,
+          onEvent: (event) => {
+            if (event.type === "script") setSource(event.source);
+            else if (event.type === "scriptResult")
+              append({
+                source: event.source,
+                output: event.run.output,
+                error: event.run.error,
+              });
+          },
+        });
+        if (result.outcome === "refused")
+          append({
+            source: "",
+            output: [],
+            error: "Claude declined this request.",
+          });
+        else {
+          const stopped =
+            result.outcome === "turnLimit"
+              ? " (stopped at the turn limit)"
+              : result.outcome === "truncated"
+                ? " (the reply was cut off)"
+                : "";
+          append({
+            source: "",
+            output: [],
+            error: null,
+            note: `Claude: ${plainSummary(result.summary) || "Done."}${stopped}`,
+          });
+        }
+        setAsk("");
+      } catch (err) {
+        append({ source: "", output: [], error: describeAiError(err) });
+      } finally {
+        setAsking(null);
       }
-      setAsk("");
-    } catch (err) {
-      append({ source: "", output: [], error: describeAiError(err) });
-    } finally {
-      setAsking(null);
-    }
-  }, [ask, asking, running, client, scrollLog]);
+    },
+    [ask, asking, running, client, scrollLog],
+  );
 
   const run = useCallback(async () => {
     if (running) return;
@@ -152,11 +184,21 @@ export function ScriptEditorPanel(_: PanelProps) {
           data-script-ask-input
         />
         {asking ? (
-          <button type="button" onClick={() => asking.abort()} className="px-2 py-0.5 rounded hover:bg-muted/60 text-xs" data-action="ask-stop">
+          <button
+            type="button"
+            onClick={() => asking.abort()}
+            className="px-2 py-0.5 rounded hover:bg-muted/60 text-xs"
+            data-action="ask-stop"
+          >
             Stop
           </button>
         ) : (
-          <button type="submit" disabled={!ask.trim() || running} className="px-2 py-0.5 rounded hover:bg-muted/60 disabled:opacity-50 text-xs" data-action="ask">
+          <button
+            type="submit"
+            disabled={!ask.trim() || running}
+            className="px-2 py-0.5 rounded hover:bg-muted/60 disabled:opacity-50 text-xs"
+            data-action="ask"
+          >
             Ask
           </button>
         )}

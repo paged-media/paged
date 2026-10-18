@@ -1,33 +1,33 @@
-$schema: '../../.moon/cache/schemas/project.json'
+$schema: "../../.moon/cache/schemas/project.json"
 
 # paged.doc: a Cargo workspace (docx-*, paged-ooxml) and JS packages
 # (doc-bundle, doc-host-model). apps/editor builds doc-bundle from source.
-language: 'rust'
-layer: 'library'
-stack: 'systems'
-tags: ['rust', 'node', 'module', 'wasm']
+language: "rust"
+layer: "library"
+stack: "systems"
+tags: ["rust", "node", "module", "wasm"]
 
 project:
-  title: 'modules/doc'
-  description: 'Word/DOCX module: import, lowering, save-back.'
+  title: "modules/doc"
+  description: "Word/DOCX module: import, lowering, save-back."
 
 # validate:manifest runs the in-tree plugin-cli.
 dependsOn:
-  - id: 'extensions'
-    scope: 'development'
+  - id: "extensions"
+    scope: "development"
 
 tasks:
   wasm:
-    description: 'docx-js wasm into packages/doc-bundle/bin/ (scripts/build-wasm.sh).'
-    toolchains: ['rust']
-    command: 'bash scripts/build-wasm.sh'
+    description: "docx-js wasm into packages/doc-bundle/bin/ (scripts/build-wasm.sh)."
+    toolchains: ["rust"]
+    command: "bash scripts/build-wasm.sh"
     inputs:
-      - '@group(rust-sources)'
-      - 'scripts/build-wasm.sh'
-      - 'packages/doc-bundle/manifest.json'
+      - "@group(rust-sources)"
+      - "scripts/build-wasm.sh"
+      - "packages/doc-bundle/manifest.json"
     outputs:
-      - 'packages/doc-bundle/bin/docx_js*'
+      - "packages/doc-bundle/bin/docx_js*"
     options:
       # Needs wasm-bindgen-cli at the Cargo.lock version; doc-rust and the
       # editor's module-wasm action (.github/actions/module-wasm) build it in CI.
-      runInCI: 'skip'
+      runInCI: "skip"

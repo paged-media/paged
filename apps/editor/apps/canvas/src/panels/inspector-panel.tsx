@@ -70,7 +70,9 @@ export function InspectorPanel(_: PanelProps) {
   const [filter, setFilter] = useState("");
   // ADR 323 — which of the element's paths have a schema row.
   const model = useObjectModel();
-  const [schemaPaths, setSchemaPaths] = useState<ReadonlySet<string>>(new Set());
+  const [schemaPaths, setSchemaPaths] = useState<ReadonlySet<string>>(
+    new Set(),
+  );
   useEffect(() => {
     if (!model || !target) {
       setSchemaPaths(new Set());
@@ -187,7 +189,10 @@ export function InspectorPanel(_: PanelProps) {
         {entries.map((entry) =>
           schemaPaths.has(entry.path) ? (
             <div key={entry.path} data-property={entry.path} data-schema="row">
-              <PropertyField path={entry.path} label={labelForPath(entry.path)} />
+              <PropertyField
+                path={entry.path}
+                label={labelForPath(entry.path)}
+              />
             </div>
           ) : (
             <PropertyRow

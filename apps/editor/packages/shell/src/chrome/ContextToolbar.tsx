@@ -156,10 +156,19 @@ function ContextSegment({ frame }: { frame: EditContextFrame }) {
   return (
     <span
       className="pg-ui-xs"
-      style={{ display: "flex", alignItems: "center", gap: 6, paddingLeft: 2, minWidth: 0 }}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        paddingLeft: 2,
+        minWidth: 0,
+      }}
       data-context-segment
     >
-      <span data-context-label style={{ fontWeight: 600, whiteSpace: "nowrap" }}>
+      <span
+        data-context-label
+        style={{ fontWeight: 600, whiteSpace: "nowrap" }}
+      >
         {model.label}
       </span>
       {model.tools.length > 0 && <span style={sepStyle} aria-hidden />}

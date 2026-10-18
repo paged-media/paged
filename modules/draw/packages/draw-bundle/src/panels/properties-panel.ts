@@ -58,19 +58,75 @@ export const DRAW_PANEL_FIELDS = {
   path: ["points", "subpathStarts"],
   appearance: ["fills", "strokes", "graphicStyle"],
   symbolInstance: ["linked"],
-  graphicStyle: ["name", "fills", "strokes", "baseFill", "baseFillTint", "baseStroke", "baseStrokeWeight", "baseOpacity", "baseBlendMode"],
+  graphicStyle: [
+    "name",
+    "fills",
+    "strokes",
+    "baseFill",
+    "baseFillTint",
+    "baseStroke",
+    "baseStrokeWeight",
+    "baseOpacity",
+    "baseBlendMode",
+  ],
   symbol: ["name"],
-  pattern: ["name", "layout", "tile", "spacing", "columns", "rows", "offset", "dim", "overlap", "fitToArtboard"],
+  pattern: [
+    "name",
+    "layout",
+    "tile",
+    "spacing",
+    "columns",
+    "rows",
+    "offset",
+    "dim",
+    "overlap",
+    "fitToArtboard",
+  ],
   repeat: [
-    "name", "kind", "count", "radiusPt", "startDeg", "sweepDeg", "rotateInstances", "columns", "rows", "spacing",
-    "flipColumns", "flipRows", "angleDeg", "offsetPt", "clip", "clipRect", "fitToArtboard",
+    "name",
+    "kind",
+    "count",
+    "radiusPt",
+    "startDeg",
+    "sweepDeg",
+    "rotateInstances",
+    "columns",
+    "rows",
+    "spacing",
+    "flipColumns",
+    "flipRows",
+    "angleDeg",
+    "offsetPt",
+    "clip",
+    "clipRect",
+    "fitToArtboard",
   ],
   blend: [
-    "name", "spacing", "steps", "distancePt", "orientation", "easing", "easingStrength", "colorEasing",
-    "colorEasingStrength", "reverseSpine", "reverseFrontToBack", "fitToArtboard",
+    "name",
+    "spacing",
+    "steps",
+    "distancePt",
+    "orientation",
+    "easing",
+    "easingStrength",
+    "colorEasing",
+    "colorEasingStrength",
+    "reverseSpine",
+    "reverseFrontToBack",
+    "fitToArtboard",
   ],
   livePaint: ["name"],
-  objectsOnPath: ["name", "distribute", "spacingPt", "startOffsetPt", "alignToPath", "pivot", "reverseOrder", "order", "fitToArtboard"],
+  objectsOnPath: [
+    "name",
+    "distribute",
+    "spacingPt",
+    "startOffsetPt",
+    "alignToPath",
+    "pivot",
+    "reverseOrder",
+    "order",
+    "fitToArtboard",
+  ],
 } as const satisfies Record<string, readonly string[]>;
 
 /**
@@ -80,25 +136,57 @@ export const DRAW_PANEL_FIELDS = {
  * panel reaches the same values as the items of the `points` list row
  * (anchor / left / right per item), whose edits write the point table.
  */
-export const DRAW_PANEL_ITEM_ROWS: Readonly<Record<string, { via: string; why: string }>> = {
-  "path.points[]": { via: "path.points", why: "one point = one item of the points list row" },
-  "path.points[].anchor": { via: "path.points", why: "the item field anchor of the points list row" },
-  "path.points[].left": { via: "path.points", why: "the item field left of the points list row" },
-  "path.points[].right": { via: "path.points", why: "the item field right of the points list row" },
+export const DRAW_PANEL_ITEM_ROWS: Readonly<
+  Record<string, { via: string; why: string }>
+> = {
+  "path.points[]": {
+    via: "path.points",
+    why: "one point = one item of the points list row",
+  },
+  "path.points[].anchor": {
+    via: "path.points",
+    why: "the item field anchor of the points list row",
+  },
+  "path.points[].left": {
+    via: "path.points",
+    why: "the item field left of the points list row",
+  },
+  "path.points[].right": {
+    via: "path.points",
+    why: "the item field right of the points list row",
+  },
 };
 
 /** Enum rows show human labels ("easeIn" → "Ease in"), never the token. */
-const choices = (values: readonly string[], labels: Record<string, string> = {}) =>
+const choices = (
+  values: readonly string[],
+  labels: Record<string, string> = {},
+) =>
   values.map((value) => ({ value, label: labels[value] ?? humanize(value) }));
 const EASES = choices(["linear", "easeIn", "easeOut", "easeInOut"]);
 const PIVOTS = choices([
-  "topLeft", "top", "topRight", "left", "center", "right", "bottomLeft", "bottom", "bottomRight",
+  "topLeft",
+  "top",
+  "topRight",
+  "left",
+  "center",
+  "right",
+  "bottomLeft",
+  "bottom",
+  "bottomRight",
 ]);
 
 /** List / struct presentation per (kind.path). */
 const STACK = { reversed: true, itemLabel: "color" } as const;
-const ROW_OPTIONS: Readonly<Record<string, Omit<PanelSchemaPropertyRow, "field" | "path" | "address">>> = {
-  "path.points": { items: { fields: ["anchor", "left", "right"], newItem: { anchor: [0, 0], left: [0, 0], right: [0, 0] } } },
+const ROW_OPTIONS: Readonly<
+  Record<string, Omit<PanelSchemaPropertyRow, "field" | "path" | "address">>
+> = {
+  "path.points": {
+    items: {
+      fields: ["anchor", "left", "right"],
+      newItem: { anchor: [0, 0], left: [0, 0], right: [0, 0] },
+    },
+  },
   "appearance.fills": { items: STACK },
   "appearance.strokes": { items: STACK },
   "graphicStyle.fills": { items: STACK },
@@ -145,13 +233,23 @@ const LABELS: Readonly<Record<string, string>> = {
   order: "Object order",
 };
 
-const rowsOf = (kind: keyof typeof DRAW_PANEL_FIELDS, address: PropertyFieldAddress) =>
+const rowsOf = (
+  kind: keyof typeof DRAW_PANEL_FIELDS,
+  address: PropertyFieldAddress,
+) =>
   propertyRows(kindOf(kind), DRAW_PANEL_FIELDS[kind], address, {
     labels: LABELS,
     row: (p) => ROW_OPTIONS[`${kind}.${p}`] ?? {},
   });
 
-type DocKind = "graphicStyle" | "symbol" | "pattern" | "repeat" | "blend" | "livePaint" | "objectsOnPath";
+type DocKind =
+  | "graphicStyle"
+  | "symbol"
+  | "pattern"
+  | "repeat"
+  | "blend"
+  | "livePaint"
+  | "objectsOnPath";
 
 const DOC_KINDS: ReadonlyArray<{ kind: DocKind; title: string }> = [
   { kind: "repeat", title: "Repeat" },
@@ -164,8 +262,10 @@ const DOC_KINDS: ReadonlyArray<{ kind: DocKind; title: string }> = [
 ];
 
 /** Published bindings: the rows of a document kind's list, and the pick. */
-export const listBinding = (kind: DocKind) => `media.paged.draw.properties.${kind}s`;
-export const pickBinding = (kind: DocKind) => `media.paged.draw.properties.${kind}`;
+export const listBinding = (kind: DocKind) =>
+  `media.paged.draw.properties.${kind}s`;
+export const pickBinding = (kind: DocKind) =>
+  `media.paged.draw.properties.${kind}`;
 
 const listRow = (kind: DocKind): PanelSchemaRow => ({
   widget: "paged.list",

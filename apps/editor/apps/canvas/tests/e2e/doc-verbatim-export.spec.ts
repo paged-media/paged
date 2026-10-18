@@ -71,9 +71,9 @@ type CanvasGlobal = {
 const invoke = (page: Page, id: string) =>
   page.evaluate(
     (cmd) =>
-      (globalThis as unknown as CanvasGlobal).__canvas.registries.commands.invoke(
-        cmd,
-      ),
+      (
+        globalThis as unknown as CanvasGlobal
+      ).__canvas.registries.commands.invoke(cmd),
     id,
   );
 

@@ -221,12 +221,20 @@ const range = (from: number, to: number): number[] =>
 
 export const ANNUAL_PLAN: ChapterPlan[] = [
   { id: "100-front-matter", title: "Front matter", pages: range(1, 10) },
-  { id: "110-anatomy", title: "Part I divider · Ch.1 Anatomy of This Book", pages: range(11, 18) },
+  {
+    id: "110-anatomy",
+    title: "Part I divider · Ch.1 Anatomy of This Book",
+    pages: range(11, 18),
+  },
   { id: "120-letter", title: "Ch.2 The Letter", pages: range(19, 22) },
   { id: "125-paragraph", title: "Ch.3 The Paragraph", pages: range(23, 26) },
   { id: "130-style", title: "Ch.4 The Style", pages: range(27, 32) },
   { id: "135-story", title: "Ch.5 The Story", pages: range(33, 40) },
-  { id: "140-scripts", title: "Ch.6 Scripts of the World", pages: range(41, 44) },
+  {
+    id: "140-scripts",
+    title: "Ch.6 Scripts of the World",
+    pages: range(41, 44),
+  },
   { id: "145-apparatus", title: "Ch.7 The Apparatus", pages: range(45, 46) },
   { id: "150-object", title: "Ch.8 The Object", pages: range(47, 52) },
   { id: "155-ink-light", title: "Ch.9 Ink & Light", pages: range(53, 56) },
@@ -234,22 +242,51 @@ export const ANNUAL_PLAN: ChapterPlan[] = [
   { id: "165-color", title: "Ch.11 The Colour", pages: range(61, 64) },
   { id: "170-table", title: "Ch.12 The Table", pages: range(65, 70) },
   { id: "175-picture", title: "Ch.13 The Picture", pages: range(71, 74) },
-  { id: "200-drawing-office", title: "Part II divider · Ch.14 The Drawing Office", pages: range(75, 86) },
+  {
+    id: "200-drawing-office",
+    title: "Part II divider · Ch.14 The Drawing Office",
+    pages: range(75, 86),
+  },
   { id: "210-darkroom", title: "Ch.15 The Darkroom", pages: range(87, 94) },
   { id: "220-ledger", title: "Ch.16 The Ledger", pages: range(95, 102) },
   { id: "230-long-read", title: "Ch.17 The Long Read", pages: range(103, 108) },
   { id: "240-catalog", title: "Ch.18 The Catalog", pages: range(109, 114) },
-  { id: "250-manuscript", title: "Ch.19 The Manuscript", pages: range(115, 118) },
-  { id: "300-press", title: "Part III divider · Ch.20 Imposition & Proof", pages: range(119, 126) },
-  { id: "310-appendix", title: "Appendix — Limits, Index, Colophon", pages: range(127, 134) },
+  {
+    id: "250-manuscript",
+    title: "Ch.19 The Manuscript",
+    pages: range(115, 118),
+  },
+  {
+    id: "300-press",
+    title: "Part III divider · Ch.20 Imposition & Proof",
+    pages: range(119, 126),
+  },
+  {
+    id: "310-appendix",
+    title: "Appendix — Limits, Index, Colophon",
+    pages: range(127, 134),
+  },
 ];
 
 /** D-Plate pages (1-based) — zero margins, no furniture, bleed-capable. */
-export const PLATE_PAGES = [1, 2, 9, 10, 11, 12, 54, 55, 75, 76, 86, 119, 120, 122];
+export const PLATE_PAGES = [
+  1, 2, 9, 10, 11, 12, 54, 55, 75, 76, 86, 119, 120, 122,
+];
 /** E-Data pages (1-based) — 12-column fine grid. */
-export const DATA_PAGES = [16, ...range(66, 70), ...range(96, 102), ...range(110, 114), 123, 124, 125];
+export const DATA_PAGES = [
+  16,
+  ...range(66, 70),
+  ...range(96, 102),
+  ...range(110, 114),
+  123,
+  124,
+  125,
+];
 /** Chapter-opener rectos (1-based, C-Opener master). */
-export const OPENER_PAGES = [13, 19, 23, 27, 33, 41, 45, 47, 53, 57, 61, 65, 71, 77, 87, 95, 103, 109, 115, 121];
+export const OPENER_PAGES = [
+  13, 19, 23, 27, 33, 41, 45, 47, 53, 57, 61, 65, 71, 77, 87, 95, 103, 109, 115,
+  121,
+];
 /** The fixture-authored master-override page (1-based). */
 export const OVERRIDE_PAGE = 15;
 /** CJK vertical pages on F-Vertical (1-based). */

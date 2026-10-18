@@ -115,9 +115,7 @@ describe("paged.sheet text provider — the declaration", () => {
     // the module header. A path left undeclared would DECLINE, and a
     // decline falls through to core.
     expect(p.provides.paths).toEqual(SERVED_PATHS);
-    expect(SERVED_PATHS.length).toBe(
-      VALUED_PATHS.length + ABSENT_PATHS.length,
-    );
+    expect(SERVED_PATHS.length).toBe(VALUED_PATHS.length + ABSENT_PATHS.length);
     // The read/write split: everything read, nothing written. The
     // engine has no cell-style write API, and DECLARING that is what
     // keeps the host's controls read-only instead of fake-interactive.
@@ -208,7 +206,11 @@ describe("paged.sheet text provider — reads", () => {
     const sparse: LoweredContent = {
       ...content([DEFAULT, BIG], [[1, 1]]),
       rows: [
-        { index: 0, heightPt: 14, cells: [{ col: 0, text: "x", align: "left", styleKey: 1 }] },
+        {
+          index: 0,
+          heightPt: 14,
+          cells: [{ col: 0, text: "x", align: "left", styleKey: 1 }],
+        },
         { index: 1, heightPt: 14, cells: [] },
       ],
     };
@@ -301,7 +303,13 @@ describe("paged.sheet text provider — the pure pieces", () => {
   });
 
   it("stylesOfRange walks row-major and defaults a keyless cell to key 0", () => {
-    const c = content([DEFAULT, BIG, SMALL], [[1, 2], [0, 1]]);
+    const c = content(
+      [DEFAULT, BIG, SMALL],
+      [
+        [1, 2],
+        [0, 1],
+      ],
+    );
     expect(stylesOfRange(c).map((s) => s.key)).toEqual([1, 2, 0, 1]);
   });
 });

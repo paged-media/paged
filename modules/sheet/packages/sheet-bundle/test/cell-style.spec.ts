@@ -50,8 +50,16 @@ const LOWERED = {
     { index: 2, widthPt: 50 },
   ],
   rows: [
-    { index: 0, heightPt: 18, cells: [{ col: 0, text: "A", align: "left" as const }] },
-    { index: 1, heightPt: 18, cells: [{ col: 2, text: "B", align: "left" as const }] },
+    {
+      index: 0,
+      heightPt: 18,
+      cells: [{ col: 0, text: "A", align: "left" as const }],
+    },
+    {
+      index: 1,
+      heightPt: 18,
+      cells: [{ col: 2, text: "B", align: "left" as const }],
+    },
   ],
   rules: { h: [], v: [] },
   merges: [],
@@ -61,7 +69,9 @@ function fakeEngine(): SheetEngine {
   return {
     loadXlsx() {},
     saveXlsx: () => new Uint8Array(),
-    setCell: (sheet, row, col, input) => ({ changed: [{ sheet, row, col, display: input }] }),
+    setCell: (sheet, row, col, input) => ({
+      changed: [{ sheet, row, col, display: input }],
+    }),
     getCellDisplay: () => "",
     getCellInput: () => "",
     sortRange: () => ({ changed: [], edits: [] }),
@@ -72,7 +82,14 @@ function fakeEngine(): SheetEngine {
     getRangeValues: () => [],
     paginate: () => [],
     getGridScene: () => ({
-      viewport: { firstRow: 0, firstCol: 0, rows: 1, cols: 1, xOffsets: [0, 40], yOffsets: [0, 18] },
+      viewport: {
+        firstRow: 0,
+        firstCol: 0,
+        rows: 1,
+        cols: 1,
+        xOffsets: [0, 40],
+        yOffsets: [0, 18],
+      },
       cells: [],
       styles: [],
       gridlines: { h: [], v: [] },
@@ -97,12 +114,10 @@ function fakeEngine(): SheetEngine {
  *  the wire-shape-only residual; everything else applies. */
 function fakeHost(opts?: { rejectApply?: boolean; cellEntries?: unknown[] }) {
   const reject = opts?.rejectApply ?? true;
-  const entries =
-    opts?.cellEntries ??
-    [
-      { path: "cellFillColor", value: { type: "colorRef", value: "FFCC00" } },
-      { path: "cellTopEdgeStrokeWeight", value: { type: "length", value: 0.5 } },
-    ];
+  const entries = opts?.cellEntries ?? [
+    { path: "cellFillColor", value: { type: "colorRef", value: "FFCC00" } },
+    { path: "cellTopEdgeStrokeWeight", value: { type: "length", value: 0.5 } },
+  ];
   const mutations: Mutation[] = [];
   let frameInserted = false;
   const host = {
@@ -115,7 +130,8 @@ function fakeHost(opts?: { rejectApply?: boolean; cellEntries?: unknown[] }) {
         return { activePage: "Page/u1" } as never;
       },
       async collection(name: string) {
-        if (name === "stories" && frameInserted) return [{ selfId: "Story/s1" }] as never;
+        if (name === "stories" && frameInserted)
+          return [{ selfId: "Story/s1" }] as never;
         return [] as never;
       },
       async elementProperties(id: ElementId) {
@@ -128,7 +144,10 @@ function fakeHost(opts?: { rejectApply?: boolean; cellEntries?: unknown[] }) {
           if (ops.some((o) => o.op === "insertTextFrame")) {
             frameInserted = true;
             const frame = { kind: "textFrame", id: "frame1" } as ElementId;
-            const table = { kind: "table", id: { story_id: "Story/s1", table_id: "table1" } } as ElementId;
+            const table = {
+              kind: "table",
+              id: { story_id: "Story/s1", table_id: "table1" },
+            } as ElementId;
             const hasTable = ops.some((o) => o.op === "insertTable");
             // The placement reports the LAST id it minted (the table: its
             // structured id carries the frame's story) and, in `minted`,
@@ -139,7 +158,9 @@ function fakeHost(opts?: { rejectApply?: boolean; cellEntries?: unknown[] }) {
               pageIds: ["Page/u1"],
               minted: [
                 { handle: "f", element: frame, storyId: "Story/s1" },
-                ...(hasTable ? [{ handle: "t", element: table, storyId: "Story/s1" }] : []),
+                ...(hasTable
+                  ? [{ handle: "t", element: table, storyId: "Story/s1" }]
+                  : []),
               ],
             };
           }
@@ -181,9 +202,7 @@ function fakeHost(opts?: { rejectApply?: boolean; cellEntries?: unknown[] }) {
   return { host, mutations };
 }
 
-async function loweredSession(
-  host: BundleHost,
-): Promise<WorkbookSession> {
+async function loweredSession(host: BundleHost): Promise<WorkbookSession> {
   const engine = fakeEngine();
   const session = createWorkbookSession(host);
   const st = session.state();
@@ -235,7 +254,9 @@ describe("sheet_plugin_cell_style_from_cell: session glue", () => {
     expect(create.args.name).toBe("Highlight");
     expect(create.args.selfId).toBe(res.styleId);
 
-    const props = mutations.filter((m) => m.op === "setStyleProperty") as Array<{
+    const props = mutations.filter(
+      (m) => m.op === "setStyleProperty",
+    ) as Array<{
       args: { collection: string; styleId: string; path: string };
     }>;
     expect(props).toHaveLength(2);

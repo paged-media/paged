@@ -35,12 +35,16 @@ async function firstStory(
       globalThis as unknown as {
         __canvas: {
           client: {
-            executeScript: (s: string) => Promise<{ output: string[]; error: string | null }>;
+            executeScript: (
+              s: string,
+            ) => Promise<{ output: string[]; error: string | null }>;
           };
         };
       }
     ).__canvas;
-    const r = await c.client.executeScript(`JSON.stringify(JSON.parse(paged.stories())[0])`);
+    const r = await c.client.executeScript(
+      `JSON.stringify(JSON.parse(paged.stories())[0])`,
+    );
     if (r.error) throw new Error(r.error);
     return JSON.parse(r.output[0]);
   });
@@ -51,7 +55,11 @@ async function placeCaret(page: Page, storyId: string): Promise<void> {
     (
       globalThis as unknown as {
         __canvas: {
-          setContentSelection: (sel: { storyId: string; start: number; end: number }) => void;
+          setContentSelection: (sel: {
+            storyId: string;
+            start: number;
+            end: number;
+          }) => void;
         };
       }
     ).__canvas.setContentSelection({ storyId: id, start: 0, end: 0 });
@@ -85,10 +93,13 @@ test.describe("Index panel — Generate index", () => {
     // is the title alone: the engine's default "Index" (the document
     // carries no IndexOptions), one paragraph of five characters.
     await expect
-      .poll(async () => {
-        const s = await firstStory(page);
-        return [s.paragraphCount, s.characterCount];
-      }, { timeout: 15_000 })
+      .poll(
+        async () => {
+          const s = await firstStory(page);
+          return [s.paragraphCount, s.characterCount];
+        },
+        { timeout: 15_000 },
+      )
       .toEqual([1, 5]);
     await expect(page.locator("[data-generate-index-error]")).toHaveCount(0);
   });

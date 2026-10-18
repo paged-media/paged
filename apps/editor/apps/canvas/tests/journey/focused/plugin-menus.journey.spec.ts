@@ -113,17 +113,22 @@ test.describe("journey · plugin menu contributions", () => {
     // invoke. The SDK refuses an entry pointing at nothing, so this
     // catches the failure that refusal is protecting against — an item
     // that renders and then does nothing when clicked.
-    const dead = await page.evaluate((ids: string[]) => {
-      const reg = (
-        globalThis as unknown as {
-          __canvas: {
-            registries: { commands: { get: (id: string) => unknown } };
-          };
-        }
-      ).__canvas.registries.commands;
-      return ids.filter((id) => !reg.get(id));
-    }, plugin.map((m) => m.command));
-    expect(dead, `menu entries with no command: ${dead.join(", ")}`).toEqual([]);
+    const dead = await page.evaluate(
+      (ids: string[]) => {
+        const reg = (
+          globalThis as unknown as {
+            __canvas: {
+              registries: { commands: { get: (id: string) => unknown } };
+            };
+          }
+        ).__canvas.registries.commands;
+        return ids.filter((id) => !reg.get(id));
+      },
+      plugin.map((m) => m.command),
+    );
+    expect(dead, `menu entries with no command: ${dead.join(", ")}`).toEqual(
+      [],
+    );
 
     // No two entries claim the same slot in the bar — across ALL
     // plugins, which is where a collision would actually happen.

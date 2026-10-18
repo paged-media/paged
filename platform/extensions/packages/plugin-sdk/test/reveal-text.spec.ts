@@ -38,7 +38,9 @@ const manifest = (): PluginManifest => ({
 });
 
 function withText(answer: boolean | (() => never) = true) {
-  const calls: Array<[{ storyId: string; start: number; end: number }, boolean]> = [];
+  const calls: Array<
+    [{ storyId: string; start: number; end: number }, boolean]
+  > = [];
   const text: TextRevealBackend = {
     revealText(range, select) {
       calls.push([range, select]);
@@ -47,7 +49,10 @@ function withText(answer: boolean | (() => never) = true) {
     },
   };
   const fake = makeFakeEditor();
-  const handle = createBundleHost(() => fake.editor, manifest(), { console: silent, text });
+  const handle = createBundleHost(() => fake.editor, manifest(), {
+    console: silent,
+    text,
+  });
   return { ...handle, calls };
 }
 
@@ -55,9 +60,18 @@ describe("host.viewport.revealText", () => {
   it("reveals and selects a range through the backend", async () => {
     const { host, calls } = withText();
     expect(host.supports("viewport.revealText@1")).toBe(true);
-    expect(await host.viewport.revealText({ storyId: "u1", start: 4, end: 12 })).toBe(true);
-    expect(await host.viewport.revealText({ storyId: "u1", start: 0, end: 0 }, { select: false })).toBe(true);
-    expect(await host.viewport.revealText({ storyId: "missing", start: 0, end: 1 })).toBe(false);
+    expect(
+      await host.viewport.revealText({ storyId: "u1", start: 4, end: 12 }),
+    ).toBe(true);
+    expect(
+      await host.viewport.revealText(
+        { storyId: "u1", start: 0, end: 0 },
+        { select: false },
+      ),
+    ).toBe(true);
+    expect(
+      await host.viewport.revealText({ storyId: "missing", start: 0, end: 1 }),
+    ).toBe(false);
     expect(calls).toEqual([
       [{ storyId: "u1", start: 4, end: 12 }, true],
       [{ storyId: "u1", start: 0, end: 0 }, false],
@@ -67,10 +81,22 @@ describe("host.viewport.revealText", () => {
 
   it("refuses a malformed range without asking the backend", async () => {
     const { host, calls } = withText();
-    expect(await host.viewport.revealText({ storyId: "", start: 0, end: 1 })).toBe(false);
-    expect(await host.viewport.revealText({ storyId: "u1", start: 5, end: 2 })).toBe(false);
-    expect(await host.viewport.revealText({ storyId: "u1", start: -1, end: 2 })).toBe(false);
-    expect(await host.viewport.revealText({ storyId: "u1", start: Number.NaN, end: 2 })).toBe(false);
+    expect(
+      await host.viewport.revealText({ storyId: "", start: 0, end: 1 }),
+    ).toBe(false);
+    expect(
+      await host.viewport.revealText({ storyId: "u1", start: 5, end: 2 }),
+    ).toBe(false);
+    expect(
+      await host.viewport.revealText({ storyId: "u1", start: -1, end: 2 }),
+    ).toBe(false);
+    expect(
+      await host.viewport.revealText({
+        storyId: "u1",
+        start: Number.NaN,
+        end: 2,
+      }),
+    ).toBe(false);
     expect(calls).toEqual([]);
   });
 
@@ -78,13 +104,19 @@ describe("host.viewport.revealText", () => {
     const { host } = withText(() => {
       throw new Error("no layout");
     });
-    expect(await host.viewport.revealText({ storyId: "u1", start: 0, end: 1 })).toBe(false);
+    expect(
+      await host.viewport.revealText({ storyId: "u1", start: 0, end: 1 }),
+    ).toBe(false);
   });
 
   it("answers the honest nothing without a backend", async () => {
     const fake = makeFakeEditor();
-    const { host } = createBundleHost(() => fake.editor, manifest(), { console: silent });
+    const { host } = createBundleHost(() => fake.editor, manifest(), {
+      console: silent,
+    });
     expect(host.supports("viewport.revealText@1")).toBe(false);
-    expect(await host.viewport.revealText({ storyId: "u1", start: 0, end: 1 })).toBe(false);
+    expect(
+      await host.viewport.revealText({ storyId: "u1", start: 0, end: 1 }),
+    ).toBe(false);
   });
 });

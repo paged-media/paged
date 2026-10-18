@@ -20,9 +20,7 @@
 // its source is not a passing check. CI must run this with the
 // package installed (it is, via the editor link or a direct dep).
 
-import {
-  createRequire,
-} from "node:module";
+import { createRequire } from "node:module";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -70,7 +68,8 @@ export function resolveSource(opts = {}) {
     let version = "unknown";
     if (existsSync(sibling)) {
       try {
-        version = JSON.parse(readFileSync(sibling, "utf8")).version ?? "unknown";
+        version =
+          JSON.parse(readFileSync(sibling, "utf8")).version ?? "unknown";
       } catch {
         /* leave unknown */
       }
@@ -130,7 +129,8 @@ export function buildHeader(version) {
 // trampoline name is blanked and the block's lines are sorted. Any other
 // difference, a trampoline signature or an export added or dropped included,
 // is still drift, and everything outside the block compares byte for byte.
-const TRAMPOLINE = /wasm_bindgen(?:_[0-9a-f]+_)?__convert__closures_____invoke\w*(?=\s*:)/;
+const TRAMPOLINE =
+  /wasm_bindgen(?:_[0-9a-f]+_)?__convert__closures_____invoke\w*(?=\s*:)/;
 const INIT_OUTPUT_START = /^export interface InitOutput \{\s*$/;
 
 /** `content` with InitOutput's build-dependent parts normalized (see above). */
@@ -145,7 +145,9 @@ export function normalizeWire(content) {
       out.push(...block.sort(), line);
       block = null;
     } else {
-      block.push(line.replace(TRAMPOLINE, "wasm_bindgen__convert__closures_____invoke…"));
+      block.push(
+        line.replace(TRAMPOLINE, "wasm_bindgen__convert__closures_____invoke…"),
+      );
     }
   }
   if (block !== null) out.push(...block);
@@ -219,7 +221,8 @@ function parseArgs(argv) {
     const a = argv[i];
     if (a === "--check") out.check = true;
     else if (a === "--source") out.source = argv[++i];
-    else if (a.startsWith("--source=")) out.source = a.slice("--source=".length);
+    else if (a.startsWith("--source="))
+      out.source = a.slice("--source=".length);
   }
   return out;
 }

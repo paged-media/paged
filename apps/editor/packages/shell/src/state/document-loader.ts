@@ -26,15 +26,15 @@
 // NOT depend on React; pass it the setters and it dispatches.
 
 import type { CanvasClient } from "@paged-media/client";
-import type {
-  DocumentHandle,
-  PageId,
-} from "@paged-media/client";
+import type { DocumentHandle, PageId } from "@paged-media/client";
 
 import type { DocumentEntry } from "@paged-media/repository";
 
 import type { LoadingState } from "./document-context";
-import { rememberOpenedFile, setCurrentLibraryDocument } from "./library-document";
+import {
+  rememberOpenedFile,
+  setCurrentLibraryDocument,
+} from "./library-document";
 
 const SNAPSHOT_WIDTH_PX = 256;
 
@@ -139,7 +139,11 @@ export async function createBlankDocument(
 
   let handle: DocumentHandle;
   try {
-    handle = await client.newBlankDocument(opts.widthPt, opts.heightPt, fontBytes);
+    handle = await client.newBlankDocument(
+      opts.widthPt,
+      opts.heightPt,
+      fontBytes,
+    );
   } catch (err) {
     cb.setLoading(null);
     cb.setStatus(`new document failed: ${String(err)}`);
@@ -148,9 +152,7 @@ export async function createBlankDocument(
 
   cb.setHandle(handle);
   cb.setLoading(null);
-  cb.setStatus(
-    `new ${handle.pageCount}-page document; snapshotting…`,
-  );
+  cb.setStatus(`new ${handle.pageCount}-page document; snapshotting…`);
   await snapshotAllPages(client, handle, cb);
 }
 
@@ -213,7 +215,12 @@ export async function fetchDefaultFontFaces(): Promise<
 function isFontFile(bytes: Uint8Array): boolean {
   if (bytes.length < 12) return false;
   const tag = String.fromCharCode(bytes[0]!, bytes[1]!, bytes[2]!, bytes[3]!);
-  return (bytes[0] === 0 && bytes[1] === 1 && bytes[2] === 0 && bytes[3] === 0) || tag === "OTTO" || tag === "true" || tag === "ttcf";
+  return (
+    (bytes[0] === 0 && bytes[1] === 1 && bytes[2] === 0 && bytes[3] === 0) ||
+    tag === "OTTO" ||
+    tag === "true" ||
+    tag === "ttcf"
+  );
 }
 
 /** U5/A7 — a missing default font is the "blank text" precondition;

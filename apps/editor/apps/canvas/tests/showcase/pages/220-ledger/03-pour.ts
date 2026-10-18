@@ -41,9 +41,19 @@ import { expect } from "@playwright/test";
 
 import { openPanel } from "../../../fidelity/canvas-driver";
 import { withActivePage } from "../../active-page";
-import { assignLayer, marginNote, proseFrame, specLabel } from "../../annual-support";
+import {
+  assignLayer,
+  marginNote,
+  proseFrame,
+  specLabel,
+} from "../../annual-support";
 import { LAYER, STYLE, p } from "../../names-annual";
-import { clearSelection, partitionByPage, removeRefs, settle } from "../../plugin-support";
+import {
+  clearSelection,
+  partitionByPage,
+  removeRefs,
+  settle,
+} from "../../plugin-support";
 import type { PageContext, PageReport } from "../../types";
 import {
   SHEET_CMD,
@@ -59,7 +69,13 @@ import { resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __pourDir = pathResolve(fileURLToPath(import.meta.url), "..");
-const WORKBOOK = pathResolve(__pourDir, "..", "..", "assets", "annual-charts.xlsx");
+const WORKBOOK = pathResolve(
+  __pourDir,
+  "..",
+  "..",
+  "assets",
+  "annual-charts.xlsx",
+);
 const RANGE = "A1:E5";
 
 export async function build(ctx: PageContext): Promise<PageReport> {
@@ -69,21 +85,29 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const covers: string[] = [];
   const elements: string[] = [];
 
-  const head = await proseFrame(ctx, p(98), [60, 96, 492, 124], [
-    { text: "The native pour", style: STYLE.head1 },
-  ]);
-  const intro = await proseFrame(ctx, p(98), [60, 128, 492, 208], [
-    {
-      text:
-        "The quarterly circulation block — Data!A1:E5 of the chart wall's " +
-        "workbook — lowered to a native table. The engine computes the " +
-        "range in Rust; the bundle inserts a frame, then a real <Table> " +
-        "whose column widths were measured through this document's own " +
-        "font shaper, then pours every cell. It exports to IDML as a " +
-        "table because it IS a table.",
-      style: STYLE.bodySmall,
-    },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    p(98),
+    [60, 96, 492, 124],
+    [{ text: "The native pour", style: STYLE.head1 }],
+  );
+  const intro = await proseFrame(
+    ctx,
+    p(98),
+    [60, 128, 492, 208],
+    [
+      {
+        text:
+          "The quarterly circulation block — Data!A1:E5 of the chart wall's " +
+          "workbook — lowered to a native table. The engine computes the " +
+          "range in Rust; the bundle inserts a frame, then a real <Table> " +
+          "whose column widths were measured through this document's own " +
+          "font shaper, then pours every cell. It exports to IDML as a " +
+          "table because it IS a table.",
+        style: STYLE.bodySmall,
+      },
+    ],
+  );
   elements.push(head.frameId, intro.frameId);
 
   // Re-activate the workbook panel tab (it shares a dock group with
@@ -99,7 +123,9 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const booted = await importWorkbook(page, WORKBOOK, notes);
   expect(booted, "this half re-imports the chart wall's workbook").toBe(true);
   const select = page.locator("[data-sheet-select]");
-  await expect(select, "the sheet picker is live").toBeVisible({ timeout: 120_000 });
+  await expect(select, "the sheet picker is live").toBeVisible({
+    timeout: 120_000,
+  });
   await select.selectOption({ index: 0 });
   const optionText = await select
     .locator("option")
@@ -107,7 +133,9 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     .textContent()
     .catch(() => null);
   if (optionText && !optionText.startsWith("Data")) {
-    notes.push(`expected the first sheet to be Data, panel says: ${optionText}`);
+    notes.push(
+      `expected the first sheet to be Data, panel says: ${optionText}`,
+    );
   }
   await page.locator("[data-sheet-range]").fill(RANGE);
 
@@ -120,7 +148,10 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     await doc.runCommand(`${SHEET_CMD}.lowerToFrame`);
     fresh = await settleNewElements(page, before);
   });
-  expect(fresh.length, "the range lowered a frame onto this page").toBeGreaterThan(0);
+  expect(
+    fresh.length,
+    "the range lowered a frame onto this page",
+  ).toBeGreaterThan(0);
   const { here, elsewhere } = await partitionByPage(page, fresh, pg98);
   if (elsewhere.length > 0) {
     await removeRefs(doc, elsewhere);
@@ -137,7 +168,9 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   await placeElements(doc, here, 1, 36, 196, notes);
   for (const el of here) {
     if (el.kind === "textFrame") {
-      await assignLayer(ctx, el.kind, el.id, LAYER.content).catch(() => undefined);
+      await assignLayer(ctx, el.kind, el.id, LAYER.content).catch(
+        () => undefined,
+      );
     }
   }
   elements.push(...here.map((e) => e.id));
@@ -163,19 +196,24 @@ export async function build(ctx: PageContext): Promise<PageReport> {
           "— recorded, not claimed; hideGridInFrame was still issued",
   );
 
-  const caption = await proseFrame(ctx, p(98), [60, 380, 492, 500], [
-    {
-      text:
-        "How the bundle finds what it made: a just-inserted EMPTY frame's " +
-        "story is invisible to the hit-test door — the text hit path needs " +
-        "content — so the lower resolves its story by diffing the stories " +
-        "collection across the insert. Only after the pour does hitTest " +
-        "answer at the frame's centre, and that is the door the chart label " +
-        "pours and the chain lowering use. Two read doors, split by " +
-        "emptiness; this page states the split rather than papering over it.",
-      style: STYLE.bodySmall,
-    },
-  ]);
+  const caption = await proseFrame(
+    ctx,
+    p(98),
+    [60, 380, 492, 500],
+    [
+      {
+        text:
+          "How the bundle finds what it made: a just-inserted EMPTY frame's " +
+          "story is invisible to the hit-test door — the text hit path needs " +
+          "content — so the lower resolves its story by diffing the stories " +
+          "collection across the insert. Only after the pour does hitTest " +
+          "answer at the frame's centre, and that is the door the chart label " +
+          "pours and the chain lowering use. Two read doors, split by " +
+          "emptiness; this page states the split rather than papering over it.",
+        style: STYLE.bodySmall,
+      },
+    ],
+  );
   elements.push(caption.frameId);
 
   elements.push(

@@ -163,7 +163,9 @@ test.describe("gestures.md DR-01…DR-03 — built-in Ellipse tool", () => {
     await expect.poll(() => treeCount(page, "oval")).toBe(before);
   });
 
-  test("DR-03 — Alt draws the ellipse from the centre @feat:editor-tools.draw.rectangle @feat:frames-paths.shape-tools @level:happy", async ({ page }) => {
+  test("DR-03 — Alt draws the ellipse from the centre @feat:editor-tools.draw.rectangle @feat:frames-paths.shape-tools @level:happy", async ({
+    page,
+  }) => {
     const before = await treeCount(page, "oval");
     await activateEllipse(page);
     // Start = centre at (180,160), drag to (260,220): the half-extents
@@ -180,7 +182,9 @@ test.describe("gestures.md DR-01…DR-03 — built-in Ellipse tool", () => {
     await expect.poll(() => treeCount(page, "oval")).toBe(before);
   });
 
-  test("DR-01/INV-1 — Escape mid-drag creates nothing @feat:editor-tools.draw.rectangle @feat:frames-paths.shape-tools @level:gesture", async ({ page }) => {
+  test("DR-01/INV-1 — Escape mid-drag creates nothing @feat:editor-tools.draw.rectangle @feat:frames-paths.shape-tools @level:gesture", async ({
+    page,
+  }) => {
     const before = await treeCount(page, "oval");
     await activateEllipse(page);
     const start = await screenPoint(page, 120, 120);
@@ -196,7 +200,9 @@ test.describe("gestures.md DR-01…DR-03 — built-in Ellipse tool", () => {
     ).toBe(before);
   });
 
-  test("DR-01 — a click with no drag commits nothing @feat:editor-tools.draw.rectangle @feat:frames-paths.shape-tools @level:gesture", async ({ page }) => {
+  test("DR-01 — a click with no drag commits nothing @feat:editor-tools.draw.rectangle @feat:frames-paths.shape-tools @level:gesture", async ({
+    page,
+  }) => {
     const before = await treeCount(page, "oval");
     await activateEllipse(page);
     const s = await screenPoint(page, 160, 160);

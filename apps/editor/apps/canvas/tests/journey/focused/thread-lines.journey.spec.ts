@@ -89,8 +89,18 @@ test.describe("journey · text thread overlay", () => {
     // port centres, as InDesign draws it — so the fixture gives the
     // assertion room rather than the overlay pretending otherwise.
     const a = await designer.addTextFrame({ x0: 40, y0: 40, x1: 260, y1: 130 });
-    const b = await designer.addTextFrame({ x0: 40, y0: 280, x1: 260, y1: 370 });
-    const c = await designer.addTextFrame({ x0: 40, y0: 520, x1: 260, y1: 610 });
+    const b = await designer.addTextFrame({
+      x0: 40,
+      y0: 280,
+      x1: 260,
+      y1: 370,
+    });
+    const c = await designer.addTextFrame({
+      x0: 40,
+      y0: 520,
+      x1: 260,
+      y1: 610,
+    });
     expect(a.frameId).toBeTruthy();
     expect(b.frameId).toBeTruthy();
     expect(c.frameId).toBeTruthy();

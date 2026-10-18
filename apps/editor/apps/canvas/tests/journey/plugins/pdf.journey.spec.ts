@@ -47,7 +47,11 @@ const invoke = (page: Page, id: string) =>
     (cmd) =>
       (
         globalThis as unknown as {
-          __canvas: { registries: { commands: { invoke: (c: string) => Promise<unknown> } } };
+          __canvas: {
+            registries: {
+              commands: { invoke: (c: string) => Promise<unknown> };
+            };
+          };
         }
       ).__canvas.registries.commands.invoke(cmd),
     id,
@@ -74,12 +78,18 @@ test.describe("journey · paged.pdf plugin", () => {
     // Destructive open swaps the document; the handle refreshes. The pdf
     // lane (pdf.js + wasm mapper) is the slowest importer — poll generously.
     await expect
-      .poll(async () => (await designer.handle()).pageCount, { timeout: 30_000 })
-      .toBeGreaterThan(0);
-    await expect
-      .poll(async () => designer.renderDiffPixels(blank, await designer.renderBytes()), {
+      .poll(async () => (await designer.handle()).pageCount, {
         timeout: 30_000,
       })
+      .toBeGreaterThan(0);
+    await expect
+      .poll(
+        async () =>
+          designer.renderDiffPixels(blank, await designer.renderBytes()),
+        {
+          timeout: 30_000,
+        },
+      )
       .toBeGreaterThan(64);
 
     const { pageCount } = await designer.handle();

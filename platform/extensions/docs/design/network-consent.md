@@ -16,13 +16,14 @@ data-source manifest are already built + tested — the §11 skeleton).
 
 `paged.data` is the only plugin in the suite that needs **network and
 filesystem reach**, and concept §11 is emphatic about the rules: external data
-+ scriptable queries make it categorically higher-risk than its siblings, so
 
-- network access is **capability-gated and user-consented**, per-origin and
+- scriptable queries make it categorically higher-risk than its siblings, so
+
+* network access is **capability-gated and user-consented**, per-origin and
   rememberable;
-- a **visible data-source manifest** shows every origin/file a document will
+* a **visible data-source manifest** shows every origin/file a document will
   touch — **no silent fetch, ever**;
-- documents carrying queries are **treated as carrying code**: opening one does
+* documents carrying queries are **treated as carrying code**: opening one does
   NOT auto-execute remote fetches; external sources are **inert until the user
   reviews the manifest and consents**. A shared/untrusted document cannot
   silently exfiltrate via DuckDB `httpfs` or call an attacker origin on open.
@@ -39,7 +40,7 @@ network surface needs the same conviction, made consent-explicit.
 
 ## Proposal (three stages)
 
-*Status note (2026-10-02): this section predates the implementation; see `DESIGN.md` §4.6b.
+_Status note (2026-10-02): this section predates the implementation; see `DESIGN.md` §4.6b.
 Stage 1 shipped with `"origins": "consent"` in place of `"*-consent"`, and the boolean form
 is still accepted (`packages/plugin-api/src/manifest.ts`). Stage 2 shipped as written; a
 remembered grant is stored in the bundle's own `host.storage` namespace
@@ -50,7 +51,7 @@ not derived from the granted origins, so a consented external origin stays unrea
 browser (`editor: apps/canvas/src/plugin-consent.ts`); and the remote-source lane of the
 paged.data bundle does not go through DuckDB `httpfs` — it gates one `fetch` of its own on
 `consentedOrigins()` and hands the bytes to DuckDB
-(`plugin-data: packages/data-bundle/src/session.ts`).*
+(`plugin-data: packages/data-bundle/src/session.ts`)._
 
 **Stage 1 — a structured network declaration (manifest schema).** Replace the
 bare boolean with a per-origin declaration (keeping `network: false` as the
@@ -64,10 +65,10 @@ is a schema change → an `apiVersion` minor bump:
 }
 ```
 
-`origins` is the allow-list of `scheme://host[:port]` the bundle may *ever*
+`origins` is the allow-list of `scheme://host[:port]` the bundle may _ever_
 reach; `purpose` is human-readable, shown in the consent UI. A bundle that
 declares no fixed origins (dynamic author-supplied sources) declares
-`"origins": "*-consent"` — meaning *every* reach requires runtime consent and
+`"origins": "*-consent"` — meaning _every_ reach requires runtime consent and
 none is pre-allowed.
 
 **Stage 2 — the consent door (host surface).** A new capability-gated
@@ -95,7 +96,7 @@ This is the platform half of concept §11's "data-source manifest in the UI".
   allow-list at the realm boundary: a **CSP `connect-src` derived from the
   granted origins** plus the editor's existing COOP/COEP cross-origin isolation
   (already required for the wasm/worker lanes). The host does not see or proxy
-  payloads; it constrains *where* the realm may connect. DuckDB-WASM `httpfs`
+  payloads; it constrains _where_ the realm may connect. DuckDB-WASM `httpfs`
   works unchanged; a non-granted origin is blocked by CSP.
 - **3b — host-proxied `host.network.fetch(req): Promise<Response>` (rejected for
   v1).** Fully mediates, but breaks DuckDB `httpfs` (which fetches itself), adds
@@ -105,13 +106,13 @@ This is the platform half of concept §11's "data-source manifest in the UI".
 ## Why not alternatives
 
 - **Keep `network: boolean`.** A global on/off with no origin allow-list and no
-  consent cannot satisfy §11: it permits silent exfiltration to *any* origin on
+  consent cannot satisfy §11: it permits silent exfiltration to _any_ origin on
   open. Directly violates the threat model.
 - **Allow-list only, no runtime consent.** Insufficient for author-supplied
   dynamic sources (the common case) and still fetches on open without review.
   Consent + manifest review is the §11 requirement, not just an allow-list.
 - **Host-proxied fetch as the primary path (3b).** Breaks the vendored
-  DuckDB-WASM `httpfs` connector — *connector breadth is the product*
+  DuckDB-WASM `httpfs` connector — _connector breadth is the product_
   (concept §6.1) — and centralizes a large attack surface for no isolation
   gain over CSP-enforced grants.
 
@@ -134,9 +135,9 @@ any reach.
 
 ## Posture without this RFC
 
-*Status note (2026-10-02): this section predates the implementation; the paged.data manifest
+_Status note (2026-10-02): this section predates the implementation; the paged.data manifest
 now declares `network: { origins: "consent" }`
-(`plugin-data: packages/data-bundle/manifest.json`).*
+(`plugin-data: packages/data-bundle/manifest.json`)._
 
 `paged.data` ships **today** with `network: false`: inline + file sources work;
 all remote / `httpfs` / DB-attach / governed-extract sources are **unreachable by

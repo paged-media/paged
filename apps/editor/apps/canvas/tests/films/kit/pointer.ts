@@ -77,7 +77,10 @@ export class Pointer {
   }
 
   private log(sample: Omit<CursorSample, "t">): void {
-    appendFileSync(this.logFile, `${JSON.stringify({ t: Date.now(), ...sample })}\n`);
+    appendFileSync(
+      this.logFile,
+      `${JSON.stringify({ t: Date.now(), ...sample })}\n`,
+    );
   }
 
   /** Teleport without a visible path (setup only, before the camera rolls). */
@@ -89,7 +92,10 @@ export class Pointer {
 
   /** Travel to `to` along a gentle arc. `targetWidth` (CSS px) feeds Fitts's
    *  law: small targets are approached more slowly. */
-  async moveTo(to: Point, opts: { targetWidth?: number; speed?: number } = {}): Promise<void> {
+  async moveTo(
+    to: Point,
+    opts: { targetWidth?: number; speed?: number } = {},
+  ): Promise<void> {
     const from = this.at;
     const dx = to.x - from.x;
     const dy = to.y - from.y;
@@ -98,7 +104,8 @@ export class Pointer {
     const w = Math.max(opts.targetWidth ?? 24, 4);
     const ms = (250 + 150 * Math.log2(dist / w + 1)) / (opts.speed ?? 1);
     // The arc bows to one side by 6–10% of the distance.
-    const bow = (0.06 + this.rand() * 0.04) * dist * (this.rand() < 0.5 ? -1 : 1);
+    const bow =
+      (0.06 + this.rand() * 0.04) * dist * (this.rand() < 0.5 ? -1 : 1);
     const nx = -dy / dist;
     const ny = dx / dist;
     const steps = Math.max(2, Math.round(ms / (1000 / 60)));
@@ -133,7 +140,10 @@ export class Pointer {
   /** Two clicks in quick succession that the page sees as a double-click
    *  (word selection in text): the second press carries clickCount 2, which
    *  separate `click()` calls never do. */
-  async dblclick(to?: Point, opts: { targetWidth?: number } = {}): Promise<void> {
+  async dblclick(
+    to?: Point,
+    opts: { targetWidth?: number } = {},
+  ): Promise<void> {
     if (to) await this.moveTo(to, opts);
     for (const clickCount of [1, 2]) {
       await this.page.mouse.down({ clickCount });
@@ -178,7 +188,11 @@ export class Pointer {
   }
 
   /** Press at `from`, travel to `to` with the button held, release. */
-  async drag(from: Point, to: Point, opts: { speed?: number } = {}): Promise<void> {
+  async drag(
+    from: Point,
+    to: Point,
+    opts: { speed?: number } = {},
+  ): Promise<void> {
     await this.moveTo(from, { targetWidth: 12 });
     await this.page.mouse.down();
     this.down = true;
@@ -194,7 +208,11 @@ export class Pointer {
 
 /** Type like a person: 55–85 ms a key, a little longer after a space or
  *  punctuation. Seeded, so a re-take types at the same rhythm. */
-export async function typeHuman(page: Page, text: string, seed = 7): Promise<void> {
+export async function typeHuman(
+  page: Page,
+  text: string,
+  seed = 7,
+): Promise<void> {
   const rand = mulberry32(seed);
   for (const ch of text) {
     await page.keyboard.type(ch);

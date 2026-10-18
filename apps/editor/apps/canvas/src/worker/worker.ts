@@ -163,10 +163,16 @@ interface CanvasWorkerInstance {
     bytes: Uint8Array,
   ): string;
   readPagedPartDirect?(path: string): Uint8Array | undefined;
-  placedAssetBytesDirect?(elementId: string):
+  placedAssetBytesDirect?(
+    elementId: string,
+  ):
     | { uri: string; width: number; height: number; encoded: Uint8Array }
     | undefined;
-  mutateWithBytesDirect?(seq: number, mutationJson: string, bytes: Uint8Array): string;
+  mutateWithBytesDirect?(
+    seq: number,
+    mutationJson: string,
+    bytes: Uint8Array,
+  ): string;
 }
 
 interface CanvasWasmModule {
@@ -617,7 +623,9 @@ function dispatchDirect(w: CanvasWorkerInstance, m: DirectMessage): void {
     }
     case "writePagedPart": {
       if (!w.writePagedPartDirect) return missing();
-      settle(w.writePagedPartDirect(m.seq, m.path, m.caller ?? undefined, m.bytes));
+      settle(
+        w.writePagedPartDirect(m.seq, m.path, m.caller ?? undefined, m.bytes),
+      );
       return;
     }
     case "mutateWithBytes": {
@@ -826,11 +834,19 @@ async function dispatch(data: IncomingMessage): Promise<void> {
   // wire kind: it is served here, before `handleMessage`, by looping the
   // same `measureText` shaper, so many strings cost one postMessage each
   // way instead of one per string. Same zeroing of a null answer.
-  const local = data.kind === "channel" ? (data.msg as unknown as {
-    kind: string;
-    seq: number;
-    payload?: { family: string; style?: string | null; texts: string[]; sizePt: number };
-  }) : null;
+  const local =
+    data.kind === "channel"
+      ? (data.msg as unknown as {
+          kind: string;
+          seq: number;
+          payload?: {
+            family: string;
+            style?: string | null;
+            texts: string[];
+            sizePt: number;
+          };
+        })
+      : null;
   if (local && local.kind === "requestMeasureTextBatch" && local.payload) {
     await initPromise;
     if (!worker) return;
@@ -838,7 +854,9 @@ async function dispatch(data: IncomingMessage): Promise<void> {
     const zero = { advance: 0, ascender: 0, descender: 0 };
     const metrics = texts.map((text) => {
       const m = worker!.measureText(family, style ?? null, text, sizePt);
-      return m ? { advance: m.advance, ascender: m.ascender, descender: m.descender } : zero;
+      return m
+        ? { advance: m.advance, ascender: m.ascender, descender: m.descender }
+        : zero;
     });
     postBack({
       seq: local.seq,
@@ -882,7 +900,9 @@ async function dispatch(data: IncomingMessage): Promise<void> {
  * binds the canvas; that case is left to the GPU surface itself.)
  */
 async function webgpuAdapterAvailable(): Promise<boolean> {
-  const gpu = (navigator as unknown as { gpu?: { requestAdapter(): Promise<unknown> } }).gpu;
+  const gpu = (
+    navigator as unknown as { gpu?: { requestAdapter(): Promise<unknown> } }
+  ).gpu;
   if (!gpu) {
     console.warn("WebGPU: not available; the canvas renders on the CPU");
     return false;
@@ -930,8 +950,7 @@ async function attachRenderer(
     pageCount: () => worker!.pageCount(),
     pageInfo: (index) => {
       const arr = worker!.pageInfo(index) as unknown as
-        | [string, number, number]
-        | undefined;
+        [string, number, number] | undefined;
       return arr;
     },
     renderTilePng: (pageId, widthPx) => worker!.renderTilePng(pageId, widthPx),

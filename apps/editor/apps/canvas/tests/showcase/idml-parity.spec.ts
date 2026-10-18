@@ -39,13 +39,24 @@
 // loss ledger. Those pages are allowed a budget; every other page must
 // match within the anti-aliasing floor.
 
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 
 import { openCanvas } from "../fidelity/canvas-driver";
 import { diffPngPixels } from "../e2e/harness/pixel-diff";
-import { CORPUS_FONTS, OUT, checkpointPath, discoverChapterIds } from "./chapter";
+import {
+  CORPUS_FONTS,
+  OUT,
+  checkpointPath,
+  discoverChapterIds,
+} from "./chapter";
 import { ShowcaseDoc } from "./driver";
 import { ANNUAL_PAGES } from "./names-annual";
 import { zipEntryNames } from "../e2e/harness/read-zip";
@@ -149,7 +160,9 @@ test.describe("idml parity", () => {
     const exportedWithLost = await doc.exportIdmlWithLost({});
     const exported = Buffer.from(exportedWithLost.bytes);
     const maskPages = await namedMaskPages(page, doc, exportedWithLost.lost);
-    expect(existsSync(idmlPath), "the assembly's export exists beside it").toBe(true);
+    expect(existsSync(idmlPath), "the assembly's export exists beside it").toBe(
+      true,
+    );
     const foreign = zipEntryNames(exported).filter((n) => !isIdmlEntry(n));
     const projectionPath = join(OUT, "showcase-projection.idml");
     writeFileSync(projectionPath, stripZip(exported));
@@ -218,7 +231,10 @@ test.describe("idml parity", () => {
     for (const d of diffs.slice(0, 12)) {
       const stem = join(outDir, `page-${String(d.page).padStart(3, "0")}`);
       writeFileSync(`${stem}-paged.png`, fromPaged[d.page - 1]);
-      writeFileSync(`${stem}-idml.png`, await doc.renderPage(d.page - 1, WIDTH));
+      writeFileSync(
+        `${stem}-idml.png`,
+        await doc.renderPage(d.page - 1, WIDTH),
+      );
     }
     const unexplained = diffs.filter((d) => !maskPages.has(d.page));
     // eslint-disable-next-line no-console

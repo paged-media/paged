@@ -54,7 +54,16 @@ import {
 type Cmd =
   | { k: "M" | "L" | "T"; rel: boolean; x: number; y: number }
   | { k: "H" | "V"; rel: boolean; v: number }
-  | { k: "C"; rel: boolean; x1: number; y1: number; x2: number; y2: number; x: number; y: number }
+  | {
+      k: "C";
+      rel: boolean;
+      x1: number;
+      y1: number;
+      x2: number;
+      y2: number;
+      x: number;
+      y: number;
+    }
   | { k: "S"; rel: boolean; x2: number; y2: number; x: number; y: number }
   | { k: "Q"; rel: boolean; x1: number; y1: number; x: number; y: number }
   | {
@@ -112,9 +121,32 @@ function pathOf(
     T: fc.record({ k: fc.constant("T" as const), rel, x: n, y: n }),
     H: fc.record({ k: fc.constant("H" as const), rel, v: n }),
     V: fc.record({ k: fc.constant("V" as const), rel, v: n }),
-    C: fc.record({ k: fc.constant("C" as const), rel, x1: n, y1: n, x2: n, y2: n, x: n, y: n }),
-    S: fc.record({ k: fc.constant("S" as const), rel, x2: n, y2: n, x: n, y: n }),
-    Q: fc.record({ k: fc.constant("Q" as const), rel, x1: n, y1: n, x: n, y: n }),
+    C: fc.record({
+      k: fc.constant("C" as const),
+      rel,
+      x1: n,
+      y1: n,
+      x2: n,
+      y2: n,
+      x: n,
+      y: n,
+    }),
+    S: fc.record({
+      k: fc.constant("S" as const),
+      rel,
+      x2: n,
+      y2: n,
+      x: n,
+      y: n,
+    }),
+    Q: fc.record({
+      k: fc.constant("Q" as const),
+      rel,
+      x1: n,
+      y1: n,
+      x: n,
+      y: n,
+    }),
     A: fc.record({
       k: fc.constant("A" as const),
       rel,
@@ -135,7 +167,10 @@ function pathOf(
     y: n,
   });
   return fc
-    .tuple(first, fc.array(fc.oneof(...kinds.map((k) => byKind[k])), { maxLength: 10 }))
+    .tuple(
+      first,
+      fc.array(fc.oneof(...kinds.map((k) => byKind[k])), { maxLength: 10 }),
+    )
     .map(([head, tail]) => [head, ...tail]);
 }
 
@@ -296,15 +331,32 @@ describe("svg-path — the grammar's semantics (properties)", () => {
   it("repeated argument groups are implicit repeats of the command (and of L after M)", () => {
     const pair = fc.tuple(smallInt, smallInt);
     fc.assert(
-      fc.property(pair, fc.array(pair, { minLength: 1, maxLength: 5 }), fc.boolean(), (head, tail, rel) => {
-        const m = rel ? "m" : "M";
-        const l = rel ? "l" : "L";
-        const flat = tail.map((p) => p.join(" ")).join(" ");
-        const explicit = `${m} ${head.join(" ")} ` + tail.map((p) => `${l} ${p.join(" ")}`).join(" ");
-        const expected = parsePathData(explicit);
-        assertTableClose(parsePathData(`${m} ${head.join(" ")} ${flat}`), expected, 0, "after M");
-        assertTableClose(parsePathData(`${m} ${head.join(" ")} ${l} ${flat}`), expected, 0, "after L");
-      }),
+      fc.property(
+        pair,
+        fc.array(pair, { minLength: 1, maxLength: 5 }),
+        fc.boolean(),
+        (head, tail, rel) => {
+          const m = rel ? "m" : "M";
+          const l = rel ? "l" : "L";
+          const flat = tail.map((p) => p.join(" ")).join(" ");
+          const explicit =
+            `${m} ${head.join(" ")} ` +
+            tail.map((p) => `${l} ${p.join(" ")}`).join(" ");
+          const expected = parsePathData(explicit);
+          assertTableClose(
+            parsePathData(`${m} ${head.join(" ")} ${flat}`),
+            expected,
+            0,
+            "after M",
+          );
+          assertTableClose(
+            parsePathData(`${m} ${head.join(" ")} ${l} ${flat}`),
+            expected,
+            0,
+            "after L",
+          );
+        },
+      ),
     );
   });
 
@@ -317,31 +369,51 @@ describe("svg-path — the grammar's semantics (properties)", () => {
     );
     const compact = (n: number): string => {
       const text = String(n);
-      return text.startsWith("0.") ? text.slice(1) : text.replace(/^-0\./, "-.");
+      return text.startsWith("0.")
+        ? text.slice(1)
+        : text.replace(/^-0\./, "-.");
     };
     fc.assert(
-      fc.property(fc.array(fc.tuple(num, num), { minLength: 2, maxLength: 6 }), (pts) => {
-        const spaced =
-          `M ${pts[0][0]} ${pts[0][1]} ` +
-          pts.slice(1).map((p) => `L ${p[0]} ${p[1]}`).join(" ");
-        const commas =
-          `M${pts[0][0]},${pts[0][1]}` +
-          pts.slice(1).map((p) => `L${p[0]},${p[1]}`).join("");
-        // Tightest legal form: a separator only where two numbers would
-        // otherwise fuse (the second neither signed nor dot-led).
-        const glue = (a: number, b: number): string => {
-          const right = compact(b);
-          const fuses =
-            right[0] !== "-" && !(right[0] === "." && compact(a).includes("."));
-          return compact(a) + (fuses ? " " : "") + right;
-        };
-        const tight =
-          `M${glue(pts[0][0], pts[0][1])}` +
-          pts.slice(1).map((p) => `L${glue(p[0], p[1])}`).join("");
-        const expected = parsePathData(spaced);
-        assertTableClose(parsePathData(commas), expected, 0, "commas");
-        assertTableClose(parsePathData(tight), expected, 0, `tight form ${tight}`);
-      }),
+      fc.property(
+        fc.array(fc.tuple(num, num), { minLength: 2, maxLength: 6 }),
+        (pts) => {
+          const spaced =
+            `M ${pts[0][0]} ${pts[0][1]} ` +
+            pts
+              .slice(1)
+              .map((p) => `L ${p[0]} ${p[1]}`)
+              .join(" ");
+          const commas =
+            `M${pts[0][0]},${pts[0][1]}` +
+            pts
+              .slice(1)
+              .map((p) => `L${p[0]},${p[1]}`)
+              .join("");
+          // Tightest legal form: a separator only where two numbers would
+          // otherwise fuse (the second neither signed nor dot-led).
+          const glue = (a: number, b: number): string => {
+            const right = compact(b);
+            const fuses =
+              right[0] !== "-" &&
+              !(right[0] === "." && compact(a).includes("."));
+            return compact(a) + (fuses ? " " : "") + right;
+          };
+          const tight =
+            `M${glue(pts[0][0], pts[0][1])}` +
+            pts
+              .slice(1)
+              .map((p) => `L${glue(p[0], p[1])}`)
+              .join("");
+          const expected = parsePathData(spaced);
+          assertTableClose(parsePathData(commas), expected, 0, "commas");
+          assertTableClose(
+            parsePathData(tight),
+            expected,
+            0,
+            `tight form ${tight}`,
+          );
+        },
+      ),
     );
   });
 
@@ -354,7 +426,11 @@ describe("svg-path — the grammar's semantics (properties)", () => {
           u * u * p0[0] + 2 * u * t * q[0] + t * t * p1[0],
           u * u * p0[1] + 2 * u * t * q[1] + t * t * p1[1],
         ];
-        assertVecClose(refEvalCubic([p0, right, left, p1], t), quad, 1e-9 * 1000);
+        assertVecClose(
+          refEvalCubic([p0, right, left, p1], t),
+          quad,
+          1e-9 * 1000,
+        );
       }),
     );
   });
@@ -383,7 +459,10 @@ describe("svg-path — the grammar's semantics (properties)", () => {
         }
         for (const a of table.anchors) {
           for (const p of [a.anchor, a.left, a.right]) {
-            assertTrue(Number.isFinite(p[0]) && Number.isFinite(p[1]), `non-finite in ${d}`);
+            assertTrue(
+              Number.isFinite(p[0]) && Number.isFinite(p[1]),
+              `non-finite in ${d}`,
+            );
           }
         }
         // And whatever it parsed, it can write and read back.
@@ -445,34 +524,53 @@ describe("svg-path — parse → serialize → parse is a fixed point (propertie
 
   it("rounding moves no coordinate by more than half a unit in the last place", () => {
     fc.assert(
-      fc.property(canonicalTable, fc.integer({ min: 0, max: 6 }), vec2, (table, precision, shift) => {
-        // Shift by an arbitrary double so there IS something to round.
-        const moved: AnchorTable = {
-          ...table,
-          anchors: table.anchors.map((a) => ({
-            anchor: [a.anchor[0] + shift[0], a.anchor[1] + shift[1]] as [number, number],
-            left: [a.left[0] + shift[0], a.left[1] + shift[1]] as [number, number],
-            right: [a.right[0] + shift[0], a.right[1] + shift[1]] as [number, number],
-          })),
-        };
-        const text = serializePathData(moved, precision);
-        for (const token of text.split(" ")) {
-          if (/^[MLCZ]$/.test(token)) continue;
-          const decimals = token.includes(".") ? token.split(".")[1].length : 0;
-          assertTrue(decimals <= precision, `"${token}" has more than ${precision} decimals`);
-          assertTrue(token !== "-0", "emitted a negative zero");
-        }
-        const back = parsePathData(text);
-        expect(back.anchors).toHaveLength(moved.anchors.length);
-        const half = 0.5 * 10 ** -precision + 1e-9;
-        back.anchors.forEach((a, i) => {
-          assertTrue(
-            Math.abs(a.anchor[0] - moved.anchors[i].anchor[0]) <= half &&
-              Math.abs(a.anchor[1] - moved.anchors[i].anchor[1]) <= half,
-            `anchor ${i} moved by more than ${half}`,
-          );
-        });
-      }),
+      fc.property(
+        canonicalTable,
+        fc.integer({ min: 0, max: 6 }),
+        vec2,
+        (table, precision, shift) => {
+          // Shift by an arbitrary double so there IS something to round.
+          const moved: AnchorTable = {
+            ...table,
+            anchors: table.anchors.map((a) => ({
+              anchor: [a.anchor[0] + shift[0], a.anchor[1] + shift[1]] as [
+                number,
+                number,
+              ],
+              left: [a.left[0] + shift[0], a.left[1] + shift[1]] as [
+                number,
+                number,
+              ],
+              right: [a.right[0] + shift[0], a.right[1] + shift[1]] as [
+                number,
+                number,
+              ],
+            })),
+          };
+          const text = serializePathData(moved, precision);
+          for (const token of text.split(" ")) {
+            if (/^[MLCZ]$/.test(token)) continue;
+            const decimals = token.includes(".")
+              ? token.split(".")[1].length
+              : 0;
+            assertTrue(
+              decimals <= precision,
+              `"${token}" has more than ${precision} decimals`,
+            );
+            assertTrue(token !== "-0", "emitted a negative zero");
+          }
+          const back = parsePathData(text);
+          expect(back.anchors).toHaveLength(moved.anchors.length);
+          const half = 0.5 * 10 ** -precision + 1e-9;
+          back.anchors.forEach((a, i) => {
+            assertTrue(
+              Math.abs(a.anchor[0] - moved.anchors[i].anchor[0]) <= half &&
+                Math.abs(a.anchor[1] - moved.anchors[i].anchor[1]) <= half,
+              `anchor ${i} moved by more than ${half}`,
+            );
+          });
+        },
+      ),
     );
   });
 
@@ -492,8 +590,16 @@ describe("svg-path — parse → serialize → parse is a fixed point (propertie
           const text = serializePathData(
             {
               anchors: [
-                { anchor: [tiny, other], left: [tiny, other], right: [tiny, other] },
-                { anchor: [other, tiny], left: [other, tiny], right: [other, tiny] },
+                {
+                  anchor: [tiny, other],
+                  left: [tiny, other],
+                  right: [tiny, other],
+                },
+                {
+                  anchor: [other, tiny],
+                  left: [other, tiny],
+                  right: [other, tiny],
+                },
               ],
               subpathStarts: [0],
               subpathOpen: [true],
@@ -508,7 +614,11 @@ describe("svg-path — parse → serialize → parse is a fixed point (propertie
 
   it("an empty table serializes to the empty string, and back", () => {
     expect(serializePathData({ anchors: [], subpathStarts: [] })).toBe("");
-    expect(parsePathData("")).toEqual({ anchors: [], subpathStarts: [], subpathOpen: [] });
+    expect(parsePathData("")).toEqual({
+      anchors: [],
+      subpathStarts: [],
+      subpathOpen: [],
+    });
   });
 });
 
@@ -562,12 +672,24 @@ describe("svg-path — DEFECTS", () => {
   it("FIXED DEFECT (1): a flag is ONE character wherever it stands — glued, comma'd, repeated", () => {
     const spaced = parsePathData("M0 0 a5 5 0 0 1 10 0 a5 5 0 1 0 -10 0");
     // Both flags and the number after them in one run of digits…
-    assertTableClose(parsePathData("M0 0a5 5 0 0110 0a5 5 0 10-10 0"), spaced, 0);
+    assertTableClose(
+      parsePathData("M0 0a5 5 0 0110 0a5 5 0 10-10 0"),
+      spaced,
+      0,
+    );
     // …a comma between the flags only…
-    assertTableClose(parsePathData("M0 0a5 5 0 0,110 0a5 5 0 1,0-10 0"), spaced, 0);
+    assertTableClose(
+      parsePathData("M0 0a5 5 0 0,110 0a5 5 0 1,0-10 0"),
+      spaced,
+      0,
+    );
     // …and the implicit repeat of the command: the second group's flags
     // are the 11th and 12th argument, counted through the first group.
-    assertTableClose(parsePathData("M0 0a5 5 0 0110 0 5 5 0 10-10 0"), spaced, 0);
+    assertTableClose(
+      parsePathData("M0 0a5 5 0 0110 0 5 5 0 10-10 0"),
+      spaced,
+      0,
+    );
     // A flag is not a number: `0.5` after the rotation is the flag 0 and
     // then `.5`, so this arc ends at (0.5, 3) — not at (3, <missing>).
     assertTableClose(
@@ -644,7 +766,11 @@ describe("svg-path — DEFECTS", () => {
       );
     }
     // And the SVGO spelling of the same circle is the same four anchors.
-    assertTableClose(parsePathData("M0 5a5 5 0 1010 0 5 5 0 10-10 0z"), circle, 0);
+    assertTableClose(
+      parsePathData("M0 5a5 5 0 1010 0 5 5 0 10-10 0z"),
+      circle,
+      0,
+    );
   });
 
   it("FIXED DEFECT (2): property — an arc back to the subpath start closes onto it, absolute or relative", () => {
@@ -720,16 +846,24 @@ describe("svg-path — DEFECTS", () => {
     // A lens drawn with two relative cubics; the second returns to the
     // start, a rounding step off. Its incoming handle belongs on the
     // start anchor, exactly as for the absolute spelling.
-    const relative = parsePathData("M 0.1 0.7 c 0.1 -0.3 0.5 -0.3 0.6 0 c -0.1 0.3 -0.5 0.3 -0.6 0 z");
-    const absolute = parsePathData("M 0.1 0.7 C 0.2 0.4 0.6 0.4 0.7 0.7 C 0.6 1 0.2 1 0.1 0.7 Z");
+    const relative = parsePathData(
+      "M 0.1 0.7 c 0.1 -0.3 0.5 -0.3 0.6 0 c -0.1 0.3 -0.5 0.3 -0.6 0 z",
+    );
+    const absolute = parsePathData(
+      "M 0.1 0.7 C 0.2 0.4 0.6 0.4 0.7 0.7 C 0.6 1 0.2 1 0.1 0.7 Z",
+    );
     expect(absolute.anchors).toHaveLength(2);
     expect(relative.anchors).toHaveLength(2);
     assertTableClose(relative, absolute, 1e-12);
-    expect(same(relative.anchors[0].left, relative.anchors[0].anchor)).toBe(false);
+    expect(same(relative.anchors[0].left, relative.anchors[0].anchor)).toBe(
+      false,
+    );
     // `Z` puts the pen ON the start (it always did), so the drift does
     // not leak into what follows: a second, relative subpath starts
     // where the absolute one would — and with the fold, at index 4.
-    const two = parsePathData("M 0.1 0.1 l 0.2 0 l 0 0.2 l -0.2 0 l 0 -0.2 z m 1 0 l 1 0");
+    const two = parsePathData(
+      "M 0.1 0.1 l 0.2 0 l 0 0.2 l -0.2 0 l 0 -0.2 z m 1 0 l 1 0",
+    );
     expect(two.subpathStarts).toEqual([0, 4]);
     expect(two.anchors[4].anchor).toEqual([1.1, 0.1]);
   });
@@ -745,19 +879,29 @@ describe("svg-path — DEFECTS", () => {
       fc.property(
         fc.array(fc.tuple(tenths, tenths), { minLength: 3, maxLength: 40 }),
         (pts) => {
-          fc.pre(pts.every((p, i) => i === 0 || p[0] !== pts[i - 1][0] || p[1] !== pts[i - 1][1]));
+          fc.pre(
+            pts.every(
+              (p, i) =>
+                i === 0 || p[0] !== pts[i - 1][0] || p[1] !== pts[i - 1][1],
+            ),
+          );
           const last = pts[pts.length - 1];
           fc.pre(last[0] !== pts[0][0] || last[1] !== pts[0][1]);
           const absolute =
             `M ${text(pts[0][0])} ${text(pts[0][1])} ` +
-            [...pts.slice(1), pts[0]].map((p) => `L ${text(p[0])} ${text(p[1])}`).join(" ") +
+            [...pts.slice(1), pts[0]]
+              .map((p) => `L ${text(p[0])} ${text(p[1])}`)
+              .join(" ") +
             " Z";
           const loop = [...pts, pts[0]];
           const relative =
             `M ${text(pts[0][0])} ${text(pts[0][1])} ` +
             loop
               .slice(1)
-              .map((p, i) => `l ${text(p[0] - loop[i][0])} ${text(p[1] - loop[i][1])}`)
+              .map(
+                (p, i) =>
+                  `l ${text(p[0] - loop[i][0])} ${text(p[1] - loop[i][1])}`,
+              )
               .join(" ") +
             " z";
           const expected = parsePathData(absolute);
@@ -772,12 +916,18 @@ describe("svg-path — DEFECTS", () => {
     // One unit in the sixth decimal, at unit scale and at page scale: far
     // inside "a hair", far outside rounding. The anchor is the author's.
     expect(parsePathData("M 0 0 L 1 0 L 0.000001 0 Z").anchors).toHaveLength(3);
-    expect(parsePathData("M 100 100 L 500 100 L 100.000001 100 Z").anchors).toHaveLength(3);
+    expect(
+      parsePathData("M 100 100 L 500 100 L 100.000001 100 Z").anchors,
+    ).toHaveLength(3);
     // Even the ninth decimal of a page-scale coordinate is a statement:
     // 1e-9 in 500 is 2e-12 of the size, twice the allowance.
-    expect(parsePathData("M 100 100 L 500 100 L 100.000000001 100 Z").anchors).toHaveLength(3);
+    expect(
+      parsePathData("M 100 100 L 500 100 L 100.000000001 100 Z").anchors,
+    ).toHaveLength(3);
     // And the same path with the gap closed folds, as it always did.
-    expect(parsePathData("M 100 100 L 500 100 L 100 100 Z").anchors).toHaveLength(2);
+    expect(
+      parsePathData("M 100 100 L 500 100 L 100 100 Z").anchors,
+    ).toHaveLength(2);
   });
 
   // ------------------------------------------------------------------
@@ -826,9 +976,9 @@ describe("svg-path — DEFECTS", () => {
 
   it("FIXED DEFECT (3): the closing segment is written out ONLY for a stacked close", () => {
     // The rectangle keeps the compact form: `Z` draws its last edge.
-    expect(serializePathData(parsePathData("M 0 0 L 10 0 L 10 10 L 0 10 Z"))).toBe(
-      "M 0 0 L 10 0 L 10 10 L 0 10 Z",
-    );
+    expect(
+      serializePathData(parsePathData("M 0 0 L 10 0 L 10 10 L 0 10 Z")),
+    ).toBe("M 0 0 L 10 0 L 10 10 L 0 10 Z");
     // Two anchors that only ROUND to the same text stack just the same:
     // (0.0004, 0) prints as "0 0" at three decimals.
     const hair: AnchorTable = {

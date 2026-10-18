@@ -48,7 +48,10 @@ import {
 import type { ImportReport } from "../src/engine";
 import { SLIDE_KEY } from "../src/slides-model";
 
-const FIXTURE = new URL("../../../slide-conformance/fixtures/placeholders.pptx", import.meta.url);
+const FIXTURE = new URL(
+  "../../../slide-conformance/fixtures/placeholders.pptx",
+  import.meta.url,
+);
 
 function recordingHost(supports: (f: string) => boolean) {
   const importers: ImporterContribution[] = [];
@@ -104,7 +107,16 @@ function recordingHost(supports: (f: string) => boolean) {
       },
     },
   } as unknown as BundleHost;
-  return { host, importers, opened, parts, diagnostics, mutations, objectModels, schemaPanels };
+  return {
+    host,
+    importers,
+    opened,
+    parts,
+    diagnostics,
+    mutations,
+    objectModels,
+    schemaPanels,
+  };
 }
 
 describe("paged.slide importer", () => {
@@ -135,7 +147,11 @@ describe("paged.slide importer", () => {
       "media.paged.slide.panel.deck",
     ]);
     const bytes = new Uint8Array(readFileSync(FIXTURE));
-    await r.importers[0].import({ name: "placeholders.pptx", bytes, mimeType: "" });
+    await r.importers[0].import({
+      name: "placeholders.pptx",
+      bytes,
+      mimeType: "",
+    });
 
     expect(r.opened).toHaveLength(1);
     // An IDML package: a zip whose first entry is the stored mimetype.
@@ -144,7 +160,9 @@ describe("paged.slide importer", () => {
     expect(head).toContain("application/vnd.adobe.indesign-idml-package");
 
     expect(r.parts.get(SOURCE_PART)).toEqual(bytes);
-    const report = JSON.parse(new TextDecoder().decode(r.parts.get(REPORT_PART))) as ImportReport;
+    const report = JSON.parse(
+      new TextDecoder().decode(r.parts.get(REPORT_PART)),
+    ) as ImportReport;
     expect(report.slides.length).toBeGreaterThan(5);
     expect(report.slides.every((s) => s.pageId.length > 0)).toBe(true);
     expect(r.diagnostics.has("media.paged.slide/import")).toBe(true);
@@ -154,9 +172,15 @@ describe("paged.slide importer", () => {
     const r = recordingHost((f) => f === "contribute.importer@1");
     activate(r.host);
     const bytes = new Uint8Array(readFileSync(FIXTURE));
-    await r.importers[0].import({ name: "placeholders.pptx", bytes, mimeType: "" });
+    await r.importers[0].import({
+      name: "placeholders.pptx",
+      bytes,
+      mimeType: "",
+    });
     expect(r.opened).toHaveLength(0);
-    expect(r.diagnostics.get("media.paged.slide/import")?.[0]?.severity).toBe("error");
+    expect(r.diagnostics.get("media.paged.slide/import")?.[0]?.severity).toBe(
+      "error",
+    );
   });
 
   it("contributes the Slides and Notes panels where the page doors exist", () => {
@@ -165,7 +189,11 @@ describe("paged.slide importer", () => {
     const host = {
       log: { debug() {}, info() {}, warn() {}, error() {} },
       supports: (f: string) =>
-        ["contribute.panel@1", "render.snapshot@1", "viewport.pages@1"].includes(f),
+        [
+          "contribute.panel@1",
+          "render.snapshot@1",
+          "viewport.pages@1",
+        ].includes(f),
       contribute: {
         panel(c: { id: string }) {
           panels.push(c);
@@ -182,7 +210,10 @@ describe("paged.slide importer", () => {
     const handle = activate(host);
     expect(panels.map((p) => p.id)).toEqual([SLIDES_PANEL_ID, NOTES_PANEL_ID]);
     // A document that is not a deck keeps them out of the panel rail.
-    expect(panels.map((p) => (p as { rail?: boolean }).rail)).toEqual([false, false]);
+    expect(panels.map((p) => (p as { rail?: boolean }).rail)).toEqual([
+      false,
+      false,
+    ]);
     handle.dispose();
 
     // Without the v70 doors the panels stay out.
@@ -200,7 +231,11 @@ describe("paged.slide importer", () => {
     const host = {
       log: { debug() {}, info() {}, warn() {}, error() {} },
       supports: (f: string) =>
-        ["contribute.panel@1", "render.snapshot@1", "viewport.pages@1"].includes(f),
+        [
+          "contribute.panel@1",
+          "render.snapshot@1",
+          "viewport.pages@1",
+        ].includes(f),
       contribute: {
         panel(c: { id: string; rail?: boolean }) {
           if (live.has(c.id)) throw new Error(`${c.id} registered twice`);
@@ -208,13 +243,18 @@ describe("paged.slide importer", () => {
           return { dispose: () => live.delete(c.id) };
         },
       },
-      viewport: { activePage: () => null, onDidChangeActivePage: () => ({ dispose() {} }) },
+      viewport: {
+        activePage: () => null,
+        onDidChangeActivePage: () => ({ dispose() {} }),
+      },
       document: {
         collection: async () => [
           {
             selfId: "p1",
             sizePt: [720, 405],
-            pluginMetadata: [{ key: SLIDE_KEY, value: '{"v":1,"data":{"layout":"m1"}}' }],
+            pluginMetadata: [
+              { key: SLIDE_KEY, value: '{"v":1,"data":{"layout":"m1"}}' },
+            ],
           },
         ],
         onDidChange: () => ({ dispose() {} }),

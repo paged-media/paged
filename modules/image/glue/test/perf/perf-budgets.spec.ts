@@ -33,7 +33,13 @@ import type { PluginManifest } from "@paged-media/plugin-api";
 import manifestJson from "@paged-media/image-manifest/manifest.json";
 
 import { createImageSession } from "../../src/session";
-import { makeFakeEditor, mapBacking, psdBytes, shellStub, silentConsole } from "../helpers";
+import {
+  makeFakeEditor,
+  mapBacking,
+  psdBytes,
+  shellStub,
+  silentConsole,
+} from "../helpers";
 import { countingEngine, type EngineLog } from "./counting-engine";
 
 let engineLog: EngineLog | null = null;
@@ -59,11 +65,15 @@ function setup() {
     bounds: [0, 0, 100, 200],
   } as never);
   fake.emitSelection([{ kind: "rectangle", id: "u1" }]);
-  const handle = createBundleHost(() => fake.editor, manifestJson as PluginManifest, {
-    console: silentConsole,
-    storage: mapBacking(),
-    shell: shellStub(),
-  });
+  const handle = createBundleHost(
+    () => fake.editor,
+    manifestJson as PluginManifest,
+    {
+      console: silentConsole,
+      storage: mapBacking(),
+      shell: shellStub(),
+    },
+  );
   const session = createImageSession(handle.host);
   return { fake, handle, session };
 }
@@ -81,7 +91,8 @@ function submittedElements(fake: ReturnType<typeof makeFakeEditor>): number {
       }
     }
   };
-  for (const call of fake.sceneLayers.submit.mock.calls as unknown[][]) visit(call);
+  for (const call of fake.sceneLayers.submit.mock.calls as unknown[][])
+    visit(call);
   return n;
 }
 
@@ -114,7 +125,8 @@ describe("work budgets — layer opacity drag (20 steps)", () => {
     // The panel slider fires each step WITHOUT awaiting the last one
     // (React onChange), so the drag is a burst, not a sequence.
     const steps: Promise<boolean>[] = [];
-    for (let i = 0; i < 20; i++) steps.push(session.setLayerOpacity(1, 1 - i / 40));
+    for (let i = 0; i < 20; i++)
+      steps.push(session.setLayerOpacity(1, 1 - i / 40));
     await Promise.all(steps);
     // The final state is the last step's, whatever was coalesced.
     expect(session.state().layers.layers[1]?.opacity).toBeCloseTo(1 - 19 / 40);

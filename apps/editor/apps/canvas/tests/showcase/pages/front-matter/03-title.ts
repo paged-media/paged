@@ -22,7 +22,12 @@
 // the display chain. Both pages are pure native authoring — the
 // annual's first ordinary spread.
 
-import { plate, proseFrame, specLabel, assignLayer } from "../../annual-support";
+import {
+  plate,
+  proseFrame,
+  specLabel,
+  assignLayer,
+} from "../../annual-support";
 import { LAYER, STYLE, SWATCH, p } from "../../names-annual";
 import type { PageContext, PageReport } from "../../types";
 
@@ -39,9 +44,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     elements.push(
       await plate(ctx, p(2), [96, y, 306, y + 56], SWATCH.slate, LAYER.content),
     );
-    const label = await proseFrame(ctx, p(2), [316, y + 14, 456, y + 44], [
-      { text: stage, style: STYLE.head2 },
-    ]);
+    const label = await proseFrame(
+      ctx,
+      p(2),
+      [316, y + 14, 456, y + 44],
+      [{ text: stage, style: STYLE.head2 }],
+    );
     elements.push(label.frameId);
     if (i < stages.length - 1) {
       const line = await doc.mutateId("insertLine", {
@@ -59,14 +67,19 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   }
 
   // Recto: the title page.
-  const title = await proseFrame(ctx, p(3), [96, 180, 480, 420], [
-    { text: "The Paged Annual", style: STYLE.chapterTitle },
-    { text: "Volume One", style: STYLE.deck },
-    {
-      text: "A specimen of the composing engine, its plugins, and the interchange they serve.",
-      style: STYLE.deck,
-    },
-  ]);
+  const title = await proseFrame(
+    ctx,
+    p(3),
+    [96, 180, 480, 420],
+    [
+      { text: "The Paged Annual", style: STYLE.chapterTitle },
+      { text: "Volume One", style: STYLE.deck },
+      {
+        text: "A specimen of the composing engine, its plugins, and the interchange they serve.",
+        style: STYLE.deck,
+      },
+    ],
+  );
   elements.push(title.frameId);
   elements.push(
     await specLabel(ctx, p(3), [

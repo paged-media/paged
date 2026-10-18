@@ -60,9 +60,7 @@ describe("metadata envelope (W-02 carrier)", () => {
   it("rejects unknown versions and malformed payloads as null", () => {
     expect(sourceFromEnvelope(null)).toBeNull();
     expect(sourceFromEnvelope({ v: 99, data: {} })).toBeNull();
-    expect(
-      sourceFromEnvelope({ v: 1, data: { html: 1, css: "" } }),
-    ).toBeNull();
+    expect(sourceFromEnvelope({ v: 1, data: { html: 1, css: "" } })).toBeNull();
     expect(sourceFromEnvelope({ v: 1, data: {} })).toBeNull();
   });
 
@@ -203,7 +201,14 @@ describe("flow chain — persisted region chain (ADR-020 rung 2)", () => {
   it("normalizeFlowChain de-dupes by id and rejects malformed entries", () => {
     expect(
       normalizeFlowChain({
-        recipients: [B, { kind: "rectangle", id: "uB" }, C, { id: "noKind" }, 7, "s"],
+        recipients: [
+          B,
+          { kind: "rectangle", id: "uB" },
+          C,
+          { id: "noKind" },
+          7,
+          "s",
+        ],
       }),
     ).toEqual({ recipients: [B, C] });
     expect(normalizeFlowChain({ recipients: [] })).toBeUndefined();
@@ -239,7 +244,9 @@ describe("flow chain — persisted region chain (ADR-020 rung 2)", () => {
   it("withoutRecipient removes by id, dropping the flow field when empty", () => {
     const s = { ...base, flow: { recipients: [B, C] } };
     expect(withoutRecipient(s, "uB").flow).toEqual({ recipients: [C] });
-    expect(withoutRecipient(withoutRecipient(s, "uB"), "uC").flow).toBeUndefined();
+    expect(
+      withoutRecipient(withoutRecipient(s, "uB"), "uC").flow,
+    ).toBeUndefined();
     expect(withoutRecipient(s, "uZ")).toBe(s); // absent → no-op
   });
 
@@ -268,7 +275,10 @@ describe("flow chain — persisted region chain (ADR-020 rung 2)", () => {
   });
 
   it("a named-flow recipient round-trips through the envelope", () => {
-    const s: WebFrameSource = { ...base, flow: { recipients: [{ ...B, flow: "notes" }] } };
+    const s: WebFrameSource = {
+      ...base,
+      flow: { recipients: [{ ...B, flow: "notes" }] },
+    };
     expect(sourceFromEnvelope(envelopeFor(s))).toEqual(s);
   });
 });
@@ -282,7 +292,9 @@ describe("large sources: label pointer + content-addressed part", () => {
     expect(utf8Length("é")).toBe(2);
     expect(utf8Length("€")).toBe(3);
     expect(utf8Length("😀")).toBe(4);
-    expect(utf8Length("<p>é😀</p>")).toBe(new TextEncoder().encode("<p>é😀</p>").length);
+    expect(utf8Length("<p>é😀</p>")).toBe(
+      new TextEncoder().encode("<p>é😀</p>").length,
+    );
   });
 
   it("contentHash is 16 hex digits, deterministic, and content-sensitive", () => {
@@ -303,8 +315,12 @@ describe("large sources: label pointer + content-addressed part", () => {
     const stored = storeSource(large);
     expect(stored.kind).toBe("part");
     if (stored.kind !== "part") return;
-    expect(utf8Length(JSON.stringify(stored.label))).toBeLessThan(LABEL_INLINE_MAX_BYTES);
-    expect(utf8Length(JSON.stringify(stored.label))).toBeLessThan(LABEL_MAX_BYTES);
+    expect(utf8Length(JSON.stringify(stored.label))).toBeLessThan(
+      LABEL_INLINE_MAX_BYTES,
+    );
+    expect(utf8Length(JSON.stringify(stored.label))).toBeLessThan(
+      LABEL_MAX_BYTES,
+    );
     expect(sourceFromEnvelope(stored.label)).toBeNull(); // not an inline source
     expect(isWebFrameEnvelope(stored.label)).toBe(true); // but still a web frame
     expect(sourceRefOf(stored.label)).toEqual(stored.ref);
@@ -315,13 +331,22 @@ describe("large sources: label pointer + content-addressed part", () => {
   it("a part whose content does not match the pointer is never read", () => {
     const stored = storeSource(large);
     if (stored.kind !== "part") throw new Error("expected a part");
-    expect(sourceFromPartText(stored.partText.replace("é", "e"), stored.ref)).toBeNull();
+    expect(
+      sourceFromPartText(stored.partText.replace("é", "e"), stored.ref),
+    ).toBeNull();
   });
 
   it("a malformed pointer reads as no pointer", () => {
-    expect(sourceRefOf({ v: 1, data: { ref: { hash: "zz", bytes: 1 } } })).toBeNull();
+    expect(
+      sourceRefOf({ v: 1, data: { ref: { hash: "zz", bytes: 1 } } }),
+    ).toBeNull();
     expect(sourceRefOf({ v: 1, data: { ref: "x" } })).toBeNull();
-    expect(sourceRefOf({ v: 2, data: { ref: { hash: "0123456789abcdef", bytes: 1 } } })).toBeNull();
+    expect(
+      sourceRefOf({
+        v: 2,
+        data: { ref: { hash: "0123456789abcdef", bytes: 1 } },
+      }),
+    ).toBeNull();
     expect(isWebFrameEnvelope(null)).toBe(false);
   });
 });
@@ -337,8 +362,12 @@ describe("the single writer's no-legacy-part marker", () => {
   });
 
   it("an envelope from the earlier writer has none, and the marker is not part of the source", () => {
-    expect(hasNoLegacyPart({ v: 1, data: { html: "<p>x</p>", css: "" } })).toBe(false);
+    expect(hasNoLegacyPart({ v: 1, data: { html: "<p>x</p>", css: "" } })).toBe(
+      false,
+    );
     expect(hasNoLegacyPart(null)).toBe(false);
-    expect(sourceFromEnvelope(envelopeFor(DEFAULT_SOURCE))).toEqual(DEFAULT_SOURCE);
+    expect(sourceFromEnvelope(envelopeFor(DEFAULT_SOURCE))).toEqual(
+      DEFAULT_SOURCE,
+    );
   });
 });

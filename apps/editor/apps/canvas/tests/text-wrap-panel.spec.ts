@@ -176,7 +176,9 @@ test.describe("Phase 5 — Text Wrap panel", () => {
 
       const read = async (path: string) => {
         const props = await dbg.client!.elementProperties(target);
-        return props?.entries.find((e) => e.path === path)?.value?.value ?? null;
+        return (
+          props?.entries.find((e) => e.path === path)?.value?.value ?? null
+        );
       };
 
       // Establish a known mode so invert's mode-preservation is
@@ -266,7 +268,9 @@ test.describe("Phase 5 — Text Wrap panel", () => {
 
       const read = async (path: string) => {
         const props = await dbg.client!.elementProperties(target);
-        return props?.entries.find((e) => e.path === path)?.value?.value ?? null;
+        return (
+          props?.entries.find((e) => e.path === path)?.value?.value ?? null
+        );
       };
 
       // Establish a contour wrap so the contour options are meaningful.

@@ -87,7 +87,12 @@ describe("renderWebFrame — the not-loaded path (W-01)", () => {
     expect(a).toEqual(b);
     // garbage geometry must not throw (the seam never crashes)
     expect(() =>
-      renderWebFrame({ html: "", css: "", frameWidthPt: NaN, frameHeightPt: -1 }),
+      renderWebFrame({
+        html: "",
+        css: "",
+        frameWidthPt: NaN,
+        frameHeightPt: -1,
+      }),
     ).not.toThrow();
   });
 
@@ -134,7 +139,9 @@ describe("renderWebFlow — the not-loaded path (ADR-020 rung 2)", () => {
     expect(() =>
       renderWebFlow({ flowId: "x", html: "", css: "", frames: [] }),
     ).not.toThrow();
-    expect(renderWebFlow({ flowId: "x", html: "", css: "", frames: [] }).frames).toEqual([]);
+    expect(
+      renderWebFlow({ flowId: "x", html: "", css: "", frames: [] }).frames,
+    ).toEqual([]);
   });
 
   it("never fakes a render — every frame's layer stays strictly null", () => {
@@ -142,7 +149,9 @@ describe("renderWebFlow — the not-loaded path (ADR-020 rung 2)", () => {
       flowId: "s",
       html: "<p>lots of threaded content</p>".repeat(50),
       css: "p { font-size: 99px }",
-      frames: [{ frameId: "s", order: 0, frameWidthPt: 1000, frameHeightPt: 1000 }],
+      frames: [
+        { frameId: "s", order: 0, frameWidthPt: 1000, frameHeightPt: 1000 },
+      ],
     });
     expect(r.frames.every((f) => f.sceneLayer === null)).toBe(true);
   });

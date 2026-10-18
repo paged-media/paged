@@ -51,7 +51,15 @@ export const NUMBER_FORMAT_PRESETS: { label: string; code: string }[] = [
   { label: "Text (@)", code: "@" },
 ];
 
-const BORDER_STYLES = ["thin", "medium", "thick", "dashed", "dotted", "double", "hair"];
+const BORDER_STYLES = [
+  "thin",
+  "medium",
+  "thick",
+  "dashed",
+  "dotted",
+  "double",
+  "hair",
+];
 const H_ALIGNS = ["general", "left", "center", "right", "justify"];
 const V_ALIGNS = ["bottom", "center", "top"];
 
@@ -87,7 +95,8 @@ export function FormatSection(props: {
 }): ReactElement {
   const { session, styles: st, openProperties } = props;
   const [msg, setMsg] = useState<string | null>(null);
-  const report = (r: SessionResult, done: string) => setMsg(r.ok ? done : r.message);
+  const report = (r: SessionResult, done: string) =>
+    setMsg(r.ok ? done : r.message);
 
   const target = session.formatTarget();
   const cur = session.styleAtTarget();
@@ -98,7 +107,8 @@ export function FormatSection(props: {
   const [width, setWidth] = useState("");
   const [height, setHeight] = useState("");
 
-  const apply = (patch: CellStylePatch, done: string) => report(session.setStyle(patch), done);
+  const apply = (patch: CellStylePatch, done: string) =>
+    report(session.setStyle(patch), done);
   const edge: EdgeStyle = { style: borderStyle, color: borderColor };
   const borders = (kind: BorderKind, done: string) =>
     report(session.setBorders(kind, edge), done);
@@ -107,7 +117,9 @@ export function FormatSection(props: {
   const summary = cur
     ? [
         cur.numFmt,
-        [cur.fontName, cur.fontSize ? `${cur.fontSize} pt` : null].filter(Boolean).join(" "),
+        [cur.fontName, cur.fontSize ? `${cur.fontSize} pt` : null]
+          .filter(Boolean)
+          .join(" "),
         cur.bold ? "bold" : null,
         cur.italic ? "italic" : null,
         cur.underline ? "underline" : null,
@@ -131,32 +143,69 @@ export function FormatSection(props: {
       )}
 
       {openProperties ? (
-        <p data-sheet-fmt-pointer style={{ ...st.body, margin: "var(--space-1, 4px) 0 0" }}>
+        <p
+          data-sheet-fmt-pointer
+          style={{ ...st.body, margin: "var(--space-1, 4px) 0 0" }}
+        >
           Number format, font, fill, alignment and iterative calculation are in{" "}
-          <button type="button" data-sheet-open-properties onClick={openProperties} style={linkButton}>
+          <button
+            type="button"
+            data-sheet-open-properties
+            onClick={openProperties}
+            style={linkButton}
+          >
             Sheet properties
           </button>
           .
         </p>
       ) : (
-        <DuplicatedFormatRows session={session} styles={st} apply={apply} report={report} />
+        <DuplicatedFormatRows
+          session={session}
+          styles={st}
+          apply={apply}
+          report={report}
+        />
       )}
 
       {/* Borders. */}
       <div style={st.row}>
-        <select data-sheet-fmt-border-style value={borderStyle} aria-label="Border style"
-          onChange={(e) => setBorderStyle(e.target.value)} style={st.input}>
+        <select
+          data-sheet-fmt-border-style
+          value={borderStyle}
+          aria-label="Border style"
+          onChange={(e) => setBorderStyle(e.target.value)}
+          style={st.input}
+        >
           {BORDER_STYLES.map((b) => (
             <option key={b} value={b}>
               {labelOf(b)}
             </option>
           ))}
         </select>
-        <input data-sheet-fmt-border-color type="color" value={borderColor}
-          onChange={(e) => setBorderColor(e.target.value)} title="Border colour" />
-        {(["all", "outline", "top", "bottom", "left", "right", "none"] as const).map((k) => (
-          <button key={k} type="button" data-sheet-fmt-border={k} style={st.button}
-            onClick={() => borders(k, k === "none" ? "Borders removed." : `${labelOf(k)} borders applied.`)}>
+        <input
+          data-sheet-fmt-border-color
+          type="color"
+          value={borderColor}
+          onChange={(e) => setBorderColor(e.target.value)}
+          title="Border colour"
+        />
+        {(
+          ["all", "outline", "top", "bottom", "left", "right", "none"] as const
+        ).map((k) => (
+          <button
+            key={k}
+            type="button"
+            data-sheet-fmt-border={k}
+            style={st.button}
+            onClick={() =>
+              borders(
+                k,
+                k === "none"
+                  ? "Borders removed."
+                  : `${labelOf(k)} borders applied.`,
+              )
+            }
+          >
             {labelOf(k)}
           </button>
         ))}
@@ -164,50 +213,116 @@ export function FormatSection(props: {
 
       <div style={st.kicker}>Layout</div>
       <div style={st.row}>
-        <button type="button" data-sheet-merge style={st.button}
-          onClick={() => report(session.mergeTarget(), "Merged.")}>
+        <button
+          type="button"
+          data-sheet-merge
+          style={st.button}
+          onClick={() => report(session.mergeTarget(), "Merged.")}
+        >
           Merge
         </button>
-        <button type="button" data-sheet-unmerge style={st.button}
-          onClick={() => report(session.unmergeTarget(), "Unmerged.")}>
+        <button
+          type="button"
+          data-sheet-unmerge
+          style={st.button}
+          onClick={() => report(session.unmergeTarget(), "Unmerged.")}
+        >
           Unmerge
         </button>
-        <button type="button" data-sheet-freeze style={st.button} aria-pressed={frozen}
-          onClick={() => report(session.toggleFreeze(), frozen ? "Panes unfrozen." : "Panes frozen.")}>
-          {frozen ? `Unfreeze (${layout!.freezeRows} × ${layout!.freezeCols})` : "Freeze panes"}
+        <button
+          type="button"
+          data-sheet-freeze
+          style={st.button}
+          aria-pressed={frozen}
+          onClick={() =>
+            report(
+              session.toggleFreeze(),
+              frozen ? "Panes unfrozen." : "Panes frozen.",
+            )
+          }
+        >
+          {frozen
+            ? `Unfreeze (${layout!.freezeRows} × ${layout!.freezeCols})`
+            : "Freeze panes"}
         </button>
       </div>
       <div style={st.row}>
-        <input data-sheet-col-width type="number" min={0} max={255} value={width}
-          placeholder="Width (ch)" aria-label="Column width in characters"
-          onChange={(e) => setWidth(e.target.value)} style={{ ...st.input, width: 80 }} />
-        <button type="button" data-sheet-col-width-set style={st.button} disabled={!width.trim()}
+        <input
+          data-sheet-col-width
+          type="number"
+          min={0}
+          max={255}
+          value={width}
+          placeholder="Width (ch)"
+          aria-label="Column width in characters"
+          onChange={(e) => setWidth(e.target.value)}
+          style={{ ...st.input, width: 80 }}
+        />
+        <button
+          type="button"
+          data-sheet-col-width-set
+          style={st.button}
+          disabled={!width.trim()}
           title={width.trim() ? undefined : "Enter a width first"}
-          onClick={() => report(session.setColumnWidth(Number(width)), "Column width set.")}>
+          onClick={() =>
+            report(session.setColumnWidth(Number(width)), "Column width set.")
+          }
+        >
           Set width
         </button>
-        <button type="button" data-sheet-col-width-reset style={st.button}
-          onClick={() => report(session.setColumnWidth(null), "Column width reset.")}>
+        <button
+          type="button"
+          data-sheet-col-width-reset
+          style={st.button}
+          onClick={() =>
+            report(session.setColumnWidth(null), "Column width reset.")
+          }
+        >
           Default
         </button>
       </div>
       <div style={st.row}>
-        <input data-sheet-row-height type="number" min={0} max={409} value={height}
-          placeholder="Height (pt)" aria-label="Row height in points"
-          onChange={(e) => setHeight(e.target.value)} style={{ ...st.input, width: 80 }} />
-        <button type="button" data-sheet-row-height-set style={st.button} disabled={!height.trim()}
+        <input
+          data-sheet-row-height
+          type="number"
+          min={0}
+          max={409}
+          value={height}
+          placeholder="Height (pt)"
+          aria-label="Row height in points"
+          onChange={(e) => setHeight(e.target.value)}
+          style={{ ...st.input, width: 80 }}
+        />
+        <button
+          type="button"
+          data-sheet-row-height-set
+          style={st.button}
+          disabled={!height.trim()}
           title={height.trim() ? undefined : "Enter a height first"}
-          onClick={() => report(session.setRowHeight(Number(height)), "Row height set.")}>
+          onClick={() =>
+            report(session.setRowHeight(Number(height)), "Row height set.")
+          }
+        >
           Set height
         </button>
-        <button type="button" data-sheet-row-height-reset style={st.button}
-          onClick={() => report(session.setRowHeight(null), "Row height reset.")}>
+        <button
+          type="button"
+          data-sheet-row-height-reset
+          style={st.button}
+          onClick={() =>
+            report(session.setRowHeight(null), "Row height reset.")
+          }
+        >
           Default
         </button>
       </div>
 
       {msg && (
-        <div data-sheet-format-msg role="status" style={{ ...st.body, marginTop: 4 }}>
+        <div
+          data-sheet-format-msg
+          role="status"
+          style={{ ...st.body, marginTop: 4 }}
+        >
           {msg}
         </div>
       )}
@@ -262,7 +377,9 @@ function DuplicatedFormatRows(props: {
           type="button"
           data-sheet-fmt-numfmt-apply
           style={st.button}
-          onClick={() => apply({ numFmt: custom.trim() || preset }, "Number format applied.")}
+          onClick={() =>
+            apply({ numFmt: custom.trim() || preset }, "Number format applied.")
+          }
         >
           Number format
         </button>
@@ -270,29 +387,68 @@ function DuplicatedFormatRows(props: {
 
       {/* Font. */}
       <div style={st.row}>
-        <button type="button" data-sheet-fmt-bold style={{ ...st.button, fontWeight: 700 }}
-          aria-pressed={!!cur?.bold} aria-label="Bold" title="Bold"
-          onClick={() => apply({ bold: !cur?.bold }, "Bold toggled.")}>
+        <button
+          type="button"
+          data-sheet-fmt-bold
+          style={{ ...st.button, fontWeight: 700 }}
+          aria-pressed={!!cur?.bold}
+          aria-label="Bold"
+          title="Bold"
+          onClick={() => apply({ bold: !cur?.bold }, "Bold toggled.")}
+        >
           B
         </button>
-        <button type="button" data-sheet-fmt-italic style={{ ...st.button, fontStyle: "italic" }}
-          aria-pressed={!!cur?.italic} aria-label="Italic" title="Italic"
-          onClick={() => apply({ italic: !cur?.italic }, "Italic toggled.")}>
+        <button
+          type="button"
+          data-sheet-fmt-italic
+          style={{ ...st.button, fontStyle: "italic" }}
+          aria-pressed={!!cur?.italic}
+          aria-label="Italic"
+          title="Italic"
+          onClick={() => apply({ italic: !cur?.italic }, "Italic toggled.")}
+        >
           I
         </button>
-        <button type="button" data-sheet-fmt-underline style={{ ...st.button, textDecoration: "underline" }}
-          aria-pressed={!!cur?.underline} aria-label="Underline" title="Underline"
-          onClick={() => apply({ underline: !cur?.underline }, "Underline toggled.")}>
+        <button
+          type="button"
+          data-sheet-fmt-underline
+          style={{ ...st.button, textDecoration: "underline" }}
+          aria-pressed={!!cur?.underline}
+          aria-label="Underline"
+          title="Underline"
+          onClick={() =>
+            apply({ underline: !cur?.underline }, "Underline toggled.")
+          }
+        >
           U
         </button>
-        <input data-sheet-fmt-font-name type="text" value={fontName} placeholder={cur?.fontName ?? "Font"}
+        <input
+          data-sheet-fmt-font-name
+          type="text"
+          value={fontName}
+          placeholder={cur?.fontName ?? "Font"}
           aria-label="Font name"
-          onChange={(e) => setFontName(e.target.value)} style={{ ...st.input, width: 90 }} />
-        <input data-sheet-fmt-font-size type="number" min={1} max={409} value={fontSize}
-          placeholder={cur?.fontSize ? String(cur.fontSize) : "pt"} aria-label="Font size in points"
-          onChange={(e) => setFontSize(e.target.value)} style={{ ...st.input, width: 48 }} />
-        <input data-sheet-fmt-font-color type="color" value={fontColor}
-          onChange={(e) => setFontColor(e.target.value)} title="Text colour" />
+          onChange={(e) => setFontName(e.target.value)}
+          style={{ ...st.input, width: 90 }}
+        />
+        <input
+          data-sheet-fmt-font-size
+          type="number"
+          min={1}
+          max={409}
+          value={fontSize}
+          placeholder={cur?.fontSize ? String(cur.fontSize) : "pt"}
+          aria-label="Font size in points"
+          onChange={(e) => setFontSize(e.target.value)}
+          style={{ ...st.input, width: 48 }}
+        />
+        <input
+          data-sheet-fmt-font-color
+          type="color"
+          value={fontColor}
+          onChange={(e) => setFontColor(e.target.value)}
+          title="Text colour"
+        />
         <button
           type="button"
           data-sheet-fmt-font-apply
@@ -314,46 +470,91 @@ function DuplicatedFormatRows(props: {
 
       {/* Fill. */}
       <div style={st.row}>
-        <input data-sheet-fmt-fill type="color" value={fill} onChange={(e) => setFill(e.target.value)}
-          title="Fill colour" />
-        <button type="button" data-sheet-fmt-fill-apply style={st.button}
-          onClick={() => apply({ fill }, "Fill applied.")}>
+        <input
+          data-sheet-fmt-fill
+          type="color"
+          value={fill}
+          onChange={(e) => setFill(e.target.value)}
+          title="Fill colour"
+        />
+        <button
+          type="button"
+          data-sheet-fmt-fill-apply
+          style={st.button}
+          onClick={() => apply({ fill }, "Fill applied.")}
+        >
           Fill
         </button>
-        <button type="button" data-sheet-fmt-fill-clear style={st.button}
-          onClick={() => apply({ fill: "" }, "Fill cleared.")}>
+        <button
+          type="button"
+          data-sheet-fmt-fill-clear
+          style={st.button}
+          onClick={() => apply({ fill: "" }, "Fill cleared.")}
+        >
           No fill
         </button>
       </div>
 
       {/* Alignment + wrap. */}
       <div style={st.row}>
-        <select data-sheet-fmt-halign value={cur?.hAlign ?? "general"} aria-label="Horizontal alignment"
-          onChange={(e) => apply({ hAlign: e.target.value }, "Alignment applied.")} style={st.input}>
+        <select
+          data-sheet-fmt-halign
+          value={cur?.hAlign ?? "general"}
+          aria-label="Horizontal alignment"
+          onChange={(e) =>
+            apply({ hAlign: e.target.value }, "Alignment applied.")
+          }
+          style={st.input}
+        >
           {H_ALIGNS.map((a) => (
             <option key={a} value={a}>
               {labelOf(a)}
             </option>
           ))}
         </select>
-        <select data-sheet-fmt-valign value={cur?.vAlign ?? "bottom"} aria-label="Vertical alignment"
-          onChange={(e) => apply({ vAlign: e.target.value }, "Vertical alignment applied.")}
-          style={st.input}>
+        <select
+          data-sheet-fmt-valign
+          value={cur?.vAlign ?? "bottom"}
+          aria-label="Vertical alignment"
+          onChange={(e) =>
+            apply({ vAlign: e.target.value }, "Vertical alignment applied.")
+          }
+          style={st.input}
+        >
           {V_ALIGNS.map((a) => (
             <option key={a} value={a}>
               {labelOf(a)}
             </option>
           ))}
         </select>
-        <label style={{ ...st.body, display: "flex", alignItems: "center", gap: 4 }}>
-          <input data-sheet-fmt-wrap type="checkbox" checked={!!cur?.wrap}
-            onChange={(e) => apply({ wrap: e.target.checked }, e.target.checked ? "Wrap on." : "Wrap off.")} />
+        <label
+          style={{ ...st.body, display: "flex", alignItems: "center", gap: 4 }}
+        >
+          <input
+            data-sheet-fmt-wrap
+            type="checkbox"
+            checked={!!cur?.wrap}
+            onChange={(e) =>
+              apply(
+                { wrap: e.target.checked },
+                e.target.checked ? "Wrap on." : "Wrap off.",
+              )
+            }
+          />
           Wrap
         </label>
       </div>
 
       {/* Iterative calculation (a workbook setting; Sheet properties ▸ Workbook). */}
-      <label style={{ ...st.body, display: "flex", gap: 6, alignItems: "center", marginTop: "var(--space-1, 4px)" }}>
+      <label
+        style={{
+          ...st.body,
+          display: "flex",
+          gap: 6,
+          alignItems: "center",
+          marginTop: "var(--space-1, 4px)",
+        }}
+      >
         <input
           data-sheet-iterative
           type="checkbox"
@@ -361,7 +562,9 @@ function DuplicatedFormatRows(props: {
           onChange={(e) =>
             report(
               session.setIterative(e.target.checked),
-              e.target.checked ? "Iterative calculation on." : "Iterative calculation off.",
+              e.target.checked
+                ? "Iterative calculation on."
+                : "Iterative calculation off.",
             )
           }
         />
@@ -378,7 +581,8 @@ export function NamesSection(props: {
 }): ReactElement {
   const { session, styles: st } = props;
   const [msg, setMsg] = useState<string | null>(null);
-  const report = (r: SessionResult, done: string) => setMsg(r.ok ? done : r.message);
+  const report = (r: SessionResult, done: string) =>
+    setMsg(r.ok ? done : r.message);
   const target = session.formatTarget();
   const names = session.names();
   const [nameNew, setNameNew] = useState("");
@@ -388,44 +592,96 @@ export function NamesSection(props: {
   return (
     <div data-sheet-names-section>
       <div style={st.row}>
-        <input data-sheet-name-new type="text" value={nameNew} placeholder="Name" aria-label="Name"
-          onChange={(e) => setNameNew(e.target.value)} style={{ ...st.input, width: 90 }} />
-        <input data-sheet-name-refers type="text" value={nameRefers}
-          placeholder={target?.range ?? "A1:B5"} aria-label="Refers to (range)"
-          onChange={(e) => setNameRefers(e.target.value)} style={{ ...st.input, width: 90 }} />
-        <label style={{ ...st.body, display: "flex", alignItems: "center", gap: 4 }}>
-          <input data-sheet-name-local type="checkbox" checked={nameLocal}
-            onChange={(e) => setNameLocal(e.target.checked)} />
+        <input
+          data-sheet-name-new
+          type="text"
+          value={nameNew}
+          placeholder="Name"
+          aria-label="Name"
+          onChange={(e) => setNameNew(e.target.value)}
+          style={{ ...st.input, width: 90 }}
+        />
+        <input
+          data-sheet-name-refers
+          type="text"
+          value={nameRefers}
+          placeholder={target?.range ?? "A1:B5"}
+          aria-label="Refers to (range)"
+          onChange={(e) => setNameRefers(e.target.value)}
+          style={{ ...st.input, width: 90 }}
+        />
+        <label
+          style={{ ...st.body, display: "flex", alignItems: "center", gap: 4 }}
+        >
+          <input
+            data-sheet-name-local
+            type="checkbox"
+            checked={nameLocal}
+            onChange={(e) => setNameLocal(e.target.checked)}
+          />
           This sheet only
         </label>
-        <button type="button" data-sheet-name-define style={st.button} disabled={!nameNew.trim()}
+        <button
+          type="button"
+          data-sheet-name-define
+          style={st.button}
+          disabled={!nameNew.trim()}
           title={nameNew.trim() ? undefined : "Enter a name first"}
           onClick={() =>
             report(
-              session.defineName(nameNew, nameRefers.trim() || undefined, nameLocal),
+              session.defineName(
+                nameNew,
+                nameRefers.trim() || undefined,
+                nameLocal,
+              ),
               `Name ${nameNew.trim()} defined.`,
             )
-          }>
+          }
+        >
           Define
         </button>
       </div>
       {names.length > 0 && (
-        <ul data-sheet-names style={{ ...st.body, margin: "4px 0 0", paddingLeft: 16 }}>
+        <ul
+          data-sheet-names
+          style={{ ...st.body, margin: "4px 0 0", paddingLeft: 16 }}
+        >
           {names.map((n) => (
             <li key={`${n.name}:${n.scope ?? "wb"}`}>
-              <span style={{ fontFamily: "var(--font-mono, monospace)" }}>{n.name}</span>
+              <span style={{ fontFamily: "var(--font-mono, monospace)" }}>
+                {n.name}
+              </span>
               {n.scope != null ? " (this sheet)" : ""} = {n.refersTo}{" "}
-              <button type="button" data-sheet-name-place={n.name} style={st.button}
+              <button
+                type="button"
+                data-sheet-name-place={n.name}
+                style={st.button}
                 title="Place this range on the page"
                 onClick={() =>
-                  void session.placeName(n.name).then((id) =>
-                    setMsg(id ? `Placed ${n.name} on the page.` : `${n.name} does not name a range.`),
-                  )
-                }>
+                  void session
+                    .placeName(n.name)
+                    .then((id) =>
+                      setMsg(
+                        id
+                          ? `Placed ${n.name} on the page.`
+                          : `${n.name} does not name a range.`,
+                      ),
+                    )
+                }
+              >
                 Place
               </button>{" "}
-              <button type="button" data-sheet-name-delete={n.name} style={st.button}
-                onClick={() => report(session.deleteName(n.name, n.scope ?? null), `Name ${n.name} deleted.`)}>
+              <button
+                type="button"
+                data-sheet-name-delete={n.name}
+                style={st.button}
+                onClick={() =>
+                  report(
+                    session.deleteName(n.name, n.scope ?? null),
+                    `Name ${n.name} deleted.`,
+                  )
+                }
+              >
                 Delete
               </button>
             </li>
@@ -433,7 +689,11 @@ export function NamesSection(props: {
         </ul>
       )}
       {msg && (
-        <div data-sheet-names-msg role="status" style={{ ...st.body, marginTop: 4 }}>
+        <div
+          data-sheet-names-msg
+          role="status"
+          style={{ ...st.body, marginTop: 4 }}
+        >
           {msg}
         </div>
       )}

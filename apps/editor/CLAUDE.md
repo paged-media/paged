@@ -14,8 +14,8 @@ PM-0001; it was MPL-2.0 OR PMEL before). (This repo was proprietary / All-Rights
 until 2026-06-22, when it was opened.)
 
 - **License headers apply to every source file** (AGPL Exhibit-style notice
-  + PMEL, pointing at LICENSE.md). New source files carry it — copy it
-  verbatim from the top of any existing source file, or see `CONTRIBUTING.md`.
+  - PMEL, pointing at LICENSE.md). New source files carry it — copy it
+    verbatim from the top of any existing source file, or see `CONTRIBUTING.md`.
 - This repo consumes the engine **across a package boundary** — the
   published `@paged-media` wasm/SDK packages — **never** a Rust path
   dependency, and never reaches into core's source tree.
@@ -161,9 +161,7 @@ the clean-room icon system, and the cockpit UI kit
   before.
 - **`bun fmt` formats everything; CI checks it.** Run
   `tooling/js/fmt.sh` (or let the pre-commit hook format what you stage);
-  `/.prettierignore` lists what it leaves alone, with the reasons. Until
-  the one-time mass format is on main (docs/migration/bun-fmt.md), run it
-  on the files you change only.
+  `/.prettierignore` lists what it leaves alone, with the reasons.
 - **Comments earn their place** — narrate the WHY for a non-obvious
   IDML/wasm/SAB constraint or a worked-around upstream bug; otherwise
   let the code speak.

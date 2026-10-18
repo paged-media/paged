@@ -903,7 +903,12 @@ export function repeatBatchFor(args: {
       // Make Compound Path uses, now reachable in the SAME batch. It
       // stores the table as given, where `insertPath` added the page's
       // origin: so the page-space table gets that origin too.
-      ops.push(framePathMutationFor(keep, spreadTableOf(moved, plan.pageOrigin ?? SPREAD_ORIGIN)));
+      ops.push(
+        framePathMutationFor(
+          keep,
+          spreadTableOf(moved, plan.pageOrigin ?? SPREAD_ORIGIN),
+        ),
+      );
       for (let c = 1; c < contours.length; c++) {
         ops.push({
           op: "deleteFrame",
@@ -1275,13 +1280,11 @@ function recipeInstanceAlive(
   host: BundleHost,
   entry: { kind: string; id: string },
 ): Promise<boolean> {
-  return linkIndex(host).cached(
-    `repeat:alive:${entry.kind}:${entry.id}`,
-    () =>
-      host.document
-        .elementGeometry([{ kind: entry.kind, id: entry.id } as ElementId])
-        .then((geo) => geo.length > 0)
-        .catch(() => false),
+  return linkIndex(host).cached(`repeat:alive:${entry.kind}:${entry.id}`, () =>
+    host.document
+      .elementGeometry([{ kind: entry.kind, id: entry.id } as ElementId])
+      .then((geo) => geo.length > 0)
+      .catch(() => false),
   );
 }
 
@@ -1367,9 +1370,7 @@ export async function repeatGenerationOf(
   return {
     // The tree the links were just read from — the same revision, so the
     // same tree, and not a second read of it.
-    group: anchor
-      ? groupHolding(await linkIndex(host).tree(), anchor)
-      : null,
+    group: anchor ? groupHolding(await linkIndex(host).tree(), anchor) : null,
     instances: links.instances.map((i) => i.id),
     clipFrame,
     clipped: clipFrame !== null,
@@ -1574,7 +1575,10 @@ async function emitRepeat(
     ? (bound?.byHandle.get(REPEAT_CLIP_HANDLE) ?? null)
     : null;
   let group = bound?.groups[0] ?? null;
-  if (instances.some((id) => id === undefined) || (plan.clipRect && !clipFrame)) {
+  if (
+    instances.some((id) => id === undefined) ||
+    (plan.clipRect && !clipFrame)
+  ) {
     // The repeat IS built, and the engine's account does not match the
     // batch. Every piece carries its link and nothing is pasted in yet,
     // so the tree still shows all of it: ask the document.

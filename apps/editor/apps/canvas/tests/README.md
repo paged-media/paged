@@ -29,9 +29,9 @@ BACKEND=gpu npm run test:fidelity
 Output lands in `/tmp/paged-canvas-fidelity/<pack>/`:
 
 - `cand-NNN.png` — canvas snapshot for page N
-- `ref-NNN.png`  — `pdftoppm`-rasterised reference PDF page N
+- `ref-NNN.png` — `pdftoppm`-rasterised reference PDF page N
 - `heat-NNN.png` — ΔE heatmap (peak red ≈ ΔE 5)
-- `pack.json`    — per-page mean ΔE / p99 ΔE / SSIM + worst-of-pack
+- `pack.json` — per-page mean ΔE / p99 ΔE / SSIM + worst-of-pack
 
 `/tmp/paged-canvas-fidelity/results.json` rolls every pack into one
 file for downstream analysis. `corpus/config/canvas-fidelity-thresholds.json`
@@ -39,13 +39,13 @@ is the gate spec — captured by `npm run test:fidelity:capture`.
 
 ## Environment
 
-| Var                 | Default                          | Meaning                                                                       |
-| ------------------- | -------------------------------- | ----------------------------------------------------------------------------- |
-| `FIDELITY_DPI`      | `144`                            | Resolution. Mirrors `corpus/harness/test.sh`'s `IDML_ENVATO_DPI`.              |
-| `FIDELITY_OUT`      | `/tmp/paged-canvas-fidelity`      | Output root.                                                                  |
-| `FIDELITY_PACKS`    | (all non-skip)                   | Comma- or space-separated pack-name subset.                                   |
-| `FIDELITY_MODE`     | `gate`                           | `gate` fails gated packs on threshold violation; `capture` writes baseline JSON; `advisory` logs only. |
-| `BACKEND`           | `cpu`                            | `gpu` routes per-page renders through the Vello WebGPU readback path. Forces headed Chromium + `--enable-unsafe-webgpu --use-vulkan` flags. Falls back to CPU if the adapter request fails. |
+| Var              | Default                      | Meaning                                                                                                                                                                                     |
+| ---------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `FIDELITY_DPI`   | `144`                        | Resolution. Mirrors `corpus/harness/test.sh`'s `IDML_ENVATO_DPI`.                                                                                                                           |
+| `FIDELITY_OUT`   | `/tmp/paged-canvas-fidelity` | Output root.                                                                                                                                                                                |
+| `FIDELITY_PACKS` | (all non-skip)               | Comma- or space-separated pack-name subset.                                                                                                                                                 |
+| `FIDELITY_MODE`  | `gate`                       | `gate` fails gated packs on threshold violation; `capture` writes baseline JSON; `advisory` logs only.                                                                                      |
+| `BACKEND`        | `cpu`                        | `gpu` routes per-page renders through the Vello WebGPU readback path. Forces headed Chromium + `--enable-unsafe-webgpu --use-vulkan` flags. Falls back to CPU if the adapter request fails. |
 
 ## Architecture
 

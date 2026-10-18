@@ -53,7 +53,10 @@ import {
 import { F1_MULTI_SHAPE } from "../fixtures/corpus";
 import { openHost } from "./host";
 
-const RECT = { kind: "rectangle", id: F1_MULTI_SHAPE.ids.rectangle! } as ElementId;
+const RECT = {
+  kind: "rectangle",
+  id: F1_MULTI_SHAPE.ids.rectangle!,
+} as ElementId;
 
 const STACK: AppearanceStack = {
   fills: [
@@ -129,8 +132,12 @@ describe("draw conformance — Appearance panel", () => {
 
   it("the inline note NAMES both states and what the bake costs (gap B-24)", () => {
     // UNBAKED — the one-slot reality: only the front-most layer renders.
-    expect(APPEARANCE_BAKE_NOTE).toContain("only the front-most fill and stroke render");
-    expect(APPEARANCE_BAKE_NOTE).toContain("one fill and one stroke of its own");
+    expect(APPEARANCE_BAKE_NOTE).toContain(
+      "only the front-most fill and stroke render",
+    );
+    expect(APPEARANCE_BAKE_NOTE).toContain(
+      "one fill and one stroke of its own",
+    );
     expect(APPEARANCE_BAKE_NOTE).toContain("saved with the file but not drawn");
     // BAKED — real stacked page items that render, reach a PDF and
     // survive an IDML save with their modifiers.
@@ -140,13 +147,19 @@ describe("draw conformance — Appearance panel", () => {
     expect(APPEARANCE_BAKE_NOTE).toContain("tint, opacity and blend mode");
     // …and the costs that are STILL real, none of them hidden.
     expect(APPEARANCE_BAKE_NOTE).toContain("The object then becomes a group");
-    expect(APPEARANCE_BAKE_NOTE).toContain("editing the stack rebuilds the group's paths");
-    expect(APPEARANCE_BAKE_NOTE).toContain("places the group above the page's other items");
+    expect(APPEARANCE_BAKE_NOTE).toContain(
+      "editing the stack rebuilds the group's paths",
+    );
+    expect(APPEARANCE_BAKE_NOTE).toContain(
+      "places the group above the page's other items",
+    );
     // …and the claim the engine fix RETIRED: Release is no longer a
     // prerequisite for saving. Pinned as a NEGATIVE so the old wording
     // cannot creep back in.
     expect(APPEARANCE_BAKE_NOTE).not.toContain("does not save back to IDML");
-    expect(APPEARANCE_BAKE_NOTE).toContain("You do not need to release before saving");
+    expect(APPEARANCE_BAKE_NOTE).toContain(
+      "You do not need to release before saving",
+    );
   });
 
   describe("against the real engine (F1 rectangle)", () => {

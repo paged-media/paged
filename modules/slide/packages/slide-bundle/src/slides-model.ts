@@ -66,7 +66,9 @@ export interface Slide {
 
 /** The slide state in a page's plugin metadata, or empty. A value that is
  *  not the engine's envelope is ignored rather than trusted. */
-export function parseState(meta: readonly PluginMetadataEntry[] | undefined): SlideState {
+export function parseState(
+  meta: readonly PluginMetadataEntry[] | undefined,
+): SlideState {
   const entry = meta?.find((m) => m.key === SLIDE_KEY);
   if (!entry) return {};
   try {
@@ -99,21 +101,36 @@ export function encodeState(state: SlideState): string | null {
 }
 
 /** Write a slide's whole state (one undoable step). */
-export function setStateMutation(pageId: string, state: SlideState): MutationInput {
+export function setStateMutation(
+  pageId: string,
+  state: SlideState,
+): MutationInput {
   return {
     op: "setPageMetadata",
-    args: { page: pageId, key: SLIDE_KEY, value: encodeState(state), caller: SLIDE_CALLER },
+    args: {
+      page: pageId,
+      key: SLIDE_KEY,
+      value: encodeState(state),
+      caller: SLIDE_CALLER,
+    },
   };
 }
 
 /** Move `pageId` so it lands at position `to` (0-based) of `order`. */
-export function moveMutation(order: readonly string[], pageId: string, to: number): MutationInput | null {
+export function moveMutation(
+  order: readonly string[],
+  pageId: string,
+  to: number,
+): MutationInput | null {
   const from = order.indexOf(pageId);
   if (from < 0) return null;
   const rest = order.filter((p) => p !== pageId);
   const at = Math.max(0, Math.min(to, rest.length));
   if (at === from) return null;
-  return { op: "movePage", args: { page: pageId, after: at === 0 ? null : rest[at - 1] } };
+  return {
+    op: "movePage",
+    args: { page: pageId, after: at === 0 ? null : rest[at - 1] },
+  };
 }
 
 export function duplicateMutation(pageId: string): MutationInput {
@@ -226,7 +243,9 @@ export class SlidesStore {
     } catch {
       pages = [];
     }
-    this.deck = pages.some((p) => p.pluginMetadata?.some((m) => m.key === SLIDE_KEY));
+    this.deck = pages.some((p) =>
+      p.pluginMetadata?.some((m) => m.key === SLIDE_KEY),
+    );
     this.slides = pages.map((p, i) => ({
       pageId: p.selfId,
       number: i + 1,
@@ -263,7 +282,9 @@ export class SlidesStore {
 }
 
 function defaultUrl(png: Uint8Array): string {
-  return URL.createObjectURL(new Blob([png as Uint8Array<ArrayBuffer>], { type: "image/png" }));
+  return URL.createObjectURL(
+    new Blob([png as Uint8Array<ArrayBuffer>], { type: "image/png" }),
+  );
 }
 
 function defaultRevoke(url: string): void {
@@ -280,28 +301,42 @@ export interface Layout {
 
 /** The layouts new slides can be made from: every master spread a slide
  *  records as its layout, named as the deck named it. */
-export async function layouts(host: BundleHost, slides: readonly Slide[]): Promise<Layout[]> {
+export async function layouts(
+  host: BundleHost,
+  slides: readonly Slide[],
+): Promise<Layout[]> {
   let masters: readonly { selfId: string; label: string }[] = [];
   try {
-    masters = await host.document.collection<{ selfId: string; label: string }>("masterPages");
+    masters = await host.document.collection<{ selfId: string; label: string }>(
+      "masterPages",
+    );
   } catch {
     masters = [];
   }
   const out: Layout[] = [];
   for (const m of masters) {
     const template = slides.find((s) => s.state.layout === m.selfId);
-    if (template) out.push({ masterId: m.selfId, name: m.label, templatePageId: template.pageId });
+    if (template)
+      out.push({
+        masterId: m.selfId,
+        name: m.label,
+        templatePageId: template.pageId,
+      });
   }
   return out;
 }
 
 /** Whether a scene-tree item is one of a layout's placeholders. */
-function isPlaceholder(meta: readonly PluginMetadataEntry[] | undefined): boolean {
+function isPlaceholder(
+  meta: readonly PluginMetadataEntry[] | undefined,
+): boolean {
   const entry = meta?.find((m) => m.key === SLIDE_KEY);
   if (!entry) return false;
   try {
     const env = JSON.parse(entry.value) as { data?: { placeholder?: unknown } };
-    return typeof env.data?.placeholder === "object" && env.data.placeholder !== null;
+    return (
+      typeof env.data?.placeholder === "object" && env.data.placeholder !== null
+    );
   } catch {
     return false;
   }
@@ -309,10 +344,15 @@ function isPlaceholder(meta: readonly PluginMetadataEntry[] | undefined): boolea
 
 /** The length of a story in the text-editing unit: UTF-8 bytes, plus one
  *  per paragraph break. */
-function storyLength(content: { paragraphs: { runs: { text: string }[] }[] }): number {
+function storyLength(content: {
+  paragraphs: { runs: { text: string }[] }[];
+}): number {
   const enc = new TextEncoder();
   return content.paragraphs.reduce(
-    (n, p, i) => n + (i > 0 ? 1 : 0) + p.runs.reduce((m, r) => m + enc.encode(r.text).length, 0),
+    (n, p, i) =>
+      n +
+      (i > 0 ? 1 : 0) +
+      p.runs.reduce((m, r) => m + enc.encode(r.text).length, 0),
     0,
   );
 }
@@ -353,14 +393,17 @@ export async function newSlide(
   const tree = (await doc.tree()) as TreeNode[];
   const items = tree[index]?.children?.[0]?.children ?? [];
   const placeholders = new Set(
-    items.filter((n) => n.id && isPlaceholder(n.pluginMetadata)).map((n) => n.id!.id),
+    items
+      .filter((n) => n.id && isPlaceholder(n.pluginMetadata))
+      .map((n) => n.id!.id),
   );
 
   // The copy's stories and the frames they flow in.
   const storyOf = new Map<string, string>();
   for (const s of await doc.collection<{ selfId: string }>("stories")) {
     if (storiesBefore.has(s.selfId)) continue;
-    for (const link of await doc.frameChain(s.selfId)) storyOf.set(link.frameId, s.selfId);
+    for (const link of await doc.frameChain(s.selfId))
+      storyOf.set(link.frameId, s.selfId);
   }
 
   const ops: MutationInput[] = [];
@@ -374,12 +417,15 @@ export async function newSlide(
     if (!story) continue;
     const content = await doc.storyContent(story);
     const end = content ? storyLength(content) : 0;
-    if (end > 0) ops.push({ op: "deleteRange", args: { storyId: story, start: 0, end } });
+    if (end > 0)
+      ops.push({ op: "deleteRange", args: { storyId: story, start: 0, end } });
   }
   // A new slide has no notes and is shown; it keeps its layout.
   ops.push(setStateMutation(pageId, { layout: layout.masterId }));
   const order = pages.map((p) => p.selfId);
-  const target = afterPageId ? order.filter((p) => p !== pageId).indexOf(afterPageId) + 1 : order.length - 1;
+  const target = afterPageId
+    ? order.filter((p) => p !== pageId).indexOf(afterPageId) + 1
+    : order.length - 1;
   const move = moveMutation(order, pageId, target);
   if (move) ops.push(move);
 

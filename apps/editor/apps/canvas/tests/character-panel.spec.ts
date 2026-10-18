@@ -234,9 +234,9 @@ test.describe("Phase 3 — Character panel (declarative composition)", () => {
       };
 
       const readOtf = async () => {
-        const json = await dbg.client!.executeScript(
-          `paged.inspect(${JSON.stringify(addr)});`,
-        ).then((r) => r.output[0] ?? "");
+        const json = await dbg
+          .client!.executeScript(`paged.inspect(${JSON.stringify(addr)});`)
+          .then((r) => r.output[0] ?? "");
         const inspect = JSON.parse(json) as {
           entries: Array<{
             path: string;

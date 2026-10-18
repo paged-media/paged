@@ -23,7 +23,11 @@
 // commit, "Bind to data…" on every field). The bundle declares fields, never
 // widgets; the outline panel stays as it is.
 
-import type { BundleHost, Disposable, PanelSchema } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  Disposable,
+  PanelSchema,
+} from "@paged-media/plugin-api";
 import { propertyRows, publishObjectList } from "@paged-media/plugin-sdk";
 
 import { PANEL_FIELDS, PLUGIN_ID } from "../object-model.js";
@@ -46,7 +50,9 @@ export const BIND = {
 } as const;
 
 const paths = (kind: string, group: string) =>
-  PANEL_FIELDS.filter((f) => `plugin:${PLUGIN_ID}/${f.kind}` === kind && f.group === group).map((f) => f.path);
+  PANEL_FIELDS.filter(
+    (f) => `plugin:${PLUGIN_ID}/${f.kind}` === kind && f.group === group,
+  ).map((f) => f.path);
 
 const list = (rows: string, select: string) => ({
   widget: "paged.list",
@@ -75,7 +81,9 @@ export const DOC_PROPERTIES_PANEL: PanelSchema = {
       rows: [
         ...propertyRows(DOCUMENT, paths(DOCUMENT, "Mail merge"), "selection"),
         list(BIND.mergeFields, BIND.mergeField),
-        ...propertyRows(MERGE_FIELD, paths(MERGE_FIELD, "Mail merge"), { bind: BIND.mergeField }),
+        ...propertyRows(MERGE_FIELD, paths(MERGE_FIELD, "Mail merge"), {
+          bind: BIND.mergeField,
+        }),
       ],
     },
     {
@@ -89,7 +97,10 @@ export const DOC_PROPERTIES_PANEL: PanelSchema = {
     {
       title: "Run",
       collapsible: true,
-      rows: [list(BIND.runs, BIND.run), ...propertyRows(RUN, paths(RUN, "Run"), { bind: BIND.run })],
+      rows: [
+        list(BIND.runs, BIND.run),
+        ...propertyRows(RUN, paths(RUN, "Run"), { bind: BIND.run }),
+      ],
     },
   ],
 };

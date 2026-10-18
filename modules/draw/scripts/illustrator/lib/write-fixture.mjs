@@ -21,12 +21,16 @@ try {
   fail(`Illustrator's reply is not JSON (${e.message})`);
 }
 if (reply.error) fail(`the probe failed before its cases: ${reply.error}`);
-if (reply.close_error) fail(`the scratch document did not close: ${reply.close_error}`);
-if (reply.probe !== name) fail(`the reply is for probe "${reply.probe}", not "${name}"`);
+if (reply.close_error)
+  fail(`the scratch document did not close: ${reply.close_error}`);
+if (reply.probe !== name)
+  fail(`the reply is for probe "${reply.probe}", not "${name}"`);
 if (reply.units !== "pt") fail(`units are "${reply.units}", not "pt"`);
 if (!Array.isArray(reply.cases) || reply.cases.length === 0) fail("no cases");
 if (reply.documents_after !== reply.documents_before) {
-  fail(`${reply.documents_before} document(s) before, ${reply.documents_after} after`);
+  fail(
+    `${reply.documents_before} document(s) before, ${reply.documents_after} after`,
+  );
 }
 const broken = reply.cases.filter((c) => c.error);
 if (broken.length > 0) {
@@ -35,7 +39,9 @@ if (broken.length > 0) {
       broken.map((c) => `    ${c.id}: ${c.error}`).join("\n"),
   );
 }
-const empty = reply.cases.filter((c) => !c.measured || c.measured.paths.length === 0);
+const empty = reply.cases.filter(
+  (c) => !c.measured || c.measured.paths.length === 0,
+);
 if (empty.length > 0) {
   fail(`cases with NO resulting path: ${empty.map((c) => c.id).join(", ")}`);
 }
@@ -67,18 +73,31 @@ const fixture = {
 // reflowed blob.
 const compact = (v) => JSON.stringify(v);
 const lines = ["{"];
-for (const key of ["fixture", "produced_by", "units", "coordinates", "operation"]) {
-  lines.push(`  ${JSON.stringify(key)}: ${JSON.stringify(fixture[key], null, 2).replace(/\n/g, "\n  ")},`);
+for (const key of [
+  "fixture",
+  "produced_by",
+  "units",
+  "coordinates",
+  "operation",
+]) {
+  lines.push(
+    `  ${JSON.stringify(key)}: ${JSON.stringify(fixture[key], null, 2).replace(/\n/g, "\n  ")},`,
+  );
 }
 lines.push('  "cases": [');
 const pathLines = (p, indent) => {
   const { anchors, ...rest } = p;
-  const head = Object.entries(rest).map(([k, v]) => `${JSON.stringify(k)}: ${compact(v)}`);
+  const head = Object.entries(rest).map(
+    ([k, v]) => `${JSON.stringify(k)}: ${compact(v)}`,
+  );
   return [
     `${indent}{`,
     ...head.map((h) => `${indent}  ${h},`),
     `${indent}  "anchors": [`,
-    ...anchors.map((a, i) => `${indent}    ${compact(a)}${i + 1 < anchors.length ? "," : ""}`),
+    ...anchors.map(
+      (a, i) =>
+        `${indent}    ${compact(a)}${i + 1 < anchors.length ? "," : ""}`,
+    ),
     `${indent}  ]`,
     `${indent}}`,
   ];
@@ -89,7 +108,11 @@ const block = (label, paths, indent, last) => {
     if (i + 1 < paths.length) ls[ls.length - 1] += ",";
     return ls;
   });
-  return [`${indent}${JSON.stringify(label)}: { "paths": [`, ...body, `${indent}] }${last ? "" : ","}`];
+  return [
+    `${indent}${JSON.stringify(label)}: { "paths": [`,
+    ...body,
+    `${indent}] }${last ? "" : ","}`,
+  ];
 };
 fixture.cases.forEach((c, i) => {
   lines.push("    {");
@@ -106,7 +129,11 @@ const norm = (v) =>
   Array.isArray(v)
     ? v.map(norm)
     : v && typeof v === "object"
-      ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, norm(v[k])]))
+      ? Object.fromEntries(
+          Object.keys(v)
+            .sort()
+            .map((k) => [k, norm(v[k])]),
+        )
       : v;
 if (JSON.stringify(norm(JSON.parse(text))) !== JSON.stringify(norm(fixture))) {
   fail("internal: the formatted fixture does not round-trip");

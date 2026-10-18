@@ -106,9 +106,9 @@ jobs:
 
       - name: build paged-diff + paged-inspect + paged-gen
         run: cargo build --release
-             -p paged-fidelity --bin paged-diff
-             -p paged-renderer --bin paged-inspect
-             -p paged-gen --bin paged-gen
+          -p paged-fidelity --bin paged-diff
+          -p paged-renderer --bin paged-inspect
+          -p paged-gen --bin paged-gen
 
       - name: golden-snapshot regression gate
         # Renders the seed_hello fixture and ΔE-diffs every page

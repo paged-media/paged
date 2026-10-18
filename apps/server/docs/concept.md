@@ -21,24 +21,24 @@ endpoint** and a **relay** between Claude and an open editor tab.
 
 ## 2. Lineage
 
-| From | Kept | Dropped |
-|---|---|---|
-| editor-server | problem+json errors, cursor paging, schema-first contracts, "bucket holds bytes, DB holds truth", GDPR export/erasure, M7's "offline-first stays ground truth" | Fastify/Node, Drizzle, better-auth, Stripe, font proxy, image search, `/generate`, opaque-file `files` table, delete-on-replace "versioning" |
-| governed-repository design | content addressing with domain-separated BLAKE3; blobs + commits + refs + evidence as the only authority; draft = branch; published = release; size-threshold blob split with verify-on-read; one writer per repository; agent provenance; agents contribute through branch → change request; policy as governed data that fails closed; writes are audited by commits, reads/refusals by evidence; derivatives addressed by recipe; repository = unit of operation | Raft, Cedar (v1), the full canonical binary format, Pimcore element model, workflow/calendar suite |
+| From                       | Kept                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Dropped                                                                                                                                      |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| editor-server              | problem+json errors, cursor paging, schema-first contracts, "bucket holds bytes, DB holds truth", GDPR export/erasure, M7's "offline-first stays ground truth"                                                                                                                                                                                                                                                                                                      | Fastify/Node, Drizzle, better-auth, Stripe, font proxy, image search, `/generate`, opaque-file `files` table, delete-on-replace "versioning" |
+| governed-repository design | content addressing with domain-separated BLAKE3; blobs + commits + refs + evidence as the only authority; draft = branch; published = release; size-threshold blob split with verify-on-read; one writer per repository; agent provenance; agents contribute through branch → change request; policy as governed data that fails closed; writes are audited by commits, reads/refusals by evidence; derivatives addressed by recipe; repository = unit of operation | Raft, Cedar (v1), the full canonical binary format, Pimcore element model, workflow/calendar suite                                           |
 
 ## 3. Topology (Cloudflare, all Rust on workers-rs)
 
 One Worker (`paged-server`, crate `paged-server`, `worker` crate, wasm32), four Durable
 Object classes on SQLite storage, one R2 bucket. No KV.
 
-| Piece | Holds | Why this shape |
-|---|---|---|
-| **Worker** | routing, auth, `/v1` sync + projections, `/mcp`, `/oauth`, `/.well-known/*`, WebSocket upgrade, MCP App HTML | stateless; fans out to DOs by id |
-| **DO `Repo`** (one per repository) | `objects(hash, kind, size, loc, data)` (≤ 64 KiB inline), `refs(name, hash, updated_by, ts)`, `change_requests`, `evidence(seq, hash, entry)`; GC on alarm | one writer per repository → ref compare-and-set is atomic for free; SQLite point-in-time recovery |
-| **DO `Workspace`** (one per org) | members + roles, policy (versioned, itself governed), repo directory, agent definitions (accountable human, autonomy), service tokens, OAuth grants | the policy decision point for every Repo |
-| **DO `Session`** (one per live editor tab) | hibernating WebSocket to the tab, pending relayed calls, presence | the browser ↔ Claude proxy |
-| **R2 `paged-objects`** | objects > 64 KiB at `r/<repo>/<hash>` | free egress; per-repo prefix = delete-a-repo is one prefix delete |
-| **DO `AuthObject`** (one) | OAuth clients, pending logins, one-time codes, rotating refresh tokens | strongly consistent: a code is spent exactly once (KV could not promise that); access tokens are HMAC-signed and need no lookup |
+| Piece                                      | Holds                                                                                                                                                      | Why this shape                                                                                                                  |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| **Worker**                                 | routing, auth, `/v1` sync + projections, `/mcp`, `/oauth`, `/.well-known/*`, WebSocket upgrade, MCP App HTML                                               | stateless; fans out to DOs by id                                                                                                |
+| **DO `Repo`** (one per repository)         | `objects(hash, kind, size, loc, data)` (≤ 64 KiB inline), `refs(name, hash, updated_by, ts)`, `change_requests`, `evidence(seq, hash, entry)`; GC on alarm | one writer per repository → ref compare-and-set is atomic for free; SQLite point-in-time recovery                               |
+| **DO `Workspace`** (one per org)           | members + roles, policy (versioned, itself governed), repo directory, agent definitions (accountable human, autonomy), service tokens, OAuth grants        | the policy decision point for every Repo                                                                                        |
+| **DO `Session`** (one per live editor tab) | hibernating WebSocket to the tab, pending relayed calls, presence                                                                                          | the browser ↔ Claude proxy                                                                                                      |
+| **R2 `paged-objects`**                     | objects > 64 KiB at `r/<repo>/<hash>`                                                                                                                      | free egress; per-repo prefix = delete-a-repo is one prefix delete                                                               |
+| **DO `AuthObject`** (one)                  | OAuth clients, pending logins, one-time codes, rotating refresh tokens                                                                                     | strongly consistent: a code is spent exactly once (KV could not promise that); access tokens are HMAC-signed and need no lookup |
 
 Not used in v1: D1, Queues, Containers, Hyperdrive, Workflows. Each is a later lane (§9).
 
@@ -143,16 +143,16 @@ them from secrets and proxy fetches, Postgres included through Hyperdrive.
 
 ## 9. Phases and status (2026-10-18)
 
-| Phase | Delivers | Status |
-|---|---|---|
-| P0 | core ADR 180, the format spec, this concept | done |
-| P1 | `paged-repo` (core) | done: round trip of 34 IDMLs; engine digests equal for 93 documents after a repository round trip |
-| P2 | editor local library: save = version, history, restore, releases | done (editor ADR 225) |
-| P3 | Worker + Repo DO + R2, push/pull, OIDC/OAuth sign-in, editor push/pull | done (ADR 950, 951) |
-| P4 | Workspace DO, policy as governed data, change requests | done |
-| P5 | MCP on `/mcp`, `paged mcp` on stdio | done (ADR 952) |
-| P6 | live relay (Session DO, editor bridge), MCP App view | done |
-| P7 | headless engine lane; sealed, deflated storage; collection, snapshots, erasure; datasets and `paged://` | done (ADR 953). Element-level model storage is proposal 181. Hyperdrive data sources are deferred (proposal 954) |
+| Phase | Delivers                                                                                                | Status                                                                                                           |
+| ----- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| P0    | core ADR 180, the format spec, this concept                                                             | done                                                                                                             |
+| P1    | `paged-repo` (core)                                                                                     | done: round trip of 34 IDMLs; engine digests equal for 93 documents after a repository round trip                |
+| P2    | editor local library: save = version, history, restore, releases                                        | done (editor ADR 225)                                                                                            |
+| P3    | Worker + Repo DO + R2, push/pull, OIDC/OAuth sign-in, editor push/pull                                  | done (ADR 950, 951)                                                                                              |
+| P4    | Workspace DO, policy as governed data, change requests                                                  | done                                                                                                             |
+| P5    | MCP on `/mcp`, `paged mcp` on stdio                                                                     | done (ADR 952)                                                                                                   |
+| P6    | live relay (Session DO, editor bridge), MCP App view                                                    | done                                                                                                             |
+| P7    | headless engine lane; sealed, deflated storage; collection, snapshots, erasure; datasets and `paged://` | done (ADR 953). Element-level model storage is proposal 181. Hyperdrive data sources are deferred (proposal 954) |
 
 All of it is local: nothing is deployed and no branch is pushed. Production still needs a
 Cloudflare account, the bucket, the container image, an OpenID provider and secrets.

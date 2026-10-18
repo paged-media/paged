@@ -60,7 +60,13 @@ export async function build(ctx: PageContext): Promise<PageReport> {
 
   // ── the field, the bleed band, the sheet ─────────────────────────
   elements.push(
-    await plate(ctx, page, [0, 0, 540, 720], SWATCH.paperWarm, LAYER.background),
+    await plate(
+      ctx,
+      page,
+      [0, 0, 540, 720],
+      SWATCH.paperWarm,
+      LAYER.background,
+    ),
   );
   // The bleed band: a Vermilion 20% ring — the sheet plate covers all
   // but the 9 pt between bleed edge and trim.
@@ -225,38 +231,43 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   await doc.mutate("batch", { ops: styleOps });
 
   // ── the labels ───────────────────────────────────────────────────
-  const label = async (
-    x: number,
-    text: string,
-    width = 96,
-  ): Promise<void> => {
-    const f = await proseFrame(ctx, page, [x - width / 2, 56, x + width / 2, 84], [
-      { text, style: STYLE.specValue },
-    ]);
+  const label = async (x: number, text: string, width = 96): Promise<void> => {
+    const f = await proseFrame(
+      ctx,
+      page,
+      [x - width / 2, 56, x + width / 2, 84],
+      [{ text, style: STYLE.specValue }],
+    );
     elements.push(f.frameId);
   };
   await label(150, "trim rule");
   await label(255, "bleed · 9 pt");
   await label(430, "crop marks");
-  const regLabel = await proseFrame(ctx, page, [60, 316, 200, 344], [
-    { text: "registration", style: STYLE.specValue },
-  ]);
+  const regLabel = await proseFrame(
+    ctx,
+    page,
+    [60, 316, 200, 344],
+    [{ text: "registration", style: STYLE.specValue }],
+  );
   elements.push(regLabel.frameId);
 
   // ── the account ──────────────────────────────────────────────────
-  const account = await proseFrame(ctx, page, [120, 380, 420, 600], [
-    { text: "The sheet, annotated", style: STYLE.head2 },
-    {
-      text:
-        "Every page of this annual is a 540 × 720 pt sheet, and this one draws the press apparatus on itself: the Slate trim rule, the tinted nine-point bleed band outside it, crop marks held five points off the bleed, and the registration targets a press aligns its plates by — three of them, the fourth edge ceded to this book's own apparatus band below. Nothing here is decoration borrowed from a template — each mark is a native line, circle or rectangle this page minted over the wire.",
-      style: STYLE.bodyFirst,
-    },
-    {
-      text:
-        "And every one of them is a depiction. A page render stops at its own trim, so the anatomy is drawn 36 points in, where it can be seen. The real marks are minted outside the trim by the export door — exportPdf carries cropMarks, registrationMarks, colorBars and bleedOverridePt — in the assembly's PDF/X-4 press pass, on the finished book, where a proof belongs.",
-      style: STYLE.body,
-    },
-  ]);
+  const account = await proseFrame(
+    ctx,
+    page,
+    [120, 380, 420, 600],
+    [
+      { text: "The sheet, annotated", style: STYLE.head2 },
+      {
+        text: "Every page of this annual is a 540 × 720 pt sheet, and this one draws the press apparatus on itself: the Slate trim rule, the tinted nine-point bleed band outside it, crop marks held five points off the bleed, and the registration targets a press aligns its plates by — three of them, the fourth edge ceded to this book's own apparatus band below. Nothing here is decoration borrowed from a template — each mark is a native line, circle or rectangle this page minted over the wire.",
+        style: STYLE.bodyFirst,
+      },
+      {
+        text: "And every one of them is a depiction. A page render stops at its own trim, so the anatomy is drawn 36 points in, where it can be seen. The real marks are minted outside the trim by the export door — exportPdf carries cropMarks, registrationMarks, colorBars and bleedOverridePt — in the assembly's PDF/X-4 press pass, on the finished book, where a proof belongs.",
+        style: STYLE.body,
+      },
+    ],
+  );
   elements.push(account.frameId);
 
   elements.push(

@@ -74,7 +74,10 @@ export function handleElementId(
  *  Rectangle / Oval / Polygon. The child keeps its document-space
  *  geometry (nothing moves on canvas) and renders CLIPPED by the
  *  container's outline. */
-export function pasteIntoMutationFor(containerId: ElementId, childId: ElementId): Mutation {
+export function pasteIntoMutationFor(
+  containerId: ElementId,
+  childId: ElementId,
+): Mutation {
   return { op: "pasteInto", args: { containerId, childId } };
 }
 

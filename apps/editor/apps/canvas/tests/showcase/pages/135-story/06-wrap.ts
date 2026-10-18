@@ -98,17 +98,25 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const page = p(39);
   const elements: string[] = [];
 
-  const head = await prose(ctx, page, [48, 104, 480, 130], [
-    { text: "The wrap catalog", style: STYLE.head1 },
-  ]);
+  const head = await prose(
+    ctx,
+    page,
+    [48, 104, 480, 130],
+    [{ text: "The wrap catalog", style: STYLE.head1 }],
+  );
   elements.push(head.frameId);
 
   // ── the backdrop: two columns of prose that everything pushes ─────
-  const backdrop = await prose(ctx, page, [48, 150, 480, 470], [
-    { text: WRAP_TEXT_A, style: STYLE.bodySmall },
-    { text: WRAP_TEXT_B, style: STYLE.bodySmall },
-    { text: WRAP_TEXT_C, style: STYLE.bodySmall },
-  ]);
+  const backdrop = await prose(
+    ctx,
+    page,
+    [48, 150, 480, 470],
+    [
+      { text: WRAP_TEXT_A, style: STYLE.bodySmall },
+      { text: WRAP_TEXT_B, style: STYLE.bodySmall },
+      { text: WRAP_TEXT_C, style: STYLE.bodySmall },
+    ],
+  );
   elements.push(backdrop.frameId);
   await doc.batch([
     {
@@ -148,14 +156,19 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     "frameBounds",
   );
   if (!stored || stored.type !== "bounds") {
-    throw new Error("the island polygon reports no frameBounds to anchor the hole");
+    throw new Error(
+      "the island polygon reports no frameBounds to anchor the hole",
+    );
   }
   const [sTop, sLeft] = stored.value as [number, number, number, number];
   const minX = Math.min(...OUTER.map((pt) => pt[0]));
   const minY = Math.min(...OUTER.map((pt) => pt[1]));
   const ox = sLeft - minX;
   const oy = sTop - minY;
-  const shift = (pt: [number, number]): [number, number] => [pt[0] + ox, pt[1] + oy];
+  const shift = (pt: [number, number]): [number, number] => [
+    pt[0] + ox,
+    pt[1] + oy,
+  ];
   await doc.setProperty("polygon", island, "framePath", {
     type: "framePath",
     value: {
@@ -200,12 +213,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   elements.push(inverse.frameId, inverseTile);
 
   // ── ONE batch: every wrap declaration at once ─────────────────────
-  const wrapSet = (
-    kind: string,
-    id: string,
-    path: string,
-    value: unknown,
-  ) => ({
+  const wrapSet = (kind: string, id: string, path: string, value: unknown) => ({
     op: "setElementProperty",
     args: { elementId: { kind, id }, path, value },
   });

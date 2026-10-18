@@ -73,7 +73,10 @@ async function leaves(h: HeadlessHost): Promise<ElementId[]> {
   return out;
 }
 
-async function until(predicate: () => Promise<boolean>, what: string): Promise<void> {
+async function until(
+  predicate: () => Promise<boolean>,
+  what: string,
+): Promise<void> {
   for (let i = 0; i < 400; i++) {
     if (await predicate()) return;
     await new Promise((r) => setTimeout(r, 5));
@@ -86,17 +89,34 @@ const swatch = (name: string) => `Color/sb-${name}`;
 
 /** Mint two swatches and fill each element with its own — so where a piece
  *  of the result came from can be read off its paint. */
-async function paint(h: HeadlessHost, fills: [ElementId, string][]): Promise<void> {
-  const rgb: Record<string, [number, number, number]> = { red: [255, 0, 0], blue: [0, 0, 255] };
+async function paint(
+  h: HeadlessHost,
+  fills: [ElementId, string][],
+): Promise<void> {
+  const rgb: Record<string, [number, number, number]> = {
+    red: [255, 0, 0],
+    blue: [0, 0, 255],
+  };
   for (const [id, name] of fills) {
     const made = await h.host.document.mutate({
       op: "createSwatch",
-      args: { spec: { selfId: swatch(name), name: swatch(name), space: "RGB", value: rgb[name] } },
+      args: {
+        spec: {
+          selfId: swatch(name),
+          name: swatch(name),
+          space: "RGB",
+          value: rgb[name],
+        },
+      },
     } as never);
     expect(made.applied, `createSwatch ${name}`).toBe(true);
     const filled = await h.host.document.mutate({
       op: "setElementProperty",
-      args: { elementId: id, path: "frameFillColor", value: { type: "colorRef", value: swatch(name) } },
+      args: {
+        elementId: id,
+        path: "frameFillColor",
+        value: { type: "colorRef", value: swatch(name) },
+      },
     });
     expect(filled.applied, `fill ${key(id)}`).toBe(true);
   }
@@ -105,8 +125,7 @@ async function paint(h: HeadlessHost, fills: [ElementId, string][]): Promise<voi
 async function fillOf(h: HeadlessHost, id: ElementId): Promise<string | null> {
   const props = await h.host.document.elementProperties(id);
   const v = props?.entries.find((e) => e.path === "frameFillColor")?.value as
-    | { type: string; value: string | null }
-    | undefined;
+    { type: string; value: string | null } | undefined;
   return v?.type === "colorRef" ? v.value : null;
 }
 
@@ -122,23 +141,48 @@ async function elementsAt(h: HeadlessHost, point: [number, number]) {
       const [g] = await h.host.document.elementGeometry([id]);
       if (!g || id.kind !== "rectangle") continue;
       const [top, left, bottom, right] = g.bounds;
-      const c = (x: number, y: number) => ({ anchor: [x, y] as [number, number], left: [x, y] as [number, number], right: [x, y] as [number, number] });
-      t = { id, anchors: [c(left, top), c(right, top), c(right, bottom), c(left, bottom)], subpathStarts: [0], itemTransform: g.itemTransform ?? null };
+      const c = (x: number, y: number) => ({
+        anchor: [x, y] as [number, number],
+        left: [x, y] as [number, number],
+        right: [x, y] as [number, number],
+      });
+      t = {
+        id,
+        anchors: [
+          c(left, top),
+          c(right, top),
+          c(right, bottom),
+          c(left, bottom),
+        ],
+        subpathStarts: [0],
+        itemTransform: g.itemTransform ?? null,
+      };
     }
     const m = t.itemTransform ?? [1, 0, 0, 1, 0, 0];
     const at = (p: [number, number]): [number, number] => [
       m[0] * p[0] + m[2] * p[1] + m[4],
       m[1] * p[0] + m[3] * p[1] + m[5],
     ];
-    const anchors = t.anchors.map((a) => ({ anchor: at(a.anchor), left: at(a.left), right: at(a.right) }));
-    if (pointInAnchorPath(point, anchors, t.subpathStarts)) out.push({ id, anchors: t.anchors.length });
+    const anchors = t.anchors.map((a) => ({
+      anchor: at(a.anchor),
+      left: at(a.left),
+      right: at(a.right),
+    }));
+    if (pointInAnchorPath(point, anchors, t.subpathStarts))
+      out.push({ id, anchors: t.anchors.length });
   }
   return out;
 }
 
 /** Drag the live handler from `from` to `to` (a move every 2 pt), wait for
  *  the commit to land. */
-async function build(h: HeadlessHost, inputs: ElementId[], from: [number, number], to: [number, number], alt = false) {
+async function build(
+  h: HeadlessHost,
+  inputs: ElementId[],
+  from: [number, number],
+  to: [number, number],
+  alt = false,
+) {
   await h.host.selection.set(inputs);
   const handler = createShapeBuilderHandler(h.host);
   handler.onActivate(undefined as never);
@@ -149,7 +193,12 @@ async function build(h: HeadlessHost, inputs: ElementId[], from: [number, number
   const steps = Math.ceil(Math.hypot(to[0] - from[0], to[1] - from[1]) / 2);
   for (let i = 1; i < steps; i++) {
     const t = i / steps;
-    handler.onPointerMove(pointer([from[0] + (to[0] - from[0]) * t, from[1] + (to[1] - from[1]) * t], alt));
+    handler.onPointerMove(
+      pointer(
+        [from[0] + (to[0] - from[0]) * t, from[1] + (to[1] - from[1]) * t],
+        alt,
+      ),
+    );
   }
   await new Promise((r) => setTimeout(r, 30));
   // The commit is the first change applied after the release (a probe the
@@ -219,8 +268,13 @@ describe("Shape Builder on a cross-shaped overlap — the regions it does not cr
       const hits = await elementsAt(h, at);
       expect(hits.length, `${where} vanished`).toBeGreaterThan(0);
       // Not part of the merged path: the drag never crossed it.
-      expect(hits.every((x) => !merged || key(x.id) !== key(merged)), `${where} was merged`).toBe(true);
-      expect(await fillOf(h, hits[0].id), `${where}'s paint`).toBe(swatch(fill));
+      expect(
+        hits.every((x) => !merged || key(x.id) !== key(merged)),
+        `${where} was merged`,
+      ).toBe(true);
+      expect(await fillOf(h, hits[0].id), `${where}'s paint`).toBe(
+        swatch(fill),
+      );
     }
   });
 
@@ -230,19 +284,26 @@ describe("Shape Builder on a cross-shaped overlap — the regions it does not cr
     await h.host.document.undo();
     expect((await leaves(h)).map(key).sort()).toEqual(before);
     expect(await fillOf(h, H)).toBe(swatch("red"));
-    expect((await elementsAt(h, RIGHT)).map((x) => key(x.id))).toEqual([key(H)]);
+    expect((await elementsAt(h, RIGHT)).map((x) => key(x.id))).toEqual([
+      key(H),
+    ]);
   });
 
   it("an Alt-drag over the left arm deletes that arm and nothing else", async () => {
     await build(h, [H, V], [110, 385], [180, 385], true);
     expect(await elementsAt(h, LEFT), "the left arm is gone").toHaveLength(0);
     for (const at of [TOP, CENTRE, RIGHT, BOTTOM]) {
-      expect((await elementsAt(h, at)).length, `${at} vanished`).toBeGreaterThan(0);
+      expect(
+        (await elementsAt(h, at)).length,
+        `${at} vanished`,
+      ).toBeGreaterThan(0);
     }
     // The vertical bar was never touched: it is still one whole bar, over
     // the centre as before...
     expect((await elementsAt(h, TOP)).map((x) => key(x.id))).toContain(key(V));
-    expect((await elementsAt(h, BOTTOM)).map((x) => key(x.id))).toContain(key(V));
+    expect((await elementsAt(h, BOTTOM)).map((x) => key(x.id))).toContain(
+      key(V),
+    );
     // ...and the horizontal bar keeps what is left of it, in its own paint
     // (the engine's `remove` alone united everything left into one shape,
     // repainting the right arm in the vertical bar's colour).
@@ -280,10 +341,17 @@ describe("Shape Builder over ovals — merges the curve, not the bounding box [p
     expect(merged, "the merged region").toHaveLength(1);
     expect(await fillOf(h, merged[0].id)).toBe(swatch("blue"));
     // A's box corner is NOT in the result: the curve was merged.
-    expect(await elementsAt(h, [110, 110]), "a bounding-box corner was merged").toHaveLength(0);
+    expect(
+      await elementsAt(h, [110, 110]),
+      "a bounding-box corner was merged",
+    ).toHaveLength(0);
     // The lens is part of it, and so is the curve's widest point.
-    expect((await elementsAt(h, [250, 200])).map((x) => key(x.id))).toEqual([key(merged[0].id)]);
-    expect((await elementsAt(h, [105, 200])).map((x) => key(x.id))).toEqual([key(merged[0].id)]);
+    expect((await elementsAt(h, [250, 200])).map((x) => key(x.id))).toEqual([
+      key(merged[0].id),
+    ]);
+    expect((await elementsAt(h, [105, 200])).map((x) => key(x.id))).toEqual([
+      key(merged[0].id),
+    ]);
   });
 
   it("B's own crescent stays — a curve in B's paint, its box corner empty", async () => {

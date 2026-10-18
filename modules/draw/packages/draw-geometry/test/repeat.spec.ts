@@ -68,27 +68,27 @@ describe("draw-geometry — REPEAT placements (§12.4)", () => {
 
     it("rotation about a centre leaves that centre fixed", () => {
       const m = affineRotate(37, [50, 70]);
-      expect(nearPoint(applyAffine(m, 50, 70) as [number, number], [50, 70])).toBe(
-        true,
-      );
+      expect(
+        nearPoint(applyAffine(m, 50, 70) as [number, number], [50, 70]),
+      ).toBe(true);
     });
 
     it("reflect(90) is a VERTICAL axis — a left↔right flip", () => {
       const m = affineReflect(90, [10, 0]);
-      expect(nearPoint(applyAffine(m, 30, 5) as [number, number], [-10, 5])).toBe(
-        true,
-      );
+      expect(
+        nearPoint(applyAffine(m, 30, 5) as [number, number], [-10, 5]),
+      ).toBe(true);
       // Points ON the axis do not move.
-      expect(nearPoint(applyAffine(m, 10, 99) as [number, number], [10, 99])).toBe(
-        true,
-      );
+      expect(
+        nearPoint(applyAffine(m, 10, 99) as [number, number], [10, 99]),
+      ).toBe(true);
     });
 
     it("reflect(0) is a HORIZONTAL axis — a top↔bottom flip", () => {
       const m = affineReflect(0, [0, 20]);
-      expect(nearPoint(applyAffine(m, 5, 30) as [number, number], [5, 10])).toBe(
-        true,
-      );
+      expect(
+        nearPoint(applyAffine(m, 5, 30) as [number, number], [5, 10]),
+      ).toBe(true);
     });
 
     it("a reflection REVERSES contour winding — which is why a mirrored compound source is NOT re-wound", () => {
@@ -144,7 +144,9 @@ describe("draw-geometry — REPEAT placements (§12.4)", () => {
       const source = boundsCenter(BOX);
       const center = radialCenterFor(source, 120, -90);
       // The source sits ON the ring at the start angle.
-      expect(nearPoint(radialPointAt(center, 120, -90), source, 1e-9)).toBe(true);
+      expect(nearPoint(radialPointAt(center, 120, -90), source, 1e-9)).toBe(
+        true,
+      );
       // …and placement 0 is the identity, i.e. the source is not re-emitted.
       const placements = radialPlacements({
         count: 4,
@@ -172,9 +174,9 @@ describe("draw-geometry — REPEAT placements (§12.4)", () => {
       });
       // Instance 1 is a quarter turn about the centre.
       const p1 = applyAffine(placements[1].matrix, source[0], source[1]);
-      expect(nearPoint(p1 as [number, number], radialPointAt(center, 100, 90))).toBe(
-        true,
-      );
+      expect(
+        nearPoint(p1 as [number, number], radialPointAt(center, 100, 90)),
+      ).toBe(true);
       // A turn is not a translation: the box's axis-aligned hull grows
       // for a non-multiple-of-90 step…
       const odd = radialPlacements({
@@ -306,7 +308,9 @@ describe("draw-geometry — REPEAT placements (§12.4)", () => {
     it("the normal is (sin θ, −cos θ): +offset moves a VERTICAL axis RIGHT and a HORIZONTAL one UP", () => {
       expect(nearPoint(mirrorAxisNormal(90), [1, 0])).toBe(true);
       expect(nearPoint(mirrorAxisNormal(0), [0, -1])).toBe(true);
-      expect(nearPoint(mirrorOriginFor([50, 50], 90, 50), [100, 50])).toBe(true);
+      expect(nearPoint(mirrorOriginFor([50, 50], 90, 50), [100, 50])).toBe(
+        true,
+      );
       expect(nearPoint(mirrorOriginFor([50, 50], 0, 50), [50, 0])).toBe(true);
     });
 

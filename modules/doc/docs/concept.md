@@ -4,9 +4,9 @@
 
 **Sources (platform truth this design binds to):**
 [ADR-021](https://github.com/paged-media/core/blob/main/docs/adr/021-paged-native-document-model-idml-as-format.md) (Paged-native model; `.paged`
-is a *container of native parts* + one core-owned *composition* part; each content engine stores its
+is a _container of native parts_ + one core-owned _composition_ part; each content engine stores its
 own native format; IDML byte-perfect as a native part) and its addendum (multi-surface renderer/
-compositor; the "native document model" is the *composition* model, small and clean);
+compositor; the "native document model" is the _composition_ model, small and clean);
 [ADR-022](https://github.com/paged-media/plugin-publish/blob/main/docs/adr/022-idml-relocates-to-plugin-publish.md) (format adapters live in plugin repos — `idml-import`/`idml-export` in `plugin-publish`);
 [ADR-017](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/017-importer-exporter-door-shape.md) (K-2 importer door: resolve-by-extension **before** the default IDML load; `import(bytes)` loads into the plugin's own engine and **replaces the load target**; the clean "open into a fresh host document" door — `host.document.open(bytes)` — **does not exist yet**);
 [ADR-020](https://github.com/paged-media/plugin-web/blob/main/docs/adr/020-paged-web-native-engine-defer-frame-threading.md) (the renderer-neutral `FlowId`/region-chain/overset seam "shared with IDML stories"; W-frag rungs 1–2 proven for web);
@@ -22,37 +22,38 @@ compositor; the "native document model" is the *composition* model, small and cl
 
 ## 1. The decision, in one paragraph
 
-*Status note (2026-10-02): this section predates the implementation; see [ADR 600](adr/600-docx-lowered-onto-native-model.md) (the lowering as built), [ADR 601](adr/601-own-package-container.md) (`paged-ooxml` and its use of `ooxmlsdk`) and [ADR 603](adr/603-two-entry-points.md) (the two modes). The two doors named below as open have shipped in the plugin contract as `host.nativeDocument.open` and `host.document.storyContent`, and so has the caret door (`host.text.caret()`).*
+_Status note (2026-10-02): this section predates the implementation; see [ADR 600](adr/600-docx-lowered-onto-native-model.md) (the lowering as built), [ADR 601](adr/601-own-package-container.md) (`paged-ooxml` and its use of `ooxmlsdk`) and [ADR 603](adr/603-two-entry-points.md) (the two modes). The two doors named below as open have shipped in the plugin contract as `host.nativeDocument.open` and `host.document.storyContent`, and so has the caret door (`host.text.caret()`)._
 
 `paged.doc` (npm/bundle id `media.paged.doc`) makes Microsoft Word **`.docx`** a first-class Paged
 content type, in **two symmetric modes**: **(a) embedded** — a Word document placed inside a host
 Paged layout as a content object in a frame (or frame chain); and **(b) standalone** — open a whole
-multi-page `.docx` so that *it is* the canvas and edit it page-by-page with the full editor. The
+multi-page `.docx` so that _it is_ the canvas and edit it page-by-page with the full editor. The
 central bet: **because WordprocessingML is, structurally, the same "styled paragraphs of runs flowing
-across pages" model the engine was built for, `paged.doc` lowers DOCX onto the engine's *native* text
-+ flow stack (`paged-model` `Story`/`Paragraph`/`CharacterRun` → `paged-text` Knuth–Plass → `paged-flow`
-region chains), not onto a forked in-plugin layout engine.** DOCX is parsed and re-serialized through a
-new **shared `paged-ooxml` foundation** (OPC container + typed part DOM over the `ooxmlsdk` crate + a
-preservation invariant), reused by `paged.sheet` and the future `paged.slide` because all three are the
-same ECMA-376 family. The two open platform doors this needs — `host.document.open(bytes)` and a
-whole-document export read — are filed as RFI items; native lowering **avoids** the two gaps that would
-otherwise bite (foreign-flow fragmentation *W-frag*, and the missing caret door *C-9*).
+across pages" model the engine was built for, `paged.doc` lowers DOCX onto the engine's _native_ text
+
+- flow stack (`paged-model` `Story`/`Paragraph`/`CharacterRun` → `paged-text` Knuth–Plass → `paged-flow`
+  region chains), not onto a forked in-plugin layout engine.** DOCX is parsed and re-serialized through a
+  new **shared `paged-ooxml` foundation** (OPC container + typed part DOM over the `ooxmlsdk` crate + a
+  preservation invariant), reused by `paged.sheet` and the future `paged.slide` because all three are the
+  same ECMA-376 family. The two open platform doors this needs — `host.document.open(bytes)` and a
+  whole-document export read — are filed as RFI items; native lowering **avoids** the two gaps that would
+  otherwise bite (foreign-flow fragmentation _W-frag_, and the missing caret door _C-9_).
 
 ---
 
 ## 2. Two modes, and the generalization to every content plugin
 
-*Status note (2026-10-02): this section predates the implementation; see [ADR 603](adr/603-two-entry-points.md). The standalone door shipped as `host.nativeDocument.open`, probed with `supports("document.openNative@1")` (`packages/doc-bundle/src/open.ts:118`).*
+_Status note (2026-10-02): this section predates the implementation; see [ADR 603](adr/603-two-entry-points.md). The standalone door shipped as `host.nativeDocument.open`, probed with `supports("document.openNative@1")` (`packages/doc-bundle/src/open.ts:118`)._
 
 The requirement is explicit and it generalizes: **"the same should be possible for all other
 plugins — either their content is embedded, or they can open that content type alone."** This is not a
-`paged.doc` feature; it is a platform pattern `paged.doc` should be designed to *instantiate cleanly*,
+`paged.doc` feature; it is a platform pattern `paged.doc` should be designed to _instantiate cleanly_,
 so sheet/slide/web/image/data inherit it.
 
-| Mode | What it is | Platform mechanism (today) | The gap |
-|---|---|---|---|
-| **Embedded** | A `.docx` lives in a **frame** of a host `.paged` document, alongside IDML text, images, sheets, etc. | `objectType` + `editContext` (K-1) claim a frame by its metadata; content is either **lowered to native** content in that frame's story/frame-chain, or painted via **C-1 `SceneLayer`**. The doc's bytes persist as a **native part** via `host.parts` (`paged/media.paged.doc/<id>/…`). | None blocking — this is the sheets/web pattern. |
-| **Standalone** | Open a `.docx` and **it becomes the document**: a full composition of pages you edit natively. | K-2 importer (ADR-017) resolves `.docx` by extension **before** the IDML loader and routes bytes to `paged.doc.import()`. | **`host.document.open(bytes)` does not exist.** ADR-017 ships *registration + routing* but explicitly defers the "open into a fresh host document" door. **This is the one door `paged.doc` must land** (RFI **DOC-01**, §9). |
+| Mode           | What it is                                                                                            | Platform mechanism (today)                                                                                                                                                                                                                                                                | The gap                                                                                                                                                                                                                       |
+| -------------- | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Embedded**   | A `.docx` lives in a **frame** of a host `.paged` document, alongside IDML text, images, sheets, etc. | `objectType` + `editContext` (K-1) claim a frame by its metadata; content is either **lowered to native** content in that frame's story/frame-chain, or painted via **C-1 `SceneLayer`**. The doc's bytes persist as a **native part** via `host.parts` (`paged/media.paged.doc/<id>/…`). | None blocking — this is the sheets/web pattern.                                                                                                                                                                               |
+| **Standalone** | Open a `.docx` and **it becomes the document**: a full composition of pages you edit natively.        | K-2 importer (ADR-017) resolves `.docx` by extension **before** the IDML loader and routes bytes to `paged.doc.import()`.                                                                                                                                                                 | **`host.document.open(bytes)` does not exist.** ADR-017 ships _registration + routing_ but explicitly defers the "open into a fresh host document" door. **This is the one door `paged.doc` must land** (RFI **DOC-01**, §9). |
 
 **The generalized contract (proposed platform pattern — RFI DOC-05).** Every content plugin declares,
 in its manifest, up to two faces of the same engine:
@@ -62,36 +63,36 @@ in its manifest, up to two faces of the same engine:
 - an optional **document contribution** — `importer`/`exporter` + the new
   `capabilities.document.openNative` door, the content-as-the-whole-canvas face.
 
-Both faces are the *same* engine and the *same* native part on disk; they differ only in **placement**
+Both faces are the _same_ engine and the _same_ native part on disk; they differ only in **placement**
 — whether the content occupies one region of a host composition or **is** the composition. ADR-021's
-addendum already frames the document as a *multi-surface compositor* over content-type engines, so
+addendum already frames the document as a _multi-surface compositor_ over content-type engines, so
 "embed vs. open" is a placement choice the composition model expresses (a surface/region in a host
 composition, vs. the root composition). `paged.doc` is the cleanest first proof of this symmetry
-because — unlike a spreadsheet grid or a web frame — a Word document is *natively a paginated document*,
+because — unlike a spreadsheet grid or a web frame — a Word document is _natively a paginated document_,
 so the standalone mode is the content type's most natural form.
 
 ---
 
 ## 3. Where `paged.doc` sits — the three precedents it inherits from
 
-*Status note (2026-10-02): this section predates the implementation; see [ADR 404](https://github.com/paged-media/plugin-web/blob/main/docs/adr/404-fragmentation-by-relayout.md) (`plugin-web` has since built fragmentation of one flow across linked frames) and [ADR 102](https://github.com/paged-media/core/blob/main/docs/adr/102-text-stack.md) (the engine's shaper is now harfrust).*
+_Status note (2026-10-02): this section predates the implementation; see [ADR 404](https://github.com/paged-media/plugin-web/blob/main/docs/adr/404-fragmentation-by-relayout.md) (`plugin-web` has since built fragmentation of one flow across linked frames) and [ADR 102](https://github.com/paged-media/core/blob/main/docs/adr/102-text-stack.md) (the engine's shaper is now harfrust)._
 
 1. **`plugin-sheets` — the engine-plugin shape.** Own Rust crates compiling to **one** wasm module; a
    thin TS `*-host-model` doing pure `Lowered → Mutation[]` translation + a `*-bundle` (manifest +
    `activate`); a **preservation invariant** ("Paged never destroys a workbook" — unknown parts kept
    byte-identical, understood-but-untouched parts re-emitted from original bytes); and **two surfaces**
    — compiled to native content (a real `<Table>` via `insertTable`, with live multi-frame pagination
-   across the host frame chain, `plugin-sheets: sheet-lower/src/paginate.rs` + `frameChain()`), *plus* an in-frame C-1 grid
+   across the host frame chain, `plugin-sheets: sheet-lower/src/paginate.rs` + `frameChain()`), _plus_ an in-frame C-1 grid
    with K-1 modal editing. **`paged.doc` copies this shape almost verbatim** — with the crucial
    difference that its "compiled to native content" is not a table, it is **native stories + flow**,
    which the engine already paginates.
 
 2. **`plugin-web` — the foreign flowing-document precedent (and the cautionary tale).** `paged.web`
-   proves the platform can host a *foreign document model* and render it print-correctly by lowering an
+   proves the platform can host a _foreign document model_ and render it print-correctly by lowering an
    in-plugin engine (Blitz/Stylo/Taffy/Parley) to a **C-1 `SceneLayer`**. Its unsolved-hard axis is
    **fragmenting one flow across a linked frame chain** (W-frag; rungs 1–2 proven, a forked engine held
-   as last resort). **`paged.doc` deliberately does *not* repeat this** — see §4: Word's model already
-   *is* the engine's native model, so there is nothing to fork and no foreign fragmentation to solve.
+   as last resort). **`paged.doc` deliberately does _not_ repeat this** — see §4: Word's model already
+   _is_ the engine's native model, so there is nothing to fork and no foreign fragmentation to solve.
 
 3. **`plugin-publish` / `idml-import` + `idml-export` — the format-adapter packaging pattern.** ADR-022
    put IDML/PDF I/O in a plugin repo as `*-import`/`*-export` crates; `idml-export` does **verbatim
@@ -112,9 +113,9 @@ WordprocessingML-shaped stack that predates the Word use case.
 
 ## 4. The core bet — lower DOCX to native, don't fork an engine
 
-*Status note (2026-10-02): this section predates the implementation; see [ADR 600](adr/600-docx-lowered-onto-native-model.md) (what was built: no fixed-render fallback and no `SceneLayer` use; a construct with no native counterpart gets a diagnostic) and [ADR 602](adr/602-save-back-is-a-byte-splice.md) (save-back finds edits by reading the stories back and comparing them with the import baseline, not through back-references stored on native content). The caret door C-9 has since shipped in the plugin contract (`plugin-sdk: packages/plugin-api/src/host.ts`); this plugin does not call it.*
+_Status note (2026-10-02): this section predates the implementation; see [ADR 600](adr/600-docx-lowered-onto-native-model.md) (what was built: no fixed-render fallback and no `SceneLayer` use; a construct with no native counterpart gets a diagnostic) and [ADR 602](adr/602-save-back-is-a-byte-splice.md) (save-back finds edits by reading the stories back and comparing them with the import baseline, not through back-references stored on native content). The caret door C-9 has since shipped in the plugin contract (`plugin-sdk: packages/plugin-api/src/host.ts`); this plugin does not call it._
 
-### 4.1 Why native lowering is right *for Word specifically*
+### 4.1 Why native lowering is right _for Word specifically_
 
 The platform has two proven strategies for foreign content: **lower-to-native** (sheets compiling to a
 native `<Table>`; the engine owns layout) and **foreign-engine-into-C-1** (web running Blitz; the
@@ -124,15 +125,15 @@ native model:**
 - **Web is far.** Arbitrary CSS box/flow/float/grid layout has no native equivalent → Blitz is
   justified, and fragmentation is genuinely novel work.
 - **A spreadsheet is orthogonal.** Grid + formula semantics aren't a layout the text engine has → its
-  own engine, with a native `<Table>` as the *lowered* publication form.
+  own engine, with a native `<Table>` as the _lowered_ publication form.
 - **Word is near — nearest of all.** WordprocessingML is styled paragraphs and runs, paragraph/character
   styles with inheritance, sections with page geometry, tables, floating/inline images, lists, tabs,
   footnotes — **the same concept set the engine implements for IDML.** The distance from `w:p`/`w:r`/
   `w:pPr`/`w:rPr`/`w:sectPr` to `Paragraph`/`CharacterRun`/`ParagraphStyleDef`/section geometry is a
-  *mapping*, not a *layout engine*.
+  _mapping_, not a _layout engine_.
 
 **Therefore DOCX lowers onto the native stack**, and the engine's existing Knuth–Plass pagination flows
-it across pages. This is the sheets "compiled surface," applied to the content type the engine is *most*
+it across pages. This is the sheets "compiled surface," applied to the content type the engine is _most_
 native to.
 
 ### 4.2 What native lowering buys — including two platform gaps it sidesteps
@@ -140,11 +141,11 @@ native to.
 - **Real editing, real caret, for free.** Standalone Word editing uses the **native text tools** on
   native stories — the same caret, selection, reflow, styles panel, and undo the editor already has.
   This **sidesteps C-9** (the missing `host.text.caret()` door): a plugin `editContext` has no way to
-  read the user's caret offset, but native text frames don't need one because the *editor* owns the
+  read the user's caret offset, but native text frames don't need one because the _editor_ owns the
   caret. A foreign-engine approach would hit C-9 head-on.
 - **Pagination is the engine's, so there is no W-frag.** Flowing a story across an auto-generated page/
   region chain is what `paged-flow` + composition already do for IDML stories. The hard "fragment a
-  *foreign* flow across frames" problem only exists when the flow is computed by a foreign engine (web).
+  _foreign_ flow across frames" problem only exists when the flow is computed by a foreign engine (web).
   Lowered to native, DOCX body text uses the **native** flow — already fragmenting across frames/pages.
 - **One text/shaping stack, print-correct by construction.** No second font/shaping stack (ADR-020's
   objection to the web fork), full colour management, CPU-testable fidelity lane — all inherited.
@@ -173,19 +174,19 @@ bargain `plugin-sheets` already makes and the same discipline `idml-export` alre
 
 ### 4.4 The alternative, documented honestly
 
-| | **Y — lower to native** *(recommended)* | **X — foreign engine → C-1** (the web pattern) |
-|---|---|---|
-| Layout owner | Core `paged-text` (Knuth–Plass, existing) | An in-plugin Word layout engine (to be built/forked) |
-| Multi-page | Native `paged-flow` pagination — **no W-frag** | Requires foreign-flow fragmentation — **W-frag** |
-| Caret / editing | **Native text tools**, native caret — **no C-9** | Plugin `editContext` — **needs C-9** (missing) |
-| Text/shaping stack | One (core rustybuzz) | Two (plugin's + core's) — ADR-020's objection |
-| Round-trip | Native↔OOXML mapping + preservation (the cost) | Foreign model is the source → round-trip is easier |
-| Word-exact line breaking | Convergence work (Word ≠ Knuth–Plass; §7 Tier 4) | Whatever the forked engine does |
-| Fidelity/effort | High reuse; effort is the **mapping + save-back** | Low reuse; effort is an **engine + fragmentation** |
+|                          | **Y — lower to native** _(recommended)_           | **X — foreign engine → C-1** (the web pattern)       |
+| ------------------------ | ------------------------------------------------- | ---------------------------------------------------- |
+| Layout owner             | Core `paged-text` (Knuth–Plass, existing)         | An in-plugin Word layout engine (to be built/forked) |
+| Multi-page               | Native `paged-flow` pagination — **no W-frag**    | Requires foreign-flow fragmentation — **W-frag**     |
+| Caret / editing          | **Native text tools**, native caret — **no C-9**  | Plugin `editContext` — **needs C-9** (missing)       |
+| Text/shaping stack       | One (core rustybuzz)                              | Two (plugin's + core's) — ADR-020's objection        |
+| Round-trip               | Native↔OOXML mapping + preservation (the cost)    | Foreign model is the source → round-trip is easier   |
+| Word-exact line breaking | Convergence work (Word ≠ Knuth–Plass; §7 Tier 4)  | Whatever the forked engine does                      |
+| Fidelity/effort          | High reuse; effort is the **mapping + save-back** | Low reuse; effort is an **engine + fragmentation**   |
 
-X's *only* structural advantage is round-trip ease (the foreign model stays the source of truth). Y pays
+X's _only_ structural advantage is round-trip ease (the foreign model stays the source of truth). Y pays
 for that with the mapping/save-back layer but wins on editing quality, reuse, and by dodging two open
-platform gaps. **The recommendation is Y**, with X retained as the pre-authorized escalation *iff* a
+platform gaps. **The recommendation is Y**, with X retained as the pre-authorized escalation _iff_ a
 measured fidelity requirement proves the native mapping cannot express Word layout faithfully enough —
 the same "revisit only on that evidence" posture [ADR-011](https://github.com/paged-media/plugin-web/blob/main/docs/adr/011-web-rendering-fork-defer-to-scenelayer.md)/020 hold for web. The most likely real-world
 middle path is **hybrid**: lower the 95% that maps cleanly to native, and fall back to a **fixed,
@@ -196,7 +197,7 @@ doesn't yet reach — never a fake, always either native-editable or an honest f
 
 ## 5. The OOXML foundation — `paged-ooxml` over `ooxmlsdk`, shared by doc / sheet / slide
 
-*Status note (2026-10-02): this section predates the implementation; see [ADR 601](adr/601-own-package-container.md). The wasm check DOC-02 passed (`Cargo.toml:9`). `ooxmlsdk` is used at version 0.12 as an ordinary crates.io dependency, not vendored (`Cargo.toml:31`, `Cargo.lock:321-323`). `paged-ooxml` is not published (`paged-ooxml/Cargo.toml:9`), and in this repo only the `docx-*` crates depend on it.*
+_Status note (2026-10-02): this section predates the implementation; see [ADR 601](adr/601-own-package-container.md). The wasm check DOC-02 passed (`Cargo.toml:9`). `ooxmlsdk` is used at version 0.12 as an ordinary crates.io dependency, not vendored (`Cargo.toml:31`, `Cargo.lock:321-323`). `paged-ooxml` is not published (`paged-ooxml/Cargo.toml:9`), and in this repo only the `docx-*` crates depend on it._
 
 ### 5.1 Why a shared foundation
 
@@ -208,17 +209,17 @@ copies of the hard, boring, bug-prone part. **One shared foundation is the right
 
 ### 5.2 `ooxmlsdk` assessment (as of 2026-07)
 
-| Dimension | Finding | Implication for us |
-|---|---|---|
-| **Coverage** | docx **and** xlsx **and** pptx; Office 2007→M365 namespaces incl. DrawingML/chart extensions | Serves all three target plugins — the whole point |
-| **Approach** | **Code-generated typed part trees** from the OOXML schemas; package-level APIs (`main_document_part`, `workbook_part`, `presentation_part`); open/create/save packages | Gives us a typed DOM to map from/to — no hand-rolled XML |
-| **Round-trip** | open + save packages; **byte-exact fidelity not explicitly documented** | **Do not rely on it for preservation** — keep our own OPC verbatim carry-through (§5.4) |
-| **Serde** | **No serde**; custom generated ser/de | Fine (it's faster for XML); just an integration note |
-| **"No Particle"** | XML children are flattened into **enum vectors**, not named struct fields (`OneSequence` supported) | Ergonomic cost: we **wrap** it in our own semantic model, we don't expose it raw to plugin logic |
-| **MC processing** | `OpenSettings` / full markup-compatibility modes **not exposed** | We handle `mc:AlternateContent` fallback selection ourselves at the `paged-ooxml` layer |
-| **wasm** | **No wasm claim anywhere** | **Gating spike (RFI DOC-02): confirm `ooxmlsdk` compiles to `wasm32-unknown-unknown` and runs in-browser.** Everything in Paged is wasm; this is a go/no-go for adopting it |
-| **Maturity / bus factor** | v0.5.1 (2026-04); single maintainer, ~54 stars | **Vendor and pin it** (the DuckDB-WASM / Blitz posture): be ready to carry patches; treat upstream as a starting point, not a dependency we can't fork |
-| **License** | **MIT OR Apache-2.0** | Compatible with this repo's licences (see `LICENSE.md`); no friction |
+| Dimension                 | Finding                                                                                                                                                                | Implication for us                                                                                                                                                          |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Coverage**              | docx **and** xlsx **and** pptx; Office 2007→M365 namespaces incl. DrawingML/chart extensions                                                                           | Serves all three target plugins — the whole point                                                                                                                           |
+| **Approach**              | **Code-generated typed part trees** from the OOXML schemas; package-level APIs (`main_document_part`, `workbook_part`, `presentation_part`); open/create/save packages | Gives us a typed DOM to map from/to — no hand-rolled XML                                                                                                                    |
+| **Round-trip**            | open + save packages; **byte-exact fidelity not explicitly documented**                                                                                                | **Do not rely on it for preservation** — keep our own OPC verbatim carry-through (§5.4)                                                                                     |
+| **Serde**                 | **No serde**; custom generated ser/de                                                                                                                                  | Fine (it's faster for XML); just an integration note                                                                                                                        |
+| **"No Particle"**         | XML children are flattened into **enum vectors**, not named struct fields (`OneSequence` supported)                                                                    | Ergonomic cost: we **wrap** it in our own semantic model, we don't expose it raw to plugin logic                                                                            |
+| **MC processing**         | `OpenSettings` / full markup-compatibility modes **not exposed**                                                                                                       | We handle `mc:AlternateContent` fallback selection ourselves at the `paged-ooxml` layer                                                                                     |
+| **wasm**                  | **No wasm claim anywhere**                                                                                                                                             | **Gating spike (RFI DOC-02): confirm `ooxmlsdk` compiles to `wasm32-unknown-unknown` and runs in-browser.** Everything in Paged is wasm; this is a go/no-go for adopting it |
+| **Maturity / bus factor** | v0.5.1 (2026-04); single maintainer, ~54 stars                                                                                                                         | **Vendor and pin it** (the DuckDB-WASM / Blitz posture): be ready to carry patches; treat upstream as a starting point, not a dependency we can't fork                      |
+| **License**               | **MIT OR Apache-2.0**                                                                                                                                                  | Compatible with this repo's licences (see `LICENSE.md`); no friction                                                                                                        |
 
 **Verdict: adopt `ooxmlsdk` as the low-level typed-DOM + (de)serialization engine, behind our own
 `paged-ooxml` wrapper, gated on the wasm spike (DOC-02) and treated as vendored/pinned.** If the wasm
@@ -251,7 +252,7 @@ respects the platform's isolation-superset rule (a plugin depends only on `@page
 ```
 
 - **Shared (`paged-ooxml`):** everything ECMA-376-common — OPC packaging, relationships, content-types,
-  DrawingML graphics, themes, the shared `sharedStrings`/`styles` *plumbing*, MC processing, and the
+  DrawingML graphics, themes, the shared `sharedStrings`/`styles` _plumbing_, MC processing, and the
   **preservation/carry-through** machinery. This is where `ooxmlsdk` lives, wrapped.
 - **Per-plugin (semantic):** WordprocessingML→native mapping is `paged.doc`'s; the cell/formula model is
   `paged.sheet`'s; PresentationML→slides is `paged.slide`'s. **No shared semantic model** — that's where
@@ -264,7 +265,7 @@ rewrite it.** The consolidation path:
 
 1. `paged-ooxml` is built **for the two new consumers first** (`paged.doc` now, `paged.slide` later),
    where there is no incumbent to disturb. It earns its shape on greenfield.
-2. It is designed so `sheet-xlsx`'s **OPC + carry-through + DrawingML** responsibilities *could* be
+2. It is designed so `sheet-xlsx`'s **OPC + carry-through + DrawingML** responsibilities _could_ be
    lifted onto it later, leaving `sheet-xlsx` as the thin SpreadsheetML-semantic layer — but only **when
    that migration is cheap and green**, opportunistically, never as a stop-the-world rewrite (the exact
    evolutionary discipline ADR-021 mandates for the model migration).
@@ -275,48 +276,62 @@ rewrite it.** The consolidation path:
 
 ## 6. Architecture — crates, packages, and the wasm boundary
 
-*Status note (2026-10-02): this section predates the implementation; see `architecture.md` for the crates and packages as built. There is no `docx-render` crate; a crate not listed here, `docx-skeleton`, writes the minimal package that standalone open loads ([ADR 603](adr/603-two-entry-points.md)); the bundle is `packages/doc-bundle`, with the package name `@paged-media/doc`, and its manifest is `packages/doc-bundle/manifest.json`; of the three on-disk parts sketched below only `source.docx` is written ([ADR 602](adr/602-save-back-is-a-byte-splice.md)).*
+_Status note (2026-10-02): this section predates the implementation; see `architecture.md` for the crates and packages as built. There is no `docx-render` crate; a crate not listed here, `docx-skeleton`, writes the minimal package that standalone open loads ([ADR 603](adr/603-two-entry-points.md)); the bundle is `packages/doc-bundle`, with the package name `@paged-media/doc`, and its manifest is `packages/doc-bundle/manifest.json`; of the three on-disk parts sketched below only `source.docx` is written ([ADR 602](adr/602-save-back-is-a-byte-splice.md))._
 
 Mirrors the `plugin-sheets` layout (all Rust semantics; thin TS glue; one wasm module per bundle).
 
 **Rust crates (a Cargo workspace at the repo root):**
 
-| Crate | Purpose |
-|---|---|
-| `docx-core` | Frozen types: the `paged.doc` view of a WordprocessingML document (sections, body, styles, numbering, headers/footers, notes) — a thin semantic layer over `paged-ooxml`'s typed DOM |
-| `docx-import` | `paged-ooxml` package → `docx-core` (parse + MC resolution + style/numbering resolution) |
-| `docx-lower` | **The heart.** Pure `docx-core` → native lowering: `Story`/`Paragraph`/`CharacterRun` + style defs + tables + placed images + a `paged-flow` region-chain + section→page-geometry. Includes `paginate.rs`-style page generation for standalone mode. Provenance back-refs attached here |
-| `docx-export` | native (edited) + retained OOXML → `.docx` **save-back**: targeted patch of changed parts + verbatim carry-through of the rest (the preservation invariant) |
-| `docx-render` *(optional, hybrid fallback only)* | Fixed faithful render of unsupported pages to PDF/PNG derived, when native lowering can't yet express a construct (§4.4) |
-| `docx-js` | The single `wasm-bindgen` surface — all crates compile to **one** wasm module |
-| `docx-conformance` | Test-only: corpus + fidelity harness (§8) |
+| Crate                                            | Purpose                                                                                                                                                                                                                                                                                 |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `docx-core`                                      | Frozen types: the `paged.doc` view of a WordprocessingML document (sections, body, styles, numbering, headers/footers, notes) — a thin semantic layer over `paged-ooxml`'s typed DOM                                                                                                    |
+| `docx-import`                                    | `paged-ooxml` package → `docx-core` (parse + MC resolution + style/numbering resolution)                                                                                                                                                                                                |
+| `docx-lower`                                     | **The heart.** Pure `docx-core` → native lowering: `Story`/`Paragraph`/`CharacterRun` + style defs + tables + placed images + a `paged-flow` region-chain + section→page-geometry. Includes `paginate.rs`-style page generation for standalone mode. Provenance back-refs attached here |
+| `docx-export`                                    | native (edited) + retained OOXML → `.docx` **save-back**: targeted patch of changed parts + verbatim carry-through of the rest (the preservation invariant)                                                                                                                             |
+| `docx-render` _(optional, hybrid fallback only)_ | Fixed faithful render of unsupported pages to PDF/PNG derived, when native lowering can't yet express a construct (§4.4)                                                                                                                                                                |
+| `docx-js`                                        | The single `wasm-bindgen` surface — all crates compile to **one** wasm module                                                                                                                                                                                                           |
+| `docx-conformance`                               | Test-only: corpus + fidelity harness (§8)                                                                                                                                                                                                                                               |
 
 **TS packages (`packages/`):**
 
-| Package | Purpose |
-|---|---|
+| Package                       | Purpose                                                                                                                                                                                                                       |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `@paged-media/doc-host-model` | **Pure** `LoweredContent → Mutation[]` translation (no DOM) — the same role as `sheet-host-model`; turns the lowering into `insertText`/`applyStyle`/`createParagraphStyle`/`insertTable`/`placeImage`/`linkFrames` mutations |
-| `@paged-media/doc-bundle` | `manifest.json` (`media.paged.doc`) + `activate(host)`: the importer/exporter, the `objectType` + `editContext`, the styles/outline panels, engine boot |
+| `@paged-media/doc-bundle`     | `manifest.json` (`media.paged.doc`) + `activate(host)`: the importer/exporter, the `objectType` + `editContext`, the styles/outline panels, engine boot                                                                       |
 
 **Manifest sketch (`media.paged.doc`):**
 
 ```jsonc
-{ "id": "media.paged.doc", "name": "paged.doc", "apiVersion": "^0.x",
+{
+  "id": "media.paged.doc",
+  "name": "paged.doc",
+  "apiVersion": "^0.x",
   "capabilities": {
-    "document": { "read": "broad", "write": "scoped",
-                  "readNative": true, "openNative": true },   // openNative = standalone open (DOC-01)
-    "rendering": ["sceneLayer"],                               // for the hybrid fixed-render fallback
-    "editContext": ["wordDocument"],                           // embedded modal edit (or native, §8.1)
-    "wasm": ["ooxml"], "assets": ["fonts"], "clipboard": "text" },
+    "document": {
+      "read": "broad",
+      "write": "scoped",
+      "readNative": true,
+      "openNative": true,
+    }, // openNative = standalone open (DOC-01)
+    "rendering": ["sceneLayer"], // for the hybrid fixed-render fallback
+    "editContext": ["wordDocument"], // embedded modal edit (or native, §8.1)
+    "wasm": ["ooxml"],
+    "assets": ["fonts"],
+    "clipboard": "text",
+  },
   "contributes": {
-    "importers": [{ "id": "media.paged.doc.import", "extensions": [".docx", ".dotx"] }],
+    "importers": [
+      { "id": "media.paged.doc.import", "extensions": [".docx", ".dotx"] },
+    ],
     "exporters": [{ "id": "media.paged.doc.export", "extension": ".docx" }],
     "editContexts": [{ "type": "wordDocument", "entry": "doubleClick" }],
     "objectTypes": [{ "type": "wordDocument", "bakedFallback": "group" }],
     "partTypes": [
       { "type": "docx", "role": "source", "format": "opc", "linkable": true },
-      { "type": "docLowered", "role": "derived" }
-    ] } }
+      { "type": "docLowered", "role": "derived" },
+    ],
+  },
+}
 ```
 
 **On-disk (three-role model, per `core: docs/reference/paged-file-format.md`):**
@@ -334,7 +349,7 @@ For **standalone** mode the same part set is the whole document's; the core **co
 
 ## 7. The WordprocessingML → native mapping, in fidelity tiers
 
-*Status note (2026-10-02): this section predates the implementation; see `status.md` for what is lowered today, [ADR 600](adr/600-docx-lowered-onto-native-model.md) (the fixed-render fallback was not built; what is not mapped gets a diagnostic) and [ADR 604](adr/604-word-is-the-oracle.md) (how the mapping is checked against Word).*
+_Status note (2026-10-02): this section predates the implementation; see `status.md` for what is lowered today, [ADR 600](adr/600-docx-lowered-onto-native-model.md) (the fixed-render fallback was not built; what is not mapped gets a diagnostic) and [ADR 604](adr/604-word-is-the-oracle.md) (how the mapping is checked against Word)._
 
 The mapping is the bulk of the work; staging it in tiers lets `paged.doc` ship value early and degrade
 honestly (ADR-007) on what isn't mapped yet. Each tier is "native-editable"; anything past the current
@@ -371,7 +386,7 @@ Tier-2-native with that construct shown via the fixed-render fallback and a diag
 
 ## 8. The two modes in detail
 
-*Status note (2026-10-02): this section predates the implementation; see [ADR 603](adr/603-two-entry-points.md) (Open, through the importer, loads the file as the document via `host.nativeDocument.open`; the place command `media.paged.doc.command.placeDoc` pours it into one new text frame of the current document, with no frame chain) and [ADR 602](adr/602-save-back-is-a-byte-splice.md) (save-back; the read asked for in 8.3 shipped as `host.document.storyContent`).*
+_Status note (2026-10-02): this section predates the implementation; see [ADR 603](adr/603-two-entry-points.md) (Open, through the importer, loads the file as the document via `host.nativeDocument.open`; the place command `media.paged.doc.command.placeDoc` pours it into one new text frame of the current document, with no frame chain) and [ADR 602](adr/602-save-back-is-a-byte-splice.md) (save-back; the read asked for in 8.3 shipped as `host.document.storyContent`)._
 
 ### 8.1 Embedded — a Word document inside a host layout
 
@@ -395,7 +410,7 @@ Tier-2-native with that construct shown via the fixed-render fallback and a diag
   "open into a fresh host document" door. `paged.doc` needs it: `import()` must **create a new Paged
   document** whose root composition is the lowered Word flow across generated pages — not mutate the
   currently-open document. This is the platform's headline dependency for the standalone requirement, and
-  it is the *same* door `plugin-image` needs for "PSD → new document" (ADR-017 names that case), so it is a
+  it is the _same_ door `plugin-image` needs for "PSD → new document" (ADR-017 names that case), so it is a
   general platform door, not a `paged.doc` special case.
 - **Render + edit:** the whole editor operates on the native composition — every native tool, panel,
   script, and the real caret. This is why native lowering matters most here: **standalone editing quality
@@ -416,16 +431,16 @@ mutation log). This is the second platform door `paged.doc` surfaces — shared 
 
 ## 9. Platform gaps this design opens (for the RFI register)
 
-*Status note (2026-10-02): this section predates the implementation; see `status.md` ("Platform doors"). DOC-01 shipped as `host.nativeDocument.open` and DOC-03 as `host.document.storyContent` (`plugin-sdk: packages/plugin-api/src/host.ts`); DOC-02 passed (`Cargo.toml:9`); for DOC-04 see [ADR 604](adr/604-word-is-the-oracle.md): Word's answers, obtained with the probe scripts in `scripts/`, are committed as `docx-conformance/fixtures/*.word.json`, and no LibreOffice proxy is used. Code comments and `status.md` also use the ids DOC-05, DOC-06 and DOC-07 for later items (headers and footers, footnote numbering, floating drawings), not for the rows below.*
+_Status note (2026-10-02): this section predates the implementation; see `status.md` ("Platform doors"). DOC-01 shipped as `host.nativeDocument.open` and DOC-03 as `host.document.storyContent` (`plugin-sdk: packages/plugin-api/src/host.ts`); DOC-02 passed (`Cargo.toml:9`); for DOC-04 see [ADR 604](adr/604-word-is-the-oracle.md): Word's answers, obtained with the probe scripts in `scripts/`, are committed as `docx-conformance/fixtures/*.word.json`, and no LibreOffice proxy is used. Code comments and `status.md` also use the ids DOC-05, DOC-06 and DOC-07 for later items (headers and footers, footnote numbering, floating drawings), not for the rows below._
 
-| ID | Gap | Why `paged.doc` needs it | Shared with |
-|---|---|---|---|
-| **DOC-01** | `host.document.open(bytes)` — open into a **fresh** host document | Standalone mode (§8.2); ADR-017 deferred it explicitly | plugin-image PSD, every standalone-open plugin |
-| **DOC-02** | **`ooxmlsdk` wasm feasibility spike** | Everything runs in-browser wasm; no wasm claim upstream — go/no-go for §5 | paged.sheet consolidation, paged.slide |
-| **DOC-03** | Whole-document **read** door for exporters | Faithful standalone `.docx` save-back (§8.3); ADR-021 names the gap | IDML export, all whole-doc foreign export |
-| **DOC-04** | Fidelity-reference harness for Word (no headless Word) | Tier-4 convergence + regression gate (§8/§Fidelity); mirrors the "no InDesign on dev machine" problem | paged.slide (no headless PowerPoint) |
-| **DOC-05** | **Ratify "embed-or-open" as a platform pattern** | Generalize §2 so every content plugin declares embed + optional document faces uniformly | web, sheet, image, data, slide |
-| **DOC-06** *(only if hybrid)* | C-1 per-glyph faithful text (multi-line, per-run face) | The fixed-render fallback wants better than C-1's single-line/default-font text; else use PDF/PNG derived | plugin-web text paint follow-ons |
+| ID                            | Gap                                                               | Why `paged.doc` needs it                                                                                  | Shared with                                    |
+| ----------------------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| **DOC-01**                    | `host.document.open(bytes)` — open into a **fresh** host document | Standalone mode (§8.2); ADR-017 deferred it explicitly                                                    | plugin-image PSD, every standalone-open plugin |
+| **DOC-02**                    | **`ooxmlsdk` wasm feasibility spike**                             | Everything runs in-browser wasm; no wasm claim upstream — go/no-go for §5                                 | paged.sheet consolidation, paged.slide         |
+| **DOC-03**                    | Whole-document **read** door for exporters                        | Faithful standalone `.docx` save-back (§8.3); ADR-021 names the gap                                       | IDML export, all whole-doc foreign export      |
+| **DOC-04**                    | Fidelity-reference harness for Word (no headless Word)            | Tier-4 convergence + regression gate (§8/§Fidelity); mirrors the "no InDesign on dev machine" problem     | paged.slide (no headless PowerPoint)           |
+| **DOC-05**                    | **Ratify "embed-or-open" as a platform pattern**                  | Generalize §2 so every content plugin declares embed + optional document faces uniformly                  | web, sheet, image, data, slide                 |
+| **DOC-06** _(only if hybrid)_ | C-1 per-glyph faithful text (multi-line, per-run face)            | The fixed-render fallback wants better than C-1's single-line/default-font text; else use PDF/PNG derived | plugin-web text paint follow-ons               |
 
 Note the pleasant result: the **native-lowering choice removes** what would otherwise be the two biggest
 items — foreign-flow fragmentation (**W-frag**) and the caret door (**C-9**) — from `paged.doc`'s
@@ -440,13 +455,13 @@ PDFs** (authored once) and/or **LibreOffice `--headless` PDF renders** as a cont
 
 ## 10. Round-trip & preservation policy (binding to ADR-007 / ADR-021)
 
-*Status note (2026-10-02): this section predates the implementation; see [ADR 601](adr/601-own-package-container.md) (byte identity is per part, on the decompressed bytes; the ZIP file as a whole is re-encoded) and [ADR 602](adr/602-save-back-is-a-byte-splice.md) (the patch; the stored `source.docx` part is written but not read back, so an edited save needs the session that imported the file).*
+_Status note (2026-10-02): this section predates the implementation; see [ADR 601](adr/601-own-package-container.md) (byte identity is per part, on the decompressed bytes; the ZIP file as a whole is re-encoded) and [ADR 602](adr/602-save-back-is-a-byte-splice.md) (the patch; the stored `source.docx` part is written but not read back, so an edited save needs the session that imported the file)._
 
-- **`.docx`-origin content is preserved by *storage*, not reconstruction.** The `source.docx` OPC package
+- **`.docx`-origin content is preserved by _storage_, not reconstruction.** The `source.docx` OPC package
   is retained as the content-engine's native part (ADR-021: "each content engine stores its own native
   format"). Untouched → byte-identical on save. This dissolves most of the round-trip-fidelity risk the
   same way ADR-021's addendum dissolves it for IDML: loss appears **only** when the whole composition is
-  flattened to a *single* foreign format, and then it is inherent and **diagnosed**, never silent.
+  flattened to a _single_ foreign format, and then it is inherent and **diagnosed**, never silent.
 - **Edits patch, they don't rewrite.** Provenance bindings make save-back a targeted patch of changed
   parts (mirrors `idml-export`'s streaming attribute patches + `sheet-xlsx`'s preservation).
 - **Never destroy a document** — the `plugin-sheets` invariant, verbatim, for Word: unknown parts and
@@ -457,12 +472,12 @@ PDFs** (authored once) and/or **LibreOffice `--headless` PDF renders** as a cont
 
 ## 11. Learnings that flow back to `plugin-web`
 
-*Status note (2026-10-02): this section predates the implementation; see [ADR 404](https://github.com/paged-media/plugin-web/blob/main/docs/adr/404-fragmentation-by-relayout.md) (`plugin-web` has since built fragmentation across linked frames) and [ADR 604](adr/604-word-is-the-oracle.md) (the fidelity method this plugin adopted).*
+_Status note (2026-10-02): this section predates the implementation; see [ADR 404](https://github.com/paged-media/plugin-web/blob/main/docs/adr/404-fragmentation-by-relayout.md) (`plugin-web` has since built fragmentation across linked frames) and [ADR 604](adr/604-word-is-the-oracle.md) (the fidelity method this plugin adopted)._
 
 `paged.doc` is not just a consumer of platform work — done right, it feeds `plugin-web` on several axes:
 
 1. **It proves and hardens the shared `FlowId`/region-chain seam.** ADR-020/021 bless one renderer-
-   neutral flow model "shared with IDML stories"; `paged.doc` is the *second heavy consumer* of that seam
+   neutral flow model "shared with IDML stories"; `paged.doc` is the _second heavy consumer_ of that seam
    (native Word flow across pages), which pressure-tests it beyond IDML before `plugin-web`'s W-frag
    rungs 3–4 ever need it. Every sharp edge `paged.doc` files against `paged-flow` is an edge `plugin-web`
    doesn't hit later. The seam graduating from "IDML + Word" to "IDML + Word + web flow" is the
@@ -470,9 +485,9 @@ PDFs** (authored once) and/or **LibreOffice `--headless` PDF renders** as a cont
 2. **A hybrid "lower-the-easy-part to native" template for web.** `paged.doc`'s hybrid posture — lower
    the 95% that maps to native, fall back to a fixed render only for the hard remainder — is directly
    transferable: much of real-world HTML (headings, paragraphs, lists, simple tables, inline images) maps
-   to the *same* native primitives as Word. `plugin-web` could lower that clean subset to **native
+   to the _same_ native primitives as Word. `plugin-web` could lower that clean subset to **native
    stories** (getting native caret/reflow/editing — sidestepping C-9 for text-heavy web content) and
-   reserve Blitz for genuinely CSS-hard layout, instead of routing *all* web content through Blitz→C-1.
+   reserve Blitz for genuinely CSS-hard layout, instead of routing _all_ web content through Blitz→C-1.
    `paged.doc` validates the "native lowering of foreign flowing text" machinery web would reuse.
 3. **The native-editing-dodges-C-9 result generalizes.** If `paged.doc` demonstrates that editing a
    foreign-origin document via native text frames is superior to a plugin `editContext` (no caret door,
@@ -489,20 +504,20 @@ PDFs** (authored once) and/or **LibreOffice `--headless` PDF renders** as a cont
 
 Conversely, `paged.doc` should **borrow from `plugin-web`**: the `web-model` discipline (pure, zero-DOM,
 "a scanner not a parser, never crashes on bad input") is exactly how `docx-import` should treat malformed
-`.docx`; and W-frag's `plugin-web: packages/web-render/src/flow.rs` rungs are the reference if `paged.doc` ever *does* need a foreign-engine
+`.docx`; and W-frag's `plugin-web: packages/web-render/src/flow.rs` rungs are the reference if `paged.doc` ever _does_ need a foreign-engine
 fallback (§4.4).
 
 ---
 
 ## 12. Milestones
 
-*Status note (2026-10-02): this section predates the implementation and records the original plan; see `status.md` for what is built.*
+_Status note (2026-10-02): this section predates the implementation and records the original plan; see `status.md` for what is built._
 
 - **M0 — Foundation + spike.** `paged-ooxml` skeleton (OPC read/write, `_rels`, content-types,
   carry-through) wrapping `ooxmlsdk`; **DOC-02 wasm spike** (go/no-go). Bundle skeleton, manifest,
   CLI-validated. Exit: a `.docx` opens, its parts round-trip byte-identical (no rendering yet).
 - **M1 — Tier 0/1 standalone read.** `docx-import` + `docx-lower` Tier 0–1 → native stories + sections +
-  pagination; **DOC-01** `host.document.open(bytes)`; open a real multi-page `.docx` and *see* it,
+  pagination; **DOC-01** `host.document.open(bytes)`; open a real multi-page `.docx` and _see_ it,
   natively, across pages (read-only acceptable). Exit: a business memo/report renders faithfully.
 - **M2 — Native editing + save-back.** Native text editing on the opened document; `docx-export` Tier 0–1
   save-back with preservation; **DOC-03** whole-doc export read. Exit: open → edit text/styles → save
@@ -521,7 +536,7 @@ fallback (§4.4).
 - **Canonical on-disk form for a standalone Word doc:** round-trip the `.docx` in place, or wrap it in a
   `.paged` container holding `source.docx`? (Likely: `.docx` stays canonical while purely Word content;
   promote to `.paged` when the user adds non-Word Paged content — a natural upgrade prompt.)
-- **How much of Word's layout must be *Word-exact* vs. *faithful-plausible*?** Sets the Tier-4 bar and
+- **How much of Word's layout must be _Word-exact_ vs. _faithful-plausible_?** Sets the Tier-4 bar and
   whether the hybrid fixed-render fallback is a long-term necessity or a temporary scaffold.
 - **`ooxmlsdk` "enum-vector children" ergonomics at scale** — does the wrapper cost stay bounded, or does
   it argue for contributing named-particle codegen upstream (we're a plausible contributor given three
@@ -536,7 +551,7 @@ See `LICENSE.md`.
 
 ## 15. One-line recommendation
 
-*Status note (2026-10-02): this section predates the implementation; see [ADR 600](adr/600-docx-lowered-onto-native-model.md), [ADR 601](adr/601-own-package-container.md) and [ADR 603](adr/603-two-entry-points.md).*
+_Status note (2026-10-02): this section predates the implementation; see [ADR 600](adr/600-docx-lowered-onto-native-model.md), [ADR 601](adr/601-own-package-container.md) and [ADR 603](adr/603-two-entry-points.md)._
 
 > Build `paged.doc` as an engine-plugin in the `plugin-sheets` shape, but lower DOCX onto the engine's
 > **native** text + flow stack rather than forking a layout engine — because Word ≈ the DTP text model

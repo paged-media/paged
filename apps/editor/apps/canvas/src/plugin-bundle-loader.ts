@@ -92,7 +92,10 @@ export interface ImporterRegistryLike {
   } | null;
 }
 
-export interface ActivatorDeps<B extends BundleLike, L extends LoadedBundleLike> {
+export interface ActivatorDeps<
+  B extends BundleLike,
+  L extends LoadedBundleLike,
+> {
   entries: readonly BundleEntry<B>[];
   /** The guarded loader (`createGuardedLoader`) — returns null on a throw. */
   activate: (bundle: B) => L | null;
@@ -171,7 +174,10 @@ export function createBundleActivator<
     return p;
   };
 
-  const activateFetched = (entry: BundleEntry<B>, bundle: B | null): L | null => {
+  const activateFetched = (
+    entry: BundleEntry<B>,
+    bundle: B | null,
+  ): L | null => {
     if (!bundle || disposed) return null;
     // An on-demand bundle's placeholders hold its importer ids; the real
     // contributions take them over here (the registry refuses duplicates).
@@ -211,9 +217,13 @@ export function createBundleActivator<
           // ensure() swaps the placeholders for the real importers
           // (activateFetched); a failed activation puts them back.
           const loaded = await ensure(entry.id);
-          const real = loaded ? registry.resolve(file.name, file.mimeType) : null;
+          const real = loaded
+            ? registry.resolve(file.name, file.mimeType)
+            : null;
           if (!real) {
-            throw new Error(`${entry.id} could not be loaded to import ${file.name}`);
+            throw new Error(
+              `${entry.id} could not be loaded to import ${file.name}`,
+            );
           }
           return real.import(file);
         },

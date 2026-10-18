@@ -99,7 +99,11 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     await mint("Color/AnnualScratchCyan", "Scratch Cyan", [85, 10, 0, 0]);
     await doc.mutate("deleteSwatch", { swatchId: "Color/AnnualScratchCyan" });
     await doc.mutate("createColorGroup", {
-      spec: { selfId: "ColorGroup/AnnualScratch", name: "Scratch Group", members: [] },
+      spec: {
+        selfId: "ColorGroup/AnnualScratch",
+        name: "Scratch Group",
+        members: [],
+      },
     });
     await doc.mutate("deleteColorGroup", {
       groupId: "ColorGroup/AnnualScratch",
@@ -136,15 +140,21 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   expect(groups.map((g) => g.name)).not.toContain("Scratch Group");
 
   // ── the page ─────────────────────────────────────────────────────
-  const head = await proseFrame(ctx, page, [60, 58, 492, 90], [
-    { text: "Minting ink", style: STYLE.head1 },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    page,
+    [60, 58, 492, 90],
+    [{ text: "Minting ink", style: STYLE.head1 }],
+  );
   // The headline that wears its subject: characterFillColor on the
   // words PRESS GREY, in Press Grey.
   const strapText = "SEVEN INKS, AND NOW A PRESS GREY";
-  const strap = await proseFrame(ctx, page, [60, 94, 492, 120], [
-    { text: strapText, style: STYLE.head2 },
-  ]);
+  const strap = await proseFrame(
+    ctx,
+    page,
+    [60, 94, 492, 120],
+    [{ text: strapText, style: STYLE.head2 }],
+  );
   await doc.setProperty(
     "storyRange",
     doc.storyRangeId(
@@ -157,22 +167,27 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   );
   elements.push(head.frameId, strap.frameId);
 
-  const intro = await proseFrame(ctx, page, [60, 128, 492, 240], [
-    {
-      text:
-        "Two swatches were created on this page and one of them was then " +
-        "edited in place. Both were born as the same flat 55% black; the " +
-        "right-hand chip's definition was replaced with a cooler " +
-        "26/18/12/62 build through editSwatch, and every reference to it — " +
-        "including the words PRESS GREY above — repainted, because a chip " +
-        "holds an identity, not a colour. A third swatch, Scratch Cyan, and " +
-        "a Scratch Group ran the whole create-then-delete round transiently: " +
-        "demonstrated, not resident. The group holding the greys was born " +
-        "Annual Live and renamed Annual Live Inks through editColorGroup " +
-        "without disturbing its two members.",
-      style: STYLE.body,
-    },
-  ]);
+  const intro = await proseFrame(
+    ctx,
+    page,
+    [60, 128, 492, 240],
+    [
+      {
+        text:
+          "Two swatches were created on this page and one of them was then " +
+          "edited in place. Both were born as the same flat 55% black; the " +
+          "right-hand chip's definition was replaced with a cooler " +
+          "26/18/12/62 build through editSwatch, and every reference to it — " +
+          "including the words PRESS GREY above — repainted, because a chip " +
+          "holds an identity, not a colour. A third swatch, Scratch Cyan, and " +
+          "a Scratch Group ran the whole create-then-delete round transiently: " +
+          "demonstrated, not resident. The group holding the greys was born " +
+          "Annual Live and renamed Annual Live Inks through editColorGroup " +
+          "without disturbing its two members.",
+        style: STYLE.body,
+      },
+    ],
+  );
   elements.push(intro.frameId);
 
   elements.push(
@@ -195,9 +210,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   );
 
   // ── overprint ────────────────────────────────────────────────────
-  const overHead = await proseFrame(ctx, page, [60, 338, 492, 366], [
-    { text: "Overprint, declared", style: STYLE.head2 },
-  ]);
+  const overHead = await proseFrame(
+    ctx,
+    page,
+    [60, 338, 492, 366],
+    [{ text: "Overprint, declared", style: STYLE.head2 }],
+  );
   elements.push(overHead.frameId);
   const band = await plate(ctx, page, [60, 408, 492, 452], SWATCH.vermilion);
   elements.push(band);
@@ -254,17 +272,22 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   await assignLayer(ctx, "rectangle", overprinted, LAYER.content);
   elements.push(knockout, overprinted);
 
-  const overCaption = await proseFrame(ctx, page, [60, 462, 492, 512], [
-    {
-      text:
-        "Two identical Press Grey squares straddle the vermilion band. The " +
-        "left one knocks out, as every fill does by default; the right one " +
-        "carries frameOverprintFill and frameOverprintStroke, so at the " +
-        "press its grey lays down ON TOP of the vermilion instead of " +
-        "punching a hole in that plate.",
-      style: STYLE.caption,
-    },
-  ]);
+  const overCaption = await proseFrame(
+    ctx,
+    page,
+    [60, 462, 492, 512],
+    [
+      {
+        text:
+          "Two identical Press Grey squares straddle the vermilion band. The " +
+          "left one knocks out, as every fill does by default; the right one " +
+          "carries frameOverprintFill and frameOverprintStroke, so at the " +
+          "press its grey lays down ON TOP of the vermilion instead of " +
+          "punching a hole in that plate.",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(overCaption.frameId);
 
   await marginNote(

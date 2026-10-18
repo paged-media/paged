@@ -25,11 +25,7 @@
 // fixture's own swatches, with the one station that writes the
 // document set in the chapter's accent ink.
 
-import {
-  plate,
-  proseFrame,
-  specLabel,
-} from "../../annual-support";
+import { plate, proseFrame, specLabel } from "../../annual-support";
 import { LAYER, STYLE, SWATCH, p } from "../../names-annual";
 import type { PageContext, PageReport } from "../../types";
 
@@ -50,25 +46,36 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const page = p(87);
   const elements: string[] = [];
 
-  const number = await proseFrame(ctx, page, [48, 96, 220, 186], [
-    { text: "15", style: STYLE.chapterNumber },
-  ]);
-  const title = await proseFrame(ctx, page, [48, 190, 480, 242], [
-    { text: "The Darkroom", style: STYLE.chapterTitle },
-  ]);
-  const deck = await proseFrame(ctx, page, [48, 254, 456, 352], [
-    {
-      text:
-        "Every correction in this chapter is honest about where it lives. " +
-        "An adjustment in paged.image is session state — a scene layer " +
-        "composited over the frame, gone the moment the document reloads. " +
-        "What persists is the loop: adjust the pixels, export them through " +
-        "the bundle's own encoder, and commit the exported bytes back into " +
-        "the frame as inline image data. Every photograph on the pages " +
-        "that follow went through that loop before it was allowed to stay.",
-      style: STYLE.deck,
-    },
-  ]);
+  const number = await proseFrame(
+    ctx,
+    page,
+    [48, 96, 220, 186],
+    [{ text: "15", style: STYLE.chapterNumber }],
+  );
+  const title = await proseFrame(
+    ctx,
+    page,
+    [48, 190, 480, 242],
+    [{ text: "The Darkroom", style: STYLE.chapterTitle }],
+  );
+  const deck = await proseFrame(
+    ctx,
+    page,
+    [48, 254, 456, 352],
+    [
+      {
+        text:
+          "Every correction in this chapter is honest about where it lives. " +
+          "An adjustment in paged.image is session state — a scene layer " +
+          "composited over the frame, gone the moment the document reloads. " +
+          "What persists is the loop: adjust the pixels, export them through " +
+          "the bundle's own encoder, and commit the exported bytes back into " +
+          "the frame as inline image data. Every photograph on the pages " +
+          "that follow went through that loop before it was allowed to stay.",
+        style: STYLE.deck,
+      },
+    ],
+  );
   elements.push(number.frameId, title.frameId, deck.frameId);
 
   // ── the pipeline, as furniture: five stations on a rail ──────────
@@ -114,19 +121,24 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     elements.push(box, label.frameId);
   }
 
-  const legend = await proseFrame(ctx, page, [48, 512, 456, 610], [
-    {
-      text:
-        "Place writes a link and a fitting; ingest decodes the placed " +
-        "bytes into the plugin's session; adjust runs the registered " +
-        "kernel chain on the GPU; composite paints the result over the " +
-        "frame as a Stage-A scene layer. Four of the five stations touch " +
-        "only the session. Commit is the exception and the point: the " +
-        "exported pixels re-enter the document through replaceImageBytes, " +
-        "the inline lane the container round trip preserves.",
-      style: STYLE.bodySmall,
-    },
-  ]);
+  const legend = await proseFrame(
+    ctx,
+    page,
+    [48, 512, 456, 610],
+    [
+      {
+        text:
+          "Place writes a link and a fitting; ingest decodes the placed " +
+          "bytes into the plugin's session; adjust runs the registered " +
+          "kernel chain on the GPU; composite paints the result over the " +
+          "frame as a Stage-A scene layer. Four of the five stations touch " +
+          "only the session. Commit is the exception and the point: the " +
+          "exported pixels re-enter the document through replaceImageBytes, " +
+          "the inline lane the container round trip preserves.",
+        style: STYLE.bodySmall,
+      },
+    ],
+  );
   elements.push(legend.frameId);
 
   elements.push(

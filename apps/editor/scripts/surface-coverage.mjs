@@ -79,7 +79,8 @@ const ACKNOWLEDGED = new Map([
 
 const walk = (dir, out = []) => {
   for (const entry of readdirSync(dir)) {
-    if (entry === "node_modules" || entry === ".git" || entry === "dist") continue;
+    if (entry === "node_modules" || entry === ".git" || entry === "dist")
+      continue;
     const p = join(dir, entry);
     if (statSync(p).isDirectory()) walk(p, out);
     else if ([".ts", ".tsx"].includes(extname(p))) out.push(p);
@@ -95,13 +96,16 @@ const read = (p) => readFileSync(p, "utf8");
 function panels() {
   const src = read(join(CANVAS, "src/main.tsx"));
   const start = src.indexOf("const BUILT_IN_PANELS");
-  if (start < 0) die("BUILT_IN_PANELS not found in main.tsx — the extractor is stale");
+  if (start < 0)
+    die("BUILT_IN_PANELS not found in main.tsx — the extractor is stale");
   const block = src.slice(start, src.indexOf("\n];", start));
-  return [...block.matchAll(/id:\s*"([^"]+)",\s*\n\s*title:\s*"([^"]+)"/g)].map((m) => ({
-    kind: "panel",
-    id: m[1],
-    label: m[2],
-  }));
+  return [...block.matchAll(/id:\s*"([^"]+)",\s*\n\s*title:\s*"([^"]+)"/g)].map(
+    (m) => ({
+      kind: "panel",
+      id: m[1],
+      label: m[2],
+    }),
+  );
 }
 
 /** Tools: `built-in-tools.ts`. `status: "planned"` entries are excluded —
@@ -124,15 +128,19 @@ function tools() {
 function commandTables(sourceFiles) {
   const blob = sourceFiles.map(read).join("\n");
   const consts = new Map(
-    [...blob.matchAll(/export const ([A-Z_0-9]+)\s*=\s*"(paged\.[^"]+)"/g)].map((m) => [m[1], m[2]]),
+    [...blob.matchAll(/export const ([A-Z_0-9]+)\s*=\s*"(paged\.[^"]+)"/g)].map(
+      (m) => [m[1], m[2]],
+    ),
   );
   const resolve = (raw) => consts.get(raw) ?? raw.replace(/"/g, "");
 
-  const keys = [...blob.matchAll(/key:\s*"([^"]+)",\s*command:\s*([A-Z_0-9]+|"[^"]+")/g)].map(
-    (m) => ({ kind: "keybinding", id: resolve(m[2]), label: m[1] }),
-  );
+  const keys = [
+    ...blob.matchAll(/key:\s*"([^"]+)",\s*command:\s*([A-Z_0-9]+|"[^"]+")/g),
+  ].map((m) => ({ kind: "keybinding", id: resolve(m[2]), label: m[1] }));
   const menu = [
-    ...blob.matchAll(/path:\s*"([^"]+)",\s*\n?\s*command:\s*([A-Z_0-9]+|"[^"]+")/g),
+    ...blob.matchAll(
+      /path:\s*"([^"]+)",\s*\n?\s*command:\s*([A-Z_0-9]+|"[^"]+")/g,
+    ),
   ].map((m) => ({ kind: "menu item", id: resolve(m[2]), label: m[1] }));
 
   return { keys, menu, constCount: consts.size };
@@ -168,12 +176,25 @@ function pluginSurface() {
   // where the resolved one declares 19). The app's symlink is the only
   // path that answers "what does this build actually inject".
   const BUNDLES_LOADED = [
-    "draw", "web", "sheet", "data", "image", "doc", "pdf", "publish", "slide",
+    "draw",
+    "web",
+    "sheet",
+    "data",
+    "image",
+    "doc",
+    "pdf",
+    "publish",
+    "slide",
   ];
   const items = [];
   const bundles = [];
   for (const pkg of BUNDLES_LOADED) {
-    const manifestPath = join(CANVAS, "node_modules/@paged-media", pkg, "manifest.json");
+    const manifestPath = join(
+      CANVAS,
+      "node_modules/@paged-media",
+      pkg,
+      "manifest.json",
+    );
     let manifest;
     try {
       manifest = JSON.parse(read(manifestPath));
@@ -192,8 +213,10 @@ function pluginSurface() {
         // commands), an object with `id` (tools), and an object keyed by
         // `type` (editContexts / objectTypes / partTypes, whose identity
         // IS the content type they claim — "webFrame", "sheet").
-        const id = typeof entry === "string" ? entry : (entry?.id ?? entry?.type);
-        if (typeof id === "string") items.push({ kind: `plugin ${type}`, id, label: pkg, type, pkg });
+        const id =
+          typeof entry === "string" ? entry : (entry?.id ?? entry?.type);
+        if (typeof id === "string")
+          items.push({ kind: `plugin ${type}`, id, label: pkg, type, pkg });
       }
     }
     bundles.push({ pkg, counts });
@@ -208,7 +231,9 @@ function die(msg) {
   process.exit(2);
 }
 
-const sourceFiles = walk(join(CANVAS, "src")).concat(walk(join(ROOT, "packages")));
+const sourceFiles = walk(join(CANVAS, "src")).concat(
+  walk(join(ROOT, "packages")),
+);
 const testFiles = walk(join(CANVAS, "tests"));
 const testBlob = testFiles.map(read).join("\n");
 
@@ -227,7 +252,10 @@ const SENTINELS = [
   ["spec files", testFiles.length, 100],
 ];
 for (const [what, got, floor] of SENTINELS) {
-  if (got < floor) die(`found only ${got} ${what} (expected >= ${floor}) — an extractor lost its footing`);
+  if (got < floor)
+    die(
+      `found only ${got} ${what} (expected >= ${floor}) — an extractor lost its footing`,
+    );
 }
 
 // Dedupe by id per kind; a command bound to both cmd+ and ctrl+ is one thing.
@@ -248,7 +276,9 @@ const acknowledgedIds = new Set(
 const nowCovered = [...ACKNOWLEDGED.keys()].filter(
   (id) => acknowledgedIds.has(id) && testBlob.includes(id),
 );
-const stale = [...ACKNOWLEDGED.keys()].filter((id) => !surface.some((s) => s.id === id));
+const stale = [...ACKNOWLEDGED.keys()].filter(
+  (id) => !surface.some((s) => s.id === id),
+);
 
 const byKind = (kind) => {
   const all = surface.filter((s) => s.kind === kind);
@@ -267,7 +297,9 @@ console.log(`  menu items   ${byKind("menu item")}`);
 // injected through that door, so the door itself is unproven.
 const pluginKinds = [...new Set(PLUG.map((p) => p.kind))].sort();
 if (pluginKinds.length) {
-  console.log("\n── plugin-injected surface (from the loaded bundles' manifests) ──");
+  console.log(
+    "\n── plugin-injected surface (from the loaded bundles' manifests) ──",
+  );
   for (const k of pluginKinds) {
     console.log(`  ${k.padEnd(22)} ${byKind(k)}`);
   }
@@ -278,18 +310,31 @@ if (pluginKinds.length) {
     const decl = Object.entries(b.counts)
       .map(([t, n]) => `${t} ${n}`)
       .join(", ");
-    console.log(`    ${b.pkg.padEnd(9)} ${String(cov).padStart(3)}/${String(mine.length).padEnd(3)}  ${decl}`);
+    console.log(
+      `    ${b.pkg.padEnd(9)} ${String(cov).padStart(3)}/${String(mine.length).padEnd(3)}  ${decl}`,
+    );
   }
 }
-console.log(`\n  ${surface.length} surface ids from ${testFiles.length} spec files\n`);
+console.log(
+  `\n  ${surface.length} surface ids from ${testFiles.length} spec files\n`,
+);
 
 // The injection PATHS themselves. A contribution type that no loaded
 // bundle uses cannot be proven by this gate at all — say so rather than
 // let its absence read as coverage.
 const CONTRIBUTION_TYPES = [
-  "bindingProvider", "command", "editContext", "exporter", "importer",
-  "keybinding", "objectType", "overlay", "panel", "sceneLayer",
-  "schemaPanel", "tool",
+  "bindingProvider",
+  "command",
+  "editContext",
+  "exporter",
+  "importer",
+  "keybinding",
+  "objectType",
+  "overlay",
+  "panel",
+  "sceneLayer",
+  "schemaPanel",
+  "tool",
 ];
 // Manifest keys are plural (`commands`), the contract's methods are
 // singular (`contribute.command`). Normalise before comparing, or every
@@ -353,7 +398,9 @@ for (const kind of kinds) {
   const ceiling = CEILING.get(kind);
   if (ceiling === undefined) {
     failed = true;
-    console.error(`kind "${kind}" has no CEILING entry — add one (uncovered: ${miss.length}).`);
+    console.error(
+      `kind "${kind}" has no CEILING entry — add one (uncovered: ${miss.length}).`,
+    );
     continue;
   }
   if (miss.length > ceiling) {
@@ -374,7 +421,9 @@ for (const kind of kinds) {
 for (const kind of CEILING.keys()) {
   if (!kinds.includes(kind)) {
     failed = true;
-    console.error(`CEILING has "${kind}", no longer a surface kind — remove it.`);
+    console.error(
+      `CEILING has "${kind}", no longer a surface kind — remove it.`,
+    );
   }
 }
 
@@ -401,9 +450,13 @@ if (stale.length) {
 for (const [id, reason] of ACKNOWLEDGED) {
   if (reason.length < 80) {
     failed = true;
-    console.error(`ACKNOWLEDGED["${id}"] reason is too short to be useful — say what and why.`);
+    console.error(
+      `ACKNOWLEDGED["${id}"] reason is too short to be useful — say what and why.`,
+    );
   }
 }
 
 if (failed) process.exit(1);
-console.log(`surface coverage OK — ${ACKNOWLEDGED.size} acknowledged gap(s), each with a reason.`);
+console.log(
+  `surface coverage OK — ${ACKNOWLEDGED.size} acknowledged gap(s), each with a reason.`,
+);

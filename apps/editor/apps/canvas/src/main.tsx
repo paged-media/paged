@@ -102,7 +102,12 @@ import {
   objectRegistry,
   setObjectModelEditor,
 } from "./object-model";
-import { ALIGN_ARGS, ALIGN_COMMAND, runAlign, type AlignKind } from "./align-plan";
+import {
+  ALIGN_ARGS,
+  ALIGN_COMMAND,
+  runAlign,
+  type AlignKind,
+} from "./align-plan";
 import {
   cameraCentredOn,
   cameraForPage,
@@ -155,7 +160,10 @@ import {
   GLOBAL_LIGHT_MENU_ITEMS,
   GlobalLightDialog,
 } from "./panels/global-light-dialog";
-import { buildCoreCommandEntries, CORE_COMMAND_MENU_ITEMS } from "./core-command-entries";
+import {
+  buildCoreCommandEntries,
+  CORE_COMMAND_MENU_ITEMS,
+} from "./core-command-entries";
 import { createEditorNativeDocumentBackend } from "./plugin-native-document";
 import { pickFiles } from "./shell-file-picker";
 import { saveFileBytes } from "./shell-file-saver";
@@ -233,8 +241,14 @@ import { BookmarksPanel } from "./panels/bookmarks-panel";
 import { CharacterStylesPanel } from "./panels/character-styles-panel";
 import { ColorGroupsPanel } from "./panels/color-groups-panel";
 import { ColorSettingsPanel } from "./panels/color-settings-panel";
-import { StyleOptionsPanel, STYLE_OPTIONS_PANEL } from "./panels/style-options-panel";
-import { DocumentSetupPanel, MarginsColumnsPanel } from "./panels/document-setup-panel";
+import {
+  StyleOptionsPanel,
+  STYLE_OPTIONS_PANEL,
+} from "./panels/style-options-panel";
+import {
+  DocumentSetupPanel,
+  MarginsColumnsPanel,
+} from "./panels/document-setup-panel";
 import { ObjectOptionsPanel } from "./panels/object-options-panel";
 import {
   GradientOptionsPanel,
@@ -1274,12 +1288,13 @@ if (!import.meta.env.PROD) {
   // Test affordance (the `__shellDoors` / `__consent` pattern): an e2e
   // spec can observe the ACTIVE provider stack — the thing the retarget
   // proof is actually about — without a bundle of its own.
-  (globalThis as unknown as { __bindingProviders?: unknown }).__bindingProviders =
-    {
-      active: () => bindingProviders.activeProviders(),
-      readCollection: (collection: string) =>
-        bindingProviders.readCollection({ collection: collection as never }),
-    };
+  (
+    globalThis as unknown as { __bindingProviders?: unknown }
+  ).__bindingProviders = {
+    active: () => bindingProviders.activeProviders(),
+    readCollection: (collection: string) =>
+      bindingProviders.readCollection({ collection: collection as never }),
+  };
 }
 if (!import.meta.env.PROD) {
   // Test affordance: drive a synthetic set prompt + observe/resolve it, and
@@ -1298,8 +1313,11 @@ if (!import.meta.env.PROD) {
 
 // ADR 222 — the activator of the mounted `PluginBundles` (StrictMode mounts
 // it twice; only the live one may settle the boot lane or serve `ensure`).
-let liveActivator: BundleActivator<{ id: string; active: boolean; dispose(): void }> | null =
-  null;
+let liveActivator: BundleActivator<{
+  id: string;
+  active: boolean;
+  dispose(): void;
+}> | null = null;
 
 // Test affordance (the `__canvas` pattern): specs wait for `settled` before
 // probing plugin contributions, and can force an on-demand bundle active.
@@ -1371,8 +1389,10 @@ function PluginBundles() {
       // v66 — enter a bundle's own edit context without a double-click
       // (an "Adjust image" command, an importer that just placed one).
       // The SDK refuses a type the calling bundle did not register.
-      enterEditContext: (type: string, elementId: Parameters<typeof enterContextByType>[1]) =>
-        enterContextRef.current(type, elementId),
+      enterEditContext: (
+        type: string,
+        elementId: Parameters<typeof enterContextByType>[1],
+      ) => enterContextRef.current(type, elementId),
     };
     // W-04: the host owns the code-editor widget (one editor across
     // every scripting-adjacent plugin). W-05: diagnostics fan out to
@@ -1468,7 +1488,10 @@ function PluginBundles() {
     // which answers from the build's module manifest (the module host in a
     // deployed build, /@fs/ in dev, with sha384 for Subresource Integrity).
     // Flips supports("modules@1").
-    const modules = createEditorModulesBackend(moduleManifest, window.location.origin);
+    const modules = createEditorModulesBackend(
+      moduleManifest,
+      window.location.origin,
+    );
     if (!import.meta.env.PROD) {
       // Test affordance (like `__textCaret`): e2e reads the answers directly.
       (globalThis as unknown as { __modules?: unknown }).__modules = {
@@ -1555,7 +1578,8 @@ function PluginBundles() {
       getClient: () => pagedRef.current?.client ?? null,
       openBytes: async (bytes, name) => {
         const client = pagedRef.current?.client;
-        if (!client) throw new Error("no engine client to open the document in");
+        if (!client)
+          throw new Error("no engine client to open the document in");
         const d = docRef.current;
         let handle: DocumentHandle | null = null;
         let failure: string | null = null;
@@ -1583,7 +1607,8 @@ function PluginBundles() {
           resetForNewDocument: d.resetForNewDocument,
           pushWarning: () => {},
         });
-        if (failure || !handle) throw new Error(failure ?? "the document did not load");
+        if (failure || !handle)
+          throw new Error(failure ?? "the document did not load");
         return handle;
       },
     });
@@ -1670,13 +1695,14 @@ function PluginBundles() {
       // every real bundle gets, so a journey can exercise a plugin door
       // end to end (SDK host → shell) without a published plugin that
       // happens to use it. Returns the disposer.
-      (globalThis as unknown as { __loadTestBundle?: unknown }).__loadTestBundle =
-        (bundle: Parameters<typeof loadBundle>[1]) =>
-          loadBundle(
-            () => pagedRef.current,
-            bundle,
-            hostOptionsFor(bundle.manifest.id),
-          );
+      (
+        globalThis as unknown as { __loadTestBundle?: unknown }
+      ).__loadTestBundle = (bundle: Parameters<typeof loadBundle>[1]) =>
+        loadBundle(
+          () => pagedRef.current,
+          bundle,
+          hostOptionsFor(bundle.manifest.id),
+        );
     }
     // Solo loads ONE bundle. Filtering here (rather than after
     // registration) means the other seven never activate at all, so
@@ -1707,8 +1733,7 @@ function PluginBundles() {
       activator.dispose();
       if (liveActivator === activator) liveActivator = null;
       detachDocuments();
-      delete (globalThis as unknown as { __shellDoors?: unknown })
-        .__shellDoors;
+      delete (globalThis as unknown as { __shellDoors?: unknown }).__shellDoors;
       delete (globalThis as unknown as { __loadTestBundle?: unknown })
         .__loadTestBundle;
     };
@@ -1735,7 +1760,11 @@ const FILE_DIAGNOSTIC_SOURCE = "paged.file";
 function reportFileFailure(what: string, err: unknown): void {
   const message = err instanceof Error ? err.message : String(err);
   problemsSink.publish(FILE_DIAGNOSTIC_SOURCE, "file", [
-    { severity: "error", message: `${what} failed — ${message}`, source: "file" },
+    {
+      severity: "error",
+      message: `${what} failed — ${message}`,
+      source: "file",
+    },
   ]);
   // eslint-disable-next-line no-console
   console.error(`${what} failed:`, err);
@@ -1893,7 +1922,11 @@ function CanvasAppIntegration() {
   useEffect(() => {
     setTextReveal(async (range, select) => {
       if (!handle) return false;
-      const sel = { storyId: range.storyId, start: range.start, end: range.end };
+      const sel = {
+        storyId: range.storyId,
+        start: range.start,
+        end: range.end,
+      };
       let at: { pageId: string; xPt: number; yPt: number } | null = null;
       try {
         if (range.end > range.start) {
@@ -1910,7 +1943,11 @@ function CanvasAppIntegration() {
         if (!at) {
           const caret = await client.caretGeometry(sel);
           if (caret) {
-            at = { pageId: String(caret.pageId), xPt: caret.xPt, yPt: caret.topPt + caret.heightPt / 2 };
+            at = {
+              pageId: String(caret.pageId),
+              xPt: caret.xPt,
+              yPt: caret.topPt + caret.heightPt / 2,
+            };
           }
         }
       } catch {
@@ -1921,14 +1958,29 @@ function CanvasAppIntegration() {
       const [vw, vh] = viewportSize;
       // Keep the user's zoom unless it is too small to read text at.
       const scale = Math.max(camera.scale, 0.6);
-      const cam = cameraCentredOn(handle.pageSizesPt, index, at.xPt, at.yPt, scale, vw, vh);
+      const cam = cameraCentredOn(
+        handle.pageSizesPt,
+        index,
+        at.xPt,
+        at.yPt,
+        scale,
+        vw,
+        vh,
+      );
       if (!cam) return false;
       animateCamera(cam);
       if (select) setContentSelection(sel);
       return true;
     });
     return () => setTextReveal(null);
-  }, [animateCamera, camera.scale, client, handle, setContentSelection, viewportSize]);
+  }, [
+    animateCamera,
+    camera.scale,
+    client,
+    handle,
+    setContentSelection,
+    viewportSize,
+  ]);
 
   // v70 — `host.viewport.goToPage`: the page by id, fitted whole or by
   // width, with the navigator's animation.
@@ -1945,14 +1997,18 @@ function CanvasAppIntegration() {
     setPageGoTo(async (pageId, fit) => {
       let order: string[];
       try {
-        order = (await client.collection<{ selfId: string }>("pages")).map((p) => p.selfId);
+        order = (await client.collection<{ selfId: string }>("pages")).map(
+          (p) => p.selfId,
+        );
       } catch {
         return false;
       }
       if (!order.includes(pageId)) return false;
       const settled = () => {
         const h = pageHandleRef.current;
-        return h && h.pageIds.length === order.length && h.pageIds.every((id, i) => id === order[i])
+        return h &&
+          h.pageIds.length === order.length &&
+          h.pageIds.every((id, i) => id === order[i])
           ? h
           : null;
       };
@@ -1963,7 +2019,13 @@ function CanvasAppIntegration() {
       }
       if (!h) return false;
       const [vw, vh] = viewportSize;
-      const cam = cameraForPage(h.pageSizesPt, h.pageIds.indexOf(pageId as never), fit, vw, vh);
+      const cam = cameraForPage(
+        h.pageSizesPt,
+        h.pageIds.indexOf(pageId as never),
+        fit,
+        vw,
+        vh,
+      );
       if (!cam) return false;
       animateCamera(cam);
       return true;
@@ -2104,7 +2166,10 @@ function CanvasAppIntegration() {
           try {
             await commitSave(bytes.slice(), baseName);
           } catch (err) {
-            console.warn("Save (.paged): the library did not take this save:", err);
+            console.warn(
+              "Save (.paged): the library did not take this save:",
+              err,
+            );
           }
           // A5 — write BACK to the file the document was opened from,
           // when there is one. Until now every save minted a download,
@@ -2288,12 +2353,18 @@ function CanvasAppIntegration() {
         category: "Object",
         args: ALIGN_ARGS,
         handler: (_paged: unknown, payload?: unknown) =>
-          runAlign(objectRegistry, payload as { kind: AlignKind; targets: string[] }),
+          runAlign(
+            objectRegistry,
+            payload as { kind: AlignKind; targets: string[] },
+          ),
       },
     ];
     // ADR 221 — every Claude entry point opens the AI Assistant panel;
     // the palette's "Ask Claude" row also runs the request there.
-    setAssistantOpener(() => void registries.commands.invoke("paged.panel.show.paged.ai-assistant"));
+    setAssistantOpener(
+      () =>
+        void registries.commands.invoke("paged.panel.show.paged.ai-assistant"),
+    );
     const aiCommands = [
       {
         id: AI_ASK_COMMAND,
@@ -2301,7 +2372,11 @@ function CanvasAppIntegration() {
         category: "Assistant",
         args: { kind: "text" } as const,
         handler: (_paged: unknown, payload?: unknown) => {
-          openAssistant({ view: "ask", draft: String(payload ?? ""), autoRun: true });
+          openAssistant({
+            view: "ask",
+            draft: String(payload ?? ""),
+            autoRun: true,
+          });
         },
       },
     ];
@@ -2343,7 +2418,15 @@ function CanvasAppIntegration() {
       for (const d of menuDisposables) d.dispose();
       for (const d of keyDisposables) d.dispose();
     };
-  }, [registries, client, camera, viewportSize, handle, sourceName, animateCamera]);
+  }, [
+    registries,
+    client,
+    camera,
+    viewportSize,
+    handle,
+    sourceName,
+    animateCamera,
+  ]);
 
   return null;
 }
@@ -2549,7 +2632,9 @@ const SOLO_SURFACES = SOLO
       return {
         panels: BUILT_IN_PANELS.filter((p) => panelAllow.has(p.id)),
         tools: BUILT_IN_TOOLS.filter((t) => toolAllow.has(t.id)),
-        panelRail: PANEL_RAIL.filter((r) => SOLO.panelRailIds.includes(r.panelId)),
+        panelRail: PANEL_RAIL.filter((r) =>
+          SOLO.panelRailIds.includes(r.panelId),
+        ),
         modes: [soloMode(SOLO)],
         keepMenu,
       };
@@ -2565,7 +2650,9 @@ function startLibrary(): void {
   } catch {
     /* storage blocked — the library needs it no more than the check does */
   }
-  const storage = navigator.storage as StorageManager & { getDirectory?: unknown };
+  const storage = navigator.storage as StorageManager & {
+    getDirectory?: unknown;
+  };
   if (typeof storage?.getDirectory !== "function") return;
   setLibrary(connectLibrary(new LibraryWorker()));
   // Ask the browser not to evict the library under storage pressure.

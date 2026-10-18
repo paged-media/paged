@@ -89,7 +89,10 @@ async function expectEdit(
   what: string,
 ): Promise<Uint8Array> {
   await expect
-    .poll(() => undoDepth(page), { timeout: 30_000, message: `${what} is one journal step` })
+    .poll(() => undoDepth(page), {
+      timeout: 30_000,
+      message: `${what} is one journal step`,
+    })
     .toBeGreaterThan(depth);
   await designer.expectRenderChangesFrom(before, { timeout: 20_000 });
   return settledRender(designer, page);
@@ -97,7 +100,9 @@ async function expectEdit(
 
 /** CPU lane: after a primed status, the gesture's refusal names it. */
 async function expectRefusal(page: Page, line: string): Promise<void> {
-  await expect.poll(() => statusText(page), { timeout: 15_000 }).toContain(line);
+  await expect
+    .poll(() => statusText(page), { timeout: 15_000 })
+    .toContain(line);
 }
 
 test.describe("journey · paged.image retouch tools", () => {
@@ -108,7 +113,12 @@ test.describe("journey · paged.image retouch tools", () => {
     const designer = new Designer(page);
     // A red pupil on grey: the only image where red eye has red to find,
     // and flat enough grey for the bucket to flood.
-    const { empty } = await ingest(designer, page, "tools-sample.png", "red-eye");
+    const { empty } = await ingest(
+      designer,
+      page,
+      "tools-sample.png",
+      "red-eye",
+    );
     const gpu = await designer.gpuActive();
     let before = gpu ? await compositeBaseline(designer, page, empty) : null;
 
@@ -233,7 +243,12 @@ test.describe("journey · paged.image retouch tools", () => {
     const designer = new Designer(page);
     // Noise: a blur on a smooth ramp stays inside the differ's tolerance;
     // on noise it cannot.
-    const { empty } = await ingest(designer, page, "brush-filter-sample.png", "noise");
+    const { empty } = await ingest(
+      designer,
+      page,
+      "brush-filter-sample.png",
+      "noise",
+    );
     const gpu = await designer.gpuActive();
     let before = gpu ? await compositeBaseline(designer, page, empty) : null;
 
@@ -273,7 +288,12 @@ test.describe("journey · paged.image retouch tools", () => {
     // search needs an offset that clears the WHOLE stroke, so the stroke
     // is short — a long scribble across noise can leave the search with
     // no clear source (see the note at the end of this file).
-    const { empty } = await ingest(designer, page, "blemish-sample.png", "blemish");
+    const { empty } = await ingest(
+      designer,
+      page,
+      "blemish-sample.png",
+      "blemish",
+    );
     const gpu = await designer.gpuActive();
     const before = gpu ? await compositeBaseline(designer, page, empty) : null;
 

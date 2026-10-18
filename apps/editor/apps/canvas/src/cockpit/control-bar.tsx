@@ -43,7 +43,11 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
-import { viewportToDoc, type ElementId, type FontSummary } from "@paged-media/client";
+import {
+  viewportToDoc,
+  type ElementId,
+  type FontSummary,
+} from "@paged-media/client";
 import {
   navigateToPages,
   useCamera,
@@ -75,8 +79,21 @@ export function DesignControlBar() {
   );
   return (
     <div
-      data-control-bar={contentSelection ? "text" : elementSelection.length > 0 ? "object" : "document"}
-      style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, overflowX: "auto", scrollbarWidth: "none" }}
+      data-control-bar={
+        contentSelection
+          ? "text"
+          : elementSelection.length > 0
+            ? "object"
+            : "document"
+      }
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        minWidth: 0,
+        overflowX: "auto",
+        scrollbarWidth: "none",
+      }}
     >
       {body}
       <Sep />
@@ -94,7 +111,10 @@ function DocumentControls() {
   const sizes = handle?.pageSizesPt ?? [];
   if (!handle || sizes.length === 0) {
     return (
-      <span className="pg-ui-xs" style={{ paddingLeft: 4, color: "var(--pg-muted-fg)" }}>
+      <span
+        className="pg-ui-xs"
+        style={{ paddingLeft: 4, color: "var(--pg-muted-fg)" }}
+      >
         No document — File ▸ New document… or drop an IDML file here
       </span>
     );
@@ -102,22 +122,47 @@ function DocumentControls() {
   // The page under the middle of the viewport (pages stack vertically —
   // `layoutPages`, the same convention the navigator fits to).
   const rects = layoutPages(sizes);
-  const [, cy] = viewportToDoc(camera, viewportSize[0] / 2, viewportSize[1] / 2);
+  const [, cy] = viewportToDoc(
+    camera,
+    viewportSize[0] / 2,
+    viewportSize[1] / 2,
+  );
   let current = 0;
   for (let i = 0; i < rects.length; i++) if (cy >= rects[i].y - 12) current = i;
-  const go = (i: number) => navigateToPages([Math.max(0, Math.min(sizes.length - 1, i))]);
+  const go = (i: number) =>
+    navigateToPages([Math.max(0, Math.min(sizes.length - 1, i))]);
   const [w, h] = sizes[current];
   const bleedOn = screenMode.screenMode === "bleed";
   return (
     <>
       <Label>Page</Label>
-      <ToolPill icon="ui-chevron-left" title="Previous page" disabled={current === 0} onClick={() => go(current - 1)} testId="page-prev" />
-      <span className="pg-value" data-control-page style={{ ...valueText, minWidth: 54, textAlign: "center" }}>
+      <ToolPill
+        icon="ui-chevron-left"
+        title="Previous page"
+        disabled={current === 0}
+        onClick={() => go(current - 1)}
+        testId="page-prev"
+      />
+      <span
+        className="pg-value"
+        data-control-page
+        style={{ ...valueText, minWidth: 54, textAlign: "center" }}
+      >
         {current + 1} / {sizes.length}
       </span>
-      <ToolPill icon="ui-chevron-right" title="Next page" disabled={current >= sizes.length - 1} onClick={() => go(current + 1)} testId="page-next" />
+      <ToolPill
+        icon="ui-chevron-right"
+        title="Next page"
+        disabled={current >= sizes.length - 1}
+        onClick={() => go(current + 1)}
+        testId="page-next"
+      />
       <Sep />
-      <span className="pg-value" title="Page size" style={{ ...valueText, color: "var(--pg-muted-fg)" }}>
+      <span
+        className="pg-value"
+        title="Page size"
+        style={{ ...valueText, color: "var(--pg-muted-fg)" }}
+      >
         {fmt(w, 0)} × {fmt(h, 0)} pt
       </span>
       <Sep />
@@ -165,7 +210,10 @@ const KIND_LABEL: Record<string, string> = {
 function kindLabel(ids: readonly ElementId[]): string {
   if (ids.length > 1) return `${ids.length} objects`;
   const kind = (ids[0] as unknown as { kind?: string }).kind ?? "";
-  return KIND_LABEL[kind] ?? (kind ? kind.charAt(0).toUpperCase() + kind.slice(1) : "Object");
+  return (
+    KIND_LABEL[kind] ??
+    (kind ? kind.charAt(0).toUpperCase() + kind.slice(1) : "Object")
+  );
 }
 
 function ObjectControls({ ids }: { ids: readonly ElementId[] }) {
@@ -176,31 +224,104 @@ function ObjectControls({ ids }: { ids: readonly ElementId[] }) {
   const { commands } = useRegistries();
   const model = useObjectModel();
   const multi = ids.length >= 2;
-  const isGroup = ids.length === 1 && (ids[0] as unknown as { kind?: string }).kind === "group";
-  const run = (id: string, args?: unknown) => void commands.invoke(id, args as never).catch(() => {});
+  const isGroup =
+    ids.length === 1 &&
+    (ids[0] as unknown as { kind?: string }).kind === "group";
+  const run = (id: string, args?: unknown) =>
+    void commands.invoke(id, args as never).catch(() => {});
   const align = (kind: AlignKind) => {
     if (!model) return;
     run(ALIGN_COMMAND, { kind, targets: ids.map((id) => model.addressOf(id)) });
   };
-  const resizeHint = "Rotated, sheared, grouped or multiple objects resize through Transform";
+  const resizeHint =
+    "Rotated, sheared, grouped or multiple objects resize through Transform";
   return (
     <>
-      <span className="pg-ui-xs" data-control-kind style={{ fontWeight: 600, color: "var(--pg-fg)", padding: "0 4px", whiteSpace: "nowrap" }}>
+      <span
+        className="pg-ui-xs"
+        data-control-kind
+        style={{
+          fontWeight: 600,
+          color: "var(--pg-fg)",
+          padding: "0 4px",
+          whiteSpace: "nowrap",
+        }}
+      >
         {kindLabel(ids)}
       </span>
       <Sep />
-      <NumField label="X" title="Left edge (pt)" value={box?.left ?? null} unit="pt"
-        onCommit={box ? (x) => moveBy(x - box.left, 0) : null} onStep={(d) => moveBy(d, 0)} testId="x" />
-      <NumField label="Y" title="Top edge (pt)" value={box?.top ?? null} unit="pt"
-        onCommit={box ? (y) => moveBy(0, y - box.top) : null} onStep={(d) => moveBy(0, d)} testId="y" />
-      <NumField label="W" title={edgeLeaf ? "Width (pt)" : resizeHint} value={box ? box.right - box.left : null} unit="pt" min={0.1}
-        onCommit={box && edgeLeaf ? (w) => setEdges({ ...box, right: box.left + w }) : null} testId="w" />
-      <NumField label="H" title={edgeLeaf ? "Height (pt)" : resizeHint} value={box ? box.bottom - box.top : null} unit="pt" min={0.1}
-        onCommit={box && edgeLeaf ? (h) => setEdges({ ...box, bottom: box.top + h }) : null} testId="h" />
+      <NumField
+        label="X"
+        title="Left edge (pt)"
+        value={box?.left ?? null}
+        unit="pt"
+        onCommit={box ? (x) => moveBy(x - box.left, 0) : null}
+        onStep={(d) => moveBy(d, 0)}
+        testId="x"
+      />
+      <NumField
+        label="Y"
+        title="Top edge (pt)"
+        value={box?.top ?? null}
+        unit="pt"
+        onCommit={box ? (y) => moveBy(0, y - box.top) : null}
+        onStep={(d) => moveBy(0, d)}
+        testId="y"
+      />
+      <NumField
+        label="W"
+        title={edgeLeaf ? "Width (pt)" : resizeHint}
+        value={box ? box.right - box.left : null}
+        unit="pt"
+        min={0.1}
+        onCommit={
+          box && edgeLeaf
+            ? (w) => setEdges({ ...box, right: box.left + w })
+            : null
+        }
+        testId="w"
+      />
+      <NumField
+        label="H"
+        title={edgeLeaf ? "Height (pt)" : resizeHint}
+        value={box ? box.bottom - box.top : null}
+        unit="pt"
+        min={0.1}
+        onCommit={
+          box && edgeLeaf
+            ? (h) => setEdges({ ...box, bottom: box.top + h })
+            : null
+        }
+        testId="h"
+      />
       <Sep />
-      <PropertyNum label="∠" title="Rotation (degrees)" field={rotation} unit="°" testId="rotation" />
-      <PropertyNum label="Stroke" title="Stroke weight (pt)" field={stroke} unit="pt" min={0} step={0.25} digits={2} testId="stroke" />
-      <PropertyNum label="Opacity" title="Opacity (%)" field={opacity} unit="%" min={0} max={100} digits={0} testId="opacity" />
+      <PropertyNum
+        label="∠"
+        title="Rotation (degrees)"
+        field={rotation}
+        unit="°"
+        testId="rotation"
+      />
+      <PropertyNum
+        label="Stroke"
+        title="Stroke weight (pt)"
+        field={stroke}
+        unit="pt"
+        min={0}
+        step={0.25}
+        digits={2}
+        testId="stroke"
+      />
+      <PropertyNum
+        label="Opacity"
+        title="Opacity (%)"
+        field={opacity}
+        unit="%"
+        min={0}
+        max={100}
+        digits={0}
+        testId="opacity"
+      />
       <Sep />
       {multi && (
         <>
@@ -214,15 +335,47 @@ function ObjectControls({ ids }: { ids: readonly ElementId[] }) {
               ["bottom", "ui-obj-align-bottom", "Align bottom"],
             ] as const
           ).map(([kind, icon, title]) => (
-            <ToolPill key={kind} icon={icon} title={title} onClick={() => align(kind)} testId={`align-${kind}`} />
+            <ToolPill
+              key={kind}
+              icon={icon}
+              title={title}
+              onClick={() => align(kind)}
+              testId={`align-${kind}`}
+            />
           ))}
           <Sep />
         </>
       )}
-      <ToolPill icon="ui-arrange-front" title="Bring to front" onClick={() => run("paged.object.bringToFront")} testId="bring-front" />
-      <ToolPill icon="ui-arrange-back" title="Send to back" onClick={() => run("paged.object.sendToBack")} testId="send-back" />
-      {multi && <Chip testId="group" title="Group (⌘G)" onClick={() => run("paged.object.group")}>Group</Chip>}
-      {isGroup && <Chip testId="ungroup" title="Ungroup (⇧⌘G)" onClick={() => run("paged.object.ungroup")}>Ungroup</Chip>}
+      <ToolPill
+        icon="ui-arrange-front"
+        title="Bring to front"
+        onClick={() => run("paged.object.bringToFront")}
+        testId="bring-front"
+      />
+      <ToolPill
+        icon="ui-arrange-back"
+        title="Send to back"
+        onClick={() => run("paged.object.sendToBack")}
+        testId="send-back"
+      />
+      {multi && (
+        <Chip
+          testId="group"
+          title="Group (⌘G)"
+          onClick={() => run("paged.object.group")}
+        >
+          Group
+        </Chip>
+      )}
+      {isGroup && (
+        <Chip
+          testId="ungroup"
+          title="Ungroup (⇧⌘G)"
+          onClick={() => run("paged.object.ungroup")}
+        >
+          Ungroup
+        </Chip>
+      )}
     </>
   );
 }
@@ -237,31 +390,91 @@ const JUSTIFY: ReadonlyArray<readonly [string, string, string]> = [
 ];
 
 function TextControls() {
-  const paraStyle = useObjectProperty({ path: "appliedParagraphStyle", scope: "content" });
-  const charStyle = useObjectProperty({ path: "appliedCharacterStyle", scope: "content" });
-  const family = useObjectProperty({ path: "characterFontFamily", scope: "content" });
-  const size = useObjectProperty({ path: "characterFontSize", scope: "content" });
-  const leading = useObjectProperty({ path: "characterLeading", scope: "content" });
-  const justify = useObjectProperty({ path: "paragraphJustification", scope: "content" });
+  const paraStyle = useObjectProperty({
+    path: "appliedParagraphStyle",
+    scope: "content",
+  });
+  const charStyle = useObjectProperty({
+    path: "appliedCharacterStyle",
+    scope: "content",
+  });
+  const family = useObjectProperty({
+    path: "characterFontFamily",
+    scope: "content",
+  });
+  const size = useObjectProperty({
+    path: "characterFontSize",
+    scope: "content",
+  });
+  const leading = useObjectProperty({
+    path: "characterLeading",
+    scope: "content",
+  });
+  const justify = useObjectProperty({
+    path: "paragraphJustification",
+    scope: "content",
+  });
   const paraStyles = useStyleRows("paragraphStyles");
   const charStyles = useStyleRows("characterStyles");
   const fonts = useCollection<FontSummary>("fonts") ?? [];
-  const current = typeof justify.state === "object" && justify.state.state === "value" ? String(justify.state.value) : null;
+  const current =
+    typeof justify.state === "object" && justify.state.state === "value"
+      ? String(justify.state.value)
+      : null;
   return (
     <>
-      <PropertySelect title="Paragraph style" field={paraStyle} width={150} testId="paragraph-style"
-        options={paraStyles.map((r) => [r.selfId, cleanStyleName(r.name)])} />
-      <PropertySelect title="Character style" field={charStyle} width={130} testId="character-style"
-        options={charStyles.map((r) => [r.selfId, cleanStyleName(r.name)])} />
+      <PropertySelect
+        title="Paragraph style"
+        field={paraStyle}
+        width={150}
+        testId="paragraph-style"
+        options={paraStyles.map((r) => [r.selfId, cleanStyleName(r.name)])}
+      />
+      <PropertySelect
+        title="Character style"
+        field={charStyle}
+        width={130}
+        testId="character-style"
+        options={charStyles.map((r) => [r.selfId, cleanStyleName(r.name)])}
+      />
       <Sep />
-      <PropertySelect title="Font family" field={family} width={150} testId="font-family"
-        options={fonts.map((f) => [f.family, f.family])} />
-      <PropertyNum label="Size" title="Font size (pt)" field={size} unit="pt" min={0.1} step={0.5} testId="font-size" />
-      <PropertyNum label="Lead" title="Leading (pt)" field={leading} unit="pt" min={0} step={0.5} testId="leading" placeholder="Auto" />
+      <PropertySelect
+        title="Font family"
+        field={family}
+        width={150}
+        testId="font-family"
+        options={fonts.map((f) => [f.family, f.family])}
+      />
+      <PropertyNum
+        label="Size"
+        title="Font size (pt)"
+        field={size}
+        unit="pt"
+        min={0.1}
+        step={0.5}
+        testId="font-size"
+      />
+      <PropertyNum
+        label="Lead"
+        title="Leading (pt)"
+        field={leading}
+        unit="pt"
+        min={0}
+        step={0.5}
+        testId="leading"
+        placeholder="Auto"
+      />
       <Sep />
       {JUSTIFY.map(([value, icon, title]) => (
-        <ToolPill key={value} icon={icon} title={title} on={current === value}
-          disabled={!justify.commit} onClick={() => void justify.commit?.(value)} testId={`justify-${value}`} />
+        <ToolPill
+          key={value}
+          icon={icon}
+          title={title}
+          on={current === value}
+          disabled={!justify.commit}
+          onClick={() => void justify.commit?.(value)}
+          testId={`justify-${value}`}
+        />
       ))}
     </>
   );
@@ -273,7 +486,9 @@ interface StyleRow {
 }
 
 /** A style collection, re-read whenever the document changes. */
-function useStyleRows(collection: "paragraphStyles" | "characterStyles"): StyleRow[] {
+function useStyleRows(
+  collection: "paragraphStyles" | "characterStyles",
+): StyleRow[] {
   const client = useCanvasClient();
   const [rows, setRows] = useState<StyleRow[]>([]);
   useEffect(() => {
@@ -285,7 +500,13 @@ function useStyleRows(collection: "paragraphStyles" | "characterStyles"): StyleR
         .catch(() => live && setRows([]));
     refresh();
     const off = client.subscribe((msg) => {
-      if (msg.kind === "documentLoaded" || msg.kind === "mutationApplied" || msg.kind === "undoApplied" || msg.kind === "redoApplied") refresh();
+      if (
+        msg.kind === "documentLoaded" ||
+        msg.kind === "mutationApplied" ||
+        msg.kind === "undoApplied" ||
+        msg.kind === "redoApplied"
+      )
+        refresh();
     });
     return () => {
       live = false;
@@ -309,15 +530,25 @@ function readNumber(field: Prop): number | null | "mixed" {
   if (s.state === "mixed") return "mixed";
   // Unset on a writable target reads as the schema's default (an
   // untouched frame's opacity is 100, not blank).
-  if (s.state === "absent" && field.commit && typeof field.row?.default === "number") {
+  if (
+    s.state === "absent" &&
+    field.commit &&
+    typeof field.row?.default === "number"
+  ) {
     return field.row.default;
   }
   if (s.state !== "value") return null;
   const v = s.value as unknown;
   // Inherited (the run sets nothing): the schema default when it has one.
-  if (v === null && typeof field.row?.default === "number") return field.row.default;
+  if (v === null && typeof field.row?.default === "number")
+    return field.row.default;
   if (typeof v === "number") return v;
-  if (v && typeof v === "object" && typeof (v as { value?: unknown }).value === "number") return (v as { value: number }).value;
+  if (
+    v &&
+    typeof v === "object" &&
+    typeof (v as { value?: unknown }).value === "number"
+  )
+    return (v as { value: number }).value;
   return null;
 }
 
@@ -375,7 +606,8 @@ function NumField(p: {
   onStep?: (delta: number) => void;
 }) {
   const digits = p.digits ?? 1;
-  const shown = p.value === "mixed" ? "—" : p.value === null ? "" : fmt(p.value, digits);
+  const shown =
+    p.value === "mixed" ? "—" : p.value === null ? "" : fmt(p.value, digits);
   const [text, setText] = useState(shown);
   const [editing, setEditing] = useState(false);
   // Only TYPED text commits on blur — a step already wrote itself, and
@@ -384,7 +616,8 @@ function NumField(p: {
   useEffect(() => {
     if (!editing) setText(shown);
   }, [shown, editing]);
-  const clamp = (n: number) => Math.min(p.max ?? Infinity, Math.max(p.min ?? -Infinity, n));
+  const clamp = (n: number) =>
+    Math.min(p.max ?? Infinity, Math.max(p.min ?? -Infinity, n));
   const commit = (raw: string) => {
     const n = Number(raw.replace(",", ".").replace(/[^\d.+-]/g, ""));
     if (!p.onCommit || raw.trim() === "" || !Number.isFinite(n)) {
@@ -404,13 +637,19 @@ function NumField(p: {
       setTyped(false);
       setText(shown);
       (e.target as HTMLInputElement).blur();
-    } else if ((e.key === "ArrowUp" || e.key === "ArrowDown") && typeof p.value === "number" && p.onCommit) {
+    } else if (
+      (e.key === "ArrowUp" || e.key === "ArrowDown") &&
+      typeof p.value === "number" &&
+      p.onCommit
+    ) {
       e.preventDefault();
-      const step = (p.step ?? 1) * (e.shiftKey ? 10 : 1) * (e.key === "ArrowUp" ? 1 : -1);
+      const step =
+        (p.step ?? 1) * (e.shiftKey ? 10 : 1) * (e.key === "ArrowUp" ? 1 : -1);
       // Step from what the field SHOWS: a second press can land before
       // the first one's re-read, and `p.value` would still be the old one.
       const shownNow = Number(text);
-      const base = Number.isFinite(shownNow) && text.trim() !== "" ? shownNow : p.value;
+      const base =
+        Number.isFinite(shownNow) && text.trim() !== "" ? shownNow : p.value;
       const next = clamp(base + step);
       // The field is focused, so it is not following `shown`; show the
       // stepped value now rather than when focus leaves.
@@ -422,7 +661,15 @@ function NumField(p: {
   };
   const readOnly = !p.onCommit || p.value === null;
   return (
-    <label title={p.title} data-control-field={p.testId} data-field-state={p.fieldState} style={{ ...fieldBox, opacity: p.value === null && !p.placeholder ? 0.45 : 1 }}>
+    <label
+      title={p.title}
+      data-control-field={p.testId}
+      data-field-state={p.fieldState}
+      style={{
+        ...fieldBox,
+        opacity: p.value === null && !p.placeholder ? 0.45 : 1,
+      }}
+    >
       <span style={fieldLabel}>{p.label}</span>
       <input
         value={text}
@@ -444,7 +691,10 @@ function NumField(p: {
           setText(e.target.value);
         }}
         onKeyDown={onKeyDown}
-        style={{ ...fieldInput, color: readOnly ? "var(--pg-muted-fg)" : "var(--pg-fg)" }}
+        style={{
+          ...fieldInput,
+          color: readOnly ? "var(--pg-muted-fg)" : "var(--pg-fg)",
+        }}
       />
       <span style={fieldUnit}>{p.unit}</span>
     </label>
@@ -469,7 +719,8 @@ function PropertySelect(p: {
       value={s.state === "value" ? value : "__none__"}
       disabled={!p.field.commit}
       onChange={(e) => {
-        if (e.target.value !== "__none__") void p.field.commit?.(e.target.value);
+        if (e.target.value !== "__none__")
+          void p.field.commit?.(e.target.value);
       }}
       onKeyDown={(e) => e.stopPropagation()}
       style={{ ...selectBox, width: p.width }}
@@ -484,14 +735,19 @@ function PropertySelect(p: {
           {label}
         </option>
       ))}
-      {s.state === "value" && !known && value !== "" && <option value={value}>{cleanStyleName(value)}</option>}
+      {s.state === "value" && !known && value !== "" && (
+        <option value={value}>{cleanStyleName(value)}</option>
+      )}
     </select>
   );
 }
 
 function Label({ children }: { children: ReactNode }) {
   return (
-    <span className="pg-ui-xs" style={{ color: "var(--pg-muted-fg)", paddingLeft: 4 }}>
+    <span
+      className="pg-ui-xs"
+      style={{ color: "var(--pg-muted-fg)", paddingLeft: 4 }}
+    >
       {children}
     </span>
   );

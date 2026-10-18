@@ -36,7 +36,11 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { CSSProperties } from "react";
 
-import { addressOfElement, objectModelEditor, objectRegistry } from "./object-model";
+import {
+  addressOfElement,
+  objectModelEditor,
+  objectRegistry,
+} from "./object-model";
 
 type Args = Record<string, unknown>;
 
@@ -129,18 +133,26 @@ function liveContext(): Ctx {
     }
   }
   const cs = editor?.contentSelection;
-  const caret = cs?.contentSelection ?? cs?.contentSelectionRef?.current ?? null;
+  const caret =
+    cs?.contentSelection ?? cs?.contentSelectionRef?.current ?? null;
   return { items, caret };
 }
 
 /** Prefill the arguments that name the selection or the caret. */
-export function contextPrefill(fields: Record<string, ArgType>, ctx: Ctx): Args {
+export function contextPrefill(
+  fields: Record<string, ArgType>,
+  ctx: Ctx,
+): Args {
   const out: Args = {};
   for (const [name, t] of Object.entries(fields)) {
     if (t.kind === "ref" && t.to === "item") {
       const at = name === "otherId" || name === "maskId" ? 1 : 0;
       if (ctx.items[at]) out[name] = ctx.items[at];
-    } else if (t.kind === "list" && t.of?.kind === "ref" && t.of.to === "item") {
+    } else if (
+      t.kind === "list" &&
+      t.of?.kind === "ref" &&
+      t.of.to === "item"
+    ) {
       if (ctx.items.length) out[name] = [...ctx.items];
     } else if (t.kind === "ref" && t.to === "story" && ctx.caret) {
       out[name] = `story:${ctx.caret.storyId}`;
@@ -160,19 +172,26 @@ const isOpaque = (t: ArgType) => t.kind === "struct" || t.kind === "map";
 function toText(t: ArgType, v: unknown): string {
   if (v === undefined || v === null) return "";
   if (t.kind === "point" && Array.isArray(v)) return v.join(", ");
-  if (t.kind === "list" && Array.isArray(v) && t.of && !isOpaque(t.of)) return v.map(String).join(", ");
-  if (isOpaque(t) || t.kind === "list" || typeof v === "object") return JSON.stringify(v);
+  if (t.kind === "list" && Array.isArray(v) && t.of && !isOpaque(t.of))
+    return v.map(String).join(", ");
+  if (isOpaque(t) || t.kind === "list" || typeof v === "object")
+    return JSON.stringify(v);
   return String(v);
 }
 
 /** The form's text → the typed value (undefined = not given). */
-export function fromText(t: ArgType, text: string): { ok: true; value: unknown } | { ok: false; reason: string } {
+export function fromText(
+  t: ArgType,
+  text: string,
+): { ok: true; value: unknown } | { ok: false; reason: string } {
   const s = text.trim();
   if (s === "") return { ok: true, value: undefined };
   switch (t.kind) {
     case "number": {
       const n = Number(s);
-      return Number.isFinite(n) ? { ok: true, value: n } : { ok: false, reason: `"${s}" is not a number` };
+      return Number.isFinite(n)
+        ? { ok: true, value: n }
+        : { ok: false, reason: `"${s}" is not a number` };
     }
     case "bool":
       return { ok: true, value: s === "true" };
@@ -184,7 +203,9 @@ export function fromText(t: ArgType, text: string): { ok: true; value: unknown }
     }
     case "list": {
       if (t.of && !isOpaque(t.of) && !s.startsWith("[")) {
-        const parts = s.split(t.of.kind === "text" ? /\s*,\s*/ : /[\s,]+/).filter(Boolean);
+        const parts = s
+          .split(t.of.kind === "text" ? /\s*,\s*/ : /[\s,]+/)
+          .filter(Boolean);
         const out: unknown[] = [];
         for (const p of parts) {
           const r = fromText(t.of, p);
@@ -206,7 +227,9 @@ export function fromText(t: ArgType, text: string): { ok: true; value: unknown }
     return { ok: true, value: JSON.parse(s) };
   } catch {
     // An opaque record also takes a bare word (`pageNumber`).
-    return /^[A-Za-z][A-Za-z0-9]*$/.test(s) ? { ok: true, value: s } : { ok: false, reason: `"${s}" is not JSON` };
+    return /^[A-Za-z][A-Za-z0-9]*$/.test(s)
+      ? { ok: true, value: s }
+      : { ok: false, reason: `"${s}" is not JSON` };
   }
 }
 
@@ -233,7 +256,9 @@ function CommandForm({ pending: p }: { pending: Pending }) {
     void objectRegistry.commands().then((list) => {
       if (cancelled) return;
       setCommands(
-        (list as unknown as CommandInfo[]).filter((c) => c.owner === "core" && c.id.startsWith(CORE_COMMAND_PREFIX)),
+        (list as unknown as CommandInfo[]).filter(
+          (c) => c.owner === "core" && c.id.startsWith(CORE_COMMAND_PREFIX),
+        ),
       );
     });
     return () => {
@@ -242,11 +267,18 @@ function CommandForm({ pending: p }: { pending: Pending }) {
   }, []);
 
   const info = useMemo(
-    () => (op ? (commands?.find((c) => c.id === `${CORE_COMMAND_PREFIX}${op}`) ?? null) : null),
+    () =>
+      op
+        ? (commands?.find((c) => c.id === `${CORE_COMMAND_PREFIX}${op}`) ??
+          null)
+        : null,
     [commands, op],
   );
   const fields = useMemo(
-    () => Object.entries(info?.args.fields ?? {}).filter(([name]) => name !== "handle"),
+    () =>
+      Object.entries(info?.args.fields ?? {}).filter(
+        ([name]) => name !== "handle",
+      ),
     [info],
   );
 
@@ -254,17 +286,32 @@ function CommandForm({ pending: p }: { pending: Pending }) {
   useEffect(() => {
     if (!info) return;
     const seedFields = Object.fromEntries(fields);
-    const seed = { ...contextPrefill(seedFields, liveContext()), ...(op === p.op ? p.prefill : {}) };
-    setTexts(Object.fromEntries(fields.map(([name, t]) => [name, toText(t, seed[name])])));
+    const seed = {
+      ...contextPrefill(seedFields, liveContext()),
+      ...(op === p.op ? p.prefill : {}),
+    };
+    setTexts(
+      Object.fromEntries(
+        fields.map(([name, t]) => [name, toText(t, seed[name])]),
+      ),
+    );
     setError(null);
     // The address lists the ref fields pick from.
     let cancelled = false;
-    const refs = fields.filter(([, t]) => t.kind === "ref" || (t.kind === "list" && t.of?.kind === "ref"));
+    const refs = fields.filter(
+      ([, t]) =>
+        t.kind === "ref" || (t.kind === "list" && t.of?.kind === "ref"),
+    );
     void Promise.all(
       refs.map(async ([name, t]) => {
         const to = (t.kind === "ref" ? t.to : t.of?.to) ?? "";
         try {
-          return [name, (await objectRegistry.query(queryKindOf(to), { limit: 200 })) as string[]] as const;
+          return [
+            name,
+            (await objectRegistry.query(queryKindOf(to), {
+              limit: 200,
+            })) as string[],
+          ] as const;
         } catch {
           return [name, [] as string[]] as const;
         }
@@ -336,7 +383,13 @@ function CommandForm({ pending: p }: { pending: Pending }) {
         <h2 id="core-command-title" style={{ margin: "0 0 4px", fontSize: 15 }}>
           {p.title ?? info?.title ?? "Run command"}
         </h2>
-        <p style={{ margin: "0 0 12px", fontSize: 12, color: "var(--muted-fg, #9a9a9a)" }}>
+        <p
+          style={{
+            margin: "0 0 12px",
+            fontSize: 12,
+            color: "var(--muted-fg, #9a9a9a)",
+          }}
+        >
           {op ? (
             <code data-core-command-id="" style={mono}>
               {CORE_COMMAND_PREFIX}
@@ -357,7 +410,10 @@ function CommandForm({ pending: p }: { pending: Pending }) {
             >
               <option value="">—</option>
               {(commands ?? []).map((c) => (
-                <option key={c.id} value={c.id.slice(CORE_COMMAND_PREFIX.length)}>
+                <option
+                  key={c.id}
+                  value={c.id.slice(CORE_COMMAND_PREFIX.length)}
+                >
                   {c.title}
                 </option>
               ))}
@@ -375,12 +431,32 @@ function CommandForm({ pending: p }: { pending: Pending }) {
           />
         ))}
         {error && (
-          <p data-core-command-error="" role="alert" style={{ margin: "8px 0", fontSize: 12, color: "var(--pg-danger, #ff6b6b)" }}>
+          <p
+            data-core-command-error=""
+            role="alert"
+            style={{
+              margin: "8px 0",
+              fontSize: 12,
+              color: "var(--pg-danger, #ff6b6b)",
+            }}
+          >
             {error}
           </p>
         )}
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
-          <button type="button" data-core-command-cancel="" onClick={close} style={btn(false)}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "flex-end",
+            gap: 8,
+            marginTop: 12,
+          }}
+        >
+          <button
+            type="button"
+            data-core-command-cancel=""
+            onClick={close}
+            style={btn(false)}
+          >
             Cancel
           </button>
           <button
@@ -426,9 +502,15 @@ function ArgField({
   const listId = options?.length ? `core-command-${name}-options` : undefined;
   let control;
   if (t.kind === "bool" || t.kind === "enum") {
-    const members = t.kind === "bool" ? ["true", "false"] : [...(t.members ?? [])];
+    const members =
+      t.kind === "bool" ? ["true", "false"] : [...(t.members ?? [])];
     control = (
-      <select data-core-command-arg={name} value={text} onChange={(e) => onChange(e.target.value)} style={input}>
+      <select
+        data-core-command-arg={name}
+        value={text}
+        onChange={(e) => onChange(e.target.value)}
+        style={input}
+      >
         <option value="">{t.optional ? "(not set)" : "—"}</option>
         {members.map((m) => (
           <option key={m} value={m}>
@@ -455,7 +537,10 @@ function ArgField({
           value={text}
           list={listId}
           onChange={(e) => onChange(e.target.value)}
-          style={{ ...input, ...(t.kind === "ref" || t.kind === "list" ? mono : {}) }}
+          style={{
+            ...input,
+            ...(t.kind === "ref" || t.kind === "list" ? mono : {}),
+          }}
         />
         {listId && (
           <datalist id={listId}>
@@ -472,7 +557,9 @@ function ArgField({
       <span>
         {name}
         {t.optional ? "" : " *"}{" "}
-        <span style={{ color: "var(--muted-fg, #9a9a9a)", fontSize: 11 }}>— {hint}</span>
+        <span style={{ color: "var(--muted-fg, #9a9a9a)", fontSize: 11 }}>
+          — {hint}
+        </span>
       </span>
       {control}
     </label>
@@ -586,7 +673,9 @@ export function CoreCommandButton({
       onClick={() => void click()}
       className="inline-flex h-[28px] items-center justify-center rounded-[7px] border px-[10px] text-[12px]"
       style={{
-        borderColor: error ? "var(--pg-danger, #ff6b6b)" : "var(--chrome-divider, var(--border))",
+        borderColor: error
+          ? "var(--pg-danger, #ff6b6b)"
+          : "var(--chrome-divider, var(--border))",
         background: "transparent",
         color: "var(--pg-fg)",
         opacity: disabled ? 0.5 : 1,
@@ -600,10 +689,14 @@ export function CoreCommandButton({
 
 /** A new master's arguments: a fresh Self id and the document's page
  *  size (core needs a positive master page size). */
-export function newMasterPrefill(pageSizePt: readonly [number, number] | null | undefined): Args {
+export function newMasterPrefill(
+  pageSizePt: readonly [number, number] | null | undefined,
+): Args {
   return {
     master: `u${Date.now().toString(36)}`,
     name: "B-Master",
-    ...(pageSizePt ? { widthPt: pageSizePt[0], heightPt: pageSizePt[1] } : { widthPt: 612, heightPt: 792 }),
+    ...(pageSizePt
+      ? { widthPt: pageSizePt[0], heightPt: pageSizePt[1] }
+      : { widthPt: 612, heightPt: 792 }),
   };
 }

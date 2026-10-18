@@ -129,7 +129,10 @@ export function nearestOnPolyline(
   if (points.length === 0) return null;
   if (points.length === 1) {
     const q = points[0];
-    return { point: [q[0], q[1]], distance: Math.hypot(p[0] - q[0], p[1] - q[1]) };
+    return {
+      point: [q[0], q[1]],
+      distance: Math.hypot(p[0] - q[0], p[1] - q[1]),
+    };
   }
   let best: { point: [number, number]; distance: number } | null = null;
   for (let i = 0; i + 1 < points.length; i++) {
@@ -140,7 +143,10 @@ export function nearestOnPolyline(
     const t =
       len2 === 0
         ? 0
-        : Math.min(1, Math.max(0, ((p[0] - a[0]) * d[0] + (p[1] - a[1]) * d[1]) / len2));
+        : Math.min(
+            1,
+            Math.max(0, ((p[0] - a[0]) * d[0] + (p[1] - a[1]) * d[1]) / len2),
+          );
     const q: [number, number] = [a[0] + d[0] * t, a[1] + d[1] * t];
     const distance = Math.hypot(p[0] - q[0], p[1] - q[1]);
     if (!best || distance < best.distance) best = { point: q, distance };
@@ -179,9 +185,14 @@ function lineMeetsPolyline(
 /** The direction an anchor's edge toward a neighbour LEAVES it: its own
  *  handle on that side when it has one, else the neighbour's facing
  *  handle, else the neighbour itself (a straight edge). */
-function edgeDirection(a: AnchorTriple, n: AnchorTriple, toward: "next" | "prev"): [number, number] {
+function edgeDirection(
+  a: AnchorTriple,
+  n: AnchorTriple,
+  toward: "next" | "prev",
+): [number, number] {
   const own = toward === "next" ? a.right : a.left;
-  if (Math.hypot(own[0] - a.anchor[0], own[1] - a.anchor[1]) > 1e-9) return sub(own, a.anchor);
+  if (Math.hypot(own[0] - a.anchor[0], own[1] - a.anchor[1]) > 1e-9)
+    return sub(own, a.anchor);
   const facing = toward === "next" ? n.left : n.right;
   if (Math.hypot(facing[0] - a.anchor[0], facing[1] - a.anchor[1]) > 1e-9) {
     return sub(facing, a.anchor);
@@ -226,7 +237,8 @@ export function snapOntoPolyline(
   };
   const anchors = table.anchors.map((a, i): AnchorTriple => {
     const nearest = nearestOnPolyline(a.anchor, line);
-    if (!nearest || nearest.distance > tolerance || nearest.distance === 0) return a;
+    if (!nearest || nearest.distance > tolerance || nearest.distance === 0)
+      return a;
     // This anchor's contour, for its cyclic neighbours.
     let from = 0;
     let to = n;
@@ -251,7 +263,8 @@ export function snapOntoPolyline(
       const hit = lineMeetsPolyline(a.anchor, dir, line);
       if (
         hit &&
-        Math.hypot(hit[0] - a.anchor[0], hit[1] - a.anchor[1]) <= SNAP_SLIDE_LIMIT * tolerance
+        Math.hypot(hit[0] - a.anchor[0], hit[1] - a.anchor[1]) <=
+          SNAP_SLIDE_LIMIT * tolerance
       ) {
         target = hit;
       }

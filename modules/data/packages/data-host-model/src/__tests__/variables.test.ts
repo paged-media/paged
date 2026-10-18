@@ -30,11 +30,17 @@ describe("§9.8 — the visibility variable", () => {
   it("emits NOTHING for the Leave missing policy", () => {
     const target = visibilityTarget("textFrame", "u9");
     expect(
-      visibilityToMutations({ kind: "visibility", target: "u9", visible: null }, target),
+      visibilityToMutations(
+        { kind: "visibility", target: "u9", visible: null },
+        target,
+      ),
     ).toEqual([]);
     // ...and exactly one op when the engine did decide.
     expect(
-      visibilityToMutations({ kind: "visibility", target: "u9", visible: true }, target),
+      visibilityToMutations(
+        { kind: "visibility", target: "u9", visible: true },
+        target,
+      ),
     ).toHaveLength(1);
   });
 });
@@ -42,7 +48,12 @@ describe("§9.8 — the visibility variable", () => {
 describe("§9.9 — applying a data set", () => {
   const applies: DataSetApply[] = [
     { variable: "Name", kind: "text", text: "Beta", applicable: true },
-    { variable: "Photo", kind: "image", href: "images/beta.png", applicable: true },
+    {
+      variable: "Photo",
+      kind: "image",
+      href: "images/beta.png",
+      applicable: true,
+    },
     { variable: "Badge", kind: "visibility", visible: false, applicable: true },
   ];
   const targets = {
@@ -55,10 +66,17 @@ describe("§9.9 — applying a data set", () => {
     const plan = dataSetPlan(applies, targets);
     expect(plan.skipped).toEqual({});
     expect(plan.ops).toEqual([
-      { op: "setFieldValue", args: { storyId: "s1", offset: 12, value: "Beta" } },
+      {
+        op: "setFieldValue",
+        args: { storyId: "s1", offset: 12, value: "Beta" },
+      },
       {
         op: "placeImage",
-        args: { elementId: "u55", uri: "images/beta.png", fit: "Proportionally" },
+        args: {
+          elementId: "u55",
+          uri: "images/beta.png",
+          fit: "Proportionally",
+        },
       },
       {
         op: "setElementProperty",
@@ -99,7 +117,14 @@ describe("§9.9 — applying a data set", () => {
     expect(dataSetBatch({ ops: [], skipped: {} })).toBeNull();
     // A plan of nothing-but-skips also commits nothing.
     const onlySkips = dataSetPlan(
-      [{ variable: "Sales", kind: "graphData", applicable: false, note: "RFI D-15" }],
+      [
+        {
+          variable: "Sales",
+          kind: "graphData",
+          applicable: false,
+          note: "RFI D-15",
+        },
+      ],
       {},
     );
     expect(onlySkips.ops).toEqual([]);
@@ -110,11 +135,27 @@ describe("§9.9 — applying a data set", () => {
     const plan = dataSetPlan(
       [
         ...applies,
-        { variable: "Sales", kind: "graphData", applicable: false, note: "no chart surface" },
-        { variable: "Orphan", kind: "text", text: "x", applicable: false, note: "no binding" },
+        {
+          variable: "Sales",
+          kind: "graphData",
+          applicable: false,
+          note: "no chart surface",
+        },
+        {
+          variable: "Orphan",
+          kind: "text",
+          text: "x",
+          applicable: false,
+          note: "no binding",
+        },
         { variable: "Unplaced", kind: "text", text: "y", applicable: true },
         { variable: "NoFrame", kind: "image", href: "a.png", applicable: true },
-        { variable: "NoElement", kind: "visibility", visible: true, applicable: true },
+        {
+          variable: "NoElement",
+          kind: "visibility",
+          visible: true,
+          applicable: true,
+        },
       ],
       targets,
     );
@@ -131,9 +172,12 @@ describe("§9.9 — applying a data set", () => {
   });
 
   it("clears a text variable rather than writing the string 'null'", () => {
-    const plan = dataSetPlan([{ variable: "Name", kind: "text", applicable: true }], {
-      fields: { Name: { storyId: "s1", offset: 0 } },
-    });
+    const plan = dataSetPlan(
+      [{ variable: "Name", kind: "text", applicable: true }],
+      {
+        fields: { Name: { storyId: "s1", offset: 0 } },
+      },
+    );
     expect(plan.ops[0]).toEqual({
       op: "setFieldValue",
       args: { storyId: "s1", offset: 0, value: null },

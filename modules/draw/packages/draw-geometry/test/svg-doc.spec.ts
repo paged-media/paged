@@ -201,7 +201,9 @@ describe("serializeSvgDocument — writer", () => {
   });
 
   it("derives a viewport from the bounds when none given", () => {
-    const doc = parseSvgDocument(`<svg><rect x="0" y="0" width="30" height="20"/></svg>`);
+    const doc = parseSvgDocument(
+      `<svg><rect x="0" y="0" width="30" height="20"/></svg>`,
+    );
     const out = serializeSvgDocument(doc!.shapes);
     expect(out).toContain(`width="30"`);
     expect(out).toContain(`height="20"`);

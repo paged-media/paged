@@ -77,7 +77,9 @@ async function ingested() {
 /** The mutations this spec is about: everything but the ownership
  *  marker ingest writes on the frame (setPluginMetadata). */
 const pathOps = (fake: { mutations: unknown[] }) =>
-  fake.mutations.filter((m) => (m as { op?: string }).op !== "setPluginMetadata");
+  fake.mutations.filter(
+    (m) => (m as { op?: string }).op !== "setPluginMetadata",
+  );
 
 describe("selection → path (real engine wasm)", () => {
   it("inserts one polygon per contour, in DOCUMENT coordinates", async () => {
@@ -245,7 +247,11 @@ describe("path → selection (real engine wasm)", () => {
           left: [2 * SCALE, SCALE - k],
           right: [2 * SCALE, SCALE + k],
         },
-        { anchor: [SCALE, 2 * SCALE], left: [SCALE + k, 2 * SCALE], right: [SCALE - k, 2 * SCALE] },
+        {
+          anchor: [SCALE, 2 * SCALE],
+          left: [SCALE + k, 2 * SCALE],
+          right: [SCALE - k, 2 * SCALE],
+        },
         { anchor: [0, SCALE], left: [0, SCALE + k], right: [0, SCALE - k] },
       ],
       subpathStarts: [],

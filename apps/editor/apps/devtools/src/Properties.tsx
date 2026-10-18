@@ -66,8 +66,8 @@ export function Properties(props: Props) {
                 {d.source.kind === "InheritedFrom"
                   ? `inherits: ${d.source.name}`
                   : d.source.kind === "Default"
-                  ? "default"
-                  : "local"}
+                    ? "default"
+                    : "local"}
               </td>
             </tr>
           ))}
@@ -103,7 +103,8 @@ function BoundsWidget(props: {
   value: PropertyValue;
   onChange: (value: PropertyValue) => void;
 }) {
-  const initial = props.value.type === "bounds" ? props.value.value : [0, 0, 0, 0];
+  const initial =
+    props.value.type === "bounds" ? props.value.value : [0, 0, 0, 0];
   const [b, setB] = useState<[number, number, number, number]>([
     initial[0],
     initial[1],

@@ -15,9 +15,9 @@ contract. When they disagree, fix one of them in the same change.
 ## 1. What the SDK is for
 
 Two first-party plugins define the existential test (companion papers):
-**paged.draw** proves the platform hosts a *tool* (gestures, path
-mutations, overlays, panels); **paged.web** proves it hosts a *foreign
-document model* (a new object type, an embedded engine, diagnostics,
+**paged.draw** proves the platform hosts a _tool_ (gestures, path
+mutations, overlays, panels); **paged.web** proves it hosts a _foreign
+document model_ (a new object type, an embedded engine, diagnostics,
 assets). The SDK is the narrowest surface that lets both be built out of
 repo — everything else is deliberately absent.
 
@@ -28,7 +28,7 @@ a proven consumer need, cited as `[draw B-NN]` or `[web §9.1.N]`.
 ## 2. Design tenets
 
 1. **Types from the API, values from the host.** `@paged-media/plugin-api`
-   is *type-only*. Every runtime value a bundle touches arrives through
+   is _type-only_. Every runtime value a bundle touches arrives through
    `BundleHost` at `activate()`. Consequences: bundle module graphs stay
    host-free (unit-testable without React/wasm), and the same bundle
    source runs in-process today and behind an isolate RPC later — the
@@ -36,14 +36,14 @@ a proven consumer need, cited as `[draw B-NN]` or `[web §9.1.N]`.
 2. **Facades, not object-graph leakage.** Bundles never see the raw
    registries or the raw `CanvasClient`. Raw registries would let a
    plugin unregister core contributions; the raw client exposes 100+
-   methods we'd freeze by accident. The host hands *scoped facades*
+   methods we'd freeze by accident. The host hands _scoped facades_
    that (a) enforce the namespace rule, (b) track every registration
    for automatic teardown, (c) define the freeze candidate. Prior art:
    VS Code's `vscode.*` + `ExtensionContext.subscriptions` (good);
    Figma's ambient `figma.*` global (bad for multi-plugin isolation —
    we take the handle-passing shape instead).
 3. **Disposable by default; deactivation is structural.** Everything a
-   bundle registers returns a `Disposable`, and the host *also* tracks
+   bundle registers returns a `Disposable`, and the host _also_ tracks
    it. `dispose()` on the bundle handle must leave the shell exactly as
    found — the platform-honesty smoke test is enforced by construction,
    not convention.
@@ -71,25 +71,25 @@ a proven consumer need, cited as `[draw B-NN]` or `[web §9.1.N]`.
    LANDED).** Panels are expert-leaf React composed from
    `@paged-media/ui` primitives and the `--pg-*`/`--chrome-*`/
    `--status-*` token layer; icons follow the 24×24/currentColor/
-   1.5–1.9-stroke rule. The declarative panel schema stays a *catalog*
+   1.5–1.9-stroke rule. The declarative panel schema stays a _catalog_
    concern [draw B-01] — the SDK adopts it, never invents a rival. W3.1
    landed that adoption: `host.contribute.schemaPanel` +
    `host.bindings`, rendered host-side from the catalog (§12).
 
 ## 3. The package layering (unchanged from v0.1, sharpened)
 
-| Package | Role | Discipline |
-|---|---|---|
-| `@paged-media/plugin-api` | the contract: manifest, lifecycle, `BundleHost`, curated wire/contribution type re-exports | **type-only**, frozen at v1 |
+| Package                   | Role                                                                                                                              | Discipline                                                                                |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `@paged-media/plugin-api` | the contract: manifest, lifecycle, `BundleHost`, curated wire/contribution type re-exports                                        | **type-only**, frozen at v1                                                               |
 | `@paged-media/plugin-sdk` | the runtime: `createBundleHost` (the in-process host adapter), `loadBundle`, gesture helpers, version negotiation, `defineBundle` | value code; faster-moving; owns `API_VERSION` (the api package can't — it has no runtime) |
-| `@paged-media/plugin-cli` | validate/package tooling | zero-dep ESM |
+| `@paged-media/plugin-cli` | validate/package tooling                                                                                                          | zero-dep ESM                                                                              |
 
 The non-obvious move: **the host adapter lives in `plugin-sdk`, not in
 the editor.** `createBundleHost(getEditor, manifest)` is a pure function
 over the editor handle — the editor's only job is one `loadBundle()`
 call per bundle. This keeps the entire contract implementation in this
 repo (reviewable, versioned with the types it implements) and makes the
-isolate migration a *second implementation of the same interface*
+isolate migration a _second implementation of the same interface_
 (`createBundleHostProxy` over RPC), not an editor refactor.
 
 ## 4. The `BundleHost` surface, area by area
@@ -99,14 +99,16 @@ documented but throw `PluginApiNotImplemented` — visible seams, never
 fake-interactive (brand honesty rule applied to API design).
 
 ### 4.1 `host.manifest`, `host.log`
+
 Own manifest (read-only) and a namespaced logger. The logger is the
 seed of the **diagnostics channel** [web §9.1.4] — same sink, levels,
 plugin-id prefix; the problems-panel UI consumes it later.
 
 ### 4.2 `host.contribute` — the contribution surface
+
 `tool / panel / command / keybinding / overlay`, each `(c) => Disposable`,
 each namespace-checked. These wrap the five proven registries
-(`ToolContribution` with `gesture()` factories *is* the tool API — it
+(`ToolContribution` with `gesture()` factories _is_ the tool API — it
 carried the whole pen/anchor build [draw D2]).
 `editContext` [draw B-02, web §8] and `objectType` [web §9.1.2] — the
 last two reserved doors — LANDED (W3.2, 2026-06-07). A bundle registers
@@ -128,7 +130,8 @@ draw B-02). The headless harness records both
 (`editContextsContributed()` / `objectTypesContributed()`).
 
 ### 4.3 `host.document` — read broadly, write through one door
-- `mutate(m: MutationInput): Promise<MutationOutcome>` — *the* write
+
+- `mutate(m: MutationInput): Promise<MutationOutcome>` — _the_ write
   door. Undo/validation/collab semantics stay engine-owned.
   `MutationInput = Mutation | PendingMutation` (§4.3a) — a WIDENED
   accepted input, which is additive: every `Mutation` still passes.
@@ -179,7 +182,7 @@ draw B-02). The headless harness records both
   plugin's document (or page) key is refused like a foreign element key.
 
 Capability note: this is the "read-broad / write-scoped" default. v0
-enforces namespace only; write-*scoping* (subtree restriction) attaches
+enforces namespace only; write-_scoping_ (subtree restriction) attaches
 at this same `mutate` chokepoint when edit contexts land.
 
 ### 4.3a Protocol-ahead mutation ops (`PendingMutation`)
@@ -197,19 +200,19 @@ Core is at **protocol 57**, unpublished. Eleven ops landed there that
 bundles need now, mirrored HAND-WRITTEN in `plugin-api/src/mutations.ts`
 — byte-equal to the tsify output the v57 build emits:
 
-| op | args | consumer |
-| --- | --- | --- |
-| `closePath` | `{ elementId, subpath? }` | paged.draw Wave B — close an open subpath (the inverse of `pathOpenAt`'s scissors cut) |
-| `joinPaths` | `{ elementId, otherId }` | paged.draw Wave B — weld two open single-contour paths (InDesign's Join) |
-| `pasteInto` | `{ containerId, childId }` | B-18 nested content — nest a top-level page item in a container frame |
-| `releaseFrom` | `{ childId }` | B-18 — pop a nested child back to top level |
-| `pathfinderDivide` | `{ elementIds }` | B-22 (v57) — paged.draw's `Pathfinder: Divide` command (`commands/pathfinder-region.ts`) |
-| `pathfinderTrim` | `{ elementIds }` | B-22 — paged.draw's `Pathfinder: Trim` |
-| `pathfinderMerge` | `{ elementIds }` | B-22 — paged.draw's `Pathfinder: Merge` |
-| `pathfinderCrop` | `{ elementIds }` | B-22 — paged.draw's `Pathfinder: Crop` |
-| `pathfinderOutline` | `{ elementIds }` | B-22 — paged.draw's `Pathfinder: Outline` |
-| `pathfinderMinusBack` | `{ elementIds }` | B-22 — paged.draw's `Pathfinder: Minus back` |
-| `pathfinderFaces` | `{ elementIds, faces, mode }` | B-22 — paged.draw's Shape Builder commit (`handlers/shape-builder.ts`), fed by §4.3c's face ids |
+| op                    | args                          | consumer                                                                                        |
+| --------------------- | ----------------------------- | ----------------------------------------------------------------------------------------------- |
+| `closePath`           | `{ elementId, subpath? }`     | paged.draw Wave B — close an open subpath (the inverse of `pathOpenAt`'s scissors cut)          |
+| `joinPaths`           | `{ elementId, otherId }`      | paged.draw Wave B — weld two open single-contour paths (InDesign's Join)                        |
+| `pasteInto`           | `{ containerId, childId }`    | B-18 nested content — nest a top-level page item in a container frame                           |
+| `releaseFrom`         | `{ childId }`                 | B-18 — pop a nested child back to top level                                                     |
+| `pathfinderDivide`    | `{ elementIds }`              | B-22 (v57) — paged.draw's `Pathfinder: Divide` command (`commands/pathfinder-region.ts`)        |
+| `pathfinderTrim`      | `{ elementIds }`              | B-22 — paged.draw's `Pathfinder: Trim`                                                          |
+| `pathfinderMerge`     | `{ elementIds }`              | B-22 — paged.draw's `Pathfinder: Merge`                                                         |
+| `pathfinderCrop`      | `{ elementIds }`              | B-22 — paged.draw's `Pathfinder: Crop`                                                          |
+| `pathfinderOutline`   | `{ elementIds }`              | B-22 — paged.draw's `Pathfinder: Outline`                                                       |
+| `pathfinderMinusBack` | `{ elementIds }`              | B-22 — paged.draw's `Pathfinder: Minus back`                                                    |
+| `pathfinderFaces`     | `{ elementIds, faces, mode }` | B-22 — paged.draw's Shape Builder commit (`handlers/shape-builder.ts`), fed by §4.3c's face ids |
 
 The seven v57 ops are the REGION row: where the vendored
 `pathfinderBoolean` (Shape Modes) combines paths into one, these resolve
@@ -227,6 +230,7 @@ runs, `Mutation` ABSORBS these and `PendingMutation` collapses into a
 subset of it — it never contradicts the vendored union.
 
 **Honest limits, recorded:**
+
 - A protocol-ahead op is NOT gated by `host.supports()`. The gate is the
   worker's protocol version, which the client handshake already checks
   (`protocolMismatch`); an op a pre-v56 (resp. pre-v57) worker can't
@@ -241,9 +245,11 @@ subset of it — it never contradicts the vendored union.
   re-sync.
 
 ### 4.3b `host.nativeDocument` — the whole-native-document door [ADR-022]
+
 The privileged, isolate-safe surface an import/export plugin needs to
 speak in terms of the WHOLE Paged-native document, replacing the
 `host.editor.client` escape hatch (§4.9) for that job.
+
 - `readModel()` / `readComposition()` — raw bytes of the core-owned
   native parts (`paged/core/model/document.pgm`,
   `…/composition/document.pgd`), or `null` when the document carries no
@@ -289,6 +295,7 @@ not simulated by the consumer.
 **Why the door answers a RESULT, not a face array.** The result carries
 a REFUSAL channel, and flattening it would be the one dishonesty this
 door cannot afford:
+
 - `found: false` + `reason` — the query could not be answered at all:
   no document, an id that doesn't resolve, or more than the kernel's
   `MAX_PLANAR_INPUTS` (12) inputs / more than 256 faces. The engine
@@ -337,10 +344,10 @@ nests page items), `null` when there is none.
 **Consumer (the promotion rule):** paged.draw's `selectParentGroup`
 command (`draw-bundle/src/commands/select-parent-group.ts`), which climbs
 to the containing group on every press. Its module header already records
-the gap in its own words — *"there is no per-element
+the gap in its own words — _"there is no per-element
 `document.parentOf(id)` read — this command re-reads the WHOLE tree per
 invocation, which is O(document) on every press … a targeted parent read
-door is the RFI candidate"*. This is that door. The bundle's pure
+door is the RFI candidate"_. This is that door. The bundle's pure
 `parentGroupOf(roots, target)` walk stays exported for its conformance
 spec; what changes is that the command stops paying for a full tree walk
 per keystroke.
@@ -376,19 +383,21 @@ door exists to remove.
 **What `null` means (three cases, deliberately merged):** the element is
 top-level (its container is a Page/Spread row, which carries no
 `ElementId` and is not a selection target — so those rows are
-*transparent*: a frame inside a group inside a page answers the GROUP);
+_transparent_: a frame inside a group inside a page answers the GROUP);
 the id does not resolve; or the address is structural (`storyRange`,
 `table`, `tableCell` — those never nest in groups, and answer without a
 read at all). A caller that needs to tell them apart still has `tree()`.
 A pure read, gated on `capabilities.document.read` like every other.
 
 ### 4.4 `host.selection`, `host.viewport`
+
 `selection.get()/set()/onDidChange` (the post-insert select pattern
 every drawing tool needs) and `viewport.camera()/pxToPt(px)` (the
 zoom-constant-tolerance idiom from `pencil/scissors/pen` — [draw B-11]
 showed every tool re-derives it).
 
 ### 4.5 `host.overlay`
+
 `setToolPreview(shape | null)` — the polyline/rect/path preview signal
 (the one overlay channel that exists [draw B-07]). Scene layers and
 retained plugin overlays are the P2 channel; reserved, not faked. The
@@ -420,17 +429,18 @@ rendered), which meant a tool could show geometry **or** a label, never
 both.
 
 **Consumers (the promotion rule), both naming the gap in their own code:**
+
 - paged.draw's **Measure** (`draw-bundle/src/handlers/measure.ts`) — its
-  header says it outright: *"`overlay.setToolPreview` is a SINGLE-SLOT
+  header says it outright: _"`overlay.setToolPreview` is a SINGLE-SLOT
   channel … the frozen line is traded for the frozen numbers; that trade
   is named here rather than hidden. A multi-primitive preview channel is
-  the follow-up RFI item."* With this door the measured segment and the
+  the follow-up RFI item."_ With this door the measured segment and the
   `"124.60 pt · 53.1°"` readout ride together; the pointer-up SWAP goes
   away.
 - paged.draw's region **Shape Builder**
-  (`draw-bundle/src/handlers/shape-builder.ts`) — *"Single-slot channel:
+  (`draw-bundle/src/handlers/shape-builder.ts`) — _"Single-slot channel:
   the hovered FACE outline wins … the gesture polyline stands in when the
-  pointer is over no face."* It can highlight ONE face; it cannot shade
+  pointer is over no face."_ It can highlight ONE face; it cannot shade
   the whole COLLECTED set, which is the interaction's actual feedback.
 
 **Why an array and not a second annotation slot.** A dedicated
@@ -442,12 +452,12 @@ no second render path, no z-ordering vocabulary to invent.
 
 **Why a new member and not a widened `setToolPreview` parameter.**
 Widening the parameter to `shape | shape[] | null` would be smaller on
-paper and worse in practice for two reasons. (1) *Silent mis-render*: the
+paper and worse in practice for two reasons. (1) _Silent mis-render_: the
 existing renderer discriminates the variants structurally (`"cells" in
 p`, `"anchors" in p`, …); an array satisfies none of them and falls
 through to the rect branch, so a bundle built against a new SDK on a host
-with an older renderer would draw garbage rather than degrade. (2) *A
-static flag is then forced*: one member cannot report which arity the
+with an older renderer would draw garbage rather than degrade. (2) _A
+static flag is then forced_: one member cannot report which arity the
 host actually renders. A separate member lets
 `supports("overlay.multiPreview@1")` be **DYNAMIC** — present-when-wired,
 exactly like `rendering.sceneLayer@1` / `text.measure@1` / `images` —
@@ -464,7 +474,7 @@ the pre-K-9 behaviour each consumer used to hand-code, now done once in
 the adapter.
 
 **One slot, two writers.** `setToolPreviews` REPLACES the slot's content;
-`null` *and* `[]` clear it, so a bundle's teardown path is the same on
+`null` _and_ `[]` clear it, so a bundle's teardown path is the same on
 either host. It is deliberately not a second overlay layer: that would
 resurrect z-ordering between the layers and double the teardown paths for
 no consumer's benefit. Shapes may address different pages — each carries
@@ -505,6 +515,7 @@ bound) bundle.
 - Same `capabilities.rendering ∋ "overlay"` gate as `setToolPreview`.
 
 ### 4.5b `host.text` — measurement + the caret read door [S-13 · C-9]
+
 `measureString(family, style, text, sizePt)` (S-13 — real engine-shaper
 metrics when the editor wires `PagedEditor.text`, an honest estimate
 otherwise; `supports("text.measure@1")` tells a bundle which it got) and
@@ -545,7 +556,7 @@ to give the edited bytes back.
 `{ name, bytes, mimeType }`; `SaveFileOptions` is `{ suggestedName, bytes,
 mimeType? }`. The one rename is deliberate — `suggestedName` says what
 the contract can honestly promise: the host may sanitize or de-duplicate
-it, and a bundle can never name a *path* or a location. `mimeType` keeps
+it, and a bundle can never name a _path_ or a location. `mimeType` keeps
 the picker's spelling so bytes picked from disk can be handed straight
 back after an edit without re-keying the field.
 
@@ -572,7 +583,7 @@ change: the option is now typed `ShellBackend` (the bundle-facing
 `ShellSurface` with `saveFile` optional) and the bundle-facing surface
 WRAPS it rather than BEING it — so a host app that predates the door
 still injects a valid shell, and a missing member surfaces to a bundle as
-`false`, never as *"host.shell.saveFile is not a function"*.
+`false`, never as _"host.shell.saveFile is not a function"_.
 
 **No capability gate, for the same reason `pickFile` has none.** Neither
 door reaches document state or another plugin's data; the host's own
@@ -587,29 +598,31 @@ blob→download and the Export Center's plugin-exporter delivery calls
 straight into it, so plugin bytes leave the app through ONE mechanism.
 
 ### 4.6 `host.storage`
+
 Namespaced KV (`paged.plugin.<id>.*`), JSON values. Needed by
 paged.web's frame-options defaults and any tool's preferences; trivial
 in-process (localStorage), trivially proxyable. Injectable backing for
 tests/headless.
 
 ### 4.6b `host.network` — the consent door [paged.data D-03]
+
 `requestConsent(origins, purpose) → ConsentResult` + `consentedOrigins()`.
 The first plugin needing network is paged.data (external datasets;
 `plugin-data: docs/concept.md` §11 — "the largest attack surface in the suite"), so the door is
-designed against *its* threat model, not a generic fetch. Three deliberate
+designed against _its_ threat model, not a generic fetch. Three deliberate
 choices: (1) **the manifest is the OUTER bound** — `capabilities.network`
 declares a per-origin allow-list (or `"consent"` for author-supplied
-sources); consent is the *inner* gate, so a bundle can never request an
+sources); consent is the _inner_ gate, so a bundle can never request an
 origin it did not declare. (2) **No fetch on open** — a document carrying
 queries is treated as carrying code: external origins are inert until the
 user reviews the data-source manifest (origins + purpose) and consents,
 per-origin and rememberable. (3) **The host does NOT proxy bytes** — a grant
-authorizes the *bundle's own* reach (so the vendored DuckDB-WASM `httpfs`
+authorizes the _bundle's own_ reach (so the vendored DuckDB-WASM `httpfs`
 connector works unchanged — connector breadth is the product); the editor
 enforces the boundary with a CSP `connect-src` derived from the granted set.
-The host adapter owns the consent *logic* (allow-list check, the remembered-
+The host adapter owns the consent _logic_ (allow-list check, the remembered-
 grant store in `host.storage`, default-deny); the editor injects the consent
-*UI* via `CreateBundleHostOptions.consent` (a `ConsentBackend`). Absent a
+_UI_ via `CreateBundleHostOptions.consent` (a `ConsentBackend`). Absent a
 backend the door denies every origin and `supports("network.consent@1")` is
 false — the honest no-consent posture, mirroring `host.assets`. Editor
 follow-up: the consent-prompt UI + the CSP enforcement. The host-proxied
@@ -618,6 +631,7 @@ large chokepoint for no isolation gain over CSP-per-grant). Full RFC:
 [`docs/design/network-consent.md`](docs/design/network-consent.md).
 
 ### 4.6c `host.dataProviders` — the cross-plugin data-provider registry [D-09]
+
 `register(registration) → handle` (provider side) + `discover(category) /
 get(id) / onDidChange(id, listener)` (consumer side). The §7.1 composition: one
 plugin PUBLISHES a resolved dataset (paged.data — a governed query result) and
@@ -646,22 +660,25 @@ the registry once + inject it into every `loadBundle`. Full RFCs:
 `plugin-sheets: docs/design/data-provider-consumer.md` (consumer).
 
 ### 4.7 `host.diagnostics`
+
 `set(key, Diagnostic[]) / clear / onDidChange` — per-plugin diagnostic
 store with console mirroring [web §9.1.4: parse errors, unsupported-CSS
-warnings]. The host-side problems UI is future; the *channel* must be
+warnings]. The host-side problems UI is future; the _channel_ must be
 in the contract from day 1 or every plugin invents its own.
 
 ### 4.8 `host.supports(feature)`
+
 Feature strings of the form `"area.member@major"` (e.g.
 `"contribute.tool@1"`, `"document.hitTest@1"`). The implemented set is
 exported as `HOST_FEATURES` so tests and docs can't drift from code.
 
 ### 4.9 `host.editor` — the marked escape hatch
+
 The raw `PagedEditor`, present in v0 **by design**: gesture handlers
 receive it from the spine anyway (`onActivate(paged)`), and pretending
-otherwise would push bundles to smuggle it. The rule: *any use of
+otherwise would push bundles to smuggle it. The rule: _any use of
 `host.editor` that isn't reachable through a facade is a
-`BREAKAGE_LOG` entry* — it's the API-gap detector, and it gets removed
+`BREAKAGE_LOG` entry_ — it's the API-gap detector, and it gets removed
 at the isolate boundary (the one v0 member that cannot survive RPC).
 
 ## 5. What `plugin-sdk` adds on top
@@ -672,7 +689,7 @@ at the isolate boundary (the one v0 member that cannot survive RPC).
 - **Gesture kit** [resolves draw B-11]: `beginPageDrag`, `endLocalFor`,
   `pxToPt`, `commitAndSelect` — the page-anchored-drag bookkeeping every
   drawing tool repeats, extracted from `editor/packages/tools/src/
-  handlers/shared.ts` so bundles can ship complete tools with zero
+handlers/shared.ts` so bundles can ship complete tools with zero
   editor-internal imports.
 - **`DisposableStore`** — the subscriptions idiom.
 - **`API_VERSION` + `satisfiesApiVersion`** — caret/exact/`*` ranges
@@ -749,17 +766,17 @@ syntax target.)
 
 ## 6. RPC-readiness audit (the isolate migration debt, stated)
 
-| Member | Clonable? | Migration note |
-|---|---|---|
-| manifest, storage, diagnostics, supports, log | yes | trivial proxy |
-| document.*, selection.*, viewport.* | yes | async already; promises proxy 1:1 |
-| overlay.setToolPreview | yes | plain data |
-| contribute.command/keybinding | yes | worker-kernel prototype already proved this (`shell/src/bundles/sample-bundle.worker.ts`) |
-| contribute.tool (`gesture()` factory) | **no** | the factory becomes an event subscription: host streams `CanvasPointerEvent`s (already plain data) to the isolate, which runs the same machine and replies with preview/mutation messages — the draw-tools machines were shaped event-in/intent-out for exactly this |
-| contribute.panel (React component) | **no** | v0 exception (expert-leaf escape hatch, same-realm only) |
-| contribute.schemaPanel (`PanelSchema` data) | **yes** | W3.1 — pure data + named bindings; the isolate-ready panel form that RESOLVES the row above (§12) |
-| host.bindings (publish/get/onDidChange) | **yes** | plain JSON; the dynamic half of schema panels (§12.2) |
-| host.editor | **no** | dies at the boundary, by design (§4.9) |
+| Member                                        | Clonable? | Migration note                                                                                                                                                                                                                                                       |
+| --------------------------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| manifest, storage, diagnostics, supports, log | yes       | trivial proxy                                                                                                                                                                                                                                                        |
+| document._, selection._, viewport.*           | yes       | async already; promises proxy 1:1                                                                                                                                                                                                                                    |
+| overlay.setToolPreview                        | yes       | plain data                                                                                                                                                                                                                                                           |
+| contribute.command/keybinding                 | yes       | worker-kernel prototype already proved this (`shell/src/bundles/sample-bundle.worker.ts`)                                                                                                                                                                            |
+| contribute.tool (`gesture()` factory)         | **no**    | the factory becomes an event subscription: host streams `CanvasPointerEvent`s (already plain data) to the isolate, which runs the same machine and replies with preview/mutation messages — the draw-tools machines were shaped event-in/intent-out for exactly this |
+| contribute.panel (React component)            | **no**    | v0 exception (expert-leaf escape hatch, same-realm only)                                                                                                                                                                                                             |
+| contribute.schemaPanel (`PanelSchema` data)   | **yes**   | W3.1 — pure data + named bindings; the isolate-ready panel form that RESOLVES the row above (§12)                                                                                                                                                                    |
+| host.bindings (publish/get/onDidChange)       | **yes**   | plain JSON; the dynamic half of schema panels (§12.2)                                                                                                                                                                                                                |
+| host.editor                                   | **no**    | dies at the boundary, by design (§4.9)                                                                                                                                                                                                                               |
 
 Three knowingly non-clonable members, each with a written exit. That is
 the entire isolate debt.
@@ -833,7 +850,7 @@ minimal and additive.
 ## 10. The plugin-shipped WASM lane (W-07)
 
 A bundle declares every wasm module it ships under `capabilities.wasm`
-(`{ name, path, purpose, maxBytes? }`) — a *capability*, not a
+(`{ name, path, purpose, maxBytes? }`) — a _capability_, not a
 contribution (it registers nothing). `purpose` is a closed vocabulary
 (`layout | codec | compute`, like `rendering`) so the host can reason
 about a module's role before granting it. The loader
@@ -861,7 +878,7 @@ DESIGN.md §2.5). Same loud-honesty style as the namespace gate, which
 still fires FIRST (the outer guard).
 
 **v1 stance (unchanged by this):** in-process, no isolation. This is
-HONESTY + accident-prevention, *not* a security boundary — a bundle
+HONESTY + accident-prevention, _not_ a security boundary — a bundle
 holding the raw `host.editor` handle (§4.9) still bypasses the facade.
 The gate makes declaration↔use drift loud so the manifest stays a
 truthful description of what the bundle touches; the real boundary is the
@@ -869,26 +886,26 @@ isolate (the trust-line's other gates).
 
 ### The chokepoint → declaration map
 
-| Door (chokepoint) | Manifest declaration required | On violation |
-|---|---|---|
-| `contribute.tool(id)` | `contributes.tools[]` lists `id` | throw |
-| `contribute.panel(id)` | `contributes.panels[]` lists `id` | throw |
-| `contribute.command(id)` | `contributes.commands[]` lists `id` | throw |
-| `contribute.keybinding` | `capabilities.keybindings: true` | throw |
-| `contribute.overlay(id)` | `capabilities.rendering` ∋ `"overlay"` | throw |
-| `document.mutate` / `setMetadata` | `capabilities.document.write` | non-applied outcome |
-| `document.undo` / `redo` | `capabilities.document.write` | throw |
-| `document.collection`/`meta`/`pathAnchors`/`elementGeometry`/`tree`/`parentOf`/`getMetadata`/`onDidChange` | `capabilities.document.read` | throw |
-| `document.hitTest` | `document.read` **and** `rendering` ∋ `"hitTest"` | throw |
-| `selection.set` | `capabilities.document.write` | throw |
-| `selection.get` / `onDidChange` | none (ambient UI state) | — |
-| `overlay.setToolPreview` / `setToolPreviews` | `capabilities.rendering` ∋ `"overlay"` | throw |
-| `shell.pickFile` / `saveFile` | none (host-owned dialog; §4.5c) | — |
-| `viewport.*` | none (read-only camera snapshot) | — |
-| `storage.*` | none (already per-bundle scoped: `paged.plugin.<id>.*`) | — |
-| `diagnostics.*` | none (per-bundle keyed store) | — |
-| `loadBundleWasm(name)` | `capabilities.wasm[]` lists `name` + host grant | throw (§10) |
-| metadata namespace (`x-paged:<id>`) | derived; foreign key refused | non-applied (always loud) |
+| Door (chokepoint)                                                                                          | Manifest declaration required                           | On violation              |
+| ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- | ------------------------- |
+| `contribute.tool(id)`                                                                                      | `contributes.tools[]` lists `id`                        | throw                     |
+| `contribute.panel(id)`                                                                                     | `contributes.panels[]` lists `id`                       | throw                     |
+| `contribute.command(id)`                                                                                   | `contributes.commands[]` lists `id`                     | throw                     |
+| `contribute.keybinding`                                                                                    | `capabilities.keybindings: true`                        | throw                     |
+| `contribute.overlay(id)`                                                                                   | `capabilities.rendering` ∋ `"overlay"`                  | throw                     |
+| `document.mutate` / `setMetadata`                                                                          | `capabilities.document.write`                           | non-applied outcome       |
+| `document.undo` / `redo`                                                                                   | `capabilities.document.write`                           | throw                     |
+| `document.collection`/`meta`/`pathAnchors`/`elementGeometry`/`tree`/`parentOf`/`getMetadata`/`onDidChange` | `capabilities.document.read`                            | throw                     |
+| `document.hitTest`                                                                                         | `document.read` **and** `rendering` ∋ `"hitTest"`       | throw                     |
+| `selection.set`                                                                                            | `capabilities.document.write`                           | throw                     |
+| `selection.get` / `onDidChange`                                                                            | none (ambient UI state)                                 | —                         |
+| `overlay.setToolPreview` / `setToolPreviews`                                                               | `capabilities.rendering` ∋ `"overlay"`                  | throw                     |
+| `shell.pickFile` / `saveFile`                                                                              | none (host-owned dialog; §4.5c)                         | —                         |
+| `viewport.*`                                                                                               | none (read-only camera snapshot)                        | —                         |
+| `storage.*`                                                                                                | none (already per-bundle scoped: `paged.plugin.<id>.*`) | —                         |
+| `diagnostics.*`                                                                                            | none (per-bundle keyed store)                           | —                         |
+| `loadBundleWasm(name)`                                                                                     | `capabilities.wasm[]` lists `name` + host grant         | throw (§10)               |
+| metadata namespace (`x-paged:<id>`)                                                                        | derived; foreign key refused                            | non-applied (always loud) |
 
 **New manifest vocabulary (additive):** `capabilities.keybindings:
 boolean` — keybindings carry no id to list under `contributes`, so a
@@ -908,7 +925,7 @@ UNAFFECTED by the mode — they are always loud.
 capability: the camera is a read-only ambient snapshot; storage is
 already namespaced per-bundle (no cross-plugin reach); diagnostics is a
 per-bundle keyed store. Reading `selection` is ambient UI state every
-bundle may observe; *changing* it is a document-level action, so
+bundle may observe; _changing_ it is a document-level action, so
 `selection.set` rides `document.write`. Over-declaring (a capability
 listed but unused — e.g. paged.web declares `rendering: ["hitTest"]` it
 does not exercise in the source lane) is allowed: the gate catches USE
@@ -916,7 +933,7 @@ without declaration, never the reverse.
 
 ## 12. The declarative panel-schema mechanism (W3.1 — closes draw B-01)
 
-§2.8 deferred the declarative panel schema as a *catalog* concern, to be
+§2.8 deferred the declarative panel schema as a _catalog_ concern, to be
 adopted "when the catalog grows it, not invent a rival." It has now
 grown (the editor's curated primitive leaves + `CompositionRenderer`
 ship live), so this section lands the SDK's adoption — the v1 mechanism
@@ -924,7 +941,7 @@ that closes plugin-draw **B-01**.
 
 **The B-01 problem, restated.** The concept paper's panels used a
 `visibleWhen`/`enabledWhen` CONDITIONAL BINDING LANGUAGE
-(`strokeType == "dashed"`). That was *rejected by design*: the editor
+(`strokeType == "dashed"`). That was _rejected by design_: the editor
 catalog's binding ceiling is `literal | selectionProperty` (+ coerce) —
 no expression language, and the SDK must not fork one (§8 rejected
 "inventing a richer panel-binding language"). B-01 recorded the
@@ -1059,19 +1076,19 @@ honest):
   iff the row's `widget` is the list leaf. A v1 schema never sets it and
   renders unchanged.
 - `SchemaListSpec { items, labelField, secondaryField?, idField?,
-  selectionBinding?, actions? }` — `labelField`/`secondaryField`/
+selectionBinding?, actions? }` — `labelField`/`secondaryField`/
   `idField` are dot-paths into a row object (`idField` defaults to
   `selfId`, the summary-shape convention every document collection
   uses); `selectionBinding` names a published binding that receives the
   clicked row's id.
 - `WidgetCollectionBinding = { kind: "documentCollection"; collection }
-  | { kind: "binding"; bind }` — the two live-collection lanes: a named
+| { kind: "binding"; bind }` — the two live-collection lanes: a named
   ENGINE collection (the `host.document.collection(name)` lane), or an
   ARRAY the plugin publishes through `host.bindings.publish(name, rows)`
   (§12.2's door, now carrying rows instead of a boolean).
 - `SchemaListAction { label, action, enabled? }` and
   `SchemaRowAction = { kind: "command"; command } | { kind:
-  "applyEntity"; scope?, path, valueType? }` — a row action either
+"applyEntity"; scope?, path, valueType? }` — a row action either
   dispatches a registered command with the row id as payload, or applies
   the row's entity id (style / swatch self-id) to the selection through
   the SAME `setElementProperty` channel the scalar widgets commit on.
@@ -1131,7 +1148,7 @@ automation surfaces as core's.
   "Bind to data…" target), `{ bind }` (an address or list the plugin
   publishes through `host.bindings`), or `{ addresses }`.
 - **The row union.** `PanelSchemaRow = PanelSchemaWidgetRow |
-  PanelSchemaPropertyRow`; each side declares the other's discriminating
+PanelSchemaPropertyRow`; each side declares the other's discriminating
   members as `undefined`, so existing `row.widget` reads still compile.
 - **React panels** get the same field through the OPTIONAL
   `host.widgets.PropertyField` (and `PropertyFrame`, the field chrome
@@ -1143,7 +1160,7 @@ automation surfaces as core's.
   another plugin, a path that is not a row of its kind. Bundles hold their
   declarations to it in unit tests.
 - **Picking one object.** `publishObjectList(host, { rows, select,
-  selector })` publishes `{ selfId, name }` rows for a `list` row (items
+selector })` publishes `{ selfId, name }` rows for a `list` row (items
   `{ kind: "binding" }`, `selectionBinding: select`) and keeps `select`
   valid, so the property rows below it address `{ bind: select }`: a
   layer list over the selected image frame, then that layer's opacity.
@@ -1205,16 +1222,16 @@ interface AssetSurface {
   getFontFace(family: string, style?: string): Promise<FontFaceAsset | null>;
 }
 interface FontFaceAsset {
-  bytes: Uint8Array;          // the face's raw OpenType/TrueType bytes
+  bytes: Uint8Array; // the face's raw OpenType/TrueType bytes
   format: "truetype" | "opentype" | "woff" | "woff2";
-  postscriptName?: string;    // when the host knows it
-  family: string;             // the family the bytes resolve (host-canonical)
-  style?: string;             // the style the bytes resolve, when style-specific
+  postscriptName?: string; // when the host knows it
+  family: string; // the family the bytes resolve (host-canonical)
+  style?: string; // the style the bytes resolve, when style-specific
 }
 ```
 
 `getFontFace` serves **DOCUMENT-registered face bytes only** — the bytes
-the engine already holds for a face the *document* loads/embeds (the same
+the engine already holds for a face the _document_ loads/embeds (the same
 faces the `fonts` collection NAMES). It is **not** an arbitrary
 filesystem or network reader: a bundle cannot ask for `/etc/passwd` or
 `https://evil/x.ttf`; it can only ask "give me the bytes for a family the
@@ -1230,10 +1247,11 @@ array vocabulary (like `rendering`): v1 has exactly one member,
 `"fonts"`. The capability gate (§11) refuses `host.assets.getFontFace`
 unless the bundle declares `capabilities.assets` ∋ `"fonts"` — a
 contribution/read door, so the verdict is **throw** in `'enforce'`, **log
-+ proceed** in `'warn'` (the same enforce/warn split every other read
-door takes). plugin-cli `validate` enforces the vocabulary
-(unknown member rejected) and the array shape; the schema + types + CLI
-gain only this one optional field. Existing valid manifests stay valid.
+
+- proceed** in `'warn'` (the same enforce/warn split every other read
+  door takes). plugin-cli `validate` enforces the vocabulary
+  (unknown member rejected) and the array shape; the schema + types + CLI
+  gain only this one optional field. Existing valid manifests stay valid.
 
 `"images"` is **OPEN since core v42 (2026-06-12, C-5 / I-04)** — the
 former v2 reservation is honored: the engine serves a placed image's
@@ -1283,7 +1301,7 @@ Tracing the editor (`apps/canvas`): document fonts are referenced by
 **name** (IDML `Fonts/Font_*.xml` carries no bytes). The only font bytes
 the **main thread** ever holds is the single default-shaping font
 (`/fonts/Inter.ttf`, fetched in `shell/.../document-loader.ts` and passed
-as `loadDocument(bytes, fontBytes)` — the engine's *fallback* font, NOT a
+as `loadDocument(bytes, fontBytes)` — the engine's _fallback_ font, NOT a
 named per-family registration). The corpus family→file map
 (`fonts.sh` → `client.registerFont`) lives ONLY in the Playwright
 fidelity driver (`tests/fidelity/`), never the app. Once `registerFont`
@@ -1600,12 +1618,13 @@ D-11's no-`get` keystone).
 ### 17.4 Additivity
 
 Wholly additive: a new `capabilities.gpu` manifest field (`GpuCapability` type
-+ schema + CLI) and the declaration-driven `gpu@1` feature flag. No new
-`BundleHost` member, no `CreateBundleHostOptions` field, no SDK surface — the
-deliberate absence IS the design. The gate / namespace rule / every other door
-are untouched. The zero-copy composite + shared device remain deferred
-record-only (ADR-018); this section adds NONE of `SceneItem::Texture`,
-`requestGpuDevice`, or a host GPU backend.
+
+- schema + CLI) and the declaration-driven `gpu@1` feature flag. No new
+  `BundleHost` member, no `CreateBundleHostOptions` field, no SDK surface — the
+  deliberate absence IS the design. The gate / namespace rule / every other door
+  are untouched. The zero-copy composite + shared device remain deferred
+  record-only (ADR-018); this section adds NONE of `SceneItem::Texture`,
+  `requestGpuDevice`, or a host GPU backend.
 
 ## 18. Binding providers (ADR-023 phase A — `contribute.bindingProvider`)
 
@@ -1631,11 +1650,11 @@ One consumer only proves you built something shaped like its only caller.
 ADR-023 named Layers; two more were added deliberately because they are
 different SHAPES:
 
-| Consumer | Shape | Addressing | Core backing |
-|---|---|---|---|
-| **Layers** | element COLLECTION — ordering, visibility, lock | row identity | `LayerSummary`, the `layers` collection, `layerSet*` / `layerMove` |
-| **Character / Paragraph** | SCALAR paths over a RANGE; value may be MIXED | story id + character range | the 37 `character*` / `paragraph*` PropertyPaths |
-| **Swatches / colour** | DOCUMENT-SCOPED resource collection the panel EDITS, plus apply-to-selection | document-level | `swatches` / `gradients` / `colorGroups` / `inks`; `create|edit|delete Swatch|Gradient|ColorGroup`; the colour-bearing paths |
+| Consumer                  | Shape                                                                        | Addressing                 | Core backing                                                       |
+| ------------------------- | ---------------------------------------------------------------------------- | -------------------------- | ------------------------------------------------------------------ |
+| **Layers**                | element COLLECTION — ordering, visibility, lock                              | row identity               | `LayerSummary`, the `layers` collection, `layerSet*` / `layerMove` |
+| **Character / Paragraph** | SCALAR paths over a RANGE; value may be MIXED                                | story id + character range | the 37 `character*` / `paragraph*` PropertyPaths                   |
+| **Swatches / colour**     | DOCUMENT-SCOPED resource collection the panel EDITS, plus apply-to-selection | document-level             | `swatches` / `gradients` / `colorGroups` / `inks`; `create         | edit | delete Swatch | Gradient | ColorGroup`; the colour-bearing paths |
 
 Colour is the most universal (every plugin touches it) and the only one with a
 LIVE consumer already working around the seam's absence: **plugin-sheets mints
@@ -1857,7 +1876,7 @@ unchanged.
 Recorded here rather than left for phase C to discover:
 
 - **`LayerSummary` is FLAT.** It carries `selfId / name / visible / locked /
-  printable / z` and has no `children`, `parentId` or `depth`; the only nested
+printable / z` and has no `children`, `parentId` or `depth`; the only nested
   wire shape is `SceneTreeNode`, which is not layer-scoped. ADR-023 phase B
   asks the editor for **tree rows**, and phase C for a Layers panel with
   nesting — but there is no core row shape for a tree to render. That is CORE
@@ -1889,11 +1908,11 @@ was for. **Layers** and **Swatches** both write STRUCTURALLY, through
 `applyMutation`, whose availability is DECLARED in `provides.ops`. So a host
 panel can ask "may this control work?" synchronously and disable it, which is
 exactly what the Swatches slice's `useCollectionOpOffered` does. The property
-lane had no such declaration: `writeProperty` is an optional *callback*, and a
+lane had no such declaration: `writeProperty` is an optional _callback_, and a
 callback's absence does not reach `activeProviders()`.
 
-That left a contradiction inside §18.3/§18.5. The op lane's rule is *an
-undeclared op must not reach core — the panel is showing somebody else's rows*.
+That left a contradiction inside §18.3/§18.5. The op lane's rule is _an
+undeclared op must not reach core — the panel is showing somebody else's rows_.
 The path lane's rule said the opposite: that an absent `writeProperty` lets
 writes **fall through to core**. Fall-through there is the WRITE-side form of
 the `absent` lie: the panel is showing a sheet cell's font size and the commit
@@ -1922,7 +1941,7 @@ fake-interactive.
 
 ### 18.12 `panelIds` vs. a retargeting panel — the docking rule, and why NO contract member was added (2026-08-05)
 
-The defect ADR-023's *Still open* names first: **`EditContextContribution.panelIds`
+The defect ADR-023's _Still open_ names first: **`EditContextContribution.panelIds`
 fights a shared panel.** `panelIds` lets a context raise its OWN panels on
 enter. It was written when every panel belonged to exactly one owner, so
 "raise mine" and "keep the shared one visible" could not conflict. §18 makes
@@ -1959,8 +1978,8 @@ vocabulary that already exists on both sides, computed by the host:
   editor's `catalog/panel-binding-surface.tsx`). A `PanelContribution.serves`
   field would have been a second copy of what `useProvidedCollection("layers")`
   already says, and the copy rots the first time a panel grows a binding. This
-  is the precedent ADR-023's own outcome praises — *"put in the PLATFORM, not
-  the panel, so every schema list inherits it"* — applied to the docking rule.
+  is the precedent ADR-023's own outcome praises — _"put in the PLATFORM, not
+  the panel, so every schema list inherits it"_ — applied to the docking rule.
 
 The rule: **on enter, OPEN each declared panel; withhold the RAISE when the
 panel on screen is one the entering context's providers serve.** Everything
@@ -1980,7 +1999,7 @@ nobody granted.
 
 **An unmounted shared panel is not a failure mode.** The three doors that could
 have been asked to do something here — closed, behind another tab, in a dock
-group that is collapsed — all resolve to *nothing happens, safely*, because
+group that is collapsed — all resolve to _nothing happens, safely_, because
 resolution through this seam is PULL-BASED at mount and not a push to a
 subscriber. There is no listener to leak, no stale render to correct, and no
 error to swallow: the panel resolves through `activeProviders()` the instant it
@@ -2078,11 +2097,13 @@ word per host call: 133 of the 148 host calls of a 57-record merge (D-27).
 ```ts
 interface DocumentsSurface {
   exportPaged(): Promise<Uint8Array>;
-  open(bytes: Uint8Array, options?: { name?: string }): Promise<OpenDocumentResult>;
+  open(
+    bytes: Uint8Array,
+    options?: { name?: string },
+  ): Promise<OpenDocumentResult>;
 }
 type OpenDocumentResult =
-  | { opened: true; pageIds: string[] }
-  | { opened: false; reason: "declined" };
+  { opened: true; pageIds: string[] } | { opened: false; reason: "declined" };
 ```
 
 The editor holds ONE document at a time; there are no tabs and no
@@ -2181,11 +2202,11 @@ plugin's own panels; commands took `payload: unknown`.
 - `host.contribute.objectModel({ kinds, commands })` → `ObjectModelHandle`
   (a `Disposable` plus `changed(addresses?)` for state the engine does
   not see). A kind is `{ kind, title, schema: PropertySchema[], content?,
-  hostOf, list, get, set?, batch? }`; addresses are
+hostOf, list, get, set?, batch? }`; addresses are
   `plugin:<manifest.id>/<kind>/<id>`. A typed command is `{ id, title,
-  args: ValueType, result?, handler(ctx: { objects }, args) }`.
+args: ValueType, result?, handler(ctx: { objects }, args) }`.
 - `host.objects` — `query / get / getAll / set / batch / schema / kinds /
-  commands / invoke / onDidChange` over core AND every plugin. Reads
+commands / invoke / onDidChange` over core AND every plugin. Reads
   answer `ObjectValue` (`value | mixed | absent | refused`), writes
   `ObjectWriteResult { applied, undoSteps, code?, reason? }` — expected
   failures are results (tenet 5); only `invoke` rejects, because a command
@@ -2322,12 +2343,12 @@ spec in `object-model-fixups.spec.ts` (real engine, canvas-wasm 0.70.0).
 - **Plugin-level `batch(ops)`** on `ObjectModelContribution`: every
   `set`/`create`/`delete` op of a batch that targets ANY kind of the
   plugin, in batch order, in ONE call. Kinds that share state (image layers
-  + adjustments, sheet sheets + cells, draw libraries) need it: planned per
-  kind, each plan starts from the same state and the later write drops the
-  earlier one. Without it the registry still plans per kind, and two
-  per-kind `state` writes on one host with the same key are REFUSED
-  (`failed`, "conflicting state writes") instead of losing an update.
-  Writes with DISTINCT sub-keys on one host merge.
+  - adjustments, sheet sheets + cells, draw libraries) need it: planned per
+    kind, each plan starts from the same state and the later write drops the
+    earlier one. Without it the registry still plans per kind, and two
+    per-kind `state` writes on one host with the same key are REFUSED
+    (`failed`, "conflicting state writes") instead of losing an update.
+    Writes with DISTINCT sub-keys on one host merge.
 - **Labels follow core's rule: one label per plugin per host.** Core takes
   exactly `x-paged:<pluginId>` (caller-checked) with the envelope
   `{v: int >= 1, data: {…}}`, ≤ 64 KiB. A `state` write's `labelKey` is
@@ -2398,7 +2419,7 @@ salvaged `mutationFailed`), so the probe never hangs. At >= 71
 - **Rows** are the vendored catalog's `propertySchemas`, normalised
   (`core-schema.ts` `coreSchema71`): enums keep their members, `count`
   numbers are integers, `degrees` is `deg`, a struct is `{ kind:
-  "struct", fields: {}, shape, open: true }` (the plugin-api `ValueType`
+"struct", fields: {}, shape, open: true }` (the plugin-api `ValueType`
   gains the additive `shape` / `open`; core validates the fields), a list
   carries its item type; indexed core paths (`labels[key]`,
   `rows[i].height`) are `[]` rows; rows the catalog lists under a Boa
@@ -2595,7 +2616,7 @@ publish of `@paged-media/ai`. Record: [ADR 324](docs/adr/324-node-cli-over-the-h
 - **Export door:** `HeadlessHost.exportDocument("paged"|"idml"|"pdf")` (new,
   harness.ts) drives the engine's exportPaged / exportIdml / exportPdf loop;
   plugin formats go through `contribute.exporter` contributions. `export
-  --format pdf` prefers a TYPED exporter (`media.paged.publish.exportPdf`,
+--format pdf` prefers a TYPED exporter (`media.paged.publish.exportPdf`,
   else any `*.exportPdf`, or `--via <command>`; `--core` opts out): the CLI
   sends ONLY the options named (`--pdf-standard`, `--pages`, repeatable
   `--option key=value`, each typed by its struct field) and `invoke` fills
@@ -2640,7 +2661,7 @@ Integrity. The deliberation and the bundle-side recipe are in
 [`docs/reference/wasm-packaging.md`](docs/reference/wasm-packaging.md) §7.
 
 - **Shape.** `host.modules.resolve(name)` → `{ url, integrity, artifact } |
-  null`; `url(name)`, `fetch(name)` (with `{ integrity }`). `null` is the
+null`; `url(name)`, `fetch(name)` (with `{ integrity }`). `null` is the
   ordinary "load your own copy". Always present (ADR 305).
 - **Gate.** The name must be declared in `capabilities.wasm`; the backend
   receives the manifest's artifact, never a bundle-typed path. Undeclared →

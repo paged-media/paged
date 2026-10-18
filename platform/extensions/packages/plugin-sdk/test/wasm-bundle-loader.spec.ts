@@ -123,7 +123,12 @@ describe("loadBundleWasm — budgets", () => {
   it("rejects an artifact over the manifest's own maxBytes", async () => {
     const tight = bundleWith({
       wasm: [
-        { name: "layout", path: "engine/layout.wasm", purpose: "layout", maxBytes: 8 },
+        {
+          name: "layout",
+          path: "engine/layout.wasm",
+          purpose: "layout",
+          maxBytes: 8,
+        },
       ],
     });
     await expect(
@@ -203,7 +208,9 @@ describe("loadBundleWasm — budgets", () => {
       initialMemoryPages: 1,
     });
     // grow to just under the cap succeeds; one more page throws (cap bites).
-    expect(() => loaded.memory!.grow(WASM_BUDGETS.maxMemoryPages - 1)).not.toThrow();
+    expect(() =>
+      loaded.memory!.grow(WASM_BUDGETS.maxMemoryPages - 1),
+    ).not.toThrow();
     expect(() => loaded.memory!.grow(1)).toThrow();
   });
 });

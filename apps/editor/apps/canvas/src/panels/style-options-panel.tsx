@@ -51,11 +51,16 @@ import type { CollectionName } from "@paged-media/client";
 
 import { SchemaSections, type SectionSpec } from "./schema-sections";
 
-export type StyleFamily = "paragraph" | "character" | "object" | "cell" | "table";
+export type StyleFamily =
+  "paragraph" | "character" | "object" | "cell" | "table";
 
 export const STYLE_OPTIONS_PANEL = "paged.style-options";
 
-const FAMILIES: ReadonlyArray<{ family: StyleFamily; title: string; collection: CollectionName }> = [
+const FAMILIES: ReadonlyArray<{
+  family: StyleFamily;
+  title: string;
+  collection: CollectionName;
+}> = [
   { family: "paragraph", title: "Paragraph", collection: "paragraphStyles" },
   { family: "character", title: "Character", collection: "characterStyles" },
   { family: "object", title: "Object", collection: "objectStyles" },
@@ -89,24 +94,40 @@ const CHARACTER_SECTIONS: readonly SectionSpec[] = [
   },
   {
     title: "Character Color",
-    fields: [{ path: "characterFillColor", label: "Fill", collection: "swatches" }],
+    fields: [
+      { path: "characterFillColor", label: "Fill", collection: "swatches" },
+    ],
   },
 ];
 
 const PARAGRAPH_SECTIONS: readonly SectionSpec[] = [
   {
     title: "General",
-    fields: [{ path: "paragraphStyleNextStyle", label: "Next style", collection: "paragraphStyles" }],
+    fields: [
+      {
+        path: "paragraphStyleNextStyle",
+        label: "Next style",
+        collection: "paragraphStyles",
+      },
+    ],
   },
   {
     title: "Indents and Spacing",
     fields: [
       { path: "paragraphJustification", label: "Alignment" },
-      { path: "paragraphBalanceRaggedLines", label: "Balance ragged lines", hideUnreported: true },
+      {
+        path: "paragraphBalanceRaggedLines",
+        label: "Balance ragged lines",
+        hideUnreported: true,
+      },
       { path: "paragraphLeftIndent", label: "Left indent" },
       { path: "paragraphRightIndent", label: "Right indent" },
       { path: "paragraphFirstLineIndent", label: "First line" },
-      { path: "paragraphLastLineIndent", label: "Last line", hideUnreported: true },
+      {
+        path: "paragraphLastLineIndent",
+        label: "Last line",
+        hideUnreported: true,
+      },
       { path: "paragraphSpaceBefore", label: "Space before" },
       { path: "paragraphSpaceAfter", label: "Space after" },
     ],
@@ -136,8 +157,16 @@ const PARAGRAPH_SECTIONS: readonly SectionSpec[] = [
   {
     title: "Justification",
     fields: [
-      { path: "paragraphAutoLeading", label: "Auto leading", hideUnreported: true },
-      { path: "paragraphSingleWordJustification", label: "Single word", hideUnreported: true },
+      {
+        path: "paragraphAutoLeading",
+        label: "Auto leading",
+        hideUnreported: true,
+      },
+      {
+        path: "paragraphSingleWordJustification",
+        label: "Single word",
+        hideUnreported: true,
+      },
       { path: "paragraphComposer", label: "Composer" },
     ],
   },
@@ -158,13 +187,25 @@ const PARAGRAPH_SECTIONS: readonly SectionSpec[] = [
       { path: "paragraphListType", label: "List type" },
       { path: "paragraphBulletCharacter", label: "Bullet" },
       { path: "paragraphBulletsTextAfter", label: "Text after" },
-      { path: "paragraphBulletsCharacterStyle", label: "Bullet style", collection: "characterStyles" },
-      { path: "paragraphAppliedNumberingList", label: "List", collection: "numberingLists" },
+      {
+        path: "paragraphBulletsCharacterStyle",
+        label: "Bullet style",
+        collection: "characterStyles",
+      },
+      {
+        path: "paragraphAppliedNumberingList",
+        label: "List",
+        collection: "numberingLists",
+      },
       { path: "paragraphNumberingFormat", label: "Format" },
       { path: "paragraphNumberingExpression", label: "Number" },
       { path: "paragraphNumberingStartAt", label: "Start at" },
       { path: "paragraphNumberingContinue", label: "Continue" },
-      { path: "paragraphNumberingCharacterStyle", label: "Number style", collection: "characterStyles" },
+      {
+        path: "paragraphNumberingCharacterStyle",
+        label: "Number style",
+        collection: "characterStyles",
+      },
     ],
   },
   ...CHARACTER_SECTIONS,
@@ -215,11 +256,23 @@ const CELL_SECTIONS: readonly SectionSpec[] = [
     fields: [
       { path: "cellTopEdgeStrokeColor", label: "Top", collection: "swatches" },
       { path: "cellTopEdgeStrokeWeight", label: "Top weight" },
-      { path: "cellBottomEdgeStrokeColor", label: "Bottom", collection: "swatches" },
+      {
+        path: "cellBottomEdgeStrokeColor",
+        label: "Bottom",
+        collection: "swatches",
+      },
       { path: "cellBottomEdgeStrokeWeight", label: "Bottom weight" },
-      { path: "cellLeftEdgeStrokeColor", label: "Left", collection: "swatches" },
+      {
+        path: "cellLeftEdgeStrokeColor",
+        label: "Left",
+        collection: "swatches",
+      },
       { path: "cellLeftEdgeStrokeWeight", label: "Left weight" },
-      { path: "cellRightEdgeStrokeColor", label: "Right", collection: "swatches" },
+      {
+        path: "cellRightEdgeStrokeColor",
+        label: "Right",
+        collection: "swatches",
+      },
       { path: "cellRightEdgeStrokeWeight", label: "Right weight" },
     ],
   },
@@ -229,23 +282,59 @@ const TABLE_SECTIONS: readonly SectionSpec[] = [
   {
     title: "Cell Styles",
     fields: [
-      { path: "tableStyleHeaderRegionCellStyle", label: "Header rows", collection: "cellStyles" },
-      { path: "tableStyleBodyRegionCellStyle", label: "Body rows", collection: "cellStyles" },
-      { path: "tableStyleFooterRegionCellStyle", label: "Footer rows", collection: "cellStyles" },
-      { path: "tableStyleLeftColumnRegionCellStyle", label: "Left column", collection: "cellStyles" },
-      { path: "tableStyleRightColumnRegionCellStyle", label: "Right column", collection: "cellStyles" },
+      {
+        path: "tableStyleHeaderRegionCellStyle",
+        label: "Header rows",
+        collection: "cellStyles",
+      },
+      {
+        path: "tableStyleBodyRegionCellStyle",
+        label: "Body rows",
+        collection: "cellStyles",
+      },
+      {
+        path: "tableStyleFooterRegionCellStyle",
+        label: "Footer rows",
+        collection: "cellStyles",
+      },
+      {
+        path: "tableStyleLeftColumnRegionCellStyle",
+        label: "Left column",
+        collection: "cellStyles",
+      },
+      {
+        path: "tableStyleRightColumnRegionCellStyle",
+        label: "Right column",
+        collection: "cellStyles",
+      },
     ],
   },
   {
     title: "Table Border",
     fields: [
-      { path: "tableStyleTopBorderStrokeColor", label: "Top", collection: "swatches" },
+      {
+        path: "tableStyleTopBorderStrokeColor",
+        label: "Top",
+        collection: "swatches",
+      },
       { path: "tableStyleTopBorderStrokeWeight", label: "Top weight" },
-      { path: "tableStyleBottomBorderStrokeColor", label: "Bottom", collection: "swatches" },
+      {
+        path: "tableStyleBottomBorderStrokeColor",
+        label: "Bottom",
+        collection: "swatches",
+      },
       { path: "tableStyleBottomBorderStrokeWeight", label: "Bottom weight" },
-      { path: "tableStyleLeftBorderStrokeColor", label: "Left", collection: "swatches" },
+      {
+        path: "tableStyleLeftBorderStrokeColor",
+        label: "Left",
+        collection: "swatches",
+      },
       { path: "tableStyleLeftBorderStrokeWeight", label: "Left weight" },
-      { path: "tableStyleRightBorderStrokeColor", label: "Right", collection: "swatches" },
+      {
+        path: "tableStyleRightBorderStrokeColor",
+        label: "Right",
+        collection: "swatches",
+      },
       { path: "tableStyleRightBorderStrokeWeight", label: "Right weight" },
     ],
   },
@@ -253,17 +342,27 @@ const TABLE_SECTIONS: readonly SectionSpec[] = [
     title: "Fills",
     fields: [
       { path: "tableStyleAlternatingFills", label: "Alternating" },
-      { path: "tableStyleStartRowFillColor", label: "First fill", collection: "swatches" },
+      {
+        path: "tableStyleStartRowFillColor",
+        label: "First fill",
+        collection: "swatches",
+      },
       { path: "tableStyleStartRowFillCount", label: "First rows" },
       { path: "tableStyleStartRowFillTint", label: "First tint" },
-      { path: "tableStyleEndRowFillColor", label: "Next fill", collection: "swatches" },
+      {
+        path: "tableStyleEndRowFillColor",
+        label: "Next fill",
+        collection: "swatches",
+      },
       { path: "tableStyleEndRowFillCount", label: "Next rows" },
       { path: "tableStyleEndRowFillTint", label: "Next tint" },
     ],
   },
 ];
 
-export const STYLE_SECTIONS: Readonly<Record<StyleFamily, readonly SectionSpec[]>> = {
+export const STYLE_SECTIONS: Readonly<
+  Record<StyleFamily, readonly SectionSpec[]>
+> = {
   paragraph: PARAGRAPH_SECTIONS,
   character: CHARACTER_SECTIONS,
   object: OBJECT_SECTIONS,
@@ -275,7 +374,10 @@ export const STYLE_SECTIONS: Readonly<Record<StyleFamily, readonly SectionSpec[]
 
 /** The style the panel edits — shared so a style panel can open the
  *  options on ITS applied style. */
-let target: { family: StyleFamily; selfId: string | null } = { family: "paragraph", selfId: null };
+let target: { family: StyleFamily; selfId: string | null } = {
+  family: "paragraph",
+  selfId: null,
+};
 const listeners = new Set<() => void>();
 const subscribe = (l: () => void) => {
   listeners.add(l);
@@ -283,13 +385,19 @@ const subscribe = (l: () => void) => {
 };
 const snapshot = () => target;
 
-export function setStyleOptionsTarget(family: StyleFamily, selfId: string | null): void {
+export function setStyleOptionsTarget(
+  family: StyleFamily,
+  selfId: string | null,
+): void {
   target = { family, selfId };
   for (const l of listeners) l();
 }
 
 /** "Style Options…": point the panel at a style and bring it up. */
-export function openStyleOptions(family: StyleFamily, selfId: string | null): void {
+export function openStyleOptions(
+  family: StyleFamily,
+  selfId: string | null,
+): void {
   setStyleOptionsTarget(family, selfId);
   cockpitActions.openPanel?.(STYLE_OPTIONS_PANEL);
 }
@@ -320,12 +428,17 @@ export function StyleOptionsPanel() {
   const selfId = useMemo(() => {
     if (!styles) return null;
     if (picked && styles.some((s) => s.selfId === picked)) return picked;
-    return (styles.find((s) => !s.name.startsWith("$ID/")) ?? styles[0])?.selfId ?? null;
+    return (
+      (styles.find((s) => !s.name.startsWith("$ID/")) ?? styles[0])?.selfId ??
+      null
+    );
   }, [styles, picked]);
   const row = styles?.find((s) => s.selfId === selfId) ?? null;
   const address = selfId ? styleAddress(family, selfId) : null;
   const targets = useMemo(() => (address ? [address] : []), [address]);
-  const basedOn = row?.basedOn ? styles?.find((s) => s.selfId === row.basedOn) : null;
+  const basedOn = row?.basedOn
+    ? styles?.find((s) => s.selfId === row.basedOn)
+    : null;
 
   return (
     <div
@@ -364,15 +477,27 @@ export function StyleOptionsPanel() {
         </CockpitRow>
         {address ? (
           <>
-            <PropertyField path="name" label="Name" targets={targets} schemaKind={address} />
+            <PropertyField
+              path="name"
+              label="Name"
+              targets={targets}
+              schemaKind={address}
+            />
             <CockpitRow label="Based on">
-              <span className="text-xs" data-style-based-on={row?.basedOn ?? ""}>
+              <span
+                className="text-xs"
+                data-style-based-on={row?.basedOn ?? ""}
+              >
                 {basedOn ? displayName(basedOn.name) : "[No style]"}
               </span>
             </CockpitRow>
           </>
         ) : (
-          <div className="text-xs" style={{ color: "var(--pg-muted-fg)" }} data-style-options-empty="">
+          <div
+            className="text-xs"
+            style={{ color: "var(--pg-muted-fg)" }}
+            data-style-options-empty=""
+          >
             This document has no {spec.title.toLowerCase()} styles.
           </div>
         )}
@@ -391,7 +516,13 @@ export function StyleOptionsPanel() {
 }
 
 /** A row's "Options…" affordance in the cell / table style lists. */
-export function StyleOptionsButton({ family, selfId }: { family: StyleFamily; selfId: string }) {
+export function StyleOptionsButton({
+  family,
+  selfId,
+}: {
+  family: StyleFamily;
+  selfId: string;
+}) {
   return (
     <button
       type="button"

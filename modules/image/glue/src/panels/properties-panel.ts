@@ -38,7 +38,12 @@ import type {
 } from "@paged-media/plugin-api";
 import { propertyRows, publishObjectList } from "@paged-media/plugin-sdk";
 
-import { KIND_PREFIX, PLUGIN_ID, parseImageAddress, layerAddress } from "../object-model/image-objects";
+import {
+  KIND_PREFIX,
+  PLUGIN_ID,
+  parseImageAddress,
+  layerAddress,
+} from "../object-model/image-objects";
 
 export const PROPERTIES_PANEL_ID = `${PLUGIN_ID}.panel.properties`;
 
@@ -76,7 +81,16 @@ export interface ImagePanelField {
  * `curves.channels` three (red, green, blue).
  */
 export const IMAGE_PANEL_FIELDS: ReadonlyArray<ImagePanelField> = [
-  ...["name", "visible", "opacity", "blendMode", "locked", "clipped", "order", "pixelSource"].map((path) => ({ kind: "layer" as const, path, group: "Layers" })),
+  ...[
+    "name",
+    "visible",
+    "opacity",
+    "blendMode",
+    "locked",
+    "clipped",
+    "order",
+    "pixelSource",
+  ].map((path) => ({ kind: "layer" as const, path, group: "Layers" })),
   { kind: "mask", path: "enabled", group: "Mask" },
   { kind: "smartObject", path: "source", group: "Smart object" },
   ...[
@@ -101,7 +115,11 @@ export const IMAGE_PANEL_FIELDS: ReadonlyArray<ImagePanelField> = [
     "hueSaturation.colorize[1]",
     "hueSaturation.colorize[2]",
     "hueSaturation.colorize[3]",
-  ].map((path) => ({ kind: "adjustment" as const, path, group: "Hue/saturation" })),
+  ].map((path) => ({
+    kind: "adjustment" as const,
+    path,
+    group: "Hue/saturation",
+  })),
   ...[
     "hueSaturation.ranges[0][0]",
     "hueSaturation.ranges[0][1]",
@@ -121,7 +139,11 @@ export const IMAGE_PANEL_FIELDS: ReadonlyArray<ImagePanelField> = [
     "hueSaturation.ranges[5][0]",
     "hueSaturation.ranges[5][1]",
     "hueSaturation.ranges[5][2]",
-  ].map((path) => ({ kind: "adjustment" as const, path, group: "Hue/saturation ranges" })),
+  ].map((path) => ({
+    kind: "adjustment" as const,
+    path,
+    group: "Hue/saturation ranges",
+  })),
   ...[
     "colorBalance.shCr",
     "colorBalance.shMg",
@@ -132,7 +154,11 @@ export const IMAGE_PANEL_FIELDS: ReadonlyArray<ImagePanelField> = [
     "colorBalance.hiCr",
     "colorBalance.hiMg",
     "colorBalance.hiYb",
-  ].map((path) => ({ kind: "adjustment" as const, path, group: "Colour balance" })),
+  ].map((path) => ({
+    kind: "adjustment" as const,
+    path,
+    group: "Colour balance",
+  })),
   ...[
     "blackWhite.enabled",
     "blackWhite.reds",
@@ -141,7 +167,11 @@ export const IMAGE_PANEL_FIELDS: ReadonlyArray<ImagePanelField> = [
     "blackWhite.cyans",
     "blackWhite.blues",
     "blackWhite.magentas",
-  ].map((path) => ({ kind: "adjustment" as const, path, group: "Black & white" })),
+  ].map((path) => ({
+    kind: "adjustment" as const,
+    path,
+    group: "Black & white",
+  })),
   ...[
     "channelMixer.rr",
     "channelMixer.rg",
@@ -155,7 +185,11 @@ export const IMAGE_PANEL_FIELDS: ReadonlyArray<ImagePanelField> = [
     "channelMixer.bg",
     "channelMixer.bb",
     "channelMixer.bc",
-  ].map((path) => ({ kind: "adjustment" as const, path, group: "Channel mixer" })),
+  ].map((path) => ({
+    kind: "adjustment" as const,
+    path,
+    group: "Channel mixer",
+  })),
   ...[
     "levelsRgb.rInBlack",
     "levelsRgb.rInWhite",
@@ -166,15 +200,27 @@ export const IMAGE_PANEL_FIELDS: ReadonlyArray<ImagePanelField> = [
     "levelsRgb.bInBlack",
     "levelsRgb.bInWhite",
     "levelsRgb.bGamma",
-  ].map((path) => ({ kind: "adjustment" as const, path, group: "Levels per channel" })),
+  ].map((path) => ({
+    kind: "adjustment" as const,
+    path,
+    group: "Levels per channel",
+  })),
   ...[
     "photoFilter.density",
     "photoFilter.fr",
     "photoFilter.fg",
     "photoFilter.fb",
     "photoFilter.preserve",
-  ].map((path) => ({ kind: "adjustment" as const, path, group: "Photo filter" })),
-  ...["curves.composite", "curves.channels"].map((path) => ({ kind: "adjustment" as const, path, group: "Curves" })),
+  ].map((path) => ({
+    kind: "adjustment" as const,
+    path,
+    group: "Photo filter",
+  })),
+  ...["curves.composite", "curves.channels"].map((path) => ({
+    kind: "adjustment" as const,
+    path,
+    group: "Curves",
+  })),
   ...[
     "gaussianBlur.sigma",
     "unsharp.amount",
@@ -187,30 +233,60 @@ export const IMAGE_PANEL_FIELDS: ReadonlyArray<ImagePanelField> = [
   ].map((path) => ({ kind: "adjustment" as const, path, group: "Filters" })),
 ];
 
-const pathsOf = (group: string) => IMAGE_PANEL_FIELDS.filter((f) => f.group === group).map((f) => f.path);
+const pathsOf = (group: string) =>
+  IMAGE_PANEL_FIELDS.filter((f) => f.group === group).map((f) => f.path);
 
 const HSL = ["Hue", "Saturation", "Lightness"];
 const RANGES = ["Reds", "Yellows", "Greens", "Cyans", "Blues", "Magentas"];
 const RGB = ["Red", "Green", "Blue"];
-const MIX_SOURCE: Record<string, string> = { r: "red", g: "green", b: "blue", c: "constant" };
-const TONES: Record<string, string> = { sh: "Shadows", mid: "Midtones", hi: "Highlights" };
-const BALANCE: Record<string, string> = { Cr: "cyan–red", Mg: "magenta–green", Yb: "yellow–blue" };
+const MIX_SOURCE: Record<string, string> = {
+  r: "red",
+  g: "green",
+  b: "blue",
+  c: "constant",
+};
+const TONES: Record<string, string> = {
+  sh: "Shadows",
+  mid: "Midtones",
+  hi: "Highlights",
+};
+const BALANCE: Record<string, string> = {
+  Cr: "cyan–red",
+  Mg: "magenta–green",
+  Yb: "yellow–blue",
+};
 
 const LABELS: Readonly<Record<string, string>> = {
   ...Object.fromEntries(HSL.map((l, i) => [`hueSaturation.master[${i}]`, l])),
   "hueSaturation.colorize[0]": "Colorize",
-  ...Object.fromEntries(HSL.map((l, i) => [`hueSaturation.colorize[${i + 1}]`, `Colorize ${l.toLowerCase()}`])),
   ...Object.fromEntries(
-    RANGES.flatMap((r, i) => HSL.map((l, j) => [`hueSaturation.ranges[${i}][${j}]`, `${r} ${l.toLowerCase()}`])),
+    HSL.map((l, i) => [
+      `hueSaturation.colorize[${i + 1}]`,
+      `Colorize ${l.toLowerCase()}`,
+    ]),
+  ),
+  ...Object.fromEntries(
+    RANGES.flatMap((r, i) =>
+      HSL.map((l, j) => [
+        `hueSaturation.ranges[${i}][${j}]`,
+        `${r} ${l.toLowerCase()}`,
+      ]),
+    ),
   ),
   ...Object.fromEntries(
     Object.entries(TONES).flatMap(([k, t]) =>
-      Object.entries(BALANCE).map(([b, l]) => [`colorBalance.${k}${b}`, `${t} ${l}`]),
+      Object.entries(BALANCE).map(([b, l]) => [
+        `colorBalance.${k}${b}`,
+        `${t} ${l}`,
+      ]),
     ),
   ),
   ...Object.fromEntries(
     RGB.flatMap((out) =>
-      Object.entries(MIX_SOURCE).map(([s, l]) => [`channelMixer.${out[0]!.toLowerCase()}${s}`, `${out} from ${l}`]),
+      Object.entries(MIX_SOURCE).map(([s, l]) => [
+        `channelMixer.${out[0]!.toLowerCase()}${s}`,
+        `${out} from ${l}`,
+      ]),
     ),
   ),
   ...Object.fromEntries(
@@ -236,7 +312,9 @@ const LABELS: Readonly<Record<string, string>> = {
  *  number list; the channel tables as their JSON) rather than an items
  *  editor: both are nullable (null = curves off), and an items editor
  *  cannot start a list from null. */
-const ROW_OPTIONS: Readonly<Record<string, Omit<PanelSchemaPropertyRow, "field" | "path" | "address">>> = {
+const ROW_OPTIONS: Readonly<
+  Record<string, Omit<PanelSchemaPropertyRow, "field" | "path" | "address">>
+> = {
   blendMode: { style: "select" },
 };
 
@@ -276,9 +354,20 @@ export const IMAGE_PROPERTIES_PANEL: PanelSchema = {
   icon: "panel-properties",
   defaultDock: "right",
   sections: [
-    { title: "Layers", rows: [layerList, ...rowsOf(LAYER, "Layers", { bind: BIND.layer })] },
-    { title: "Mask", visible: { bind: BIND.hasMask }, rows: rowsOf(MASK, "Mask", { bind: BIND.mask }) },
-    { title: "Smart object", visible: { bind: BIND.isSmart }, rows: rowsOf(SMART, "Smart object", { bind: BIND.smartObject }) },
+    {
+      title: "Layers",
+      rows: [layerList, ...rowsOf(LAYER, "Layers", { bind: BIND.layer })],
+    },
+    {
+      title: "Mask",
+      visible: { bind: BIND.hasMask },
+      rows: rowsOf(MASK, "Mask", { bind: BIND.mask }),
+    },
+    {
+      title: "Smart object",
+      visible: { bind: BIND.isSmart },
+      rows: rowsOf(SMART, "Smart object", { bind: BIND.smartObject }),
+    },
     ...ADJUSTMENT_GROUPS.map((group) => ({
       title: group === "Tone" ? "Adjustment" : group,
       collapsible: true,
@@ -312,8 +401,13 @@ export function publishPropertyLists(host: BundleHost): Disposable {
       hasMask = m?.kind === "value" ? m.value === true : false;
     }
     if (mine !== generation) return;
-    const at = (k: "mask" | "adjustment" | "smartObject", on: boolean, bind: string) => {
-      if (on && a && a.layerId !== null) host.bindings.publish(bind, layerAddress(k, a.frameId, a.layerId));
+    const at = (
+      k: "mask" | "adjustment" | "smartObject",
+      on: boolean,
+      bind: string,
+    ) => {
+      if (on && a && a.layerId !== null)
+        host.bindings.publish(bind, layerAddress(k, a.frameId, a.layerId));
       else host.bindings.delete(bind);
     };
     at("mask", hasMask === true, BIND.mask);

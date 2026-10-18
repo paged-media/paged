@@ -165,8 +165,16 @@ export interface SelectSameWeightOptions {
   tolerance: number;
 }
 
-export const STROKE_JOINS: readonly StrokeJoinToken[] = ["miter", "round", "bevel"];
-export const STROKE_CAPS: readonly StrokeCapToken[] = ["butt", "round", "square"];
+export const STROKE_JOINS: readonly StrokeJoinToken[] = [
+  "miter",
+  "round",
+  "bevel",
+];
+export const STROKE_CAPS: readonly StrokeCapToken[] = [
+  "butt",
+  "round",
+  "square",
+];
 
 /** "Use what the element's own stroke says" — the Outline Stroke
  *  default for every key. */
@@ -272,7 +280,15 @@ export const PATH_OPTIONS_DEFAULTS: PathOptions = {
     miterLimit: DEFAULT_MITER_LIMIT,
   },
   // The "Dashed" preset's 6 / 3, so ticking the box gives a dash at once.
-  dash: { dashed: false, dash1: 6, gap1: 3, dash2: 0, gap2: 0, dash3: 0, gap3: 0 },
+  dash: {
+    dashed: false,
+    dash1: 6,
+    gap1: 3,
+    dash2: 0,
+    gap2: 0,
+    dash3: 0,
+    gap3: 0,
+  },
   reflect: { angleDeg: 90, copy: false },
   arc: ARC_PARAM_DEFAULTS,
   spiral: SPIRAL_PARAM_DEFAULTS,
@@ -286,7 +302,9 @@ export const PATH_OPTIONS_DEFAULTS: PathOptions = {
 type Loose = Record<string, unknown> | undefined;
 
 const loose = (v: unknown): Loose =>
-  v !== null && typeof v === "object" ? (v as Record<string, unknown>) : undefined;
+  v !== null && typeof v === "object"
+    ? (v as Record<string, unknown>)
+    : undefined;
 
 const num = (v: unknown, fallback: number): number =>
   typeof v === "number" && Number.isFinite(v) ? v : fallback;
@@ -317,9 +335,16 @@ export function sanitizePathOptions(raw: unknown): PathOptions {
     },
     simplify: { tolerance: num(simplify?.tolerance, d.simplify.tolerance) },
     outlineStroke: {
-      overrideWidth: bool(outline?.overrideWidth, d.outlineStroke.overrideWidth),
+      overrideWidth: bool(
+        outline?.overrideWidth,
+        d.outlineStroke.overrideWidth,
+      ),
       width: num(outline?.width, d.outlineStroke.width),
-      cap: oneOf(outline?.cap, [FROM_ELEMENT, ...STROKE_CAPS], d.outlineStroke.cap),
+      cap: oneOf(
+        outline?.cap,
+        [FROM_ELEMENT, ...STROKE_CAPS],
+        d.outlineStroke.cap,
+      ),
       join: oneOf(
         outline?.join,
         [FROM_ELEMENT, ...STROKE_JOINS],
@@ -345,7 +370,10 @@ export function sanitizePathOptions(raw: unknown): PathOptions {
         MAX_STROKE_WEIGHT_TOLERANCE,
         Math.max(
           0,
-          num(loose(r?.selectSameWeight)?.tolerance, d.selectSameWeight.tolerance),
+          num(
+            loose(r?.selectSameWeight)?.tolerance,
+            d.selectSameWeight.tolerance,
+          ),
         ),
       ),
     },
@@ -354,14 +382,22 @@ export function sanitizePathOptions(raw: unknown): PathOptions {
 
 // -------------------------------------------------------------- dashes
 
-const DASH_FIELDS = ["dash1", "gap1", "dash2", "gap2", "dash3", "gap3"] as const;
+const DASH_FIELDS = [
+  "dash1",
+  "gap1",
+  "dash2",
+  "gap2",
+  "dash3",
+  "gap3",
+] as const;
 
 /** A stored / typed dash record, sanitised: a length is a finite number
  *  ≥ 0 (a negative one is 0), anything unreadable is its default. */
 function dashOptionsFrom(raw: Loose): DashOptions {
   const d = PATH_OPTIONS_DEFAULTS.dash;
   const out: DashOptions = { ...d, dashed: bool(raw?.dashed, d.dashed) };
-  for (const key of DASH_FIELDS) out[key] = Math.max(0, num(raw?.[key], d[key]));
+  for (const key of DASH_FIELDS)
+    out[key] = Math.max(0, num(raw?.[key], d[key]));
   return out;
 }
 
@@ -438,7 +474,10 @@ export function lastUsedPathOptions(host: BundleHost): PathOptions {
 /** Has `section` ever been applied from the panel? Decides whether a
  *  payload-free command repeats stored values or runs its original
  *  defaults untouched. */
-export function hasLastUsed(host: BundleHost, section: PathOptionSection): boolean {
+export function hasLastUsed(
+  host: BundleHost,
+  section: PathOptionSection,
+): boolean {
   return loose(storedPathOptions(host)?.[section]) !== undefined;
 }
 
@@ -456,7 +495,9 @@ export function rememberPathOptions<S extends PathOptionSection>(
       [section]: values,
     });
   } catch (e) {
-    host.log.debug(`path options: could not remember ${section} (${String(e)})`);
+    host.log.debug(
+      `path options: could not remember ${section} (${String(e)})`,
+    );
   }
 }
 

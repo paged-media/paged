@@ -47,7 +47,12 @@ import { dirname, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { withActivePage } from "../../active-page";
-import { assignLayer, marginNote, proseFrame, specLabel } from "../../annual-support";
+import {
+  assignLayer,
+  marginNote,
+  proseFrame,
+  specLabel,
+} from "../../annual-support";
 import { LAYER, STYLE, contentBox, p } from "../../names-annual";
 import { newRefs, type Ref } from "../../plugin-support";
 import type { PageContext, PageReport } from "../../types";
@@ -119,12 +124,18 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const pageId = ctx.pageIds[0];
 
   // ── the opener block, above the crest's fixed zone ───────────────
-  const number = await proseFrame(ctx, page, [left, 56, 150, 128], [
-    { text: "14", style: STYLE.chapterNumber },
-  ]);
-  const title = await proseFrame(ctx, page, [160, 60, right, 128], [
-    { text: "The Drawing Office", style: STYLE.chapterTitle },
-  ]);
+  const number = await proseFrame(
+    ctx,
+    page,
+    [left, 56, 150, 128],
+    [{ text: "14", style: STYLE.chapterNumber }],
+  );
+  const title = await proseFrame(
+    ctx,
+    page,
+    [160, 60, right, 128],
+    [{ text: "The Drawing Office", style: STYLE.chapterTitle }],
+  );
   elements.push(number.frameId, title.frameId);
 
   // ── the import ───────────────────────────────────────────────────
@@ -164,18 +175,21 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   await makeCompound(shield, keyway);
 
   // ── the thesis, below the crest ──────────────────────────────────
-  const thesis = await proseFrame(ctx, page, [left, 486, right, 640], [
-    {
-      text:
-        "The crest above arrived as a file of curves — annual-crest.svg, fed to the host importer registry and claimed by paged.draw. The importer lowered every contour through the same insertPath the pen tool commits, so what stands on this page is six native polygons wearing real swatches, not an embedded picture of a drawing.",
-      style: STYLE.bodyFirst,
-    },
-    {
-      text:
-        "Two of those shapes are compound. The engine fills non-zero, and the importer delivers a compound path as sibling contours, so the annulus first painted as a solid coin; Compound Path > Make merged each pair into one polygon and re-wound the inner contour by nesting depth. The paper you can read through the ring is the whole argument of this chapter: a drawing tool that writes the document's own geometry, not a layer above it.",
-      style: STYLE.body,
-    },
-  ]);
+  const thesis = await proseFrame(
+    ctx,
+    page,
+    [left, 486, right, 640],
+    [
+      {
+        text: "The crest above arrived as a file of curves — annual-crest.svg, fed to the host importer registry and claimed by paged.draw. The importer lowered every contour through the same insertPath the pen tool commits, so what stands on this page is six native polygons wearing real swatches, not an embedded picture of a drawing.",
+        style: STYLE.bodyFirst,
+      },
+      {
+        text: "Two of those shapes are compound. The engine fills non-zero, and the importer delivers a compound path as sibling contours, so the annulus first painted as a solid coin; Compound Path > Make merged each pair into one polygon and re-wound the inner contour by nesting depth. The paper you can read through the ring is the whole argument of this chapter: a drawing tool that writes the document's own geometry, not a layer above it.",
+        style: STYLE.body,
+      },
+    ],
+  );
   elements.push(thesis.frameId);
 
   elements.push(

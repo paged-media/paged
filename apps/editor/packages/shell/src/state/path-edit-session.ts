@@ -127,9 +127,5 @@ export interface PathEditSession {
    * taken only while a gesture is in flight (an idle Escape is the
    * host's — it leaves path-edit mode).
    */
-  key(event: {
-    key: string;
-    shiftKey: boolean;
-    altKey: boolean;
-  }): boolean;
+  key(event: { key: string; shiftKey: boolean; altKey: boolean }): boolean;
 }

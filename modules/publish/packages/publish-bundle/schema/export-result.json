@@ -10,7 +10,10 @@
       "of": {
         "kind": "struct",
         "fields": {
-          "severity": { "kind": "enum", "members": ["error", "warning", "info"] },
+          "severity": {
+            "kind": "enum",
+            "members": ["error", "warning", "info"]
+          },
           "code": { "kind": "text" },
           "message": { "kind": "text", "multiline": true },
           "page": { "kind": "number", "integer": true }

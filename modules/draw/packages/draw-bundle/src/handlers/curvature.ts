@@ -62,7 +62,10 @@ export function createCurvatureHandler(host: BundleHost): GestureHandler {
       .catch(() => null)
       .then((paint) =>
         host.document.mutate(
-          withGraphicPaint(insertPathMutationFor(page, c.anchors, c.open), paint),
+          withGraphicPaint(
+            insertPathMutationFor(page, c.anchors, c.open),
+            paint,
+          ),
         ),
       )
       .then(async (outcome) => {
@@ -98,7 +101,9 @@ export function createCurvatureHandler(host: BundleHost): GestureHandler {
   // chain — a machine must never see an up before the down it follows.
   const snapper = createSnapper(host);
   let placed: [number, number][] = [];
-  const at = async (e: CanvasPointerEvent): Promise<[number, number] | null> => {
+  const at = async (
+    e: CanvasPointerEvent,
+  ): Promise<[number, number] | null> => {
     const p = await snapper.snapAsync(e, placed);
     return p ? [p[0], p[1]] : null;
   };

@@ -100,7 +100,9 @@ export async function attemptReplaceBytes(
       });
       return {
         kind: reply.kind,
-        error: reply.payload?.error ? JSON.stringify(reply.payload.error) : null,
+        error: reply.payload?.error
+          ? JSON.stringify(reply.payload.error)
+          : null,
         bytes: bytes.length,
       };
     },
@@ -134,7 +136,10 @@ export async function frameBoundsOf(
         __canvas: {
           client: {
             elementProperties: (id: unknown) => Promise<{
-              entries: Array<{ path: string; value: { type: string; value: unknown } }>;
+              entries: Array<{
+                path: string;
+                value: { type: string; value: unknown };
+              }>;
             } | null>;
           };
         };
@@ -146,8 +151,7 @@ export async function frameBoundsOf(
     });
     return (
       (props?.entries.find((e) => e.path === "frameBounds")?.value?.value as
-        | number[]
-        | undefined) ?? null
+        number[] | undefined) ?? null
     );
   }, frameId);
   if (!v || v.length !== 4) {

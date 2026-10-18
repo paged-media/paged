@@ -36,11 +36,10 @@ const PPTX_FIXTURE = pathResolve(
 );
 const PPTX_IMPORTER = "media.paged.slide.importer.pptx";
 
-
 /** Open the fixture deck through the host's importer registry (the path
  *  File ▸ Open takes). Answers the importer id, or why there was none. */
 async function importDeck(page: Page): Promise<string> {
-    const bytes = [...readFileSync(PPTX_FIXTURE)];
+  const bytes = [...readFileSync(PPTX_FIXTURE)];
   return page.evaluate(
     async ({ bytes, name }) => {
       const reg = (
@@ -53,7 +52,11 @@ async function importDeck(page: Page): Promise<string> {
                   mimeType?: string,
                 ) => {
                   id?: string;
-                  import: (args: { name: string; bytes: Uint8Array; mimeType?: string }) => Promise<void>;
+                  import: (args: {
+                    name: string;
+                    bytes: Uint8Array;
+                    mimeType?: string;
+                  }) => Promise<void>;
                 } | null;
               };
             };
@@ -82,7 +85,11 @@ test.describe("journey · paged.slide plugin", () => {
     expect(imported).toBe(PPTX_IMPORTER);
 
     // The deck replaced the blank document: ten slides, 16:9 at 960 × 540 pt.
-    await expect.poll(async () => (await designer.handle()).pageCount, { timeout: 20_000 }).toBe(10);
+    await expect
+      .poll(async () => (await designer.handle()).pageCount, {
+        timeout: 20_000,
+      })
+      .toBe(10);
     const handle = await designer.handle();
     for (const [w, h] of handle.pageSizesPt) {
       expect(Math.round(w)).toBe(960);
@@ -96,32 +103,51 @@ test.describe("journey · paged.slide plugin", () => {
           __canvas: {
             registries: {
               exporters?: {
-                list: () => { id: string; export: () => Promise<{ bytes: Uint8Array; fileName: string } | null> }[];
+                list: () => {
+                  id: string;
+                  export: () => Promise<{
+                    bytes: Uint8Array;
+                    fileName: string;
+                  } | null>;
+                }[];
               };
             };
           };
         }
       ).__canvas.registries.exporters;
-      const ex = reg?.list().find((e) => e.id === "media.paged.slide.exporter.pptx");
+      const ex = reg
+        ?.list()
+        .find((e) => e.id === "media.paged.slide.exporter.pptx");
       const out = ex ? await ex.export() : null;
-      return out ? { bytes: Array.from(out.bytes), fileName: out.fileName } : null;
+      return out
+        ? { bytes: Array.from(out.bytes), fileName: out.fileName }
+        : null;
     });
     expect(exported, "the PowerPoint exporter answered").not.toBeNull();
-    expect(Buffer.from(exported!.bytes).equals(readFileSync(PPTX_FIXTURE)), "byte-identical").toBe(true);
+    expect(
+      Buffer.from(exported!.bytes).equals(readFileSync(PPTX_FIXTURE)),
+      "byte-identical",
+    ).toBe(true);
 
     // The first slide (title layout) draws its title and subtitle: its
     // snapshot is not a blank page.
     const png = await designer.renderBytes({ widthPx: 960 });
-    const inked = await page.evaluate(async (bytes) => {
-      const bmp = await createImageBitmap(new Blob([new Uint8Array(bytes)], { type: "image/png" }));
-      const c = new OffscreenCanvas(bmp.width, bmp.height);
-      const g = c.getContext("2d")!;
-      g.drawImage(bmp, 0, 0);
-      const px = g.getImageData(0, 0, bmp.width, bmp.height).data;
-      let n = 0;
-      for (let i = 0; i < px.length; i += 4) if (px[i] < 200 || px[i + 1] < 200 || px[i + 2] < 200) n++;
-      return n;
-    }, [...png]);
+    const inked = await page.evaluate(
+      async (bytes) => {
+        const bmp = await createImageBitmap(
+          new Blob([new Uint8Array(bytes)], { type: "image/png" }),
+        );
+        const c = new OffscreenCanvas(bmp.width, bmp.height);
+        const g = c.getContext("2d")!;
+        g.drawImage(bmp, 0, 0);
+        const px = g.getImageData(0, 0, bmp.width, bmp.height).data;
+        let n = 0;
+        for (let i = 0; i < px.length; i += 4)
+          if (px[i] < 200 || px[i + 1] < 200 || px[i + 2] < 200) n++;
+        return n;
+      },
+      [...png],
+    );
     expect(inked, "the title slide draws its text").toBeGreaterThan(1500);
   });
 
@@ -132,11 +158,19 @@ test.describe("journey · paged.slide plugin", () => {
     await designer.open();
     await designer.newDocument();
     // A plain document gives the slide panels no rail slot; a deck does.
-    const railSlides = page.locator('[data-panel-rail-item="media.paged.slide.panel.slides"]');
-    const railNotes = page.locator('[data-panel-rail-item="media.paged.slide.panel.notes"]');
+    const railSlides = page.locator(
+      '[data-panel-rail-item="media.paged.slide.panel.slides"]',
+    );
+    const railNotes = page.locator(
+      '[data-panel-rail-item="media.paged.slide.panel.notes"]',
+    );
     await expect(railSlides).toHaveCount(0);
     expect(await importDeck(page)).toBe(PPTX_IMPORTER);
-    await expect.poll(async () => (await designer.handle()).pageCount, { timeout: 20_000 }).toBe(10);
+    await expect
+      .poll(async () => (await designer.handle()).pageCount, {
+        timeout: 20_000,
+      })
+      .toBe(10);
     await expect(railSlides).toBeVisible({ timeout: 10_000 });
     await expect(railNotes).toBeVisible();
 
@@ -145,38 +179,60 @@ test.describe("journey · paged.slide plugin", () => {
     await expect(panel).toBeVisible();
     await expect(panel.locator("[data-slide]")).toHaveCount(10);
     // Every slide gets its thumbnail from the engine's renderer.
-    await expect(panel.locator("[data-slide] img")).toHaveCount(10, { timeout: 30_000 });
+    await expect(panel.locator("[data-slide] img")).toHaveCount(10, {
+      timeout: 30_000,
+    });
 
     // Clicking slide 4 brings it into view; the panel marks it.
     const fourth = panel.locator("[data-slide]").nth(3);
     const pageId = await fourth.getAttribute("data-slide");
     await fourth.locator("button").first().click();
-    await expect(fourth).toHaveAttribute("data-active", "true", { timeout: 10_000 });
+    await expect(fourth).toHaveAttribute("data-active", "true", {
+      timeout: 10_000,
+    });
 
     // New slide from a layout: inserted right after the current slide
     // (slide 4) and brought into view.
     await panel.locator("[data-new-slide] button").click();
-    await expect(panel.locator("[data-slide]")).toHaveCount(11, { timeout: 20_000 });
-    await expect(panel.locator("[data-slide]").nth(4)).toHaveAttribute("data-active", "true", {
+    await expect(panel.locator("[data-slide]")).toHaveCount(11, {
+      timeout: 20_000,
+    });
+    await expect(panel.locator("[data-slide]").nth(4)).toHaveAttribute(
+      "data-active",
+      "true",
+      {
+        timeout: 10_000,
+      },
+    );
+    await panel
+      .locator("[data-slide]")
+      .nth(3)
+      .locator("button")
+      .first()
+      .click();
+    await expect(fourth).toHaveAttribute("data-active", "true", {
       timeout: 10_000,
     });
-    await panel.locator("[data-slide]").nth(3).locator("button").first().click();
-    await expect(fourth).toHaveAttribute("data-active", "true", { timeout: 10_000 });
 
     // Notes typed for the slide land on its page as plugin metadata.
     await designer.openPanel("media.paged.slide.panel.notes");
     const notes = page.locator("[data-notes-text]");
-    await expect(page.locator('[data-notes-panel="ready"]')).toContainText("Slide 4");
+    await expect(page.locator('[data-notes-panel="ready"]')).toContainText(
+      "Slide 4",
+    );
     await notes.fill("Mention the Q3 numbers\nthen hand over");
     await notes.blur();
     await expect
       .poll(async () => {
         const pages = await designer.collection("pages");
         const p = pages.find((x) => x.selfId === pageId) as
-          | { pluginMetadata?: { key: string; value: string }[] }
-          | undefined;
-        const v = p?.pluginMetadata?.find((m) => m.key === "x-paged:media.paged.slide")?.value;
-        return v ? (JSON.parse(v) as { data: { notes?: string } }).data.notes : null;
+          { pluginMetadata?: { key: string; value: string }[] } | undefined;
+        const v = p?.pluginMetadata?.find(
+          (m) => m.key === "x-paged:media.paged.slide",
+        )?.value;
+        return v
+          ? (JSON.parse(v) as { data: { notes?: string } }).data.notes
+          : null;
       })
       .toBe("Mention the Q3 numbers\nthen hand over");
   });

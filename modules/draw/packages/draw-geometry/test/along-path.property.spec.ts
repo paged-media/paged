@@ -66,7 +66,9 @@ const longMetric = anyMetric.filter((m) => m.length > 1e-3);
 /** A polyline with no two consecutive points coincident, as a metric —
  *  every flattened segment has a direction. */
 const cleanPolyline = polyline(2, 8, smallVec2).filter((pts) =>
-  pts.every((p, i) => i === 0 || p[0] !== pts[i - 1][0] || p[1] !== pts[i - 1][1]),
+  pts.every(
+    (p, i) => i === 0 || p[0] !== pts[i - 1][0] || p[1] !== pts[i - 1][1],
+  ),
 );
 
 const pointsOf = (m: PathMetric): Vec2[] => m.stations.map((s) => s.point);
@@ -85,25 +87,40 @@ describe("along-path — measureAnchorRun (properties)", () => {
             `station ${i} goes backwards`,
           );
         }
-        assertClose(m.length, refPolylineLength(pointsOf(m)), lengthTol(m), "length");
+        assertClose(
+          m.length,
+          refPolylineLength(pointsOf(m)),
+          lengthTol(m),
+          "length",
+        );
       }),
     );
   });
 
   it("starts on the path's first anchor and ends on its last (open) / first (closed)", () => {
     fc.assert(
-      fc.property(anchorRun(1, 6), fc.boolean(), samples, (anchors, close, n) => {
-        const m = measureAnchorRun(anchors, { close, samplesPerSegment: n });
-        expect(m.closed).toBe(close);
-        assertVecClose(m.stations[0].point, anchors[0].anchor, 0, "first station");
-        const end = close ? anchors[0] : anchors[anchors.length - 1];
-        assertVecClose(
-          m.stations[m.stations.length - 1].point,
-          end.anchor,
-          0,
-          "last station",
-        );
-      }),
+      fc.property(
+        anchorRun(1, 6),
+        fc.boolean(),
+        samples,
+        (anchors, close, n) => {
+          const m = measureAnchorRun(anchors, { close, samplesPerSegment: n });
+          expect(m.closed).toBe(close);
+          assertVecClose(
+            m.stations[0].point,
+            anchors[0].anchor,
+            0,
+            "first station",
+          );
+          const end = close ? anchors[0] : anchors[anchors.length - 1];
+          assertVecClose(
+            m.stations[m.stations.length - 1].point,
+            end.anchor,
+            0,
+            "last station",
+          );
+        },
+      ),
     );
   });
 
@@ -111,24 +128,32 @@ describe("along-path — measureAnchorRun (properties)", () => {
     // For every cubic: |chord| ≤ arc length ≤ control-polygon length, and
     // an inscribed flattening sits between the first two.
     fc.assert(
-      fc.property(anchorRun(2, 6), fc.boolean(), samples, (anchors, close, n) => {
-        const m = measureAnchorRun(anchors, { close, samplesPerSegment: n });
-        const count = close ? anchors.length : anchors.length - 1;
-        let chord = 0;
-        let control = 0;
-        for (let i = 0; i < count; i++) {
-          const a = anchors[i];
-          const b = anchors[(i + 1) % anchors.length];
-          chord += refPolylineLength([a.anchor, b.anchor]);
-          control += refPolylineLength([a.anchor, a.right, b.left, b.anchor]);
-        }
-        const slack = 1e-9 * Math.max(1, control);
-        assertTrue(m.length >= chord - slack, `length ${m.length} < chord ${chord}`);
-        assertTrue(
-          m.length <= control + slack,
-          `length ${m.length} > control polygon ${control}`,
-        );
-      }),
+      fc.property(
+        anchorRun(2, 6),
+        fc.boolean(),
+        samples,
+        (anchors, close, n) => {
+          const m = measureAnchorRun(anchors, { close, samplesPerSegment: n });
+          const count = close ? anchors.length : anchors.length - 1;
+          let chord = 0;
+          let control = 0;
+          for (let i = 0; i < count; i++) {
+            const a = anchors[i];
+            const b = anchors[(i + 1) % anchors.length];
+            chord += refPolylineLength([a.anchor, b.anchor]);
+            control += refPolylineLength([a.anchor, a.right, b.left, b.anchor]);
+          }
+          const slack = 1e-9 * Math.max(1, control);
+          assertTrue(
+            m.length >= chord - slack,
+            `length ${m.length} < chord ${chord}`,
+          );
+          assertTrue(
+            m.length <= control + slack,
+            `length ${m.length} > control polygon ${control}`,
+          );
+        },
+      ),
     );
   });
 
@@ -139,7 +164,10 @@ describe("along-path — measureAnchorRun (properties)", () => {
         fc.boolean(),
         fc.integer({ min: 1, max: 12 }),
         (anchors, close, n) => {
-          const coarse = measureAnchorRun(anchors, { close, samplesPerSegment: n });
+          const coarse = measureAnchorRun(anchors, {
+            close,
+            samplesPerSegment: n,
+          });
           const fine = measureAnchorRun(anchors, {
             close,
             samplesPerSegment: 2 * n,
@@ -203,20 +231,25 @@ describe("along-path — pointAtLength / pointAtFraction (properties)", () => {
 
   it("its end points are the path's end points", () => {
     fc.assert(
-      fc.property(anchorRun(1, 6), fc.boolean(), samples, (anchors, close, n) => {
-        const m = measureAnchorRun(anchors, { close, samplesPerSegment: n });
-        fc.pre(m.length > 1e-3);
-        const start = pointAtFraction(m, 0);
-        const end = pointAtFraction(m, 1);
-        const last = close ? anchors[0] : anchors[anchors.length - 1];
-        const tol = 1e-9 * magnitude(...pointsOf(m));
-        assertVecClose(start.point, anchors[0].anchor, tol, "u = 0");
-        assertVecClose(end.point, last.anchor, tol, "u = 1");
-        expect(start.s).toBe(0);
-        expect(start.u).toBe(0);
-        assertClose(end.s, m.length, lengthTol(m), "s at u = 1");
-        assertClose(end.u, 1, 1e-12, "u at u = 1");
-      }),
+      fc.property(
+        anchorRun(1, 6),
+        fc.boolean(),
+        samples,
+        (anchors, close, n) => {
+          const m = measureAnchorRun(anchors, { close, samplesPerSegment: n });
+          fc.pre(m.length > 1e-3);
+          const start = pointAtFraction(m, 0);
+          const end = pointAtFraction(m, 1);
+          const last = close ? anchors[0] : anchors[anchors.length - 1];
+          const tol = 1e-9 * magnitude(...pointsOf(m));
+          assertVecClose(start.point, anchors[0].anchor, tol, "u = 0");
+          assertVecClose(end.point, last.anchor, tol, "u = 1");
+          expect(start.s).toBe(0);
+          expect(start.u).toBe(0);
+          assertClose(end.s, m.length, lengthTol(m), "s at u = 1");
+          assertClose(end.u, 1, 1e-12, "u at u = 1");
+        },
+      ),
     );
   });
 
@@ -252,7 +285,10 @@ describe("along-path — pointAtLength / pointAtFraction (properties)", () => {
       fc.property(longMetric, unit, unit, (m, u1, u2) => {
         const a = pointAtFraction(m, u1);
         const b = pointAtFraction(m, u2);
-        const moved = Math.hypot(b.point[0] - a.point[0], b.point[1] - a.point[1]);
+        const moved = Math.hypot(
+          b.point[0] - a.point[0],
+          b.point[1] - a.point[1],
+        );
         assertTrue(
           moved <= Math.abs(b.s - a.s) + 1e-9 * magnitude(...pointsOf(m)),
           `moved ${moved} for an arc of ${Math.abs(b.s - a.s)}`,
@@ -276,30 +312,31 @@ describe("along-path — pointAtLength / pointAtFraction (properties)", () => {
 
   it("clamps s to [0, length] and reads NaN as the start", () => {
     fc.assert(
-      fc.property(
-        longMetric,
-        real(0, 1e6),
-        (m, beyond) => {
-          expect(pointAtLength(m, -beyond)).toEqual(pointAtLength(m, 0));
-          expect(pointAtLength(m, m.length + beyond)).toEqual(
-            pointAtLength(m, m.length),
-          );
-          expect(pointAtLength(m, Number.NaN)).toEqual(pointAtLength(m, 0));
-          expect(pointAtFraction(m, Number.NaN)).toEqual(pointAtLength(m, 0));
-        },
-      ),
+      fc.property(longMetric, real(0, 1e6), (m, beyond) => {
+        expect(pointAtLength(m, -beyond)).toEqual(pointAtLength(m, 0));
+        expect(pointAtLength(m, m.length + beyond)).toEqual(
+          pointAtLength(m, m.length),
+        );
+        expect(pointAtLength(m, Number.NaN)).toEqual(pointAtLength(m, 0));
+        expect(pointAtFraction(m, Number.NaN)).toEqual(pointAtLength(m, 0));
+      }),
     );
   });
 
   it("a degenerate metric answers its one point for every s", () => {
     fc.assert(
-      fc.property(vec2, fc.double({ noNaN: true }), fc.boolean(), (p, s, close) => {
-        const m = measureAnchorRun([cornerOf(p)], { close });
-        expect(m.length).toBe(0);
-        const at = pointAtLength(m, s);
-        assertVecClose(at.point, p, 0);
-        expect([at.s, at.u, at.tangentDeg]).toEqual([0, 0, 0]);
-      }),
+      fc.property(
+        vec2,
+        fc.double({ noNaN: true }),
+        fc.boolean(),
+        (p, s, close) => {
+          const m = measureAnchorRun([cornerOf(p)], { close });
+          expect(m.length).toBe(0);
+          const at = pointAtLength(m, s);
+          assertVecClose(at.point, p, 0);
+          expect([at.s, at.u, at.tangentDeg]).toEqual([0, 0, 0]);
+        },
+      ),
     );
   });
 
@@ -335,11 +372,18 @@ describe("along-path — pointAtLength / pointAtFraction (properties)", () => {
         (pts, pick, within) => {
           const m = measureAnchorRun(pts.map(cornerOf));
           const i = pick % (pts.length - 1);
-          const s = m.stations[i].s + within * (m.stations[i + 1].s - m.stations[i].s);
+          const s =
+            m.stations[i].s + within * (m.stations[i + 1].s - m.stations[i].s);
           const expected =
-            (Math.atan2(pts[i + 1][1] - pts[i][1], pts[i + 1][0] - pts[i][0]) * 180) /
+            (Math.atan2(pts[i + 1][1] - pts[i][1], pts[i + 1][0] - pts[i][0]) *
+              180) /
             Math.PI;
-          assertClose(pointAtLength(m, s).tangentDeg, expected, 1e-9, "tangentDeg");
+          assertClose(
+            pointAtLength(m, s).tangentDeg,
+            expected,
+            1e-9,
+            "tangentDeg",
+          );
         },
       ),
     );
@@ -353,8 +397,14 @@ describe("along-path — pointAtLength / pointAtFraction (properties)", () => {
         const doubled = [pts[0], ...pts];
         const m = measureAnchorRun(doubled.map(cornerOf));
         const expected =
-          (Math.atan2(pts[1][1] - pts[0][1], pts[1][0] - pts[0][0]) * 180) / Math.PI;
-        assertClose(pointAtFraction(m, 0).tangentDeg, expected, 1e-9, "tangentDeg");
+          (Math.atan2(pts[1][1] - pts[0][1], pts[1][0] - pts[0][0]) * 180) /
+          Math.PI;
+        assertClose(
+          pointAtFraction(m, 0).tangentDeg,
+          expected,
+          1e-9,
+          "tangentDeg",
+        );
       }),
     );
   });
@@ -391,11 +441,13 @@ describe("along-path — pointAtLength / pointAtFraction (properties)", () => {
   // ------------------------------------------------------------------
   it("FIXED DEFECT (minimal counterexample): the end tangent survives a doubled last anchor", () => {
     const m = measureAnchorRun(
-      ([
-        [0, 0],
-        [0, 10],
-        [0, 10],
-      ] as Vec2[]).map(cornerOf),
+      (
+        [
+          [0, 0],
+          [0, 10],
+          [0, 10],
+        ] as Vec2[]
+      ).map(cornerOf),
     );
     expect(pointAtFraction(m, 0.5).tangentDeg).toBe(90);
     expect(pointAtFraction(m, 1).tangentDeg).toBe(90);
@@ -409,10 +461,18 @@ describe("along-path — pointAtLength / pointAtFraction (properties)", () => {
         const doubled = [...pts, pts[n - 1]];
         const m = measureAnchorRun(doubled.map(cornerOf));
         const expected =
-          (Math.atan2(pts[n - 1][1] - pts[n - 2][1], pts[n - 1][0] - pts[n - 2][0]) *
+          (Math.atan2(
+            pts[n - 1][1] - pts[n - 2][1],
+            pts[n - 1][0] - pts[n - 2][0],
+          ) *
             180) /
           Math.PI;
-        assertClose(pointAtFraction(m, 1).tangentDeg, expected, 1e-9, "tangentDeg");
+        assertClose(
+          pointAtFraction(m, 1).tangentDeg,
+          expected,
+          1e-9,
+          "tangentDeg",
+        );
       }),
     );
   });
@@ -422,20 +482,26 @@ describe("along-path — pointAtLength / pointAtFraction (properties)", () => {
     // adds no length, so the point and the tangent at the end must be
     // the ones the path had without the repeats — exactly.
     fc.assert(
-      fc.property(cleanPolyline, fc.integer({ min: 1, max: 4 }), (pts, repeats) => {
-        const last = pts[pts.length - 1];
-        const plain = measureAnchorRun(pts.map(cornerOf));
-        const padded = measureAnchorRun(
-          [...pts, ...Array.from({ length: repeats }, () => last)].map(cornerOf),
-        );
-        expect(padded.length).toBe(plain.length);
-        const want = pointAtFraction(plain, 1);
-        const got = pointAtFraction(padded, 1);
-        expect(got.tangentDeg).toBe(want.tangentDeg);
-        assertVecClose(got.point, last, 0, "end point");
-        assertVecClose(want.point, last, 0, "end point of the plain path");
-        expect(got.s).toBe(padded.length);
-      }),
+      fc.property(
+        cleanPolyline,
+        fc.integer({ min: 1, max: 4 }),
+        (pts, repeats) => {
+          const last = pts[pts.length - 1];
+          const plain = measureAnchorRun(pts.map(cornerOf));
+          const padded = measureAnchorRun(
+            [...pts, ...Array.from({ length: repeats }, () => last)].map(
+              cornerOf,
+            ),
+          );
+          expect(padded.length).toBe(plain.length);
+          const want = pointAtFraction(plain, 1);
+          const got = pointAtFraction(padded, 1);
+          expect(got.tangentDeg).toBe(want.tangentDeg);
+          assertVecClose(got.point, last, 0, "end point");
+          assertVecClose(want.point, last, 0, "end point of the plain path");
+          expect(got.s).toBe(padded.length);
+        },
+      ),
     );
   });
 
@@ -443,12 +509,14 @@ describe("along-path — pointAtLength / pointAtFraction (properties)", () => {
     // The closing segment is empty; the end of the lap is reached along
     // the segment before it.
     const m = measureAnchorRun(
-      ([
-        [0, 0],
-        [10, 0],
-        [10, 10],
-        [0, 0],
-      ] as Vec2[]).map(cornerOf),
+      (
+        [
+          [0, 0],
+          [10, 0],
+          [10, 10],
+          [0, 0],
+        ] as Vec2[]
+      ).map(cornerOf),
       { close: true },
     );
     const end = pointAtLength(m, m.length);
@@ -472,7 +540,11 @@ describe("along-path — distributeAlongPath (properties)", () => {
       fc.property(run, count, (r, n) => {
         const m = metricOf(r, false);
         fc.pre(m.length > 1e-3);
-        const slots = distributeAlongPath({ metric: m, mode: "count", count: n });
+        const slots = distributeAlongPath({
+          metric: m,
+          mode: "count",
+          count: n,
+        });
         expect(slots).toHaveLength(n);
         slots.forEach((slot, j) => {
           expect(slot.index).toBe(j);
@@ -481,7 +553,8 @@ describe("along-path — distributeAlongPath (properties)", () => {
           assertClose(slot.s, u * m.length, lengthTol(m), `slot ${j} s`);
         });
         expect(slots[0].s).toBe(0);
-        if (n > 1) assertClose(slots[n - 1].s, m.length, lengthTol(m), "last s");
+        if (n > 1)
+          assertClose(slots[n - 1].s, m.length, lengthTol(m), "last s");
       }),
     );
   });
@@ -500,7 +573,10 @@ describe("along-path — distributeAlongPath (properties)", () => {
         expect(slots).toHaveLength(n);
         slots.forEach((slot, j) => {
           assertClose(slot.u, (j + 1) / (n + 1), 1e-12, `slot ${j} u`);
-          assertTrue(slot.s > 0 && slot.s < m.length, `slot ${j} sits on an end`);
+          assertTrue(
+            slot.s > 0 && slot.s < m.length,
+            `slot ${j} sits on an end`,
+          );
         });
       }),
     );
@@ -511,7 +587,11 @@ describe("along-path — distributeAlongPath (properties)", () => {
       fc.property(run, count, (r, n) => {
         const m = metricOf(r, true);
         fc.pre(m.length > 1e-3);
-        const slots = distributeAlongPath({ metric: m, mode: "count", count: n });
+        const slots = distributeAlongPath({
+          metric: m,
+          mode: "count",
+          count: n,
+        });
         expect(slots).toHaveLength(n);
         slots.forEach((slot, j) => {
           assertClose(slot.s, (j / n) * m.length, lengthTol(m), `slot ${j} s`);
@@ -538,7 +618,10 @@ describe("along-path — distributeAlongPath (properties)", () => {
             endpoints,
           });
           for (let j = 1; j < slots.length; j++) {
-            assertTrue(slots[j].s > slots[j - 1].s, `slot ${j} is out of order`);
+            assertTrue(
+              slots[j].s > slots[j - 1].s,
+              `slot ${j} is out of order`,
+            );
           }
         },
       ),
@@ -563,7 +646,11 @@ describe("along-path — distributeAlongPath (properties)", () => {
           slots.forEach((slot, j) => {
             assertVecClose(slot.point, p, 0);
             const u =
-              endpoints === "interior" ? (j + 1) / (n + 1) : n === 1 ? 0 : j / (n - 1);
+              endpoints === "interior"
+                ? (j + 1) / (n + 1)
+                : n === 1
+                  ? 0
+                  : j / (n - 1);
             assertClose(slot.u, u, 1e-12, `slot ${j} u`);
           });
         },
@@ -583,7 +670,11 @@ describe("along-path — distributeAlongPath (properties)", () => {
           fc.pre(m.length > 1e-3);
           const wanted = Array.from({ length: n }, (_, j) => {
             const u =
-              endpoints === "interior" ? (j + 1) / (n + 1) : n === 1 ? 0 : j / (n - 1);
+              endpoints === "interior"
+                ? (j + 1) / (n + 1)
+                : n === 1
+                  ? 0
+                  : j / (n - 1);
             return { j, u, s: u * m.length + startOffsetPt };
           });
           // A slot a hair's breadth from an end could go either way.
@@ -605,7 +696,12 @@ describe("along-path — distributeAlongPath (properties)", () => {
           });
           expect(slots.map((slot) => slot.index)).toEqual(kept.map((k) => k.j));
           slots.forEach((slot, i) => {
-            assertClose(slot.s, kept[i].s, lengthTol(m), `slot ${slot.index} s`);
+            assertClose(
+              slot.s,
+              kept[i].s,
+              lengthTol(m),
+              `slot ${slot.index} s`,
+            );
             assertClose(slot.u, kept[i].u, 1e-12, `slot ${slot.index} u`);
           });
         },
@@ -615,88 +711,106 @@ describe("along-path — distributeAlongPath (properties)", () => {
 
   it("a closed path WRAPS the start offset: always `count` slots, each a whole number of laps from where it was asked", () => {
     fc.assert(
-      fc.property(
-        run,
-        count,
-        real(-500, 500),
-        (r, n, startOffsetPt) => {
-          const m = metricOf(r, true);
-          fc.pre(m.length > 1e-3);
-          const slots = distributeAlongPath({
-            metric: m,
-            mode: "count",
-            count: n,
-            startOffsetPt,
-          });
-          expect(slots).toHaveLength(n);
-          slots.forEach((slot, j) => {
-            assertTrue(slot.s >= 0 && slot.s <= m.length, `s = ${slot.s}`);
-            const laps = ((j / n) * m.length + startOffsetPt - slot.s) / m.length;
-            assertClose(laps, Math.round(laps), 1e-6, `slot ${j}: laps between asked and placed`);
-          });
-        },
-      ),
+      fc.property(run, count, real(-500, 500), (r, n, startOffsetPt) => {
+        const m = metricOf(r, true);
+        fc.pre(m.length > 1e-3);
+        const slots = distributeAlongPath({
+          metric: m,
+          mode: "count",
+          count: n,
+          startOffsetPt,
+        });
+        expect(slots).toHaveLength(n);
+        slots.forEach((slot, j) => {
+          assertTrue(slot.s >= 0 && slot.s <= m.length, `s = ${slot.s}`);
+          const laps = ((j / n) * m.length + startOffsetPt - slot.s) / m.length;
+          assertClose(
+            laps,
+            Math.round(laps),
+            1e-6,
+            `slot ${j}: laps between asked and placed`,
+          );
+        });
+      }),
     );
   });
 
   it("SPACING on an open path: one slot every `spacing`, from 0 to the last that fits", () => {
     fc.assert(
-      fc.property(
-        run,
-        real(0.01, 1),
-        (r, fraction) => {
-          const m = metricOf(r, false);
-          fc.pre(m.length > 1e-3);
-          const spacingPt = fraction * m.length;
-          const slots = distributeAlongPath({ metric: m, mode: "spacing", spacingPt });
-          assertTrue(slots.length >= 1, "no slot at the start");
-          slots.forEach((slot, j) => {
-            expect(slot.index).toBe(j);
-            assertClose(slot.s, Math.min(m.length, j * spacingPt), lengthTol(m), `slot ${j} s`);
-          });
-          // The next one would not fit.
-          assertTrue(
-            slots.length * spacingPt > m.length - lengthTol(m),
-            `${slots.length} slots at ${spacingPt} leave room on ${m.length}`,
+      fc.property(run, real(0.01, 1), (r, fraction) => {
+        const m = metricOf(r, false);
+        fc.pre(m.length > 1e-3);
+        const spacingPt = fraction * m.length;
+        const slots = distributeAlongPath({
+          metric: m,
+          mode: "spacing",
+          spacingPt,
+        });
+        assertTrue(slots.length >= 1, "no slot at the start");
+        slots.forEach((slot, j) => {
+          expect(slot.index).toBe(j);
+          assertClose(
+            slot.s,
+            Math.min(m.length, j * spacingPt),
+            lengthTol(m),
+            `slot ${j} s`,
           );
-          assertTrue(
-            (slots.length - 1) * spacingPt <= m.length + lengthTol(m),
-            "a slot past the end",
-          );
-        },
-      ),
+        });
+        // The next one would not fit.
+        assertTrue(
+          slots.length * spacingPt > m.length - lengthTol(m),
+          `${slots.length} slots at ${spacingPt} leave room on ${m.length}`,
+        );
+        assertTrue(
+          (slots.length - 1) * spacingPt <= m.length + lengthTol(m),
+          "a slot past the end",
+        );
+      }),
     );
   });
 
   it("SPACING with a start offset on an open path: exactly the walk's steps that land ON the path", () => {
     fc.assert(
-      fc.property(run, real(0.05, 1), real(-3, 2), (r, fraction, offsetLaps) => {
-        const m = metricOf(r, false);
-        fc.pre(m.length > 1e-3);
-        const spacingPt = fraction * m.length;
-        const startOffsetPt = offsetLaps * m.length;
-        // The walk: offset, offset + spacing, … — the ones in [0, length].
-        const expected: { j: number; s: number }[] = [];
-        const edge = 1e-6 * m.length;
-        let ambiguous = false;
-        for (let j = 0; j < 200; j++) {
-          const at = startOffsetPt + j * spacingPt;
-          if (at > m.length + edge) break;
-          if (Math.abs(at) <= edge || Math.abs(at - m.length) <= edge) ambiguous = true;
-          if (at >= 0 && at <= m.length) expected.push({ j, s: at });
-        }
-        fc.pre(!ambiguous);
-        const slots = distributeAlongPath({
-          metric: m,
-          mode: "spacing",
-          spacingPt,
-          startOffsetPt,
-        });
-        expect(slots.map((slot) => slot.index)).toEqual(expected.map((e) => e.j));
-        slots.forEach((slot, i) => {
-          assertClose(slot.s, expected[i].s, lengthTol(m), `slot ${slot.index} s`);
-        });
-      }),
+      fc.property(
+        run,
+        real(0.05, 1),
+        real(-3, 2),
+        (r, fraction, offsetLaps) => {
+          const m = metricOf(r, false);
+          fc.pre(m.length > 1e-3);
+          const spacingPt = fraction * m.length;
+          const startOffsetPt = offsetLaps * m.length;
+          // The walk: offset, offset + spacing, … — the ones in [0, length].
+          const expected: { j: number; s: number }[] = [];
+          const edge = 1e-6 * m.length;
+          let ambiguous = false;
+          for (let j = 0; j < 200; j++) {
+            const at = startOffsetPt + j * spacingPt;
+            if (at > m.length + edge) break;
+            if (Math.abs(at) <= edge || Math.abs(at - m.length) <= edge)
+              ambiguous = true;
+            if (at >= 0 && at <= m.length) expected.push({ j, s: at });
+          }
+          fc.pre(!ambiguous);
+          const slots = distributeAlongPath({
+            metric: m,
+            mode: "spacing",
+            spacingPt,
+            startOffsetPt,
+          });
+          expect(slots.map((slot) => slot.index)).toEqual(
+            expected.map((e) => e.j),
+          );
+          slots.forEach((slot, i) => {
+            assertClose(
+              slot.s,
+              expected[i].s,
+              lengthTol(m),
+              `slot ${slot.index} s`,
+            );
+          });
+        },
+      ),
     );
   });
 
@@ -760,7 +874,8 @@ describe("along-path — distributeAlongPath (properties)", () => {
           let ambiguous = false;
           for (let j = 0; j <= skipped + steps + 2; j++) {
             const at = startOffsetPt + j * spacingPt;
-            if (Math.abs(at) <= edge || Math.abs(at - length) <= edge) ambiguous = true;
+            if (Math.abs(at) <= edge || Math.abs(at - length) <= edge)
+              ambiguous = true;
             if (at >= 0 && at <= length) onPath.push(j);
           }
           fc.pre(!ambiguous);
@@ -771,7 +886,9 @@ describe("along-path — distributeAlongPath (properties)", () => {
             startOffsetPt,
             maxSlots,
           });
-          expect(slots.map((slot) => slot.index)).toEqual(onPath.slice(0, maxSlots));
+          expect(slots.map((slot) => slot.index)).toEqual(
+            onPath.slice(0, maxSlots),
+          );
           slots.forEach((slot) => {
             assertClose(
               slot.s,
@@ -803,29 +920,34 @@ describe("along-path — distributeAlongPath (properties)", () => {
         startOffsetPt: -back * spacingPt,
         maxSlots: 3,
       });
-      expect(slots.map((slot) => slot.index)).toEqual([back, back + 1, back + 2]);
-      for (const slot of slots) assertTrue(slot.s >= 0, `slot at s = ${slot.s}`);
+      expect(slots.map((slot) => slot.index)).toEqual([
+        back,
+        back + 1,
+        back + 2,
+      ]);
+      for (const slot of slots)
+        assertTrue(slot.s >= 0, `slot at s = ${slot.s}`);
       assertClose(slots[0].s, 0, 1e-9, "first slot");
     }
   });
 
   it("SPACING on a closed path: exactly one lap, never a slot back on the start", () => {
     fc.assert(
-      fc.property(
-        run,
-        real(0.01, 1),
-        (r, fraction) => {
-          const m = metricOf(r, true);
-          fc.pre(m.length > 1e-3);
-          const spacingPt = fraction * m.length;
-          const slots = distributeAlongPath({ metric: m, mode: "spacing", spacingPt });
-          assertTrue(slots.length >= 1, "no slot at the start");
-          slots.forEach((slot, j) => {
-            assertTrue(j * spacingPt < m.length, `slot ${j} is past one lap`);
-            assertClose(slot.s, j * spacingPt, lengthTol(m), `slot ${j} s`);
-          });
-        },
-      ),
+      fc.property(run, real(0.01, 1), (r, fraction) => {
+        const m = metricOf(r, true);
+        fc.pre(m.length > 1e-3);
+        const spacingPt = fraction * m.length;
+        const slots = distributeAlongPath({
+          metric: m,
+          mode: "spacing",
+          spacingPt,
+        });
+        assertTrue(slots.length >= 1, "no slot at the start");
+        slots.forEach((slot, j) => {
+          assertTrue(j * spacingPt < m.length, `slot ${j} is past one lap`);
+          assertClose(slot.s, j * spacingPt, lengthTol(m), `slot ${j} s`);
+        });
+      }),
     );
   });
 
@@ -862,7 +984,9 @@ describe("along-path — wrapOrClamp (properties)", () => {
     fc.assert(
       fc.property(longMetric, anyS, (m, s) => {
         const open: PathMetric = { ...m, closed: false };
-        expect(wrapOrClamp(open, s)).toBe(Math.min(open.length, Math.max(0, s)));
+        expect(wrapOrClamp(open, s)).toBe(
+          Math.min(open.length, Math.max(0, s)),
+        );
       }),
     );
   });
@@ -874,7 +998,12 @@ describe("along-path — wrapOrClamp (properties)", () => {
         const w = wrapOrClamp(closed, s);
         assertTrue(w >= 0 && w <= closed.length, `wrapped to ${w}`);
         const laps = (s - w) / closed.length;
-        assertClose(laps, Math.round(laps), 1e-6, "whole laps between s and its wrap");
+        assertClose(
+          laps,
+          Math.round(laps),
+          1e-6,
+          "whole laps between s and its wrap",
+        );
       }),
     );
   });
@@ -969,18 +1098,13 @@ describe("along-path — ease (properties)", () => {
 
   it("clamps t and strength, and treats non-finite input as 0", () => {
     fc.assert(
-      fc.property(
-        kind,
-        real(-50, 50),
-        real(-50, 50),
-        (k, t, strength) => {
-          const clampedT = Math.min(1, Math.max(0, t));
-          const clampedK = Math.min(1, Math.max(0, strength));
-          expect(ease(t, k, strength)).toBe(ease(clampedT, k, clampedK));
-          expect(ease(Number.NaN, k, strength)).toBe(0);
-          expect(ease(t, k, Number.NaN)).toBe(clampedT);
-        },
-      ),
+      fc.property(kind, real(-50, 50), real(-50, 50), (k, t, strength) => {
+        const clampedT = Math.min(1, Math.max(0, t));
+        const clampedK = Math.min(1, Math.max(0, strength));
+        expect(ease(t, k, strength)).toBe(ease(clampedT, k, clampedK));
+        expect(ease(Number.NaN, k, strength)).toBe(0);
+        expect(ease(t, k, Number.NaN)).toBe(clampedT);
+      }),
     );
   });
 });

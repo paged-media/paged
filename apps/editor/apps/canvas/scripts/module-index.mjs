@@ -31,14 +31,24 @@
 // file's content hash: `<version>+<sha256 prefix>`.
 
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import {
+  existsSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  statSync,
+} from "node:fs";
 import { dirname, join, posix, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const APP = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-export const MODULE_HOST = process.env.PAGED_MODULE_HOST ?? "https://modules.paged.media";
+export const MODULE_HOST =
+  process.env.PAGED_MODULE_HOST ?? "https://modules.paged.media";
 
-export const sha = (alg, buf) => createHash(alg).update(buf).digest(alg === "sha384" ? "base64" : "hex");
+export const sha = (alg, buf) =>
+  createHash(alg)
+    .update(buf)
+    .digest(alg === "sha384" ? "base64" : "hex");
 export const toPosix = (p) => p.split(sep).join("/");
 
 /** Every `.wasm` under `dir` (absolute paths). */
@@ -61,7 +71,10 @@ export function walkWasm(dir, out = [], skipNodeModules = true) {
  *  its own directory in the repository. */
 export function pagedPackages(app = APP) {
   const roots = new Set();
-  for (const base of [join(app, "node_modules", "@paged-media"), join(app, "..", "..", "node_modules", "@paged-media")]) {
+  for (const base of [
+    join(app, "node_modules", "@paged-media"),
+    join(app, "..", "..", "node_modules", "@paged-media"),
+  ]) {
     if (!existsSync(base)) continue;
     for (const name of readdirSync(base)) {
       try {
@@ -76,14 +89,21 @@ export function pagedPackages(app = APP) {
     const pkgFile = join(root, "package.json");
     if (!existsSync(pkgFile)) continue;
     const { name, version } = JSON.parse(readFileSync(pkgFile, "utf8"));
-    out.push({ name, version, root, published: toPosix(root).includes("/node_modules/.bun/") });
+    out.push({
+      name,
+      version,
+      root,
+      published: toPosix(root).includes("/node_modules/.bun/"),
+    });
   }
   return out;
 }
 
 /** The immutable host version of one file of `pkg`. */
 export function hostVersion(pkg, bytes) {
-  return pkg.published ? pkg.version : `${pkg.version}+${sha("sha256", bytes).slice(0, 12)}`;
+  return pkg.published
+    ? pkg.version
+    : `${pkg.version}+${sha("sha256", bytes).slice(0, 12)}`;
 }
 
 /** Every wasm inside the installed @paged-media packages, by sha256 →
@@ -95,7 +115,11 @@ export function packageIndex(app = APP) {
       const bytes = readFileSync(file);
       const hash = sha("sha256", bytes);
       if (!index.has(hash)) {
-        index.set(hash, { name: pkg.name, version: hostVersion(pkg, bytes), path: toPosix(relative(pkg.root, file)) });
+        index.set(hash, {
+          name: pkg.name,
+          version: hostVersion(pkg, bytes),
+          path: toPosix(relative(pkg.root, file)),
+        });
       }
     }
   }
@@ -120,7 +144,11 @@ export function packageIndex(app = APP) {
  * `dev`, each file also carries its absolute path (`fs`), which the dev
  * server serves under `/@fs/`.
  */
-export function buildModuleManifest({ app = APP, host = null, dev = false } = {}) {
+export function buildModuleManifest({
+  app = APP,
+  host = null,
+  dev = false,
+} = {}) {
   const packages = {};
   const plugins = {};
   const unbuilt = [];
@@ -131,7 +159,10 @@ export function buildModuleManifest({ app = APP, host = null, dev = false } = {}
     try {
       manifest = JSON.parse(readFileSync(manifestFile, "utf8"));
     } catch (e) {
-      if (!pkg.published) throw new Error(`${pkg.name}: manifest.json does not parse: ${e.message}`);
+      if (!pkg.published)
+        throw new Error(
+          `${pkg.name}: manifest.json does not parse: ${e.message}`,
+        );
       continue;
     }
     const wasm = manifest?.capabilities?.wasm;
@@ -172,7 +203,12 @@ function unbuiltMessage(unbuilt) {
   for (const { pkg, path } of unbuilt) {
     const m = /\/modules\/([^/]+)\//.exec(toPosix(pkg.root) + "/");
     if (!m) tasks.add(`build ${pkg.name}'s wasm`);
-    else tasks.add(m[1] === "data" && path.includes("duckdb") ? "data:duckdb" : `${m[1]}:wasm`);
+    else
+      tasks.add(
+        m[1] === "data" && path.includes("duckdb")
+          ? "data:duckdb"
+          : `${m[1]}:wasm`,
+      );
   }
   const moon = [...tasks].filter((t) => !t.startsWith("build "));
   const other = [...tasks].filter((t) => t.startsWith("build "));

@@ -33,7 +33,10 @@
 
 import { describe, expect, it } from "bun:test";
 
-import type { PluginManifest, ProviderRecordSet } from "@paged-media/plugin-api";
+import type {
+  PluginManifest,
+  ProviderRecordSet,
+} from "@paged-media/plugin-api";
 
 import {
   createBundleHost,
@@ -118,7 +121,12 @@ describe("host.dataProviders — cross-plugin data-provider registry (D-09)", ()
       getSnapshot: recordSet,
     });
     const info = host(CONSUMER, registry).dataProviders.discover("dataset")[0];
-    expect(Object.keys(info).sort()).toEqual(["category", "id", "revision", "schema"]);
+    expect(Object.keys(info).sort()).toEqual([
+      "category",
+      "id",
+      "revision",
+      "schema",
+    ]);
   });
 
   it("gate: register needs publish, discover/get need consume (PluginCapabilityError in enforce)", async () => {
@@ -133,8 +141,12 @@ describe("host.dataProviders — cross-plugin data-provider registry (D-09)", ()
         getSnapshot: recordSet,
       }),
     ).toThrow(PluginCapabilityError);
-    expect(() => neither.dataProviders.discover("dataset")).toThrow(PluginCapabilityError);
-    await expect(neither.dataProviders.get("x")).rejects.toBeInstanceOf(PluginCapabilityError);
+    expect(() => neither.dataProviders.discover("dataset")).toThrow(
+      PluginCapabilityError,
+    );
+    await expect(neither.dataProviders.get("x")).rejects.toBeInstanceOf(
+      PluginCapabilityError,
+    );
   });
 
   it("onDidChange fans the provider's revision bump out to the consumer", () => {
@@ -170,6 +182,8 @@ describe("host.dataProviders — cross-plugin data-provider registry (D-09)", ()
   });
 
   it("supports('dataProviders@1') is true once a registry is wired", () => {
-    expect(host(PROVIDER, createDataProviderRegistry()).supports("dataProviders@1")).toBe(true);
+    expect(
+      host(PROVIDER, createDataProviderRegistry()).supports("dataProviders@1"),
+    ).toBe(true);
   });
 });

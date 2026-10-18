@@ -33,19 +33,16 @@ import {
 // `W` toggles Normal ⇄ Preview (text-suppressed like tool shortcuts).
 
 export type ScreenMode =
-  | "normal"
-  | "preview"
-  | "bleed"
-  | "slug"
-  | "presentation";
+  "normal" | "preview" | "bleed" | "slug" | "presentation";
 
-export const SCREEN_MODES: ReadonlyArray<{ mode: ScreenMode; label: string }> = [
-  { mode: "normal", label: "Normal" },
-  { mode: "preview", label: "Preview" },
-  { mode: "bleed", label: "Bleed" },
-  { mode: "slug", label: "Slug" },
-  { mode: "presentation", label: "Presentation" },
-];
+export const SCREEN_MODES: ReadonlyArray<{ mode: ScreenMode; label: string }> =
+  [
+    { mode: "normal", label: "Normal" },
+    { mode: "preview", label: "Preview" },
+    { mode: "bleed", label: "Bleed" },
+    { mode: "slug", label: "Slug" },
+    { mode: "presentation", label: "Presentation" },
+  ];
 
 interface ScreenModeValue {
   screenMode: ScreenMode;

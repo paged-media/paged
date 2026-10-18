@@ -95,10 +95,7 @@ export function createLivePaintHandler(
   host: BundleHost,
   mode: LivePaintToolMode,
 ): GestureHandler {
-  const label =
-    mode === "fill"
-      ? "livePaintBucket"
-      : "livePaintSelect";
+  const label = mode === "fill" ? "livePaintBucket" : "livePaintSelect";
   let machine: LivePaintMachine | null = null;
   let pageId: string | null = null;
   /** The recipe this gesture scope operates on. */
@@ -269,9 +266,11 @@ export function createLivePaintHandler(
 }
 
 /** The Live Paint Bucket handler. */
-export const createLivePaintBucketHandler = (host: BundleHost): GestureHandler =>
-  createLivePaintHandler(host, "fill");
+export const createLivePaintBucketHandler = (
+  host: BundleHost,
+): GestureHandler => createLivePaintHandler(host, "fill");
 
 /** The Live Paint Selection handler. */
-export const createLivePaintSelectHandler = (host: BundleHost): GestureHandler =>
-  createLivePaintHandler(host, "select");
+export const createLivePaintSelectHandler = (
+  host: BundleHost,
+): GestureHandler => createLivePaintHandler(host, "select");

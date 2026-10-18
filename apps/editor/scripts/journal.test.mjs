@@ -27,13 +27,25 @@ const here = dirname(fileURLToPath(import.meta.url));
 const CLIENT = pathToFileURL(
   resolvePath(here, "..", "packages", "client", "src", "journal"),
 ).href;
-const { IDENT_RE, FORBIDDEN_KEYS, sanitizeData, errorIdent, identOf, siteHash } =
-  await import(`${CLIENT}/entry.ts`);
+const {
+  IDENT_RE,
+  FORBIDDEN_KEYS,
+  sanitizeData,
+  errorIdent,
+  identOf,
+  siteHash,
+} = await import(`${CLIENT}/entry.ts`);
 const { JournalBuffer } = await import(`${CLIENT}/buffer.ts`);
 const { CODES, policyFor } = await import(`${CLIENT}/codes.ts`);
-const { emptyLedger, KNOWN_BLIND_SPOTS } = await import(`${CLIENT}/uncaptured.ts`);
-const { buildJournalBundle, serializeJournalBundle, reduceUserAgent, roundToHour } =
-  await import(`${CLIENT}/export.ts`);
+const { emptyLedger, KNOWN_BLIND_SPOTS } = await import(
+  `${CLIENT}/uncaptured.ts`
+);
+const {
+  buildJournalBundle,
+  serializeJournalBundle,
+  reduceUserAgent,
+  roundToHour,
+} = await import(`${CLIENT}/export.ts`);
 const { createGuardedLoader } = await import(
   pathToFileURL(
     resolvePath(here, "..", "apps", "canvas", "src", "plugin-load-guard.ts"),
@@ -51,17 +63,17 @@ const { createBundleActivator } = await import(
 
 test("IDENT_RE rejects everything a user could have typed", () => {
   const mustReject = [
-    "the quick brown fox",                      // prose (spaces)
-    "/Users/alice/Documents/secret.idml",       // absolute path
-    "C:\\Users\\alice\\secret.idml",            // windows path
-    "https://example.com/private?token=abc",    // URI
-    "Helvetica Neue",                           // font family
-    "alice@example.com",                        // email
-    "Chapter 1: The Beginning",                 // document text
-    "Ünïcödé",                                  // non-ascii
-    "UPPERCASE",                                // capitals
-    "",                                         // empty
-    "a".repeat(65),                             // over length
+    "the quick brown fox", // prose (spaces)
+    "/Users/alice/Documents/secret.idml", // absolute path
+    "C:\\Users\\alice\\secret.idml", // windows path
+    "https://example.com/private?token=abc", // URI
+    "Helvetica Neue", // font family
+    "alice@example.com", // email
+    "Chapter 1: The Beginning", // document text
+    "Ünïcödé", // non-ascii
+    "UPPERCASE", // capitals
+    "", // empty
+    "a".repeat(65), // over length
   ];
   for (const value of mustReject) {
     assert.equal(IDENT_RE.test(value), false, `must reject: ${value}`);
@@ -115,7 +127,10 @@ test("identOf normalises camelCase machine ids, and only machine ids", () => {
   // Command ids in this app are camelCase (`paged.chrome.toggleAll`), and they
   // are code-authored constants, so lowercasing is lossless.
   assert.equal(identOf("paged.chrome.toggleAll"), "paged.chrome.toggleall");
-  assert.equal(identOf("media.paged.draw.boolean.union"), "media.paged.draw.boolean.union");
+  assert.equal(
+    identOf("media.paged.draw.boolean.union"),
+    "media.paged.draw.boolean.union",
+  );
   // But it is NOT a back door for user content.
   assert.equal(identOf("The Quick Brown Fox"), undefined);
   assert.equal(identOf("/Users/Alice/Secret.idml"), undefined);
@@ -160,22 +175,40 @@ test("an exported bundle cannot contain user text or paths", () => {
     code: "plugin.log",
     data: { level: "warn", site: siteHash(`${SECRET_TEXT} ${SECRET_PATH}`) },
   });
-  buffer.record({ code: "shell.gesture", data: { tool: "paged.pen", updates: 200 } });
+  buffer.record({
+    code: "shell.gesture",
+    data: { tool: "paged.pen", updates: 200 },
+  });
 
   const json = serializeJournalBundle(
     buildJournalBundle({
       entries: buffer.entries(),
       uncaptured: buffer.getLedger(),
       app: { editorVersion: "0.0.0", protocol: 62 },
-      env: { ua: reduceUserAgent("Mozilla/5.0 (Macintosh) Chrome/140.0 Safari/537"), viewport: { w: 1443, h: 907 } },
+      env: {
+        ua: reduceUserAgent("Mozilla/5.0 (Macintosh) Chrome/140.0 Safari/537"),
+        viewport: { w: 1443, h: 907 },
+      },
       clocks: { shellEpochMs: 0 },
       generatedAtMs: 1_755_870_000_000,
     }),
   );
 
-  assert.equal(json.includes(SECRET_TEXT), false, "user text leaked into the bundle");
-  assert.equal(json.includes(SECRET_PATH), false, "a file path leaked into the bundle");
-  assert.equal(json.includes("alice"), false, "a user name leaked into the bundle");
+  assert.equal(
+    json.includes(SECRET_TEXT),
+    false,
+    "user text leaked into the bundle",
+  );
+  assert.equal(
+    json.includes(SECRET_PATH),
+    false,
+    "a file path leaked into the bundle",
+  );
+  assert.equal(
+    json.includes("alice"),
+    false,
+    "a user name leaked into the bundle",
+  );
   // The safe values DID survive — otherwise this test would pass vacuously.
   assert.equal(json.includes("paged.pen"), true);
   assert.equal(json.includes('"updates": 200'), true);
@@ -201,7 +234,11 @@ test("reduceUserAgent keeps family+major+platform and nothing else", () => {
   const reduced = reduceUserAgent(raw);
   assert.equal(reduced, "chrome.140.macos");
   assert.equal(IDENT_RE.test(reduced), true);
-  assert.equal(reduced.includes("537"), false, "build numbers are fingerprints");
+  assert.equal(
+    reduced.includes("537"),
+    false,
+    "build numbers are fingerprints",
+  );
 });
 
 test("the bundle always carries the declared blind spots", () => {
@@ -213,7 +250,10 @@ test("the bundle always carries the declared blind spots", () => {
     clocks: { shellEpochMs: 0 },
     generatedAtMs: 0,
   });
-  assert.ok(bundle.blindSpots.length >= 8, "blind spots must not be silently emptied");
+  assert.ok(
+    bundle.blindSpots.length >= 8,
+    "blind spots must not be silently emptied",
+  );
   for (const spot of bundle.blindSpots) {
     assert.ok(spot.id && spot.what && spot.why && spot.wouldCost);
   }
@@ -273,11 +313,22 @@ test("every code has text and a bounded policy", () => {
 });
 
 test("code ids follow the dotted area convention", () => {
-  const areas = new Set(["engine", "worker", "client", "shell", "plugin", "journal"]);
+  const areas = new Set([
+    "engine",
+    "worker",
+    "client",
+    "shell",
+    "plugin",
+    "journal",
+  ]);
   for (const code of Object.keys(CODES)) {
     const area = code.split(".")[0];
     assert.ok(areas.has(area), `${code} has unknown area "${area}"`);
-    assert.equal(IDENT_RE.test(code), true, `${code} is not itself a safe identifier`);
+    assert.equal(
+      IDENT_RE.test(code),
+      true,
+      `${code} is not itself a safe identifier`,
+    );
   }
 });
 
@@ -303,11 +354,19 @@ function fixedBuffer(overrides = {}) {
 
 test("the ring is bounded and counts what it evicted", () => {
   const b = fixedBuffer({ capacity: 4 });
-  for (let i = 0; i < 10; i += 1) b.record({ code: "shell.command", data: { id: `c${i}` } });
+  for (let i = 0; i < 10; i += 1)
+    b.record({ code: "shell.command", data: { id: `c${i}` } });
   assert.equal(b.entries().length, 4, "ring must not grow past capacity");
-  assert.equal(b.getLedger().evicted, 6, "evictions must be counted, not silent");
+  assert.equal(
+    b.getLedger().evicted,
+    6,
+    "evictions must be counted, not silent",
+  );
   // Oldest-first, and it kept the NEWEST four.
-  assert.deepEqual(b.entries().map((e) => e.data.id), ["c6", "c7", "c8", "c9"]);
+  assert.deepEqual(
+    b.entries().map((e) => e.data.id),
+    ["c6", "c7", "c8", "c9"],
+  );
 });
 
 test("debug is gated off by default, info and above always record", () => {
@@ -320,7 +379,8 @@ test("debug is gated off by default, info and above always record", () => {
 
 test("sample keeps 1 in N, stamps the rate, and counts the rest", () => {
   const b = fixedBuffer();
-  for (let i = 0; i < 16; i += 1) b.record({ code: "plugin.mutate", data: { ok: true } });
+  for (let i = 0; i < 16; i += 1)
+    b.record({ code: "plugin.mutate", data: { ok: true } });
   const kept = b.entries();
   assert.equal(kept.length, 2, "plugin.mutate samples every 8");
   assert.equal(kept[0].data.sampled, 8, "the survivor must say it was sampled");
@@ -348,7 +408,11 @@ test("coalesce folds identical entries and carries the count", () => {
   }
   const kept = b.entries();
   assert.equal(kept.length, 1, "identical log lines inside the window fold");
-  assert.equal(kept[0].data.n, 4, "the count survives even though entries did not");
+  assert.equal(
+    kept[0].data.n,
+    4,
+    "the count survives even though entries did not",
+  );
 });
 
 test("record never throws, whatever it is handed", () => {
@@ -356,7 +420,9 @@ test("record never throws, whatever it is handed", () => {
   const cyclic = {};
   cyclic.self = cyclic;
   assert.doesNotThrow(() => b.record({ code: "shell.command", data: cyclic }));
-  assert.doesNotThrow(() => b.record({ code: "shell.command", data: { fn: () => {} } }));
+  assert.doesNotThrow(() =>
+    b.record({ code: "shell.command", data: { fn: () => {} } }),
+  );
 });
 
 test("a throwing subscriber cannot break recording", () => {
@@ -388,7 +454,11 @@ test("entry timestamps are relative, never wall clock", () => {
   b.record({ code: "shell.command" });
   const [e] = b.entries();
   assert.ok(e.t < 1_000, `t must be relative to the epoch, got ${e.t}`);
-  assert.equal(b.epochWallMs, 1_755_870_000_000, "the wall clock lives on the buffer, once");
+  assert.equal(
+    b.epochWallMs,
+    1_755_870_000_000,
+    "the wall clock lives on the buffer, once",
+  );
 });
 
 // ─────────────────────────────────────────────────────────────────────
@@ -444,8 +514,16 @@ test("a throwing bundle does not take the ones after it down", () => {
     "the failed bundle must not be in the loaded list",
   );
   // Everything AFTER the failure still loaded — the actual regression guarded.
-  for (const id of ["media.paged.sheet", "media.paged.image", "media.paged.pdf", "media.paged.doc"]) {
-    assert.ok(loaded.some((l) => l.id === id), `${id} (after the failure) must still load`);
+  for (const id of [
+    "media.paged.sheet",
+    "media.paged.image",
+    "media.paged.pdf",
+    "media.paged.doc",
+  ]) {
+    assert.ok(
+      loaded.some((l) => l.id === id),
+      `${id} (after the failure) must still load`,
+    );
   }
 });
 
@@ -457,7 +535,11 @@ test("the failure is attributed in the journal, not swallowed", () => {
   assert.equal(failures.length, 1, "exactly one failure recorded");
   assert.equal(failures[0].code, "plugin.activate");
   assert.equal(failures[0].severity, "error");
-  assert.equal(failures[0].data.plugin, "media.paged.data", "the culprit is NAMED");
+  assert.equal(
+    failures[0].data.plugin,
+    "media.paged.data",
+    "the culprit is NAMED",
+  );
   assert.equal(failures[0].data.error, "typeerror");
   assert.equal(typeof failures[0].durMs, "number");
 
@@ -472,8 +554,16 @@ test("an activation failure never carries the throw's text into the journal", ()
   const h = guardHarness(new Set(["media.paged.data"]));
   EIGHT.map(h.load);
   const json = JSON.stringify(h.recorded);
-  assert.equal(json.includes("/Users/alice"), false, "a disk path leaked into the journal");
-  assert.equal(json.includes("Cannot read properties"), false, "throw text leaked into the journal");
+  assert.equal(
+    json.includes("/Users/alice"),
+    false,
+    "a disk path leaked into the journal",
+  );
+  assert.equal(
+    json.includes("Cannot read properties"),
+    false,
+    "throw text leaked into the journal",
+  );
 });
 
 test("the failure also reaches the user-facing Problems panel", () => {
@@ -485,17 +575,31 @@ test("the failure also reaches the user-facing Problems panel", () => {
   assert.equal(h.problems[0].diagnostics[0].severity, "error");
   // The Problems panel is LOCAL UI, not an exported artifact, so the full
   // message is appropriate here — that asymmetry is deliberate.
-  assert.ok(h.problems[0].diagnostics[0].message.includes("failed to activate"));
+  assert.ok(
+    h.problems[0].diagnostics[0].message.includes("failed to activate"),
+  );
 });
 
 test("a malformed bundle (no manifest) is contained too", () => {
   const h = guardHarness();
-  const loaded = [{ manifest: { id: "media.paged.draw" } }, {}, { manifest: { id: "media.paged.doc" } }]
+  const loaded = [
+    { manifest: { id: "media.paged.draw" } },
+    {},
+    { manifest: { id: "media.paged.doc" } },
+  ]
     .map(h.load)
     .filter((l) => l !== null);
-  assert.equal(loaded.length, 2, "reading a missing manifest must not escape the guard");
+  assert.equal(
+    loaded.length,
+    2,
+    "reading a missing manifest must not escape the guard",
+  );
   const failure = h.recorded.find((e) => e.data.ok === false);
-  assert.equal(failure.data.plugin, "unknown", "an unidentifiable bundle is named 'unknown', not crashed on");
+  assert.equal(
+    failure.data.plugin,
+    "unknown",
+    "an unidentifiable bundle is named 'unknown', not crashed on",
+  );
 });
 
 test("all eight loading cleanly produces eight successes and no problems", () => {
@@ -503,7 +607,10 @@ test("all eight loading cleanly produces eight successes and no problems", () =>
   const loaded = EIGHT.map(h.load).filter((l) => l !== null);
   assert.equal(loaded.length, 8);
   assert.equal(h.problems.length, 0);
-  assert.equal(h.recorded.every((e) => e.data.ok === true), true);
+  assert.equal(
+    h.recorded.every((e) => e.data.ok === true),
+    true,
+  );
 });
 
 // ─────────────────────────────────────────────────────────────────────
@@ -544,7 +651,10 @@ function miniImporterRegistry() {
   };
 }
 
-function activatorHarness(entries, { importers, failActivate = new Set() } = {}) {
+function activatorHarness(
+  entries,
+  { importers, failActivate = new Set() } = {},
+) {
   const activated = [];
   const disposed = [];
   const problems = [];
@@ -590,7 +700,13 @@ test("boot activates in the declared order whatever order the chunks arrive in",
 test("a chunk that fails to load is named, and the rest still activate", async () => {
   const entries = [
     { id: "a", lane: "boot", load: async () => ({ manifest: { id: "a" } }) },
-    { id: "b", lane: "boot", load: async () => { throw new TypeError("Failed to fetch /Users/alice/b.js"); } },
+    {
+      id: "b",
+      lane: "boot",
+      load: async () => {
+        throw new TypeError("Failed to fetch /Users/alice/b.js");
+      },
+    },
     { id: "c", lane: "boot", load: async () => ({ manifest: { id: "c" } }) },
   ];
   const h = activatorHarness(entries);
@@ -600,12 +716,20 @@ test("a chunk that fails to load is named, and the rest still activate", async (
   assert.equal(h.problems[0].bundleId, "b");
   const failure = h.recorded.find((e) => e.data?.ok === false);
   assert.equal(failure.data.plugin, "b");
-  assert.equal(JSON.stringify(h.recorded).includes("/Users/alice"), false, "no path in the journal");
+  assert.equal(
+    JSON.stringify(h.recorded).includes("/Users/alice"),
+    false,
+    "no path in the journal",
+  );
 });
 
 test("a chunk whose manifest id disagrees with the table is refused", async () => {
   const h = activatorHarness([
-    { id: "a", lane: "boot", load: async () => ({ manifest: { id: "not-a" } }) },
+    {
+      id: "a",
+      lane: "boot",
+      load: async () => ({ manifest: { id: "not-a" } }),
+    },
   ]);
   await h.activator.boot();
   assert.deepEqual(h.activated, []);
@@ -614,12 +738,18 @@ test("a chunk whose manifest id disagrees with the table is refused", async () =
 
 test("disposing mid-fetch (StrictMode remount) activates nothing", async () => {
   const d = deferred();
-  const h = activatorHarness([{ id: "a", lane: "boot", load: () => d.promise }]);
+  const h = activatorHarness([
+    { id: "a", lane: "boot", load: () => d.promise },
+  ]);
   const booted = h.activator.boot();
   h.activator.dispose();
   d.resolve({ manifest: { id: "a" } });
   await booted;
-  assert.deepEqual(h.activated, [], "an orphaned activation would never be disposed");
+  assert.deepEqual(
+    h.activated,
+    [],
+    "an orphaned activation would never be disposed",
+  );
 });
 
 test("dispose tears down every activated bundle", async () => {
@@ -645,7 +775,14 @@ test("an on-demand bundle is not fetched at boot; its placeholder importer is re
           fetches++;
           return { manifest: { id: "pdf" } };
         },
-        importers: [{ id: "pdf.importer", title: "PDF", extensions: [".pdf"], mimeTypes: ["application/pdf"] }],
+        importers: [
+          {
+            id: "pdf.importer",
+            title: "PDF",
+            extensions: [".pdf"],
+            mimeTypes: ["application/pdf"],
+          },
+        ],
       },
     ],
     { importers },
@@ -653,7 +790,11 @@ test("an on-demand bundle is not fetched at boot; its placeholder importer is re
   await h.activator.boot();
   assert.equal(fetches, 0);
   assert.deepEqual(h.activated, []);
-  assert.equal(importers.resolve("x.pdf")?.id, "pdf.importer", "the placeholder claims the file type");
+  assert.equal(
+    importers.resolve("x.pdf")?.id,
+    "pdf.importer",
+    "the placeholder claims the file type",
+  );
 });
 
 test("the first import activates the bundle and hands the file to the real importer", async () => {
@@ -683,12 +824,22 @@ test("the first import activates the bundle and hands the file to the real impor
     { importers },
   );
   const placeholder = importers.resolve("brochure.pdf");
-  await placeholder.import({ name: "brochure.pdf", bytes: new Uint8Array(), mimeType: "application/pdf" });
+  await placeholder.import({
+    name: "brochure.pdf",
+    bytes: new Uint8Array(),
+    mimeType: "application/pdf",
+  });
   assert.deepEqual(h.activated, ["pdf"]);
   assert.deepEqual(received, ["brochure.pdf"]);
-  assert.notEqual(importers.resolve("brochure.pdf"), placeholder, "the real importer replaced it");
+  assert.notEqual(
+    importers.resolve("brochure.pdf"),
+    placeholder,
+    "the real importer replaced it",
+  );
   // A second import goes straight to the real importer.
-  await importers.resolve("again.pdf").import({ name: "again.pdf", bytes: new Uint8Array(), mimeType: "" });
+  await importers
+    .resolve("again.pdf")
+    .import({ name: "again.pdf", bytes: new Uint8Array(), mimeType: "" });
   assert.deepEqual(received, ["brochure.pdf", "again.pdf"]);
   assert.deepEqual(h.activated, ["pdf"], "activated once");
 });
@@ -707,7 +858,12 @@ test("a failed on-demand load keeps the placeholder and retries next time", asyn
           return {
             manifest: { id: "pdf" },
             onActivate: () =>
-              importers.register({ id: "pdf.importer", title: "PDF", extensions: [".pdf"], import: () => {} }),
+              importers.register({
+                id: "pdf.importer",
+                title: "PDF",
+                extensions: [".pdf"],
+                import: () => {},
+              }),
           };
         },
         importers: [{ id: "pdf.importer", title: "PDF", extensions: [".pdf"] }],
@@ -716,8 +872,14 @@ test("a failed on-demand load keeps the placeholder and retries next time", asyn
     { importers },
   );
   const file = { name: "a.pdf", bytes: new Uint8Array(), mimeType: "" };
-  await assert.rejects(importers.resolve("a.pdf").import(file), /could not be loaded/);
-  assert.ok(importers.resolve("a.pdf"), "the file type is still claimed after a failure");
+  await assert.rejects(
+    importers.resolve("a.pdf").import(file),
+    /could not be loaded/,
+  );
+  assert.ok(
+    importers.resolve("a.pdf"),
+    "the file type is still claimed after a failure",
+  );
   await importers.resolve("a.pdf").import(file);
   assert.equal(attempt, 2, "the chunk was fetched again");
   assert.deepEqual(h.activated, ["pdf"]);

@@ -82,7 +82,9 @@ test.describe("Phase 5 — Wave 1 structural panels", () => {
     await page.locator('[data-toolbar-btn="ui-plus"]').click();
     await expect.poll(() => rows.count()).toBe(before + 1);
     await expect(rows.last()).toHaveAttribute("data-selected", "true");
-    await expect(page.locator('[data-page-list] [data-selected="true"]')).toHaveCount(1);
+    await expect(
+      page.locator('[data-page-list] [data-selected="true"]'),
+    ).toHaveCount(1);
     // Delete rides deletePage, on that page, with nothing else clicked.
     await page.locator('[data-toolbar-btn="ui-x"]').click();
     await expect.poll(() => rows.count()).toBe(before);
@@ -114,12 +116,16 @@ test.describe("Phase 5 — Wave 1 structural panels", () => {
     // Delete takes the copy away; the page it was copied from stays.
     await page.locator('[data-toolbar-btn="ui-x"]').click();
     await expect.poll(() => rows.count()).toBe(before + 1);
-    const ids = await rows.evaluateAll((els) => els.map((e) => e.getAttribute("data-list-row")));
+    const ids = await rows.evaluateAll((els) =>
+      els.map((e) => e.getAttribute("data-list-row")),
+    );
     expect(ids).toContain(made);
     expect(ids).not.toContain(copy);
   });
 
-  test("AC-WAVE1-2 — Spreads panel mounts @feat:editor-shell.panels.master-pages @feat:editor-shell.panels.pages-list @feat:editor-shell.panels.spreads @level:smoke", async ({ page }) => {
+  test("AC-WAVE1-2 — Spreads panel mounts @feat:editor-shell.panels.master-pages @feat:editor-shell.panels.pages-list @feat:editor-shell.panels.spreads @level:smoke", async ({
+    page,
+  }) => {
     await mountAndAssert(
       page,
       "paged.spreads",
@@ -129,7 +135,9 @@ test.describe("Phase 5 — Wave 1 structural panels", () => {
     );
   });
 
-  test("AC-WAVE1-3 — Master Pages panel mounts @feat:editor-shell.panels.master-pages @feat:editor-shell.panels.pages-list @feat:editor-shell.panels.spreads @level:smoke", async ({ page }) => {
+  test("AC-WAVE1-3 — Master Pages panel mounts @feat:editor-shell.panels.master-pages @feat:editor-shell.panels.pages-list @feat:editor-shell.panels.spreads @level:smoke", async ({
+    page,
+  }) => {
     await mountAndAssert(
       page,
       "paged.master-pages",
@@ -139,7 +147,9 @@ test.describe("Phase 5 — Wave 1 structural panels", () => {
     );
   });
 
-  test("AC-WAVE1-4 — Cell Styles panel mounts @feat:editor-shell.panels.master-pages @feat:editor-shell.panels.pages-list @feat:editor-shell.panels.spreads @level:smoke", async ({ page }) => {
+  test("AC-WAVE1-4 — Cell Styles panel mounts @feat:editor-shell.panels.master-pages @feat:editor-shell.panels.pages-list @feat:editor-shell.panels.spreads @level:smoke", async ({
+    page,
+  }) => {
     await mountAndAssert(
       page,
       "paged.cell-styles",
@@ -149,7 +159,9 @@ test.describe("Phase 5 — Wave 1 structural panels", () => {
     );
   });
 
-  test("AC-WAVE1-5 — Table Styles panel mounts @feat:editor-shell.panels.master-pages @feat:editor-shell.panels.pages-list @feat:editor-shell.panels.spreads @level:smoke", async ({ page }) => {
+  test("AC-WAVE1-5 — Table Styles panel mounts @feat:editor-shell.panels.master-pages @feat:editor-shell.panels.pages-list @feat:editor-shell.panels.spreads @level:smoke", async ({
+    page,
+  }) => {
     await mountAndAssert(
       page,
       "paged.table-styles",

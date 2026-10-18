@@ -46,11 +46,7 @@
 // stays green at the 16-page showcase's coverage numbers.
 
 export type ExclusionCategory =
-  | "app-shell"
-  | "exit-path"
-  | "session-only"
-  | "infrastructure"
-  | "by-design";
+  "app-shell" | "exit-path" | "session-only" | "infrastructure" | "by-design";
 
 export interface Exclusion {
   category: ExclusionCategory;
@@ -67,7 +63,8 @@ export const EXCLUSIONS_COMPLETE = false;
 export const FAMILY_EXCLUSIONS: Record<string, Exclusion> = {
   "editor-shell": {
     category: "app-shell",
-    reason: "editor chrome — every panel/tool/keybinding id is ratcheted by the surface gate",
+    reason:
+      "editor chrome — every panel/tool/keybinding id is ratcheted by the surface gate",
     companion: "scripts/surface-coverage.mjs",
   },
   "editor-tools": {
@@ -91,7 +88,8 @@ export const FAMILY_EXCLUSIONS: Record<string, Exclusion> = {
 export const ROW_EXCLUSIONS: Record<string, Exclusion> = {
   "plugin-pdf.importer": {
     category: "exit-path",
-    reason: "PDF import replaces the open document by design — cannot appear as a page of this one",
+    reason:
+      "PDF import replaces the open document by design — cannot appear as a page of this one",
     companion: "tests/journey/plugins/pdf.journey.spec.ts",
   },
 };

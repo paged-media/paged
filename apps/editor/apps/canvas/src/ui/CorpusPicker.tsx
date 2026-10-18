@@ -61,7 +61,8 @@ export function CorpusPicker() {
     fetch("/corpus/idml/list")
       .then((r) => (r.ok ? r.json() : []))
       .then((list: unknown) => {
-        if (!cancelled && Array.isArray(list)) setEntries(list as CorpusEntry[]);
+        if (!cancelled && Array.isArray(list))
+          setEntries(list as CorpusEntry[]);
       })
       .catch(() => {
         // corpus route unreachable (e.g. production build) — stay hidden

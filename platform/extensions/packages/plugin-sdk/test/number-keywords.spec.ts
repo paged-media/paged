@@ -25,16 +25,25 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "bun:test";
 import { normalizeCoreType } from "../src/core-schema";
-import { checkValueType, coerceValue, validateValue } from "../src/object-schema";
+import {
+  checkValueType,
+  coerceValue,
+  validateValue,
+} from "../src/object-schema";
 
 describe("a number row's keywords", () => {
   it("survive normalisation of core's catalog row", () => {
-    expect(normalizeCoreType({ kind: "number", unit: "count", members: ["All"] })).toEqual({
+    expect(
+      normalizeCoreType({ kind: "number", unit: "count", members: ["All"] }),
+    ).toEqual({
       kind: "number",
       integer: true,
       keywords: ["All"],
     });
-    expect(normalizeCoreType({ kind: "number", unit: "count" })).toEqual({ kind: "number", integer: true });
+    expect(normalizeCoreType({ kind: "number", unit: "count" })).toEqual({
+      kind: "number",
+      integer: true,
+    });
   });
 
   it("are taken by validation and text coercion, and nothing else is", () => {
@@ -42,22 +51,39 @@ describe("a number row's keywords", () => {
     expect(validateValue(t, "All")).toBeNull();
     expect(validateValue(t, 3)).toBeNull();
     expect(validateValue(t, "Some")).toMatch(/number or one of All/);
-    expect(validateValue({ kind: "number" }, "All")).toMatch(/must be a number$/);
+    expect(validateValue({ kind: "number" }, "All")).toMatch(
+      /must be a number$/,
+    );
     expect(coerceValue(t, "All")).toEqual({ ok: true, value: "All" });
     expect(coerceValue(t, "4")).toEqual({ ok: true, value: 4 });
   });
 
   it("are checked for shape", () => {
     expect(checkValueType({ kind: "number", keywords: ["All"] })).toBeNull();
-    expect(checkValueType({ kind: "number", keywords: [1] })).toMatch(/keywords must be strings/);
+    expect(checkValueType({ kind: "number", keywords: [1] })).toMatch(
+      /keywords must be strings/,
+    );
   });
 
-  it("the vendored catalog's span count keeps \"All\"", () => {
+  it('the vendored catalog\'s span count keeps "All"', () => {
     const catalog = JSON.parse(
-      readFileSync(fileURLToPath(new URL("../../plugin-api/src/catalog.json", import.meta.url)), "utf8"),
-    ) as { propertySchemas?: Array<{ path: string; type: { kind: string; unit?: string; members?: string[] } }> };
-    const rows = (catalog.propertySchemas ?? []).filter((r) => r.path === "paragraphSpanSplitColumnCount");
+      readFileSync(
+        fileURLToPath(
+          new URL("../../plugin-api/src/catalog.json", import.meta.url),
+        ),
+        "utf8",
+      ),
+    ) as {
+      propertySchemas?: Array<{
+        path: string;
+        type: { kind: string; unit?: string; members?: string[] };
+      }>;
+    };
+    const rows = (catalog.propertySchemas ?? []).filter(
+      (r) => r.path === "paragraphSpanSplitColumnCount",
+    );
     expect(rows.length).toBeGreaterThan(0);
-    for (const r of rows) expect(normalizeCoreType(r.type)).toMatchObject({ keywords: ["All"] });
+    for (const r of rows)
+      expect(normalizeCoreType(r.type)).toMatchObject({ keywords: ["All"] });
   });
 });

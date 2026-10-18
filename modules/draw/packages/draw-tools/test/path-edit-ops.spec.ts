@@ -57,7 +57,11 @@ function square(): AnchorTable {
 
 function polyline(): AnchorTable {
   return {
-    anchors: [cornerAnchor([0, 0]), cornerAnchor([10, 0]), cornerAnchor([20, 0])],
+    anchors: [
+      cornerAnchor([0, 0]),
+      cornerAnchor([10, 0]),
+      cornerAnchor([20, 0]),
+    ],
     subpathStarts: [0],
     subpathOpen: [true],
   };
@@ -66,7 +70,12 @@ function polyline(): AnchorTable {
 describe("lowerPathOp", () => {
   it("lowers each op to its wire shape on the element", () => {
     expect(
-      lowerPathOp(EL, { op: "pathPointSet", index: 2, role: "left", position: [1, 2] }),
+      lowerPathOp(EL, {
+        op: "pathPointSet",
+        index: 2,
+        role: "left",
+        position: [1, 2],
+      }),
     ).toEqual({
       op: "pathPointSet",
       args: { elementId: EL, index: 2, role: "left", position: [1, 2] },
@@ -75,7 +84,9 @@ describe("lowerPathOp", () => {
       op: "pathPointRemove",
       args: { elementId: EL, index: 3 },
     });
-    expect(lowerPathOp(EL, { op: "pathPointCurveType", index: 1, smooth: true })).toEqual({
+    expect(
+      lowerPathOp(EL, { op: "pathPointCurveType", index: 1, smooth: true }),
+    ).toEqual({
       op: "pathPointCurveType",
       args: { elementId: EL, index: 1, smooth: true },
     });
@@ -90,7 +101,11 @@ describe("lowerPathOp", () => {
   });
 
   it("an insert carries the contour starts only when the plan supplied them", () => {
-    const bare = lowerPathOp(EL, { op: "pathPointInsert", index: 3, anchor: cornerAnchor([5, 5]) });
+    const bare = lowerPathOp(EL, {
+      op: "pathPointInsert",
+      index: 3,
+      anchor: cornerAnchor([5, 5]),
+    });
     expect(bare).toEqual({
       op: "pathPointInsert",
       args: { elementId: EL, index: 3, anchor: cornerAnchor([5, 5]) },
@@ -110,7 +125,12 @@ describe("lowerPathOp", () => {
 
   it("a set's position is a fresh tuple, not the plan's own array", () => {
     const position: [number, number] = [1, 2];
-    const wire = lowerPathOp(EL, { op: "pathPointSet", index: 0, role: "anchor", position });
+    const wire = lowerPathOp(EL, {
+      op: "pathPointSet",
+      index: 0,
+      role: "anchor",
+      position,
+    });
     expect(wire.op === "pathPointSet" && wire.args.position).not.toBe(position);
   });
 });
@@ -141,7 +161,12 @@ describe("pathEditBatch / targetedPathEditBatch", () => {
 
   it("addresses each op at ITS element and leaves no stray key behind", () => {
     const batch = targetedPathEditBatch([
-      { elementId: EL, op: "pathPointInsert", index: 3, anchor: cornerAnchor([5, 5]) },
+      {
+        elementId: EL,
+        op: "pathPointInsert",
+        index: 3,
+        anchor: cornerAnchor([5, 5]),
+      },
       { elementId: EL, op: "joinPaths", otherId: OTHER },
       { elementId: OTHER, op: "pathPointRemove", index: 0 },
     ]);
@@ -149,7 +174,10 @@ describe("pathEditBatch / targetedPathEditBatch", () => {
       op: "batch",
       args: {
         ops: [
-          { op: "pathPointInsert", args: { elementId: EL, index: 3, anchor: cornerAnchor([5, 5]) } },
+          {
+            op: "pathPointInsert",
+            args: { elementId: EL, index: 3, anchor: cornerAnchor([5, 5]) },
+          },
           { op: "joinPaths", args: { elementId: EL, otherId: OTHER } },
           { op: "pathPointRemove", args: { elementId: OTHER, index: 0 } },
         ],
@@ -166,7 +194,11 @@ describe("anchorEditOps", () => {
     const table = polyline();
     const plan = planAnchorAdd(table, [5, 0], 1)!;
     const ops = anchorEditOps(plan);
-    expect(ops.map((o) => o.op)).toEqual(["pathPointSet", "pathPointSet", "pathPointInsert"]);
+    expect(ops.map((o) => o.op)).toEqual([
+      "pathPointSet",
+      "pathPointSet",
+      "pathPointInsert",
+    ]);
     const after = applyPathOps(table, ops);
     expect(after.anchors.map((a) => a.anchor)).toEqual([
       [0, 0],
@@ -178,13 +210,21 @@ describe("anchorEditOps", () => {
 
   it("a closing-edge insert carries the starts override through", () => {
     const table: AnchorTable = {
-      anchors: [...square().anchors, cornerAnchor([100, 100]), cornerAnchor([110, 100])],
+      anchors: [
+        ...square().anchors,
+        cornerAnchor([100, 100]),
+        cornerAnchor([110, 100]),
+      ],
       subpathStarts: [0, 4],
       subpathOpen: [false, true],
     };
     const plan = planAnchorAddAt(table, 3, 0.5)!;
     const ops = anchorEditOps(plan);
-    expect(ops[2]).toMatchObject({ op: "pathPointInsert", index: 4, prevSubpathStarts: [0, 5] });
+    expect(ops[2]).toMatchObject({
+      op: "pathPointInsert",
+      index: 4,
+      prevSubpathStarts: [0, 5],
+    });
     const after = applyPathOps(table, ops);
     // The new anchor closes out the FIRST contour; the second is intact.
     expect(after.subpathStarts).toEqual([0, 5]);
@@ -192,7 +232,9 @@ describe("anchorEditOps", () => {
   });
 
   it("remove and convert are one op each", () => {
-    expect(anchorEditOps({ kind: "remove", index: 2 })).toEqual([{ op: "pathPointRemove", index: 2 }]);
+    expect(anchorEditOps({ kind: "remove", index: 2 })).toEqual([
+      { op: "pathPointRemove", index: 2 },
+    ]);
     expect(anchorEditOps({ kind: "convert", index: 1, smooth: true })).toEqual([
       { op: "pathPointCurveType", index: 1, smooth: true },
     ]);
@@ -240,7 +282,9 @@ describe("index-addressed anchor planners", () => {
 
   it("planAnchorDeleteAt agrees with the click planner, floor included", () => {
     const table = polyline();
-    expect(planAnchorDeleteAt(table, 1)).toEqual(planAnchorDelete(table, [10, 0], 1));
+    expect(planAnchorDeleteAt(table, 1)).toEqual(
+      planAnchorDelete(table, [10, 0], 1),
+    );
     expect(planAnchorDeleteAt(table, 1)).toEqual({ kind: "remove", index: 1 });
     const pair: AnchorTable = {
       anchors: [cornerAnchor([0, 0]), cornerAnchor([10, 0])],

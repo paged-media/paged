@@ -28,12 +28,29 @@ import { basename, dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { BundleHost, PagedBundle } from "@paged-media/plugin-api";
-import { API_VERSION, createHeadlessHost, protocolFromVersion, resolveCanvasWasm, type HeadlessHost } from "@paged-media/plugin-sdk";
+import {
+  API_VERSION,
+  createHeadlessHost,
+  protocolFromVersion,
+  resolveCanvasWasm,
+  type HeadlessHost,
+} from "@paged-media/plugin-sdk";
 
-import { aiObjectModel, complete, createDirectTransport, type AiTransport } from "@paged-media/ai";
+import {
+  aiObjectModel,
+  complete,
+  createDirectTransport,
+  type AiTransport,
+} from "@paged-media/ai";
 import ENGINE_CATALOG from "@paged-media/ai/catalog";
 
-import { autoCandidates, importBundle, resolvable, type DiscoveredBundle, type DiscoveryProblem } from "./plugins";
+import {
+  autoCandidates,
+  importBundle,
+  resolvable,
+  type DiscoveredBundle,
+  type DiscoveryProblem,
+} from "./plugins";
 import { installNodeShims } from "./node-shims";
 import { CliError, EXIT } from "./errors";
 
@@ -48,7 +65,12 @@ export interface SessionOptions {
   font?: string;
   /** Where to resolve `@paged-media/canvas-wasm` from (else this package). */
   engineFrom?: string;
-  log?: { debug(...a: unknown[]): void; info(...a: unknown[]): void; warn(...a: unknown[]): void; error(...a: unknown[]): void };
+  log?: {
+    debug(...a: unknown[]): void;
+    info(...a: unknown[]): void;
+    warn(...a: unknown[]): void;
+    error(...a: unknown[]): void;
+  };
 }
 
 export interface LoadedPlugin {
@@ -73,10 +95,20 @@ export interface CliSession {
   plugin(id: string): LoadedPlugin | undefined;
   /** Serialise the document in `format` (core exporters, or a plugin
    *  exporter by id / extension). */
-  exportBytes(format: string, options?: ExportOptions): Promise<{ bytes: Uint8Array; format: string; diagnostics: string[]; lost?: string[] }>;
+  exportBytes(
+    format: string,
+    options?: ExportOptions,
+  ): Promise<{
+    bytes: Uint8Array;
+    format: string;
+    diagnostics: string[];
+    lost?: string[];
+  }>;
   /** Write the document to `out` (format from its extension), or back to
    *  the file it was opened from. */
-  save(out?: string): Promise<{ path: string; format: string; bytes: number; lost?: string[] }>;
+  save(
+    out?: string,
+  ): Promise<{ path: string; format: string; bytes: number; lost?: string[] }>;
   dispose(): void;
 }
 
@@ -98,12 +130,21 @@ const silent = { debug() {}, info() {}, warn() {}, error() {} };
 export const MIN_ENGINE_PROTOCOL = 70;
 
 /** The protocol of the canvas-wasm `resolveFrom` resolves (no boot). */
-export async function engineProtocolOnDisk(resolveFrom: string): Promise<{ version: string; protocol: number }> {
+export async function engineProtocolOnDisk(
+  resolveFrom: string,
+): Promise<{ version: string; protocol: number }> {
   const { version } = await resolveCanvasWasm(resolveFrom);
   const protocol = protocolFromVersion(version);
-  if (protocol === null) throw new CliError(EXIT.usage, `@paged-media/canvas-wasm@${version}: not a 0.<protocol>.<patch> version`);
+  if (protocol === null)
+    throw new CliError(
+      EXIT.usage,
+      `@paged-media/canvas-wasm@${version}: not a 0.<protocol>.<patch> version`,
+    );
   if (protocol < MIN_ENGINE_PROTOCOL) {
-    throw new CliError(EXIT.usage, `@paged-media/canvas-wasm@${version} speaks protocol ${protocol}; the CLI needs >= ${MIN_ENGINE_PROTOCOL}`);
+    throw new CliError(
+      EXIT.usage,
+      `@paged-media/canvas-wasm@${version} speaks protocol ${protocol}; the CLI needs >= ${MIN_ENGINE_PROTOCOL}`,
+    );
   }
   return { version, protocol };
 }
@@ -115,7 +156,11 @@ export function packageRoot(): string {
     const pj = join(dir, "package.json");
     if (existsSync(pj)) {
       try {
-        if ((JSON.parse(readFileSync(pj, "utf8")) as { name?: string }).name === "@paged-media/cli") return dir;
+        if (
+          (JSON.parse(readFileSync(pj, "utf8")) as { name?: string }).name ===
+          "@paged-media/cli"
+        )
+          return dir;
       } catch {
         /* keep walking */
       }
@@ -127,7 +172,11 @@ export function packageRoot(): string {
 
 export function cliVersion(): string {
   try {
-    return (JSON.parse(readFileSync(join(packageRoot(), "package.json"), "utf8")) as { version: string }).version;
+    return (
+      JSON.parse(readFileSync(join(packageRoot(), "package.json"), "utf8")) as {
+        version: string;
+      }
+    ).version;
   } catch {
     return "0.0.0";
   }
@@ -144,7 +193,10 @@ function readInput(path: string): Uint8Array {
   try {
     return readFileSync(path);
   } catch (err) {
-    throw new CliError(EXIT.usage, `cannot read ${path}: ${(err as Error).message}`);
+    throw new CliError(
+      EXIT.usage,
+      `cannot read ${path}: ${(err as Error).message}`,
+    );
   }
 }
 
@@ -153,7 +205,10 @@ export function writeOutput(path: string, bytes: Uint8Array): void {
     mkdirSync(dirname(resolve(path)), { recursive: true });
     writeFileSync(path, bytes);
   } catch (err) {
-    throw new CliError(EXIT.usage, `cannot write ${path}: ${(err as Error).message}`);
+    throw new CliError(
+      EXIT.usage,
+      `cannot write ${path}: ${(err as Error).message}`,
+    );
   }
 }
 
@@ -162,7 +217,10 @@ export function writeOutput(path: string, bytes: Uint8Array): void {
  * bundles. Every bundle gets its own host bound to its manifest; they meet
  * through the shared registries.
  */
-export async function openSession(docPath: string | null, options: SessionOptions = {}): Promise<CliSession> {
+export async function openSession(
+  docPath: string | null,
+  options: SessionOptions = {},
+): Promise<CliSession> {
   const cwd = options.cwd ?? process.cwd();
   const log = options.log ?? silent;
   const format = docPath ? docFormatOf(docPath) : null;
@@ -170,7 +228,8 @@ export async function openSession(docPath: string | null, options: SessionOption
   const font = options.font ? readInput(resolve(cwd, options.font)) : undefined;
 
   installNodeShims();
-  const resolveFrom = options.engineFrom ?? process.env["PAGED_ENGINE_FROM"] ?? packageRoot();
+  const resolveFrom =
+    options.engineFrom ?? process.env["PAGED_ENGINE_FROM"] ?? packageRoot();
   let h: HeadlessHost;
   try {
     const { protocol } = await engineProtocolOnDisk(resolveFrom);
@@ -182,7 +241,10 @@ export async function openSession(docPath: string | null, options: SessionOption
     });
   } catch (err) {
     if (err instanceof CliError) throw err;
-    throw new CliError(EXIT.usage, `cannot boot the engine: ${(err as Error).message}`);
+    throw new CliError(
+      EXIT.usage,
+      `cannot boot the engine: ${(err as Error).message}`,
+    );
   }
   const fail = (err: unknown): never => {
     h.dispose();
@@ -227,13 +289,21 @@ export async function openSession(docPath: string | null, options: SessionOption
   const plugins: LoadedPlugin[] = [];
   const problems: DiscoveryProblem[] = [];
   const explicit = options.plugins !== undefined;
-  const sources = explicit ? [...options.plugins!] : autoCandidates(cwd).filter((s) => resolvable(s, cwd));
+  const sources = explicit
+    ? [...options.plugins!]
+    : autoCandidates(cwd).filter((s) => resolvable(s, cwd));
   for (const source of sources) {
     let found: DiscoveredBundle;
     try {
       found = await importBundle(source, cwd);
     } catch (err) {
-      if (explicit) fail(new CliError(EXIT.usage, `plugin ${source}: ${(err as Error).message}`));
+      if (explicit)
+        fail(
+          new CliError(
+            EXIT.usage,
+            `plugin ${source}: ${(err as Error).message}`,
+          ),
+        );
       problems.push({ source, error: (err as Error).message });
       continue;
     }
@@ -250,11 +320,23 @@ export async function openSession(docPath: string | null, options: SessionOption
       h.loadBundle(wrapped);
     } catch (err) {
       const why = `activation failed: ${(err as Error).message}`;
-      if (explicit) fail(new CliError(EXIT.usage, `plugin ${source} (${found.bundle.manifest.id}): ${why}`));
+      if (explicit)
+        fail(
+          new CliError(
+            EXIT.usage,
+            `plugin ${source} (${found.bundle.manifest.id}): ${why}`,
+          ),
+        );
       problems.push({ source, error: why });
       continue;
     }
-    plugins.push({ id: found.bundle.manifest.id, source, version: found.version, host: captured!, module: found.module });
+    plugins.push({
+      id: found.bundle.manifest.id,
+      source,
+      version: found.version,
+      host: captured!,
+      module: found.module,
+    });
   }
 
   const session: CliSession = {
@@ -276,27 +358,52 @@ export async function openSession(docPath: string | null, options: SessionOption
           const out = await h.exportDocument(f, exportOptions);
           return { ...out, format: f };
         } catch (err) {
-          throw new CliError(EXIT.failed, `export ${f} failed: ${(err as Error).message}`);
+          throw new CliError(
+            EXIT.failed,
+            `export ${f} failed: ${(err as Error).message}`,
+          );
         }
       }
       const exporter = h
         .exportersContributed()
-        .find((e) => e.id === fmt || e.extension.replace(/^\./, "").toLowerCase() === f);
+        .find(
+          (e) =>
+            e.id === fmt || e.extension.replace(/^\./, "").toLowerCase() === f,
+        );
       if (!exporter) {
-        const known = ["pdf", "idml", "paged", ...h.exportersContributed().map((e) => `${e.id} (${e.extension})`)];
-        throw new CliError(EXIT.usage, `no exporter for "${fmt}" — known: ${known.join(", ")}`);
+        const known = [
+          "pdf",
+          "idml",
+          "paged",
+          ...h.exportersContributed().map((e) => `${e.id} (${e.extension})`),
+        ];
+        throw new CliError(
+          EXIT.usage,
+          `no exporter for "${fmt}" — known: ${known.join(", ")}`,
+        );
       }
       const result = await exporter.export();
-      if (!result) throw new CliError(EXIT.failed, `${exporter.id}: nothing to export`);
-      return { bytes: result.bytes, format: exporter.extension.replace(/^\./, ""), diagnostics: [] };
+      if (!result)
+        throw new CliError(EXIT.failed, `${exporter.id}: nothing to export`);
+      return {
+        bytes: result.bytes,
+        format: exporter.extension.replace(/^\./, ""),
+        diagnostics: [],
+      };
     },
     async save(out) {
       const target = out ? resolve(cwd, out) : session.docPath;
-      if (!target) throw new CliError(EXIT.usage, "nothing to save to: pass -o <file>");
+      if (!target)
+        throw new CliError(EXIT.usage, "nothing to save to: pass -o <file>");
       const ext = extname(target).replace(/^\./, "").toLowerCase();
       const done = await session.exportBytes(ext || (format ?? "paged"));
       writeOutput(target, done.bytes);
-      return { path: target, format: done.format, bytes: done.bytes.byteLength, ...(done.lost?.length ? { lost: done.lost } : {}) };
+      return {
+        path: target,
+        format: done.format,
+        bytes: done.bytes.byteLength,
+        ...(done.lost?.length ? { lost: done.lost } : {}),
+      };
     },
     dispose() {
       h.dispose();
@@ -309,7 +416,14 @@ export async function openSession(docPath: string | null, options: SessionOption
 export function engineVersionOnDisk(from = packageRoot()): string | null {
   try {
     const req = createRequire(join(from, "package.json"));
-    return (JSON.parse(readFileSync(req.resolve("@paged-media/canvas-wasm/package.json"), "utf8")) as { version: string }).version;
+    return (
+      JSON.parse(
+        readFileSync(
+          req.resolve("@paged-media/canvas-wasm/package.json"),
+          "utf8",
+        ),
+      ) as { version: string }
+    ).version;
   } catch {
     return null;
   }

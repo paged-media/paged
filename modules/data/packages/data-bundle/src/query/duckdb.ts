@@ -114,7 +114,9 @@ export const DUCKDB_EXTENSIONS = {
 } as const;
 
 /** The bin/-relative path of one shipped extension. */
-export function extensionPath(name: (typeof DUCKDB_EXTENSIONS.names)[number]): string {
+export function extensionPath(
+  name: (typeof DUCKDB_EXTENSIONS.names)[number],
+): string {
   const e = DUCKDB_EXTENSIONS;
   return `${e.dir}/${e.engineVersion}/${e.platform}/${name}.duckdb_extension.wasm`;
 }
@@ -198,7 +200,10 @@ export interface DuckDBLike {
   dropFile?(name: string): unknown;
 }
 export interface DuckDBConnectionLike {
-  insertCSVFromPath(path: string, opts: { name: string; schema: string; detect: boolean }): unknown;
+  insertCSVFromPath(
+    path: string,
+    opts: { name: string; schema: string; detect: boolean },
+  ): unknown;
   query(sql: string): unknown;
   close(): unknown;
 }
@@ -212,14 +217,21 @@ function ident(name: string): string {
  *  INTERVAL, LIST, STRUCT, MAP, …), run it again with exactly those columns
  *  cast to VARCHAR, so they cross as DuckDB's own text rendering (oracle
  *  defect DQ-4). Only such results pay the second query. */
-async function runQuery(conn: DuckDBConnectionLike, sql: string): Promise<ArrowLikeTable> {
+async function runQuery(
+  conn: DuckDBConnectionLike,
+  sql: string,
+): Promise<ArrowLikeTable> {
   const table = (await conn.query(sql)) as ArrowLikeTable;
   const casts = table.schema.fields.filter(needsText);
   if (casts.length === 0) return table;
   const inner = sql.trim().replace(/;+\s*$/, "");
-  const replace = casts.map((f) => `CAST(${ident(f.name)} AS VARCHAR) AS ${ident(f.name)}`).join(", ");
+  const replace = casts
+    .map((f) => `CAST(${ident(f.name)} AS VARCHAR) AS ${ident(f.name)}`)
+    .join(", ");
   try {
-    return (await conn.query(`SELECT * REPLACE (${replace}) FROM (${inner}) AS _paged_q`)) as ArrowLikeTable;
+    return (await conn.query(
+      `SELECT * REPLACE (${replace}) FROM (${inner}) AS _paged_q`,
+    )) as ArrowLikeTable;
   } catch {
     // A shape the rewrite cannot wrap (e.g. duplicate column names): read the
     // original, whose nested columns then fall back to per-row text.
@@ -238,7 +250,11 @@ export function duckdbHandle(
       await db.registerFileText(`${name}.csv`, csvText);
       // The CSV insert CREATES the table: a source imported again replaces it.
       await conn.query(`DROP TABLE IF EXISTS ${ident(name)}`);
-      await conn.insertCSVFromPath(`${name}.csv`, { name, schema: "main", detect: true });
+      await conn.insertCSVFromPath(`${name}.csv`, {
+        name,
+        schema: "main",
+        detect: true,
+      });
     },
     async registerFileBuffer(name: string, bytes: Uint8Array) {
       // A copy: the browser AsyncDuckDB transfers the buffer to its worker,
@@ -304,7 +320,9 @@ export interface BootDuckDBOptions {
  *  serves it, else from the bundle's `bin/`; the worker and the JS API always
  *  from `bin/`. Throws [`DUCKDB_NOT_VENDORED`] when the artifact is absent
  *  (the panel renders that honestly). */
-export async function bootDuckDB(opts: BootDuckDBOptions = {}): Promise<DuckDBHandle> {
+export async function bootDuckDB(
+  opts: BootDuckDBOptions = {},
+): Promise<DuckDBHandle> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let duckdb: any = null;
   try {
@@ -324,7 +342,10 @@ export async function bootDuckDB(opts: BootDuckDBOptions = {}): Promise<DuckDBHa
   if (hosted && hosted.url !== own) {
     const why = await preflightHostedWasm(hosted.url, hosted.integrity);
     if (why === null) candidates.unshift(hosted.url);
-    else opts.onFallback?.(`the host's DuckDB engine (${hosted.url}) ${why}; using bin/`);
+    else
+      opts.onFallback?.(
+        `the host's DuckDB engine (${hosted.url}) ${why}; using bin/`,
+      );
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let db: any = null;
@@ -358,7 +379,8 @@ export async function bootDuckDB(opts: BootDuckDBOptions = {}): Promise<DuckDBHa
   }
   const liveWorker: Worker = worker;
   const conn = await db.connect();
-  for (const sql of bootSql(binUrl(DUCKDB_EXTENSIONS.dir))) await conn.query(sql);
+  for (const sql of bootSql(binUrl(DUCKDB_EXTENSIONS.dir)))
+    await conn.query(sql);
   return duckdbHandle(db, conn, async () => {
     await db.terminate();
     liveWorker.terminate();

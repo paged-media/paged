@@ -50,9 +50,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const elements: string[] = [];
   const page = p(30);
 
-  const head = await proseFrame(ctx, page, [60, 58, 492, 92], [
-    { text: "Nested styles and the next style", style: STYLE.head1 },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    page,
+    [60, 58, 492, 92],
+    [{ text: "Nested styles and the next style", style: STYLE.head1 }],
+  );
   elements.push(head.frameId);
 
   // ── the catalog entries: the NestedStyle fires by itself ─────────
@@ -64,29 +67,34 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   );
   elements.push(catalog.frameId);
 
-  const nestedProse = await proseFrame(ctx, page, [60, 204, 492, 360], [
-    {
-      text:
-        "No range op touched the stock numbers above. Catalog Entry " +
-        "carries a nested style in its definition: through one " +
-        "occurrence of the delimiter, a period, inclusive, the run " +
-        "wears Specimen Number - the mono slate hand you see on each " +
-        "SKU. Apply the paragraph style and the restyling happens on " +
-        "its own, at compose time, wherever the delimiter lands.",
-      style: STYLE.bodyFirst,
-    },
-    {
-      text:
-        "The model names twelve delimiter kinds a nested style can " +
-        "count: characters, words, sentences, any digit, any letter, " +
-        "double quotes, single quotes, a tab, a forced line break, the " +
-        "end-nested-style marker, a literal character, and an unknown " +
-        "fallback that fires at the start. This page demonstrates the " +
-        "literal character; the front matter's tab-led contents would " +
-        "suit the tab kind just as well.",
-      style: STYLE.body,
-    },
-  ]);
+  const nestedProse = await proseFrame(
+    ctx,
+    page,
+    [60, 204, 492, 360],
+    [
+      {
+        text:
+          "No range op touched the stock numbers above. Catalog Entry " +
+          "carries a nested style in its definition: through one " +
+          "occurrence of the delimiter, a period, inclusive, the run " +
+          "wears Specimen Number - the mono slate hand you see on each " +
+          "SKU. Apply the paragraph style and the restyling happens on " +
+          "its own, at compose time, wherever the delimiter lands.",
+        style: STYLE.bodyFirst,
+      },
+      {
+        text:
+          "The model names twelve delimiter kinds a nested style can " +
+          "count: characters, words, sentences, any digit, any letter, " +
+          "double quotes, single quotes, a tab, a forced line break, the " +
+          "end-nested-style marker, a literal character, and an unknown " +
+          "fallback that fires at the start. This page demonstrates the " +
+          "literal character; the front matter's tab-led contents would " +
+          "suit the tab kind just as well.",
+        style: STYLE.body,
+      },
+    ],
+  );
   elements.push(nestedProse.frameId);
 
   // ── the next-style chain, read live ──────────────────────────────
@@ -107,32 +115,45 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     return names.join(" -> ");
   };
 
-  const chainHead = await proseFrame(ctx, page, [60, 372, 492, 404], [
-    { text: "The next style, as declared", style: STYLE.head2 },
-  ]);
+  const chainHead = await proseFrame(
+    ctx,
+    page,
+    [60, 372, 492, 404],
+    [{ text: "The next style, as declared", style: STYLE.head2 }],
+  );
   elements.push(chainHead.frameId);
-  const chains = await proseFrame(ctx, page, [60, 410, 492, 470], [
-    { text: chainFrom(STYLE.chapterTitle), style: STYLE.codeBlock },
-    { text: chainFrom("Field Note"), style: STYLE.codeBlock },
-  ]);
+  const chains = await proseFrame(
+    ctx,
+    page,
+    [60, 410, 492, 470],
+    [
+      { text: chainFrom(STYLE.chapterTitle), style: STYLE.codeBlock },
+      { text: chainFrom("Field Note"), style: STYLE.codeBlock },
+    ],
+  );
   elements.push(chains.frameId);
 
-  const nextProse = await proseFrame(ctx, page, [60, 482, 492, 610], [
-    {
-      text:
-        "Both chains above are read live from the paragraphStyles " +
-        "collection - the first is the fixture's opener chain, the " +
-        "second was forged two pages ago when setStyleProperty gave " +
-        "Field Note a next-style of Annual Body. NextStyle answers one " +
-        "question: when a writer ends a paragraph at the keyboard, " +
-        "what style should the next one wear? A chapter title hands " +
-        "off to its deck, the deck to the first body paragraph, and " +
-        "the writer never touches a style menu. This book, poured over " +
-        "the wire, applies every style explicitly - which is why the " +
-        "chain is printed here as evidence rather than performed.",
-      style: STYLE.bodyFirst,
-    },
-  ]);
+  const nextProse = await proseFrame(
+    ctx,
+    page,
+    [60, 482, 492, 610],
+    [
+      {
+        text:
+          "Both chains above are read live from the paragraphStyles " +
+          "collection - the first is the fixture's opener chain, the " +
+          "second was forged two pages ago when setStyleProperty gave " +
+          "Field Note a next-style of Annual Body. NextStyle answers one " +
+          "question: when a writer ends a paragraph at the keyboard, " +
+          "what style should the next one wear? A chapter title hands " +
+          "off to its deck, the deck to the first body paragraph, and " +
+          "the writer never touches a style menu. This book, poured over " +
+          "the wire, applies every style explicitly - which is why the " +
+          "chain is printed here as evidence rather than performed.",
+        style: STYLE.bodyFirst,
+      },
+    ],
+  );
   elements.push(nextProse.frameId);
 
   await marginNote(

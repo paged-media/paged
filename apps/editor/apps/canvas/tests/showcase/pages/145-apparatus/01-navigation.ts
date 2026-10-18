@@ -77,38 +77,54 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   //    inserted text frames under ~140 pt compose at a fraction of
   //    their width — see this chapter's notes — so captions here stay
   //    wide.) ─────────────────────────────────────────────────────────
-  const caption = await proseFrame(ctx, page, [left, 292, right, 320], [
-    {
-      text:
-        "Exhibit, fixture-authored: this story was born navigable - a " +
-        "hyperlink text source on paged.media, the cross-reference " +
-        "source that resolves overleaf, and two index markers filed " +
-        "under Typography and Baskerville.",
-      style: STYLE.caption,
-    },
-  ]);
+  const caption = await proseFrame(
+    ctx,
+    page,
+    [left, 292, right, 320],
+    [
+      {
+        text:
+          "Exhibit, fixture-authored: this story was born navigable - a " +
+          "hyperlink text source on paged.media, the cross-reference " +
+          "source that resolves overleaf, and two index markers filed " +
+          "under Typography and Baskerville.",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(caption.frameId);
 
   // ── the chapter opener, beneath the exhibit. Number and title sit
   //    side by side so the deck and the live demonstration both fit
   //    above the apparatus band. ──────────────────────────────────────
-  const number = await proseFrame(ctx, page, [left, 326, 150, 404], [
-    { text: "7", style: STYLE.chapterNumber },
-  ]);
+  const number = await proseFrame(
+    ctx,
+    page,
+    [left, 326, 150, 404],
+    [{ text: "7", style: STYLE.chapterNumber }],
+  );
   elements.push(number.frameId);
-  const title = await proseFrame(ctx, page, [160, 330, right, 400], [
-    { text: "The Apparatus", style: STYLE.chapterTitle },
-  ]);
+  const title = await proseFrame(
+    ctx,
+    page,
+    [160, 330, right, 400],
+    [{ text: "The Apparatus", style: STYLE.chapterTitle }],
+  );
   elements.push(title.frameId);
-  const deck = await proseFrame(ctx, page, [left, 414, right, 500], [
-    {
-      text:
-        "A book is not only its pages; it is the machinery a reader " +
-        "moves by. Links, bookmarks, references and index marks - shown " +
-        "live where a door exists, named honestly where none does.",
-      style: STYLE.deck,
-    },
-  ]);
+  const deck = await proseFrame(
+    ctx,
+    page,
+    [left, 414, right, 500],
+    [
+      {
+        text:
+          "A book is not only its pages; it is the machinery a reader " +
+          "moves by. Links, bookmarks, references and index marks - shown " +
+          "live where a door exists, named honestly where none does.",
+        style: STYLE.deck,
+      },
+    ],
+  );
   elements.push(deck.frameId);
 
   // ── the live demonstration: two links authored in front of you ───
@@ -124,11 +140,16 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const linkTextB = "the living registry";
   const linkTextC = "the first chapter opener";
 
-  const demo = await proseFrame(ctx, page, [left, 506, right, 572], [
-    { text: paraA, style: STYLE.bodyFirst },
-    { text: paraB, style: STYLE.body },
-    { text: paraC, style: STYLE.body },
-  ]);
+  const demo = await proseFrame(
+    ctx,
+    page,
+    [left, 506, right, 572],
+    [
+      { text: paraA, style: STYLE.bodyFirst },
+      { text: paraB, style: STYLE.body },
+      { text: paraC, style: STYLE.body },
+    ],
+  );
   elements.push(demo.frameId);
 
   // Contiguous char offsets (applyStyle's space — separators uncounted).
@@ -153,7 +174,13 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     [startB, linkTextB.length],
     [startC, linkTextC.length],
   ] as const) {
-    await doc.applyStyle(demo.storyId, start, start + len, urlStyle, "character");
+    await doc.applyStyle(
+      demo.storyId,
+      start,
+      start + len,
+      urlStyle,
+      "character",
+    );
   }
 
   // ── read the collections back and print the inventory ────────────
@@ -190,24 +217,29 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     }
   }
   const fixtureNames = linksBefore.map((l) => l.name ?? l.selfId);
-  const inventory = await proseFrame(ctx, page, [left, 578, right, 639], [
-    {
-      text: `Hyperlinks, read live: ${linksAfter.length} — ${fixtureNames.join(
-        ", ",
-      )}, plus ${born.length} authored on this page moments ago${
-        collided
-          ? " (which the wire, honestly recorded, minted under a single shared id)"
-          : ""
-      }.`,
-      style: STYLE.bodySmall,
-    },
-    {
-      text: `Bookmarks, read live: ${bookmarks.length} — ${bookmarks
-        .map((b) => b.name ?? b.selfId)
-        .join(", ")}. No wire op minted these; the fixture did.`,
-      style: STYLE.bodySmall,
-    },
-  ]);
+  const inventory = await proseFrame(
+    ctx,
+    page,
+    [left, 578, right, 639],
+    [
+      {
+        text: `Hyperlinks, read live: ${linksAfter.length} — ${fixtureNames.join(
+          ", ",
+        )}, plus ${born.length} authored on this page moments ago${
+          collided
+            ? " (which the wire, honestly recorded, minted under a single shared id)"
+            : ""
+        }.`,
+        style: STYLE.bodySmall,
+      },
+      {
+        text: `Bookmarks, read live: ${bookmarks.length} — ${bookmarks
+          .map((b) => b.name ?? b.selfId)
+          .join(", ")}. No wire op minted these; the fixture did.`,
+        style: STYLE.bodySmall,
+      },
+    ],
+  );
   elements.push(inventory.frameId);
 
   elements.push(

@@ -89,7 +89,9 @@ test.describe("page position — the footprint and the edge rule", () => {
     expect(edgesWritable(leaf("oval", [1, 0, 0, 1, 10, 0]))).toBe(true);
     expect(edgesWritable(leaf("textFrame", [1, 0, 0, 1, 0, 7]))).toBe(true);
     // Rotated: a frameBounds write moves it along its own axes.
-    expect(edgesWritable(leaf("rectangle", [C30, S30, -S30, C30, 0, 0]))).toBe(false);
+    expect(edgesWritable(leaf("rectangle", [C30, S30, -S30, C30, 0, 0]))).toBe(
+      false,
+    );
     // Drawn from anchors: a frameBounds write moves nothing (§14).
     expect(edgesWritable(leaf("graphicLine", null))).toBe(false);
     expect(edgesWritable(leaf("polygon", null))).toBe(false);
@@ -125,7 +127,10 @@ test.describe("page position — the footprint and the edge rule", () => {
         id,
         kind: "Group",
         entries: [
-          { path: "frameTransform", value: { type: "transform", value: [1, 0, 0, 1, 3, 3] } },
+          {
+            path: "frameTransform",
+            value: { type: "transform", value: [1, 0, 0, 1, 3, 3] },
+          },
         ],
       }),
     } as unknown as TranslationClient;
@@ -145,7 +150,10 @@ test.describe("page position — the footprint and the edge rule", () => {
     expect(await translationPlan(client, [group], 5, 0)).toEqual({
       ok: true,
       ops: [
-        { op: "setGroupTransform", args: { groupId: "g1", transform: [1, 0, 0, 1, 8, 3] } },
+        {
+          op: "setGroupTransform",
+          args: { groupId: "g1", transform: [1, 0, 0, 1, 8, 3] },
+        },
       ],
     });
     // An engine that answers a TOP-LEVEL group's composed transform (it
@@ -156,22 +164,32 @@ test.describe("page position — the footprint and the edge rule", () => {
         ids.map((id) => ({
           id,
           bounds: [0, 0, 10, 10],
-          itemTransform: id.kind === "group" ? [1, 0, 0, 1, 3, 3] : [C30, S30, -S30, C30, 4, 2],
+          itemTransform:
+            id.kind === "group"
+              ? [1, 0, 0, 1, 3, 3]
+              : [C30, S30, -S30, C30, 4, 2],
           hasImage: false,
         })),
     } as unknown as TranslationClient;
     expect(await translationPlan(answering, [group], 5, 0)).toEqual({
       ok: true,
       ops: [
-        { op: "setGroupTransform", args: { groupId: "g1", transform: [1, 0, 0, 1, 8, 3] } },
+        {
+          op: "setGroupTransform",
+          args: { groupId: "g1", transform: [1, 0, 0, 1, 8, 3] },
+        },
       ],
     });
 
     // A refusal is a reason the caller prefixes with its own verb.
-    const gone = { ...client, elementGeometry: async () => [] } as TranslationClient;
+    const gone = {
+      ...client,
+      elementGeometry: async () => [],
+    } as TranslationClient;
     expect(await translationPlan(gone, [rect], 1, 0)).toEqual({
       ok: false,
-      reason: "the engine reports no geometry for rectangle u1, so there is no position to move.",
+      reason:
+        "the engine reports no geometry for rectangle u1, so there is no position to move.",
     });
   });
 });

@@ -28,7 +28,9 @@ import { expect, test } from "@playwright/test";
 import { Designer } from "../driver/designer";
 
 test.describe("journey · tables", () => {
-  test("insert a 3×4 table into a text frame @feat:editor-shell.context-toolbars @feat:editor-shell.panels.properties @feat:stories-text.story-model @feat:tables.model @level:happy", async ({ page }) => {
+  test("insert a 3×4 table into a text frame @feat:editor-shell.context-toolbars @feat:editor-shell.panels.properties @feat:stories-text.story-model @feat:tables.model @level:happy", async ({
+    page,
+  }) => {
     const designer = new Designer(page);
     await designer.open();
     await designer.newDocument();

@@ -57,7 +57,8 @@ describe("web conformance — fonts collection door", () => {
   afterAll(() => h?.dispose());
 
   it("surfaces the document's registered font FAMILY names (no bytes)", async () => {
-    const rows = await h.host.document.collection<Record<string, unknown>>("fonts");
+    const rows =
+      await h.host.document.collection<Record<string, unknown>>("fonts");
     expect(rows.map((r) => r.family).sort()).toEqual([...W2_FAMILIES].sort());
     // Name-based parity only — no face bytes cross the door.
     expect(rows[0]).not.toHaveProperty("bytes");
@@ -122,7 +123,9 @@ describe("web conformance — diagnostics publication on a bad source", () => {
       const css = 'p { font-family: "Ghost Sans"; }';
       const diags = [...diagnoseHtml(html), ...diagnoseFonts(css, families)];
       // HTML policy error (line 2) + font warning, in one publishable set.
-      expect(diags.some((d) => d.severity === "error" && d.source === "html")).toBe(true);
+      expect(
+        diags.some((d) => d.severity === "error" && d.source === "html"),
+      ).toBe(true);
       expect(
         diags.some((d) => d.severity === "warning" && d.source === "css"),
       ).toBe(true);
@@ -140,7 +143,9 @@ describe("web conformance — diagnostics publication on a bad source", () => {
       await h.load(W1_EMPTY_PAGE.bytes());
       const families = await registeredFamilies(h);
       expect(families).toEqual([]);
-      expect(diagnoseFonts('p { font-family: "Anything"; }', families)).toEqual([]);
+      expect(diagnoseFonts('p { font-family: "Anything"; }', families)).toEqual(
+        [],
+      );
     } finally {
       h.dispose();
     }

@@ -225,7 +225,9 @@ export function useCollectionPathOffered(
   path: PropertyPath,
 ): boolean {
   const active = useActiveBindingProviders();
-  const owner = active.find((p) => p.provides.collections?.includes(collection));
+  const owner = active.find((p) =>
+    p.provides.collections?.includes(collection),
+  );
   if (!owner) return true;
   return owner.provides.paths?.includes(path) ?? false;
 }
@@ -271,7 +273,9 @@ export function useCollectionOpOffered(
   op: string,
 ): boolean {
   const active = useActiveBindingProviders();
-  const owner = active.find((p) => p.provides.collections?.includes(collection));
+  const owner = active.find((p) =>
+    p.provides.collections?.includes(collection),
+  );
   if (!owner) return true;
   return owner.provides.ops?.includes(op) ?? false;
 }
@@ -592,8 +596,7 @@ export function useProviderFirstMutate(): (
         }
         if (offered.handled) {
           const outcome = offered.outcome as
-            | { applied: boolean; error?: unknown }
-            | undefined;
+            { applied: boolean; error?: unknown } | undefined;
           return {
             applied: outcome?.applied === true,
             provider: offered.provider,
@@ -609,7 +612,11 @@ export function useProviderFirstMutate(): (
         const r = await model.objects.batch(objectOps, { label: mutation.op });
         return r.applied
           ? { applied: true, provider: null }
-          : { applied: false, provider: null, error: `${r.code ?? "failed"}: ${r.reason ?? "refused"}` };
+          : {
+              applied: false,
+              provider: null,
+              error: `${r.code ?? "failed"}: ${r.reason ?? "refused"}`,
+            };
       }
       //
       // `client.mutate` RESOLVES on a rejected mutation (the failure

@@ -48,7 +48,12 @@ export const RECORDS = 5;
 export const BURST = 20;
 
 /** A closed square polygon, `size` pt on a side, top-left at (x, y). */
-export function squareItem(id: string, x: number, y: number, size = 20): string {
+export function squareItem(
+  id: string,
+  x: number,
+  y: number,
+  size = 20,
+): string {
   return pathItem(
     "Polygon",
     id,
@@ -116,7 +121,11 @@ export const plainId = (i: number): ElementId => poly(`p${i}`);
 export function panelDocument(seeds: string): Uint8Array {
   let plain = "";
   for (let i = 0; i < PLAIN_LEAVES; i++) {
-    plain += squareItem(`p${i}`, 40 + (i % 8) * 60, 520 + Math.floor(i / 8) * 50);
+    plain += squareItem(
+      `p${i}`,
+      40 + (i % 8) * 60,
+      520 + Math.floor(i / 8) * 50,
+    );
   }
   return packageWithSpread(seeds + plain);
 }

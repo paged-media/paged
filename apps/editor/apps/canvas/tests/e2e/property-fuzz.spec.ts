@@ -81,8 +81,7 @@ async function setProp(
       });
       const props = await c.client.elementProperties(ref);
       const v = props?.entries.find((e) => e.path === path)?.value as
-        | { value: number }
-        | undefined;
+        { value: number } | undefined;
       return {
         ok: reply.kind === "mutationApplied",
         readBack: v?.value ?? null,

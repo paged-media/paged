@@ -40,7 +40,11 @@
 // ONE BATCH = ONE UNDO STEP. Every lowering here returns a `batch`, even
 // for a single op, so a gesture is always exactly one Cmd-Z.
 
-import type { ElementId, Mutation, PathPointRole } from "@paged-media/plugin-api";
+import type {
+  ElementId,
+  Mutation,
+  PathPointRole,
+} from "@paged-media/plugin-api";
 import type { AnchorTriple } from "@paged-media/draw-geometry";
 
 import type { AnchorEditPlan } from "./anchor-machine";

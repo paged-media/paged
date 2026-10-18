@@ -33,7 +33,11 @@ import { describe, expect, it } from "bun:test";
 
 import type { ConsentResult, PluginManifest } from "@paged-media/plugin-api";
 
-import { createBundleHost, PluginCapabilityError, type ConsentBackend } from "../src";
+import {
+  createBundleHost,
+  PluginCapabilityError,
+  type ConsentBackend,
+} from "../src";
 import { makeFakeEditor } from "./fake-editor";
 
 const silent = { debug() {}, info() {}, warn() {}, error() {} };
@@ -94,9 +98,9 @@ function makeHost(
 describe("host.network — consent door (D-03)", () => {
   it("refuses requestConsent when capabilities.network is undeclared (enforce)", async () => {
     const { host } = makeHost(UNDECLARED, grantBackend([API]));
-    await expect(host.network.requestConsent([API], "x")).rejects.toBeInstanceOf(
-      PluginCapabilityError,
-    );
+    await expect(
+      host.network.requestConsent([API], "x"),
+    ).rejects.toBeInstanceOf(PluginCapabilityError);
   });
 
   it("grants a declared origin; consentedOrigins reflects it", async () => {

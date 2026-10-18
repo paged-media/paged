@@ -48,7 +48,11 @@ import { expect, test, type Page } from "@playwright/test";
 import { openCanvas } from "../fidelity/canvas-driver";
 import { loadFixture, type LoadedFixture } from "./harness/fixtures";
 import { setCaret } from "./harness/ui";
-import { loadViaReactPath, screenPoint, activateTool } from "./harness/viewport";
+import {
+  loadViaReactPath,
+  screenPoint,
+  activateTool,
+} from "./harness/viewport";
 
 // ── small readers over the debug bridge ──────────────────────────────
 
@@ -74,7 +78,9 @@ async function caretGeo(page: Page, sel: Sel): Promise<CaretGeo | null> {
   return page.evaluate(async (s) => {
     const c = (
       globalThis as unknown as {
-        __canvas: { client: { caretGeometry: (s: unknown) => Promise<unknown> } };
+        __canvas: {
+          client: { caretGeometry: (s: unknown) => Promise<unknown> };
+        };
       }
     ).__canvas;
     return (await c.client.caretGeometry(s)) as CaretGeo | null;
@@ -340,10 +346,13 @@ test.describe("W2.11 caret navigation", () => {
 
     await page.keyboard.press("Shift+ArrowDown");
     await expect
-      .poll(async () => {
-        const s = await currentSelection(page);
-        return s ? s.end - s.start : 0;
-      }, { timeout: 5000 })
+      .poll(
+        async () => {
+          const s = await currentSelection(page);
+          return s ? s.end - s.start : 0;
+        },
+        { timeout: 5000 },
+      )
       .toBeGreaterThan(0);
 
     const sel = (await currentSelection(page))!;
@@ -394,9 +403,10 @@ test.describe("W2.11 caret navigation", () => {
     // async lineBounds reply and occasionally reading a stale offset for
     // both End and Home (the `home < end` flake).
     const lineEnd = (await lineBoundsAt(page, storyId, mid))!.lineEnd;
-    expect(lineEnd, "line end strictly past the interior offset").toBeGreaterThan(
-      mid,
-    );
+    expect(
+      lineEnd,
+      "line end strictly past the interior offset",
+    ).toBeGreaterThan(mid);
 
     await setCaret(page, storyId, mid);
     await blurFocus(page);
@@ -457,10 +467,13 @@ test.describe("W2.11 caret navigation", () => {
     // A range selection materialised (non-empty), with non-empty
     // geometry.
     await expect
-      .poll(async () => {
-        const s = await currentSelection(page);
-        return s ? s.end - s.start : 0;
-      }, { timeout: 6000 })
+      .poll(
+        async () => {
+          const s = await currentSelection(page);
+          return s ? s.end - s.start : 0;
+        },
+        { timeout: 6000 },
+      )
       .toBeGreaterThan(0);
     const sel = (await currentSelection(page))!;
     const rects = await selRects(page, sel);
@@ -515,10 +528,13 @@ test.describe("W2.11 caret navigation", () => {
     await page.mouse.dblclick(pt.x, pt.y);
 
     await expect
-      .poll(async () => {
-        const s = await currentSelection(page);
-        return s ? `${s.start}:${s.end}` : "";
-      }, { timeout: 6000 })
+      .poll(
+        async () => {
+          const s = await currentSelection(page);
+          return s ? `${s.start}:${s.end}` : "";
+        },
+        { timeout: 6000 },
+      )
       .toBe(`${word!.start}:${word!.end}`);
 
     // Engine contract: double-click on a WHITESPACE run selects the whole
@@ -679,10 +695,13 @@ test.describe("W2.11 caret navigation", () => {
     await page.mouse.click(pt.x, pt.y);
 
     await expect
-      .poll(async () => {
-        const s = await currentSelection(page);
-        return s ? `${s.start}:${s.end}` : "";
-      }, { timeout: 6000 })
+      .poll(
+        async () => {
+          const s = await currentSelection(page);
+          return s ? `${s.start}:${s.end}` : "";
+        },
+        { timeout: 6000 },
+      )
       .toBe(`${para!.start}:${para!.end}`);
   });
 
@@ -715,10 +734,13 @@ test.describe("W2.11 caret navigation", () => {
 
     // Wait for the paragraph range to materialise on the mirror.
     await expect
-      .poll(async () => {
-        const s = await currentSelection(page);
-        return s ? s.end - s.start : 0;
-      }, { timeout: 6000 })
+      .poll(
+        async () => {
+          const s = await currentSelection(page);
+          return s ? s.end - s.start : 0;
+        },
+        { timeout: 6000 },
+      )
       .toBe(para!.end - para!.start);
 
     const sel = (await currentSelection(page))!;

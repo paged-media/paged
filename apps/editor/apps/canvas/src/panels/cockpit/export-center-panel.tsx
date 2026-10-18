@@ -120,7 +120,9 @@ export function ExportCenterPanel() {
         padding: "24px 16px",
       }}
     >
-      <div style={{ width: "min(680px, 100%)", fontFamily: "var(--font-sans)" }}>
+      <div
+        style={{ width: "min(680px, 100%)", fontFamily: "var(--font-sans)" }}
+      >
         <div
           style={{
             display: "flex",
@@ -199,7 +201,14 @@ export function ExportCenterPanel() {
                   </div>
                 </div>
                 {t.live ? (
-                  <span style={{ display: "flex", alignItems: "center", gap: 10, marginLeft: "auto" }}>
+                  <span
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      marginLeft: "auto",
+                    }}
+                  >
                     <StatusPill tone={r.tone} testId={`readiness-${t.id}`}>
                       {r.label}
                     </StatusPill>

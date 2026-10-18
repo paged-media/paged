@@ -29,7 +29,12 @@ export type Pt = [number, number];
 export function pointerAt(
   pageId: string,
   point: Pt,
-  opts: { alt?: boolean; shift?: boolean; button?: number; pressure?: number } = {},
+  opts: {
+    alt?: boolean;
+    shift?: boolean;
+    button?: number;
+    pressure?: number;
+  } = {},
 ): CanvasPointerEvent {
   return {
     pageId,
@@ -57,7 +62,10 @@ export function linePoints(from: Pt, to: Pt, samples: number): Pt[] {
   const out: Pt[] = [];
   for (let i = 0; i < samples; i++) {
     const t = samples === 1 ? 0 : i / (samples - 1);
-    out.push([from[0] + (to[0] - from[0]) * t, from[1] + (to[1] - from[1]) * t]);
+    out.push([
+      from[0] + (to[0] - from[0]) * t,
+      from[1] + (to[1] - from[1]) * t,
+    ]);
   }
   return out;
 }
@@ -124,7 +132,12 @@ export function jitteredFreehand(
   from: Pt,
   to: Pt,
   samples: number,
-  options: { jitter?: number; amplitude?: number; waves?: number; seed?: number } = {},
+  options: {
+    jitter?: number;
+    amplitude?: number;
+    waves?: number;
+    seed?: number;
+  } = {},
 ): FreehandSample[] {
   const jitter = options.jitter ?? 1.5;
   const amplitude = options.amplitude ?? 60;

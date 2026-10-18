@@ -71,24 +71,35 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const page = p(61);
   const elements: string[] = [];
 
-  const number = await proseFrame(ctx, page, [48, 100, 220, 196], [
-    { text: "11", style: STYLE.chapterNumber },
-  ]);
-  const title = await proseFrame(ctx, page, [48, 200, 480, 252], [
-    { text: "The Colour", style: STYLE.chapterTitle },
-  ]);
-  const deck = await proseFrame(ctx, page, [48, 264, 448, 372], [
-    {
-      text:
-        "A document's palette is a contract with a press. This chapter reads " +
-        "the annual's seven inks off the live collection, mints and edits new " +
-        "ones in front of you, walks the whole library out of the file as " +
-        "Adobe Swatch Exchange bytes and back in, and finishes at the " +
-        "prepress bench: profiles, proofs, ink aliases, and the defaults a " +
-        "fresh frame is born wearing.",
-      style: STYLE.deck,
-    },
-  ]);
+  const number = await proseFrame(
+    ctx,
+    page,
+    [48, 100, 220, 196],
+    [{ text: "11", style: STYLE.chapterNumber }],
+  );
+  const title = await proseFrame(
+    ctx,
+    page,
+    [48, 200, 480, 252],
+    [{ text: "The Colour", style: STYLE.chapterTitle }],
+  );
+  const deck = await proseFrame(
+    ctx,
+    page,
+    [48, 264, 448, 372],
+    [
+      {
+        text:
+          "A document's palette is a contract with a press. This chapter reads " +
+          "the annual's seven inks off the live collection, mints and edits new " +
+          "ones in front of you, walks the whole library out of the file as " +
+          "Adobe Swatch Exchange bytes and back in, and finishes at the " +
+          "prepress bench: profiles, proofs, ink aliases, and the defaults a " +
+          "fresh frame is born wearing.",
+        style: STYLE.deck,
+      },
+    ],
+  );
   const rule = await plate(ctx, page, [48, 382, 300, 384], SWATCH.vermilion);
   elements.push(number.frameId, title.frameId, deck.frameId, rule);
 

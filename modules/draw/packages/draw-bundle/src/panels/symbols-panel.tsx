@@ -150,27 +150,31 @@ export function makeSymbolsPanel(host: BundleHost): {
     // once per document REVISION, out of the walk every panel shares.
     // Which instances the selection touches is a lookup in that same
     // walk — it used to be a second walk, and a third tree read.
-    const reload = usePanelReload(host, "symbols", async ({ live, selection }) => {
-      const library = await readSymbolLibrary(host);
-      if (!live()) return;
-      const tally: Record<string, number> = {};
-      for (const instance of await symbolInstances(host)) {
-        tally[instance.symbol] = (tally[instance.symbol] ?? 0) + 1;
-      }
-      if (!live()) return;
-      let touched: string[] = [];
-      try {
-        touched = (await selectedSymbolInstances(host)).map((i) => i.symbol);
-      } catch {
-        touched = [];
-      }
-      if (!live()) return;
-      setPortable(host.supports(SYMBOLS_FEATURE));
-      setSymbols(library.symbols);
-      setCounts(tally);
-      setHasSelection(selection.length > 0);
-      setSelected(touched);
-    });
+    const reload = usePanelReload(
+      host,
+      "symbols",
+      async ({ live, selection }) => {
+        const library = await readSymbolLibrary(host);
+        if (!live()) return;
+        const tally: Record<string, number> = {};
+        for (const instance of await symbolInstances(host)) {
+          tally[instance.symbol] = (tally[instance.symbol] ?? 0) + 1;
+        }
+        if (!live()) return;
+        let touched: string[] = [];
+        try {
+          touched = (await selectedSymbolInstances(host)).map((i) => i.symbol);
+        } catch {
+          touched = [];
+        }
+        if (!live()) return;
+        setPortable(host.supports(SYMBOLS_FEATURE));
+        setSymbols(library.symbols);
+        setCounts(tally);
+        setHasSelection(selection.length > 0);
+        setSelected(touched);
+      },
+    );
 
     const { refusal, run } = useActionFeedback(host, reload);
 
@@ -300,7 +304,9 @@ export function makeSymbolsPanel(host: BundleHost): {
                   }
                   data-draw-symbol-redefine
                   disabled={!hasSelection}
-                  onClick={() => void run(() => applyRedefineSymbol(host, symbol.id))}
+                  onClick={() =>
+                    void run(() => applyRedefineSymbol(host, symbol.id))
+                  }
                 >
                   Redefine
                 </button>
@@ -309,7 +315,9 @@ export function makeSymbolsPanel(host: BundleHost): {
                   label="Delete"
                   title="Delete the symbol and unlink its instances (the placed artwork stays). Cannot be undone."
                   data-draw-symbol-delete
-                  onConfirm={() => void run(() => applyDeleteSymbol(host, symbol.id))}
+                  onConfirm={() =>
+                    void run(() => applyDeleteSymbol(host, symbol.id))
+                  }
                 />
               </div>
             );

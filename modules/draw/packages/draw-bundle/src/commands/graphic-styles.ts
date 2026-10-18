@@ -439,7 +439,10 @@ export function projectGraphicAppearance(
     if (has.has("frameStrokeWeight")) base.strokeWeight = topStroke.weight;
   }
   return {
-    stack: { fills: appearance.stack.fills.slice(), strokes: appearance.stack.strokes.slice() },
+    stack: {
+      fills: appearance.stack.fills.slice(),
+      strokes: appearance.stack.strokes.slice(),
+    },
     base,
   };
 }
@@ -628,10 +631,17 @@ export function applyGraphicStyleBatchFor(args: {
   /** The element's current envelope (every other draw key is preserved). */
   prev: PluginMetadataEnvelope | null;
 }): Mutation {
-  const projected = projectGraphicAppearance(args.style.appearance, args.supported);
+  const projected = projectGraphicAppearance(
+    args.style.appearance,
+    args.supported,
+  );
   const stack = args.style.appearance.stack;
   const ops: Mutation[] = [
-    ...graphicStyleBaseMutations(args.elementId, args.style.appearance.base, args.supported),
+    ...graphicStyleBaseMutations(
+      args.elementId,
+      args.style.appearance.base,
+      args.supported,
+    ),
     ...bakeAppearanceMutations(args.elementId, stack).filter((m) =>
       m.op === "setElementProperty"
         ? (args.supported instanceof Set
@@ -671,7 +681,9 @@ export async function readGraphicStyleLibrary(
     return emptyLibrary();
   }
   try {
-    return parseGraphicStyleLibrary(await readRecipeBytes(host, GRAPHIC_STYLES_PART));
+    return parseGraphicStyleLibrary(
+      await readRecipeBytes(host, GRAPHIC_STYLES_PART),
+    );
   } catch (e) {
     host.log.warn(`graphic styles: library read failed (${String(e)})`);
     return emptyLibrary();
@@ -692,7 +704,8 @@ export async function writeGraphicStyleLibrary(
     return false;
   }
   try {
-    await writeRecipeBytes(host, 
+    await writeRecipeBytes(
+      host,
       GRAPHIC_STYLES_PART,
       serializeGraphicStyleLibrary(library),
     );
@@ -762,7 +775,8 @@ function graphicAppearanceFrom(
     supported.push(e.path);
     const v = e.value;
     if (!v) continue;
-    if (e.path === "frameFillColor" && v.type === "colorRef") base.fill = v.value;
+    if (e.path === "frameFillColor" && v.type === "colorRef")
+      base.fill = v.value;
     else if (e.path === "frameFillTint" && v.type === "length") {
       base.fillTint = v.value;
     } else if (e.path === "frameStrokeColor" && v.type === "colorRef") {
@@ -949,7 +963,9 @@ export async function applySaveGraphicStyle(
     name,
     appearance: projectGraphicAppearance(read.appearance, read.supported),
   };
-  if (!(await writeGraphicStyleLibrary(host, upsertGraphicStyle(library, style)))) {
+  if (
+    !(await writeGraphicStyleLibrary(host, upsertGraphicStyle(library, style)))
+  ) {
     return null;
   }
   for (const carrier of carriers) {
@@ -1009,7 +1025,9 @@ export async function applyRedefineGraphicStyle(
     ...existing,
     appearance: projectGraphicAppearance(read.appearance, read.supported),
   };
-  if (!(await writeGraphicStyleLibrary(host, upsertGraphicStyle(library, style)))) {
+  if (
+    !(await writeGraphicStyleLibrary(host, upsertGraphicStyle(library, style)))
+  ) {
     return null;
   }
   const links = await graphicStyleLinks(host, styleId);
@@ -1117,7 +1135,9 @@ export async function applyDeleteGraphicStyle(
 // ------------------------------------------------------------- commands
 
 const payloadOf = (payload: unknown): Record<string, unknown> =>
-  payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+  payload && typeof payload === "object"
+    ? (payload as Record<string, unknown>)
+    : {};
 
 /** Register the six graphic-style commands. Payloads:
  *  save `{ name?: string }`, apply/redefine/delete `{ styleId: string }`,

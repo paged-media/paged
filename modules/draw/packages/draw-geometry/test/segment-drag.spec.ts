@@ -45,7 +45,10 @@ describe("segmentDragWeight", () => {
 
   it("is continuous at the joins and monotone in between", () => {
     for (const t of [1 / 6, 0.5, 5 / 6]) {
-      expect(segmentDragWeight(t + 1e-9)).toBeCloseTo(segmentDragWeight(t - 1e-9), 6);
+      expect(segmentDragWeight(t + 1e-9)).toBeCloseTo(
+        segmentDragWeight(t - 1e-9),
+        6,
+      );
     }
     let last = 0;
     for (let i = 0; i <= 100; i++) {
@@ -57,7 +60,10 @@ describe("segmentDragWeight", () => {
 
   it("is symmetric: the end takes at 1−t what the start takes at t", () => {
     for (const t of [0.2, 0.3, 0.4, 0.45]) {
-      expect(segmentDragWeight(1 - t)).toBeCloseTo(1 - segmentDragWeight(t), 12);
+      expect(segmentDragWeight(1 - t)).toBeCloseTo(
+        1 - segmentDragWeight(t),
+        12,
+      );
     }
   });
 });
@@ -65,7 +71,15 @@ describe("segmentDragWeight", () => {
 describe("reshapeSegmentByDrag", () => {
   it("moves the grabbed point by exactly the drag, at any parameter in range", () => {
     const delta = [7, -13] as const;
-    for (const t of [SEGMENT_DRAG_T_MIN, 0.1, 0.25, 0.5, 0.6, 0.9, 1 - SEGMENT_DRAG_T_MIN]) {
+    for (const t of [
+      SEGMENT_DRAG_T_MIN,
+      0.1,
+      0.25,
+      0.5,
+      0.6,
+      0.9,
+      1 - SEGMENT_DRAG_T_MIN,
+    ]) {
       const before = evalCubic(P0, P1, P2, P3, t);
       const r = reshapeSegmentByDrag(P1, P2, t, delta);
       const after = evalCubic(P0, r.startRight, r.endLeft, P3, t);
@@ -101,7 +115,10 @@ describe("reshapeSegmentByDrag", () => {
     expect(atZero).toEqual(atMin);
     expect(Number.isFinite(atZero.startRight[0])).toBe(true);
     // 1 / (3 · 0.95² · 0.05) ≈ 7.39 handle units per pointer unit.
-    expect(atZero.startRight[0] - P1[0]).toBeCloseTo(1 / (3 * 0.95 * 0.95 * 0.05), 10);
+    expect(atZero.startRight[0] - P1[0]).toBeCloseTo(
+      1 / (3 * 0.95 * 0.95 * 0.05),
+      10,
+    );
     expect(reshapeSegmentByDrag(P1, P2, 1, [1, 0])).toEqual(
       reshapeSegmentByDrag(P1, P2, 1 - SEGMENT_DRAG_T_MIN, [1, 0]),
     );
@@ -110,8 +127,12 @@ describe("reshapeSegmentByDrag", () => {
 
 describe("isSmoothAnchor", () => {
   it("two handles on opposite sides of the anchor, any lengths", () => {
-    expect(isSmoothAnchor({ anchor: [50, 50], left: [30, 50], right: [90, 50] })).toBe(true);
-    expect(isSmoothAnchor({ anchor: [0, 0], left: [-3, -4], right: [30, 40] })).toBe(true);
+    expect(
+      isSmoothAnchor({ anchor: [50, 50], left: [30, 50], right: [90, 50] }),
+    ).toBe(true);
+    expect(
+      isSmoothAnchor({ anchor: [0, 0], left: [-3, -4], right: [30, 40] }),
+    ).toBe(true);
   });
 
   it("a corner is not smooth", () => {
@@ -121,18 +142,30 @@ describe("isSmoothAnchor", () => {
   });
 
   it("a one-handled anchor is not smooth", () => {
-    expect(isSmoothAnchor({ anchor: [0, 0], left: [0, 0], right: [30, 0] })).toBe(false);
-    expect(isSmoothAnchor({ anchor: [0, 0], left: [-30, 0], right: [0, 0] })).toBe(false);
+    expect(
+      isSmoothAnchor({ anchor: [0, 0], left: [0, 0], right: [30, 0] }),
+    ).toBe(false);
+    expect(
+      isSmoothAnchor({ anchor: [0, 0], left: [-30, 0], right: [0, 0] }),
+    ).toBe(false);
   });
 
   it("a cusp is not smooth — neither bent nor folded back on itself", () => {
-    expect(isSmoothAnchor({ anchor: [0, 0], left: [-30, 0], right: [0, 30] })).toBe(false);
+    expect(
+      isSmoothAnchor({ anchor: [0, 0], left: [-30, 0], right: [0, 30] }),
+    ).toBe(false);
     // Collinear, but both handles on the SAME side.
-    expect(isSmoothAnchor({ anchor: [0, 0], left: [10, 0], right: [30, 0] })).toBe(false);
+    expect(
+      isSmoothAnchor({ anchor: [0, 0], left: [10, 0], right: [30, 0] }),
+    ).toBe(false);
   });
 
   it("tolerates round-off, and the tolerance is the caller's to set", () => {
-    const nearly = { anchor: [50, 50], left: [30, 50.01], right: [90, 50] } as never;
+    const nearly = {
+      anchor: [50, 50],
+      left: [30, 50.01],
+      right: [90, 50],
+    } as never;
     expect(isSmoothAnchor(nearly)).toBe(true);
     expect(isSmoothAnchor(nearly, undefined, 1e-6)).toBe(false);
   });

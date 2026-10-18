@@ -52,7 +52,10 @@ export function TableStylesPanel() {
           op="createTableStyle"
           label="New table style…"
           testId="table-style-new"
-          prefill={{ selfId: `TableStyle/u${Date.now().toString(36)}`, name: "New table style" }}
+          prefill={{
+            selfId: `TableStyle/u${Date.now().toString(36)}`,
+            name: "New table style",
+          }}
         />
       </div>
       {items.length === 0 ? (

@@ -41,7 +41,11 @@ import catalog from "@paged-media/ai/catalog";
 
 interface KV {
   get(key: string): Promise<string | null>;
-  put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
+  put(
+    key: string,
+    value: string,
+    options?: { expirationTtl?: number },
+  ): Promise<void>;
 }
 
 interface Env {
@@ -60,10 +64,16 @@ interface Context {
 }
 
 function refuse(status: number, type: string, message: string): Response {
-  return new Response(JSON.stringify({ type: "error", error: { type, message } }), {
-    status,
-    headers: { "content-type": "application/json", "cache-control": "no-store" },
-  });
+  return new Response(
+    JSON.stringify({ type: "error", error: { type, message } }),
+    {
+      status,
+      headers: {
+        "content-type": "application/json",
+        "cache-control": "no-store",
+      },
+    },
+  );
 }
 
 const today = (): string => new Date().toISOString().slice(0, 10);
@@ -72,7 +82,12 @@ const hour = (): string => new Date().toISOString().slice(0, 13);
 /** KV counters are read-modify-write and eventually consistent: the caps
  *  are approximate (a burst can overshoot by a few turns), which is the
  *  trade for needing nothing but a KV namespace. */
-async function bump(kv: KV, key: string, by: number, ttlSeconds: number): Promise<number> {
+async function bump(
+  kv: KV,
+  key: string,
+  by: number,
+  ttlSeconds: number,
+): Promise<number> {
   const next = Number((await kv.get(key)) ?? "0") + by;
   await kv.put(key, String(next), { expirationTtl: ttlSeconds });
   return next;
@@ -80,14 +95,25 @@ async function bump(kv: KV, key: string, by: number, ttlSeconds: number): Promis
 
 export async function onRequest(context: Context): Promise<Response> {
   const { request, env } = context;
-  if (!env.ANTHROPIC_API_KEY) return refuse(503, "ai_unavailable", "The AI service is not configured on this deployment.");
+  if (!env.ANTHROPIC_API_KEY)
+    return refuse(
+      503,
+      "ai_unavailable",
+      "The AI service is not configured on this deployment.",
+    );
   const uncapped = env.AI_ALLOW_UNCAPPED === "1";
   const kv = env.AI_USAGE;
-  if (!kv && !uncapped) return refuse(503, "ai_unavailable", "The AI service has no usage store on this deployment.");
+  if (!kv && !uncapped)
+    return refuse(
+      503,
+      "ai_unavailable",
+      "The AI service has no usage store on this deployment.",
+    );
 
   // Same-origin only: the editor sends Origin on every POST.
   const origin = request.headers.get("origin");
-  if (origin !== new URL(request.url).origin) return refuse(403, "permission_error", "same-origin requests only");
+  if (origin !== new URL(request.url).origin)
+    return refuse(403, "permission_error", "same-origin requests only");
 
   const budget = Number(env.AI_DAILY_BUDGET_USD ?? "20");
   const perHour = Number(env.AI_IP_TURNS_PER_HOUR ?? "120");
@@ -95,19 +121,33 @@ export async function onRequest(context: Context): Promise<Response> {
 
   return handleAiProxy(request, {
     apiKey: env.ANTHROPIC_API_KEY,
-    ...(env.ANTHROPIC_WORKSPACE_ID ? { workspaceId: env.ANTHROPIC_WORKSPACE_ID } : {}),
+    ...(env.ANTHROPIC_WORKSPACE_ID
+      ? { workspaceId: env.ANTHROPIC_WORKSPACE_ID }
+      : {}),
     catalog,
     async authorize() {
       if (!kv) return null;
       const spent = Number((await kv.get(`spend:${today()}`)) ?? "0");
-      if (spent >= budget) return refuse(503, "ai_unavailable", "Today's AI budget for this deployment is used up. It resets at midnight UTC.");
+      if (spent >= budget)
+        return refuse(
+          503,
+          "ai_unavailable",
+          "Today's AI budget for this deployment is used up. It resets at midnight UTC.",
+        );
       const turns = await bump(kv, `turns:${ip}:${hour()}`, 1, 2 * 3600);
-      if (turns > perHour) return refuse(429, "rate_limit_error", "Too many AI requests from this address. Try again within the hour.");
+      if (turns > perHour)
+        return refuse(
+          429,
+          "rate_limit_error",
+          "Too many AI requests from this address. Try again within the hour.",
+        );
       return null;
     },
     onUsage(usage) {
       if (!kv) return;
-      context.waitUntil(bump(kv, `spend:${today()}`, haikuCostUsd(usage), 3 * 86_400));
+      context.waitUntil(
+        bump(kv, `spend:${today()}`, haikuCostUsd(usage), 3 * 86_400),
+      );
     },
   });
 }

@@ -80,8 +80,8 @@ export function inspectCrossOriginIsolation(env?: {
   const hasSharedArrayBuffer =
     env?.hasSharedArrayBuffer ??
     (typeof globalThis !== "undefined" &&
-      typeof (globalThis as { SharedArrayBuffer?: unknown }).SharedArrayBuffer !==
-        "undefined");
+      typeof (globalThis as { SharedArrayBuffer?: unknown })
+        .SharedArrayBuffer !== "undefined");
   // `import.meta.env.PROD` is true only in a Vite production build.
   const isProd = env?.isProd ?? Boolean(import.meta.env?.PROD);
   return { isolated, hasSharedArrayBuffer, isProd };

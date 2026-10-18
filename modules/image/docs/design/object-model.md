@@ -15,13 +15,13 @@ pixels. Every command took an untyped payload.
 
 Addresses are `plugin:media.paged.image/<kind>/<id>`.
 
-| Kind | Id | Rows | Source of the rows |
-|---|---|---|---|
-| `image` | `<frame>` | 5 (all read-only: width, height, layerCount, revision, pending) | hand |
-| `layer` | `<frame>/<layerId>` | 12 + `content` (name, visible, opacity %, blendMode, order, locked, clipped, kind, id, hasMask, bounds, pixelSource) | hand; `blendMode` members generated from the `compose.*` registry |
-| `mask` | `<frame>/<layerId>` | 2 + `content` (enabled, bounds) | hand |
-| `adjustment` | `<frame>/<layerId>` | 89 | **generated** (see below) |
-| `smartObject` | `<frame>/<layerId>` | 5 (source, sourceWidth, sourceHeight, scale, renderPending) | hand |
+| Kind          | Id                  | Rows                                                                                                                 | Source of the rows                                                |
+| ------------- | ------------------- | -------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `image`       | `<frame>`           | 5 (all read-only: width, height, layerCount, revision, pending)                                                      | hand                                                              |
+| `layer`       | `<frame>/<layerId>` | 12 + `content` (name, visible, opacity %, blendMode, order, locked, clipped, kind, id, hasMask, bounds, pixelSource) | hand; `blendMode` members generated from the `compose.*` registry |
+| `mask`        | `<frame>/<layerId>` | 2 + `content` (enabled, bounds)                                                                                      | hand                                                              |
+| `adjustment`  | `<frame>/<layerId>` | 89                                                                                                                   | **generated** (see below)                                         |
+| `smartObject` | `<frame>/<layerId>` | 5 (source, sourceWidth, sourceHeight, scale, renderPending)                                                          | hand                                                              |
 
 `<frame>` is the frame's `Self` id and `<layerId>` the engine's stable
 layer id (it survives reorders). Both are **session handles**: InDesign
@@ -170,17 +170,17 @@ editor cannot start a list from null. The list below was the original survey.
 
 ## Gaps
 
-| Gap | Class |
-|---|---|
-| No text layer: type is rasterised into pixels, so the text-replacement variable has no target | not modelled (by design) |
-| Non-identity composites are not baked headless; stored `pending` | constitution (GPU-only); needs a GPU realm, for example the Node CLI on a WebGPU runtime |
-| Smart-object re-render and `scale` writes | GPU resample; `renderPending`, `scale` read-only |
-| Pixel replacement only "as is" (no fit, fill or conform) | GPU resample |
-| `http(s)` pixel sources | no fetch door (manifest `network: false`); the caller resolves |
-| A placed *layered* PSD reads flat until opened in the editor | engine door: no stateless PSD→manifest export |
-| No `group` kind; `order` is refused in a grouped stack | plugin follow-up |
-| A write to the frame that is open in the image edit context is not merged into the live session | plugin follow-up (the session should observe its marker) |
-| Adjustment rows carry no ranges or units | `ParamsLayout` has none (frozen ABI; needs an amendment or registry ranges) |
-| 35 typed twins take no target and act on the edit-context session | plugin follow-up (explicit targets) |
-| 16-bit layers: `content` read refused; replacement is 8-bit | plugin follow-up |
-| After an InDesign round trip, the parts are gone: the frame opens flat from its baked image (the marker survives and points nowhere) | by design (ADR 559: parts are a cache) |
+| Gap                                                                                                                                  | Class                                                                                    |
+| ------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| No text layer: type is rasterised into pixels, so the text-replacement variable has no target                                        | not modelled (by design)                                                                 |
+| Non-identity composites are not baked headless; stored `pending`                                                                     | constitution (GPU-only); needs a GPU realm, for example the Node CLI on a WebGPU runtime |
+| Smart-object re-render and `scale` writes                                                                                            | GPU resample; `renderPending`, `scale` read-only                                         |
+| Pixel replacement only "as is" (no fit, fill or conform)                                                                             | GPU resample                                                                             |
+| `http(s)` pixel sources                                                                                                              | no fetch door (manifest `network: false`); the caller resolves                           |
+| A placed _layered_ PSD reads flat until opened in the editor                                                                         | engine door: no stateless PSD→manifest export                                            |
+| No `group` kind; `order` is refused in a grouped stack                                                                               | plugin follow-up                                                                         |
+| A write to the frame that is open in the image edit context is not merged into the live session                                      | plugin follow-up (the session should observe its marker)                                 |
+| Adjustment rows carry no ranges or units                                                                                             | `ParamsLayout` has none (frozen ABI; needs an amendment or registry ranges)              |
+| 35 typed twins take no target and act on the edit-context session                                                                    | plugin follow-up (explicit targets)                                                      |
+| 16-bit layers: `content` read refused; replacement is 8-bit                                                                          | plugin follow-up                                                                         |
+| After an InDesign round trip, the parts are gone: the frame opens flat from its baked image (the marker survives and points nowhere) | by design (ADR 559: parts are a cache)                                                   |

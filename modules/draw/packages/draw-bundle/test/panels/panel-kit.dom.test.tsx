@@ -16,7 +16,6 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-
 // The shared panel pieces: the confirm step of a destructive button, the
 // refusal a panel shows in place of a silent log line, and the labels.
 
@@ -73,7 +72,12 @@ describe("ConfirmButton", () => {
 describe("useActionFeedback", () => {
   const fakeHost = () => {
     const warn = vi.fn();
-    return { host: { log: { warn, info: vi.fn(), debug: vi.fn() } } as unknown as BundleHost, warn };
+    return {
+      host: {
+        log: { warn, info: vi.fn(), debug: vi.fn() },
+      } as unknown as BundleHost,
+      warn,
+    };
   };
 
   function Harness(props: {
@@ -84,7 +88,10 @@ describe("useActionFeedback", () => {
     const { refusal, run } = useActionFeedback(props.host, props.after);
     return (
       <div>
-        <button type="button" onClick={() => void run(() => props.work(props.host))}>
+        <button
+          type="button"
+          onClick={() => void run(() => props.work(props.host))}
+        >
           Go
         </button>
         <Refusal text={refusal} />
@@ -100,14 +107,18 @@ describe("useActionFeedback", () => {
         host={host}
         after={after}
         work={async (h) => {
-          h.log.warn("media.paged.draw.command.defineSymbol: nothing capturable in the selection — no-op");
+          h.log.warn(
+            "media.paged.draw.command.defineSymbol: nothing capturable in the selection — no-op",
+          );
         }}
       />,
     );
     await act(async () => {
       fireEvent.click(view.getByRole("button"));
     });
-    expect(view.getByRole("status").textContent).toBe("Nothing capturable in the selection.");
+    expect(view.getByRole("status").textContent).toBe(
+      "Nothing capturable in the selection.",
+    );
     expect(warn).toHaveBeenCalledTimes(1);
     expect(after).toHaveBeenCalledTimes(1);
   });
@@ -127,7 +138,9 @@ describe("useActionFeedback", () => {
     await act(async () => {
       fireEvent.click(view.getByRole("button"));
     });
-    expect(view.getByRole("status").textContent).toBe("The engine refused the batch.");
+    expect(view.getByRole("status").textContent).toBe(
+      "The engine refused the batch.",
+    );
     fail = false;
     await act(async () => {
       fireEvent.click(view.getByRole("button"));
@@ -138,9 +151,11 @@ describe("useActionFeedback", () => {
 
 describe("labels", () => {
   it("refusalText drops the command prefix and the trailing no-op", () => {
-    expect(refusalText("media.paged.draw.blend.make: select exactly two objects — no-op")).toBe(
-      "Select exactly two objects.",
-    );
+    expect(
+      refusalText(
+        "media.paged.draw.blend.make: select exactly two objects — no-op",
+      ),
+    ).toBe("Select exactly two objects.");
     expect(refusalText("Already a sentence.")).toBe("Already a sentence.");
   });
 

@@ -124,7 +124,11 @@ export class DocEngine {
    */
   saveObjectEdits(edits: {
     runs?: ReadonlyArray<{ block: number; run: number; text: string }>;
-    mergeFields?: ReadonlyArray<{ block: number; occurrence: number; value: string }>;
+    mergeFields?: ReadonlyArray<{
+      block: number;
+      occurrence: number;
+      value: string;
+    }>;
   }): { bytes: Uint8Array; skips: string[] } {
     const bytes = this.inner.save_object_edits(JSON.stringify(edits));
     return { bytes, skips: this.lastSaveSkips() };

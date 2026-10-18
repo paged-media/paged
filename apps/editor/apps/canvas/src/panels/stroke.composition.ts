@@ -237,7 +237,11 @@ export const strokeComposition: CompositionNode = asPropertyFields({
       children: [
         {
           catalogId: PAGED_INPUT_NUMERIC_SCRUB,
-          props: { label: "Dash pattern", labelPosition: "stack", suffix: "pt" },
+          props: {
+            label: "Dash pattern",
+            labelPosition: "stack",
+            suffix: "pt",
+          },
           bindings: {
             value: {
               kind: "selectionProperty",

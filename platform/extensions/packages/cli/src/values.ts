@@ -22,7 +22,12 @@
 // path and the type it expects.
 
 import type { PropertySchema, ValueType } from "@paged-media/plugin-api";
-import { CORE_PATH_ALIASES, coerceValue, rowPathOf, validateValue } from "@paged-media/plugin-sdk";
+import {
+  CORE_PATH_ALIASES,
+  coerceValue,
+  rowPathOf,
+  validateValue,
+} from "@paged-media/plugin-sdk";
 
 /** A human description of a value type (error messages, `schema --text`). */
 export function describeType(t: ValueType): string {
@@ -34,7 +39,9 @@ export function describeType(t: ValueType): string {
     case "enum":
       return `enum (${t.members.join(" | ")})`;
     case "text":
-      return t.maxLength !== undefined ? `text (≤ ${t.maxLength} chars)` : "text";
+      return t.maxLength !== undefined
+        ? `text (≤ ${t.maxLength} chars)`
+        : "text";
     case "ref":
       return `ref to ${t.to}`;
     case "bounds":
@@ -49,7 +56,10 @@ export function describeType(t: ValueType): string {
       return `map of ${describeType(t.of)} (JSON)`;
     case "struct":
       return `record { ${Object.entries(t.fields)
-        .map(([k, v]) => `${k}${v.optional || v.default !== undefined ? "?" : ""}: ${describeType(v)}${v.default !== undefined ? ` = ${JSON.stringify(v.default)}` : ""}`)
+        .map(
+          ([k, v]) =>
+            `${k}${v.optional || v.default !== undefined ? "?" : ""}: ${describeType(v)}${v.default !== undefined ? ` = ${JSON.stringify(v.default)}` : ""}`,
+        )
         .join(", ")} } (JSON)`;
     case "color":
       return "color (a swatch name or reference)";
@@ -63,12 +73,20 @@ export function describeType(t: ValueType): string {
 /** The schema row for `path` among `rows` (core path aliases honoured; a
  *  concrete indexed path such as `rows[0].height` falls back to its indexed
  *  row `rows[].height`, §21.8). */
-export function rowFor(rows: readonly PropertySchema[], path: string): PropertySchema | null {
-  const exact = (p: string) => rows.find((r) => r.path === p) ?? rows.find((r) => r.path === (CORE_PATH_ALIASES[p] ?? p)) ?? null;
+export function rowFor(
+  rows: readonly PropertySchema[],
+  path: string,
+): PropertySchema | null {
+  const exact = (p: string) =>
+    rows.find((r) => r.path === p) ??
+    rows.find((r) => r.path === (CORE_PATH_ALIASES[p] ?? p)) ??
+    null;
   return exact(path) ?? (path.includes("[") ? exact(rowPathOf(path)) : null);
 }
 
-export type Parsed = { ok: true; value: unknown; schema: PropertySchema | null } | { ok: false; reason: string };
+export type Parsed =
+  | { ok: true; value: unknown; schema: PropertySchema | null }
+  | { ok: false; reason: string };
 
 /**
  * Parse a command-line `raw` value for `path`. `json` forces JSON (for a
@@ -76,13 +94,20 @@ export type Parsed = { ok: true; value: unknown; schema: PropertySchema | null }
  * without `json` the text passes as text, unconverted — the owner then
  * accepts or refuses it.
  */
-export function parseCliValue(rows: readonly PropertySchema[], address: string, path: string, raw: string, json = false): Parsed {
+export function parseCliValue(
+  rows: readonly PropertySchema[],
+  address: string,
+  path: string,
+  raw: string,
+  json = false,
+): Parsed {
   const row = rowFor(rows, path);
   const fail = (why: string): Parsed => ({
     ok: false,
     reason: `${address} ${path}: ${why}${row ? ` — expected ${describeType(row.type)}${row.nullable ? " or null" : ""}` : ""}`,
   });
-  if (row && (row.access === "readOnly" || row.access === "derived")) return fail(`is ${row.access}`);
+  if (row && (row.access === "readOnly" || row.access === "derived"))
+    return fail(`is ${row.access}`);
   let value: unknown = raw;
   if (json) {
     try {

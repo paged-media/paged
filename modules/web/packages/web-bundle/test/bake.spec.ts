@@ -252,12 +252,21 @@ describe("bakeWebFlow — the threaded-flow bake (ADR-020 rung 2)", () => {
     // #story → the primary ("main") flow; #notes → the "side" flow. F1 is the
     // primary's recipient; F2 is routed to "side".
     const multi: WebFrameSource = {
-      html: "<section id=\"story\"><p>x</p></section><aside id=\"notes\"><p>y</p></aside>",
+      html: '<section id="story"><p>x</p></section><aside id="notes"><p>y</p></aside>',
       css: "#story{flow-into:main} #notes{flow-into:side}",
       options: { media: "print", overflow: "clip" },
     };
-    const src0 = withRecipient(multi, { kind: "rectangle", id: "S" }, { kind: "rectangle", id: "F1" });
-    const src = withRecipient(src0, { kind: "rectangle", id: "S" }, { kind: "rectangle", id: "F2" }, "side");
+    const src0 = withRecipient(
+      multi,
+      { kind: "rectangle", id: "S" },
+      { kind: "rectangle", id: "F1" },
+    );
+    const src = withRecipient(
+      src0,
+      { kind: "rectangle", id: "S" },
+      { kind: "rectangle", id: "F2" },
+      "side",
+    );
 
     // An engine that records (flowRoot, frame count) per group + paints one item/frame.
     const calls: { flowRoot?: string; n: number }[] = [];
@@ -298,7 +307,9 @@ describe("bakeWebFlow — the threaded-flow bake (ADR-020 rung 2)", () => {
         getMetadata: async () => envelopeFor(src),
         elementGeometry,
       },
-      contribute: { sceneLayer: () => ({ submit, clear: async () => {}, dispose: vi.fn() }) },
+      contribute: {
+        sceneLayer: () => ({ submit, clear: async () => {}, dispose: vi.fn() }),
+      },
       supports: (f: string) => f === "rendering.sceneLayer@1",
     } as unknown as BundleHost;
 
@@ -406,7 +417,9 @@ describe("renderSelectedWebFrame — the command handler", () => {
     // The engine must not load here. Under Node it could not: the glue's
     // bare-relative fetch of its wasm failed. Bun's fetch reads file: URLs,
     // so the fetch is refused, as a realm without the sibling asset would.
-    stubGlobal("fetch", () => Promise.reject(new TypeError("engine asset not fetchable (test)")));
+    stubGlobal("fetch", () =>
+      Promise.reject(new TypeError("engine asset not fetchable (test)")),
+    );
     try {
       const { host, diags } = makeHost({
         metadata: envelopeFor(DEFAULT_SOURCE),

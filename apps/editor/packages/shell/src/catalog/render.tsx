@@ -140,9 +140,7 @@ function Node({ node }: { node: CompositionNode }): ReactElement {
     // hook. Only VALUE-bearing input leaves get it (layout leaves —
     // section/cluster/row — have no `value` binding); the `contents`
     // span is layout-neutral.
-    const valueBinding = node.bindings?.value as
-      | { path?: string }
-      | undefined;
+    const valueBinding = node.bindings?.value as { path?: string } | undefined;
     const controlPath =
       valueBinding && typeof valueBinding.path === "string"
         ? valueBinding.path

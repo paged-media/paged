@@ -51,7 +51,9 @@ export const docxPresent = existsSync(WASM);
 /** Fail (not skip) when the lane is required and the artifact is missing. */
 export function requireDocx(suite: string): void {
   if (!docxPresent && process.env.REQUIRE_REAL_DOCX === "1") {
-    throw new Error(`${suite}: REQUIRE_REAL_DOCX=1 but bin/docx_js_bg.wasm is not built (bash scripts/build-wasm.sh)`);
+    throw new Error(
+      `${suite}: REQUIRE_REAL_DOCX=1 but bin/docx_js_bg.wasm is not built (bash scripts/build-wasm.sh)`,
+    );
   }
 }
 
@@ -69,7 +71,10 @@ export interface OpenedDoc {
 /** A headless host with the bundle loaded and `name` opened standalone. */
 export async function openDoc(name: string): Promise<OpenedDoc> {
   const bytes = fixture(name);
-  const h = await createHeadlessHost({ resolveFrom: ENGINE_ANCHOR, console: silent });
+  const h = await createHeadlessHost({
+    resolveFrom: ENGINE_ANCHOR,
+    console: silent,
+  });
   const engine = await DocEngine.boot();
   try {
     engine.loadDocx(bytes);
@@ -77,7 +82,14 @@ export async function openDoc(name: string): Promise<OpenedDoc> {
     await h.load(engine.skeletonIdml(name));
     h.loadBundle(docBundle);
     const host = h.host;
-    const opened = await finishStandalone(host, engine, ir, bytes, name, (idml) => h.load(idml));
+    const opened = await finishStandalone(
+      host,
+      engine,
+      ir,
+      bytes,
+      name,
+      (idml) => h.load(idml),
+    );
     return { h, host, opened };
   } finally {
     engine.dispose();
@@ -85,7 +97,10 @@ export async function openDoc(name: string): Promise<OpenedDoc> {
 }
 
 /** The text of every paragraph of a story, as the engine holds it. */
-export async function storyTexts(host: BundleHost, storyId: string): Promise<string[]> {
+export async function storyTexts(
+  host: BundleHost,
+  storyId: string,
+): Promise<string[]> {
   const c = await host.document.storyContent(storyId);
   return (c?.paragraphs ?? []).map((p) => p.runs.map((r) => r.text).join(""));
 }

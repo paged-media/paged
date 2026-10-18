@@ -14,9 +14,22 @@ import type { ToolSettingValue } from "@paged-media/plugin-api";
 import type { ImageSession } from "./session";
 
 type ToolOptionField =
-  | { kind: "number"; key: string; label: string; min?: number; max?: number; step?: number; unit?: string }
+  | {
+      kind: "number";
+      key: string;
+      label: string;
+      min?: number;
+      max?: number;
+      step?: number;
+      unit?: string;
+    }
   | { kind: "toggle"; key: string; label: string }
-  | { kind: "select"; key: string; label: string; options: Array<{ value: string; label: string }> };
+  | {
+      kind: "select";
+      key: string;
+      label: string;
+      options: Array<{ value: string; label: string }>;
+    };
 
 const pct = (key: string, label: string): ToolOptionField => ({
   kind: "number",
@@ -28,9 +41,24 @@ const pct = (key: string, label: string): ToolOptionField => ({
   unit: "%",
 });
 
-const SIZE: ToolOptionField = { kind: "number", key: "size", label: "Size", min: 1, max: 2000, step: 1, unit: "px" };
+const SIZE: ToolOptionField = {
+  kind: "number",
+  key: "size",
+  label: "Size",
+  min: 1,
+  max: 2000,
+  step: 1,
+  unit: "px",
+};
 const WAND: ToolOptionField[] = [
-  { kind: "number", key: "tolerance", label: "Tolerance", min: 0, max: 255, step: 1 },
+  {
+    kind: "number",
+    key: "tolerance",
+    label: "Tolerance",
+    min: 0,
+    max: 255,
+    step: 1,
+  },
   { kind: "toggle", key: "contiguous", label: "Contiguous" },
 ];
 
@@ -44,9 +72,18 @@ export function toolOptionFields(ids: {
   gradient: string;
 }): Record<string, ToolOptionField[]> {
   return {
-    [ids.brush]: [SIZE, pct("hardness", "Hardness"), pct("opacity", "Opacity"), pct("flow", "Flow")],
+    [ids.brush]: [
+      SIZE,
+      pct("hardness", "Hardness"),
+      pct("opacity", "Opacity"),
+      pct("flow", "Flow"),
+    ],
     [ids.pencil]: [SIZE, pct("opacity", "Opacity")],
-    [ids.eraser]: [SIZE, pct("hardness", "Hardness"), pct("opacity", "Opacity")],
+    [ids.eraser]: [
+      SIZE,
+      pct("hardness", "Hardness"),
+      pct("opacity", "Opacity"),
+    ],
     [ids.wand]: WAND,
     [ids.bucket]: WAND,
     [ids.gradient]: [
@@ -67,7 +104,8 @@ export function applyToolSettings(
   kind: "brush" | "wand" | "gradient",
   v: Readonly<Record<string, ToolSettingValue>>,
 ): void {
-  const num = (k: string) => (typeof v[k] === "number" ? (v[k] as number) : undefined);
+  const num = (k: string) =>
+    typeof v[k] === "number" ? (v[k] as number) : undefined;
   if (kind === "brush") {
     const p: Parameters<ImageSession["setBrushParams"]>[0] = {};
     if (num("size") !== undefined) p.size = Math.max(1, num("size")!);
@@ -80,7 +118,10 @@ export function applyToolSettings(
     if (num("tolerance") !== undefined) o.tolerance = num("tolerance")!;
     if (typeof v.contiguous === "boolean") o.contiguous = v.contiguous;
     if (Object.keys(o).length) session.setWandOptions(o);
-  } else if (typeof v.kind === "string" && (GRADIENT_KINDS as string[]).includes(v.kind)) {
+  } else if (
+    typeof v.kind === "string" &&
+    (GRADIENT_KINDS as string[]).includes(v.kind)
+  ) {
     session.setGradientKind(v.kind as GradientKind);
   }
 }
@@ -96,7 +137,9 @@ export function bindToolSettings(
   const surface = host.tools;
   const subs = Object.entries(tools).map(([id, kind]) => {
     applyToolSettings(session, kind, surface.settings(id));
-    return surface.onDidChangeSettings(id, (v) => applyToolSettings(session, kind, v));
+    return surface.onDidChangeSettings(id, (v) =>
+      applyToolSettings(session, kind, v),
+    );
   });
   return { dispose: () => subs.forEach((s) => s.dispose()) };
 }

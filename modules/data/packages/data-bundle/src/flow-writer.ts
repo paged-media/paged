@@ -31,7 +31,12 @@
 // Pages first, then content: two undo steps when pages are added (a page
 // minted in a batch cannot be named — Wave 8), one otherwise.
 
-import type { BundleHost, ElementId, Mutation, PageId } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  ElementId,
+  Mutation,
+  PageId,
+} from "@paged-media/plugin-api";
 
 import { BINDING_KEY, makeEnvelope } from "../../data-host-model/src";
 import type { Bounds } from "./merge";
@@ -57,7 +62,8 @@ export interface FlowEngine {
 export function flowFrameText(blocks: readonly Block[]): string {
   const lines: string[] = [];
   for (const b of blocks) {
-    if (b.block === "groupHeader") lines.push(b.continued ? `${b.text} (continued)` : b.text);
+    if (b.block === "groupHeader")
+      lines.push(b.continued ? `${b.text} (continued)` : b.text);
     else if (b.block === "record") lines.push(...b.cells);
     else lines.push(b.cells.join("\t"));
   }
@@ -96,39 +102,96 @@ export async function commitRecordFlow(
     marginRightPt: number;
   }>("pages");
   const page = pages.find((p) => p.selfId === pageId);
-  if (!page) return { ok: false, frames: [], pages: [], mutateCalls: 0, overflow: false, diagnostics: ["flow: no start page"] };
+  if (!page)
+    return {
+      ok: false,
+      frames: [],
+      pages: [],
+      mutateCalls: 0,
+      overflow: false,
+      diagnostics: ["flow: no start page"],
+    };
   const [pw, ph] = page.sizePt;
-  const box: Bounds = [page.marginTopPt, page.marginLeftPt, ph - page.marginBottomPt, pw - page.marginRightPt];
+  const box: Bounds = [
+    page.marginTopPt,
+    page.marginLeftPt,
+    ph - page.marginBottomPt,
+    pw - page.marginRightPt,
+  ];
   const height = box[2] - box[0];
 
   // A chain long enough for every block to take a frame of its own.
-  const probe = engine.lower_record_flow(binding, [{ frame: "all", page: "all", heightPt: Number.MAX_SAFE_INTEGER }], undefined) as PaginatedFlow;
+  const probe = engine.lower_record_flow(
+    binding,
+    [{ frame: "all", page: "all", heightPt: Number.MAX_SAFE_INTEGER }],
+    undefined,
+  ) as PaginatedFlow;
   const blocks = probe.frames.reduce((n, f) => n + f.blocks.length, 0);
-  const chain = Array.from({ length: Math.max(1, blocks) }, (_, i) => ({ frame: `f${i}`, page: `p${i}`, heightPt: height }));
-  const flow = engine.lower_record_flow(binding, chain, undefined) as PaginatedFlow;
-  if (flow.overflow) diagnostics.push(`flow: ${flow.total - flow.placed} record(s) did not fit`);
+  const chain = Array.from({ length: Math.max(1, blocks) }, (_, i) => ({
+    frame: `f${i}`,
+    page: `p${i}`,
+    heightPt: height,
+  }));
+  const flow = engine.lower_record_flow(
+    binding,
+    chain,
+    undefined,
+  ) as PaginatedFlow;
+  if (flow.overflow)
+    diagnostics.push(`flow: ${flow.total - flow.placed} record(s) did not fit`);
   const used = flow.frames.length;
-  if (used === 0) return { ok: true, frames: [], pages: [], mutateCalls: 0, overflow: flow.overflow, diagnostics };
+  if (used === 0)
+    return {
+      ok: true,
+      frames: [],
+      pages: [],
+      mutateCalls: 0,
+      overflow: flow.overflow,
+      diagnostics,
+    };
 
   let mutateCalls = 0;
   let pending = [...clear];
   if (used > 1) {
     const ops: Mutation[] = [...pending];
-    for (let i = 1; i < used; i++) ops.push({ op: "insertPage", args: { afterPageId: pageId, masterId: null } });
+    for (let i = 1; i < used; i++)
+      ops.push({
+        op: "insertPage",
+        args: { afterPageId: pageId, masterId: null },
+      });
     pending = [];
     mutateCalls += 1;
     const o = await host.document.mutate({ op: "batch", args: { ops } });
     if (!o.applied) {
-      return { ok: false, frames: [], pages: [], mutateCalls, overflow: flow.overflow, diagnostics: [...diagnostics, `flow: adding pages was refused`] };
+      return {
+        ok: false,
+        frames: [],
+        pages: [],
+        mutateCalls,
+        overflow: flow.overflow,
+        diagnostics: [...diagnostics, `flow: adding pages was refused`],
+      };
     }
   }
-  const after = (await host.document.collection<{ selfId: string }>("pages")).map((p) => p.selfId);
+  const after = (
+    await host.document.collection<{ selfId: string }>("pages")
+  ).map((p) => p.selfId);
   const at = after.indexOf(pageId);
   const out = after.slice(at, at + used) as PageId[];
   // (Not "the ids are new": a re-lower deletes the pages it added before adding
   // them again, and core may hand the same ids out again.)
   if (out.length !== used) {
-    return { ok: false, frames: [], pages: out, mutateCalls, overflow: flow.overflow, diagnostics: [...diagnostics, "flow: the added pages are not where expected"] };
+    return {
+      ok: false,
+      frames: [],
+      pages: out,
+      mutateCalls,
+      overflow: flow.overflow,
+      diagnostics: [
+        ...diagnostics,
+        "flow: the added pages are not where expected",
+      ],
+    };
   }
 
   const ops: Mutation[] = [...pending];
@@ -137,21 +200,46 @@ export async function commitRecordFlow(
     const text = flowFrameText(f.blocks);
     ops.push({ op: "insertTextFrame", args: { pageId: out[i], bounds: box } });
     ops.push({ op: "bindCreated", args: { handle: h } });
-    if (text) ops.push({ op: "insertText", args: { storyId: `$h:${h}`, offset: 0, text } });
+    if (text)
+      ops.push({
+        op: "insertText",
+        args: { storyId: `$h:${h}`, offset: 0, text },
+      });
     ops.push({
       op: "setPluginMetadata",
       args: {
         elementId: { kind: "textFrame", id: `$h:${h}` } as ElementId,
         key: BINDING_KEY,
-        value: makeEnvelope({ kind: "recordFlow", binding, frame: i, ...(i > 0 ? { createdPage: true } : {}) }),
+        value: makeEnvelope({
+          kind: "recordFlow",
+          binding,
+          frame: i,
+          ...(i > 0 ? { createdPage: true } : {}),
+        }),
       },
     });
   });
   mutateCalls += 1;
   const o = await host.document.mutate({ op: "batch", args: { ops } });
   if (!o.applied) {
-    return { ok: false, frames: [], pages: out, mutateCalls, overflow: flow.overflow, diagnostics: [...diagnostics, "flow: the frame batch was refused"] };
+    return {
+      ok: false,
+      frames: [],
+      pages: out,
+      mutateCalls,
+      overflow: flow.overflow,
+      diagnostics: [...diagnostics, "flow: the frame batch was refused"],
+    };
   }
-  const frames = (o.minted ?? []).filter((m) => m.element.kind === "textFrame").map((m) => m.element);
-  return { ok: true, frames, pages: out, mutateCalls, overflow: flow.overflow, diagnostics };
+  const frames = (o.minted ?? [])
+    .filter((m) => m.element.kind === "textFrame")
+    .map((m) => m.element);
+  return {
+    ok: true,
+    frames,
+    pages: out,
+    mutateCalls,
+    overflow: flow.overflow,
+    diagnostics,
+  };
 }

@@ -27,7 +27,11 @@ import { memoryFs } from "../src/fs.ts";
 import { Library } from "../src/library.ts";
 
 initSync({
-  module: readFileSync(new URL(import.meta.resolve("@paged-media/repo-wasm/paged_repo_wasm_bg.wasm"))),
+  module: readFileSync(
+    new URL(
+      import.meta.resolve("@paged-media/repo-wasm/paged_repo_wasm_bg.wasm"),
+    ),
+  ),
 });
 
 // A minimal STORED zip writer: enough to make `.paged` fixtures in a test.
@@ -127,7 +131,10 @@ test("an opened file becomes a document that survives a reload", async () => {
   assert.ok(entry.head);
 
   const fresh = library(fs).lib;
-  assert.deepEqual((await fresh.list()).map((d) => d.id), ["doc-1"]);
+  assert.deepEqual(
+    (await fresh.list()).map((d) => d.id),
+    ["doc-1"],
+  );
   const log = await fresh.log("doc-1");
   assert.equal(log.length, 1);
   assert.equal(log[0].imported_from, "brochure.idml");
@@ -177,7 +184,10 @@ test("exports are recorded, and a write that did not finish is ignored", async (
   await fs.write(`repos/${id}/packs/99.pack`, new Uint8Array([1, 2, 3]));
   const fresh = library(fs).lib;
   const ev = await fresh.evidence(id);
-  assert.deepEqual(ev.map((e) => e.action), ["export"]);
+  assert.deepEqual(
+    ev.map((e) => e.action),
+    ["export"],
+  );
   assert.equal((await fresh.log(id)).length, 1);
 });
 
@@ -192,7 +202,12 @@ test("calls run one at a time", async () => {
 test("a model's save is an agent's version on its branch, merged by the person", async () => {
   const { lib } = library();
   const { id } = await lib.importFile(doc(noise(10, 20)), "d.paged");
-  const saved = await lib.saveAgent(id, doc(noise(10, 21)), { agent: "agent:claude", client: "claude", run: "R1" }, "Claude's edit");
+  const saved = await lib.saveAgent(
+    id,
+    doc(noise(10, 21)),
+    { agent: "agent:claude", client: "claude", run: "R1" },
+    "Claude's edit",
+  );
   assert.equal(saved.branch, "agent/r1/live");
   assert.equal((await lib.log(id)).length, 1, "main does not move");
   const branch = await lib.log(id, saved.branch);
@@ -207,10 +222,19 @@ test("a dataset is a repository of data parts, named by paged:// references", as
   const csv = new TextEncoder().encode("sku,price\nA1,9.90\nB2,12.50\n");
   const ds = await lib.importDataset("products", [
     { path: "data/products.csv", bytes: csv },
-    { path: "schema.json", bytes: new TextEncoder().encode('{"sku":"string","price":"number"}') },
+    {
+      path: "schema.json",
+      bytes: new TextEncoder().encode('{"sku":"string","price":"number"}'),
+    },
   ]);
   assert.equal(ds.kind, "data");
-  assert.deepEqual(await lib.resolve("paged://products/data/products.csv"), csv);
-  await assert.rejects(lib.resolve("paged://acme.products/data/products.csv"), /not in this library/);
+  assert.deepEqual(
+    await lib.resolve("paged://products/data/products.csv"),
+    csv,
+  );
+  await assert.rejects(
+    lib.resolve("paged://acme.products/data/products.csv"),
+    /not in this library/,
+  );
   await assert.rejects(lib.resolve("http://x/y"), /not a paged/);
 });

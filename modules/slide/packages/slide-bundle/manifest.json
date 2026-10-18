@@ -42,8 +42,16 @@
       "kinds": [
         { "kind": "deck", "title": "Deck", "schema": "schema/deck.json" },
         { "kind": "slide", "title": "Slide", "schema": "schema/slide.json" },
-        { "kind": "layout", "title": "Slide layout", "schema": "schema/layout.json" },
-        { "kind": "placeholder", "title": "Placeholder", "schema": "schema/placeholder.json" }
+        {
+          "kind": "layout",
+          "title": "Slide layout",
+          "schema": "schema/layout.json"
+        },
+        {
+          "kind": "placeholder",
+          "title": "Placeholder",
+          "schema": "schema/placeholder.json"
+        }
       ],
       "commands": [
         {

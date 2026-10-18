@@ -92,7 +92,10 @@ export class FakeSession implements ViewerSessionLike {
     return Promise.resolve(this.bindResult);
   }
 
-  render_page_to_bytes(index: number, targetWidthPx: number): Promise<SessionRaster> {
+  render_page_to_bytes(
+    index: number,
+    targetWidthPx: number,
+  ): Promise<SessionRaster> {
     this.thumbnails.push({ index, width: targetWidthPx });
     const height = Math.ceil((792 / 612) * targetWidthPx);
     return Promise.resolve({

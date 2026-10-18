@@ -81,8 +81,18 @@ function fakeEngine() {
     sortRange: () => ({ changed: [], edits: [] }),
     findAll: () => [],
     replaceAll: () => ({ occurrences: 0, changed: [], edits: [], skipped: [] }),
-    getRangeLowered: () => ({ cols: [], rows: [], rules: { h: [], v: [] }, merges: [] }),
-    getRangeStyled: () => ({ cols: [], rows: [], rules: { h: [], v: [] }, merges: [] }),
+    getRangeLowered: () => ({
+      cols: [],
+      rows: [],
+      rules: { h: [], v: [] },
+      merges: [],
+    }),
+    getRangeStyled: () => ({
+      cols: [],
+      rows: [],
+      rules: { h: [], v: [] },
+      merges: [],
+    }),
     getRangeValues: () => [],
     paginate: () => [],
     // The fake ignores the window args and always returns the 2×2 scene; the
@@ -110,8 +120,9 @@ function fakeEngine() {
  *  leading edge; we read the buffer back by matching the value. */
 function textsOf(submit: { layer: SceneLayer }): string[] {
   return submit.layer.items
-    .filter((i): i is Extract<SceneLayer["items"][number], { kind: "text" }> =>
-      i.kind === "text",
+    .filter(
+      (i): i is Extract<SceneLayer["items"][number], { kind: "text" }> =>
+        i.kind === "text",
     )
     .map((i) => i.text);
 }
@@ -171,7 +182,9 @@ describe("sheet_scene_layer_in_frame: K-1 click-to-select", () => {
     expect(submits).toHaveLength(1);
     expect(submits[0].elementId).toBe("frame-1");
     // The first render carries no selection (no fillPath wash).
-    expect(submits[0].layer.items.some((i) => i.kind === "fillPath")).toBe(false);
+    expect(submits[0].layer.items.some((i) => i.kind === "fillPath")).toBe(
+      false,
+    );
 
     // A content-space point in col1 (x∈[40,80)) row0 (y∈[0,20)).
     const hit = session.selectCellInFrame(50, 10);
@@ -183,7 +196,11 @@ describe("sheet_scene_layer_in_frame: K-1 click-to-select", () => {
     // the Wave 5 fill-handle knob at the selection's bottom-right corner).
     expect(submits).toHaveLength(2);
     const last = submits[1].layer.items.slice(-3);
-    expect(last.map((i) => i.kind)).toEqual(["fillPath", "strokePath", "fillPath"]);
+    expect(last.map((i) => i.kind)).toEqual([
+      "fillPath",
+      "strokePath",
+      "fillPath",
+    ]);
   });
 
   it("returns false (no extra submit) for a point outside the windowed cells", async () => {
