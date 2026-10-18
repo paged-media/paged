@@ -1,14 +1,14 @@
-$schema: '../../../.moon/cache/schemas/project.json'
+$schema: "../../../.moon/cache/schemas/project.json"
 
 # paged-test-resources: the one convention for optional test resources
 # (docs/development/testing.md). A dev-dependency of every Cargo workspace
 # with tests that need a GPU, the private corpus, a profile, a font, a
 # generated fixture, a tool or a running server.
-language: 'rust'
-layer: 'library'
-stack: 'systems'
-tags: ['rust', 'shared']
+language: "rust"
+layer: "library"
+stack: "systems"
+tags: ["rust", "shared"]
 
 project:
-  title: 'platform/shared/test-resources'
-  description: 'Optional test resources: unavailable: <reason>, PAGED_REQUIRE_<X>=1, PAGED_CORPUS_DIR.'
+  title: "platform/shared/test-resources"
+  description: "Optional test resources: unavailable: <reason>, PAGED_REQUIRE_<X>=1, PAGED_CORPUS_DIR."
