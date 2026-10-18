@@ -77,7 +77,7 @@ void import("react").then(
   },
   () => {
     // React-free consumer (headless tests, Node-side conformance, a
-    // host-agnostic plugin repo's vitest run). The render paths that
+    // host-agnostic plugin repo's unit-test run). The render paths that
     // call `requireCreateElement` are never reached there.
     state = "absent";
   },

@@ -28,7 +28,7 @@
 //   4. the no-backend door: no backend → read null, write no-op (the honest
 //      no-clipboard posture); supports("clipboard@1") is false.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { ClipboardPayload, PluginManifest } from "@paged-media/plugin-api";
 

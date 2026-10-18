@@ -24,7 +24,7 @@
 // one undo step — and the panel validator holds `items` / `fields` to the
 // row's value type.
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "bun:test";
 
 import type {
   BundleHost,

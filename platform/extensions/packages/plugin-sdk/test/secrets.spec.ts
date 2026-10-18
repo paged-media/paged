@@ -24,7 +24,7 @@
 // never come back to the plugin realm; the HOST injects them at attach
 // time).
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "bun:test";
 
 import type { PagedEditor, PluginManifest } from "@paged-media/plugin-api";
 

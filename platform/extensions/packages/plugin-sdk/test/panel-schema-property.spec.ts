@@ -18,7 +18,7 @@
 
 // The object-model property row (ADR 323, design §4).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { PanelSchema, PluginManifest, PropertyFieldProps, PropertySchema } from "@paged-media/plugin-api";
 
