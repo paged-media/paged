@@ -43,6 +43,27 @@ Note: the npm name `@paged-media/sdk` belonged to the **viewer session**
 `@paged-media/idml-viewer/session` — the plugin runtime is `plugin-sdk`,
 deliberately.
 
+## React 19
+
+From 0.2.76 the contract is typed against React 19 ([PM-0008](../../docs/adr/PM-0008-npm-packages-and-release.md),
+amendment 2): `plugin-api` depends on `@types/react` ^19.3, and `plugin-sdk`'s optional React
+peer, like every built-in bundle's, is `react >=19.3`. The editor provides React 19.3.1. For an
+extension with React panels:
+
+- Declare `react` (and `react-dom`, if you use it) as a peer `>=19.3`, and develop against
+  `@types/react` 19.
+- `ref` is a plain prop of a function component; `forwardRef` still works but is no longer
+  needed.
+- `useRef` takes an argument (`useRef<HTMLDivElement>(null)`). A ref callback may return a
+  cleanup function, so an arrow with an implicit return (`ref={(el) => (node = el)}`) is a type
+  error: give it a block body.
+- `ReactElement`'s props default to `unknown`, and the global `JSX` namespace is gone: write
+  `React.JSX.Element`.
+- `react-test-renderer` is deprecated: test panels with `@testing-library/react` in a DOM
+  environment (happy-dom).
+
+React's upgrade guide covers the rest: https://react.dev/blog/2024/04/25/react-19-upgrade-guide.
+
 ## Documentation
 
 How the contract is designed and built is in [`docs/`](./docs/README.md) and in

@@ -23,7 +23,7 @@ until 2026-06-22, when it was opened.)
 ## Workspace layout (Bun)
 
 `apps/*` + `packages/*`, members of the repository's root Bun workspace
-(`/package.json` `workspaces`, one `/bun.lock`). React 18 + Vite + TS +
+(`/package.json` `workspaces`, one `/bun.lock`). React 19 + Vite + TS +
 Tailwind.
 
 - `apps/canvas` (`paged-canvas`) — the editor app. React shell →

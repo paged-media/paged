@@ -21,7 +21,7 @@
   "peerDependencies": {
     "@paged-media/plugin-api": "workspace:*",
     "@paged-media/plugin-sdk": "workspace:*",
-    "react": "^18.3.0"
+    "react": ">=19.3"
   },
   "devDependencies": {
     "@paged-media/canvas-wasm": "workspace:*",

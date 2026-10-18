@@ -17,7 +17,7 @@
   "peerDependencies": {
     "@paged-media/plugin-api": "workspace:*",
     "@paged-media/plugin-sdk": "workspace:*",
-    "react": "^18.3.0"
+    "react": ">=19.3"
   },
   "devDependencies": {
     "@paged-media/canvas-wasm": "workspace:*",
@@ -26,9 +26,9 @@
     "@paged-media/sheet-host-model": "workspace:*",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
-    "@types/react-test-renderer": "18.3.1",
+    "@types/react-test-renderer": "19.3.0",
     "react": "catalog:",
-    "react-test-renderer": "18.3.1",
+    "react-test-renderer": "19.3.1",
     "typescript": "catalog:",
     "@paged-media/test-kit": "workspace:*",
     "@types/bun": "catalog:"
