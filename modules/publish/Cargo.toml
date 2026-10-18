@@ -1,6 +1,8 @@
 [workspace]
 resolver = "2"
-members = ["crates/idml-import", "crates/idml-export", "crates/pdf-import", "tools/idml-coverage"]
+# The IDML adapter (idml-import, idml-export) and its coverage tool moved into
+# the engine workspace (engine/core/crates/); pdf-import is what stays here.
+members = ["crates/pdf-import"]
 
 [workspace.package]
 version = "0.0.0"

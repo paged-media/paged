@@ -41,8 +41,8 @@ use types::StructMap;
 
 pub const IMPORT_SRC: &str = "crates/idml-import/src";
 pub const EXPORT_SRC: &str = "crates/idml-export/src";
-pub const MANUAL: &str = "tools/idml-coverage/manual.toml";
-pub const CENSUS: &str = "tools/idml-coverage/census.json";
+pub const MANUAL: &str = "crates/idml-coverage/manual.toml";
+pub const CENSUS: &str = "crates/idml-coverage/census.json";
 pub const OUTPUT: &str = "docs/reference/idml-coverage.json";
 pub const RATCHET: &str = "docs/reference/idml-coverage-ratchet.json";
 
@@ -275,7 +275,7 @@ fn load(root: &Path, rel_dir: &str) -> Result<Vec<SourceFile>, String> {
 }
 
 /// The `paged-model` sources the importer builds into, located through
-/// `cargo metadata` (a pinned git dependency).
+/// `cargo metadata` (the workspace member `crates/paged-model`).
 fn paged_model_src(root: &Path) -> Result<PathBuf, String> {
     let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
     let out = std::process::Command::new(cargo)
@@ -1060,7 +1060,7 @@ pub fn analyse(root: &Path) -> Result<Analysis, String> {
         ("exporter", EXPORT_SRC),
         ("manual", MANUAL),
         ("census", CENSUS),
-        ("tool", "tools/idml-coverage"),
+        ("tool", "crates/idml-coverage"),
         (
             "regenerate",
             "cargo run -p idml-coverage > docs/reference/idml-coverage.json",
