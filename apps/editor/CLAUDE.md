@@ -161,9 +161,7 @@ the clean-room icon system, and the cockpit UI kit
   before.
 - **`bun fmt` formats everything; CI checks it.** Run
   `tooling/js/fmt.sh` (or let the pre-commit hook format what you stage);
-  `/.prettierignore` lists what it leaves alone, with the reasons. Until
-  the one-time mass format is on main (docs/migration/bun-fmt.md), run it
-  on the files you change only.
+  `/.prettierignore` lists what it leaves alone, with the reasons.
 - **Comments earn their place** — narrate the WHY for a non-obvious
   IDML/wasm/SAB constraint or a worked-around upstream bug; otherwise
   let the code speak.
