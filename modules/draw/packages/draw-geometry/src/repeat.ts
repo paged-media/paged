@@ -199,7 +199,10 @@ export function radialPointAt(
   deg: number,
 ): Vec2 {
   const r = deg * DEG;
-  return [center[0] + radiusPt * Math.cos(r), center[1] + radiusPt * Math.sin(r)];
+  return [
+    center[0] + radiusPt * Math.cos(r),
+    center[1] + radiusPt * Math.sin(r),
+  ];
 }
 
 /** The ring centre that leaves the SOURCE exactly where it is: the
@@ -394,7 +397,12 @@ export function rectAnchorTable(bounds: RepeatBounds): AnchorTable {
     right: [x, y] as [number, number],
   });
   return {
-    anchors: [at(left, top), at(right, top), at(right, bottom), at(left, bottom)],
+    anchors: [
+      at(left, top),
+      at(right, top),
+      at(right, bottom),
+      at(left, bottom),
+    ],
     subpathStarts: [0],
     subpathOpen: [false],
   };

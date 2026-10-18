@@ -138,7 +138,9 @@ const EMPTY: AppearanceStack = { fills: [], strokes: [] };
 /** Read the appearance stack out of an envelope's `data.appearance`, or
  *  an empty stack. Tolerant of partial/foreign shapes (returns empty
  *  rather than throwing). */
-export function appearanceOf(env: PluginMetadataEnvelope | null): AppearanceStack {
+export function appearanceOf(
+  env: PluginMetadataEnvelope | null,
+): AppearanceStack {
   const raw = (env?.data as { appearance?: unknown } | undefined)?.appearance;
   if (!raw || typeof raw !== "object") return { fills: [], strokes: [] };
   const a = raw as Partial<AppearanceStack>;
@@ -163,7 +165,11 @@ export function withAppearance(
   } else {
     data.appearance = stack;
   }
-  return { v: prev?.v ?? 1, data, ...(prev?.engine ? { engine: prev.engine } : {}) };
+  return {
+    v: prev?.v ?? 1,
+    data,
+    ...(prev?.engine ? { engine: prev.engine } : {}),
+  };
 }
 
 // ------------------------------------------------ pure stack transforms
@@ -311,15 +317,25 @@ async function frameFillStroke(
   host: BundleHost,
   id: ElementId,
 ): Promise<{ fill: string | null; stroke: string | null; weight: number }> {
-  const out = { fill: null as string | null, stroke: null as string | null, weight: 1 };
+  const out = {
+    fill: null as string | null,
+    stroke: null as string | null,
+    weight: 1,
+  };
   try {
     const props = await host.document.elementProperties(id);
     for (const e of props?.entries ?? []) {
       const v = e.value;
       if (!v) continue;
-      if (e.path === "frameFillColor" && v.type === "colorRef") out.fill = v.value;
-      else if (e.path === "frameStrokeColor" && v.type === "colorRef") out.stroke = v.value;
-      else if (e.path === "frameStrokeWeight" && v.type === "length" && v.value != null) {
+      if (e.path === "frameFillColor" && v.type === "colorRef")
+        out.fill = v.value;
+      else if (e.path === "frameStrokeColor" && v.type === "colorRef")
+        out.stroke = v.value;
+      else if (
+        e.path === "frameStrokeWeight" &&
+        v.type === "length" &&
+        v.value != null
+      ) {
         out.weight = v.value;
       }
     }
@@ -422,20 +438,26 @@ export function contributeAppearanceCommands(host: BundleHost): Disposable {
       id: APPEARANCE_ADD_FILL_COMMAND_ID,
       title: "Appearance: Add fill",
       category: APPEARANCE_COMMAND_CATEGORY,
-      handler: () => applyAppearanceCommand(host, APPEARANCE_ADD_FILL_COMMAND_ID, "fill"),
+      handler: () =>
+        applyAppearanceCommand(host, APPEARANCE_ADD_FILL_COMMAND_ID, "fill"),
     }),
     registerCommand(host, {
       id: APPEARANCE_ADD_STROKE_COMMAND_ID,
       title: "Appearance: Add stroke",
       category: APPEARANCE_COMMAND_CATEGORY,
       handler: () =>
-        applyAppearanceCommand(host, APPEARANCE_ADD_STROKE_COMMAND_ID, "stroke"),
+        applyAppearanceCommand(
+          host,
+          APPEARANCE_ADD_STROKE_COMMAND_ID,
+          "stroke",
+        ),
     }),
     registerCommand(host, {
       id: APPEARANCE_CLEAR_COMMAND_ID,
       title: "Appearance: Clear extra layers",
       category: APPEARANCE_COMMAND_CATEGORY,
-      handler: () => applyAppearanceCommand(host, APPEARANCE_CLEAR_COMMAND_ID, "clear"),
+      handler: () =>
+        applyAppearanceCommand(host, APPEARANCE_CLEAR_COMMAND_ID, "clear"),
     }),
     registerCommand(host, {
       id: APPEARANCE_REMOVE_LAYER_COMMAND_ID,
@@ -443,8 +465,11 @@ export function contributeAppearanceCommands(host: BundleHost): Disposable {
       category: APPEARANCE_COMMAND_CATEGORY,
       handler: (_paged, payload) => {
         const p = payload as Record<string, unknown> | undefined;
-        return applyAppearanceEdit(host, APPEARANCE_REMOVE_LAYER_COMMAND_ID, (s) =>
-          removeAppearanceLayer(s, layerKind(p?.kind), layerIndex(p?.index)),
+        return applyAppearanceEdit(
+          host,
+          APPEARANCE_REMOVE_LAYER_COMMAND_ID,
+          (s) =>
+            removeAppearanceLayer(s, layerKind(p?.kind), layerIndex(p?.index)),
         );
       },
     }),
@@ -454,13 +479,16 @@ export function contributeAppearanceCommands(host: BundleHost): Disposable {
       category: APPEARANCE_COMMAND_CATEGORY,
       handler: (_paged, payload) => {
         const p = payload as Record<string, unknown> | undefined;
-        return applyAppearanceEdit(host, APPEARANCE_MOVE_LAYER_COMMAND_ID, (s) =>
-          moveAppearanceLayer(
-            s,
-            layerKind(p?.kind),
-            layerIndex(p?.index),
-            layerDelta(p),
-          ),
+        return applyAppearanceEdit(
+          host,
+          APPEARANCE_MOVE_LAYER_COMMAND_ID,
+          (s) =>
+            moveAppearanceLayer(
+              s,
+              layerKind(p?.kind),
+              layerIndex(p?.index),
+              layerDelta(p),
+            ),
         );
       },
     }),

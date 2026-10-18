@@ -150,7 +150,9 @@ export function applyPathOps(
         const shifted = t.subpathStarts
           .map((s) => (s > op.index ? s - 1 : s))
           .filter((s) => s < t.anchors.length);
-        t.subpathStarts = shifted.filter((s, i) => i === 0 || s !== shifted[i - 1]);
+        t.subpathStarts = shifted.filter(
+          (s, i) => i === 0 || s !== shifted[i - 1],
+        );
         break;
       }
       case "pathPointCurveType": {
@@ -195,8 +197,10 @@ export function applyPathOps(
         }
         const ux = tx / len;
         const uy = ty / len;
-        const toPrev = Math.hypot(a.anchor[0] - prev[0], a.anchor[1] - prev[1]) / 3;
-        const toNext = Math.hypot(next[0] - a.anchor[0], next[1] - a.anchor[1]) / 3;
+        const toPrev =
+          Math.hypot(a.anchor[0] - prev[0], a.anchor[1] - prev[1]) / 3;
+        const toNext =
+          Math.hypot(next[0] - a.anchor[0], next[1] - a.anchor[1]) / 3;
         a.left = [a.anchor[0] - ux * toPrev, a.anchor[1] - uy * toPrev];
         a.right = [a.anchor[0] + ux * toNext, a.anchor[1] + uy * toNext];
         break;

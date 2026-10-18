@@ -103,7 +103,9 @@ const OWN_KEY = `x-paged:${manifest.id}`;
  *  leaves still need a read each. An engine that has it lists the field
  *  on EVERY item row, empty when there is nothing, so its absence is
  *  never "no metadata". */
-export function treeEnvelopeOf(node: SceneTreeNode): PluginMetadataEnvelope | null | undefined {
+export function treeEnvelopeOf(
+  node: SceneTreeNode,
+): PluginMetadataEnvelope | null | undefined {
   const entries = (node as { pluginMetadata?: unknown }).pluginMetadata;
   if (!Array.isArray(entries)) return undefined;
   for (const entry of entries as { key?: unknown; value?: unknown }[]) {
@@ -378,7 +380,10 @@ function createLinkIndex(host: BundleHost): LinkIndex {
     return rev.envelopes.get(key)!;
   };
 
-  const seedFromTree = (rev: Revision, roots: readonly SceneTreeNode[]): void => {
+  const seedFromTree = (
+    rev: Revision,
+    roots: readonly SceneTreeNode[],
+  ): void => {
     const walk = (nodes: readonly SceneTreeNode[]) => {
       for (const node of nodes) {
         const children = node.children ?? [];

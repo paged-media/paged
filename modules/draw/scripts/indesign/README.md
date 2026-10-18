@@ -55,27 +55,27 @@ recording's `produced_by` is the authority: app, version, locale, the
 reader's sha256 and the IDML's sha256 — the replay refuses a recording
 made by another reader or from another IDML.
 
-| Case | Row | Verdict |
-|---|---|---|
-| `pen-open`, `pen-closed` | Pen path, open / closed, with curves | identical |
-| `compound-hole` | compound path with a hole | identical |
-| `pathfinder-{union,subtract,intersect,exclude}` | the four booleans | identical |
-| `pathfinder-divide` | Divide | identical |
-| `offset-path`, `outline-stroke`, `simplify`, `join` | path ops | identical |
-| `live-corners-rectangle` | every corner style on a source `<Rectangle>` | corners survive; DEFECT absent StrokeColor; CONVENTION bevel spelling |
-| `live-corners-polygon` | every corner style on a draw Polygon | corners survive since 0.70.0; CONVENTION bevel spelling |
-| `dash-presets` | the four dash presets | dash survives since 0.70.0; CONVENTION: the model holds the array alone, IDML also names the Dashed type |
-| `arrowheads` | line ends | identical — a GraphicLine's and a Pen path's (C-62, fixed in 0.66.0) |
-| `stroke-attributes` | weight / cap / join / miter | identical since 0.70.0 |
-| `gradient-linear` | linear gradient fill | identical — the axis reads back since 0.66.0 (C-83b) |
-| `gradient-radial` | radial gradient fill | gradient and stops survive; CONVENTION: an unset length, which InDesign derives from the item |
-| `opacity-blend` | opacity 50 + Multiply via a Graphic Style | identical |
-| `group` | a group | identical |
-| `appearance-bake` | bake: a group of stacked items | identical since 0.70.0 (Color/Paper declared) |
-| `repeat-expanded`, `blend-expanded` | expanded repeat / blend | identical (the blend's duplicate stroke swatches were fixed in draw and the case re-recorded) |
-| `svg-import` | SVG import | identical |
-| `text-on-path` | Type on a Path | identical since 0.71.1 (`EndBracket` exported; re-recorded 2026-10-11, and on 0.71.8 for the `TextAlignment` spelling 2026-10-13) |
-| `opacity-mask` | opacity mask | EXPECTED LOSS, named in `lost` |
+| Case                                                | Row                                          | Verdict                                                                                                                           |
+| --------------------------------------------------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `pen-open`, `pen-closed`                            | Pen path, open / closed, with curves         | identical                                                                                                                         |
+| `compound-hole`                                     | compound path with a hole                    | identical                                                                                                                         |
+| `pathfinder-{union,subtract,intersect,exclude}`     | the four booleans                            | identical                                                                                                                         |
+| `pathfinder-divide`                                 | Divide                                       | identical                                                                                                                         |
+| `offset-path`, `outline-stroke`, `simplify`, `join` | path ops                                     | identical                                                                                                                         |
+| `live-corners-rectangle`                            | every corner style on a source `<Rectangle>` | corners survive; DEFECT absent StrokeColor; CONVENTION bevel spelling                                                             |
+| `live-corners-polygon`                              | every corner style on a draw Polygon         | corners survive since 0.70.0; CONVENTION bevel spelling                                                                           |
+| `dash-presets`                                      | the four dash presets                        | dash survives since 0.70.0; CONVENTION: the model holds the array alone, IDML also names the Dashed type                          |
+| `arrowheads`                                        | line ends                                    | identical — a GraphicLine's and a Pen path's (C-62, fixed in 0.66.0)                                                              |
+| `stroke-attributes`                                 | weight / cap / join / miter                  | identical since 0.70.0                                                                                                            |
+| `gradient-linear`                                   | linear gradient fill                         | identical — the axis reads back since 0.66.0 (C-83b)                                                                              |
+| `gradient-radial`                                   | radial gradient fill                         | gradient and stops survive; CONVENTION: an unset length, which InDesign derives from the item                                     |
+| `opacity-blend`                                     | opacity 50 + Multiply via a Graphic Style    | identical                                                                                                                         |
+| `group`                                             | a group                                      | identical                                                                                                                         |
+| `appearance-bake`                                   | bake: a group of stacked items               | identical since 0.70.0 (Color/Paper declared)                                                                                     |
+| `repeat-expanded`, `blend-expanded`                 | expanded repeat / blend                      | identical (the blend's duplicate stroke swatches were fixed in draw and the case re-recorded)                                     |
+| `svg-import`                                        | SVG import                                   | identical                                                                                                                         |
+| `text-on-path`                                      | Type on a Path                               | identical since 0.71.1 (`EndBracket` exported; re-recorded 2026-10-11, and on 0.71.8 for the `TextAlignment` spelling 2026-10-13) |
+| `opacity-mask`                                      | opacity mask                                 | EXPECTED LOSS, named in `lost`                                                                                                    |
 
 "Identical" means every anchor and handle within 0.01 pt, every paint and
 stroke attribute, z-order, grouping and draw's metadata label agree.
@@ -134,16 +134,16 @@ recording.
 
 ## How InDesign is asked
 
-| What | How | Measured |
-|---|---|---|
-| run a script | `«event K2  dosc» <text> given «class doLg»:«constant ****JSLg»` | InDesign's terminology is dynamic; where AppleScript cannot fetch it while compiling, `do script … language javascript` does not compile (core `run-export.sh`). The raw code needs none. |
-| open | `app.open(File(idml), false)` under `UserInteractionLevels.NEVER_INTERACT`, closed with `SaveOptions.NO` in a `finally` | the runner pings again after, and refuses a document count that changed |
-| coordinates | `scriptPreferences.measurementUnit = POINTS`, ruler origin PAGE, zero point 0,0 | page-local, Y down, the engine's frame. `geometricBounds` is `[top, left, bottom, right]` and is recorded as `[minX, minY, maxX, maxY]` |
-| geometry | `paths[i].entirePath` + `pathType` | a corner point comes back as `[x, y]`, a point with handles as `[[left], [anchor], [right]]` |
-| enumerations | reverse lookup over the enum object (`EndCap.reflect.properties`) | InDesign hands back four-character numbers |
-| stroke style | matched by id against `strokeStyles.itemByName("$ID/…")` | `strokeType.name` is localised ("Durchgezogen") |
-| z-order | InDesign's OWN IDML export of the opened document, `Self="u<hex id>"` | see trap 3 |
-| warnings | unresolved fonts, links that are not normal, overset stories | see trap 4 |
+| What         | How                                                                                                                     | Measured                                                                                                                                                                                  |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| run a script | `«event K2  dosc» <text> given «class doLg»:«constant ****JSLg»`                                                        | InDesign's terminology is dynamic; where AppleScript cannot fetch it while compiling, `do script … language javascript` does not compile (core `run-export.sh`). The raw code needs none. |
+| open         | `app.open(File(idml), false)` under `UserInteractionLevels.NEVER_INTERACT`, closed with `SaveOptions.NO` in a `finally` | the runner pings again after, and refuses a document count that changed                                                                                                                   |
+| coordinates  | `scriptPreferences.measurementUnit = POINTS`, ruler origin PAGE, zero point 0,0                                         | page-local, Y down, the engine's frame. `geometricBounds` is `[top, left, bottom, right]` and is recorded as `[minX, minY, maxX, maxY]`                                                   |
+| geometry     | `paths[i].entirePath` + `pathType`                                                                                      | a corner point comes back as `[x, y]`, a point with handles as `[[left], [anchor], [right]]`                                                                                              |
+| enumerations | reverse lookup over the enum object (`EndCap.reflect.properties`)                                                       | InDesign hands back four-character numbers                                                                                                                                                |
+| stroke style | matched by id against `strokeStyles.itemByName("$ID/…")`                                                                | `strokeType.name` is localised ("Durchgezogen")                                                                                                                                           |
+| z-order      | InDesign's OWN IDML export of the opened document, `Self="u<hex id>"`                                                   | see trap 3                                                                                                                                                                                |
+| warnings     | unresolved fonts, links that are not normal, overset stories                                                            | see trap 4                                                                                                                                                                                |
 
 ## Traps
 

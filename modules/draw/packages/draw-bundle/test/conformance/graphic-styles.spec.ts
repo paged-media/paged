@@ -100,9 +100,15 @@ import {
 import { F1_MULTI_SHAPE } from "../fixtures/corpus";
 import { openHost } from "./host";
 
-const RECT = { kind: "rectangle", id: F1_MULTI_SHAPE.ids.rectangle! } as ElementId;
+const RECT = {
+  kind: "rectangle",
+  id: F1_MULTI_SHAPE.ids.rectangle!,
+} as ElementId;
 const POLY = { kind: "polygon", id: F1_MULTI_SHAPE.ids.polygon! } as ElementId;
-const LINE = { kind: "graphicLine", id: F1_MULTI_SHAPE.ids.graphicLine! } as ElementId;
+const LINE = {
+  kind: "graphicLine",
+  id: F1_MULTI_SHAPE.ids.graphicLine!,
+} as ElementId;
 
 /** A rectangle's full vocabulary (the paths the projection cares about). */
 const RECT_PATHS = [
@@ -233,7 +239,10 @@ describe("draw conformance — GRAPHIC STYLES (Illustrator Phase 2)", () => {
       expect(
         mintGraphicStyleId({
           v: 1,
-          styles: [{ ...STYLE, id: "gs-3" }, { ...STYLE, id: "imported" }],
+          styles: [
+            { ...STYLE, id: "gs-3" },
+            { ...STYLE, id: "imported" },
+          ],
         }),
       ).toBe("gs-4");
     });
@@ -248,7 +257,9 @@ describe("draw conformance — GRAPHIC STYLES (Illustrator Phase 2)", () => {
       const redefined = upsertGraphicStyle(two, { ...STYLE, name: "renamed" });
       expect(redefined.styles.map((s) => s.name)).toEqual(["renamed", "B"]);
 
-      expect(renameGraphicStyleIn(one, "gs-1", "New").styles[0]!.name).toBe("New");
+      expect(renameGraphicStyleIn(one, "gs-1", "New").styles[0]!.name).toBe(
+        "New",
+      );
       expect(renameGraphicStyleIn(one, "nope", "New")).toEqual(one);
       expect(renameGraphicStyleIn(one, "gs-1", "")).toEqual(one);
       expect(removeGraphicStyleFrom(one, "gs-1").styles).toEqual([]);
@@ -344,7 +355,9 @@ describe("draw conformance — GRAPHIC STYLES (Illustrator Phase 2)", () => {
     it("reads tolerantly and preserves every other draw key", () => {
       expect(graphicStyleRefOf(null)).toBeNull();
       expect(graphicStyleRefOf({ v: 1, data: {} })).toBeNull();
-      expect(graphicStyleRefOf({ v: 1, data: { graphicStyle: { rev: "x" } } })).toBeNull();
+      expect(
+        graphicStyleRefOf({ v: 1, data: { graphicStyle: { rev: "x" } } }),
+      ).toBeNull();
       expect(
         graphicStyleRefOf({ v: 1, data: { graphicStyle: { id: "gs-1" } } }),
       ).toEqual({ id: "gs-1", rev: "" });
@@ -360,7 +373,10 @@ describe("draw conformance — GRAPHIC STYLES (Illustrator Phase 2)", () => {
       expect(broken!.data).toEqual({ appearance: STACK });
       // …and an envelope that held NOTHING else collapses to null.
       expect(
-        withGraphicStyleRef({ v: 1, data: { graphicStyle: { id: "x", rev: "" } } }, null),
+        withGraphicStyleRef(
+          { v: 1, data: { graphicStyle: { id: "x", rev: "" } } },
+          null,
+        ),
       ).toBeNull();
     });
   });
@@ -369,20 +385,66 @@ describe("draw conformance — GRAPHIC STYLES (Illustrator Phase 2)", () => {
 
   describe("the wire builders (pure — the no-second-copy rule)", () => {
     it("the base ops CLEAR what the style does not carry and skip what the kind lacks", () => {
-      const bare = graphicStyleBaseMutations(RECT, EMPTY_GRAPHIC_STYLE_BASE, RECT_PATHS);
+      const bare = graphicStyleBaseMutations(
+        RECT,
+        EMPTY_GRAPHIC_STYLE_BASE,
+        RECT_PATHS,
+      );
       expect(bare).toEqual([
-        { op: "setElementProperty", args: { elementId: RECT, path: "frameFillColor", value: { type: "colorRef", value: null } } },
-        { op: "setElementProperty", args: { elementId: RECT, path: "frameFillTint", value: { type: "length", value: null } } },
-        { op: "setElementProperty", args: { elementId: RECT, path: "frameStrokeColor", value: { type: "colorRef", value: null } } },
-        { op: "setElementProperty", args: { elementId: RECT, path: "frameStrokeWeight", value: { type: "length", value: null } } },
-        { op: "setElementProperty", args: { elementId: RECT, path: "frameOpacity", value: { type: "length", value: null } } },
-        { op: "setElementProperty", args: { elementId: RECT, path: "frameBlendMode", value: { type: "text", value: "" } } },
+        {
+          op: "setElementProperty",
+          args: {
+            elementId: RECT,
+            path: "frameFillColor",
+            value: { type: "colorRef", value: null },
+          },
+        },
+        {
+          op: "setElementProperty",
+          args: {
+            elementId: RECT,
+            path: "frameFillTint",
+            value: { type: "length", value: null },
+          },
+        },
+        {
+          op: "setElementProperty",
+          args: {
+            elementId: RECT,
+            path: "frameStrokeColor",
+            value: { type: "colorRef", value: null },
+          },
+        },
+        {
+          op: "setElementProperty",
+          args: {
+            elementId: RECT,
+            path: "frameStrokeWeight",
+            value: { type: "length", value: null },
+          },
+        },
+        {
+          op: "setElementProperty",
+          args: {
+            elementId: RECT,
+            path: "frameOpacity",
+            value: { type: "length", value: null },
+          },
+        },
+        {
+          op: "setElementProperty",
+          args: {
+            elementId: RECT,
+            path: "frameBlendMode",
+            value: { type: "text", value: "" },
+          },
+        },
       ]);
       // On a GraphicLine only the two stroke paths are emitted — an op the
       // kind refuses would roll the whole ATOMIC batch back.
       expect(
-        graphicStyleBaseMutations(LINE, APPEARANCE.base, LINE_PATHS).map(
-          (m) => (m.op === "setElementProperty" ? m.args.path : m.op),
+        graphicStyleBaseMutations(LINE, APPEARANCE.base, LINE_PATHS).map((m) =>
+          m.op === "setElementProperty" ? m.args.path : m.op,
         ),
       ).toEqual(["frameStrokeColor", "frameStrokeWeight"]);
     });
@@ -396,7 +458,9 @@ describe("draw conformance — GRAPHIC STYLES (Illustrator Phase 2)", () => {
       });
       expect(batch.op).toBe("batch");
       const ops = batch.op === "batch" ? batch.args.ops : [];
-      expect(ops.map((m) => (m.op === "setElementProperty" ? m.args.path : m.op))).toEqual([
+      expect(
+        ops.map((m) => (m.op === "setElementProperty" ? m.args.path : m.op)),
+      ).toEqual([
         "frameFillColor",
         "frameFillTint",
         "frameStrokeColor",
@@ -434,7 +498,9 @@ describe("draw conformance — GRAPHIC STYLES (Illustrator Phase 2)", () => {
         prev: null,
       });
       const ops = batch.op === "batch" ? batch.args.ops : [];
-      expect(ops.map((m) => (m.op === "setElementProperty" ? m.args.path : m.op))).toEqual([
+      expect(
+        ops.map((m) => (m.op === "setElementProperty" ? m.args.path : m.op)),
+      ).toEqual([
         "frameStrokeColor",
         "frameStrokeWeight",
         "frameStrokeColor",
@@ -446,7 +512,9 @@ describe("draw conformance — GRAPHIC STYLES (Illustrator Phase 2)", () => {
       // The stamped rev is the digest of what LANDED, not of the style —
       // so a faithfully-applied line is never falsely "overridden".
       expect(JSON.parse(stamp.args.value as string).data.graphicStyle.rev).toBe(
-        graphicAppearanceDigest(projectGraphicAppearance(APPEARANCE, LINE_PATHS)),
+        graphicAppearanceDigest(
+          projectGraphicAppearance(APPEARANCE, LINE_PATHS),
+        ),
       );
     });
   });
@@ -474,10 +542,13 @@ describe("draw conformance — GRAPHIC STYLES (Illustrator Phase 2)", () => {
 
     it("degrades with a warn — an empty library and a refused write, never a throw", async () => {
       warnings.length = 0;
-      expect(await readGraphicStyleLibrary(noParts)).toEqual({ v: 1, styles: [] });
-      expect(await writeGraphicStyleLibrary(noParts, { v: 1, styles: [STYLE] })).toBe(
-        false,
-      );
+      expect(await readGraphicStyleLibrary(noParts)).toEqual({
+        v: 1,
+        styles: [],
+      });
+      expect(
+        await writeGraphicStyleLibrary(noParts, { v: 1, styles: [STYLE] }),
+      ).toBe(false);
       expect(warnings).toHaveLength(2);
       expect(warnings[0]).toContain('supports("storage.parts@1") is false');
       expect(warnings[1]).toContain("NOT saved");
@@ -613,9 +684,9 @@ describe("draw conformance — GRAPHIC STYLES (Illustrator Phase 2)", () => {
       await commandFor(h, APPLY_GRAPHIC_STYLE_COMMAND_ID).handler(undefined, {
         styleId: "gs-1",
       });
-      expect((await graphicStyleLinks(h.host, "gs-1")).map((l) => l.id.id).sort()).toEqual(
-        [POLY.id, RECT.id].sort(),
-      );
+      expect(
+        (await graphicStyleLinks(h.host, "gs-1")).map((l) => l.id.id).sort(),
+      ).toEqual([POLY.id, RECT.id].sort());
     });
 
     it("a DIRECT appearance edit keeps the link and marks the element OVERRIDDEN", async () => {
@@ -650,9 +721,12 @@ describe("draw conformance — GRAPHIC STYLES (Illustrator Phase 2)", () => {
         prev,
       );
       await h.host.selection.set([RECT]);
-      await commandFor(h, REDEFINE_GRAPHIC_STYLE_COMMAND_ID).handler(undefined, {
-        styleId: "gs-1",
-      });
+      await commandFor(h, REDEFINE_GRAPHIC_STYLE_COMMAND_ID).handler(
+        undefined,
+        {
+          styleId: "gs-1",
+        },
+      );
 
       // The library carries the new definition under the SAME id + name.
       const library = parseGraphicStyleLibrary(
@@ -687,7 +761,9 @@ describe("draw conformance — GRAPHIC STYLES (Illustrator Phase 2)", () => {
       const before = await signature(h, [POLY]);
 
       await h.host.selection.set([POLY]);
-      await commandFor(h, BREAK_GRAPHIC_STYLE_LINK_COMMAND_ID).handler(undefined);
+      await commandFor(h, BREAK_GRAPHIC_STYLE_LINK_COMMAND_ID).handler(
+        undefined,
+      );
 
       const env = await h.host.document.getMetadata(POLY);
       expect(graphicStyleRefOf(env)).toBeNull();
@@ -699,15 +775,17 @@ describe("draw conformance — GRAPHIC STYLES (Illustrator Phase 2)", () => {
       expect(await signature(h, [POLY])).toBe(before);
 
       // Break it again and leave it broken for the delete test below.
-      await commandFor(h, BREAK_GRAPHIC_STYLE_LINK_COMMAND_ID).handler(undefined);
+      await commandFor(h, BREAK_GRAPHIC_STYLE_LINK_COMMAND_ID).handler(
+        undefined,
+      );
       expect(await graphicStyleLinks(h.host, "gs-1")).toHaveLength(1);
     });
 
     it("RENAME is library-only — no document mutation at all", async () => {
       const before = await signature(h, [RECT, POLY, LINE]);
-      expect(await applyRenameGraphicStyle(h.host, "gs-1", "  Heavy rule  ")).toBe(
-        true,
-      );
+      expect(
+        await applyRenameGraphicStyle(h.host, "gs-1", "  Heavy rule  "),
+      ).toBe(true);
       const library = parseGraphicStyleLibrary(
         await h.host.parts.read(GRAPHIC_STYLES_PART),
       );
@@ -715,9 +793,9 @@ describe("draw conformance — GRAPHIC STYLES (Illustrator Phase 2)", () => {
       // The element reference stores the ID and nothing else, so a rename
       // never walks the document — and nothing became undoable.
       expect(await signature(h, [RECT, POLY, LINE])).toBe(before);
-      expect(graphicStyleRefOf(await h.host.document.getMetadata(RECT))?.id).toBe(
-        "gs-1",
-      );
+      expect(
+        graphicStyleRefOf(await h.host.document.getMetadata(RECT))?.id,
+      ).toBe("gs-1");
       // An unknown id / an empty name refuse rather than corrupt.
       expect(await applyRenameGraphicStyle(h.host, "nope", "x")).toBe(false);
       expect(await applyRenameGraphicStyle(h.host, "gs-1", "   ")).toBe(false);
@@ -792,7 +870,9 @@ describe("draw conformance — GRAPHIC STYLES (Illustrator Phase 2)", () => {
       const read = await readGraphicAppearance(h.host, LINE);
       expect(read.supported).not.toContain("frameFillColor");
       expect(read.supported).not.toContain("frameFillTint");
-      expect(read.supported).toEqual(expect.arrayContaining(["frameOpacity", "frameBlendMode"]));
+      expect(read.supported).toEqual(
+        expect.arrayContaining(["frameOpacity", "frameBlendMode"]),
+      );
       // …the metadata stack travelled whole regardless…
       expect(read.appearance.stack).toEqual(STACK);
       // …and the link records what was WRITTEN, so the line is linked and
@@ -806,7 +886,10 @@ describe("draw conformance — GRAPHIC STYLES (Illustrator Phase 2)", () => {
       await reset();
       await seedRect();
       // Bake the rectangle's stack into the B-24 group of derived paths.
-      const baked = await commandFor(h, "media.paged.draw.command.bakeAppearance");
+      const baked = await commandFor(
+        h,
+        "media.paged.draw.command.bakeAppearance",
+      );
       await h.host.selection.set([RECT]);
       await baked.handler(undefined);
       const env = await h.host.document.getMetadata(RECT);
@@ -826,16 +909,18 @@ describe("draw conformance — GRAPHIC STYLES (Illustrator Phase 2)", () => {
       await h.host.selection.set([RECT]);
       await applyGraphicStyleToSelection(h.host, "gs-1");
       expect(await signature(h, [RECT])).toBe(before);
-      expect(graphicStyleRefOf(await h.host.document.getMetadata(RECT))).toBeNull();
+      expect(
+        graphicStyleRefOf(await h.host.document.getMetadata(RECT)),
+      ).toBeNull();
 
       // Release, and the same apply now lands.
       await commandFor(h, "media.paged.draw.command.releaseAppearance").handler(
         undefined,
       );
       await applyGraphicStyleToSelection(h.host, "gs-1");
-      expect(graphicStyleRefOf(await h.host.document.getMetadata(RECT))?.id).toBe(
-        "gs-1",
-      );
+      expect(
+        graphicStyleRefOf(await h.host.document.getMetadata(RECT))?.id,
+      ).toBe("gs-1");
     });
 
     it("refuses honestly on an empty selection / an unknown style", async () => {
@@ -855,9 +940,7 @@ describe("draw conformance — GRAPHIC STYLES (Illustrator Phase 2)", () => {
       await expect(
         commandFor(h, BREAK_GRAPHIC_STYLE_LINK_COMMAND_ID).handler(undefined),
       ).resolves.toBeUndefined();
-      await expect(
-        applyBreakGraphicStyleLink(h.host),
-      ).resolves.toBeUndefined();
+      await expect(applyBreakGraphicStyleLink(h.host)).resolves.toBeUndefined();
       expect(await applyDeleteGraphicStyle(h.host, "gs-404")).toBe(false);
       expect(await applyRedefineGraphicStyle(h.host, "gs-404")).toBeNull();
       expect(await graphicStyleLinks(h.host)).toEqual([]);
@@ -868,7 +951,9 @@ describe("draw conformance — GRAPHIC STYLES (Illustrator Phase 2)", () => {
 
   describe("the panel surface", () => {
     it("the row label names the paints and the blast radius of a redefine", () => {
-      expect(graphicStyleRowLabel(STYLE, 3)).toBe("2 fills · 1 stroke · 3 linked");
+      expect(graphicStyleRowLabel(STYLE, 3)).toBe(
+        "2 fills · 1 stroke · 3 linked",
+      );
       expect(
         graphicStyleRowLabel(
           {
@@ -882,18 +967,32 @@ describe("draw conformance — GRAPHIC STYLES (Illustrator Phase 2)", () => {
 
     it("the inline note NAMES the link semantics and every honest limit", () => {
       // The feature's substance, in plain words: link, redefine, break.
-      expect(GRAPHIC_STYLES_NOTE).toContain("stacked fills and strokes plus the object's");
-      expect(GRAPHIC_STYLES_NOTE).toContain("Redefine updates every linked object");
-      expect(GRAPHIC_STYLES_NOTE).toContain("Break link keeps the look and drops the link");
+      expect(GRAPHIC_STYLES_NOTE).toContain(
+        "stacked fills and strokes plus the object's",
+      );
+      expect(GRAPHIC_STYLES_NOTE).toContain(
+        "Redefine updates every linked object",
+      );
+      expect(GRAPHIC_STYLES_NOTE).toContain(
+        "Break link keeps the look and drops the link",
+      );
       // The OVERRIDE decision, stated where the author can read it.
-      expect(GRAPHIC_STYLES_NOTE).toContain("keeps the link and marks the object overridden");
-      expect(GRAPHIC_STYLES_NOTE).toContain("the next Redefine replaces that change");
+      expect(GRAPHIC_STYLES_NOTE).toContain(
+        "keeps the link and marks the object overridden",
+      );
+      expect(GRAPHIC_STYLES_NOTE).toContain(
+        "the next Redefine replaces that change",
+      );
       // Where the library lives — and that it is outside the undo stack.
-      expect(GRAPHIC_STYLES_NOTE).toContain("The library is saved in the document");
+      expect(GRAPHIC_STYLES_NOTE).toContain(
+        "The library is saved in the document",
+      );
       expect(GRAPHIC_STYLES_NOTE).toContain("cannot be undone");
       // The limits that are real and must not quietly disappear.
       expect(GRAPHIC_STYLES_NOTE).toContain("Lines have no fill");
-      expect(GRAPHIC_STYLES_NOTE).toContain("a baked appearance has to be released");
+      expect(GRAPHIC_STYLES_NOTE).toContain(
+        "a baked appearance has to be released",
+      );
     });
   });
 });

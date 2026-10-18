@@ -54,7 +54,10 @@ const LINE = {
   kind: "graphicLine",
   id: F1_MULTI_SHAPE.ids.graphicLine!,
 } as ElementId;
-const RECT = { kind: "rectangle", id: F1_MULTI_SHAPE.ids.rectangle! } as ElementId;
+const RECT = {
+  kind: "rectangle",
+  id: F1_MULTI_SHAPE.ids.rectangle!,
+} as ElementId;
 
 const openTable = (anchors: [number, number][]): AnchorTable => ({
   anchors: anchors.map((a) => ({ anchor: a, left: a, right: a })),
@@ -169,11 +172,21 @@ describe("draw conformance — join/average endpoints (Phase 4c)", () => {
         ops: [
           {
             op: "pathPointSet",
-            args: { elementId: POLY, index: 2, role: "anchor", position: [10, 20] },
+            args: {
+              elementId: POLY,
+              index: 2,
+              role: "anchor",
+              position: [10, 20],
+            },
           },
           {
             op: "pathPointSet",
-            args: { elementId: LINE, index: 0, role: "anchor", position: [10, 20] },
+            args: {
+              elementId: LINE,
+              index: 0,
+              role: "anchor",
+              position: [10, 20],
+            },
           },
         ],
       },
@@ -183,7 +196,10 @@ describe("draw conformance — join/average endpoints (Phase 4c)", () => {
   describe("against the real engine (recorded handlers, undo round-trips)", () => {
     let h: HeadlessHost;
     const polyRef = { kind: "polygon", id: F1_MULTI_SHAPE.ids.polygon! };
-    const lineRef = { kind: "graphicLine", id: F1_MULTI_SHAPE.ids.graphicLine! };
+    const lineRef = {
+      kind: "graphicLine",
+      id: F1_MULTI_SHAPE.ids.graphicLine!,
+    };
 
     beforeAll(async () => {
       h = await openHost();

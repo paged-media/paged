@@ -64,7 +64,9 @@ describe("draw conformance — tree parentage", () => {
         ],
       },
     ];
-    expect(parentGroupOf(roots, { kind: "polygon", id: "deep" } as ElementId)).toEqual({
+    expect(
+      parentGroupOf(roots, { kind: "polygon", id: "deep" } as ElementId),
+    ).toEqual({
       kind: "group",
       id: "gInner",
     });
@@ -72,13 +74,21 @@ describe("draw conformance — tree parentage", () => {
       parentGroupOf(roots, { kind: "polygon", id: "shallow" } as ElementId),
     ).toEqual({ kind: "group", id: "gOuter" });
     // Cycling: the inner group's own parent is the outer group.
-    expect(parentGroupOf(roots, { kind: "group", id: "gInner" } as ElementId)).toEqual({
+    expect(
+      parentGroupOf(roots, { kind: "group", id: "gInner" } as ElementId),
+    ).toEqual({
       kind: "group",
       id: "gOuter",
     });
     // Top level (or unknown) → null.
-    expect(parentGroupOf(roots, { kind: "polygon", id: "free" } as ElementId)).toBeNull();
-    expect(parentGroupOf(roots, { kind: "group", id: "gOuter" } as ElementId)).toBeNull();
-    expect(parentGroupOf(roots, { kind: "polygon", id: "ghost" } as ElementId)).toBeNull();
+    expect(
+      parentGroupOf(roots, { kind: "polygon", id: "free" } as ElementId),
+    ).toBeNull();
+    expect(
+      parentGroupOf(roots, { kind: "group", id: "gOuter" } as ElementId),
+    ).toBeNull();
+    expect(
+      parentGroupOf(roots, { kind: "polygon", id: "ghost" } as ElementId),
+    ).toBeNull();
   });
 });

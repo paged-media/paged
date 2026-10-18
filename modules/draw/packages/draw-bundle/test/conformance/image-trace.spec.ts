@@ -109,7 +109,10 @@ import {
   type TraceWorkerReply,
   type TraceWorkerRequest,
 } from "../../src/trace-engine";
-import { serveTraceRequests, type TraceWorkerScope } from "../../src/trace-worker";
+import {
+  serveTraceRequests,
+  type TraceWorkerScope,
+} from "../../src/trace-worker";
 import { F7_PLACED_IMAGE, ringPixels } from "../fixtures/corpus";
 import { openHost } from "./host";
 import { runThrough, type LaneName } from "./one-batch";
@@ -578,7 +581,9 @@ describe("draw conformance — IMAGE TRACE v0", () => {
       expect(bound[0].absorb).toEqual([poly("b")]);
       // A count mismatch REFUSES rather than mis-binding.
       expect(bindTraceRegions(plan, [poly("a")])).toBeNull();
-      expect(bindTraceRegions(plan, [poly("a"), poly("b"), poly("c")])).toBeNull();
+      expect(
+        bindTraceRegions(plan, [poly("a"), poly("b"), poly("c")]),
+      ).toBeNull();
     });
 
     it("batch 2 = re-merge + delete the surplus + fill + clear stroke + stamp", () => {
@@ -726,7 +731,9 @@ describe("draw conformance — IMAGE TRACE v0", () => {
       // inline-embedded payload is reachable, with its real natural
       // size. Keeping the old `toBeNull()` would have meant a green
       // test asserting a bug.
-      const placed = await h.host.assets.getPlacedImage(F7_PLACED_IMAGE.imageId);
+      const placed = await h.host.assets.getPlacedImage(
+        F7_PLACED_IMAGE.imageId,
+      );
       expect(placed, "C-26 — inline-embedded bytes are served").not.toBeNull();
       expect(placed!.bytes.byteLength).toBeGreaterThan(0);
       expect(placed!.width).toBeGreaterThan(0);
@@ -817,7 +824,9 @@ describe("draw conformance — IMAGE TRACE v0", () => {
       // The engine fills NON-ZERO (`paged-export-pdf` emits `f`, never
       // `f*`), so opposite windings are what carves the hole. Same sign
       // here would mean the traced ring printed as a solid coin.
-      expect(Math.sign(ringArea(outerRing))).toBe(-Math.sign(ringArea(innerRing)));
+      expect(Math.sign(ringArea(outerRing))).toBe(
+        -Math.sign(ringArea(innerRing)),
+      );
       expect(Math.abs(ringArea(outerRing))).toBeCloseTo(32 * 32 * 25, -1);
       expect(Math.abs(ringArea(innerRing))).toBeCloseTo(12 * 12 * 25, -1);
 
@@ -878,7 +887,10 @@ describe("draw conformance — IMAGE TRACE v0", () => {
           });
         const shipped = await through("oneBatch");
         expect(shipped.result).toHaveLength(fixed.regions.length);
-        expect(shipped.work.mutations.map((m) => m.op)).toEqual(["batch", "batch"]);
+        expect(shipped.work.mutations.map((m) => m.op)).toEqual([
+          "batch",
+          "batch",
+        ]);
         expect(shipped.undoSteps).toBe(2);
         expect(shipped.restored).toBe(true);
         // As found: 2 for the ring, 3 with a group to find.
@@ -895,9 +907,9 @@ describe("draw conformance — IMAGE TRACE v0", () => {
         {},
       );
       expect(blank.regions).toHaveLength(0);
-      expect(
-        await applyImageTracePlan(h.host, planFor(blank, 32, 32)),
-      ).toEqual([]);
+      expect(await applyImageTracePlan(h.host, planFor(blank, 32, 32))).toEqual(
+        [],
+      );
       expect(await leafIds(h)).toEqual(before);
     });
 
@@ -983,7 +995,12 @@ function standInWorkers(
     concurrency: () => 2,
     async spawn({ module, name }) {
       if (options.refuse) throw new Error(options.refuse);
-      const record: SpawnRecord = { module, name, terminated: false, posts: [] };
+      const record: SpawnRecord = {
+        module,
+        name,
+        terminated: false,
+        posts: [],
+      };
       spawned.push(record);
       const listeners = new Set<(message: unknown) => void>();
       const scope: TraceWorkerScope = {
@@ -998,7 +1015,10 @@ function standInWorkers(
       (options.serve ?? serveTraceRequests)(scope);
       return {
         post(message, transfer = []) {
-          record.posts.push({ message: message as TraceWorkerRequest, transfer });
+          record.posts.push({
+            message: message as TraceWorkerRequest,
+            transfer,
+          });
           const copy = structuredClone(message, { transfer });
           setTimeout(() => {
             if (!record.terminated) scope.onmessage?.({ data: copy });
@@ -1033,7 +1053,12 @@ function hostWith(
   return new Proxy(host, {
     get(target, prop, receiver) {
       if (prop === "log") {
-        return { debug: note("debug"), info: note("info"), warn: note("warn"), error: note("error") };
+        return {
+          debug: note("debug"),
+          info: note("info"),
+          warn: note("warn"),
+          error: note("error"),
+        };
       }
       if (workers) {
         if (prop === "workers") return workers;
@@ -1060,7 +1085,11 @@ describe("draw conformance — IMAGE TRACE off the calling thread", () => {
   afterAll(() => h?.dispose());
   afterEach(() => unstubAllGlobals());
 
-  const RING = { width: 48, height: 48, options: { mode: "bw", pathMode: "polygon" } as const };
+  const RING = {
+    width: 48,
+    height: 48,
+    options: { mode: "bw", pathMode: "polygon" } as const,
+  };
   const ringOnThisThread = (): TraceResult =>
     engine.trace(ringPixels(48), RING.width, RING.height, RING.options);
 
@@ -1114,7 +1143,8 @@ describe("draw conformance — IMAGE TRACE off the calling thread", () => {
       const replies: TraceWorkerReply[] = [];
       const scope: TraceWorkerScope = {
         onmessage: null,
-        postMessage: (message) => void replies.push(message as TraceWorkerReply),
+        postMessage: (message) =>
+          void replies.push(message as TraceWorkerReply),
       };
       serveTraceRequests(scope);
       const pixels = ringPixels(48);
@@ -1128,7 +1158,9 @@ describe("draw conformance — IMAGE TRACE off the calling thread", () => {
           ...RING,
         } satisfies TraceWorkerRequest,
       });
-      scope.onmessage!({ data: { id: 2, kind: "limits" } satisfies TraceWorkerRequest });
+      scope.onmessage!({
+        data: { id: 2, kind: "limits" } satisfies TraceWorkerRequest,
+      });
       await waitFor(() => expect(replies).toHaveLength(2));
       expect(replies.map((r) => [r.id, r.ok])).toEqual([
         [1, true],
@@ -1139,7 +1171,9 @@ describe("draw conformance — IMAGE TRACE off the calling thread", () => {
     it("the worker module is not serving on THIS thread just because it was imported", () => {
       // Importing `trace-worker` for its types must wire nothing: only a
       // dedicated worker's global scope gets the message loop.
-      expect((globalThis as { onmessage?: unknown }).onmessage ?? null).toBeNull();
+      expect(
+        (globalThis as { onmessage?: unknown }).onmessage ?? null,
+      ).toBeNull();
     });
   });
 
@@ -1173,7 +1207,12 @@ describe("draw conformance — IMAGE TRACE off the calling thread", () => {
 
       const pixels = ringPixels(48);
       const buffer = pixels.buffer;
-      const result = await session.trace(pixels, RING.width, RING.height, RING.options);
+      const result = await session.trace(
+        pixels,
+        RING.width,
+        RING.height,
+        RING.options,
+      );
       expect(result).toEqual(ringOnThisThread());
 
       // TRANSFERRED, not copied: the buffer rode the transfer list, and
@@ -1208,20 +1247,23 @@ describe("draw conformance — IMAGE TRACE off the calling thread", () => {
     it("the kernel's refusal crosses the worker boundary with its message intact", async () => {
       const short = (): Uint8Array => new Uint8Array(16);
       const calling = await openTraceSession(hostWith(h.host, null));
-      const onThisThread = await calling
-        .trace(short(), 48, 48, {})
-        .then(() => "", (err: Error) => err.message);
+      const onThisThread = await calling.trace(short(), 48, 48, {}).then(
+        () => "",
+        (err: Error) => err.message,
+      );
       expect(onThisThread).toContain("expected 9216 RGBA bytes, got 16");
 
       const { workers } = standInWorkers();
       const session = await openTraceSession(hostWith(h.host, workers));
-      await expect(session.trace(short(), 48, 48, {})).rejects.toThrow(onThisThread);
+      await expect(session.trace(short(), 48, 48, {})).rejects.toThrow(
+        onThisThread,
+      );
       session.close();
     });
 
     it("spawn REFUSED (the host knows no such module for this bundle): calling thread, with the host's reason logged", async () => {
       const reason =
-        'WorkerBackend: media.paged.draw has no registered worker-module resolver';
+        "WorkerBackend: media.paged.draw has no registered worker-module resolver";
       const logs: string[] = [];
       const { workers, spawned } = standInWorkers({ refuse: reason });
       const session = await openTraceSession(hostWith(h.host, workers, logs));
@@ -1229,7 +1271,12 @@ describe("draw conformance — IMAGE TRACE off the calling thread", () => {
       expect(spawned).toHaveLength(0);
       expect(logs.join("\n")).toContain(reason);
       expect(
-        await session.trace(ringPixels(48), RING.width, RING.height, RING.options),
+        await session.trace(
+          ringPixels(48),
+          RING.width,
+          RING.height,
+          RING.options,
+        ),
       ).toEqual(ringOnThisThread());
     });
 
@@ -1304,7 +1351,9 @@ describe("draw conformance — IMAGE TRACE off the calling thread", () => {
           getContext() {
             return {
               drawImage() {},
-              getImageData: () => ({ data: new Uint8ClampedArray(ringPixels(size)) }),
+              getImageData: () => ({
+                data: new Uint8ClampedArray(ringPixels(size)),
+              }),
             };
           }
         },
@@ -1317,7 +1366,10 @@ describe("draw conformance — IMAGE TRACE off the calling thread", () => {
     ): Promise<{ made: number; contours: number[] }> => {
       const before = await leafIds(h);
       await h.host.selection.set([IMAGE]);
-      const created = await applyImageTrace(host, { mode: "bw", pathMode: "polygon" });
+      const created = await applyImageTrace(host, {
+        mode: "bw",
+        pathMode: "polygon",
+      });
       const made = (await leafIds(h)).filter((id) => !before.includes(id));
       const contours: number[] = [];
       for (const id of created) {
@@ -1347,7 +1399,10 @@ describe("draw conformance — IMAGE TRACE off the calling thread", () => {
       expect(out).toEqual({ made: 1, contours: [2] });
       expect(logs.join("\n")).toContain("in a worker");
       expect(spawned).toHaveLength(1);
-      expect(spawned[0].posts.map((p) => p.message.kind)).toEqual(["limits", "trace"]);
+      expect(spawned[0].posts.map((p) => p.message.kind)).toEqual([
+        "limits",
+        "trace",
+      ]);
       expect(spawned[0].posts[1].transfer).toHaveLength(1);
       expect(spawned[0].terminated).toBe(true);
     });
@@ -1369,15 +1424,23 @@ describe("draw conformance — IMAGE TRACE off the calling thread", () => {
             scope.postMessage(
               request.kind === "limits"
                 ? answerTraceRequest(engine, request)
-                : ({ id: request.id, ok: false, error: "raster over the cap" } satisfies TraceWorkerReply),
+                : ({
+                    id: request.id,
+                    ok: false,
+                    error: "raster over the cap",
+                  } satisfies TraceWorkerReply),
             );
           };
         },
       });
       const logs: string[] = [];
       await h.host.selection.set([IMAGE]);
-      expect(await applyImageTrace(hostWith(h.host, workers, logs))).toEqual([]);
-      expect(logs.join("\n")).toContain("the tracer refused — raster over the cap");
+      expect(await applyImageTrace(hostWith(h.host, workers, logs))).toEqual(
+        [],
+      );
+      expect(logs.join("\n")).toContain(
+        "the tracer refused — raster over the cap",
+      );
       expect(spawned[0].terminated).toBe(true);
     });
   });

@@ -41,17 +41,24 @@ const WRITE = process.env.PAGED_ROUNDTRIP_WRITE ?? "";
 const wanted = (id: string): boolean =>
   WRITE === "1" || WRITE === "all" || WRITE.split(",").includes(id);
 
-describe.skipIf(WRITE === "")("round trip — write the IDML InDesign is asked to read", () => {
-  for (const c of ROUNDTRIP_CASES) {
-    it.if(wanted(c.id))(`${c.id}: ${c.row}`, async () => {
-      const authored = await authorCase(c);
-      try {
-        mkdirSync(ROUNDTRIP_FIXTURES, { recursive: true });
-        writeFileSync(idmlPath(c.id), authored.idml);
-        expect(authored.idml.length).toBeGreaterThan(0);
-      } finally {
-        authored.h.dispose();
-      }
-    }, 60_000);
-  }
-});
+describe.skipIf(WRITE === "")(
+  "round trip — write the IDML InDesign is asked to read",
+  () => {
+    for (const c of ROUNDTRIP_CASES) {
+      it.if(wanted(c.id))(
+        `${c.id}: ${c.row}`,
+        async () => {
+          const authored = await authorCase(c);
+          try {
+            mkdirSync(ROUNDTRIP_FIXTURES, { recursive: true });
+            writeFileSync(idmlPath(c.id), authored.idml);
+            expect(authored.idml.length).toBeGreaterThan(0);
+          } finally {
+            authored.h.dispose();
+          }
+        },
+        60_000,
+      );
+    }
+  },
+);

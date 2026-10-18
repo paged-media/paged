@@ -78,7 +78,9 @@ describe("draw conformance — corpus geometry round-trips", () => {
     await h.load(F1_MULTI_SHAPE.bytes());
     const tree = await h.host.document.tree();
     const leaves: string[] = [];
-    const walk = (nodes: { id?: { id?: string } | null; children?: unknown[] }[]) => {
+    const walk = (
+      nodes: { id?: { id?: string } | null; children?: unknown[] }[],
+    ) => {
       for (const n of nodes) {
         if (n.id?.id) leaves.push(n.id.id);
         if (n.children) walk(n.children as never);

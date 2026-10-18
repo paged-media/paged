@@ -111,13 +111,22 @@ interface Placed {
 
 /** Lay `nodes` out side by side in `slot`; every node's box is strictly
  *  inside its slot, every child's slot is inside its parent's box. */
-function layout(nodes: readonly Node[], slot: Box, column: boolean, out: Placed[]): void {
+function layout(
+  nodes: readonly Node[],
+  slot: Box,
+  column: boolean,
+  out: Placed[],
+): void {
   const n = nodes.length;
   nodes.forEach((nd, i) => {
     const sx0 = column ? slot.x0 : slot.x0 + ((slot.x1 - slot.x0) * i) / n;
-    const sx1 = column ? slot.x1 : slot.x0 + ((slot.x1 - slot.x0) * (i + 1)) / n;
+    const sx1 = column
+      ? slot.x1
+      : slot.x0 + ((slot.x1 - slot.x0) * (i + 1)) / n;
     const sy0 = column ? slot.y0 + ((slot.y1 - slot.y0) * i) / n : slot.y0;
-    const sy1 = column ? slot.y0 + ((slot.y1 - slot.y0) * (i + 1)) / n : slot.y1;
+    const sy1 = column
+      ? slot.y0 + ((slot.y1 - slot.y0) * (i + 1)) / n
+      : slot.y1;
     const w = sx1 - sx0;
     const h = sy1 - sy0;
     const box: Box = {
@@ -131,7 +140,11 @@ function layout(nodes: readonly Node[], slot: Box, column: boolean, out: Placed[
   });
 }
 
-function rectContour(box: Box, clockwise: boolean, startCorner: number): AnchorTriple[] {
+function rectContour(
+  box: Box,
+  clockwise: boolean,
+  startCorner: number,
+): AnchorTriple[] {
   // TL, TR, BR, BL — clockwise on a y-down page (positive shoelace).
   const corners: Vec2[] = [
     [box.x0, box.y0],
@@ -195,10 +208,7 @@ const signsOf = (table: AnchorTable): number[] =>
   ringsOf(table).map((ring) => Math.sign(refSignedArea(ring)));
 
 /** A probe inside the page that is clear of every rectangle's edges. */
-const probe = fc.tuple(
-  real(0, 1000),
-  real(0, 800),
-);
+const probe = fc.tuple(real(0, 1000), real(0, 800));
 const clearOf = (p: Vec2, boxes: readonly Box[]): boolean =>
   boxes.every(
     (b) =>
@@ -288,8 +298,16 @@ describe("compound — contourDepths (properties)", () => {
     { anchor: [0, 0], left: [3, -5], right: [3, 5] },
     { anchor: [10, 0], left: [7, 5], right: [7, -5] },
   ];
-  const squareAbout = (cx: number, cy: number, clockwise: boolean): AnchorTriple[] =>
-    rectContour({ x0: cx - 1, y0: cy - 1, x1: cx + 1, y1: cy + 1 }, clockwise, 0);
+  const squareAbout = (
+    cx: number,
+    cy: number,
+    clockwise: boolean,
+  ): AnchorTriple[] =>
+    rectContour(
+      { x0: cx - 1, y0: cy - 1, x1: cx + 1, y1: cy + 1 },
+      clockwise,
+      0,
+    );
 
   it("FIXED DEFECT (minimal counterexample): a contour inside a two-anchor lens is at depth 1", () => {
     const inside: AnchorTable = {
@@ -321,7 +339,11 @@ describe("compound — contourDepths (properties)", () => {
     for (const clockwise of [true, false]) {
       const made = makeCompoundTable([
         { anchors: LENS, subpathStarts: [0], subpathOpen: [false] },
-        { anchors: squareAbout(5, 0, clockwise), subpathStarts: [0], subpathOpen: [false] },
+        {
+          anchors: squareAbout(5, 0, clockwise),
+          subpathStarts: [0],
+          subpathOpen: [false],
+        },
       ]);
       const lens = contourSignedArea(made.anchors.slice(0, 2));
       const hole = contourSignedArea(made.anchors.slice(2));
@@ -338,7 +360,10 @@ describe("compound — contourDepths (properties)", () => {
     // single corner anchor, so its depth is 0 or 1. The reference is an
     // even-odd count over the flattened ring with a VERTICAL ray.
     const offLattice = fc
-      .tuple(fc.integer({ min: -60, max: 60 }), fc.integer({ min: -60, max: 60 }))
+      .tuple(
+        fc.integer({ min: -60, max: 60 }),
+        fc.integer({ min: -60, max: 60 }),
+      )
       .map(([x, y]): Vec2 => [x / 4 + 0.13, y / 4 + 0.29]);
     fc.assert(
       fc.property(
@@ -412,9 +437,12 @@ describe("compound — orientForNonZeroHoles (properties)", () => {
           (sum, ring) => sum + refWindingNumber(p, ring),
           0,
         );
-        const evenOdd = boxes.filter(
-          (b) => p[0] > b.x0 && p[0] < b.x1 && p[1] > b.y0 && p[1] < b.y1,
-        ).length % 2 === 1;
+        const evenOdd =
+          boxes.filter(
+            (b) => p[0] > b.x0 && p[0] < b.x1 && p[1] > b.y0 && p[1] < b.y1,
+          ).length %
+            2 ===
+          1;
         assertTrue(
           Math.abs(winding) <= 1,
           `winding ${winding} at [${p[0]}, ${p[1]}] — a nested pair is wound the same way`,
@@ -466,7 +494,9 @@ describe("compound — orientForNonZeroHoles (properties)", () => {
         fc.pre(depths[0] % 2 === 0);
         const oriented = orientForNonZeroHoles(table);
         const end = table.subpathStarts[1] ?? table.anchors.length;
-        expect(oriented.anchors.slice(0, end)).toEqual(table.anchors.slice(0, end));
+        expect(oriented.anchors.slice(0, end)).toEqual(
+          table.anchors.slice(0, end),
+        );
       }),
     );
   });
@@ -527,7 +557,9 @@ describe("compound — orientForNonZeroHoles (properties)", () => {
 
   it("FIXED DEFECT (minimal counterexample): contour 0 keeps its authored direction when it is the hole", () => {
     const oriented = orientForNonZeroHoles(HOLE_FIRST);
-    expect(oriented.anchors.slice(0, 4)).toEqual(HOLE_FIRST.anchors.slice(0, 4));
+    expect(oriented.anchors.slice(0, 4)).toEqual(
+      HOLE_FIRST.anchors.slice(0, 4),
+    );
     // …and it is the OUTER contour that turned, so the pair still
     // alternates: the hole is still a hole.
     expect(signsOf(HOLE_FIRST)).toEqual([1, 1]);
@@ -556,7 +588,9 @@ describe("compound — orientForNonZeroHoles (properties)", () => {
       fc.property(family, ({ table }) => {
         const oriented = orientForNonZeroHoles(table);
         const end = table.subpathStarts[1] ?? table.anchors.length;
-        expect(oriented.anchors.slice(0, end)).toEqual(table.anchors.slice(0, end));
+        expect(oriented.anchors.slice(0, end)).toEqual(
+          table.anchors.slice(0, end),
+        );
       }),
     );
   });
@@ -580,7 +614,8 @@ describe("compound — orientByPaintOrder (properties)", () => {
         const after = signsOf(orientByPaintOrder(table, backmost));
         for (let i = 0; i < after.length; i++) {
           assertTrue(
-            after[i] === (i === backmost ? before[backmost] : -before[backmost]),
+            after[i] ===
+              (i === backmost ? before[backmost] : -before[backmost]),
             `contour ${i} winds ${after[i]}; the backmost (contour ` +
               `${backmost}) was given winding ${before[backmost]}`,
           );
@@ -661,8 +696,13 @@ describe("compound — orientByPaintOrder (properties)", () => {
           const key = (r: Vec2[]) => r.map((v) => `${v[0]},${v[1]}`).sort();
           expect(key(after[i])).toEqual(key(ring));
         });
-        const [from, to] = contourRanges(table.anchors.length, table.subpathStarts)[backmost];
-        expect(oriented.anchors.slice(from, to)).toEqual(table.anchors.slice(from, to));
+        const [from, to] = contourRanges(
+          table.anchors.length,
+          table.subpathStarts,
+        )[backmost];
+        expect(oriented.anchors.slice(from, to)).toEqual(
+          table.anchors.slice(from, to),
+        );
       }),
     );
   });
@@ -694,7 +734,12 @@ describe("compound — contourSignedArea / reverseContour (properties)", () => {
           const b = boxes[i];
           const area = contourSignedArea(table.anchors.slice(from, to));
           const expected = (b.x1 - b.x0) * (b.y1 - b.y0);
-          assertClose(Math.abs(area), expected, 1e-9 * expected + 1e-9, "|area|");
+          assertClose(
+            Math.abs(area),
+            expected,
+            1e-9 * expected + 1e-9,
+            "|area|",
+          );
         });
       }),
     );
@@ -721,7 +766,9 @@ describe("compound — contourSignedArea / reverseContour (properties)", () => {
         assertClose(
           contourSignedArea(reverseContour(anchors)),
           -contourSignedArea(anchors),
-          1e-9 * magnitude(...anchors.flatMap((a) => [a.anchor, a.left, a.right])) ** 2,
+          1e-9 *
+            magnitude(...anchors.flatMap((a) => [a.anchor, a.left, a.right])) **
+              2,
         );
       }),
     );
@@ -770,7 +817,9 @@ describe("compound — contourSignedArea / reverseContour (properties)", () => {
     fc.assert(
       fc.property(anchorRun(1, 6, smallAnchorTriple), (anchors) => {
         const forward = flattenAnchorRun(anchors, { close: true });
-        const backward = flattenAnchorRun(reverseContour(anchors), { close: true });
+        const backward = flattenAnchorRun(reverseContour(anchors), {
+          close: true,
+        });
         expect(backward).toHaveLength(forward.length);
         const tol = 1e-9 * magnitude(...forward);
         forward.forEach((p, i) => {
@@ -788,10 +837,10 @@ describe("compound — contourSignedArea / reverseContour (properties)", () => {
 describe("compound — contourRanges / merge / split (properties)", () => {
   /** A well-formed multi-contour table: 1..4 contours of 1..5 anchors. */
   const wellFormed: fc.Arbitrary<AnchorTable> = fc
-    .array(
-      fc.tuple(anchorRun(1, 5, smallAnchorTriple), fc.boolean()),
-      { minLength: 1, maxLength: 4 },
-    )
+    .array(fc.tuple(anchorRun(1, 5, smallAnchorTriple), fc.boolean()), {
+      minLength: 1,
+      maxLength: 4,
+    })
     .map((contours) => {
       const anchors: AnchorTriple[] = [];
       const subpathStarts: number[] = [];
@@ -904,13 +953,22 @@ describe("compound — contourRanges / merge / split (properties)", () => {
       [0, 4],
       [4, 8],
     ]);
-    expect(splitCompound(table).map((t) => t.subpathOpen)).toEqual([[false], [false]]);
+    expect(splitCompound(table).map((t) => t.subpathOpen)).toEqual([
+      [false],
+      [false],
+    ]);
     expect(mergeCompound([table]).subpathOpen).toEqual([false, false]);
     // The third reader of the flag, and the mirror case: the real open
     // contour sits AFTER the empty one and must stay open.
     expect(orientForNonZeroHoles(table).subpathOpen).toEqual([false, false]);
-    const openLast: AnchorTable = { ...table, subpathOpen: [false, false, true] };
-    expect(splitCompound(openLast).map((t) => t.subpathOpen)).toEqual([[false], [true]]);
+    const openLast: AnchorTable = {
+      ...table,
+      subpathOpen: [false, false, true],
+    };
+    expect(splitCompound(openLast).map((t) => t.subpathOpen)).toEqual([
+      [false],
+      [true],
+    ]);
     expect(mergeCompound([openLast]).subpathOpen).toEqual([false, true]);
     expect(orientForNonZeroHoles(openLast).subpathOpen).toEqual([false, true]);
   });
@@ -922,7 +980,10 @@ describe("compound — contourRanges / merge / split (properties)", () => {
     fc.assert(
       fc.property(
         wellFormed,
-        fc.array(fc.integer({ min: 0, max: 3 }), { minLength: 4, maxLength: 4 }),
+        fc.array(fc.integer({ min: 0, max: 3 }), {
+          minLength: 4,
+          maxLength: 4,
+        }),
         (table, emptiesBefore) => {
           const starts: number[] = [];
           const open: boolean[] = [];

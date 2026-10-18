@@ -106,7 +106,9 @@ export function planShapeBuild(
   canRewrite: (input: number) => boolean = () => true,
 ): ShapeBuildPlan | null {
   const sweptSet = new Set(swept);
-  const crossed = faces.filter((f) => sweptSet.has(f.id) && f.signature.length > 0);
+  const crossed = faces.filter(
+    (f) => sweptSet.has(f.id) && f.signature.length > 0,
+  );
   if (crossed.length === 0) return null;
 
   // The inputs the gesture touched: every input covering a crossed face.
@@ -150,7 +152,8 @@ export function planShapeBuild(
     }
     if (own.length > 0 && canRewrite(i)) {
       plan.rewrites.push({ input: i, face: own[0] });
-      for (const face of own.slice(1)) plan.inserts.push({ face, paintFrom: i });
+      for (const face of own.slice(1))
+        plan.inserts.push({ face, paintFrom: i });
       continue;
     }
     for (const face of own) plan.inserts.push({ face, paintFrom: i });

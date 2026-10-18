@@ -193,7 +193,10 @@ export function selectionCentre(
 }
 
 /** The spread-space matrix of `record` about `centre`. */
-export function transformMatrixOf(record: TransformRecord, centre: Vec2): Affine {
+export function transformMatrixOf(
+  record: TransformRecord,
+  centre: Vec2,
+): Affine {
   return affineReflect(record.angleDeg, centre);
 }
 
@@ -217,12 +220,16 @@ const FRAME_EPSILON_PT = 1e-2;
  * rounding) or when G cannot be inverted — both mean the write is
  * `R ∘ G`.
  */
-export function groupFrameOf(composed: Affine | null, stored: Affine | null): Affine | null {
+export function groupFrameOf(
+  composed: Affine | null,
+  stored: Affine | null,
+): Affine | null {
   const inverse = invertAffine(stored ?? IDENTITY);
   if (!inverse) return null;
   const frame = composeAffine(composed ?? IDENTITY, inverse);
-  const spread = frame.every((v, i) =>
-    Math.abs(v - IDENTITY[i]!) <= (i < 4 ? FRAME_EPSILON : FRAME_EPSILON_PT),
+  const spread = frame.every(
+    (v, i) =>
+      Math.abs(v - IDENTITY[i]!) <= (i < 4 ? FRAME_EPSILON : FRAME_EPSILON_PT),
   );
   return spread ? null : frame;
 }
@@ -236,7 +243,10 @@ export function writtenTransformOf(t: TransformTarget, matrix: Affine): Affine {
   const frame = t.group ? (t.frame ?? null) : null;
   const inverse = frame ? invertAffine(frame) : null;
   if (!frame || !inverse) return composeAffine(matrix, current);
-  return composeAffine(inverse, composeAffine(matrix, composeAffine(frame, current)));
+  return composeAffine(
+    inverse,
+    composeAffine(matrix, composeAffine(frame, current)),
+  );
 }
 
 /**
@@ -263,7 +273,17 @@ export function transformBatchFor(
     if (t.group) {
       ops.push({
         op: "setGroupTransform",
-        args: { groupId: String(t.id.id), transform: [...next] as [number, number, number, number, number, number] },
+        args: {
+          groupId: String(t.id.id),
+          transform: [...next] as [
+            number,
+            number,
+            number,
+            number,
+            number,
+            number,
+          ],
+        },
       });
     } else {
       ops.push(frameTransformMutationFor(t.id, next));
@@ -289,18 +309,38 @@ export async function transformTargetsOf(
   const items = selection.filter((id) => id.kind !== "group");
   const groups = selection.filter((id) => id.kind === "group");
   const out: TransformTarget[] = [];
-  const geoms = items.length > 0 ? await host.document.elementGeometry([...items]).catch(() => []) : [];
+  const geoms =
+    items.length > 0
+      ? await host.document.elementGeometry([...items]).catch(() => [])
+      : [];
   for (const g of geoms) {
-    const m = storedTransformOf((g.itemTransform ?? null) as Affine | null, pageOriginOf(g));
-    out.push({ id: g.id, matrix: m, box: m ? transformBounds(g.bounds, m) : g.bounds, group: false });
+    const m = storedTransformOf(
+      (g.itemTransform ?? null) as Affine | null,
+      pageOriginOf(g),
+    );
+    out.push({
+      id: g.id,
+      matrix: m,
+      box: m ? transformBounds(g.bounds, m) : g.bounds,
+      group: false,
+    });
   }
   // Its own call, so an engine that refuses a group id there costs the
   // page items nothing. Answered groups map to their composed transform,
   // in spread space (null = identity).
   const composed = new Map<string, Affine | null>();
-  const groupGeoms = groups.length > 0 ? await host.document.elementGeometry([...groups]).catch(() => []) : [];
+  const groupGeoms =
+    groups.length > 0
+      ? await host.document.elementGeometry([...groups]).catch(() => [])
+      : [];
   for (const g of groupGeoms) {
-    composed.set(String(g.id.id), storedTransformOf((g.itemTransform ?? null) as Affine | null, pageOriginOf(g)));
+    composed.set(
+      String(g.id.id),
+      storedTransformOf(
+        (g.itemTransform ?? null) as Affine | null,
+        pageOriginOf(g),
+      ),
+    );
   }
   for (const id of groups) {
     const props = await host.document.elementProperties(id).catch(() => null);
@@ -309,18 +349,23 @@ export async function transformTargetsOf(
     for (const e of props?.entries ?? []) {
       const v = e.value;
       if (!v) continue;
-      if (e.path === "frameTransform" && v.type === "transform") matrix = (v.value ?? null) as Affine | null;
+      if (e.path === "frameTransform" && v.type === "transform")
+        matrix = (v.value ?? null) as Affine | null;
       if (e.path === "frameBounds" && v.type === "bounds") box = v.value;
     }
     if (!box) continue;
     const key = String(id.id);
-    const frame = composed.has(key) ? groupFrameOf(composed.get(key) ?? null, matrix) : null;
+    const frame = composed.has(key)
+      ? groupFrameOf(composed.get(key) ?? null, matrix)
+      : null;
     out.push({ id, matrix, box, group: true, ...(frame ? { frame } : {}) });
   }
   const answered = new Set(out.map((t) => `${t.id.kind}:${String(t.id.id)}`));
   for (const id of selection) {
     if (!answered.has(`${id.kind}:${String(id.id)}`)) {
-      host.log.debug(`transform: ${id.kind} ${String(id.id)} has no readable geometry — skipped`);
+      host.log.debug(
+        `transform: ${id.kind} ${String(id.id)} has no readable geometry — skipped`,
+      );
     }
   }
   return out;
@@ -356,7 +401,8 @@ export async function applySelectionTransform(
   }
   const targets = await transformTargetsOf(host, selection);
   const centre = selectionCentre(targets.map((t) => t.box));
-  if (!centre) return { applied: false, targets: [], refusal: "no readable geometry" };
+  if (!centre)
+    return { applied: false, targets: [], refusal: "no readable geometry" };
   const outcome = await host.document.mutate(
     transformBatchFor(targets, transformMatrixOf(record, centre), record.copy),
   );
@@ -381,10 +427,14 @@ export function applyReflect(
 
 /** Repeat the last transform on the current selection. Nothing
  *  remembered ⇒ a logged no-op. */
-export async function applyTransformAgain(host: BundleHost): Promise<TransformResult> {
+export async function applyTransformAgain(
+  host: BundleHost,
+): Promise<TransformResult> {
   const last = lastSelectionTransform();
   if (!last) {
-    host.log.info("transform again: no transform has been applied yet — nothing to repeat");
+    host.log.info(
+      "transform again: no transform has been applied yet — nothing to repeat",
+    );
     return { applied: false, targets: [], refusal: "nothing to repeat" };
   }
   return applySelectionTransform(host, last);
@@ -394,7 +444,9 @@ export async function applyTransformAgain(host: BundleHost): Promise<TransformRe
 function payloadOf(payload: unknown): { angleDeg?: number; copy: boolean } {
   const p = (payload ?? {}) as { angleDeg?: unknown; copy?: unknown };
   return {
-    ...(typeof p.angleDeg === "number" && Number.isFinite(p.angleDeg) ? { angleDeg: p.angleDeg } : {}),
+    ...(typeof p.angleDeg === "number" && Number.isFinite(p.angleDeg)
+      ? { angleDeg: p.angleDeg }
+      : {}),
     copy: p.copy === true,
   };
 }

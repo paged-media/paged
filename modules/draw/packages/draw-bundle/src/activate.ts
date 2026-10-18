@@ -120,10 +120,7 @@ import {
   contributeInsertShapeCommands,
   INSERT_SHAPE_COMMAND_IDS,
 } from "./commands/insert-shapes";
-import {
-  contributeBlendCommands,
-  BLEND_COMMAND_IDS,
-} from "./commands/blend";
+import { contributeBlendCommands, BLEND_COMMAND_IDS } from "./commands/blend";
 import {
   contributeObjectsOnPathCommands,
   OBJECTS_ON_PATH_COMMAND_IDS,
@@ -565,7 +562,10 @@ export function activate(host: BundleHost): BundleHandle {
   // (`bindings.provider@1` false) nothing would consult it: draw then
   // contributes none and the host Layers panel keeps reading core.
   const layersProviderHandle = host.supports("bindings.provider@1")
-    ? host.contribute.bindingProvider(vectorGraphicEditContext.type, layersProvider.provider)
+    ? host.contribute.bindingProvider(
+        vectorGraphicEditContext.type,
+        layersProvider.provider,
+      )
     : null;
   // Phase 8 — SVG interchange (K-2): an `.svg` importer (parse → insert
   // the shapes through the existing insertPath lane) + an `.svg` exporter

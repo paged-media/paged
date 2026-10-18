@@ -30,7 +30,14 @@
 //   (4) a second reversal is the identity, every selected path rides ONE
 //       batch, and ONE undo restores.
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from "bun:test";
 
 import type {
   CommandContribution,
@@ -49,7 +56,11 @@ import {
   reverseTable,
   REVERSE_PATH_COMMAND_ID,
 } from "../../src";
-import { F1_MULTI_SHAPE, F3_CURVED_OPEN, F6_RING_PAIR } from "../fixtures/corpus";
+import {
+  F1_MULTI_SHAPE,
+  F3_CURVED_OPEN,
+  F6_RING_PAIR,
+} from "../fixtures/corpus";
 import { countingHost } from "../perf/counting-host";
 import { openHost } from "./host";
 
@@ -68,7 +79,11 @@ function commandFor(h: HeadlessHost, id: string): CommandContribution {
 
 const shapeOf = (t: PathAnchorsResult | null) =>
   t && {
-    anchors: t.anchors.map((a) => ({ anchor: a.anchor, left: a.left, right: a.right })),
+    anchors: t.anchors.map((a) => ({
+      anchor: a.anchor,
+      left: a.left,
+      right: a.right,
+    })),
     subpathStarts: t.subpathStarts,
     subpathOpen: t.subpathOpen,
   };
@@ -81,7 +96,12 @@ function areasOf(t: PathAnchorsResult): number[] {
   );
 }
 
-const A = (x: number, y: number, l?: [number, number], r?: [number, number]) => ({
+const A = (
+  x: number,
+  y: number,
+  l?: [number, number],
+  r?: [number, number],
+) => ({
   anchor: [x, y] as [number, number],
   left: l ?? ([x, y] as [number, number]),
   right: r ?? ([x, y] as [number, number]),
@@ -91,11 +111,19 @@ describe("draw conformance — reverse path direction", () => {
   describe("the pure reversal", () => {
     it("an OPEN contour reverses outright and every handle swaps sides", () => {
       const out = reverseTable({
-        anchors: [A(0, 0, [-1, 0], [1, 0]), A(10, 0, [9, 1], [11, 1]), A(20, 5)],
+        anchors: [
+          A(0, 0, [-1, 0], [1, 0]),
+          A(10, 0, [9, 1], [11, 1]),
+          A(20, 5),
+        ],
         subpathStarts: [0],
         subpathOpen: [true],
       });
-      expect(out.anchors).toEqual([A(20, 5), A(10, 0, [11, 1], [9, 1]), A(0, 0, [1, 0], [-1, 0])]);
+      expect(out.anchors).toEqual([
+        A(20, 5),
+        A(10, 0, [11, 1], [9, 1]),
+        A(0, 0, [1, 0], [-1, 0]),
+      ]);
       expect(out.subpathOpen).toEqual([true]);
     });
 
@@ -144,7 +172,11 @@ describe("draw conformance — reverse path direction", () => {
 
     it("reversing twice is the identity", () => {
       const t = {
-        anchors: [A(0, 0, [-1, 2], [1, -2]), A(10, 0, [9, 3], [11, -3]), A(5, 8, [3, 8], [7, 8])],
+        anchors: [
+          A(0, 0, [-1, 2], [1, -2]),
+          A(10, 0, [9, 3], [11, -3]),
+          A(5, 8, [3, 8], [7, 8]),
+        ],
         subpathStarts: [0],
         subpathOpen: [false],
       };
@@ -153,11 +185,18 @@ describe("draw conformance — reverse path direction", () => {
 
     it("the batch is one framePath write per target, and nothing for nothing", () => {
       expect(reversePathBatchFor([])).toBeNull();
-      const t = { anchors: [A(0, 0), A(1, 0)], subpathStarts: [0], subpathOpen: [true] };
+      const t = {
+        anchors: [A(0, 0), A(1, 0)],
+        subpathStarts: [0],
+        subpathOpen: [true],
+      };
       const b = reversePathBatchFor([
         [CURVE, t],
         [OUTER, t],
-      ]) as { op: string; args: { ops: { op: string; args: { path: string } }[] } };
+      ]) as {
+        op: string;
+        args: { ops: { op: string; args: { path: string } }[] };
+      };
       expect(b.op).toBe("batch");
       expect(b.args.ops.map((o) => [o.op, o.args.path])).toEqual([
         ["setElementProperty", "framePath"],
@@ -187,7 +226,12 @@ describe("draw conformance — reverse path direction", () => {
       expect(counted.work.mutations).toEqual([{ op: "batch", ops: 1 }]);
 
       const after = (await h.host.document.pathAnchors(CURVE))!;
-      expect(shapeOf(after)).toEqual(shapeOf({ ...before, ...reverseTable(reversePathTableOf(before)) } as PathAnchorsResult));
+      expect(shapeOf(after)).toEqual(
+        shapeOf({
+          ...before,
+          ...reverseTable(reversePathTableOf(before)),
+        } as PathAnchorsResult),
+      );
       // The endpoints swapped, and the curve's handles went with them.
       expect(after.anchors[0].anchor).toEqual(before.anchors[1].anchor);
       expect(after.anchors[0].right).toEqual(before.anchors[1].left);
@@ -196,16 +240,22 @@ describe("draw conformance — reverse path direction", () => {
       expect(after.subpathOpen).toEqual([true]);
 
       await h.host.document.undo();
-      expect(shapeOf(await h.host.document.pathAnchors(CURVE))).toEqual(shapeOf(before));
+      expect(shapeOf(await h.host.document.pathAnchors(CURVE))).toEqual(
+        shapeOf(before),
+      );
     });
 
     it("the RECORDED command, run twice, is the identity", async () => {
       const before = await h.host.document.pathAnchors(CURVE);
       await h.host.selection.set([CURVE]);
       await commandFor(h, REVERSE_PATH_COMMAND_ID).handler(undefined);
-      expect(shapeOf(await h.host.document.pathAnchors(CURVE))).not.toEqual(shapeOf(before));
+      expect(shapeOf(await h.host.document.pathAnchors(CURVE))).not.toEqual(
+        shapeOf(before),
+      );
       await commandFor(h, REVERSE_PATH_COMMAND_ID).handler(undefined);
-      expect(shapeOf(await h.host.document.pathAnchors(CURVE))).toEqual(shapeOf(before));
+      expect(shapeOf(await h.host.document.pathAnchors(CURVE))).toEqual(
+        shapeOf(before),
+      );
     });
 
     it("a TRANSFORMED path reverses in its own space: the transform is untouched, the page-space curve is the same curve backwards", async () => {
@@ -247,7 +297,10 @@ describe("draw conformance — reverse path direction", () => {
       await applyReversePath(h.host);
       const after = (await h.host.document.pathAnchors(OUTER))!;
       expect(Math.sign(areasOf(after)[0])).toBe(-Math.sign(areasOf(before)[0]));
-      expect(Math.abs(areasOf(after)[0])).toBeCloseTo(Math.abs(areasOf(before)[0]), 6);
+      expect(Math.abs(areasOf(after)[0])).toBeCloseTo(
+        Math.abs(areasOf(before)[0]),
+        6,
+      );
       expect(after.anchors[0].anchor).toEqual(before.anchors[0].anchor);
       expect(after.subpathOpen?.[0] ?? false).toBe(false);
     });
@@ -272,18 +325,28 @@ describe("draw conformance — reverse path direction", () => {
 
     it("SEVERAL selected paths — closed and open — reverse in ONE batch, and ONE undo restores all of them", async () => {
       const ids = [OUTER, INNER, OPEN];
-      const before = await Promise.all(ids.map((id) => h.host.document.pathAnchors(id)));
+      const before = await Promise.all(
+        ids.map((id) => h.host.document.pathAnchors(id)),
+      );
       await h.host.selection.set(ids);
       const counted = countingHost(h.host);
       expect(await applyReversePath(counted.host)).toEqual(ids);
       expect(counted.work.mutations).toEqual([{ op: "batch", ops: 3 }]);
-      const after = await Promise.all(ids.map((id) => h.host.document.pathAnchors(id)));
-      after.forEach((t, i) => expect(shapeOf(t)).not.toEqual(shapeOf(before[i])));
+      const after = await Promise.all(
+        ids.map((id) => h.host.document.pathAnchors(id)),
+      );
+      after.forEach((t, i) =>
+        expect(shapeOf(t)).not.toEqual(shapeOf(before[i])),
+      );
       expect(after[2]!.subpathOpen).toEqual([true]);
 
       await h.host.document.undo();
-      const restored = await Promise.all(ids.map((id) => h.host.document.pathAnchors(id)));
-      restored.forEach((t, i) => expect(shapeOf(t)).toEqual(shapeOf(before[i])));
+      const restored = await Promise.all(
+        ids.map((id) => h.host.document.pathAnchors(id)),
+      );
+      restored.forEach((t, i) =>
+        expect(shapeOf(t)).toEqual(shapeOf(before[i])),
+      );
     });
   });
 
@@ -303,6 +366,5 @@ describe("draw conformance — reverse path direction", () => {
       expect(await applyReversePath(counted.host)).toEqual([]);
       expect(counted.work.mutations).toEqual([]);
     });
-
   });
 });

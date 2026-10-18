@@ -48,7 +48,11 @@ import {
 } from "@paged-media/draw-tools";
 
 import { F2_CLOSED_QUAD } from "../fixtures/corpus";
-import { SCALED_SQUARE, SMOOTH_ARCH, TWO_CONTOURS } from "../fixtures/path-edit";
+import {
+  SCALED_SQUARE,
+  SMOOTH_ARCH,
+  TWO_CONTOURS,
+} from "../fixtures/path-edit";
 import { openHost } from "./host";
 
 type P = [number, number];
@@ -57,15 +61,23 @@ const NONE = { shift: false, alt: false };
 const SHIFT = { shift: true, alt: false };
 const ALT = { shift: false, alt: true };
 
-const polygon = (id: string): ElementId => ({ kind: "polygon", id }) as ElementId;
+const polygon = (id: string): ElementId =>
+  ({ kind: "polygon", id }) as ElementId;
 
-const anchorHit = (index: number): DirectSelectHit => ({ kind: "anchor", index });
+const anchorHit = (index: number): DirectSelectHit => ({
+  kind: "anchor",
+  index,
+});
 const handleHit = (index: number, side: "left" | "right"): DirectSelectHit => ({
   kind: "handle",
   index,
   side,
 });
-const segmentHit = (index: number, t: number): DirectSelectHit => ({ kind: "segment", index, t });
+const segmentHit = (index: number, t: number): DirectSelectHit => ({
+  kind: "segment",
+  index,
+  t,
+});
 
 /** The three fields a path edit can change, as the engine reports them. */
 interface Table {
@@ -89,7 +101,11 @@ describe("draw conformance — Direct Selection plans through the real engine", 
 
   async function tableOf(el: ElementId): Promise<Table> {
     const r = await read(el);
-    return { anchors: r.anchors, subpathStarts: r.subpathStarts, subpathOpen: r.subpathOpen };
+    return {
+      anchors: r.anchors,
+      subpathStarts: r.subpathStarts,
+      subpathOpen: r.subpathOpen,
+    };
   }
 
   /** A machine seated on the engine's live table — exactly what the
@@ -118,7 +134,10 @@ describe("draw conformance — Direct Selection plans through the real engine", 
   }
 
   /** Send a committed plan as its ONE batch and assert it applied. */
-  async function send(el: ElementId, snap: DirectSelectSnapshot): Promise<void> {
+  async function send(
+    el: ElementId,
+    snap: DirectSelectSnapshot,
+  ): Promise<void> {
     expect(snap.commit, "the gesture committed a plan").not.toBeNull();
     const mutation = directSelectMutation(snap.commit!, el);
     expect(mutation.op).toBe("batch");
@@ -127,7 +146,10 @@ describe("draw conformance — Direct Selection plans through the real engine", 
   }
 
   /** ONE undo, then the table must be the original — all of it. */
-  async function expectOneUndoRestores(el: ElementId, original: Table): Promise<void> {
+  async function expectOneUndoRestores(
+    el: ElementId,
+    original: Table,
+  ): Promise<void> {
     await h.host.document.undo();
     expect(await tableOf(el)).toEqual(original);
   }
@@ -152,7 +174,11 @@ describe("draw conformance — Direct Selection plans through the real engine", 
 
       const after = await tableOf(el);
       // The dragged anchor, handles and all, is where the preview put it.
-      expect(after.anchors[2]).toEqual({ anchor: [330, 290], left: [330, 290], right: [330, 290] });
+      expect(after.anchors[2]).toEqual({
+        anchor: [330, 290],
+        left: [330, 290],
+        right: [330, 290],
+      });
       expect(after.anchors[2]).toEqual(snap.table.anchors[2]);
       // THE WRONG-NODE SYMPTOM: every other anchor is byte-identical.
       for (const i of [0, 1, 3]) {
@@ -181,7 +207,9 @@ describe("draw conformance — Direct Selection plans through the real engine", 
         [100, 300],
       ]);
       for (const i of [2, 3]) {
-        expect(JSON.stringify(after.anchors[i])).toBe(JSON.stringify(before.anchors[i]));
+        expect(JSON.stringify(after.anchors[i])).toBe(
+          JSON.stringify(before.anchors[i]),
+        );
       }
       await expectOneUndoRestores(el, before);
     });
@@ -205,7 +233,9 @@ describe("draw conformance — Direct Selection plans through the real engine", 
       expect(e.left).toEqual([300, 60]);
       expect(e.right).toEqual([300, 100]);
       for (const i of [2, 3]) {
-        expect(JSON.stringify(after.anchors[i])).toBe(JSON.stringify(before.anchors[i]));
+        expect(JSON.stringify(after.anchors[i])).toBe(
+          JSON.stringify(before.anchors[i]),
+        );
       }
       await expectOneUndoRestores(el, before);
     });
@@ -224,7 +254,9 @@ describe("draw conformance — Direct Selection plans through the real engine", 
       expect(after.anchors[0].right).toEqual([100, 100]);
       expect(after.anchors[3].left).toEqual([100, 300]);
       for (const i of [1, 2]) {
-        expect(JSON.stringify(after.anchors[i])).toBe(JSON.stringify(before.anchors[i]));
+        expect(JSON.stringify(after.anchors[i])).toBe(
+          JSON.stringify(before.anchors[i]),
+        );
       }
       await expectOneUndoRestores(el, before);
     });
@@ -237,7 +269,10 @@ describe("draw conformance — Direct Selection plans through the real engine", 
       await send(el, snap);
       const after = await tableOf(el);
       expect(after.anchors[0].anchor[1]).toBeCloseTo(100, 4);
-      expect(after.anchors[0].anchor[0]).toBeCloseTo(100 + Math.hypot(40, 3), 4);
+      expect(after.anchors[0].anchor[0]).toBeCloseTo(
+        100 + Math.hypot(40, 3),
+        4,
+      );
       await expectOneUndoRestores(el, before);
     });
 
@@ -245,9 +280,15 @@ describe("draw conformance — Direct Selection plans through the real engine", 
       const before = await tableOf(el);
       const m = await machineOn(el, [1, 2]);
       for (let i = 0; i < 3; i++) {
-        await send(el, m.handle({ type: "key", key: "ArrowRight", modifiers: NONE }));
+        await send(
+          el,
+          m.handle({ type: "key", key: "ArrowRight", modifiers: NONE }),
+        );
       }
-      await send(el, m.handle({ type: "key", key: "ArrowUp", modifiers: SHIFT }));
+      await send(
+        el,
+        m.handle({ type: "key", key: "ArrowUp", modifiers: SHIFT }),
+      );
       const after = await tableOf(el);
       expect(after.anchors.map((a) => a.anchor)).toEqual([
         [100, 100],
@@ -285,11 +326,23 @@ describe("draw conformance — Direct Selection plans through the real engine", 
       const m = await machineOn(el, [0, 1, 2]);
       const refused = m.handle({ type: "key", key: "Delete", modifiers: NONE });
       expect(refused.commit).toBeNull();
-      expect(refused.refusal).toEqual({ reason: "contourFloor", contours: [0] });
-      m.handle({ type: "down", point: [100, 100], hit: anchorHit(0), modifiers: NONE });
+      expect(refused.refusal).toEqual({
+        reason: "contourFloor",
+        contours: [0],
+      });
+      m.handle({
+        type: "down",
+        point: [100, 100],
+        hit: anchorHit(0),
+        modifiers: NONE,
+      });
       m.handle({ type: "move", point: [150, 150], modifiers: NONE });
-      expect(m.handle({ type: "key", key: "Escape", modifiers: NONE }).commit).toBeNull();
-      expect(m.handle({ type: "up", point: [150, 150], modifiers: NONE }).commit).toBeNull();
+      expect(
+        m.handle({ type: "key", key: "Escape", modifiers: NONE }).commit,
+      ).toBeNull();
+      expect(
+        m.handle({ type: "up", point: [150, 150], modifiers: NONE }).commit,
+      ).toBeNull();
       // No plan ⇒ nothing was sent ⇒ the document is as it was.
       expect(await tableOf(el)).toEqual(before);
     });
@@ -303,7 +356,11 @@ describe("draw conformance — Direct Selection plans through the real engine", 
 
     it("an anchor drag carries its handles — with ONE op, the engine doing the rest", async () => {
       const before = await tableOf(el);
-      expect(before.anchors[1]).toEqual({ anchor: [200, 200], left: [160, 200], right: [280, 200] });
+      expect(before.anchors[1]).toEqual({
+        anchor: [200, 200],
+        left: [160, 200],
+        right: [280, 200],
+      });
       const m = await machineOn(el);
       const snap = drag(m, [200, 200], [210, 220], anchorHit(1));
       expect(snap.commit!.ops).toEqual([
@@ -311,10 +368,16 @@ describe("draw conformance — Direct Selection plans through the real engine", 
       ]);
       await send(el, snap);
       const after = await tableOf(el);
-      expect(after.anchors[1]).toEqual({ anchor: [210, 220], left: [170, 220], right: [290, 220] });
+      expect(after.anchors[1]).toEqual({
+        anchor: [210, 220],
+        left: [170, 220],
+        right: [290, 220],
+      });
       expect(after.anchors[1]).toEqual(snap.table.anchors[1]);
       for (const i of [0, 2]) {
-        expect(JSON.stringify(after.anchors[i])).toBe(JSON.stringify(before.anchors[i]));
+        expect(JSON.stringify(after.anchors[i])).toBe(
+          JSON.stringify(before.anchors[i]),
+        );
       }
       await expectOneUndoRestores(el, before);
     });
@@ -328,9 +391,15 @@ describe("draw conformance — Direct Selection plans through the real engine", 
       await send(el, snap);
       const after = await tableOf(el);
       // The left one is now straight up, still 40 long.
-      expect(after.anchors[1]).toEqual({ anchor: [200, 200], left: [200, 160], right: [200, 280] });
+      expect(after.anchors[1]).toEqual({
+        anchor: [200, 200],
+        left: [200, 160],
+        right: [200, 280],
+      });
       for (const i of [0, 2]) {
-        expect(JSON.stringify(after.anchors[i])).toBe(JSON.stringify(before.anchors[i]));
+        expect(JSON.stringify(after.anchors[i])).toBe(
+          JSON.stringify(before.anchors[i]),
+        );
       }
       // Two ops, ONE step.
       await expectOneUndoRestores(el, before);
@@ -343,7 +412,11 @@ describe("draw conformance — Direct Selection plans through the real engine", 
       expect(snap.commit!.ops).toHaveLength(1);
       await send(el, snap);
       const after = await tableOf(el);
-      expect(after.anchors[1]).toEqual({ anchor: [200, 200], left: [160, 200], right: [200, 280] });
+      expect(after.anchors[1]).toEqual({
+        anchor: [200, 200],
+        left: [160, 200],
+        right: [200, 280],
+      });
       await expectOneUndoRestores(el, before);
     });
 
@@ -469,7 +542,9 @@ describe("draw conformance — Direct Selection plans through the real engine", 
       // The transform itself was not touched: a path edit moves points.
       expect(after.itemTransform).toEqual([...SCALED_SQUARE.transform]);
       for (const i of [0, 2, 3]) {
-        expect(JSON.stringify(after.anchors[i])).toBe(JSON.stringify(before.anchors[i]));
+        expect(JSON.stringify(after.anchors[i])).toBe(
+          JSON.stringify(before.anchors[i]),
+        );
       }
       await expectOneUndoRestores(el, before);
     });
@@ -477,7 +552,12 @@ describe("draw conformance — Direct Selection plans through the real engine", 
     it("a marquee is a page-space rectangle and selects by where anchors SHOW", async () => {
       const m = await machineOn(el);
       // Around page (250, 260) — inner (100, 100), anchor 2.
-      m.handle({ type: "down", point: [240, 250], hit: { kind: "empty" }, modifiers: NONE });
+      m.handle({
+        type: "down",
+        point: [240, 250],
+        hit: { kind: "empty" },
+        modifiers: NONE,
+      });
       const snap = m.handle({ type: "up", point: [260, 270], modifiers: NONE });
       expect(snap.selected).toEqual([2]);
       expect(snap.commit).toBeNull();

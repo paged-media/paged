@@ -60,7 +60,11 @@
 // engine's RAW path space to page space before installing, so the two
 // agree). Element keys and face ids are opaque strings.
 
-import { clone, type AnchorTriple, type Vec2 } from "@paged-media/draw-geometry";
+import {
+  clone,
+  type AnchorTriple,
+  type Vec2,
+} from "@paged-media/draw-geometry";
 
 import {
   prepareRegions,

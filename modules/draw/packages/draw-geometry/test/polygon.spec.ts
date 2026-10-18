@@ -203,7 +203,10 @@ function crossingsOnly(
     for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
       const [xi, yi] = ring[i];
       const [xj, yj] = ring[j];
-      if (yi > py !== yj > py && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) {
+      if (
+        yi > py !== yj > py &&
+        px < ((xj - xi) * (py - yi)) / (yj - yi) + xi
+      ) {
         inside = !inside;
       }
     }
@@ -227,7 +230,11 @@ describe("flattenAnchorPath + pointInFlatPath", () => {
     starts: number[];
   }> = [
     { name: "a square", anchors: OUTER, starts: [] },
-    { name: "a square with a hole", anchors: [...OUTER, ...HOLE], starts: [0, OUTER.length] },
+    {
+      name: "a square with a hole",
+      anchors: [...OUTER, ...HOLE],
+      starts: [0, OUTER.length],
+    },
     { name: "a circle", anchors: circle(306.25, 395.5, 84.3), starts: [0] },
     {
       name: "a lens",
@@ -243,48 +250,61 @@ describe("flattenAnchorPath + pointInFlatPath", () => {
       starts: [0, 4],
     },
     // Far from the origin, where an ulp is big.
-    { name: "a circle a million points out", anchors: circle(1e6 + 0.3, -1e6 - 0.7, 50.1), starts: [] },
+    {
+      name: "a circle a million points out",
+      anchors: circle(1e6 + 0.3, -1e6 - 0.7, 50.1),
+      starts: [],
+    },
   ];
   /** Offsets from a box edge: on it, a rounding error off it, a hair
    *  off it, clearly off it. */
-  const NUDGES = [0, 1e-13, -1e-13, 1e-10, -1e-10, 1e-7, -1e-7, 1e-3, -1e-3, 5, -5];
+  const NUDGES = [
+    0, 1e-13, -1e-13, 1e-10, -1e-10, 1e-7, -1e-7, 1e-3, -1e-3, 5, -5,
+  ];
 
   // vitest's `$name` quoted a string ('a circle'); bun's inserts it bare, so
   // the quotes are in the title to keep the test's id.
-  it.each(SHAPES)("'$name': the flat form answers exactly what the anchor form answers", ({ anchors, starts }) => {
-    const flat = flattenAnchorPath(anchors, starts);
-    const xs = [flat.minX, flat.maxX, (flat.minX + flat.maxX) / 2];
-    const ys = [flat.minY, flat.maxY, (flat.minY + flat.maxY) / 2];
-    // Also every vertex height: a ray through a vertex is where a
-    // crossing count is most easily miscounted.
-    for (const ring of flat.rings) for (const [, y] of ring) ys.push(y);
-    let probes = 0;
-    let inside = 0;
-    for (const x0 of xs) {
-      for (const y0 of ys) {
-        for (const dx of NUDGES) {
-          for (const dy of NUDGES) {
-            const scale = Math.max(1, Math.abs(x0), Math.abs(y0));
-            const p: Vec2 = [x0 + dx * scale, y0 + dy * scale];
-            const expected = crossingsOnly(p, anchors, starts);
-            expect(pointInFlatPath(p, flat), `at ${p[0]}, ${p[1]}`).toBe(expected);
-            expect(pointInAnchorPath(p, anchors, starts)).toBe(expected);
-            probes++;
-            if (expected) inside++;
+  it.each(SHAPES)(
+    "'$name': the flat form answers exactly what the anchor form answers",
+    ({ anchors, starts }) => {
+      const flat = flattenAnchorPath(anchors, starts);
+      const xs = [flat.minX, flat.maxX, (flat.minX + flat.maxX) / 2];
+      const ys = [flat.minY, flat.maxY, (flat.minY + flat.maxY) / 2];
+      // Also every vertex height: a ray through a vertex is where a
+      // crossing count is most easily miscounted.
+      for (const ring of flat.rings) for (const [, y] of ring) ys.push(y);
+      let probes = 0;
+      let inside = 0;
+      for (const x0 of xs) {
+        for (const y0 of ys) {
+          for (const dx of NUDGES) {
+            for (const dy of NUDGES) {
+              const scale = Math.max(1, Math.abs(x0), Math.abs(y0));
+              const p: Vec2 = [x0 + dx * scale, y0 + dy * scale];
+              const expected = crossingsOnly(p, anchors, starts);
+              expect(pointInFlatPath(p, flat), `at ${p[0]}, ${p[1]}`).toBe(
+                expected,
+              );
+              expect(pointInAnchorPath(p, anchors, starts)).toBe(expected);
+              probes++;
+              if (expected) inside++;
+            }
           }
         }
       }
-    }
-    // The sweep is not all-outside (which a box would get right for
-    // free) nor all-inside.
-    expect(probes).toBeGreaterThan(1000);
-    expect(inside).toBeGreaterThan(0);
-    expect(inside).toBeLessThan(probes);
-  });
+      // The sweep is not all-outside (which a box would get right for
+      // free) nor all-inside.
+      expect(probes).toBeGreaterThan(1000);
+      expect(inside).toBeGreaterThan(0);
+      expect(inside).toBeLessThan(probes);
+    },
+  );
 
   it("the box is the box of the flattened rings, and an empty path contains nothing", () => {
     const flat = flattenAnchorPath(OUTER);
-    expect([flat.minX, flat.minY, flat.maxX, flat.maxY]).toEqual([0, 0, 100, 100]);
+    expect([flat.minX, flat.minY, flat.maxX, flat.maxY]).toEqual([
+      0, 0, 100, 100,
+    ]);
     expect(flat.rings).toHaveLength(1);
     const none = flattenAnchorPath([]);
     expect(none.minX).toBeGreaterThan(none.maxX);
@@ -293,7 +313,9 @@ describe("flattenAnchorPath + pointInFlatPath", () => {
 
   it("flattening once is flattening the same: the rings are flattenAnchorRun's, per contour", () => {
     const anchors = [...OUTER, ...HOLE];
-    const flat = flattenAnchorPath(anchors, [0, OUTER.length], { samplesPerSegment: 5 });
+    const flat = flattenAnchorPath(anchors, [0, OUTER.length], {
+      samplesPerSegment: 5,
+    });
     expect(flat.rings).toEqual([
       flattenAnchorRun(OUTER, { close: true, samplesPerSegment: 5 }),
       flattenAnchorRun(HOLE, { close: true, samplesPerSegment: 5 }),
@@ -319,11 +341,27 @@ describe("polylineTouchesPolygon — the lasso's outline-intersection test", () 
   });
 
   it("a polyline with a vertex inside touches", () => {
-    expect(polylineTouchesPolygon([[5, 5], [50, 50]], BOX)).toBe(true);
+    expect(
+      polylineTouchesPolygon(
+        [
+          [5, 5],
+          [50, 50],
+        ],
+        BOX,
+      ),
+    ).toBe(true);
   });
 
   it("a polyline that only CROSSES the region (no vertex inside) touches", () => {
-    expect(polylineTouchesPolygon([[-5, 5], [15, 5]], BOX)).toBe(true);
+    expect(
+      polylineTouchesPolygon(
+        [
+          [-5, 5],
+          [15, 5],
+        ],
+        BOX,
+      ),
+    ).toBe(true);
   });
 
   it("a polyline outside a CONCAVE lasso's region but inside its box does not touch", () => {
@@ -336,8 +374,24 @@ describe("polylineTouchesPolygon — the lasso's outline-intersection test", () 
       [4, 10],
       [0, 10],
     ];
-    expect(polylineTouchesPolygon([[7, 7], [9, 9]], L)).toBe(false);
-    expect(polylineTouchesPolygon([[20, 20], [30, 30]], L)).toBe(false);
+    expect(
+      polylineTouchesPolygon(
+        [
+          [7, 7],
+          [9, 9],
+        ],
+        L,
+      ),
+    ).toBe(false);
+    expect(
+      polylineTouchesPolygon(
+        [
+          [20, 20],
+          [30, 30],
+        ],
+        L,
+      ),
+    ).toBe(false);
   });
 
   it("the CLOSING segment counts only for a closed polyline", () => {
@@ -365,7 +419,15 @@ describe("polylineTouchesPolygon — the lasso's outline-intersection test", () 
 
   it("degenerate input answers false, never throws; a single point is a point test", () => {
     expect(polylineTouchesPolygon([], BOX)).toBe(false);
-    expect(polylineTouchesPolygon([[5, 5]], [[0, 0], [1, 1]])).toBe(false);
+    expect(
+      polylineTouchesPolygon(
+        [[5, 5]],
+        [
+          [0, 0],
+          [1, 1],
+        ],
+      ),
+    ).toBe(false);
     expect(polylineTouchesPolygon([[5, 5]], BOX)).toBe(true);
     expect(polylineTouchesPolygon([[50, 5]], BOX)).toBe(false);
   });

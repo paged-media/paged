@@ -116,7 +116,10 @@ export function countingHost(host: BundleHost): {
    *  the observer hangs off the same promise the caller awaits. */
   const observe = (door: string, result: unknown): void => {
     if (door !== "document.pathAnchors") return;
-    if (!result || typeof (result as PromiseLike<unknown>).then !== "function") {
+    if (
+      !result ||
+      typeof (result as PromiseLike<unknown>).then !== "function"
+    ) {
       return;
     }
     (result as PromiseLike<unknown>).then(

@@ -41,9 +41,11 @@ async function curve(
   points: [number, number][],
   opts: { cmd?: boolean } = {},
 ): Promise<number[][]> {
-  const before = new Set((await h.host.document.tree()).flatMap(function walk(n: any): string[] {
-    return [n.id?.id, ...(n.children ?? []).flatMap(walk)].filter(Boolean);
-  }));
+  const before = new Set(
+    (await h.host.document.tree()).flatMap(function walk(n: any): string[] {
+      return [n.id?.id, ...(n.children ?? []).flatMap(walk)].filter(Boolean);
+    }),
+  );
   const { host, work } = countingHost(h.host);
   const handler = createCurvatureHandler(host);
   handler.onActivate(undefined as never);
@@ -58,7 +60,9 @@ async function curve(
   handler.onKey?.({ key: "Enter" } as never);
   await settle();
   expect(work.count("document.collection")).toBe(1);
-  const after = (await h.host.document.tree()).flatMap(function walk(n: any): any[] {
+  const after = (await h.host.document.tree()).flatMap(function walk(
+    n: any,
+  ): any[] {
     return [n, ...(n.children ?? []).flatMap(walk)];
   });
   const created = after.find((n) => n.id && !before.has(n.id.id));
@@ -74,7 +78,11 @@ const V67 = await (async () => {
   const p = await openHost();
   try {
     await p.load(F4_OVERLAP.bytes());
-    const probe = await p.host.document.snapPoint?.({ pageId: PAGE, point: [1, 1], cameraScale: 1 });
+    const probe = await p.host.document.snapPoint?.({
+      pageId: PAGE,
+      point: [1, 1],
+      cameraScale: 1,
+    });
     return !!probe && probe.tolerancePt !== 0;
   } finally {
     p.dispose();
@@ -100,32 +108,37 @@ describe("draw conformance — snapping for point-placing tools (C-68)", () => {
     expect(anchors[1]![1]).toBeCloseTo(CENTRE[1], 3);
   });
 
-  it.skipIf(!V67 && process.env.PAGED_REQUIRE_V67 !== "1")("protocol 67: a Curvature point lands on another path's anchor", async () => {
-    const probe = await h.host.document.snapPoint?.({
-      pageId: PAGE,
-      point: [1, 1],
-      cameraScale: 1,
-    });
-    if (!probe || probe.tolerancePt === 0) {
-      throw new Error("PAGED_REQUIRE_V67=1 but the engine does not answer requestSnapPoint");
-    }
-    // A first path with an anchor at (200, 520): clear of the page's
-    // centre lines (306 / 396) and edges.
-    await curve(h, [
-      [100, 500],
-      [200, 520],
-      [300, 500],
-    ]);
-    // A second run clicks 2.2 pt from that anchor. The fallback only knows
-    // the page and the run's own points; the engine knows the first path.
-    const anchors = await curve(h, [
-      [120, 600],
-      [201.5, 518.4],
-      [300, 620],
-    ]);
-    expect(anchors[1]![0]).toBeCloseTo(200, 3);
-    expect(anchors[1]![1]).toBeCloseTo(520, 3);
-  });
+  it.skipIf(!V67 && process.env.PAGED_REQUIRE_V67 !== "1")(
+    "protocol 67: a Curvature point lands on another path's anchor",
+    async () => {
+      const probe = await h.host.document.snapPoint?.({
+        pageId: PAGE,
+        point: [1, 1],
+        cameraScale: 1,
+      });
+      if (!probe || probe.tolerancePt === 0) {
+        throw new Error(
+          "PAGED_REQUIRE_V67=1 but the engine does not answer requestSnapPoint",
+        );
+      }
+      // A first path with an anchor at (200, 520): clear of the page's
+      // centre lines (306 / 396) and edges.
+      await curve(h, [
+        [100, 500],
+        [200, 520],
+        [300, 500],
+      ]);
+      // A second run clicks 2.2 pt from that anchor. The fallback only knows
+      // the page and the run's own points; the engine knows the first path.
+      const anchors = await curve(h, [
+        [120, 600],
+        [201.5, 518.4],
+        [300, 620],
+      ]);
+      expect(anchors[1]![0]).toBeCloseTo(200, 3);
+      expect(anchors[1]![1]).toBeCloseTo(520, 3);
+    },
+  );
 
   it("with Cmd held the point stays where the pointer was", async () => {
     const anchors = await curve(

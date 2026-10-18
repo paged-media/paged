@@ -16,7 +16,6 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-
 // The GRAPHIC STYLES panel, RENDERED (happy-dom) against the real engine:
 // behaviour first (empty state, records, buttons asserted on the
 // DOCUMENT), then its reload budgets as counts at the host doors — the
@@ -74,7 +73,6 @@ import {
 const PANEL = "[data-draw-graphic-styles-panel]";
 const ROW = '[data-draw-graphic-style-row="gs-1"]';
 
-
 /** Per-leaf `getMetadata` one link walk costs on this engine (RFI C-65:
  *  1 before tree rows carried metadata, 0 after), and what a walk over
  *  this file's 45 leaves therefore reads besides the tree. */
@@ -96,7 +94,9 @@ describe("Graphic styles panel — rendered against the engine", () => {
     it("the CONTRIBUTED component mounts and shows the empty state", async () => {
       const panel = await mountContributed(h, GRAPHIC_STYLES_PANEL_ID);
       expect(panel.attr(PANEL, "data-draw-graphic-styles-panel")).toBe("0");
-      expect(panel.attr(PANEL, "data-draw-graphic-styles-portable")).toBe("true");
+      expect(panel.attr(PANEL, "data-draw-graphic-styles-portable")).toBe(
+        "true",
+      );
       expect(panel.text()).toContain("Graphic styles (0)");
       expect(panel.text()).toContain(
         "No graphic styles yet — select an object and save its appearance.",
@@ -179,31 +179,43 @@ describe("Graphic styles panel — rendered against the engine", () => {
     it("a direct appearance edit shows as OVERRIDDEN without breaking the link", async () => {
       await h.host.selection.set([plainId(0)]);
       const panel = await mountPanel(h, makeGraphicStylesPanel);
-      expect(panel.attr(PANEL, "data-draw-graphic-style-overridden")).toBe("false");
+      expect(panel.attr(PANEL, "data-draw-graphic-style-overridden")).toBe(
+        "false",
+      );
 
       // A foreign edit: nothing here goes through the panel or a graphic-
       // style command. `plainChange` writes p0's stroke weight.
       await drive(() => plainChange(h, 4), panel.work);
 
       expect(await refOf(plainId(0))).toBe("gs-1");
-      expect(panel.attr(PANEL, "data-draw-graphic-style-overridden")).toBe("true");
-      expect(panel.get("[data-draw-graphic-style-selection]").textContent).toContain(
-        "overridden",
+      expect(panel.attr(PANEL, "data-draw-graphic-style-overridden")).toBe(
+        "true",
       );
+      expect(
+        panel.get("[data-draw-graphic-style-selection]").textContent,
+      ).toContain("overridden");
     });
 
     it("Redefine takes the selection's appearance and propagates it to every link", async () => {
       await h.host.selection.set([plainId(0)]);
       const panel = await mountPanel(h, makeGraphicStylesPanel);
-      expect(panel.attr(PANEL, "data-draw-graphic-style-overridden")).toBe("true");
+      expect(panel.attr(PANEL, "data-draw-graphic-style-overridden")).toBe(
+        "true",
+      );
       const edited = await propertyOf(h, plainId(0), "frameStrokeWeight");
-      expect(await propertyOf(h, poly("s0"), "frameStrokeWeight")).not.toEqual(edited);
+      expect(await propertyOf(h, poly("s0"), "frameStrokeWeight")).not.toEqual(
+        edited,
+      );
 
       await panel.click(`${ROW} [data-draw-graphic-style-redefine]`);
 
       // The OTHER linked object now carries the redefined stroke weight.
-      expect(await propertyOf(h, poly("s0"), "frameStrokeWeight")).toEqual(edited);
-      expect(panel.attr(PANEL, "data-draw-graphic-style-overridden")).toBe("false");
+      expect(await propertyOf(h, poly("s0"), "frameStrokeWeight")).toEqual(
+        edited,
+      );
+      expect(panel.attr(PANEL, "data-draw-graphic-style-overridden")).toBe(
+        "false",
+      );
       expect(panel.attr(ROW, "data-draw-graphic-style-linked-count")).toBe("2");
     });
 
@@ -214,7 +226,9 @@ describe("Graphic styles panel — rendered against the engine", () => {
       await panel.click("[data-draw-graphic-style-break]");
 
       expect(await refOf(plainId(0))).toBeNull();
-      expect(await propertyOf(h, plainId(0), "frameStrokeWeight")).toEqual(weight);
+      expect(await propertyOf(h, plainId(0), "frameStrokeWeight")).toEqual(
+        weight,
+      );
       expect(panel.attr(PANEL, "data-draw-graphic-style-linked")).toBe("");
       expect(panel.attr(ROW, "data-draw-graphic-style-linked-count")).toBe("1");
     });
@@ -224,9 +238,9 @@ describe("Graphic styles panel — rendered against the engine", () => {
       // The first click only arms the button: deleting a style cannot be
       // undone, so it asks for a second click.
       await panel.click(`${ROW} [data-draw-graphic-style-delete]`);
-      expect(panel.get(`${ROW} [data-draw-graphic-style-delete]`).textContent).toBe(
-        "Confirm delete",
-      );
+      expect(
+        panel.get(`${ROW} [data-draw-graphic-style-delete]`).textContent,
+      ).toBe("Confirm delete");
       expect((await readGraphicStyleLibrary(h.host)).styles).toHaveLength(1);
       await panel.click(`${ROW} [data-draw-graphic-style-delete]`);
 
@@ -248,23 +262,20 @@ describe("Graphic styles panel — rendered against the engine", () => {
     // existed (1 row). (Rename is library-only: no event at all.)
     // `writeGraphicStyleLibrary` now announces the write, and the panel
     // reloads on that.
-    it(
-      "an OPEN panel drops a style deleted by the COMMAND, not only by its own button",
-      async () => {
-        await h.host.selection.set([poly("s1")]);
-        const style = await applySaveGraphicStyle(h.host);
-        expect(style).not.toBeNull();
-        const panel = await mountPanel(h, makeGraphicStylesPanel);
-        expect(panel.count("[data-draw-graphic-style-row]")).toBe(1);
+    it("an OPEN panel drops a style deleted by the COMMAND, not only by its own button", async () => {
+      await h.host.selection.set([poly("s1")]);
+      const style = await applySaveGraphicStyle(h.host);
+      expect(style).not.toBeNull();
+      const panel = await mountPanel(h, makeGraphicStylesPanel);
+      expect(panel.count("[data-draw-graphic-style-row]")).toBe(1);
 
-        await drive(() => applyDeleteGraphicStyle(h.host, style!.id), panel.work);
+      await drive(() => applyDeleteGraphicStyle(h.host, style!.id), panel.work);
 
-        // The document has let go of it…
-        expect((await readGraphicStyleLibrary(h.host)).styles).toEqual([]);
-        // …and so has the panel.
-        expect(panel.count("[data-draw-graphic-style-row]")).toBe(0);
-      },
-    );
+      // The document has let go of it…
+      expect((await readGraphicStyleLibrary(h.host)).styles).toEqual([]);
+      // …and so has the panel.
+      expect(panel.count("[data-draw-graphic-style-row]")).toBe(0);
+    });
 
     // The same, in the order the EDITOR has (see blend-panel.dom.test.tsx):
     // the library write lands a task after the reload the last unlink
@@ -325,12 +336,16 @@ describe("Graphic styles panel — rendered against the engine", () => {
         if (k > 0) {
           await drive(async () => {
             await h.host.selection.set([poly(`s${k - 1}`)]);
-            const made = await applySaveGraphicStyle(h.host, { name: `Style ${k}` });
+            const made = await applySaveGraphicStyle(h.host, {
+              name: `Style ${k}`,
+            });
             if (!made) throw new Error(`style ${k} was not saved`);
             await h.host.selection.set([]);
           }, panel.work);
         }
-        readsByRecords.push((await panel.costOf(() => plainChange(h, k))).reads);
+        readsByRecords.push(
+          (await panel.costOf(() => plainChange(h, k))).reads,
+        );
       }
       unmountAll();
     });
@@ -339,7 +354,9 @@ describe("Graphic styles panel — rendered against the engine", () => {
 
     it("the document is the one the budgets name", async () => {
       expect(await leafIds(h)).toHaveLength(PLAIN_LEAVES + RECORDS);
-      expect((await readGraphicStyleLibrary(h.host)).styles).toHaveLength(RECORDS);
+      expect((await readGraphicStyleLibrary(h.host)).styles).toHaveLength(
+        RECORDS,
+      );
     });
 
     it("NO per-record walk here: a reload costs the same whatever the record count", () => {
@@ -350,7 +367,10 @@ describe("Graphic styles panel — rendered against the engine", () => {
       // The one exception is ZERO styles: with no library part at all the
       // read also asks the DOCUMENT LABEL (ADR 559 — after an InDesign
       // save the library survives only there; src/recipe-store.ts).
-      expect(readsByRecords).toEqual([2 + leafReads(), ...Array(5).fill(1 + leafReads())]);
+      expect(readsByRecords).toEqual([
+        2 + leafReads(),
+        ...Array(5).fill(1 + leafReads()),
+      ]);
     });
 
     it("ONE reload = 1 walk = 46 reads — one per leaf", async () => {

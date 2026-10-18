@@ -189,8 +189,13 @@ export function facesCrossedBy(
   if (path.length === 0) return [];
   const m = new ShapeBuilderMachine();
   m.setRegions(faces);
-  m.handle({ type: "down", point: [path[0][0], path[0][1]], modifiers: { alt } });
-  for (const p of path.slice(1, -1)) m.handle({ type: "move", point: [p[0], p[1]] });
+  m.handle({
+    type: "down",
+    point: [path[0][0], path[0][1]],
+    modifiers: { alt },
+  });
+  for (const p of path.slice(1, -1))
+    m.handle({ type: "move", point: [p[0], p[1]] });
   const last = path[path.length - 1];
   return [...m.handle({ type: "up", point: [last[0], last[1]] }).collected];
 }
@@ -360,13 +365,19 @@ export function createShapeBuilderHandler(host: BundleHost): GestureHandler {
     // pieces are written with the STORED transform — `../page-origin.ts`).
     const transformOf = (id: ElementId) =>
       host.document.pathAnchors(id).then(
-        (t) => ({ matrix: (t?.itemTransform ?? null) as Affine | null, pageOrigin: pageOriginOf(t) }),
+        (t) => ({
+          matrix: (t?.itemTransform ?? null) as Affine | null,
+          pageOrigin: pageOriginOf(t),
+        }),
         () => ({ matrix: null, pageOrigin: SPREAD_ORIGIN }),
       );
     if (hasOval(operands)) {
       const probe = await ovalStandIns(host, operands, "shapeBuilder");
       if (!probe) return null;
-      let front: Awaited<ReturnType<typeof transformOf>> = { matrix: null, pageOrigin: SPREAD_ORIGIN };
+      let front: Awaited<ReturnType<typeof transformOf>> = {
+        matrix: null,
+        pageOrigin: SPREAD_ORIGIN,
+      };
       let regions: Awaited<ReturnType<typeof readPlanarRegions>> = null;
       try {
         front = await transformOf(probe.ids[0]!);
@@ -399,7 +410,11 @@ export function createShapeBuilderHandler(host: BundleHost): GestureHandler {
       reportPlanarRefusal(host, "shapeBuilder", regions);
       return null;
     }
-    return { faces: [...regions.faces], ...front, crossed: [...snap.collected] };
+    return {
+      faces: [...regions.faces],
+      ...front,
+      crossed: [...snap.collected],
+    };
   };
 
   /** The REGION-lane release: plan the result from the arrangement
@@ -426,7 +441,11 @@ export function createShapeBuilderHandler(host: BundleHost): GestureHandler {
     if (!plan) return "nothing";
     let mutation: MutationInput | null;
     if (planIsEngineKeep(plan) && !hasOval(operands)) {
-      mutation = shapeBuilderFacesMutationFor(operands, arrangement.crossed, "keep");
+      mutation = shapeBuilderFacesMutationFor(
+        operands,
+        arrangement.crossed,
+        "keep",
+      );
     } else {
       mutation = shapeBuildBatchFor(plan, {
         inputs: operands,
@@ -438,7 +457,9 @@ export function createShapeBuilderHandler(host: BundleHost): GestureHandler {
       });
     }
     if (!mutation) {
-      host.log.warn("shapeBuilder: the arrangement no longer holds a face the gesture crossed");
+      host.log.warn(
+        "shapeBuilder: the arrangement no longer holds a face the gesture crossed",
+      );
       return "refused";
     }
     const outcome = await host.document.mutate(mutation);
@@ -452,7 +473,8 @@ export function createShapeBuilderHandler(host: BundleHost): GestureHandler {
     })();
     if (text.includes("unknown variant")) return "unknownOp";
     const reason =
-      regionRefusalReason(outcome.error) ?? "the engine refused the shape-builder commit";
+      regionRefusalReason(outcome.error) ??
+      "the engine refused the shape-builder commit";
     host.log.warn(`shapeBuilder refused: ${reason}`);
     host.bindings.publish(BIND_PATHFINDER_STATUS, reason);
     return "refused";
@@ -527,7 +549,11 @@ export function createShapeBuilderHandler(host: BundleHost): GestureHandler {
         if (await supportsRegions()) {
           // An oval set collected nothing live (its faces are resolved at
           // release), so it goes to the region commit on its gesture alone.
-          if (operands.length >= 2 && page && (snap.collected.length > 0 || hasOval(operands))) {
+          if (
+            operands.length >= 2 &&
+            page &&
+            (snap.collected.length > 0 || hasOval(operands))
+          ) {
             const result = await commitRegions(operands, snap, page);
             if (result === "done") {
               host.bindings.publish(BIND_PATHFINDER_STATUS, null);

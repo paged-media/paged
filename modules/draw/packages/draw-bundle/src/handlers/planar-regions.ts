@@ -282,13 +282,18 @@ export function createRegionCache(
     read: Promise<{ matrix: Affine | null; origin: PageOrigin }>;
   } | null = null;
 
-  const frontmostRead = (id: ElementId): Promise<{ matrix: Affine | null; origin: PageOrigin }> => {
+  const frontmostRead = (
+    id: ElementId,
+  ): Promise<{ matrix: Affine | null; origin: PageOrigin }> => {
     const forKey = planarInputKey([id]);
     if (frontmost?.key === forKey) return frontmost.read;
     const read: NonNullable<typeof frontmost> = {
       key: forKey,
       read: host.document.pathAnchors(id).then(
-        (table) => ({ matrix: table?.itemTransform ?? null, origin: pageOriginOf(table) }),
+        (table) => ({
+          matrix: table?.itemTransform ?? null,
+          origin: pageOriginOf(table),
+        }),
         () => {
           // A read that FAILED answers "unknown" this once and is not
           // kept: the next sample asks again, as every sample used to.
@@ -372,8 +377,7 @@ export function createRegionCache(
       // Keep the outline available to the overlay even without a full
       // enumeration (one face is still a legible highlight).
       const mapped = faceToPageSpace(face, m ?? null);
-      if (!cached.some((f) => f.id === mapped.id))
-        cached = [...cached, mapped];
+      if (!cached.some((f) => f.id === mapped.id)) cached = [...cached, mapped];
     }
     return { face: face ? face.id : null };
   };

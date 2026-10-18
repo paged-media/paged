@@ -427,9 +427,9 @@ describe("drawBundle.activate", () => {
     // The host stamped the own-namespace metadata key.
     expect(ec.metadataKey).toBe("x-paged:media.paged.draw");
     // Kind-claimed: a polygon matches, an oval (no path) does not.
-    expect(ec.matches?.({ kind: "polygon", groupChain: [], metadata: null })).toBe(
-      true,
-    );
+    expect(
+      ec.matches?.({ kind: "polygon", groupChain: [], metadata: null }),
+    ).toBe(true);
     expect(ec.matches?.({ kind: "oval", groupChain: [], metadata: null })).toBe(
       false,
     );

@@ -151,7 +151,11 @@ async function groupShape(
   let found: { id: string; members: string[] } | null = null;
   const walk = (nodes: readonly SceneTreeNode[]) => {
     for (const node of nodes) {
-      if (node.id && node.id.kind === "group" && typeof node.id.id === "string") {
+      if (
+        node.id &&
+        node.id.kind === "group" &&
+        typeof node.id.id === "string"
+      ) {
         found = {
           id: node.id.id,
           members: (node.children ?? [])
@@ -497,7 +501,9 @@ describe("draw conformance — the appearance GROUP BAKE (gap B-24)", () => {
       expect(appearanceOf(next)).toEqual(STACK);
       expect(appearanceBakeOf(withAppearanceBake(next, null))).toBeNull();
       expect(appearanceBakeOf(null)).toBeNull();
-      expect(appearanceBakeOf({ v: 1, data: { appearanceBake: 7 } })).toBeNull();
+      expect(
+        appearanceBakeOf({ v: 1, data: { appearanceBake: 7 } }),
+      ).toBeNull();
     });
   });
 
@@ -623,7 +629,9 @@ describe("draw conformance — the appearance GROUP BAKE (gap B-24)", () => {
       // Undo #2 unwinds the insert batch: back to the pre-bake document.
       await h.host.document.undo();
       expect(await leafIds(h)).toEqual(before);
-      expect(appearanceBakeOf(await h.host.document.getMetadata(RECT))).toBeNull();
+      expect(
+        appearanceBakeOf(await h.host.document.getMetadata(RECT)),
+      ).toBeNull();
       // The carrier's own paint is back (the front-most-layer bake).
       expect(await readProp(h, RECT, "frameFillColor")).toEqual({
         type: "colorRef",
@@ -646,7 +654,10 @@ describe("draw conformance — the appearance GROUP BAKE (gap B-24)", () => {
         });
       const shipped = await through("oneBatch");
       expect(shipped.result).toHaveLength(3);
-      expect(shipped.work.mutations.map((m) => m.op)).toEqual(["batch", "batch"]);
+      expect(shipped.work.mutations.map((m) => m.op)).toEqual([
+        "batch",
+        "batch",
+      ]);
       expect(shipped.undoSteps).toBe(2);
       expect(shipped.restored).toBe(true);
       // As found: 2 — the before/after diff.
@@ -719,9 +730,9 @@ describe("draw conformance — the appearance GROUP BAKE (gap B-24)", () => {
       expect(record!.layers).toHaveLength(2);
       const group = await groupShape(h);
       expect(group!.members).toEqual([RECT.id, ...record!.layers]);
-      expect(await readProp(h, poly(record!.layers[0]), "frameFillColor")).toEqual(
-        { type: "colorRef", value: "Color/Black" },
-      );
+      expect(
+        await readProp(h, poly(record!.layers[0]), "frameFillColor"),
+      ).toEqual({ type: "colorRef", value: "Color/Black" });
       expect(
         await readProp(h, poly(record!.layers[1]), "frameStrokeColor"),
       ).toEqual({ type: "colorRef", value: "Color/Black" });
@@ -844,12 +855,12 @@ describe("draw conformance — the appearance GROUP BAKE (gap B-24)", () => {
           type: "colorRef",
           value: "Color/Paper",
         });
-        expect(await readProp(reopened, created[2], "frameStrokeColor")).toEqual(
-          { type: "colorRef", value: "Color/Black" },
-        );
-        expect(await readProp(reopened, created[2], "frameStrokeWeight")).toEqual(
-          { type: "length", value: 2 },
-        );
+        expect(
+          await readProp(reopened, created[2], "frameStrokeColor"),
+        ).toEqual({ type: "colorRef", value: "Color/Black" });
+        expect(
+          await readProp(reopened, created[2], "frameStrokeWeight"),
+        ).toEqual({ type: "length", value: 2 });
         expect(
           appearanceLayerOf(
             await reopened.host.document.getMetadata(created[0]),
