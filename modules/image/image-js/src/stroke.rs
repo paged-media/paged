@@ -1433,7 +1433,7 @@ mod tests {
     // ── end-to-end on the device ─────────────────────────────────────
 
     /// The test GPU device, or `None` where there is no adapter and
-    /// `REQUIRE_GPU=1` is not set (then it fails instead of skipping).
+    /// `PAGED_REQUIRE_GPU=1` is not set (then it fails instead of skipping).
     fn device() -> Option<&'static GpuContext> {
         image_gpu::test_support::device_or_skip("stroke")
     }

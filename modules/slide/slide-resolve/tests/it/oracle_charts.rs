@@ -26,8 +26,6 @@
 //! measure (it reads no font files). The estimate (0.6 × size) is off by up
 //! to 0.09 × size per digit: Space Mono runs 0.51, Montserrat 0.66.
 
-use std::path::Path;
-
 use slide_resolve::model::{Item, ItemKind, Paint};
 
 const TOLERANCE: f64 = 3.0;
@@ -56,19 +54,21 @@ fn rects(it: &Item, out: &mut Vec<(f64, f64, f64, f64)>) {
     }
 }
 
+/// The corpus decks' charts against PowerPoint's recordings (the private
+/// corpus, `corpus: pptx`; docs/development/testing.md).
 #[test]
+#[ignore = "corpus: pptx"]
 fn corpus_chart_bars_land_where_powerpoint_draws_them() {
-    let base = std::env::var_os("PAGED_CORPUS")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../corpus"));
-    let packs = base.join("pptx/packs");
-    if !packs.is_dir() {
-        assert!(
-            std::env::var("PAGED_REQUIRE_CORPUS").as_deref() != Ok("1"),
-            "PAGED_REQUIRE_CORPUS=1 but no corpus"
-        );
-        eprintln!("SKIP: no pptx corpus");
+    let Some(pptx) = paged_test_resources::corpus("pptx", &["PAGED_CORPUS"]) else {
         return;
+    };
+    let packs = pptx.join("packs");
+    if !packs.is_dir() {
+        paged_test_resources::skip!(
+            paged_test_resources::Resource::Corpus,
+            "{} is not a directory",
+            packs.display()
+        );
     }
     let mut checked = 0;
     let mut misses = Vec::new();

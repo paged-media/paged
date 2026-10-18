@@ -3,6 +3,9 @@
 #
 #   bash scripts/ppt-record-corpus.sh [corpus-root]
 #
+# The corpus root is the argument, else $PAGED_CORPUS_DIR, else the
+# deprecated $PAGED_CORPUS, else the gitignored <repo root>/corpus link.
+#
 # The corpus decks are third-party files, so their recordings live with them
 # in the PRIVATE corpus repository, never here:
 #   <corpus>/pptx/packs/<pack>/oracle/primary.ppt.pdf    PowerPoint's PDF
@@ -11,7 +14,10 @@
 # Tests rasterise the PDF themselves (pdftoppm), so no PNGs are stored.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-CORPUS="${1:-${PAGED_CORPUS:-$ROOT/../../corpus}}"
+if [ -z "${1:-}" ] && [ -z "${PAGED_CORPUS_DIR:-}" ] && [ -n "${PAGED_CORPUS:-}" ]; then
+  echo "warning: PAGED_CORPUS is deprecated; set PAGED_CORPUS_DIR to the corpus root" >&2
+fi
+CORPUS="${1:-${PAGED_CORPUS_DIR:-${PAGED_CORPUS:-$ROOT/../../corpus}}}"
 CORPUS="$(cd "$CORPUS" && pwd)"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT

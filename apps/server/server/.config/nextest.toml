@@ -1,0 +1,11 @@
+# cargo-nextest configuration.
+#
+# The opt-in server lane: paged-sync's integration tests, every one
+# `#[ignore = "server: a running paged.server (PAGED_SERVER_URL)"]`
+# (docs/development/testing.md). Start the server (README.md, "Local"), then
+#
+#   PAGED_SERVER_URL=http://127.0.0.1:8791 PAGED_REQUIRE_SERVER=1 \
+#     cargo nextest run --profile server --run-ignored only
+[profile.server]
+default-filter = "binary_id(paged-sync::it)"
+fail-fast = false

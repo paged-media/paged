@@ -83,6 +83,8 @@ serde-wasm-bindgen = "0.6"
 console_error_panic_hook = "0.1"
 getrandom = { version = "0.3", features = ["wasm_js"] }
 proptest = "1"
+# Optional test resources (docs/development/testing.md): dev-dependency only.
+paged-test-resources = { path = "../../platform/shared/test-resources" }
 
 # wasm-opt is run by scripts/build-wasm.sh (binaryen pinned in CI — see
 # the binaryen reftypes gotcha; locally it is skipped when absent).

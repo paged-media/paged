@@ -19,6 +19,8 @@ on:
       # The root Cargo config and its linker/wrapper scripts apply to every build.
       - ".cargo/config.toml"
       - "tooling/rust/**"
+      # The test-resources dev-dependency (the skip convention).
+      - "platform/shared/test-resources/**"
       # Prose under docs/ builds and tests nothing (test inputs are not .md there).
       - "!modules/doc/docs/**/*.md"
   pull_request:
@@ -27,6 +29,8 @@ on:
       - ".github/workflows/doc-rust.yml"
       - ".cargo/config.toml"
       - "tooling/rust/**"
+      # The test-resources dev-dependency (the skip convention).
+      - "platform/shared/test-resources/**"
       # Prose under docs/ builds and tests nothing (test inputs are not .md there).
       - "!modules/doc/docs/**/*.md"
   workflow_dispatch:
@@ -89,9 +93,15 @@ jobs:
       - name: nextest (junit; red results still upload)
         run: |
           set -uo pipefail
-          cargo nextest run --workspace --profile ci \
+          # Tests that miss a resource append `unavailable: …` here; the
+          # lane report marks them <skipped> in the JUnit and fails a run
+          # that executed nothing (docs/development/testing.md).
+          export PAGED_SKIP_LOG="$RUNNER_TEMP/paged-skips.tsv"
+          cargo nextest run --workspace --profile ci --no-tests=fail \
             || echo "RUST_FAILED=1" >> "$GITHUB_ENV"
           test -s target/nextest/ci/junit.xml
+          python3 ../../tooling/rust/skip-report.py --lane "doc nextest" --junit target/nextest/ci/junit.xml \
+            || echo "RUST_FAILED=1" >> "$GITHUB_ENV"
       # plugin-doc is a PUBLIC repo and the publish-results action lives in the
       # PRIVATE paged-media/state repo. GitHub refuses to resolve a private
       # repo's action from a public workflow ("Unable to resolve action

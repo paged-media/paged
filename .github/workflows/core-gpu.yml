@@ -13,9 +13,11 @@ concurrency:
 # adapter via `init_gpu()`; with lavapipe installed and VK_ICD_FILENAMES
 # pointed at it, that adapter request succeeds and the pixel-level Vello
 # assertions actually run. Without it (or on a stock runner) those same
-# tests skip silently, so the lane FAILS when vulkaninfo finds no
-# lavapipe device: from early October until 2026-10-14 Mesa's renamed
-# ICD left it with no adapter and every Vello test passed by skipping.
+# tests report `unavailable: GPU adapter` and return, so the lane FAILS
+# twice over when there is no device: vulkaninfo must find lavapipe, and
+# PAGED_REQUIRE_GPU=1 turns every unavailable test into a failure. From
+# early October until 2026-10-14 Mesa's renamed ICD left it with no
+# adapter and every Vello test passed by skipping.
 #
 # PROMOTION STEP 1 (fidelity-governance second half; audit 17082026
 # §1.10): `continue-on-error` is REMOVED, so a failure now shows as a
@@ -39,6 +41,8 @@ on:
       # The root Cargo config and its linker/wrapper scripts apply to every build.
       - ".cargo/config.toml"
       - "tooling/rust/**"
+      # The test-resources dev-dependency (the skip convention).
+      - "platform/shared/test-resources/**"
       # Prose under docs/ builds and tests nothing (test inputs are not .md there).
       - "!engine/core/docs/**/*.md"
   pull_request:
@@ -57,6 +61,8 @@ on:
       # The root Cargo config and its linker/wrapper scripts apply to every build.
       - ".cargo/config.toml"
       - "tooling/rust/**"
+      # The test-resources dev-dependency (the skip convention).
+      - "platform/shared/test-resources/**"
   workflow_dispatch:
 
 defaults:
@@ -65,6 +71,8 @@ defaults:
 
 env:
   CARGO_TERM_COLOR: always
+  # A nextest lane whose filter selects no test fails (exit 4).
+  NEXTEST_NO_TESTS: fail
 
 jobs:
   vello-lavapipe:
@@ -81,6 +89,11 @@ jobs:
       # lane stayed green.
       # Surface adapter-selection detail in wgpu logs if a test fails.
       RUST_LOG: wgpu=warn,vello=warn
+      # This lane exists to run the GPU tests: a test that finds no
+      # adapter fails instead of reporting it unavailable
+      # (paged-test-resources, docs/development/testing.md). The vulkaninfo
+      # sanity step below checks the driver; this checks every test.
+      PAGED_REQUIRE_GPU: "1"
     steps:
       - uses: actions/checkout@v4
       # The pinned toolchain from rust-toolchain.toml (audit B21), read here
@@ -162,7 +175,16 @@ jobs:
         # target/nextest/ci/junit.xml (.config/nextest.toml), which the
         # upload below hands to cockpit as the `core/vello-lavapipe` lane:
         # before it, the only GPU evidence was this job's colour.
-        run: cargo nextest run -p paged-gpu --features vello-backend --profile ci --no-fail-fast
+        run: |
+          echo "PAGED_SKIP_LOG=$RUNNER_TEMP/paged-skips.tsv" >> "$GITHUB_ENV"
+          PAGED_SKIP_LOG="$RUNNER_TEMP/paged-skips.tsv" \
+            cargo nextest run -p paged-gpu --features vello-backend --profile ci --no-fail-fast
+
+      # A lane that executed nothing fails; unavailable tests (none, under
+      # PAGED_REQUIRE_GPU=1) would be <skipped> rows in the JUnit.
+      - name: lane report
+        if: ${{ !cancelled() && steps.gpu_tests.outcome != 'skipped' }}
+        run: python3 ../../tooling/rust/skip-report.py --lane "core vello on lavapipe" --junit target/nextest/ci/junit.xml
 
       - name: CPU ↔ Vello parity over the generated corpus
         id: parity

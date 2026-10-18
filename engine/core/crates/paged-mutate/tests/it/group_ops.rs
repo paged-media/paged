@@ -307,10 +307,8 @@ fn dissolve_parsed_group_round_trips_with_index_fixup() {
             }
         }
     }
-    let Some((si, group_id)) = target else {
-        eprintln!("fixture has no top-level flat group — skipping");
-        return;
-    };
+    let (si, group_id) =
+        target.expect("geometry-groups.idml (paged-gen) has a top-level flat group");
     let before_order = order_snapshot(&doc, si);
     let before_paint = command_stream_digest(&doc);
 
@@ -497,10 +495,8 @@ fn nested_create_round_trips_and_restores_prior_structure() {
     let mut doc = idml_import::import_idml_doc(&fixture_bytes()).expect("open");
     // NESTED create: group an EXISTING top-level group G1 together with
     // a top-level leaf into a new outer group G2 (group-of-groups).
-    let Some((si, g1_id, leaf)) = group_plus_leaf(&doc) else {
-        eprintln!("fixture has no top-level group + leaf spread — skipping");
-        return;
-    };
+    let (si, g1_id, leaf) = group_plus_leaf(&doc)
+        .expect("geometry-groups.idml (paged-gen) has a spread with a top-level group and a leaf");
 
     let before_order = order_snapshot(&doc, si);
     let before_paint = command_stream_digest(&doc);
@@ -715,10 +711,8 @@ fn nested_dissolve_splices_into_parent_geometry_invariant() {
             let _ = pi;
         }
     }
-    let Some((si, inner_id, parent_id)) = target else {
-        eprintln!("fixture has no nested group — skipping");
-        return;
-    };
+    let (si, inner_id, parent_id) =
+        target.expect("geometry-groups.idml (paged-gen) has a nested group");
 
     // KEYSTONE: the rendered paint stream is the invariant. Dissolving a
     // nested group only removes the wrapper; members keep their pre-baked

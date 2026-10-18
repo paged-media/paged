@@ -61,6 +61,9 @@ too_many_arguments = "allow"
 # Shared dependency versions. Individual crates pick what they need.
 # Versions are intentionally conservative pins; bump during Phase 0.
 [workspace.dependencies]
+# Optional test resources (GPU, corpus, profiles, ...): the one skip
+# convention, docs/development/testing.md. Dev-dependency only.
+paged-test-resources = { path = "../../platform/shared/test-resources" }
 thiserror = "2"
 anyhow = "1"
 bytes = "1"
