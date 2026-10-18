@@ -12,7 +12,7 @@ built on them.
 | `@paged-media/cli` | `paged-node`: get, set, query, batch, export and more over core and every installed bundle, through the headless host ([ADR 324](./docs/adr/324-node-cli-over-the-headless-host.md)). A private workspace package (PM-0008). | tooling cadence |
 | `@paged-media/ai` | Claude for paged: the model, prompt, tools and loop behind `paged-node ai` ([ADR 325](./docs/adr/325-claude-agent-package.md)). A private workspace package (PM-0008). | tooling cadence |
 
-**Declarations.** From 0.2.70 the published declarations of `plugin-api` and `plugin-sdk`
+**Declarations.** From 0.2.71 the published declarations of `plugin-api` and `plugin-sdk`
 are emitted by TypeScript 7 (`tsc --emitDeclarationOnly`). `plugin-sdk` ships one `.d.ts`
 per module instead of a single bundled `index.d.ts`, with the same exported types; its
 JavaScript is bundled by `bun build`
