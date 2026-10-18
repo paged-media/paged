@@ -1,0 +1,51 @@
+# Cross-origin isolation for SharedArrayBuffer (W0.17).
+#
+# The render worker allocates a SharedArrayBuffer for the camera + gesture
+# transforms. `new SharedArrayBuffer(...)` throws SecurityError unless the
+# page is cross-origin isolated, which requires BOTH of these response
+# headers on the top-level document (and COEP on every subresource —
+# require-corp makes the browser refuse any resource that doesn't opt in).
+#
+# Format: Netlify / Cloudflare Pages `_headers`. Vite copies files under
+# `public/` verbatim to the dist root, so this ships as `dist/_headers`.
+# The dev server sets the same two headers via the `crossOriginIsolation`
+# plugin in vite.config.ts; keep them in lock-step.
+#
+# nginx equivalent (for a self-hosted static deploy) — add inside the
+# `server { ... }` (or the SPA `location / { ... }`) block:
+#
+#     add_header Cross-Origin-Opener-Policy   "same-origin"   always;
+#     add_header Cross-Origin-Embedder-Policy "require-corp"  always;
+#     # the .wasm asset must be served with the right type so the
+#     # streaming-compile path (WebAssembly.instantiateStreaming) works:
+#     types { application/wasm wasm; }
+#
+# Apache equivalent (.htaccess):
+#     Header always set Cross-Origin-Opener-Policy   "same-origin"
+#     Header always set Cross-Origin-Embedder-Policy "require-corp"
+
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  # `credentialless` (not `require-corp`) so this app can be embedded as a
+  # cross-origin <iframe> by the docs scripting playground (docs.paged.media ships
+  # COEP: credentialless, and Chrome will not nest a `require-corp` document inside
+  # a `credentialless` one — the modes must match). Both values yield
+  # crossOriginIsolated === true, so SharedArrayBuffer still works; credentialless
+  # just loads any cross-origin subresource without credentials instead of
+  # requiring CORP — and the CSP below already walls fetches to same-origin, so
+  # there are none. Lock-step with the dev header in apps/canvas/vite.config.ts.
+  Cross-Origin-Embedder-Policy: credentialless
+  # Allow this document to be embedded as a cross-origin <iframe> by the docs
+  # scripting playground. A COEP parent (docs.paged.media) blocks a cross-origin
+  # iframe with ERR_BLOCKED_BY_RESPONSE unless the embedded document opts in with
+  # CORP — without this the iframe shows "refused to connect". `cross-origin` (vs
+  # `same-site`) keeps the open playground embeddable from anywhere.
+  Cross-Origin-Resource-Policy: cross-origin
+  # D-03 network wall — bound EVERY page/worker fetch to same-origin + local
+  # bytes; no external origin is reachable (every first-party bundle declares
+  # `network: false`, so the consented set is empty). `connect-src` only — no
+  # `default-src` — so script/style/img are untouched (just the egress wall).
+  # Lock-step with the dev header in apps/canvas/vite.config.ts.
+  # The module host (ADR 220) is part of the floor: the deployed build's wasm
+  # redirects there.
+  Content-Security-Policy: connect-src 'self' blob: data: https://modules.paged.media

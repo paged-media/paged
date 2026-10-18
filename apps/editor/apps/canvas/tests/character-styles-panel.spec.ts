@@ -1,0 +1,149 @@
+/*
+ * This file is part of paged (https://paged.media), the commercial editor
+ * for the paged IDML engine.
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// SDK Phase 5 — Character Styles panel acceptance.
+//
+// Direct twin of `paragraph-styles-panel.spec.ts`. Validates the
+// §9 "≥2 panels" rule for PAGED_INPUT_COLLECTION_SELECT — the
+// same primitive driving Paragraph Styles also drives this panel,
+// parameterised by `collectionName` + the bound property path.
+
+import { test, expect } from "@playwright/test";
+import { dirname, resolve as pathResolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { openCanvas, loadIdml, openPanel } from "./fidelity/canvas-driver";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const REPO_ROOT = pathResolve(__dirname, "..", "..", "..");
+const FIXTURE = `${REPO_ROOT}/corpus/idml/generated/geometry-groups.idml`;
+
+test.describe("Phase 5 — Character Styles panel", () => {
+  test.beforeEach(async ({ page }) => {
+    await openCanvas(page);
+    await loadIdml(page, FIXTURE);
+    await openPanel(page, "paged.character-styles");
+  });
+
+  test("AC-CSTYLE-1 — panel mounts as a composition with a select @feat:editor-shell.panels.character-styles @feat:styles.character.crud @level:smoke", async ({
+    page,
+  }) => {
+    await expect(
+      page.locator('[data-character-styles-panel="ready"]'),
+    ).toBeVisible();
+    await expect(
+      page.locator(
+        '[data-character-styles-panel="ready"] select[data-collection="characterStyles"]',
+      ),
+    ).toBeVisible();
+  });
+
+  test("AC-CSTYLE-2 — selecting a style writes appliedCharacterStyle through the apply layer @feat:editor-shell.panels.character-styles @feat:styles.character.crud @level:happy", async ({
+    page,
+  }) => {
+    const selectedSelfId = await page.evaluate(async () => {
+      type DebugCanvas = {
+        client?: {
+          executeScript(src: string): Promise<{
+            output: string[];
+            error: string | null;
+          }>;
+        };
+        setContentSelection?(
+          sel: {
+            storyId: string;
+            start: number;
+            end: number;
+          } | null,
+        ): void;
+      };
+      const w = window as unknown as { __canvas?: DebugCanvas };
+      const dbg = w.__canvas;
+      if (!dbg?.client) {
+        throw new Error("__canvas client not available");
+      }
+
+      const stories = await dbg.client
+        .executeScript("paged.stories()")
+        .then((r) => JSON.parse(r.output[0] ?? "[]"));
+      if (!stories.length) throw new Error("fixture has no stories");
+      const story = stories[0] as {
+        selfId: string;
+        characterCount: number;
+      };
+      const range = {
+        storyId: story.selfId,
+        start: 0,
+        end: Math.max(1, Math.min(story.characterCount, 4)),
+      };
+      dbg.setContentSelection?.(range);
+      await new Promise((r) => setTimeout(r, 50));
+
+      const stylesJson = await dbg.client
+        .executeScript("paged.characterStyles()")
+        .then((r) => r.output[0] ?? "[]");
+      const styles = JSON.parse(stylesJson);
+      if (!styles.length) {
+        throw new Error(`fixture has no character styles; raw=${stylesJson}`);
+      }
+      const target = (styles as Array<{ selfId: string }>).find(
+        (s) => s.selfId && s.selfId.length > 0,
+      );
+      if (!target) {
+        throw new Error(
+          `no character style with a non-empty selfId; styles=${stylesJson}`,
+        );
+      }
+
+      const setResult = await dbg.client.executeScript(
+        `paged.set("storyRange:${range.storyId}@${range.start}..${range.end}",
+                   "appliedCharacterStyle",
+                   ${JSON.stringify(target.selfId)});`,
+      );
+      if (setResult.error) {
+        throw new Error(`paged.set errored: ${setResult.error}`);
+      }
+      // paged.set returns the boolean apply-success indicator as the
+      // script's terminal expression.
+      const setOk = setResult.output[0]?.trim();
+      if (setOk !== "true") {
+        throw new Error(
+          `paged.set returned ${setOk}; target.selfId=${target.selfId}`,
+        );
+      }
+      await new Promise((r) => setTimeout(r, 50));
+
+      const inspectJson = await dbg.client
+        .executeScript(
+          `paged.inspect("storyRange:${range.storyId}@${range.start}..${range.end}");`,
+        )
+        .then((r) => r.output[0] ?? "");
+      const inspect = JSON.parse(inspectJson) as {
+        entries: Array<{ path: string; value: { value: string } | null }>;
+      };
+      const entry = inspect.entries.find(
+        (e) => e.path === "appliedCharacterStyle",
+      );
+      return entry?.value?.value ?? null;
+    });
+
+    expect(selectedSelfId).toBeTruthy();
+  });
+});

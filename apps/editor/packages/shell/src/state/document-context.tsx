@@ -1,0 +1,140 @@
+/*
+ * This file is part of paged (https://paged.media), the commercial editor
+ * for the paged IDML engine.
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+  type PropsWithChildren,
+} from "react";
+
+// eslint-disable-next-line import/no-relative-parent-imports
+import type {
+  DocumentHandle,
+  PageId,
+  ResolutionResult,
+} from "@paged-media/client";
+
+export interface LoadingState {
+  name: string;
+  bytes: number;
+}
+
+interface DocumentContextValue {
+  /** Loaded document descriptor; null until the first IDML loads. */
+  handle: DocumentHandle | null;
+  setHandle: (h: DocumentHandle | null) => void;
+
+  /** U14 — the loaded file's display name (extension stripped), set by
+   * the loader from `File.name`. Fallback identity for documents whose
+   * meta carries no `documentName` (most generated/corpus IDMLs):
+   * `meta.documentName || sourceName || "Untitled document"`. Null for
+   * a blank File ▸ New document or before anything loads. */
+  sourceName: string | null;
+  setSourceName: (name: string | null) => void;
+
+  /** In-flight file load; null when idle. */
+  loading: LoadingState | null;
+  setLoading: (l: LoadingState | null) => void;
+
+  /** Per-page thumbnail object-URLs (revoked on document swap). */
+  snapshots: ReadonlyMap<PageId, string>;
+  setSnapshots: React.Dispatch<React.SetStateAction<Map<PageId, string>>>;
+
+  /** Flag flipped true after every page has a snapshot — Playwright
+   * polls this to avoid contending with the navigator pre-fetch. */
+  snapshotsReady: boolean;
+  setSnapshotsReady: (ready: boolean) => void;
+
+  /** Tier 3 resolution result. Null before the first resolve fires. */
+  resolution: ResolutionResult | null;
+  setResolution: (r: ResolutionResult | null) => void;
+
+  /** Convenience reset: clears every per-document field. Called by
+   * the loader before kicking off a fresh `loadDocument` so a
+   * partial load doesn't show stale snapshots. */
+  resetForNewDocument: () => void;
+}
+
+const Context = createContext<DocumentContextValue | null>(null);
+
+export function DocumentProvider({ children }: PropsWithChildren) {
+  const [handle, setHandle] = useState<DocumentHandle | null>(null);
+  const [sourceName, setSourceName] = useState<string | null>(null);
+  const [loading, setLoading] = useState<LoadingState | null>(null);
+  const [snapshots, setSnapshots] = useState<Map<PageId, string>>(new Map());
+  const [snapshotsReady, setSnapshotsReady] = useState(false);
+  const [resolution, setResolution] = useState<ResolutionResult | null>(null);
+
+  const resetForNewDocument = useCallback(() => {
+    setSnapshots((prev) => {
+      for (const url of prev.values()) URL.revokeObjectURL(url);
+      return new Map();
+    });
+    setResolution(null);
+    setSnapshotsReady(false);
+    // The loader re-sets sourceName right after this reset; clearing
+    // here keeps a failed load from wearing the previous file's name.
+    setSourceName(null);
+  }, []);
+
+  const value = useMemo<DocumentContextValue>(
+    () => ({
+      handle,
+      setHandle,
+      sourceName,
+      setSourceName,
+      loading,
+      setLoading,
+      snapshots,
+      setSnapshots,
+      snapshotsReady,
+      setSnapshotsReady,
+      resolution,
+      setResolution,
+      resetForNewDocument,
+    }),
+    [
+      handle,
+      sourceName,
+      loading,
+      snapshots,
+      snapshotsReady,
+      resolution,
+      resetForNewDocument,
+    ],
+  );
+
+  return <Context.Provider value={value}>{children}</Context.Provider>;
+}
+
+export function useDocument(): DocumentContextValue {
+  const ctx = useContext(Context);
+  if (!ctx) {
+    throw new Error("useDocument called outside DocumentProvider");
+  }
+  return ctx;
+}
+
+/** The document context, or `null` outside a DocumentProvider. */
+export function useOptionalDocument(): DocumentContextValue | null {
+  return useContext(Context);
+}

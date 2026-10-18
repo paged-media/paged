@@ -1,0 +1,251 @@
+/*
+ * This file is part of paged (https://paged.media), the commercial editor
+ * for the paged IDML engine.
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// File-loading orchestration extracted from CanvasApp.tsx — the
+// `onFile` flow that turns a dropped file into (a) loaded
+// document handle, (b) per-page snapshots, (c) Tier 3 resolution.
+//
+// The loader takes the canvas client + the document/loading
+// callbacks (typically the setters from DocumentContext). It does
+// NOT depend on React; pass it the setters and it dispatches.
+
+// eslint-disable-next-line import/no-relative-parent-imports
+import type { CanvasClient } from "@paged-media/client";
+// eslint-disable-next-line import/no-relative-parent-imports
+import type {
+  DocumentHandle,
+  PageId,
+} from "@paged-media/client";
+
+import type { LoadingState } from "./document-context";
+
+const SNAPSHOT_WIDTH_PX = 256;
+
+export interface DocumentLoaderCallbacks {
+  setHandle: (h: DocumentHandle | null) => void;
+  setLoading: (l: LoadingState | null) => void;
+  setStatus: (s: string) => void;
+  setSnapshotsReady: (ready: boolean) => void;
+  addSnapshot: (pageId: PageId, objectUrl: string) => void;
+  resetForNewDocument: () => void;
+  pushWarning: (w: string) => void;
+  /** U14 — receives the loaded file's display name (extension
+   * stripped) so the doc title bar / Save-As basename can fall back
+   * to it when the document meta carries no `documentName`. Optional:
+   * callers that don't surface a title may omit it. */
+  setSourceName?: (name: string | null) => void;
+}
+
+/**
+ * Drives the load → snapshot → ready sequence for one IDML file.
+ *
+ * Order matters here: each step must complete before the next. The
+ * worker is single-threaded; parallel requests would only queue.
+ * Snapshot progress lands in the UI page-by-page (the navigator
+ * shows the snapshot as soon as it lands), so the loop is
+ * deliberately not Promise.all.
+ *
+ * Errors at the load step abort; per-page snapshot errors are
+ * pushed as warnings and the loop continues — a missing snapshot
+ * shouldn't block the rest of the document.
+ */
+export async function loadDocumentFile(
+  client: CanvasClient,
+  file: File,
+  cb: DocumentLoaderCallbacks,
+): Promise<void> {
+  cb.setStatus(`loading ${file.name} (${file.size.toLocaleString()} bytes)…`);
+  cb.setLoading({ name: file.name, bytes: file.size });
+  cb.resetForNewDocument();
+  // U14 — the file's name (extension stripped) is the document's
+  // fallback display identity when its meta has no documentName.
+  cb.setSourceName?.(file.name.replace(/\.[^.]+$/, "") || null);
+
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const fontBytes = await fetchDefaultFont();
+  if (!fontBytes) warnDefaultFontUnavailable(cb);
+
+  let handle: DocumentHandle;
+  try {
+    handle = await client.loadDocument(bytes, fontBytes);
+  } catch (err) {
+    cb.setLoading(null);
+    cb.setStatus(`load failed: ${String(err)}`);
+    return;
+  }
+
+  cb.setHandle(handle);
+  cb.setLoading(null);
+  cb.setStatus(
+    `loaded ${handle.pageCount} page${handle.pageCount === 1 ? "" : "s"}; snapshotting…`,
+  );
+  await snapshotAllPages(client, handle, cb);
+}
+
+/** Size of a new blank document in points, [width, height]. */
+export interface BlankDocumentOptions {
+  widthPt: number;
+  heightPt: number;
+}
+
+/**
+ * File ▸ New — create an empty single-page document and run the same
+ * post-load orchestration as {@link loadDocumentFile} (reset, snapshot,
+ * ready). The blank package is minted by the engine
+ * ([`CanvasClient.newBlankDocument`]); the editor only orchestrates the
+ * surrounding UI state, exactly like opening a file.
+ */
+export async function createBlankDocument(
+  client: CanvasClient,
+  opts: BlankDocumentOptions,
+  cb: DocumentLoaderCallbacks,
+): Promise<void> {
+  cb.setStatus("creating new document…");
+  cb.setLoading({ name: "Untitled", bytes: 0 });
+  cb.resetForNewDocument();
+  // U14 — a blank document has no source file; the title bar's
+  // "Untitled document" fallback is the honest name.
+  cb.setSourceName?.(null);
+
+  const fontBytes = await fetchDefaultFont();
+  if (!fontBytes) warnDefaultFontUnavailable(cb);
+
+  let handle: DocumentHandle;
+  try {
+    handle = await client.newBlankDocument(opts.widthPt, opts.heightPt, fontBytes);
+  } catch (err) {
+    cb.setLoading(null);
+    cb.setStatus(`new document failed: ${String(err)}`);
+    return;
+  }
+
+  cb.setHandle(handle);
+  cb.setLoading(null);
+  cb.setStatus(
+    `new ${handle.pageCount}-page document; snapshotting…`,
+  );
+  await snapshotAllPages(client, handle, cb);
+}
+
+/**
+ * Auto-fetch a default font so text is shaped + the captured StoryLayout
+ * has real glyph positions. Without this the caret + selection rendering
+ * has nothing to position against (glyphs vec empty → no clusters
+ * captured) — and, worse, fonts the document declares but cannot resolve
+ * have NO fallback face, so their text renders blank (U5/A7). Inter is
+ * checked in under corpus/fonts/. Best-effort in that the load proceeds
+ * without it, but callers must be LOUD about the gap (see
+ * `warnDefaultFontUnavailable`).
+ *
+ * Exported (U5/A7) so the app can hand the SAME fetch to
+ * `CanvasClient`'s `defaultFontProvider` — one default-font door for
+ * shell loads and bare client loads alike.
+ */
+export async function fetchDefaultFont(): Promise<Uint8Array | undefined> {
+  try {
+    const fontResp = await fetch("/fonts/Inter.ttf");
+    if (fontResp.ok) {
+      const bytes = new Uint8Array(await fontResp.arrayBuffer());
+      // A static host answers a missing file with its SPA index.html and a
+      // 200 — the playground did, and every new document laid its text out
+      // with "HTML" as the font: nothing drew. Accept only sfnt bytes.
+      if (isFontFile(bytes)) return bytes;
+    }
+  } catch {
+    // fall through to undefined — the caller warns.
+  }
+  return undefined;
+}
+
+/** The bundled default family's italic, beside its roman (`Inter.ttf`):
+ *  the variable roman covers weights, not italic, so the client
+ *  registers this as Inter's "Italic" after every load
+ *  (`CanvasClient`'s `defaultFontFaces`). Fetched once per session. */
+let defaultItalic: Promise<Uint8Array | undefined> | null = null;
+
+export async function fetchDefaultFontFaces(): Promise<
+  Array<{ family: string; style: string; bytes: Uint8Array }>
+> {
+  defaultItalic ??= (async () => {
+    try {
+      const resp = await fetch("/fonts/Inter-Italic.ttf");
+      if (!resp.ok) return undefined;
+      const bytes = new Uint8Array(await resp.arrayBuffer());
+      return isFontFile(bytes) ? bytes : undefined;
+    } catch {
+      return undefined;
+    }
+  })();
+  const italic = await defaultItalic;
+  // A failed fetch is not cached: the next load tries again.
+  if (!italic) defaultItalic = null;
+  return italic ? [{ family: "Inter", style: "Italic", bytes: italic }] : [];
+}
+
+/** TrueType / OpenType / collection magic: 0x00010000, "OTTO", "true", "ttcf". */
+function isFontFile(bytes: Uint8Array): boolean {
+  if (bytes.length < 12) return false;
+  const tag = String.fromCharCode(bytes[0]!, bytes[1]!, bytes[2]!, bytes[3]!);
+  return (bytes[0] === 0 && bytes[1] === 1 && bytes[2] === 0 && bytes[3] === 0) || tag === "OTTO" || tag === "true" || tag === "ttcf";
+}
+
+/** U5/A7 — a missing default font is the "blank text" precondition;
+ *  say so where the user can see it instead of failing silently. */
+function warnDefaultFontUnavailable(cb: DocumentLoaderCallbacks): void {
+  cb.pushWarning(
+    "default font unavailable — text in documents with missing fonts will not render",
+  );
+}
+
+/** One page's thumbnail as an object URL (the caller revokes it). The
+ *  load pass and the thumbnail keeper (`usePageThumbnails`) both take
+ *  them here, so a re-taken thumbnail matches the one it replaces. */
+export async function requestPageThumbnail(
+  client: CanvasClient,
+  pageId: PageId,
+): Promise<string> {
+  const snap = await client.requestSnapshot(pageId, SNAPSHOT_WIDTH_PX);
+  const blob = new Blob([new Uint8Array(snap.pngBytes)], { type: "image/png" });
+  return URL.createObjectURL(blob);
+}
+
+/**
+ * Sequential per-page snapshot requests + ready flag, shared by the
+ * open-file and new-document paths. Sequential because the worker is
+ * single-threaded; parallel requests would only queue. A missing
+ * snapshot is a warning, not a hard failure.
+ */
+async function snapshotAllPages(
+  client: CanvasClient,
+  handle: DocumentHandle,
+  cb: DocumentLoaderCallbacks,
+): Promise<void> {
+  for (const pageId of handle.pageIds) {
+    try {
+      cb.addSnapshot(pageId, await requestPageThumbnail(client, pageId));
+    } catch (err) {
+      cb.pushWarning(`snapshot ${pageId}: ${String(err)}`);
+    }
+  }
+
+  cb.setStatus(
+    `loaded ${handle.pageCount} page${handle.pageCount === 1 ? "" : "s"}`,
+  );
+  cb.setSnapshotsReady(true);
+}

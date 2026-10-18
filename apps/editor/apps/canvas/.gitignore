@@ -1,0 +1,32 @@
+node_modules/
+dist/
+# Decision-B: the engine wasm is consumed from the published
+# `@paged-media/canvas-wasm` package, not built into `src/wasm/`.
+# Kept as a defensive ignore in case a stray `build-wasm.sh` run
+# (legacy bridge) drops output here on a dev machine.
+src/wasm/
+*.local
+tsconfig.tsbuildinfo
+playwright-report/
+test-results/
+
+# demo/playground build output (deployed to the playground host, not committed)
+dist-demo/
+
+# ad-hoc real-world PDF test documents (manual paged.pdf testing; some are
+# personal/third-party — never commit). The committed fixtures are
+# public/sample.pdf + public/report.pdf.
+public/pdfs/
+
+# annual/showcase build state: per-chapter checkpoints + ledger fragments are
+# reproducible run intermediates; the committed artifacts live in showcase/ root
+showcase/checkpoints/
+showcase/ledger/
+# full-res per-page renders at annual scale are CI artifacts, not commits;
+# the committed page evidence is the contact sheet (WP5)
+showcase/pages/
+showcase/preview/
+# InDesign probe work dir (staged copies + reports) — tests/showcase/indesign-probe.spec.ts
+showcase/indesign/
+# IDML export link folder (copied/handed-back image files) — 900-assemble.spec.ts
+showcase/Links/

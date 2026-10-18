@@ -1,0 +1,27 @@
+# Node / pnpm
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Test + build artefacts
+test-results/
+playwright-report/
+*.actual.png
+
+# OS / editor / runtime
+.DS_Store
+.vscode/
+.idea/
+.claude/
+
+# Local side-by-side-dev symlinks (→ ~/paged/corpus, ~/paged/core/target);
+# the corpus assets live in the paged-media/corpus repo, never here.
+/corpus
+/target
+
+# NOTE: Decision-B package boundary — the engine wasm (loader .js,
+# *_bg.wasm, and tsify .d.ts) ships in the published @paged-media
+# packages and is resolved from node_modules; nothing wasm is vendored
+# or tracked here anymore. The per-package .gitignore files under
+# apps/*/ and packages/client/ keep defensive ignores for legacy
+# build-wasm.sh output only.

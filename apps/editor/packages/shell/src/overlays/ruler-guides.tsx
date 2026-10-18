@@ -1,0 +1,96 @@
+/*
+ * This file is part of paged (https://paged.media), the commercial editor
+ * for the paged IDML engine.
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// Plan-2 §8.3 — ruler-guide overlay.
+//
+// Draws every `<Guide>` declared in the loaded IDML as a thin cyan
+// line at its page-local location. The snap pass treats them as
+// targets (see `paged-canvas::snap`), so this overlay is mostly
+// informational — the visible line tells the user where the
+// invisible snap target sits.
+//
+// Data source: `useDocument().handle.rulerGuides`. Empty for IDMLs
+// without `<Guide>` elements (most synthetic fixtures); real
+// InDesign exports often ship a handful per page.
+
+import { useDocument } from "../state/document-context";
+import { useOptionalScreenMode } from "../state/screen-mode-context";
+
+import type { OverlayContribution, OverlayProps } from "../registries/overlay";
+
+function RulerGuidesRender(props: OverlayProps) {
+  const { handle } = useDocument();
+  // Concept 1 (T7) — guides are non-printing chrome: Normal mode only;
+  // Preview / Bleed / Slug / Presentation hide them.
+  const screenMode = useOptionalScreenMode();
+  const guides = handle?.rulerGuides ?? [];
+  if (screenMode && screenMode.screenMode !== "normal") return null;
+  if (guides.length === 0) return null;
+  const inv = 1 / props.camera.scale;
+  return (
+    <g pointerEvents="none">
+      {guides.map((g, i) => {
+        const pr = props.pageRects.get(g.pageId);
+        if (!pr) return null;
+        if (g.orientation === "vertical") {
+          // Vertical guide: vertical line at page-local x = location,
+          // spanning the page's height in document space.
+          const x = pr.x + g.location;
+          return (
+            <line
+              key={i}
+              x1={x}
+              y1={pr.y}
+              x2={x}
+              y2={pr.y + pr.h}
+              stroke="var(--overlay-guide)"
+              strokeWidth={1 * inv}
+              strokeOpacity={0.6}
+              vectorEffect="non-scaling-stroke"
+            />
+          );
+        }
+        // Horizontal guide.
+        const y = pr.y + g.location;
+        return (
+          <line
+            key={i}
+            x1={pr.x}
+            y1={y}
+            x2={pr.x + pr.w}
+            y2={y}
+            stroke="var(--overlay-guide)"
+            strokeWidth={1 * inv}
+            strokeOpacity={0.6}
+            vectorEffect="non-scaling-stroke"
+          />
+        );
+      })}
+    </g>
+  );
+}
+
+export const rulerGuidesContribution: OverlayContribution = {
+  id: "paged.ruler-guides",
+  render: RulerGuidesRender,
+  // Below selection chrome / handles (z 200+) and snap lines (z 400+),
+  // above the page decorations (z 50) — a quiet line on the page
+  // that doesn't fight selection visibility.
+  z: 75,
+};

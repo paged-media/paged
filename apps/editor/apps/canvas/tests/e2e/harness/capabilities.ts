@@ -1,0 +1,343 @@
+/*
+ * This file is part of paged (https://paged.media), the commercial editor
+ * for the paged IDML engine.
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// E2E op suite — the CHECKED-IN capability table: engine support
+// for every wire Mutation op, as established EMPIRICALLY by the
+// probe in capability-matrix.spec.ts. The spec asserts the current
+// engine classification matches this table — support changing in
+// EITHER direction fails CI with instructions to update the table
+// (and add/upgrade the real domain test).
+//
+// Statuses:
+//   supported   — op applies, model changes, undo restores
+//   unsupported — op rejected (the note carries the error kind)
+//
+// Seeded from the capture run on 2026-06-05 (E2E_CAPS=capture);
+// re-captured 2026-06-06 against protocol v28 (the W0/W1 wave:
+// applyStyle/insertField/linkFrames/unlinkFrames went live, plus
+// insertTextFrame/insertOval, guide CRUD, masters/sections ops and
+// conditional-text ops), then again 2026-06-06 against protocol v30
+// (W3.A2: the 6 table ops — setRowHeight/setColumnWidth/insertTableRow
+// /deleteTableRow/insertTableColumn/deleteTableColumn, probed against
+// the tables fixture's first cell — plus the 3 kernel path ops
+// outlineStroke/offsetPath/simplifyPath), then 2026-06-07 against
+// protocol v34 (createGroup/dissolveGroup, setPluginMetadata), then
+// again 2026-06-07 against protocol v35 (W2.11 tables v2: the
+// header/footer row ops insertHeaderRow/removeHeaderRow/insertFooterRow
+// /removeFooterRow + setCellSpan, probed against the tables fixture's
+// first cell), then 2026-06-07 (W2.10: the W1.22 NumberingList CRUD ops
+// createNumberingList/editNumberingList/deleteNumberingList — the
+// Bullets & Numbering list-definition surface — probed on the `text`
+// fixture). Update via the same run when core lands new ops.
+//
+// 2026-08-09: RE-CAPTURED at protocol v61 (engine `canvas-wasm@0.61.1`).
+// Every op listed below still classifies as recorded — the probe passed
+// unchanged. But the recapture surfaced something the probe structurally
+// cannot: this table had drifted TWENTY-ONE protocol versions without a
+// red run, because the probe validates the ops the table LISTS and
+// nothing iterates the engine's own set. The header above said "v40"
+// while core was at 61; the table carried 94 ops, the engine declares
+// 117.
+//
+// The 23 it had never heard of include `insertHyperlink` and
+// `insertAnchoredFrame` — doors the plugin-doc campaign built and
+// shipped — plus the seven `pathfinder*` region verbs, both opacity-mask
+// ops, and text-on-a-path. They are now named in KNOWN_UNCLASSIFIED in
+// capability-matrix.spec.ts, guarded by AC-E2E-CAPS-COVER as a
+// shrink-only ratchet: a NEW engine op fails immediately, and an entry
+// that gets classified must leave the list.
+//
+// Why they are not classified here: a probe needs real args, and a probe
+// built on guessed args reports "unsupported" when the guess is wrong
+// rather than when the engine lacks the op. This table is where
+// paged-media/state's completeness-check.mjs gets its wire-op list, so
+// false evidence here propagates straight into the capability registry —
+// worse than the gap it would paper over.
+//
+// 2026-06-12: re-captured at protocol v40, closing the v36–v40 gap the
+// audit flagged (02 E5'). Added `setGroupTransform` — the group-transform
+// write that landed beside createGroup/dissolveGroup — and probed it
+// against the 0.40.0 engine (transforms a scratch group built from two
+// frames, modeled on the dissolveGroup probe). NOTE: the audit also named
+// `insertTable`; the 0.40.0 wire union had NO standalone insertTable
+// Mutation (table creation rode a NodeSpec through an insert op, and the
+// engine rejected a bare `insertTable`, probe-verified) — HISTORY as of
+// the v62 re-capture below: the CURRENT wire ships `insertTable` as a
+// standalone story-addressed op (the showcase's 11-tables page builds on
+// it), and it is classified in the table.
+// The path-segment discriminants moveTo/lineTo/cubicTo/close are
+// `ScenePathSeg` kinds (the C-1 scene-layer payload), NOT Mutation ops,
+// so they are correctly absent. The table's op universe == the published
+// Mutation union, which `state/scripts/completeness-check.mjs` derives
+// its wire-op set from (CAPS_FILE).
+//
+// 2026-08-26: the 94→117 drift CLOSED at protocol v62. All 23 ops the
+// AC-E2E-CAPS-COVER ratchet named in KNOWN_UNCLASSIFIED got real-args
+// probes (shapes sourced from the generated .d.ts, core's wire tests —
+// opacity_mask_and_text_path / planar_regions / reorder / place_image /
+// placeholder / batch_composition — and the shipping consumers in
+// plugin-draw / plugin-doc / the showcase) and are classified below;
+// KNOWN_UNCLASSIFIED is empty.
+//
+// 2026-10-05: the pin moved 0.64 → 0.66 in one step (protocol 65 and
+// 66). AC-E2E-CAPS-COVER named the two new Mutation ops,
+// `duplicateElements` (v65) and `deleteTable` (v66); both got real-args
+// probes and classify `supported` on canvas-wasm 0.66.0. (v66's
+// `deletePagedPart` is a worker message beside write/read/listPagedParts,
+// not a Mutation op, so it is correctly absent here.)
+//
+// 2026-10-06: the pin moved to canvas-wasm 0.70.0 (protocol 70).
+// AC-E2E-CAPS-COVER named seven new Mutation ops — movePage,
+// setPageMetadata, setDocumentMetadata, createMaster, deleteMaster,
+// renameMaster, onMaster. All got real-args probes (shapes from the .d.ts
+// and core's master_crud / on_master / page_metadata tests) and classify
+// `supported`; none has an editor UI yet, which each note says.
+//
+// 2026-10-11: the pin moved to canvas-wasm 0.71.1 (protocol 71).
+// AC-E2E-CAPS-COVER named three new Mutation ops — set,
+// createTextVariable, deleteTextVariable — each probed with real args.
+//
+// 2026-10-17: the pin moved to canvas-wasm 0.71.13 (additive on protocol
+// 71). AC-E2E-CAPS-COVER named five new Mutation ops from core's v73 wire
+// (ADRs 163–165): insertFootnote, deleteFootnote, deleteHyperlink,
+// editHyperlink, updateTableOfContents. Each got a real-args probe: the
+// footnote and hyperlink ops on the `text` fixture (the delete / edit
+// probes make their own scratch note or link and read its id off the
+// footnotes / hyperlinks collection), the TOC update on sample.idml's TOC
+// story. None has an editor UI of its own yet.
+//
+// 2026-10-17: the pin moved to canvas-wasm 0.72.0 (protocol 72).
+// AC-E2E-CAPS-COVER named ten new Mutation ops (core ADRs 168, 169, 172,
+// 173): generateIndex, updateCrossReferences, insertNote, editNote,
+// deleteNote, convertNoteToText, createBookmark, renameBookmark,
+// moveBookmark, deleteBookmark. Each got a real-args probe: Generate
+// Index and the note ops on the `text` fixture (the edit / delete /
+// convert probes make their own scratch note and read its `id` off the
+// notes collection — a note has no InDesign Self), cross-references and
+// the bookmark ops on the `navigation` fixture (its cross-reference
+// source and its two bookmarks). None has an editor UI of its own yet.
+
+export type CapabilityStatus = "supported" | "unsupported";
+
+export interface Capability {
+  op: string;
+  status: CapabilityStatus;
+  note?: string;
+}
+
+export const CAPABILITIES: Capability[] = [
+  // ── text ops ──────────────────────────────────────────────────────
+  { op: "insertText", status: "supported" },
+  { op: "deleteRange", status: "supported" },
+  { op: "applyStyle", status: "supported" },
+  { op: "insertField", status: "supported" },
+  // ── frame / page structure ────────────────────────────────────────
+  { op: "moveFrame", status: "supported", note: "live as of the v35 wasm bump (was a notImplemented stub); frame moves also ride the translate gesture, proven in proving.spec AC-E2E-PROVE-2" },
+  { op: "resizeFrame", status: "supported" },
+  { op: "linkFrames", status: "supported" },
+  { op: "unlinkFrames", status: "supported" },
+  { op: "insertPage", status: "supported" },
+  { op: "deletePage", status: "supported" },
+  { op: "resizePage", status: "supported" },
+  { op: "duplicatePage", status: "supported" },
+  { op: "insertFrame", status: "supported" },
+  { op: "insertTextFrame", status: "supported" },
+  { op: "deleteFrame", status: "supported" },
+  { op: "insertLine", status: "supported" },
+  { op: "insertPath", status: "supported" },
+  { op: "insertOval", status: "supported" },
+  // ── guides / masters / sections (v28) ─────────────────────────────
+  { op: "insertGuide", status: "supported" },
+  { op: "moveGuide", status: "supported" },
+  { op: "deleteGuide", status: "supported" },
+  { op: "applyMasterToPage", status: "supported" },
+  { op: "insertSection", status: "supported" },
+  { op: "editSection", status: "supported" },
+  { op: "deleteSection", status: "supported" },
+  // ── conditional text (v28) ────────────────────────────────────────
+  { op: "setConditionVisible", status: "supported" },
+  { op: "activateConditionSet", status: "supported" },
+  // ── document settings ─────────────────────────────────────────────
+  { op: "setDocumentDefaults", status: "supported" },
+  { op: "setColorSettings", status: "supported" },
+  { op: "setProofSetup", status: "supported" },
+  { op: "importSwatchLibrary", status: "supported" },
+  { op: "setInkSetting", status: "supported" },
+  { op: "setUseStandardLabForSpots", status: "supported" },
+  // ── path topology ─────────────────────────────────────────────────
+  { op: "pathPointInsert", status: "supported" },
+  { op: "pathPointRemove", status: "supported" },
+  { op: "pathOpenAt", status: "supported" },
+  { op: "pathPointCurveType", status: "supported" },
+  { op: "pathPointSet", status: "supported" },
+  { op: "batch", status: "supported" },
+  // ── kernel path ops (v30) ─────────────────────────────────────────
+  { op: "outlineStroke", status: "supported" },
+  { op: "offsetPath", status: "supported" },
+  { op: "simplifyPath", status: "supported" },
+  // ── group ops (v32) ───────────────────────────────────────────────
+  { op: "createGroup", status: "supported" },
+  { op: "dissolveGroup", status: "supported" },
+  // ── group transform (v40 re-capture) ──────────────────────────────
+  { op: "setGroupTransform", status: "supported" },
+  // ── plugin-metadata carrier (v33; v34 adds the batch $created
+  //    sentinel — probed through the batch op) ──────────────────────
+  { op: "setPluginMetadata", status: "supported" },
+  // ── table ops (v30) ───────────────────────────────────────────────
+  { op: "setRowHeight", status: "supported" },
+  { op: "setColumnWidth", status: "supported" },
+  { op: "insertTableRow", status: "supported" },
+  { op: "deleteTableRow", status: "supported" },
+  { op: "insertTableColumn", status: "supported" },
+  { op: "deleteTableColumn", status: "supported" },
+  // ── table ops (v35: header/footer rows + cell span) ───────────────
+  { op: "insertHeaderRow", status: "supported" },
+  { op: "removeHeaderRow", status: "supported" },
+  { op: "insertFooterRow", status: "supported" },
+  { op: "removeFooterRow", status: "supported" },
+  { op: "setCellSpan", status: "supported" },
+  // ── layers ────────────────────────────────────────────────────────
+  { op: "layerSetVisible", status: "supported" },
+  { op: "layerSetLocked", status: "supported" },
+  { op: "layerSetPrintable", status: "supported" },
+  { op: "layerSetName", status: "supported" },
+  { op: "layerMove", status: "supported" },
+  { op: "layerInsert", status: "supported" },
+  { op: "layerRemove", status: "supported" },
+  // ── properties / boolean ──────────────────────────────────────────
+  { op: "setElementProperty", status: "supported" },
+  { op: "pathfinderBoolean", status: "supported" },
+  // ── colour resources ──────────────────────────────────────────────
+  { op: "createSwatch", status: "supported" },
+  { op: "editSwatch", status: "supported" },
+  { op: "deleteSwatch", status: "supported" },
+  { op: "createGradient", status: "supported" },
+  { op: "editGradient", status: "supported" },
+  { op: "deleteGradient", status: "supported" },
+  { op: "createColorGroup", status: "supported" },
+  { op: "editColorGroup", status: "supported" },
+  { op: "deleteColorGroup", status: "supported" },
+  // ── numbering lists (W1.22 — the Bullets & Numbering list-definition surface) ──
+  { op: "createNumberingList", status: "supported" },
+  { op: "editNumberingList", status: "supported" },
+  { op: "deleteNumberingList", status: "supported" },
+  // ── styles ────────────────────────────────────────────────────────
+  { op: "createParagraphStyle", status: "supported" },
+  { op: "renameParagraphStyle", status: "supported" },
+  { op: "deleteParagraphStyle", status: "supported" },
+  { op: "createCharacterStyle", status: "supported" },
+  { op: "renameCharacterStyle", status: "supported" },
+  { op: "deleteCharacterStyle", status: "supported" },
+  { op: "createObjectStyle", status: "supported" },
+  { op: "renameObjectStyle", status: "supported" },
+  { op: "deleteObjectStyle", status: "supported" },
+  { op: "createCellStyle", status: "supported" },
+  { op: "renameCellStyle", status: "supported" },
+  { op: "deleteCellStyle", status: "supported" },
+  { op: "createTableStyle", status: "supported" },
+  { op: "renameTableStyle", status: "supported" },
+  { op: "deleteTableStyle", status: "supported" },
+  { op: "setStyleProperty", status: "supported" },
+  // ── the v62 re-capture (2026-08-26): the 23 formerly-unclassified ──
+  // story-addressed doors
+  { op: "insertTable", status: "supported", note: "standalone story-addressed door (v37+); mints a STRUCTURED ElementId::Table ({story_id, table_id})" },
+  { op: "insertAnchoredFrame", status: "supported", note: "proto 52, the plugin-doc inline-image door; imageUri optional" },
+  { op: "insertHyperlink", status: "supported", note: "proto 53, plugin-doc; contiguous char offsets" },
+  { op: "setFieldValue", status: "supported", note: "v43 D-01; re-resolves a placeholder field at its enumerated offset (the probe inserts one first)" },
+  // path topology (v57 join/close)
+  { op: "closePath", status: "supported", note: "requires an OPEN subpath" },
+  { op: "joinPaths", status: "supported", note: "welds otherId INTO elementId; both must be open paths" },
+  // planar region verbs (v57, B-22)
+  { op: "pathfinderDivide", status: "supported" },
+  { op: "pathfinderTrim", status: "supported" },
+  { op: "pathfinderMerge", status: "supported" },
+  { op: "pathfinderCrop", status: "supported" },
+  { op: "pathfinderOutline", status: "supported" },
+  { op: "pathfinderMinusBack", status: "supported" },
+  { op: "pathfinderFaces", status: "supported", note: "faces are engine-minted ids — read them via requestPlanarRegions, never guess the format" },
+  // nesting + z-order
+  { op: "pasteInto", status: "supported" },
+  { op: "releaseFrom", status: "supported" },
+  { op: "reorderElement", status: "supported", note: "ZOrderTarget verb or {index}" },
+  // opacity mask + text-on-a-path (v58: C-28 / C-29)
+  { op: "applyOpacityMask", status: "supported", note: "lossless only via .paged — .idml export reports the mask as a named loss" },
+  { op: "releaseOpacityMask", status: "supported" },
+  { op: "attachTextToPath", status: "supported", note: "requires a story flowing into NO frame (a story belongs to exactly one flow)" },
+  { op: "detachTextFromPath", status: "supported" },
+  // image content (v43 D-14 / v50 C-1)
+  { op: "placeImage", status: "supported", note: "elementId is the BARE self id; an unreachable uri still applies (link only)" },
+  { op: "replaceImageBytes", status: "supported", note: "bare self id + decoded-on-apply image bytes" },
+  // batch handle binding (v34)
+  { op: "bindCreated", status: "supported", note: "only meaningful inside a batch — binds the batch's most recent createdId for $h:<handle> refs; probed as insert→bind→write" },
+  // flow grow rule (v64, plugin-doc ADR 026/029)
+  { op: "setFlowGrowRule", status: "supported", note: "proto 64; generated pages after the story's last frame while it oversets (InDesign Smart Text Reflow); UI = the Stories inspector's Smart text reflow, layout proof in e2e/paragraph-flow-ops.spec.ts AC-E2E-FLOW-smartReflow" },
+  // whole-element duplicate (v65, core d22bc31 — paged.draw's Reflect ▸ Copy)
+  { op: "duplicateElements", status: "supported", note: "proto 65; a whole clone of each element directly above its source, moved by `offset`; probed on a scratch frame" },
+  // whole-table removal (v66, core f3bfefe + de297f5 — the sheet campaign)
+  { op: "deleteTable", status: "supported", note: "proto 66; {storyId, tableId}; the removal is captured whole so one undo restores every cell; probed on a table the probe mints with insertTable" },
+  // the presentation batch (v70, core f6a8c56 — ADR 129/130): page order,
+  // page/document plugin labels, master CRUD + master item edits. All seven
+  // are WIRE-ONLY in the editor today: no panel, menu or gesture issues them
+  // (the Pages panel has no drag-reorder, there is no masters editor).
+  // Domain proof lives in core (master_crud.rs, on_master.rs,
+  // page_metadata.rs); here they are probed on the geometry fixture.
+  { op: "movePage", status: "supported", note: "proto 70; moves a page's single-page spread after `after` (null = to the front); wire-only, no editor UI" },
+  { op: "setPageMetadata", status: "supported", note: "proto 70; a page's plugin label, read back on the pages collection's pluginMetadata; travels with movePage/duplicatePage; plugin-sdk gates the key namespace; no editor UI" },
+  { op: "setDocumentMetadata", status: "supported", note: "proto 70; the document-scoped plugin label — reached via the plugin host door host.document.setDocumentMetadata (journey plugin-doors-69), no editor UI of its own" },
+  { op: "createMaster", status: "supported", note: "proto 70; a one-page master of widthPt×heightPt, or a fresh-id copy of duplicateOf; master id is the bare MasterSpread self id; wire-only, no editor UI" },
+  { op: "deleteMaster", status: "supported", note: "proto 70; refused while any page applies the master; undo restores it exactly; probed on a scratch master; wire-only, no editor UI" },
+  { op: "renameMaster", status: "supported", note: "proto 70; sets the master's Name (the masterPages collection's label); probed on a scratch master; wire-only, no editor UI" },
+  // the object model (v71, core v0.71 — ADR 131/132): the typed Set every
+  // object-model field writes through, and authored text variables (the
+  // Text Variables panel).
+  { op: "set", status: "supported", note: "proto 71; {address, path, value} — ADR 132's typed Set over the address grammar; the editor's object-model PropertyFields write through it (host.objects)" },
+  { op: "createTextVariable", status: "supported", note: "proto 71; a custom text variable {name, contents?, textBefore?, textAfter?}; id dTextVariablen<name>; Text Variables panel ▸ New" },
+  { op: "deleteTextVariable", status: "supported", note: "proto 71; {variableId}; probed on a scratch variable; Text Variables panel ▸ Delete" },
+  { op: "onMaster", status: "supported", note: "proto 70; wraps a page-item/style/property mutation to apply to a master's spread (page/spread-list ops are refused inside); probed as an insertGuide on a scratch master; wire-only, no editor UI" },
+  // footnotes, hyperlink edits and the TOC over the wire (v73, core
+  // 0.71.13 — ADRs 163–165). No editor UI issues any of them (the
+  // Hyperlinks panel lists links read-only); reached via paged.* scripts,
+  // the wire and the generic core-command picker.
+  { op: "insertFootnote", status: "supported", note: "0.71.13, ADR 163; {storyId, offset, paragraph?, text}; the model mints the note id (footnotes collection); no editor UI" },
+  { op: "deleteFootnote", status: "supported", note: "0.71.13, ADR 163; {storyId, footnoteId} — the note's Self id off the footnotes collection; probed on a scratch note; no editor UI" },
+  { op: "deleteHyperlink", status: "supported", note: "0.71.13, ADR 164; {hyperlinkId} — the Hyperlink's Self id off the hyperlinks collection; probed on a scratch link; the Hyperlinks panel is read-only" },
+  { op: "editHyperlink", status: "supported", note: "0.71.13, ADR 164; {hyperlinkId, name?, url?, page?}; probed renaming and re-pointing a scratch link; the Hyperlinks panel is read-only" },
+  { op: "updateTableOfContents", status: "supported", note: "0.71.13, ADR 165; {storyId} of a story or frame that names a TOC style (refused otherwise); probed on sample.idml's TOC story u28e69; no editor UI" },
+  // generated text, editorial notes and bookmarks (protocol 72, core
+  // 0.72.0 — ADRs 168, 169, 172, 173). No editor UI issues any of them yet.
+  { op: "generateIndex", status: "supported", note: "proto 72, ADR 168; {storyId} — the index replaces the story's text; probed on the text fixture's first story; no editor UI" },
+  { op: "updateCrossReferences", status: "supported", note: "proto 72, ADR 169; {sourceId?} — every source without one; probed on the navigation fixture; the Cross-References panel is read-only" },
+  { op: "insertNote", status: "supported", note: "proto 72, ADR 172; {storyId, offset, paragraph?, text, user?, date?}; the model mints the note id (notes collection, rows carry `id`); no editor UI" },
+  { op: "editNote", status: "supported", note: "proto 72, ADR 172; {noteId, text, date?}; probed on a scratch note; no editor UI" },
+  { op: "deleteNote", status: "supported", note: "proto 72, ADR 172; {noteId}; probed on a scratch note; no editor UI" },
+  { op: "convertNoteToText", status: "supported", note: "proto 72, ADR 172; {noteId}; probed on a scratch note; no editor UI" },
+  { op: "createBookmark", status: "supported", note: "proto 72, ADR 173; {name, page? | destination?, parent?, index?}; probed to the navigation fixture's first page; the Bookmarks panel is read-only" },
+  { op: "renameBookmark", status: "supported", note: "proto 72, ADR 173; {bookmarkId, name}; probed on the navigation fixture's first bookmark; the Bookmarks panel is read-only" },
+  { op: "moveBookmark", status: "supported", note: "proto 72, ADR 173; {bookmarkId, parent?, index?}; probed moving the navigation fixture's first bookmark to the end; the Bookmarks panel is read-only" },
+  { op: "deleteBookmark", status: "supported", note: "proto 72, ADR 173; {bookmarkId}; probed on the navigation fixture's first bookmark; the Bookmarks panel is read-only" },
+  // endnotes (protocol 73, core 0.73.0 — ADR 174). No editor UI issues
+  // any of them yet.
+  { op: "insertEndnote", status: "supported", note: "proto 73, ADR 174; {storyId, offset, paragraph?, text}; the first endnote also makes the endnote story on a new page; endnotes collection rows carry `id`; no editor UI" },
+  { op: "deleteEndnote", status: "supported", note: "proto 73, ADR 174; {endnoteId}; probed on a scratch endnote; no editor UI" },
+  { op: "convertFootnoteToEndnote", status: "supported", note: "proto 73, ADR 174; {storyId, footnoteId}; the footnote's removal and an endnote of its text, one undo step; probed on a scratch footnote; no editor UI" },
+];
+
+export function expectedStatus(op: string): Capability | undefined {
+  return CAPABILITIES.find((c) => c.op === op);
+}

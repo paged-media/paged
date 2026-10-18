@@ -1,0 +1,162 @@
+/*
+ * This file is part of paged (https://paged.media), the commercial editor
+ * for the paged IDML engine.
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// Cockpit — the right dock: the kit's DockGroup (right-panels.jsx).
+// A 36px tab strip (icon · title · close ✕, active tab carries the
+// 2px violet underline) over the active panel. The strip hides when
+// only one tab is open — the kit's "single fixed inspector" look in
+// the non-design modes. The ONLY tabbed surface in the app; panels
+// never float or re-dock elsewhere.
+
+import { useEffect, useRef } from "react";
+
+import { Icon, hasIcon } from "../icons";
+import { PluginGlyph } from "../icons/plugin-glyph";
+import { useRegistries } from "../state/registries-context";
+import { useCockpitState } from "./cockpit-state-context";
+import { PanelHost } from "./PanelHost";
+
+export function RightDock() {
+  const { rightTabs, activeTab, activateTab, closeTab } = useCockpitState();
+  const { panels } = useRegistries();
+
+  // Resolve tabs against the registry — a disposed plugin panel
+  // simply drops out of the strip.
+  const tabs = rightTabs
+    .map((id) => panels.get(id))
+    .filter((c): c is NonNullable<typeof c> => c != null);
+  const active = activeTab && panels.get(activeTab) ? activeTab : null;
+
+  // The strip scrolls sideways once tabs outgrow the dock. Opening a
+  // panel (menu, palette, a pill) activates a tab that was then usually
+  // out of sight to the right — the panel changed and its tab did not
+  // appear. Bring the active tab into view; let the wheel scroll the strip.
+  const stripRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const strip = stripRef.current;
+    if (!strip || !active) return;
+    const tab = strip.querySelector<HTMLElement>(`[data-dock-tab="${CSS.escape(active)}"]`);
+    tab?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [active, rightTabs]);
+
+  return (
+    <div
+      data-right-dock
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        minHeight: 0,
+        height: "100%",
+      }}
+    >
+      {tabs.length > 1 && (
+        <div
+          ref={stripRef}
+          data-dock-strip
+          onWheel={(e) => {
+            if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+              e.currentTarget.scrollLeft += e.deltaY;
+            }
+          }}
+          style={{
+            display: "flex",
+            alignItems: "stretch",
+            height: 36,
+            background: "var(--chrome-panel-bg)",
+            borderBottom: "1px solid var(--chrome-border)",
+            flexShrink: 0,
+            overflowX: "auto",
+            scrollbarWidth: "none",
+          }}
+        >
+          {tabs.map((t) => {
+            const a = active === t.id;
+            const icon = t.icon && hasIcon(t.icon) ? t.icon : undefined;
+            // K-8 — a plugin-supplied sanitized glyph fills the gap a
+            // host-unknown icon name used to leave (an iconless tab).
+            const svg = !icon ? t.iconSvg : undefined;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                data-dock-tab={t.id}
+                data-active={a || undefined}
+                onClick={() => activateTab(t.id)}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "0 12px",
+                  border: "none",
+                  cursor: "pointer",
+                  background: a ? "var(--pg-bg)" : "transparent",
+                  color: a ? "var(--pg-fg)" : "var(--pg-muted-fg)",
+                  fontFamily: "var(--font-sans)",
+                  fontSize: 12.5,
+                  fontWeight: a ? 600 : 500,
+                  borderBottom: a
+                    ? "2px solid var(--pg-primary)"
+                    : "2px solid transparent",
+                  borderRight: "1px solid var(--chrome-border)",
+                  whiteSpace: "nowrap",
+                  flexShrink: 0,
+                }}
+              >
+                {icon && (
+                  <Icon name={icon} size={13} style={{ opacity: 0.85 }} />
+                )}
+                {svg && <PluginGlyph svg={svg} size={13} />}
+                {t.title}
+                {a && t.closable !== false && (
+                  <span
+                    role="button"
+                    aria-label={`Close ${t.title}`}
+                    data-dock-tab-close={t.id}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      closeTab(t.id);
+                    }}
+                    style={{
+                      display: "inline-flex",
+                      opacity: 0.4,
+                      marginLeft: 2,
+                      cursor: "pointer",
+                    }}
+                  >
+                    <Icon name="ui-x" size={12} />
+                  </span>
+                )}
+              </button>
+            );
+          })}
+          <div style={{ flex: 1 }} />
+        </div>
+      )}
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+        {active ? (
+          <PanelHost id={active} />
+        ) : (
+          <div className="pg-ui-xs" style={{ padding: 16, opacity: 0.6 }}>
+            No panel open.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

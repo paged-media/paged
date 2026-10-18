@@ -1,0 +1,195 @@
+/*
+ * This file is part of paged (https://paged.media), the commercial editor
+ * for the paged IDML engine.
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// SDK Phase 5 (D1) — document-collection + document-meta hooks.
+//
+// React side of the `documentCollection:<name>` ReadSpec form. Each
+// hook subscribes to `mutationApplied` / `undoApplied` / `redoApplied`
+// and re-fetches, matching the snapshot discipline `useBindings`
+// uses (sdk.md §11.1: every panel reads from the same one snapshot
+// the Operation log applies to).
+//
+// Generic over the consumer's expected summary type — callers
+// pass the typed shape they want:
+//
+//   const swatches = useCollection<SwatchSummary>("swatches");
+//   const styles   = useCollection<ParagraphStyleSummary>("paragraphStyles");
+//
+// `null` represents "fetch pending"; an empty array means "fetched,
+// no entries" (the wire-shape-only collections also return this).
+// Same convention `useBindings` follows.
+
+import { useEffect, useState } from "react";
+import type {
+  CollectionName,
+  DocumentMeta,
+  DocumentStats,
+} from "@paged-media/client";
+
+import { useCanvasClient } from "../state/canvas-client-context";
+import { useDocument } from "../state/document-context";
+
+/**
+ * Hook returning the live array for a named document collection.
+ * Re-fetches on every Operation-log push (mutation / undo / redo).
+ *
+ * The cast to `T[]` is the deliberate boundary where the caller
+ * commits to a typed `*Summary` shape — the wire-format
+ * `CollectionReply.items` is `any` so one envelope serves every
+ * collection. Use the matching summary type from `@paged-media/client`
+ * (e.g. `SwatchSummary`, `ParagraphStyleSummary`,
+ * `CharacterStyleSummary`, `GradientSummary`, `LayerSummary`,
+ * `StorySummary`).
+ *
+ * Returns `null` until the first fetch completes; empty arrays
+ * after that for collections with no entries or not yet wired
+ * to a backing accessor.
+ */
+export function useCollection<T>(name: CollectionName): T[] | null {
+  const client = useCanvasClient();
+  const [items, setItems] = useState<T[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const refetch = () => {
+      void client
+        .collection<T>(name)
+        .then((next) => {
+          if (cancelled) return;
+          setItems(next as T[]);
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setItems([] as T[]);
+        });
+    };
+    refetch();
+    const off = client.subscribe((msg) => {
+      if (
+        msg.kind === "mutationApplied" ||
+        msg.kind === "undoApplied" ||
+        msg.kind === "redoApplied" ||
+        // A script writes without mutationApplied notifications.
+        msg.kind === "scriptResult" ||
+        msg.kind === "documentLoaded"
+      ) {
+        refetch();
+      }
+    });
+    return () => {
+      cancelled = true;
+      off();
+    };
+  }, [client, name]);
+
+  return items;
+}
+
+/**
+ * Hook returning the live document-meta snapshot — `pageCount`,
+ * `activePage`, `units`, `colorMode`, `documentName`, `dirty`.
+ * Re-fetches on Operation-log pushes. `null` until first fetch.
+ *
+ * The Info panel and status bar bind individual `documentMeta:<key>`
+ * ReadSpecs against this object; binding-renderer support lives in
+ * a follow-up. For v1 the hook is consumed directly by expert
+ * leaves.
+ */
+export function useDocumentMeta(): DocumentMeta | null {
+  const client = useCanvasClient();
+  const [meta, setMeta] = useState<DocumentMeta | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const refetch = () => {
+      void client
+        .documentMeta()
+        .then((next) => {
+          if (cancelled) return;
+          setMeta(next);
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setMeta(null);
+        });
+    };
+    refetch();
+    const off = client.subscribe((msg) => {
+      if (
+        msg.kind === "mutationApplied" ||
+        msg.kind === "undoApplied" ||
+        msg.kind === "redoApplied" ||
+        // A script writes without mutationApplied notifications.
+        msg.kind === "scriptResult" ||
+        msg.kind === "documentLoaded"
+      ) {
+        refetch();
+      }
+    });
+    // A save flips `dirty` with no worker message to say so.
+    const offSaved = client.onSaved(refetch);
+    return () => {
+      cancelled = true;
+      off();
+      offSaved();
+    };
+  }, [client]);
+
+  return meta;
+}
+
+/**
+ * Cockpit — live `DocumentStats` (spreads/pages/frames/stories/
+ * paragraphs/runs/glyphs/lines). Seeds from the worker's `stats`
+ * push (sent after load + rebuilds); `null` before the first one.
+ */
+export function useDocumentStats(): DocumentStats | null {
+  const client = useCanvasClient();
+  // The `documentLoaded` / `stats` messages are one-shot and unsolicited
+  // (there's no `requestStats` to re-pull). A panel that mounts AFTER the
+  // load fires would miss them and wedge at null, so seed from the
+  // document handle's stats (persisted in context across mounts) and let
+  // the live subscription override on later stats pushes (post-mutation).
+  const { handle } = useDocument();
+  const [stats, setStats] = useState<DocumentStats | null>(
+    handle?.stats ?? null,
+  );
+
+  useEffect(() => {
+    if (handle?.stats) setStats(handle.stats);
+  }, [handle]);
+
+  useEffect(() => {
+    const off = client.subscribe((msg) => {
+      if (msg.kind === "stats") {
+        setStats(msg.payload);
+      } else if (msg.kind === "documentLoaded") {
+        setStats(msg.payload.stats);
+      } else if (msg.kind === "scriptResult") {
+        // Engine ≥ 0.71.5 puts the counts on every script reply: a script
+        // writes without the round trip that pushes `stats`.
+        const after = (msg.payload as { stats?: DocumentStats }).stats;
+        if (after) setStats(after);
+      }
+    });
+    return off;
+  }, [client]);
+
+  return stats;
+}

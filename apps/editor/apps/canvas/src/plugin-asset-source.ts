@@ -1,0 +1,106 @@
+/*
+ * This file is part of paged (https://paged.media), the commercial editor
+ * for the paged IDML engine.
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// The editor's host-injected ASSET SOURCE for the plugin SDK (W-06).
+//
+// `host.assets.getFontFace(family, style?)` is the capability-gated,
+// READ-ONLY door that serves a font face's BYTES so a bundle
+// (paged.web) can compose a real `@font-face` in its preview. The SDK
+// owns the door, the gate, and the budget; the editor's only job is to
+// provide a `BundleAssetProvider` rooted at the REAL font mechanism.
+//
+// SERVED FOR REAL since protocol v43 (the W-06 wire pair): the worker
+// answers `requestFontFaceBytes { family, style? }` from the engine's
+// font registry — the same store `registerFont` fills, plus the
+// document-load default face. What is honestly servable is exactly
+// what the ENGINE holds: wire-registered faces. IDML packages
+// reference fonts by NAME only (Fonts/Font_*.xml carries no bytes), so
+// an unregistered document family still answers `found:false` → null —
+// the bundle keeps its substitution badge for those, never shown a
+// wrong face as "the document's".
+//
+// W-15 (protocol 69): `registerFont` / `clearSceneFonts` back the one
+// WRITE on the door, `host.assets.registerFont`. They address the
+// engine's SCENE-LAYER face table (`scope: "sceneLayer"`), which only
+// plugin scene-layer text reads — a bundle's face never reaches document
+// layout or the Fonts panel. The SDK owns which faces are live and
+// replays them after a clear; this adapter only forwards.
+
+import type { CanvasClient } from "@paged-media/client";
+import type { BundleAssetProvider } from "@paged-media/plugin-sdk";
+import type { FontFaceAsset } from "@paged-media/plugin-api";
+
+/** Container formats the SDK door accepts (`FontFaceFormat`). */
+const KNOWN_FORMATS = new Set(["truetype", "opentype", "woff", "woff2"]);
+
+/**
+ * Build the editor's asset provider over the live engine client (the
+ * same thunk idiom as the bundle loader — resolved at call time so the
+ * provider survives client reloads). Serves the bytes of any face the
+ * ENGINE's registry holds; `null` for everything else (the honest
+ * no-bytes answer the preview substitutes + badges on).
+ */
+export function createEditorAssetSource(
+  getClient: () => CanvasClient | null,
+): BundleAssetProvider {
+  return {
+    async getFontFace(
+      family: string,
+      style?: string,
+    ): Promise<FontFaceAsset | null> {
+      const client = getClient();
+      if (!client) return null;
+      try {
+        const reply = await client.send({
+          kind: "requestFontFaceBytes",
+          payload: { family, style: style ?? null },
+        });
+        if (reply.kind !== "fontFaceBytes" || !reply.payload.found) {
+          return null;
+        }
+        const p = reply.payload;
+        const format = KNOWN_FORMATS.has(p.format) ? p.format : "truetype";
+        return {
+          bytes: Uint8Array.from(p.bytes),
+          format: format as FontFaceAsset["format"],
+          postscriptName: p.postscriptName ?? undefined,
+          family: p.family,
+          style: p.style ?? undefined,
+        };
+      } catch {
+        return null;
+      }
+    },
+    async registerFont(
+      family: string,
+      bytes: Uint8Array,
+      style?: string,
+    ): Promise<void> {
+      const client = getClient();
+      if (!client) throw new Error("no engine client to register the face with");
+      await client.registerFont(family, bytes, style ?? null, {
+        scope: "sceneLayer",
+      });
+    },
+    async clearSceneFonts(): Promise<void> {
+      // No client: no engine, so no scene faces to drop.
+      await getClient()?.clearFontRegistry({ scope: "sceneLayer" });
+    },
+  };
+}

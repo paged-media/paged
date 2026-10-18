@@ -1,0 +1,64 @@
+/*
+ * This file is part of paged (https://paged.media), the commercial editor
+ * for the paged IDML engine.
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// Journey: text editing context.
+//
+// The DTP heart of the oracle — when a caret lands in a text frame, the
+// editor must present the Text context (Character + Paragraph), the way
+// InDesign does. Hybrid: the frame is channel-seeded (setup); the caret
+// + typing are driven through the real content-selection + keyboard
+// path (the step under test).
+
+import { expect, test } from "@playwright/test";
+
+import { TEXT_CARET_EDITING } from "../driver/context-contract";
+import { Designer } from "../driver/designer";
+
+test.describe("journey · text flow", () => {
+  test("a caret in a text frame surfaces the Text context; typing inserts @feat:editor-shell.context-toolbars @feat:editor-shell.panels.properties @feat:stories-text.story-model @feat:stories-text.caret-selection @feat:stories-text.text.insert @feat:editor-tools.text.caret-typing @feat:editor-shell.panels.character @feat:editor-shell.panels.paragraph @level:gesture", async ({
+    page,
+  }) => {
+    const designer = new Designer(page);
+    await designer.open();
+    await designer.newDocument();
+
+    const { storyId } = await designer.addTextFrame({
+      x0: 80,
+      y0: 80,
+      x1: 320,
+      y1: 200,
+    });
+    expect(storyId, "new text frame should have a parent story").toBeTruthy();
+
+    // Real input: place the caret, then assert the context-sensitive UI
+    // responded the way a DTP user expects.
+    await designer.placeCaret(storyId!, 0);
+    await designer.expectContext(TEXT_CARET_EDITING);
+    // Chrome visual: the Properties panel in its Text inspector mode
+    // (Character + Paragraph) — the context-sensitive UX, locked.
+    await designer.chromeCheckpoint("properties-text");
+
+    // And the real keyboard path inserts into the story.
+    const before = await designer.storyChars(storyId!);
+    await designer.typeText("Hello world");
+    await expect
+      .poll(() => designer.storyChars(storyId!), { timeout: 6000 })
+      .toBeGreaterThan(before);
+  });
+});

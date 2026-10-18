@@ -1,0 +1,96 @@
+/*
+ * This file is part of paged (https://paged.media), the commercial editor
+ * for the paged IDML engine.
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// SDK Phase 5 (named sweep) — Gradients panel as a declarative
+// composition.
+//
+// Direct twin of `swatches.composition.ts`. IDML treats gradients
+// as named entries in the same `Graphic` palette (via
+// `<Gradient Self="Gradient/...">`); a frame's `FillColor`
+// attribute can carry either a `Swatch/*` or `Gradient/*` self_id
+// — both flow through the same `FrameFillColor` apply arm and
+// `Value::ColorRef` write. So the only thing different from the
+// Swatches panel is the bound collection.
+//
+// Reads:  `documentCollection:gradients`
+// Writes: `selectionProperty:frameFillColor` (ColorRef payload
+//         carrying a `Gradient/<self_id>`), `frameGradientFillAngle`,
+//         `frameGradientFillLength`
+
+import type { CompositionNode } from "@paged-media/catalog";
+import {
+  PAGED_INPUT_COLLECTION_SELECT,
+  PAGED_INPUT_LENGTH,
+  PAGED_INPUT_NUMERIC_SCRUB,
+  PAGED_LAYOUT_SECTION,
+  asPropertyFields,
+} from "@paged-media/shell";
+
+// ADR 323 — every live field is a schema-driven `PropertyField`: the
+// type comes from the target's schema row, reads/writes go through
+// `host.objects` (one batch = one undo step over a multi-selection), and
+// each field offers "Bind to data…" with a binding badge. Seams stay seams.
+export const gradientsComposition: CompositionNode = asPropertyFields({
+  catalogId: PAGED_LAYOUT_SECTION,
+  props: { title: "Gradients" },
+  bindings: {},
+  children: [
+    {
+      catalogId: PAGED_INPUT_COLLECTION_SELECT,
+      props: {
+        label: "Fill",
+        collectionName: "gradients",
+        valueType: "colorRef",
+      },
+      bindings: {
+        value: {
+          kind: "selectionProperty",
+          scope: "element",
+          path: "frameFillColor",
+        },
+      },
+    },
+    // The applied gradient's direction and reach on this object — the
+    // rows paged.draw's separate "Vector fill" panel carried (merged
+    // here). Core answers them for any frame; they only show an effect
+    // while the fill is a gradient.
+    {
+      catalogId: PAGED_INPUT_NUMERIC_SCRUB,
+      props: { label: "Angle", suffix: "°" },
+      bindings: {
+        value: {
+          kind: "selectionProperty",
+          scope: "element",
+          path: "frameGradientFillAngle",
+        },
+      },
+    },
+    {
+      catalogId: PAGED_INPUT_LENGTH,
+      props: { label: "Length" },
+      bindings: {
+        value: {
+          kind: "selectionProperty",
+          scope: "element",
+          path: "frameGradientFillLength",
+        },
+      },
+    },
+  ],
+});

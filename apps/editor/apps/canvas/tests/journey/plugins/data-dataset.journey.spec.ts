@@ -1,0 +1,179 @@
+/*
+ * This file is part of paged (https://paged.media), the commercial editor
+ * for the paged IDML engine.
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// Journey: paged.data DATASET PANEL (openDataset) — the materialized-records
+// view over an imported source: the §7 governed catalog, the §7.1 data-provider
+// publish, the §9.1 locale display, and the §10 batch plan, all driven through
+// the dataset panel the `openDataset` command opens.
+//
+// Rows driven through THIS panel:
+//   • data.source.adapters — the inline/file source adapter the import wired is
+//     the dataset the catalog materializes (the panel lists the resolved
+//     columns of the imported source over the demo query).
+//   • data.provider.contract (D-09) — "Publish provider" produces the engine
+//     publication (schema + stabilized rows + revision etag) ready to register
+//     with the core data-provider registry; the panel renders the provider
+//     id + revision. In a standalone editor the host.dataProviders door may be
+//     absent → the bundle reports "registration deferred (D-09)" honestly. The
+//     live cross-plugin consume is the sheet-dataset journey (S-15).
+//   • data.i18n.display — the locale select (en/de) drives the §9.1 display
+//     kernels (NUMBER/CURRENCY/PERCENT/DATEFMT formatting locale).
+//   • data.query.seam — "Preview rows" re-runs the DuckDB query (the
+//     CSV→Arrow→RecordSet seam) before materializing.
+//
+// The dataset panel shows "No queries yet" until a query exists, so this
+// journey first adds a variable binding in the bindings panel over "All rows
+// of data_people" (which defines that query), then opens the dataset panel
+// and drives its controls.
+
+import { expect, test, type Page } from "@playwright/test";
+
+import { openPanel } from "../../fidelity/canvas-driver";
+import { Designer } from "../driver/designer";
+
+import { dirname, resolve as pathResolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { skipWithoutDuckDB } from "./data-duckdb-gate";
+import { addBindingThroughPanel } from "./data-engine";
+
+const CSV_FIXTURE = pathResolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../e2e/harness/data-people.csv",
+);
+
+const SOURCES_PANEL = "media.paged.data.panel.sources";
+const BINDINGS_PANEL = "media.paged.data.panel.bindings";
+const DATASET_PANEL = "media.paged.data.panel.dataset";
+const IMPORT_COMMAND = "media.paged.data.command.importData";
+const OPEN_DATASET_COMMAND = "media.paged.data.command.openDataset";
+
+const invoke = (page: Page, id: string) =>
+  page.evaluate(
+    (c) =>
+      (
+        globalThis as unknown as {
+          __canvas: { registries: { commands: { invoke: (i: string) => Promise<unknown> } } };
+        }
+      ).__canvas.registries.commands.invoke(c),
+    id,
+  );
+
+async function importCsv(page: Page): Promise<boolean> {
+  await invoke(page, IMPORT_COMMAND);
+  await openPanel(page, SOURCES_PANEL);
+  // data canary.6: the sources panel imports through the shell.pickFile@1
+  // door (programmatic input.click -> Playwright filechooser, the
+  // doc.journey idiom); the raw <input> survives only in the SDK harness.
+  const importButton = page.locator("[data-data-import-csv]");
+  await expect(importButton).toBeVisible({ timeout: 10_000 });
+  const chooser = page.waitForEvent("filechooser");
+  await importButton.click();
+  await (await chooser).setFiles(CSV_FIXTURE);
+  const status = page.locator("[data-status]").last();
+  try {
+    await expect
+      .poll(async () => (await status.getAttribute("data-status").catch(() => null)) ?? "?", {
+        timeout: 45_000,
+      })
+      .toBe("ready");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+test.describe("journey · paged.data dataset panel", () => {
+  test("a designer opens the dataset panel and materializes the imported source: catalog, locale, publish @feat:data.source.adapters @feat:data.provider.contract @feat:data.i18n.display @feat:data.query.seam @feat:data.plugin.bundle @level:happy", async ({
+    page,
+  }) => {
+    const designer = new Designer(page);
+    await designer.open();
+    await designer.newDocument();
+
+    // ── 1. IMPORT — register the inline/file source adapter through DuckDB. ──
+    const ready = await importCsv(page);
+    if (!ready) {
+      const got =
+        (await page.locator("[data-status]").last().getAttribute("data-status").catch(() => null)) ??
+        "unknown";
+      skipWithoutDuckDB(
+        got,
+        `dataset panel needs DuckDB-WASM to boot (engine status "${got}"). It boots on the ` +
+          "standard editor dev server (Vite duckdbDistRoute + COOP/COEP isolation); this skip only " +
+          "fires if the package shipped no bin/duckdb-engine.wasm or the context is not cross-origin isolated.",
+      );
+    }
+    await expect(page.getByText(/data_people/).first()).toBeVisible({ timeout: 6_000 });
+
+    // ── 2. DEFINE A QUERY — the dataset panel materializes a query; a binding
+    //    over "All rows of data_people" defines it (SELECT * FROM the source). ──
+    await openPanel(page, BINDINGS_PANEL);
+    await expect(page.locator("[data-data-bind-author]")).toBeVisible({ timeout: 10_000 });
+    await addBindingThroughPanel(page, "variable", "name");
+
+    // ── 3. OPEN THE DATASET PANEL via the openDataset command (the menu/
+    //    palette entry). It mounts and shows the query selector (no longer the
+    //    "No queries yet" empty state). ──
+    await invoke(page, OPEN_DATASET_COMMAND);
+    // data canary.6 (U12): the v-header body text is gone — anchor the
+    // mounted panel on its stable variables block, then the query selector.
+    await expect(page.locator("[data-data-variables]")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("[data-data-dataset-empty]")).toHaveCount(0);
+    await expect(page.getByText(/^Query/).last()).toBeVisible({ timeout: 8_000 });
+
+    // ── 4. CATALOG (§7) — "Preview rows" re-runs the DuckDB query
+    //    (data.query.seam) and materializes the resolved schema: the panel
+    //    headlines the column count of the imported source's records and
+    //    shows its first rows. The CSV fixture has 2 columns (name, role)
+    //    and 3 records. ──
+    await page.getByRole("button", { name: /preview rows/i }).click();
+    await expect(page.getByText(/^\d+ columns? · \d+ documented/)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/^2 columns · /)).toBeVisible({ timeout: 6_000 });
+    const rows = page.locator("[data-data-dataset-rows]");
+    await expect(rows).toHaveAttribute("data-data-dataset-rows", "3");
+    await expect(rows).toContainText("Ada Lovelace");
+
+    // ── 5. LOCALE (§9.1, data.i18n.display) — switch the display locale en→de.
+    //    The select drives the engine's formatting kernels; the panel reflects
+    //    the chosen locale. ──
+    const localeSelect = page
+      .locator("select")
+      .filter({ has: page.locator('option[value="de"]') })
+      .first();
+    await localeSelect.selectOption("de");
+    await expect(localeSelect).toHaveValue("de");
+
+    // ── 6. PUBLISH PROVIDER (§7.1 / D-09, data.provider.contract) — the engine
+    //    produces the publication (id + revision etag). The panel renders the
+    //    provider id + revision in user language (canary.6 / U12 dropped the
+    //    RFI-speak). The editor injects the data-provider registry, so since
+    //    canary.10 the panel says the provider IS shared (the "can't share
+    //    yet" note is only for a host without the registry). ──
+    await page.getByRole("button", { name: /publish provider/i }).click();
+    await expect(
+      page.getByText(/provider ".*-dataset" \(revision .*\) is shared with other plugins/i),
+    ).toBeVisible({
+      timeout: 10_000,
+    });
+
+    // Re-open via the panel id too (the openPanel door).
+    await designer.openPanel(DATASET_PANEL);
+    await expect(page.locator("[data-data-variables]")).toBeVisible();
+  });
+});

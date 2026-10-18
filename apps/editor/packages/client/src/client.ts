@@ -1,0 +1,2259 @@
+/*
+ * This file is part of paged (https://paged.media), the commercial editor
+ * for the paged IDML engine.
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// Main-thread client for the canvas worker.
+//
+// Owns the worker handle, the next outgoing seq, the reply
+// pending-promise table, and the camera SAB. UI code sends typed
+// messages and awaits typed replies; the protocol envelope shape
+// stays internal.
+//
+// SDK Phase 1 — this lives in `@paged-media/client`, framework-agnostic.
+// No React imports. The worker URL is injected by the consumer
+// (the canvas app constructs it via `new URL("./worker/worker.ts",
+// import.meta.url)`) because `import.meta.url` here would resolve
+// against this file's location in the package, not the app's
+// worker.
+
+import {
+  PROTOCOL_VERSION,
+  type CaretDirection,
+  type CaretGeometry,
+  type CollectionName,
+  type ColorPreview,
+  type ContentSelection,
+  type DocumentHandle,
+  type DocumentMeta,
+  type ExportPdfWireOptions,
+  type ElementGeometryItem,
+  type FontScope,
+  type ElementId,
+  type GestureAnchor,
+  type GestureFailure,
+  type GestureHandle,
+  type GestureModifiers,
+  type ElementProperties,
+  type FrameChainLink,
+  type GestureType,
+  type GradientDetail,
+  type LayerSummary,
+  type LineBounds,
+  type LodTier,
+  type SceneLayer,
+  type SceneTreeNode,
+  type MainToWorker,
+  type MainToWorkerKind,
+  type Mutation,
+  type PageId,
+  type ParagraphBounds,
+  type PathAnchorsResult,
+  type PreflightFinding,
+  type ProviderTileWire,
+  type ResourceTilesNeededWire,
+  type SelectionMode,
+  type SelectionRect,
+  type SnapLine,
+  type SnapshotPng,
+  type TextCellAddr,
+  type WordBounds,
+  type WorkerToMain,
+} from "./protocol";
+import { CameraBuffer, type Camera } from "./sab/camera";
+import { GestureBuffer } from "./sab/gesture";
+import type { JournalEntry, UncapturedLedger } from "./journal";
+
+/** ADR 025 — what one worker-journal drain hands back. */
+export interface JournalDrain {
+  entries: JournalEntry[];
+  ledger: UncapturedLedger;
+  /** The worker ring's epoch, so the main thread can rebase relative
+   *  timestamps onto its own. Rebasing is APPROXIMATE and the export says so
+   *  (`clocks.skewNote`) rather than pretending the two clocks are one. */
+  epochWallMs: number;
+}
+
+/** A `send(...)` awaiting its reply. Holds `reject` too, so a worker that
+ *  dies, fails to boot or fails one dispatch settles the caller instead of
+ *  leaving the promise hanging forever (ADR 031). */
+type PendingReply = {
+  resolve: (msg: WorkerToMain) => void;
+  reject: (err: Error) => void;
+};
+
+/**
+ * Construction options for `CanvasClient`. The consumer supplies the
+ * Worker — `@paged-media/client` only drives it.
+ *
+ * Prefer `workerFactory`: a zero-arg function that returns a freshly
+ * constructed `Worker`, built in the CONSUMER's module graph. The canvas
+ * app uses Vite's `?worker` import (`import CanvasWorker from
+ * "./worker/worker.ts?worker"; workerFactory: () => new CanvasWorker()`),
+ * which makes Vite treat the worker as a real module-graph entry: it emits
+ * the worker chunk AND follows the worker's transitive `?url` wasm import,
+ * emitting the `.wasm` asset too.
+ *
+ * WHY a factory and not a `URL` here (the D6/E8 prod-build bug):
+ *   Vite's worker plugin only recognises a worker when it sees
+ *   `new Worker(new URL(...), ...)` with the `new URL` LITERALLY adjacent,
+ *   or an explicit `?worker` import. The old shape built `new URL(...)` in
+ *   the app but passed it as a variable into THIS module, where
+ *   `new Worker(thatVariable)` is opaque to static analysis. Vite then
+ *   treated the `new URL(...)` as a plain asset, copied the RAW `.ts`
+ *   verbatim into dist (a browser can't run un-transpiled TS), and never
+ *   followed the worker's wasm import — so prod dist shipped a dead worker
+ *   and no `.wasm`. Constructing the worker in the consumer fixes it at the
+ *   only place Vite can see the whole worker module graph.
+ *
+ * `workerUrl` is kept for back-compat / non-Vite bundlers that DO statically
+ * resolve `new Worker(url)`. With Vite, use `workerFactory`.
+ */
+export interface CanvasClientOptions {
+  /** Preferred: returns a freshly-constructed module Worker (e.g. from a
+   *  Vite `?worker` import). Takes precedence over `workerUrl`. */
+  workerFactory?: () => Worker;
+  /** Back-compat: a URL to the worker module. Vite cannot fully bundle the
+   *  worker from a URL passed across the package boundary — use
+   *  `workerFactory` under Vite. */
+  workerUrl?: URL;
+  /**
+   * U5/A7 — the default-font invariant. Invoked by `loadDocument` /
+   * `newBlankDocument` when the caller passes NO font bytes, so every
+   * load path shares one default-font door instead of each caller
+   * remembering to fetch one. Without a default font the engine has no
+   * fallback face for fonts the document declares but cannot resolve —
+   * their text shapes to nothing and silently renders BLANK. Resolve
+   * `undefined` when no font is available (the caller-visible behaviour
+   * is then exactly the pre-provider one); a throw is treated as
+   * `undefined`.
+   */
+  defaultFontProvider?: () => Promise<Uint8Array | undefined>;
+  /**
+   * The default family's OTHER faces — the editor bundles Inter roman
+   * as the default face and Inter Italic beside it. A load carries one
+   * font, the roman; a variable face covers its `wght` axis but not
+   * italic, so an Inter Italic run drew upright. Each face this returns
+   * is registered with the engine (`registerFont`) after every
+   * `loadDocument` / `newBlankDocument`, before the handle is returned,
+   * so the first paint already uses it. A throw, or a face the engine
+   * refuses, leaves the load as it is.
+   */
+  defaultFontFaces?: () => Promise<readonly DefaultFontFace[]>;
+}
+
+/** One face of the default family, for {@link CanvasClientOptions.defaultFontFaces}. */
+export interface DefaultFontFace {
+  family: string;
+  /** The style name the document's runs ask for (`"Italic"`). */
+  style: string | null;
+  bytes: Uint8Array;
+}
+
+/** Render a `GestureFailure` with its payload intact. The engine's
+ *  `Other { message }` (and the detail-bearing kinds) carry the actual
+ *  diagnosis — surfacing only `.kind` once left a corpus-sweep red
+ *  unclassifiable as literally "other" (audit 17082026). */
+function describeGestureFailure(error: GestureFailure): string {
+  const details = "details" in error ? error.details : undefined;
+  if (!details) return error.kind;
+  if ("message" in details) return `${error.kind}: ${details.message}`;
+  if ("reason" in details) return `${error.kind}: ${details.reason}`;
+  return `${error.kind}: ${JSON.stringify(details)}`;
+}
+
+/** v66 — the buffers that may move to the worker: a view spanning its
+ *  whole, non-shared buffer. Anything else (a window onto wasm memory, a
+ *  SharedArrayBuffer) is copied by the structured clone instead —
+ *  transferring it would detach memory the caller does not own. */
+function transferable(views: readonly Uint8Array[]): Transferable[] {
+  const out: Transferable[] = [];
+  for (const v of views) {
+    const b = v.buffer;
+    if (
+      b instanceof ArrayBuffer &&
+      v.byteOffset === 0 &&
+      v.byteLength === b.byteLength &&
+      !out.includes(b)
+    ) {
+      out.push(b);
+    }
+  }
+  return out;
+}
+
+/** v66 — settle a binary scene-image reply. */
+function sceneImageApplied(
+  reply: WorkerToMain,
+  what: string,
+  elementId: string,
+): { pageIds: PageId[] } {
+  if (reply.kind !== "sceneLayerApplied") {
+    throw new Error(`${what}: unexpected reply ${reply.kind}`);
+  }
+  const p = reply.payload as { applied: boolean; pageIds?: PageId[] | null };
+  if (!p.applied) {
+    throw new Error(
+      `${what}("${elementId}"): the engine refused it (malformed buffer, ` +
+        `no image to patch, another plugin's frame, or no document)`,
+    );
+  }
+  return { pageIds: p.pageIds ?? [] };
+}
+
+/** One call a suspended script makes on the host's object registry
+ *  (engine protocol 71 `HostObjectCall`). */
+export type HostObjectCallWire =
+  | { op: "get"; address: string; path: string }
+  | { op: "batch"; ops: unknown[] }
+  | { op: "query"; selector: string }
+  | { op: "schema"; target: string }
+  /** `paged.invoke(id, args)` / an `{ op: "invoke" }` batch op's command:
+   *  a typed command (`core.<op>` or a plugin's) run by the registry. */
+  | { op: "invoke"; id: string; args?: unknown }
+  /** `paged.commands(owner?)`: the typed commands on offer. */
+  | { op: "commands"; owner?: string };
+
+/** The answer to one call (`HostObjectAnswer`). */
+export interface HostObjectAnswerWire {
+  value?: unknown;
+  error?: { code: string; reason: string; index?: number } | null;
+}
+
+/** One answered round: the answers, in call order, and `committed` — the
+ *  engine `appliedSeq` of every write the host made ANSWERING these calls
+ *  (the plugin SDK's `answerHostObjectsRound`). */
+export interface HostObjectsRound {
+  answers: HostObjectAnswerWire[];
+  committed?: number[];
+}
+
+/** Answers every call, in order. Returning only the answers (the plugin
+ *  SDK's `answerHostObjects`) reports no committed writes. */
+export type HostObjectsAnswerer = (
+  calls: HostObjectCallWire[],
+) => Promise<HostObjectAnswerWire[] | HostObjectsRound>;
+
+/** A face in the engine's DOCUMENT font registry, as this client sent it.
+ *  `owner` is the document it was given for ({@link
+ *  CanvasClient.registerDocumentFont}); `null` is a face for the session. */
+interface RegistryFace {
+  family: string;
+  style: string | null;
+  bytes: Uint8Array;
+  owner: string | null;
+}
+
+function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
+  if (a === b) return true;
+  if (a.byteLength !== b.byteLength) return false;
+  for (let i = 0; i < a.byteLength; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
+export class CanvasClient {
+  private readonly worker: Worker;
+  private nextSeq = 1;
+  private readonly pending = new Map<number, PendingReply>();
+  private readonly listeners = new Set<(msg: WorkerToMain) => void>();
+  /** C-6 — the tile-fill subscribers (see {@link onResourceTilesNeeded}).
+   *  Kept apart from {@link listeners} because the engine delivers the
+   *  miss list on the CLAIM/SUBMIT ACK, not as an unsolicited event. */
+  private readonly tilesNeededListeners = new Set<
+    (need: ResourceTilesNeededWire) => void
+  >();
+  /**
+   * The view transform, in shared memory. Written by the host at input
+   * rate and read by the render worker on its own schedule, so panning
+   * and zooming never queue a message per frame.
+   */
+  readonly camera: CameraBuffer;
+  /**
+   * Pointer deltas for a live drag, in shared memory — the same trade
+   * as {@link camera}: a drag emits far more samples than the channel
+   * should carry, so the worker samples the buffer instead.
+   */
+  readonly gestureSab: GestureBuffer;
+  /** See {@link CanvasClientOptions.defaultFontProvider}. */
+  private readonly defaultFontProvider?: () => Promise<Uint8Array | undefined>;
+  /** See {@link CanvasClientOptions.defaultFontFaces}. */
+  private readonly defaultFontFaces?: () => Promise<readonly DefaultFontFace[]>;
+  /** See {@link setActivePage}. Host-supplied, never engine-derived. */
+  private activePageHint: string | null = null;
+  /** Set once the worker can no longer answer (boot failed, protocol or SAB
+   *  layout mismatch, worker error, disposed). Every pending request was
+   *  rejected with it, and every later request rejects with it at once. */
+  private fatal: Error | null = null;
+  /** ADR 323 — answers a suspended script's `plugin:` calls. */
+  private hostObjects: HostObjectsAnswerer | null = null;
+  /** See {@link markSaved}: replies that may have changed the document,
+   *  counted, and the count at the last save (`null`: never saved since
+   *  the load). */
+  private editCount = 0;
+  private savedAtEdit: number | null = null;
+  private readonly savedListeners = new Set<() => void>();
+  /** The engine's document font registry as this client filled it, in
+   *  order. The engine keeps ONE such registry, seeds every later load from
+   *  it and can only empty it whole, so this is what lets a load drop the
+   *  open document's faces and keep the session's (see
+   *  {@link registerDocumentFont}). */
+  private readonly fontRegistry: RegistryFace[] = [];
+  /** The open document's id (the last `documentLoaded`), or null. */
+  private openDocId: string | null = null;
+  /** The load in flight, if any. */
+  private loading: Promise<unknown> | null = null;
+
+  constructor(options: CanvasClientOptions) {
+    this.defaultFontProvider = options.defaultFontProvider;
+    this.defaultFontFaces = options.defaultFontFaces;
+    if (options.workerFactory) {
+      this.worker = options.workerFactory();
+    } else if (options.workerUrl) {
+      this.worker = new Worker(options.workerUrl, { type: "module" });
+    } else {
+      throw new Error(
+        "CanvasClient: provide workerFactory (preferred, Vite `?worker`) or workerUrl.",
+      );
+    }
+    this.worker.addEventListener("message", this.onMessage);
+    this.worker.addEventListener("error", this.onWorkerError);
+    this.worker.addEventListener("messageerror", this.onMessageError);
+    this.camera = CameraBuffer.allocate();
+    this.worker.postMessage({ kind: "cameraSab", buffer: this.camera.buffer });
+    this.gestureSab = GestureBuffer.allocate();
+    this.worker.postMessage({
+      kind: "gestureSab",
+      buffer: this.gestureSab.buffer,
+    });
+  }
+
+  /**
+   * Send a typed message and await the worker's reply. Replies are
+   * matched on `seq`; messages with `seq === null` are unsolicited
+   * notifications and flow through `subscribe(...)` instead.
+   */
+  async send(kind: MainToWorkerKind): Promise<WorkerToMain> {
+    if (kind.kind === "loadDocument" || kind.kind === "newBlankDocument") {
+      return this.replacingDocument(
+        () => this.post(kind),
+        (reply) => reply.kind === "documentLoaded",
+      );
+    }
+    const face = this.noteFontRegistry(kind);
+    const reply = await this.post(kind);
+    if (face && reply.kind !== "fontRegistered") this.forgetFace(face);
+    return reply;
+  }
+
+  /** Post one message on the JSON channel. Synchronous up to the post, so
+   *  messages reach the worker in call order (and it answers in order). */
+  private post(kind: MainToWorkerKind): Promise<WorkerToMain> {
+    if (this.fatal) return Promise.reject(this.fatal);
+    const seq = this.nextSeq++;
+    const envelope: MainToWorker = {
+      seq,
+      protocol: PROTOCOL_VERSION,
+      ...kind,
+    };
+    const promise = new Promise<WorkerToMain>((resolve, reject) => {
+      this.pending.set(seq, { resolve, reject });
+    });
+    this.worker.postMessage({ kind: "channel", msg: envelope });
+    return promise;
+  }
+
+  /** Subscribe to unsolicited worker → main notifications. */
+  subscribe(listener: (msg: WorkerToMain) => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  /**
+   * Convenience: type-narrow `documentLoaded` reply.
+   *
+   * Routes through a binary side-channel (transferable ArrayBuffers)
+   * rather than the JSON envelope so multi-MB IDMLs don't pay the
+   * ~8× cost of `Array.from(bytes)` → `JSON.stringify` →
+   * `serde_json::from_str`. On wasm32 the JSON path trips a
+   * `Vec::with_capacity` overflow above ~80 MB; the binary path is
+   * effectively a memcpy.
+   */
+  async loadDocument(
+    bytes: Uint8Array,
+    font?: Uint8Array,
+    cmykIccProfile?: Uint8Array,
+  ): Promise<DocumentHandle> {
+    // U5/A7 — no explicit font ⇒ ask the provider, so a caller that
+    // never thought about fonts (the plugin native-document fallback,
+    // a bare test load) still gets the default-face fallback for
+    // unresolvable document fonts. The result rides the binary
+    // side-channel exactly like caller-passed bytes.
+    const fontBytes = font ?? (await this.resolveDefaultFont());
+    if (this.fatal) throw this.fatal;
+    const handle = await this.replacingDocument(
+      () => {
+        const seq = this.nextSeq++;
+        const promise = new Promise<DocumentHandle>((resolve, reject) => {
+          this.loadDocPending.set(seq, { resolve, reject });
+        });
+        const transfer: Transferable[] = [bytes.buffer];
+        if (fontBytes) transfer.push(fontBytes.buffer);
+        if (cmykIccProfile) transfer.push(cmykIccProfile.buffer);
+        this.worker.postMessage(
+          {
+            kind: "loadDocumentBinary",
+            seq,
+            bytes,
+            font: fontBytes ?? null,
+            cmykIccProfile: cmykIccProfile ?? null,
+          },
+          // Transfer ownership of the underlying buffers; the caller's
+          // Uint8Array references become unusable after this. Saves a
+          // copy in V8.
+          transfer,
+        );
+        return promise;
+      },
+      () => true,
+    );
+    await this.registerDefaultFontFaces();
+    return handle;
+  }
+
+  /**
+   * File ▸ New — replace the active document with a freshly-minted
+   * EMPTY one at `widthPt` × `heightPt` (points). The engine synthesises
+   * the blank IDML and loads it through the normal parse path, so the
+   * returned handle is identical in shape to {@link loadDocument}.
+   *
+   * Unlike `loadDocument` this carries no large payload, so it rides the
+   * regular JSON channel (`send`) rather than the binary side-channel.
+   * `font` is the optional default-font fallback (the editor's Inter) so
+   * text the user then types has glyph metrics.
+   */
+  async newBlankDocument(
+    widthPt: number,
+    heightPt: number,
+    font?: Uint8Array,
+  ): Promise<DocumentHandle> {
+    // U5/A7 — same default-font door as `loadDocument`; this path rides
+    // the JSON channel, so the bytes go as `number[]` like a
+    // caller-passed font would.
+    const fontBytes = font ?? (await this.resolveDefaultFont());
+    const reply = await this.send({
+      kind: "newBlankDocument",
+      payload: {
+        widthPt,
+        heightPt,
+        font: fontBytes ? Array.from(fontBytes) : null,
+      },
+    });
+    if (reply.kind === "documentLoaded") {
+      await this.registerDefaultFontFaces();
+      return reply.payload;
+    }
+    if (reply.kind === "loadFailed") {
+      const e = reply.payload.error;
+      throw new Error(
+        `new document failed (${e.kind}): ${"message" in e ? e.message : ""}`,
+      );
+    }
+    throw new Error(`unexpected reply kind: ${reply.kind}`);
+  }
+
+  private readonly loadDocPending = new Map<
+    number,
+    { resolve: (h: DocumentHandle) => void; reject: (e: Error) => void }
+  >();
+
+  /** Register the default family's other faces (see
+   *  {@link CanvasClientOptions.defaultFontFaces}). Never fails the load
+   *  it follows. */
+  private async registerDefaultFontFaces(): Promise<void> {
+    if (!this.defaultFontFaces) return;
+    let faces: readonly DefaultFontFace[];
+    try {
+      faces = await this.defaultFontFaces();
+    } catch {
+      return;
+    }
+    for (const face of faces) {
+      try {
+        await this.registerFont(face.family, face.bytes, face.style);
+      } catch {
+        // The face is an improvement, not a precondition.
+      }
+    }
+  }
+
+  /** The provider's answer, or `undefined` with no provider / on a
+   *  provider failure — the load itself must never fail because the
+   *  fallback font could not be fetched. */
+  private async resolveDefaultFont(): Promise<Uint8Array | undefined> {
+    if (!this.defaultFontProvider) return undefined;
+    try {
+      return await this.defaultFontProvider();
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Ask the worker to lay out and paint one page at a level of detail.
+   * The reply carries the page's render; the LOD tier is a hint about
+   * how much of the document's detail is worth resolving at the
+   * current zoom.
+   */
+  async requestPage(pageId: PageId, lod: LodTier): Promise<WorkerToMain> {
+    return this.send({ kind: "requestPage", payload: { pageId, lod } });
+  }
+
+  /**
+   * Request a low-resolution snapshot for the navigator / overview.
+   * Resolves to the PNG bytes; throws if the worker errors. When
+   * `dpi` is provided it wins over `targetWidthPx` — useful for the
+   * fidelity suite, which needs byte-exact dimensions vs `pdftoppm`.
+   */
+  async requestSnapshot(
+    pageId: PageId,
+    targetWidthPx: number,
+    dpi?: number,
+  ): Promise<SnapshotPng> {
+    const reply = await this.send({
+      kind: "requestSnapshot",
+      payload: { pageId, targetWidthPx, dpi: dpi ?? null },
+    });
+    if (reply.kind === "snapshotReady") {
+      return reply.payload;
+    }
+    if (reply.kind === "snapshotFailed") {
+      const e = reply.payload.error;
+      throw new Error(`snapshot failed (${e.kind})`);
+    }
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /**
+   * Apply one mutation to the document — THE write door.
+   *
+   * Every authoring operation the engine has, all 117 of them, is a
+   * variant of `Mutation`, and this method takes the type rather than
+   * a per-operation method, so a mutation added to the engine is
+   * reachable from this SDK the moment the types are re-vendored.
+   * That is why the typed helpers below (`setSelection`,
+   * `registerFont`, …) exist only where a call needs shaping — they
+   * are conveniences over this, never the only way through.
+   *
+   * The reply is `mutationApplied` (carrying the ids the engine minted,
+   * which is how a caller learns the id of a thing it just created) or
+   * `mutationFailed` with the engine's own words. It does not throw on
+   * a rejected mutation: a refusal is an answer, not an exception.
+   */
+  async mutate(mutation: Mutation): Promise<WorkerToMain> {
+    return this.send({ kind: "mutate", payload: mutation });
+  }
+
+  /** Phase 3 — replace the worker's selection state. */
+  async setSelection(
+    selection: ContentSelection | null,
+  ): Promise<WorkerToMain> {
+    return this.send({ kind: "setSelection", payload: { selection } });
+  }
+
+  /**
+   * Phase A — apply an element-selection update with the given mode.
+   * Resolves to the post-update set (which may differ from the
+   * request when mode is `add`/`toggle`).
+   */
+  async setElementSelection(
+    ids: ElementId[],
+    mode: SelectionMode,
+  ): Promise<ElementId[]> {
+    const reply = await this.send({
+      kind: "setElementSelection",
+      payload: { ids, mode },
+    });
+    if (reply.kind === "elementSelectionApplied") return reply.payload.ids;
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /**
+   * Phase A — return every selectable element whose oriented bounds
+   * intersect `rect` (page-local `[top, left, bottom, right]`). Returns
+   * ids in paint order, top-first.
+   */
+  async marqueeHits(
+    pageId: PageId,
+    rect: [number, number, number, number],
+  ): Promise<ElementId[]> {
+    const reply = await this.send({
+      kind: "requestMarqueeHits",
+      payload: { pageId, rect },
+    });
+    if (reply.kind === "marqueeHits") return reply.payload.ids;
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /**
+   * Phase A — fetch oriented geometry (raw bounds + composed transform
+   * + host page) for one or more elements. Used by the overlay to
+   * draw selection chrome without re-deriving the affine math in TS.
+   */
+  async elementGeometry(ids: ElementId[]): Promise<ElementGeometryItem[]> {
+    const reply = await this.send({
+      kind: "requestElementGeometry",
+      payload: { ids },
+    });
+    if (reply.kind === "elementGeometry") return reply.payload.items;
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /**
+   * Phase H — return every leaf descendant of the named group (no
+   * groups; nested groups are descended). The canvas selects this
+   * list when the user double-clicks a frame whose hit `group_chain`
+   * is non-empty.
+   */
+  async groupLeaves(groupId: string): Promise<ElementId[]> {
+    const reply = await this.send({
+      kind: "requestGroupLeaves",
+      payload: { groupId },
+    });
+    if (reply.kind === "groupLeaves") return reply.payload.ids;
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /**
+   * Step 5 — fetch the path-anchor table for an element so the
+   * path-edit overlay can draw one dot per anchor + Bezier-handle
+   * pair. Returns `null` when the element doesn't resolve or sits
+   * on a non-body page; returns a result with an empty `anchors`
+   * vector when the element carries no `<PathGeometry>` (e.g. a
+   * Rectangle declared via `GeometricBounds` only).
+   */
+  async pathAnchors(id: ElementId): Promise<PathAnchorsResult | null> {
+    const reply = await this.send({
+      kind: "requestPathAnchors",
+      payload: { id },
+    });
+    if (reply.kind === "pathAnchors") return reply.payload.result;
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /**
+   * Track M — list every `<Layer>` from the loaded document. Used by
+   * the Layers panel to seed its row list and re-query on every
+   * `LayersChanged` notification. Returns an empty array when no
+   * document is loaded.
+   */
+  async layers(): Promise<LayerSummary[]> {
+    const reply = await this.send({
+      kind: "requestLayers",
+    });
+    if (reply.kind === "layers") return reply.payload.items;
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /**
+   * SDK Phase 5 (D1) — typed read of any document collection per
+   * `docs/design/panel-catalog.md` §5.1. Generic
+   * over the consumer's expected summary shape — e.g.
+   * `client.collection<SwatchSummary>("swatches")` or
+   * `client.collection<ParagraphStyleSummary>("paragraphStyles")`.
+   *
+   * The worker's `CollectionReply.items` is typed as `any` on the
+   * wire (one envelope handles every collection's typed shape), so
+   * the cast here is the deliberate boundary where the consumer
+   * commits to a specific `*Summary` type. tsc protects the
+   * `name` arg via the closed `CollectionName` union — typos fail
+   * at compile time, not at runtime.
+   *
+   * Empty array for unknown / unimplemented collections — never
+   * null, so consumer hooks can rely on the array invariant.
+   */
+  async collection<T>(name: CollectionName): Promise<readonly T[]> {
+    const reply = await this.send({
+      kind: "requestCollection",
+      payload: { name },
+    });
+    if (reply.kind === "collectionReply") {
+      const items = reply.payload.items;
+      if (Array.isArray(items)) return items as T[];
+      return [];
+    }
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /**
+   * SDK Phase 5 (D1) — singleton document-meta snapshot per
+   * `docs/design/panel-catalog.md` §5.6. The
+   * `documentMeta:<key>` ReadSpec form binds against fields of
+   * this object. Re-fetch on `mutationApplied` / `undoApplied` /
+   * `redoApplied` to keep the panel reactive — same snapshot-
+   * discipline pattern the existing `useBindings` uses.
+   */
+  async documentMeta(): Promise<DocumentMeta> {
+    const reply = await this.send({
+      kind: "requestDocumentMeta",
+    });
+    if (reply.kind !== "documentMetaReply") {
+      throw new Error(`unexpected reply: ${reply.kind}`);
+    }
+    const meta = reply.payload.meta;
+    // Fold the host's active page in. The engine deliberately reports
+    // `activePage: null` — `CanvasModel::document_meta` says active
+    // page is application state (camera focus + Pages-panel selection)
+    // that the worker does not track, and leaves it to "consumers to
+    // fold their own active-page state in when they need it". This is
+    // that fold, and until it existed nobody had done it.
+    //
+    // It is not cosmetic. Every first-party bundle that mints a page
+    // item resolves its target the same way — paged.web's `insert.ts`,
+    // paged.data's `lower.ts`, paged.doc's `place.ts`, paged.draw's
+    // `resolveTargetPage`, paged.sheet's `activePageId` all read
+    // `meta.activePage` and fall back to `pages[0]`. With the engine
+    // always answering null, that fallback was the ONLY branch: on a
+    // one-page document nothing looked wrong, and on a sixteen-page
+    // one every plugin dropped its work onto page 1 no matter which
+    // page the user was looking at. Reparenting cannot repair it after
+    // the fact either — `MoveNode`'s `new_parent` is deliberately not
+    // on the wire.
+    const folded =
+      this.activePageHint && !meta.activePage
+        ? { ...meta, activePage: this.activePageHint }
+        : meta;
+    // The engine's `dirty` means "edited since the LOAD" — it has no save
+    // point. Fold the host's in: nothing edited since the last save reads
+    // clean.
+    return folded.dirty && this.savedAtEdit === this.editCount
+      ? { ...folded, dirty: false }
+      : folded;
+  }
+
+  /**
+   * How many replies that may have changed the document have arrived.
+   * A save reads it the moment its export settles, so an edit landing
+   * while the bytes are being written does not count as saved.
+   */
+  get editMark(): number {
+    return this.editCount;
+  }
+
+  /**
+   * Record a save: from now until the next edit, `documentMeta()`
+   * answers `dirty: false`.
+   *
+   * The engine cannot do this itself. Its flag follows the undo log (an
+   * applied mutation dirties, undoing every one reads clean) and there
+   * is no save point on the wire, while whether the bytes reached a file
+   * is only known here — after the write, or the download, succeeded. So
+   * saving never cleared the flag: the next Open warned of unsaved edits
+   * and closing the tab raised "leave page?".
+   *
+   * Edits are counted from the replies that can change the document:
+   * mutations, undo, redo, committed gestures, plugin part writes, and
+   * every script result, because a script's writes arrive with no other
+   * notice. A read-only script after a save therefore reads as an edit;
+   * the flag errs on the side of asking.
+   *
+   * `mark` defaults to now; pass {@link editMark} as read when the export
+   * settled.
+   */
+  markSaved(mark?: number): void {
+    this.savedAtEdit = mark ?? this.editCount;
+    for (const l of this.savedListeners) l();
+  }
+
+  /** Notified after {@link markSaved}: the dirty flag may have flipped
+   *  without any worker message to say so. */
+  onSaved(listener: () => void): () => void {
+    this.savedListeners.add(listener);
+    return () => this.savedListeners.delete(listener);
+  }
+
+  private trackEdits(msg: WorkerToMain): void {
+    switch (msg.kind) {
+      case "documentLoaded":
+        // A fresh document starts clean in the engine; forget the old save.
+        this.savedAtEdit = null;
+        this.openDocId = msg.payload.docId;
+        return;
+      case "mutationApplied":
+      case "undoApplied":
+      case "redoApplied":
+      case "gestureCommitted":
+      case "scriptResult":
+      case "pagedPartWritten":
+      case "pagedPartDeleted":
+        this.editCount += 1;
+        return;
+      default:
+        return;
+    }
+  }
+
+  /**
+   * Tell the client which page the user is working on, so
+   * `documentMeta()` can answer `activePage` for plugins.
+   *
+   * The client cannot derive this: it is a fact about the CANVAS —
+   * where the camera is pointed, what the Pages panel has selected —
+   * and the client is deliberately UI-agnostic. So the app that owns
+   * the viewport pushes it here. Passing `null` clears the hint and
+   * restores the engine's own answer.
+   */
+  setActivePage(pageId: string | null): void {
+    this.activePageHint = pageId;
+  }
+
+  /** The page most recently pushed by {@link setActivePage}. */
+  get activePage(): string | null {
+    return this.activePageHint;
+  }
+
+  /**
+   * SDK Phase 5 (v1 sweep) — resolved colour readout for a single
+   * swatch. Powers the Color panel's CMYK/RGB display. Returns
+   * `null` when the swatch id doesn't resolve.
+   */
+  async colorPreview(swatchId: string): Promise<ColorPreview | null> {
+    const reply = await this.send({
+      kind: "requestColorPreview",
+      payload: { swatchId },
+    });
+    if (reply.kind === "colorPreviewReply") return reply.payload.result;
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /**
+   * Concept 2 — resolve an ARBITRARY colour value (mixer slider
+   * state, not a swatch ref) through the document's active colour
+   * management. Returns the display hex, the effective CMYK (when
+   * the value routes through CMYK), and the out-of-gamut verdict
+   * against the active CMYK working space.
+   */
+  async colorCompute(args: {
+    space: string;
+    value: number[];
+    tint?: number | null;
+    model?: string | null;
+    alternateSpace?: string | null;
+    alternateValue?: number[] | null;
+  }): Promise<{
+    rgbHex: string;
+    cmyk: [number, number, number, number] | null;
+    outOfGamut: boolean;
+  }> {
+    const reply = await this.send({
+      kind: "requestColorCompute",
+      payload: args,
+    });
+    if (reply.kind === "colorComputeReply") return reply.payload;
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /**
+   * Concept 2 — full stop detail for one gradient (the ramp editor
+   * + faithful gradient chips). `null` when the id doesn't resolve.
+   */
+  async gradientDetail(gradientId: string): Promise<GradientDetail | null> {
+    const reply = await this.send({
+      kind: "requestGradientDetail",
+      payload: { gradientId },
+    });
+    if (reply.kind === "gradientDetailReply") return reply.payload.result;
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /**
+   * Concept 2 — register a named ICC profile with the worker's
+   * registry (the RegisterFont pattern; survives loads). Working-
+   * space / proof names in `setColorSettings`/`setProofSetup`
+   * resolve against it; a document whose designmap names a
+   * registered profile activates it at load.
+   */
+  async registerColorProfile(name: string, bytes: Uint8Array): Promise<void> {
+    const reply = await this.send({
+      kind: "registerColorProfile",
+      payload: { name, bytes: Array.from(bytes) },
+    });
+    if (reply.kind === "colorProfileRegistered") return;
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /**
+   * Concept 2 — serialise swatches back to `.ase` ("Save .ase…").
+   * `groupId` exports one ColorGroup; omitted exports the palette.
+   */
+  async exportSwatchLibrary(groupId?: string | null): Promise<Uint8Array> {
+    const reply = await this.send({
+      kind: "exportSwatchLibrary",
+      payload: { groupId: groupId ?? null },
+    });
+    if (reply.kind === "swatchLibraryExported") {
+      return new Uint8Array(reply.payload.aseBytes);
+    }
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /**
+   * W3.B2 — serialise the loaded document back to an `.idml` package
+   * ("Save As IDML"). One-shot, like `exportSwatchLibrary`: the worker
+   * re-emits the parsed designmap + stories + resources as a ZIP and
+   * replies `idmlExported` with the bytes (`exportIdmlFailed` on
+   * error). The returned `Uint8Array` is a complete IDML package
+   * (starts with the `PK` zip magic) the caller hands to a browser
+   * download, or feeds straight back into `loadDocument` to round-trip.
+   */
+  async exportIdml(): Promise<Uint8Array> {
+    const reply = await this.send({ kind: "exportIdml", payload: {} });
+    if (reply.kind === "idmlExported") {
+      return new Uint8Array(reply.payload.idmlBytes);
+    }
+    if (reply.kind === "exportIdmlFailed") {
+      throw new Error(reply.payload.error);
+    }
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /**
+   * Serialise the loaded document to a `.paged` container ("Save
+   * (.paged)"). Same one-shot shape as `exportIdml`, and the bytes are
+   * a superset: the engine carries every IDML entry through unchanged,
+   * then appends `manifest.json`, a freshly re-serialised
+   * `paged/core/model/document.pgm`, and every `paged/<plugin>/…` part
+   * a bundle wrote through `host.parts` (protocol 51).
+   *
+   * So the result opens BOTH ways. InDesign and any IDML reader see a
+   * valid UCF package and ignore the `paged/` namespace; this engine
+   * sniffs `document.pgm` on load and reconstructs the model without
+   * parsing the IDML projection at all. That is why the same bytes can
+   * be handed to a download, fed back into `loadDocument`, or renamed
+   * to `.idml` — and why a plugin's content survives a round-trip that
+   * a plain IDML export would flatten away.
+   *
+   * The failure reply is `pagedPartFailed`, shared with the three
+   * part-level doors rather than given an export-specific variant.
+   */
+  async exportPaged(): Promise<Uint8Array> {
+    const reply = await this.send({ kind: "exportPaged", payload: {} });
+    if (reply.kind === "pagedExported") {
+      return new Uint8Array(reply.payload.bytes);
+    }
+    if (reply.kind === "pagedPartFailed") {
+      throw new Error(reply.payload.error);
+    }
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /**
+   * Concept 3 — open a PDF export session. The worker re-builds the
+   * scene one-shot (text-as-text side-channel on) and parks the
+   * writer state; drive it with `exportPdfPage` one page at a time.
+   */
+  async beginPdfExport(
+    options: ExportPdfWireOptions,
+  ): Promise<{ session: number; pageCount: number }> {
+    const reply = await this.send({
+      kind: "exportPdfBegin",
+      payload: { options },
+    });
+    if (reply.kind === "exportPdfBegun") {
+      return {
+        session: reply.payload.session,
+        pageCount: reply.payload.pageCount,
+      };
+    }
+    if (reply.kind === "exportPdfFailed") {
+      throw new Error(reply.payload.error);
+    }
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /** Concept 3 — export ONE page; returns monotone progress. */
+  async exportPdfPage(
+    session: number,
+  ): Promise<{ done: number; total: number }> {
+    const reply = await this.send({
+      kind: "exportPdfPage",
+      payload: { session },
+    });
+    if (reply.kind === "exportPdfProgress") {
+      return { done: reply.payload.done, total: reply.payload.total };
+    }
+    if (reply.kind === "exportPdfFailed") {
+      throw new Error(reply.payload.error);
+    }
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /** Concept 3 — serialise the finished PDF and drop the session.
+   *  W3.A2 — the `pdfExported` reply also carries STRUCTURED preflight
+   *  `findings` (code/severity/message/pageIndex) alongside the legacy
+   *  flat `diagnostics`; surface both off the typed return so callers
+   *  no longer have to capture findings off the `subscribe` broadcast. */
+  async finishPdfExport(session: number): Promise<{
+    bytes: Uint8Array;
+    diagnostics: string[];
+    findings: PreflightFinding[];
+  }> {
+    const reply = await this.send({
+      kind: "exportPdfFinish",
+      payload: { session },
+    });
+    if (reply.kind === "pdfExported") {
+      return {
+        bytes: new Uint8Array(reply.payload.pdfBytes),
+        diagnostics: reply.payload.diagnostics,
+        findings: reply.payload.findings ?? [],
+      };
+    }
+    if (reply.kind === "exportPdfFailed") {
+      throw new Error(reply.payload.error);
+    }
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /** Concept 3 — abandon an in-flight session (idempotent). */
+  async cancelPdfExport(session: number): Promise<void> {
+    const reply = await this.send({
+      kind: "exportPdfCancel",
+      payload: { session },
+    });
+    if (reply.kind === "exportPdfCancelled") return;
+    if (reply.kind === "exportPdfFailed") {
+      throw new Error(reply.payload.error);
+    }
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /**
+   * Concept 3 — the full export loop: begin → one page per call
+   * (progress + abort checked at every page boundary) → finish.
+   * Always cancels the worker-side session on failure or abort so
+   * no writer state leaks.
+   */
+  async exportPdf(
+    options: ExportPdfWireOptions,
+    hooks?: {
+      onProgress?: (done: number, total: number) => void;
+      signal?: AbortSignal;
+    },
+  ): Promise<{
+    bytes: Uint8Array;
+    diagnostics: string[];
+    findings: PreflightFinding[];
+  }> {
+    const { session, pageCount } = await this.beginPdfExport(options);
+    try {
+      hooks?.onProgress?.(0, pageCount);
+      for (let i = 0; i < pageCount; i++) {
+        if (hooks?.signal?.aborted) {
+          throw new DOMException("export cancelled", "AbortError");
+        }
+        const { done, total } = await this.exportPdfPage(session);
+        hooks?.onProgress?.(done, total);
+      }
+      return await this.finishPdfExport(session);
+    } catch (err) {
+      // Best-effort worker-side cleanup; the original error wins.
+      try {
+        await this.cancelPdfExport(session);
+      } catch {
+        /* session already gone */
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Inspector P1 — typed property snapshot for the selected element.
+   * The Inspector panel passes each entry's `path` + `value` directly
+   * into the matching editor; on commit it dispatches a
+   * `SetElementProperty` mutation carrying the edited value. `null`
+   * when the id doesn't resolve.
+   */
+  async elementProperties(id: ElementId): Promise<ElementProperties | null> {
+    const reply = await this.send({
+      kind: "requestElementProperties",
+      payload: { id },
+    });
+    if (reply.kind === "elementProperties") return reply.payload.result;
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /**
+   * Inspector P1 — fetch the scene-tree outline (Spread → Page →
+   * frame leaves). Lightweight; the Tree panel re-fetches on every
+   * `mutationApplied` to stay in sync.
+   */
+  async sceneTree(): Promise<SceneTreeNode[]> {
+    const reply = await this.send({
+      kind: "requestSceneTree",
+    });
+    if (reply.kind === "sceneTree") return reply.payload.roots;
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /**
+   * S-13 (K-7) — measure a text run against the loaded document's
+   * font registry. Routes to the worker's `CanvasWorker.measureText`
+   * shaper; the editor exposes this through `PagedEditor.text.measure`,
+   * which the plugin-sdk's `host.text.measureString` calls instead of
+   * its estimate fallback. All values are in POINTS; `descender` is
+   * negative per the OpenType convention. `style` is IDML's `FontStyle`
+   * ("Bold", "Italic", …) or `null`. Resolves with zeroed metrics when
+   * no document is loaded / the family resolves to no face (the worker
+   * sends a `null` shaper result, which we normalise here).
+   */
+  async measureText(
+    family: string,
+    style: string | null,
+    text: string,
+    sizePt: number,
+  ): Promise<{ advance: number; ascender: number; descender: number }> {
+    const reply = await this.send({
+      kind: "requestMeasureText",
+      payload: { family, style, text, sizePt },
+    });
+    if (reply.kind === "measureTextResult") {
+      const { advance, ascender, descender } = reply.payload;
+      return { advance, ascender, descender };
+    }
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /**
+   * D-27 — measure many strings in one face and size in ONE worker
+   * round-trip; one entry per input, in order, each equal to what
+   * {@link measureText} answers for that string. The worker loops the
+   * same `CanvasWorker.measureText` shaper, so this is an editor-local
+   * message (`requestMeasureTextBatch`), not an engine wire kind: no
+   * protocol change. An empty input resolves `[]` without a message.
+   */
+  async measureTexts(
+    family: string,
+    style: string | null,
+    texts: readonly string[],
+    sizePt: number,
+  ): Promise<Array<{ advance: number; ascender: number; descender: number }>> {
+    if (texts.length === 0) return [];
+    const reply = (await this.send({
+      kind: "requestMeasureTextBatch",
+      payload: { family, style, texts: [...texts], sizePt },
+    } as never)) as unknown as {
+      kind: string;
+      payload?: {
+        metrics?: Array<{ advance: number; ascender: number; descender: number }>;
+      };
+    };
+    const metrics = reply.payload?.metrics;
+    if (reply.kind === "measureTextBatchResult" && Array.isArray(metrics)) {
+      if (metrics.length !== texts.length) {
+        throw new Error(
+          `measureTexts: ${metrics.length} metrics for ${texts.length} strings`,
+        );
+      }
+      return metrics;
+    }
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /** C-1 — submit (replace) a plugin vector scene layer rendered inside
+   *  the frame `elementId` (its `Self` id). The worker stores it + rebuilds
+   *  so compose lowers it inside the frame; the next snapshot reflects it.
+   *
+   *  Protocol 68 — a text item draws in the face it names (`family` +
+   *  `style`, or `weight` / `italic`), resolved through the fonts
+   *  registered for the document. Resolves with `fontFallbacks`: the faces
+   *  (`"Family Style"`) that did not resolve and drew in the default font
+   *  instead; empty when every named face resolved. */
+  async submitSceneLayer(
+    elementId: string,
+    layer: SceneLayer,
+    caller?: string,
+  ): Promise<{ fontFallbacks: string[] }> {
+    const reply = await this.send({
+      kind: "submitSceneLayer",
+      // C-34 — `caller` names the plugin whose render this is. The
+      // engine records the frame's owner and refuses a foreign replace;
+      // a frame's in-frame render belongs to ONE content type and this
+      // door used to be an unconditional insert. OMITTED is the prior
+      // behaviour exactly (no owner recorded, nothing enforced), so
+      // this is additive and needs no protocol bump.
+      payload: caller ? { elementId, layer, caller } : { elementId, layer },
+    } as never);
+    if (reply.kind === "sceneLayerApplied") {
+      return { fontFallbacks: reply.payload.fontFallbacks ?? [] };
+    }
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /** C-1 — clear the scene layer for `elementId` (returns the frame to its
+   *  native content). */
+  async clearSceneLayer(elementId: string): Promise<void> {
+    const reply = await this.send({
+      kind: "clearSceneLayer",
+      payload: { elementId },
+    });
+    if (reply.kind === "sceneLayerApplied") return;
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /** v66 — post one binary-door request and await its envelope reply.
+   *  Rides the same seq table as `send`, so a `dispatchError` warning
+   *  rejects it exactly like a JSON request. */
+  private postDirect(
+    msg: Record<string, unknown> & { op: string },
+    transfer: Transferable[],
+  ): Promise<WorkerToMain> {
+    if (this.fatal) return Promise.reject(this.fatal);
+    const seq = this.nextSeq++;
+    const promise = new Promise<WorkerToMain>((resolve, reject) => {
+      this.pending.set(seq, { resolve, reject });
+    });
+    this.worker.postMessage({ kind: "direct", seq, ...msg }, transfer);
+    return promise;
+  }
+
+  /** v66 — a byte READ on the binary doors (`directBytesReply`). */
+  private postDirectBytes<T>(msg: Record<string, unknown> & { op: string }): Promise<T> {
+    if (this.fatal) return Promise.reject(this.fatal);
+    const seq = this.nextSeq++;
+    const promise = new Promise<T>((resolve, reject) => {
+      this.bytesPending.set(seq, {
+        resolve: resolve as (v: unknown) => void,
+        reject,
+      });
+    });
+    this.worker.postMessage({ kind: "direct", seq, ...msg });
+    return promise;
+  }
+
+  private readonly bytesPending = new Map<
+    number,
+    { resolve: (v: unknown) => void; reject: (e: Error) => void }
+  >();
+
+  /**
+   * v66 — make the frame `elementId`'s scene layer ONE RGBA8 image
+   * (`width*height*4` bytes) drawn at `dest` (`[x, y, w, h]`,
+   * frame-content points), as bytes rather than a `number[]` in the JSON
+   * envelope. With `transfer` the buffer moves to the worker and is
+   * detached here (only when the view spans its whole, non-shared
+   * buffer; otherwise it is copied). Resolves with the pages the change
+   * repainted; rejects when the engine refused it (malformed buffer,
+   * another plugin's frame, no document).
+   */
+  async submitSceneImageBinary(
+    elementId: string,
+    image: {
+      rgba: Uint8Array;
+      width: number;
+      height: number;
+      dest: [number, number, number, number];
+    },
+    caller?: string,
+    transfer = false,
+  ): Promise<{ pageIds: PageId[] }> {
+    const reply = await this.postDirect(
+      {
+        op: "submitSceneImage",
+        elementId,
+        caller: caller ?? null,
+        rgba: image.rgba,
+        width: image.width,
+        height: image.height,
+        dest: image.dest,
+      },
+      transfer ? transferable([image.rgba]) : [],
+    );
+    return sceneImageApplied(reply, "submitSceneImageBinary", elementId);
+  }
+
+  /**
+   * v66 — patch rectangles of the image {@link submitSceneImageBinary}
+   * set: each tile is `x, y` (image pixels), `width × height` and its
+   * tightly packed RGBA8. The worker packs them; only the pages showing
+   * the frame repaint. All tiles are validated before any byte moves.
+   */
+  async submitSceneImageTilesBinary(
+    elementId: string,
+    tiles: ReadonlyArray<{
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      rgba: Uint8Array;
+    }>,
+    caller?: string,
+    transfer = false,
+  ): Promise<{ pageIds: PageId[] }> {
+    const reply = await this.postDirect(
+      {
+        op: "submitSceneImageTiles",
+        elementId,
+        caller: caller ?? null,
+        tiles: tiles.map((t) => ({
+          x: t.x,
+          y: t.y,
+          width: t.width,
+          height: t.height,
+          rgba: t.rgba,
+        })),
+      },
+      transfer ? transferable(tiles.map((t) => t.rgba)) : [],
+    );
+    return sceneImageApplied(reply, "submitSceneImageTilesBinary", elementId);
+  }
+
+  /** v66 — write a `.paged` part (`paged/…` path) as bytes. `caller`
+   *  confines the write to `paged/<caller>/` (C-34). */
+  async writePagedPartBinary(
+    path: string,
+    bytes: Uint8Array,
+    caller?: string,
+    transfer = false,
+  ): Promise<void> {
+    const reply = await this.postDirect(
+      { op: "writePagedPart", path, caller: caller ?? null, bytes },
+      transfer ? transferable([bytes]) : [],
+    );
+    if (reply.kind === "pagedPartWritten") return;
+    if (reply.kind === "pagedPartFailed") throw new Error(reply.payload.error);
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /** v66 — read a `.paged` part's bytes, or `null` when absent. */
+  readPagedPartBinary(path: string): Promise<Uint8Array | null> {
+    return this.postDirectBytes<Uint8Array | null>({ op: "readPagedPart", path });
+  }
+
+  /** v66 — delete a `.paged` part. Resolves whether it existed; a part
+   *  the loaded container carries is left out of the next save. */
+  async deletePagedPart(path: string, caller?: string): Promise<boolean> {
+    const reply = await this.send({
+      kind: "deletePagedPart",
+      payload: caller ? { path, caller } : { path },
+    } as never);
+    const r = reply as unknown as {
+      kind: string;
+      payload: { existed?: boolean; error?: string };
+    };
+    if (r.kind === "pagedPartDeleted") return r.payload.existed === true;
+    if (r.kind === "pagedPartFailed") throw new Error(r.payload.error);
+    throw new Error(`unexpected reply: ${r.kind}`);
+  }
+
+  /** v66 — a frame's placed image as bytes (`encoded`), or `null` when the
+   *  element holds none. */
+  placedAssetBytesBinary(elementId: string): Promise<{
+    uri: string;
+    width: number;
+    height: number;
+    encoded: Uint8Array;
+  } | null> {
+    return this.postDirectBytes({ op: "placedAssetBytes", elementId });
+  }
+
+  /**
+   * v66 — apply `mutation` (a `batch` too) handing `bytes` to its first
+   * `replaceImageBytes` whose `bytes` is `[]` — the commit lane for
+   * processed pixels without a `number[]`. Resolves with the same reply
+   * `mutate` does.
+   */
+  async mutateWithBytes(
+    mutation: Mutation,
+    bytes: Uint8Array,
+    transfer = false,
+  ): Promise<WorkerToMain> {
+    return this.postDirect(
+      { op: "mutateWithBytes", mutationJson: JSON.stringify(mutation), bytes },
+      transfer ? transferable([bytes]) : [],
+    );
+  }
+
+  /**
+   * C-6 (I-06) — claim a placed image's tiled mip pyramid (the v44 wire).
+   * The worker registers the claim, rebuilds, and answers with the tiles
+   * that build LACKED — carried on the `resourceClaimApplied` ack as
+   * `needed`. Routing that set to {@link onResourceTilesNeeded} is what
+   * closes the fill loop; the plugin's provider sources those tiles and
+   * posts them back through {@link submitResourceTiles}.
+   *
+   * THE ACK IS THE ONLY DELIVERY. The wire also declares an unsolicited
+   * `resourceTilesNeeded` notification, and this client used to wait for
+   * it alone — but nothing constructs it: `paged-canvas-wasm`'s dispatch
+   * returns the miss list additively on the ack and never posts the
+   * standalone kind. Waiting on it meant a claim EVICTED the frame's
+   * cached tiles (the worker drops them when a claim is replaced) and
+   * nothing ever refilled them, so every plugin-served frame rendered
+   * BLANK — measured on the showcase's raster page, where `claimTiles`
+   * turned a filled 228 × 240 pt frame into 0 px of content while the
+   * panel reported "Claimed tile resource".
+   */
+  async claimImageResource(claim: {
+    imageId: string;
+    levels: number;
+    tileSize: number;
+    baseWidth: number;
+    baseHeight: number;
+    revision: number;
+  }): Promise<void> {
+    const reply = await this.send({ kind: "claimImageResource", payload: claim });
+    if (reply.kind === "resourceClaimApplied") {
+      this.emitTilesNeeded(reply.payload.needed);
+      return;
+    }
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /** C-6 — release a claimed image resource (the renderer drops to the
+   *  whole-image fallback lane). */
+  async releaseImageResource(imageId: string): Promise<void> {
+    const reply = await this.send({
+      kind: "releaseImageResource",
+      payload: { imageId },
+    });
+    if (reply.kind === "resourceClaimApplied") return;
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /** C-6 — fill the worker-side tile cache for a claimed image at `level`.
+   *  `generation` echoes the `resourceTilesNeeded` request so a stale reply
+   *  is dropped worker-side. The ack re-states whatever is STILL missing
+   *  (a partial fill, or a level the provider skipped), so it feeds the
+   *  same loop the claim starts — which terminates because a provider that
+   *  returns nothing for a tile submits nothing, and a submit that carries
+   *  no tiles is never sent. */
+  async submitResourceTiles(
+    imageId: string,
+    level: number,
+    tiles: ProviderTileWire[],
+    generation: number,
+  ): Promise<void> {
+    const reply = await this.send({
+      kind: "submitResourceTiles",
+      payload: { imageId, level, tiles, generation },
+    });
+    if (reply.kind === "resourceClaimApplied") {
+      this.emitTilesNeeded(reply.payload.needed);
+      return;
+    }
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /** C-6 — subscribe to the tiles a build is missing. Fed by the
+   *  claim/submit acks (the engine's only delivery — see
+   *  {@link claimImageResource}) AND by the unsolicited
+   *  `resourceTilesNeeded` notification, so a future engine that posts one
+   *  needs no change here. The SDK adapter routes per-image and pulls +
+   *  submits the tiles. The returned function unsubscribes. */
+  onResourceTilesNeeded(
+    listener: (need: ResourceTilesNeededWire) => void,
+  ): () => void {
+    this.tilesNeededListeners.add(listener);
+    const offWire = this.subscribe((msg) => {
+      if (msg.kind === "resourceTilesNeeded") listener(msg.payload);
+    });
+    return () => {
+      this.tilesNeededListeners.delete(listener);
+      offWire();
+    };
+  }
+
+  /** Hand one ack's miss list to the tile-fill subscribers. A listener
+   *  that throws must not strand the rest of the fill (or the ack's
+   *  caller), so each is called defensively. */
+  private emitTilesNeeded(needed?: ResourceTilesNeededWire[]): void {
+    if (!needed || needed.length === 0) return;
+    for (const need of needed) {
+      for (const listener of [...this.tilesNeededListeners]) {
+        try {
+          listener(need);
+        } catch {
+          // a subscriber's failure is its own; the loop continues
+        }
+      }
+    }
+  }
+
+  /**
+   * Scripting Stage 2 — run JS source against the loaded document.
+   * The Paged JS API (paged.set / get / inspect / undo / redo,
+   * frame Proxy, console.*) is available to the script; every
+   * mutation routes through the standard Operation channel, so
+   * undo/redo + the inspector + the canvas re-render all work
+   * identically to UI-driven changes. Returns the captured
+   * console.* output, any thrown error, and which runtime budget (if
+   * any) stopped it.
+   */
+  async executeScript(
+    source: string,
+  ): Promise<{ output: string[]; error: string | null; budgetKind: string | null }> {
+    const answer = this.hostObjects;
+    let reply = (await this.send({
+      kind: "executeScript",
+      payload: { source, ...(answer ? { hostObjects: true } : {}) },
+    } as MainToWorkerKind)) as { kind: string; payload?: unknown };
+    // Engine protocol 71 (ADR 323): a script that names a `plugin:`
+    // address suspends; answer its calls through the host's object
+    // registry until the worker replies with the result.
+    while (reply.kind === "requestHostObjects" && answer) {
+      const { session, calls } = reply.payload as { session: number; calls: HostObjectCallWire[] };
+      const round = await answer(calls);
+      const { answers, committed = [] } = Array.isArray(round) ? { answers: round } : round;
+      // Protocol 71 folds only a script's OWN undo records into its step:
+      // the writes made answering this round are named by their applied
+      // seqs, so they join it; a UI edit made while the script waits is
+      // never named and stays its own step.
+      reply = (await this.send({
+        kind: "hostObjectsResult",
+        payload: { session, answers, ...(committed.length > 0 ? { committed } : {}) },
+      } as unknown as MainToWorkerKind)) as { kind: string; payload?: unknown };
+    }
+    if (reply.kind === "scriptResult") {
+      const p = reply.payload as { output: string[]; error?: string | null; budgetKind?: string | null };
+      return { output: p.output, error: p.error ?? null, budgetKind: p.budgetKind ?? null };
+    }
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /**
+   * Object model (ADR 323) — install the answerer for a script's
+   * `plugin:` calls: the app passes the plugin SDK's `answerHostObjects`
+   * over its ONE shared object registry. With one installed,
+   * `executeScript` arms the engine's host bridge, so `paged.get/set/
+   * batch/query/schema` reach plugin objects, `paged.invoke/commands`
+   * reach typed commands (core's and plugins'), and a script's core and
+   * plugin writes undo as one step. `null` uninstalls it (a `plugin:`
+   * address then throws `noHost` in the script).
+   */
+  setHostObjects(answer: HostObjectsAnswerer | null): void {
+    this.hostObjects = answer;
+  }
+
+  /**
+   * Phase B — begin a gesture against the listed elements. Resolves
+   * to the worker's handle; pass it to subsequent
+   * `updateGesture` / `commitGesture` / `cancelGesture` calls.
+   * Rejects when the worker reports a `gestureFailed` envelope.
+   */
+  async beginGesture(
+    nodes: ElementId[],
+    gesture: GestureType,
+    anchor: GestureAnchor | null = null,
+  ): Promise<GestureHandle> {
+    // Phase G — read the current camera scale from the SAB so the
+    // snap pass can keep its tolerance constant in screen px. The
+    // value is snapshot-locked for the gesture's lifetime (a mid-
+    // gesture zoom doesn't retune snap tolerance — that's a
+    // deliberate UX choice; consistency within a drag wins).
+    const camera = this.camera.read();
+    const cameraScale = camera.scale > 0 ? camera.scale : null;
+    const reply = await this.send({
+      kind: "beginGesture",
+      payload: { nodes, gesture, anchor, cameraScale },
+    });
+    if (reply.kind === "gestureBegun") return reply.payload.handle;
+    if (reply.kind === "gestureFailed") {
+      throw new Error(`beginGesture failed: ${describeGestureFailure(reply.payload.error)}`);
+    }
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /**
+   * Phase B — push a pointer delta into the active gesture. Worker
+   * rewrites the preview + rebuilds. Phase E — the reply carries
+   * the active snap lines so the overlay can render them.
+   *
+   * Step 5d — `mode: "sab"` routes the delta through the gesture
+   * SAB instead of postMessage. Fire-and-forget (no reply): the
+   * worker drains the SAB on its next tick and applies the latest
+   * delta via `updateGestureRaw`. Returns an empty result —
+   * callers that need snap-lines per update must stay on JSON.
+   * SAB-mode requires `supportsGestureSab()` (crossOriginIsolated +
+   * SharedArrayBuffer); the client silently falls back to JSON
+   * otherwise so legacy environments stay correct.
+   */
+  async updateGesture(
+    handle: GestureHandle,
+    delta: [number, number],
+    modifiers: GestureModifiers,
+    mode: "json" | "sab" = "json",
+  ): Promise<{ pageIds: PageId[]; snapLines: SnapLine[] }> {
+    if (mode === "sab" && this.gestureSab.buffer instanceof SharedArrayBuffer) {
+      this.gestureSab.push(BigInt(handle), delta[0], delta[1], modifiers);
+      return { pageIds: [], snapLines: [] };
+    }
+    const reply = await this.send({
+      kind: "updateGesture",
+      payload: { handle, delta, modifiers },
+    });
+    if (reply.kind === "gestureUpdated") {
+      return {
+        pageIds: reply.payload.pageIds,
+        snapLines: reply.payload.snapLines ?? [],
+      };
+    }
+    if (reply.kind === "gestureFailed") {
+      throw new Error(`updateGesture failed: ${describeGestureFailure(reply.payload.error)}`);
+    }
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /**
+   * Phase B — commit the active gesture. Returns the new applied_seq
+   * + dirty pages so the caller can update the HUD / undo state.
+   */
+  async commitGesture(handle: GestureHandle): Promise<{
+    appliedSeq: number;
+    pageIds: PageId[];
+  }> {
+    const reply = await this.send({
+      kind: "commitGesture",
+      payload: { handle },
+    });
+    if (reply.kind === "gestureCommitted") {
+      return {
+        appliedSeq: reply.payload.appliedSeq,
+        pageIds: reply.payload.pageIds,
+      };
+    }
+    if (reply.kind === "gestureFailed") {
+      throw new Error(`commitGesture failed: ${describeGestureFailure(reply.payload.error)}`);
+    }
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /**
+   * Phase B — discard the active gesture. Worker reverts the preview;
+   * resolves to the dirty pages set so the overlay can clear.
+   */
+  async cancelGesture(handle: GestureHandle): Promise<PageId[]> {
+    const reply = await this.send({
+      kind: "cancelGesture",
+      payload: { handle },
+    });
+    if (reply.kind === "gestureCancelled") return reply.payload.pageIds;
+    if (reply.kind === "gestureFailed") {
+      throw new Error(`cancelGesture failed: ${describeGestureFailure(reply.payload.error)}`);
+    }
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /** Phase 3 — fetch the caret rectangle for a selection. */
+  async caretGeometry(
+    selection: ContentSelection,
+  ): Promise<CaretGeometry | null> {
+    const reply = await this.send({
+      kind: "requestCaretGeometry",
+      payload: { selection },
+    });
+    if (reply.kind === "caretGeometry") return reply.payload.caret;
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /** Phase 3 — fetch rect-per-line selection geometry. */
+  async selectionGeometry(
+    selection: ContentSelection,
+  ): Promise<SelectionRect[]> {
+    const reply = await this.send({
+      kind: "requestSelectionGeometry",
+      payload: { selection },
+    });
+    if (reply.kind === "selectionGeometry") return reply.payload.rects;
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /**
+   * W2.11 — vertical caret navigation. The engine owns line metrics
+   * (and the InDesign desired-x "goal column" so repeated Up/Down keep
+   * the visual column); we hand it the current story + offset + a
+   * direction and apply the returned offset. Resolves to `null` when
+   * the move is a no-op (already at the first/last line) so callers can
+   * leave the caret put.
+   */
+  async caretNav(
+    storyId: string,
+    offset: number,
+    direction: CaretDirection,
+    cell: TextCellAddr | null = null,
+  ): Promise<number | null> {
+    const reply = await this.send({
+      kind: "requestCaretNav",
+      payload: { storyId, offset, direction, cell },
+    });
+    if (reply.kind === "caretNavResult") return reply.payload.offset ?? null;
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /**
+   * W2.11 — line extent for the line containing `offset`: the story
+   * offsets of the line's first character and one-past its last. Home /
+   * End map the caret to `lineStart` / `lineEnd`; triple-click selects
+   * `[lineStart, lineEnd)`. Resolves to `null` when the offset has no
+   * resolvable line (empty / unbuilt story).
+   */
+  async lineBounds(
+    storyId: string,
+    offset: number,
+    cell: TextCellAddr | null = null,
+  ): Promise<LineBounds | null> {
+    const reply = await this.send({
+      kind: "requestLineBounds",
+      payload: { storyId, offset, cell },
+    });
+    if (reply.kind === "lineBoundsResult") return reply.payload.bounds ?? null;
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /**
+   * Aftercare-A — word extent for the word containing `offset`: the
+   * story-local BYTE offsets `[start, end)` of the UAX-29 word break the
+   * engine resolves the offset into. Double-click selects this range.
+   * A double-click that lands on a whitespace run resolves to that whole
+   * whitespace run (the engine's UAX-29 segmentation contract). Resolves
+   * to `null` when the offset has no resolvable word (empty / unbuilt
+   * story).
+   */
+  async wordBounds(
+    storyId: string,
+    offset: number,
+    cell: TextCellAddr | null = null,
+  ): Promise<WordBounds | null> {
+    const reply = await this.send({
+      kind: "requestWordBounds",
+      payload: { storyId, offset, cell },
+    });
+    if (reply.kind === "wordBoundsResult") return reply.payload.bounds ?? null;
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /**
+   * W2.9 — paragraph extent for the paragraph containing `offset`: the
+   * story-local BYTE offsets `[start, end)` of the paragraph the engine
+   * resolves the offset into (same address space as `wordBounds` /
+   * `lineBounds` / `HitResult.offsetWithinStory`). The synthetic
+   * inter-paragraph `\n` is the boundary and is NOT included in the span.
+   * The span covers every wrapped line of the paragraph, so triple-click
+   * selects `[start, end)` across line wraps. Resolves to `null` when the
+   * offset has no resolvable paragraph (empty / unbuilt story). The
+   * `cell` qualifier (v35) addresses a paragraph inside a table cell's
+   * stream; `null` (the default) targets the body story.
+   */
+  async paragraphBounds(
+    storyId: string,
+    offset: number,
+    cell: TextCellAddr | null = null,
+  ): Promise<ParagraphBounds | null> {
+    const reply = await this.send({
+      kind: "requestParagraphBounds",
+      payload: { storyId, offset, cell },
+    });
+    if (reply.kind === "paragraphBoundsResult")
+      return reply.payload.bounds ?? null;
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /**
+   * v38 (Wave 2, C-2 / S-05) — the story's `NextTextFrame` thread,
+   * head-first: one `FrameChainLink` per frame the story flows
+   * through (`frameId` is the frame's `Self` id; `next` is its
+   * `NextTextFrame` target, `null` at end-of-chain; `overflow` marks
+   * the tail link of an overset story). Empty array when the story
+   * owns no frames. This is the story→frame map the Stories panel
+   * uses to select/reveal a story's first frame.
+   */
+  async frameChain(storyId: string): Promise<FrameChainLink[]> {
+    const reply = await this.send({
+      kind: "requestFrameChain",
+      payload: { storyId },
+    });
+    if (reply.kind === "frameChainResult") return reply.payload.links;
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /**
+   * Undo the last applied mutation. The undo stack lives in the
+   * worker, so this is a message rather than a local replay — a host
+   * with several clients over one worker shares one history.
+   */
+  async undo(): Promise<WorkerToMain> {
+    return this.send({ kind: "undo" });
+  }
+
+  /**
+   * Register a font in the worker's family resolver. Persists across
+   * loadDocument calls; the renderer's `BytesResolver` will route any
+   * `AppliedFont` matching `family` (+ optional `style`) to these
+   * bytes. Mirrors `paged-inspect --font-family "Family=path"`.
+   * `scope: "sceneLayer"` puts the face in the table only plugin
+   * scene-layer text reads (document layout and the Fonts panel never
+   * see it); the default is the document registry.
+   */
+  async registerFont(
+    family: string,
+    bytes: Uint8Array,
+    style: string | null = null,
+    options: { scope?: FontScope } = {},
+  ): Promise<void> {
+    const face =
+      (options.scope ?? "document") === "document"
+        ? this.addSessionFace(family, style, bytes)
+        : null;
+    const reply = await this.post({
+      kind: "registerFont",
+      payload: {
+        family,
+        style,
+        bytes: Array.from(bytes),
+        ...(options.scope ? { scope: options.scope } : {}),
+      },
+    });
+    if (reply.kind !== "fontRegistered") {
+      if (face) this.forgetFace(face);
+      throw new Error(`unexpected reply: ${reply.kind}`);
+    }
+  }
+
+  /**
+   * Put a face in the engine's DOCUMENT font registry for the document
+   * open now (plugin-sdk ADR 330). Unlike {@link registerFont}, whose faces
+   * stay for the session, this face belongs to that document: it is dropped
+   * before the next document loads — File ▸ Open, File ▸ New, a plugin's
+   * open, the same file again — so no other document lays out with it, and
+   * a document that names the family without holding it reports it
+   * missing. Whoever gave the face gives it again when the document opens
+   * again. Resolves with the engine's reply (`fontRegistered`, with the
+   * pages laid out again). Rejects when no document is open, or when the
+   * document closed before the face could be registered.
+   */
+  async registerDocumentFont(
+    family: string,
+    bytes: Uint8Array,
+    style: string | null = null,
+  ): Promise<WorkerToMain> {
+    const owner = this.openDocId;
+    // A face asked for during a load is for the document that was open
+    // when it was asked for; once the load has settled, that may be gone.
+    while (this.loading) await this.loading.catch(() => undefined);
+    if (owner === null) throw new Error("no document is open to give the face to");
+    if (this.openDocId !== owner) {
+      throw new Error("the document the face was given for has closed");
+    }
+    const face: RegistryFace = { family, style, bytes: bytes.slice(), owner };
+    this.fontRegistry.push(face);
+    const reply = await this.post({
+      kind: "registerFont",
+      payload: { family, style, bytes: Array.from(bytes), scope: "document" },
+    });
+    if (reply.kind !== "fontRegistered") this.forgetFace(face);
+    return reply;
+  }
+
+  /** Record a session face; a face the registry already holds byte for
+   *  byte (the default family's other faces, registered after every load)
+   *  is not recorded twice. Answers the record, or null. */
+  private addSessionFace(
+    family: string,
+    style: string | null,
+    bytes: Uint8Array,
+  ): RegistryFace | null {
+    const held = this.fontRegistry.some(
+      (f) =>
+        f.owner === null &&
+        f.family === family &&
+        f.style === style &&
+        sameBytes(f.bytes, bytes),
+    );
+    if (held) return null;
+    const face: RegistryFace = { family, style, bytes: bytes.slice(), owner: null };
+    this.fontRegistry.push(face);
+    return face;
+  }
+
+  private forgetFace(face: RegistryFace): void {
+    const i = this.fontRegistry.indexOf(face);
+    if (i >= 0) this.fontRegistry.splice(i, 1);
+  }
+
+  /** Keep {@link fontRegistry} in step with a message about to be posted
+   *  through {@link send}. Answers the face a document-scope
+   *  `registerFont` adds, so a refusal can take it out again. */
+  private noteFontRegistry(kind: MainToWorkerKind): RegistryFace | null {
+    if (kind.kind === "registerFont") {
+      const p = kind.payload;
+      if ((p.scope ?? "document") !== "document") return null;
+      return this.addSessionFace(p.family, p.style ?? null, Uint8Array.from(p.bytes));
+    }
+    if (kind.kind === "clearFontRegistry") {
+      if ((kind.payload?.scope ?? "document") === "document") {
+        this.fontRegistry.length = 0;
+      }
+    }
+    return null;
+  }
+
+  /** Register a recorded face again (posted, not awaited). */
+  private repostFace(face: RegistryFace): void {
+    this.fontRegistry.push(face);
+    this.post({
+      kind: "registerFont",
+      payload: {
+        family: face.family,
+        style: face.style,
+        bytes: Array.from(face.bytes),
+        scope: "document",
+      },
+    }).then(
+      (reply) => {
+        if (reply.kind !== "fontRegistered") this.forgetFace(face);
+      },
+      () => this.forgetFace(face),
+    );
+  }
+
+  /**
+   * Every load that replaces the open document goes through here. The
+   * open document's faces are dropped BEFORE the load is posted: the
+   * registry is emptied and the session's faces registered again, and the
+   * worker answers in order, so the next document never lays out with
+   * them. Each of those changes re-lays out the outgoing document's text
+   * that names the families, and the worker repaints the pages the replies
+   * name. A load that fails leaves the document open, so its faces come
+   * back.
+   */
+  private async replacingDocument<T>(
+    start: () => Promise<T>,
+    loaded: (result: T) => boolean,
+  ): Promise<T> {
+    const dropped = this.fontRegistry.filter((f) => f.owner !== null);
+    if (dropped.length > 0) {
+      const keep = this.fontRegistry.filter((f) => f.owner === null);
+      this.fontRegistry.length = 0;
+      this.post({ kind: "clearFontRegistry", payload: null }).catch(() => undefined);
+      for (const face of keep) this.repostFace(face);
+    }
+    const pending = start();
+    this.loading = pending;
+    try {
+      const result = await pending;
+      if (!loaded(result)) for (const face of dropped) this.repostFace(face);
+      return result;
+    } catch (err) {
+      for (const face of dropped) this.repostFace(face);
+      throw err;
+    } finally {
+      if (this.loading === pending) this.loading = null;
+    }
+  }
+
+  /** Drop every previously-registered font of one registry: the
+   *  document's by default, or the scene-layer faces with
+   *  `scope: "sceneLayer"` (the other registry is left alone). */
+  async clearFontRegistry(options: { scope?: FontScope } = {}): Promise<void> {
+    const reply = await this.send({
+      kind: "clearFontRegistry",
+      payload: options.scope ? { scope: options.scope } : null,
+    });
+    if (reply.kind !== "fontRegistryCleared") {
+      throw new Error(`unexpected reply: ${reply.kind}`);
+    }
+  }
+
+  /**
+   * Sub-phase D — request a Vello/GPU readback PNG of one page.
+   * Routes around the JSON channel because the underlying wasm
+   * method is `Promise<Uint8Array>` and returning binary through
+   * the seq-keyed envelope path serialises as a number array
+   * (slow on large pages). Resolves to null when GPU is not
+   * initialised (the caller falls back to `requestSnapshot`).
+   */
+  async requestVelloPng(
+    pageId: PageId,
+    dpi: number,
+  ): Promise<Uint8Array | null> {
+    const seq = this.nextVelloSeq++;
+    const promise = new Promise<Uint8Array | null>((resolve) => {
+      this.velloPending.set(seq, resolve);
+    });
+    this.worker.postMessage({ kind: "renderPageVelloPng", seq, pageId, dpi });
+    return promise;
+  }
+
+  /**
+   * ADR 025 — drain the render worker's journal ring into the caller.
+   *
+   * A TS-ONLY side-channel, exactly like `requestVelloPng` above: it never
+   * touches the engine wire, so the whole worker->main journal path costs zero
+   * protocol surface. Drained rather than streamed so the cost lands when
+   * somebody looks (panel open, export), not on the render loop.
+   *
+   * Resolves to null if the worker does not answer within `timeoutMs` — a
+   * drain that silently hangs would leave the merged view quietly incomplete,
+   * so the caller counts the failure instead (`drainFailures`).
+   */
+  async drainJournal(timeoutMs = 2000): Promise<JournalDrain | null> {
+    const seq = this.nextJournalSeq++;
+    return new Promise<JournalDrain | null>((resolve) => {
+      const timer = setTimeout(() => {
+        this.journalPending.delete(seq);
+        resolve(null);
+      }, timeoutMs);
+      this.journalPending.set(seq, (drain) => {
+        clearTimeout(timer);
+        resolve(drain);
+      });
+      this.worker.postMessage({ kind: "journalDrain", seq });
+    });
+  }
+
+  private nextJournalSeq = 1;
+  private readonly journalPending = new Map<
+    number,
+    (drain: JournalDrain | null) => void
+  >();
+
+  private nextVelloSeq = 1;
+  private readonly velloPending = new Map<
+    number,
+    (bytes: Uint8Array | null) => void
+  >();
+
+  /** Redo the last undone mutation. See {@link undo}. */
+  async redo(): Promise<WorkerToMain> {
+    return this.send({ kind: "redo" });
+  }
+
+  /** Write the camera transform. Worker reads it on the next frame. */
+  setCamera(cam: Camera): void {
+    this.camera.write(cam);
+  }
+
+  /**
+   * Transfer an OffscreenCanvas to the worker. The worker takes
+   * ownership of the canvas's backing buffer and runs its render
+   * loop against it. Call once per canvas; after the transfer the
+   * main-thread `HTMLCanvasElement` cannot be drawn into directly.
+   */
+  attachCanvas(
+    canvas: OffscreenCanvas,
+    dpr: number,
+    cssWidth: number,
+    cssHeight: number,
+  ): void {
+    this.worker.postMessage(
+      { kind: "attachCanvas", canvas, dpr, cssWidth, cssHeight },
+      [canvas],
+    );
+  }
+
+  /**
+   * Notify the worker of a host canvas resize. Worker re-allocates
+   * the OffscreenCanvas's backing pixel buffer to match.
+   */
+  resizeCanvas(dpr: number, cssWidth: number, cssHeight: number): void {
+    this.worker.postMessage({ kind: "resizeCanvas", dpr, cssWidth, cssHeight });
+  }
+
+  /**
+   * Tear the session down: stop listening and terminate the worker.
+   * The wasm core, the loaded document and the undo history all live
+   * in that worker, so this discards them — call it on unmount, and
+   * not before an export has resolved.
+   */
+  dispose(): void {
+    this.worker.removeEventListener("message", this.onMessage);
+    this.worker.removeEventListener("error", this.onWorkerError);
+    this.worker.removeEventListener("messageerror", this.onMessageError);
+    this.worker.terminate();
+    this.failAll(new Error("CanvasClient disposed"), true);
+  }
+
+  /**
+   * Settle everything still waiting: `send` and `loadDocument` callers are
+   * rejected; journal and Vello readbacks resolve `null`, which is their
+   * documented failure value. With `fatal`, later requests reject at once.
+   */
+  private failAll(err: Error, fatal: boolean): void {
+    if (fatal && !this.fatal) this.fatal = err;
+    const sends = [...this.pending.values()];
+    const loads = [...this.loadDocPending.values()];
+    const journals = [...this.journalPending.values()];
+    const vellos = [...this.velloPending.values()];
+    const byteReads = [...this.bytesPending.values()];
+    this.bytesPending.clear();
+    for (const p of byteReads) p.reject(err);
+    this.pending.clear();
+    this.loadDocPending.clear();
+    this.journalPending.clear();
+    this.velloPending.clear();
+    for (const p of sends) p.reject(err);
+    for (const p of loads) p.reject(err);
+    for (const cb of journals) cb(null);
+    for (const cb of vellos) cb(null);
+  }
+
+  /** An uncaught error in the worker scope, or the worker script failing to
+   *  load. The worker catches every dispatch itself, so reaching here means
+   *  it cannot be trusted to answer anything still pending. */
+  private readonly onWorkerError = (event: ErrorEvent) => {
+    this.failAll(
+      new Error(`canvas worker failed: ${event.message || "unknown error"}`),
+      true,
+    );
+  };
+
+  /** A reply that could not be deserialised. We cannot tell which request it
+   *  answered, so reject what is pending; the worker itself is still alive. */
+  private readonly onMessageError = () => {
+    this.failAll(new Error("canvas worker reply could not be deserialised"), false);
+  };
+
+  /** The worker's lifecycle warnings that mean a request will never be
+   *  answered: settle the callers they strand. */
+  private settleFromWarning(msg: WorkerToMain): void {
+    if (msg.kind !== "warning") return;
+    const w = msg.payload as { kind?: string; details?: string };
+    const details = w.details ?? "";
+    switch (w.kind) {
+      // The wasm never loaded: nothing will ever answer.
+      case "initFailed":
+        this.failAll(new Error(`canvas engine failed to start: ${details}`), true);
+        return;
+      // Engine and bundle disagree on the wire or on the shared-memory
+      // layout. Carrying on would read wrong bytes as camera/selection
+      // state, so refuse every request (ADR 031).
+      case "protocolMismatch":
+        this.failAll(new Error(`canvas engine/bundle mismatch: ${details}`), true);
+        return;
+      // One request's dispatch threw; the worker reports it with that
+      // request's seq. Only that caller is rejected.
+      case "dispatchError":
+        if (msg.seq !== null) {
+          const p = this.pending.get(msg.seq) ?? this.bytesPending.get(msg.seq);
+          if (p) {
+            this.pending.delete(msg.seq);
+            this.bytesPending.delete(msg.seq);
+            p.reject(new Error(`canvas worker dispatch failed: ${details}`));
+          }
+        }
+        return;
+    }
+  }
+
+  private readonly onMessage = (event: MessageEvent) => {
+    // Side-channel: binary loadDocument reply (skip the JSON envelope
+    // because the request payload was binary, see `loadDocument`).
+    const raw = event.data as { kind?: string };
+    if (raw && raw.kind === "loadDocumentBinaryReply") {
+      const r = event.data as { seq: number; replyJson: string };
+      const pending = this.loadDocPending.get(r.seq);
+      if (!pending) return;
+      this.loadDocPending.delete(r.seq);
+      try {
+        const reply = JSON.parse(r.replyJson) as WorkerToMain;
+        if (reply.kind === "documentLoaded") {
+          pending.resolve(reply.payload);
+        } else if (reply.kind === "loadFailed") {
+          const e = reply.payload.error;
+          pending.reject(
+            new Error(
+              `load failed (${e.kind}): ${"message" in e ? e.message : ""}`,
+            ),
+          );
+        } else {
+          pending.reject(new Error(`unexpected reply kind: ${reply.kind}`));
+        }
+      } catch (err) {
+        pending.reject(new Error(`malformed reply: ${String(err)}`));
+      }
+      // Fan out to listeners that care (e.g. the renderer's
+      // documentLoaded → refreshLayout side-effect already runs on
+      // the worker side; main-thread listeners that want to know
+      // can subscribe).
+      try {
+        const parsed = JSON.parse(r.replyJson) as WorkerToMain;
+        this.trackEdits(parsed);
+        for (const l of this.listeners) l(parsed);
+      } catch {
+        // already handled
+      }
+      return;
+    }
+    // Sub-phase D side-channel: vello PNG readback replies bypass
+    // the typed JSON envelope (transferable bytes ride directly).
+    if (raw && raw.kind === "directBytesReply") {
+      const r = event.data as {
+        seq: number;
+        bytes?: Uint8Array | null;
+        asset?: unknown;
+      };
+      const p = this.bytesPending.get(r.seq);
+      if (p) {
+        this.bytesPending.delete(r.seq);
+        p.resolve("asset" in r ? (r.asset ?? null) : (r.bytes ?? null));
+      }
+      return;
+    }
+    if (raw && raw.kind === "journalDrainReply") {
+      const reply = event.data as JournalDrain & { seq: number };
+      const cb = this.journalPending.get(reply.seq);
+      if (cb) {
+        this.journalPending.delete(reply.seq);
+        cb(reply);
+      }
+      return;
+    }
+    if (raw && raw.kind === "velloPngReply") {
+      const reply = event.data as {
+        kind: "velloPngReply";
+        seq: number;
+        pngBytes: number[] | null;
+      };
+      const cb = this.velloPending.get(reply.seq);
+      if (cb) {
+        this.velloPending.delete(reply.seq);
+        cb(reply.pngBytes ? Uint8Array.from(reply.pngBytes) : null);
+      }
+      return;
+    }
+    const msg = event.data as WorkerToMain;
+    // Settle callers a lifecycle warning strands; the warning still fans
+    // out below (the shell journals it).
+    if (msg.kind === "warning") this.settleFromWarning(msg);
+    if (msg.seq !== null) {
+      // Resolve the matching `send(...)` promise first so the
+      // request-reply path stays the lowest-latency one.
+      const p = this.pending.get(msg.seq);
+      if (p) {
+        this.pending.delete(msg.seq);
+        p.resolve(msg);
+      }
+    }
+    this.trackEdits(msg);
+    // Fan out to subscribers regardless of seq. Lets multiple parts
+    // of the UI react to the same reply (e.g. CanvasApp updates the
+    // cache-stats HUD on `mutationApplied` while the original
+    // `client.mutate(...)` caller awaits the promise). Without this
+    // broadcast, only the awaiter sees the reply.
+    for (const l of this.listeners) {
+      l(msg);
+    }
+  };
+}

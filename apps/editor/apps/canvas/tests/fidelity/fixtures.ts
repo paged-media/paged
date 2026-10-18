@@ -1,0 +1,189 @@
+/*
+ * This file is part of paged (https://paged.media), the commercial editor
+ * for the paged IDML engine.
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// Envato pack discovery + manifest reading.
+//
+// The Playwright suite iterates one test per (pack, page); this
+// module is the single source of truth for "which packs exist and
+// what's their staging".
+
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+export const REPO_ROOT = resolve(__dirname, "..", "..", "..", "..");
+export const ENVATO_DIR = resolve(REPO_ROOT, "corpus", "idml");
+// PACKS_DIR is deliberately GONE. It was `corpus/idml/packs`, and any
+// caller resolving a pack against it addresses by bare name — the exact
+// bug that silenced this suite. Packs are addressed by (group, name);
+// see `listPacks`.
+export const OVERRIDES_DIR = resolve(REPO_ROOT, "corpus", "config", "overrides");
+export const MANIFEST_PATH = resolve(REPO_ROOT, "corpus", "config", "manifest.json");
+
+// Default DPI mirrors corpus/harness/test.sh's IDML_ENVATO_DPI=144.
+// Override via the FIDELITY_DPI env var.
+export const FIDELITY_DPI = Number(process.env.FIDELITY_DPI ?? 144);
+export const FIDELITY_OUT_ROOT = resolve(
+  process.env.FIDELITY_OUT ?? "/tmp/paged-canvas-fidelity",
+);
+
+export type PackStage = "smoke" | "gated" | "skip";
+
+export interface PackFixture {
+  name: string;
+  stage: PackStage;
+  skipReason: string | null;
+  declaredFonts: string[];
+  idmlPath: string;
+  referencePdfPath: string;
+  hasReferencePdf: boolean;
+}
+
+interface ManifestEntry {
+  name: string;
+  /** The corpus GROUP this pack belongs to (`idml`, `docx`, `psd`,
+   *  `vector`, `pptx`, `html`). Load-bearing: pack names are NOT unique
+   *  across groups — `resume-template`, `business-proposal-template` and
+   *  `magazine-editorial-layout` each exist in both `idml` and `docx` —
+   *  so a pack is addressed by (group, name), never by name alone. */
+  group?: string;
+  stage?: PackStage;
+  skip_reason?: string;
+  declared_fonts?: string[];
+}
+
+interface Manifest {
+  packs: ManifestEntry[];
+}
+
+let cached: PackFixture[] | null = null;
+
+export function listPacks(): PackFixture[] {
+  if (cached) return cached;
+  const manifest = JSON.parse(readFileSync(MANIFEST_PATH, "utf8")) as Manifest;
+  const fixtures: PackFixture[] = [];
+  for (const entry of manifest.packs) {
+    // ADDRESS BY (GROUP, NAME). This used to be
+    // `resolve(PACKS_DIR, entry.name)` — PACKS_DIR being `corpus/idml/
+    // packs` — so every entry, whatever its group, was looked up inside
+    // the IDML tree. Three docx packs share a name with an idml pack, so
+    // those three resolved onto the IDML pack's directory, found its
+    // `template.idml`, and were admitted as fixtures.
+    //
+    // THE CONSEQUENCE WAS NOT A WRONG NUMBER, IT WAS NO TESTS AT ALL:
+    // the three collisions produced duplicate `render + diff <name>`
+    // titles, Playwright refuses a file with duplicate titles, and the
+    // whole spec was dropped — `--list` reported "Total: 0 tests in 0
+    // files" AND EXITED 0. A fidelity gate that measures nothing and
+    // passes is worse than one that fails.
+    const dir = resolve(REPO_ROOT, "corpus", entry.group ?? "idml", "packs", entry.name);
+    const idmlPath = resolve(dir, "template.idml");
+    const referencePdfPath = resolve(dir, "reference.pdf");
+    let hasIdml = false;
+    let hasPdf = false;
+    try {
+      hasIdml = statSync(idmlPath).isFile();
+    } catch {
+      hasIdml = false;
+    }
+    try {
+      hasPdf = statSync(referencePdfPath).isFile();
+    } catch {
+      hasPdf = false;
+    }
+    if (!hasIdml) continue;
+    fixtures.push({
+      name: entry.name,
+      stage: entry.stage ?? "smoke",
+      skipReason: entry.skip_reason ?? null,
+      declaredFonts: entry.declared_fonts ?? [],
+      idmlPath,
+      referencePdfPath,
+      hasReferencePdf: hasPdf,
+    });
+  }
+  cached = fixtures;
+  return fixtures;
+}
+
+/**
+ * Subset of packs to run. Honours FIDELITY_PACKS env var (comma- or
+ * space-separated names) for targeted runs, otherwise returns every
+ * non-skip pack from the manifest.
+ */
+export function selectPacks(): PackFixture[] {
+  const all = listPacks();
+  const filter = process.env.FIDELITY_PACKS?.trim();
+  if (!filter) {
+    return all.filter((p) => p.stage !== "skip");
+  }
+  const wanted = new Set(filter.split(/[\s,]+/).filter(Boolean));
+  const picked = all.filter((p) => wanted.has(p.name));
+  if (picked.length === 0) {
+    throw new Error(
+      `FIDELITY_PACKS=${filter} matched no packs; available: ${all
+        .slice(0, 5)
+        .map((p) => p.name)
+        .join(", ")}…`,
+    );
+  }
+  return picked;
+}
+
+export function packOutDir(name: string): string {
+  return resolve(FIDELITY_OUT_ROOT, name);
+}
+
+export function packPagePath(
+  name: string,
+  kind: "cand" | "ref" | "heat",
+  pageNumber: number,
+): string {
+  const n = String(pageNumber).padStart(3, "0");
+  return resolve(packOutDir(name), `${kind}-${n}.png`);
+}
+
+/**
+ * Cache key for `pdftoppm` outputs — invalidates when the source PDF
+ * or DPI changes. Mirrors the per-pack output naming so a downstream
+ * diff just reads files from disk.
+ */
+export function pdfRasterizeCacheKey(name: string): string {
+  const fixtures = listPacks();
+  const pack = fixtures.find((p) => p.name === name);
+  if (!pack) throw new Error(`unknown pack: ${name}`);
+  const mtime = statSync(pack.referencePdfPath).mtimeMs;
+  return `${name}@${mtime}@${FIDELITY_DPI}`;
+}
+
+/**
+ * Resolve the renderer-side default font path used by the existing
+ * native harness. Returns absolute paths to TTFs that exist in
+ * corpus/fonts/. Phase B replaces this with a real resolver.
+ */
+export function corpusFontsDir(): string {
+  return resolve(REPO_ROOT, "corpus", "fonts");
+}
+
+export function listCorpusFonts(): string[] {
+  return readdirSync(corpusFontsDir())
+    .filter((n) => /\.(ttf|otf)$/i.test(n))
+    .map((n) => resolve(corpusFontsDir(), n));
+}

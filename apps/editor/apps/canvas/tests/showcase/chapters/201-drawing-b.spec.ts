@@ -1,0 +1,47 @@
+/*
+ * This file is part of paged (https://paged.media), the commercial editor
+ * for the paged IDML engine.
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// Part II · Ch.14 — The Drawing Office (p75–p86): the paged.draw
+// chapter. The Part II divider, the crest-import opener, and then the
+// studio floor by floor: parametric drafting, the pathfinder wall,
+// live paint, the appearance stack, paint (gradients/pattern/dashes),
+// repeats + symbols, blends + objects-on-path, type on a path, and the
+// image-trace plate that closes the chapter.
+
+import { annualChapter } from "../chapter";
+import { p } from "../names-annual";
+
+import { build as pathfinder } from "../pages/200-drawing-office/04-pathfinder";
+import { build as livepaint } from "../pages/200-drawing-office/05-livepaint";
+import { build as appearance } from "../pages/200-drawing-office/06-appearance";
+import { build as paint } from "../pages/200-drawing-office/07b-paint-banked";
+
+
+// Continuation of 200-drawing-office - split for the in-chain per-op cost;
+// the checkpoint chain absorbs splits with zero logic change.
+annualChapter({
+  id: "201-drawing-b",
+  title: "Ch.14 The Drawing Office - pathfinder, faces, appearance, paint",
+  modules: [
+    { id: "do-pathfinder", pages: [p(79)], build: pathfinder },
+    { id: "do-livepaint", pages: [p(80)], build: livepaint },
+    { id: "do-appearance", pages: [p(81)], build: appearance },
+    { id: "do-paint", pages: [p(82)], build: paint },
+  ],
+});

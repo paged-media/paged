@@ -1,0 +1,64 @@
+/*
+ * This file is part of paged (https://paged.media), the commercial editor
+ * for the paged IDML engine.
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// Ch.18 The Catalog — p109–p114, the paged.data chapter. The opener
+// prints the order book as a source specimen; p110 lowers three of its
+// columns into a record card as caret-placed fields; p111 shows the
+// native table lane and transcribes the governance readouts; p112 draws
+// all four barcode symbologies as native path geometry; p113 plays the
+// card through data sets, the preview stepper and the refresh; p114
+// prints the DSL's registry-driven roster and evaluates two expressions
+// live.
+//
+// RUN ORDER ≠ PAGE ORDER, on purpose (pages keep their book order;
+// modules need not run in it). The plugin's data session is shared
+// across the chapter and `lowerAll` re-lowers EVERY binding — a
+// re-lower re-draws each bound barcode afresh onto the ACTIVE page and
+// re-commits the demo table as a new frame — so the modules run in
+// dependency order instead: cards (mints the variable bindings), sets
+// (previews/applies while only in-place-refreshing bindings exist),
+// dsl (the first frame-bound bindings), barcodes (cleans dsl's
+// re-draws), and the table LAST (the final lowering pass, cleaning all
+// six symbols' re-draws behind itself).
+
+import { annualChapter } from "../chapter";
+import { p } from "../names-annual";
+
+import { build as dsl } from "../pages/240-catalog/04-dsl";
+import { build as barcodes } from "../pages/240-catalog/05-barcodes";
+import { build as table } from "../pages/240-catalog/06-table";
+
+
+// Continuation of 240-catalog - split for the in-chain per-op cost;
+// the checkpoint chain absorbs splits with zero logic change.
+annualChapter({
+  id: "242-catalog-b",
+  // Panel-driven modules poll the app; under machine contention every
+  // wait runs to its ceiling, and the chapter outran 40 minutes twice.
+  budgetMinutes: 90,
+  title: "Ch.18 The Catalog - the DSL, barcodes, the table",
+  modules: [
+    // Both drive the bindings PANEL (authoring row, refresh, lower) —
+    // the app shows what has been APPLIED, so these author one op at a
+    // time rather than take the chapter-wide fallback every build.
+    { id: "ct-dsl", pages: [p(114)], build: dsl, unbatched: true },
+    { id: "ct-barcodes", pages: [p(112)], build: barcodes, unbatched: true },
+    { id: "ct-table", pages: [p(111)], build: table },
+  ],
+});

@@ -1,0 +1,378 @@
+/*
+ * This file is part of paged (https://paged.media), the commercial editor
+ * for the paged IDML engine.
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// Cockpit — the Properties tab: the kit's CONTEXT INSPECTOR
+// (inspectors.jsx — swaps Text / Image / Frame / Page by what's
+// selected). Routing layer over the existing engine-backed
+// compositions; no new bindings, no new wire:
+//
+//   - Content selection (caret/range)  ⇒ Text: Character + Paragraph.
+//   - Element(s) whose geometry hosts a placed image ⇒ Image:
+//     Object Transform + Frame fitting + Stroke.
+//   - Other element(s) ⇒ Frame: Object Transform + Stroke (+ the
+//     text-frame compositions ride the content selection). Titled
+//     "Group" for groups, "Objects" for groups and frames together.
+//   - Nothing selected ⇒ the panel-rail steer (`inspectorContext`)
+//     picks the Page summary or a per-kind guidance hint.
+//
+// The AI Assistant lives in its own panel (ADR 221); this one links to it.
+
+import { useEffect, useRef, useState } from "react";
+
+import type { ElementId } from "@paged-media/client";
+import {
+  CatalogRegistryProvider,
+  CockpitBtn,
+  openAssistant,
+  CockpitPanelHeader,
+  CockpitRow,
+  CockpitSection,
+  CockpitValue,
+  CompositionRenderer,
+  PanelHost,
+  useContentSelection,
+  useDocument,
+  useOptionalCockpitState,
+  useSelection,
+  useSelectionMetadataOwner,
+  useSelectionObjectType,
+  useOptionalCanvasClient,
+  useOptionalThreading,
+} from "@paged-media/shell";
+
+import { groupMembersOf } from "../object-commands";
+import { appCatalogRegistry } from "./catalog-registry";
+import { characterComposition } from "./character.composition";
+import { frameFittingComposition } from "./frame-fitting.composition";
+import { objectTransformComposition } from "./object-transform.composition";
+import { paragraphComposition } from "./paragraph.composition";
+import { strokeComposition } from "./stroke.composition";
+
+type InspectorKind = "text" | "image" | "frame" | "page" | "none";
+
+export function PropertiesPanel() {
+  const { elementSelection, elementGeometry } = useSelection();
+  const { contentSelection } = useContentSelection();
+  const cockpit = useOptionalCockpitState();
+  // Plugin-owned content: SELECTING a classified object (webFrame,
+  // sheetFrame, wordDocument, …) now surfaces the owning bundle in the
+  // inspector — previously object types were consulted only on
+  // double-click (the edit-context entry chain).
+  const owned = useSelectionObjectType();
+  // Artwork a plugin made or annotated without an object type of its own
+  // (paged.draw's repeats, blends, styled paths): that plugin's surface,
+  // inline — the "Draw settings" panel used to be a separate tab only.
+  const metadataOwner = useSelectionMetadataOwner();
+
+  const hasElement = elementSelection.length > 0;
+  const hasContent = !!contentSelection;
+  const hasImage =
+    hasElement &&
+    elementGeometry.some(
+      (g) => (g as { hasImage?: boolean }).hasImage === true,
+    );
+
+  // D1 — the frame whose overset state the chip reports. A text caret
+  // means the content selection's frame; a frame selection means that
+  // frame. Null when neither, which is why the chip renders only when
+  // it has something real to say rather than showing a dash.
+  const threading = useOptionalThreading();
+  // `ElementId.id` is a union — a StoryRange carries a struct, not a
+  // string — and narrowing on `kind` does not narrow it, so the string
+  // check is the narrowing.
+  const oversetFrameId = (() => {
+    const hit = elementGeometry.find((g) => g.id.kind === "textFrame");
+    return typeof hit?.id.id === "string" ? hit.id.id : null;
+  })();
+
+  // Live selection wins; the panel-rail steer covers the empty case —
+  // and one more. The rail's Image button pressed with a frame selected
+  // used to change nothing at all (the selection won, so the click had
+  // no visible effect). It now opens the Image inspector for THAT
+  // selection, which says plainly when the frame holds no image. The
+  // steer is pinned to the selection it was pressed on, so picking
+  // something else falls back to what that is.
+  const steer = cockpit?.inspectorContext ?? null;
+  const selectionKey = JSON.stringify(elementSelection);
+  const steerAt = useRef({ steer, key: selectionKey });
+  if (steerAt.current.steer !== steer) steerAt.current = { steer, key: selectionKey };
+  const imageSteer = steer === "image" && steerAt.current.key === selectionKey;
+  const kind: InspectorKind = hasContent
+    ? "text"
+    : hasImage
+      ? "image"
+      : hasElement
+        ? imageSteer
+          ? "image"
+          : "frame"
+        : (steer ?? "none");
+
+  // A group is not a frame: InDesign names it "Group". A selection of
+  // groups and frames together is named for both.
+  const groups = elementSelection.filter((id) => id.kind === "group").length;
+  const frames = elementSelection.length - groups;
+  const noun = groups === 0 ? "Frame" : frames === 0 ? "Group" : "Objects";
+  const loneGroup =
+    groups === 1 && frames === 0 ? groupIdOf(elementSelection[0]) : null;
+  const members = useGroupMemberCount(loneGroup, elementGeometry);
+
+  const ownedTitle =
+    kind === "frame" && owned ? humanizeType(owned.objectType.type) : null;
+  const title =
+    ownedTitle ??
+    (kind === "text"
+      ? "Text"
+      : kind === "image"
+        ? "Image"
+        : kind === "frame"
+          ? noun
+          : kind === "page"
+            ? "Page"
+            : "Properties");
+
+  // The gallery's selection sub-header — "Text · 1 frame", "Group · 2
+  // objects" (a lone group counts what is in it).
+  const counted = loneGroup
+    ? members === null
+      ? null
+      : plural(members, "object")
+    : [
+        groups > 0 ? plural(groups, "group") : null,
+        frames > 0 ? plural(frames, "frame") : null,
+      ]
+        .filter(Boolean)
+        .join(", ");
+  const selectionLabel =
+    kind === "text"
+      ? "Text selection"
+      : hasElement
+        ? [kind === "image" ? "Image" : noun, counted].filter(Boolean).join(" · ")
+        : null;
+
+  return (
+    <CatalogRegistryProvider registry={appCatalogRegistry()}>
+      <div
+        data-properties-panel="ready"
+        data-inspector-kind={kind}
+        data-has-element={hasElement ? "true" : "false"}
+        data-has-content={hasContent ? "true" : "false"}
+        style={{ display: "flex", flexDirection: "column", minHeight: 0 }}
+      >
+        <CockpitPanelHeader title={title} />
+        {selectionLabel && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 8,
+              padding: "0 14px 8px",
+            }}
+          >
+            <span className="pg-label" data-selection-label>
+              {selectionLabel}
+            </span>
+            {/* D1 — the seam had INVERTED. This chip read
+                `overset · —  "awaiting the engine's overset signal"`
+                while that very signal was live and already painting the
+                red "+" badge on the out-port two overlays away. So the
+                Properties panel — which IS on the panel rail, unlike
+                the ports — was telling the user a shipped feature was
+                missing, next to a canvas demonstrating it.
+
+                `StorySummary.overset` reaches the ThreadingContext via
+                `paged.stories()`, mapped frame→story by hit-testing the
+                frame's transformed centre. Reading it here costs
+                nothing; it is the same accessor the ports use. */}
+            {kind === "text" && oversetFrameId && (
+              <span
+                data-overset-state={
+                  threading?.isOverset(oversetFrameId) ? "overset" : "fits"
+                }
+                title={
+                  threading?.isOverset(oversetFrameId)
+                    ? "This frame's story does not fit — text continues past the last frame in its chain"
+                    : "This frame's story fits"
+                }
+                className="pg-ui-xs"
+                style={{
+                  opacity: threading?.isOverset(oversetFrameId) ? 1 : 0.55,
+                  whiteSpace: "nowrap",
+                  color: threading?.isOverset(oversetFrameId)
+                    ? "var(--status-error)"
+                    : undefined,
+                }}
+              >
+                {threading?.isOverset(oversetFrameId) ? "overset" : "overset · no"}
+              </span>
+            )}
+          </div>
+        )}
+
+        {kind === "none" && (
+          <div
+            className="pg-ui-xs"
+            data-properties-empty
+            style={{ padding: "0 14px 12px", lineHeight: 1.5 }}
+          >
+            Select a frame or place a text caret to see its properties.
+          </div>
+        )}
+
+        {kind === "page" && <PageSummary />}
+
+        <div className="p-3 pt-0 flex flex-col gap-3">
+          {kind === "frame" && owned ? (
+            <div
+              data-properties-section="object-type"
+              data-object-type={owned.objectType.type}
+            >
+              {owned.editContext?.panelIds?.length ? (
+                // The owning bundle's inspector surface, inline — the
+                // same registered panel the edit context raises.
+                <PanelHost id={owned.editContext.panelIds[0]} />
+              ) : (
+                <div
+                  className="pg-ui-xs"
+                  style={{ padding: "4px 2px", opacity: 0.7, lineHeight: 1.5 }}
+                >
+                  {humanizeType(owned.objectType.type)} — double-click to edit
+                  in place.
+                </div>
+              )}
+            </div>
+          ) : null}
+          {kind === "frame" && !owned && metadataOwner?.panelIds?.[0] ? (
+            <div
+              data-properties-section="plugin-owned"
+              data-properties-owner={metadataOwner.type}
+            >
+              <PanelHost id={metadataOwner.panelIds[0]} />
+            </div>
+          ) : null}
+          {hasElement ? (
+            <div data-properties-section="object">
+              <CompositionRenderer composition={objectTransformComposition} />
+            </div>
+          ) : null}
+          {kind === "image" && hasImage ? (
+            <div data-properties-section="fitting">
+              <CompositionRenderer composition={frameFittingComposition} />
+            </div>
+          ) : null}
+          {kind === "image" && hasElement && !hasImage ? (
+            <div
+              className="pg-ui-xs"
+              data-properties-no-image
+              style={{ padding: "4px 2px", lineHeight: 1.5 }}
+            >
+              The selection holds no placed image. File ▸ Place… puts one in
+              the selected frame.
+            </div>
+          ) : null}
+          {hasElement ? (
+            <div data-properties-section="stroke">
+              <CompositionRenderer composition={strokeComposition} />
+            </div>
+          ) : null}
+          {hasContent ? (
+            <div data-properties-section="character">
+              <CompositionRenderer composition={characterComposition} />
+            </div>
+          ) : null}
+          {hasContent ? (
+            <div data-properties-section="paragraph">
+              <CompositionRenderer composition={paragraphComposition} />
+            </div>
+          ) : null}
+        </div>
+
+        {kind !== "none" && (
+          <div data-ai-assistant-link style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 14px 16px" }}>
+            <CockpitBtn sm tone="soft" onClick={() => openAssistant({ view: "ask" })} testId="open-ai-assistant">
+              Ask the AI Assistant…
+            </CockpitBtn>
+          </div>
+        )}
+      </div>
+    </CatalogRegistryProvider>
+  );
+}
+
+function plural(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? "" : "s"}`;
+}
+
+function groupIdOf(id: ElementId | undefined): string | null {
+  return id?.kind === "group" && typeof id.id === "string" ? id.id : null;
+}
+
+/** How many objects the group holds directly (a nested group is one),
+ *  read off the scene tree; null until it has answered. `refresh` is the
+ *  geometry mirror, which every change to the selection's content
+ *  replaces. */
+function useGroupMemberCount(groupId: string | null, refresh: unknown): number | null {
+  const client = useOptionalCanvasClient();
+  const [answer, setAnswer] = useState<{ groupId: string; count: number } | null>(null);
+  useEffect(() => {
+    if (!client || !groupId) return;
+    let live = true;
+    client
+      .sceneTree()
+      .then((roots) => {
+        if (live) setAnswer({ groupId, count: groupMembersOf(roots, groupId).length });
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [client, groupId, refresh]);
+  return answer && answer.groupId === groupId ? answer.count : null;
+}
+
+/** "webFrame" → "Web frame" — the breadcrumb's title-casing rule. */
+function humanizeType(type: string): string {
+  const spaced = type.replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase();
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+/** Page geometry summary (kit PageInspector). REAL: size from the
+ *  document handle. Margins / bleed / columns await the engine's
+ *  page-geometry reads; section/status await collaboration. */
+function PageSummary() {
+  const { handle } = useDocument();
+  const first = handle?.pageSizesPt[0];
+  const fmt = (pt: number) => `${(pt / 72).toFixed(2).replace(/\.00$/, "")} in`;
+  return (
+    <CockpitSection title="Geometry">
+      <CockpitRow label="Pages">
+        <CockpitValue>{handle ? handle.pageCount : "—"}</CockpitValue>
+      </CockpitRow>
+      <CockpitRow label="Size">
+        <CockpitValue>
+          {first ? `${fmt(first[0])} × ${fmt(first[1])}` : "—"}
+        </CockpitValue>
+      </CockpitRow>
+      <span className="pg-ui-xs" style={{ lineHeight: 1.45 }}>
+        Margins, bleed and column reads land with the engine's page-geometry
+        accessors.
+      </span>
+    </CockpitSection>
+  );
+}

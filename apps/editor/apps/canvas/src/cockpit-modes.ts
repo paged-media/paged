@@ -1,0 +1,183 @@
+/*
+ * This file is part of paged (https://paged.media), the commercial editor
+ * for the paged IDML engine.
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// Cockpit — the six workflow modes + the right-edge panel rail
+// (design-system ui_kits/editor is the reference). Each mode is a
+// VIEW over the registered panels: `slots` selects what mounts,
+// `toolbarLeft` (work-in-progress; D4) re-skins the context
+// toolbar. The shell renders, this file declares.
+
+import type { ModeContribution, PanelRailItem } from "@paged-media/shell";
+
+import {
+  ContentToolbar,
+  DataToolbar,
+  DesignToolbar,
+  ExportToolbar,
+  PrepressToolbar,
+  ReviewToolbar,
+} from "./cockpit/toolbars";
+
+export const COCKPIT_MODES: ModeContribution[] = [
+  {
+    id: "design",
+    toolbarLeft: DesignToolbar,
+    paletteSuggestions: ["paged.file.openIdml"],
+    title: "Design",
+    icon: "panel-canvas",
+    order: 10,
+    blurb: "Composition, typography, grids, components",
+    slots: {
+      left: "paged.document-map",
+      // Layers, not the component library: the library is a "coming
+      // soon" card, and it held the second-most prominent tab of the
+      // default workspace.
+      tabs: ["paged.properties", "paged.swatches", "paged.layers"],
+    },
+  },
+  {
+    id: "content",
+    toolbarLeft: ContentToolbar,
+    title: "Content",
+    icon: "panel-character",
+    order: 20,
+    blurb: "Safe text editing, stories, review flow",
+    slots: {
+      left: "paged.stories",
+      inspector: "paged.story-inspector",
+    },
+  },
+  {
+    id: "prepress",
+    toolbarLeft: PrepressToolbar,
+    title: "Prepress",
+    icon: "ui-target",
+    order: 30,
+    blurb: "Preflight, bleed, colour, output readiness",
+    slots: {
+      left: "paged.preflight",
+      inspector: "paged.output-readiness",
+    },
+  },
+  {
+    id: "data",
+    toolbarLeft: DataToolbar,
+    paletteSuggestions: [
+      "media.paged.data.command.importData",
+      "media.paged.data.command.lowerBinding",
+    ],
+    title: "Data layout",
+    icon: "ui-database",
+    order: 40,
+    blurb: "Structured data → repeatable pages",
+    // The Data menu is a context menu (it shows while a binding is
+    // selected or entered); in this mode it is the workspace's own.
+    menus: ["Data"],
+    // The paged.data bundle's LIVE panels, not the ComingSoon stubs the
+    // mode shipped with: sources = the record/field intake, bindings = the
+    // field mapping. No canvas override — lowered bindings render INTO the
+    // document, so the real canvas IS the generated-layout preview.
+    // NOTE: `tabs` wins over `inspector` when both are set
+    // (cockpit-state-context seeds tabs ?? [inspector]) — declare the
+    // seeded dock as tabs, bindings first (the active tab).
+    slots: {
+      left: "media.paged.data.panel.sources",
+      tabs: [
+        "media.paged.data.panel.bindings",
+        "media.paged.data.panel.dataset",
+      ],
+    },
+  },
+  {
+    id: "review",
+    toolbarLeft: ReviewToolbar,
+    title: "Review",
+    icon: "ui-comment",
+    order: 50,
+    blurb: "Comments, approvals, versions",
+    slots: {
+      left: "paged.comments",
+      inspector: "paged.review-inspector",
+    },
+  },
+  {
+    id: "export",
+    toolbarLeft: ExportToolbar,
+    paletteSuggestions: ["paged.file.exportPdf", "paged.library.exportAse"],
+    title: "Export",
+    icon: "ui-export",
+    order: 60,
+    blurb: "Multi-format publishing",
+    slots: {
+      left: "paged.outputs",
+      inspector: "paged.export-inspector",
+      canvas: "panel:paged.export-center",
+    },
+  },
+];
+
+// The kit's panel-selector rail (ui_kits/editor data.jsx PANEL_RAIL):
+// Text / Image / Pages steer the Properties inspector; the rest open
+// their panel as a right-dock tab. Everything else (Layers, Effects,
+// Align, …) stays reachable through the Window menu.
+export const PANEL_RAIL: PanelRailItem[] = [
+  {
+    panelId: "paged.properties",
+    title: "Text",
+    icon: "panel-character",
+    inspectorContext: "text",
+  },
+  {
+    panelId: "paged.properties",
+    title: "Image",
+    icon: "panel-frame-fitting",
+    inspectorContext: "image",
+  },
+  {
+    panelId: "paged.object-styles",
+    title: "Styles",
+    icon: "panel-object-styles",
+  },
+  { panelId: "paged.swatches", title: "Swatches", icon: "panel-swatches" },
+  // The live paged.data bindings panel (the rail's first plugin panel).
+  // U8: the ComingSoon mapping stub it replaced (`paged.data-mapping`)
+  // is retired — the live panel owns the surface.
+  {
+    panelId: "media.paged.data.panel.bindings",
+    title: "Data",
+    icon: "ui-database",
+  },
+  {
+    panelId: "paged.properties",
+    title: "Pages",
+    icon: "panel-pages",
+    inspectorContext: "page",
+  },
+  { panelId: "paged.comments", title: "Comments", icon: "ui-comment" },
+  { panelId: "paged.preflight", title: "Preflight", icon: "ui-target" },
+  // Problems. The app writes genuinely good refusal sentences into this
+  // panel — "Insert rectangle inserts page items, and you are editing
+  // inside a vectorGraphic. Leave the frame (Esc) to insert into the
+  // document." — and the panel was in NO mode's slots and on no rail, so
+  // the explanation for a greyed command was published where nobody
+  // could read it. Save and export failures now land here too, which
+  // makes reachability the difference between a reported failure and a
+  // silent one.
+  { panelId: "paged.problems", title: "Problems", icon: "ui-warn" },
+];

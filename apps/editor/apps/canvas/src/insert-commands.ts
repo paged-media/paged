@@ -1,0 +1,1192 @@
+/*
+ * This file is part of paged (https://paged.media), the commercial editor
+ * for the paged IDML engine.
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// `paged.insert.*` — the object-authoring command layer (U7).
+//
+// WHY THIS LIVES IN THE EDITOR AND NOT IN A PLUGIN. Creating a text
+// frame, a rectangle, a table or a page is what everything else BUILDS
+// ON, so — like the `paged.object.*` structural verbs — it belongs to
+// the host. Until this layer landed, every insert op the engine has
+// carried since protocol v24 (`insertTextFrame`, `insertFrame`,
+// `insertOval`, `insertLine`, `insertTable`, `insertPage`) was
+// reachable only through a DRAG on the tool rail; a user asking the
+// command palette to "insert a text frame" got nothing, and File had a
+// permanently-disabled "Place…" seam. These seven verbs close that gap
+// with click-free, keyboard-first inserts.
+//
+// Facts that shape the code:
+//
+//  1. PLACEMENT IS THE VIEWPORT'S BUSINESS. A command has no drag, so
+//     WHERE to insert comes from what the user is looking at: the
+//     viewport centre, mapped through the camera into document space
+//     (`viewportToDoc`) and onto the page under it — the exact
+//     page-layout convention `ViewportCanvas` resolves pointer events
+//     with (`layoutPages` + containing-page walk). Off every page (a
+//     pasteboard view) the NEAREST page wins; an uninitialised camera
+//     falls back to page 0. The insert then centres on that page.
+//
+//  2. THE POST-INSERT FLOW IS THE TOOLS'. `mutateAndSelect`
+//     (@paged-media/tools) is the same mutate → select-created →
+//     geometry-refresh chain every drawing tool commits through, so a
+//     palette insert lands indistinguishably from a drawn one — the
+//     rectangle, ellipse and line through `mutateGraphicAndSelect`, so
+//     they wear the drawing tools' graphic default (no fill, 1 pt black
+//     stroke) rather than appearing invisible in a new document.
+//
+//  3. COMPOUND INSERTS ARE SEQUENTIAL, MEASURED NOT CHOSEN. "Insert
+//     table" with no caret mints a text frame AND its table; "Place
+//     image" mints a frame AND fills it. The intended shape was ONE
+//     `batch` with the `$created` sentinel binding the child to the
+//     minted parent (one undo step, the pencil tool's v34 precedent) —
+//     but on wire v61 the engine substitutes `$created` only into
+//     `ElementId`-typed fields, never a `storyId` string (probe:
+//     `node not found: Story("$created")`), and its batch executor
+//     does not dispatch `PlaceImage`/`ReplaceImageBytes` children at
+//     all (`Mutation::Batch child 1 (ReplaceImageBytes):
+//     NotImplemented`) although both apply fine standalone. So the
+//     compounds run as TWO mutations — two undo records — and a
+//     failing second step ROLLS BACK the first via `undo()`, so a
+//     refusal never strands an empty frame. A story-handle door in
+//     the batch executor is the RFI that would restore atomicity.
+//
+//  4. PLACE IS THE INLINE-BYTES LANE. `placeImage(uri)` has no
+//     resolver door in the editor (nothing serves a picked file back
+//     by URI), so Place routes the picked bytes through
+//     `replaceImageBytes` — the lane the engine already treats as a
+//     placed image (`hasImage` flips on the frame, and the bytes
+//     decode + RENDER engine-side; measured, red-swatch probe).
+//
+//  5. `client.mutate` NEVER REJECTS — a refusal resolves as
+//     `mutationFailed`. Every runner inspects the reply (via
+//     `mutateAndSelect`'s `onRefused` tap) and reports through the
+//     Problems panel, the `paged.object.*` discipline.
+
+import type {
+  CommandContribution,
+  ImporterContribution,
+  KeybindingContribution,
+  MenuItemContribution,
+  PagedEditor,
+} from "@paged-media/shell";
+import { awaitPlacementPoint } from "@paged-media/shell";
+import type { ElementId, Mutation, PageId } from "@paged-media/client";
+import { viewportToDoc } from "@paged-media/client";
+import {
+  mutateAndSelect,
+  mutateGraphicAndSelect,
+  type MutateReply,
+} from "@paged-media/tools";
+
+import { layoutPages, type PageRect } from "./ui/layout";
+import { pickFiles } from "./shell-file-picker";
+import { refusalOf } from "./object-commands";
+
+export const PAGED_INSERT_TEXT_FRAME = "paged.insert.textFrame";
+export const PAGED_INSERT_RECTANGLE = "paged.insert.rectangle";
+export const PAGED_INSERT_ELLIPSE = "paged.insert.ellipse";
+export const PAGED_INSERT_LINE = "paged.insert.line";
+export const PAGED_INSERT_TABLE = "paged.insert.table";
+export const PAGED_INSERT_PLACE_IMAGE = "paged.insert.placeImage";
+export const PAGED_INSERT_NEW_PAGE = "paged.insert.newPage";
+export const PAGED_INSERT_DELETE_PAGE = "paged.insert.deletePage";
+
+/** Attribution the insert layer publishes diagnostics under. */
+export const INSERT_DIAGNOSTIC_SOURCE = "paged.insert";
+
+// ------------------------------------------------------- named sizes
+//
+// Default insert sizes in pt. A command insert has no drag to size
+// from, so these are the deliberate defaults: the text frame is a
+// 2:1 reading block, shapes are a square the eye reads as "an
+// object, resize me", the line spans a comfortable grab length, and
+// the table frame is wide enough that four rows × three columns
+// render legible cells.
+
+export const TEXT_FRAME_SIZE_PT: readonly [number, number] = [240, 120];
+export const SHAPE_SIZE_PT: readonly [number, number] = [160, 160];
+export const LINE_LENGTH_PT = 200;
+export const TABLE_FRAME_SIZE_PT: readonly [number, number] = [320, 180];
+export const TABLE_ROWS = 4;
+/** Each new row's height (pt) — the engine's own height for a row it
+ *  mints. A row the insert leaves unsized lays out 0 pt tall while its
+ *  cells are empty, so a new table drew as one black bar of stacked
+ *  strokes (ED-7). The renderer sizes a row as max(this, content), so a
+ *  row still grows with what is typed into it. */
+export const TABLE_ROW_HEIGHT_PT = 20;
+export const TABLE_COLS = 3;
+/** Place… fits the image within this fraction of the page (never
+ *  upscaling past natural size — InDesign places at 100%). */
+export const PLACE_IMAGE_MAX_PAGE_FRACTION = 0.8;
+
+/** How a command reports back to the user (the Problems panel).
+ *  `info` = the command was reachable but does not apply here;
+ *  `error` = the engine's own sentence for a refused mutation. */
+export type InsertReport = (
+  severity: "error" | "info",
+  message: string,
+) => void;
+
+/** What a runner resolves with — surfaced through `invoke` so tests
+ *  (and a future scripting caller) can see the outcome without
+ *  scraping the Problems panel. */
+export interface InsertOutcome {
+  applied: boolean;
+  createdId: ElementId | null;
+}
+
+const REFUSED: InsertOutcome = { applied: false, createdId: null };
+
+/** B3 — deleting a page had NO menu route at all. `deletePage` was
+ *  reachable only from `paged.pages-list`, a panel in no mode's slots,
+ *  so a designer using the default layout could add pages and never
+ *  remove one.
+ *
+ *  Targets the page the camera is on, which is the same page `Add page`
+ *  inserts after — the two verbs then read as a pair rather than one
+ *  acting on the view and the other on a hidden selection. Refuses on
+ *  the last page: a document with no pages is not a state the editor
+ *  recovers from gracefully, and the engine's own refusal message would
+ *  reach the user as jargon. */
+export async function deleteCurrentPage(
+  paged: PagedEditor,
+  report: InsertReport,
+): Promise<InsertOutcome> {
+  if (blockedFor(paged, report, "Delete page")) return REFUSED;
+  const target = currentPageTarget(paged);
+  if (!target) {
+    report("error", "Delete page needs a page in view.");
+    return REFUSED;
+  }
+  if ((paged.document.handle?.pageCount ?? 0) <= 1) {
+    report(
+      "error",
+      "Delete page refused: this is the document's only page. " +
+        "Add another page first, or close the document.",
+    );
+    return REFUSED;
+  }
+  const reply = await paged.client.mutate({
+    op: "deletePage",
+    args: { pageId: target.pageId },
+  });
+  const refusal = refusalOf(reply);
+  if (refusal) {
+    report("error", `Delete page refused: ${refusal}`);
+    return REFUSED;
+  }
+  return outcomeOf(reply);
+}
+
+// ---------------------------------------------------------------- pure
+
+/** The page a command insert targets, in the `layoutPages` document-
+ *  space convention. */
+export interface PageTarget {
+  pageId: PageId;
+  /** Document-space page rect; inserts use PAGE-LOCAL coordinates,
+   *  so only `w`/`h` participate in bounds math. */
+  rect: PageRect;
+}
+
+/**
+ * Resolve the CURRENT page — the placement anchor for every verb.
+ *
+ * Viewport centre → `viewportToDoc` → the containing page over the
+ * `layoutPages` stack (the `ViewportCanvas` pointer mapping) → else
+ * the NEAREST page (pasteboard view) → else page 0 (camera not yet
+ * initialised: scale 0 / no viewport). `null` only with no document.
+ */
+export function currentPageTarget(paged: PagedEditor): PageTarget | null {
+  return pageTargetFor({
+    handle: paged.document.handle,
+    camera: paged.camera.camera,
+    viewportSize: paged.camera.viewportSize,
+  });
+}
+
+/** A client-space pointer position in `layoutPages` DOCUMENT space, or
+ *  null when there is no measurable viewport to invert through.
+ *
+ *  `viewportToDoc` expects VIEWPORT coordinates, so the wrapper's rect
+ *  comes off first — `[data-paged-viewport]` tags it, the same hook the
+ *  guide and threading controllers invert through. */
+function clientPointToDoc(
+  paged: PagedEditor,
+  clientX: number,
+  clientY: number,
+): [number, number] | null {
+  const wrap = document.querySelector("[data-paged-viewport]");
+  if (!wrap) return null;
+  const cam = paged.camera.camera;
+  if (!cam || cam.scale <= 0) return null;
+  const r = wrap.getBoundingClientRect();
+  return viewportToDoc(cam, clientX - r.left, clientY - r.top);
+}
+
+/** The page whose rect contains a document-space point, or null for the
+ *  pasteboard between and around the pages. */
+function pageContaining(
+  paged: PagedEditor,
+  x: number,
+  y: number,
+): PageTarget | null {
+  const handle = paged.document.handle;
+  if (!handle || handle.pageIds.length === 0) return null;
+  const rects = layoutPages(handle.pageSizesPt);
+  for (let i = 0; i < rects.length; i++) {
+    const r = rects[i];
+    if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) {
+      return { pageId: handle.pageIds[i], rect: r };
+    }
+  }
+  return null;
+}
+
+/** The inputs {@link currentPageTarget} actually reads. Split out so a
+ *  caller that holds the camera and handle directly — the canvas app's
+ *  active-page effect does — can ask without assembling a fake
+ *  `PagedEditor` around three fields. */
+export interface PageTargetInputs {
+  handle: PagedEditor["document"]["handle"];
+  camera: PagedEditor["camera"]["camera"];
+  viewportSize: PagedEditor["camera"]["viewportSize"];
+}
+
+export function pageTargetFor({
+  handle,
+  camera: cam,
+  viewportSize,
+}: PageTargetInputs): PageTarget | null {
+  if (!handle || handle.pageIds.length === 0) return null;
+  const rects = layoutPages(handle.pageSizesPt);
+  const at = (i: number): PageTarget => ({
+    pageId: handle.pageIds[i],
+    rect: rects[i],
+  });
+
+  const [vw, vh] = viewportSize;
+  if (!(cam.scale > 0) || vw <= 0 || vh <= 0) return at(0);
+  const [docX, docY] = viewportToDoc(cam, vw / 2, vh / 2);
+  if (!Number.isFinite(docX) || !Number.isFinite(docY)) return at(0);
+
+  let nearest = 0;
+  let nearestD = Infinity;
+  for (let i = 0; i < rects.length; i++) {
+    const r = rects[i];
+    if (
+      docX >= r.x &&
+      docX <= r.x + r.w &&
+      docY >= r.y &&
+      docY <= r.y + r.h
+    ) {
+      return at(i);
+    }
+    // Distance to the rect (0 inside — handled above), for the
+    // pasteboard fallback.
+    const dx = Math.max(r.x - docX, 0, docX - (r.x + r.w));
+    const dy = Math.max(r.y - docY, 0, docY - (r.y + r.h));
+    const d = dx * dx + dy * dy;
+    if (d < nearestD) {
+      nearestD = d;
+      nearest = i;
+    }
+  }
+  return at(nearest);
+}
+
+/** Page-local `[top, left, bottom, right]` for a `w × h` insert
+ *  centred on the page, clamped so it never leaves it (a page smaller
+ *  than the default size shrinks the insert to fit). */
+export function centeredBoundsOn(
+  rect: PageRect,
+  widthPt: number,
+  heightPt: number,
+): [number, number, number, number] {
+  const w = Math.min(widthPt, rect.w);
+  const h = Math.min(heightPt, rect.h);
+  const left = Math.max(0, (rect.w - w) / 2);
+  const top = Math.max(0, (rect.h - h) / 2);
+  return [top, left, top + h, left + w];
+}
+
+/** `cols` equal column widths over `totalPt` — the "even column
+ *  widths" the insert-table default promises. */
+export function evenColumnWidths(totalPt: number, cols: number): number[] {
+  return Array.from({ length: cols }, () => totalPt / cols);
+}
+
+// -------------------------------------------------------------- guards
+
+/**
+ * ADR 024 — the single declarative gate for all seven verbs: a
+ * document is open AND the user is at the DOCUMENT ROOT (not inside a
+ * plugin content type, where "insert a rectangle" would land a page
+ * item behind the raster stack / grid / DOM being edited). Shared by
+ * the `when` on every contribution (menu greys, palette hides) and
+ * re-checked by the runner guard below, because a shortcut reaches
+ * the handler with no menu in between.
+ */
+const insertApplies = (state: unknown): boolean => {
+  const s = state as {
+    document?: { handle?: { pageCount?: number } | null } | null;
+    editContext?: unknown;
+  } | null;
+  if (!s?.document?.handle || (s.document.handle.pageCount ?? 0) === 0) {
+    return false;
+  }
+  return !s.editContext;
+};
+
+/** The runner-side guard. Returns true when the command must NOT run,
+ *  having already told the user why — a report, not a silent return
+ *  (the `paged.object.*` rule: the user pressed something and is owed
+ *  an answer). */
+function blockedFor(
+  paged: PagedEditor,
+  report: InsertReport,
+  verb: string,
+): boolean {
+  const handle = paged.document.handle;
+  if (!handle || handle.pageCount === 0) {
+    report("info", `${verb} needs an open document. Open or create one first.`);
+    return true;
+  }
+  const ctx = paged.editContext;
+  if (ctx) {
+    report(
+      "info",
+      `${verb} inserts page items, and you are editing inside a ${ctx.type}. ` +
+        "Leave the frame (Esc) to insert into the document.",
+    );
+    return true;
+  }
+  return false;
+}
+
+/** Route a `mutationFailed` reply's engine sentence to the report
+ *  channel under the verb's name. */
+function refusedTap(report: InsertReport, verb: string) {
+  return (reply: MutateReply) => {
+    const refusal = refusalOf(reply);
+    if (refusal) report("error", `${verb} refused: ${refusal}`);
+  };
+}
+
+function outcomeOf(reply: MutateReply | null): InsertOutcome {
+  if (!reply || reply.kind !== "mutationApplied") return REFUSED;
+  return { applied: true, createdId: reply.payload.createdId ?? null };
+}
+
+// ------------------------------------------------------------- runners
+
+async function insertCenteredShape(
+  paged: PagedEditor,
+  report: InsertReport,
+  verb: string,
+  size: readonly [number, number],
+  build: (pageId: PageId, bounds: [number, number, number, number]) => Mutation,
+  label: string,
+  commit: typeof mutateAndSelect = mutateAndSelect,
+): Promise<InsertOutcome> {
+  if (blockedFor(paged, report, verb)) return REFUSED;
+  const target = currentPageTarget(paged);
+  if (!target) return REFUSED;
+  const bounds = centeredBoundsOn(target.rect, size[0], size[1]);
+  const reply = await commit(
+    paged,
+    build(target.pageId, bounds),
+    label,
+    refusedTap(report, verb),
+  );
+  return outcomeOf(reply);
+}
+
+export function insertTextFrame(
+  paged: PagedEditor,
+  report: InsertReport,
+): Promise<InsertOutcome> {
+  return insertCenteredShape(
+    paged,
+    report,
+    "Insert text frame",
+    TEXT_FRAME_SIZE_PT,
+    (pageId, bounds) => ({ op: "insertTextFrame", args: { pageId, bounds } }),
+    "insertTextFrame",
+  );
+}
+
+export function insertRectangle(
+  paged: PagedEditor,
+  report: InsertReport,
+): Promise<InsertOutcome> {
+  return insertCenteredShape(
+    paged,
+    report,
+    "Insert rectangle",
+    SHAPE_SIZE_PT,
+    (pageId, bounds) => ({ op: "insertFrame", args: { pageId, bounds } }),
+    "insertFrame",
+    mutateGraphicAndSelect,
+  );
+}
+
+export function insertEllipse(
+  paged: PagedEditor,
+  report: InsertReport,
+): Promise<InsertOutcome> {
+  return insertCenteredShape(
+    paged,
+    report,
+    "Insert ellipse",
+    SHAPE_SIZE_PT,
+    (pageId, bounds) => ({ op: "insertOval", args: { pageId, bounds } }),
+    "insertOval",
+    mutateGraphicAndSelect,
+  );
+}
+
+/** A horizontal `LINE_LENGTH_PT` line centred on the current page
+ *  (clamped to the page width). */
+export async function insertLine(
+  paged: PagedEditor,
+  report: InsertReport,
+): Promise<InsertOutcome> {
+  if (blockedFor(paged, report, "Insert line")) return REFUSED;
+  const target = currentPageTarget(paged);
+  if (!target) return REFUSED;
+  const len = Math.min(LINE_LENGTH_PT, target.rect.w);
+  const cx = target.rect.w / 2;
+  const cy = target.rect.h / 2;
+  const reply = await mutateGraphicAndSelect(
+    paged,
+    {
+      op: "insertLine",
+      args: {
+        pageId: target.pageId,
+        start: [cx - len / 2, cy],
+        end: [cx + len / 2, cy],
+      },
+    },
+    "insertLine",
+    refusedTap(report, "Insert line"),
+  );
+  return outcomeOf(reply);
+}
+
+/** The width of the frame hosting `storyId` (its chain's FIRST frame)
+ *  — the honest total for the caret-case even column widths. `null`
+ *  when unreadable; the engine's own default widths then apply. */
+async function storyFrameWidth(
+  paged: PagedEditor,
+  storyId: string,
+): Promise<number | null> {
+  try {
+    const links = await paged.client.frameChain(storyId);
+    const first = links[0];
+    if (!first) return null;
+    const items = await paged.client.elementGeometry([
+      { kind: "textFrame", id: first.frameId },
+    ]);
+    const b = items[0]?.bounds;
+    if (!b) return null;
+    const w = b[3] - b[1];
+    return w > 0 ? w : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Undo the FIRST half of a compound insert after its second half
+ *  refused, so a refusal never strands an empty frame (fact 3). */
+async function rollBackFirstStep(paged: PagedEditor): Promise<void> {
+  try {
+    await paged.client.undo();
+  } catch {
+    /* the report already carries the refusal; a failed rollback
+       leaves the frame, which the user can undo by hand. */
+  }
+}
+
+function newRowHeights(): number[] {
+  return Array.from({ length: TABLE_ROWS }, () => TABLE_ROW_HEIGHT_PT);
+}
+
+/** Put the caret in the new table's first cell, as InDesign does: the
+ *  next keys fill the table. Without it the caret stayed where it was —
+ *  in the empty paragraph the engine leaves ABOVE a table it appends — so
+ *  the text typed next landed above the table (ED-7). */
+function enterFirstCell(paged: PagedEditor, outcome: InsertOutcome): void {
+  const id = outcome.createdId;
+  if (!outcome.applied || id?.kind !== "table") return;
+  const table = id.id as unknown as { story_id?: string; table_id?: string };
+  if (!table.story_id || !table.table_id) return;
+  paged.contentSelection.setContentSelection({
+    storyId: table.story_id,
+    start: 0,
+    end: 0,
+    affinity: false,
+    cell: { tableId: table.table_id, row: 0, col: 0 },
+  });
+}
+
+/**
+ * Insert a `TABLE_ROWS × TABLE_COLS` table with even column widths.
+ *
+ * Caret in a story → the table lands AT THE STORY the caret is in
+ * (columns split the hosting frame's width evenly). No caret → mint a
+ * text frame, resolve the story it minted (the stories collection
+ * grows by exactly that story), and insert the table there. Two
+ * mutations — see fact 3 for why this cannot be one batch on wire
+ * v61 — with the frame rolled back if the table half refuses.
+ */
+export async function insertTable(
+  paged: PagedEditor,
+  report: InsertReport,
+): Promise<InsertOutcome> {
+  if (blockedFor(paged, report, "Insert table")) return REFUSED;
+  const caret = paged.contentSelection.contentSelectionRef.current;
+  if (caret) {
+    const width = await storyFrameWidth(paged, caret.storyId);
+    const reply = await mutateAndSelect(
+      paged,
+      {
+        op: "insertTable",
+        args: {
+          storyId: caret.storyId,
+          rows: TABLE_ROWS,
+          cols: TABLE_COLS,
+          rowHeights: newRowHeights(),
+          ...(width != null
+            ? { columnWidths: evenColumnWidths(width, TABLE_COLS) }
+            : {}),
+        },
+      },
+      "insertTable",
+      refusedTap(report, "Insert table"),
+    );
+    const outcome = outcomeOf(reply);
+    enterFirstCell(paged, outcome);
+    return outcome;
+  }
+
+  const target = currentPageTarget(paged);
+  if (!target) return REFUSED;
+  const bounds = centeredBoundsOn(
+    target.rect,
+    TABLE_FRAME_SIZE_PT[0],
+    TABLE_FRAME_SIZE_PT[1],
+  );
+  const frameWidth = bounds[3] - bounds[1];
+
+  // The minted story has no readable pointer from the frame (no
+  // parentStory property on the wire), so diff the stories collection
+  // around the create — single-user editor, nothing else mints
+  // stories between the two reads.
+  const storiesBefore = new Set(
+    (await paged.client.collection<{ selfId: string }>("stories")).map(
+      (s) => s.selfId,
+    ),
+  );
+  const frameReply = await mutateAndSelect(
+    paged,
+    { op: "insertTextFrame", args: { pageId: target.pageId, bounds } },
+    "insertTable(frame)",
+    refusedTap(report, "Insert table"),
+  );
+  const frame = outcomeOf(frameReply);
+  if (!frame.applied) return REFUSED;
+  const minted = (
+    await paged.client.collection<{ selfId: string }>("stories")
+  ).filter((s) => !storiesBefore.has(s.selfId));
+  const storyId = minted[0]?.selfId ?? null;
+  if (!storyId) {
+    report(
+      "error",
+      "Insert table: the new text frame reported no story to put the table in.",
+    );
+    await rollBackFirstStep(paged);
+    return REFUSED;
+  }
+  const tableReply = await mutateAndSelect(
+    paged,
+    {
+      op: "insertTable",
+      args: {
+        storyId,
+        rows: TABLE_ROWS,
+        cols: TABLE_COLS,
+        columnWidths: evenColumnWidths(frameWidth, TABLE_COLS),
+        rowHeights: newRowHeights(),
+      },
+    },
+    "insertTable",
+    refusedTap(report, "Insert table"),
+  );
+  const table = outcomeOf(tableReply);
+  if (!table.applied) {
+    await rollBackFirstStep(paged);
+    return REFUSED;
+  }
+  enterFirstCell(paged, table);
+  // Report the TABLE as the creation (the verb's object); the frame
+  // is its host and the fallback if the reply carried no table id.
+  return { applied: true, createdId: table.createdId ?? frame.createdId };
+}
+
+/** Natural pixel size of picked image bytes, via `createImageBitmap`
+ *  (the browser's decoder — no format sniffing of our own). */
+async function naturalImageSize(
+  bytes: Uint8Array,
+  mimeType: string,
+): Promise<{ width: number; height: number } | null> {
+  try {
+    const bitmap = await createImageBitmap(
+      new Blob([bytes.slice().buffer as ArrayBuffer], {
+        type: mimeType || "application/octet-stream",
+      }),
+    );
+    const size = { width: bitmap.width, height: bitmap.height };
+    bitmap.close();
+    return size.width > 0 && size.height > 0 ? size : null;
+  } catch {
+    return null;
+  }
+}
+
+/** A Photoshop file's pixel size, read from its header — browsers decode
+ *  neither PSD nor PSB, so `createImageBitmap` cannot size one. The
+ *  header is `8BPS`, version, six reserved bytes, the channel count, then
+ *  height and width as big-endian u32 at bytes 14 and 18. */
+export function psdHeaderSize(
+  bytes: Uint8Array,
+): { width: number; height: number } | null {
+  if (bytes.length < 26) return null;
+  if (bytes[0] !== 0x38 || bytes[1] !== 0x42 || bytes[2] !== 0x50 || bytes[3] !== 0x53) {
+    return null;
+  }
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const height = view.getUint32(14);
+  const width = view.getUint32(18);
+  return width > 0 && height > 0 ? { width, height } : null;
+}
+
+/** Smallest frame (pt) a place drag draws; a smaller box is a click. */
+const PLACE_MIN_DRAG_PT = 4;
+
+/** The box a place DRAG draws for an image of `size`: the largest box of
+ *  the image's proportions inside the dragged one, anchored at the press
+ *  (it grows the way the drag went). Document space; `null` when too
+ *  small to be meant. */
+export function placeDragBox(
+  from: [number, number],
+  to: [number, number],
+  size: { width: number; height: number },
+): { left: number; top: number; w: number; h: number } | null {
+  const scale = Math.min(
+    Math.abs(to[0] - from[0]) / size.width,
+    Math.abs(to[1] - from[1]) / size.height,
+  );
+  const w = size.width * scale;
+  const h = size.height * scale;
+  if (!(w >= PLACE_MIN_DRAG_PT && h >= PLACE_MIN_DRAG_PT)) return null;
+  return {
+    left: to[0] >= from[0] ? from[0] : from[0] - w,
+    top: to[1] >= from[1] ? from[1] : from[1] - h,
+    w,
+    h,
+  };
+}
+
+/** The selection when it is exactly one EMPTY graphic frame — where a
+ *  Place puts the picture instead of asking for a point (ED-6). */
+async function selectedEmptyFrame(paged: PagedEditor): Promise<ElementId | null> {
+  const selected = paged.selection.elementSelection;
+  if (selected.length !== 1) return null;
+  const [id] = selected;
+  if (id.kind !== "rectangle" && id.kind !== "oval" && id.kind !== "polygon") {
+    return null;
+  }
+  try {
+    const [geometry] = await paged.client.elementGeometry([id]);
+    return geometry && !geometry.hasImage ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * File ▸ Place… — pick an image, ask WHERE with the pointer, then mint
+ * an aspect-fit frame with its top-left at the clicked point
+ * (≤ `PLACE_IMAGE_MAX_PAGE_FRACTION` of the page, never upscaled past
+ * natural size at 1 px = 1 pt) and fill it with the picked bytes
+ * through `replaceImageBytes` (the inline-bytes lane — `placeImage(uri)`
+ * has no resolver door here). Two mutations, frame rolled back if the
+ * bytes half refuses — see fact 3 for why the engine's batch executor
+ * cannot carry the pair.
+ *
+ * CLICK-TO-PLACE. Every place used to land CENTRED on the current page,
+ * so placing four images built a pile of four and the user dragged
+ * three of them off it. After the picker returns, the pointer arms
+ * (copy cursor) and the next click decides the position; Escape
+ * cancels and places NOTHING, because a place that landed anyway after
+ * a cancel is worse than one that always centred.
+ *
+ * DRAG-TO-SIZE and PLACE-INTO (ED-6). A drag with the armed cursor draws
+ * the frame — the image's proportions inside the dragged box, previewed
+ * while dragging — instead of the press alone deciding a natural-size
+ * frame. And with exactly one empty graphic frame selected there is
+ * nothing to ask: the picture goes into that frame.
+ *
+ * FORMATS THE BROWSER CANNOT DECODE (IMG-2). A PSD sized through the
+ * browser's decoder failed, so Place stopped with a message in a panel
+ * nobody had open. Now a file an importer claims (paged.image claims
+ * .psd / .psb) is sized from its header, the frame is minted and selected
+ * as for any image, and the bytes go to that importer, which reads the
+ * frame selection to know where the layers belong. Errors reach the user:
+ * the host's report opens the Problems panel.
+ *
+ * A click that misses every page still places — page-local bounds may
+ * sit outside the page rect, which is the pasteboard, and putting an
+ * image on the pasteboard while you decide is ordinary DTP practice.
+ */
+export async function placeImage(
+  paged: PagedEditor,
+  report: InsertReport,
+): Promise<InsertOutcome> {
+  if (blockedFor(paged, report, "Place image")) return REFUSED;
+  const [file] = await pickFiles({ accept: ["image/*", ".psd", ".psb"] });
+  if (!file) return REFUSED; // cancelled — an ordinary answer, no report.
+
+  // The browser decodes PNG, JPEG and the like itself. What it cannot
+  // decode, an importer may: its size then comes from the file's header.
+  let size = await naturalImageSize(file.bytes, file.mimeType);
+  let importer: ImporterContribution | null = null;
+  if (!size) {
+    const psd = psdHeaderSize(file.bytes);
+    if (psd) {
+      importer = paged.registries.importers.resolve(file.name, file.mimeType);
+      if (!importer) {
+        report(
+          "error",
+          `Place image: "${file.name}" is a Photoshop file, and no loaded plugin reads one.`,
+        );
+        return REFUSED;
+      }
+      size = psd;
+    }
+  }
+  if (!size) {
+    report("error", `Place image: could not decode "${file.name}" as an image.`);
+    return REFUSED;
+  }
+
+  /** Put the file into `frame` (selected). False when that refused. */
+  const fill = async (frame: ElementId): Promise<boolean> => {
+    if (importer) {
+      try {
+        await importer.import({
+          name: file.name,
+          bytes: file.bytes,
+          mimeType: file.mimeType,
+        });
+        return true;
+      } catch (err) {
+        report(
+          "error",
+          `Place image: ${importer.title} could not read "${file.name}" — ` +
+            (err instanceof Error ? err.message : String(err)),
+        );
+        return false;
+      }
+    }
+    const reply = await mutateAndSelect(
+      paged,
+      {
+        op: "replaceImageBytes",
+        args: {
+          elementId: frame.id as string,
+          bytes: Array.from(file.bytes),
+        },
+      },
+      "placeImage",
+      refusedTap(report, "Place image"),
+    );
+    return outcomeOf(reply).applied;
+  };
+
+  // An empty frame is selected: that is where it goes.
+  const into = await selectedEmptyFrame(paged);
+  if (into) {
+    return (await fill(into)) ? { applied: true, createdId: into } : REFUSED;
+  }
+
+  const target = currentPageTarget(paged);
+  if (!target) return REFUSED;
+  const maxW = target.rect.w * PLACE_IMAGE_MAX_PAGE_FRACTION;
+  const maxH = target.rect.h * PLACE_IMAGE_MAX_PAGE_FRACTION;
+  const scale = Math.min(1, maxW / size.width, maxH / size.height);
+  const w = size.width * scale;
+  const h = size.height * scale;
+  const natural = size;
+
+  // Ask where. Cancelling is an ordinary answer — no report, exactly
+  // like cancelling the picker above. A drag previews the frame it draws.
+  const point = await awaitPlacementPoint({
+    onDrag: (from, to) => {
+      const a = to ? clientPointToDoc(paged, from.clientX, from.clientY) : null;
+      const b = to ? clientPointToDoc(paged, to.clientX, to.clientY) : null;
+      const box = a && b ? placeDragBox(a, b, natural) : null;
+      const page = a ? (pageContaining(paged, a[0], a[1]) ?? target) : target;
+      paged.overlaySignals.setToolPreview(
+        box
+          ? {
+              pageId: page.pageId,
+              rect: [
+                box.top - page.rect.y,
+                box.left - page.rect.x,
+                box.top - page.rect.y + box.h,
+                box.left - page.rect.x + box.w,
+              ],
+            }
+          : null,
+      );
+    },
+  });
+  if (!point) return REFUSED;
+
+  const doc = clientPointToDoc(paged, point.clientX, point.clientY);
+  const dragEnd = point.to
+    ? clientPointToDoc(paged, point.to.clientX, point.to.clientY)
+    : null;
+  let landing = target;
+  let bounds: [number, number, number, number];
+  if (doc) {
+    // Land on whichever page contains the click, so placing onto page 3
+    // while page 1 is "current" does what it looks like it does.
+    const hit = pageContaining(paged, doc[0], doc[1]);
+    if (hit) landing = hit;
+    const box = dragEnd ? placeDragBox(doc, dragEnd, natural) : null;
+    if (box) {
+      const left = box.left - landing.rect.x;
+      const top = box.top - landing.rect.y;
+      bounds = [top, left, top + box.h, left + box.w];
+    } else {
+      const left = doc[0] - landing.rect.x;
+      const top = doc[1] - landing.rect.y;
+      bounds = [top, left, top + h, left + w];
+    }
+  } else {
+    // No viewport to measure against (the canvas is unmounted, or the
+    // camera has no scale). Falling back to centring is right here: the
+    // user asked to place and a refusal would discard the file they
+    // already chose.
+    bounds = centeredBoundsOn(landing.rect, w, h);
+  }
+  const frameReply = await mutateAndSelect(
+    paged,
+    { op: "insertFrame", args: { pageId: landing.pageId, bounds } },
+    "placeImage(frame)",
+    refusedTap(report, "Place image"),
+  );
+  const frame = outcomeOf(frameReply);
+  if (!frame.applied || !frame.createdId) return REFUSED;
+  if (!(await fill(frame.createdId))) {
+    await rollBackFirstStep(paged);
+    return REFUSED;
+  }
+  return frame;
+}
+
+/** Layout ▸ Add page — a fresh page AFTER the current one (the
+ *  pages-list panel's `insertPage` shape; no master). */
+export async function addPage(
+  paged: PagedEditor,
+  report: InsertReport,
+): Promise<InsertOutcome> {
+  if (blockedFor(paged, report, "Add page")) return REFUSED;
+  const target = currentPageTarget(paged);
+  const reply = await paged.client.mutate({
+    op: "insertPage",
+    args: { afterPageId: target?.pageId ?? null, masterId: null },
+  });
+  const refusal = refusalOf(reply);
+  if (refusal) {
+    report("error", `Add page refused: ${refusal}`);
+    return REFUSED;
+  }
+  return outcomeOf(reply);
+}
+
+// ------------------------------------------------------------ commands
+
+/** The seven closures a host binds to the seven commands. Each
+ *  receives the LIVE `PagedEditor` the registry materialises at
+ *  invoke time — never captured state. */
+export interface InsertCommandHandlers {
+  textFrame: (paged: PagedEditor) => unknown | Promise<unknown>;
+  rectangle: (paged: PagedEditor) => unknown | Promise<unknown>;
+  ellipse: (paged: PagedEditor) => unknown | Promise<unknown>;
+  line: (paged: PagedEditor) => unknown | Promise<unknown>;
+  table: (paged: PagedEditor) => unknown | Promise<unknown>;
+  placeImage: (paged: PagedEditor) => unknown | Promise<unknown>;
+  newPage: (paged: PagedEditor) => unknown | Promise<unknown>;
+  deletePage: (paged: PagedEditor) => unknown | Promise<unknown>;
+}
+
+/** Build the insert command set. Same shape as `buildObjectCommands`
+ *  so both register through one path in `CanvasAppIntegration`. */
+export function buildInsertCommands(
+  handlers: InsertCommandHandlers,
+): CommandContribution[] {
+  const cmd = (
+    id: string,
+    title: string,
+    run: (paged: PagedEditor) => unknown | Promise<unknown>,
+  ): CommandContribution => ({
+    id,
+    title,
+    category: "Insert",
+    when: insertApplies,
+    handler: (paged) => run(paged as PagedEditor),
+  });
+  return [
+    cmd(PAGED_INSERT_TEXT_FRAME, "Insert text frame", handlers.textFrame),
+    cmd(PAGED_INSERT_RECTANGLE, "Insert rectangle", handlers.rectangle),
+    cmd(PAGED_INSERT_ELLIPSE, "Insert ellipse", handlers.ellipse),
+    cmd(PAGED_INSERT_LINE, "Insert line", handlers.line),
+    cmd(PAGED_INSERT_TABLE, "Insert table", handlers.table),
+    cmd(PAGED_INSERT_DELETE_PAGE, "Delete page", handlers.deletePage),
+    cmd(PAGED_INSERT_PLACE_IMAGE, "Place image…", handlers.placeImage),
+    cmd(PAGED_INSERT_NEW_PAGE, "Add page", handlers.newPage),
+  ];
+}
+
+/** Menu projection. The five object inserts head the Object menu
+ *  (group "insert", above the arrange/group blocks); "Place…" takes
+ *  the File slot its `soon` seam held (order 40, group "place" —
+ *  the seam in `cockpit-menus.ts` is retired by this layer, the
+ *  honest-stub convention doing its job); "Add page" heads Layout.
+ *  Each item carries the same `when` as its command so the menu greys
+ *  where the palette hides. */
+/** C1 — an Insert entry for a PLUGIN content type.
+ *
+ *  The plugin contract has twelve contribution types and `menu` is not
+ *  one of them, so a plugin command's only host-wide home is Cmd+K —
+ *  where the palette shows the raw command id rather than a shortcut,
+ *  and where nobody ever sees two creation verbs side by side. That is
+ *  why the six content types teach six different idioms (Insert / Place
+ *  / Import / and sheet's `lowerToFrame`, which is compiler vocabulary
+ *  for the step that actually puts the sheet on the page).
+ *
+ *  Until the contract grows a menu door, the host curates. It already
+ *  special-cases one plugin this way — `File > Open PDF…` is a host
+ *  menu item written for media.paged.pdf, which never asked for it — so
+ *  the precedent is set and the alternative is leaving four content
+ *  types undiscoverable.
+ *
+ *  Gated on the command being REGISTERED, not on a hardcoded list of
+ *  bundles: a build without paged.sheet shows no Spreadsheet entry
+ *  rather than a dead one, which is the tool-rail rule ("worse than an
+ *  empty slot") applied to the menu.
+ */
+function pluginInsert(command: string) {
+  return (state: unknown): boolean => {
+    if (!insertApplies(state)) return false;
+    const s = state as {
+      registries?: { commands?: { list?: () => { id: string }[] } };
+    } | null;
+    const list = s?.registries?.commands?.list?.();
+    return Array.isArray(list) && list.some((c) => c.id === command);
+  };
+}
+
+/** F1 — the host's COURTESY entries for plugin commands.
+ *
+ *  C1 curated these because the contract had no menu door: a plugin's
+ *  creation verb was reachable only through Cmd+K, so the host named
+ *  four bundles by hand and gave them a front door. `contribute.menu()`
+ *  (plugin-api 0.2.33) ended that necessity, and each entry now carries
+ *  `fallbackFor` — it stands down the moment its plugin contributes its
+ *  own entry for the same command, wherever the plugin chooses to put
+ *  it.
+ *
+ *  They are NOT deleted. A bundle that declares no menu still needs a
+ *  front door, and the host naming a few plugins is a smaller cost than
+ *  a user who cannot find how to insert a spreadsheet. A fallback is
+ *  removed when someone walks through the door, not when the door opens.
+ *
+ *  The three `Data/…` rows are a different case and deliberately keep no
+ *  `fallbackFor`: they raise PANELS through the registry-derived
+ *  panel-show commands, which no plugin command supersedes. */
+const PLUGIN_INSERT_ENTRIES: {
+  path: string;
+  command: string;
+  order: number;
+  fallbackFor?: string;
+  icon?: string;
+}[] =
+  [
+    {
+      path: "Object/Insert web frame…",
+      command: "media.paged.web.command.insertWebFrame",
+      icon: "ui-web",
+      fallbackFor: "media.paged.web.command.insertWebFrame",
+      order: 30,
+    },
+    {
+      path: "Object/Insert spreadsheet…",
+      command: "media.paged.sheet.command.importXlsx",
+      icon: "ui-grid",
+      fallbackFor: "media.paged.sheet.command.importXlsx",
+      order: 31,
+    },
+    {
+      path: "Object/Insert Word document…",
+      command: "media.paged.doc.command.placeDoc",
+      icon: "ui-doc",
+      fallbackFor: "media.paged.doc.command.placeDoc",
+      order: 32,
+    },
+    {
+      path: "Object/Insert data binding…",
+      command: "media.paged.data.command.defineBinding",
+      icon: "ui-database",
+      fallbackFor: "media.paged.data.command.defineBinding",
+      order: 33,
+    },
+    // The three Data-menu entries raise the same panels the Data-mode
+    // pills do, named as the panels are named. They were "Connect
+    // source…", "Field mapping…" and "Generate pages…" — three names for
+    // panels titled Data sources, Bindings and Dataset preview, the last
+    // of which generates no pages.
+    {
+      path: "Data/Data sources…",
+      command: "paged.panel.show.media.paged.data.panel.sources",
+      order: 10,
+    },
+    {
+      path: "Data/Bindings…",
+      command: "paged.panel.show.media.paged.data.panel.bindings",
+      order: 20,
+    },
+
+    {
+      path: "Data/Dataset preview…",
+      command: "paged.panel.show.media.paged.data.panel.dataset",
+      order: 30,
+    },
+  ];
+
+export const INSERT_MENU_ITEMS: MenuItemContribution[] = [
+  // Not an insert — it rode in the plugin-courtesy table (group
+  // "insert-plugin") for want of a home. Help's learning group is it.
+  {
+    path: "Help/Keyboard shortcuts",
+    command: "paged.panel.show.paged.keyboard-shortcuts",
+    order: 20,
+    group: "learn",
+  },
+  {
+    path: "Object/Insert text frame",
+    command: PAGED_INSERT_TEXT_FRAME,
+    icon: "tool-type",
+    order: 1,
+    group: "insert",
+    when: insertApplies,
+  },
+  {
+    path: "Object/Insert rectangle",
+    command: PAGED_INSERT_RECTANGLE,
+    icon: "tool-rectangle",
+    order: 2,
+    group: "insert",
+    when: insertApplies,
+  },
+  {
+    path: "Object/Insert ellipse",
+    command: PAGED_INSERT_ELLIPSE,
+    icon: "tool-ellipse",
+    order: 3,
+    group: "insert",
+    when: insertApplies,
+  },
+  {
+    path: "Object/Insert line",
+    command: PAGED_INSERT_LINE,
+    icon: "tool-line",
+    order: 4,
+    group: "insert",
+    when: insertApplies,
+  },
+  {
+    path: "Object/Insert table",
+    command: PAGED_INSERT_TABLE,
+    icon: "ui-grid-cols",
+    order: 5,
+    group: "insert",
+    when: insertApplies,
+  },
+  {
+    path: "File/Place…",
+    command: PAGED_INSERT_PLACE_IMAGE,
+    icon: "tool-rectangleFrame",
+    order: 40,
+    group: "place",
+    when: insertApplies,
+  },
+  {
+    path: "Layout/Add page",
+    command: PAGED_INSERT_NEW_PAGE,
+    icon: "ui-plus",
+    order: 5,
+    group: "pages",
+    when: insertApplies,
+  },
+  {
+    path: "Layout/Delete page",
+    command: PAGED_INSERT_DELETE_PAGE,
+    icon: "ui-minus",
+    order: 6,
+    group: "pages",
+    when: insertApplies,
+  },
+  ...PLUGIN_INSERT_ENTRIES.map((e) => ({
+    path: e.path,
+    command: e.command,
+    order: e.order,
+    group: "insert-plugin",
+    when: pluginInsert(e.command),
+    // Carried through explicitly. This map names every field, so a new
+    // one on the source type is dropped in silence — `fallbackFor` was,
+    // and the courtesy entries stayed permanent while every other part
+    // of the mechanism worked.
+    fallbackFor: e.fallbackFor,
+    icon: e.icon,
+  })),
+];
+
+/** Cmd+D — InDesign's Place. Both platform variants register, each a
+ *  distinct key→command signature (INV-REG-3). Unguarded on purpose: a
+ *  bundle binding the same chord under a `when` (paged.sheet's Fill down
+ *  while a sheet frame is entered) wins while its guard holds — see
+ *  `resolveBinding` — so Place is the chord's meaning everywhere else. */
+export const INSERT_KEYBINDINGS: KeybindingContribution[] = [
+  { key: "cmd+d", command: PAGED_INSERT_PLACE_IMAGE },
+  { key: "ctrl+d", command: PAGED_INSERT_PLACE_IMAGE },
+];

@@ -1,0 +1,146 @@
+/*
+ * This file is part of paged (https://paged.media), the commercial editor
+ * for the paged IDML engine.
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// eslint-disable-next-line import/no-relative-parent-imports
+import type { ElementGeometryItem } from "@paged-media/client";
+
+import type { OverlayContribution, OverlayProps } from "../registries/overlay";
+import { useSelection } from "../state/selection-context";
+
+import { applyAffine } from "./affine";
+import { groupByPage, unionAabb } from "./selection-chrome";
+
+const TETHER_PX = 24;
+const ROTATE_R = 5;
+
+/**
+ * Rotation handle floating above the top-centre of the selection.
+ *
+ * - Single selection: the tether follows the oriented frame's local
+ *   +Y direction, so a rotated frame's handle tracks the rotation.
+ * - Multi-selection: the union AABB's top-centre, with a straight
+ *   vertical tether (no orientation to follow).
+ *
+ * Carries `data-handle="rotate"`; ViewportCanvas's pointerdown
+ * routes that dataset to a Rotate gesture.
+ */
+function RotateHandleRender(props: OverlayProps) {
+  const { placedGeometry: elementGeometry, pathEditMode } = useSelection();
+  // Path-edit mode edits the element's POINTS, and every press on the
+  // canvas is the path's there — a frame handle would be drawn and
+  // dead. The outline stays; the handles come back with the mode off.
+  if (pathEditMode) return null;
+  if (elementGeometry.length === 0) return null;
+  if (elementGeometry.length === 1) {
+    return renderSingle(elementGeometry[0], props);
+  }
+  return renderUnion(elementGeometry, props);
+}
+
+function renderSingle(item: ElementGeometryItem, props: OverlayProps) {
+  // C-23 — no page found for it ⇒ no space to draw in.
+  const pr = item.pageId ? props.pageRects.get(item.pageId) : undefined;
+  if (!pr) return null;
+  const [top, left, _bottom, right] = item.bounds;
+  const cx = (left + right) * 0.5;
+  const [tcx, tcy] = applyAffine(item.itemTransform, cx, top);
+  const inv = 1 / props.camera.scale;
+  const [upx, upy] = applyAffine(item.itemTransform, cx, top - 1);
+  let dx = upx - tcx;
+  let dy = upy - tcy;
+  const len = Math.hypot(dx, dy) || 1;
+  dx /= len;
+  dy /= len;
+  const dxDoc = dx * TETHER_PX * inv;
+  const dyDoc = dy * TETHER_PX * inv;
+  const hx = pr.x + tcx + dxDoc;
+  const hy = pr.y + tcy + dyDoc;
+  return renderTether(pr.x + tcx, pr.y + tcy, hx, hy, inv, "single");
+}
+
+function renderUnion(
+  geometry: ReadonlyArray<ElementGeometryItem>,
+  props: OverlayProps,
+) {
+  const byPage = groupByPage(geometry);
+  const inv = 1 / props.camera.scale;
+  const tethers: React.ReactNode[] = [];
+  for (const [pageId, items] of byPage) {
+    const pr = props.pageRects.get(pageId);
+    if (!pr) continue;
+    const bb = unionAabb(items);
+    if (!bb) continue;
+    const tcx = pr.x + (bb.minX + bb.maxX) * 0.5;
+    const tcy = pr.y + bb.minY;
+    const hx = tcx;
+    const hy = tcy - TETHER_PX * inv;
+    tethers.push(renderTether(tcx, tcy, hx, hy, inv, `union:${pageId}`));
+  }
+  return <>{tethers}</>;
+}
+
+function renderTether(
+  tx: number,
+  ty: number,
+  hx: number,
+  hy: number,
+  inv: number,
+  key: string,
+) {
+  return (
+    <g key={key}>
+      <line
+        x1={tx}
+        y1={ty}
+        x2={hx}
+        y2={hy}
+        stroke="var(--overlay-selection)"
+        strokeWidth={1}
+        vectorEffect="non-scaling-stroke"
+        pointerEvents="none"
+      />
+      <g transform={`translate(${hx}, ${hy}) scale(${inv})`}>
+        <circle
+          cx={0}
+          cy={0}
+          r={ROTATE_R + 4}
+          fill="transparent"
+          data-handle="rotate"
+          style={{ cursor: "grab", pointerEvents: "all" }}
+        />
+        <circle
+          cx={0}
+          cy={0}
+          r={ROTATE_R}
+          fill="white"
+          stroke="var(--overlay-selection)"
+          strokeWidth={1}
+          data-handle="rotate"
+          style={{ cursor: "grab", pointerEvents: "all" }}
+        />
+      </g>
+    </g>
+  );
+}
+
+export const rotateHandleContribution: OverlayContribution = {
+  id: "paged.rotate-handle",
+  render: RotateHandleRender,
+  z: 310,
+};

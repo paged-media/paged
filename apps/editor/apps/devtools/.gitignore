@@ -1,0 +1,7 @@
+node_modules/
+dist/
+# Decision-B: the introspect wasm + its `.d.ts` now ship in the
+# published `@paged-media/introspect-wasm` package (resolved from
+# node_modules); there is no longer a vendored `src/wasm/` directory.
+tsconfig.tsbuildinfo
+*.local

@@ -1,0 +1,2919 @@
+/*
+ * This file is part of paged (https://paged.media), the commercial editor
+ * for the paged IDML engine.
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// E2E op suite — the capability matrix. Probes EVERY wire Mutation
+// op against a live document with minimal valid args, classifies
+// the outcome (supported / unsupported), and asserts the
+// classification matches the checked-in table
+// (harness/capabilities.ts). Engine support changing in EITHER
+// direction fails here with instructions: update the table AND
+// add/upgrade the real domain test.
+//
+// Edit/delete/rename/property probes create their OWN scratch
+// resource first (setupUndo cleans it up on BOTH paths), so the
+// classification reflects the engine — never whether the fixture
+// happened to hold a deletable swatch or a non-builtin style.
+//
+// Capture mode: `E2E_CAPS=capture npx playwright test
+// e2e/capability-matrix` prints the observed table (and writes
+// /tmp/paged-e2e-capabilities.json) instead of asserting.
+
+import { readFileSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { test, expect, type Page } from "@playwright/test";
+
+import { openCanvas } from "../fidelity/canvas-driver";
+import {
+  CAPABILITIES,
+  expectedStatus,
+  type CapabilityStatus,
+} from "./harness/capabilities";
+import { loadFixture, type LoadedFixture } from "./harness/fixtures";
+
+const CAPTURE = process.env.E2E_CAPS === "capture";
+
+interface ProbeResult {
+  op: string;
+  status: CapabilityStatus;
+  error?: string;
+  skipped?: string;
+}
+
+interface Ctx {
+  page: Page;
+  fx: LoadedFixture;
+}
+
+/** Run one mutation; resolve {ok} or {error string}. `mutate()`
+ *  RESOLVES with the reply envelope on failure (it never throws) —
+ *  a rejected op comes back as `{kind:"mutationFailed", payload:
+ *  {error}}`, a successful one as `mutationApplied`. So classify by
+ *  the reply kind, not by a thrown error. */
+async function tryMutate(
+  page: Page,
+  m: unknown,
+): Promise<{ ok: boolean; error?: string }> {
+  return page.evaluate(async (mm) => {
+    const c = (
+      globalThis as unknown as {
+        __canvas: {
+          client: {
+            mutate: (
+              x: unknown,
+            ) => Promise<{ kind: string; payload?: { error?: unknown } }>;
+          };
+        };
+      }
+    ).__canvas;
+    try {
+      const reply = await c.client.mutate(mm);
+      if (reply?.kind === "mutationApplied") return { ok: true };
+      const err = reply?.payload?.error;
+      const errStr =
+        err == null
+          ? `reply kind: ${reply?.kind}`
+          : typeof err === "string"
+            ? err
+            : JSON.stringify(err);
+      return { ok: false, error: errStr.slice(0, 300) };
+    } catch (err) {
+      return {
+        ok: false,
+        error: `threw: ${err instanceof Error ? err.message : JSON.stringify(err).slice(0, 280)}`,
+      };
+    }
+  }, m);
+}
+
+async function undoN(page: Page, n: number): Promise<void> {
+  if (n <= 0) return;
+  await page.evaluate(async (count) => {
+    const c = (
+      globalThis as unknown as {
+        __canvas: { client: { undo: () => Promise<unknown> } };
+      }
+    ).__canvas;
+    for (let i = 0; i < count; i++) await c.client.undo();
+  }, n);
+}
+
+async function lastCollectionId(
+  page: Page,
+  name: string,
+): Promise<string | null> {
+  return page.evaluate(async (n) => {
+    const c = (
+      globalThis as unknown as {
+        __canvas: {
+          client: {
+            collection: (n: string) => Promise<Array<{ selfId: string }>>;
+          };
+        };
+      }
+    ).__canvas;
+    const items = await c.client.collection(n);
+    return items[items.length - 1]?.selfId ?? null;
+  }, name);
+}
+
+/** The `selfId` of a collection item that was not there before. */
+async function newCollectionId(
+  page: Page,
+  name: string,
+  before: ReadonlySet<string>,
+): Promise<string | null> {
+  return page.evaluate(
+    async ({ n, seen }) => {
+      const c = (
+        globalThis as unknown as {
+          __canvas: {
+            client: {
+              collection: (n: string) => Promise<Array<{ selfId: string }>>;
+            };
+          };
+        }
+      ).__canvas;
+      const items = await c.client.collection(n);
+      return items.find((i) => !seen.includes(i.selfId))?.selfId ?? null;
+    },
+    { n: name, seen: [...before] },
+  );
+}
+
+async function collectionIds(page: Page, name: string): Promise<Set<string>> {
+  return new Set(
+    await page.evaluate(async (n) => {
+      const c = (
+        globalThis as unknown as {
+          __canvas: {
+            client: {
+              collection: (n: string) => Promise<Array<{ selfId: string }>>;
+            };
+          };
+        }
+      ).__canvas;
+      return (await c.client.collection(n)).map((i) => i.selfId);
+    }, name),
+  );
+}
+
+/** A scratch hyperlink on the story's first character (insertHyperlink,
+ *  classified above); its `Hyperlink` id off the hyperlinks collection. */
+async function scratchHyperlink(page: Page, fx: LoadedFixture): Promise<string | null> {
+  if (!fx.firstStory || fx.firstStory.characterCount < 2) return null;
+  const before = await collectionIds(page, "hyperlinks");
+  const made = await tryMutate(page, {
+    op: "insertHyperlink",
+    args: { storyId: fx.firstStory.selfId, start: 0, end: 1, url: "https://paged.media/probe-scratch" },
+  });
+  return made.ok ? newCollectionId(page, "hyperlinks", before) : null;
+}
+
+/** A scratch editorial note on the story's second character (insertNote,
+ *  classified above); its `id` off the notes collection — the rows carry
+ *  `id`, not `selfId`, since InDesign writes no Self for a note. */
+async function scratchNote(page: Page, fx: LoadedFixture): Promise<string | null> {
+  if (!fx.firstStory) return null;
+  const made = await tryMutate(page, {
+    op: "insertNote",
+    args: { storyId: fx.firstStory.selfId, offset: 1, text: "Scratch note." },
+  });
+  if (!made.ok) return null;
+  return page.evaluate(async () => {
+    const c = (
+      globalThis as unknown as {
+        __canvas: {
+          client: { collection: (n: string) => Promise<Array<{ id: string }>> };
+        };
+      }
+    ).__canvas;
+    const notes = await c.client.collection("notes");
+    return notes[notes.length - 1]?.id ?? null;
+  });
+}
+
+/** A scratch endnote on the story's second character (insertEndnote,
+ *  classified above; the first one makes the endnote story on a new
+ *  page); its `id` off the endnotes collection, whose rows carry `id`. */
+async function scratchEndnote(page: Page, fx: LoadedFixture): Promise<string | null> {
+  if (!fx.firstStory) return null;
+  const ids = () =>
+    page.evaluate(async () => {
+      const c = (
+        globalThis as unknown as {
+          __canvas: {
+            client: { collection: (n: string) => Promise<Array<{ id: string }>> };
+          };
+        }
+      ).__canvas;
+      return (await c.client.collection("endnotes")).map((e) => e.id);
+    });
+  const before = new Set(await ids());
+  const made = await tryMutate(page, {
+    op: "insertEndnote",
+    args: { storyId: fx.firstStory.selfId, offset: 1, text: "Scratch endnote." },
+  });
+  if (!made.ok) return null;
+  return (await ids()).find((id) => !before.has(id)) ?? null;
+}
+
+/** The navigation fixture's first bookmark, off the bookmarks collection. */
+async function firstBookmarkId(page: Page): Promise<string | null> {
+  return (await collectionIds(page, "bookmarks")).values().next().value ?? null;
+}
+
+async function firstLayerId(page: Page): Promise<string | null> {
+  return page.evaluate(async () => {
+    const c = (
+      globalThis as unknown as {
+        __canvas: {
+          client: { layers: () => Promise<Array<{ selfId: string }>> };
+        };
+      }
+    ).__canvas;
+    const layers = await c.client.layers();
+    return layers[0]?.selfId ?? null;
+  });
+}
+
+const RGB_SPEC = (selfId: string | null, name: string) => ({
+  selfId,
+  name,
+  space: "RGB",
+  value: [10, 120, 220],
+  model: "Process",
+  alternateSpace: null,
+  alternateValue: [],
+  tint: null,
+  alpha: null,
+});
+
+/** Create a scratch swatch; return its id (or null if create failed). */
+async function newSwatch(page: Page): Promise<string | null> {
+  const r = await tryMutate(page, {
+    op: "createSwatch",
+    args: { spec: RGB_SPEC(null, "scratch swatch") },
+  });
+  return r.ok ? lastCollectionId(page, "swatches") : null;
+}
+
+/** Create a scratch gradient (referencing any existing swatch). */
+async function newGradient(page: Page): Promise<string | null> {
+  const sw = await lastCollectionId(page, "swatches");
+  if (!sw) return null;
+  const r = await tryMutate(page, {
+    op: "createGradient",
+    args: {
+      spec: {
+        selfId: null,
+        name: "scratch gradient",
+        kind: "Linear",
+        stops: [
+          { stopColor: sw, locationPct: 0, midpointPct: null },
+          { stopColor: sw, locationPct: 100, midpointPct: null },
+        ],
+      },
+    },
+  });
+  return r.ok ? lastCollectionId(page, "gradients") : null;
+}
+
+/** Insert a scratch layer; return its id (generated fixtures expose
+ *  no document layer, so set/move/remove probes target this). */
+async function newLayer(page: Page): Promise<string | null> {
+  const r = await tryMutate(page, {
+    op: "layerInsert",
+    args: { position: 0, name: "scratch layer" },
+  });
+  return r.ok ? firstLayerId(page) : null;
+}
+
+/** Create a scratch spot swatch (registers a spot ink); return the
+ *  first ink's id, or null if the engine doesn't surface one. */
+async function newSpotInk(page: Page): Promise<string | null> {
+  const r = await tryMutate(page, {
+    op: "createSwatch",
+    args: {
+      spec: {
+        selfId: null,
+        name: "PANTONE probe",
+        space: "CMYK",
+        value: [0, 100, 100, 0],
+        model: "Spot",
+        alternateSpace: "CMYK",
+        alternateValue: [0, 100, 100, 0],
+        tint: null,
+        alpha: null,
+      },
+    },
+  });
+  if (!r.ok) return null;
+  return page.evaluate(async () => {
+    const c = (
+      globalThis as unknown as {
+        __canvas: {
+          client: {
+            collection: (n: string) => Promise<Array<{ selfId: string }>>;
+          };
+        };
+      }
+    ).__canvas;
+    try {
+      // InkSummary keys the spot colour as `spotId`, not `selfId`.
+      const inks = (await c.client.collection("inks")) as unknown as Array<{
+        spotId: string;
+      }>;
+      return inks[inks.length - 1]?.spotId ?? null;
+    } catch {
+      return null;
+    }
+  });
+}
+
+async function newColorGroup(page: Page): Promise<string | null> {
+  const r = await tryMutate(page, {
+    op: "createColorGroup",
+    args: { spec: { selfId: null, name: "scratch group", members: [] } },
+  });
+  return r.ok ? lastCollectionId(page, "colorGroups") : null;
+}
+
+// W1.22 — scratch NumberingList for the edit / delete probes.
+async function newNumberingList(page: Page): Promise<string | null> {
+  const r = await tryMutate(page, {
+    op: "createNumberingList",
+    args: {
+      spec: {
+        selfId: null,
+        name: "scratch list",
+        continueAcrossStories: false,
+        continueAcrossDocuments: false,
+      },
+    },
+  });
+  return r.ok ? lastCollectionId(page, "numberingLists") : null;
+}
+
+const STYLE_COLLECTION: Record<string, string> = {
+  Paragraph: "paragraphStyles",
+  Character: "characterStyles",
+  Object: "objectStyles",
+  Cell: "cellStyles",
+  Table: "tableStyles",
+};
+
+async function newStyle(page: Page, kind: string): Promise<string | null> {
+  const r = await tryMutate(page, {
+    op: `create${kind}Style`,
+    args: { name: `scratch ${kind.toLowerCase()}` },
+  });
+  return r.ok ? lastCollectionId(page, STYLE_COLLECTION[kind]) : null;
+}
+
+/** Valid one-loose-colour ASE ("P", RGB 0.5/0.5/0.5, process) — the
+ *  byte layout `paged_color::ase::write_ase` emits. An EMPTY ASE
+ *  yields zero ops and the import translates to `None` (→ falsely
+ *  "unsupported"); one real swatch exercises the supported path. */
+function oneColorAseBytes(): number[] {
+  return [
+    0x41,
+    0x53,
+    0x45,
+    0x46, // "ASEF"
+    0x00,
+    0x01,
+    0x00,
+    0x00, // version 1.0
+    0x00,
+    0x00,
+    0x00,
+    0x01, // 1 block
+    0x00,
+    0x01, // block type: colour
+    0x00,
+    0x00,
+    0x00,
+    0x18, // block length = 24
+    0x00,
+    0x02, // name length 2 (incl. null)
+    0x00,
+    0x50,
+    0x00,
+    0x00, // "P\0" UTF-16BE
+    0x52,
+    0x47,
+    0x42,
+    0x20, // "RGB "
+    0x3f,
+    0x00,
+    0x00,
+    0x00, // 0.5
+    0x3f,
+    0x00,
+    0x00,
+    0x00, // 0.5
+    0x3f,
+    0x00,
+    0x00,
+    0x00, // 0.5
+    0x00,
+    0x02, // colour type: process
+  ];
+}
+
+const ANCHOR = (x: number, y: number) => ({
+  anchor: [x, y] as [number, number],
+  left: [x, y] as [number, number],
+  right: [x, y] as [number, number],
+});
+
+/** Insert a scratch 4-anchor path on a page; return its created
+ *  ElementId. Path-point ops need a real path node — the generated
+ *  geometry fixture exposes only rectangles, which the point resolver
+ *  rejects ("node not found"). `dx`/`dy` shift the quad (two calls
+ *  give the OVERLAPPING pair the planar pathfinder verbs need);
+ *  `open: true` leaves the subpath open (closePath / joinPaths). */
+async function newPath(
+  page: Page,
+  pageId: string,
+  dx = 0,
+  dy = 0,
+  open = false,
+): Promise<{ kind: string; id: string } | null> {
+  return page.evaluate(
+    async ({ pid, dx, dy, open }) => {
+      const c = (
+        globalThis as unknown as {
+          __canvas: {
+            client: {
+              mutate: (m: unknown) => Promise<{
+                kind: string;
+                payload?: { createdId?: { kind: string; id: string } | null };
+              }>;
+            };
+          };
+        }
+      ).__canvas;
+      const a = (x: number, y: number) => ({
+        anchor: [x, y],
+        left: [x, y],
+        right: [x, y],
+      });
+      const reply = await c.client.mutate({
+        op: "insertPath",
+        args: {
+          pageId: pid,
+          anchors: [
+            a(20 + dx, 20 + dy),
+            a(120 + dx, 20 + dy),
+            a(120 + dx, 120 + dy),
+            a(20 + dx, 120 + dy),
+          ],
+          open,
+        },
+      });
+      return reply.kind === "mutationApplied"
+        ? (reply.payload?.createdId ?? null)
+        : null;
+    },
+    { pid: pageId, dx, dy, open },
+  );
+}
+
+/** Insert one scratch frame per bounds; return the created ElementIds
+ *  (null if any insert failed). ONE setup undo per frame. */
+async function newFrames(
+  page: Page,
+  pageId: string,
+  boundsList: Array<[number, number, number, number]>,
+): Promise<Array<{ kind: string; id: string }> | null> {
+  return page.evaluate(
+    async ({ pid, boundsList }) => {
+      const c = (
+        globalThis as unknown as {
+          __canvas: {
+            client: {
+              mutate: (m: unknown) => Promise<{
+                kind: string;
+                payload?: { createdId?: { kind: string; id: string } | null };
+              }>;
+            };
+          };
+        }
+      ).__canvas;
+      const out: Array<{ kind: string; id: string }> = [];
+      for (const bounds of boundsList) {
+        const reply = await c.client.mutate({
+          op: "insertFrame",
+          args: { pageId: pid, bounds },
+        });
+        const created =
+          reply.kind === "mutationApplied"
+            ? (reply.payload?.createdId ?? null)
+            : null;
+        if (!created) return null;
+        out.push(created);
+      }
+      return out;
+    },
+    { pid: pageId, boundsList },
+  );
+}
+
+/** Mint a FRAMELESS story: insertTextFrame mints a story alongside the
+ *  frame (v-K1 fix), and deleting the frame leaves the story behind.
+ *  attachTextToPath REQUIRES this shape — the engine rejects a story
+ *  that already flows into a text frame ("a story belongs to exactly
+ *  one flow"). TWO setup undos (the insert + the delete). */
+async function newFramelessStory(
+  page: Page,
+  pageId: string,
+): Promise<string | null> {
+  return page.evaluate(async (pid) => {
+    const c = (
+      globalThis as unknown as {
+        __canvas: {
+          client: {
+            mutate: (m: unknown) => Promise<{
+              kind: string;
+              payload?: { createdId?: { kind: string; id: string } | null };
+            }>;
+            collection: (n: string) => Promise<Array<{ selfId: string }>>;
+          };
+        };
+      }
+    ).__canvas;
+    const before = new Set(
+      (await c.client.collection("stories")).map((s) => s.selfId),
+    );
+    const reply = await c.client.mutate({
+      op: "insertTextFrame",
+      args: { pageId: pid, bounds: [200, 200, 320, 260] },
+    });
+    if (reply.kind !== "mutationApplied") return null;
+    const frameId = reply.payload?.createdId?.id ?? null;
+    if (!frameId) return null;
+    const minted = (await c.client.collection("stories")).find(
+      (s) => !before.has(s.selfId),
+    );
+    if (!minted) return null;
+    const del = await c.client.mutate({
+      op: "deleteFrame",
+      args: { frameId },
+    });
+    return del.kind === "mutationApplied" ? minted.selfId : null;
+  }, pageId);
+}
+
+/** A real 70-byte 1×1 RGBA PNG (signature + IHDR + IDAT + IEND, CRCs
+ *  valid) — replaceImageBytes DECODES the payload, so a stub signature
+ *  would classify the decoder, not the op. */
+const PNG_1X1: number[] = [
+  137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0,
+  0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 13, 73, 68, 65, 84, 120,
+  156, 99, 144, 155, 240, 255, 63, 0, 5, 42, 2, 173, 139, 172, 239, 108, 0, 0,
+  0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+];
+
+/** Sweep the loaded fixture's first page for a table cell, returning
+ *  `{ storyId, tableId, row, col }` from `HitResult.tableContext` — the
+ *  table ops address the cell by story + table id + index. Null when no
+ *  cell is found (the fixture carries no table). */
+async function firstTableCell(
+  page: Page,
+  pageId: string,
+  widthPt: number,
+  heightPt: number,
+): Promise<{
+  storyId: string;
+  tableId: string;
+  row: number;
+  col: number;
+} | null> {
+  return page.evaluate(
+    async ({ pageId, widthPt, heightPt }) => {
+      const c = (
+        globalThis as unknown as {
+          __canvas: {
+            client: {
+              send: (m: unknown) => Promise<{
+                kind: string;
+                payload?: {
+                  storyId?: string | null;
+                  tableContext?: {
+                    tableId: string;
+                    row: number;
+                    col: number;
+                  } | null;
+                };
+              }>;
+            };
+          };
+        }
+      ).__canvas;
+      for (let gy = 0.04; gy < 0.97; gy += 0.04) {
+        for (let gx = 0.04; gx < 0.97; gx += 0.04) {
+          const reply = await c.client.send({
+            kind: "hitTest",
+            payload: {
+              pageId,
+              docPoint: [widthPt * gx, heightPt * gy],
+              filter: "any",
+            },
+          });
+          const p = reply.payload;
+          if (reply.kind === "hitResult" && p?.tableContext && p.storyId) {
+            return {
+              storyId: p.storyId,
+              tableId: p.tableContext.tableId,
+              row: p.tableContext.row,
+              col: p.tableContext.col,
+            };
+          }
+        }
+      }
+      return null;
+    },
+    { pageId, widthPt, heightPt },
+  );
+}
+
+/** A probe: build the mutation (null = prerequisites missing → skip).
+ *  setupUndo = undo steps to ALWAYS apply afterward (cleans up
+ *  whatever build() created); undo = ADDITIONAL steps on success (the
+ *  probe op's own reversal, default 1). */
+interface Probe {
+  op: string;
+  build: (ctx: Ctx) => Promise<unknown | null>;
+  setupUndo?: number;
+  undo?: number;
+}
+
+// ── probes on the `text` fixture ────────────────────────────────
+const TEXT_PROBES: Probe[] = [
+  {
+    op: "insertText",
+    build: async ({ fx }) =>
+      fx.firstStory
+        ? {
+            op: "insertText",
+            args: { storyId: fx.firstStory.selfId, offset: 0, text: "X" },
+          }
+        : null,
+  },
+  {
+    op: "deleteRange",
+    build: async ({ fx }) =>
+      fx.firstStory && fx.firstStory.characterCount > 1
+        ? {
+            op: "deleteRange",
+            args: { storyId: fx.firstStory.selfId, start: 0, end: 1 },
+          }
+        : null,
+  },
+  {
+    op: "applyStyle",
+    build: async ({ page, fx }) => {
+      // v28 shape: a named style ref + scope (range attributes go
+      // through setElementProperty / the splitters instead).
+      const style = await lastCollectionId(page, "paragraphStyles");
+      return fx.firstStory && style
+        ? {
+            op: "applyStyle",
+            args: {
+              storyId: fx.firstStory.selfId,
+              start: 0,
+              end: 1,
+              style,
+              scope: "paragraph",
+            },
+          }
+        : null;
+    },
+  },
+  {
+    op: "insertField",
+    build: async ({ fx }) =>
+      fx.firstStory
+        ? {
+            op: "insertField",
+            args: {
+              storyId: fx.firstStory.selfId,
+              offset: 0,
+              field: "pageNumber",
+            },
+          }
+        : null,
+  },
+  {
+    op: "moveFrame",
+    build: async ({ fx }) =>
+      fx.firstTextFrame
+        ? {
+            op: "moveFrame",
+            args: {
+              frameId: fx.firstTextFrame.id,
+              transform: [1, 0, 0, 1, 4, 4],
+            },
+          }
+        : null,
+  },
+  {
+    op: "resizeFrame",
+    build: async ({ fx }) =>
+      fx.firstTextFrame
+        ? {
+            op: "resizeFrame",
+            args: { frameId: fx.firstTextFrame.id, bounds: [0, 0, 180, 120] },
+          }
+        : null,
+  },
+  {
+    op: "linkFrames",
+    build: async ({ page, fx }) => {
+      // v28 semantics: `to` must be an EMPTY frame — insert a scratch
+      // text frame to thread into (setupUndo rolls it back).
+      const from = fx.frames.find((f) => f.ref.kind === "textFrame");
+      if (!from) return null;
+      const createdId = await page.evaluate(async (pageId) => {
+        const c = (
+          globalThis as unknown as {
+            __canvas: {
+              client: {
+                mutate: (x: unknown) => Promise<{
+                  kind: string;
+                  payload?: { createdId?: unknown };
+                }>;
+              };
+            };
+          }
+        ).__canvas;
+        // Threading requires an EMPTY TEXT frame target (v28
+        // insertTextFrame; a rectangle is not linkable).
+        const reply = await c.client.mutate({
+          op: "insertTextFrame",
+          args: { pageId, bounds: [400, 400, 520, 480] },
+        });
+        if (reply?.kind !== "mutationApplied") return null;
+        // createdId is an ElementId object ({kind, id}); the wire
+        // wants the bare id string.
+        const created = reply.payload?.createdId as
+          | { id?: string }
+          | string
+          | null
+          | undefined;
+        return typeof created === "string" ? created : (created?.id ?? null);
+      }, fx.pages[0].pageId);
+      return createdId
+        ? {
+            op: "linkFrames",
+            args: { from: from.ref.id, to: createdId },
+          }
+        : null;
+    },
+    setupUndo: 1, // the scratch frame
+  },
+  {
+    op: "unlinkFrames",
+    build: async ({ fx }) =>
+      fx.firstTextFrame
+        ? {
+            op: "unlinkFrames",
+            args: { frame: fx.firstTextFrame.id },
+          }
+        : null,
+  },
+  {
+    op: "insertPage",
+    build: async () => ({
+      op: "insertPage",
+      args: { afterPageId: null, masterId: null },
+    }),
+  },
+  {
+    op: "deletePage",
+    build: async ({ fx }) =>
+      fx.pageCount > 1
+        ? {
+            op: "deletePage",
+            args: { pageId: fx.pages[fx.pageCount - 1].pageId },
+          }
+        : null,
+  },
+  {
+    op: "resizePage",
+    build: async ({ fx }) => ({
+      op: "resizePage",
+      args: { pageId: fx.pages[0].pageId, bounds: [0, 0, 700, 900] },
+    }),
+  },
+  {
+    op: "insertFrame",
+    build: async ({ fx }) => ({
+      op: "insertFrame",
+      args: { pageId: fx.pages[0].pageId, bounds: [10, 10, 80, 80] },
+    }),
+  },
+  {
+    op: "deleteFrame",
+    build: async ({ fx }) => {
+      // Scratch frame so deletion is always legal and reversible.
+      const rect = fx.frames.find((f) => f.ref.kind === "rectangle");
+      const any = rect ?? fx.frames[fx.frames.length - 1];
+      return any ? { op: "deleteFrame", args: { frameId: any.ref.id } } : null;
+    },
+  },
+  {
+    op: "insertLine",
+    build: async ({ fx }) => ({
+      op: "insertLine",
+      args: { pageId: fx.pages[0].pageId, start: [10, 10], end: [120, 120] },
+    }),
+  },
+  {
+    op: "insertPath",
+    build: async ({ fx }) => ({
+      op: "insertPath",
+      args: {
+        pageId: fx.pages[0].pageId,
+        anchors: [ANCHOR(20, 20), ANCHOR(120, 30), ANCHOR(70, 120)],
+        open: false,
+      },
+    }),
+  },
+  {
+    op: "setDocumentDefaults",
+    build: async () => ({
+      op: "setDocumentDefaults",
+      args: { fillColor: null, strokeColor: null, strokeWeight: 2 },
+    }),
+  },
+  {
+    op: "setColorSettings",
+    build: async () => ({
+      op: "setColorSettings",
+      args: { cmykProfileName: null, rgbPolicy: null, intent: null, bpc: true },
+    }),
+  },
+  {
+    op: "setProofSetup",
+    build: async () => ({
+      op: "setProofSetup",
+      args: { profileName: null, intent: null },
+    }),
+  },
+  {
+    op: "importSwatchLibrary",
+    build: async () => ({
+      op: "importSwatchLibrary",
+      args: { bytes: oneColorAseBytes(), groupName: "probe" },
+    }),
+  },
+  {
+    op: "setInkSetting",
+    build: async ({ page }) => {
+      const spotId = await newSpotInk(page);
+      return spotId
+        ? { op: "setInkSetting", args: { spotId, convertToProcess: true } }
+        : null;
+    },
+    setupUndo: 1, // the scratch spot swatch
+  },
+  {
+    op: "setUseStandardLabForSpots",
+    build: async () => ({
+      op: "setUseStandardLabForSpots",
+      args: { enabled: true },
+    }),
+  },
+  {
+    op: "batch",
+    build: async ({ fx }) =>
+      fx.firstTextFrame
+        ? {
+            op: "batch",
+            args: {
+              ops: [
+                {
+                  op: "setElementProperty",
+                  args: {
+                    elementId: fx.firstTextFrame,
+                    path: "frameOpacity",
+                    value: { type: "length", value: 70 },
+                  },
+                },
+              ],
+            },
+          }
+        : null,
+  },
+  {
+    op: "setElementProperty",
+    build: async ({ fx }) =>
+      fx.firstTextFrame
+        ? {
+            op: "setElementProperty",
+            args: {
+              elementId: fx.firstTextFrame,
+              path: "frameOpacity",
+              value: { type: "length", value: 55 },
+            },
+          }
+        : null,
+  },
+  // ── layers (each set/move/remove targets a scratch layer, since
+  //    generated fixtures report no document layer) ───────────────
+  {
+    op: "layerInsert",
+    build: async () => ({
+      op: "layerInsert",
+      args: { position: 0, name: "probe layer" },
+    }),
+  },
+  {
+    op: "layerSetVisible",
+    build: async ({ page }) => {
+      const id = await newLayer(page);
+      return id
+        ? { op: "layerSetVisible", args: { layerId: id, visible: false } }
+        : null;
+    },
+    setupUndo: 1,
+  },
+  {
+    op: "layerSetLocked",
+    build: async ({ page }) => {
+      const id = await newLayer(page);
+      return id
+        ? { op: "layerSetLocked", args: { layerId: id, locked: true } }
+        : null;
+    },
+    setupUndo: 1,
+  },
+  {
+    op: "layerSetPrintable",
+    build: async ({ page }) => {
+      const id = await newLayer(page);
+      return id
+        ? { op: "layerSetPrintable", args: { layerId: id, printable: false } }
+        : null;
+    },
+    setupUndo: 1,
+  },
+  {
+    op: "layerSetName",
+    build: async ({ page }) => {
+      const id = await newLayer(page);
+      return id
+        ? { op: "layerSetName", args: { layerId: id, name: "probe renamed" } }
+        : null;
+    },
+    setupUndo: 1,
+  },
+  {
+    op: "layerMove",
+    build: async ({ page }) => {
+      const id = await newLayer(page);
+      return id
+        ? { op: "layerMove", args: { layerId: id, newIndex: 0 } }
+        : null;
+    },
+    setupUndo: 1,
+  },
+  {
+    op: "layerRemove",
+    build: async ({ page }) => {
+      const id = await newLayer(page);
+      return id ? { op: "layerRemove", args: { layerId: id } } : null;
+    },
+    setupUndo: 1, // the scratch layerInsert (undone alongside on success)
+  },
+  // ── colour resources ──────────────────────────────────────────
+  {
+    op: "createSwatch",
+    build: async () => ({
+      op: "createSwatch",
+      args: { spec: RGB_SPEC(null, "probe swatch") },
+    }),
+  },
+  {
+    op: "editSwatch",
+    build: async ({ page }) => {
+      const id = await newSwatch(page);
+      return id
+        ? {
+            op: "editSwatch",
+            args: { swatchId: id, spec: RGB_SPEC(id, "probe swatch 2") },
+          }
+        : null;
+    },
+    setupUndo: 1,
+  },
+  {
+    op: "deleteSwatch",
+    build: async ({ page }) => {
+      const id = await newSwatch(page);
+      return id ? { op: "deleteSwatch", args: { swatchId: id } } : null;
+    },
+    setupUndo: 1,
+  },
+  {
+    op: "createGradient",
+    build: async ({ page }) => {
+      const sw = await lastCollectionId(page, "swatches");
+      return sw
+        ? {
+            op: "createGradient",
+            args: {
+              spec: {
+                selfId: null,
+                name: "probe gradient",
+                kind: "Linear",
+                stops: [
+                  { stopColor: sw, locationPct: 0, midpointPct: null },
+                  { stopColor: sw, locationPct: 100, midpointPct: null },
+                ],
+              },
+            },
+          }
+        : null;
+    },
+  },
+  {
+    op: "editGradient",
+    build: async ({ page }) => {
+      const id = await newGradient(page);
+      const sw = await lastCollectionId(page, "swatches");
+      return id && sw
+        ? {
+            op: "editGradient",
+            args: {
+              gradientId: id,
+              spec: {
+                selfId: id,
+                name: "probe gradient 2",
+                kind: "Radial",
+                stops: [
+                  { stopColor: sw, locationPct: 0, midpointPct: null },
+                  { stopColor: sw, locationPct: 100, midpointPct: null },
+                ],
+              },
+            },
+          }
+        : null;
+    },
+    setupUndo: 1,
+  },
+  {
+    op: "deleteGradient",
+    build: async ({ page }) => {
+      const id = await newGradient(page);
+      return id ? { op: "deleteGradient", args: { gradientId: id } } : null;
+    },
+    setupUndo: 1,
+  },
+  {
+    op: "createColorGroup",
+    build: async () => ({
+      op: "createColorGroup",
+      args: { spec: { selfId: null, name: "probe group", members: [] } },
+    }),
+  },
+  {
+    op: "editColorGroup",
+    build: async ({ page }) => {
+      const id = await newColorGroup(page);
+      return id
+        ? {
+            op: "editColorGroup",
+            args: {
+              groupId: id,
+              spec: { selfId: id, name: "probe group 2", members: [] },
+            },
+          }
+        : null;
+    },
+    setupUndo: 1,
+  },
+  {
+    op: "deleteColorGroup",
+    build: async ({ page }) => {
+      const id = await newColorGroup(page);
+      return id ? { op: "deleteColorGroup", args: { groupId: id } } : null;
+    },
+    setupUndo: 1,
+  },
+  // ── numbering lists ×3 (W1.22, create / edit / delete) ──────────
+  {
+    op: "createNumberingList",
+    build: async () => ({
+      op: "createNumberingList",
+      args: {
+        spec: {
+          selfId: null,
+          name: "probe list",
+          continueAcrossStories: false,
+          continueAcrossDocuments: false,
+        },
+      },
+    }),
+  },
+  {
+    op: "editNumberingList",
+    build: async ({ page }) => {
+      const id = await newNumberingList(page);
+      return id
+        ? {
+            op: "editNumberingList",
+            args: {
+              listId: id,
+              spec: {
+                selfId: id,
+                name: "probe list 2",
+                continueAcrossStories: true,
+                continueAcrossDocuments: false,
+              },
+            },
+          }
+        : null;
+    },
+    setupUndo: 1,
+  },
+  {
+    op: "deleteNumberingList",
+    build: async ({ page }) => {
+      const id = await newNumberingList(page);
+      return id ? { op: "deleteNumberingList", args: { listId: id } } : null;
+    },
+    setupUndo: 1,
+  },
+  // ── styles ×5 (create / rename / delete, each self-contained) ──
+  ...(["Paragraph", "Character", "Object", "Cell", "Table"] as const).flatMap(
+    (kind): Probe[] => [
+      {
+        op: `create${kind}Style`,
+        build: async () => ({
+          op: `create${kind}Style`,
+          args: { name: `probe ${kind.toLowerCase()} style` },
+        }),
+      },
+      {
+        op: `rename${kind}Style`,
+        build: async ({ page }) => {
+          const id = await newStyle(page, kind);
+          return id
+            ? {
+                op: `rename${kind}Style`,
+                args: { styleId: id, name: "probe renamed" },
+              }
+            : null;
+        },
+        setupUndo: 1,
+      },
+      {
+        op: `delete${kind}Style`,
+        build: async ({ page }) => {
+          const id = await newStyle(page, kind);
+          return id
+            ? { op: `delete${kind}Style`, args: { styleId: id } }
+            : null;
+        },
+        setupUndo: 1,
+      },
+    ],
+  ),
+  {
+    op: "setStyleProperty",
+    build: async ({ page }) => {
+      const id = await newStyle(page, "Paragraph");
+      return id
+        ? {
+            op: "setStyleProperty",
+            args: {
+              collection: "paragraph",
+              styleId: id,
+              path: "characterFontSize",
+              value: { type: "length", value: 13 },
+            },
+          }
+        : null;
+    },
+    setupUndo: 1,
+  },
+  // ── the v62 re-capture: story-addressed doors the table had never
+  //    heard of (the 94→117 drift; args from the generated .d.ts +
+  //    the real consumers — showcase 11-tables, plugin-doc, D-01) ────
+  {
+    op: "insertTable",
+    // v37+ standalone door (the v40-era note in capabilities.ts about
+    // table-create riding a NodeSpec is history): a table lands INSIDE
+    // a story — the showcase inserts into a poured frame's story via
+    // this exact shape. Mints a STRUCTURED ElementId::Table.
+    build: async ({ fx }) =>
+      fx.firstStory
+        ? {
+            op: "insertTable",
+            args: { storyId: fx.firstStory.selfId, rows: 2, cols: 2 },
+          }
+        : null,
+  },
+  {
+    op: "deleteTable",
+    // proto 66 (the sheet campaign, core f3bfefe / de297f5) — removes a
+    // whole table from its story by `{storyId, tableId}`; the removal is
+    // captured whole, so one undo restores every cell. The probe deletes
+    // a table it mints first with `insertTable` (the minted id is the
+    // STRUCTURED ElementId::Table), so the fixture's own text is never
+    // the thing removed.
+    build: async ({ page, fx }) => {
+      if (!fx.firstStory) return null;
+      const tableId = await page.evaluate(async (storyId) => {
+        const c = (
+          globalThis as unknown as {
+            __canvas: {
+              client: {
+                mutate: (m: unknown) => Promise<{
+                  kind: string;
+                  payload?: {
+                    createdId?: {
+                      kind: string;
+                      id: { story_id: string; table_id: string } | string;
+                    } | null;
+                  };
+                }>;
+              };
+            };
+          }
+        ).__canvas;
+        const r = await c.client.mutate({
+          op: "insertTable",
+          args: { storyId, rows: 2, cols: 2 },
+        });
+        const created = r.kind === "mutationApplied" ? r.payload?.createdId : null;
+        return created && created.kind === "table" && typeof created.id === "object"
+          ? created.id.table_id
+          : null;
+      }, fx.firstStory.selfId);
+      return tableId
+        ? {
+            op: "deleteTable",
+            args: { storyId: fx.firstStory.selfId, tableId },
+          }
+        : null;
+    },
+    setupUndo: 1, // the scratch insertTable
+  },
+  {
+    op: "insertAnchoredFrame",
+    // proto 52 (plugin-doc's inline-image door) — anchors a w×h frame
+    // at a story offset; `imageUri` optional (null = plain frame).
+    build: async ({ fx }) =>
+      fx.firstStory
+        ? {
+            op: "insertAnchoredFrame",
+            args: {
+              storyId: fx.firstStory.selfId,
+              offset: 0,
+              width: 72,
+              height: 54,
+              imageUri: null,
+            },
+          }
+        : null,
+  },
+  {
+    op: "insertHyperlink",
+    // proto 53 (plugin-doc) — contiguous char offsets, like applyStyle.
+    build: async ({ fx }) =>
+      fx.firstStory && fx.firstStory.characterCount > 1
+        ? {
+            op: "insertHyperlink",
+            args: {
+              storyId: fx.firstStory.selfId,
+              start: 0,
+              end: 1,
+              url: "https://paged.media/probe",
+            },
+          }
+        : null,
+  },
+  // v73 in core 0.71.13 (ADRs 163–164): footnotes and hyperlink edits
+  // over the wire. The editor has no UI of its own for any of them; the
+  // paged.* script functions, the wire and the generic core-command
+  // picker reach them.
+  {
+    op: "insertFootnote",
+    // ADR 163 — the reference at a contiguous char offset, the note's
+    // text after its number and separator.
+    build: async ({ fx }) =>
+      fx.firstStory
+        ? {
+            op: "insertFootnote",
+            args: { storyId: fx.firstStory.selfId, offset: 1, text: "Probe note." },
+          }
+        : null,
+  },
+  {
+    op: "deleteFootnote",
+    // Deletes a scratch footnote this probe inserts first, addressed by
+    // the note's id off the footnotes collection.
+    build: async ({ page, fx }) => {
+      if (!fx.firstStory) return null;
+      const before = await collectionIds(page, "footnotes");
+      const made = await tryMutate(page, {
+        op: "insertFootnote",
+        args: { storyId: fx.firstStory.selfId, offset: 1, text: "Scratch." },
+      });
+      if (!made.ok) return null;
+      const footnoteId = await newCollectionId(page, "footnotes", before);
+      return footnoteId
+        ? { op: "deleteFootnote", args: { storyId: fx.firstStory.selfId, footnoteId } }
+        : null;
+    },
+    setupUndo: 1, // the scratch insertFootnote
+  },
+  {
+    op: "deleteHyperlink",
+    // ADR 164 — by the Hyperlink's Self id; a scratch link made first.
+    build: async ({ page, fx }) => {
+      const hyperlinkId = await scratchHyperlink(page, fx);
+      return hyperlinkId ? { op: "deleteHyperlink", args: { hyperlinkId } } : null;
+    },
+    setupUndo: 1, // the scratch insertHyperlink
+  },
+  {
+    op: "editHyperlink",
+    // ADR 164 — rename and re-point a scratch link.
+    build: async ({ page, fx }) => {
+      const hyperlinkId = await scratchHyperlink(page, fx);
+      return hyperlinkId
+        ? {
+            op: "editHyperlink",
+            args: { hyperlinkId, name: "Probe link", url: "https://paged.media/probe-edited" },
+          }
+        : null;
+    },
+    setupUndo: 1, // the scratch insertHyperlink
+  },
+  // protocol 72 in core 0.72.0 (ADRs 168, 172): Generate Index and the
+  // editorial-note ops. No editor UI of its own yet.
+  {
+    op: "generateIndex",
+    // ADR 168 — the index replaces the story's text (a title only when the
+    // fixture has no topics).
+    build: async ({ fx }) =>
+      fx.firstStory ? { op: "generateIndex", args: { storyId: fx.firstStory.selfId } } : null,
+  },
+  {
+    op: "insertNote",
+    // ADR 172 — a note is one character of the text that prints nothing.
+    build: async ({ fx }) =>
+      fx.firstStory
+        ? {
+            op: "insertNote",
+            args: { storyId: fx.firstStory.selfId, offset: 1, text: "Probe note." },
+          }
+        : null,
+  },
+  {
+    op: "editNote",
+    build: async ({ page, fx }) => {
+      const noteId = await scratchNote(page, fx);
+      return noteId ? { op: "editNote", args: { noteId, text: "Edited." } } : null;
+    },
+    setupUndo: 1, // the scratch insertNote
+  },
+  {
+    op: "deleteNote",
+    build: async ({ page, fx }) => {
+      const noteId = await scratchNote(page, fx);
+      return noteId ? { op: "deleteNote", args: { noteId } } : null;
+    },
+    setupUndo: 1, // the scratch insertNote
+  },
+  {
+    op: "convertNoteToText",
+    build: async ({ page, fx }) => {
+      const noteId = await scratchNote(page, fx);
+      return noteId ? { op: "convertNoteToText", args: { noteId } } : null;
+    },
+    setupUndo: 1, // the scratch insertNote
+  },
+  // protocol 73 in core 0.73.0 (ADR 174): endnotes. No editor UI of its
+  // own yet.
+  {
+    op: "insertEndnote",
+    // ADR 174 — the reference at a story offset; the first endnote of a
+    // document also makes the endnote story on a page of its own.
+    build: async ({ fx }) =>
+      fx.firstStory
+        ? {
+            op: "insertEndnote",
+            args: { storyId: fx.firstStory.selfId, offset: 1, text: "Probe endnote." },
+          }
+        : null,
+  },
+  {
+    op: "deleteEndnote",
+    build: async ({ page, fx }) => {
+      const endnoteId = await scratchEndnote(page, fx);
+      return endnoteId ? { op: "deleteEndnote", args: { endnoteId } } : null;
+    },
+    setupUndo: 1, // the scratch insertEndnote
+  },
+  {
+    op: "convertFootnoteToEndnote",
+    // A scratch footnote first, by its id off the footnotes collection.
+    build: async ({ page, fx }) => {
+      if (!fx.firstStory) return null;
+      const before = await collectionIds(page, "footnotes");
+      const made = await tryMutate(page, {
+        op: "insertFootnote",
+        args: { storyId: fx.firstStory.selfId, offset: 1, text: "Scratch." },
+      });
+      if (!made.ok) return null;
+      const footnoteId = await newCollectionId(page, "footnotes", before);
+      return footnoteId
+        ? {
+            op: "convertFootnoteToEndnote",
+            args: { storyId: fx.firstStory.selfId, footnoteId },
+          }
+        : null;
+    },
+    setupUndo: 1, // the scratch insertFootnote
+  },
+  {
+    op: "setFlowGrowRule",
+    // proto 64 (plugin-doc's standalone open, ADR 026/029) — the story's
+    // frame chain grows generated pages while it oversets. maxPages null
+    // = unbounded; copyFrameOptions keeps the last frame's options.
+    build: async ({ fx }) =>
+      fx.firstStory
+        ? {
+            op: "setFlowGrowRule",
+            args: {
+              storyId: fx.firstStory.selfId,
+              grow: true,
+              maxPages: null,
+              copyFrameOptions: true,
+            },
+          }
+        : null,
+  },
+  {
+    op: "setFieldValue",
+    // v43 (D-01) — re-resolves a placeholder FIELD's cached display,
+    // and the fixture carries none: insert one, then address it at the
+    // ENUMERATED offset (insert → enumerate → re-resolve, the
+    // placeholder_wire.rs sequence).
+    build: async ({ page, fx }) => {
+      if (!fx.firstStory) return null;
+      const made = await tryMutate(page, {
+        op: "insertField",
+        args: {
+          storyId: fx.firstStory.selfId,
+          offset: 0,
+          field: { placeholder: { plugin: "media.paged.probe", key: "k" } },
+        },
+      });
+      if (!made.ok) return null;
+      const item = await page.evaluate(async () => {
+        const c = (
+          globalThis as unknown as {
+            __canvas: {
+              client: {
+                send: (m: unknown) => Promise<{
+                  kind: string;
+                  payload?: {
+                    items?: Array<{
+                      storyId: string;
+                      offset: number;
+                      plugin: string;
+                    }>;
+                  };
+                }>;
+              };
+            };
+          }
+        ).__canvas;
+        const reply = await c.client.send({
+          kind: "requestDocumentPlaceholders",
+        });
+        return (
+          reply.payload?.items?.find(
+            (i) => i.plugin === "media.paged.probe",
+          ) ?? null
+        );
+      });
+      return item
+        ? {
+            op: "setFieldValue",
+            args: {
+              storyId: item.storyId,
+              offset: item.offset,
+              value: "€ 9,99",
+            },
+          }
+        : null;
+    },
+    setupUndo: 1, // the scratch placeholder field
+  },
+];
+
+// ── probes on the `geometry` fixture (paths + boolean) ──────────
+// Path-point ops target a scratch path created per probe (setupUndo
+// undoes the insert on both paths) so the classification is the
+// engine's, never the fixture's shape inventory.
+const GEOMETRY_PROBES: Probe[] = [
+  {
+    op: "pathPointInsert",
+    build: async ({ page, fx }) => {
+      const t = await newPath(page, fx.pages[0].pageId);
+      return t
+        ? {
+            op: "pathPointInsert",
+            args: { elementId: t, index: 1, anchor: ANCHOR(30, 30) },
+          }
+        : null;
+    },
+    setupUndo: 1,
+  },
+  {
+    op: "pathPointRemove",
+    build: async ({ page, fx }) => {
+      const t = await newPath(page, fx.pages[0].pageId);
+      return t
+        ? { op: "pathPointRemove", args: { elementId: t, index: 0 } }
+        : null;
+    },
+    setupUndo: 1,
+  },
+  {
+    op: "pathPointCurveType",
+    build: async ({ page, fx }) => {
+      const t = await newPath(page, fx.pages[0].pageId);
+      return t
+        ? {
+            op: "pathPointCurveType",
+            args: { elementId: t, index: 0, smooth: true },
+          }
+        : null;
+    },
+    setupUndo: 1,
+  },
+  {
+    op: "pathPointSet",
+    build: async ({ page, fx }) => {
+      const t = await newPath(page, fx.pages[0].pageId);
+      return t
+        ? {
+            op: "pathPointSet",
+            args: {
+              elementId: t,
+              index: 0,
+              role: "anchor",
+              position: [15, 15],
+            },
+          }
+        : null;
+    },
+    setupUndo: 1,
+  },
+  {
+    op: "pathOpenAt",
+    build: async ({ page, fx }) => {
+      const t = await newPath(page, fx.pages[0].pageId);
+      return t ? { op: "pathOpenAt", args: { elementId: t, index: 0 } } : null;
+    },
+    setupUndo: 1,
+  },
+  // ── v30 kernel path ops (outline / offset / simplify) ───────────
+  // Each targets a scratch path created per probe (setupUndo undoes
+  // the insert on both paths) so the classification is the engine's.
+  {
+    op: "outlineStroke",
+    build: async ({ page, fx }) => {
+      const t = await newPath(page, fx.pages[0].pageId);
+      return t
+        ? {
+            op: "outlineStroke",
+            args: {
+              elementId: t,
+              width: 2,
+              cap: "butt",
+              join: "miter",
+              miterLimit: 4,
+            },
+          }
+        : null;
+    },
+    setupUndo: 1,
+  },
+  {
+    op: "offsetPath",
+    build: async ({ page, fx }) => {
+      const t = await newPath(page, fx.pages[0].pageId);
+      return t
+        ? {
+            op: "offsetPath",
+            args: { elementId: t, delta: 3, join: "miter", miterLimit: 4 },
+          }
+        : null;
+    },
+    setupUndo: 1,
+  },
+  {
+    op: "simplifyPath",
+    build: async ({ page, fx }) => {
+      const t = await newPath(page, fx.pages[0].pageId);
+      return t
+        ? { op: "simplifyPath", args: { elementId: t, tolerance: 1.5 } }
+        : null;
+    },
+    setupUndo: 1,
+  },
+  // ── group ops (v32) ───────────────────────────────────────────
+  {
+    op: "createGroup",
+    build: async ({ page, fx }) => {
+      const ids = await page.evaluate(async (pageId) => {
+        const c = (
+          globalThis as unknown as {
+            __canvas: {
+              client: {
+                mutate: (m: unknown) => Promise<{
+                  kind: string;
+                  payload?: {
+                    createdId?: { kind: string; id: string } | null;
+                  };
+                }>;
+              };
+            };
+          }
+        ).__canvas;
+        const a = await c.client.mutate({
+          op: "insertFrame",
+          args: { pageId, bounds: [10, 10, 60, 60] },
+        });
+        const b = await c.client.mutate({
+          op: "insertFrame",
+          args: { pageId, bounds: [70, 70, 120, 120] },
+        });
+        return { a: a.payload?.createdId, b: b.payload?.createdId };
+      }, fx.pages[0].pageId);
+      if (!ids.a || !ids.b) return null;
+      return { op: "createGroup", args: { memberIds: [ids.a, ids.b] } };
+    },
+    setupUndo: 2, // the two scratch insertFrame ops
+  },
+  {
+    op: "dissolveGroup",
+    build: async ({ page, fx }) => {
+      const groupId = await page.evaluate(async (pageId) => {
+        const c = (
+          globalThis as unknown as {
+            __canvas: {
+              client: {
+                mutate: (m: unknown) => Promise<{
+                  kind: string;
+                  payload?: {
+                    createdId?: { kind: string; id: string } | null;
+                  };
+                }>;
+              };
+            };
+          }
+        ).__canvas;
+        const a = await c.client.mutate({
+          op: "insertFrame",
+          args: { pageId, bounds: [10, 10, 60, 60] },
+        });
+        const b = await c.client.mutate({
+          op: "insertFrame",
+          args: { pageId, bounds: [70, 70, 120, 120] },
+        });
+        if (!a.payload?.createdId || !b.payload?.createdId) return null;
+        const g = await c.client.mutate({
+          op: "createGroup",
+          args: { memberIds: [a.payload.createdId, b.payload.createdId] },
+        });
+        return g.payload?.createdId?.id ?? null;
+      }, fx.pages[0].pageId);
+      if (!groupId) return null;
+      return { op: "dissolveGroup", args: { groupId } };
+    },
+    setupUndo: 3, // two inserts + the createGroup
+  },
+  // ── duplicateElements (v65, core d22bc31) ─────────────────────
+  // A whole clone of each element, directly above its source, moved by
+  // `offset` — paged.draw's Reflect ▸ Copy rides it. One scratch frame,
+  // duplicated; the probe's own undo removes the clone, the setup undo
+  // the frame.
+  {
+    op: "duplicateElements",
+    build: async ({ page, fx }) => {
+      const made = await newFrames(page, fx.pages[0].pageId, [
+        [10, 10, 60, 60],
+      ]);
+      return made
+        ? {
+            op: "duplicateElements",
+            args: { elementIds: made, offset: [12, 12] },
+          }
+        : null;
+    },
+    setupUndo: 1, // the scratch insertFrame
+  },
+  // ── group transform (v40 re-capture) ──────────────────────────
+  // setGroupTransform writes an affine onto an existing group — so
+  // build a scratch group first (two frames + createGroup, same as
+  // dissolveGroup), then transform it. The matrix [a b c d e f] here
+  // is a pure translate (identity 2×2 + a 12pt nudge); we only need
+  // the engine to ACCEPT + reverse the op, not assert geometry.
+  {
+    op: "setGroupTransform",
+    build: async ({ page, fx }) => {
+      const groupId = await page.evaluate(async (pageId) => {
+        const c = (
+          globalThis as unknown as {
+            __canvas: {
+              client: {
+                mutate: (m: unknown) => Promise<{
+                  kind: string;
+                  payload?: {
+                    createdId?: { kind: string; id: string } | null;
+                  };
+                }>;
+              };
+            };
+          }
+        ).__canvas;
+        const a = await c.client.mutate({
+          op: "insertFrame",
+          args: { pageId, bounds: [10, 10, 60, 60] },
+        });
+        const b = await c.client.mutate({
+          op: "insertFrame",
+          args: { pageId, bounds: [70, 70, 120, 120] },
+        });
+        if (!a.payload?.createdId || !b.payload?.createdId) return null;
+        const g = await c.client.mutate({
+          op: "createGroup",
+          args: { memberIds: [a.payload.createdId, b.payload.createdId] },
+        });
+        return g.payload?.createdId?.id ?? null;
+      }, fx.pages[0].pageId);
+      if (!groupId) return null;
+      return {
+        op: "setGroupTransform",
+        args: { groupId, transform: [1, 0, 0, 1, 12, 0] },
+      };
+    },
+    setupUndo: 3, // two inserts + the createGroup
+  },
+  // ── plugin-metadata carrier (v33) ─────────────────────────────
+  {
+    op: "setPluginMetadata",
+    build: async ({ page, fx }) => {
+      const t = await newPath(page, fx.pages[0].pageId);
+      return t
+        ? {
+            op: "setPluginMetadata",
+            args: {
+              elementId: t,
+              key: "x-paged:probe",
+              value: '{"v":1,"data":{}}',
+            },
+          }
+        : null;
+    },
+    setupUndo: 1,
+  },
+  {
+    op: "pathfinderBoolean",
+    build: async ({ page, fx }) => {
+      const ids = await page.evaluate(async (pageId) => {
+        const c = (
+          globalThis as unknown as {
+            __canvas: {
+              client: {
+                mutate: (m: unknown) => Promise<{
+                  payload?: { createdId?: { kind: string; id: string } };
+                }>;
+              };
+            };
+          }
+        ).__canvas;
+        const a = await c.client.mutate({
+          op: "insertFrame",
+          args: { pageId, bounds: [10, 10, 90, 90] },
+        });
+        const b = await c.client.mutate({
+          op: "insertFrame",
+          args: { pageId, bounds: [50, 50, 140, 140] },
+        });
+        return { a: a.payload?.createdId, b: b.payload?.createdId };
+      }, fx.pages[0].pageId);
+      if (!ids.a || !ids.b) return null;
+      return {
+        op: "pathfinderBoolean",
+        args: { kept: ids.a, others: [ids.b], kind: "union" },
+      };
+    },
+    setupUndo: 2, // the two scratch insertFrame ops
+  },
+  // ── v28 operations (W0.5 batch) ───────────────────────────────
+  {
+    op: "insertTextFrame",
+    build: async ({ fx }) => ({
+      op: "insertTextFrame",
+      args: { pageId: fx.pages[0].pageId, bounds: [30, 30, 140, 150] },
+    }),
+  },
+  {
+    op: "insertOval",
+    build: async ({ fx }) => ({
+      op: "insertOval",
+      args: { pageId: fx.pages[0].pageId, bounds: [20, 20, 120, 90] },
+    }),
+  },
+  {
+    op: "insertGuide",
+    build: async ({ page }) => {
+      const spreadId = await lastCollectionId(page, "spreads");
+      return spreadId
+        ? {
+            op: "insertGuide",
+            args: { spreadId, orientation: "horizontal", position: 100 },
+          }
+        : null;
+    },
+  },
+  {
+    op: "moveGuide",
+    build: async ({ page }) => {
+      // Guides are addressed positionally (Guide/<spread>/<index>);
+      // insert a scratch guide, then move index 0 on that spread.
+      const spreadId = await lastCollectionId(page, "spreads");
+      if (!spreadId) return null;
+      const made = await tryMutate(page, {
+        op: "insertGuide",
+        args: { spreadId, orientation: "vertical", position: 50 },
+      });
+      return made.ok
+        ? { op: "moveGuide", args: { guideId: `Guide/${spreadId}/0`, position: 80 } }
+        : null;
+    },
+    setupUndo: 1, // the scratch guide
+  },
+  {
+    op: "deleteGuide",
+    build: async ({ page }) => {
+      const spreadId = await lastCollectionId(page, "spreads");
+      if (!spreadId) return null;
+      const made = await tryMutate(page, {
+        op: "insertGuide",
+        args: { spreadId, orientation: "vertical", position: 60 },
+      });
+      return made.ok
+        ? { op: "deleteGuide", args: { guideId: `Guide/${spreadId}/0` } }
+        : null;
+    },
+    setupUndo: 1,
+  },
+  {
+    op: "applyMasterToPage",
+    build: async ({ fx }) => ({
+      // master:null = detach — exercises the op without needing a
+      // master spread in the fixture; undo restores the prior ref.
+      op: "applyMasterToPage",
+      args: { page: fx.pages[0].pageId, master: null },
+    }),
+  },
+  {
+    op: "duplicatePage",
+    build: async ({ fx }) => ({
+      op: "duplicatePage",
+      args: { page: fx.pages[0].pageId },
+    }),
+  },
+  // ── protocol 70 (core f6a8c56 — the presentation batch, ADR 129/130):
+  //    page order, page/document plugin labels, master CRUD and master
+  //    item edits. Shapes from canvas-wasm 0.70.0's generated .d.ts and
+  //    core's tests (master_crud.rs, on_master.rs, page_metadata.rs).
+  //    Master ids are the BARE MasterSpread self ids the `masterPages`
+  //    collection lists ("MasterSpread/<id>" is accepted too). ────────
+  {
+    op: "movePage",
+    // `after: null` = to the front; the inverse restores the order.
+    build: async ({ fx }) =>
+      fx.pageCount > 1
+        ? {
+            op: "movePage",
+            args: { page: fx.pages[fx.pageCount - 1].pageId, after: null },
+          }
+        : null,
+  },
+  {
+    op: "setPageMetadata",
+    // A page's plugin label — read back on the `pages` collection's
+    // `pluginMetadata`; gated by key namespace like item metadata.
+    build: async ({ fx }) => ({
+      op: "setPageMetadata",
+      args: {
+        page: fx.pages[0].pageId,
+        key: "x-paged:probe",
+        value: '{"v":1,"data":{}}',
+      },
+    }),
+  },
+  {
+    op: "setDocumentMetadata",
+    // The document-scoped plugin label (host.document.setDocumentMetadata).
+    build: async () => ({
+      op: "setDocumentMetadata",
+      args: { key: "x-paged:probe", value: '{"v":1,"data":{}}' },
+    }),
+  },
+  {
+    op: "createMaster",
+    // A fresh one-page master of a given size (no page applies it, so
+    // nothing repaints until applyMasterToPage); undo deletes it.
+    build: async () => ({
+      op: "createMaster",
+      args: { master: "uProbeCreate", name: "Probe", widthPt: 300, heightPt: 400 },
+    }),
+  },
+  {
+    op: "renameMaster",
+    // Renames a scratch master this probe creates first.
+    build: async ({ page }) => {
+      const made = await tryMutate(page, {
+        op: "createMaster",
+        args: { master: "uProbeRename", widthPt: 300, heightPt: 400 },
+      });
+      return made.ok
+        ? { op: "renameMaster", args: { master: "uProbeRename", name: "Renamed" } }
+        : null;
+    },
+    setupUndo: 1, // the scratch master
+  },
+  {
+    op: "deleteMaster",
+    // Refused while any page applies the master, so the probe deletes a
+    // scratch master no page uses; undo restores it exactly.
+    build: async ({ page }) => {
+      const made = await tryMutate(page, {
+        op: "createMaster",
+        args: { master: "uProbeDelete", widthPt: 300, heightPt: 400 },
+      });
+      return made.ok ? { op: "deleteMaster", args: { master: "uProbeDelete" } } : null;
+    },
+    setupUndo: 1,
+  },
+  {
+    op: "onMaster",
+    // Wraps an ordinary mutation so it lands on a master's spread (the
+    // master stands in as the document's only spread for the inner
+    // apply). Page/spread-list ops are refused inside it. The probe adds
+    // a guide to a scratch master — addressable by the master's own id,
+    // unlike an item insert, which would need the master page's id.
+    build: async ({ page }) => {
+      const made = await tryMutate(page, {
+        op: "createMaster",
+        args: { master: "uProbeOn", widthPt: 300, heightPt: 400 },
+      });
+      return made.ok
+        ? {
+            op: "onMaster",
+            args: {
+              master: "uProbeOn",
+              mutation: {
+                op: "insertGuide",
+                args: { spreadId: "uProbeOn", orientation: "vertical", position: 60 },
+              },
+            },
+          }
+        : null;
+    },
+    setupUndo: 1,
+  },
+  // ── protocol 71 (core v0.71 — the object model, ADR 131/132): one
+  //    address grammar and a typed Set, plus authored text variables.
+  //    Shapes from canvas-wasm 0.71.1's generated .d.ts; a text
+  //    variable's id is `dTextVariablen<name>` (core's own tests). ──────
+  {
+    op: "set",
+    // ADR 132's typed Set: an address, a schema path and a wire Value;
+    // the editor's object-model fields write through it.
+    build: async ({ fx }) =>
+      fx.firstStory
+        ? {
+            op: "set",
+            args: {
+              address: `storyRange:${fx.firstStory.selfId}@0..1`,
+              path: "paragraphSpaceBefore",
+              value: { type: "length", value: 6 },
+            },
+          }
+        : null,
+  },
+  {
+    op: "createTextVariable",
+    // A custom text variable (the Text Variables panel's New…).
+    build: async () => ({
+      op: "createTextVariable",
+      args: { name: "ProbeCreate", contents: "9.99" },
+    }),
+  },
+  {
+    op: "deleteTextVariable",
+    // Deletes a scratch variable this probe creates first.
+    build: async ({ page }) => {
+      const made = await tryMutate(page, {
+        op: "createTextVariable",
+        args: { name: "ProbeDelete", contents: "x" },
+      });
+      return made.ok
+        ? { op: "deleteTextVariable", args: { variableId: "dTextVariablenProbeDelete" } }
+        : null;
+    },
+    setupUndo: 1,
+  },
+  {
+    op: "insertSection",
+    build: async ({ fx }) => ({
+      op: "insertSection",
+      args: { atPage: fx.pages[0].pageId, prefix: "A-", startAt: 1 },
+    }),
+  },
+  {
+    op: "editSection",
+    build: async ({ page, fx }) => {
+      const made = await tryMutate(page, {
+        op: "insertSection",
+        args: { atPage: fx.pages[0].pageId, prefix: "B-", startAt: 5 },
+      });
+      if (!made.ok) return null;
+      const sectionId = await lastCollectionId(page, "sections");
+      return sectionId
+        ? { op: "editSection", args: { sectionId, prefix: "C-" } }
+        : null;
+    },
+    setupUndo: 1, // the scratch section
+  },
+  {
+    op: "deleteSection",
+    build: async ({ page, fx }) => {
+      const made = await tryMutate(page, {
+        op: "insertSection",
+        args: { atPage: fx.pages[0].pageId, prefix: "D-", startAt: 9 },
+      });
+      if (!made.ok) return null;
+      const sectionId = await lastCollectionId(page, "sections");
+      return sectionId
+        ? { op: "deleteSection", args: { sectionId } }
+        : null;
+    },
+    setupUndo: 1,
+  },
+  // ── the v62 re-capture: the 19 element-addressed doors the table
+  //    had never heard of (the 94→117 drift). Args come from the
+  //    generated .d.ts + the real consumers: core's wire tests
+  //    (opacity_mask_and_text_path / planar_regions / reorder /
+  //    place_image / render_effect_sweep / batch_composition) and the
+  //    plugin-draw builders (join-average / pathfinder-region). ──────
+  {
+    op: "closePath",
+    // Closes an OPEN subpath — a closed scratch quad has nothing to
+    // close, so the scratch path is inserted `open: true`.
+    build: async ({ page, fx }) => {
+      const t = await newPath(page, fx.pages[0].pageId, 0, 0, true);
+      return t
+        ? { op: "closePath", args: { elementId: t, subpath: null } }
+        : null;
+    },
+    setupUndo: 1,
+  },
+  {
+    op: "joinPaths",
+    // Welds `otherId` INTO `elementId` — both must be OPEN paths.
+    build: async ({ page, fx }) => {
+      const a = await newPath(page, fx.pages[0].pageId, 0, 0, true);
+      const b = await newPath(page, fx.pages[0].pageId, 150, 0, true);
+      return a && b
+        ? { op: "joinPaths", args: { elementId: a, otherId: b } }
+        : null;
+    },
+    setupUndo: 2,
+  },
+  // The six planar region verbs (v57, B-22) all take `elementIds`
+  // top-to-bottom over the SAME overlapping scratch pair; each is one
+  // wire op and one undo step (planar_regions_wire.rs pins this).
+  ...(
+    [
+      "pathfinderDivide",
+      "pathfinderTrim",
+      "pathfinderMerge",
+      "pathfinderCrop",
+      "pathfinderOutline",
+      "pathfinderMinusBack",
+    ] as const
+  ).map(
+    (op): Probe => ({
+      op,
+      build: async ({ page, fx }) => {
+        const a = await newPath(page, fx.pages[0].pageId);
+        const b = await newPath(page, fx.pages[0].pageId, 50, 50);
+        return a && b ? { op, args: { elementIds: [b, a] } } : null;
+      },
+      setupUndo: 2,
+    }),
+  ),
+  {
+    op: "pathfinderFaces",
+    // The shape-builder verb: unite/delete NAMED faces of the planar
+    // arrangement. Face ids are engine-minted (`0-1#0` = the overlap
+    // of inputs 0 and 1) — read them back through the
+    // requestPlanarRegions door rather than guessing the format.
+    build: async ({ page, fx }) => {
+      const a = await newPath(page, fx.pages[0].pageId);
+      const b = await newPath(page, fx.pages[0].pageId, 50, 50);
+      if (!a || !b) return null;
+      const faceId = await page.evaluate(
+        async ({ a, b }) => {
+          const c = (
+            globalThis as unknown as {
+              __canvas: {
+                client: {
+                  send: (m: unknown) => Promise<{
+                    kind: string;
+                    payload?: {
+                      result?: {
+                        found: boolean;
+                        faces: Array<{ id: string }>;
+                      };
+                    };
+                  }>;
+                };
+              };
+            }
+          ).__canvas;
+          const reply = await c.client.send({
+            kind: "requestPlanarRegions",
+            payload: { elementIds: [a, b], point: null },
+          });
+          const res = reply.payload?.result;
+          return res?.found && res.faces.length > 0 ? res.faces[0].id : null;
+        },
+        { a, b },
+      );
+      return faceId
+        ? {
+            op: "pathfinderFaces",
+            args: { elementIds: [a, b], faces: [faceId], mode: "keep" },
+          }
+        : null;
+    },
+    setupUndo: 2,
+  },
+  {
+    op: "pasteInto",
+    // Nests `childId` inside `containerId` (the container clips) —
+    // the child deliberately sticks out, as in render_effect_sweep.
+    build: async ({ page, fx }) => {
+      const ids = await newFrames(page, fx.pages[0].pageId, [
+        [100, 100, 300, 300],
+        [150, 150, 400, 400],
+      ]);
+      return ids
+        ? { op: "pasteInto", args: { containerId: ids[0], childId: ids[1] } }
+        : null;
+    },
+    setupUndo: 2,
+  },
+  {
+    op: "releaseFrom",
+    build: async ({ page, fx }) => {
+      const ids = await newFrames(page, fx.pages[0].pageId, [
+        [100, 100, 300, 300],
+        [150, 150, 400, 400],
+      ]);
+      if (!ids) return null;
+      const nested = await tryMutate(page, {
+        op: "pasteInto",
+        args: { containerId: ids[0], childId: ids[1] },
+      });
+      return nested.ok
+        ? { op: "releaseFrom", args: { childId: ids[1] } }
+        : null;
+    },
+    setupUndo: 3, // two inserts + the pasteInto
+  },
+  {
+    op: "applyOpacityMask",
+    // C-28 (v58): `maskId` leaves the z-table and masks `targetId`.
+    build: async ({ page, fx }) => {
+      const ids = await newFrames(page, fx.pages[0].pageId, [
+        [10, 10, 90, 90],
+        [50, 50, 140, 140],
+      ]);
+      return ids
+        ? {
+            op: "applyOpacityMask",
+            args: {
+              targetId: ids[0],
+              maskId: ids[1],
+              maskType: "alpha",
+              invert: false,
+            },
+          }
+        : null;
+    },
+    setupUndo: 2,
+  },
+  {
+    op: "releaseOpacityMask",
+    build: async ({ page, fx }) => {
+      const ids = await newFrames(page, fx.pages[0].pageId, [
+        [10, 10, 90, 90],
+        [50, 50, 140, 140],
+      ]);
+      if (!ids) return null;
+      const masked = await tryMutate(page, {
+        op: "applyOpacityMask",
+        args: {
+          targetId: ids[0],
+          maskId: ids[1],
+          maskType: "alpha",
+          invert: false,
+        },
+      });
+      return masked.ok
+        ? { op: "releaseOpacityMask", args: { targetId: ids[0] } }
+        : null;
+    },
+    setupUndo: 3, // two inserts + the applyOpacityMask
+  },
+  {
+    op: "attachTextToPath",
+    // C-29 (v58): links a story to a path host. The engine REQUIRES a
+    // story flowing into NO frame ("a story belongs to exactly one
+    // flow"), so the fixture's framed stories are unattachable —
+    // newFramelessStory mints one (insertTextFrame + deleteFrame).
+    build: async ({ page, fx }) => {
+      const storyId = await newFramelessStory(page, fx.pages[0].pageId);
+      if (!storyId) return null;
+      const t = await newPath(page, fx.pages[0].pageId);
+      return t
+        ? {
+            op: "attachTextToPath",
+            args: {
+              elementId: t,
+              storyId,
+              pathTypeAlignment: "CenterPathType",
+              flipPathEffect: null,
+              startBracket: null,
+              endBracket: null,
+            },
+          }
+        : null;
+    },
+    setupUndo: 3, // insertTextFrame + deleteFrame + the scratch path
+  },
+  {
+    op: "detachTextFromPath",
+    build: async ({ page, fx }) => {
+      const storyId = await newFramelessStory(page, fx.pages[0].pageId);
+      if (!storyId) return null;
+      const t = await newPath(page, fx.pages[0].pageId);
+      if (!t) return null;
+      const attached = await tryMutate(page, {
+        op: "attachTextToPath",
+        args: {
+          elementId: t,
+          storyId,
+          pathTypeAlignment: null,
+          flipPathEffect: null,
+          startBracket: null,
+          endBracket: null,
+        },
+      });
+      return attached.ok
+        ? { op: "detachTextFromPath", args: { elementId: t } }
+        : null;
+    },
+    setupUndo: 4, // frameless-story pair + the path + the attach
+  },
+  {
+    op: "reorderElement",
+    // Reorder the BACKMOST of two scratch frames to the front — a real
+    // move (the second insert is already frontmost, so reordering IT
+    // would probe the no-op lane instead).
+    build: async ({ page, fx }) => {
+      const ids = await newFrames(page, fx.pages[0].pageId, [
+        [10, 10, 60, 60],
+        [70, 70, 120, 120],
+      ]);
+      return ids
+        ? { op: "reorderElement", args: { elementId: ids[0], to: "front" } }
+        : null;
+    },
+    setupUndo: 2,
+  },
+  {
+    op: "placeImage",
+    // v43 (D-14): `elementId` is the BARE self id (not an ElementId
+    // object). An unreachable uri still APPLIES — the op records the
+    // link; resolving it is the asset provider's job.
+    build: async ({ page, fx }) => {
+      const ids = await newFrames(page, fx.pages[0].pageId, [
+        [10, 10, 120, 120],
+      ]);
+      return ids
+        ? {
+            op: "placeImage",
+            args: {
+              elementId: ids[0].id,
+              uri: "file:///unreachable/probe.png",
+              fit: "FillProportionally",
+            },
+          }
+        : null;
+    },
+    setupUndo: 1,
+  },
+  {
+    op: "replaceImageBytes",
+    // v50 (C-1 Stage B): bare self id + decoded-on-apply PNG bytes.
+    build: async ({ page, fx }) => {
+      const ids = await newFrames(page, fx.pages[0].pageId, [
+        [10, 10, 120, 120],
+      ]);
+      return ids
+        ? {
+            op: "replaceImageBytes",
+            args: { elementId: ids[0].id, bytes: PNG_1X1 },
+          }
+        : null;
+    },
+    setupUndo: 1,
+  },
+  {
+    op: "bindCreated",
+    // Only meaningful INSIDE a batch: it names the batch's most recent
+    // createdId so later children can address it as `$h:<handle>` (the
+    // resolver replaces the WHOLE address — the declared kind on the
+    // handle ref never has to predict the minted kind). Probed as the
+    // full sentence: insert → bind → write through the handle. The
+    // batch is ONE undo step (C-14 atomicity).
+    build: async ({ fx }) => ({
+      op: "batch",
+      args: {
+        ops: [
+          {
+            op: "insertFrame",
+            args: { pageId: fx.pages[0].pageId, bounds: [10, 10, 80, 80] },
+          },
+          { op: "bindCreated", args: { handle: "probe" } },
+          {
+            op: "setElementProperty",
+            args: {
+              elementId: { kind: "rectangle", id: "$h:probe" },
+              path: "frameOpacity",
+              value: { type: "length", value: 60 },
+            },
+          },
+        ],
+      },
+    }),
+  },
+];
+
+// ── probes on the `tables` fixture (v30 table ops) ──────────────
+// Each addresses the FIRST table cell (resolved via a hit-test sweep
+// in the test body and passed through `ctx.fx`'s page geometry). The
+// six ops target the cell's story + table id + row/col index; insert/
+// delete are reversible (one undo). Row height / column width set an
+// absolute value (reversible). The cell is resolved once and stashed
+// ── probes on the `conditions` fixture (conditional text, v28) ─────
+// The `text` fixture carries no conditions, so these two ops classified
+// "unsupported" for want of something to address, not because the engine
+// refused them. The generated `conditions` fixture has both conditions and
+// a condition set.
+const CONDITION_PROBES: Probe[] = [
+  {
+    op: "setConditionVisible",
+    build: async ({ page }) => {
+      const condition = await lastCollectionId(page, "conditions");
+      return condition
+        ? { op: "setConditionVisible", args: { condition, visible: false } }
+        : null;
+    },
+  },
+  {
+    op: "activateConditionSet",
+    build: async ({ page }) => {
+      const set = await lastCollectionId(page, "conditionSets");
+      return set ? { op: "activateConditionSet", args: { set } } : null;
+    },
+  },
+];
+
+// on a module-level ref the build()s read.
+let TABLE_CELL: {
+  storyId: string;
+  tableId: string;
+  row: number;
+  col: number;
+} | null = null;
+
+const TABLE_PROBES: Probe[] = [
+  {
+    op: "setRowHeight",
+    build: async () =>
+      TABLE_CELL
+        ? {
+            op: "setRowHeight",
+            args: {
+              storyId: TABLE_CELL.storyId,
+              tableId: TABLE_CELL.tableId,
+              row: TABLE_CELL.row,
+              height: 36,
+            },
+          }
+        : null,
+  },
+  {
+    op: "setColumnWidth",
+    build: async () =>
+      TABLE_CELL
+        ? {
+            op: "setColumnWidth",
+            args: {
+              storyId: TABLE_CELL.storyId,
+              tableId: TABLE_CELL.tableId,
+              col: TABLE_CELL.col,
+              width: 80,
+            },
+          }
+        : null,
+  },
+  {
+    op: "insertTableRow",
+    build: async () =>
+      TABLE_CELL
+        ? {
+            op: "insertTableRow",
+            args: {
+              storyId: TABLE_CELL.storyId,
+              tableId: TABLE_CELL.tableId,
+              at: TABLE_CELL.row,
+            },
+          }
+        : null,
+  },
+  {
+    op: "deleteTableRow",
+    build: async ({ page }) => {
+      if (!TABLE_CELL) return null;
+      // Insert a scratch row first so the delete is always legal +
+      // reversible (deleting the last row would empty the table).
+      const made = await tryMutate(page, {
+        op: "insertTableRow",
+        args: {
+          storyId: TABLE_CELL.storyId,
+          tableId: TABLE_CELL.tableId,
+          at: TABLE_CELL.row,
+        },
+      });
+      return made.ok
+        ? {
+            op: "deleteTableRow",
+            args: {
+              storyId: TABLE_CELL.storyId,
+              tableId: TABLE_CELL.tableId,
+              at: TABLE_CELL.row,
+            },
+          }
+        : null;
+    },
+    setupUndo: 1,
+  },
+  {
+    op: "insertTableColumn",
+    build: async () =>
+      TABLE_CELL
+        ? {
+            op: "insertTableColumn",
+            args: {
+              storyId: TABLE_CELL.storyId,
+              tableId: TABLE_CELL.tableId,
+              at: TABLE_CELL.col,
+            },
+          }
+        : null,
+  },
+  {
+    op: "deleteTableColumn",
+    build: async ({ page }) => {
+      if (!TABLE_CELL) return null;
+      const made = await tryMutate(page, {
+        op: "insertTableColumn",
+        args: {
+          storyId: TABLE_CELL.storyId,
+          tableId: TABLE_CELL.tableId,
+          at: TABLE_CELL.col,
+        },
+      });
+      return made.ok
+        ? {
+            op: "deleteTableColumn",
+            args: {
+              storyId: TABLE_CELL.storyId,
+              tableId: TABLE_CELL.tableId,
+              at: TABLE_CELL.col,
+            },
+          }
+        : null;
+    },
+    setupUndo: 1,
+  },
+  // ── v35 table ops (header/footer rows + cell span) ──────────────
+  // Header/footer ops take only story+table id; span addresses the
+  // cell. All reversible by the engine (one undo on success).
+  {
+    op: "insertHeaderRow",
+    build: async () =>
+      TABLE_CELL
+        ? {
+            op: "insertHeaderRow",
+            args: {
+              storyId: TABLE_CELL.storyId,
+              tableId: TABLE_CELL.tableId,
+            },
+          }
+        : null,
+  },
+  {
+    op: "removeHeaderRow",
+    build: async ({ page }) => {
+      if (!TABLE_CELL) return null;
+      // Add a header row first so the removal is always legal +
+      // reversible (no header to remove on a fresh body table).
+      const made = await tryMutate(page, {
+        op: "insertHeaderRow",
+        args: { storyId: TABLE_CELL.storyId, tableId: TABLE_CELL.tableId },
+      });
+      return made.ok
+        ? {
+            op: "removeHeaderRow",
+            args: {
+              storyId: TABLE_CELL.storyId,
+              tableId: TABLE_CELL.tableId,
+            },
+          }
+        : null;
+    },
+    setupUndo: 1,
+  },
+  {
+    op: "insertFooterRow",
+    build: async () =>
+      TABLE_CELL
+        ? {
+            op: "insertFooterRow",
+            args: {
+              storyId: TABLE_CELL.storyId,
+              tableId: TABLE_CELL.tableId,
+            },
+          }
+        : null,
+  },
+  {
+    op: "removeFooterRow",
+    build: async ({ page }) => {
+      if (!TABLE_CELL) return null;
+      const made = await tryMutate(page, {
+        op: "insertFooterRow",
+        args: { storyId: TABLE_CELL.storyId, tableId: TABLE_CELL.tableId },
+      });
+      return made.ok
+        ? {
+            op: "removeFooterRow",
+            args: {
+              storyId: TABLE_CELL.storyId,
+              tableId: TABLE_CELL.tableId,
+            },
+          }
+        : null;
+    },
+    setupUndo: 1,
+  },
+  {
+    op: "setCellSpan",
+    build: async () =>
+      TABLE_CELL
+        ? {
+            op: "setCellSpan",
+            args: {
+              storyId: TABLE_CELL.storyId,
+              tableId: TABLE_CELL.tableId,
+              row: TABLE_CELL.row,
+              col: TABLE_CELL.col,
+              rowSpan: 2,
+              columnSpan: 2,
+            },
+          }
+        : null,
+  },
+];
+
+// ── probes on the `sample` fixture (an InDesign document) ───────
+// v73 in core 0.71.13 (ADR 165): Update Table of Contents rewrites a
+// TOC story from its TOC style over the current layout, and refuses a
+// story that names none. No generated fixture carries one; sample.idml
+// does: Story_u28e69 applies "TOCStyle/TOC Style". Wire / script only
+// in the editor (no Layout ▸ Update Table of Contents yet).
+const SAMPLE_TOC_STORY = "u28e69";
+const SAMPLE_PROBES: Probe[] = [
+  {
+    op: "updateTableOfContents",
+    build: async () => ({
+      op: "updateTableOfContents",
+      args: { storyId: SAMPLE_TOC_STORY },
+    }),
+  },
+];
+
+// ── probes on the `navigation` fixture ─────────────────────────
+// protocol 72 in core 0.72.0 (ADRs 169, 173): cross-references updated,
+// bookmarks created / renamed / moved / deleted. The fixture carries a
+// cross-reference source and two bookmarks to text destinations.
+const NAVIGATION_PROBES: Probe[] = [
+  {
+    op: "updateCrossReferences",
+    build: async () => ({ op: "updateCrossReferences", args: {} }),
+  },
+  {
+    op: "createBookmark",
+    build: async ({ fx }) => ({
+      op: "createBookmark",
+      args: { name: "Probe bookmark", page: fx.pages[0].pageId },
+    }),
+  },
+  {
+    op: "renameBookmark",
+    build: async ({ page }) => {
+      const bookmarkId = await firstBookmarkId(page);
+      return bookmarkId
+        ? { op: "renameBookmark", args: { bookmarkId, name: "Renamed by the probe" } }
+        : null;
+    },
+  },
+  {
+    op: "moveBookmark",
+    build: async ({ page }) => {
+      const bookmarkId = await firstBookmarkId(page);
+      return bookmarkId ? { op: "moveBookmark", args: { bookmarkId } } : null;
+    },
+  },
+  {
+    op: "deleteBookmark",
+    build: async ({ page }) => {
+      const bookmarkId = await firstBookmarkId(page);
+      return bookmarkId ? { op: "deleteBookmark", args: { bookmarkId } } : null;
+    },
+  },
+];
+
+async function runProbes(
+  page: Page,
+  probes: Probe[],
+  fx: LoadedFixture,
+  results: ProbeResult[],
+): Promise<void> {
+  for (const probe of probes) {
+    if (CAPTURE) process.stdout.write(`[probe] ${probe.op}\n`);
+    const setup = probe.setupUndo ?? 0;
+    let m: unknown | null;
+    try {
+      m = await probe.build({ page, fx });
+    } catch (err) {
+      await undoN(page, setup);
+      results.push({
+        op: probe.op,
+        status: "unsupported",
+        error: `build threw: ${err instanceof Error ? err.message : String(err)}`,
+      });
+      continue;
+    }
+    if (m === null) {
+      await undoN(page, setup);
+      results.push({
+        op: probe.op,
+        status: "unsupported",
+        skipped: "prerequisites missing in fixture",
+      });
+      continue;
+    }
+    const r = await tryMutate(page, m);
+    if (r.ok) {
+      results.push({ op: probe.op, status: "supported" });
+      await undoN(page, (probe.undo ?? 1) + setup);
+    } else {
+      results.push({ op: probe.op, status: "unsupported", error: r.error });
+      await undoN(page, setup);
+    }
+  }
+}
+
+test("AC-E2E-CAPS — every wire op's engine support matches the table", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  const results: ProbeResult[] = [];
+  if (CAPTURE) {
+    // Surface worker panics live — a dead worker otherwise reads as
+    // a silent tryMutate hang.
+    page.on("console", (msg) => {
+      const t = msg.text();
+      if (/panic|error|unreachable/i.test(t))
+        process.stdout.write(`[console] ${t.slice(0, 300)}\n`);
+    });
+    page.on("pageerror", (err) =>
+      process.stdout.write(`[pageerror] ${String(err).slice(0, 300)}\n`),
+    );
+  }
+
+  await openCanvas(page);
+  const textFx = await loadFixture(page, "text");
+  await runProbes(page, TEXT_PROBES, textFx, results);
+
+  const geoFx = await loadFixture(page, "geometry");
+  await runProbes(page, GEOMETRY_PROBES, geoFx, results);
+
+  const condFx = await loadFixture(page, "conditions");
+  await runProbes(page, CONDITION_PROBES, condFx, results);
+
+  // ── v30 table ops on the `tables` fixture ──────────────────────
+  const tableFx = await loadFixture(page, "tables");
+  const p0 = tableFx.pages[0];
+  TABLE_CELL = await firstTableCell(page, p0.pageId, p0.widthPt, p0.heightPt);
+  if (CAPTURE) {
+    process.stdout.write(`[tables] firstCell=${JSON.stringify(TABLE_CELL)}\n`);
+  }
+  await runProbes(page, TABLE_PROBES, tableFx, results);
+
+  const sampleFx = await loadFixture(page, "sample");
+  await runProbes(page, SAMPLE_PROBES, sampleFx, results);
+
+  const navFx = await loadFixture(page, "navigation");
+  await runProbes(page, NAVIGATION_PROBES, navFx, results);
+
+  // ── report ────────────────────────────────────────────────────
+  const table = results
+    .map(
+      (r) =>
+        `${r.op.padEnd(28)} ${r.status}${r.error ? `  [${r.error.slice(0, 90)}]` : ""}${r.skipped ? `  (skipped: ${r.skipped})` : ""}`,
+    )
+    .join("\n");
+  console.log(`\nCAPABILITY PROBE RESULTS\n${table}\n`);
+  if (CAPTURE) {
+    writeFileSync(
+      "/tmp/paged-e2e-capabilities.json",
+      JSON.stringify(results, null, 2),
+    );
+    return;
+  }
+
+  // Assert vs the checked-in table.
+  const issues: string[] = [];
+  for (const r of results) {
+    if (r.skipped) continue; // prerequisite-skips don't gate
+    const exp = expectedStatus(r.op);
+    if (!exp) {
+      issues.push(`${r.op}: probed but missing from CAPABILITIES table`);
+      continue;
+    }
+    if (exp.status !== r.status) {
+      issues.push(
+        `${r.op}: table says ${exp.status}, engine says ${r.status}${r.error ? ` (${r.error.slice(0, 100)})` : ""} — update harness/capabilities.ts AND the domain test`,
+      );
+    }
+  }
+  // Table rows never probed (typo guard).
+  for (const c of CAPABILITIES) {
+    if (!results.find((r) => r.op === c.op)) {
+      issues.push(`${c.op}: in CAPABILITIES table but never probed`);
+    }
+  }
+  expect(issues, issues.join("\n")).toEqual([]);
+});
+
+// ── AC-E2E-CAPS-COVER — the table must ENUMERATE the engine ─────────
+//
+// The probe above validates every op the table lists. It cannot notice
+// an op the table has never heard of, because nothing iterates the
+// engine's own op set — and that is precisely how this table drifted
+// 21 protocol versions without a single red run.
+//
+// Found 2026-08-09: the header said "re-captured at protocol v40" while
+// core was at 61. The table carried 94 ops; the engine declared 117.
+// The 23 missing ones included `insertHyperlink` and
+// `insertAnchoredFrame` — doors the plugin-doc campaign built and
+// shipped — and `state`'s completeness gate derives ITS wire-op list
+// from this very file, so it printed "completeness check OK" while
+// structurally blind to all of them.
+//
+// The fix is to read the op set from the ENGINE rather than trust the
+// table: `@paged-media/canvas-wasm` ships its `Mutation` union in its
+// generated .d.ts, and that package is already a dependency here, so
+// this needs no core checkout and no live probe. A new op now fails
+// this test the moment the engine is repinned.
+//
+// Deliberately a SEPARATE test from the probe: this one asserts the
+// table is COMPLETE, the probe asserts it is CORRECT. Conflating them
+// would mean an unclassified new op could not be reported without also
+// failing the classification run.
+test("AC-E2E-CAPS-COVER — every engine Mutation op appears in the table", () => {
+  const require = createRequire(import.meta.url);
+  const dts = require.resolve(
+    "@paged-media/canvas-wasm/paged_canvas_wasm.d.ts",
+  );
+  const src = readFileSync(dts, "utf8");
+
+  // The union is emitted on one line: `export type Mutation = { op: "a";
+  // args: {...} } | { op: "b"; ... };`. Slice that statement first so a
+  // stray `op: "…"` in some other type cannot leak in.
+  const start = src.indexOf("export type Mutation =");
+  expect(start, "engine .d.ts has no `export type Mutation`").toBeGreaterThan(-1);
+  const stmt = src.slice(start, src.indexOf(";\n", start));
+  const engineOps = [...stmt.matchAll(/\bop: "([a-zA-Z]+)"/g)].map((m) => m[1]);
+  expect(engineOps.length, "parsed no ops from the Mutation union").toBeGreaterThan(50);
+
+  const listed = new Set(CAPABILITIES.map((c) => c.op));
+  // `batch` is the envelope, not a capability — it carries other ops and
+  // has no standalone support question.
+  const missing = [...new Set(engineOps)]
+    .filter((op) => op !== "batch" && !listed.has(op))
+    .sort();
+
+  // The gap as it stood when this gate was written (2026-08-09: 23 ops
+  // — the pathfinder region verbs, both opacity-mask ops, text-on-a-
+  // path, the plugin-doc doors, and friends). A RATCHET, not an
+  // excuse: it must only ever shrink — and on 2026-08-26 it shrank to
+  // EMPTY: every one of the 23 got a real-args probe (shapes sourced
+  // from the generated .d.ts + core's wire tests, per the rule below)
+  // and a row in harness/capabilities.ts.
+  //
+  // An op may only ever sit here UNCLASSIFIED, never mis-classified,
+  // because classifying an op means probing it with real args, and a
+  // probe built on GUESSED args reports "unsupported" when the guess is
+  // wrong rather than when the engine lacks the op. That would put
+  // false evidence into the one table `state`'s completeness gate
+  // trusts — worse than the gap it would paper over. A new entry needs
+  // its args from the engine's .d.ts and a real domain test alongside.
+  const KNOWN_UNCLASSIFIED: string[] = [];
+
+  // STALENESS, checked in the other direction too: an entry that has
+  // since been classified must leave this list, or the ratchet quietly
+  // stops ratcheting. Same shape as core's KNOWN_WRITE_ONLY audit.
+  const stale = KNOWN_UNCLASSIFIED.filter((op) => listed.has(op)).sort();
+  expect(
+    stale,
+    `These ops are now IN the table but still listed as unclassified — ` +
+      `delete them from KNOWN_UNCLASSIFIED:\n  ${stale.join("\n  ")}`,
+  ).toEqual([]);
+
+  const unexpected = missing.filter((op) => !KNOWN_UNCLASSIFIED.includes(op));
+
+  expect(
+    unexpected,
+    unexpected.length === 0
+      ? ""
+      : `The engine declares ${unexpected.length} NEW Mutation op(s) this table has never heard of:\n` +
+        `  ${unexpected.join("\n  ")}\n\n` +
+        `Add each to harness/capabilities.ts and give it a probe in this spec ` +
+        `(E2E_CAPS=capture to classify), then add or upgrade the real domain test. ` +
+        `Leaving them out does not just under-report here: paged-media/state's ` +
+        `completeness-check.mjs reads its wire-op list from this file, so an op ` +
+        `missing here is invisible to the capability registry too.`,
+  ).toEqual([]);
+});

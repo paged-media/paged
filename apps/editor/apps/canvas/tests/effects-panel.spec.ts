@@ -1,0 +1,140 @@
+/*
+ * This file is part of paged (https://paged.media), the commercial editor
+ * for the paged IDML engine.
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// SDK Phase 5 (named sweep) — Effects panel acceptance.
+//
+// v1 ships only the drop-shadow enable toggle; per-field editors
+// land when their PropertyPaths do. This pins the toggle apply
+// path end-to-end.
+
+import { test, expect } from "@playwright/test";
+import { dirname, resolve as pathResolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { openCanvas, loadIdml, openPanel } from "./fidelity/canvas-driver";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const REPO_ROOT = pathResolve(__dirname, "..", "..", "..");
+const FIXTURE = `${REPO_ROOT}/corpus/idml/generated/geometry-groups.idml`;
+
+test.describe("Phase 5 — Effects panel", () => {
+  test.beforeEach(async ({ page }) => {
+    await openCanvas(page);
+    await loadIdml(page, FIXTURE);
+    await openPanel(page, "paged.effects");
+  });
+
+  test("AC-EFFECTS-1 — panel mounts; em-dash when no selection @feat:editor-shell.panels.effects @feat:effects-transparency.drop-shadow @level:smoke", async ({
+    page,
+  }) => {
+    await expect(page.locator('[data-effects-panel="ready"]')).toBeVisible();
+    // W2.2 — every top field + effect pill is LIVE now, so all show
+    // the em-dash mixed sentinel without a selection: Opacity metric
+    // + Blend select + 8 effect pills (Drop/Inner shadow, Outer/Inner
+    // glow, Bevel, Satin, Feather, Directional feather) + the two group
+    // options (Isolate blending, Knockout group). The per-field editors
+    // only render inside an expanded (enabled) row, which never happens
+    // at no-selection.
+    await expect(
+      page.locator('[data-effects-panel="ready"] [data-mixed]').first(),
+    ).toBeVisible();
+    await expect(
+      page.locator('[data-effects-panel="ready"] [data-mixed]'),
+    ).toHaveCount(12);
+    // The four transparency targets (engine 0.71.8), Object first.
+    await expect(
+      page.locator('[data-effects-panel="ready"] [data-effects-target]'),
+    ).toHaveCount(4);
+    await expect(page.locator('[data-effects-panel="ready"]')).toHaveAttribute(
+      "data-effects-target-active",
+      "object",
+    );
+    // No more honest-seam pills — every effect family flipped live.
+    await expect(
+      page.locator('[data-effects-panel="ready"] [data-effect-row][data-seam]'),
+    ).toHaveCount(0);
+    // All eight effect families render as disclosure rows.
+    await expect(
+      page.locator('[data-effects-panel="ready"] [data-effect-row]'),
+    ).toHaveCount(8);
+  });
+
+  test("AC-EFFECTS-2 — drop-shadow toggle round-trips via the apply layer @feat:editor-shell.panels.effects @feat:effects-transparency.drop-shadow @level:happy", async ({
+    page,
+  }) => {
+    const initial = await page.evaluate(async () => {
+      type DebugCanvas = {
+        client?: {
+          executeScript(src: string): Promise<{
+            output: string[];
+            error: string | null;
+          }>;
+          mutate(op: unknown): Promise<unknown>;
+        };
+      };
+      const dbg = (window as unknown as { __canvas?: DebugCanvas }).__canvas;
+      if (!dbg?.client) throw new Error("__canvas client not available");
+      const treeJson = await dbg.client
+        .executeScript("paged.tree()")
+        .then((r) => r.output[0] ?? "[]");
+      type Node = {
+        id?: { kind: string; id: string } | null;
+        children?: Node[];
+      };
+      const walk = (nodes: Node[] | undefined): Node["id"] => {
+        if (!nodes) return null;
+        for (const n of nodes) {
+          if (n.id && n.id.kind === "textFrame") return n.id;
+          const f = walk(n.children);
+          if (f) return f;
+        }
+        return null;
+      };
+      const target = walk(JSON.parse(treeJson) as Node[]);
+      if (!target) throw new Error("fixture has no TextFrame");
+      const addr = `${target.kind}:${target.id}`;
+
+      // Toggle on.
+      await dbg.client.mutate({
+        op: "setElementProperty",
+        args: {
+          elementId: { kind: target.kind, id: target.id },
+          path: "frameDropShadow",
+          value: { type: "bool", value: true },
+        },
+      });
+      await new Promise((r) => setTimeout(r, 30));
+
+      const inspectJson = await dbg.client
+        .executeScript(`paged.inspect(${JSON.stringify(addr)});`)
+        .then((r) => r.output[0] ?? "");
+      const inspect = JSON.parse(inspectJson) as {
+        entries: Array<{
+          path: string;
+          value: { type: string; value: boolean } | null;
+        }>;
+      };
+      const entry = inspect.entries.find((e) => e.path === "frameDropShadow");
+      return entry?.value?.value ?? null;
+    });
+
+    expect(initial).toBe(true);
+  });
+});
