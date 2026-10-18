@@ -38,14 +38,22 @@ const NOTE = "Ask who reads the mailing edition.";
 
 /** A point on the slide the canvas is fitted to, in slide points. A slide
  *  clicked in the Slides panel is fitted and centred in the canvas. */
-async function slidePt(k: Kit, x: number, y: number): Promise<{ x: number; y: number }> {
+async function slidePt(
+  k: Kit,
+  x: number,
+  y: number,
+): Promise<{ x: number; y: number }> {
   const box = await k.page.locator("canvas").first().boundingBox();
   if (!box) throw new Error("no canvas");
   const s = await cameraScale(k.page);
-  return { x: box.x + box.width / 2 + (x - 480) * s, y: box.y + box.height / 2 + (y - 270) * s };
+  return {
+    x: box.x + box.width / 2 + (x - 480) * s,
+    y: box.y + box.height / 2 + (y - 270) * s,
+  };
 }
 
-const thumbs = (page: Page) => page.locator('[data-slides-panel="ready"] [data-slide]');
+const thumbs = (page: Page) =>
+  page.locator('[data-slides-panel="ready"] [data-slide]');
 
 /** Scroll a control of the Slides panel into view, then click it. */
 async function pressIn(k: Kit, l: Locator): Promise<void> {
@@ -62,29 +70,57 @@ async function goToSlide(k: Kit, index: number): Promise<void> {
 }
 
 async function order(page: Page): Promise<string[]> {
-  return thumbs(page).evaluateAll((els) => els.map((e) => e.getAttribute("data-slide") ?? ""));
+  return thumbs(page).evaluateAll((els) =>
+    els.map((e) => e.getAttribute("data-slide") ?? ""),
+  );
 }
 
 async function storyLengths(page: Page): Promise<number[]> {
   return page.evaluate(async () => {
-    const c = (globalThis as unknown as { __canvas: { client: { collection(n: string): Promise<Array<{ characterCount: number }>> } } }).__canvas;
+    const c = (
+      globalThis as unknown as {
+        __canvas: {
+          client: {
+            collection(n: string): Promise<Array<{ characterCount: number }>>;
+          };
+        };
+      }
+    ).__canvas;
     return (await c.client.collection("stories")).map((s) => s.characterCount);
   });
 }
 
 async function slideNotes(page: Page): Promise<Array<string | null>> {
   return page.evaluate(async () => {
-    const c = (globalThis as unknown as { __canvas: { client: { collection(n: string): Promise<Array<{ pluginMetadata?: Array<{ key: string; value: string }> }>> } } }).__canvas;
+    const c = (
+      globalThis as unknown as {
+        __canvas: {
+          client: {
+            collection(
+              n: string,
+            ): Promise<
+              Array<{ pluginMetadata?: Array<{ key: string; value: string }> }>
+            >;
+          };
+        };
+      }
+    ).__canvas;
     return (await c.client.collection("pages")).map((p) => {
-      const v = p.pluginMetadata?.find((m) => m.key === "x-paged:media.paged.slide")?.value;
-      return v ? ((JSON.parse(v) as { data: { notes?: string } }).data.notes ?? null) : null;
+      const v = p.pluginMetadata?.find(
+        (m) => m.key === "x-paged:media.paged.slide",
+      )?.value;
+      return v
+        ? ((JSON.parse(v) as { data: { notes?: string } }).data.notes ?? null)
+        : null;
     });
   });
 }
 
 /** What a .pptx says, read from its parts: each slide in deck order with its
  *  text, whether it is hidden, and its speaker notes. */
-function readDeck(file: string): Array<{ text: string; hidden: boolean; notes: string }> {
+function readDeck(
+  file: string,
+): Array<{ text: string; hidden: boolean; notes: string }> {
   const part = (name: string) => {
     try {
       return execFileSync("unzip", ["-p", file, name], { encoding: "utf8" });
@@ -92,17 +128,38 @@ function readDeck(file: string): Array<{ text: string; hidden: boolean; notes: s
       return "";
     }
   };
-  const texts = (xml: string) => [...xml.matchAll(/<a:t>([^<]*)<\/a:t>/g)].map((m) => m[1]).join(" ");
-  const rels = (xml: string) => new Map([...xml.matchAll(/Id="([^"]+)"[^>]*Target="([^"]+)"/g)].map((m) => [m[1], m[2]]));
+  const texts = (xml: string) =>
+    [...xml.matchAll(/<a:t>([^<]*)<\/a:t>/g)].map((m) => m[1]).join(" ");
+  const rels = (xml: string) =>
+    new Map(
+      [...xml.matchAll(/Id="([^"]+)"[^>]*Target="([^"]+)"/g)].map((m) => [
+        m[1],
+        m[2],
+      ]),
+    );
   const presRels = rels(part("ppt/_rels/presentation.xml.rels"));
-  const ids = [...part("ppt/presentation.xml").matchAll(/<p:sldId [^>]*r:id="([^"]+)"/g)].map((m) => m[1]);
+  const ids = [
+    ...part("ppt/presentation.xml").matchAll(/<p:sldId [^>]*r:id="([^"]+)"/g),
+  ].map((m) => m[1]);
   return ids.map((rid) => {
     const target = presRels.get(rid)!.replace(/^\/?ppt\//, "");
     const xml = part(`ppt/${target}`);
-    const slideRels = rels(part(`ppt/${target.replace(/slides\/(slide\d+\.xml)$/, "slides/_rels/$1.rels")}`));
-    const notesTarget = [...slideRels.values()].find((t) => t.includes("notesSlide"));
-    const notes = notesTarget ? texts(part(`ppt/${notesTarget.replace(/^\.\.\//, "")}`)) : "";
-    return { text: texts(xml), hidden: /<p:sld\b[^>]*\bshow="0"/.test(xml), notes };
+    const slideRels = rels(
+      part(
+        `ppt/${target.replace(/slides\/(slide\d+\.xml)$/, "slides/_rels/$1.rels")}`,
+      ),
+    );
+    const notesTarget = [...slideRels.values()].find((t) =>
+      t.includes("notesSlide"),
+    );
+    const notes = notesTarget
+      ? texts(part(`ppt/${notesTarget.replace(/^\.\.\//, "")}`))
+      : "";
+    return {
+      text: texts(xml),
+      hidden: /<p:sld\b[^>]*\bshow="0"/.test(xml),
+      notes,
+    };
   });
 }
 
@@ -124,16 +181,26 @@ film("slide", async (k) => {
     await menu(k, ["File", "Open…"]);
     k.chip("pitch-deck.pptx", "file");
     await (await chooser).setFiles(join(ASSETS, "pitch-deck.pptx"));
-    await expect.poll(async () => (await designer.handle()).pageCount, { timeout: 20_000 }).toBe(6);
-    for (const [w, h] of (await designer.handle()).pageSizesPt) expect([Math.round(w), Math.round(h)]).toEqual([960, 540]);
+    await expect
+      .poll(async () => (await designer.handle()).pageCount, {
+        timeout: 20_000,
+      })
+      .toBe(6);
+    for (const [w, h] of (await designer.handle()).pageSizesPt)
+      expect([Math.round(w), Math.round(h)]).toEqual([960, 540]);
     await k.hold(800);
   });
 
   // ── The Slides panel; the chart slide, fitted. ──
   await k.scene("slides", async () => {
-    await press(k, page.locator('[data-panel-rail-item="media.paged.slide.panel.slides"]'));
+    await press(
+      k,
+      page.locator('[data-panel-rail-item="media.paged.slide.panel.slides"]'),
+    );
     await expect(thumbs(page)).toHaveCount(6, { timeout: 10_000 });
-    await expect(thumbs(page).locator("img")).toHaveCount(6, { timeout: 30_000 });
+    await expect(thumbs(page).locator("img")).toHaveCount(6, {
+      timeout: 30_000,
+    });
     await k.hold(500);
     await goToSlide(k, 2);
   });
@@ -153,16 +220,33 @@ film("slide", async (k) => {
     await thumbs(page).nth(0).scrollIntoViewIfNeeded();
     const a = (await src.boundingBox())!;
     const b = (await dst.boundingBox())!;
-    await pointer.drag({ x: a.x + a.width / 2, y: Math.min(a.y + a.height / 2, 880) }, { x: b.x + b.width / 2, y: b.y + 12 }, { speed: 0.7 });
-    await expect.poll(() => order(page)).toEqual([before[0], before[3], before[1], before[2], before[4], before[5]]);
+    await pointer.drag(
+      { x: a.x + a.width / 2, y: Math.min(a.y + a.height / 2, 880) },
+      { x: b.x + b.width / 2, y: b.y + 12 },
+      { speed: 0.7 },
+    );
+    await expect
+      .poll(() => order(page))
+      .toEqual([
+        before[0],
+        before[3],
+        before[1],
+        before[2],
+        before[4],
+        before[5],
+      ]);
     await k.hold(500);
   });
 
   // ── Hide the fifth slide from the slideshow. ──
   await k.scene("hide", async () => {
-    const hide = thumbs(page).nth(4).getByRole("button", { name: "Hide", exact: true });
+    const hide = thumbs(page)
+      .nth(4)
+      .getByRole("button", { name: "Hide", exact: true });
     await pressIn(k, hide);
-    await expect(thumbs(page).nth(4).locator("button[aria-pressed]")).toHaveAttribute("aria-pressed", "true");
+    await expect(
+      thumbs(page).nth(4).locator("button[aria-pressed]"),
+    ).toHaveAttribute("aria-pressed", "true");
     await k.hold(500);
   });
 
@@ -180,7 +264,11 @@ film("slide", async (k) => {
     await k.hold(300);
     await typeHuman(page, " this year");
     await expect
-      .poll(async () => (await storyLengths(page)).map((n, i) => n - (lengths[i] ?? 0)).filter((d) => d !== 0))
+      .poll(async () =>
+        (await storyLengths(page))
+          .map((n, i) => n - (lengths[i] ?? 0))
+          .filter((d) => d !== 0),
+      )
       .toEqual([10]);
     await k.hold(600);
   });
@@ -188,9 +276,14 @@ film("slide", async (k) => {
   // ── Speaker notes beside the slide. ──
   await k.scene("notes", async () => {
     await k.key("Escape");
-    await press(k, page.locator('[data-panel-rail-item="media.paged.slide.panel.notes"]'));
+    await press(
+      k,
+      page.locator('[data-panel-rail-item="media.paged.slide.panel.notes"]'),
+    );
     const field = page.locator("[data-notes-text]");
-    await expect(page.locator('[data-notes-panel="ready"]')).toContainText("Slide 2");
+    await expect(page.locator('[data-notes-panel="ready"]')).toContainText(
+      "Slide 2",
+    );
     await press(k, field);
     await typeHuman(page, NOTE);
     // Notes are written when the field lets go of the keyboard.
@@ -201,10 +294,16 @@ film("slide", async (k) => {
   // ── Back to PowerPoint, from the export centre. ──
   let saved = "";
   await k.scene("export", async () => {
-    await press(k, page.getByRole("button", { name: "Export", exact: true }).last());
+    await press(
+      k,
+      page.getByRole("button", { name: "Export", exact: true }).last(),
+    );
     await k.hold(600);
     const download = page.waitForEvent("download");
-    await press(k, page.locator('[data-plugin-export="media.paged.slide.exporter.pptx"]'));
+    await press(
+      k,
+      page.locator('[data-plugin-export="media.paged.slide.exporter.pptx"]'),
+    );
     const file = await download;
     k.chip(`${file.suggestedFilename()} saved`, "save");
     saved = join(k.dir, file.suggestedFilename());
@@ -217,13 +316,23 @@ film("slide", async (k) => {
     // What the file says, before the editor reads it back.
     const deck = readDeck(saved);
     expect(deck).toHaveLength(6);
-    expect(deck[1].text, "the moved slide is second").toContain("What readers asked for");
-    expect(deck[1].text, "edited text is not written back yet").not.toContain("this year");
+    expect(deck[1].text, "the moved slide is second").toContain(
+      "What readers asked for",
+    );
+    expect(deck[1].text, "edited text is not written back yet").not.toContain(
+      "this year",
+    );
     expect(deck[1].notes, "the new notes went with it").toContain(NOTE);
-    expect(deck.map((x) => x.hidden), "only the hidden slide is hidden").toEqual([false, false, false, false, true, false]);
+    expect(
+      deck.map((x) => x.hidden),
+      "only the hidden slide is hidden",
+    ).toEqual([false, false, false, false, true, false]);
     expect(deck[0].notes).toContain("Welcome everyone");
 
-    await press(k, page.getByRole("button", { name: "Design", exact: true }).last());
+    await press(
+      k,
+      page.getByRole("button", { name: "Design", exact: true }).last(),
+    );
     await k.hold(500);
     const chooser = page.waitForEvent("filechooser");
     await menu(k, ["File", "Open…"]);
@@ -232,20 +341,34 @@ film("slide", async (k) => {
     // If the open deck still counts as edited, the editor asks before
     // replacing it; the answer is the reader's own click.
     const discard = page.getByTestId("replace-document-discard");
-    if (await discard.isVisible({ timeout: 1500 }).catch(() => false)) await press(k, discard);
-    await expect.poll(async () => (await designer.handle()).pageCount, { timeout: 20_000 }).toBe(6);
+    if (await discard.isVisible({ timeout: 1500 }).catch(() => false))
+      await press(k, discard);
+    await expect
+      .poll(async () => (await designer.handle()).pageCount, {
+        timeout: 20_000,
+      })
+      .toBe(6);
     await k.hold(600);
   });
 
   // ── What it kept: the order, the hidden slide, the notes; not the edit. ──
   await k.scene("limits", async () => {
-    const rail = page.locator('[data-panel-rail-item="media.paged.slide.panel.slides"]');
+    const rail = page.locator(
+      '[data-panel-rail-item="media.paged.slide.panel.slides"]',
+    );
     await press(k, rail);
-    await expect(thumbs(page).locator("img")).toHaveCount(6, { timeout: 30_000 });
-    await expect(thumbs(page).nth(4).locator("button[aria-pressed]")).toHaveAttribute("aria-pressed", "true");
+    await expect(thumbs(page).locator("img")).toHaveCount(6, {
+      timeout: 30_000,
+    });
+    await expect(
+      thumbs(page).nth(4).locator("button[aria-pressed]"),
+    ).toHaveAttribute("aria-pressed", "true");
     await goToSlide(k, 1);
     await k.hold(1200);
-    await press(k, page.locator('[data-panel-rail-item="media.paged.slide.panel.notes"]'));
+    await press(
+      k,
+      page.locator('[data-panel-rail-item="media.paged.slide.panel.notes"]'),
+    );
     await expect(page.locator("[data-notes-text]")).toHaveValue(NOTE);
     await k.hold(800);
   });

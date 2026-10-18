@@ -55,9 +55,7 @@ interface DocumentHandleWithGuides {
 
 interface CanvasGlobal {
   client: {
-    loadDocument: (
-      bytes: Uint8Array,
-    ) => Promise<DocumentHandleWithGuides>;
+    loadDocument: (bytes: Uint8Array) => Promise<DocumentHandleWithGuides>;
   };
 }
 
@@ -71,7 +69,8 @@ test.describe("Plan-2 §8.3 — ruler guides", () => {
     // path that the test driver's `loadIdml` doesn't run.
     const handle = await page.evaluate(
       async ({ pack }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         const url = `/@fs${pack}`;
         const bytes = new Uint8Array(await (await fetch(url)).arrayBuffer());
         return c.client.loadDocument(bytes);

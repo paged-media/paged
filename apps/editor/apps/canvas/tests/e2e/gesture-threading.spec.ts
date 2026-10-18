@@ -491,8 +491,7 @@ test.describe("gestures.md TH-04 — overset badge", () => {
                     pageId: string;
                     bounds: [number, number, number, number];
                     itemTransform?:
-                      | [number, number, number, number, number, number]
-                      | null;
+                      [number, number, number, number, number, number] | null;
                   }>
                 >;
                 send: (m: unknown) => Promise<{

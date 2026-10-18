@@ -29,7 +29,10 @@ import type { Camera } from "@paged-media/client";
 import { fitCamera, layoutPages } from "./ui/layout";
 
 type Listener = (pageId: string | null) => void;
-type GoTo = (pageId: string, fit: "page" | "width") => boolean | Promise<boolean>;
+type GoTo = (
+  pageId: string,
+  fit: "page" | "width",
+) => boolean | Promise<boolean>;
 
 let active: string | null = null;
 let goTo: GoTo | null = null;
@@ -132,7 +135,8 @@ export function cameraCentredOn(
   viewportHeightPx: number,
 ): Camera | null {
   const rect = layoutPages(pageSizesPt)[index];
-  if (!rect || viewportWidthPx <= 0 || viewportHeightPx <= 0 || !(scale > 0)) return null;
+  if (!rect || viewportWidthPx <= 0 || viewportHeightPx <= 0 || !(scale > 0))
+    return null;
   return {
     scale,
     tx: viewportWidthPx / 2 - (rect.x + xPt) * scale,

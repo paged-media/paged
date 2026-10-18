@@ -47,8 +47,7 @@ import {
   type ElementRef,
 } from "./web-kit";
 
-const HTML =
-  "<div class='block'></div><p>Plain <b>Bold</b> tail</p>";
+const HTML = "<div class='block'></div><p>Plain <b>Bold</b> tail</p>";
 const CSS =
   ".block { width: 120px; height: 24px; background: #c0392b; margin: 0 0 8px; }\n" +
   "p { margin: 0; font: 20px/28px Inter, sans-serif; color: #101820; }";
@@ -56,14 +55,20 @@ const CSS =
 /** Every page item id in the scene tree. */
 async function pageItems(page: Page): Promise<string[]> {
   return page.evaluate(async () => {
-    type Node = { id?: { kind: string; id: unknown } | null; children?: Node[] | null };
+    type Node = {
+      id?: { kind: string; id: unknown } | null;
+      children?: Node[] | null;
+    };
     const c = (
-      globalThis as unknown as { __canvas: { client: { sceneTree: () => Promise<Node[]> } } }
+      globalThis as unknown as {
+        __canvas: { client: { sceneTree: () => Promise<Node[]> } };
+      }
     ).__canvas.client;
     const out: string[] = [];
     const walk = (nodes: Node[] | null | undefined) => {
       for (const n of nodes ?? []) {
-        if (n.id && typeof n.id.id === "string") out.push(`${n.id.kind}:${n.id.id}`);
+        if (n.id && typeof n.id.id === "string")
+          out.push(`${n.id.kind}:${n.id.id}`);
         walk(n.children);
       }
     };
@@ -83,20 +88,30 @@ async function storyRuns(page: Page): Promise<Run[]> {
   const bytes = await page.evaluate(async () =>
     Array.from(
       await (
-        globalThis as unknown as { __canvas: { client: { exportIdml: () => Promise<Uint8Array> } } }
+        globalThis as unknown as {
+          __canvas: { client: { exportIdml: () => Promise<Uint8Array> } };
+        }
       ).__canvas.client.exportIdml(),
     ),
   );
   const idml = Buffer.from(bytes);
   const runs: Run[] = [];
-  for (const name of zipEntryNames(idml).filter((n) => n.startsWith("Stories/"))) {
+  for (const name of zipEntryNames(idml).filter((n) =>
+    n.startsWith("Stories/"),
+  )) {
     const story = readZipText(idml, name) ?? "";
-    for (const m of story.matchAll(/<CharacterStyleRange\b([^>]*)>([\s\S]*?)<\/CharacterStyleRange>/g)) {
-      const text = [...m[2]!.matchAll(/<Content>([\s\S]*?)<\/Content>/g)].map((c) => c[1]).join("");
+    for (const m of story.matchAll(
+      /<CharacterStyleRange\b([^>]*)>([\s\S]*?)<\/CharacterStyleRange>/g,
+    )) {
+      const text = [...m[2]!.matchAll(/<Content>([\s\S]*?)<\/Content>/g)]
+        .map((c) => c[1])
+        .join("");
       if (!text) continue;
       runs.push({
         text,
-        font: m[2]!.match(/<AppliedFont\b[^>]*>([^<]*)<\/AppliedFont>/)?.[1] ?? null,
+        font:
+          m[2]!.match(/<AppliedFont\b[^>]*>([^<]*)<\/AppliedFont>/)?.[1] ??
+          null,
         style: m[1]!.match(/\bFontStyle="([^"]*)"/)?.[1] ?? null,
       });
     }
@@ -125,14 +140,27 @@ test.describe("journey · paged.web bake to document", () => {
     await select(page, [frame]);
     const mark = await tapMark(page);
     await invoke(page, BAKE);
-    await expect.poll(() => logs.length, { timeout: 20_000 }).toBeGreaterThan(0);
-    expect(logs.join(" | "), "the bake reports what it made").toMatch(/baked \d+ native item/);
-    expect(await mutationsSince(page, mark), "a bake is ONE batch mutation").toEqual(["batch"]);
+    await expect
+      .poll(() => logs.length, { timeout: 20_000 })
+      .toBeGreaterThan(0);
+    expect(logs.join(" | "), "the bake reports what it made").toMatch(
+      /baked \d+ native item/,
+    );
+    expect(
+      await mutationsSince(page, mark),
+      "a bake is ONE batch mutation",
+    ).toEqual(["batch"]);
 
     const itemsAfter = await pageItems(page);
     const minted = itemsAfter.filter((i) => !itemsBefore.includes(i));
-    expect(itemsBefore.every((i) => itemsAfter.includes(i)), "the bake removes nothing").toBe(true);
-    expect(minted.filter((i) => i.startsWith("textFrame:")).length, "native text frames").toBeGreaterThan(0);
+    expect(
+      itemsBefore.every((i) => itemsAfter.includes(i)),
+      "the bake removes nothing",
+    ).toBe(true);
+    expect(
+      minted.filter((i) => i.startsWith("textFrame:")).length,
+      "native text frames",
+    ).toBeGreaterThan(0);
     expect(minted.length, "a native fill beside the text").toBeGreaterThan(
       minted.filter((i) => i.startsWith("textFrame:")).length,
     );
@@ -140,18 +168,29 @@ test.describe("journey · paged.web bake to document", () => {
     const baked = (await storyRuns(page)).slice(runsBefore.length);
     const text = baked.map((r) => r.text).join(" ");
     for (const word of ["Plain", "Bold", "tail"]) expect(text).toContain(word);
-    for (const r of baked) expect(r.font, `run "${r.text}" names its family`).toBe("Inter");
+    for (const r of baked)
+      expect(r.font, `run "${r.text}" names its family`).toBe("Inter");
     const bold = baked.filter((r) => r.text.includes("Bold"));
     expect(bold.length, "the bold run baked as its own run").toBeGreaterThan(0);
-    for (const r of bold) expect(r.style, `run "${r.text}" is Bold`).toBe("Bold");
+    for (const r of bold)
+      expect(r.style, `run "${r.text}" is Bold`).toBe("Bold");
     for (const r of baked.filter((x) => !x.text.includes("Bold"))) {
-      expect(r.style ?? "Regular", `run "${r.text}" is not bold`).not.toMatch(/Bold/);
+      expect(r.style ?? "Regular", `run "${r.text}" is not bold`).not.toMatch(
+        /Bold/,
+      );
     }
 
     // ── 3. One undo removes everything the bake made. ──
     await undo(page);
-    await expect.poll(() => pageItems(page), { timeout: 10_000 }).toEqual(itemsBefore);
-    expect(await storyRuns(page), "the baked stories are gone").toEqual(runsBefore);
-    expect((await webSource(page, frame))?.html, "the web frame keeps its source").toBe(HTML);
+    await expect
+      .poll(() => pageItems(page), { timeout: 10_000 })
+      .toEqual(itemsBefore);
+    expect(await storyRuns(page), "the baked stories are gone").toEqual(
+      runsBefore,
+    );
+    expect(
+      (await webSource(page, frame))?.html,
+      "the web frame keeps its source",
+    ).toBe(HTML);
   });
 });

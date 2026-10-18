@@ -188,7 +188,12 @@ export async function clearSelection(page: Page): Promise<void> {
     const c = (
       globalThis as unknown as {
         __canvas: {
-          client: { setElementSelection: (ids: unknown[], mode: string) => Promise<unknown> };
+          client: {
+            setElementSelection: (
+              ids: unknown[],
+              mode: string,
+            ) => Promise<unknown>;
+          };
           setElementSelection?: (ids: unknown[], mode: string) => void;
         };
       }
@@ -344,7 +349,9 @@ export async function invokeWith(
 ): Promise<void> {
   if (process.env.ANNUAL_TRACE) {
     // eslint-disable-next-line no-console
-    console.log(`[trace-cmd] ${id} ${JSON.stringify(payload)?.slice(0, 80) ?? ""}`);
+    console.log(
+      `[trace-cmd] ${id} ${JSON.stringify(payload)?.slice(0, 80) ?? ""}`,
+    );
   }
   await page.evaluate(
     async ({ id, payload }) => {
@@ -352,7 +359,9 @@ export async function invokeWith(
         globalThis as unknown as {
           __canvas: {
             registries: {
-              commands: { invoke: (id: string, payload?: unknown) => Promise<void> };
+              commands: {
+                invoke: (id: string, payload?: unknown) => Promise<void>;
+              };
             };
           };
         }

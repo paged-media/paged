@@ -160,14 +160,18 @@ test.describe("journey · paged.data plugin", () => {
     await invokeCommand(page, IMPORT_COMMAND);
     // data canary.6 (U12): the v-header body text is gone — the panel's
     // stable mount anchor is its import affordance.
-    await expect(page.locator("[data-data-import-csv]")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("[data-data-import-csv]")).toBeVisible({
+      timeout: 10_000,
+    });
 
     // Before any source exists the bindings panel mounts its empty state,
     // which offers the next step instead of controls that cannot work
     // (2026-10-11); the authoring row appears once a source is imported
     // (asserted after the import below).
     await openPanel(page, BINDINGS_PANEL);
-    await expect(page.locator("[data-data-bind-empty] [data-data-bind-open-sources]")).toBeVisible({
+    await expect(
+      page.locator("[data-data-bind-empty] [data-data-bind-open-sources]"),
+    ).toBeVisible({
       timeout: 10_000,
     });
 
@@ -186,7 +190,9 @@ test.describe("journey · paged.data plugin", () => {
     //    "error" when the heavy engines won't boot headless. Collected so a
     //    partial drive is reported, never flaked. ──
     await openPanel(page, SOURCES_PANEL);
-    await expect(page.locator("[data-data-import-csv]")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("[data-data-import-csv]")).toBeVisible({
+      timeout: 10_000,
+    });
 
     // data canary.6: import goes through the shell.pickFile@1 door
     // (programmatic input.click -> Playwright filechooser, the doc.journey
@@ -241,8 +247,12 @@ test.describe("journey · paged.data plugin", () => {
       // With a source, the bindings panel trades its empty state for the
       // authoring row, reading "All rows of data_people" (HARD).
       await openPanel(page, BINDINGS_PANEL);
-      await expect(page.locator("[data-data-bind-author]")).toBeVisible({ timeout: 10_000 });
-      await expect(page.locator("[data-data-bind-query-pick]")).toHaveValue("s:data_people");
+      await expect(page.locator("[data-data-bind-author]")).toBeVisible({
+        timeout: 10_000,
+      });
+      await expect(page.locator("[data-data-bind-query-pick]")).toHaveValue(
+        "s:data_people",
+      );
       try {
         await invokeCommand(page, RESOLVE_COMMAND);
         await invokeCommand(page, LOWER_COMMAND);
@@ -274,7 +284,10 @@ test.describe("journey · paged.data plugin", () => {
     // Under REQUIRE_REAL_DUCKDB=1 the lane has promised a real DuckDB, so the
     // data-flow steps ARE gated: any not-driven step fails the journey.
     if (REQUIRE_REAL_DUCKDB) {
-      expect(failures, "REQUIRE_REAL_DUCKDB=1: every DuckDB-dependent step must drive").toEqual([]);
+      expect(
+        failures,
+        "REQUIRE_REAL_DUCKDB=1: every DuckDB-dependent step must drive",
+      ).toEqual([]);
     }
   });
 });

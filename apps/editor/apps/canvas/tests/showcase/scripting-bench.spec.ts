@@ -178,8 +178,8 @@ test.describe("scripting bench", () => {
       let out: string[] = [];
       try {
         out = await script(
-        page,
-        `
+          page,
+          `
       var page = ${JSON.stringify(pageB)};
       var quads = ${JSON.stringify(slice)};
       var made = 0;

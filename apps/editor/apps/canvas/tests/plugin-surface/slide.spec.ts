@@ -138,7 +138,12 @@ const PANEL_TITLES: Record<string, string> = {
   [PLACEHOLDER_PANEL]: "Placeholder",
   [DECK_PANEL]: "Deck",
 };
-const SCHEMA_PANELS = [SLIDE_PANEL, TRANSITION_PANEL, PLACEHOLDER_PANEL, DECK_PANEL] as const;
+const SCHEMA_PANELS = [
+  SLIDE_PANEL,
+  TRANSITION_PANEL,
+  PLACEHOLDER_PANEL,
+  DECK_PANEL,
+] as const;
 
 /** The property rows each schema panel shows, in order (the bundle's
  *  `SLIDE_PANEL_FIELDS`, restated). */
@@ -161,7 +166,11 @@ interface Importer {
   title: string;
   extensions: string[];
   mimeTypes?: string[];
-  import(f: { name: string; bytes: Uint8Array; mimeType: string }): Promise<void>;
+  import(f: {
+    name: string;
+    bytes: Uint8Array;
+    mimeType: string;
+  }): Promise<void>;
 }
 
 interface Exporter {
@@ -175,7 +184,11 @@ interface Exporter {
 interface CanvasGlobal {
   __canvas: {
     ready: boolean;
-    handle: { pageCount: number; pageIds: string[]; pageSizesPt: [number, number][] } | null;
+    handle: {
+      pageCount: number;
+      pageIds: string[];
+      pageSizesPt: [number, number][];
+    } | null;
     openPanel(id: string): void;
     registries: {
       commands: {
@@ -194,7 +207,9 @@ interface CanvasGlobal {
         }>;
       };
       tools: { list(): Array<{ id: string }> };
-      menus: { list(): Array<{ path: string; command: string; disabled?: boolean }> };
+      menus: {
+        list(): Array<{ path: string; command: string; disabled?: boolean }>;
+      };
       keybindings: { list(): Array<{ key: string; command: string }> };
       importers: {
         list(): Importer[];
@@ -210,17 +225,24 @@ interface CanvasGlobal {
       commands(): Promise<Array<{ id: string; title: string; owner: string }>>;
       invoke(command: string, args: unknown): Promise<unknown>;
       query(selector: string): Promise<string[]>;
-      get(address: string, path: string): Promise<{ kind: string; value?: unknown }>;
+      get(
+        address: string,
+        path: string,
+      ): Promise<{ kind: string; value?: unknown }>;
     } | null;
     client: {
       undo(): Promise<unknown>;
-      executeScript(s: string): Promise<{ output: string[]; error: string | null }>;
+      executeScript(
+        s: string,
+      ): Promise<{ output: string[]; error: string | null }>;
     };
   };
 }
 
 const canvas = (page: Page) =>
-  page.evaluate(() => Boolean((globalThis as unknown as CanvasGlobal).__canvas));
+  page.evaluate(() =>
+    Boolean((globalThis as unknown as CanvasGlobal).__canvas),
+  );
 
 /** Boot and start a blank one-page document (File ▸ New): NOT a deck. */
 async function bootBlank(page: Page): Promise<Designer> {
@@ -251,7 +273,8 @@ async function openDeck(page: Page, designer: Designer): Promise<void> {
     .toBe(10);
 }
 
-const pageCount = async (designer: Designer) => (await designer.handle()).pageCount;
+const pageCount = async (designer: Designer) =>
+  (await designer.handle()).pageCount;
 
 const slidePanels = (page: Page) =>
   page.evaluate(() =>
@@ -276,18 +299,25 @@ const railFlags = async (page: Page) =>
   );
 
 async function openPanel(page: Page, id: string): Promise<void> {
-  await page.evaluate((pid) => (globalThis as unknown as CanvasGlobal).__canvas.openPanel(pid), id);
+  await page.evaluate(
+    (pid) => (globalThis as unknown as CanvasGlobal).__canvas.openPanel(pid),
+    id,
+  );
 }
 
 /** The property rows a schema panel renders right now. */
 const fieldsOf = (page: Page, id: string) =>
   page
     .locator(`[data-schema-panel="${id}"] [data-property-field]`)
-    .evaluateAll((els) => els.map((e) => e.getAttribute("data-property-field")));
+    .evaluateAll((els) =>
+      els.map((e) => e.getAttribute("data-property-field")),
+    );
 
 /** The first text frame that carries paged.slide's placeholder metadata:
  *  the title placeholder of slide 1 in the fixture. */
-async function firstPlaceholderFrame(page: Page): Promise<{ kind: string; id: string }> {
+async function firstPlaceholderFrame(
+  page: Page,
+): Promise<{ kind: string; id: string }> {
   const ref = await page.evaluate(async () => {
     const c = (globalThis as unknown as CanvasGlobal).__canvas;
     const r = await c.client.executeScript("paged.tree()");
@@ -355,8 +385,12 @@ test.describe("plugin surface · paged.slide", () => {
     expect([...c.panels].sort()).toEqual([...DECLARED.panels].sort());
     expect([...c.importers]).toEqual([...DECLARED.importers]);
     expect([...c.exporters]).toEqual([...DECLARED.exporters]);
-    expect(c.objectModel.kinds.map((k) => k.kind)).toEqual([...DECLARED.objectKinds]);
-    expect(c.objectModel.commands.map((k) => k.id)).toEqual([...DECLARED.typedCommands]);
+    expect(c.objectModel.kinds.map((k) => k.kind)).toEqual([
+      ...DECLARED.objectKinds,
+    ]);
+    expect(c.objectModel.commands.map((k) => k.id)).toEqual([
+      ...DECLARED.typedCommands,
+    ]);
     // …and declares nothing in the categories it does not use.
     expect(c.commands, "no palette commands are declared").toBeUndefined();
     expect(c.tools, "no tools are declared").toBeUndefined();
@@ -364,21 +398,32 @@ test.describe("plugin surface · paged.slide", () => {
     expect(c.objectTypes, "no object type is declared").toBeUndefined();
 
     for (const id of c.panels) expect(live.panels, `panel ${id}`).toContain(id);
-    for (const id of c.importers) expect(live.importers, `importer ${id}`).toContain(id);
-    for (const id of c.exporters) expect(live.exporters, `exporter ${id}`).toContain(id);
+    for (const id of c.importers)
+      expect(live.importers, `importer ${id}`).toContain(id);
+    for (const id of c.exporters)
+      expect(live.exporters, `exporter ${id}`).toContain(id);
     // The registries hold nothing of paged.slide's that it did not declare.
-    expect(live.commands.filter((id) => id.startsWith("media.paged.slide."))).toEqual([]);
-    expect(live.tools.filter((id) => id.startsWith("media.paged.slide."))).toEqual([]);
+    expect(
+      live.commands.filter((id) => id.startsWith("media.paged.slide.")),
+    ).toEqual([]);
+    expect(
+      live.tools.filter((id) => id.startsWith("media.paged.slide.")),
+    ).toEqual([]);
     expect(live.editContexts).not.toContain("x-paged:media.paged.slide");
     expect(live.objectTypes).not.toContain("x-paged:media.paged.slide");
 
     // The object model is live in the ONE shared object registry
     // (`host.objects`), with the manifest's titles.
-    expect(live.kinds, "the editor wires a shared object registry").not.toBeNull();
+    expect(
+      live.kinds,
+      "the editor wires a shared object registry",
+    ).not.toBeNull();
     expect(live.kinds).toEqual(
       c.objectModel.kinds.map((k) => ({ kind: KIND(k.kind), title: k.title })),
     );
-    expect(live.typed).toEqual(c.objectModel.commands.map((k) => ({ id: k.id, title: k.title })));
+    expect(live.typed).toEqual(
+      c.objectModel.commands.map((k) => ({ id: k.id, title: k.title })),
+    );
 
     // Same void the doc, sheet and web manifests declare into: `partTypes`
     // has no registry on the host side. The bundle writes its parts through
@@ -413,41 +458,62 @@ test.describe("plugin surface · paged.slide", () => {
     // The two React panels carry their own glyph for the panel rail.
     expect(byId[SLIDES_PANEL].iconSvg).toBe(true);
     expect(byId[NOTES_PANEL].iconSvg).toBe(true);
-    for (const id of SCHEMA_PANELS) expect(byId[id].defaultDock, id).toBe("right");
+    for (const id of SCHEMA_PANELS)
+      expect(byId[id].defaultDock, id).toBe("right");
 
     // Each panel has a show command and a Plugins ▸ Slide entry onto it.
     const menu = await page.evaluate(() => {
       const r = (globalThis as unknown as CanvasGlobal).__canvas.registries;
       return r.menus
         .list()
-        .filter((m) => m.command.startsWith("paged.panel.show.media.paged.slide."))
-        .map((m) => ({ path: m.path, command: m.command, registered: Boolean(r.commands.get(m.command)) }));
+        .filter((m) =>
+          m.command.startsWith("paged.panel.show.media.paged.slide."),
+        )
+        .map((m) => ({
+          path: m.path,
+          command: m.command,
+          registered: Boolean(r.commands.get(m.command)),
+        }));
     });
     expect(menu.map((m) => m.path).sort()).toEqual(
       DECLARED.panels.map((id) => `Plugins/Slide/${PANEL_TITLES[id]}`).sort(),
     );
-    for (const m of menu) expect(m.registered, `${m.path} → ${m.command}`).toBe(true);
+    for (const m of menu)
+      expect(m.registered, `${m.path} → ${m.command}`).toBe(true);
 
     // Every panel mounts its real body, even on a document that is not a
     // deck: the sorter and the notes work on any document's pages.
     await openPanel(page, SLIDES_PANEL);
-    await expect(page.locator('[data-slides-panel="ready"]')).toBeVisible({ timeout: 15_000 });
-    await expect(page.locator("[data-slides-panel] [data-slide]")).toHaveCount(1);
+    await expect(page.locator('[data-slides-panel="ready"]')).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.locator("[data-slides-panel] [data-slide]")).toHaveCount(
+      1,
+    );
     // The only slide cannot be deleted (the button says so by being
     // disabled, rather than deleting the document's last page).
     await expect(
-      page.locator("[data-slides-panel] [data-slide]").first().getByTitle("Delete slide"),
+      page
+        .locator("[data-slides-panel] [data-slide]")
+        .first()
+        .getByTitle("Delete slide"),
     ).toBeDisabled();
     // No layouts outside a deck, so no New slide row.
     await expect(page.locator("[data-new-slide]")).toHaveCount(0);
 
     await openPanel(page, NOTES_PANEL);
-    await expect(page.locator('[data-notes-panel="ready"]')).toContainText("Slide 1", {
-      timeout: 15_000,
-    });
+    await expect(page.locator('[data-notes-panel="ready"]')).toContainText(
+      "Slide 1",
+      {
+        timeout: 15_000,
+      },
+    );
     for (const id of SCHEMA_PANELS) {
       await openPanel(page, id);
-      await expect(page.locator(`[data-schema-panel="${id}"]`), `${id} mounts`).toBeVisible({
+      await expect(
+        page.locator(`[data-schema-panel="${id}"]`),
+        `${id} mounts`,
+      ).toBeVisible({
         timeout: 15_000,
       });
     }
@@ -463,12 +529,19 @@ test.describe("plugin surface · paged.slide", () => {
     await page.locator('[data-menu-submenu="Slide"]').hover();
     const sub = page.getByRole("menu").last();
     for (const id of DECLARED.panels) {
-      const item = sub.getByRole("menuitem", { name: PANEL_TITLES[id], exact: true });
-      await expect(item, `Plugins ▸ Slide ▸ ${PANEL_TITLES[id]}`).toHaveCount(1);
+      const item = sub.getByRole("menuitem", {
+        name: PANEL_TITLES[id],
+        exact: true,
+      });
+      await expect(item, `Plugins ▸ Slide ▸ ${PANEL_TITLES[id]}`).toHaveCount(
+        1,
+      );
       await expect(item).not.toHaveAttribute("aria-disabled", "true");
     }
     await sub.getByRole("menuitem", { name: "Slides", exact: true }).click();
-    await expect(page.locator('[data-slides-panel="ready"]')).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('[data-slides-panel="ready"]')).toBeVisible({
+      timeout: 10_000,
+    });
   });
 
   test("Slides and Notes join the panel rail only while a deck is open, and leave it with the deck @feat:plugin-platform.panel-rail-door @feat:plugin-slide.slide-sorter @level:edge", async ({
@@ -482,15 +555,20 @@ test.describe("plugin surface · paged.slide", () => {
     const railSlides = page.locator(`[data-panel-rail-item="${SLIDES_PANEL}"]`);
     const railNotes = page.locator(`[data-panel-rail-item="${NOTES_PANEL}"]`);
 
-    expect(await railFlags(page)).toEqual({ [SLIDES_PANEL]: false, [NOTES_PANEL]: false });
+    expect(await railFlags(page)).toEqual({
+      [SLIDES_PANEL]: false,
+      [NOTES_PANEL]: false,
+    });
     await expect(railSlides).toHaveCount(0);
     await expect(railNotes).toHaveCount(0);
 
     await openDeck(page, designer);
-    await expect.poll(() => railFlags(page), { timeout: 15_000 }).toEqual({
-      [SLIDES_PANEL]: true,
-      [NOTES_PANEL]: true,
-    });
+    await expect
+      .poll(() => railFlags(page), { timeout: 15_000 })
+      .toEqual({
+        [SLIDES_PANEL]: true,
+        [NOTES_PANEL]: true,
+      });
     await expect(railSlides).toBeVisible({ timeout: 10_000 });
     await expect(railNotes).toBeVisible();
     // Re-registration keeps one registration per id (no duplicate panel).
@@ -500,10 +578,12 @@ test.describe("plugin surface · paged.slide", () => {
 
     // A blank document is not a deck: both leave the rail again.
     await designer.newDocument();
-    await expect.poll(() => railFlags(page), { timeout: 15_000 }).toEqual({
-      [SLIDES_PANEL]: false,
-      [NOTES_PANEL]: false,
-    });
+    await expect
+      .poll(() => railFlags(page), { timeout: 15_000 })
+      .toEqual({
+        [SLIDES_PANEL]: false,
+        [NOTES_PANEL]: false,
+      });
     await expect(railSlides).toHaveCount(0, { timeout: 10_000 });
     await expect(railNotes).toHaveCount(0);
   });
@@ -522,8 +602,14 @@ test.describe("plugin surface · paged.slide", () => {
       await openPanel(page, id);
       const panel = page.locator(`[data-schema-panel="${id}"]`);
       await expect(panel).toBeVisible({ timeout: 15_000 });
-      expect(await fieldsOf(page, id), `${id} has no rows outside a deck`).toEqual([]);
-      expect(((await panel.textContent()) ?? "").trim(), `${id} says nothing`).toBe("");
+      expect(
+        await fieldsOf(page, id),
+        `${id} has no rows outside a deck`,
+      ).toEqual([]);
+      expect(
+        ((await panel.textContent()) ?? "").trim(),
+        `${id} says nothing`,
+      ).toBe("");
     }
     test.info().annotations.push({
       type: "surface-finding",
@@ -559,25 +645,41 @@ test.describe("plugin surface · paged.slide", () => {
     // placeholder): empty until something is selected…
     for (const id of [SLIDE_PANEL, TRANSITION_PANEL, PLACEHOLDER_PANEL]) {
       await openPanel(page, id);
-      await expect(page.locator(`[data-schema-panel="${id}"]`)).toBeVisible({ timeout: 15_000 });
-      expect(await fieldsOf(page, id), `${id} is empty with nothing selected`).toEqual([]);
+      await expect(page.locator(`[data-schema-panel="${id}"]`)).toBeVisible({
+        timeout: 15_000,
+      });
+      expect(
+        await fieldsOf(page, id),
+        `${id} is empty with nothing selected`,
+      ).toEqual([]);
     }
 
     // …and fill once the title placeholder of slide 1 is selected.
     const frame = await firstPlaceholderFrame(page);
     await designer.selectElement(frame.kind, frame.id);
-    for (const id of [SLIDE_PANEL, TRANSITION_PANEL, PLACEHOLDER_PANEL] as const) {
+    for (const id of [
+      SLIDE_PANEL,
+      TRANSITION_PANEL,
+      PLACEHOLDER_PANEL,
+    ] as const) {
       await openPanel(page, id);
       await expect
-        .poll(() => fieldsOf(page, id), { timeout: 15_000, message: `${id} rows` })
+        .poll(() => fieldsOf(page, id), {
+          timeout: 15_000,
+          message: `${id} rows`,
+        })
         .toEqual(PANEL_FIELDS[id]);
     }
 
     // The schema panel for speaker notes is NOT contributed here: the
     // React Notes panel owns the id, so the bundle skips the fallback.
     await openPanel(page, NOTES_PANEL);
-    await expect(page.locator('[data-notes-panel="ready"]')).toBeVisible({ timeout: 15_000 });
-    await expect(page.locator(`[data-schema-panel="${NOTES_PANEL}"]`)).toHaveCount(0);
+    await expect(page.locator('[data-notes-panel="ready"]')).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(
+      page.locator(`[data-schema-panel="${NOTES_PANEL}"]`),
+    ).toHaveCount(0);
   });
 
   // ── 3. IMPORTER ──────────────────────────────────────────────────
@@ -589,11 +691,18 @@ test.describe("plugin surface · paged.slide", () => {
 
     const wiring = await page.evaluate((mime) => {
       const r = (globalThis as unknown as CanvasGlobal).__canvas.registries;
-      const entry = r.importers.list().find((i) => i.id === "media.paged.slide.importer.pptx");
-      const id = (name: string, m?: string) => r.importers.resolve(name, m)?.id ?? null;
+      const entry = r.importers
+        .list()
+        .find((i) => i.id === "media.paged.slide.importer.pptx");
+      const id = (name: string, m?: string) =>
+        r.importers.resolve(name, m)?.id ?? null;
       return {
         entry: entry
-          ? { title: entry.title, ext: entry.extensions, mime: entry.mimeTypes ?? [] }
+          ? {
+              title: entry.title,
+              ext: entry.extensions,
+              mime: entry.mimeTypes ?? [],
+            }
           : null,
         pptx: id("deck.pptx"),
         upper: id("DECK.PPTX"),
@@ -617,7 +726,8 @@ test.describe("plugin surface · paged.slide", () => {
     expect(wiring.potx).toBe(IMPORTER);
     expect(wiring.byMime).toBe(IMPORTER);
     expect(wiring.ppt).toBeNull();
-    for (const ext of [".pptx", ".ppsx", ".potx"]) expect(wiring.accept).toContain(ext);
+    for (const ext of [".pptx", ".ppsx", ".potx"])
+      expect(wiring.accept).toContain(ext);
 
     // Drive it with real bytes. Unlike paged.web's importer this one
     // REPLACES the document: the deck becomes the open document, a page
@@ -650,19 +760,33 @@ test.describe("plugin surface · paged.slide", () => {
     const exportNow = () =>
       page.evaluate(async () => {
         const r = (globalThis as unknown as CanvasGlobal).__canvas.registries;
-        const ex = r.exporters.list().find((e) => e.id === "media.paged.slide.exporter.pptx");
+        const ex = r.exporters
+          .list()
+          .find((e) => e.id === "media.paged.slide.exporter.pptx");
         if (!ex) return "no exporter";
         const out = await ex.export();
         return out
-          ? { fileName: out.fileName, length: out.bytes.length, head: Array.from(out.bytes.slice(0, 4)) }
+          ? {
+              fileName: out.fileName,
+              length: out.bytes.length,
+              head: Array.from(out.bytes.slice(0, 4)),
+            }
           : null;
       });
 
     const entry = await page.evaluate(() => {
-      const e = (globalThis as unknown as CanvasGlobal).__canvas.registries.exporters
+      const e = (
+        globalThis as unknown as CanvasGlobal
+      ).__canvas.registries.exporters
         .list()
         .find((x) => x.id === "media.paged.slide.exporter.pptx");
-      return e ? { title: e.title, extension: e.extension, mimeType: e.mimeType ?? null } : null;
+      return e
+        ? {
+            title: e.title,
+            extension: e.extension,
+            mimeType: e.mimeType ?? null,
+          }
+        : null;
     });
     expect(entry).toEqual({
       title: "PowerPoint presentation (.pptx)",
@@ -676,9 +800,12 @@ test.describe("plugin surface · paged.slide", () => {
     // inventing a deck.
     expect(await exportNow()).toBeNull();
     await expect
-      .poll(() => errors.some((e) => /not opened from a PowerPoint deck/.test(e)), {
-        timeout: 10_000,
-      })
+      .poll(
+        () => errors.some((e) => /not opened from a PowerPoint deck/.test(e)),
+        {
+          timeout: 10_000,
+        },
+      )
       .toBe(true);
 
     // After an open it writes a deck (a zip). The bytes are the journey's
@@ -688,7 +815,9 @@ test.describe("plugin surface · paged.slide", () => {
     expect(out).not.toBeNull();
     expect(out).not.toBe("no exporter");
     const ok = out as { fileName: string; length: number; head: number[] };
-    expect(ok.head, "a zip local-file header").toEqual([0x50, 0x4b, 0x03, 0x04]);
+    expect(ok.head, "a zip local-file header").toEqual([
+      0x50, 0x4b, 0x03, 0x04,
+    ]);
     expect(ok.length).toBeGreaterThan(1000);
 
     // KNOWN DEFECT — the file is not named after the deck. The exporter
@@ -704,19 +833,26 @@ test.describe("plugin surface · paged.slide", () => {
       const c = (globalThis as unknown as CanvasGlobal).__canvas;
       const o = c.objects!;
       const [address] = await o.query(deckKind);
-      const meta = (await (
-        c.client as unknown as { documentMeta(): Promise<{ documentName?: string }> }
-      ).documentMeta()) ?? {};
+      const meta =
+        (await (
+          c.client as unknown as {
+            documentMeta(): Promise<{ documentName?: string }>;
+          }
+        ).documentMeta()) ?? {};
       return {
         deck: (await o.get(address, "name")).value,
         documentName: (meta.documentName ?? "").trim(),
       };
     }, KIND("deck"));
     expect(names.deck, "the deck knows its own name").toBe("slide-deck");
-    expect(names.documentName, "KNOWN DEFECT: the opened deck document has no name").toBe("");
-    expect(ok.fileName, "KNOWN DEFECT: so it exports under the fallback name").toBe(
-      "presentation.pptx",
-    );
+    expect(
+      names.documentName,
+      "KNOWN DEFECT: the opened deck document has no name",
+    ).toBe("");
+    expect(
+      ok.fileName,
+      "KNOWN DEFECT: so it exports under the fallback name",
+    ).toBe("presentation.pptx");
     test.info().annotations.push({
       type: "surface-finding",
       description:
@@ -736,12 +872,20 @@ test.describe("plugin surface · paged.slide", () => {
     await openDeck(page, designer);
     await openPanel(page, SLIDES_PANEL);
     const panel = page.locator('[data-slides-panel="ready"]');
-    await expect(panel.locator("[data-slide]")).toHaveCount(10, { timeout: 15_000 });
+    await expect(panel.locator("[data-slide]")).toHaveCount(10, {
+      timeout: 15_000,
+    });
     const undo = () =>
-      page.evaluate(() => (globalThis as unknown as CanvasGlobal).__canvas.client.undo());
+      page.evaluate(() =>
+        (globalThis as unknown as CanvasGlobal).__canvas.client.undo(),
+      );
 
     // Duplicate slide 2: eleven slides, then undo → ten.
-    await panel.locator("[data-slide]").nth(1).getByTitle("Duplicate slide").click();
+    await panel
+      .locator("[data-slide]")
+      .nth(1)
+      .getByTitle("Duplicate slide")
+      .click();
     await expect.poll(() => pageCount(designer), { timeout: 15_000 }).toBe(11);
     await expect(panel.locator("[data-slide]")).toHaveCount(11);
     await undo();
@@ -756,21 +900,33 @@ test.describe("plugin surface · paged.slide", () => {
     const hidden = () =>
       page.evaluate(
         async (address) =>
-          (await (globalThis as unknown as CanvasGlobal).__canvas.objects!.get(address, "hidden"))
-            .value,
+          (
+            await (globalThis as unknown as CanvasGlobal).__canvas.objects!.get(
+              address,
+              "hidden",
+            )
+          ).value,
         `${KIND("slide")}/${pageId}`,
       );
     expect(await hidden()).toBe(false);
     await third.getByTitle("Hide from slideshow").click();
-    await expect(third.getByTitle("Show in slideshow")).toHaveAttribute("aria-pressed", "true", {
-      timeout: 10_000,
-    });
+    await expect(third.getByTitle("Show in slideshow")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+      {
+        timeout: 10_000,
+      },
+    );
     await expect.poll(hidden, { timeout: 10_000 }).toBe(true);
     await undo();
     await expect.poll(hidden, { timeout: 10_000 }).toBe(false);
 
     // Delete slide 10: nine slides, then undo → ten.
-    await panel.locator("[data-slide]").nth(9).getByTitle("Delete slide").click();
+    await panel
+      .locator("[data-slide]")
+      .nth(9)
+      .getByTitle("Delete slide")
+      .click();
     await expect.poll(() => pageCount(designer), { timeout: 15_000 }).toBe(9);
     await undo();
     await expect.poll(() => pageCount(designer), { timeout: 15_000 }).toBe(10);
@@ -786,10 +942,9 @@ test.describe("plugin surface · paged.slide", () => {
       page.evaluate(
         async ({ command, args }) => {
           try {
-            const v = await (globalThis as unknown as CanvasGlobal).__canvas.objects!.invoke(
-              command,
-              args,
-            );
+            const v = await (
+              globalThis as unknown as CanvasGlobal
+            ).__canvas.objects!.invoke(command, args);
             return { ok: true as const, value: v };
           } catch (err) {
             return { ok: false as const, error: String(err) };
@@ -809,7 +964,9 @@ test.describe("plugin surface · paged.slide", () => {
     const bytes = [...readFileSync(PPTX_FIXTURE)];
     const opened = await page.evaluate(
       async ({ command, bytes }) => {
-        const r = (await (globalThis as unknown as CanvasGlobal).__canvas.objects!.invoke(command, {
+        const r = (await (
+          globalThis as unknown as CanvasGlobal
+        ).__canvas.objects!.invoke(command, {
           name: "slide-deck.pptx",
           bytes: new Uint8Array(bytes),
         })) as { slides: string[] };
@@ -818,11 +975,14 @@ test.describe("plugin surface · paged.slide", () => {
       { command: IMPORT_PPTX, bytes },
     );
     expect(opened).toHaveLength(10);
-    for (const a of opened) expect(a).toMatch(/^plugin:media\.paged\.slide\/slide\//);
+    for (const a of opened)
+      expect(a).toMatch(/^plugin:media\.paged\.slide\/slide\//);
     await expect.poll(() => pageCount(designer), { timeout: 30_000 }).toBe(10);
 
     // A slide that does not exist is a typed refusal.
-    const unknown = await invoke(NEW_SLIDE, { after: `${KIND("slide")}/no-such-page` });
+    const unknown = await invoke(NEW_SLIDE, {
+      after: `${KIND("slide")}/no-such-page`,
+    });
     expect(unknown.ok).toBe(false);
     expect(unknown.ok ? "" : unknown.error).toMatch(/unknownAddress/);
     expect(await pageCount(designer)).toBe(10);
@@ -835,7 +995,9 @@ test.describe("plugin surface · paged.slide", () => {
       slide: expect.stringMatching(/^plugin:media\.paged\.slide\/slide\//),
     });
     await expect.poll(() => pageCount(designer), { timeout: 15_000 }).toBe(11);
-    await page.evaluate(() => (globalThis as unknown as CanvasGlobal).__canvas.client.undo());
+    await page.evaluate(() =>
+      (globalThis as unknown as CanvasGlobal).__canvas.client.undo(),
+    );
     await expect.poll(() => pageCount(designer), { timeout: 15_000 }).toBe(10);
   });
 
@@ -849,10 +1011,17 @@ test.describe("plugin surface · paged.slide", () => {
     const reach = await page.evaluate(() => {
       const r = (globalThis as unknown as CanvasGlobal).__canvas.registries;
       const mine = (s: string) => s.startsWith("media.paged.slide.");
-      const panelShow = (s: string) => s.startsWith("paged.panel.show.media.paged.slide.");
+      const panelShow = (s: string) =>
+        s.startsWith("paged.panel.show.media.paged.slide.");
       return {
-        commands: r.commands.list().map((c) => c.id).filter(mine),
-        tools: r.tools.list().map((t) => t.id).filter(mine),
+        commands: r.commands
+          .list()
+          .map((c) => c.id)
+          .filter(mine),
+        tools: r.tools
+          .list()
+          .map((t) => t.id)
+          .filter(mine),
         keybindings: r.keybindings
           .list()
           .filter((k) => mine(k.command) || panelShow(k.command))
@@ -860,27 +1029,49 @@ test.describe("plugin surface · paged.slide", () => {
         // Menu entries onto paged.slide that are NOT its panels' show items.
         verbItems: r.menus
           .list()
-          .filter((m) => mine(m.command) || (/powerpoint|pptx/i.test(m.path) && !panelShow(m.command)))
+          .filter(
+            (m) =>
+              mine(m.command) ||
+              (/powerpoint|pptx/i.test(m.path) && !panelShow(m.command)),
+          )
           .map((m) => m.path),
         // For contrast: the host curates a File-menu front door for
         // paged.pdf's importer.
-        pdfCourtesyItem: r.menus.list().some((m) => m.path === "File/Open PDF…"),
+        pdfCourtesyItem: r.menus
+          .list()
+          .some((m) => m.path === "File/Open PDF…"),
         genericOpen: r.menus.list().some((m) => m.path === "File/Open…"),
-        pluginToolsTotal: r.tools.list().filter((t) => t.id.startsWith("media.paged.")).length,
+        pluginToolsTotal: r.tools
+          .list()
+          .filter((t) => t.id.startsWith("media.paged.")).length,
       };
     });
 
-    expect(reach.commands, "paged.slide registers no palette command").toEqual([]);
+    expect(reach.commands, "paged.slide registers no palette command").toEqual(
+      [],
+    );
     expect(reach.tools, "paged.slide contributes no tool").toEqual([]);
-    expect(reach.pluginToolsTotal, "the tool door works — other bundles use it").toBeGreaterThan(10);
-    expect(reach.keybindings, "paged.slide contributes no keybinding").toEqual([]);
-    expect(reach.verbItems, "no menu entry beyond the six panel items").toEqual([]);
-    expect(reach.pdfCourtesyItem, "the host curates File ▸ Open PDF… for paged.pdf").toBe(true);
+    expect(
+      reach.pluginToolsTotal,
+      "the tool door works — other bundles use it",
+    ).toBeGreaterThan(10);
+    expect(reach.keybindings, "paged.slide contributes no keybinding").toEqual(
+      [],
+    );
+    expect(reach.verbItems, "no menu entry beyond the six panel items").toEqual(
+      [],
+    );
+    expect(
+      reach.pdfCourtesyItem,
+      "the host curates File ▸ Open PDF… for paged.pdf",
+    ).toBe(true);
     expect(reach.genericOpen, "File ▸ Open… is the deck's door").toBe(true);
 
     await expect(page.locator('[data-tool-rail="ready"]')).toBeVisible();
     await expect(
-      page.locator('[data-tool-rail="ready"] [data-tool^="media.paged.slide."]'),
+      page.locator(
+        '[data-tool-rail="ready"] [data-tool^="media.paged.slide."]',
+      ),
     ).toHaveCount(0);
 
     // The two typed commands are titled for a user ("New slide", "Open a
@@ -890,9 +1081,9 @@ test.describe("plugin surface · paged.slide", () => {
     // New slide has a button in the Slides panel; Open a PowerPoint deck
     // is the importer by another name.
     await page.evaluate(() =>
-      (globalThis as unknown as CanvasGlobal).__canvas.registries.commands.invoke(
-        "paged.core.runCommand",
-      ),
+      (
+        globalThis as unknown as CanvasGlobal
+      ).__canvas.registries.commands.invoke("paged.core.runCommand"),
     );
     const picker = page.locator("[data-core-command-picker]");
     await expect(picker).toBeVisible({ timeout: 10_000 });
@@ -900,8 +1091,12 @@ test.describe("plugin surface · paged.slide", () => {
       .poll(() => picker.locator("option").count(), { timeout: 10_000 })
       .toBeGreaterThan(5);
     const offered = await picker.locator("option").allTextContents();
-    expect(offered, "Run command… does not offer New slide").not.toContain("New slide");
-    expect(offered, "…nor Open a PowerPoint deck").not.toContain("Open a PowerPoint deck");
+    expect(offered, "Run command… does not offer New slide").not.toContain(
+      "New slide",
+    );
+    expect(offered, "…nor Open a PowerPoint deck").not.toContain(
+      "Open a PowerPoint deck",
+    );
     await page.keyboard.press("Escape");
 
     test.info().annotations.push({

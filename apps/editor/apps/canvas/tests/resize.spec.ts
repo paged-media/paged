@@ -69,7 +69,9 @@ interface CanvasGlobal {
       d: [number, number],
       mods: { shift: boolean; alt: boolean },
     ) => Promise<string[]>;
-    commitGesture: (h: number) => Promise<{ appliedSeq: number; pageIds: string[] }>;
+    commitGesture: (
+      h: number,
+    ) => Promise<{ appliedSeq: number; pageIds: string[] }>;
     cancelGesture: (h: number) => Promise<string[]>;
     undo: () => Promise<unknown>;
   };
@@ -97,12 +99,18 @@ async function hitTopmostUnrotatedFrame(
         const reply = (await c.client.send({
           kind: "hitTest",
           payload: { pageId, docPoint: [x, y], filter: "any" },
-        })) as { payload: { element: ElementId | null; itemTransform: number[] | null } };
+        })) as {
+          payload: {
+            element: ElementId | null;
+            itemTransform: number[] | null;
+          };
+        };
         const el = reply.payload.element;
         const tr = reply.payload.itemTransform;
         if (!el) continue;
         if (tr) {
-          if (Math.abs(tr[0] - 1) > 1e-3 || Math.abs(tr[3] - 1) > 1e-3) continue;
+          if (Math.abs(tr[0] - 1) > 1e-3 || Math.abs(tr[3] - 1) > 1e-3)
+            continue;
           if (Math.abs(tr[1]) > 1e-3 || Math.abs(tr[2]) > 1e-3) continue;
         }
         return el;
@@ -113,14 +121,19 @@ async function hitTopmostUnrotatedFrame(
   );
 }
 
-async function getBounds(page: Page, el: ElementId): Promise<[number, number, number, number]> {
+async function getBounds(
+  page: Page,
+  el: ElementId,
+): Promise<[number, number, number, number]> {
   return page.evaluate(
     async ({ el }) => {
       const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
       const r = (await c.client.send({
         kind: "requestElementGeometry",
         payload: { ids: [el] },
-      })) as { payload: { items: Array<{ bounds: [number, number, number, number] }> } };
+      })) as {
+        payload: { items: Array<{ bounds: [number, number, number, number] }> };
+      };
       if (r.payload.items.length === 0) throw new Error("no geometry");
       return r.payload.items[0].bounds;
     },
@@ -138,7 +151,10 @@ async function resize(
   await page.evaluate(
     async ({ target, handle, delta, mods }) => {
       const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
-      const h = await c.client.beginGesture([target], { kind: "resize", handle });
+      const h = await c.client.beginGesture([target], {
+        kind: "resize",
+        handle,
+      });
       await c.client.updateGesture(h, delta, mods);
       await c.client.commitGesture(h);
     },
@@ -161,7 +177,9 @@ test.describe("Phase C — resize gesture", () => {
     target = await hitTopmostUnrotatedFrame(page, pageId, pageW, pageH);
   });
 
-  test("AC-E-14 — SE handle: opposite (top + left) edges fixed @feat:editor-tools.resize.handles @level:gesture", async ({ page }) => {
+  test("AC-E-14 — SE handle: opposite (top + left) edges fixed @feat:editor-tools.resize.handles @level:gesture", async ({
+    page,
+  }) => {
     const before = await getBounds(page, target);
     await resize(page, target, "southEast", [15.0, 25.0]);
     const after = await getBounds(page, target);
@@ -172,7 +190,9 @@ test.describe("Phase C — resize gesture", () => {
     expect(after[3]).toBeCloseTo(before[3] + 15.0, 2);
   });
 
-  test("AC-E-14 — N handle: only top moves @feat:editor-tools.resize.handles @level:gesture", async ({ page }) => {
+  test("AC-E-14 — N handle: only top moves @feat:editor-tools.resize.handles @level:gesture", async ({
+    page,
+  }) => {
     const before = await getBounds(page, target);
     await resize(page, target, "north", [0.0, -10.0]);
     const after = await getBounds(page, target);
@@ -182,11 +202,16 @@ test.describe("Phase C — resize gesture", () => {
     expect(after[3]).toBeCloseTo(before[3], 2);
   });
 
-  test("AC-E-14 — Alt + SE: centre fixed, both opposite edges mirror @feat:editor-tools.resize.handles @level:happy", async ({ page }) => {
+  test("AC-E-14 — Alt + SE: centre fixed, both opposite edges mirror @feat:editor-tools.resize.handles @level:happy", async ({
+    page,
+  }) => {
     const before = await getBounds(page, target);
     const cxBefore = (before[1] + before[3]) * 0.5;
     const cyBefore = (before[0] + before[2]) * 0.5;
-    await resize(page, target, "southEast", [10.0, 6.0], { shift: false, alt: true });
+    await resize(page, target, "southEast", [10.0, 6.0], {
+      shift: false,
+      alt: true,
+    });
     const after = await getBounds(page, target);
     const cxAfter = (after[1] + after[3]) * 0.5;
     const cyAfter = (after[0] + after[2]) * 0.5;
@@ -201,10 +226,15 @@ test.describe("Phase C — resize gesture", () => {
     expect(hAfter).toBeCloseTo(hBefore + 12.0, 2);
   });
 
-  test("AC-E-14 — Shift + SE corner locks aspect ratio @feat:editor-tools.resize.handles @level:happy", async ({ page }) => {
+  test("AC-E-14 — Shift + SE corner locks aspect ratio @feat:editor-tools.resize.handles @level:happy", async ({
+    page,
+  }) => {
     const before = await getBounds(page, target);
     const aspect = (before[3] - before[1]) / (before[2] - before[0]);
-    await resize(page, target, "southEast", [40.0, 10.0], { shift: true, alt: false });
+    await resize(page, target, "southEast", [40.0, 10.0], {
+      shift: true,
+      alt: false,
+    });
     const after = await getBounds(page, target);
     const newAspect = (after[3] - after[1]) / (after[2] - after[0]);
     expect(newAspect).toBeCloseTo(aspect, 3);
@@ -213,16 +243,22 @@ test.describe("Phase C — resize gesture", () => {
     expect(after[1]).toBeCloseTo(before[1], 2);
   });
 
-  test("cancel restores @feat:editor-tools.resize.handles @level:edge", async ({ page }) => {
+  test("cancel restores @feat:editor-tools.resize.handles @level:edge", async ({
+    page,
+  }) => {
     const before = await getBounds(page, target);
     await page.evaluate(
       async ({ target }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         const h = await c.client.beginGesture([target], {
           kind: "resize",
           handle: "east",
         });
-        await c.client.updateGesture(h, [50.0, 0.0], { shift: false, alt: false });
+        await c.client.updateGesture(h, [50.0, 0.0], {
+          shift: false,
+          alt: false,
+        });
         await c.client.cancelGesture(h);
       },
       { target },
@@ -231,7 +267,9 @@ test.describe("Phase C — resize gesture", () => {
     for (let i = 0; i < 4; i++) expect(after[i]).toBeCloseTo(before[i], 2);
   });
 
-  test("resize undo round-trips @feat:editor-tools.resize.handles @level:gesture", async ({ page }) => {
+  test("resize undo round-trips @feat:editor-tools.resize.handles @level:gesture", async ({
+    page,
+  }) => {
     const before = await getBounds(page, target);
     await resize(page, target, "east", [25.0, 0.0]);
     const after = await getBounds(page, target);

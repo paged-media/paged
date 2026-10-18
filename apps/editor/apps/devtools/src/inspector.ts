@@ -32,7 +32,9 @@
 // loader JS inside node_modules (which Vite does not rewrite).
 import introspectWasmUrl from "@paged-media/introspect-wasm/paged_introspect_wasm_bg.wasm?url";
 
-let modulePromise: Promise<typeof import("@paged-media/introspect-wasm")> | null = null;
+let modulePromise: Promise<
+  typeof import("@paged-media/introspect-wasm")
+> | null = null;
 
 async function loadModule() {
   if (!modulePromise) {
@@ -40,9 +42,9 @@ async function loadModule() {
       const mod = await import("@paged-media/introspect-wasm");
       // Object form (`{ module_or_path }`) — the bare-URL positional
       // form is deprecated by current wasm-bindgen loaders.
-      const init = mod.default as (
-        opts?: { module_or_path?: string | URL },
-      ) => Promise<unknown>;
+      const init = mod.default as (opts?: {
+        module_or_path?: string | URL;
+      }) => Promise<unknown>;
       await init({ module_or_path: introspectWasmUrl });
       return mod;
     })();
@@ -81,7 +83,8 @@ export interface FrameEntry {
 
 export type PropertyKey = "frameBounds" | "frameFillColor";
 
-export type PropertyKind = "bounds" | "length" | "color" | "text" | "bool" | "enum";
+export type PropertyKind =
+  "bounds" | "length" | "color" | "text" | "bool" | "enum";
 
 export type PropertyValue =
   | { type: "bounds"; value: [number, number, number, number] }
@@ -122,7 +125,9 @@ export interface MutationResult {
 }
 
 export class InspectorClient {
-  private constructor(private inner: import("@paged-media/introspect-wasm").Inspector) {}
+  private constructor(
+    private inner: import("@paged-media/introspect-wasm").Inspector,
+  ) {}
 
   static async open(bytes: Uint8Array): Promise<InspectorClient> {
     const mod = await loadModule();
@@ -134,11 +139,15 @@ export class InspectorClient {
   }
 
   properties(node: NodeId): PropertyDescriptor[] {
-    return JSON.parse(this.inner.properties(JSON.stringify(node))) as PropertyDescriptor[];
+    return JSON.parse(
+      this.inner.properties(JSON.stringify(node)),
+    ) as PropertyDescriptor[];
   }
 
   apply(mutation: Mutation): MutationResult {
-    return JSON.parse(this.inner.apply(JSON.stringify(mutation))) as MutationResult;
+    return JSON.parse(
+      this.inner.apply(JSON.stringify(mutation)),
+    ) as MutationResult;
   }
 
   renderPage(pageIndex: number, dpi = 144): Uint8Array {

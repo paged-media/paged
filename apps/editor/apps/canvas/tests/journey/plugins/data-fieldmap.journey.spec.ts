@@ -59,7 +59,11 @@ const invoke = (page: Page, id: string) =>
     (c) =>
       (
         globalThis as unknown as {
-          __canvas: { registries: { commands: { invoke: (i: string) => Promise<unknown> } } };
+          __canvas: {
+            registries: {
+              commands: { invoke: (i: string) => Promise<unknown> };
+            };
+          };
         }
       ).__canvas.registries.commands.invoke(c),
     id,
@@ -79,9 +83,13 @@ async function importCsv(page: Page): Promise<boolean> {
   const status = page.locator("[data-status]").last();
   try {
     await expect
-      .poll(async () => (await status.getAttribute("data-status").catch(() => null)) ?? "?", {
-        timeout: 45_000,
-      })
+      .poll(
+        async () =>
+          (await status.getAttribute("data-status").catch(() => null)) ?? "?",
+        {
+          timeout: 45_000,
+        },
+      )
       .toBe("ready");
     return true;
   } catch {
@@ -101,8 +109,11 @@ test.describe("journey · paged.data field-mapping wizard", () => {
     const ready = await importCsv(page);
     if (!ready) {
       const got =
-        (await page.locator("[data-status]").last().getAttribute("data-status").catch(() => null)) ??
-        "unknown";
+        (await page
+          .locator("[data-status]")
+          .last()
+          .getAttribute("data-status")
+          .catch(() => null)) ?? "unknown";
       skipWithoutDuckDB(
         got,
         `field-mapping wizard needs DuckDB-WASM to boot (engine status "${got}"). It boots on the ` +
@@ -110,13 +121,17 @@ test.describe("journey · paged.data field-mapping wizard", () => {
           "fires if the package shipped no bin/duckdb-engine.wasm or the context is not cross-origin isolated.",
       );
     }
-    await expect(page.getByText(/data_people/).first()).toBeVisible({ timeout: 6_000 });
+    await expect(page.getByText(/data_people/).first()).toBeVisible({
+      timeout: 6_000,
+    });
 
     // ── 2. OPEN THE WIZARD — "Map fields…" refreshes the demo query, then asks
     //    the engine (`query_mappings`) for the column → variable-binding
     //    suggestions, defaulting the mappable columns to checked. ──
     await openPanel(page, BINDINGS_PANEL);
-    await expect(page.locator("[data-data-bind-author]")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("[data-data-bind-author]")).toBeVisible({
+      timeout: 10_000,
+    });
     await page.getByRole("button", { name: /map fields/i }).click();
 
     // ── 3. WIZARD COLUMNS — the engine computed one row per CSV column. The
@@ -148,7 +163,11 @@ test.describe("journey · paged.data field-mapping wizard", () => {
     //    grows with the generated variable bindings (v_name, v_role). ──
     await confirm.click();
     await expect(wizardColumns).toBeHidden({ timeout: 6_000 });
-    await expect(page.getByText(/bindings:.*v_name/i).first()).toBeVisible({ timeout: 6_000 });
-    await expect(page.getByText(/bindings:.*v_role/i).first()).toBeVisible({ timeout: 6_000 });
+    await expect(page.getByText(/bindings:.*v_name/i).first()).toBeVisible({
+      timeout: 6_000,
+    });
+    await expect(page.getByText(/bindings:.*v_role/i).first()).toBeVisible({
+      timeout: 6_000,
+    });
   });
 });

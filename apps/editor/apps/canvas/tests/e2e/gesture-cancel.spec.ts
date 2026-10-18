@@ -93,11 +93,17 @@ async function assertCancelRollsBack(
 
   const log = await drainGestureLog(page);
   expect(countKind(log, "gestureCancelled"), "one cancelled envelope").toBe(1);
-  expect(countKind(log, "gestureCommitted"), "INV-1: no commit on abort").toBe(0);
-  expect(countKind(log, "mutationApplied"), "INV-1: no mutation on abort").toBe(0);
+  expect(countKind(log, "gestureCommitted"), "INV-1: no commit on abort").toBe(
+    0,
+  );
+  expect(countKind(log, "mutationApplied"), "INV-1: no mutation on abort").toBe(
+    0,
+  );
   expect(countKind(log, "gestureFailed"), "no failure envelope").toBe(0);
 
-  expect(await dumpElement(page, ref), "INV-2: model restored").toBe(modelBefore);
+  expect(await dumpElement(page, ref), "INV-2: model restored").toBe(
+    modelBefore,
+  );
   const pngAfter = await pagePng(page, pageInfo.pageId, pageInfo.widthPt);
   expect(
     pngAfter.equals(pngBefore),
@@ -118,7 +124,9 @@ test.describe("E2E-07 — cancel rolls back every gesture family (channel)", () 
     pageRect = (await elementPageRectPt(page, target.ref))!;
   });
 
-  test("AC-E2E-GEST-CANCEL-1 — translate @feat:editor-tools.gesture-lifecycle @level:edge", async ({ page }) => {
+  test("AC-E2E-GEST-CANCEL-1 — translate @feat:editor-tools.gesture-lifecycle @level:edge", async ({
+    page,
+  }) => {
     await assertCancelRollsBack(
       page,
       fx,
@@ -129,7 +137,9 @@ test.describe("E2E-07 — cancel rolls back every gesture family (channel)", () 
     );
   });
 
-  test("AC-E2E-GEST-CANCEL-2 — resize (southEast) @feat:editor-tools.gesture-lifecycle @level:edge", async ({ page }) => {
+  test("AC-E2E-GEST-CANCEL-2 — resize (southEast) @feat:editor-tools.gesture-lifecycle @level:edge", async ({
+    page,
+  }) => {
     await assertCancelRollsBack(
       page,
       fx,
@@ -140,7 +150,9 @@ test.describe("E2E-07 — cancel rolls back every gesture family (channel)", () 
     );
   });
 
-  test("AC-E2E-GEST-CANCEL-3 — rotate @feat:editor-tools.gesture-lifecycle @level:edge", async ({ page }) => {
+  test("AC-E2E-GEST-CANCEL-3 — rotate @feat:editor-tools.gesture-lifecycle @level:edge", async ({
+    page,
+  }) => {
     const [cx, cy] = centroid(pageRect);
     await assertCancelRollsBack(
       page,
@@ -148,11 +160,16 @@ test.describe("E2E-07 — cancel rolls back every gesture family (channel)", () 
       target.ref,
       target.pageIndex,
       { kind: "rotate" },
-      { pageId: fx.pages[target.pageIndex].pageId, pointInPage: [cx + 100, cy] },
+      {
+        pageId: fx.pages[target.pageIndex].pageId,
+        pointInPage: [cx + 100, cy],
+      },
     );
   });
 
-  test("AC-E2E-GEST-CANCEL-4 — scale @feat:editor-tools.gesture-lifecycle @level:edge", async ({ page }) => {
+  test("AC-E2E-GEST-CANCEL-4 — scale @feat:editor-tools.gesture-lifecycle @level:edge", async ({
+    page,
+  }) => {
     const [cx, cy] = centroid(pageRect);
     await assertCancelRollsBack(
       page,
@@ -167,7 +184,9 @@ test.describe("E2E-07 — cancel rolls back every gesture family (channel)", () 
     );
   });
 
-  test("AC-E2E-GEST-CANCEL-5 — shear @feat:editor-tools.gesture-lifecycle @level:edge", async ({ page }) => {
+  test("AC-E2E-GEST-CANCEL-5 — shear @feat:editor-tools.gesture-lifecycle @level:edge", async ({
+    page,
+  }) => {
     // Shear needs a vertical lever arm from the pivot (the union
     // centroid) — anchor straight above the centroid.
     const [cx, cy] = centroid(pageRect);
@@ -236,10 +255,18 @@ test.describe("E2E-07 — real-input Escape (wiring)", () => {
     await page.waitForTimeout(300);
 
     const log = await drainGestureLog(page);
-    expect(countKind(log, "gestureCommitted"), "INV-1: Escape killed the commit").toBe(0);
+    expect(
+      countKind(log, "gestureCommitted"),
+      "INV-1: Escape killed the commit",
+    ).toBe(0);
     expect(countKind(log, "mutationApplied")).toBe(0);
-    expect(countKind(log, "gestureCancelled"), "the worker saw the cancel").toBeGreaterThanOrEqual(1);
-    expect(await dumpElement(page, target.ref), "INV-2: model untouched").toBe(modelBefore);
+    expect(
+      countKind(log, "gestureCancelled"),
+      "the worker saw the cancel",
+    ).toBeGreaterThanOrEqual(1);
+    expect(await dumpElement(page, target.ref), "INV-2: model untouched").toBe(
+      modelBefore,
+    );
   });
 
   test("AC-E2E-GEST-CANCEL-8 — Escape mid draw-tool drag creates nothing @feat:editor-tools.gesture-lifecycle @level:edge", async ({

@@ -63,9 +63,7 @@ test.describe("Output readiness panel", () => {
     await openCanvas(page);
     await loadIdml(page, FIXTURE);
     await openPanel(page, "paged.output-readiness");
-    await expect(
-      page.locator("[data-output-readiness-panel]"),
-    ).toBeVisible();
+    await expect(page.locator("[data-output-readiness-panel]")).toBeVisible();
 
     // The fixture really is broken on the wire.
     const missing = await wireMissingLinks(page);
@@ -85,9 +83,9 @@ test.describe("Output readiness panel", () => {
 
     // The X-4 verdict is the AND of the live checks — a failing links
     // check makes the document Not ready.
-    await expect(
-      page.locator('[data-status-pill="readiness-x4"]'),
-    ).toHaveText("Not ready");
+    await expect(page.locator('[data-status-pill="readiness-x4"]')).toHaveText(
+      "Not ready",
+    );
   });
 });
 
@@ -105,7 +103,12 @@ test.describe("Output readiness — unknown resolution", () => {
     const designer = new Designer(page);
     await designer.open();
     await designer.newDocument();
-    const frame = await designer.drawRectangle({ x0: 80, y0: 80, x1: 380, y1: 280 });
+    const frame = await designer.drawRectangle({
+      x0: 80,
+      y0: 80,
+      x1: 380,
+      y1: 280,
+    });
     expect(await designer.placeImageLink(frame), "placed a link").toBe(true);
     const replaced = await page.evaluate(async (elementId) => {
       const cv = new OffscreenCanvas(64, 48);
@@ -116,18 +119,28 @@ test.describe("Output readiness — unknown resolution", () => {
       const bytes = Array.from(new Uint8Array(await blob.arrayBuffer()));
       const c = (
         globalThis as unknown as {
-          __canvas: { client: { mutate: (m: unknown) => Promise<{ kind: string }> } };
+          __canvas: {
+            client: { mutate: (m: unknown) => Promise<{ kind: string }> };
+          };
         }
       ).__canvas;
-      return (await c.client.mutate({ op: "replaceImageBytes", args: { elementId, bytes } })).kind;
+      return (
+        await c.client.mutate({
+          op: "replaceImageBytes",
+          args: { elementId, bytes },
+        })
+      ).kind;
     }, frame);
     expect(replaced).toBe("mutationApplied");
 
     // The precondition, on the wire: a resolved placement whose PPI is
     // unknown.
     await expect
-      .poll(async () =>
-        (await wireLinks(page)).filter((l) => l.status !== "missing" && l.effectivePpi == null).length,
+      .poll(
+        async () =>
+          (await wireLinks(page)).filter(
+            (l) => l.status !== "missing" && l.effectivePpi == null,
+          ).length,
       )
       .toBeGreaterThan(0);
 
@@ -137,9 +150,9 @@ test.describe("Output readiness — unknown resolution", () => {
     await expect(ppiRow).toContainText("1 unknown");
     await expect(ppiRow).not.toContainText(/\bok\b/);
     // An unverified check cannot make the document ready.
-    await expect(page.locator('[data-status-pill="readiness-x4"]')).not.toHaveText(
-      "PDF/X-4 ready",
-    );
+    await expect(
+      page.locator('[data-status-pill="readiness-x4"]'),
+    ).not.toHaveText("PDF/X-4 ready");
   });
 });
 
@@ -153,7 +166,9 @@ async function wireLinks(
           client: {
             collection: (
               n: string,
-            ) => Promise<Array<{ status?: string; effectivePpi?: number | null }>>;
+            ) => Promise<
+              Array<{ status?: string; effectivePpi?: number | null }>
+            >;
           };
         };
       }

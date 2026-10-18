@@ -28,8 +28,20 @@
 // A MODULE-SCOPE STORE (like library-document.ts): the connection outlives the
 // panel being closed and reopened.
 
-import { canvasScriptEngine, commitSave, currentLibraryDocument, getLibrary } from "@paged-media/shell";
-import { accessToken, connectLive, type LiveCall, type LiveConnection, type LiveState, type ToolResult } from "@paged-media/repository";
+import {
+  canvasScriptEngine,
+  commitSave,
+  currentLibraryDocument,
+  getLibrary,
+} from "@paged-media/shell";
+import {
+  accessToken,
+  connectLive,
+  type LiveCall,
+  type LiveConnection,
+  type LiveState,
+  type ToolResult,
+} from "@paged-media/repository";
 import type { CanvasClient } from "@paged-media/client";
 
 export interface LiveEntry {
@@ -88,22 +100,39 @@ export const live = {
 
 function note(call: LiveCall, outcome: LiveEntry["outcome"]): void {
   const source = typeof call.args.source === "string" ? call.args.source : "";
-  const summary = source ? source.split("\n").find((l) => l.trim())?.trim().slice(0, 80) ?? "" : JSON.stringify(call.args).slice(0, 80);
+  const summary = source
+    ? (source
+        .split("\n")
+        .find((l) => l.trim())
+        ?.trim()
+        .slice(0, 80) ?? "")
+    : JSON.stringify(call.args).slice(0, 80);
   const existing = log.find((e) => e.id === call.id);
   if (existing) existing.outcome = outcome;
-  else log = [{ id: call.id, tool: call.tool, summary, ts: Date.now(), outcome }, ...log].slice(0, 25);
+  else
+    log = [
+      { id: call.id, tool: call.tool, summary, ts: Date.now(), outcome },
+      ...log,
+    ].slice(0, 25);
   changed();
 }
 
-const text = (t: string, isError = false): ToolResult => ({ content: [{ type: "text", text: t }], isError });
+const text = (t: string, isError = false): ToolResult => ({
+  content: [{ type: "text", text: t }],
+  isError,
+});
 
 function b64(bytes: Uint8Array): string {
   let s = "";
-  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  for (let i = 0; i < bytes.length; i += 0x8000)
+    s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
   return btoa(s);
 }
 
-async function handle(client: CanvasClient, call: LiveCall): Promise<ToolResult> {
+async function handle(
+  client: CanvasClient,
+  call: LiveCall,
+): Promise<ToolResult> {
   note(call, "pending");
   if (CHANGES.has(call.tool) && ask) {
     const allowed = await new Promise<boolean>((resolve) => {
@@ -122,8 +151,16 @@ async function handle(client: CanvasClient, call: LiveCall): Promise<ToolResult>
       case "open_document": {
         const doc = currentLibraryDocument();
         result = {
-          content: [{ type: "text", text: `This tab has ${doc?.name ?? "an unsaved document"} open; engine tools act on it.` }],
-          structuredContent: { document: doc?.remote?.repo ?? doc?.name ?? null, open: doc?.name ?? null },
+          content: [
+            {
+              type: "text",
+              text: `This tab has ${doc?.name ?? "an unsaved document"} open; engine tools act on it.`,
+            },
+          ],
+          structuredContent: {
+            document: doc?.remote?.repo ?? doc?.name ?? null,
+            open: doc?.name ?? null,
+          },
           isError: false,
         };
         break;
@@ -131,7 +168,16 @@ async function handle(client: CanvasClient, call: LiveCall): Promise<ToolResult>
       case "run_script": {
         const run = await engine.runScript(String(call.args.source ?? ""));
         result = {
-          content: [{ type: "text", text: [...run.output, ...(run.error ? [`error: ${run.error}`] : [])].join("\n") || "(no output)" }],
+          content: [
+            {
+              type: "text",
+              text:
+                [
+                  ...run.output,
+                  ...(run.error ? [`error: ${run.error}`] : []),
+                ].join("\n") || "(no output)",
+            },
+          ],
           structuredContent: { output: run.output, error: run.error ?? null },
           isError: Boolean(run.error),
         };
@@ -141,7 +187,12 @@ async function handle(client: CanvasClient, call: LiveCall): Promise<ToolResult>
         const page = Number(call.args.page ?? 1) || 1;
         const png = engine.renderPage ? await engine.renderPage(page) : null;
         result = png
-          ? { content: [{ type: "image", data: b64(png), mimeType: "image/png" }], isError: false }
+          ? {
+              content: [
+                { type: "image", data: b64(png), mimeType: "image/png" },
+              ],
+              isError: false,
+            }
           : text(`There is no page ${page}.`, true);
         break;
       }
@@ -149,13 +200,25 @@ async function handle(client: CanvasClient, call: LiveCall): Promise<ToolResult>
         const library = getLibrary();
         if (!library) return text("This editor keeps no library.", true);
         const bytes = await client.exportPaged();
-        if (!currentLibraryDocument()) await commitSave(bytes.slice(), "document");
+        if (!currentLibraryDocument())
+          await commitSave(bytes.slice(), "document");
         const doc = currentLibraryDocument();
-        if (!doc) return text("The document could not be kept in the library.", true);
+        if (!doc)
+          return text("The document could not be kept in the library.", true);
         const message = String(call.args.message ?? "Claude's edit");
-        const saved = await library.saveAgent(doc.id, bytes, { agent: call.agent, client: "mcp", run: call.run }, message);
+        const saved = await library.saveAgent(
+          doc.id,
+          bytes,
+          { agent: call.agent, client: "mcp", run: call.run },
+          message,
+        );
         result = {
-          content: [{ type: "text", text: `Kept as a version on ${saved.branch}. The person merges it from the Library panel; main has not moved.` }],
+          content: [
+            {
+              type: "text",
+              text: `Kept as a version on ${saved.branch}. The person merges it from the Library panel; main has not moved.`,
+            },
+          ],
           structuredContent: { ref: saved.branch, at: saved.head },
           isError: false,
         };
@@ -173,7 +236,10 @@ async function handle(client: CanvasClient, call: LiveCall): Promise<ToolResult>
 }
 
 /** Connects this tab to `server` for the signed-in person. */
-export async function connect(server: string, client: CanvasClient): Promise<void> {
+export async function connect(
+  server: string,
+  client: CanvasClient,
+): Promise<void> {
   if (connection) return;
   const token = await accessToken(server);
   if (!token) throw new Error("Sign in to the server first.");

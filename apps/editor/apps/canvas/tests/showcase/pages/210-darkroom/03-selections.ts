@@ -93,15 +93,22 @@ export async function build(ctx: PageContext): Promise<PageReport> {
 
   const gpu = await doc.gpuActive();
 
-  const head = await proseFrame(ctx, page, [60, 58, 492, 88], [
-    { text: "Selections — the mask, made visible", style: STYLE.head2 },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    page,
+    [60, 58, 492, 88],
+    [{ text: "Selections — the mask, made visible", style: STYLE.head2 }],
+  );
   elements.push(head.frameId);
 
   // ── the exhibit frame ────────────────────────────────────────────
   const frame = await doc.rectangle(pg, FRAME);
   await assignLayer(ctx, "rectangle", frame, LAYER.content);
-  await doc.mutate("placeImage", { elementId: frame, uri: APPLES_URI, fit: null });
+  await doc.mutate("placeImage", {
+    elementId: frame,
+    uri: APPLES_URI,
+    fit: null,
+  });
   await replaceBytesFromFile(ctx, frame, APPLES);
   elements.push(frame);
 
@@ -166,13 +173,19 @@ export async function build(ctx: PageContext): Promise<PageReport> {
           : "quick-selection stroke landed no coverage";
 
       maskedCoverage = quickCov ?? marqueeCov;
-      door = quickCov !== null ? "quick selection" : marqueeCov !== null ? "marquee" : "none";
+      door =
+        quickCov !== null
+          ? "quick selection"
+          : marqueeCov !== null
+            ? "marquee"
+            : "none";
       if (maskedCoverage === null) {
         // The stated fallback: the command lane. Full extent — and the
         // caption says so.
         await doc.runCommand(CMD.selectAll);
         maskedCoverage = await awaitCoverage(ctx, 10_000);
-        door = maskedCoverage !== null ? "select all (command fallback)" : "none";
+        door =
+          maskedCoverage !== null ? "select all (command fallback)" : "none";
         notes.push(
           "pointer selection lane landed no coverage; the command lane " +
             "(select all) substituted — the masked dispatch below ran " +
@@ -209,28 +222,33 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   }
 
   // ── captions, written from the measured outcome ──────────────────
-  const abi = await proseFrame(ctx, page, [372, 158, 492, 380], [
-    {
-      text: "THE MASK ABI",
-      style: STYLE.specLabel,
-    },
-    {
-      text:
-        "A selection is an engine-side coverage field over the ingested " +
-        "pixels. At dispatch it is lowered to a per-tile r16float window " +
-        "and bound at the kernel ABI's group 2 — every pointwise kernel " +
-        "composites mix(backdrop, result, mask), so one mask gates the " +
-        "whole adjustment vocabulary without any kernel knowing.",
-      style: STYLE.caption,
-    },
-    {
-      text:
-        "Add, subtract and intersect are max, min and multiply on the " +
-        "same field; feather is a gaussian pass over the mask, not the " +
-        "image.",
-      style: STYLE.caption,
-    },
-  ]);
+  const abi = await proseFrame(
+    ctx,
+    page,
+    [372, 158, 492, 380],
+    [
+      {
+        text: "THE MASK ABI",
+        style: STYLE.specLabel,
+      },
+      {
+        text:
+          "A selection is an engine-side coverage field over the ingested " +
+          "pixels. At dispatch it is lowered to a per-tile r16float window " +
+          "and bound at the kernel ABI's group 2 — every pointwise kernel " +
+          "composites mix(backdrop, result, mask), so one mask gates the " +
+          "whole adjustment vocabulary without any kernel knowing.",
+        style: STYLE.caption,
+      },
+      {
+        text:
+          "Add, subtract and intersect are max, min and multiply on the " +
+          "same field; feather is a gaussian pass over the mask, not the " +
+          "image.",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(abi.frameId);
 
   const outcomeParas =
@@ -266,7 +284,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
             style: STYLE.body,
           },
         ];
-  const outcome = await proseFrame(ctx, page, [60, 380, 492, 470], outcomeParas);
+  const outcome = await proseFrame(
+    ctx,
+    page,
+    [60, 380, 492, 470],
+    outcomeParas,
+  );
   elements.push(outcome.frameId);
 
   await marginNote(

@@ -310,7 +310,11 @@ export function LayersPanel(_: PanelProps) {
   // property for, so they stay plain mutations.
   const objectModel = useObjectModel();
   const run = useCallback(
-    async (mutation: Mutation, what: string, objectOps?: readonly ShellObjectOp[]) => {
+    async (
+      mutation: Mutation,
+      what: string,
+      objectOps?: readonly ShellObjectOp[],
+    ) => {
       const out = await mutate(mutation, objectOps);
       if (!out.applied) {
         // A claimed-but-refused write names its owner; an unclaimed one
@@ -360,7 +364,14 @@ export function LayersPanel(_: PanelProps) {
               args: { layerId: p.id, name: p.name },
             } as Mutation,
             "layerSetName",
-            [{ op: "set", address: layerAddress(p.id), path: "layerName", value: p.name }],
+            [
+              {
+                op: "set",
+                address: layerAddress(p.id),
+                path: "layerName",
+                value: p.name,
+              },
+            ],
           );
         },
       },
@@ -368,7 +379,8 @@ export function LayersPanel(_: PanelProps) {
         id: LAYERS_TOGGLE_VISIBLE_COMMAND,
         title: "Show or hide layer",
         run: (payload?: unknown) => {
-          const row = typeof payload === "string" ? rowById(payload) : undefined;
+          const row =
+            typeof payload === "string" ? rowById(payload) : undefined;
           if (!row) return;
           return run(
             {
@@ -376,7 +388,14 @@ export function LayersPanel(_: PanelProps) {
               args: { layerId: row.selfId, visible: !row.visible },
             } as Mutation,
             "layerSetVisible",
-            [{ op: "set", address: layerAddress(row.selfId), path: "layerVisible", value: !row.visible }],
+            [
+              {
+                op: "set",
+                address: layerAddress(row.selfId),
+                path: "layerVisible",
+                value: !row.visible,
+              },
+            ],
           );
         },
       },
@@ -384,7 +403,8 @@ export function LayersPanel(_: PanelProps) {
         id: LAYERS_ASSIGN_SELECTION_COMMAND,
         title: "Move the selection to this layer",
         run: (payload?: unknown) => {
-          const row = typeof payload === "string" ? rowById(payload) : undefined;
+          const row =
+            typeof payload === "string" ? rowById(payload) : undefined;
           if (!row) return;
           const targets = selectionRef.current;
           if (targets.length === 0) return;
@@ -421,7 +441,8 @@ export function LayersPanel(_: PanelProps) {
         id: LAYERS_TOGGLE_PRINTABLE_COMMAND,
         title: "Include or exclude this layer when printing",
         run: (payload?: unknown) => {
-          const row = typeof payload === "string" ? rowById(payload) : undefined;
+          const row =
+            typeof payload === "string" ? rowById(payload) : undefined;
           if (!row) return;
           return run(
             {
@@ -429,7 +450,14 @@ export function LayersPanel(_: PanelProps) {
               args: { layerId: row.selfId, printable: !row.printable },
             } as Mutation,
             "layerSetPrintable",
-            [{ op: "set", address: layerAddress(row.selfId), path: "layerPrintable", value: !row.printable }],
+            [
+              {
+                op: "set",
+                address: layerAddress(row.selfId),
+                path: "layerPrintable",
+                value: !row.printable,
+              },
+            ],
           );
         },
       },
@@ -437,7 +465,8 @@ export function LayersPanel(_: PanelProps) {
         id: LAYERS_TOGGLE_LOCKED_COMMAND,
         title: "Lock or unlock layer",
         run: (payload?: unknown) => {
-          const row = typeof payload === "string" ? rowById(payload) : undefined;
+          const row =
+            typeof payload === "string" ? rowById(payload) : undefined;
           if (!row) return;
           return run(
             {
@@ -445,7 +474,14 @@ export function LayersPanel(_: PanelProps) {
               args: { layerId: row.selfId, locked: !row.locked },
             } as Mutation,
             "layerSetLocked",
-            [{ op: "set", address: layerAddress(row.selfId), path: "layerLocked", value: !row.locked }],
+            [
+              {
+                op: "set",
+                address: layerAddress(row.selfId),
+                path: "layerLocked",
+                value: !row.locked,
+              },
+            ],
           );
         },
       },
@@ -505,7 +541,11 @@ export function LayersPanel(_: PanelProps) {
   }, [provider, active]);
 
   return (
-    <div className="text-sm" data-layers="ready" data-layers-source={provider ?? "core"}>
+    <div
+      className="text-sm"
+      data-layers="ready"
+      data-layers-source={provider ?? "core"}
+    >
       <div className="flex items-center justify-between gap-2 border-b border-input p-1">
         {/* "Provided by" — the ADR's own affordance. It is DISPLAY: the
             user is told which content type they are looking at, and no

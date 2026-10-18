@@ -65,7 +65,11 @@ const invoke = (page: Page, id: string) =>
     (c) =>
       (
         globalThis as unknown as {
-          __canvas: { registries: { commands: { invoke: (i: string) => Promise<unknown> } } };
+          __canvas: {
+            registries: {
+              commands: { invoke: (i: string) => Promise<unknown> };
+            };
+          };
         }
       ).__canvas.registries.commands.invoke(c),
     id,
@@ -85,9 +89,13 @@ async function importCsv(page: Page): Promise<boolean> {
   const status = page.locator("[data-status]").last();
   try {
     await expect
-      .poll(async () => (await status.getAttribute("data-status").catch(() => null)) ?? "?", {
-        timeout: 45_000,
-      })
+      .poll(
+        async () =>
+          (await status.getAttribute("data-status").catch(() => null)) ?? "?",
+        {
+          timeout: 45_000,
+        },
+      )
       .toBe("ready");
     return true;
   } catch {
@@ -107,8 +115,11 @@ test.describe("journey · paged.data barcode symbology", () => {
     const ready = await importCsv(page);
     if (!ready) {
       const got =
-        (await page.locator("[data-status]").last().getAttribute("data-status").catch(() => null)) ??
-        "unknown";
+        (await page
+          .locator("[data-status]")
+          .last()
+          .getAttribute("data-status")
+          .catch(() => null)) ?? "unknown";
       skipWithoutDuckDB(
         got,
         `barcode symbology needs DuckDB-WASM to boot (engine status "${got}"). It boots on the ` +
@@ -116,12 +127,19 @@ test.describe("journey · paged.data barcode symbology", () => {
           "fires if the package shipped no bin/duckdb-engine.wasm or the context is not cross-origin isolated.",
       );
     }
-    await expect(page.getByText(/data_people/).first()).toBeVisible({ timeout: 6_000 });
+    await expect(page.getByText(/data_people/).first()).toBeVisible({
+      timeout: 6_000,
+    });
 
     // ── 2. SELECT A FRAME — the barcode's symbol frame. Draw a rectangle and
     //    select it (the bindings panel's barcode binding needs a selected
     //    rectangle as the target the symbol fills). ──
-    const rect = await designer.drawRectangle({ x0: 150, y0: 150, x1: 360, y1: 290 });
+    const rect = await designer.drawRectangle({
+      x0: 150,
+      y0: 150,
+      x1: 360,
+      y1: 290,
+    });
     expect(rect, "drew the barcode frame").not.toBe("");
     await designer.selectElement("rectangle", rect);
     await fitFirstPage(page);
@@ -132,7 +150,9 @@ test.describe("journey · paged.data barcode symbology", () => {
     //    rectangle (the engine will encode
     //    the symbology + scale the module grid to the frame's content box). ──
     await openPanel(page, BINDINGS_PANEL);
-    await expect(page.locator("[data-data-bind-author]")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("[data-data-bind-author]")).toBeVisible({
+      timeout: 10_000,
+    });
 
     // data canary.6 (U12): the symbology select only renders once the
     // binding KIND is barcode — pick the kind first, then the symbology.
@@ -145,7 +165,9 @@ test.describe("journey · paged.data barcode symbology", () => {
     await symbology.selectOption("code128");
 
     const id = await addBindingThroughPanel(page, "barcode", "name");
-    await expect(page.locator("[data-data-bind-msg]")).toContainText("(code128)");
+    await expect(page.locator("[data-data-bind-msg]")).toContainText(
+      "(code128)",
+    );
     // The binding registered (the panel's bindings list now carries it).
     await expect(
       page.getByText(new RegExp(`bindings:.*${id}`)).first(),
@@ -160,9 +182,12 @@ test.describe("journey · paged.data barcode symbology", () => {
     await page.waitForTimeout(1200);
 
     const status = page.locator("[data-status]").last();
-    await expect(status).toHaveText(/Resolved \+ lowered barcode|nothing drawn/i, {
-      timeout: 8_000,
-    });
+    await expect(status).toHaveText(
+      /Resolved \+ lowered barcode|nothing drawn/i,
+      {
+        timeout: 8_000,
+      },
+    );
 
     // ── 5. RENDER (HARD) — the lower's atomic batch (insertPath ×N +
     //    setPluginMetadata with the `{ v, data }` envelope) now applies, so the

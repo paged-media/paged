@@ -346,13 +346,19 @@ test.describe("journey · paged.image paint", () => {
 
     const spy = await page.evaluate(
       () =>
-        (globalThis as unknown as { __strokeSpy: { images: number; tiles: number; json: number } })
-          .__strokeSpy,
+        (
+          globalThis as unknown as {
+            __strokeSpy: { images: number; tiles: number; json: number };
+          }
+        ).__strokeSpy,
     );
     // eslint-disable-next-line no-console
     console.log(`[journey] stroke crossings: ${JSON.stringify(spy)}`);
     expect(spy.json, "nothing crossed as a JSON scene layer").toBe(0);
-    expect(spy.tiles, "the samples crossed as dirty-rect tiles").toBeGreaterThan(0);
+    expect(
+      spy.tiles,
+      "the samples crossed as dirty-rect tiles",
+    ).toBeGreaterThan(0);
     expect(
       spy.tiles,
       "more tile patches than whole images — the image is not resent per sample",

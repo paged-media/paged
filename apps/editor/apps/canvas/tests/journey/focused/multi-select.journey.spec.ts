@@ -36,8 +36,18 @@ test.describe("journey · multi-select", () => {
     await designer.open();
     await designer.newDocument();
 
-    const a = await designer.drawRectangle({ x0: 70, y0: 90, x1: 240, y1: 230 });
-    const b = await designer.drawRectangle({ x0: 300, y0: 90, x1: 470, y1: 230 });
+    const a = await designer.drawRectangle({
+      x0: 70,
+      y0: 90,
+      x1: 240,
+      y1: 230,
+    });
+    const b = await designer.drawRectangle({
+      x0: 300,
+      y0: 90,
+      x1: 470,
+      y1: 230,
+    });
     expect(a).toBeTruthy();
     expect(b).toBeTruthy();
 

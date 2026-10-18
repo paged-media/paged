@@ -73,16 +73,23 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const slate = await doc.swatch(SWATCH.slate);
   const layerContent = await doc.layerId(LAYER.content);
 
-  const head = await proseFrame(ctx, page, [left, 54, right, 82], [
-    { text: "The appearance stack", style: STYLE.head1 },
-  ]);
-  const intro = await proseFrame(ctx, page, [left, 86, right, 126], [
-    {
-      text:
-        "An IDML frame owns one fill and one stroke. The stack below is plugin metadata plus a bake: the left blob is LIVE (stack on the envelope, front-most layer on the frame), the right one is the same stack lowered to a carrier group of single-paint items.",
-      style: STYLE.bodyFirst,
-    },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    page,
+    [left, 54, right, 82],
+    [{ text: "The appearance stack", style: STYLE.head1 }],
+  );
+  const intro = await proseFrame(
+    ctx,
+    page,
+    [left, 86, right, 126],
+    [
+      {
+        text: "An IDML frame owns one fill and one stroke. The stack below is plugin metadata plus a bake: the left blob is LIVE (stack on the envelope, front-most layer on the frame), the right one is the same stack lowered to a carrier group of single-paint items.",
+        style: STYLE.bodyFirst,
+      },
+    ],
+  );
   elements.push(head.frameId, intro.frameId);
 
   // ── the twins ────────────────────────────────────────────────────
@@ -92,10 +99,26 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       ctx,
       pageId,
       [
-        { anchor: [cx, cy - r], left: [cx - 30, cy - r], right: [cx + 30, cy - r] },
-        { anchor: [cx + r, cy], left: [cx + r, cy - 30], right: [cx + r, cy + 30] },
-        { anchor: [cx, cy + r], left: [cx + 30, cy + r], right: [cx - 30, cy + r] },
-        { anchor: [cx - r, cy], left: [cx - r, cy + 30], right: [cx - r, cy - 30] },
+        {
+          anchor: [cx, cy - r],
+          left: [cx - 30, cy - r],
+          right: [cx + 30, cy - r],
+        },
+        {
+          anchor: [cx + r, cy],
+          left: [cx + r, cy - 30],
+          right: [cx + r, cy + 30],
+        },
+        {
+          anchor: [cx, cy + r],
+          left: [cx + 30, cy + r],
+          right: [cx - 30, cy + r],
+        },
+        {
+          anchor: [cx - r, cy],
+          left: [cx - r, cy + 30],
+          right: [cx - r, cy - 30],
+        },
       ],
       false,
       { fill: vermilion, stroke: ink, weight: 6 },
@@ -156,15 +179,20 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     notes.push("appearance bake minted nothing — recorded");
   }
 
-  const twinCaption = await proseFrame(ctx, page, [left, 286, right, 336], [
-    {
-      text:
-        bakedLayers > 0
-          ? `Two identical blobs, each carrying +1 fill and +2 strokes over their own paint, one stroke reordered by Appearance: Reorder layer. The left is live metadata; the right was group-baked into a carrier plus ${bakedLayers} derived single-paint layers. They render alike - that is the bake's whole claim, and release restores the carrier exactly.`
-          : "Two identical blobs carrying the same appearance stack; the group bake's derived layers are recorded in the notes for this page.",
-      style: STYLE.caption,
-    },
-  ]);
+  const twinCaption = await proseFrame(
+    ctx,
+    page,
+    [left, 286, right, 336],
+    [
+      {
+        text:
+          bakedLayers > 0
+            ? `Two identical blobs, each carrying +1 fill and +2 strokes over their own paint, one stroke reordered by Appearance: Reorder layer. The left is live metadata; the right was group-baked into a carrier plus ${bakedLayers} derived single-paint layers. They render alike - that is the bake's whole claim, and release restores the carrier exactly.`
+            : "Two identical blobs carrying the same appearance stack; the group bake's derived layers are recorded in the notes for this page.",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(twinCaption.frameId);
 
   // ── graphic styles: save / apply / redefine / break link ─────────
@@ -172,7 +200,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     const id = await path(
       ctx,
       pageId,
-      [corner(x, 380), corner(x + 88, 380), corner(x + 88, 448), corner(x, 448)],
+      [
+        corner(x, 380),
+        corner(x + 88, 380),
+        corner(x + 88, 448),
+        corner(x, 448),
+      ],
       false,
       { fill: marigold, stroke: ink, weight: 2 },
     );
@@ -242,7 +275,10 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       async () =>
         (await propOf(ctx, { kind: "polygon", id: t2 }, "frameFillColor"))
           ?.value ?? "",
-      { message: "second redefine reached the still-linked tile 2", timeout: 120_000 },
+      {
+        message: "second redefine reached the still-linked tile 2",
+        timeout: 120_000,
+      },
     )
     .toBe(slate);
   expect(
@@ -251,13 +287,17 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   ).toBe(screenBlue);
   covers.push("plugin-draw.graphic-styles");
 
-  const gsCaption = await proseFrame(ctx, page, [left, 458, right, 516], [
-    {
-      text:
-        "Three tiles, one saved style. Apply linked all three; a direct recolour of the first marked it overridden without breaking its link; Redefine pushed first blue, then slate, through every link it found. The third tile broke its link after the blue pass - it keeps that appearance while its neighbours moved on. A style that only copied values would be a clipboard; the link is the feature.",
-      style: STYLE.caption,
-    },
-  ]);
+  const gsCaption = await proseFrame(
+    ctx,
+    page,
+    [left, 458, right, 516],
+    [
+      {
+        text: "Three tiles, one saved style. Apply linked all three; a direct recolour of the first marked it overridden without breaking its link; Redefine pushed first blue, then slate, through every link it found. The third tile broke its link after the blue pass - it keeps that appearance while its neighbours moved on. A style that only copied values would be a clipboard; the link is the feature.",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(gsCaption.frameId);
 
   elements.push(

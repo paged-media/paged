@@ -88,7 +88,8 @@ async function dispatch(
   if (parsed.kind === "inspect") {
     const props = await page.evaluate(
       async ({ id }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         return c.client.elementProperties(id);
       },
       { id: parsed.elementId },
@@ -117,7 +118,9 @@ async function fetchOpacity(
     { id },
   );
   if (!props) throw new Error("element not found");
-  const entry = props.entries.find((e: PropertyEntry) => e.path === "frameOpacity");
+  const entry = props.entries.find(
+    (e: PropertyEntry) => e.path === "frameOpacity",
+  );
   if (!entry) throw new Error("frameOpacity missing");
   return entry.value.value;
 }
@@ -147,7 +150,8 @@ test.describe("Scripting Stage 1.b — REPL", () => {
     );
     const props = await page.evaluate(
       async ({ id }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         return c.client.elementProperties({ kind: "textFrame", id });
       },
       { id: TEXT_FRAME_ID },
@@ -158,7 +162,9 @@ test.describe("Scripting Stage 1.b — REPL", () => {
     expect(fill).toBe("Color/Red");
   });
 
-  test("AC-REPL-3 — undo and redo round-trip @feat:scripting.repl @level:happy", async ({ page }) => {
+  test("AC-REPL-3 — undo and redo round-trip @feat:scripting.repl @level:happy", async ({
+    page,
+  }) => {
     await dispatch(
       page,
       `set textFrame:${TEXT_FRAME_ID} frameOpacity length:25`,

@@ -48,7 +48,8 @@ function die(msg) {
 function hostPanels() {
   const src = read(join(CANVAS, "src/main.tsx"));
   const start = src.indexOf("const BUILT_IN_PANELS");
-  if (start < 0) die("BUILT_IN_PANELS not found in main.tsx — extractor is stale");
+  if (start < 0)
+    die("BUILT_IN_PANELS not found in main.tsx — extractor is stale");
   const block = src.slice(start, src.indexOf("\n];", start));
   return new Set([...block.matchAll(/id:\s*"([^"]+)"/g)].map((m) => m[1]));
 }
@@ -96,8 +97,16 @@ function pluginPanels(bundleNpmName) {
  *  to the end alphabetically, which is legal but almost always a typo in
  *  a profile. */
 const KNOWN_TOP_LEVELS = new Set([
-  "File", "Edit", "Layout", "Type", "Object", "Data", "View", "Tools",
-  "Window", "Help",
+  "File",
+  "Edit",
+  "Layout",
+  "Type",
+  "Object",
+  "Data",
+  "View",
+  "Tools",
+  "Window",
+  "Help",
 ]);
 
 // ── what the profiles claim ─────────────────────────────────────────
@@ -125,14 +134,17 @@ function codeOnly(src) {
 function profiles() {
   const src = codeOnly(read(join(CANVAS, "src/solo/profiles.ts")));
   const out = [];
-  for (const m of src.matchAll(/const (\w+_PROFILE): SoloProfile = \{([\s\S]*?)\n\};/g)) {
+  for (const m of src.matchAll(
+    /const (\w+_PROFILE): SoloProfile = \{([\s\S]*?)\n\};/g,
+  )) {
     const [, name, body] = m;
     const list = (key) => {
       const block = body.match(new RegExp(`${key}:\\s*\\[([\\s\\S]*?)\\]`));
       if (!block) return [];
       return [...block[1].matchAll(/"([^"]+)"/g)].map((x) => x[1]);
     };
-    const one = (key) => body.match(new RegExp(`${key}:\\s*"([^"]+)"`))?.[1] ?? null;
+    const one = (key) =>
+      body.match(new RegExp(`${key}:\\s*"([^"]+)"`))?.[1] ?? null;
     const slotsBlock = body.match(/slots:\s*\{([\s\S]*?)\n {2}\}/)?.[1] ?? "";
     out.push({
       name,
@@ -170,7 +182,9 @@ for (const [what, got, floor] of [
   ["profiles", PROFILES.length, 1],
 ]) {
   if (got < floor) {
-    die(`found only ${got} ${what} (expected >= ${floor}) — an extractor lost its footing`);
+    die(
+      `found only ${got} ${what} (expected >= ${floor}) — an extractor lost its footing`,
+    );
   }
 }
 
@@ -188,10 +202,12 @@ for (const p of PROFILES) {
 
   const problems = [];
   for (const id of p.panelIds) {
-    if (!HOST_PANELS.has(id)) problems.push(`panelIds: "${id}" is not a host panel`);
+    if (!HOST_PANELS.has(id))
+      problems.push(`panelIds: "${id}" is not a host panel`);
   }
   for (const id of p.toolIds) {
-    if (!HOST_TOOLS.has(id)) problems.push(`toolIds: "${id}" is not a built-in tool`);
+    if (!HOST_TOOLS.has(id))
+      problems.push(`toolIds: "${id}" is not a built-in tool`);
   }
   for (const id of [...p.slotIds, ...p.panelRailIds]) {
     // A plugin-owned id cannot be judged without that plugin's

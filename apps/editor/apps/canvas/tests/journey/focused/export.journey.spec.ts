@@ -36,12 +36,19 @@ test.describe("journey · export", () => {
     await designer.newDocument();
 
     // Put real content on the page so the export carries page items.
-    const id = await designer.drawRectangle({ x0: 90, y0: 120, x1: 300, y1: 280 });
+    const id = await designer.drawRectangle({
+      x0: 90,
+      y0: 120,
+      x1: 300,
+      y1: 280,
+    });
     expect(id).toBeTruthy();
     await designer.applyFill("rectangle", id, "Color/Black");
 
     const { byteLength, pageCount } = await designer.exportAndReload();
-    expect(byteLength, "exported IDML should be non-trivial").toBeGreaterThan(500);
+    expect(byteLength, "exported IDML should be non-trivial").toBeGreaterThan(
+      500,
+    );
     expect(pageCount, "re-parsed document keeps its single page").toBe(1);
   });
 });

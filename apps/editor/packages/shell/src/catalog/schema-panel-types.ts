@@ -42,7 +42,10 @@
 // needs them — that is a plugin-sdk change, and the superset rule is
 // what lets the two land out of step.
 
-import type { ListPresentation, SubFieldPresentation } from "./property-field-model";
+import type {
+  ListPresentation,
+  SubFieldPresentation,
+} from "./property-field-model";
 import type { PropertyPath, Value } from "@paged-media/client";
 
 export type WidgetValueBinding =
@@ -316,10 +319,7 @@ export interface PanelSchemaWidgetRow {
  *  `PropertyFieldAddress`, mirrored): the selection (scoped to `kind`), a
  *  selector, a published binding, or explicit addresses. */
 export type PropertyFieldAddress =
-  | "selection"
-  | string
-  | { bind: string }
-  | { addresses: readonly string[] };
+  "selection" | string | { bind: string } | { addresses: readonly string[] };
 
 /** ADR 323 — the object-model property row (plugin-api schema v1.2,
  *  mirrored): the host renders it with `PropertyField` over
@@ -347,7 +347,9 @@ export interface PanelSchemaPropertyRow {
 
 export type PanelSchemaRow = PanelSchemaWidgetRow | PanelSchemaPropertyRow;
 
-export function isPropertyRow(row: PanelSchemaRow): row is PanelSchemaPropertyRow {
+export function isPropertyRow(
+  row: PanelSchemaRow,
+): row is PanelSchemaPropertyRow {
   return (row as { field?: unknown }).field === "property";
 }
 

@@ -64,7 +64,11 @@ const invoke = (page: Page, id: string) =>
     (c) =>
       (
         globalThis as unknown as {
-          __canvas: { registries: { commands: { invoke: (i: string) => Promise<unknown> } } };
+          __canvas: {
+            registries: {
+              commands: { invoke: (i: string) => Promise<unknown> };
+            };
+          };
         }
       ).__canvas.registries.commands.invoke(c),
     id,
@@ -84,9 +88,13 @@ async function importCsv(page: Page): Promise<boolean> {
   const status = page.locator("[data-status]").last();
   try {
     await expect
-      .poll(async () => (await status.getAttribute("data-status").catch(() => null)) ?? "?", {
-        timeout: 45_000,
-      })
+      .poll(
+        async () =>
+          (await status.getAttribute("data-status").catch(() => null)) ?? "?",
+        {
+          timeout: 45_000,
+        },
+      )
       .toBe("ready");
     return true;
   } catch {
@@ -106,8 +114,11 @@ test.describe("journey · paged.data preview stepper + change report", () => {
     const ready = await importCsv(page);
     if (!ready) {
       const got =
-        (await page.locator("[data-status]").last().getAttribute("data-status").catch(() => null)) ??
-        "unknown";
+        (await page
+          .locator("[data-status]")
+          .last()
+          .getAttribute("data-status")
+          .catch(() => null)) ?? "unknown";
       skipWithoutDuckDB(
         got,
         `preview stepper needs DuckDB-WASM to boot (engine status "${got}"). It boots on the ` +
@@ -115,14 +126,18 @@ test.describe("journey · paged.data preview stepper + change report", () => {
           "fires if the package shipped no bin/duckdb-engine.wasm or the context is not cross-origin isolated.",
       );
     }
-    await expect(page.getByText(/data_people/).first()).toBeVisible({ timeout: 6_000 });
+    await expect(page.getByText(/data_people/).first()).toBeVisible({
+      timeout: 6_000,
+    });
 
     // ── 2. WIRE — add a variable binding through the authoring row (it
     //    defines the all-rows query the stepper walks on first use), then
     //    refresh the data so the records are ingested (the stepper's "of N"
     //    bound). ──
     await openPanel(page, BINDINGS_PANEL);
-    await expect(page.locator("[data-data-bind-author]")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("[data-data-bind-author]")).toBeVisible({
+      timeout: 10_000,
+    });
     await addBindingThroughPanel(page, "variable", "name");
     await page.getByRole("button", { name: /refresh data/i }).click();
     await page.waitForTimeout(500);
@@ -160,7 +175,9 @@ test.describe("journey · paged.data preview stepper + change report", () => {
     await expect(report).toContainText(/changed since last sync/i);
     // The baseline diff reports the wired bindings as `added` entries (a
     // data-change-kind the panel tags) — proof the diff engine ran end to end.
-    await expect(report.locator('[data-change-kind="added"]').first()).toBeVisible({
+    await expect(
+      report.locator('[data-change-kind="added"]').first(),
+    ).toBeVisible({
       timeout: 6_000,
     });
   });

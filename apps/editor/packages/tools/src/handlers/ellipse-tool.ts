@@ -73,7 +73,9 @@ function ellipsePreviewPoints(bounds: Bounds): [number, number][] {
   return points;
 }
 
-export function createEllipseHandler(options: DrawHandlerOptions = {}): GestureHandler {
+export function createEllipseHandler(
+  options: DrawHandlerOptions = {},
+): GestureHandler {
   const commit = options.frame ? mutateAndSelect : mutateGraphicAndSelect;
   let paged: PagedEditor | null = null;
   let drag: PageDrag | null = null;

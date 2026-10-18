@@ -30,34 +30,50 @@ import type { PageContext, PageReport } from "../../types";
 export async function build(ctx: PageContext): Promise<PageReport> {
   const elements: string[] = [];
 
-  const number = await proseFrame(ctx, p(57), [48, 54, 480, 132], [
-    { text: "10", style: STYLE.chapterNumber },
-  ]);
+  const number = await proseFrame(
+    ctx,
+    p(57),
+    [48, 54, 480, 132],
+    [{ text: "10", style: STYLE.chapterNumber }],
+  );
   elements.push(number.frameId);
 
-  const title = await proseFrame(ctx, p(57), [48, 140, 480, 208], [
-    { text: "The Effects", style: STYLE.chapterTitle },
-  ]);
+  const title = await proseFrame(
+    ctx,
+    p(57),
+    [48, 140, 480, 208],
+    [{ text: "The Effects", style: STYLE.chapterTitle }],
+  );
   elements.push(title.frameId);
 
-  const deck = await proseFrame(ctx, p(57), [48, 218, 480, 288], [
-    {
-      text: "Eight families of borrowed light and manufactured shadow, some sixty property paths between them — and one honest contact sheet.",
-      style: STYLE.deck,
-    },
-  ]);
+  const deck = await proseFrame(
+    ctx,
+    p(57),
+    [48, 218, 480, 288],
+    [
+      {
+        text: "Eight families of borrowed light and manufactured shadow, some sixty property paths between them — and one honest contact sheet.",
+        style: STYLE.deck,
+      },
+    ],
+  );
   elements.push(deck.frameId);
 
-  const prose = await proseFrame(ctx, p(57), [48, 300, 480, 580], [
-    {
-      text: "The verso overleaf is the contact sheet: the same vermilion square eight times, each carrying one family at full expressive settings — drop shadow, inner shadow, outer glow, inner glow, bevel and emboss, satin, feather, directional feather. The recto answers with two compositions that use them in anger, and gives the gradient feather, the ninth instrument, an exhibit of its own.",
-      style: STYLE.bodyFirst,
-    },
-    {
-      text: "The closing page is the parameter table: for every family, a row of small squares that turn one knob at a time, so the reader can see what each path buys rather than take the panel's word for it. Two limits are recorded where they occur — satin stores an invert flag the rasterizer ignores, and a transparency group's raster bounds can clip a wide overhang that the PDF path keeps. Both stand in the margin and again in Appendix A.",
-      style: STYLE.body,
-    },
-  ]);
+  const prose = await proseFrame(
+    ctx,
+    p(57),
+    [48, 300, 480, 580],
+    [
+      {
+        text: "The verso overleaf is the contact sheet: the same vermilion square eight times, each carrying one family at full expressive settings — drop shadow, inner shadow, outer glow, inner glow, bevel and emboss, satin, feather, directional feather. The recto answers with two compositions that use them in anger, and gives the gradient feather, the ninth instrument, an exhibit of its own.",
+        style: STYLE.bodyFirst,
+      },
+      {
+        text: "The closing page is the parameter table: for every family, a row of small squares that turn one knob at a time, so the reader can see what each path buys rather than take the panel's word for it. Two limits are recorded where they occur — satin stores an invert flag the rasterizer ignores, and a transparency group's raster bounds can clip a wide overhang that the PDF path keeps. Both stand in the margin and again in Appendix A.",
+        style: STYLE.body,
+      },
+    ],
+  );
   elements.push(prose.frameId);
 
   elements.push(

@@ -92,7 +92,7 @@ no-repaint here was the second hypothesis: the generated
 cascade — a style font-size edit legitimately changes nothing visible.
 AC-E2E-STYLE-1 now edits `paragraphJustification` (not overridden by
 the fixture's direct formatting) and passes as a real cascade-repaint
-proof. The style-edit *undo* leg was additionally covered by fix #1.
+proof. The style-edit _undo_ leg was additionally covered by fix #1.
 
 ## 3. insertPage in the MIDDLE of the set panics the renderer
 
@@ -123,7 +123,7 @@ position.
 
 **RESOLVED (core, 2026-06-06).** Root cause was sharper than the
 hypothesis: not an ungrown pipeline vector but the **body-story emit
-cache** — its signature ignored the chain's page *indices*, so cached
+cache** — its signature ignored the chain's page _indices_, so cached
 per-page deltas survived page-set changes with stale absolute indices;
 the un-cleared undo/redo path (finding #1) then spliced past
 `pages.len()`. Core now (a) clears the caches on undo/redo, (b) keys

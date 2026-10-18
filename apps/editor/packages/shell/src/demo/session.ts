@@ -32,7 +32,11 @@
 // depth. It deliberately does NOT handle regex literals — demo scripts don't use
 // them (documented constraint).
 
-import { buildAutomation, type CanvasHandleLike, type DemoGlobals } from "./automation";
+import {
+  buildAutomation,
+  type CanvasHandleLike,
+  type DemoGlobals,
+} from "./automation";
 import { demoResetOverlay } from "./overlay";
 
 export interface Statement {
@@ -45,7 +49,8 @@ export interface Statement {
   chapterLabel?: string;
 }
 
-export type SessionStatus = "idle" | "playing" | "paused" | "stepping" | "done" | "error";
+export type SessionStatus =
+  "idle" | "playing" | "paused" | "stepping" | "done" | "error";
 
 export interface SessionState {
   status: SessionStatus;
@@ -75,9 +80,14 @@ export function splitTopLevelStatements(source: string): Statement[] {
     // comments ABOVE a statement belong to its span, so testing the text's
     // first characters would drop the first statement of every script that
     // opens with a header comment.
-    const code = text.replace(/^(?:\s*(?:\/\/[^\n]*|\/\*[\s\S]*?\*\/))+/, "").trim();
+    const code = text
+      .replace(/^(?:\s*(?:\/\/[^\n]*|\/\*[\s\S]*?\*\/))+/, "")
+      .trim();
     if (code) {
-      const realStart = stmtStart + (source.slice(stmtStart, end).length - source.slice(stmtStart, end).trimStart().length);
+      const realStart =
+        stmtStart +
+        (source.slice(stmtStart, end).length -
+          source.slice(stmtStart, end).trimStart().length);
       out.push({
         index: out.length,
         text,
@@ -148,7 +158,10 @@ export function splitTopLevelStatements(source: string): Statement[] {
   return out;
 }
 
-function chapterInfo(text: string): { isChapter: boolean; chapterLabel?: string } {
+function chapterInfo(text: string): {
+  isChapter: boolean;
+  chapterLabel?: string;
+} {
   const m = text.match(/demo\.(showInfo|step|pause)\s*\(\s*(["'`])([^"'`]*)\2/);
   if (!m) return { isChapter: false };
   return { isChapter: true, chapterLabel: m[3] || "Step" };
@@ -166,7 +179,12 @@ export interface DemoSessionOptions {
 export class DemoSession {
   readonly statements: Statement[];
   readonly chapters: Statement[];
-  private state: SessionState = { status: "idle", currentIndex: -1, currentChapter: -1, error: null };
+  private state: SessionState = {
+    status: "idle",
+    currentIndex: -1,
+    currentChapter: -1,
+    error: null,
+  };
   private readonly onState?: (s: SessionState) => void;
   private speedMs: number;
 
@@ -183,7 +201,9 @@ export class DemoSession {
     this.chapters = this.statements.filter((s) => s.isChapter);
     this.onState = opts.onState;
     this.speedMs = opts.speedMs ?? 250;
-    this.globals = buildAutomation(opts.handle, { isSilent: () => this.silent });
+    this.globals = buildAutomation(opts.handle, {
+      isSilent: () => this.silent,
+    });
   }
 
   getState(): SessionState {
@@ -208,10 +228,16 @@ export class DemoSession {
         this.replayTarget = -1; // reached target → resume normal (show this chapter's box)
         this.silent = false;
       }
-      this.emit({ currentIndex: index, currentChapter: this.chapterIndexFor(index) });
+      this.emit({
+        currentIndex: index,
+        currentChapter: this.chapterIndexFor(index),
+      });
       return;
     }
-    this.emit({ currentIndex: index, currentChapter: this.chapterIndexFor(index) });
+    this.emit({
+      currentIndex: index,
+      currentChapter: this.chapterIndexFor(index),
+    });
     // single-step: pause after handing control back for one statement
     if (this.state.status === "stepping") {
       this.paused = true;
@@ -226,17 +252,21 @@ export class DemoSession {
 
   private chapterIndexFor(stmtIndex: number): number {
     let ci = -1;
-    for (let k = 0; k < this.chapters.length; k++) if (this.chapters[k].index <= stmtIndex) ci = k;
+    for (let k = 0; k < this.chapters.length; k++)
+      if (this.chapters[k].index <= stmtIndex) ci = k;
     return ci;
   }
 
   private buildInstrumented(): (...args: unknown[]) => Promise<void> {
-    const body = this.statements.map((s) => `await __gate(${s.index});\n${s.text};`).join("\n");
+    const body = this.statements
+      .map((s) => `await __gate(${s.index});\n${s.text};`)
+      .join("\n");
     const names = [...Object.keys(this.globals), "__gate"];
     // eslint-disable-next-line no-new-func
-    const factory = new Function(...names, `"use strict"; return (async () => {\n${body}\n})();`) as (
-      ...args: unknown[]
-    ) => Promise<void>;
+    const factory = new Function(
+      ...names,
+      `"use strict"; return (async () => {\n${body}\n})();`,
+    ) as (...args: unknown[]) => Promise<void>;
     return factory;
   }
 
@@ -305,7 +335,11 @@ export class DemoSession {
         if (token === this.runToken) this.emit({ status: "paused" });
         return;
       }
-      if (token === this.runToken) this.emit({ status: "error", error: e instanceof Error ? e.message : String(e) });
+      if (token === this.runToken)
+        this.emit({
+          status: "error",
+          error: e instanceof Error ? e.message : String(e),
+        });
     }
   }
 
@@ -328,7 +362,11 @@ export class DemoSession {
 
   /** Run exactly one statement, then pause. */
   step(): void {
-    if (this.state.status === "idle" || this.state.status === "done" || this.runToken === 0) {
+    if (
+      this.state.status === "idle" ||
+      this.state.status === "done" ||
+      this.runToken === 0
+    ) {
       this.emit({ status: "stepping", error: null });
       void this.exec();
       return;
@@ -344,7 +382,12 @@ export class DemoSession {
     this.flushResume();
     this.silent = false;
     this.replayTarget = -1;
-    this.emit({ status: "idle", currentIndex: -1, currentChapter: -1, error: null });
+    this.emit({
+      status: "idle",
+      currentIndex: -1,
+      currentChapter: -1,
+      error: null,
+    });
   }
 
   /** Seek to chapter N: silently replay from the top to that chapter, then show it. */

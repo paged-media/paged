@@ -77,9 +77,7 @@ async function engineGuideCount(page: Page): Promise<number> {
       globalThis as unknown as {
         __canvas: {
           client: {
-            collection: (
-              n: string,
-            ) => Promise<Array<{ guides?: unknown[] }>>;
+            collection: (n: string) => Promise<Array<{ guides?: unknown[] }>>;
           };
         };
       }
@@ -149,7 +147,9 @@ test.describe("gestures.md GD-01 — drag a guide out of a ruler", () => {
     expect(await previewCount(page)).toBe(0);
   });
 
-  test("AC-GD-01-V: vertical guide from the left ruler @feat:editor-tools.guides.drag @level:happy", async ({ page }) => {
+  test("AC-GD-01-V: vertical guide from the left ruler @feat:editor-tools.guides.drag @level:happy", async ({
+    page,
+  }) => {
     test.setTimeout(120_000);
     await openCanvas(page);
     const fx = await loadViaReactPath(page, "geometry");
@@ -179,7 +179,11 @@ test.describe("gestures.md GD-01 — drag a guide out of a ruler", () => {
     const p0 = fx.pages[0];
 
     const before = await guideLineCount(page, "horizontal");
-    const overPage = await screenPoint(page, p0.widthPt * 0.5, p0.heightPt * 0.4);
+    const overPage = await screenPoint(
+      page,
+      p0.widthPt * 0.5,
+      p0.heightPt * 0.4,
+    );
     const ruler = await rulerPoint(page, "h");
 
     await page.mouse.move(ruler.x, ruler.y);
@@ -294,7 +298,11 @@ test.describe("gestures.md GD-03 — Escape mid-drag", () => {
 
     const before = await guideLineCount(page);
     const ruler = await rulerPoint(page, "h");
-    const overPage = await screenPoint(page, p0.widthPt * 0.5, p0.heightPt * 0.5);
+    const overPage = await screenPoint(
+      page,
+      p0.widthPt * 0.5,
+      p0.heightPt * 0.5,
+    );
 
     await page.mouse.move(ruler.x, ruler.y);
     await page.mouse.down();
@@ -392,7 +400,7 @@ test.describe("gestures.md GD-01 — undo + engine-truth read", () => {
       .toBe(before);
   });
 
-  test("AC-GD-01-ENGINE: the placed guide is engine truth (collection(\"spreads\").guides) and undo removes it @feat:editor-tools.guides.drag @level:happy", async ({
+  test('AC-GD-01-ENGINE: the placed guide is engine truth (collection("spreads").guides) and undo removes it @feat:editor-tools.guides.drag @level:happy', async ({
     page,
   }) => {
     // The cross-boundary truth (the engine actually persisted the

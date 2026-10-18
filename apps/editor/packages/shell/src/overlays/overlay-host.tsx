@@ -19,9 +19,7 @@
 
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 
-import type {
-  Camera,
-} from "@paged-media/client";
+import type { Camera } from "@paged-media/client";
 import type { PageId } from "@paged-media/client";
 
 import type {

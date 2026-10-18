@@ -83,10 +83,7 @@ async function undoOnce(page: Page): Promise<void> {
   });
 }
 
-async function elementProperties(
-  page: Page,
-  id: ElementId,
-): Promise<unknown> {
+async function elementProperties(page: Page, id: ElementId): Promise<unknown> {
   return page.evaluate(async (target) => {
     const c = (
       globalThis as unknown as {
@@ -375,9 +372,9 @@ test.describe("U7 — paged.insert.* command authoring", () => {
     expect(await sceneNodeCount(page)).toBe(before);
     expect(outcome.createdId).not.toBeNull();
     expect(outcome.createdId!.kind).toBe("table");
-    expect(
-      (outcome.createdId!.id as { story_id: string }).story_id,
-    ).toBe(storyId);
+    expect((outcome.createdId!.id as { story_id: string }).story_id).toBe(
+      storyId,
+    );
     expect(await elementProperties(page, outcome.createdId!)).not.toBeNull();
 
     // One undo removes the table again.
@@ -406,10 +403,9 @@ test.describe("U7 — paged.insert.* command authoring", () => {
     // command does not resolve until it has a point. (Before this, every
     // place landed centred, so four places built a pile of four.)
     const viewport = page.locator("[data-paged-viewport]");
-    await expect(page.locator("html[data-paged-placement='armed']")).toHaveCount(
-      1,
-      { timeout: 10_000 },
-    );
+    await expect(
+      page.locator("html[data-paged-placement='armed']"),
+    ).toHaveCount(1, { timeout: 10_000 });
     const box = (await viewport.boundingBox())!;
     const clickX = box.x + box.width * 0.35;
     const clickY = box.y + box.height * 0.3;
@@ -469,15 +465,16 @@ test.describe("U7 — paged.insert.* command authoring", () => {
   }> {
     const chooser = page.waitForEvent("filechooser");
     const invoked = invoke(page, "paged.insert.placeImage");
-    await (await chooser).setFiles({
+    await (
+      await chooser
+    ).setFiles({
       name: "swatch.png",
       mimeType: "image/png",
       buffer: tinyPng(40, 20),
     });
-    await expect(page.locator("html[data-paged-placement='armed']")).toHaveCount(
-      1,
-      { timeout: 10_000 },
-    );
+    await expect(
+      page.locator("html[data-paged-placement='armed']"),
+    ).toHaveCount(1, { timeout: 10_000 });
     const box = (await page.locator("[data-paged-viewport]").boundingBox())!;
     // INTEGER click coordinates. The mouse lands on whole CSS pixels,
     // and at this zoom (scale ~0.41) one pixel is ~2.5pt of document
@@ -498,7 +495,9 @@ test.describe("U7 — paged.insert.* command authoring", () => {
           globalThis as unknown as {
             __canvas: {
               client: {
-                camera: { read: () => { scale: number; tx: number; ty: number } };
+                camera: {
+                  read: () => { scale: number; tx: number; ty: number };
+                };
               };
             };
           }
@@ -566,15 +565,16 @@ test.describe("U7 — paged.insert.* command authoring", () => {
     const before = await sceneNodeCount(page);
     const chooser = page.waitForEvent("filechooser");
     const invoked = invoke(page, "paged.insert.placeImage");
-    await (await chooser).setFiles({
+    await (
+      await chooser
+    ).setFiles({
       name: "swatch.png",
       mimeType: "image/png",
       buffer: tinyPng(40, 20),
     });
-    await expect(page.locator("html[data-paged-placement='armed']")).toHaveCount(
-      1,
-      { timeout: 10_000 },
-    );
+    await expect(
+      page.locator("html[data-paged-placement='armed']"),
+    ).toHaveCount(1, { timeout: 10_000 });
 
     await page.keyboard.press("Escape");
     const outcome = (await invoked) as InsertOutcome;
@@ -604,7 +604,10 @@ test.describe("U7 — paged.insert.* command authoring", () => {
           ).__canvas.handle.pageIds.length,
       );
     const before = await pageCount();
-    const outcome = (await invoke(page, "paged.insert.newPage")) as InsertOutcome;
+    const outcome = (await invoke(
+      page,
+      "paged.insert.newPage",
+    )) as InsertOutcome;
     expect(outcome.applied).toBe(true);
     // The page-structure mirror follows (pageStructureChanged contract).
     await expect.poll(pageCount).toBe(before + 1);
@@ -713,8 +716,7 @@ test.describe("U7 — paged.insert.* command authoring", () => {
                 Array<{
                   bounds: [number, number, number, number];
                   itemTransform?:
-                    | [number, number, number, number, number, number]
-                    | null;
+                    [number, number, number, number, number, number] | null;
                 }>
               >;
             };

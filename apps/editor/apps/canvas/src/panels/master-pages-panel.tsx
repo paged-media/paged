@@ -26,7 +26,12 @@
 // (`core.deleteMaster`) — each one invoke = one undo step; the ones that
 // need a name or a page open the generated form.
 
-import { ListRows, displayName, useCollection, useDocument } from "@paged-media/shell";
+import {
+  ListRows,
+  displayName,
+  useCollection,
+  useDocument,
+} from "@paged-media/shell";
 import type { MasterPageSummary } from "@paged-media/client";
 
 import { CoreCommandButton, newMasterPrefill } from "../core-command-dialog";

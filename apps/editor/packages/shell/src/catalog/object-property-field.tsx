@@ -43,11 +43,23 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { ElementId } from "@paged-media/client";
 
 import { useSelection } from "../state/selection-context";
-import { ObjectFieldFrame, useObjectField, type BindScope, type BindScopeOf } from "./object-field";
+import {
+  ObjectFieldFrame,
+  useObjectField,
+  type BindScope,
+  type BindScopeOf,
+} from "./object-field";
 import { useObjectModel } from "./object-model";
 import { PropertyField } from "./property-field";
-import type { ListPresentation, SubFieldPresentation } from "./property-field-model";
-import type { BindingsSurface, PanelSchemaPropertyRow, PropertyFieldAddress } from "./schema-panel-types";
+import type {
+  ListPresentation,
+  SubFieldPresentation,
+} from "./property-field-model";
+import type {
+  BindingsSurface,
+  PanelSchemaPropertyRow,
+  PropertyFieldAddress,
+} from "./schema-panel-types";
 
 /** What a resolved address hands the field. `targets: undefined` = the
  *  plain selection (PropertyField's own default). */
@@ -56,12 +68,17 @@ export interface ResolvedFieldTargets {
   bindScope: BindScopeOf | undefined;
 }
 
-const sameList = (a: readonly string[] | undefined, b: readonly string[] | undefined) =>
-  a === b || (!!a && !!b && a.length === b.length && a.every((x, i) => x === b[i]));
+const sameList = (
+  a: readonly string[] | undefined,
+  b: readonly string[] | undefined,
+) =>
+  a === b ||
+  (!!a && !!b && a.length === b.length && a.every((x, i) => x === b[i]));
 
 function asAddressList(v: unknown): string[] {
   if (typeof v === "string") return v ? [v] : [];
-  if (Array.isArray(v)) return v.filter((x): x is string => typeof x === "string" && x !== "");
+  if (Array.isArray(v))
+    return v.filter((x): x is string => typeof x === "string" && x !== "");
   return [];
 }
 
@@ -76,7 +93,8 @@ export function useFieldTargets(
 ): ResolvedFieldTargets {
   const model = useObjectModel();
   const { elementSelection } = useSelection();
-  const addressKey = typeof address === "string" ? address : JSON.stringify(address);
+  const addressKey =
+    typeof address === "string" ? address : JSON.stringify(address);
 
   // Change ticks: the object model (a layer added, a frame removed) and
   // the plugin's published bindings.
@@ -86,7 +104,8 @@ export function useFieldTargets(
     const d = model.objects.onDidChange(() => setTick((n) => n + 1));
     return () => d.dispose();
   }, [model]);
-  const bindName = typeof address === "object" && "bind" in address ? address.bind : null;
+  const bindName =
+    typeof address === "object" && "bind" in address ? address.bind : null;
   const [bound, setBound] = useState<string[]>(() =>
     bindName && bindings ? asAddressList(bindings.get(bindName)) : [],
   );
@@ -110,25 +129,38 @@ export function useFieldTargets(
   const scopedToKind = address === "selection" && !!kind;
   const hosts = useMemo((): { address: string; element: ElementId }[] => {
     if (!scopedToKind || !model) return [];
-    return elementSelection.map((id) => ({ address: model.addressOf(id), element: id }));
+    return elementSelection.map((id) => ({
+      address: model.addressOf(id),
+      element: id,
+    }));
   }, [scopedToKind, model, elementSelection]);
   const hostsKey = hosts.map((h) => h.address).join("\n");
   // Every selected object as a possible host (for `{ bind }` addresses).
   const selectionHosts = useMemo(
     (): { address: string; element: ElementId }[] =>
-      model ? elementSelection.map((id) => ({ address: model.addressOf(id), element: id })) : [],
+      model
+        ? elementSelection.map((id) => ({
+            address: model.addressOf(id),
+            element: id,
+          }))
+        : [],
     [model, elementSelection],
   );
 
   // Query-resolved forms: a selector, or the selection scoped to a kind.
-  const [queried, setQueried] = useState<{ list: string[]; hostOf: Map<string, number> }>({
+  const [queried, setQueried] = useState<{
+    list: string[];
+    hostOf: Map<string, number>;
+  }>({
     list: [],
     hostOf: new Map(),
   });
   const isSelector = typeof address === "string" && address !== "selection";
   useEffect(() => {
     if (!model || (!isSelector && !scopedToKind)) {
-      setQueried((prev) => (prev.list.length === 0 ? prev : { list: [], hostOf: new Map() }));
+      setQueried((prev) =>
+        prev.list.length === 0 ? prev : { list: [], hostOf: new Map() },
+      );
       return;
     }
     let cancelled = false;
@@ -136,11 +168,17 @@ export function useFieldTargets(
       const list: string[] = [];
       const hostOf = new Map<string, number>();
       if (isSelector) {
-        list.push(...(await model.objects.query(address as string).catch(() => [] as string[])));
+        list.push(
+          ...(await model.objects
+            .query(address as string)
+            .catch(() => [] as string[])),
+        );
       } else {
         const hostList = hostsKey ? hostsKey.split("\n") : [];
         for (let i = 0; i < hostList.length; i++) {
-          const hits = await model.objects.query(`${hostList[i]} > ${kind}`).catch(() => [] as string[]);
+          const hits = await model.objects
+            .query(`${hostList[i]} > ${kind}`)
+            .catch(() => [] as string[]);
           for (const h of hits) {
             if (!hostOf.has(h)) {
               hostOf.set(h, i);
@@ -150,7 +188,9 @@ export function useFieldTargets(
         }
       }
       if (!cancelled) {
-        setQueried((prev) => (sameList(prev.list, list) ? prev : { list, hostOf }));
+        setQueried((prev) =>
+          sameList(prev.list, list) ? prev : { list, hostOf },
+        );
       }
     })();
     return () => {
@@ -161,7 +201,8 @@ export function useFieldTargets(
   }, [model, addressKey, isSelector, scopedToKind, hostsKey, kind, tick]);
 
   return useMemo((): ResolvedFieldTargets => {
-    if (address === "selection" && !kind) return { targets: undefined, bindScope: undefined };
+    if (address === "selection" && !kind)
+      return { targets: undefined, bindScope: undefined };
     if (typeof address === "object" && "addresses" in address) {
       return { targets: [...address.addresses], bindScope: undefined };
     }
@@ -172,7 +213,9 @@ export function useFieldTargets(
         targets: bound,
         bindScope: (a: string): BindScope | null => {
           const m = /^(plugin:[^/]+\/[^/]+)\//.exec(a);
-          return m && selectionHosts.length ? { kind: m[1], hostCandidates: selectionHosts } : null;
+          return m && selectionHosts.length
+            ? { kind: m[1], hostCandidates: selectionHosts }
+            : null;
         },
       };
     }
@@ -193,7 +236,16 @@ export function useFieldTargets(
       },
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [addressKey, kind, bindName, bound, isSelector, queried, hosts, selectionHosts]);
+  }, [
+    addressKey,
+    kind,
+    bindName,
+    bound,
+    isSelector,
+    queried,
+    hosts,
+    selectionHosts,
+  ]);
 }
 
 export interface ObjectPropertyFieldProps {
@@ -245,10 +297,15 @@ export function ObjectPropertyField(p: ObjectPropertyFieldProps) {
     <div
       data-plugin-property-field={p.path}
       data-property-kind={p.kind}
-      data-property-targets={targets === undefined ? "selection" : String(targets.length)}
+      data-property-targets={
+        targets === undefined ? "selection" : String(targets.length)
+      }
     >
       {p.disabled ? (
-        <div data-schema-disabled="true" style={{ opacity: 0.5, pointerEvents: "none" }}>
+        <div
+          data-schema-disabled="true"
+          style={{ opacity: 0.5, pointerEvents: "none" }}
+        >
           {field}
         </div>
       ) : (

@@ -66,37 +66,43 @@ const EXHIBITS: Exhibit[] = [
     file: derived("apples.png"),
     uri: "assets/photos/derived/apples.png",
     name: "PNG",
-    facts: "8-bit/channel RGB, lossless filters + DEFLATE. The reference print of the six.",
+    facts:
+      "8-bit/channel RGB, lossless filters + DEFLATE. The reference print of the six.",
   },
   {
     file: derived("apples.webp"),
     uri: "assets/photos/derived/apples.webp",
     name: "WebP",
-    facts: "VP8 lossy, YUV 4:2:0 — an eighth of the PNG's bytes; the chroma carries the cost.",
+    facts:
+      "VP8 lossy, YUV 4:2:0 — an eighth of the PNG's bytes; the chroma carries the cost.",
   },
   {
     file: derived("apples.tif"),
     uri: "assets/photos/derived/apples.tif",
     name: "TIFF",
-    facts: "LZW, 8-bit RGB, little-endian — the prepress workhorse, lossless like the PNG.",
+    facts:
+      "LZW, 8-bit RGB, little-endian — the prepress workhorse, lossless like the PNG.",
   },
   {
     file: derived("apples.gif"),
     uri: "assets/photos/derived/apples.gif",
     name: "GIF",
-    facts: "87a, one adaptive 256-colour palette. Look at the apples' shoulders: continuous tone posterises where PNG keeps it smooth.",
+    facts:
+      "87a, one adaptive 256-colour palette. Look at the apples' shoulders: continuous tone posterises where PNG keeps it smooth.",
   },
   {
     file: derived("apples.bmp"),
     uri: "assets/photos/derived/apples.bmp",
     name: "BMP",
-    facts: "Windows 3.x, 24-bit, uncompressed — every pixel spelled out; the largest file for the same picture.",
+    facts:
+      "Windows 3.x, 24-bit, uncompressed — every pixel spelled out; the largest file for the same picture.",
   },
   {
     file: derived("apples-cmyk.jpg"),
     uri: "assets/photos/derived/apples-cmyk.jpg",
     name: "CMYK JPEG",
-    facts: "baseline DCT, FOUR components, core's default CMYK profile embedded — decoded through the ICC lane, not assumed sRGB.",
+    facts:
+      "baseline DCT, FOUR components, core's default CMYK profile embedded — decoded through the ICC lane, not assumed sRGB.",
   },
 ];
 
@@ -110,20 +116,28 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const beforeRecto = await doc.renderPage(p(73));
 
   // ── furniture ────────────────────────────────────────────────────
-  const head = await proseFrame(ctx, p(72), [60, 58, 492, 88], [
-    { text: "One photograph, six codecs", style: STYLE.head1 },
-  ]);
-  const intro = await proseFrame(ctx, p(72), [60, 92, 492, 156], [
-    {
-      text:
-        "Every exhibit on this spread is the same 800 × 534 photograph in " +
-        "an identically sized frame; only the encoding differs. All six " +
-        "went into the document as inline bytes and were decoded by the " +
-        "engine itself — a page this green is six codecs answering. The " +
-        "differences worth a loupe are qualitative and stated per label.",
-      style: STYLE.bodySmall,
-    },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    p(72),
+    [60, 58, 492, 88],
+    [{ text: "One photograph, six codecs", style: STYLE.head1 }],
+  );
+  const intro = await proseFrame(
+    ctx,
+    p(72),
+    [60, 92, 492, 156],
+    [
+      {
+        text:
+          "Every exhibit on this spread is the same 800 × 534 photograph in " +
+          "an identically sized frame; only the encoding differs. All six " +
+          "went into the document as inline bytes and were decoded by the " +
+          "engine itself — a page this green is six codecs answering. The " +
+          "differences worth a loupe are qualitative and stated per label.",
+        style: STYLE.bodySmall,
+      },
+    ],
+  );
   elements.push(head.frameId, intro.frameId);
 
   // ── the six placements ───────────────────────────────────────────
@@ -135,7 +149,11 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   ): Promise<void> => {
     const frame = await doc.rectangle(pageId, box);
     await assignLayer(ctx, "rectangle", frame, LAYER.content);
-    await doc.mutate("placeImage", { elementId: frame, uri: ex.uri, fit: null });
+    await doc.mutate("placeImage", {
+      elementId: frame,
+      uri: ex.uri,
+      fit: null,
+    });
     const bytes = await replaceBytesFromFile(ctx, frame, ex.file);
     const caption = await proseFrame(
       ctx,
@@ -155,17 +173,22 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   await place(p(72), pg72, [60, 166, 60 + W, 166 + H], EXHIBITS[0]);
   await place(p(72), pg72, [292, 166, 292 + W, 166 + H], EXHIBITS[1]);
   await place(p(72), pg72, [60, 372, 60 + W, 372 + H], EXHIBITS[2]);
-  const parity = await proseFrame(ctx, p(72), [292, 372, 492, 540], [
-    {
-      text:
-        "Same pixels, five sizes: the byte counts on these labels are " +
-        "read from the committed files at build time, not typed. PNG, " +
-        "TIFF and BMP are lossless siblings — their renders should be " +
-        "indistinguishable. WebP trades chroma for an order of " +
-        "magnitude; GIF trades the whole palette.",
-      style: STYLE.body,
-    },
-  ]);
+  const parity = await proseFrame(
+    ctx,
+    p(72),
+    [292, 372, 492, 540],
+    [
+      {
+        text:
+          "Same pixels, five sizes: the byte counts on these labels are " +
+          "read from the committed files at build time, not typed. PNG, " +
+          "TIFF and BMP are lossless siblings — their renders should be " +
+          "indistinguishable. WebP trades chroma for an order of " +
+          "magnitude; GIF trades the whole palette.",
+        style: STYLE.body,
+      },
+    ],
+  );
   elements.push(parity.frameId);
 
   // p73 — GIF, BMP, CMYK JPEG, and the EPS.
@@ -213,8 +236,8 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   notes.push(
     epsOutcome.kind === "mutationApplied"
       ? "EPS bytes: the store accepted them (the wire is format-agnostic); " +
-        "the RENDER declines the decode and falls back to the frame's own " +
-        "fill — which is the exhibit"
+          "the RENDER declines the decode and falls back to the frame's own " +
+          "fill — which is the exhibit"
       : `EPS bytes refused at the wire: ${epsOutcome.error ?? epsOutcome.kind}`,
   );
   const epsCaption = await proseFrame(

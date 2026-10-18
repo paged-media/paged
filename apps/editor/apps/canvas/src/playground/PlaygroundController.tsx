@@ -42,9 +42,17 @@ interface ScriptMeta {
   description?: string;
 }
 
-function getParams(): { scriptId: string | null; embed: boolean; autoplay: boolean } {
+function getParams(): {
+  scriptId: string | null;
+  embed: boolean;
+  autoplay: boolean;
+} {
   const p = new URLSearchParams(window.location.search);
-  return { scriptId: p.get("script"), embed: p.has("embed"), autoplay: p.has("autoplay") };
+  return {
+    scriptId: p.get("script"),
+    embed: p.has("embed"),
+    autoplay: p.has("autoplay"),
+  };
 }
 
 const SPEEDS = [
@@ -61,7 +69,12 @@ export function PlaygroundController(): React.ReactElement | null {
   const [editing, setEditing] = useState(false);
   const [open, setOpen] = useState(!embed);
   const [speedMs, setSpeedMs] = useState(250);
-  const [state, setState] = useState<SessionState>({ status: "idle", currentIndex: -1, currentChapter: -1, error: null });
+  const [state, setState] = useState<SessionState>({
+    status: "idle",
+    currentIndex: -1,
+    currentChapter: -1,
+    error: null,
+  });
   const [loadError, setLoadError] = useState<string | null>(null);
   const [statements, setStatements] = useState<Statement[]>([]);
   const [chapters, setChapters] = useState<Statement[]>([]);
@@ -72,16 +85,29 @@ export function PlaygroundController(): React.ReactElement | null {
     if (!scriptId) return;
     let alive = true;
     Promise.all([
-      fetch(`/scripts/${scriptId}.js`).then((r) => (r.ok ? r.text() : Promise.reject(new Error(`script "${scriptId}" not found`)))),
-      fetch(`/scripts/manifest.json`).then((r) => (r.ok ? r.json() : { scripts: [] })).catch(() => ({ scripts: [] })),
+      fetch(`/scripts/${scriptId}.js`).then((r) =>
+        r.ok
+          ? r.text()
+          : Promise.reject(new Error(`script "${scriptId}" not found`)),
+      ),
+      fetch(`/scripts/manifest.json`)
+        .then((r) => (r.ok ? r.json() : { scripts: [] }))
+        .catch(() => ({ scripts: [] })),
     ])
       .then(([src, manifest]) => {
         if (!alive) return;
         setDraft(src);
         setCurrent(src);
-        setMeta((manifest as { scripts?: ScriptMeta[] }).scripts?.find((s) => s.id === scriptId) ?? { id: scriptId });
+        setMeta(
+          (manifest as { scripts?: ScriptMeta[] }).scripts?.find(
+            (s) => s.id === scriptId,
+          ) ?? { id: scriptId },
+        );
       })
-      .catch((e) => alive && setLoadError(e instanceof Error ? e.message : String(e)));
+      .catch(
+        (e) =>
+          alive && setLoadError(e instanceof Error ? e.message : String(e)),
+      );
     return () => {
       alive = false;
     };
@@ -90,7 +116,8 @@ export function PlaygroundController(): React.ReactElement | null {
   // 2) (re)create the session whenever the running source changes
   useEffect(() => {
     if (!current) return;
-    const read = () => (window as unknown as { __canvas?: CanvasHandleLike }).__canvas;
+    const read = () =>
+      (window as unknown as { __canvas?: CanvasHandleLike }).__canvas;
     if (!read()) return;
     // LIVE, not a snapshot: the shell republishes `window.__canvas` on every
     // render, so the object held at session creation kept the document it
@@ -99,7 +126,12 @@ export function PlaygroundController(): React.ReactElement | null {
     const handle = new Proxy({} as CanvasHandleLike, {
       get: (_t, prop) => Reflect.get(read() ?? {}, prop),
     });
-    const session = new DemoSession({ source: current, handle, onState: setState, speedMs });
+    const session = new DemoSession({
+      source: current,
+      handle,
+      onState: setState,
+      speedMs,
+    });
     sessionRef.current = session;
     setStatements(session.statements);
     setChapters(session.chapters);
@@ -129,21 +161,33 @@ export function PlaygroundController(): React.ReactElement | null {
   const restart = useCallback(() => {
     sessionRef.current?.restart();
   }, []);
-  const seekChapter = useCallback((i: number) => sessionRef.current?.seekToChapter(i), []);
+  const seekChapter = useCallback(
+    (i: number) => sessionRef.current?.seekToChapter(i),
+    [],
+  );
   const runEdited = useCallback(() => {
     setEditing(false);
     setCurrent(draft); // recreates the session (effect) → autoplay handled separately
     // play after the new session mounts
     setTimeout(() => sessionRef.current?.play(), 0);
   }, [draft]);
-  const copyAll = useCallback(() => void navigator.clipboard?.writeText(current ?? ""), [current]);
+  const copyAll = useCallback(
+    () => void navigator.clipboard?.writeText(current ?? ""),
+    [current],
+  );
 
   // 3) keyboard transport
   useEffect(() => {
     if (!scriptId) return;
     const onKey = (e: KeyboardEvent) => {
       const tgt = e.target as HTMLElement | null;
-      if (tgt && (tgt.tagName === "TEXTAREA" || tgt.tagName === "INPUT" || tgt.isContentEditable)) return;
+      if (
+        tgt &&
+        (tgt.tagName === "TEXTAREA" ||
+          tgt.tagName === "INPUT" ||
+          tgt.isContentEditable)
+      )
+        return;
       const s = sessionRef.current;
       if (!s) return;
       if (e.code === "Space") {
@@ -185,16 +229,39 @@ export function PlaygroundController(): React.ReactElement | null {
 
       {open ? (
         <div data-playground-source style={panelStyle}>
-          <div style={{ padding: "12px 14px 8px", borderBottom: "1px solid var(--pg-border,#333)" }}>
-            <div style={{ fontSize: 13, fontWeight: 640 }}>{meta?.title ?? scriptId}</div>
+          <div
+            style={{
+              padding: "12px 14px 8px",
+              borderBottom: "1px solid var(--pg-border,#333)",
+            }}
+          >
+            <div style={{ fontSize: 13, fontWeight: 640 }}>
+              {meta?.title ?? scriptId}
+            </div>
             {meta?.description ? (
-              <div style={{ fontSize: 12, color: "var(--pg-muted-fg,#aaa)", marginTop: 2 }}>{meta.description}</div>
+              <div
+                style={{
+                  fontSize: 12,
+                  color: "var(--pg-muted-fg,#aaa)",
+                  marginTop: 2,
+                }}
+              >
+                {meta.description}
+              </div>
             ) : null}
           </div>
 
           {/* chapter table of contents / scrub */}
           {chapters.length > 0 ? (
-            <div style={{ display: "flex", gap: 4, flexWrap: "wrap", padding: "8px 12px", borderBottom: "1px solid var(--pg-border,#333)" }}>
+            <div
+              style={{
+                display: "flex",
+                gap: 4,
+                flexWrap: "wrap",
+                padding: "8px 12px",
+                borderBottom: "1px solid var(--pg-border,#333)",
+              }}
+            >
               {chapters.map((c, i) => (
                 <button
                   key={c.index}
@@ -213,8 +280,14 @@ export function PlaygroundController(): React.ReactElement | null {
                     overflow: "hidden",
                     textOverflow: "ellipsis",
                     whiteSpace: "nowrap",
-                    color: i === state.currentChapter ? "var(--pg-primary-fg,#fff)" : "var(--pg-muted-fg,#aaa)",
-                    background: i === state.currentChapter ? "var(--pg-primary,#6b5cff)" : "transparent",
+                    color:
+                      i === state.currentChapter
+                        ? "var(--pg-primary-fg,#fff)"
+                        : "var(--pg-muted-fg,#aaa)",
+                    background:
+                      i === state.currentChapter
+                        ? "var(--pg-primary,#6b5cff)"
+                        : "transparent",
                   }}
                 >
                   {i + 1}. {c.chapterLabel}
@@ -245,70 +318,175 @@ export function PlaygroundController(): React.ReactElement | null {
               }}
             />
           ) : (
-            <div data-playground-code style={{ flex: 1, overflow: "auto", padding: "8px 0", fontFamily: "var(--font-mono,monospace)", fontSize: 12, lineHeight: "18px" }}>
-              {(current ?? (loadError ? `// ${loadError}` : "Loading…")).split("\n").map((line, i) => {
-                const ln = i + 1;
-                const active = activeSpan && ln >= activeSpan.from && ln <= activeSpan.to;
-                return (
-                  <div
-                    key={i}
-                    data-line={ln}
-                    style={{
-                      display: "flex",
-                      padding: "0 14px",
-                      background: active ? "color-mix(in srgb, var(--pg-primary,#6b5cff) 22%, transparent)" : "transparent",
-                      borderLeft: active ? "2px solid var(--pg-primary,#6b5cff)" : "2px solid transparent",
-                    }}
-                  >
-                    <span style={{ width: 24, textAlign: "right", marginRight: 12, color: "var(--pg-muted-fg,#666)", userSelect: "none" }}>{ln}</span>
-                    <span style={{ whiteSpace: "pre-wrap", color: "var(--pg-fg,#cdd)" }}>{line || " "}</span>
-                  </div>
-                );
-              })}
+            <div
+              data-playground-code
+              style={{
+                flex: 1,
+                overflow: "auto",
+                padding: "8px 0",
+                fontFamily: "var(--font-mono,monospace)",
+                fontSize: 12,
+                lineHeight: "18px",
+              }}
+            >
+              {(current ?? (loadError ? `// ${loadError}` : "Loading…"))
+                .split("\n")
+                .map((line, i) => {
+                  const ln = i + 1;
+                  const active =
+                    activeSpan && ln >= activeSpan.from && ln <= activeSpan.to;
+                  return (
+                    <div
+                      key={i}
+                      data-line={ln}
+                      style={{
+                        display: "flex",
+                        padding: "0 14px",
+                        background: active
+                          ? "color-mix(in srgb, var(--pg-primary,#6b5cff) 22%, transparent)"
+                          : "transparent",
+                        borderLeft: active
+                          ? "2px solid var(--pg-primary,#6b5cff)"
+                          : "2px solid transparent",
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: 24,
+                          textAlign: "right",
+                          marginRight: 12,
+                          color: "var(--pg-muted-fg,#666)",
+                          userSelect: "none",
+                        }}
+                      >
+                        {ln}
+                      </span>
+                      <span
+                        style={{
+                          whiteSpace: "pre-wrap",
+                          color: "var(--pg-fg,#cdd)",
+                        }}
+                      >
+                        {line || " "}
+                      </span>
+                    </div>
+                  );
+                })}
             </div>
           )}
 
           {/* transport */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderTop: "1px solid var(--pg-border,#333)", flexWrap: "wrap" }}>
-            <button type="button" data-playground-play onClick={toggle} style={btnPrimary} title="Play / Pause (Space)">
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "8px 12px",
+              borderTop: "1px solid var(--pg-border,#333)",
+              flexWrap: "wrap",
+            }}
+          >
+            <button
+              type="button"
+              data-playground-play
+              onClick={toggle}
+              style={btnPrimary}
+              title="Play / Pause (Space)"
+            >
               {playing ? "❚❚" : state.status === "done" ? "↻" : "▶"}
             </button>
-            <button type="button" data-playground-step onClick={stepOnce} style={btnGhost} title="Step (→)">
+            <button
+              type="button"
+              data-playground-step
+              onClick={stepOnce}
+              style={btnGhost}
+              title="Step (→)"
+            >
               ⤼ step
             </button>
-            <button type="button" data-playground-restart onClick={restart} style={btnGhost} title="Restart (r)">
+            <button
+              type="button"
+              data-playground-restart
+              onClick={restart}
+              style={btnGhost}
+              title="Restart (r)"
+            >
               ⟲
             </button>
-            <span style={{ display: "inline-flex", border: "1px solid var(--pg-border,#333)", borderRadius: 4, overflow: "hidden" }}>
+            <span
+              style={{
+                display: "inline-flex",
+                border: "1px solid var(--pg-border,#333)",
+                borderRadius: 4,
+                overflow: "hidden",
+              }}
+            >
               {SPEEDS.map((s) => (
                 <button
                   key={s.label}
                   type="button"
                   onClick={() => setSpeedMs(s.ms)}
-                  style={{ ...btnGhost, borderRadius: 0, padding: "3px 7px", color: speedMs === s.ms ? "var(--pg-primary,#6b5cff)" : "var(--pg-muted-fg,#aaa)" }}
+                  style={{
+                    ...btnGhost,
+                    borderRadius: 0,
+                    padding: "3px 7px",
+                    color:
+                      speedMs === s.ms
+                        ? "var(--pg-primary,#6b5cff)"
+                        : "var(--pg-muted-fg,#aaa)",
+                  }}
                 >
                   {s.label}
                 </button>
               ))}
             </span>
             <span style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
-              <button type="button" data-playground-copy onClick={copyAll} style={btnGhost} title="Copy script">
+              <button
+                type="button"
+                data-playground-copy
+                onClick={copyAll}
+                style={btnGhost}
+                title="Copy script"
+              >
                 copy
               </button>
               {editing ? (
-                <button type="button" data-playground-runedit onClick={runEdited} style={btnPrimary} title="Run edited script">
+                <button
+                  type="button"
+                  data-playground-runedit
+                  onClick={runEdited}
+                  style={btnPrimary}
+                  title="Run edited script"
+                >
                   run ▶
                 </button>
               ) : (
-                <button type="button" data-playground-edit-toggle onClick={() => setEditing(true)} style={btnGhost} title="Edit & run">
+                <button
+                  type="button"
+                  data-playground-edit-toggle
+                  onClick={() => setEditing(true)}
+                  style={btnGhost}
+                  title="Edit & run"
+                >
                   edit
                 </button>
               )}
             </span>
-            <span style={{ width: "100%", fontSize: 11, color: state.status === "error" ? "var(--warn,#e5484d)" : "var(--pg-muted-fg,#888)" }}>
+            <span
+              style={{
+                width: "100%",
+                fontSize: 11,
+                color:
+                  state.status === "error"
+                    ? "var(--warn,#e5484d)"
+                    : "var(--pg-muted-fg,#888)",
+              }}
+            >
               {state.status}
               {state.error ? `: ${state.error}` : ""}
-              {state.currentChapter >= 0 && chapters.length ? ` · ${state.currentChapter + 1}/${chapters.length}` : ""}
+              {state.currentChapter >= 0 && chapters.length
+                ? ` · ${state.currentChapter + 1}/${chapters.length}`
+                : ""}
             </span>
           </div>
         </div>

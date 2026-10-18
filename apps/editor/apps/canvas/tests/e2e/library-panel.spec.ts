@@ -34,7 +34,13 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { openCanvas, openPanel } from "../fidelity/canvas-driver";
 
-const REPO_ROOT = pathResolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..");
+const REPO_ROOT = pathResolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "..",
+  "..",
+  "..",
+);
 const FIXTURE = `${REPO_ROOT}/corpus/idml/generated/text.idml`;
 
 type Canvas = {
@@ -49,7 +55,13 @@ type Canvas = {
 async function load(page: Page): Promise<void> {
   await page.setInputFiles('input[type="file"]', FIXTURE);
   await expect
-    .poll(() => page.evaluate(() => (globalThis as unknown as { __canvas: { ready: boolean } }).__canvas.ready))
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (globalThis as unknown as { __canvas: { ready: boolean } }).__canvas
+            .ready,
+      ),
+    )
     .toBe(true);
 }
 
@@ -57,14 +69,19 @@ async function edit(page: Page, text: string): Promise<void> {
   await page.evaluate(async (t) => {
     const c = (globalThis as unknown as { __canvas: Canvas }).__canvas;
     const bytes = Array.from(new TextEncoder().encode(t));
-    await c.client.send({ kind: "writePagedPart", payload: { path: "paged/media.paged.test/probe.json", bytes } });
+    await c.client.send({
+      kind: "writePagedPart",
+      payload: { path: "paged/media.paged.test/probe.json", bytes },
+    });
   }, text);
 }
 
 async function save(page: Page): Promise<void> {
   const download = page.waitForEvent("download");
   await page.evaluate(() =>
-    (globalThis as unknown as { __canvas: Canvas }).__canvas.registries.commands.invoke("paged.file.savePaged"),
+    (
+      globalThis as unknown as { __canvas: Canvas }
+    ).__canvas.registries.commands.invoke("paged.file.savePaged"),
   );
   await download;
 }
@@ -72,12 +89,16 @@ async function save(page: Page): Promise<void> {
 async function clearLibrary(page: Page): Promise<void> {
   await page.evaluate(async () => {
     const root = await navigator.storage.getDirectory();
-    await root.removeEntry("paged-library", { recursive: true }).catch(() => undefined);
+    await root
+      .removeEntry("paged-library", { recursive: true })
+      .catch(() => undefined);
   });
 }
 
 test.describe("library panel @feat:editor-shell.panels.library", () => {
-  test("saves are versions, restore adds one, and the library outlives a reload @level:happy", async ({ page }) => {
+  test("saves are versions, restore adds one, and the library outlives a reload @level:happy", async ({
+    page,
+  }) => {
     await openCanvas(page);
     await clearLibrary(page);
     await page.reload();
@@ -95,7 +116,10 @@ test.describe("library panel @feat:editor-shell.panels.library", () => {
     await expect(versions).toHaveCount(2);
 
     await save(page);
-    await expect(versions, "a save that changed nothing is not a version").toHaveCount(2);
+    await expect(
+      versions,
+      "a save that changed nothing is not a version",
+    ).toHaveCount(2);
 
     await edit(page, '{"v":2}');
     await save(page);
@@ -112,7 +136,9 @@ test.describe("library panel @feat:editor-shell.panels.library", () => {
     const docs = page.locator("[data-library-panel] [data-library-document]");
     await expect(docs).toHaveCount(1);
     await docs.first().locator("[data-library-open]").click();
-    await expect(page.locator("[data-library-panel] [data-library-version]")).toHaveCount(4);
+    await expect(
+      page.locator("[data-library-panel] [data-library-version]"),
+    ).toHaveCount(4);
     await clearLibrary(page);
   });
 });

@@ -73,46 +73,59 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const page = p(46);
   const [left, top, right] = contentBox(page);
 
-  const head = await proseFrame(ctx, page, [left, top, right, top + 32], [
-    { text: "The destination and the marks", style: STYLE.head1 },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    page,
+    [left, top, right, top + 32],
+    [{ text: "The destination and the marks", style: STYLE.head1 }],
+  );
   elements.push(head.frameId);
 
   // ── caption for the fixture exhibit — full width below it (narrow
   //    live frames compose at a fraction of their width; see notes) ──
-  const caption = await proseFrame(ctx, page, [left, 292, right, 318], [
-    {
-      text:
-        "Exhibit, fixture-authored: the receiving end. This story " +
-        "carries the text anchor the p45 cross-reference resolves to, a " +
-        "link back to the first chapter, and a Colophon index marker.",
-      style: STYLE.caption,
-    },
-  ]);
+  const caption = await proseFrame(
+    ctx,
+    page,
+    [left, 292, right, 318],
+    [
+      {
+        text:
+          "Exhibit, fixture-authored: the receiving end. This story " +
+          "carries the text anchor the p45 cross-reference resolves to, a " +
+          "link back to the first chapter, and a Colophon index marker.",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(caption.frameId);
 
   // ── the index-tab system, explained where it can be seen ─────────
-  const prose = await proseFrame(ctx, page, [left, 324, right, 452], [
-    {
-      text:
-        "An index is apparatus that accumulates. Six slim tabs ride the " +
-        "fore-edge of verso pages through this book - a to f, on pages " +
-        "20, 34, 48, 66, 78 and 96 - and each tab's story carries one or " +
-        "two PageReference markers. A marker files its page under a " +
-        "topic; the topic collects pages from wherever its markers " +
-        "landed.",
-      style: STYLE.bodyFirst,
-    },
-    {
-      text:
-        "Ten topics are defined at document level, from Typography to " +
-        "Colophon, and the markers scattered here and on the exhibit " +
-        "pages feed them. Appendix A resolves the whole apparatus into " +
-        "the printed index: topic by topic, with the page lists the " +
-        "markers earned.",
-      style: STYLE.body,
-    },
-  ]);
+  const prose = await proseFrame(
+    ctx,
+    page,
+    [left, 324, right, 452],
+    [
+      {
+        text:
+          "An index is apparatus that accumulates. Six slim tabs ride the " +
+          "fore-edge of verso pages through this book - a to f, on pages " +
+          "20, 34, 48, 66, 78 and 96 - and each tab's story carries one or " +
+          "two PageReference markers. A marker files its page under a " +
+          "topic; the topic collects pages from wherever its markers " +
+          "landed.",
+        style: STYLE.bodyFirst,
+      },
+      {
+        text:
+          "Ten topics are defined at document level, from Typography to " +
+          "Colophon, and the markers scattered here and on the exhibit " +
+          "pages feed them. Appendix A resolves the whole apparatus into " +
+          "the printed index: topic by topic, with the page lists the " +
+          "markers earned.",
+        style: STYLE.body,
+      },
+    ],
+  );
   elements.push(prose.frameId);
 
   // ── the live inventory ───────────────────────────────────────────
@@ -136,7 +149,9 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const links = (await doc.designer.collection(
     "hyperlinks",
   )) as unknown as HyperlinkRow[];
-  const carrier = links.find((l) => l.source?.startsWith("CrossReferenceSource/"));
+  const carrier = links.find((l) =>
+    l.source?.startsWith("CrossReferenceSource/"),
+  );
   if (!carrier) {
     throw new Error(
       "no hyperlink carries a CrossReferenceSource — the fixture wires " +
@@ -164,23 +179,28 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     );
   }
 
-  const inventory = await proseFrame(ctx, page, [left, 460, right, 596], [
-    { text: "The apparatus, read live", style: STYLE.head2 },
-    {
-      text: `Index topics: ${topics.length} — ${topics
-        .map((t) => t.name ?? t.selfId)
-        .join(", ")}.`,
-      style: STYLE.indexEntry,
-    },
-    {
-      text:
-        `Cross-references: ${sourceMarks} source marker in the document's ` +
-        `own export, carried by the hyperlink ${carrier.name ?? carrier.selfId} ` +
-        `(source on the facing page, destination in the exhibit above). The ` +
-        `wire's crossReferences collection lists ${xrefs.length}.`,
-      style: STYLE.indexEntry,
-    },
-  ]);
+  const inventory = await proseFrame(
+    ctx,
+    page,
+    [left, 460, right, 596],
+    [
+      { text: "The apparatus, read live", style: STYLE.head2 },
+      {
+        text: `Index topics: ${topics.length} — ${topics
+          .map((t) => t.name ?? t.selfId)
+          .join(", ")}.`,
+        style: STYLE.indexEntry,
+      },
+      {
+        text:
+          `Cross-references: ${sourceMarks} source marker in the document's ` +
+          `own export, carried by the hyperlink ${carrier.name ?? carrier.selfId} ` +
+          `(source on the facing page, destination in the exhibit above). The ` +
+          `wire's crossReferences collection lists ${xrefs.length}.`,
+        style: STYLE.indexEntry,
+      },
+    ],
+  );
   elements.push(inventory.frameId);
 
   elements.push(

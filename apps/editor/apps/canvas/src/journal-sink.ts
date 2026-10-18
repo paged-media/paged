@@ -17,7 +17,6 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-
 // The app's journal sink (ADR 025) — the ONE shell-side buffer.
 //
 // A module singleton, deliberately, for the same reason `problems-store.ts` is
@@ -81,15 +80,16 @@ export function createHostConsole(
       // Forward verbatim FIRST — instrumentation must never cost the developer
       // the log line they were about to read.
       const fn = real[level === "warn" ? "warn" : level] as
-        | ((...args: unknown[]) => void)
-        | undefined;
+        ((...args: unknown[]) => void) | undefined;
       fn?.call(real, message, ...rest);
       journal.record({
         code: "plugin.log",
         severity: level === "error" ? "error" : "info",
         data: {
           level,
-          site: siteHash(typeof message === "string" ? message : typeof message),
+          site: siteHash(
+            typeof message === "string" ? message : typeof message,
+          ),
           plugin: pluginId,
         },
       });
@@ -306,7 +306,8 @@ export async function exportJournalBundleAsync(
 // the shape of the document open AT EXPORT TIME, not whatever was open when
 // the panel mounted.
 
-let documentShapeProvider: (() => BundleDocumentShape | undefined) | null = null;
+let documentShapeProvider: (() => BundleDocumentShape | undefined) | null =
+  null;
 
 export function setDocumentShapeProvider(
   fn: (() => BundleDocumentShape | undefined) | null,

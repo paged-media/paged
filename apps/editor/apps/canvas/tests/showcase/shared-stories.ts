@@ -56,7 +56,8 @@ export function storiesSharedByFrames(idml: Buffer): {
 } {
   const frames = new Map<string, FrameRow>();
   for (const name of zipEntryNames(idml)) {
-    if (!name.startsWith("Spreads/") && !name.startsWith("MasterSpreads/")) continue;
+    if (!name.startsWith("Spreads/") && !name.startsWith("MasterSpreads/"))
+      continue;
     const xml = readZipText(idml, name);
     if (xml === null) continue;
     for (const m of xml.matchAll(/<TextFrame\b([^>]*)>/g)) {

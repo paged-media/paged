@@ -51,35 +51,51 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const pageId = ctx.pageIds[0];
 
   // ── the opener block ─────────────────────────────────────────────
-  const number = await proseFrame(ctx, page, [left, 96, 150, 174], [
-    { text: "8", style: STYLE.chapterNumber },
-  ]);
-  const title = await proseFrame(ctx, page, [160, 100, right, 170], [
-    { text: "The Object", style: STYLE.chapterTitle },
-  ]);
-  const deck = await proseFrame(ctx, page, [left, 186, right, 300], [
-    {
-      text:
-        "Everything on a page is an object with a stacking order, a " +
-        "transform, corners, a stroke and, sometimes, other objects " +
-        "inside it. This chapter takes one plain rectangle and asks it " +
-        "every question the wire knows how to ask.",
-      style: STYLE.deck,
-    },
-  ]);
+  const number = await proseFrame(
+    ctx,
+    page,
+    [left, 96, 150, 174],
+    [{ text: "8", style: STYLE.chapterNumber }],
+  );
+  const title = await proseFrame(
+    ctx,
+    page,
+    [160, 100, right, 170],
+    [{ text: "The Object", style: STYLE.chapterTitle }],
+  );
+  const deck = await proseFrame(
+    ctx,
+    page,
+    [left, 186, right, 300],
+    [
+      {
+        text:
+          "Everything on a page is an object with a stacking order, a " +
+          "transform, corners, a stroke and, sometimes, other objects " +
+          "inside it. This chapter takes one plain rectangle and asks it " +
+          "every question the wire knows how to ask.",
+        style: STYLE.deck,
+      },
+    ],
+  );
   elements.push(number.frameId, title.frameId, deck.frameId);
 
-  const intro = await proseFrame(ctx, page, [left, 312, right, 372], [
-    {
-      text:
-        "Below, five plates were inserted back to front, A first and E " +
-        "last, then rearranged live: A to the front, B to the front over " +
-        "it, A one step forward and one step backward, E to the back, " +
-        "and finally D to absolute index zero. Every overlap you can " +
-        "read is the paint order saying so.",
-      style: STYLE.bodyFirst,
-    },
-  ]);
+  const intro = await proseFrame(
+    ctx,
+    page,
+    [left, 312, right, 372],
+    [
+      {
+        text:
+          "Below, five plates were inserted back to front, A first and E " +
+          "last, then rearranged live: A to the front, B to the front over " +
+          "it, A one step forward and one step backward, E to the back, " +
+          "and finally D to absolute index zero. Every overlap you can " +
+          "read is the paint order saying so.",
+        style: STYLE.bodyFirst,
+      },
+    ],
+  );
   elements.push(intro.frameId);
 
   // ── the ladder: five mutually overlapping plates ─────────────────
@@ -140,16 +156,21 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   // the render. (Full-width caption, not a narrow side column — live
   // frames under ~140 pt compose at a fraction of their width; see the
   // chapter notes.)
-  const caption = await proseFrame(ctx, page, [left, 604, right, 639], [
-    {
-      text:
-        "A vermilion, B marigold, C screen blue, D slate, E vermilion " +
-        "20%. reorderElement walked all five targets - front, back, " +
-        "forward, backward, absolute index - six steps, six gated " +
-        "repaints. Final order, back to front: D, E, C, A, B.",
-      style: STYLE.caption,
-    },
-  ]);
+  const caption = await proseFrame(
+    ctx,
+    page,
+    [left, 604, right, 639],
+    [
+      {
+        text:
+          "A vermilion, B marigold, C screen blue, D slate, E vermilion " +
+          "20%. reorderElement walked all five targets - front, back, " +
+          "forward, backward, absolute index - six steps, six gated " +
+          "repaints. Final order, back to front: D, E, C, A, B.",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(caption.frameId);
 
   elements.push(

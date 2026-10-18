@@ -181,7 +181,10 @@ test.describe("Phase A — element selection + hit-testing", () => {
         break;
       }
     }
-    expect(firstHit, "expected at least one selectable frame on the cover").not.toBeNull();
+    expect(
+      firstHit,
+      "expected at least one selectable frame on the cover",
+    ).not.toBeNull();
 
     // Replace selection.
     const afterReplace = await setSelection(page, [firstHit!], "replace");
@@ -227,7 +230,9 @@ test.describe("Phase A — element selection + hit-testing", () => {
     expect(center.length).toBeLessThanOrEqual(all.length);
   });
 
-  test("AC-E-12 — selection survives a camera zoom change @feat:editor-tools.nav.zoom @feat:editor-tools.select.click-marquee @feat:the-renderer.hit-testing @level:gesture", async ({ page }) => {
+  test("AC-E-12 — selection survives a camera zoom change @feat:editor-tools.nav.zoom @feat:editor-tools.select.click-marquee @feat:the-renderer.hit-testing @level:gesture", async ({
+    page,
+  }) => {
     const w = pageW;
     const h = pageH;
 
@@ -256,22 +261,45 @@ test.describe("Phase A — element selection + hit-testing", () => {
         break;
       }
     }
-    expect(centerHit, "expected at least one selectable point on page 0").not.toBeNull();
+    expect(
+      centerHit,
+      "expected at least one selectable point on page 0",
+    ).not.toBeNull();
 
     const [px, py] = hitPoint!;
 
     await page.evaluate(() => {
-      const c = (globalThis as unknown as {
-        __canvas: { client: { setCamera: (cam: { scale: number; tx: number; ty: number }) => void } };
-      }).__canvas;
+      const c = (
+        globalThis as unknown as {
+          __canvas: {
+            client: {
+              setCamera: (cam: {
+                scale: number;
+                tx: number;
+                ty: number;
+              }) => void;
+            };
+          };
+        }
+      ).__canvas;
       c.client.setCamera({ scale: 0.25, tx: 0, ty: 0 });
     });
     const lowZoom = await hitAt(page, pageId, px, py);
 
     await page.evaluate(() => {
-      const c = (globalThis as unknown as {
-        __canvas: { client: { setCamera: (cam: { scale: number; tx: number; ty: number }) => void } };
-      }).__canvas;
+      const c = (
+        globalThis as unknown as {
+          __canvas: {
+            client: {
+              setCamera: (cam: {
+                scale: number;
+                tx: number;
+                ty: number;
+              }) => void;
+            };
+          };
+        }
+      ).__canvas;
       c.client.setCamera({ scale: 2.0, tx: 0, ty: 0 });
     });
     const highZoom = await hitAt(page, pageId, px, py);
@@ -280,17 +308,22 @@ test.describe("Phase A — element selection + hit-testing", () => {
     expect(highZoom.element).toEqual(centerHit);
   });
 
-  test("HitFilter=text only returns text frames with stories @feat:editor-tools.select.click-marquee @feat:the-renderer.hit-testing @level:happy", async ({ page }) => {
+  test("HitFilter=text only returns text frames with stories @feat:editor-tools.select.click-marquee @feat:the-renderer.hit-testing @level:happy", async ({
+    page,
+  }) => {
     const w = pageW;
     const h = pageH;
 
     const reply = await page.evaluate(
       async ({ pageId, x, y }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         const r = (await c.client.send({
           kind: "hitTest",
           payload: { pageId, docPoint: [x, y], filter: "text" },
-        })) as { payload: { element: ElementId | null; storyId: string | null } };
+        })) as {
+          payload: { element: ElementId | null; storyId: string | null };
+        };
         return r.payload;
       },
       { pageId, x: w * 0.5, y: h * 0.5 },

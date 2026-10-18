@@ -21,16 +21,10 @@ export { caretContribution } from "./caret";
 export { contentGrabberContribution } from "./content-grabber";
 export { hitMarkerContribution } from "./hit-marker";
 export { marqueeContribution } from "./marquee";
-export {
-  toolPreviewContribution,
-  renderPreviewShape,
-} from "./tool-preview";
+export { toolPreviewContribution, renderPreviewShape } from "./tool-preview";
 export { pluginOverlayLayersContribution } from "./plugin-layers";
 export { pageDecorationsContribution } from "./page-decorations";
-export {
-  pathEditContribution,
-  elementSupportsPathEdit,
-} from "./path-edit";
+export { pathEditContribution, elementSupportsPathEdit } from "./path-edit";
 export { resizeHandlesContribution } from "./resize-handles";
 export { rotateHandleContribution } from "./rotate-handle";
 export { rulerGuidesContribution } from "./ruler-guides";

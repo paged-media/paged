@@ -17,7 +17,6 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-
 // The journal subpath (`@paged-media/client/journal`).
 //
 // The package barrel pulls in the SAB primitives, which is more than a caller

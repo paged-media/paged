@@ -42,7 +42,9 @@ export function IndexPanel() {
   const [failed, setFailed] = useState<string | null>(null);
   // A story's body text, not a table cell's: the index is a story.
   const target =
-    contentSelection && !contentSelection.cell ? contentSelection.storyId : null;
+    contentSelection && !contentSelection.cell
+      ? contentSelection.storyId
+      : null;
   const generate = () => {
     if (!target) return;
     setFailed(null);
@@ -99,7 +101,10 @@ export function IndexPanel() {
           + Generate index
         </button>
         {failed ? (
-          <div className="pt-2 text-xs text-muted-foreground" data-generate-index-error>
+          <div
+            className="pt-2 text-xs text-muted-foreground"
+            data-generate-index-error
+          >
             {failed}
           </div>
         ) : null}

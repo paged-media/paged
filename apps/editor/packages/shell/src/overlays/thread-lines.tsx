@@ -58,16 +58,19 @@
 // `elementGeometry`, refreshed on the same pushes the threading
 // controller listens to.
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
 import type { ElementGeometryItem, ElementId } from "@paged-media/client";
 
 import type { OverlayContribution, OverlayProps } from "../registries/overlay";
 import { useCanvasClient } from "../state/canvas-client-context";
-import {
-  getViewToggle,
-  subscribeViewToggles,
-} from "../state/view-toggles";
+import { getViewToggle, subscribeViewToggles } from "../state/view-toggles";
 
 import { applyAffine } from "./affine";
 
@@ -232,12 +235,21 @@ function ThreadLinesRender(props: OverlayProps) {
     }
     if (chain.overset && chain.frames.length > 0) {
       const last = corner(chain.frames[chain.frames.length - 1], "out");
-      if (last) stubs.push({ key: `${chain.frames.at(-1)}-overset`, x: last[0], y: last[1] });
+      if (last)
+        stubs.push({
+          key: `${chain.frames.at(-1)}-overset`,
+          x: last[0],
+          y: last[1],
+        });
     }
   }
 
   return (
-    <g data-thread-lines={hops.length > 0 || stubs.length > 0 ? "ready" : "empty"}>
+    <g
+      data-thread-lines={
+        hops.length > 0 || stubs.length > 0 ? "ready" : "empty"
+      }
+    >
       {hops.map((h) => (
         <g key={h.key} data-thread-hop={h.key}>
           <line
@@ -253,12 +265,7 @@ function ThreadLinesRender(props: OverlayProps) {
           />
           {/* Direction marker at the destination: a story reads one way,
               and a plain segment between two frames does not say which. */}
-          <circle
-            cx={h.x2}
-            cy={h.y2}
-            r={3 * inv}
-            fill="var(--overlay-guide)"
-          />
+          <circle cx={h.x2} cy={h.y2} r={3 * inv} fill="var(--overlay-guide)" />
         </g>
       ))}
       {stubs.map((s) => (

@@ -297,7 +297,12 @@ export const paragraphComposition: CompositionNode = asPropertyFields({
     },
     {
       catalogId: PAGED_INPUT_LENGTH,
-      props: { label: "Last line indent", icon: "ui-align-right", showUnit: false, hideUnreported: true },
+      props: {
+        label: "Last line indent",
+        icon: "ui-align-right",
+        showUnit: false,
+        hideUnreported: true,
+      },
       bindings: paraAhead("paragraphLastLineIndent"),
     },
     {

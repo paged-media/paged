@@ -50,9 +50,10 @@ test.describe("W0.17 — worker boot + cross-origin isolation", () => {
     // COOP same-origin + COEP require-corp. If they didn't, this is false and
     // every SharedArrayBuffer allocation downstream throws SecurityError.
     const isolated = await page.evaluate(() => globalThis.crossOriginIsolated);
-    expect(isolated, "crossOriginIsolated must be true — check COOP/COEP headers").toBe(
-      true,
-    );
+    expect(
+      isolated,
+      "crossOriginIsolated must be true — check COOP/COEP headers",
+    ).toBe(true);
 
     // Prove a SAB actually constructs (the worker does exactly this for the
     // camera + gesture buffers).
@@ -68,7 +69,9 @@ test.describe("W0.17 — worker boot + cross-origin isolation", () => {
     expect(sabOk, "new SharedArrayBuffer(8) must not throw").toBe(true);
   });
 
-  test("the boot-time isolation banner does NOT fire @feat:plugin-platform.worker-pool @feat:the-renderer.offscreen-worker @level:smoke", async ({ page }) => {
+  test("the boot-time isolation banner does NOT fire @feat:plugin-platform.worker-pool @feat:the-renderer.offscreen-worker @level:smoke", async ({
+    page,
+  }) => {
     const banners: string[] = [];
     page.on("console", (msg) => {
       if (/CROSS-ORIGIN ISOLATION MISSING/.test(msg.text())) {
@@ -103,9 +106,10 @@ test.describe("W0.17 — worker boot + cross-origin isolation", () => {
     // reaches ready and this times out.
     await openCanvas(page);
 
-    expect(failures, "worker must boot without init/protocol/dispatch errors").toEqual(
-      [],
-    );
+    expect(
+      failures,
+      "worker must boot without init/protocol/dispatch errors",
+    ).toEqual([]);
   });
 
   test("the worker chunk + wasm asset resolve with correct content-types @feat:plugin-platform.worker-pool @feat:the-renderer.offscreen-worker @level:happy", async ({
@@ -114,8 +118,11 @@ test.describe("W0.17 — worker boot + cross-origin isolation", () => {
     // Drive the app so the worker fetches its wasm, then read the actual
     // network responses. This is the browser-side mirror of the curl checks
     // run during non-browser verification — here against the live worker.
-    const wasmResponses: { url: string; type: string | undefined; status: number }[] =
-      [];
+    const wasmResponses: {
+      url: string;
+      type: string | undefined;
+      status: number;
+    }[] = [];
     page.on("response", (resp) => {
       const url = resp.url();
       if (url.endsWith(".wasm")) {

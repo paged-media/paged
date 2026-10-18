@@ -60,7 +60,8 @@ interface CanvasGlobal {
 /** File ▸ New, then wait for the load pass (handle + its thumbnails). */
 async function newDocument(page: Page): Promise<string> {
   const before = await page.evaluate(
-    () => (globalThis as unknown as CanvasGlobal).__canvas.handle?.docId ?? null,
+    () =>
+      (globalThis as unknown as CanvasGlobal).__canvas.handle?.docId ?? null,
   );
   await page.evaluate(() =>
     (globalThis as unknown as CanvasGlobal).__canvas.registries.commands.invoke(
@@ -77,7 +78,9 @@ async function newDocument(page: Page): Promise<string> {
     .not.toBe(before);
   await expect
     .poll(() =>
-      page.evaluate(() => (globalThis as unknown as CanvasGlobal).__canvas.snapshotsReady),
+      page.evaluate(
+        () => (globalThis as unknown as CanvasGlobal).__canvas.snapshotsReady,
+      ),
     )
     .toBe(true);
   return page.evaluate(
@@ -102,7 +105,8 @@ async function batchInsertPages(page: Page, count: number): Promise<void> {
 
 async function pageCount(page: Page): Promise<number> {
   return page.evaluate(
-    () => (globalThis as unknown as CanvasGlobal).__canvas.handle?.pageCount ?? 0,
+    () =>
+      (globalThis as unknown as CanvasGlobal).__canvas.handle?.pageCount ?? 0,
   );
 }
 
@@ -149,11 +153,15 @@ test.describe("Batch-minted pages", () => {
     await batchInsertPages(page, 2);
     await expect.poll(() => pageCount(page)).toBe(3);
 
-    const rows = page.locator("[data-document-map-panel] [data-document-map-spread]");
+    const rows = page.locator(
+      "[data-document-map-panel] [data-document-map-spread]",
+    );
     await expect(rows).toHaveCount(3);
     // Each row's first line is its name. The engine's spread label IS
     // the spread's selfId, so a name like "u3" is an id, never a name.
-    const names = (await rows.allInnerTexts()).map((t) => t.split("\n")[0]!.trim());
+    const names = (await rows.allInnerTexts()).map((t) =>
+      t.split("\n")[0]!.trim(),
+    );
     expect(names).toEqual(["Cover", "Page 2", "Page 3"]);
   });
 
@@ -168,7 +176,9 @@ test.describe("Batch-minted pages", () => {
     await expect(rows).toHaveCount(3);
     // A fresh document mints ids such as "us" that are no hex run, so only
     // the comparison with the spread's own selfId catches them.
-    const names = (await rows.allInnerTexts()).map((t) => t.split("\n")[0]!.trim());
+    const names = (await rows.allInnerTexts()).map((t) =>
+      t.split("\n")[0]!.trim(),
+    );
     expect(names).toEqual(["Spread 1", "Spread 2", "Spread 3"]);
   });
 
@@ -179,7 +189,9 @@ test.describe("Batch-minted pages", () => {
     await expect.poll(() => pageCount(page)).toBe(3);
 
     await expect
-      .poll(async () => (await railThumbnails(page)).map((t) => `${t.label}:${t.loaded}`))
+      .poll(async () =>
+        (await railThumbnails(page)).map((t) => `${t.label}:${t.loaded}`),
+      )
       .toEqual(["Cover:true", "2:true", "3:true"]);
   });
 
@@ -190,7 +202,8 @@ test.describe("Batch-minted pages", () => {
     expect(before.loaded, "the load pass gave page 1 a thumbnail").toBe(true);
 
     const pageId = await page.evaluate(
-      () => (globalThis as unknown as CanvasGlobal).__canvas.handle!.pageIds[0]!,
+      () =>
+        (globalThis as unknown as CanvasGlobal).__canvas.handle!.pageIds[0]!,
     );
     const reply = await page.evaluate(
       (id) =>
@@ -244,14 +257,19 @@ test.describe("Batch-minted pages", () => {
       ([last, first]) =>
         (globalThis as unknown as CanvasGlobal).__canvas.client.mutate({
           op: "batch",
-          args: { ops: [{ op: "movePage", args: { page: last, after: first } }] },
+          args: {
+            ops: [{ op: "movePage", args: { page: last, after: first } }],
+          },
         }),
       [ids[2], ids[0]],
     );
     expect(reply.kind).toBe("mutationApplied");
     await expect
       .poll(() =>
-        page.evaluate(() => (globalThis as unknown as CanvasGlobal).__canvas.handle!.pageIds),
+        page.evaluate(
+          () =>
+            (globalThis as unknown as CanvasGlobal).__canvas.handle!.pageIds,
+        ),
       )
       .toEqual([ids[0], ids[2], ids[1]]);
   });
@@ -261,11 +279,13 @@ test.describe("Batch-minted pages", () => {
   }) => {
     // A deliberate view: 100%, not the on-load fit.
     await page.evaluate(() =>
-      (globalThis as unknown as CanvasGlobal).__canvas.registries.commands.invoke(
-        "paged.view.zoom100",
-      ),
+      (
+        globalThis as unknown as CanvasGlobal
+      ).__canvas.registries.commands.invoke("paged.view.zoom100"),
     );
-    await expect.poll(async () => (await readCamera(page)).scale).toBeCloseTo(1, 3);
+    await expect
+      .poll(async () => (await readCamera(page)).scale)
+      .toBeCloseTo(1, 3);
     const kept = await readCamera(page);
 
     await batchInsertPages(page, 8);
@@ -284,6 +304,8 @@ test.describe("Batch-minted pages", () => {
     // A REPLACED document still fits: File ▸ New lands on the fit, not
     // on the 100% the previous document was left at.
     await newDocument(page);
-    await expect.poll(async () => (await readCamera(page)).scale).toBeLessThan(0.9);
+    await expect
+      .poll(async () => (await readCamera(page)).scale)
+      .toBeLessThan(0.9);
   });
 });

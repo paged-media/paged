@@ -33,22 +33,50 @@ import { openCanvas, openPanel } from "../fidelity/canvas-driver";
 import { startFakeIdp } from "./harness/fake-idp";
 
 const SERVER = process.env.PAGED_SERVER_URL;
-const REPO_ROOT = pathResolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..");
+const REPO_ROOT = pathResolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "..",
+  "..",
+  "..",
+);
 const FIXTURE = `${REPO_ROOT}/corpus/idml/generated/text.idml`;
 
 /** One MCP tool call, as Claude would make it, with the person's token. */
-async function claude(token: string, name: string, args: Record<string, unknown>) {
+async function claude(
+  token: string,
+  name: string,
+  args: Record<string, unknown>,
+) {
   const resp = await fetch(`${SERVER}/mcp`, {
     method: "POST",
-    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }),
+    headers: {
+      authorization: `Bearer ${token}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/call",
+      params: { name, arguments: args },
+    }),
   });
-  return ((await resp.json()) as { result: { content: { type: string; text?: string }[]; structuredContent?: Record<string, unknown>; isError: boolean } }).result;
+  return (
+    (await resp.json()) as {
+      result: {
+        content: { type: string; text?: string }[];
+        structuredContent?: Record<string, unknown>;
+        isError: boolean;
+      };
+    }
+  ).result;
 }
 
 async function tokenOf(page: Page): Promise<string> {
   return page.evaluate((server) => {
-    const raw = localStorage.getItem(`paged.server.${new URL(server).origin}.tokens`);
+    const raw = localStorage.getItem(
+      `paged.server.${new URL(server).origin}.tokens`,
+    );
     return (JSON.parse(raw ?? "{}") as { access: string }).access;
   }, SERVER!);
 }
@@ -63,18 +91,29 @@ test.describe("library panel · Claude in this tab @feat:editor-shell.panels.lib
     await new Promise((r) => idp.close(r));
   });
 
-  test("Claude scripts, renders and saves in the tab; the person allows, declines, merges @level:happy", async ({ page, context }) => {
+  test("Claude scripts, renders and saves in the tab; the person allows, declines, merges @level:happy", async ({
+    page,
+    context,
+  }) => {
     await openCanvas(page);
     await page.evaluate(async () => {
       localStorage.clear();
       const root = await navigator.storage.getDirectory();
-      await root.removeEntry("paged-library", { recursive: true }).catch(() => undefined);
+      await root
+        .removeEntry("paged-library", { recursive: true })
+        .catch(() => undefined);
     });
     await page.reload();
     await openCanvas(page);
     await page.setInputFiles('input[type="file"]', FIXTURE);
     await expect
-      .poll(() => page.evaluate(() => (globalThis as unknown as { __canvas: { ready: boolean } }).__canvas.ready))
+      .poll(() =>
+        page.evaluate(
+          () =>
+            (globalThis as unknown as { __canvas: { ready: boolean } }).__canvas
+              .ready,
+        ),
+      )
       .toBe(true);
     await openPanel(page, "paged.library");
     const panel = page.locator("[data-library-panel]");
@@ -91,18 +130,26 @@ test.describe("library panel · Claude in this tab @feat:editor-shell.panels.lib
     expect((sessions.structuredContent?.sessions as unknown[]).length).toBe(1);
 
     // A change waits for the person.
-    const ran = claude(token, "run_script", { source: "console.log(paged.pages().length > 0)" });
-    await expect(panel.locator('[data-library-live-pending="run_script"]')).toBeVisible();
+    const ran = claude(token, "run_script", {
+      source: "console.log(paged.pages().length > 0)",
+    });
+    await expect(
+      panel.locator('[data-library-live-pending="run_script"]'),
+    ).toBeVisible();
     await panel.locator("[data-library-live-allow]").click();
     const result = await ran;
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain("true");
 
     const declined = claude(token, "run_script", { source: "paged.pages()" });
-    await expect(panel.locator('[data-library-live-pending="run_script"]')).toBeVisible();
+    await expect(
+      panel.locator('[data-library-live-pending="run_script"]'),
+    ).toBeVisible();
     await panel.locator("[data-library-live-decline]").click();
     expect((await declined).isError).toBe(true);
-    await expect(panel.locator('[data-library-live-entry="declined"]')).toHaveCount(1);
+    await expect(
+      panel.locator('[data-library-live-entry="declined"]'),
+    ).toHaveCount(1);
 
     // Reading needs no permission.
     const shot = await claude(token, "render_page", { page: 1 });
@@ -110,19 +157,31 @@ test.describe("library panel · Claude in this tab @feat:editor-shell.panels.lib
 
     // A save is Claude's version on its own branch; main does not move until the person merges.
     const saving = claude(token, "save_document", { message: "Claude's pass" });
-    await expect(panel.locator('[data-library-live-pending="save_document"]')).toBeVisible();
+    await expect(
+      panel.locator('[data-library-live-pending="save_document"]'),
+    ).toBeVisible();
     await panel.locator("[data-library-live-allow]").click();
     const saved = await saving;
     expect(saved.isError).toBe(false);
     const branch = String(saved.structuredContent?.ref);
     expect(branch).toMatch(/^agent\//);
     await expect(panel.locator("[data-library-version]")).toHaveCount(1);
-    await expect(panel.locator(`[data-library-merge="${branch}"]`)).toBeVisible();
+    await expect(
+      panel.locator(`[data-library-merge="${branch}"]`),
+    ).toBeVisible();
     await panel.locator(`[data-library-merge="${branch}"]`).click();
     await expect(panel.locator("[data-library-version]")).toHaveCount(2);
 
     await panel.locator("[data-library-live-disconnect]").click();
     await expect(panel.locator("[data-library-live-connect]")).toBeVisible();
-    await expect.poll(async () => ((await claude(token, "list_live_sessions", {})).structuredContent?.sessions as unknown[]).length).toBe(0);
+    await expect
+      .poll(
+        async () =>
+          (
+            (await claude(token, "list_live_sessions", {})).structuredContent
+              ?.sessions as unknown[]
+          ).length,
+      )
+      .toBe(0);
   });
 });

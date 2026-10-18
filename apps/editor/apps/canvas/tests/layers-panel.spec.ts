@@ -92,7 +92,8 @@ test.describe("Track M.4-M.7 — structural layer ops", () => {
     const originalName = target.name;
     await page.evaluate(
       async ({ id }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         await c.client.mutate({
           op: "layerSetName",
           args: { layerId: id, name: "RenameTest" },
@@ -114,14 +115,17 @@ test.describe("Track M.4-M.7 — structural layer ops", () => {
     );
   });
 
-  test("AC-M-5 — reorder a layer + undo restores @feat:editor-shell.panels.layers @feat:layers.ops @level:happy", async ({ page }) => {
+  test("AC-M-5 — reorder a layer + undo restores @feat:editor-shell.panels.layers @feat:layers.ops @level:happy", async ({
+    page,
+  }) => {
     await load(page);
     const before = await getLayers(page);
     expect(before.length).toBeGreaterThanOrEqual(2);
     const moved = before[before.length - 1];
     await page.evaluate(
       async ({ id }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         await c.client.mutate({
           op: "layerMove",
           args: { layerId: id, newIndex: 0 },
@@ -159,7 +163,8 @@ test.describe("Track M.4-M.7 — structural layer ops", () => {
 
     await page.evaluate(
       async ({ id }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         await c.client.mutate({
           op: "layerRemove",
           args: { layerId: id },

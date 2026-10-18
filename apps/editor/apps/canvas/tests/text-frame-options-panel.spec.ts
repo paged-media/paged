@@ -49,13 +49,17 @@ test.describe("Phase 5 — Text Frame Options panel", () => {
     await openPanel(page, "paged.text-frame-options");
   });
 
-  test("AC-TFO-1 — panel mounts as a composition @feat:editor-shell.panels.text-frame-options @level:smoke", async ({ page }) => {
+  test("AC-TFO-1 — panel mounts as a composition @feat:editor-shell.panels.text-frame-options @level:smoke", async ({
+    page,
+  }) => {
     await expect(
       page.locator('[data-text-frame-options-panel="ready"]'),
     ).toBeVisible();
   });
 
-  test("AC-TFO-2 — frameInsetSpacing apply round-trips @feat:editor-shell.panels.text-frame-options @level:happy", async ({ page }) => {
+  test("AC-TFO-2 — frameInsetSpacing apply round-trips @feat:editor-shell.panels.text-frame-options @level:happy", async ({
+    page,
+  }) => {
     const result = await page.evaluate(async () => {
       type DebugCanvas = {
         client?: {
@@ -165,7 +169,9 @@ test.describe("Phase 5 — Text Frame Options panel", () => {
 
       const read = async (path: string) => {
         const props = await dbg.client!.elementProperties(target);
-        return props?.entries.find((e) => e.path === path)?.value?.value ?? null;
+        return (
+          props?.entries.find((e) => e.path === path)?.value?.value ?? null
+        );
       };
 
       const before = {
@@ -250,21 +256,28 @@ test.describe("Phase 5 — Text Frame Options panel", () => {
       "column layout ships in the wasm AFTER 0.63.0; the pinned engine cannot render a gutter",
     );
     const setup = await page.evaluate(async () => {
-      const dbg = (window as unknown as {
-        __canvas?: {
-          client?: {
-            collection<T>(n: string): Promise<readonly T[]>;
-            executeScript(s: string): Promise<{ output: string[]; error: string | null }>;
+      const dbg = (
+        window as unknown as {
+          __canvas?: {
+            client?: {
+              collection<T>(n: string): Promise<readonly T[]>;
+              executeScript(
+                s: string,
+              ): Promise<{ output: string[]; error: string | null }>;
+            };
           };
-        };
-      }).__canvas;
+        }
+      ).__canvas;
       const pages = await dbg!.client!.collection<{ selfId: string }>("pages");
       // The frame the tree walk finds first, and its own story — the
       // pair AC-TFO-3 already relies on.
-      const treeJson = await dbg!.client!
-        .executeScript("paged.tree()")
+      const treeJson = await dbg!
+        .client!.executeScript("paged.tree()")
         .then((r) => r.output[0] ?? "[]");
-      type Node = { id?: { kind: string; id: string } | null; children?: Node[] };
+      type Node = {
+        id?: { kind: string; id: string } | null;
+        children?: Node[];
+      };
       const walk = (nodes: Node[] | undefined): Node["id"] => {
         if (!nodes) return null;
         for (const nd of nodes) {
@@ -295,10 +308,16 @@ test.describe("Phase 5 — Text Frame Options panel", () => {
     // `PageSummary.sizePt` is `[width, height]` — the wire's own name,
     // read from the generated types rather than guessed at.
     const pageWidthPt = await page.evaluate(async () => {
-      const dbg = (window as unknown as {
-        __canvas?: { client?: { collection<T>(n: string): Promise<readonly T[]> } };
-      }).__canvas;
-      const pages = await dbg!.client!.collection<{ sizePt?: [number, number] }>("pages");
+      const dbg = (
+        window as unknown as {
+          __canvas?: {
+            client?: { collection<T>(n: string): Promise<readonly T[]> };
+          };
+        }
+      ).__canvas;
+      const pages = await dbg!.client!.collection<{
+        sizePt?: [number, number];
+      }>("pages");
       return pages[0]?.sizePt?.[0] ?? 0;
     });
     expect(pageWidthPt).toBeGreaterThan(0);
@@ -319,7 +338,9 @@ test.describe("Phase 5 — Text Frame Options panel", () => {
         for (let y = y0; y < y1 && !any; y++) {
           const i = (y * png.width + x) * 4;
           const lum =
-            0.299 * png.data[i] + 0.587 * png.data[i + 1] + 0.114 * png.data[i + 2];
+            0.299 * png.data[i] +
+            0.587 * png.data[i + 1] +
+            0.114 * png.data[i + 2];
           if (png.data[i + 3] > 0 && lum < 200) any = true;
         }
         inked.push(any);
@@ -339,16 +360,26 @@ test.describe("Phase 5 — Text Frame Options panel", () => {
     const setColumns = (count: number) =>
       page.evaluate(
         async ({ n, id }: { n: number; id: unknown }) => {
-          const dbg = (window as unknown as {
-            __canvas?: { client?: { mutate(op: unknown): Promise<unknown> } };
-          }).__canvas;
+          const dbg = (
+            window as unknown as {
+              __canvas?: { client?: { mutate(op: unknown): Promise<unknown> } };
+            }
+          ).__canvas;
           await dbg!.client!.mutate({
             op: "setElementProperty",
-            args: { elementId: id, path: "textFrameColumnGutter", value: { type: "length", value: 24 } },
+            args: {
+              elementId: id,
+              path: "textFrameColumnGutter",
+              value: { type: "length", value: 24 },
+            },
           });
           await dbg!.client!.mutate({
             op: "setElementProperty",
-            args: { elementId: id, path: "textFrameColumnCount", value: { type: "length", value: n } },
+            args: {
+              elementId: id,
+              path: "textFrameColumnCount",
+              value: { type: "length", value: n },
+            },
           });
         },
         { n: count, id: setup.target },
@@ -361,7 +392,9 @@ test.describe("Phase 5 — Text Frame Options panel", () => {
     await expect
       .poll(
         async () => {
-          oneColumn = gutterPx(await snapshotPagePng(page, setup.pageId!, SNAP_W, 96));
+          oneColumn = gutterPx(
+            await snapshotPagePng(page, setup.pageId!, SNAP_W, 96),
+          );
           return oneColumn;
         },
         { timeout: 30_000 },
@@ -373,7 +406,8 @@ test.describe("Phase 5 — Text Frame Options panel", () => {
     const expected = Math.round(24 * scale * 0.6);
     await expect
       .poll(
-        async () => gutterPx(await snapshotPagePng(page, setup.pageId!, SNAP_W, 96)),
+        async () =>
+          gutterPx(await snapshotPagePng(page, setup.pageId!, SNAP_W, 96)),
         { timeout: 30_000 },
       )
       .toBeGreaterThan(Math.max(oneColumn, expected));

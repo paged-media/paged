@@ -41,7 +41,9 @@ test.describe("Phase 5 — Frame Fitting panel", () => {
     await openPanel(page, "paged.frame-fitting");
   });
 
-  test("AC-FF-1 — panel mounts @feat:editor-shell.panels.frame-fitting @feat:images-graphics.frame-fitting @level:smoke", async ({ page }) => {
+  test("AC-FF-1 — panel mounts @feat:editor-shell.panels.frame-fitting @feat:images-graphics.frame-fitting @level:smoke", async ({
+    page,
+  }) => {
     await expect(
       page.locator('[data-frame-fitting-panel="ready"]'),
     ).toBeVisible();
@@ -178,7 +180,9 @@ test.describe("Phase 5 — Frame Fitting panel", () => {
 
       const read = async (path: string) => {
         const props = await dbg.client!.elementProperties(target);
-        return props?.entries.find((e) => e.path === path)?.value?.value ?? null;
+        return (
+          props?.entries.find((e) => e.path === path)?.value?.value ?? null
+        );
       };
 
       const before = {

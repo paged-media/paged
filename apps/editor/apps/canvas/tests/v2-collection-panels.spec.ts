@@ -52,7 +52,9 @@ test.describe("Phase 5 — five remaining collection panels", () => {
     await loadIdml(page, FIXTURE);
   });
 
-  test("AC-V2-1 — Articles @feat:editor-shell.panels.list-collections @level:happy", async ({ page }) => {
+  test("AC-V2-1 — Articles @feat:editor-shell.panels.list-collections @level:happy", async ({
+    page,
+  }) => {
     await mountAndAssert(
       page,
       "paged.articles",
@@ -61,7 +63,9 @@ test.describe("Phase 5 — five remaining collection panels", () => {
     );
   });
 
-  test("AC-V2-2 — Hyperlinks @feat:editor-shell.panels.list-collections @level:happy", async ({ page }) => {
+  test("AC-V2-2 — Hyperlinks @feat:editor-shell.panels.list-collections @level:happy", async ({
+    page,
+  }) => {
     await mountAndAssert(
       page,
       "paged.hyperlinks",
@@ -70,7 +74,9 @@ test.describe("Phase 5 — five remaining collection panels", () => {
     );
   });
 
-  test("AC-V2-3 — Bookmarks @feat:editor-shell.panels.list-collections @level:happy", async ({ page }) => {
+  test("AC-V2-3 — Bookmarks @feat:editor-shell.panels.list-collections @level:happy", async ({
+    page,
+  }) => {
     await mountAndAssert(
       page,
       "paged.bookmarks",
@@ -79,7 +85,9 @@ test.describe("Phase 5 — five remaining collection panels", () => {
     );
   });
 
-  test("AC-V2-4 — Cross References @feat:editor-shell.panels.list-collections @level:happy", async ({ page }) => {
+  test("AC-V2-4 — Cross References @feat:editor-shell.panels.list-collections @level:happy", async ({
+    page,
+  }) => {
     await mountAndAssert(
       page,
       "paged.cross-references",
@@ -88,7 +96,9 @@ test.describe("Phase 5 — five remaining collection panels", () => {
     );
   });
 
-  test("AC-V2-5 — Index @feat:editor-shell.panels.list-collections @level:happy", async ({ page }) => {
+  test("AC-V2-5 — Index @feat:editor-shell.panels.list-collections @level:happy", async ({
+    page,
+  }) => {
     await mountAndAssert(
       page,
       "paged.index",

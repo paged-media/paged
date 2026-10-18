@@ -49,7 +49,10 @@ test.describe("rebuild profile", () => {
     browser,
   }) => {
     const checkpoint = checkpointPath("312-appendix-b");
-    test.skip(!existsSync(checkpoint), `${checkpoint} missing — run the chapter specs first`);
+    test.skip(
+      !existsSync(checkpoint),
+      `${checkpoint} missing — run the chapter specs first`,
+    );
 
     await openCanvas(page);
     const doc = new ShowcaseDoc(page);
@@ -64,9 +67,15 @@ test.describe("rebuild profile", () => {
 
     // One scratch frame to write to, minted on the raw lane.
     const frame = await page.evaluate(async (pid) => {
-      const c = (window as unknown as { __canvas: { client: { mutate: (m: unknown) => Promise<any> } } })
-        .__canvas.client;
-      const r = await c.mutate({ op: "insertFrame", args: { pageId: pid, bounds: [40, 40, 80, 100] } });
+      const c = (
+        window as unknown as {
+          __canvas: { client: { mutate: (m: unknown) => Promise<any> } };
+        }
+      ).__canvas.client;
+      const r = await c.mutate({
+        op: "insertFrame",
+        args: { pageId: pid, bounds: [40, 40, 80, 100] },
+      });
       return r.payload?.createdId ?? null;
     }, pageId);
     expect(frame, "insertFrame minted an element").not.toBeNull();
@@ -75,12 +84,19 @@ test.describe("rebuild profile", () => {
     const rawWrite = async (tint: number) =>
       page.evaluate(
         async ({ id, swatch, tint }) => {
-          const c = (window as unknown as { __canvas: { client: { mutate: (m: unknown) => Promise<any> } } })
-            .__canvas.client;
+          const c = (
+            window as unknown as {
+              __canvas: { client: { mutate: (m: unknown) => Promise<any> } };
+            }
+          ).__canvas.client;
           const t0 = performance.now();
           const r = await c.mutate({
             op: "setElementProperty",
-            args: { elementId: id, path: "frameFillColor", value: { type: "colorRef", value: swatch } },
+            args: {
+              elementId: id,
+              path: "frameFillColor",
+              value: { type: "colorRef", value: swatch },
+            },
           });
           const wall = performance.now() - t0;
           const s = r.payload?.cacheStats ?? {};
@@ -105,8 +121,11 @@ test.describe("rebuild profile", () => {
     for (let i = 0; i < RUNS; i += 1) {
       laneB.push(
         await page.evaluate(async () => {
-          const c = (window as unknown as { __canvas: { client: { send: (m: unknown) => Promise<any> } } })
-            .__canvas.client;
+          const c = (
+            window as unknown as {
+              __canvas: { client: { send: (m: unknown) => Promise<any> } };
+            }
+          ).__canvas.client;
           const t0 = performance.now();
           await c.send({ kind: "requestSceneTree" });
           return performance.now() - t0;
@@ -118,7 +137,10 @@ test.describe("rebuild profile", () => {
     const laneC = [];
     for (let i = 0; i < RUNS; i += 1) {
       const t0 = Date.now();
-      await doc.setProperty(frame.kind, frame.id, "frameFillColor", { type: "colorRef", value: vermilion });
+      await doc.setProperty(frame.kind, frame.id, "frameFillColor", {
+        type: "colorRef",
+        value: vermilion,
+      });
       laneC.push(Date.now() - t0);
     }
 

@@ -149,8 +149,7 @@ async function allRectBounds(
     for (const id of ids) {
       const props = await c.client.elementProperties(id);
       const b = props?.entries.find((e) => e.path === "frameBounds")?.value as
-        | { type: string; value: number[] }
-        | undefined;
+        { type: string; value: number[] } | undefined;
       if (b?.type === "bounds")
         out.push({
           id: id.id,
@@ -203,9 +202,10 @@ test.describe("E2E-08 — pan/zoom during an in-flight gesture", () => {
     });
     await page.waitForTimeout(150);
     const scaleAfter = await cameraScale(page);
-    expect(scaleAfter, "the mid-drag zoom actually changed the camera").toBeGreaterThan(
-      scaleBefore * 1.5,
-    );
+    expect(
+      scaleAfter,
+      "the mid-drag zoom actually changed the camera",
+    ).toBeGreaterThan(scaleBefore * 1.5);
 
     // Continue the drag to the (now re-projected) screen position of the
     // intended document target, then release.
@@ -221,12 +221,14 @@ test.describe("E2E-08 — pan/zoom during an in-flight gesture", () => {
     // moved by ~ the intended pt delta despite the 1.5×+ zoom. Tolerance
     // matches the transform-gesture specs (snap may nudge a few pt); a
     // screen-space bug would miss by tens of pt at this zoom.
-    expect(Math.abs(acx - (cx + dxPt)), "x anchored to the document point").toBeLessThan(
-      8,
-    );
-    expect(Math.abs(acy - (cy + dyPt)), "y anchored to the document point").toBeLessThan(
-      8,
-    );
+    expect(
+      Math.abs(acx - (cx + dxPt)),
+      "x anchored to the document point",
+    ).toBeLessThan(8);
+    expect(
+      Math.abs(acy - (cy + dyPt)),
+      "y anchored to the document point",
+    ).toBeLessThan(8);
   });
 });
 
@@ -287,7 +289,10 @@ test.describe("E2E-09 — floating pane over the canvas", () => {
       () => (window as unknown as { __paneHits: number }).__paneHits,
     );
     const afterPane = await treeCount(page, "rectangle");
-    expect(paneHits, "the pane received the pointerdown").toBeGreaterThanOrEqual(1);
+    expect(
+      paneHits,
+      "the pane received the pointerdown",
+    ).toBeGreaterThanOrEqual(1);
     expect(
       afterPane,
       "INV/IN-08: the pane drag did NOT leak into a canvas tool gesture",
@@ -358,9 +363,7 @@ test.describe("E2E-10 — devicePixelRatio variation", () => {
       Math.max(px0, px1),
     ];
 
-    const beforeIds = new Set(
-      (await allRectBounds(page)).map((r) => r.id),
-    );
+    const beforeIds = new Set((await allRectBounds(page)).map((r) => r.id));
     const s0 = await screenPoint(page, px0, py0);
     const s1 = await screenPoint(page, px1, py1);
     await page.mouse.move(s0.x, s0.y);
@@ -462,7 +465,10 @@ test.describe("E2E-11 — pointer-capture loss aborts the gesture", () => {
       countKind(blurLog, "gestureCancelled"),
       "INV-8: blur aborts the in-flight gesture at blur time",
     ).toBeGreaterThanOrEqual(1);
-    expect(countKind(blurLog, "gestureCommitted"), "INV-1: no commit on blur").toBe(0);
+    expect(
+      countKind(blurLog, "gestureCommitted"),
+      "INV-1: no commit on blur",
+    ).toBe(0);
 
     // The pointer eventually releases (focus returns); the stale up
     // must not resurrect / commit the aborted gesture.

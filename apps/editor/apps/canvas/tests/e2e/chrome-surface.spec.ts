@@ -47,7 +47,11 @@ import { fixturePath } from "./harness/fixtures";
 
 interface DebugSnapshot {
   panels: { open: string[]; active: string | null };
-  tools: { base: string | null; effective: string | null; registered: string[] };
+  tools: {
+    base: string | null;
+    effective: string | null;
+    registered: string[];
+  };
   commands: string[];
   keybindings: { key: string; command: string }[];
 }
@@ -56,7 +60,9 @@ async function debugContext(page: Page): Promise<DebugSnapshot> {
   return page.evaluate(
     () =>
       (
-        globalThis as unknown as { __canvas: { debugContext: () => DebugSnapshot } }
+        globalThis as unknown as {
+          __canvas: { debugContext: () => DebugSnapshot };
+        }
       ).__canvas.debugContext() as unknown as DebugSnapshot,
   );
 }
@@ -76,7 +82,9 @@ async function openPanel(page: Page, id: string): Promise<void> {
   await page.evaluate(
     (panelId) =>
       (
-        globalThis as unknown as { __canvas: { openPanel: (i: string) => void } }
+        globalThis as unknown as {
+          __canvas: { openPanel: (i: string) => void };
+        }
       ).__canvas.openPanel(panelId),
     id,
   );
@@ -90,7 +98,9 @@ test.describe("chrome surface — the keybindings, commands and panels nothing n
       .poll(
         () =>
           page.evaluate(
-            () => (globalThis as unknown as { __canvas: { ready: boolean } }).__canvas.ready,
+            () =>
+              (globalThis as unknown as { __canvas: { ready: boolean } })
+                .__canvas.ready,
           ),
         { timeout: 30_000 },
       )
@@ -164,11 +174,15 @@ test.describe("chrome surface — the keybindings, commands and panels nothing n
   }) => {
     const start = await cameraScale(page);
     await page.keyboard.press("Meta+=");
-    await expect.poll(() => cameraScale(page), { timeout: 5_000 }).toBeGreaterThan(start);
+    await expect
+      .poll(() => cameraScale(page), { timeout: 5_000 })
+      .toBeGreaterThan(start);
 
     const zoomed = await cameraScale(page);
     await page.keyboard.press("Meta+-");
-    await expect.poll(() => cameraScale(page), { timeout: 5_000 }).toBeLessThan(zoomed);
+    await expect
+      .poll(() => cameraScale(page), { timeout: 5_000 })
+      .toBeLessThan(zoomed);
   });
 
   test("AC-CHROME-5 — Tab hides the whole chrome, Shift+Tab keeps the tool rail @feat:editor-shell.panel-rail @feat:editor-shell.tool-rail @level:happy", async ({
@@ -213,11 +227,15 @@ test.describe("chrome surface — the keybindings, commands and panels nothing n
     for (const id of ["paged.data-grid", "paged.export-inspector"]) {
       await openPanel(page, id);
       await expect
-        .poll(async () => (await debugContext(page)).panels.open, { timeout: 5_000 })
+        .poll(async () => (await debugContext(page)).panels.open, {
+          timeout: 5_000,
+        })
         .toContain(id);
       // Mounted, not crashed: PanelHost renders the raw id in a failure
       // string, so its absence is the assertion that it resolved.
-      await expect(page.getByText(`Panel ${id} not registered.`)).toHaveCount(0);
+      await expect(page.getByText(`Panel ${id} not registered.`)).toHaveCount(
+        0,
+      );
     }
   });
 });

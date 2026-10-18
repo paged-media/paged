@@ -42,7 +42,13 @@
 // Usage:  node scripts/wasm-budget.mjs [--json]
 // Exit 1 when over budget; prints the full inventory either way.
 
-import { readdirSync, readFileSync, statSync, realpathSync, writeFileSync } from "node:fs";
+import {
+  readdirSync,
+  readFileSync,
+  statSync,
+  realpathSync,
+  writeFileSync,
+} from "node:fs";
 import { join, dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -87,7 +93,9 @@ function wasmFilesUnder(dir, depth = 0, out = []) {
 function shippedPaths(pkgDir) {
   let files;
   try {
-    files = JSON.parse(readFileSync(join(pkgDir, "package.json"), "utf8")).files;
+    files = JSON.parse(
+      readFileSync(join(pkgDir, "package.json"), "utf8"),
+    ).files;
   } catch {
     files = undefined;
   }
@@ -143,7 +151,9 @@ export function collect() {
 
   const artifacts = [...byReal.entries()]
     .map(([real, v]) => ({
-      file: real.includes("/node_modules/") ? real.replace(/^.*\/node_modules\//, "") : relative(REPO, real),
+      file: real.includes("/node_modules/")
+        ? real.replace(/^.*\/node_modules\//, "")
+        : relative(REPO, real),
       bytes: v.bytes,
       owners: v.owners,
     }))
@@ -182,9 +192,14 @@ function main() {
       lane: "wasm-budget",
       commit: process.env.GITHUB_SHA ?? "unknown",
       branch: process.env.GITHUB_REF_NAME ?? "main",
-      ...(process.env.GITHUB_RUN_ID ? { run_id: String(process.env.GITHUB_RUN_ID) } : {}),
+      ...(process.env.GITHUB_RUN_ID
+        ? { run_id: String(process.env.GITHUB_RUN_ID) }
+        : {}),
       finished_at: new Date().toISOString(),
-      environment: { os: process.env.RUNNER_OS ?? process.platform, arch: process.arch },
+      environment: {
+        os: process.env.RUNNER_OS ?? process.platform,
+        arch: process.arch,
+      },
       // AGGREGATES ONLY, and one of them deliberately.
       //
       // A row per artifact would key the series on a FILE PATH — an

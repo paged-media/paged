@@ -170,7 +170,10 @@ test.describe("E2E anchored-object (W2.12) ops", () => {
       absPath: FIXTURE,
     });
     const hostFrame = fx.frames.find((f) => f.ref.id === HOST_REF.id)!;
-    expect(hostFrame, "the anchored object's host frame is present").toBeTruthy();
+    expect(
+      hostFrame,
+      "the anchored object's host frame is present",
+    ).toBeTruthy();
     const pageInfo = fx.pages[hostFrame.pageIndex];
     const region = (await elementPageRectPt(page, HOST_REF)) as PtRect;
 

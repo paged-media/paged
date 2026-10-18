@@ -66,7 +66,9 @@ interface CanvasGlobal {
       modifiers: { shift: boolean; alt: boolean },
       mode?: "json" | "sab",
     ) => Promise<{ pageIds: string[]; snapLines: SnapLine[] }>;
-    commitGesture: (handle: number) => Promise<{ appliedSeq: number; pageIds: string[] }>;
+    commitGesture: (
+      handle: number,
+    ) => Promise<{ appliedSeq: number; pageIds: string[] }>;
     cancelGesture: (handle: number) => Promise<string[]>;
   };
 }
@@ -93,7 +95,12 @@ async function findUnrotatedRectLike(
         })) as {
           payload: {
             element: ElementId | null;
-            frameBounds: { top: number; left: number; bottom: number; right: number } | null;
+            frameBounds: {
+              top: number;
+              left: number;
+              bottom: number;
+              right: number;
+            } | null;
             itemTransform: number[] | null;
           };
         };
@@ -102,7 +109,8 @@ async function findUnrotatedRectLike(
         const tr = reply.payload.itemTransform;
         if (!el || !fb) continue;
         if (tr) {
-          if (Math.abs(tr[0] - 1) > 1e-3 || Math.abs(tr[3] - 1) > 1e-3) continue;
+          if (Math.abs(tr[0] - 1) > 1e-3 || Math.abs(tr[3] - 1) > 1e-3)
+            continue;
           if (Math.abs(tr[1]) > 1e-3 || Math.abs(tr[2]) > 1e-3) continue;
         }
         return {
@@ -143,8 +151,9 @@ test.describe("Step 5e — SAB-mode snap-line notifications", () => {
     const env = await page.evaluate(() => {
       const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
       return {
-        isolated: (globalThis as { crossOriginIsolated?: boolean })
-          .crossOriginIsolated === true,
+        isolated:
+          (globalThis as { crossOriginIsolated?: boolean })
+            .crossOriginIsolated === true,
         bufferKind: c.client.gestureSab.buffer.constructor.name,
       };
     });
@@ -164,7 +173,8 @@ test.describe("Step 5e — SAB-mode snap-line notifications", () => {
 
     const result = await page.evaluate(
       async ({ id, dx }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
 
         // Resolves on the first notification with a non-empty
         // snapLines vector or rejects after 5s. The 5s budget covers
@@ -174,7 +184,10 @@ test.describe("Step 5e — SAB-mode snap-line notifications", () => {
         let resolveOnce: (v: SnapLine[]) => void;
         const firstSnap = new Promise<SnapLine[]>((res, rej) => {
           resolveOnce = res;
-          setTimeout(() => rej(new Error("no gestureSnapLines after 5s")), 5000);
+          setTimeout(
+            () => rej(new Error("no gestureSnapLines after 5s")),
+            5000,
+          );
         });
         const observed: SnapLine[][] = [];
         const unsubscribe = c.client.subscribe((msg) => {
@@ -234,7 +247,8 @@ test.describe("Step 5e — SAB-mode snap-line notifications", () => {
 
     const observed = await page.evaluate(
       async ({ id, dxSnap, dyClear }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         const log: SnapLine[][] = [];
         const unsubscribe = c.client.subscribe((msg) => {
           const m = msg as { kind: string; payload: { snapLines: SnapLine[] } };
@@ -269,7 +283,10 @@ test.describe("Step 5e — SAB-mode snap-line notifications", () => {
     // Each push that lands during a drain boundary should surface a
     // notification. With ~1.5s sleeps between pushes both drains
     // get their own tick — expect ≥2 notifications.
-    expect(observed.length, "one notify per drained push").toBeGreaterThanOrEqual(2);
+    expect(
+      observed.length,
+      "one notify per drained push",
+    ).toBeGreaterThanOrEqual(2);
     // The first drain saw the page-left snap target.
     expect(
       observed[0].some((l) => l.axis === "x"),

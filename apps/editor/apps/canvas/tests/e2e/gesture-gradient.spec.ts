@@ -81,7 +81,9 @@ async function firstGradientFilledRect(page: Page): Promise<ElementRef | null> {
       globalThis as unknown as {
         __canvas: {
           client: {
-            executeScript(src: string): Promise<{ output: string[]; error: string | null }>;
+            executeScript(
+              src: string,
+            ): Promise<{ output: string[]; error: string | null }>;
           };
         };
       }
@@ -122,7 +124,10 @@ test("GR-01 — dragging the Gradient Annotator re-aims the selection's gradient
   page,
 }) => {
   const ref = await firstGradientFilledRect(page);
-  expect(ref, "gradients fixture has a gradient-filled rectangle").not.toBeNull();
+  expect(
+    ref,
+    "gradients fixture has a gradient-filled rectangle",
+  ).not.toBeNull();
 
   await selectElements(page, [ref!]);
   await awaitGeometryMirror(page, 1);

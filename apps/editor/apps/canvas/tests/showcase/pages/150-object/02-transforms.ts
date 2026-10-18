@@ -64,7 +64,11 @@ import {
 const PENNANT = (
   x: number,
   y: number,
-): Array<{ anchor: [number, number]; left: [number, number]; right: [number, number] }> => [
+): Array<{
+  anchor: [number, number];
+  left: [number, number];
+  right: [number, number];
+}> => [
   corner(x, y),
   corner(x + 96, y + 8),
   corner(x + 68, y + 26),
@@ -90,20 +94,28 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const ink = await doc.swatch(SWATCH.ink);
 
   // ── verso: head + intro ──────────────────────────────────────────
-  const head = await proseFrame(ctx, verso, [vLeft, 54, vRight, 86], [
-    { text: "Nine frames, one knob each", style: STYLE.head1 },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    verso,
+    [vLeft, 54, vRight, 86],
+    [{ text: "Nine frames, one knob each", style: STYLE.head1 }],
+  );
   elements.push(head.frameId);
-  const intro = await proseFrame(ctx, verso, [vLeft, 92, vRight, 144], [
-    {
-      text:
-        "The same pennant nine times. One cell is untouched; seven carry " +
-        "a single transform property write apiece; the last carries the " +
-        "replace-pair - two frames, two different frameTransform " +
-        "histories, one silhouette.",
-      style: STYLE.bodyFirst,
-    },
-  ]);
+  const intro = await proseFrame(
+    ctx,
+    verso,
+    [vLeft, 92, vRight, 144],
+    [
+      {
+        text:
+          "The same pennant nine times. One cell is untouched; seven carry " +
+          "a single transform property write apiece; the last carries the " +
+          "replace-pair - two frames, two different frameTransform " +
+          "histories, one silhouette.",
+        style: STYLE.bodyFirst,
+      },
+    ],
+  );
   elements.push(intro.frameId);
 
   // ── the pennant factory ──────────────────────────────────────────
@@ -167,9 +179,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   ): Promise<void> => {
     const x = cellX(col);
     const y = cellY(row);
-    const cap = await proseFrame(ctx, verso, [x, y + 80, x + 136, y + 108], [
-      { text, style: STYLE.caption },
-    ]);
+    const cap = await proseFrame(
+      ctx,
+      verso,
+      [x, y + 80, x + 136, y + 108],
+      [{ text, style: STYLE.caption }],
+    );
     elements.push(cap.frameId);
   };
   const tileAt = (row: number, col: number): [number, number] => [
@@ -199,13 +214,19 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   {
     const [x, y] = tileAt(1, 1);
     const id = await pennant(x, y, vermilionTint);
-    await knob(id, [1.4, 0, 0, 1], "frameScaleX", { type: "length", value: 1.4 });
+    await knob(id, [1.4, 0, 0, 1], "frameScaleX", {
+      type: "length",
+      value: 1.4,
+    });
     await label(1, 1, "frameScaleX 140%");
   }
   {
     const [x, y] = tileAt(1, 2);
     const id = await pennant(x, y, vermilionTint);
-    await knob(id, [1, 0, 0, 1.4], "frameScaleY", { type: "length", value: 1.4 });
+    await knob(id, [1, 0, 0, 1.4], "frameScaleY", {
+      type: "length",
+      value: 1.4,
+    });
     await label(1, 2, "frameScaleY 140%");
   }
   // Flips — this is why the pennant is asymmetric.
@@ -261,27 +282,32 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     await label(2, 2, "frameTransform x2 vs x1 - one silhouette");
   }
 
-  const versoProse = await proseFrame(ctx, verso, [vLeft, 524, vRight, 632], [
-    {
-      text:
-        "The last cell holds two pennants. The vermilion one was moved " +
-        "up 26 points and then given a second frameTransform; the slate " +
-        "one was given only the second. They landed on the same spot - " +
-        "read back, the vermilion frame carries exactly the second " +
-        "matrix and no memory of the first. frameTransform replaces; it " +
-        "never composes.",
-      style: STYLE.bodyFirst,
-    },
-    {
-      text:
-        "Every rotated, scaled and flipped tile above pre-seeds a " +
-        "translation before its one knob write, because the knob pivots " +
-        "about the item-space origin. The seed is read from the " +
-        "element's own stored geometry, and it is the same arithmetic a " +
-        "rotate-about-centre control performs.",
-      style: STYLE.body,
-    },
-  ]);
+  const versoProse = await proseFrame(
+    ctx,
+    verso,
+    [vLeft, 524, vRight, 632],
+    [
+      {
+        text:
+          "The last cell holds two pennants. The vermilion one was moved " +
+          "up 26 points and then given a second frameTransform; the slate " +
+          "one was given only the second. They landed on the same spot - " +
+          "read back, the vermilion frame carries exactly the second " +
+          "matrix and no memory of the first. frameTransform replaces; it " +
+          "never composes.",
+        style: STYLE.bodyFirst,
+      },
+      {
+        text:
+          "Every rotated, scaled and flipped tile above pre-seeds a " +
+          "translation before its one knob write, because the knob pivots " +
+          "about the item-space origin. The seed is read from the " +
+          "element's own stored geometry, and it is the same arithmetic a " +
+          "rotate-about-centre control performs.",
+        style: STYLE.body,
+      },
+    ],
+  );
   elements.push(versoProse.frameId);
 
   elements.push(
@@ -304,19 +330,27 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   );
 
   // ════ recto: the corner sampler ════════════════════════════════════
-  const rHead = await proseFrame(ctx, recto, [rLeft, 54, rRight, 86], [
-    { text: "The corner sampler", style: STYLE.head1 },
-  ]);
+  const rHead = await proseFrame(
+    ctx,
+    recto,
+    [rLeft, 54, rRight, 86],
+    [{ text: "The corner sampler", style: STYLE.head1 }],
+  );
   elements.push(rHead.frameId);
-  const rIntro = await proseFrame(ctx, recto, [rLeft, 92, rRight, 132], [
-    {
-      text:
-        "A frame's four corners are addressed by name - option and " +
-        "radius each, eight property paths. Five kinds, one mixed " +
-        "outline, and one polygon that shows where the addressing ends.",
-      style: STYLE.bodyFirst,
-    },
-  ]);
+  const rIntro = await proseFrame(
+    ctx,
+    recto,
+    [rLeft, 92, rRight, 132],
+    [
+      {
+        text:
+          "A frame's four corners are addressed by name - option and " +
+          "radius each, eight property paths. Five kinds, one mixed " +
+          "outline, and one polygon that shows where the addressing ends.",
+        style: STYLE.bodyFirst,
+      },
+    ],
+  );
   elements.push(rIntro.frameId);
 
   const CORNERS = ["TopLeft", "TopRight", "BottomLeft", "BottomRight"] as const;
@@ -375,9 +409,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       id,
       CORNERS.map(() => ({ option: token, radius: 16 })),
     );
-    const cap = await proseFrame(ctx, recto, [x, 222, x + 80, 246], [
-      { text: name, style: STYLE.caption },
-    ]);
+    const cap = await proseFrame(
+      ctx,
+      recto,
+      [x, 222, x + 80, 246],
+      [{ text: name, style: STYLE.caption }],
+    );
     elements.push(cap.frameId);
   }
 
@@ -389,16 +426,21 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     { option: "InsetCorner", radius: 18 },
     { option: "InverseRoundedCorner", radius: 18 },
   ]);
-  const mixedCap = await proseFrame(ctx, recto, [216, 260, rRight, 376], [
-    {
-      text:
-        "One rectangle, four kinds: rounded top-left at 28, bevel " +
-        "top-right at 28, inset bottom-left at 18, inverse bottom-right " +
-        "at 18. Per-corner addressing means the outline can disagree " +
-        "with itself, on purpose.",
-      style: STYLE.caption,
-    },
-  ]);
+  const mixedCap = await proseFrame(
+    ctx,
+    recto,
+    [216, 260, rRight, 376],
+    [
+      {
+        text:
+          "One rectangle, four kinds: rounded top-left at 28, bevel " +
+          "top-right at 28, inset bottom-left at 18, inverse bottom-right " +
+          "at 18. Per-corner addressing means the outline can disagree " +
+          "with itself, on purpose.",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(mixedCap.frameId);
 
   // The polygon attempt.
@@ -445,17 +487,22 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     type: "length",
     value: 18,
   });
-  const polyCap = await proseFrame(ctx, recto, [216, 396, rRight, 500], [
-    {
-      text:
-        "The same vocabulary on a polygon: the TopLeft slot rounds every " +
-        "corner uniformly - the four names are rectangle-shaped " +
-        "addressing, and IDML has no per-name mapping for a shape whose " +
-        "corners are not four. The BevelCorner written to TopRight is " +
-        "stored and round-trips; it steers nothing.",
-      style: STYLE.caption,
-    },
-  ]);
+  const polyCap = await proseFrame(
+    ctx,
+    recto,
+    [216, 396, rRight, 500],
+    [
+      {
+        text:
+          "The same vocabulary on a polygon: the TopLeft slot rounds every " +
+          "corner uniformly - the four names are rectangle-shaped " +
+          "addressing, and IDML has no per-name mapping for a shape whose " +
+          "corners are not four. The BevelCorner written to TopRight is " +
+          "stored and round-trips; it steers nothing.",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(polyCap.frameId);
 
   elements.push(

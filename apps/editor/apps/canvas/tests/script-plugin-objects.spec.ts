@@ -45,9 +45,14 @@ const NOTE = `plugin:${PLUGIN}/note/1`;
 type ObjectValue = { kind: string; value?: unknown };
 interface Canvas {
   client: {
-    executeScript(source: string): Promise<{ output: string[]; error: string | null }>;
+    executeScript(
+      source: string,
+    ): Promise<{ output: string[]; error: string | null }>;
     elementProperties(id: unknown): Promise<{
-      entries: { path: string; value?: { type: string; value?: unknown } | null }[];
+      entries: {
+        path: string;
+        value?: { type: string; value?: unknown } | null;
+      }[];
     } | null>;
     undo(): Promise<unknown>;
   };
@@ -68,10 +73,14 @@ async function registerNoteKind(page: Page) {
       const readText = async (): Promise<string> => {
         const props = await c.client.elementProperties(frame);
         const e = props?.entries.find(
-          (x) => x.value?.type === "pluginMetadata" && (x.value.value as { key?: string }).key === key,
+          (x) =>
+            x.value?.type === "pluginMetadata" &&
+            (x.value.value as { key?: string }).key === key,
         );
         const raw = e ? (e.value!.value as { value?: string }).value : null;
-        return raw ? (JSON.parse(raw) as { data: { text: string } }).data.text : "";
+        return raw
+          ? (JSON.parse(raw) as { data: { text: string } }).data.text
+          : "";
       };
       c.objects!.register({
         plugin,
@@ -83,8 +92,25 @@ async function registerNoteKind(page: Page) {
               id: `${plugin}.annotate`,
               title: "Annotate",
               args: { kind: "struct", fields: { text: { kind: "text" } } },
-              handler: async (ctx: { objects: { set(a: string, p: string, v: unknown): Promise<{ applied: boolean }> } }, args: { text: string }) =>
-                (await ctx.objects.set(`plugin:${plugin}/note/1`, "text", args.text)).applied,
+              handler: async (
+                ctx: {
+                  objects: {
+                    set(
+                      a: string,
+                      p: string,
+                      v: unknown,
+                    ): Promise<{ applied: boolean }>;
+                  };
+                },
+                args: { text: string },
+              ) =>
+                (
+                  await ctx.objects.set(
+                    `plugin:${plugin}/note/1`,
+                    "text",
+                    args.text,
+                  )
+                ).applied,
             },
           ],
           kinds: [
@@ -95,13 +121,19 @@ async function registerNoteKind(page: Page) {
               hostOf: () => address,
               list: () => [`plugin:${plugin}/note/1`],
               get: async (_a: string, path: string) =>
-                path === "text" ? { kind: "value", value: await readText() } : { kind: "absent" },
+                path === "text"
+                  ? { kind: "value", value: await readText() }
+                  : { kind: "absent" },
               set: (_a: string, _path: string, value: unknown) => ({
                 kind: "mutations",
                 mutations: [
                   {
                     op: "setPluginMetadata",
-                    args: { elementId: frame, key, value: JSON.stringify({ v: 1, data: { text: value } }) },
+                    args: {
+                      elementId: frame,
+                      key,
+                      value: JSON.stringify({ v: 1, data: { text: value } }),
+                    },
                   },
                 ],
               }),
@@ -122,12 +154,17 @@ const run = (page: Page, source: string) =>
 
 const query = (page: Page, selector: string) =>
   page.evaluate(
-    async (sel) => (globalThis as unknown as { __canvas: Canvas }).__canvas.objects!.query(sel),
+    async (sel) =>
+      (globalThis as unknown as { __canvas: Canvas }).__canvas.objects!.query(
+        sel,
+      ),
     selector,
   );
 
 const undo = (page: Page) =>
-  page.evaluate(() => (globalThis as unknown as { __canvas: Canvas }).__canvas.client.undo());
+  page.evaluate(() =>
+    (globalThis as unknown as { __canvas: Canvas }).__canvas.client.undo(),
+  );
 
 const read = (page: Page, address: string, path: string) =>
   page.evaluate(
@@ -162,7 +199,9 @@ test.describe("ADR 323 — Boa scripts reach plugin objects", () => {
     expect(await read(page, NOTE, "text")).toBe("from a script");
     expect(await read(page, ADDRESS, "frameStrokeWeight")).toBe(next);
 
-    await page.evaluate(() => (globalThis as unknown as { __canvas: Canvas }).__canvas.client.undo());
+    await page.evaluate(() =>
+      (globalThis as unknown as { __canvas: Canvas }).__canvas.client.undo(),
+    );
     expect(await read(page, NOTE, "text")).toBe("");
     expect(await read(page, ADDRESS, "frameStrokeWeight")).toBe(before);
   });
@@ -176,7 +215,10 @@ test.describe("ADR 323 — Boa scripts reach plugin objects", () => {
        try { await paged.get("plugin:${PLUGIN}/nope/1", "text"); } catch (e) { console.log("refused", e.code); }`,
     );
     expect(r.error).toBeNull();
-    expect(r.output).toEqual(["[log] refused invalidValue", "[log] refused unknownAddress"]);
+    expect(r.output).toEqual([
+      "[log] refused invalidValue",
+      "[log] refused unknownAddress",
+    ]);
   });
 
   test("SB-3 — a UI edit made while a script waits on the host stays its OWN undo step; the script's plugin + core writes stay one @feat:scripting.property-readwrite @feat:round-tripping.undo-redo @level:edge", async ({
@@ -186,7 +228,9 @@ test.describe("ADR 323 — Boa scripts reach plugin objects", () => {
     // it go, so a UI edit can land while the script is suspended.
     await page.evaluate((plugin) => {
       const c = (globalThis as unknown as { __canvas: Canvas }).__canvas;
-      const g = globalThis as unknown as { __gate?: { parked: boolean; release?: () => void } };
+      const g = globalThis as unknown as {
+        __gate?: { parked: boolean; release?: () => void };
+      };
       g.__gate = { parked: false };
       c.objects!.register({
         plugin: `${plugin}.gate`,
@@ -200,7 +244,8 @@ test.describe("ADR 323 — Boa scripts reach plugin objects", () => {
               get: () =>
                 new Promise((resolve) => {
                   g.__gate!.parked = true;
-                  g.__gate!.release = () => resolve({ kind: "value", value: true });
+                  g.__gate!.release = () =>
+                    resolve({ kind: "value", value: true });
                 }),
             },
           ],
@@ -218,7 +263,10 @@ test.describe("ADR 323 — Boa scripts reach plugin objects", () => {
     // made BEFORE a foreign edit cannot join a step that ends after it —
     // the engine keeps that one as its own step.)
     const script = page.evaluate(
-      async ({ src }) => (globalThis as unknown as { __canvas: Canvas }).__canvas.client.executeScript(src),
+      async ({ src }) =>
+        (
+          globalThis as unknown as { __canvas: Canvas }
+        ).__canvas.client.executeScript(src),
       {
         src: `await paged.get(${JSON.stringify(GATE)}, "open");
               paged.set(${JSON.stringify(NOTE)}, "text", "scripted");
@@ -226,17 +274,38 @@ test.describe("ADR 323 — Boa scripts reach plugin objects", () => {
       },
     );
     await expect
-      .poll(() => page.evaluate(() => (globalThis as unknown as { __gate: { parked: boolean } }).__gate.parked))
+      .poll(() =>
+        page.evaluate(
+          () =>
+            (globalThis as unknown as { __gate: { parked: boolean } }).__gate
+              .parked,
+        ),
+      )
       .toBe(true);
     // The UI edit, through the same registry a panel field writes with.
     const ui = await page.evaluate(
       async ({ address, opacity }) =>
-        (globalThis as unknown as { __canvas: { objects: { set(a: string, p: string, v: unknown): Promise<{ applied: boolean }> } } })
-          .__canvas.objects.set(address, "frameOpacity", opacity),
+        (
+          globalThis as unknown as {
+            __canvas: {
+              objects: {
+                set(
+                  a: string,
+                  p: string,
+                  v: unknown,
+                ): Promise<{ applied: boolean }>;
+              };
+            };
+          }
+        ).__canvas.objects.set(address, "frameOpacity", opacity),
       { address: ADDRESS, opacity },
     );
     expect(ui.applied).toBe(true);
-    await page.evaluate(() => (globalThis as unknown as { __gate: { release(): void } }).__gate.release());
+    await page.evaluate(() =>
+      (
+        globalThis as unknown as { __gate: { release(): void } }
+      ).__gate.release(),
+    );
     const r = await script;
     expect(r.error).toBeNull();
     expect(await read(page, NOTE, "text")).toBe("scripted");
@@ -245,12 +314,16 @@ test.describe("ADR 323 — Boa scripts reach plugin objects", () => {
 
     // Undo once: the SCRIPT's step — both its writes, the plugin one
     // included (reported as committed) — and nothing of the UI edit.
-    await page.evaluate(() => (globalThis as unknown as { __canvas: Canvas }).__canvas.client.undo());
+    await page.evaluate(() =>
+      (globalThis as unknown as { __canvas: Canvas }).__canvas.client.undo(),
+    );
     expect(await read(page, NOTE, "text")).toBe("");
     expect(await read(page, ADDRESS, "frameStrokeWeight")).toBe(weightBefore);
     expect(await read(page, ADDRESS, "frameOpacity")).toBe(opacity);
     // Undo again: the UI edit, on its own.
-    await page.evaluate(() => (globalThis as unknown as { __canvas: Canvas }).__canvas.client.undo());
+    await page.evaluate(() =>
+      (globalThis as unknown as { __canvas: Canvas }).__canvas.client.undo(),
+    );
     expect(await read(page, ADDRESS, "frameOpacity")).toBe(opacityBefore);
   });
   test("SB-4 — paged.invoke runs a CORE command and a PLUGIN command from a script; ONE undo step @feat:scripting.property-readwrite @feat:round-tripping.undo-redo @level:happy", async ({
@@ -266,7 +339,11 @@ test.describe("ADR 323 — Boa scripts reach plugin objects", () => {
        try { await paged.invoke("${PLUGIN}.nothing", {}); } catch (e) { console.log("refused", e.code); }`,
     );
     expect(r.error).toBeNull();
-    expect(r.output).toEqual(["[log] 1 1", "[log] true", "[log] refused unknownCommand"]);
+    expect(r.output).toEqual([
+      "[log] 1 1",
+      "[log] true",
+      "[log] refused unknownCommand",
+    ]);
     expect((await query(page, "frame")).length).toBe(framesBefore + 1);
     expect(await read(page, NOTE, "text")).toBe("invoked");
 
@@ -297,7 +374,12 @@ test.describe("ADR 323 — Boa scripts reach plugin objects", () => {
     );
     expect(r.error).toBeNull();
     expect(r.output[0]).toBe(`[log] core true ${PLUGIN}.annotate`);
-    expect(JSON.parse(r.output[1]!.replace("[log] ", ""))).toEqual([{ ok: true }, { ok: true }, { ok: true }, { ok: true }]);
+    expect(JSON.parse(r.output[1]!.replace("[log] ", ""))).toEqual([
+      { ok: true },
+      { ok: true },
+      { ok: true },
+      { ok: true },
+    ]);
     expect((await query(page, "frame")).length).toBe(framesBefore + 1);
     expect(await read(page, NOTE, "text")).toBe("batched");
     expect(await read(page, ADDRESS, "frameStrokeWeight")).toBe(next);

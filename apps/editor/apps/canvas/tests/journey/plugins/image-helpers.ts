@@ -67,7 +67,9 @@ export async function statusText(page: Page): Promise<string> {
 export async function undoDepth(page: Page): Promise<number> {
   const el = page.locator("[data-image-history-readout]");
   if ((await el.count()) === 0) return 0;
-  const m = ((await el.first().textContent()) ?? "").match(/History:\s*(\d+)\s*undo/);
+  const m = ((await el.first().textContent()) ?? "").match(
+    /History:\s*(\d+)\s*undo/,
+  );
   return m ? Number(m[1]) : 0;
 }
 
@@ -90,7 +92,9 @@ export async function ingest(
   const frame = await designer.drawRectangle(FRAME);
   expect(frame, "drew a target frame").not.toBe("");
   await designer.selectElement("rectangle", frame);
-  const empty = (await designer.gpuActive()) ? await designer.renderBytes() : null;
+  const empty = (await designer.gpuActive())
+    ? await designer.renderBytes()
+    : null;
 
   const importer = await page.evaluate(
     async ({ name, fill, width, height }) => {
@@ -162,7 +166,11 @@ export async function ingest(
                   m: string,
                 ): {
                   id?: string;
-                  import(f: { name: string; bytes: Uint8Array; mimeType: string }): Promise<unknown>;
+                  import(f: {
+                    name: string;
+                    bytes: Uint8Array;
+                    mimeType: string;
+                  }): Promise<unknown>;
                 } | null;
               };
             };
@@ -215,7 +223,10 @@ export async function compositeBaseline(
   page: Page,
   empty: Uint8Array | null,
 ): Promise<Uint8Array> {
-  expect(empty, "the empty-frame render was taken on the GPU lane").not.toBeNull();
+  expect(
+    empty,
+    "the empty-frame render was taken on the GPU lane",
+  ).not.toBeNull();
   const apply = page.getByRole("button", { name: "Apply", exact: true });
   if ((await apply.count()) > 0 && (await apply.first().isEnabled())) {
     await apply.first().click();
@@ -241,7 +252,9 @@ export async function dragPt(
   pathPt: Array<[number, number]>,
   opts: { alt?: boolean } = {},
 ): Promise<void> {
-  const path = await Promise.all(pathPt.map(([x, y]) => screenPoint(page, x, y)));
+  const path = await Promise.all(
+    pathPt.map(([x, y]) => screenPoint(page, x, y)),
+  );
   await page.mouse.move(path[0].x, path[0].y);
   await page.waitForTimeout(750);
   if (opts.alt) await page.keyboard.down("Alt");
@@ -271,7 +284,10 @@ export async function clickPt(page: Page, x: number, y: number): Promise<void> {
  * Fill-with-pattern before any pattern is defined is a pure refusal: it
  * touches no pixel and no selection.
  */
-export async function primeStatus(designer: Designer, page: Page): Promise<void> {
+export async function primeStatus(
+  designer: Designer,
+  page: Page,
+): Promise<void> {
   await designer.runCommand("media.paged.image.command.fillPattern");
   await expect
     .poll(() => statusText(page), { timeout: 10_000 })

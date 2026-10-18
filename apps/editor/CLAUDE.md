@@ -14,8 +14,8 @@ PM-0001; it was MPL-2.0 OR PMEL before). (This repo was proprietary / All-Rights
 until 2026-06-22, when it was opened.)
 
 - **License headers apply to every source file** (AGPL Exhibit-style notice
-  + PMEL, pointing at LICENSE.md). New source files carry it — copy it
-  verbatim from the top of any existing source file, or see `CONTRIBUTING.md`.
+  - PMEL, pointing at LICENSE.md). New source files carry it — copy it
+    verbatim from the top of any existing source file, or see `CONTRIBUTING.md`.
 - This repo consumes the engine **across a package boundary** — the
   published `@paged-media` wasm/SDK packages — **never** a Rust path
   dependency, and never reaches into core's source tree.

@@ -105,7 +105,10 @@ async function strokeWeightOf(
         __canvas: {
           client: {
             elementProperties: (id: unknown) => Promise<{
-              entries?: Array<{ path: string; value?: { type: string; value?: number } | null }>;
+              entries?: Array<{
+                path: string;
+                value?: { type: string; value?: number } | null;
+              }>;
             } | null>;
           };
         };
@@ -182,7 +185,9 @@ test.describe("journey · paged.draw plugin", () => {
 
     let snap = await pathAnchorsOf(page, ref);
     expect(snap?.anchors, "the authored path has 3 anchors").toHaveLength(3);
-    expect(snap?.subpathOpen?.[0] ?? false, "Pen committed an open path").toBe(true);
+    expect(snap?.subpathOpen?.[0] ?? false, "Pen committed an open path").toBe(
+      true,
+    );
 
     // Re-fit so the live camera is settled for the refinement clicks.
     await fitFirstPage(page);
@@ -197,7 +202,9 @@ test.describe("journey · paged.draw plugin", () => {
         .poll(() => anchorCount(page, ref), { timeout: 6_000 })
         .toBe(4);
     } catch {
-      failures.push(`add anchor: count stayed ${await anchorCount(page, ref)} (expected 4)`);
+      failures.push(
+        `add anchor: count stayed ${await anchorCount(page, ref)} (expected 4)`,
+      );
     }
 
     // ── 3. DELETE ANCHOR — `-` arms Delete; clicking the anchor we just
@@ -209,7 +216,9 @@ test.describe("journey · paged.draw plugin", () => {
         .poll(() => anchorCount(page, ref), { timeout: 6_000 })
         .toBe(3);
     } catch {
-      failures.push(`delete anchor: count stayed ${await anchorCount(page, ref)} (expected 3)`);
+      failures.push(
+        `delete anchor: count stayed ${await anchorCount(page, ref)} (expected 3)`,
+      );
     }
 
     // ── 4. CONVERT ANCHOR — `shift+c` arms Convert; clicking the MIDDLE
@@ -227,7 +236,10 @@ test.describe("journey · paged.draw plugin", () => {
             const s = await pathAnchorsOf(page, ref);
             const a = s?.anchors[1];
             if (!a) return 0;
-            return Math.hypot(a.right[0] - a.anchor[0], a.right[1] - a.anchor[1]);
+            return Math.hypot(
+              a.right[0] - a.anchor[0],
+              a.right[1] - a.anchor[1],
+            );
           },
           { timeout: 6_000 },
         )
@@ -261,6 +273,9 @@ test.describe("journey · paged.draw plugin", () => {
     // One run, all the bundle contributions reported. The pen author and
     // the 3-anchor commit above are HARD assertions (they gate the test);
     // the per-step refinements collect so a partial drive is visible.
-    expect(failures, `paged.draw refinement steps that did not drive: ${failures.join("; ")}`).toEqual([]);
+    expect(
+      failures,
+      `paged.draw refinement steps that did not drive: ${failures.join("; ")}`,
+    ).toEqual([]);
   });
 });

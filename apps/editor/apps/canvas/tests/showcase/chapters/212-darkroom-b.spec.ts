@@ -36,7 +36,6 @@ import { build as paintType } from "../pages/210-darkroom/05-paint-type";
 import { build as psd } from "../pages/210-darkroom/06-psd";
 import { build as loop } from "../pages/210-darkroom/07-loop";
 
-
 // Continuation of 210-darkroom - split for the in-chain per-op cost;
 // the checkpoint chain absorbs splits with zero logic change.
 annualChapter({

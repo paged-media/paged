@@ -65,7 +65,10 @@ export type ShellValueType =
 
 /** A struct field: its type, plus whether it may be absent and the value
  *  a new item starts from (plugin-api `StructField`). */
-export type ShellStructField = ShellValueType & { optional?: boolean; default?: unknown };
+export type ShellStructField = ShellValueType & {
+  optional?: boolean;
+  default?: unknown;
+};
 
 /** One edit of a LIST or STRUCT value (plugin-api `ValueEdit`, §12.8): a
  *  list field adds, removes, reorders or edits ONE item; a struct field

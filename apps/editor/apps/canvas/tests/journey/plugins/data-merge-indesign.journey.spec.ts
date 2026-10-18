@@ -86,7 +86,11 @@ async function pageTexts(page: Page): Promise<string[][]> {
       }
     ).__canvas;
     const tree = await c.client.send({ kind: "requestSceneTree" });
-    type Node = { kind: string; id?: { kind: string; id: string } | null; children?: Node[] };
+    type Node = {
+      kind: string;
+      id?: { kind: string; id: string } | null;
+      children?: Node[];
+    };
     const pages: { kind: string; id: string }[][] = [];
     const walk = (nodes: Node[]) => {
       for (const n of nodes) {
@@ -94,7 +98,10 @@ async function pageTexts(page: Page): Promise<string[][]> {
           pages.push(
             (n.children ?? [])
               .map((x) => x.id)
-              .filter((id): id is { kind: string; id: string } => !!id && id.kind === "textFrame"),
+              .filter(
+                (id): id is { kind: string; id: string } =>
+                  !!id && id.kind === "textFrame",
+              ),
           );
         } else if (n.children) walk(n.children);
       }
@@ -102,15 +109,30 @@ async function pageTexts(page: Page): Promise<string[][]> {
     walk(((tree.payload as { roots?: Node[] }).roots ?? []) as Node[]);
     const out: string[][] = [];
     for (const frames of pages) {
-      const g = await c.client.send({ kind: "requestElementGeometry", payload: { ids: frames } });
-      const items = ((g.payload as { items?: { storyId?: string }[] }).items ?? []);
+      const g = await c.client.send({
+        kind: "requestElementGeometry",
+        payload: { ids: frames },
+      });
+      const items =
+        (g.payload as { items?: { storyId?: string }[] }).items ?? [];
       const texts: string[] = [];
       for (const it of items) {
         if (!it.storyId) continue;
-        const r = await c.client.send({ kind: "requestStoryContent", payload: { storyId: it.storyId } });
-        const content = (r.payload as { content?: { paragraphs: { runs: { text: string }[] }[] } }).content;
+        const r = await c.client.send({
+          kind: "requestStoryContent",
+          payload: { storyId: it.storyId },
+        });
+        const content = (
+          r.payload as {
+            content?: { paragraphs: { runs: { text: string }[] }[] };
+          }
+        ).content;
         texts.push(
-          content ? content.paragraphs.map((p) => p.runs.map((x) => x.text).join("")).join("\n") : "",
+          content
+            ? content.paragraphs
+                .map((p) => p.runs.map((x) => x.text).join(""))
+                .join("\n")
+            : "",
         );
       }
       out.push(texts.sort());
@@ -140,13 +162,21 @@ async function importCsv(page: Page, designer: Designer): Promise<void> {
   const status = page.locator("[data-status]").last();
   try {
     await expect
-      .poll(async () => (await status.getAttribute("data-status").catch(() => null)) ?? "?", {
-        timeout: 45_000,
-      })
+      .poll(
+        async () =>
+          (await status.getAttribute("data-status").catch(() => null)) ?? "?",
+        {
+          timeout: 45_000,
+        },
+      )
       .toBe("ready");
   } catch {
-    const got = (await status.getAttribute("data-status").catch(() => null)) ?? "unknown";
-    skipWithoutDuckDB(got, `the data-merge journey needs DuckDB-WASM to boot (engine status "${got}")`);
+    const got =
+      (await status.getAttribute("data-status").catch(() => null)) ?? "unknown";
+    skipWithoutDuckDB(
+      got,
+      `the data-merge journey needs DuckDB-WASM to boot (engine status "${got}")`,
+    );
   }
 }
 
@@ -184,11 +214,15 @@ test.describe("journey · paged.data Data Merge", () => {
     const expected = RECORDED.merged.pages.map((p) =>
       p.text_frames.map((t) => normalise(t.text)).sort(),
     );
-    await expect.poll(async () => pageTexts(page), { timeout: 30_000 }).toEqual(expected);
+    await expect
+      .poll(async () => pageTexts(page), { timeout: 30_000 })
+      .toEqual(expected);
 
     // ── MERGE AGAIN — replaces the first run ──────────────────────────────
     await merge(page);
-    await expect.poll(async () => pageTexts(page), { timeout: 30_000 }).toEqual(expected);
+    await expect
+      .poll(async () => pageTexts(page), { timeout: 30_000 })
+      .toEqual(expected);
 
     // ── UNDO — one step per merge on engine protocol 69 (pages and content
     // in one batch), two before (pages, then content) ──────────────────────
@@ -197,7 +231,9 @@ test.describe("journey · paged.data Data Merge", () => {
       await designer.runCommand(CMD.undo);
       await page.waitForTimeout(250);
     }
-    await expect.poll(async () => pageTexts(page), { timeout: 30_000 }).toEqual(expected);
+    await expect
+      .poll(async () => pageTexts(page), { timeout: 30_000 })
+      .toEqual(expected);
     if (ONE_STEP_MERGE) {
       // One more undo takes the first merge back whole: the template page.
       await designer.runCommand(CMD.undo);
@@ -209,7 +245,9 @@ test.describe("journey · paged.data Data Merge", () => {
     // One more takes the first merge's content back: its pages stay, empty.
     await designer.runCommand(CMD.undo);
     await expect
-      .poll(async () => (await pageTexts(page)).map((p) => p.length), { timeout: 30_000 })
+      .poll(async () => (await pageTexts(page)).map((p) => p.length), {
+        timeout: 30_000,
+      })
       .toEqual([0, 0, 0]);
     // And the last one, the first merge's pages: the template is back — one
     // page, its one frame, its placeholders (D-29: the editor used to bring

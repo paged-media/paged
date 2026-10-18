@@ -36,7 +36,11 @@ export const POINTS_PER_UNIT: Record<LengthUnit, number> = {
 };
 
 /** Convert a value from `from` to `to`. */
-export function convertLength(value: number, from: LengthUnit, to: LengthUnit): number {
+export function convertLength(
+  value: number,
+  from: LengthUnit,
+  to: LengthUnit,
+): number {
   if (from === to) return value;
   const inPoints = value * POINTS_PER_UNIT[from];
   return inPoints / POINTS_PER_UNIT[to];

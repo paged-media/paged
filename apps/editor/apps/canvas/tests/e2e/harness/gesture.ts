@@ -67,7 +67,9 @@ interface ClientSurface {
     d: [number, number],
     m: unknown,
   ) => Promise<{ pageIds: string[]; snapLines: unknown[] }>;
-  commitGesture: (h: number) => Promise<{ appliedSeq: number; pageIds: string[] }>;
+  commitGesture: (
+    h: number,
+  ) => Promise<{ appliedSeq: number; pageIds: string[] }>;
   cancelGesture: (h: number) => Promise<string[]>;
   undo: () => Promise<unknown>;
   redo: () => Promise<unknown>;
@@ -110,7 +112,11 @@ export async function updateGesture(
   return page.evaluate(
     async ({ handle, delta, mods }) => {
       const c = (globalThis as unknown as CanvasGlobal).__canvas;
-      return (await c.client.updateGesture(handle, delta, mods)) as UpdateResult;
+      return (await c.client.updateGesture(
+        handle,
+        delta,
+        mods,
+      )) as UpdateResult;
     },
     { handle, delta, mods },
   );
@@ -250,7 +256,10 @@ export async function installGestureRecorder(page: Page): Promise<void> {
     if (g.__gestureUnsub) return;
     g.__gestureLog = [];
     g.__gestureUnsub = g.__canvas.client.subscribe((msg) => {
-      const m = msg as { kind: string; payload?: { error?: { kind?: string } } };
+      const m = msg as {
+        kind: string;
+        payload?: { error?: { kind?: string } };
+      };
       if ((kinds as readonly string[]).includes(m.kind)) {
         g.__gestureLog!.push({
           kind: m.kind,
@@ -272,9 +281,6 @@ export async function drainGestureLog(
   });
 }
 
-export function countKind(
-  log: Array<{ kind: string }>,
-  kind: string,
-): number {
+export function countKind(log: Array<{ kind: string }>, kind: string): number {
   return log.filter((e) => e.kind === kind).length;
 }

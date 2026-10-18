@@ -40,7 +40,12 @@ import { fileURLToPath } from "node:url";
 
 import { openPanel } from "../../../fidelity/canvas-driver";
 import { withActivePage } from "../../active-page";
-import { marginNote, proseFrame, specLabel, type Para } from "../../annual-support";
+import {
+  marginNote,
+  proseFrame,
+  specLabel,
+  type Para,
+} from "../../annual-support";
 import { STYLE, SWATCH, p } from "../../names-annual";
 import {
   ConsoleTap,
@@ -63,7 +68,14 @@ import {
 } from "./00-support";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const ARTICLE = pathResolve(__dirname, "..", "..", "assets", "web", "long-read.html");
+const ARTICLE = pathResolve(
+  __dirname,
+  "..",
+  "..",
+  "assets",
+  "web",
+  "long-read.html",
+);
 
 /** The web frame's slot, page-space (x0, y0, x1, y1). */
 const FRAME: [number, number, number, number] = [60, 186, 268, 560];
@@ -79,20 +91,28 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   ];
   const elements: string[] = [];
 
-  const head = await proseFrame(ctx, p(104), [60, 96, 492, 124], [
-    { text: "Source beside render", style: STYLE.head1 },
-  ]);
-  const intro = await proseFrame(ctx, p(104), [60, 128, 492, 178], [
-    {
-      text:
-        "The frame on the left is an ordinary rectangle whose document " +
-        "metadata carries this year's long read as HTML and CSS. The " +
-        "column on the right prints an excerpt of exactly what the " +
-        "envelope holds. The engine that laid the article out is a real " +
-        "browser stack, compiled to wasm, drawing into the frame.",
-      style: STYLE.bodySmall,
-    },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    p(104),
+    [60, 96, 492, 124],
+    [{ text: "Source beside render", style: STYLE.head1 }],
+  );
+  const intro = await proseFrame(
+    ctx,
+    p(104),
+    [60, 128, 492, 178],
+    [
+      {
+        text:
+          "The frame on the left is an ordinary rectangle whose document " +
+          "metadata carries this year's long read as HTML and CSS. The " +
+          "column on the right prints an excerpt of exactly what the " +
+          "envelope holds. The engine that laid the article out is a real " +
+          "browser stack, compiled to wasm, drawing into the frame.",
+        style: STYLE.bodySmall,
+      },
+    ],
+  );
   elements.push(head.frameId, intro.frameId);
 
   // ── the frame, through the bundle's own insert command ───────────
@@ -202,8 +222,8 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       notes.push(
         answered
           ? "the Blitz/WASM engine did not load in this lane — the frame " +
-            "carries its source but no live paint; plugin-web.engine-rendering " +
-            "is NOT claimed"
+              "carries its source but no live paint; plugin-web.engine-rendering " +
+              "is NOT claimed"
           : `renderWebFrame reported no outcome within 25 s (saw: ${tap.join() || "nothing"})`,
       );
     }
@@ -240,18 +260,23 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const specimen = await proseFrame(ctx, p(104), [280, 186, 492, 560], paras);
   elements.push(specimen.frameId);
 
-  const status = await proseFrame(ctx, p(104), [60, 574, 492, 630], [
-    {
-      text: rendered
-        ? "Rendered live: the engine submitted a scene layer that core " +
-          "composes inside the frame. That paint is session state — the " +
-          "envelope beside it is what the document keeps."
-        : "The web engine did not load on this build lane, so the frame " +
-          "carries its committed source without live paint; a lane with " +
-          "the engine renders it. The envelope round-trips either way.",
-      style: STYLE.caption,
-    },
-  ]);
+  const status = await proseFrame(
+    ctx,
+    p(104),
+    [60, 574, 492, 630],
+    [
+      {
+        text: rendered
+          ? "Rendered live: the engine submitted a scene layer that core " +
+            "composes inside the frame. That paint is session state — the " +
+            "envelope beside it is what the document keeps."
+          : "The web engine did not load on this build lane, so the frame " +
+            "carries its committed source without live paint; a lane with " +
+            "the engine renders it. The envelope round-trips either way.",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(status.frameId);
 
   elements.push(

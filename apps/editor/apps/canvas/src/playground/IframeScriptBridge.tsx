@@ -44,13 +44,20 @@ import { useEffect } from "react";
 import { type CanvasHandleLike } from "@paged-media/shell";
 import { seedPrelude } from "./seeds";
 
-type ScriptClient = { executeScript(source: string): Promise<{ output: string[]; error: string | null }> };
+type ScriptClient = {
+  executeScript(
+    source: string,
+  ): Promise<{ output: string[]; error: string | null }>;
+};
 type Handle = CanvasHandleLike & { client?: ScriptClient };
 
 function allowedOrigins(): string[] {
-  const configured = (import.meta.env.VITE_DOCS_ORIGIN as string | undefined) || "https://docs.paged.media";
+  const configured =
+    (import.meta.env.VITE_DOCS_ORIGIN as string | undefined) ||
+    "https://docs.paged.media";
   const list = [configured];
-  if (import.meta.env.DEV) list.push("http://localhost:3000", "http://127.0.0.1:3000");
+  if (import.meta.env.DEV)
+    list.push("http://localhost:3000", "http://127.0.0.1:3000");
   return list;
 }
 
@@ -73,7 +80,11 @@ export function IframeScriptBridge(): null {
     // command registry is invoked elsewhere (invoke ?? execute ?? run).
     const newDocument = async () => {
       const c = handle()?.registries?.commands as
-        | { invoke?: (id: string) => unknown; execute?: (id: string) => unknown; run?: (id: string) => unknown }
+        | {
+            invoke?: (id: string) => unknown;
+            execute?: (id: string) => unknown;
+            run?: (id: string) => unknown;
+          }
         | undefined;
       const fn = c?.invoke ?? c?.execute ?? c?.run;
       if (fn) {
@@ -126,12 +137,20 @@ export function IframeScriptBridge(): null {
 
     const onMessage = async (event: MessageEvent) => {
       if (!isAllowed(event.origin)) return;
-      const data = event.data as { type?: string; id?: number; source?: string; reseed?: boolean };
+      const data = event.data as {
+        type?: string;
+        id?: number;
+        source?: string;
+        reseed?: boolean;
+      };
       if (data?.type !== "paged:run" || typeof data.source !== "string") return;
 
       const reply = (payload: { output: string[]; error: string | null }) => {
         try {
-          (event.source as WindowProxy | null)?.postMessage({ type: "paged:result", id: data.id, ...payload }, event.origin);
+          (event.source as WindowProxy | null)?.postMessage(
+            { type: "paged:result", id: data.id, ...payload },
+            event.origin,
+          );
         } catch {
           /* source gone */
         }
@@ -139,7 +158,10 @@ export function IframeScriptBridge(): null {
 
       const client = handle()?.client;
       if (!client) {
-        reply({ output: [], error: "editor is still loading — try again in a moment" });
+        reply({
+          output: [],
+          error: "editor is still loading — try again in a moment",
+        });
         return;
       }
       try {
@@ -152,7 +174,10 @@ export function IframeScriptBridge(): null {
         const result = await client.executeScript(data.source);
         reply({ output: result.output ?? [], error: result.error ?? null });
       } catch (err) {
-        reply({ output: [], error: err instanceof Error ? err.message : String(err) });
+        reply({
+          output: [],
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     };
 
