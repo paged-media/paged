@@ -589,7 +589,7 @@ over a set of items. The `GroupSpec` has no clip flag and core's parsed
 
 ```bash
 pnpm install && pnpm test && pnpm -r typecheck
-node ../plugin-sdk/packages/plugin-cli/bin/paged-plugin.mjs validate packages/draw-bundle/manifest.json
+node ../../platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs validate packages/draw-bundle/manifest.json
 
 # The Rust half (only needed when crates/ changes — the artifact is committed)
 cargo fmt --all && cargo clippy --workspace --all-targets -- -D warnings
