@@ -5,8 +5,8 @@
   "license": "MPL-2.0 OR LicenseRef-PMEL",
   "repository": {
     "type": "git",
-    "url": "https://github.com/paged-media/core.git",
-    "directory": "web/idml-viewer"
+    "url": "git+https://github.com/paged-media/paged.git",
+    "directory": "engine/core/web/idml-viewer"
   },
   "type": "module",
   "main": "dist/index.js",
