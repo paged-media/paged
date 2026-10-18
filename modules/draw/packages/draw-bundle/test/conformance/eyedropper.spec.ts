@@ -27,7 +27,7 @@
 // (the handler's honest scope) — asserted here only through property
 // reads.
 
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 import type {
   CanvasPointerEvent,

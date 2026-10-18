@@ -33,7 +33,7 @@
 // batch leaving the same document the stepwise chain leaves, are
 // asserted where the counts are — test/perf/perf-budgets-freehand.spec.ts.
 
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 import type {
   CanvasPointerEvent,

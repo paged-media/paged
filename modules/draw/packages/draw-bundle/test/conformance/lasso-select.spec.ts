@@ -25,7 +25,7 @@
 // `mode` option. handlers/lasso.ts documents both. F1's leaf centers:
 // rectangle (200, 200), polygon (250, 500), line (250, 675).
 
-import { describe, expect, it, beforeAll, beforeEach, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, beforeEach, afterAll } from "bun:test";
 
 import type { CanvasPointerEvent, ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";

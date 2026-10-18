@@ -36,7 +36,7 @@
 //   (6) the TOOL: click attaches, alt+click detaches, a text frame under
 //       the click is refused with the reason, empty canvas is a no-op.
 
-import { describe, expect, it, beforeAll, beforeEach, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, beforeEach, afterAll } from "bun:test";
 
 import type {
   CanvasPointerEvent,

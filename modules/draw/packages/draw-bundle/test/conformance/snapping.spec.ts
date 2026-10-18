@@ -23,7 +23,7 @@
 // target the plugin-side fallback cannot see. That case skips on an
 // older engine; `PAGED_REQUIRE_V67=1` makes the skip a failure.
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
@@ -67,6 +67,20 @@ async function curve(
   return table!.anchors.map((a: { anchor: number[] }) => a.anchor);
 }
 
+// Whether the engine answers requestSnapPoint (protocol 67), probed once
+// while the file loads: bun:test has no runtime skip (vitest's ctx.skip()),
+// so the case that needs it is skipIf'd on it instead.
+const V67 = await (async () => {
+  const p = await openHost();
+  try {
+    await p.load(F4_OVERLAP.bytes());
+    const probe = await p.host.document.snapPoint?.({ pageId: PAGE, point: [1, 1], cameraScale: 1 });
+    return !!probe && probe.tolerancePt !== 0;
+  } finally {
+    p.dispose();
+  }
+})();
+
 describe("draw conformance — snapping for point-placing tools (C-68)", () => {
   let h: HeadlessHost;
   beforeAll(async () => {
@@ -86,17 +100,14 @@ describe("draw conformance — snapping for point-placing tools (C-68)", () => {
     expect(anchors[1]![1]).toBeCloseTo(CENTRE[1], 3);
   });
 
-  it("protocol 67: a Curvature point lands on another path's anchor", async (ctx) => {
+  it.skipIf(!V67 && process.env.PAGED_REQUIRE_V67 !== "1")("protocol 67: a Curvature point lands on another path's anchor", async () => {
     const probe = await h.host.document.snapPoint?.({
       pageId: PAGE,
       point: [1, 1],
       cameraScale: 1,
     });
     if (!probe || probe.tolerancePt === 0) {
-      if (process.env.PAGED_REQUIRE_V67 === "1") {
-        throw new Error("PAGED_REQUIRE_V67=1 but the engine does not answer requestSnapPoint");
-      }
-      ctx.skip();
+      throw new Error("PAGED_REQUIRE_V67=1 but the engine does not answer requestSnapPoint");
     }
     // A first path with an anchor at (200, 520): clear of the page's
     // centre lines (306 / 396) and edges.

@@ -29,7 +29,7 @@
 // gradient assignment (or its undo) flips the section without a
 // selection change. That reactive loop is asserted here end-to-end.
 
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 import type {
   CommandContribution,

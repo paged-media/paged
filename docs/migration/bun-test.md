@@ -62,6 +62,9 @@ package. It is gated on
 | plugin-sdk | 713 | 715 | yes, + 2 | codemod; `modules.spec` stubs `fetch` by hand (a public package does not import the internal kit, PM-0002). The 2 new ids are B6's tests (efa3d9597), merged from main between the base and the flip |
 | ai | 31 | 31 | yes | codemod; tsconfig `types` gains `bun` |
 | cli | 54 + 1 skipped | 54 + 1 skipped | yes | `vitest.config.ts` deleted: one file at a time and 120 s timeouts become `bun test --timeout 120000` (no `--parallel`); its `server.deps.inline` was a Vite transform bun does not need. `.runIf` → `.if` (with a boolean). The shipped `node-shims.ts` routes DuckDB's worker in-process under Bun too (below) |
+| draw-geometry | 681 | 681 | yes | codemod; one `.each` title: vitest's `$name` quoted strings, bun's does not, so the quotes are in the title; 5 bench files → mitata |
+| draw-tools | 337 | 337 | yes | codemod; 1 bench file → mitata |
+| draw-bundle | 1645 + 34 skipped | 1480 + 34 skipped (main) + 165 (DOM) | yes, with 12 renamed files | the 12 jsdom specs become `test/panels/*.dom.test.tsx` in the DOM task; 3 conformance files' `ctx.skip()` → load-time probes + `it.skipIf`; `expect.poll` → `waitFor`; 1 bench file → mitata |
 
 ## Refactors beyond the codemod
 
@@ -140,3 +143,33 @@ pass. `tooling/js/bun-test-setup.ts`, which every package's `bun test` preloads,
 matcher: it remembers each property of the received value that the expected object reaches, runs
 bun's matcher and puts each one back. The test kit's suite proves the wrapper (it fails without
 the preload).
+
+### The DOM split (draw-bundle)
+
+The twelve panel specs that declared `// @vitest-environment jsdom` render React panels against
+the real engine. They are now `test/panels/<name>.dom.test.tsx` (the docblock is gone) and run in
+a separate task, `bun run test:dom`, which preloads `test/happydom.ts` (happy-dom's
+`GlobalRegistrator`). The main `bun test` skips them (`--path-ignore-patterns
+'**/*.dom.test.*'`), so no other suite sees a global `window`: code that asks `typeof window`
+(the wasm boot paths) still knows it is not in a browser. The engine boots under happy-dom as it
+did under jsdom (the harness reads the wasm off disk). Triage of jsdom → happy-dom: no spec
+needed a change for happy-dom itself; the one failure was `expect.poll`, which bun:test lacks
+(now the test kit's `waitFor`, same defaults). The module's `bun run test` runs both tasks, and
+draw-vitest.yml concatenates both reports into `vitest-junit`. The rename changes these 165
+tests' classnames (`test/panels/x.spec.tsx` → `test/panels/x.dom.test.tsx`); the feature
+registry's map is rewritten for it (see the Cockpit proof).
+
+### Runtime skips in draw-bundle
+
+`create-outlines`, `snapping` and `page-space` skipped five cases at run time when the engine
+lacked a door (protocol 66 outlines, protocol 67 snapping, page origins). Each file now probes
+its engine once while it loads (a throwaway headless host, the same calls the tests make) and
+the cases are `it.skipIf` on the result. The `PAGED_REQUIRE_V66`/`V67` switches still turn the
+skip into a failure.
+
+### Benchmarks
+
+The seven `*.bench.ts` files (vitest's `bench`) run on [mitata](https://github.com/evanwashere/mitata):
+`describe` → mitata's `group`, `bench` unchanged, `await run()` at the end, and each package's
+`bench` script runs the files with `bun`. They stay trended, not gated, and run in no CI lane, as
+before.

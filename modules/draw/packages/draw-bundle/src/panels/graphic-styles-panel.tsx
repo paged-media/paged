@@ -168,7 +168,7 @@ export function makeGraphicStylesPanel(host: BundleHost): {
     const [link, setLink] = React.useState<SelectionLink>(NO_LINK);
     const [portable, setPortable] = React.useState(true);
 
-    // WHAT A RELOAD COSTS (`test/panels/graphic-styles-panel.spec.tsx`,
+    // WHAT A RELOAD COSTS (`test/panels/graphic-styles-panel.dom.test.tsx`,
     // and it may only go down): the library part once, and — once per
     // document REVISION — the links (out of the walk every panel shares)
     // and ONE property read, of the selected element, for its

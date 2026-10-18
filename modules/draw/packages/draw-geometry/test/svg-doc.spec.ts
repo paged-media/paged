@@ -21,7 +21,7 @@
 // matrix/rotate, nested groups), and a full document round-trip (parse →
 // serialize → re-parse with geometry stable within tolerance).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   parseSvgDocument,

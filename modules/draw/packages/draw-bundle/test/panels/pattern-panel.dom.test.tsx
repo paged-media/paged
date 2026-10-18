@@ -16,9 +16,8 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// @vitest-environment jsdom
 
-// The PATTERN OPTIONS panel, RENDERED (jsdom) against the real engine:
+// The PATTERN OPTIONS panel, RENDERED (happy-dom) against the real engine:
 // behaviour first (empty state, records, buttons asserted on the
 // DOCUMENT), then its reload budgets as counts at the host doors — the
 // perf-budgets.spec.ts rules: MEASURED, target beside it, only lowered.
@@ -32,7 +31,7 @@
 // (`src/link-index.ts`), one part read per reload, the newest reload
 // wins.
 
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 
 import { metadataReadsPerLeaf } from "../engine-reads";
 
@@ -193,7 +192,7 @@ describe("Pattern options panel — rendered against the engine", () => {
       expect(panel.text()).toContain("Grid · 3 × 1 (2 copies requested, 2 placed)");
     });
 
-    // WAS A BUG (measured, then fixed) — the same one blend-panel.spec.tsx
+    // WAS A BUG (measured, then fixed) — the same one blend-panel.dom.test.tsx
     // pins, in this panel's copy of the code. With EXACTLY ONE field in
     // the library `resolvePatternField` answers that field whatever is
     // selected, and every reload ended in `if (saved)
@@ -245,7 +244,7 @@ describe("Pattern options panel — rendered against the engine", () => {
       expect(panel.count("[data-draw-pattern-row]")).toBe(0);
     });
 
-    // WAS A BUG (measured, then fixed) — the one blend-panel.spec.tsx
+    // WAS A BUG (measured, then fixed) — the one blend-panel.dom.test.tsx
     // explains, seen from the other end: a recipe write is not an event.
     // A BAKE happened to be followed (`applyMakePattern` saves the recipe
     // before it emits), but `applyReleasePattern` drops the recipe AFTER
@@ -273,7 +272,7 @@ describe("Pattern options panel — rendered against the engine", () => {
       },
     );
 
-    // The same, in the order the EDITOR has (see blend-panel.spec.tsx):
+    // The same, in the order the EDITOR has (see blend-panel.dom.test.tsx):
     // the recipe write lands a task after the reload the mutation
     // started. This is the case that fails without the announcement —
     // with the headless engine's synchronous replies the whole command
@@ -401,7 +400,7 @@ describe("Pattern options panel — rendered against the engine", () => {
 
     // WAS A BUG (measured, then fixed) — the last reload to FINISH won,
     // not the last to start, and the panel showed "" with a source of
-    // pat-1 selected; see blend-panel.spec.tsx for the mechanism.
+    // pat-1 selected; see blend-panel.dom.test.tsx for the mechanism.
     it(
       "the panel ends on the LATEST selection when a slower, older reload is still in flight",
       async () => {

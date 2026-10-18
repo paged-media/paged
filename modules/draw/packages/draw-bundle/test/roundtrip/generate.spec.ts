@@ -23,7 +23,7 @@
 // environment variable so `pnpm test` never rewrites a committed fixture:
 //
 //   PAGED_ROUNDTRIP_WRITE=1 pnpm --filter @paged-media/draw exec \
-//     vitest run test/roundtrip/generate.spec.ts
+//     bun test test/roundtrip/generate.spec.ts
 //   PAGED_ROUNDTRIP_WRITE=pen-open,join …   (only these cases)
 //
 // A re-generated IDML makes its recording STALE: `roundtrip.spec.ts`
@@ -32,7 +32,7 @@
 
 import { mkdirSync, writeFileSync } from "node:fs";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { ROUNDTRIP_CASES, authorCase } from "./author";
 import { ROUNDTRIP_FIXTURES, idmlPath } from "./indesign";
@@ -43,7 +43,7 @@ const wanted = (id: string): boolean =>
 
 describe.skipIf(WRITE === "")("round trip — write the IDML InDesign is asked to read", () => {
   for (const c of ROUNDTRIP_CASES) {
-    it.runIf(wanted(c.id))(`${c.id}: ${c.row}`, async () => {
+    it.if(wanted(c.id))(`${c.id}: ${c.row}`, async () => {
       const authored = await authorCase(c);
       try {
         mkdirSync(ROUNDTRIP_FIXTURES, { recursive: true });

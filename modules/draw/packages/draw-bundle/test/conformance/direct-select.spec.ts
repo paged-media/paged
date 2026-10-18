@@ -35,7 +35,7 @@
 // spine (B-17, the same boundary `test/replay.ts` names). The hit
 // description is the host's job, so the specs state it directly.
 
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 import type { ElementId, PathAnchorsResult } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";

@@ -46,7 +46,7 @@
 //       its direction, every other one is wound against it.
 
 import { inflateSync } from "node:zlib";
-import { describe, expect, it, beforeAll, afterAll, beforeEach } from "vitest";
+import { describe, expect, it, beforeAll, afterAll, beforeEach } from "bun:test";
 
 import type {
   CommandContribution,

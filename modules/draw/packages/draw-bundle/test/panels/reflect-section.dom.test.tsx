@@ -16,7 +16,6 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// @vitest-environment jsdom
 
 // The REFLECT section of the Path Options panel, rendered against the
 // real engine: the ANGLE typed is the axis the selection is mirrored
@@ -24,7 +23,8 @@
 // Transform again repeats, and Copy is OFFERED only where the engine has
 // `duplicateElements` — on this engine (0.64) it is disabled and says why.
 
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "bun:test";
+import { waitFor } from "@paged-media/test-kit";
 
 import type { ElementId, PathAnchorsResult } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
@@ -97,9 +97,10 @@ describe("the Reflect section — rendered against the engine", () => {
   it("COPY is offered where the engine can copy (0.65, duplicateElements): enabled, and no excuse is shown", async () => {
     const panel = await mountPanel(h, makePathOptionsPanel);
     await panel.click(HEADER);
-    await expect
-      .poll(() => panel.get<HTMLInputElement>(`[data-draw-pathopts-toggle="reflect.copy"]`).disabled)
-      .toBe(false);
+    // vitest's expect.poll (bun:test has none): the kit's waitFor, same defaults.
+    await waitFor(() =>
+      expect(panel.get<HTMLInputElement>(`[data-draw-pathopts-toggle="reflect.copy"]`).disabled).toBe(false),
+    );
     expect(panel.count("[data-draw-pathopts-reflect-copy-note]")).toBe(0);
     // The note an older engine is shown names the version, not an op.
     expect(REFLECT_COPY_UNAVAILABLE_NOTE).toMatch(/0\.65/);

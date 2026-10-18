@@ -16,9 +16,8 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// @vitest-environment jsdom
 
-// The SYMBOLS panel, RENDERED (jsdom) against the real engine: behaviour
+// The SYMBOLS panel, RENDERED (happy-dom) against the real engine: behaviour
 // first (empty state, records, buttons asserted on the DOCUMENT), then
 // its reload budgets as counts at the host doors — the
 // perf-budgets.spec.ts rules: MEASURED, target beside it, only lowered.
@@ -31,7 +30,7 @@
 // burst, one walk per document REVISION out of the shared link index
 // (`src/link-index.ts`) — and a selection is a lookup in that walk.
 
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 
 import { metadataReadsPerLeaf } from "../engine-reads";
 

@@ -27,15 +27,11 @@
       "react": "^18.3.1",
       "react-dom": "^18.3.1",
       "typescript": "^5.9.3",
-      "vite": "^6.4.3",
-      "vitest": "^2.1.9"
+      "vite": "^6.4.3"
     },
     "catalogs": {
       "node25": {
         "@types/node": "^25.9.6"
-      },
-      "vitest3": {
-        "vitest": "^3.2.7"
       }
     }
   },

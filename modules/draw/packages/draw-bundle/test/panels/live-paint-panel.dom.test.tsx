@@ -16,9 +16,8 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// @vitest-environment jsdom
 
-// The LIVE PAINT panel, RENDERED (jsdom) against the real engine:
+// The LIVE PAINT panel, RENDERED (happy-dom) against the real engine:
 // behaviour first (empty state, records, buttons asserted on the
 // DOCUMENT), then its reload budgets as counts at the host doors — the
 // perf-budgets.spec.ts rules: MEASURED, target beside it, only lowered.
@@ -32,7 +31,7 @@
 // and the swatch collection once per document REVISION, so a selection
 // change reads neither; one part read per reload.
 
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 
 import { metadataReadsPerLeaf } from "../engine-reads";
 
@@ -298,7 +297,7 @@ describe("Live paint panel — rendered against the engine", () => {
       expect(panel.count("[data-draw-live-paint-face]")).toBe(1);
     });
 
-    // The same, in the order the EDITOR has (see blend-panel.spec.tsx):
+    // The same, in the order the EDITOR has (see blend-panel.dom.test.tsx):
     // the recipe write lands a task after the reload the insert started.
     // This is the case that fails without the announcement.
     it("…and when the recipe write lands AFTER the reload its insert started", async () => {

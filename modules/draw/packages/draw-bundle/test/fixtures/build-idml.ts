@@ -21,7 +21,7 @@
 // convention the fidelity corpus uses (mimetype STORED first, the rest
 // DEFLATEd) so the engine's parse contract sees a real IDML. Node-only
 // (uses `node:zlib`), which is exactly where these conformance suites
-// run (vitest in Node — the headless host boots the wasm here too).
+// run (bun test — the headless host boots the wasm here too).
 //
 // This replaces the hand-authored single-package fixture
 // (`minimal-idml.ts`, vendored base64) for the CORPUS replay harness:

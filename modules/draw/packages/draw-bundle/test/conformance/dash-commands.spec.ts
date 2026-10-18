@@ -29,7 +29,7 @@
 // selected stroked element lands the mutation at the REAL engine
 // (outcome.applied) — the plugin-web command-test pattern.
 
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 import type {
   CommandContribution,
@@ -112,7 +112,7 @@ describe("draw conformance — dash-preset commands (B-12)", () => {
         "media.paged.draw.command.strokeDashDashDot",
         // The dash EDITOR's "…" command (Draw ▸ Stroke ▸ Dashes…): it
         // raises the Path Options panel at its Stroke dashes section and
-        // writes nothing itself (pinned in `panels/dash-editor.spec.tsx`).
+        // writes nothing itself (pinned in `panels/dash-editor.dom.test.tsx`).
         "media.paged.draw.command.strokeDashOptions",
       ]);
     });

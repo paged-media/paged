@@ -31,7 +31,7 @@
 // pinned-gap test so a future engine fix fails THIS test loudly (the
 // signal to move the polygon onto the round-trip path above).
 
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 

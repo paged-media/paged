@@ -46,7 +46,7 @@
 //       (RFI C-23) — warned at place, and reset falls back to the
 //       recorded origin rather than failing mutely.
 
-import { describe, expect, it, beforeAll, afterAll, beforeEach } from "vitest";
+import { describe, expect, it, beforeAll, afterAll, beforeEach } from "bun:test";
 
 import type {
   BundleHost,

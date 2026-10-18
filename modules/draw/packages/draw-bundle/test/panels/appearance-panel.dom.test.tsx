@@ -16,9 +16,8 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// @vitest-environment jsdom
 
-// The APPEARANCE panel, RENDERED (jsdom) against the real engine:
+// The APPEARANCE panel, RENDERED (happy-dom) against the real engine:
 // behaviour first (empty state, the stack, buttons asserted on the
 // DOCUMENT), then its reload budgets as counts at the host doors — the
 // perf-budgets.spec.ts rules: MEASURED, target beside it, only lowered.
@@ -30,7 +29,7 @@
 // inside a selection listener — and that is one selection behind. It
 // now takes the ids the event hands it (`src/panels/reload.ts`).
 
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 
 import type { ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
