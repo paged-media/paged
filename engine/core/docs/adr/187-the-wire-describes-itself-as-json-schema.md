@@ -7,9 +7,11 @@
   - `crates/paged-mutate`: the `schema` feature and `src/schema.rs`.
   - `platform/extensions/scripts/gen-core-commands.mjs`, which reads the schema.
   - `.github/workflows/core-ci.yml` and Moon's `core:wire-schema`, which check it.
-  - No wire or protocol change. No wasm build turns the feature on. The four wasm packages keep
-    their sizes and their code; their data differs only in the line numbers of three panic
-    locations, which the added attribute lines move.
+  - No wire or protocol change. No wasm build turns the feature on. Built before and after,
+    repo-wasm and sdk are byte-identical, and every `.js` and `.d.ts` is. canvas-wasm and
+    introspect-wasm keep their sizes and their code section; their data sections differ in
+    the line numbers of panic locations the added attribute lines move (three in canvas-wasm,
+    one in introspect-wasm).
 
 ## Context
 
