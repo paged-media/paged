@@ -4,9 +4,9 @@
 //
 // canvas-wasm is a devDependency of this package; the engine is found by
 // probing: PAGED_ENGINE_FROM first (a directory whose node_modules holds a
-// canvas-wasm build, e.g. a local sync-wasm build), then this package, then an editor
-// checkout above this repo (`~/paged/editor/packages/client` in the local
-// workspace layout, `../editor/packages/client` in the sibling CI layout).
+// canvas-wasm build, e.g. a local sync-wasm build), then this package, then the
+// monorepo's editor (`<repo root>/apps/editor/packages/client`, found by walking
+// up from this package).
 // When nothing is found the suite SKIPS — unless REQUIRE_REAL_CORE=1, under
 // which it fails instead, so a CI lane that opts in can never silently drop it.
 
@@ -27,10 +27,10 @@ export function findEngineAnchor(): string | null {
   if (local) return existsSync(join(local, PKG)) ? local : null;
   const own = resolve(HERE, "..");
   if (existsSync(join(own, PKG))) return own;
-  // Walk up from this package looking for an editor checkout beside a parent.
+  // Walk up from this package looking for the monorepo's apps/editor.
   let dir = own;
   for (let i = 0; i < 8; i++) {
-    const candidate = join(dir, "editor/packages/client");
+    const candidate = join(dir, "apps/editor/packages/client");
     if (existsSync(join(candidate, PKG))) return candidate;
     const parent = dirname(dir);
     if (parent === dir) break;
@@ -68,7 +68,7 @@ export async function openRealHost(extra: { engineShaper?: boolean } = {}): Prom
   if (!ENGINE_ANCHOR) {
     throw new Error(
       "REQUIRE_REAL_CORE=1 but no @paged-media/canvas-wasm was found " +
-        "(set PAGED_ENGINE_FROM, or install an editor checkout beside this repo)",
+        "(set PAGED_ENGINE_FROM, or install apps/editor in this repository)",
     );
   }
   const h = await createHeadlessHost({

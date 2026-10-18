@@ -58,7 +58,7 @@ bash scripts/build-wasm.sh
 
 # TS (the bundle); the plugin contract comes from npm at an exact pin
 pnpm install && pnpm typecheck && pnpm test
-pnpm validate:manifest   # needs a plugin-sdk checkout beside this repository
+pnpm validate:manifest   # uses the in-repo platform/extensions plugin-cli
 
 # End-to-end harness (needs the built wasm + vendored DuckDB above):
 # real DuckDB-WASM CSV→Arrow→RecordSet → the real data-js wasm engine →
