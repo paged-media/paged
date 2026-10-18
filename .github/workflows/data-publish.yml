@@ -130,7 +130,7 @@ jobs:
           test -n "$CHROME"
           echo "PAGED_CHROMIUM=$CHROME" >> "$GITHUB_ENV"
       - name: test
-        run: bun scripts/check-contract-imports.mjs && bun run --filter './packages/*' typecheck && bun run --filter './packages/*' test
+        run: bun run --filter './packages/*' typecheck && bun run --filter './packages/*' test
         env:
           REQUIRE_REAL_ENGINE: "1"
           REQUIRE_REAL_DUCKDB: "1"

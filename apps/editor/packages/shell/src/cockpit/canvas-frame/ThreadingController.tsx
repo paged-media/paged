@@ -53,7 +53,6 @@
 
 import { useCallback, useEffect, useRef } from "react";
 
-// eslint-disable-next-line import/no-relative-parent-imports
 import type { Mutation, PageId, StorySummary } from "@paged-media/client";
 
 import { useCamera } from "../../state/camera-context";
@@ -531,7 +530,6 @@ export function ThreadingController() {
     return off;
     // `elementGeometry` is read through `geomRef`; list it so a
     // selection change re-runs the resolve.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client, refreshOverset, refreshChain, elementGeometry]);
 
   return null;

@@ -72,9 +72,10 @@ that write to the document (`src/lower.ts`).
 - The bundle imports the host model by relative path (`../../data-host-model/src`), and
   tsup inlines it, so the published package does not depend on the private one.
 - `@paged-media/plugin-api`, `@paged-media/plugin-sdk` and `react` are peer dependencies.
-  `scripts/check-contract-imports.mjs` fails on a package import outside its allow-list:
-  those three, this repo's own `@paged-media/data-` packages, `@duckdb/duckdb-wasm` and
-  `apache-arrow`.
+  The contract-import lint rule (`/bunfig.toml`, PM-0003) fails on a package import outside its
+  allow-list:
+  those three, the internal shared packages (`platform/shared/*`), this repo's own
+  `@paged-media/data-` packages, `@duckdb/duckdb-wasm` and `apache-arrow`.
 - The TypeScript interface `DataEngineLike` (`src/engine.ts`) repeats the methods of the
   Rust class by hand, except `define_template` and `lower_barcode_at`. Nothing generates it.
 

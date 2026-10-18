@@ -58,8 +58,8 @@ content, and `paged-store` the codec that writes `Document` as a container part
 
 **Output.** `paged-compose` defines the display list, the effect masks and the scene-layer
 types plugins submit. `paged-gpu` owns the `PathRasterizer` trait and two implementations
-behind Cargo features: `cpu` (tiny-skia, the default) and `vello-backend` (Vello 0.10 on
-wgpu 29) ([ADR 100](adr/100-two-rasterisers-one-trait.md)). `paged-renderer` is the
+behind Cargo features: `cpu` (tiny-skia, the default) and `vello-backend` (Vello 0.11 on
+wgpu 30) ([ADR 100](adr/100-two-rasterisers-one-trait.md)). `paged-renderer` is the
 pipeline: `pipeline::build_document`, the asset resolver, diagnostics, and the
 `paged-inspect` binary. `paged-export-pdf` writes PDF from the display list
 ([ADR 119](adr/119-pdf-export-backend.md)). `paged-composition-render` renders a

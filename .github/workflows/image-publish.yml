@@ -80,7 +80,7 @@ jobs:
       # manifest package validates through a sibling plugin-sdk checkout,
       # which ci has and this job does not.
       - name: test
-        run: bun scripts/check-contract-imports.mjs && bun run --cwd glue test
+        run: bun run --cwd glue test
         env:
           REQUIRE_REAL_WASM: "1"
       - run: bun run --filter './glue' --filter './manifest' build

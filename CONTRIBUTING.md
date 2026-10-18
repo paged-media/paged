@@ -39,6 +39,19 @@ moon run :lint                  # every project
 moon ci --base origin/main --head HEAD   # only what your branch affects
 ```
 
+The whole repository has one lint config, `bunfig.toml` `[lint]`, run by `bun lint`
+(correctness rules, import boundaries and the Rules of React; see
+`docs/adr/PM-0003-one-lint-config.md`):
+
+```bash
+bun run lint            # every JavaScript and TypeScript file (also: moon run :lint)
+bun run lint:selftest   # the import boundaries still fire
+git config core.hooksPath tooling/git/hooks   # optional, once: lint and format what you commit
+```
+
+`bun lint` is in Bun's canary builds only for now. `tooling/js/bun-canary.sh` runs the
+pinned canary through `bunx`, so there is nothing extra to install.
+
 Moon installs the root Bun workspace with `--frozen-lockfile` before the
 first JS task and never rewrites package.json, lockfiles, tsconfig.json or
 rust-toolchain.toml. Each component also documents its own build and test

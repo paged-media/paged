@@ -25,12 +25,6 @@ tasks:
       cargo clippy --workspace --all-targets -- -D warnings
       && cargo clippy --workspace --all-targets --target wasm32-unknown-unknown -- -D warnings
 
-  js-lint:
-    description: 'The contract-import guard (scripts/check-contract-imports.mjs).'
-    command: 'bun run lint:contract'
-    inputs:
-      - '@group(js-sources)'
-
   js-test:
     # The image-trace specs boot the wasm; draw-vitest.yml builds it first.
     deps: ['~:wasm']

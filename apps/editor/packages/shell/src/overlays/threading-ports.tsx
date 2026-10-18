@@ -52,7 +52,6 @@
 
 import { useCallback } from "react";
 
-// eslint-disable-next-line import/no-relative-parent-imports
 import type { Mutation } from "@paged-media/client";
 
 import type { OverlayContribution, OverlayProps } from "../registries/overlay";

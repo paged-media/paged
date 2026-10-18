@@ -106,8 +106,6 @@ jobs:
       - name: bun install (root workspace)
         working-directory: .
         run: bun install --frozen-lockfile
-      - name: contract-import lint
-        run: bun scripts/check-contract-imports.mjs
       - name: typecheck
         run: bun run --filter './packages/*' typecheck
       - name: validate manifest
