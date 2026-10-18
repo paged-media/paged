@@ -55,7 +55,7 @@ pub fn lookup(query: &str, limit: usize) -> Value {
             }
         }
     }
-    hits.sort_by(|a, b| b.0.cmp(&a.0));
+    hits.sort_by_key(|a| std::cmp::Reverse(a.0));
     let found: Vec<Value> = hits.into_iter().take(limit).map(|(_, v)| v).collect();
     json!({ "query": query, "matches": found.len(), "results": found })
 }

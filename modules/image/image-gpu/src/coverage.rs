@@ -244,7 +244,7 @@ impl SelectionCoverage {
                     }
                 }
                 xs.sort_by(|a, b| a.partial_cmp(b).expect("finite intersections"));
-                for pair in xs.chunks_exact(2) {
+                for pair in xs.as_chunks::<2>().0 {
                     let (xa, xb) = (pair[0].max(0.0), pair[1].min(width as f32));
                     if xb <= xa {
                         continue;

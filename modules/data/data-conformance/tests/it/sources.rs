@@ -359,7 +359,7 @@ fn data_source_refresh_policy_roundtrip() {
     }
     let reopened = DataSession::from_payload(session.payload(), 0);
     let mut sources = reopened.payload().sources;
-    sources.sort_by(|a, b| a.id.to_string().cmp(&b.id.to_string()));
+    sources.sort_by_key(|s| s.id.to_string());
     assert_eq!(sources.len(), 4);
     for (src, expected) in sources.iter().zip(policies.iter()) {
         assert_eq!(

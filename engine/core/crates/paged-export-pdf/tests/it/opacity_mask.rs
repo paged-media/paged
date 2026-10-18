@@ -82,7 +82,7 @@ fn masked_pdf(mask_type: OpacityMaskType, invert: bool) -> Vec<u8> {
 /// XObject it names.
 fn soft_masks(doc: &lopdf::Document) -> Vec<(lopdf::Dictionary, lopdf::Dictionary)> {
     let mut out = Vec::new();
-    for (_, obj) in doc.objects.iter() {
+    for obj in doc.objects.values() {
         let Ok(dict) = obj.as_dict() else { continue };
         let Ok(sm) = dict.get(b"SMask") else { continue };
         let Ok((_, sm)) = doc.dereference(sm) else {

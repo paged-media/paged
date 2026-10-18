@@ -160,7 +160,12 @@ pub fn cmyk8_to_rgba8(cmyk: &[u8], icc: Option<&[u8]>) -> Result<(Vec<u8>, bool)
 pub fn cmyk_device_to_rgba8(cmyk: &[u8]) -> Vec<u8> {
     let n = cmyk.len() / 4;
     let mut rgba = vec![0u8; n * 4];
-    for (px, out) in cmyk.chunks_exact(4).zip(rgba.chunks_exact_mut(4)) {
+    for (px, out) in cmyk
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(rgba.as_chunks_mut::<4>().0)
+    {
         let c = px[0] as f32 / 255.0;
         let m = px[1] as f32 / 255.0;
         let y = px[2] as f32 / 255.0;
@@ -199,7 +204,7 @@ mod tests {
         assert_eq!(&rgba[8..12], &[255, 0, 255, 255], "solid magenta");
         assert_eq!(&rgba[12..16], &[255, 255, 0, 255], "solid yellow");
         assert_eq!(&rgba[16..20], &[0, 0, 0, 255], "solid K");
-        for px in rgba.chunks_exact(4) {
+        for px in rgba.as_chunks::<4>().0 {
             assert_eq!(px[3], 255, "alpha synthesised to opaque");
         }
     }

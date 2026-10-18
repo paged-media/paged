@@ -307,7 +307,7 @@ fn merged_rgba8(psd: &PsdFile, ink: &image_js::cmyk::InkTransform) -> Result<Vec
         let c = psd.composite_cmyk8().map_err(|e| e.to_string())?;
         let mut rgba = ink.to_rgba8(&c.cmyk);
         if let Some(a) = &c.alpha {
-            for (p, &al) in rgba.chunks_exact_mut(4).zip(a) {
+            for (p, &al) in rgba.as_chunks_mut::<4>().0.iter_mut().zip(a) {
                 p[3] = al;
             }
         }

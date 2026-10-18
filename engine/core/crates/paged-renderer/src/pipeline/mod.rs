@@ -1166,7 +1166,7 @@ impl BuiltDocument {
                 }
             }
         }
-        out.sort_by(|a, b| (a.paragraph_idx, a.line_idx).cmp(&(b.paragraph_idx, b.line_idx)));
+        out.sort_by_key(|a| (a.paragraph_idx, a.line_idx));
         out
     }
 }

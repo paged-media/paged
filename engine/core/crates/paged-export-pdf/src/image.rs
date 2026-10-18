@@ -238,7 +238,7 @@ pub fn write_image(
     let mut rgb = Vec::with_capacity(n * 3);
     let mut alpha = Vec::with_capacity(n);
     let mut has_alpha = false;
-    for px in rgba.chunks_exact(4) {
+    for px in rgba.as_chunks::<4>().0 {
         rgb.extend_from_slice(&px[..3]);
         alpha.push(px[3]);
         if px[3] != 255 {

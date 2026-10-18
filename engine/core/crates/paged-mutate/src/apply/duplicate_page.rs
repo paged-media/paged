@@ -189,13 +189,11 @@ pub(super) fn apply_duplicate_page(
 
     // The stories: one copy per distinct story, threads kept inside the
     // page and cut where they leave it.
-    let mut story_n = next_story_number(doc);
     let mut new_story: HashMap<String, String> = HashMap::new();
     let mut stories: Vec<ParsedStory> = Vec::new();
     let mut hyperlinks: Vec<String> = Vec::new();
-    for sid in &story_sources {
+    for (story_n, sid) in (next_story_number(doc)..).zip(&story_sources) {
         let id = format!("Story/u{story_n}");
-        story_n += 1;
         let mut story = doc
             .stories
             .iter()

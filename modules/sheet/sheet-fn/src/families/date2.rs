@@ -458,10 +458,8 @@ fn collect_holidays(arg: Option<&Arg>, sys: DateSystem) -> Result<Vec<i64>, Cell
             for cell in r.iter_live() {
                 match cell {
                     CellValue::Error(e) => return Err(e),
-                    CellValue::Number(n) => {
-                        if n >= 0.0 {
-                            out.push(n.floor() as i64);
-                        }
+                    CellValue::Number(n) if n >= 0.0 => {
+                        out.push(n.floor() as i64);
                     }
                     // Text / Bool / Empty holiday cells are skipped.
                     _ => {}

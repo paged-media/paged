@@ -403,14 +403,12 @@ fn decode_ean13(g: &BarcodeGeometry) -> Option<String> {
         if let Some(d) = L.iter().position(|l| *l == sym) {
             digits.push((b'0' + d as u8) as char);
             parity.push('L');
-        } else if let Some(d) = L
-            .iter()
-            .position(|l| r(l).chars().rev().collect::<String>() == sym)
-        {
+        } else {
+            let d = L
+                .iter()
+                .position(|l| r(l).chars().rev().collect::<String>() == sym)?;
             digits.push((b'0' + d as u8) as char);
             parity.push('G');
-        } else {
-            return None;
         }
     }
     for i in 0..6 {

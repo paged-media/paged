@@ -322,7 +322,7 @@ fn image_cms_cmyk_lane_moxcms_compiles_and_synthesises_alpha() {
     let cmyk = cmyk_ramp();
     let rgba = t.cmyk_to_rgba8_vec(&cmyk);
     assert_eq!(rgba.len(), cmyk.len(), "CMYK→RGBA is pixel-for-pixel");
-    for (i, px) in rgba.chunks_exact(4).enumerate() {
+    for (i, px) in rgba.as_chunks::<4>().0.iter().enumerate() {
         assert_eq!(px[3], 255, "alpha must be synthesised to 255 at patch {i}");
     }
     // Paper white (no ink) must be near the top of the RGB range; full
@@ -370,7 +370,13 @@ fn image_cms_cmyk_lane_moxcms_lcms2_oracle_per_channel() {
 
         let oracle = lcms2_cmyk_to_rgb(&cmyk_bytes, &srgb_bytes, &cmyk, lintent);
 
-        for (i, (m, l)) in mox.chunks_exact(4).zip(oracle.chunks_exact(3)).enumerate() {
+        for (i, (m, l)) in mox
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .zip(oracle.as_chunks::<3>().0)
+            .enumerate()
+        {
             // The one documented outlier: paper white (patch 0, all-zero
             // ink) under RelativeColorimetric — the media-white-clamp
             // corner. It is held to the headline bound; everything else to
@@ -428,8 +434,10 @@ fn image_cms_cmyk_lane_moxcms_intents_not_ignored() {
     let a = abs.cmyk_to_rgba8_vec(&cmyk);
 
     let max_dev = p
-        .chunks_exact(4)
-        .zip(a.chunks_exact(4))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(a.as_chunks::<4>().0)
         .flat_map(|(p, a)| (0..3).map(move |c| p[c].abs_diff(a[c])))
         .max()
         .unwrap_or(0);

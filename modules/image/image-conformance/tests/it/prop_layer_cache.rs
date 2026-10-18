@@ -400,8 +400,10 @@ fn unpremultiply_is_the_identity_on_opaque_texels__feat__image_editor_layers() {
     )
     .expect("dispatch");
     let bad: Vec<(u16, u16)> = out
-        .chunks_exact(2)
-        .zip(bytes.chunks_exact(2))
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .zip(bytes.as_chunks::<2>().0)
         .map(|(a, b)| {
             (
                 u16::from_le_bytes([b[0], b[1]]),

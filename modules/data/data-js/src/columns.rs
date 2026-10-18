@@ -105,11 +105,10 @@ impl WordHash {
         self.0 = (self.0 ^ w).wrapping_mul(Self::PRIME).rotate_left(29);
     }
     fn bytes(&mut self, b: &[u8]) {
-        let mut chunks = b.chunks_exact(8);
-        for c in &mut chunks {
-            self.word(u64::from_le_bytes(c.try_into().expect("8 bytes")));
+        let (chunks, rest) = b.as_chunks::<8>();
+        for c in chunks {
+            self.word(u64::from_le_bytes(*c));
         }
-        let rest = chunks.remainder();
         let mut last = [0u8; 8];
         last[..rest.len()].copy_from_slice(rest);
         self.word(u64::from_le_bytes(last) ^ ((rest.len() as u64) << 56));

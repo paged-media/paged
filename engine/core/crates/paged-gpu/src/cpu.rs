@@ -3552,7 +3552,7 @@ fn stamp_path_alpha(
 /// on the edge).
 fn alpha_to_mask(rgba: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(rgba.len() / 4);
-    for chunk in rgba.chunks_exact(4) {
+    for chunk in rgba.as_chunks::<4>().0 {
         out.push(chunk[3]);
     }
     out
@@ -4186,7 +4186,7 @@ fn composite_alpha_mask(
         None => return,
     };
     let data = scratch.data_mut();
-    for (&m_u8, px) in mask.iter().zip(data.chunks_exact_mut(4)) {
+    for (&m_u8, px) in mask.iter().zip(data.as_chunks_mut::<4>().0) {
         let m = m_u8 as f32 / 255.0;
         let a = (m * 0.5).clamp(0.0, 1.0);
         px[0] = 0;

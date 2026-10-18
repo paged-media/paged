@@ -1025,20 +1025,18 @@ pub fn parse_spread_with_provenance(xml: &[u8]) -> Result<(Spread, SpreadProvena
                     out.text_frames[i].subpath_starts = subpath_starts;
                     out.text_frames[i].subpath_open = subpath_open;
                 }
-                CurrentFrameKind::Rect(i) if i < out.rectangles.len() => {
-                    // Stash the path unless it is the plain
-                    // axis-aligned box the bounds already
-                    // describe. InDesign draws a
-                    // `<Rectangle>`'s path whatever it is: an
-                    // oval's four curved anchors, a triangle's
-                    // three (core `text-wrap-sides`). Keeping
-                    // only paths of more than four anchors
-                    // (Q-11) drew both as boxes.
-                    if !is_plain_box(&cf.anchors, &subpath_starts, &subpath_open) {
-                        out.rectangles[i].anchors = cf.anchors;
-                        out.rectangles[i].subpath_starts = subpath_starts;
-                        out.rectangles[i].subpath_open = subpath_open;
-                    }
+                // Stash the path unless it is the plain axis-aligned box the
+                // bounds already describe. InDesign draws a `<Rectangle>`'s
+                // path whatever it is: an oval's four curved anchors, a
+                // triangle's three (core `text-wrap-sides`). Keeping only
+                // paths of more than four anchors (Q-11) drew both as boxes.
+                CurrentFrameKind::Rect(i)
+                    if i < out.rectangles.len()
+                        && !is_plain_box(&cf.anchors, &subpath_starts, &subpath_open) =>
+                {
+                    out.rectangles[i].anchors = cf.anchors;
+                    out.rectangles[i].subpath_starts = subpath_starts;
+                    out.rectangles[i].subpath_open = subpath_open;
                 }
                 _ => {}
             }

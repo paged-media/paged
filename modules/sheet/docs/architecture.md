@@ -8,7 +8,7 @@ under [`adr/`](adr/README.md), linked where it applies.
 ## Two workspaces in one repo
 
 - **Cargo workspace:** eleven crates, each a directory at the repo root. The toolchain is
-  pinned to Rust 1.93.0 (`rust-toolchain.toml`).
+  pinned to Rust 1.99.1 (`rust-toolchain.toml`).
 - **pnpm workspace:** two packages under `packages/`.
 - **`registry/`:** YAML tables. `registry/functions/` has 224 rows in 18 files, one row per
   spreadsheet function; `registry/features/` has 162 rows in 24 files, one per behaviour or
