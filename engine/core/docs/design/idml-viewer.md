@@ -91,7 +91,7 @@ The editor is deliberately Chrome/WebGPU-only. The viewer's embedding use cases 
 
 ## 5. SDK Layering
 
-*Status note (2026-10-02): this section predates the implementation, and the layering was built the other way round; see [ADR 112](../adr/112-viewer-sdk-is-a-sibling.md) and [ADR 123](../adr/123-viewer-ships-from-core.md). `@paged-media/sdk` is the wasm `ViewerSession`, and `@paged-media/idml-viewer` wraps a session it is handed (`web/idml-viewer/src/viewer.ts:67`). There is no `EditorSession` and no `/ui` export (`web/idml-viewer/package.json:14`). The editor's write SDK is a separate package in the editor repository ([ADR 205](https://github.com/paged-media/editor/blob/main/docs/adr/205-client-packaged-as-write-sdk.md)).*
+*Status note (2026-10-02): this section predates the implementation, and the layering was built the other way round; see [ADR 112](../adr/112-viewer-sdk-is-a-sibling.md) and [ADR 123](../adr/123-viewer-ships-from-core.md). `@paged-media/sdk` is the wasm `ViewerSession`, and `@paged-media/idml-viewer` wraps a session it is handed (`web/idml-viewer/src/viewer.ts:71`). There is no `EditorSession` and no `/ui` export (`web/idml-viewer/package.json:14`). The editor's write SDK is a separate package in the editor repository ([ADR 205](https://github.com/paged-media/editor/blob/main/docs/adr/205-client-packaged-as-write-sdk.md)).*
 
 The viewer is a **standalone package** — `@paged-media/idml-viewer` — and the **ground floor** of the SDK family. The editor SDK depends on it and extends it, never duplicates it:
 
@@ -117,7 +117,7 @@ Consequences:
 
 ## 6. API Surface (v1)
 
-*Status note (2026-10-02): this section predates the implementation; the built interface is `Viewer` in `web/idml-viewer/src/viewer.ts:90`. It differs in these points: `createViewer` takes `{ canvas, session }`, and the bundled wasm is loaded with `createSessionFromBundledWasm(wasmUrl?)`; `fit` accepts `"page" | "width"`; `layoutMode` is `"single" | "continuous"`; `renderPageThumbnail` resolves to an RGBA8 raster, not an `ImageBitmap`; there is no `/ui` chrome.*
+*Status note (2026-10-02): this section predates the implementation; the built interface is `Viewer` in `web/idml-viewer/src/viewer.ts:94`. It differs in these points: `createViewer` takes `{ canvas, session }`, and the bundled wasm is loaded with `createSessionFromBundledWasm(wasmUrl?)`; `fit` accepts `"page" | "width"`; `layoutMode` is `"single" | "continuous"`; `renderPageThumbnail` resolves to an RGBA8 raster, not an `ImageBitmap`; there is no `/ui` chrome.*
 
 ### 6.1 Construction & lifecycle
 
@@ -207,7 +207,7 @@ No selection, no text extraction, no search, no hit-testing, no annotations, no 
 
 ## 9. Delivery Plan
 
-*Status note (2026-10-02): this section predates the implementation. The session, the wrapper API, thumbnails and the native digest test are built and published, and docs.paged.media embeds the published package ([ADR 803](https://github.com/paged-media/docs/blob/main/docs/adr/803-live-preview-uses-viewer-package.md)). The chrome of V2 and everything in V3 are not built. Source comments cite these phase names (`crates/paged-sdk/tests/digest_equivalence.rs:22`).*
+*Status note (2026-10-02): this section predates the implementation. The session, the wrapper API, thumbnails and the native digest test are built and published, and docs.paged.media embeds the published package ([ADR 803](https://github.com/paged-media/docs/blob/main/docs/adr/803-live-preview-uses-viewer-package.md)). The chrome of V2 and everything in V3 are not built. Source comments cite these phase names (`crates/paged-sdk/tests/digest_equivalence.rs:26`).*
 
 | Phase | Milestone | Exit criterion |
 |---|---|---|

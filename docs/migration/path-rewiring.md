@@ -78,7 +78,7 @@ Line numbers are in the files as they now stand.
 | `scripts/sync-wire.mjs:38-44` | `RESOLVE_CANDIDATES` `../../editor/packages/client`, `../editor/packages/client` | `../../apps/editor/packages/client` (`PAGED_CANVAS_WASM_FROM` still wins) |
 | `scripts/sync-catalog.mjs:36-41` | the same two editor candidates | `../../apps/editor/packages/client` (`PAGED_INTROSPECT_WASM_FROM` still wins) |
 | `scripts/sync-catalog.mjs:46-53` | `CORE_CANDIDATES` `../../core/…`, `../core/…` | `../../engine/core/crates/paged-introspect/catalog.json` (`CORE_REPO` still wins) |
-| `packages/plugin-sdk/src/wasm-loader.ts:194-200` | anchor `../../../../editor/packages/client` | `../../../../../apps/editor/packages/client` |
+| `packages/plugin-sdk/src/wasm-loader.ts:198-204` | anchor `../../../../editor/packages/client` | `../../../../../apps/editor/packages/client` |
 | `scripts/assert-contract-bumped.mjs:56-62` | `git show <ref>:packages/<pkg>/package.json` — relative to the top of the git repository, so in the monorepo every lookup missed and every package silently counted as "bumped" | `git show <ref>:./packages/<pkg>/package.json` (relative to `platform/extensions`) |
 | `packages/{ai,cli,plugin-api,plugin-cli,plugin-sdk}/package.json` (`repository`) | `paged-media/plugin-sdk`, `directory: packages/<p>` | `paged-media/paged`, `platform/extensions/packages/<p>` |
 
@@ -99,17 +99,17 @@ put anything there.
 | `slide/scripts/fidelity-local.py:21-27` | `--core ../../core` (from `modules/slide` that is `modules/core`), `--corpus ../../corpus` | `--core <repo root>/engine/core`, `--corpus <repo root>/corpus` |
 | `sheet/sheet-conformance/oracle/recalc/classify.py:5-12,19-20` | default `~/paged/corpus/xlsx`; usage `PAGED_XLSX_CORPUS=~/paged/corpus` | default `<repo root>/corpus/xlsx` (argv still wins); usage `PAGED_XLSX_CORPUS=1` |
 | `image/README.md:57-63`, `sheet/README.md:56-62`, `data/README.md:61` | sibling-checkout setup (`~/paged/{editor,plugin-sdk,plugin-*}`) | the monorepo components |
-| comments: `doc/docx-conformance/tests/real_word_corpus.rs:61`, `publish/crates/idml-export/tests/support/corpus.rs:17,28,48`, `publish/crates/idml-export/examples/corpus_sweep.rs:216`, `sheet/sheet-js/benches/session.rs:40,81`, `slide/pptx-import/tests/corpus.rs:21`, `slide/slide-resolve/tests/oracle_geometry.rs:140`, `image/image-conformance/src/psd_corpus.rs:67`, `sheet/sheet-conformance/oracle/excel/drive.sh:14` | `~/paged/corpus`, "sibling checkout", "beside this repo" | `<repo root>/corpus` / the private corpus |
+| comments: `doc/docx-conformance/tests/real_word_corpus.rs:61`, `publish/crates/idml-export/tests/support/corpus.rs:21,32,52`, `publish/crates/idml-export/examples/corpus_sweep.rs:220`, `sheet/sheet-js/benches/session.rs:26,67`, `slide/pptx-import/tests/corpus.rs:21`, `slide/slide-resolve/tests/oracle_geometry.rs:140`, `image/image-conformance/src/psd_corpus.rs:53`, `sheet/sheet-conformance/oracle/excel/drive.sh:14` | `~/paged/corpus`, "sibling checkout", "beside this repo" | `<repo root>/corpus` / the private corpus |
 | `package.json` `repository` of `data/packages/data-bundle`, `draw/packages/draw-bundle`, `image/glue`, `publish/packages/{pdf,publish}-bundle`, `sheet/packages/sheet-bundle`, `web/packages/web-bundle` | `paged-media/plugin-<repo>`, `directory: <in-repo path>` | `paged-media/paged`, `modules/<m>/<in-repo path>` |
 
 Verified unchanged (already `<repo root>/corpus` at the new depth, three levels
 above a module crate or five above a module test directory):
-`image/image-conformance/{src/psd_corpus.rs:79, tests/real_raster_corpus.rs:101, tests/real_png_corpus.rs:93, tests/real_jpeg_corpus.rs:95}`,
+`image/image-conformance/{src/psd_corpus.rs:65, tests/real_raster_corpus.rs:105, tests/real_png_corpus.rs:97, tests/real_jpeg_corpus.rs:99}`,
 `doc/docx-conformance/tests/{poi_corpus.rs:90, real_word_corpus.rs:63}`,
-`sheet/sheet-conformance/tests/{real_xlsx_corpus.rs:125, xlsx_recalc_corpus.rs:223}`,
-`sheet/sheet-js/benches/session.rs:85`, `slide/pptx-import/tests/corpus.rs:35`,
+`sheet/sheet-conformance/tests/{real_xlsx_corpus.rs:125, xlsx_recalc_corpus.rs:209}`,
+`sheet/sheet-js/benches/session.rs:71`, `slide/pptx-import/tests/corpus.rs:35`,
 `slide/pptx-export/tests/roundtrip.rs:35`, `slide/slide-resolve/tests/{oracle_charts.rs:63, oracle_geometry.rs:147}`,
-`slide/scripts/ppt-record-corpus.sh:14`, `publish/crates/idml-export/{tests/support/corpus.rs:50, examples/corpus_sweep.rs:218}` (four up),
+`slide/scripts/ppt-record-corpus.sh:14`, `publish/crates/idml-export/{tests/support/corpus.rs:54, examples/corpus_sweep.rs:222}` (four up),
 `draw/packages/draw-bundle/test/real-vector-corpus.spec.ts:81`, `web/packages/web-model/test/real-html-corpus.spec.ts:63`.
 The `../corpus/...` paths in `modules/sheet` point at the module's own committed
 `modules/sheet/corpus/` and are correct.
@@ -118,9 +118,9 @@ The `../corpus/...` paths in `modules/sheet` point at the module's own committed
 
 | File:line | Old | New |
 | --- | --- | --- |
-| `crates/paged-scene/tests/grid_matrix_corpus.rs:30-32,52-54` | `PAGED_GRID_CORPUS=1` → `../../../corpus` (was `~/paged/corpus`; in the monorepo `engine/corpus`) | `../../../../corpus` = `<repo root>/corpus` |
-| `crates/paged-gen/src/samples/images.rs:92-95,335-342` | `PHOTO_URI = "file:/Users/drietsch/idml/corpus/samples/media/photo.webp"` (an absolute path into a pre-split checkout; resolved on no machine) | `"file:photo.webp"`, resolved by basename under `--links-dir` like `LINK_URI` |
-| `crates/paged-cli/tests/package_folder.rs:39` | comment: "an absolute `photo.webp` that is on no machine" | "`file:photo.webp`, which is not beside it" |
+| `crates/paged-scene/tests/grid_matrix_corpus.rs:34-36,56-58` | `PAGED_GRID_CORPUS=1` → `../../../corpus` (was `~/paged/corpus`; in the monorepo `engine/corpus`) | `../../../../corpus` = `<repo root>/corpus` |
+| `crates/paged-gen/src/samples/images.rs:96-99,339-346` | `PHOTO_URI = "file:/Users/drietsch/idml/corpus/samples/media/photo.webp"` (an absolute path into a pre-split checkout; resolved on no machine) | `"file:photo.webp"`, resolved by basename under `--links-dir` like `LINK_URI` |
+| `crates/paged-cli/tests/package_folder.rs:43` | comment: "an absolute `photo.webp` that is on no machine" | "`file:photo.webp`, which is not beside it" |
 | `web/idml-viewer/package.json:8-9` | `repository.url` `paged-media/core.git`, `directory: web/idml-viewer` | `paged-media/paged`, `engine/core/web/idml-viewer` |
 
 `PHOTO_URI` is in no committed output: `corpus/generated/*.idml` is gitignored and
@@ -156,7 +156,7 @@ at `b612da5d`) are left for step A6.
 | `~/paged/sync-wasm.sh` (`apps/editor/CLAUDE.md:74,79`), `~/paged/brand/editor` (`apps/editor/CLAUDE.md:116`), `~/paged/cockpit` (`modules/{data,doc,image,sheet,slide}/CLAUDE.md`), `~/paged/thoughts/…` (`modules/sheet/CLAUDE.md:20`) | local tools and private repositories outside this repository; no in-repo equivalent to point at yet. |
 | Rendered showcase prose `apps/editor/apps/canvas/tests/showcase/pages/03-editorial.ts:284`, `12-layers.ts:122` (`~/paged/sync-wasm.sh`) | text printed into the showcase document (output, not instructions). |
 | `apps/editor/apps/canvas/showcase/showcase.coverage.json:2` (`"generatedFrom": "/Users/drietsch/paged/state/registry/features"`) | generated artifact; the next showcase build rewrites it (`"unavailable"` without `PAGED_FEATURE_REGISTRY`). |
-| `apps/editor/apps/canvas/src/worker/render.ts:33`, `engine/core/crates/paged-renderer/src/module/mod.rs:32` (`/Users/drietsch/.claude/plans/…`); `apps/editor/apps/canvas/perf-probe.mjs:13`, `apps/editor/apps/canvas/tests/fidelity/google-fonts.ts:235` (`/Users/drietsch/idml/…`) | code comments, not paths the code uses (the last two describe the pre-split history). Candidates for a publication pass. |
+| `apps/editor/apps/canvas/src/worker/render.ts:33`, `engine/core/crates/paged-renderer/src/module/mod.rs:36` (`/Users/drietsch/.claude/plans/…`); `apps/editor/apps/canvas/perf-probe.mjs:13`, `apps/editor/apps/canvas/tests/fidelity/google-fonts.ts:235` (`/Users/drietsch/idml/…`) | code comments, not paths the code uses (the last two describe the pre-split history). Candidates for a publication pass. |
 | `apps/editor/apps/canvas/src/app-commands.ts:88` (`https://github.com/paged-media/editor/issues/new`) | a runtime URL (product behaviour), not a path; switch to `paged-media/paged/issues` when the old repository stops taking issues. |
 | GitHub links to the old repositories' documents: `engine/core/docs/{README.md:51-54, architecture.md:24-25, design/canvas.md:35, design/plugin-metadata-and-baking.md:22,150,152, reference/composition-format.md:127, reference/deferred-scope.md:15, reference/paged-file-format.md:13}`, `modules/doc/docs/concept.md:10,12,77,190,460`, `apps/editor/docs/README.md:58`, `modules/{draw/docs/status.md:94, sheet/docs/status.md:108}` | documentation links; they still resolve while the old repositories exist (read-only). Rewrite to in-repo relative links in a docs pass. |
 | ADRs and status logs (`*/docs/adr/*`, `*/docs/status.md`, `engine/core/crates/paged-sdk/WEBGPU.md:133`, `apps/editor/packages/ai/README.md` "Source: plugin-sdk `df58d0e`") | historical records. |

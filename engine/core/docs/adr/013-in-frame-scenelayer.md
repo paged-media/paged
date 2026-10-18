@@ -81,25 +81,25 @@ unchanged.
 runs". It does not change the mechanism: each added item kind lowers to a display command
 that already existed. One paint was new: the sweep gradient of protocol 46 added a gradient
 pool and `Paint::SweepGradient` to the display list, with a branch for it in each rasteriser
-(`crates/paged-canvas/src/channel.rs:284-286`, `crates/paged-gpu/src/cpu.rs:2917`,
-`crates/paged-gpu/src/vello_rs.rs:2783`).
+(`crates/paged-canvas/src/channel.rs:288-290`, `crates/paged-gpu/src/cpu.rs:2921`,
+`crates/paged-gpu/src/vello_rs.rs:2787`).
 
-- `crates/paged-compose/src/scene_layer.rs:54-210` — `SceneItem` has ten variants: `FillPath`,
+- `crates/paged-compose/src/scene_layer.rs:58-214` — `SceneItem` has ten variants: `FillPath`,
   `StrokePath`, `Text`, `Image`, `FillPathGradient`, `FillPathBlend`, `DropShadow`,
   `InnerShadow`, `StrokePathGradient`, `FillPathGradientBlend`.
-- `crates/paged-compose/src/scene_layer.rs:269-300` — `SceneGradient` is linear, radial or
-  sweep; `:220-236` — `SceneBlendMode` has fifteen modes.
-- `crates/paged-canvas/src/channel.rs:228-236` (protocol 41, `Image`), `:278-283` (45,
-  `FillPathGradient`), `:284-293` (46, sweep gradient, `FillPathBlend`, `DropShadow`),
-  `:295-299` (47, `InnerShadow`), `:301-307` (48, `StrokePathGradient`,
+- `crates/paged-compose/src/scene_layer.rs:273-304` — `SceneGradient` is linear, radial or
+  sweep; `:224-240` — `SceneBlendMode` has fifteen modes.
+- `crates/paged-canvas/src/channel.rs:232-240` (protocol 41, `Image`), `:282-287` (45,
+  `FillPathGradient`), `:288-297` (46, sweep gradient, `FillPathBlend`, `DropShadow`),
+  `:299-303` (47, `InnerShadow`), `:305-311` (48, `StrokePathGradient`,
   `FillPathGradientBlend`) — each is recorded as a payload-only addition to
   `SubmitSceneLayer`, with no new message.
-- `crates/paged-compose/src/scene_layer.rs:593-632` (`Image` → `DisplayCommand::Image`),
-  `:633-652` (gradient fill → `DisplayCommand::FillPath`), `:699-714`
-  (→ `DisplayCommand::FillPathBlend`), `:715-751` (→ `DisplayCommand::DropShadow`),
-  `:752-789` (→ `DisplayCommand::InnerShadow`) — the lowerings.
+- `crates/paged-compose/src/scene_layer.rs:597-636` (`Image` → `DisplayCommand::Image`),
+  `:637-656` (gradient fill → `DisplayCommand::FillPath`), `:703-718`
+  (→ `DisplayCommand::FillPathBlend`), `:719-755` (→ `DisplayCommand::DropShadow`),
+  `:756-793` (→ `DisplayCommand::InnerShadow`) — the lowerings.
 
-The module doc at `crates/paged-compose/src/scene_layer.rs:17-19` still describes the layer as
+The module doc at `crates/paged-compose/src/scene_layer.rs:21-23` still describes the layer as
 "filled / stroked bezier paths with solid paint" and is stale.
 
 **2. A second in-frame channel exists for raster tiles.** Protocol 50 added
@@ -109,18 +109,18 @@ registry, so it is the same contract with a different wire shape
 ([ADR 108](108-plugin-raster-tiles.md)). This adds to the Consequences bullet "A protocol
 bump per capability expansion", which names v39 and v40 only.
 
-- `crates/paged-canvas/src/channel.rs:315-325`, `:1059-1079` — the two message kinds.
-- `crates/paged-compose/src/pixel_layer.rs:88-112` — `PixelLayer::into_scene_layer`.
-- `crates/paged-canvas/src/model.rs:9044-9058` — `set_pixel_layer` stores the lowered layer
+- `crates/paged-canvas/src/channel.rs:319-329`, `:1063-1083` — the two message kinds.
+- `crates/paged-compose/src/pixel_layer.rs:92-116` — `PixelLayer::into_scene_layer`.
+- `crates/paged-canvas/src/model.rs:9048-9062` — `set_pixel_layer` stores the lowered layer
   through `set_scene_layer`.
 - `plugin-sdk: packages/plugin-api/src/wire.d.ts:93` — in the plugin contract (plugin-sdk at
   `d90f727`) the pixel layer occurs only in the vendored wire types; the host contract there
   has no door for it.
 
 **3. Unchanged, and still open.** Scene-layer text is still set in the document's default
-face with glyphs upright in page space (`crates/paged-compose/src/scene_layer.rs:68-74`,
-`:327-331`; `crates/paged-renderer/src/pipeline/text_frame.rs:1380-1384`, `:1398-1402`). The
+face with glyphs upright in page space (`crates/paged-compose/src/scene_layer.rs:72-78`,
+`:331-335`; `crates/paged-renderer/src/pipeline/text_frame.rs:1384-1388`, `:1402-1406`). The
 GPU texture door is still not built
 ([ADR 018](018-stage-b-gpu-texture-defer-record-only.md)). The layer registry is still
 render-time state on the canvas model, not part of the document
-(`crates/paged-canvas/src/model.rs:1152-1157`).
+(`crates/paged-canvas/src/model.rs:1156-1161`).

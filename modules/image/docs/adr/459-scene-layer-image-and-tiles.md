@@ -45,9 +45,9 @@ frame's image resource and serves level-0 tiles of 256 pixels.
 - `glue/src/session.ts:1312-1349`, `:841-845` — `submitLayer`; the probe
 - `glue/src/session.ts:3162-3217`, `:2727-2734` — `apply()`; the per-sample stroke preview
 - `glue/src/session.ts:1432-1442`, `:3273-3282` — cleared on deselect and on Reset
-- `image-js/src/lib.rs:42-48`, `:506-525` — what `adjust_image` returns, and from where
+- `image-js/src/lib.rs:28-34`, `:492-511` — what `adjust_image` returns, and from where
 - `glue/src/tile-provider.ts:75-127`, `:26-37` — the claim; why only level 0 is served
-- `image-js/src/lib.rs:744-769` — the level-0 tile cut: windowing of the held buffer
+- `image-js/src/lib.rs:730-755` — the level-0 tile cut: windowing of the held buffer
 - `glue/src/activate.ts:120-133`, `glue/src/menu.ts:22-23` — the claim is a command, kept
   out of the menu
 - `glue/test/wasm-surface.spec.ts:50-63` — the mip-level tile export has no caller
@@ -57,7 +57,7 @@ frame's image resource and serves level-0 tiles of 256 pixels.
 - **A shared GPU device and a texture composited by the host.** Not available on the host
   side (see ADR 018 below). The session header names it as the interactive path.
 - **Tiles at mip levels above 0.** The engine has the export (`image_tile_rgba8_level`,
-  `image-js/src/lib.rs:771-786`); the bundle does not call it, because "the tile provider
+  `image-js/src/lib.rs:757-772`); the bundle does not call it, because "the tile provider
   fetches the whole image at its natural extent, so no LOD is ever requested"
   (`glue/test/wasm-surface.spec.ts:56-57`).
 
@@ -73,7 +73,7 @@ frame clears it. How edits become permanent is [ADR 460](460-document-is-not-the
 
 The tile lane does not show the adjustment chain. `image_tile_rgba8` reads the image held
 behind the handle, and the chain's output is returned to the caller without being stored
-there (`image-js/src/lib.rs:506-525`). The tile claim is reachable only through the command
+there (`image-js/src/lib.rs:492-511`). The tile claim is reachable only through the command
 `media.paged.image.command.claimTiles`; nothing else in `glue/src` calls `claimTiles`.
 
 Two comments are behind the code. `glue/src/session.ts:25-26` says resubmission is "never

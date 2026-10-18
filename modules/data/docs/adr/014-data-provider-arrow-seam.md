@@ -88,10 +88,10 @@ as an IPC byte buffer.
   the same way.
 - `packages/data-bundle/src/session.ts:1514-1525` — the provider's `getSnapshot` returns
   `{ schema, columns, rowCount }`, mapping the engine's `row_count` to the contract's `rowCount`.
-- `plugin-sdk: packages/plugin-api/src/host.ts:1385-1392` — the contract type is
+- `plugin-sdk: packages/plugin-api/src/host.ts:1389-1396` — the contract type is
   `ProviderRecordSet { schema, columns: unknown[][], rowCount }`, "The columnar row payload a
-  provider serves (Arrow-aligned)"; `:1373-1378` — a field's type is the string `ty`. The contract
-  has no byte-buffer type. `plugin-sdk: packages/plugin-sdk/src/host-impl.ts:523-528` — the
+  provider serves (Arrow-aligned)"; `:1377-1382` — a field's type is the string `ty`. The contract
+  has no byte-buffer type. `plugin-sdk: packages/plugin-sdk/src/host-impl.ts:527-532` — the
   registry hands the consumer the object that `getSnapshot` returned.
 - `registry/features/provider.yaml:16` — "transport is Arrow-aligned-by-SHAPE, not arrow-rs IPC
   (ADR-014)" and "JSON over the wasm boundary, not an arrow-rs byte buffer".

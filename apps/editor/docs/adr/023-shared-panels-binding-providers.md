@@ -20,7 +20,7 @@ Effects / Levels / Selection; `plugin-doc` = outline; `plugin-sheets` =
 datasets / grid / workbook); the existing contribution surface
 (`contributeSchemaPanel`, `contributePanel`, `contributeEditContext`,
 `BindingsSurface.publish/get` at
-`plugin-sdk: packages/plugin-api/src/host.ts:1326-1334`,
+`plugin-sdk: packages/plugin-api/src/host.ts:1330-1338`,
 `WidgetValueBinding` with `selectionProperty`, and the `SchemaListSpec` /
 `SchemaRowAction` / `applyEntity` list tier from B-01/G3 schema v1.1); the
 internal gap register's rows **B-01/G3** (the list tier landed; *"Still absent: tree rows,
@@ -390,14 +390,14 @@ own three-consumer bar.
 Checked against the code at `28dc764`, with the contract at plugin-sdk `d90f727` and the
 providers at plugin-draw `0d12bf8`, plugin-image `f7d21e5` and plugin-sheets `71f37d7`. The
 decision stands. The contract door is `bindingProvider(contextType, provider)`
-(`plugin-sdk: packages/plugin-api/src/host.ts:468-471`); the host side is
+(`plugin-sdk: packages/plugin-api/src/host.ts:472-475`); the host side is
 `packages/shell/src/catalog/binding-providers.tsx`, whose header states the three rules it
-enforces (`:28-46`); the docking rule recorded under "Still open" is
+enforces (`:32-50`); the docking rule recorded under "Still open" is
 `packages/shell/src/catalog/panel-binding-surface.tsx:177` (`panelServedBy`), consulted at
 `packages/shell/src/state/edit-context-controller.tsx:205`. Panel slots are still unbuilt:
-`ContributionSurface` has no slot member (`plugin-sdk: packages/plugin-api/src/host.ts:380-485`).
+`ContributionSurface` has no slot member (`plugin-sdk: packages/plugin-api/src/host.ts:384-489`).
 Line numbers in Sources and Sequencing are those of 2026-08-04; `BindingsSurface`, for example,
-is now at `plugin-sdk: packages/plugin-api/src/host.ts:1535-1549`. The text above no longer
+is now at `plugin-sdk: packages/plugin-api/src/host.ts:1539-1553`. The text above no longer
 matches the code in five places.
 
 **1. Raster type serves fifteen paths, and font size is one of them.** "The fourth consumer"
@@ -432,7 +432,7 @@ only static-label actions, so the Layers toggles "work but do not SHOW state".
 
 The state is shown as a label ("Hide" or "Show"), not as a glyph. The member exists in the
 editor's schema type only; `SchemaListAction` in the published contract has `label`, `action`
-and `enabled` (`plugin-sdk: packages/plugin-api/src/panel-schema.ts:175-183`).
+and `enabled` (`plugin-sdk: packages/plugin-api/src/panel-schema.ts:179-187`).
 
 **3. There are three plugin-id comparisons, none against a literal.** The Outcome section says
 the only one is inside `writableByDeclaration`. That one is

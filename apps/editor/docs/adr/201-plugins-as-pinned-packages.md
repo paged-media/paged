@@ -79,7 +79,7 @@ repository out and builds its wasm before installing the editor.
 
 Three comments contradict the code. `apps/canvas/src/plugin-load-guard.ts:24` calls
 `loadBundle` unguarded and `:33-36` defers a fix in the SDK; plugin-sdk at the pinned version
-catches a throwing `activate` itself (`plugin-sdk: packages/plugin-sdk/src/load.ts:89-122`).
+catches a throwing `activate` itself (`plugin-sdk: packages/plugin-sdk/src/load.ts:93-126`).
 `apps/canvas/vite.config.ts:47-52` says the editor consumes the data bundle "through the pnpm
 `link:` chain". `scripts/check-plugin-pins.mjs:33` says the script is not invoked through a
 package script; `package.json:18` defines `check:pins`.

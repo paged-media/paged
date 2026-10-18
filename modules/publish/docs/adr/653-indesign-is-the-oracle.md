@@ -16,7 +16,7 @@ them."
 
 Measurements on 2026-09-05 found the same for sections, hyperlinks, bookmarks and
 conditional text: InDesign 20.0.1 dropped them from files the engine had written
-(`crates/idml-export/src/navigation.rs:15-23`, commit `7f2f5ab`).
+(`crates/idml-export/src/navigation.rs:19-27`, commit `7f2f5ab`).
 
 ## Decision
 
@@ -43,15 +43,15 @@ not enough that `idml-import` reads it back.
 
 ## Evidence
 
-- `crates/idml-export/src/navigation.rs:23-58` — the measured rules for `designmap.xml`
-- `crates/idml-export/src/navigation.rs:60-66` — byte identity for InDesign's spelling;
+- `crates/idml-export/src/navigation.rs:27-62` — the measured rules for `designmap.xml`
+- `crates/idml-export/src/navigation.rs:64-70` — byte identity for InDesign's spelling;
   the older spelling is rewritten on every export
-- `crates/idml-export/src/lib.rs:189-198`, `:573-580` — the two exceptions to byte identity
-- `crates/idml-export/tests/indesign_canonical.rs:15-21`, `:113-122` — the fixture and the
+- `crates/idml-export/src/lib.rs:193-202`, `:577-584` — the two exceptions to byte identity
+- `crates/idml-export/tests/indesign_canonical.rs:19-25`, `:117-126` — the fixture and the
   byte-identity test over it
-- `crates/idml-import/src/lib.rs:210-216`, `:256-259`;
-  `crates/idml-import/src/designmap.rs:229-232`, `:352-353` — both spellings are read
-- `crates/idml-export/tests/support/corpus.rs:15-29`, `:38-59` — the opt-in corpus lanes
+- `crates/idml-import/src/lib.rs:214-220`, `:260-263`;
+  `crates/idml-import/src/designmap.rs:233-236`, `:356-357` — both spellings are read
+- `crates/idml-export/tests/support/corpus.rs:19-33`, `:42-63` — the opt-in corpus lanes
 - `.github/workflows/ci.yml:93-97`, `.config/nextest.toml:8-12` — what CI runs
 
 ## Alternatives considered
@@ -65,7 +65,7 @@ probed, not read off the spec".
 InDesign is not part of this repository's checks. No script here drives InDesign; the
 tooling that opens generated packages in InDesign lives in the engine repository
 (`core: tools/indesign-export/`). The experiment notes that
-`crates/idml-export/src/navigation.rs:25` refers to are not in this repository either.
+`crates/idml-export/src/navigation.rs:29` refers to are not in this repository either.
 What a contributor can read here is the result of each experiment, written as a comment
 or a commit message.
 

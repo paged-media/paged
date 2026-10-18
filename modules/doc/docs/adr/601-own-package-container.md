@@ -20,7 +20,7 @@ check that it builds for wasm. `Cargo.toml:9` records that check as passed on 20
 
 `paged-ooxml` owns the container and uses `ooxmlsdk` only to deserialise single parts. The
 crate comment gives the reason: the container is not delegated
-"because `ooxmlsdk` does not document byte-exact fidelity" (`paged-ooxml/src/lib.rs:28`) and
+"because `ooxmlsdk` does not document byte-exact fidelity" (`paged-ooxml/src/lib.rs:32`) and
 the preservation rule needs verbatim carry-through.
 
 - `OpcPackage::read` opens the ZIP with the `zip` crate and keeps every entry, in on-disk
@@ -41,11 +41,11 @@ the preservation rule needs verbatim carry-through.
 
 ## Evidence
 
-- `paged-ooxml/src/lib.rs:24-40`, `:56-59` — the two responsibilities, the reason for
+- `paged-ooxml/src/lib.rs:28-44`, `:60-63` — the two responsibilities, the reason for
   keeping the container, the re-export
-- `paged-ooxml/src/opc.rs:17-33`, `:78-119`, `:148-170`, `:179-202` — the preservation
+- `paged-ooxml/src/opc.rs:21-37`, `:82-123`, `:152-174`, `:183-206` — the preservation
   model, `read` with the format checks, `set_part`, `write`
-- `paged-ooxml/src/dom.rs:42-58`, `:85-94`, `paged-ooxml/src/rels.rs:15-21` — the depth
+- `paged-ooxml/src/dom.rs:46-62`, `:89-98`, `paged-ooxml/src/rels.rs:19-25` — the depth
   limit, `parse_root`, the relationship scan
 - `docx-import/src/lib.rs:35-44`, `:192-217`, `:316`, `:333`, `:488`, `:501` — the only
   imports of `ooxmlsdk` types and every call of `parse_root`
@@ -56,10 +56,10 @@ the preservation rule needs verbatim carry-through.
 ## Alternatives considered
 
 The package API of `ooxmlsdk` (its `parts` feature) was not used, for the reason quoted
-above (`paged-ooxml/src/lib.rs:26-32`, `paged-ooxml/src/opc.rs:17-22`). Had the wasm check
+above (`paged-ooxml/src/lib.rs:30-36`, `paged-ooxml/src/opc.rs:21-26`). Had the wasm check
 failed, the concept paper's fallback was a thinner own layer of OPC and `quick-xml` for the
 parts the plugin touches (`docs/concept.md:223-226`, section 5.2). Writing parts through
-the typed DOM is possible, `serialize_root` exists (`paged-ooxml/src/dom.rs:96-104`), and is
+the typed DOM is possible, `serialize_root` exists (`paged-ooxml/src/dom.rs:100-108`), and is
 not done: see [ADR 602](602-save-back-is-a-byte-splice.md).
 
 ## Consequences
@@ -67,7 +67,7 @@ not done: see [ADR 602](602-save-back-is-a-byte-splice.md).
 What the importer can read is bounded by the root types and the parser of `ooxmlsdk`. A file
 written by `OpcPackage::write` is not bit-identical to its input even without an edit.
 Nothing calls `serialize_root`; its comment says it is
-"exercised now only for the round-trip identity harness" (`paged-ooxml/src/dom.rs:97`), and
+"exercised now only for the round-trip identity harness" (`paged-ooxml/src/dom.rs:101`), and
 no such caller exists. The reader for `[Content_Types].xml`
 (`paged-ooxml/src/content_types.rs`) has no caller outside its own file either.
 
@@ -78,16 +78,16 @@ Three written claims do not match the code:
   It is an ordinary crates.io dependency with the requirement `"0.12"`, fixed only by
   `Cargo.lock`; the repository holds no copy of it. The repository does not record why.
 - `paged-ooxml` is described as shared with the spreadsheet and presentation plugins
-  (`paged-ooxml/src/lib.rs:17-22`). In this repository its only dependents are the `docx-*`
+  (`paged-ooxml/src/lib.rs:21-26`). In this repository its only dependents are the `docx-*`
   crates, and its manifest sets `publish = false` (`paged-ooxml/Cargo.toml:9`). Its
   `license` field differs from the workspace default (`:6-8`; see `LICENSE.md`).
-- On `mc:AlternateContent` the comments disagree: `paged-ooxml/src/lib.rs:38-40` leaves
-  fallback selection to later, `paged-ooxml/src/dom.rs:24-26` says the typed DOM handles it
+- On `mc:AlternateContent` the comments disagree: `paged-ooxml/src/lib.rs:42-44` leaves
+  fallback selection to later, `paged-ooxml/src/dom.rs:28-30` says the typed DOM handles it
   at parse time. `docx-import` has no code that mentions it.
 
 ## Related
 
 - [ADR 602](602-save-back-is-a-byte-splice.md), [ADR 600](600-docx-lowered-onto-native-model.md) — how a changed part is written; what the parsed model is lowered to
 - [ADR 007](https://github.com/paged-media/core/blob/main/docs/adr/007-carry-through-rendering-honesty.md) — carry-through as a platform rule
-- [ADR 503](https://github.com/paged-media/plugin-sheets/blob/main/docs/adr/503-xlsx-patched-not-regenerated.md) — the spreadsheet plugin's rule that XLSX is patched, never regenerated; `paged-ooxml/src/opc.rs:24` says this container mirrors that plugin's
+- [ADR 503](https://github.com/paged-media/plugin-sheets/blob/main/docs/adr/503-xlsx-patched-not-regenerated.md) — the spreadsheet plugin's rule that XLSX is patched, never regenerated; `paged-ooxml/src/opc.rs:28` says this container mirrors that plugin's
 - [ADR 314](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/314-plugin-shape.md), [ADR 315](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/315-isolation-contract.md) — the plugin shape and the isolation contract

@@ -8,7 +8,7 @@
 `CONTRIBUTING.md:38-39` states the rule: "Rendering changes are gated on visual fidelity
 against InDesign-exported references." The measuring crate came first. `paged-fidelity` "is
 built first (before the renderer itself) so every downstream change is measurable from day
-one" (`crates/paged-fidelity/src/lib.rs:21-22`).
+one" (`crates/paged-fidelity/src/lib.rs:25-26`).
 
 The gate's engine script once lived outside this repository, and the gate skipped itself
 when the script was absent, which was every clean checkout. `corpus/generated/diff.sh:44-53`
@@ -19,7 +19,7 @@ Two differences between the two rasters are not layout errors and had to be remo
 CMYK profile mismatch adds about 4 ΔE to every solid CMYK fill
 (`corpus/generated/render-diff.sh:163-184`). Poppler draws a glyph at a floored sub-pixel
 phase, so a layout change below a pixel "reads as a regression"
-(`crates/paged-gpu/src/lib.rs:130-140`).
+(`crates/paged-gpu/src/lib.rs:134-144`).
 
 ## Decision
 
@@ -53,9 +53,9 @@ thresholds that are tightened after a fix and not loosened to pass a regression.
 - `corpus/generated/diff.sh:4-16` — the five steps; `:143-155` — zero gated pages fail; `:157-170` — the three comparisons; `:43-60` — exit 2; `:213-240` — exits 0, 3 and 1
 - `corpus/generated/render-diff.sh:55`, `:110-119`, `:141-150`, `:185-216` — 144 dpi, glyph snapping, the `paged-inspect` call, the profile handed to `pdftoppm`
 - `corpus/generated/fidelity-thresholds.json:7-28` — semantics, calibration, the tightening rule, the long-term target; 58 fixture entries, each with a `rationale`
-- `crates/paged-fidelity/src/diff.rs:39-72`, `crates/paged-fidelity/src/ssim.rs:15-20` — the metric
-- `crates/paged-color/src/profiles.rs:51-68` — why the environment variable outranks the declared profile: "Both halves now read the same variable, so both move together"
-- `.github/workflows/fidelity.yml:3-9`, `:34-35`, `:90-121` — runs on pushes to `main` and on pull requests touching `crates/**` or `corpus/**`, on Ubuntu and macOS
+- `crates/paged-fidelity/src/diff.rs:43-76`, `crates/paged-fidelity/src/ssim.rs:19-24` — the metric
+- `crates/paged-color/src/profiles.rs:55-72` — why the environment variable outranks the declared profile: "Both halves now read the same variable, so both move together"
+- `.github/workflows/fidelity.yml:3-9`, `:38-39`, `:94-125` — runs on pushes to `main` and on pull requests touching `crates/**` or `corpus/**`, on Ubuntu and macOS
 - `CLAUDE.md:126-129`, `CONTRIBUTING.md:46-48` — the no-loosening rule as a contributor rule
 
 ## Alternatives considered
@@ -66,9 +66,9 @@ apart from it: a golden-snapshot test over one seed fixture
 described as "NOT the InDesign fidelity gate" (`.github/workflows/ci.yml:338-339`).
 
 `paged-fidelity` defines one global pass criterion (mean ≤ 1.0, p99 ≤ 2.5, SSIM ≥ 0.99;
-`crates/paged-fidelity/src/lib.rs:28-31`). The gate does not apply it; the thresholds file
+`crates/paged-fidelity/src/lib.rs:32-35`). The gate does not apply it; the thresholds file
 names it as the long-term goal. The crate doc names Ghostscript and CoreGraphics as
-reference rasterisers (`crates/paged-fidelity/src/lib.rs:17`); the gate uses `pdftoppm`.
+reference rasterisers (`crates/paged-fidelity/src/lib.rs:21`); the gate uses `pdftoppm`.
 
 ## Consequences
 

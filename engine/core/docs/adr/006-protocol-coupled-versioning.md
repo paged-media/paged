@@ -61,7 +61,7 @@ was chosen over a conventional independent semver:
 
 Checked against the code at `9f933f1`, with the editor at `28dc764` and plugin-sdk at
 `d90f727`. The decision stands: the protocol is 64
-(`crates/paged-canvas/src/channel.rs:510`, pinned by the test at `:3765-3767`), the editor
+(`crates/paged-canvas/src/channel.rs:514`, pinned by the test at `:3769-3771`), the editor
 pins `@paged-media/canvas-wasm` `0.64.0` (`editor: packages/client/package.json:54`), and the
 equality is still exact, with no range. The text above is silent on how a release is cut
 (point 1) and differs from the code in points 2 and 3. Bullet numbers below refer to the
@@ -76,13 +76,13 @@ The procedure is described in [`../reference/release-flow.md`](../reference/rele
   `vMAJOR.MINOR.PATCH[-prerelease]`, stops here.
 - `.github/workflows/publish-wasm.yml:177-188` — a version with a `-suffix` is published under
   the npm dist-tag `next`; any other under `latest`.
-- `.github/workflows/publish-wasm.yml:217`, `:237`, `:273`, `:298` — the four build steps
-  (`canvas-wasm`, `introspect-wasm`, `sdk`, `idml-viewer`); `:339-342` — four `npm publish`
-  calls in sequence. A failure part-way leaves the earlier packages published (`:328-332`).
+- `.github/workflows/publish-wasm.yml:217`, `:241`, `:277`, `:302` — the four build steps
+  (`canvas-wasm`, `introspect-wasm`, `sdk`, `idml-viewer`); `:343-346` — four `npm publish`
+  calls in sequence. A failure part-way leaves the earlier packages published (`:332-336`).
 - The workflow does not read `PROTOCOL_VERSION`. That the minor equals the protocol follows
   from the tag that is pushed, not from a check at publish time.
 - `.github/workflows/ci.yml:283-332` — `protocol-tag-guard`: a push to `main` that changes
-  `PROTOCOL_VERSION` fails unless a tag `v0.<protocol>.*` exists. `:247-272` is the older
+  `PROTOCOL_VERSION` fails unless a tag `v0.<protocol>.*` exists. `:251-276` is the older
   check, which only warns.
 
 **2. The editor no longer holds a second number.** "CI enforces the equality" describes a
@@ -94,7 +94,7 @@ editor derives the constant from the installed package:
 - `editor: .github/workflows/protocol-version.yml:10-13`, `:46-48` — the workflow states that no
   agreement step is left. `scripts/check-protocol-version.sh` no longer exists in the editor.
 - The runtime check remains. The wasm exposes its compiled-in protocol
-  (`crates/paged-canvas-wasm/src/lib.rs:209-214`); the editor's worker compares it with the
+  (`crates/paged-canvas-wasm/src/lib.rs:213-218`); the editor's worker compares it with the
   derived number and reports `protocolMismatch` (`editor: apps/canvas/src/worker/worker.ts:277-287`),
   and the client then rejects every request (`editor: packages/client/src/client.ts:1522-1527`).
 
@@ -106,15 +106,15 @@ and the `protocol.ts:24` and `check-protocol-version.sh` entries in **Sources**.
 version moves exactly when the wire shape moves incompatibly". The version history kept as
 comments above the constant records two bumps for changes that bullet lists as additive:
 
-- `crates/paged-canvas/src/channel.rs:465-469` — protocol 62 added one `PropertyPath` variant
+- `crates/paged-canvas/src/channel.rs:469-473` — protocol 62 added one `PropertyPath` variant
   behind an existing message kind: "No new message: the vocabulary grew, not the wire shape,
   which is why this is a bump and not a redesign."
-- `crates/paged-canvas/src/channel.rs:491-502`, `:1174-1175` — protocol 63 added an optional
+- `crates/paged-canvas/src/channel.rs:495-506`, `:1178-1179` — protocol 63 added an optional
   field with a serde default; the note calls the change "Additive".
 
-Other additive fields still ride without a bump and say so (`crates/paged-canvas/src/channel.rs:555-557`,
-`:3290-3294`). No comment in the repository states a revised rule.
+Other additive fields still ride without a bump and say so (`crates/paged-canvas/src/channel.rs:559-561`,
+`:3294-3298`). No comment in the repository states a revised rule.
 
 **4. Dist-tags.** The last Consequences bullet is about plugin-sdk's canary releases
-(`plugin-sdk: .github/workflows/publish.yml:9`, `:90`). For the four engine packages the rule
+(`plugin-sdk: .github/workflows/publish.yml:9`, `:94`). For the four engine packages the rule
 is the one in point 1: `latest` for a release tag, `next` for a prerelease tag.

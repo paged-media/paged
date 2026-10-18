@@ -22,7 +22,7 @@ reason. The repository does not record why.
 They do record why the wasm crate has two layers. The exported class exists only for
 `wasm32` "because `JsValue`-returning `#[wasm_bindgen]` methods compile only for wasm32",
 and the plain-Rust session under it exists so that the conformance crate "exercises it
-WITHOUT a wasm runtime" (`plugin-sheets: sheet-js/src/lib.rs:41-48`). In plugin-data a
+WITHOUT a wasm runtime" (`plugin-sheets: sheet-js/src/lib.rs:27-34`). In plugin-data a
 native command-line tool drives the same session (`plugin-data: data-cli/Cargo.toml:25`).
 
 On 2026-06-23 five plugin repositories were changed to publish one package each, with the
@@ -67,7 +67,7 @@ PDF".
 
 - `plugin-sheets: CLAUDE.md:77-84`, `plugin-data: CLAUDE.md:80-87`,
   `plugin-doc: CLAUDE.md:56-62` — the rule
-- `plugin-sheets: sheet-js/src/lib.rs:35-48`, `plugin-data: data-js/src/lib.rs:42-48`,
+- `plugin-sheets: sheet-js/src/lib.rs:21-34`, `plugin-data: data-js/src/lib.rs:42-48`,
   `plugin-doc: docx-js/src/lib.rs:21-23` — the session and the forwarding class
 - `plugin-sheets: packages/sheet-host-model/src/index.ts:19-22`,
   `plugin-data: packages/data-host-model/src/index.ts:19-21`,
@@ -77,12 +77,12 @@ PDF".
 - `.github/workflows/publish.yml` publishes one directory: plugin-sheets `:56`, plugin-data
   `:56`, plugin-doc `:48`, plugin-image `:56`, plugin-web `:60`, plugin-draw `:34`; every
   bundle directory in plugin-publish `:46`
-- `plugin-image: image-js/src/lib.rs:98-138`, `plugin-image: glue/src/quick-select.ts:19-23`
+- `plugin-image: image-js/src/lib.rs:84-124`, `plugin-image: glue/src/quick-select.ts:19-23`
   — exports over thread-local state; the TypeScript pixel algorithm
 - `plugin-web: CLAUDE.md:17-19`, `plugin-web: packages/web-model/src/index.ts:19-24`,
   `plugin-web: packages/web-render/src/lib.rs:104-122` — the pure model; the two exports
-- `plugin-draw: Cargo.toml:3-11`, `plugin-publish: packages/publish-bundle/src/io/idml.ts:19-21`,
-  `plugin-publish: crates/pdf-import/src/lib.rs:24-27` — the repositories outside the shape
+- `plugin-draw: Cargo.toml:3-11`, `plugin-publish: packages/publish-bundle/src/io/idml.ts:23-25`,
+  `plugin-publish: crates/pdf-import/src/lib.rs:28-31` — the repositories outside the shape
 
 ## Alternatives considered
 

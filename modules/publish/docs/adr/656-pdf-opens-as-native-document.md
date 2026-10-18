@@ -9,13 +9,13 @@
 The bundle registers an importer for `.pdf` through the host's importer door
 ([ADR 017](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/017-importer-exporter-door-shape.md)).
 The door it opens the result with, `host.nativeDocument.open`, replaces the active document
-with the package it is given (`plugin-sdk: packages/plugin-api/src/host.ts:1320-1322`). So
+with the package it is given (`plugin-sdk: packages/plugin-api/src/host.ts:1324-1326`). So
 the importer has to produce a complete document.
 
 The first version (commit `e1e5318`, 2026-07-23) rendered each page to a PNG and wrapped
 the images in a minimal IDML package. The editable path was added on top of it, and the
 importer's header keeps the image path "so a PDF always opens *something* real"
-(`packages/pdf-bundle/src/io/pdf.ts:27-30`). The editable path produces the engine's native
+(`packages/pdf-bundle/src/io/pdf.ts:31-34`). The editable path produces the engine's native
 model directly, "no IDML round-trip" (`Cargo.toml:26-27`). That is stated as a property.
 The repository does not record why.
 
@@ -33,7 +33,7 @@ images. It never throws past the host: failures are logged.
   change (commit `7b30b3d`). The engine takes the model from the native part and does not
   parse the skeleton's spreads or stories; it still opens the package with the IDML
   reader and reads `Resources/Styles.xml` to fill style leading the native part lacks
-  (`core: crates/paged-canvas/src/model.rs:1546`, `:9912-9929`).
+  (`core: crates/paged-canvas/src/model.rs:1550`, `:9916-9933`).
 - **Fallback.** When the mapper does not load, returns nothing, or extraction throws,
   `rasterizePdf` renders the pages and `buildIdmlFromRasters` builds an IDML package in
   TypeScript with JSZip: one spread per page, each a full-page rectangle with the PNG
@@ -44,31 +44,31 @@ images. It never throws past the host: failures are logged.
 
 ## Evidence
 
-- `packages/pdf-bundle/src/io/pdf.ts:59-88`, `:93-110` — `importPdf`: the gate, the editable
+- `packages/pdf-bundle/src/io/pdf.ts:63-92`, `:97-114` — `importPdf`: the gate, the editable
   attempt, the fallback, the catch; `tryEditableImport` returns `null` instead of throwing
-- `packages/pdf-bundle/src/engine-loader.ts:21-26`, `:95-125` — the mapper loader resolves
+- `packages/pdf-bundle/src/engine-loader.ts:25-30`, `:99-129` — the mapper loader resolves
   to `null` on any failure
-- `crates/pdf-import/src/lib.rs:49-63` — IR to `Document` to `wrap_document`
-- `core: crates/paged-store/src/package.rs:15-23`, `:121-166` — the shared writer and its
+- `crates/pdf-import/src/lib.rs:53-67` — IR to `Document` to `wrap_document`
+- `core: crates/paged-store/src/package.rs:19-27`, `:125-170` — the shared writer and its
   fallback skeleton
-- `core: crates/paged-canvas/src/model.rs:1520-1558` — the load path prefers the native part
-- `packages/pdf-bundle/src/idml-fallback.ts:15-33`, `:234` — the TypeScript IDML package
+- `core: crates/paged-canvas/src/model.rs:1524-1562` — the load path prefers the native part
+- `packages/pdf-bundle/src/idml-fallback.ts:19-37`, `:238` — the TypeScript IDML package
 - `packages/pdf-bundle/manifest.json:7-20` — capabilities; one importer, no exporter
 
 ## Alternatives considered
 
 A container writer private to the crate (`crates/pdf-import/src/ocf.rs`) was deleted in
 commit `7b30b3d` in favour of the engine's writer, which is "shared with every native
-producer, so the format cannot drift between plugins" (`crates/pdf-import/src/lib.rs:52-53`).
+producer, so the format cannot drift between plugins" (`crates/pdf-import/src/lib.rs:56-57`).
 A full-page raster kept beneath low-confidence pages is still in the IR and the mapper
-(`crates/pdf-import/src/ir.rs:35-44`); the current reader never supplies it.
+(`crates/pdf-import/src/ir.rs:39-48`); the current reader never supplies it.
 
 ## Consequences
 
 Long documents are truncated without notice. `extractPdf` reads at most 12 pages and
 `rasterizePdf` at most 20 unless given an option, and the importer calls both without
-options (`packages/pdf-bundle/src/pdfium.ts:228`, `:351`;
-`packages/pdf-bundle/src/io/pdf.ts:77`, `:100`). The log line reports the number of pages
+options (`packages/pdf-bundle/src/pdfium.ts:232`, `:355`;
+`packages/pdf-bundle/src/io/pdf.ts:81`, `:104`). The log line reports the number of pages
 imported; nothing reports that the PDF had more.
 
 The fallback does not cover a failure of the reader. Both paths use PDFium
@@ -77,14 +77,14 @@ fallback throws as well, an error is logged and nothing opens.
 
 The mapper has to be built against an engine revision whose native model encoding the
 running engine can decode. When it cannot, the engine falls back to the IDML skeleton: one
-blank page of the first page's size (`crates/pdf-import/src/lib.rs:52-56`,
-`crates/pdf-import/tests/build_roundtrip.rs:209-254`). The committed mapper binary is
+blank page of the first page's size (`crates/pdf-import/src/lib.rs:56-60`,
+`crates/pdf-import/tests/build_roundtrip.rs:213-258`). The committed mapper binary is
 older than the crate ([ADR 654](654-pdf-ir-and-mapper.md)).
 
 Comments describe earlier states. The doc comment on `importPdf`
-(`packages/pdf-bundle/src/io/pdf.ts:51-58`) and the header of
-`packages/pdf-bundle/src/activate.ts` (`:15-22`) describe the image path only;
-`packages/pdf-bundle/src/io/pdf.ts:24-25` describes a per-page confidence gate that the
+(`packages/pdf-bundle/src/io/pdf.ts:55-62`) and the header of
+`packages/pdf-bundle/src/activate.ts` (`:19-26`) describe the image path only;
+`packages/pdf-bundle/src/io/pdf.ts:28-29` describes a per-page confidence gate that the
 reader no longer implements. The manifest version (`0.2.3-canary.0`) is behind the package
 version (`0.2.6-canary.0`).
 

@@ -43,7 +43,7 @@ model          paged-store   paged-scene   paged-composition   paged-flow   page
 only dependency is `serde`. `paged-scene` wraps them in `Document`, the object the pipeline
 and the mutation code work on: designmap, swatches, spreads, stories, master spreads and
 styles, plus lookup indexes that are not serialised and are rebuilt by
-`Document::rebuild_indexes` (`crates/paged-scene/src/lib.rs:59-99`). `paged-flow` is a
+`Document::rebuild_indexes` (`crates/paged-scene/src/lib.rs:63-103`). `paged-flow` is a
 content-agnostic protocol for flowing content through an ordered chain of regions,
 `paged-composition` an arrangement model (surfaces, pages, regions, flows) that holds no
 content, and `paged-store` the codec that writes `Document` as a container part
@@ -88,14 +88,14 @@ library and the `paged-diff` binary.
 
 ## From document bytes to pixels
 
-1. **Load.** `CanvasModel::load` (`crates/paged-canvas/src/model.rs:1513`) opens the ZIP
+1. **Load.** `CanvasModel::load` (`crates/paged-canvas/src/model.rs:1517`) opens the ZIP
    with `idml_import::open_source_archive`. If the archive holds
    `paged/core/model/document.pgm` and `paged_store::from_bytes` accepts it, the model is
    rebuilt from that part with no IDML parse; otherwise, or when the part has another
    format version, `idml_import::import_idml_archive` parses the IDML parts. The viewer
-   calls `idml_import::import_idml_doc` directly (`crates/paged-sdk/src/lib.rs:203`).
+   calls `idml_import::import_idml_doc` directly (`crates/paged-sdk/src/lib.rs:207`).
 2. **Build.** `pipeline::build_document(&Document, &PipelineOptions)`
-   (`crates/paged-renderer/src/pipeline/mod.rs:1198`) lays out the whole document and
+   (`crates/paged-renderer/src/pipeline/mod.rs:1202`) lays out the whole document and
    returns a `BuiltDocument`: one `BuiltPage` per page, each with its `DisplayList`, plus
    diagnostics. The renderer keeps no layout state between calls (its one memo is of font ids).
    Fonts, the CMYK profile, decoded images and the layout caches belong to the caller, which hands them in through
@@ -108,7 +108,7 @@ library and the `paged-diff` binary.
    through the `AssetResolver` trait, and the CMYK profile arrives as bytes. No typeface and
    no profile is bundled ([ADR 109](adr/109-engine-does-no-io.md)). Degraded output is
    reported in `BuiltDocument::diagnostics` ([ADR 007](adr/007-carry-through-rendering-honesty.md)).
-4. **Display list.** `DisplayList` (`crates/paged-compose/src/display_list.rs:1463`) is a
+4. **Display list.** `DisplayList` (`crates/paged-compose/src/display_list.rs:1467`) is a
    flat `Vec<DisplayCommand>` with pools for paths, gradients, images and spot inks. Text
    becomes one `FillPath` per glyph over interned outlines. Clips, blend groups, layers and
    soft masks are bracket markers in the same stream, and each object effect is its own
@@ -121,16 +121,16 @@ library and the `paged-diff` binary.
    is what the command line, snapshots, ink coverage and the fidelity gate use.
    `VelloRasterizer` draws the same list with Vello; in the browser `SurfacePresenter`
    (compiled for `wasm32` only) presents it to a canvas. Ink separations exist on the CPU
-   path only (`crates/paged-gpu/src/lib.rs:86-91`).
+   path only (`crates/paged-gpu/src/lib.rs:90-95`).
 6. **PDF.** The export session rebuilds the document once with the glyph-run side channel
    on and the live build's caches off, then `paged-export-pdf` writes the pages from those
-   display lists, one page per message (`crates/paged-canvas/src/export.rs:15-26`).
+   display lists, one page per message (`crates/paged-canvas/src/export.rs:19-30`).
 
 ## The mutation path
 
 A change arrives as a `Mutation` (`crates/paged-wire/src/lib.rs`), tagged `{op, args}`; the
 roster holds 118 operations (comments in several files still say 117).
-`CanvasModel::apply_mutation` (`crates/paged-canvas/src/model.rs:1894`) routes it:
+`CanvasModel::apply_mutation` (`crates/paged-canvas/src/model.rs:1898`) routes it:
 
 - Settings that are not document content (`SetDocumentDefaults`, `SetColorSettings`, ink
   settings) are applied directly and leave no undo entry.
@@ -138,7 +138,7 @@ roster holds 118 operations (comments in several files still say 117).
   by `paged_mutate::apply`, which returns the applied operation with its inverse
   ([ADR 116](adr/116-mutations-lowered-onto-operations.md), [ADR 005](adr/005-wire-recipe.md)). The engine mints
   ids: page items, groups, tables, anchored frames and links take the next `u<hex>` number above the highest
-  in use; story, section, colour and guide ids have their own namespaces (`crates/paged-mutate/src/ids.rs:15-39`).
+  in use; story, section, colour and guide ids have their own namespaces (`crates/paged-mutate/src/ids.rs:19-43`).
 - `InsertText` and `DeleteRange` go through a second lane, `TextOp`
   (`crates/paged-canvas/src/mutate.rs`). Text is addressed by story id and UTF-8 byte
   offsets ([ADR 117](adr/117-story-local-text-offsets.md)).
@@ -221,7 +221,7 @@ Parts are read, listed and written through `ReadPagedPart`, `ListPagedParts` and
 `WritePagedPart`. A write must be under `paged/`, and under `paged/<caller>/` when the
 message names a caller; without a caller only the prefix is checked, and the code comment
 calls the check an aid for correct callers, not a security boundary
-(`crates/paged-canvas/src/model.rs:4578-4593`). `ExportPaged` embeds a fresh model part,
+(`crates/paged-canvas/src/model.rs:4582-4597`). `ExportPaged` embeds a fresh model part,
 `paged/core/model/document.pgm` (JSON, `PGM_FORMAT_VERSION` 3), and hands the IDML parts
 and the overlay to `idml_export::write_paged` (`crates/idml-export`).
 `paged_store::package::wrap_document` writes documents that never were IDML: the model part

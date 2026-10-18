@@ -14,7 +14,7 @@ that already called it.
 The bundle's header says which: "Under ADR-022 Option A the engine (canvas-wasm) still
 performs the actual IDML parse/write via the out-of-repo adapter crates; this bundle does
 NOT re-implement IDML. It only routes the file/registry flow to the engine"
-(`packages/publish-bundle/src/io/idml.ts:19-21`). The engine takes the adapter crates as
+(`packages/publish-bundle/src/io/idml.ts:23-25`). The engine takes the adapter crates as
 git dependencies ([ADR 650](650-mutual-git-revision-pins.md)).
 
 ## Decision
@@ -40,16 +40,16 @@ contains no parser, no writer and no wasm. It registers one importer and one exp
 
 ## Evidence
 
-- `packages/publish-bundle/src/io/idml.ts:55-70` — import through `host.nativeDocument.open`
-- `packages/publish-bundle/src/io/idml.ts:74-90` — export through `host.editor.client.send`
+- `packages/publish-bundle/src/io/idml.ts:59-74` — import through `host.nativeDocument.open`
+- `packages/publish-bundle/src/io/idml.ts:78-94` — export through `host.editor.client.send`
 - `packages/publish-bundle/manifest.json:7-13` — capabilities and contributions; no `wasm` entry
-- `core: crates/paged-canvas/Cargo.toml:22`, `:31-35`; `core: crates/paged-canvas-wasm/Cargo.toml:24`
+- `core: crates/paged-canvas/Cargo.toml:22`, `:35-39`; `core: crates/paged-canvas-wasm/Cargo.toml:24`
   — the wasm crate depends on `paged-canvas`, which depends on both adapter crates
-- `core: crates/paged-canvas/src/model.rs:1529-1558`, `:4398-4408` — the load sniff and the
+- `core: crates/paged-canvas/src/model.rs:1533-1562`, `:4402-4412` — the load sniff and the
   export call into the adapter
-- `core: crates/paged-canvas/src/channel.rs:1206-1209`, `:1790-1814` — the wire kinds
+- `core: crates/paged-canvas/src/channel.rs:1210-1213`, `:1794-1818` — the wire kinds
   `ExportIdml` and `IdmlExported`
-- `core: crates/paged-sdk/Cargo.toml:26`, `core: crates/paged-sdk/src/lib.rs:203` — the viewer
+- `core: crates/paged-sdk/Cargo.toml:26`, `core: crates/paged-sdk/src/lib.rs:207` — the viewer
   SDK imports IDML with `idml_import::import_idml_doc`
 - `.github/workflows/ci.yml:37-40`, `Cargo.toml:33`, `crates/idml-export/Cargo.toml:18-21` —
   the wasm32 build and the `zip` feature set
@@ -57,7 +57,7 @@ contains no parser, no writer and no wasm. It registers one importer and one exp
 ## Alternatives considered
 
 The exporter's comment names two successors to the raw editor handle: "a first-class export
-door (or the adapter-wasm path)" (`packages/publish-bundle/src/io/idml.ts:79-80`). The
+door (or the adapter-wasm path)" (`packages/publish-bundle/src/io/idml.ts:83-84`). The
 bundle uses neither. ADR 022 records the other placements of the adapter that were weighed.
 
 ## Consequences
@@ -66,9 +66,9 @@ The engine cannot be built without this repository. A change to IDML import or e
 reaches users through an engine release, not through a release of `@paged-media/publish`.
 
 Export uses `host.editor`, which the bundle calls "a transitional bridge"
-(`packages/publish-bundle/src/io/idml.ts:78-79`). The plugin contract marks that member as
+(`packages/publish-bundle/src/io/idml.ts:82-83`). The plugin contract marks that member as
 one that "does not survive the isolate boundary"
-(`plugin-sdk: packages/plugin-api/src/host.ts:1673-1679`), so the exporter works only while
+(`plugin-sdk: packages/plugin-api/src/host.ts:1677-1683`), so the exporter works only while
 bundles run in the editor's own realm. Import already uses the isolate-safe door.
 
 The exporter reads only `idmlBytes` from the reply. The reply's `lost` list, which names

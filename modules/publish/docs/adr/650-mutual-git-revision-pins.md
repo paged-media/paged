@@ -50,8 +50,8 @@ published: `publish = false` is set for both workspaces.
   https with no authentication because both repositories are public
 - `CONTRIBUTING.md:45-48` — a model change is made in the engine first, then the `rev` here
   is moved
-- `crates/idml-import/src/story.rs:705-707`, `:1616-1620`;
-  `crates/idml-import/src/styles.rs:1173-1176` — model literals end in `..Default::default()`
+- `crates/idml-import/src/story.rs:709-711`, `:1620-1624`;
+  `crates/idml-import/src/styles.rs:1177-1180` — model literals end in `..Default::default()`
   so the model can grow "without breaking this crate at a pinned rev"
 
 ## Alternatives considered

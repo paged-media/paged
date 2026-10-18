@@ -19,9 +19,9 @@ boundary (`isDirty` plumbed, coalescing semantics TBD)**"); the implementation �
 routes Enter→commit / Esc→cancel / printable→type; `isDirty: () =>
 session.isCellEditing()`; `onExit: hideGridInFrame`),
 `plugin-sheets: packages/sheet-host-model/src/lower-to-mutations.ts:13-16,248-251` ("ONE undoable
-`batch`: frame + rules + binding metadata"); `packages/plugin-api/src/host.ts:333`
-("undo/validation/collaboration semantics stay engine-owned") + `:395-396`
-("the host applies the batch atomically (one undo step)") + `:141`
+`batch`: frame + rules + binding metadata"); `packages/plugin-api/src/host.ts:337`
+("undo/validation/collaboration semantics stay engine-owned") + `:399-400`
+("the host applies the batch atomically (one undo step)") + `:145`
 (`isDirty` "gates … the §8.0 seamless-undo boundary"); core wire `undo` /
 `batch` (`packages/plugin-api/src/wire.d.ts`).
 
@@ -159,7 +159,7 @@ document mutation. plugin-sheets is the one bundle that declares the undo hooks.
 
 **1. The Tier-1 hooks landed, with the redo pair.**
 
-- `packages/plugin-api/src/host.ts:217-234` — `onUndo`, `onRedo`, `onCanUndo` and `onCanRedo` on
+- `packages/plugin-api/src/host.ts:221-238` — `onUndo`, `onRedo`, `onCanUndo` and `onCanRedo` on
   `EditContextContribution` (commit `f903925`, 2026-06-12).
 - `editor: packages/shell/src/state/edit-context-controller.tsx:100-110` — while a context is
   active, Cmd-Z and Cmd-Shift-Z go to the contribution's `onUndo` / `onRedo` and do not reach
@@ -173,10 +173,10 @@ document mutation. plugin-sheets is the one bundle that declares the undo hooks.
 This supersedes "Implementation lands after this record" in the header for Tier 1, and "when it
 advertises `onCanUndo`" in the second Consequences bullet (the editor keys on `onUndo`). In the
 first Consequences bullet, "a harness conformance test cover them" does not hold for the undo
-hooks: in this repo they appear only as type declarations (`packages/plugin-api/src/host.ts:228-234`)
-and in one doc comment (`packages/plugin-api/src/binding-provider.ts:272`). The harness test
+hooks: in this repo they appear only as type declarations (`packages/plugin-api/src/host.ts:232-238`)
+and in one doc comment (`packages/plugin-api/src/binding-provider.ts:276`). The harness test
 registers `onCommit` and `onCancel` and invokes `onCommit`
-(`packages/plugin-sdk/test/harness.spec.ts:309-325`).
+(`packages/plugin-sdk/test/harness.spec.ts:313-329`).
 
 **2. Tier 1 runs on a journal in the bundle.** The log that Cmd-Z walks is held by the bundle's
 session, not by the workbook engine: one entry per committed cell edit, carrying the previous and
@@ -212,7 +212,7 @@ and the session adds no step to the document undo stack. The exit handler does n
 earlier cell values in the workbook. This supersedes the Tier 2 paragraph, "on commit-exit the
 net change re-lowers as one atomic batch" in the decision, and the first half of the acceptance
 proof ("**one** document undo removes the whole session"). The contract comment at
-`packages/plugin-api/src/host.ts:220-222` still describes Tier 2 as behaviour; nothing in this
+`packages/plugin-api/src/host.ts:224-226` still describes Tier 2 as behaviour; nothing in this
 repo performs or checks it.
 
 **4. Lowering is no longer one batch.** "Why this boundary" rests Tier 2 on the lowering being

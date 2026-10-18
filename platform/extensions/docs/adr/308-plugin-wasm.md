@@ -44,16 +44,16 @@ its own glue in its own realm. The size limit is one number for the whole applic
 
 - `packages/plugin-api/src/manifest.schema.json:196-233`,
   `packages/plugin-cli/bin/paged-plugin.mjs:310-397` — the artifact schema; the mirrored checks
-- `packages/plugin-sdk/src/wasm-bundle-loader.ts:44-86`, `:162-247` — `WASM_BUDGETS`; the
-  loader (refusals at `:169-182`, ceiling at `:208-221`, memory at `:224-238`)
-- `docs/reference/wasm-packaging.md:46-55`, `:208-235` — why a manifest field; the two load paths
+- `packages/plugin-sdk/src/wasm-bundle-loader.ts:48-90`, `:166-251` — `WASM_BUDGETS`; the
+  loader (refusals at `:173-186`, ceiling at `:212-225`, memory at `:228-242`)
+- `docs/reference/wasm-packaging.md:46-55`, `:212-239` — why a manifest field; the two load paths
 - `plugin-sheets: packages/sheet-bundle/src/engine.ts:26-36`, `plugin-image: glue/src/engine.ts:25-36`,
   `plugin-draw: packages/draw-bundle/src/trace-engine.ts:35-42`,
   `plugin-data: packages/data-bundle/src/engine.ts:19-24`, `:120-139`,
   `plugin-doc: packages/doc-bundle/src/engine.ts:24-29` — each states that it does not use
   `loadBundleWasm`; plugin-data's boot
 - `plugin-web: packages/web-bundle/src/engine-loader.ts:129-142`,
-  `plugin-publish: packages/pdf-bundle/src/engine-loader.ts:73-86` — the glue-and-`?url` load
+  `plugin-publish: packages/pdf-bundle/src/engine-loader.ts:77-90` — the glue-and-`?url` load
 - `editor: scripts/wasm-budget.mjs:47`, `:79-120`, `:198-206`;
   `editor: .github/workflows/tests.yml:139-144` — the app-wide sum and where it runs
 
@@ -72,7 +72,7 @@ because there "WebGPU is reachable".
 
 Nothing compares what a bundle loads with what it declares. The PDF bundle loads
 `bin/pdfium.esm.wasm`, and its manifest lists only `pdf-import`
-(`plugin-publish: packages/pdf-bundle/src/pdfium.ts:86`,
+(`plugin-publish: packages/pdf-bundle/src/pdfium.ts:90`,
 `plugin-publish: packages/pdf-bundle/manifest.json:9-16`). plugin-data declares
 `duckdb-engine` at one path as "the GOVERNANCE anchor" and at run time picks one of three
 files from a vendored directory (`plugin-data: packages/data-bundle/src/query/duckdb.ts:29-35`, `:78-91`).
@@ -80,9 +80,9 @@ files from a vendored directory (`plugin-data: packages/data-bundle/src/query/du
 The 100 MB number is repeated, not shared: the editor script defines its own constant and
 counts files, not declarations; nothing reads `WASM_BUDGETS.maxAppTotalBytes`.
 Comments contradict the code: `docs/reference/wasm-packaging.md:62-66` and
-`packages/plugin-api/src/manifest.ts:294-300` still say `engine` earns a higher ceiling;
+`packages/plugin-api/src/manifest.ts:298-304` still say `engine` earns a higher ceiling;
 in the code every ceiling is 100 MB. The document names the loader `host.loadBundleWasm`
-(`:213`); it is an export of plugin-sdk, not a `BundleHost` member.
+(`:217`); it is an export of plugin-sdk, not a `BundleHost` member.
 
 ## Related
 

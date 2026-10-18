@@ -67,8 +67,8 @@ Three live alternatives were weighed:
 Checked against the code at `71f37d7`. The decision stands. `sheet-chart` is the only crate
 whose manifest names `plotters`, and the workspace turns its default features off
 (`Cargo.toml:44-57`, `sheet-chart/Cargo.toml:23-24`); `GeomBackend` implements `DrawingBackend`
-(`sheet-chart/src/backend.rs:146`); the IR is `ChartGeometry` over five primitive kinds
-(`sheet-chart/src/geometry.rs:122-170`, `:178-182`). Points 1, 3 and 4 below supersede text
+(`sheet-chart/src/backend.rs:132`); the IR is `ChartGeometry` over five primitive kinds
+(`sheet-chart/src/geometry.rs:108-156`, `:164-168`). Points 1, 3 and 4 below supersede text
 above. Point 2 records growth that the text allowed for; point 5 adds a second limit.
 
 **1. The translator emits `insertPath` and `insertTextFrame`. No chart code emits
@@ -95,39 +95,39 @@ commit since its first (`ca1c59f`, 2026-06-08). In this repository `insertLine` 
 only by the tab-text fallback lowering of a cell range
 (`packages/sheet-host-model/src/lower-to-mutations.ts:400`, `:410`), and `insertOval` is
 emitted nowhere. Three places still name the two ops for charts and are stale:
-`sheet-chart/src/lib.rs:41`, `sheet-chart/src/geometry.rs:37` and the title at
-`registry/features/chart.yaml:240` (the ruling of the same row, `:241`, says the translator
+`sheet-chart/src/lib.rs:27`, `sheet-chart/src/geometry.rs:23` and the title at
+`registry/features/chart.yaml:240` (the ruling of the same row, `:227`, says the translator
 "emits insertPath + insertTextFrame native wire ops").
 
 **2. There are ten chart kinds on the same IR.** The text above names no number, so no
 sentence is superseded.
 
-- `sheet-chart/src/model.rs:59-76` — `ChartKind` has ten variants: Bar, Column, Line, Area,
+- `sheet-chart/src/model.rs:45-62` — `ChartKind` has ten variants: Bar, Column, Line, Area,
   Pie, Donut, Scatter, StackedColumn, StackedBar, Radar. The last three were added on
   2026-08-05 (commit `f2fb100`); before that there were seven.
-- `sheet-chart/src/geometry.rs:245-262` — `generate` dispatches all ten.
-- `sheet-chart/src/model.rs:52-57` — the comment states that a new kind is expressed in the
+- `sheet-chart/src/geometry.rs:231-248` — `generate` dispatches all ten.
+- `sheet-chart/src/model.rs:38-43` — the comment states that a new kind is expressed in the
   existing primitives. The definitions of `Primitive` and `ChartGeometry` are unchanged since
   the commit that introduced plotters (`d2a2755`, 2026-06-08).
-- `sheet-chart/src/geometry.rs:544-551` — one cost of the frozen IR: `Primitive::Text` has no
+- `sheet-chart/src/geometry.rs:530-537` — one cost of the frozen IR: `Primitive::Text` has no
   rotation, so the value-axis title is set horizontally above its axis.
 
-The crate documentation at `sheet-chart/src/lib.rs:48-53` still lists seven kinds and is
+The crate documentation at `sheet-chart/src/lib.rs:34-39` still lists seven kinds and is
 stale.
 
 **3. plotters supplies the cartesian coordinate system. Pie, donut, radar and legend layout
 are the crate's own arithmetic.**
 
-- `sheet-chart/src/geometry.rs:701`, `:799`, `:888`, `:984` — the column, bar, line/area and
+- `sheet-chart/src/geometry.rs:687`, `:785`, `:874`, `:970` — the column, bar, line/area and
   scatter generators build a plotters `ChartBuilder` with `build_cartesian_2d` and read
-  positions back through `map_coordinate` (for example `:720`, `:745-750`).
-- `sheet-chart/src/geometry.rs:367-413` — the value range handed to plotters is computed by
-  the crate's `ValueScale`. `:1224-1236` — tick labels are `VAL_TICKS` (5, `:218`) evenly
+  positions back through `map_coordinate` (for example `:706`, `:731-736`).
+- `sheet-chart/src/geometry.rs:353-399` — the value range handed to plotters is computed by
+  the crate's `ValueScale`. `:1210-1222` — tick labels are `VAL_TICKS` (5, `:204`) evenly
   spaced values, placed through `map_coordinate`.
-- `sheet-chart/src/geometry.rs:1026-1031`, `:1057-1074` — pie and donut: the "wedge geometry
+- `sheet-chart/src/geometry.rs:1012-1017`, `:1043-1060` — pie and donut: the "wedge geometry
   is emitted DIRECTLY"; each angle is the value's share of the total times 360.
-- `sheet-chart/src/geometry.rs:1105-1110` — radar: "the polar layout is emitted DIRECTLY".
-- `sheet-chart/src/geometry.rs:590-617`, `:621-648`, `:229-232` — legend rows are placed from
+- `sheet-chart/src/geometry.rs:1091-1096` — radar: "the polar layout is emitted DIRECTLY".
+- `sheet-chart/src/geometry.rs:576-603`, `:607-634`, `:215-218` — legend rows are placed from
   the plot area and fixed constants, then drawn as plotters `Rectangle` and `Text` elements so
   that they pass through the backend.
 

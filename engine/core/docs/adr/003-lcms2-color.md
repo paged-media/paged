@@ -5,9 +5,9 @@ code; carries known parity debt).**
 
 **Sources:** `crates/paged-color/Cargo.toml:17-31` (`lcms2 = "6"`
 native-only; `qcms = "0.3"` target-gated to wasm32 + compiled natively for the
-parity test); `crates/paged-color/src/cmm.rs:135` (the `Cmm` trait abstracts
-"lcms2 native / qcms wasm32"), `:307-311` (Lab handling diverges on wasm),
-`:395` (`mod native_export`), `crates/paged-color/tests/parity.rs` (lcms2-vs-qcms
+parity test); `crates/paged-color/src/cmm.rs:139` (the `Cmm` trait abstracts
+"lcms2 native / qcms wasm32"), `:311-315` (Lab handling diverges on wasm),
+`:399` (`mod native_export`), `crates/paged-color/tests/parity.rs` (lcms2-vs-qcms
 side-by-side bake-off); the original design spec, §9.2 ("lcms2 compiled to WASM" —
 never happened).
 
@@ -16,7 +16,7 @@ never happened).
 **Color management uses lcms2 (the C library, via `lcms2-sys`) on native
 targets and qcms (Mozilla's pure-Rust ICC library, ships in Firefox) on
 wasm32 — not a single pure-Rust CMS, and not lcms2-compiled-to-wasm as
-the original design spec (§9.2) promised.** The `Cmm` trait (`cmm.rs:135`) is the seam; the
+the original design spec (§9.2) promised.** The `Cmm` trait (`cmm.rs:139`) is the seam; the
 lcms2-vs-qcms split never leaks past it.
 
 ## Why (reconstructed rationale)
@@ -43,7 +43,7 @@ and the parity test, not a prior written decision:
   bake-off evidence). The fidelity gate runs on native (lcms2) only — so the
   *shipped* path (wasm/qcms) is verified by the parity test, not by the gate.
 - **Lab handling differs on wasm.** qcms exposes no Lab transform, so Lab colors
-  are resolved analytically to sRGB first on wasm (`cmm.rs:307-311`); native
+  are resolved analytically to sRGB first on wasm (`cmm.rs:311-315`); native
   lcms2 does Lab↔CMYK directly. This is the most likely source of any residual
   ΔE gap.
 - ICC-on-wasm remains listed in the internal renderer gap list; the parity test

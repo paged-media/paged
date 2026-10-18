@@ -10,7 +10,7 @@ The plugin contract gives a bundle two ways to put something on a page. It can w
 document content through `host.document.mutate`, or it can register an object type
 (`contributes.objectTypes`) and submit its own drawing through a scene layer; the rendering
 capability names are `sceneLayer`, `overlay`, `hitTest` and `resourceProvider`
-(`plugin-sdk: packages/plugin-sdk/src/host-impl.ts:1096-1098`, `:1459-1464`, `:1589-1604`).
+(`plugin-sdk: packages/plugin-sdk/src/host-impl.ts:1100-1102`, `:1463-1468`, `:1593-1608`).
 
 The repo states its reasons per feature, not once. The SVG importer's header:
 "No new platform door: it rides" `host.document.mutate` only

@@ -10,15 +10,15 @@ The importer reads only part of an IDML package. The writer's module header stat
 follows: "The parser keeps a *subset* of every entry's attributes; most entries (fonts,
 preferences, tags, metadata, the XML backing store) are not modeled at all. Regenerating
 those from the model would silently drop everything the parser didn't read"
-(`crates/idml-export/src/lib.rs:22-25`).
+(`crates/idml-export/src/lib.rs:26-29`).
 
 A patching writer has to know which source element became which model item, and the
 parser does not keep one item per element: it drops a character range with no text, drops
 a page item with no geometry, and splits a range that holds a text variable. Matching
-ranges by counting patched the wrong runs (`crates/idml-import/src/story.rs:144-156`).
+ranges by counting patched the wrong runs (`crates/idml-import/src/story.rs:148-160`).
 Reading "id not in the model" as "the user deleted it" removed two polygons on a save that
-changed nothing (`crates/idml-export/src/rewrite.rs:2494-2496`,
-`crates/idml-import/src/spread.rs:527-532`).
+changed nothing (`crates/idml-export/src/rewrite.rs:2498-2500`,
+`crates/idml-import/src/spread.rs:531-536`).
 
 ## Decision
 
@@ -47,46 +47,46 @@ element to a model item comes from the parser.
 
 ## Evidence
 
-- `crates/idml-export/src/lib.rs:20-47`, `:211-224` — the strategy and its reason; the API
+- `crates/idml-export/src/lib.rs:24-51`, `:215-228` — the strategy and its reason; the API
   takes the original bytes
-- `crates/idml-export/src/lib.rs:360-372`, `:895-937`, `crates/idml-export/src/emit.rs:15-32`
-  — kept rewrites; the walk (`raw_copy_file` at `:907`, `:927`); parts created after load
-- `crates/idml-export/src/rewrite.rs:45-50`, `:61-66`, `:3455-3470`, `:3993-3995` — source
+- `crates/idml-export/src/lib.rs:364-376`, `:899-941`, `crates/idml-export/src/emit.rs:19-36`
+  — kept rewrites; the walk (`raw_copy_file` at `:911`, `:931`); parts created after load
+- `crates/idml-export/src/rewrite.rs:49-54`, `:65-70`, `:3459-3474`, `:3997-3999` — source
   spelling for an untouched transform or stroke weight
-- `crates/idml-import/src/story.rs:138-197`, `crates/idml-import/src/spread.rs:514-561` — the
+- `crates/idml-import/src/story.rs:142-201`, `crates/idml-import/src/spread.rs:518-565` — the
   two provenance records and why each is keyed as it is
-- `crates/idml-export/src/rewrite.rs:2507-2510`, `:4435-4438`, `:5400-5449` — the writer
+- `crates/idml-export/src/rewrite.rs:2511-2514`, `:4439-4442`, `:5404-5453` — the writer
   parses the entry it rewrites and resolves each element through the record
 
 ## Alternatives considered
 
 Regenerating the package from the model: rejected in the module header quoted above.
 Teaching the writer the parser's drop rule: "that would be two copies of one decision,
-which is the defect one level up" (`crates/idml-import/src/story.rs:158-161`). Ordinals for
+which is the defect one level up" (`crates/idml-import/src/story.rs:162-165`). Ordinals for
 story ranges and byte offsets for page items were both rejected
-(`crates/idml-import/src/story.rs:163-175`, `crates/idml-import/src/spread.rs:540-547`).
+(`crates/idml-import/src/story.rs:167-179`, `crates/idml-import/src/spread.rs:544-551`).
 
 ## Consequences
 
 The engine holds the source package bytes while the document is open and passes them to
-the writer (`core: crates/paged-canvas/src/model.rs:1119-1127`, `:4402-4406`); `original`
+the writer (`core: crates/paged-canvas/src/model.rs:1123-1131`, `:4406-4410`); `original`
 must be the package the model was parsed from or one with the same entries and `Self` ids
-(`crates/idml-export/src/lib.rs:183-184`). Export parses each rewritten spread and story
+(`crates/idml-export/src/lib.rs:187-188`). Export parses each rewritten spread and story
 again, and both crates must read a part with the same reader configuration or the offsets
-disagree (`crates/idml-export/src/rewrite.rs:4410-4416`, `crates/idml-import/src/story.rs:168-172`).
+disagree (`crates/idml-export/src/rewrite.rs:4414-4420`, `crates/idml-import/src/story.rs:172-176`).
 
 The writer's header lists what does not save: a removed page keeps its entry and its
 `designmap.xml` reference; a master spread with no source entry is not written; an item
 that changes parent is rebuilt and loses source-only children; a dissolved group and a
 group's own transform are not written back
-(`crates/idml-export/src/rewrite.rs:159-203`, `crates/idml-export/src/lib.rs:482-487`).
+(`crates/idml-export/src/rewrite.rs:163-207`, `crates/idml-export/src/lib.rs:486-491`).
 
-Comments lag the code. `crates/idml-export/src/lib.rs:29-30` names only spreads, master
-spreads and stories as patched, and `:743-893` patches five more entries; `:52-53` says
+Comments lag the code. `crates/idml-export/src/lib.rs:33-34` names only spreads, master
+spreads and stories as patched, and `:747-897` patches five more entries; `:56-57` says
 `Document` retains the original entries, and the importer returns the archive separately
-(`crates/idml-import/src/lib.rs:170-176`). `crates/idml-export/src/rewrite.rs:34-39` says
-story ranges are matched positionally; `:204-209` says opacity on an existing item is not
-saved, and `crates/idml-export/src/lib.rs:428-434` runs a transparency pass over spreads
+(`crates/idml-import/src/lib.rs:174-180`). `crates/idml-export/src/rewrite.rs:38-43` says
+story ranges are matched positionally; `:208-213` says opacity on an existing item is not
+saved, and `crates/idml-export/src/lib.rs:432-438` runs a transparency pass over spreads
 that have a source entry.
 
 ## Related

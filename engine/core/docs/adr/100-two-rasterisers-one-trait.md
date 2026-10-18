@@ -12,7 +12,7 @@ without a GPU.
 
 `paged-gpu` states the purpose of its trait as letting "the pipeline swap between rasterizer
 implementations (Vello, forked Vello, or a custom tile-based pipeline) without changing
-callers" (`crates/paged-gpu/src/lib.rs:17-19`). The commit that introduced the two
+callers" (`crates/paged-gpu/src/lib.rs:21-23`). The commit that introduced the two
 implementations (`809f1aa`, 2026-04-26) says the pipeline and the fidelity harness "can pick
 a backend per render without touching the display-list contract". For the browser,
 `crates/paged-sdk/WEBGPU.md:50-53` records the rule "No WebGL and no CPU fallback on the
@@ -20,9 +20,9 @@ forward surface"; when `navigator.gpu` is absent the consumer shows a message an
 does not carry a second renderer".
 
 The module doc says the choice of rasteriser "is driven by Spike A in `spikes/vello-eval`"
-(`crates/paged-gpu/src/lib.rs:20`). That spike lists six cases and a pass criterion; its
+(`crates/paged-gpu/src/lib.rs:24`). That spike lists six cases and a pass criterion; its
 `main` constructs a `vello::Scene` and ends in two `TODO` lines
-(`spikes/vello-eval/src/main.rs:71-86`). Vello was chosen over the other candidates the
+(`spikes/vello-eval/src/main.rs:75-90`). Vello was chosen over the other candidates the
 trait doc names. The repository does not record why.
 
 ## Decision
@@ -49,13 +49,13 @@ trait doc names. The repository does not record why.
 
 ## Evidence
 
-- `crates/paged-gpu/src/lib.rs:163-181` — the trait ("log + skip it rather than fail the whole render")
-- `crates/paged-gpu/Cargo.toml:13-22`, `:38-41` — `default = ["cpu"]`, the two features, the pinned `vello`, `tiny-skia` and `wgpu` versions
-- `crates/paged-gpu/src/cpu.rs:51-59`, `crates/paged-gpu/src/vello_rs.rs:158-161` — the two implementations; `crates/paged-gpu/src/vello_rs.rs:96-99` — "path of record"
-- `crates/paged-gpu/src/surface.rs:15-33` — `SurfacePresenter`: "directly on the browser canvas with no readback"; "wasm32-only by design"
-- `.github/workflows/publish-wasm.yml:220`, `:276` — the two page-drawing wasm packages built with `--features gpu`; `:240` — `paged-introspect-wasm` built without it
+- `crates/paged-gpu/src/lib.rs:167-185` — the trait ("log + skip it rather than fail the whole render")
+- `crates/paged-gpu/Cargo.toml:13-22`, `:42-45` — `default = ["cpu"]`, the two features, the pinned `vello`, `tiny-skia` and `wgpu` versions
+- `crates/paged-gpu/src/cpu.rs:55-63`, `crates/paged-gpu/src/vello_rs.rs:162-165` — the two implementations; `crates/paged-gpu/src/vello_rs.rs:100-103` — "path of record"
+- `crates/paged-gpu/src/surface.rs:19-37` — `SurfacePresenter`: "directly on the browser canvas with no readback"; "wasm32-only by design"
+- `.github/workflows/publish-wasm.yml:220`, `:280` — the two page-drawing wasm packages built with `--features gpu`; `:244` — `paged-introspect-wasm` built without it
 - `crates/paged-sdk/Cargo.toml:27-32`, `crates/paged-canvas/Cargo.toml:13-18`, `crates/paged-canvas-wasm/Cargo.toml:21-24` — which wasm links the CPU rasteriser
-- `crates/paged-renderer/src/bin/inspect.rs:199-205`, `crates/paged-cli/src/session.rs:466-476` — `cpu` is the default backend; the session refuses any other
+- `crates/paged-renderer/src/bin/inspect.rs:203-209`, `crates/paged-cli/src/session.rs:470-480` — `cpu` is the default backend; the session refuses any other
 
 ## Alternatives considered
 
@@ -68,24 +68,24 @@ WebGL and a CPU fallback on the SDK's surface are rejected in `crates/paged-sdk/
 
 The viewer SDK needs WebGPU to draw a page. The editor wasm is not GPU-only: `initGpu`
 documents that on failure "the worker stays on the CPU snapshot-blit fallback path"
-(`crates/paged-canvas-wasm/src/lib.rs:400-405`). The wgpu version follows Vello's releases:
+(`crates/paged-canvas-wasm/src/lib.rs:404-409`). The wgpu version follows Vello's releases:
 wgpu 30 is blocked on Vello (`crates/paged-gpu/Cargo.toml:30-32`).
 
 Some results exist on the CPU lane only. Ink separations and total-area-coverage are read
-from the CPU rasteriser's plane state (`crates/paged-gpu/src/lib.rs:86-91`); without the
-`cpu` feature `ink_coverage` returns an empty list (`crates/paged-canvas/src/model.rs:7744-7752`).
+from the CPU rasteriser's plane state (`crates/paged-gpu/src/lib.rs:90-95`); without the
+`cpu` feature `ink_coverage` returns an empty list (`crates/paged-canvas/src/model.rs:7748-7756`).
 On Vello, `DropShadow` is skipped and `PathShadow` is a multi-stamp approximation
-(`crates/paged-gpu/src/vello_rs.rs:1039-1078`). The Vello lane is not measured against
+(`crates/paged-gpu/src/vello_rs.rs:1043-1082`). The Vello lane is not measured against
 InDesign: its tests run on a software Vulkan driver (`.github/workflows/gpu.yml:100-108`),
 and `crates/paged-gpu/tests/vello_effects.rs` pins it against the CPU rasteriser.
 
-Several comments are stale. `crates/paged-gpu/src/lib.rs:25-26` and
-`crates/paged-cli/src/session.rs:63` call the Vello backend a stub; it is implemented, and
+Several comments are stale. `crates/paged-gpu/src/lib.rs:29-30` and
+`crates/paged-cli/src/session.rs:67` call the Vello backend a stub; it is implemented, and
 `paged-inspect --backend vello` renders through it when built with the `gpu` feature.
 `crates/paged-gpu/Cargo.toml:15-16` says only one rasteriser may be enabled at a time;
 `paged-inspect` built with `--features gpu` has both (`crates/paged-renderer/Cargo.toml:14`,
-`:24-28`, `:33`), and so does the published editor wasm. `crates/paged-gpu/src/vello_rs.rs:54-64` lists
-`BevelEmboss` as skipped; the code at `:1079-1099` paints it from the shared masks
+`:28-32`, `:37`), and so does the published editor wasm. `crates/paged-gpu/src/vello_rs.rs:58-68` lists
+`BevelEmboss` as skipped; the code at `:1083-1103` paints it from the shared masks
 ([ADR 104](104-effects-follow-indesign-parameters.md)).
 
 ## Related

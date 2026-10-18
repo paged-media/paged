@@ -49,7 +49,7 @@ Persistence is split in two.
 ## Alternatives considered
 
 One envelope holding every recipe of a document is tested and rejected on size: the host
-caps a metadata value at 64 KiB (`core: crates/paged-mutate/src/apply/layer.rs:498`), and 400
+caps a metadata value at 64 KiB (`core: crates/paged-mutate/src/apply/layer.rs:502`), and 400
 recipes in one value exceed it (`packages/data-host-model/src/__tests__/payload-budget.test.ts:117-124`).
 
 ## Consequences

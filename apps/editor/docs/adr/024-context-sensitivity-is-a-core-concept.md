@@ -315,19 +315,19 @@ non-context tools are dimmed and the rail is not otherwise reorganised.
 
 **5. The contract does not make the declaration required.** Decision 2 says the contract
 should make `toolIds` and `panelIds` required. Both are optional in
-`plugin-sdk: packages/plugin-api/src/host.ts:166`, `:187`. The editor treats an omitted `toolIds`
+`plugin-sdk: packages/plugin-api/src/host.ts:170`, `:191`. The editor treats an omitted `toolIds`
 as unrestricted and an empty one as "no tool applies"
 (`packages/shell/src/state/edit-context-stack.tsx:76-92`,
 `packages/shell/src/chrome/ToolRail.tsx:246-252`). Three comments still give the earlier
 meaning, that an empty list restricts nothing, and are stale:
-`plugin-sdk: packages/plugin-api/src/host.ts:163-165`,
+`plugin-sdk: packages/plugin-api/src/host.ts:167-169`,
 `packages/shell/src/registries/edit-context.ts:72` and
 `packages/shell/src/chrome/ToolRail.tsx:243-244`.
 
 **6. Entry has one declared gesture and two host paths.** "What a context is" says entry is
 uniform: double-click the frame.
 
-- `plugin-sdk: packages/plugin-api/src/host.ts:154` — `entry` is the one-member union
+- `plugin-sdk: packages/plugin-api/src/host.ts:158` — `entry` is the one-member union
   `"doubleClick"`; the six manifests that declare an edit context all use it.
 - `packages/shell/src/state/use-edit-context-entry.tsx:187` — the only call in the editor that
   enters a context.
