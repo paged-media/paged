@@ -20,14 +20,14 @@ most 20 jobs run at once, 5 of them on macOS, shared by every repository.
 | Lever | Before | After | How measured |
 |---|---|---|---|
 | 1. Run only what is affected | Root Cargo config (`.cargo/config.toml`, `tooling/rust/`) reached no Rust workflow; a dependency or toolchain update skipped the GPU lane; doc's Rust lane never ran on pull requests; a docs-only change ran its component's full CI (2–10 % of component commits) | All 13 Rust workflows watch the root Cargo config; core-gpu watches `Cargo.toml`/`Cargo.lock`/`rust-toolchain.toml`; doc/rust gates pull requests; `docs/**/*.md` under a component triggers nothing | Path filters read from the workflow files; docs-only share from 90 days of git history |
-| 2. `concurrency` | 297 superseded runs, 111 of them ran to the end (1,543 job-minutes after a newer run existed); 114 duplicate runs; 143 runs on main cancelled | All 22 pull-request workflows cancel a superseded run; no push to main is cancelled or queued; deploys never cancel | Runs API over the window; the configuration; one demonstration push |
-| 3. Rust caching | rust-cache hit rate 20 % (old: 97 %); 0 core caches on main, 12.4 GB of caches against the 10 GB limit, the oldest 30 min old | Pull requests restore main's caches and write none; sccache measured on one job before any switch | rust-cache log lines of 251 + 34 jobs; the Actions cache list; a trial job |
-| 4. Job shape | Linux ran core's 3,797 tests twice (`cargo test`, then nextest), 39.8 job-minutes a run; every core job waited for a 10 s toolchain job, median 12m57s | Linux runs them once (nextest + doctests, same counts), about 21 job-minutes; no toolchain hop; wasm-size no longer waits for the macOS leg | Step times and `Finished` lines of 4 paired runs; the jobs API |
+| 2. `concurrency` | 297 superseded runs, 111 of them ran to the end (1,543 job-minutes after a newer run existed); 114 duplicate runs; 143 runs on main cancelled | All 22 pull-request workflows cancel a superseded run; no push to main is cancelled or queued; deploys never cancel. This PR: one run per workflow, 0 superseded | Runs API over the window; the configuration; one demonstration push |
+| 3. Rust caching | rust-cache hit rate 20 % (old: 97 %); 0 core caches on main, 12.4 GB of caches against the 10 GB limit, the oldest 30 min old | Pull requests restore main's caches and write none: this PR hit on 6 of 8 core jobs (47 % overall while other PRs still evict); sccache measured on one job and not adopted (warm 4m14s vs rust-cache hit 2m09s) | rust-cache log lines of 251 + 34 + 32 jobs; the Actions cache list; a trial job |
+| 4. Job shape | Linux ran core's 3,797 tests twice (`cargo test`, then nextest), 39.8 job-minutes a run; every core job waited for a 10 s toolchain job, median 12m57s | Linux runs them once (nextest + doctests, same counts): 12m44s in this PR's run; no toolchain hop; core ci 103.9 → 45.5 job-minutes | Step times and `Finished` lines; the jobs API; this PR's run |
 | 5. mold | Links core's Linux builds since A8b | No isolated CI number (linking is inside cargo's compile time) | — |
 | 6. Docker cache | No workflow builds an image | Not applicable | Workflow files |
-| 7. Runner disk | 104 GB free after the clean-up step (145 GB disk) | End-of-job margin recorded by a new step | `df` in the job logs |
+| 7. Runner disk | 104 GB free after the clean-up step (145 GB disk) | 93 GB free at the end of the largest job (target 9.0 GB), now recorded on every run | `df` in the job logs |
 
-The PR's own CI run is in [This pull request's CI run](#this-pull-requests-ci-run).
+The PR's own CI run is in [This pull request's CI run](#this-pull-requests-ci-run): the 21 green workflows that have a before took 175.8 job-minutes against 247.8, core ci 45.5 against 103.9.
 
 ## The five measurements (before)
 
@@ -275,8 +275,8 @@ on dispatch. The comparison is with rust-cache's numbers for the same build: a
 miss compiles in 7m42s–10m23s, a hit in about 6 min (old runs: 6m04s–6m13s).
 sccache cannot cache what links (test harnesses, build scripts, proc macros),
 which is most of a test build. The result is in [This pull request's CI
-run](#this-pull-requests-ci-run); nothing switches to sccache unless the warm
-build beats rust-cache's hit.
+run](#this-pull-requests-ci-run): the warm build (4m14s) does not beat
+rust-cache's hit (2m09s), so nothing switches to sccache.
 
 ## Lever 4: job shape
 
@@ -378,9 +378,75 @@ concurrent-job limit as well, which is the other way to shorten it.
 
 ## This pull request's CI run
 
-Pending: filled from the PR's own run (wall time, job minutes, rust-cache
-results, the sccache trial, the end-of-job disk margin, and the
-demonstration push).
+One push (2026-10-18 16:03 UTC) created one run for each of the 24
+workflows its files touch (it edits most workflow files, so nearly
+everything ran), and all were done at 16:32. Raw data:
+[`ci-speed-pr.json`](ci-speed-pr.json) (`ci_speed.py report --branch
+a10/ci-speed`). 22 green; the 2 red are the known missing secrets (CLA, and
+the editor's corpus checkout).
+
+The org was less loaded than in the before window (peak 39 jobs queued, 16
+running; job queue median 3m47s against 15m40s), so wall times are not
+comparable; job minutes and the cache results are.
+
+| Workflow | Wall | Job minutes | Before: median job minutes (green monorepo runs) | Old repository |
+|---|---|---|---|---|
+| core ci | 20m21s | **45.5** | 103.9 | 105.0 |
+| core fidelity | 27m54s | 31.7 | 33.0 | 21.4 |
+| core gpu | 20m12s | 16.4 | 21.1 | 16.7 |
+| image ci | 9m09s | 7.8 | 10.8 | 9.9 |
+| sheet rust | 1m49s | 3.2 | 6.1 | 2.9 |
+| web rust | 2m30s | 2.5 | 4.5 | 1.3 |
+| moon ci | 4m29s | 2.0 | 7.2 | — |
+| doc rust (now on pull requests) | 12m55s | 16.4 | 13.9 | 12.2 |
+| the 21 green workflows that have a before | — | **175.8** | 247.8 | — |
+
+The sccache trial took a further 17.6 job-minutes.
+
+**Lever 2.** One push, one run per workflow: no superseded or duplicate run.
+The demonstration push is the follow-up commit that added these numbers. It
+changes only `docs/` and `tooling/migration/`, so it started only `moon ci`
+and CLA (lever 1: no component workflow); no run of either was still in
+flight, so nothing was cancelled. A newer push cancelling an older run, and a
+push to `main` never being cancelled, show up in the first merges and pull
+requests after this lands; `ci_speed.py report` measures them the same way.
+
+**Lever 3.**
+
+| Measure | Before | This run |
+|---|---|---|
+| rust-cache results | 31 exact, 19 partial, 201 miss (20 %) | 15 exact, 17 miss (47 %) |
+| Core jobs that hit | — | 6 of 8 (check + test on both OSes, export-diff, wasm lane, fidelity macOS, gpu); misses: wasm-size (main never saved one) and fidelity Linux (main's entry, written at 16:02, was already evicted) |
+| Module jobs | — | 9 of 24 hit: `main`'s module caches had shrunk from 5.8 GB (15:48) to 1.0 GB (16:33), evicted by the pull requests that still write caches under the old configuration |
+| Cache save time | 1,442 s over 251 jobs | 6 s over 32 jobs |
+| Cache entries this pull request wrote | — | 0 from rust-cache (`save-if: false` in every log) |
+| Core test-binary compile, Linux | 7m42s–10m23s on a miss | 1m55s after a 14 s restore (hit) |
+
+The sccache trial (one job, core's test binaries, GitHub backend):
+
+| Build | Time | sccache |
+|---|---|---|
+| cold (empty namespace) | 11m14s | 437 misses, 177 non-cacheable calls (links, build scripts, proc macros), 0.48 s per cache write |
+| warm (after deleting `target/`) | 4m14s | 437 hits (all cacheable calls), 0.21 s per read |
+| rust-cache for the same build, this run | 2m09s (14 s restore + 1m55s compile) | — |
+| rust-cache miss, before | 7m42s–10m23s | — |
+
+rust-cache's hit is twice as fast as sccache's warm build, and sccache's
+cold build is 1–3.5 min slower than a rust-cache miss; sccache also wrote 438
+cache entries (541 MB) per namespace into the same 10 GB. **Decision: stay on
+rust-cache**, with main-only saves. The trial's entries were deleted after the
+measurement; the workflow stays for re-measuring on dispatch.
+
+**Lever 4.** The Linux `check + test` job ran 12m44s: clippy 49 s, test
+compile 1m55s, nextest 3,796 run / 18 skipped in 7m31s, doctests 1 run / 1
+ignored (31 crates); macOS ran `cargo test` 3,797 / 19 in 14m43s. Same tests
+as before, now once on Linux (39.8 job-minutes before for the two Linux jobs,
+on cache misses). All 8 core-ci jobs were created when the run started:
+no toolchain hop, and wasm-size ran beside the check legs (16:10–16:12).
+core-ci's longest job is now the macOS leg.
+
+**Lever 7.** The Linux `check + test` job ended with 93 GB free (36 % used)
+and a 9.0 GB target directory, from 104 GB after the clean-up step.
 
 ## Reproduce
 
@@ -395,3 +461,6 @@ python3 tooling/migration/ci_speed.py report --cache DIR \
 ```
 
 The cache list (measurement 2) is live state: `fetch` takes one snapshot.
+This pull request's run: `report --branch a10/ci-speed --until
+2026-10-18T16:40:00Z --hours 1 --config-rev HEAD --out
+docs/migration/ci-speed-pr.json`.
