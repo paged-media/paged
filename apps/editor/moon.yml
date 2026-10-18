@@ -128,6 +128,10 @@ tasks:
     description: 'vite build of apps/* (needs the engine wasm and the bundles'' engine wasm).'
     command: 'bun run build'
     deps: ['core:wasm-pkg', 'doc:wasm', 'slide:wasm', 'sheet:wasm', 'data:wasm', 'web:wasm']
+    inputs:
+      - '@group(js-sources)'
+    options:
+      runInCI: false
 
   fixtures:
     description: 'paged-gen (engine/core) emits every sample into corpus/idml/generated/, as editor-tests does.'

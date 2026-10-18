@@ -3,6 +3,11 @@
 - **Status:** Accepted. Recorded retroactively on 2026-10-02 from the code at `d90f727`.
 - **Scope:** `packages/plugin-sdk/src/react-optional.ts`, its two users (`schema-panel.tsx`,
   `widgets-fallback.tsx`) and the build script of `packages/plugin-sdk`
+- **Amended 2026-10-18 (TypeScript 7):** tsup is gone. `bun build` bundles the JavaScript and has
+  no syntax target, so the gate moved to the declaration compile: `tsconfig.build.json` sets
+  `"module": "ES2020"`, where TypeScript rejects a top-level await (TS1378). The test asserts that
+  setting instead of `--target`. See
+  [the TypeScript 7 note](../../../../docs/migration/typescript-7.md).
 
 ## Context
 

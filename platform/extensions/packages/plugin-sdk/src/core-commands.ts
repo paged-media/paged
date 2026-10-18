@@ -46,10 +46,10 @@ import type {
   ValueType,
 } from "@paged-media/plugin-api";
 
-import type { CoreObjects } from "./core-objects";
-import { CORE_WIRE_OPS, type CoreWireOpRow } from "./core-commands.generated";
-import { formatAddress, fromElementId, parseAddress, parseSelector } from "./object-address";
-import { validateValue } from "./object-schema";
+import type { CoreObjects } from "./core-objects.js";
+import { CORE_WIRE_OPS, type CoreWireOpRow } from "./core-commands.generated.js";
+import { formatAddress, fromElementId, parseAddress, parseSelector } from "./object-address.js";
+import { validateValue } from "./object-schema.js";
 
 /** The command id prefix: `core.insertTable`. */
 export const CORE_COMMAND_PREFIX = "core.";

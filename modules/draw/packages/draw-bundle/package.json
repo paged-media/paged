@@ -1,6 +1,6 @@
 {
   "name": "@paged-media/draw",
-  "private": false,
+  "private": true,
   "version": "0.1.0-canary.20",
   "license": "AGPL-3.0-only OR LicenseRef-PMEL",
   "type": "module",
@@ -17,8 +17,6 @@
     "typecheck": "bun check -p tsconfig.json",
     "test": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts --path-ignore-patterns '**/*.dom.test.*'",
     "test:dom": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts --preload ./test/happydom.ts .dom.test.",
-    "build": "tsup",
-    "prepublishOnly": "bun run build",
     "bench": "bun ./test/perf/doors.bench.ts"
   },
   "devDependencies": {
@@ -46,31 +44,6 @@
     "wasm",
     "manifest.json"
   ],
-  "publishConfig": {
-    "access": "public",
-    "tag": "canary",
-    "main": "./dist/index.js",
-    "types": "./dist/index.d.ts",
-    "exports": {
-      ".": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.js"
-      },
-      "./geometry": {
-        "types": "./dist/geometry.d.ts",
-        "default": "./dist/geometry.js"
-      },
-      "./machines": {
-        "types": "./dist/machines.d.ts",
-        "default": "./dist/machines.js"
-      },
-      "./trace-worker": {
-        "types": "./dist/trace-worker.d.ts",
-        "default": "./dist/trace-worker.js"
-      },
-      "./manifest.json": "./manifest.json"
-    }
-  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/paged-media/paged.git",
